@@ -48,16 +48,30 @@ runs `.ts`, and `tsc --noEmit` type-checks. There is no `tsx`, no
 
 ```bash
 bun install
-cp .env.example .env        # fill in keys (Neon, Anthropic, OpenAI, Google, R2)
+bun run dev                 # dotenvx decrypts .env.development, then turbo -> bun --watch the api (http://localhost:8787/health)
 bun run typecheck           # turbo -> tsc --noEmit across all packages
-bun run dev                 # turbo -> bun --watch the api (http://localhost:8787/health)
 ```
+
+### Environment & secrets
+
+Secrets are managed with [dotenvx](https://dotenvx.com). `.env.development` and
+`.env.production` are committed **encrypted** (public-key); the private decryption
+keys live only in `.env.keys`, which is gitignored — **never commit it**.
+
+- **Onboarding:** get `.env.keys` from a teammate (1Password / Signal / AirDrop),
+  then `bun run dev`. No `.env` copying.
+- **Set a value:** `dotenvx set DATABASE_URL "postgres://…" -f .env.development`
+  (repeat with `-f .env.production` for prod), then commit the encrypted file.
+- `.env.example` is the plaintext catalog of which vars exist.
+- **Deploy:** set `DOTENV_PRIVATE_KEY_PRODUCTION` in the host env; dotenvx
+  decrypts at start.
 
 ### Database
 
 ```bash
-bun --env-file=.env --filter @skipper/db db:push     # apply schema to Neon
-bun --env-file=.env --filter @skipper/db db:studio    # browse
+bun run db:push      # apply schema to Neon (dev)
+bun run db:studio    # browse
+bun run db:migrate   # run migrations (db:migrate:prod targets .env.production)
 ```
 
 ## Status
