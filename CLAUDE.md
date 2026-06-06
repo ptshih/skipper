@@ -39,7 +39,11 @@ scale-for-a-market, pick polish.
 - Verified pins: TS 6.0.3, turbo 2.9.16, zod 4.4.3 (`z.enum`, top-level
   `z.uuid()`/`z.url()`), drizzle-orm 0.45.2 + drizzle-kit 0.31.10 (neon-http,
   stateless — no interactive transactions; use `db.batch`), hono 4.12.23,
-  @anthropic-ai/sdk 0.102.0, openai 6.42.0.
+  @anthropic-ai/sdk 0.102.0. **TTS = ElevenLabs via REST** (no SDK — raw `fetch`
+  to `/v1/text-to-speech/{voice}/with-timestamps`, model `eleven_multilingual_v2`;
+  returns MP3 + char alignment so we get audio + duration in one call). **R2 =
+  Bun's native `S3Client`** (no `@aws-sdk`; `region: "auto"`); the generator
+  tsconfig needs `types: ["node","bun"]` for it.
 - **Secrets via dotenvx.** `.env.development` / `.env.production` are committed
   ENCRYPTED (public-key); the private keys live only in gitignored `.env.keys`.
   Root scripts wrap commands with `dotenvx run -f .env.development` — so `bun run
@@ -103,8 +107,10 @@ From an adversarial review of the scaffold. Verdict: sound foundation. Guardrail
   `(poi_id, persona, voice, joke_level)`; `persona`, `joke_level`, and
   `duration_bucket` are all pgEnums, so the dedup key can't fragment on a typo.
 - **`voice` is a fixed function of persona in v1** (`PERSONA_VOICE` in
-  `packages/generator/src/models.ts`: skipper → ballad). Not a request knob
-  until M3 (no `tours.voice` / `tourRequest.voice` yet).
+  `packages/generator/src/models.ts`: skipper → the ElevenLabs voice_id for
+  "George", stored verbatim as the cache-key `voice`). Not a request knob until
+  M3 (no `tours.voice` / `tourRequest.voice` yet). NOTE: ElevenLabs sunsets its
+  default voices on 2026-12-31 — mint a permanent Voice-Library id before then.
 - **M1 generator MUST populate `poi_content.attribution`** for every
   wikipedia-sourced clip (CC BY-SA is legal, not optional) — put it on the
   generation invariant checklist + the human-review gate.
@@ -117,3 +123,15 @@ From an adversarial review of the scaffold. Verdict: sound foundation. Guardrail
 - **M4 cache invalidation.** Deleting a `poi_content` row `SET NULL`s a stop's
   content pointer without demoting `tours.status` from `ready` — pair content
   deletes with tour re-validation when the cache/dedup machinery lands.
+- **M4 cache precondition — `stopType` is NOT in the `poi_content` key.** The key
+  is `(poi_id, persona, voice, joke_level)`, but whether a Wikipedia POI is
+  narrated as `story` vs `scenic` is decided by extract length at generation time
+  (`STORY_MIN_FACT_CHARS`). When the cache is reused across tours (M4), a
+  classification flip on regen (a Wikipedia lead-section edit, or tuning
+  `EXTRACT_CHARS`/`STORY_MIN_FACT_CHARS`) makes `upsertPoiContent` overwrite the
+  shared row — a still-`ready` tour could then serve scenic audio for a `story`
+  stop (or a story clip, which NAMES the place, for a `scenic` stop) and lose its
+  attribution. M1 is safe (generate-and-use-the-new-tour, no reuse). Before M4
+  reuse: either fold `stopType` into the key (widens this invariant — a
+  deliberate decision) or store `stopType` on `poi_content` and reject/re-validate
+  cross-type conflicts, paired with tour re-validation.

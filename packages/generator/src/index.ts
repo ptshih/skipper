@@ -8,9 +8,12 @@
 //     -> Google Places searchAlongRoute        (food/rest break stops)
 //     -> select stops to fit duration           (pace by drive TIME, not distance)
 //     -> skipper narration (Anthropic)          (facts-only prompt; never invent)
-//     -> TTS (OpenAI) -> Cloudflare R2
+//     -> TTS (ElevenLabs) -> Cloudflare R2
 //     -> write tours + ordered tour_stops (Neon/Drizzle)
 //
 // Invariant: a tour may not be marked `ready` until every story/scenic stop has
 // non-null audio. NO cache variants, NO dedup, NO feedback in M1 — generate naively.
+// CLI entry point: ./run.ts.
 export * from './models'
+export { generateTour } from './pipeline/generate'
+export type { GenerateOptions, GenerateResult, StopSummary } from './pipeline/generate'

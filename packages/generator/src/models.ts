@@ -31,55 +31,60 @@ export const NARRATION_MODEL_ALTERNATES = {
 } as const
 
 // ---------------------------------------------------------------------------
-// Text-to-speech — OpenAI Audio API (audio.speech.create)
+// Text-to-speech — ElevenLabs (POST /v1/text-to-speech/{voice_id}/with-timestamps)
 // ---------------------------------------------------------------------------
-// "gpt-4o-mini-tts" is OpenAI's current, most reliable TTS model and the ONLY
-// one that supports the steerable `instructions` parameter (control tone,
-// emotion, accent, pacing — ideal for giving the skipper a consistent
-// character). Legacy "tts-1" (low latency) and "tts-1-hd" (higher quality)
-// still exist but support only 9 voices and ignore `instructions`.
+// We synthesize narration OFFLINE in a batch job (latency irrelevant, quality
+// paramount), so we use ElevenLabs' most lifelike narration model. The
+// /with-timestamps endpoint returns the MP3 (base64) AND character alignment in
+// one call, so we get audio + exact duration together
+// (durationMs = last(alignment.character_end_times_seconds) * 1000) — which
+// satisfies the ready-gate's non-null-audio + known-duration requirement without
+// a second probe.
 //
-// Source: OpenAI Text-to-Speech guide
-// https://developers.openai.com/api/docs/guides/text-to-speech
-export const TTS_MODEL = 'gpt-4o-mini-tts' as const
+// Sources: https://elevenlabs.io/docs/api-reference/text-to-speech/convert-with-timestamps
+//          https://elevenlabs.io/docs/overview/models
+export const TTS_MODEL = 'eleven_multilingual_v2' as const
 
-// Legacy TTS models, kept for reference (do not use unless you need tts-1's
-// lower latency and can live without `instructions`).
-export const TTS_MODEL_LEGACY = {
-  fast: 'tts-1',
-  hd: 'tts-1-hd',
+// MP3 at 44.1 kHz / 128 kbps — good quality/size for narration; uploaded to R2
+// with this Content-Type. (mp3_44100_192 needs a higher ElevenLabs tier.)
+// NOTE: output_format is a QUERY param on the REST endpoint, not a body field.
+export const TTS_OUTPUT_FORMAT = 'mp3_44100_128' as const
+export const TTS_AUDIO_CONTENT_TYPE = 'audio/mpeg' as const
+
+// Default-library voices that fit a warm, characterful, slightly-older male
+// storyteller — stable, shareable voice_ids.
+// HEADS-UP: ElevenLabs is sunsetting these legacy "Default" voices on
+// 2026-12-31. Before then, add the chosen voice to the account Voice Library to
+// mint a permanent id and update SKIPPER_VOICE_ID. Changing the id changes the
+// poi_content cache-key `voice`, which correctly forces regeneration.
+// Source: https://help.elevenlabs.io/hc/en-us/articles/25844757988753
+export const ELEVEN_VOICES = {
+  george: 'JBFqnCBsd6RMkjVDRZzb', // "Warm, Captivating Storyteller" — best Skipper fit
+  brian: 'nPczCjzI2devNBz1zQrb', // "Deep, Resonant and Comforting"
+  bill: 'pqHfZKP75CvOlQylNhV4', // older, trustworthy, warm narrator
 } as const
 
-// Characterful voice candidates for the skipper.
-// gpt-4o-mini-tts exposes 13 voices: alloy, ash, ballad, coral, echo, fable,
-// nova, onyx, sage, shimmer, verse, marin, cedar.
-// OpenAI recommends `marin` and `cedar` for best overall quality. `ballad`,
-// `ash`, `verse`, `fable`, and `onyx` read as the most expressive/characterful
-// of the set — good fits for a "skipper" persona.
-// NOTE: `marin`, `cedar`, `ballad`, and `verse` are gpt-4o-mini-tts ONLY —
-// they are not available on tts-1 / tts-1-hd.
-//
-// Source: OpenAI Text-to-Speech guide (link above).
-export const TTS_VOICE_CANDIDATES = [
-  'marin', // OpenAI-recommended, best quality
-  'cedar', // OpenAI-recommended, best quality
-  'ballad', // warm, expressive — strong characterful-skipper pick
-  'ash', // dynamic, characterful
-  'verse', // expressive, narration-friendly
-  'fable', // storytelling timbre
-  'onyx', // deep, authoritative
-] as const
+export type ElevenVoiceId = (typeof ELEVEN_VOICES)[keyof typeof ELEVEN_VOICES]
 
-export type TtsVoice = (typeof TTS_VOICE_CANDIDATES)[number]
+// The Skipper's voice. Stored VERBATIM as the poi_content cache-key `voice`.
+export const SKIPPER_VOICE_ID: ElevenVoiceId = ELEVEN_VOICES.george
 
-// Default voice for the skipper. Swap to any entry in TTS_VOICE_CANDIDATES.
-export const TTS_VOICE: TtsVoice = 'ballad'
+// voice_settings tuned for a warm/corny/characterful storyteller on
+// eleven_multilingual_v2 (continuous controls). style is moderate — high style
+// destabilizes long passages. (eleven_v3 would change these semantics.)
+export const ELEVEN_VOICE_SETTINGS = {
+  stability: 0.4,
+  similarity_boost: 0.8,
+  style: 0.35,
+  use_speaker_boost: true,
+  speed: 1.0,
+} as const
 
 /**
  * Voice is a fixed function of persona in v1 — centralized here so it can't drift
- * from the poi_content cache-key `voice` dimension. (A user-selectable voice knob
- * on the tour request is deferred to M3.)
+ * from the poi_content cache-key `voice` dimension. The stored value is the
+ * ElevenLabs voice_id. (A user-selectable voice knob is deferred to M3.)
  */
 export const PERSONA_VOICE = {
-  skipper: TTS_VOICE,
+  skipper: SKIPPER_VOICE_ID,
 } as const

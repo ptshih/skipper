@@ -70,6 +70,11 @@ export const corridors = pgTable(
     slug: text('slug').notNull(),
     // Frozen, precomputed route geometry.
     polyline: jsonb('polyline').$type<Polyline>().notNull(),
+    // Frozen Routes-API totals for the route. Nullable (older rows predate these);
+    // the generator paces stops by drive TIME and uses durationSeconds when set,
+    // falling back to a speed estimate when null.
+    distanceMeters: integer('distance_meters'),
+    durationSeconds: integer('duration_seconds'),
     summary: text('summary'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true })

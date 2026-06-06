@@ -23,7 +23,7 @@ over hand-curated driving routes, with CarPlay output. First region: **Lake Taho
 
 - **TypeScript 6** everywhere · **bun** (package manager + runtime) · **Turborepo**
 - **Backend:** Hono (served natively by bun) · **DB:** Neon + Drizzle · **Audio:** Cloudflare R2
-- **AI:** Anthropic `claude-opus-4-8` (narration) · OpenAI `gpt-4o-mini-tts` (TTS)
+- **AI:** Anthropic `claude-opus-4-8` (narration) · ElevenLabs `eleven_multilingual_v2` (TTS)
 - **Mobile (deferred):** Expo SDK 56, CarPlay via `@g4rb4g3/react-native-carplay`
 
 ## Layout
