@@ -1,0 +1,19 @@
+{
+  "name": "@skipper/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "start": "bun src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "hono": "^4.12.23",
+    "@skipper/shared": "workspace:*",
+    "@skipper/db": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24"
+  }
+}

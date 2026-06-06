@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "display": "Skipper base (TypeScript 6.x, bun)",
+  "compilerOptions": {
+    // --- Language & runtime target (safe for Node >= 20.19.4 and Bun) ---
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "useDefineForClassFields": true,
+
+    // --- Module system: bundler/bun-oriented base ---
+    // Bun runs .ts source directly and resolves like a bundler, so internal
+    // packages can export source (no dist build). `preserve` implies
+    // moduleResolution "bundler".
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+
+    // --- Single-file transpiler safety (bun / esbuild) ---
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+
+    // --- Strictness ---
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true,
+
+    // --- Ambient types are opt-in per package (set "types": ["node"] where used) ---
+    "types": [],
+
+    // --- Type-check only by default; packages run from source via bun ---
+    "noEmit": true,
+    "skipLibCheck": true
+  }
+}

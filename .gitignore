@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+out/
+.next/
+web-build/
+
+# Turborepo
+.turbo/
+
+# Expo / React Native (apps/mobile — deferred until the CarPlay gate)
+.expo/
+.expo-shared/
+ios/Pods/
+*.orig.*
+*.keystore
+
+# TypeScript
+*.tsbuildinfo
+
+# Env files (keep a committed example)
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# NOTE: bun.lock (text lockfile) IS committed — do not ignore it.
