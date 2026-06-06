@@ -134,7 +134,13 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       `${plan.filter((s) => s.stopType === 'break').length} break.`,
   )
 
+  // Each stop is an independent narration call, so the model can't see its own
+  // prior output. We feed it (a) recent place names for earned callbacks and
+  // (b) how the last few stops OPENED, so it can vary its entry instead of
+  // reusing "coming up off the bow" every time.
   const priorStops: string[] = []
+  const recentOpeners: string[] = []
+  const openerOf = (script: string) => script.trim().split(/\s+/).slice(0, 8).join(' ')
   const narrate = (s: StopPlan) =>
     narrateStop({
       region: corridor.region,
@@ -143,9 +149,13 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       jokeLevel,
       targetSeconds: s.targetSeconds,
       priorStops: priorStops.slice(-3),
+      recentOpeners: recentOpeners.slice(-3),
       ...(s.stopType === 'story' ? { place: { name: s.name, kind: s.kind }, facts: s.facts } : {}),
     })
-  const rememberStop = (s: StopPlan) => priorStops.push(s.stopType === 'story' ? s.name : 'a quiet stretch')
+  const rememberStop = (s: StopPlan, script: string) => {
+    priorStops.push(s.stopType === 'story' ? s.name : 'a quiet stretch')
+    recentOpeners.push(openerOf(script))
+  }
 
   // ---- Dry run: narrate story/scenic, print, no writes. -------------------
   if (dryRun) {
@@ -157,7 +167,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       }
       console.log(`Narrating stop ${s.seq} (${s.stopType}) "${s.name}"...`)
       const { script } = await narrate(s)
-      rememberStop(s)
+      rememberStop(s, script)
       stops.push({ seq: s.seq, stopType: s.stopType, name: s.name, alongSec: s.alongSec, script })
     }
     return { corridor: corridor.name, region: corridor.region, durationBucket, totalSec, dryRun: true, stops }
@@ -194,7 +204,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
 
       console.log(`Narrating + synthesizing stop ${s.seq} (${s.stopType}) "${s.name}"...`)
       const { script } = await narrate(s)
-      rememberStop(s)
+      rememberStop(s, script)
 
       const { audio, durationMs } = await synthesize(script, voice)
       const audioUrl = await uploadAudio(clipKey(poiId, persona, voice, jokeLevel), audio)

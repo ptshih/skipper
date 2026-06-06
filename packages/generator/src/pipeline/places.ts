@@ -10,6 +10,12 @@
 // Needs Places API (New) enabled on GOOGLE_MAPS_API_KEY (Routes enablement alone
 // is not enough). Callers treat failures here as non-fatal — break stops are a
 // nicety, not the core bet.
+//
+// TODO(places-api): ENABLE "Places API (New)" on the GCP project before break
+// stops will work. As of the last run it was DISABLED — the request 403'd with
+// PERMISSION_DENIED on project 666110297056. Enable it here:
+//   https://console.cloud.google.com/apis/library/places.googleapis.com?project=666110297056
+// Until then break stops are silently skipped (generate.ts catches the error).
 
 import { fetchWithRetry } from './http'
 
