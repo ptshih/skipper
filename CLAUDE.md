@@ -40,6 +40,13 @@ scale-for-a-market, pick polish.
   `z.uuid()`/`z.url()`), drizzle-orm 0.45.2 + drizzle-kit 0.31.10 (neon-http,
   stateless — no interactive transactions; use `db.batch`), hono 4.12.23,
   @anthropic-ai/sdk 0.102.0, openai 6.42.0.
+- **Secrets via dotenvx.** `.env.development` / `.env.production` are committed
+  ENCRYPTED (public-key); the private keys live only in gitignored `.env.keys`.
+  Root scripts wrap commands with `dotenvx run -f .env.development` — so `bun run
+  dev` and `bun run db:*` get decrypted vars; don't add a plaintext `.env`. Edit
+  a value with `dotenvx set KEY "v" -f .env.development`; `.env.example` is the
+  plaintext catalog of what exists. Deploy: set `DOTENV_PRIVATE_KEY_PRODUCTION`
+  in the host env. Onboarding = get `.env.keys` from a teammate.
 - The **highest-leverage file** in the repo (once written) is the skipper
   narration system prompt. Iterate on it more than anything.
 

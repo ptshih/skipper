@@ -21,9 +21,11 @@ ios/Pods/
 # TypeScript
 *.tsbuildinfo
 
-# Env files (keep a committed example)
+# Env files (dotenvx). Encrypted .env.development / .env.production ARE committed;
+# the plaintext .env, the private keys, and *.local overrides are NOT.
 .env
-.env.*
+.env.keys
+.env.*.local
 !.env.example
 
 # Logs

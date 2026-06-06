@@ -11,17 +11,19 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "turbo run dev",
+    "dev": "dotenvx run -f .env.development -- turbo run dev",
     "typecheck": "turbo run typecheck",
     "clean": "turbo run clean",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yaml,yml}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,yaml,yml}\"",
-    "db:generate": "bun --env-file=.env --filter @skipper/db db:generate",
-    "db:push": "bun --env-file=.env --filter @skipper/db db:push",
-    "db:migrate": "bun --env-file=.env --filter @skipper/db db:migrate",
-    "db:studio": "bun --env-file=.env --filter @skipper/db db:studio"
+    "db:generate": "dotenvx run -f .env.development -- bun --filter @skipper/db db:generate",
+    "db:push": "dotenvx run -f .env.development -- bun --filter @skipper/db db:push",
+    "db:migrate": "dotenvx run -f .env.development -- bun --filter @skipper/db db:migrate",
+    "db:migrate:prod": "dotenvx run -f .env.production --overload -- bun --filter @skipper/db db:migrate",
+    "db:studio": "dotenvx run -f .env.development -- bun --filter @skipper/db db:studio"
   },
   "devDependencies": {
+    "@dotenvx/dotenvx": "^1.71.0",
     "prettier": "^3.8.3",
     "turbo": "^2.9.16",
     "typescript": "^6.0.3"
