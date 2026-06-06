@@ -40,7 +40,7 @@ export type AttributionSnapshot = {
 export type StopMeta = Record<string, unknown>
 
 /* -------------------------------------------------------------------------- */
-/*  Enums                                                                      */
+/*  Enums — keep these in lockstep with the Zod enums in @skipper/shared        */
 /* -------------------------------------------------------------------------- */
 
 export const poiSourceEnum = pgEnum('poi_source', ['wikipedia', 'google_places'])
@@ -50,6 +50,12 @@ export const jokeLevelEnum = pgEnum('joke_level', ['off', 'mild', 'dad', 'dadpoc
 export const tourStatusEnum = pgEnum('tour_status', ['draft', 'generating', 'ready', 'failed'])
 
 export const stopTypeEnum = pgEnum('stop_type', ['story', 'scenic', 'break'])
+
+// persona + duration_bucket are poi_content / tour cache-key dimensions, so the
+// DB enforces them (mirrors the Zod enums) — a typo can't fragment the dedup key.
+export const personaEnum = pgEnum('persona', ['skipper'])
+
+export const durationBucketEnum = pgEnum('duration_bucket', ['short', 'standard', 'long'])
 
 /* -------------------------------------------------------------------------- */
 /*  corridors — hand-curated routes                                            */
@@ -115,7 +121,7 @@ export const poiContent = pgTable(
     poiId: uuid('poi_id')
       .notNull()
       .references(() => pois.id, { onDelete: 'cascade' }),
-    persona: text('persona').notNull(),
+    persona: personaEnum('persona').notNull(),
     voice: text('voice').notNull(),
     jokeLevel: jokeLevelEnum('joke_level').notNull(),
     // Generated narration script.
@@ -125,7 +131,9 @@ export const poiContent = pgTable(
     audioDurationMs: integer('audio_duration_ms'),
     // Human spot-check flag.
     reviewed: boolean('reviewed').default(false).notNull(),
-    // Frozen attribution at generation time.
+    // Frozen attribution at generation time. NULLABLE here, but the M1 generator
+    // MUST populate it for every wikipedia-sourced clip (CC BY-SA is legal, not
+    // optional) — enforced in the generation checklist + human-review gate.
     attribution: jsonb('attribution').$type<AttributionSnapshot>(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
@@ -150,13 +158,14 @@ export const tours = pgTable(
     corridorId: uuid('corridor_id')
       .notNull()
       .references(() => corridors.id, { onDelete: 'restrict' }),
-    durationBucket: text('duration_bucket').notNull(),
+    durationBucket: durationBucketEnum('duration_bucket').notNull(),
     // Selected interest tags.
     interests: text('interests').array().notNull().default([]),
-    persona: text('persona').notNull(),
+    persona: personaEnum('persona').notNull(),
     jokeLevel: jokeLevelEnum('joke_level').notNull(),
     status: tourStatusEnum('status').notNull().default('draft'),
-    // Route signature hash for dedup/cache — nullable in v1.
+    // Route signature hash — M4 cache/dedup forward-compat. Nullable in v1; do
+    // NOT add a (unique) index until M4 actually queries/dedupes on it.
     routeSig: text('route_sig'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
@@ -164,11 +173,7 @@ export const tours = pgTable(
       .notNull()
       .$onUpdate(() => new Date()),
   },
-  (t) => [
-    index('tours_corridor_idx').on(t.corridorId),
-    index('tours_status_idx').on(t.status),
-    index('tours_route_sig_idx').on(t.routeSig),
-  ],
+  (t) => [index('tours_corridor_idx').on(t.corridorId), index('tours_status_idx').on(t.status)],
 )
 
 /* -------------------------------------------------------------------------- */
@@ -188,7 +193,9 @@ export const tourStops = pgTable(
     poiId: uuid('poi_id')
       .notNull()
       .references(() => pois.id, { onDelete: 'restrict' }),
-    // Null for break / not-yet-generated stops.
+    // Null for break / not-yet-generated stops. NOTE (M4): set-null on a deleted
+    // poi_content row does NOT demote tours.status from 'ready' — when cache
+    // invalidation lands, pair content deletes with tour re-validation.
     poiContentId: uuid('poi_content_id').references(() => poiContent.id, {
       onDelete: 'set null',
     }),
@@ -256,7 +263,7 @@ export const tourStopsRelations = relations(tourStops, ({ one }) => ({
 }))
 
 /* -------------------------------------------------------------------------- */
-/*  Inferred types                                                             */
+/*  Inferred row types (import via the "@skipper/db/schema" subpath, aliased)   */
 /* -------------------------------------------------------------------------- */
 
 export type Corridor = typeof corridors.$inferSelect

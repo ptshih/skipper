@@ -76,3 +76,37 @@ conversational agent + on-device fallback.
 - **Audio:** `expo-audio` (NOT `expo-av`, removed in SDK 55); background playback
   via config plugin. Duck (don't stop) the user's music at a trigger.
 - **Offline-first:** download a complete tour before driving (Tahoe dead zones).
+
+## Scaffold review notes (carry into M1/M2)
+
+From an adversarial review of the scaffold. Verdict: sound foundation. Guardrails:
+
+- **Type-name collisions.** `@skipper/shared` (Zod boundary types) and
+  `@skipper/db/schema` (Drizzle `$inferSelect` row types) both export `Poi`,
+  `Tour`, `PoiContent`, `Corridor`, `TourStop`, `Polyline` — DIFFERENT shapes
+  (Zod = read DTOs: nullish, omit internal cols like `facts`/`meta`). Use Zod
+  types from `@skipper/shared` at boundaries; import DB row types only from the
+  `@skipper/db/schema` subpath, aliased (`import type { Poi as PoiRow }`). NEVER
+  `export * from` both in one barrel. The `@skipper/db` client deliberately does
+  NOT re-export the schema.
+- **`@skipper/db` import is side-effect-free.** The client is lazy (`getDb()` /
+  the `db` proxy build on first query) so importing it never forces
+  `DATABASE_URL` to exist — env-free routes like `GET /health` keep booting.
+- **Cache-key dimensions are DB-enforced.** `poi_content` uniqueness is
+  `(poi_id, persona, voice, joke_level)`; `persona`, `joke_level`, and
+  `duration_bucket` are all pgEnums, so the dedup key can't fragment on a typo.
+- **`voice` is a fixed function of persona in v1** (`PERSONA_VOICE` in
+  `packages/generator/src/models.ts`: skipper → ballad). Not a request knob
+  until M3 (no `tours.voice` / `tourRequest.voice` yet).
+- **M1 generator MUST populate `poi_content.attribution`** for every
+  wikipedia-sourced clip (CC BY-SA is legal, not optional) — put it on the
+  generation invariant checklist + the human-review gate.
+- **scenic ≠ break.** A scenic stop is delivery-only ambient audio (no facts) but
+  STILL needs a `poi_content` row with non-null `audioUrl` to satisfy the ready
+  gate. Only `break` stops carry no audio.
+- **M1 ready-gate is atomic via `db.batch([...])`** — neon-http has no
+  interactive transactions, but co-committing the `status='ready'` flip with the
+  final stop writes in one batch suffices (no neon-serverless Pool needed).
+- **M4 cache invalidation.** Deleting a `poi_content` row `SET NULL`s a stop's
+  content pointer without demoting `tours.status` from `ready` — pair content
+  deletes with tour re-validation when the cache/dedup machinery lands.

@@ -20,7 +20,7 @@ version **before** we commit. So the SDK pin is a downstream decision of the
 CarPlay gate, not the other way around.
 
 Target at time of writing: **Expo SDK 56** (current latest stable; `expo` npm
-`latest` = `56.0.9`). Treat that as the *candidate*, not a commitment.
+`latest` = `56.0.9`). Treat that as the _candidate_, not a commitment.
 
 Key SDK 56 facts to design against:
 

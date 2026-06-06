@@ -74,3 +74,12 @@ export type TtsVoice = (typeof TTS_VOICE_CANDIDATES)[number]
 
 // Default voice for the skipper. Swap to any entry in TTS_VOICE_CANDIDATES.
 export const TTS_VOICE: TtsVoice = 'ballad'
+
+/**
+ * Voice is a fixed function of persona in v1 — centralized here so it can't drift
+ * from the poi_content cache-key `voice` dimension. (A user-selectable voice knob
+ * on the tour request is deferred to M3.)
+ */
+export const PERSONA_VOICE = {
+  skipper: TTS_VOICE,
+} as const

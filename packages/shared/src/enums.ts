@@ -7,7 +7,12 @@ import { z } from 'zod'
 export const jokeLevel = z.enum(['off', 'mild', 'dad', 'dadpocalypse'])
 export type JokeLevel = z.infer<typeof jokeLevel>
 
-/** Story = narrated history/fact; scenic = view, no narration; break = food/rest. */
+/**
+ * story  = factual narration (needs a poi_content row + audio).
+ * scenic = delivery-only ambient audio, no facts — but STILL needs a poi_content
+ *          row + non-null audio to satisfy the ready gate.
+ * break  = food/rest stop; no audio.
+ */
 export const stopType = z.enum(['story', 'scenic', 'break'])
 export type StopType = z.infer<typeof stopType>
 

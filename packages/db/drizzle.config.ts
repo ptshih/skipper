@@ -1,16 +1,19 @@
 import { defineConfig } from 'drizzle-kit'
 
-// DATABASE_URL must be present in the environment when running drizzle-kit.
-// Bun auto-loads .env from the working directory. With the .env at the repo
-// root, run from there or point bun at it explicitly, e.g.:
-//   bun --env-file=.env --filter @skipper/db db:push
+// drizzle-kit does NOT auto-load .env. Run via the root passthrough scripts,
+// which set bun's --env-file, e.g.:  bun run db:push
+const url = process.env.DATABASE_URL
+if (!url) {
+  throw new Error(
+    'DATABASE_URL is not set. Run drizzle-kit via the root scripts (e.g. `bun run db:push`) so .env is loaded.',
+  )
+}
+
 export default defineConfig({
   dialect: 'postgresql',
   schema: './src/schema.ts',
   out: './drizzle',
-  dbCredentials: {
-    url: process.env.DATABASE_URL!,
-  },
+  dbCredentials: { url },
   strict: true,
   verbose: true,
 })
