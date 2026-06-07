@@ -2,3 +2,4 @@
 export * from './geo'
 export * from './trigger'
 export * from './simulate'
+export * from './preview'
