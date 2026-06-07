@@ -68,6 +68,8 @@ export interface NarrationRequest {
   recentKitBeats?: string[]
   /** Pacing target; honored but never padded past the facts. */
   targetSeconds?: number
+  /** Re-narration notes from the diversity lint — concrete things THIS take must avoid. */
+  avoid?: string[]
 }
 
 export interface NarrationResult {
@@ -140,6 +142,12 @@ export function buildFactSheet(req: NarrationRequest): string {
     lines.push(
       `TARGET LENGTH: about ${req.targetSeconds} seconds read aloud (~${words} words). Honor it, but never pad past the facts.`,
     )
+  }
+
+  if (req.avoid && req.avoid.length > 0) {
+    lines.push('')
+    lines.push('REVISION NOTES — this is a re-narration to break up tour-wide repetition. Same facts, fresh take. You MUST:')
+    for (const a of req.avoid) lines.push(`- ${a}`)
   }
 
   return lines.join('\n')

@@ -40,6 +40,8 @@ import type { BreakAnchor } from './places'
 import { selectStops } from './select'
 import type { StopPlan } from './select'
 import { narrateStop } from './narrate'
+import type { NarrationRequest } from './narrate'
+import { lintScripts } from './lint'
 import { synthesize } from './tts'
 import { clipKey, uploadAudio } from './storage'
 import {
@@ -156,18 +158,22 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
     [/\bcoffee\b/i, 'his coffee opinions'],
   ]
   const kitBeatsOf = (script: string) => KIT_BEATS.filter(([re]) => re.test(script)).map(([, label]) => label)
+  const baseReq = (s: StopPlan): NarrationRequest => ({
+    region: corridor.region,
+    corridor: corridor.name,
+    stopType: s.stopType,
+    jokeLevel,
+    targetSeconds: s.targetSeconds,
+    ...(s.stopType === 'story' ? { place: { name: s.name, kind: s.kind }, facts: s.facts } : {}),
+  })
+  // First-pass narration: thread the trailing-3 window of cross-stop context.
   const narrate = (s: StopPlan) =>
     narrateStop({
-      region: corridor.region,
-      corridor: corridor.name,
-      stopType: s.stopType,
-      jokeLevel,
-      targetSeconds: s.targetSeconds,
+      ...baseReq(s),
       priorStops: priorStops.slice(-3),
       recentOpeners: recentOpeners.slice(-3),
       recentClosers: recentClosers.slice(-3),
       recentKitBeats: [...new Set(recentKit.slice(-3).flat())],
-      ...(s.stopType === 'story' ? { place: { name: s.name, kind: s.kind }, facts: s.facts } : {}),
     })
   const rememberStop = (s: StopPlan, script: string) => {
     priorStops.push(s.stopType === 'story' ? s.name : 'a quiet stretch')
@@ -176,19 +182,61 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
     recentKit.push(kitBeatsOf(script))
   }
 
-  // ---- Dry run: narrate story/scenic, print, no writes. -------------------
-  if (dryRun) {
-    const stops: StopSummary[] = []
-    for (const s of plan) {
-      if (s.stopType === 'break') {
-        stops.push({ seq: s.seq, stopType: s.stopType, name: s.name, alongSec: s.alongSec })
-        continue
+  // Narrate every story/scenic stop up front — cheap (no TTS yet), so the lint can
+  // see the whole tour and regenerate outliers BEFORE we pay to synthesize.
+  const narratedRecs: { s: StopPlan; script: string }[] = []
+  for (const s of plan) {
+    if (s.stopType === 'break') continue
+    console.log(`Narrating stop ${s.seq} (${s.stopType}) "${s.name}"...`)
+    const { script } = await narrate(s)
+    rememberStop(s, script)
+    narratedRecs.push({ s, script })
+  }
+
+  // Post-assembly diversity lint: regenerate cross-stop outliers (Anthropic only,
+  // still no TTS). Each flagged stop is re-narrated with the lint's `avoid` notes
+  // plus FULL awareness of every OTHER stop's opener/closer/kit (not just the
+  // trailing-3 window). Bounded rounds; a regen failure or a stubborn finding
+  // falls back to the current script, so the lint can never block a valid tour.
+  const LINT_ROUNDS = 2
+  const lintInputs = () => narratedRecs.map((r) => ({ seq: r.s.seq, stopType: r.s.stopType, script: r.script }))
+  for (let round = 0; round < LINT_ROUNDS; round++) {
+    const findings = lintScripts(lintInputs())
+    if (findings.length === 0) break
+    console.log(`Diversity lint (round ${round + 1}): ${findings.length} stop(s) flagged.`)
+    for (const f of findings) {
+      const rec = narratedRecs.find((r) => r.s.seq === f.seq)!
+      console.log(`  regen stop ${f.seq} (${rec.s.name}): ${f.reasons.join('; ')}`)
+      const others = narratedRecs.filter((r) => r.s.seq !== f.seq)
+      try {
+        const { script } = await narrateStop({
+          ...baseReq(rec.s),
+          recentOpeners: others.map((r) => openerOf(r.script)),
+          recentClosers: others.map((r) => closerOf(r.script)),
+          recentKitBeats: [...new Set(others.flatMap((r) => kitBeatsOf(r.script)))],
+          avoid: f.avoid,
+        })
+        rec.script = script
+      } catch (e) {
+        console.warn(`  stop ${f.seq} regen failed (${(e as Error).message}) — keeping original.`)
       }
-      console.log(`Narrating stop ${s.seq} (${s.stopType}) "${s.name}"...`)
-      const { script } = await narrate(s)
-      rememberStop(s, script)
-      stops.push({ seq: s.seq, stopType: s.stopType, name: s.name, alongSec: s.alongSec, script })
     }
+  }
+  const stillFlagged = lintScripts(lintInputs())
+  console.log(
+    stillFlagged.length === 0
+      ? 'Diversity lint: clean.'
+      : `Diversity lint: ${stillFlagged.length} finding(s) remain after ${LINT_ROUNDS} rounds (kept best available).`,
+  )
+  const scriptBySeq = new Map(narratedRecs.map((r) => [r.s.seq, r.script]))
+
+  // ---- Dry run: print finalized scripts, no writes. -----------------------
+  if (dryRun) {
+    const stops: StopSummary[] = plan.map((s) =>
+      s.stopType === 'break'
+        ? { seq: s.seq, stopType: s.stopType, name: s.name, alongSec: s.alongSec }
+        : { seq: s.seq, stopType: s.stopType, name: s.name, alongSec: s.alongSec, script: scriptBySeq.get(s.seq) },
+    )
     return { corridor: corridor.name, region: corridor.region, durationBucket, totalSec, dryRun: true, stops }
   }
 
@@ -227,10 +275,8 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
         continue
       }
 
-      console.log(`Narrating + synthesizing stop ${s.seq} (${s.stopType}) "${s.name}"...`)
-      const { script } = await narrate(s)
-      rememberStop(s, script)
-
+      const script = scriptBySeq.get(s.seq)!
+      console.log(`Synthesizing stop ${s.seq} (${s.stopType}) "${s.name}"...`)
       const { audio, durationMs } = await synthesize(script, voice)
       const audioUrl = await uploadAudio(clipKey(poiId, persona, voice, jokeLevel), audio)
 

@@ -94,3 +94,36 @@ describe('selectStops', () => {
     expect(tiny.filter((s) => s.stopType !== 'break').length).toBeLessThanOrEqual(2)
   })
 })
+
+describe('selectStops co-located dedup', () => {
+  // A route that runs NORTH then doubles back SOUTH ~88 m to the east, so the two
+  // ends sit at OPPOSITE ends of the route (far apart in along-route time) yet only
+  // ~88 m apart on the ground — the Fannette-⊂-Emerald-Bay shape. A pure time-gap
+  // would keep both; only the spatial dedup collapses them.
+  const uRoute: LngLat[] = [
+    ...Array.from({ length: 21 }, (_, i) => [0, 38.0 + i * 0.001] as LngLat), // north along lng 0
+    ...Array.from({ length: 21 }, (_, i) => [0.001, 38.02 - i * 0.001] as LngLat), // south along lng 0.001
+  ]
+  const plan = selectStops({
+    polyline: uRoute,
+    totalSec: 660,
+    pacing: { minGapSec: 30, maxNarratedStops: 5, breakStops: 0 }, // tiny gap: time-window would NOT dedup
+    breakAnchors: [],
+    wikiPois: [
+      wiki({ pageid: 1, lat: 38.0, lng: 0, title: 'Start Rich', extract: RICHER }), // snaps to route START
+      wiki({ pageid: 2, lat: 38.0, lng: 0.001, title: 'End Rich', extract: RICH }), // ~88 m away, snaps to route END
+    ],
+  })
+
+  test('collapses two co-located POIs to one, keeping the richer extract', () => {
+    expect(plan.some((s) => s.name === 'Start Rich')).toBe(true) // RICHER wins
+    expect(plan.some((s) => s.name === 'End Rich')).toBe(false) // within MIN_STOP_SEPARATION_M → dropped
+    expect(plan.filter((s) => s.stopType !== 'break').length).toBe(1)
+  })
+
+  test('the survivor sits at opposite end in TIME, proving spatial (not time-gap) dedup', () => {
+    // Start and End snap to alongSec ~0 and ~max — a time gap alone keeps both.
+    const along = (name: string) => plan.find((s) => s.name === name)?.alongSec
+    expect(along('Start Rich')).toBeLessThan(60) // near the route start
+  })
+})

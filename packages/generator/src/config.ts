@@ -51,6 +51,16 @@ export const GEOSEARCH_STEP_M = 2_500
 export const GEOSEARCH_RADIUS_M = 2_000
 /** Wikipedia POIs farther than this from the road aren't "along the drive" — dropped. */
 export const OFF_ROUTE_MAX_M = 700
+/**
+ * Minimum on-the-ground separation between two NARRATED stops (m). A SPATIAL floor
+ * complementary to the minGapSec TIME floor: two POIs can clear the time gap yet
+ * sit on top of each other where the road wraps (Fannette Island sits INSIDE
+ * Emerald Bay State Park — 571 m apart, 254 s apart in drive time — and both leads
+ * named "the only island in Lake Tahoe"). Co-located candidates are deduped to the
+ * richest extract. Measured margin on emerald-bay-run: the only sub-1.5 km pair is
+ * that 571 m overlap; the next-closest stops are 2.3 km apart, so 1000 m is safe.
+ */
+export const MIN_STOP_SEPARATION_M = 1_000
 /** Lead-section extract length to request (chars). ~3–5 sentences of grounded facts. */
 export const EXTRACT_CHARS = 600
 /** Below this extract length a STORY candidate is too thin → downgraded to scenic. */

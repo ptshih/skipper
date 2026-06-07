@@ -13,9 +13,9 @@
 // over thin neighbours.
 
 import type { PoiSource, StopType } from '@skipper/shared'
-import { OFF_ROUTE_MAX_M, PACING, STORY_MIN_FACT_CHARS, TARGET_SECONDS, TRIGGER_RADIUS_M } from '../config'
+import { MIN_STOP_SEPARATION_M, OFF_ROUTE_MAX_M, PACING, STORY_MIN_FACT_CHARS, TARGET_SECONDS, TRIGGER_RADIUS_M } from '../config'
 import type { BucketPacing } from '../config'
-import { cumulativeMeters, nearestOnRoute, timeAtAlong, totalMeters } from './geo'
+import { cumulativeMeters, haversineMeters, nearestOnRoute, timeAtAlong, totalMeters } from './geo'
 import type { LngLat } from './geo'
 import type { WikiPoi } from './wikipedia'
 import type { BreakAnchor } from './places'
@@ -69,6 +69,25 @@ interface Placed {
   alongSec: number
 }
 
+/**
+ * Drop co-located candidates: when two POIs sit within MIN_STOP_SEPARATION_M of
+ * each other on the ground they are effectively the same physical stop (e.g.
+ * Fannette Island ⊂ Emerald Bay State Park), and narrating both repeats the place.
+ * Keep the RICHER extract in each spatial cluster — a duplicate stop is worse than
+ * one good one. Greedy richest-first, so the survivor is the longest extract.
+ */
+function dedupeColocated(placed: Placed[]): Placed[] {
+  const byRichness = [...placed].sort((a, b) => b.poi.extract.length - a.poi.extract.length)
+  const kept: Placed[] = []
+  for (const cand of byRichness) {
+    const tooClose = kept.some(
+      (k) => haversineMeters([k.poi.lng, k.poi.lat], [cand.poi.lng, cand.poi.lat]) < MIN_STOP_SEPARATION_M,
+    )
+    if (!tooClose) kept.push(cand)
+  }
+  return kept
+}
+
 /** Choose narrated (story/scenic) stops from Wikipedia POIs, time-paced, richest-first per window. */
 function selectNarrated(params: SelectParams, alongSecOf: (p: LngLat) => { alongSec: number; offRouteM: number }) {
   const placed: Placed[] = []
@@ -77,13 +96,15 @@ function selectNarrated(params: SelectParams, alongSecOf: (p: LngLat) => { along
     const { alongSec, offRouteM } = alongSecOf([poi.lng, poi.lat])
     if (offRouteM <= OFF_ROUTE_MAX_M) placed.push({ poi, alongSec })
   }
-  placed.sort((a, b) => a.alongSec - b.alongSec)
+  // Spatial dedup BEFORE time-pacing (two co-located POIs can clear the time gap).
+  const candidates = dedupeColocated(placed)
+  candidates.sort((a, b) => a.alongSec - b.alongSec)
 
   const chosen: Placed[] = []
   let lastSec = -Infinity
   let i = 0
-  while (i < placed.length && chosen.length < params.pacing.maxNarratedStops) {
-    const here = placed[i]!
+  while (i < candidates.length && chosen.length < params.pacing.maxNarratedStops) {
+    const here = candidates[i]!
     if (here.alongSec - lastSec < params.pacing.minGapSec) {
       i++
       continue
@@ -92,14 +113,14 @@ function selectNarrated(params: SelectParams, alongSecOf: (p: LngLat) => { along
     let bestIdx = i
     let bestLen = here.poi.extract.length
     let j = i + 1
-    while (j < placed.length && placed[j]!.alongSec - here.alongSec <= params.pacing.minGapSec) {
-      if (placed[j]!.poi.extract.length > bestLen) {
-        bestLen = placed[j]!.poi.extract.length
+    while (j < candidates.length && candidates[j]!.alongSec - here.alongSec <= params.pacing.minGapSec) {
+      if (candidates[j]!.poi.extract.length > bestLen) {
+        bestLen = candidates[j]!.poi.extract.length
         bestIdx = j
       }
       j++
     }
-    const pick = placed[bestIdx]!
+    const pick = candidates[bestIdx]!
     chosen.push(pick)
     lastSec = pick.alongSec
     i = bestIdx + 1
