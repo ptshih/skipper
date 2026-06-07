@@ -8,7 +8,7 @@
 import { S3Client } from 'bun'
 import type { JokeLevel, Persona } from '@skipper/shared'
 import { requireEnv } from '../config'
-import { TTS_AUDIO_CONTENT_TYPE } from '../models'
+import { TTS_AUDIO_CONTENT_TYPE, TTS_CLIP_EXTENSION } from '../models'
 
 let client: S3Client | undefined
 
@@ -30,7 +30,7 @@ function getClient(): S3Client {
 
 /** Object key mirroring the poi_content cache key (persona, voice, joke level, poi). */
 export function clipKey(poiId: string, persona: Persona, voice: string, jokeLevel: JokeLevel): string {
-  return `clips/${persona}/${voice}/${jokeLevel}/${poiId}.mp3`
+  return `clips/${persona}/${voice}/${jokeLevel}/${poiId}.${TTS_CLIP_EXTENSION}`
 }
 
 /** Upload an MP3 (private) and return its R2 object KEY to store on poi_content.audioUrl. */

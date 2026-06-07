@@ -10,7 +10,8 @@
 //                        (tours.isPreview) — the free "sample, then sign up" tour.
 //   --duration=<bucket>  short | standard | long   (default: standard)
 //
-// A full run additionally needs ELEVENLABS_API_KEY and the R2_* vars.
+// A full run additionally needs Google Cloud TTS (GOOGLE_CLOUD_PROJECT + ADC, i.e.
+// GOOGLE_APPLICATION_CREDENTIALS or `gcloud auth application-default login`) and R2_*.
 
 import { generateTour } from './pipeline/generate'
 import type { GenerateResult } from './pipeline/generate'

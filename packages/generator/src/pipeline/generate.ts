@@ -23,7 +23,7 @@ import type { DurationBucket } from '@skipper/shared'
 import type { AttributionSnapshot } from '@skipper/db/schema'
 import {
   ANTHROPIC_READY,
-  ELEVENLABS_READY,
+  GOOGLE_TTS_READY,
   FALLBACK_SPEED_MPS,
   GEOSEARCH_STEP_M,
   GOOGLE_READY,
@@ -92,7 +92,12 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
 
   if (!ANTHROPIC_READY()) throw new Error('ANTHROPIC_API_KEY is not set (narration requires it).')
   if (!dryRun) {
-    if (!ELEVENLABS_READY()) throw new Error('ELEVENLABS_API_KEY is not set (needed for TTS; use --dry-run to skip).')
+    if (!GOOGLE_TTS_READY())
+      throw new Error(
+        'Google Cloud TTS is not configured — set GOOGLE_CLOUD_PROJECT and provide ADC ' +
+          '(GOOGLE_APPLICATION_CREDENTIALS=<service-account.json>, or `gcloud auth application-default login` ' +
+          'plus GOOGLE_TTS_USE_ADC=1). Use --dry-run to skip TTS.',
+      )
     if (!R2_READY()) {
       throw new Error('R2_* env (ACCOUNT_ID, ACCESS_KEY_ID, SECRET_ACCESS_KEY, BUCKET) is not set.')
     }

@@ -28,7 +28,12 @@ export function hasEnv(name: string): boolean {
 // --- Provider readiness (lets --dry-run skip TTS/R2 cleanly) ----------------
 
 export const ANTHROPIC_READY = (): boolean => hasEnv('ANTHROPIC_API_KEY')
-export const ELEVENLABS_READY = (): boolean => hasEnv('ELEVENLABS_API_KEY')
+// Cloud TTS readiness: the only env var we strictly need is the billing/quota
+// project; the OAuth creds come from ADC (a service-account JSON via
+// GOOGLE_APPLICATION_CREDENTIALS, or `gcloud auth application-default login`). If
+// the project is set but creds are missing, synthesize() throws a clear auth error.
+export const GOOGLE_TTS_READY = (): boolean =>
+  hasEnv('GOOGLE_CLOUD_PROJECT') && (hasEnv('GOOGLE_APPLICATION_CREDENTIALS') || hasEnv('GOOGLE_TTS_USE_ADC'))
 export const GOOGLE_READY = (): boolean => hasEnv('GOOGLE_MAPS_API_KEY')
 // Credentials + bucket are always required; the endpoint comes from either an
 // explicit S3_ENDPOINT override (Tigris, B2, AWS S3) or the R2 account id.
