@@ -51,23 +51,32 @@ export const TTS_MODEL = 'eleven_multilingual_v2' as const
 export const TTS_OUTPUT_FORMAT = 'mp3_44100_128' as const
 export const TTS_AUDIO_CONTENT_TYPE = 'audio/mpeg' as const
 
-// ElevenLabs voice options for the Skipper. The ACTIVE pick (`adam`) is a
-// PROFESSIONAL voice → permanent (NOT subject to the 2026-12-31 Default-voice
-// sunset). The george/brian/bill entries are legacy "Default" voices that
-// ElevenLabs RETIRES on 2026-12-31 — kept only as A/B references, do not ship them.
+// ElevenLabs voice options for the Skipper. The ACTIVE pick is `george`
+// ("Warm, Captivating Storyteller") — a PREMADE ("Default") voice. Why a Default
+// and not the permanent professional `adam`: this account is on the ElevenLabs
+// FREE plan, and Free cannot synthesize library/PROFESSIONAL voices via the API
+// (the request 402s with paid_plan_required — it's what killed the first full run
+// on stop 1). Premade voices DO work on Free, and George is the best tonal fit for
+// the warm/corny skipper (auditioned head-to-head 2026-06-06 vs Chris/Brian/Will).
+// CAVEAT: premade "Default" voices are RETIRED by ElevenLabs on 2026-12-31 — so
+// re-synthesize onto a permanent voice before then (or once the plan is upgraded).
+// `adam` (+ `mark`) are professional/library voices reserved for the paid-plan
+// upgrade path; brian/bill are premade A/B references.
 // Source: https://help.elevenlabs.io/hc/en-us/articles/25844757988753
 export const ELEVEN_VOICES = {
-  adam: 'IRHApOXLvnW57QJPQH2P', // "Adam — American, Dark and Tough" — PROFESSIONAL (permanent)
-  george: 'JBFqnCBsd6RMkjVDRZzb', // "Warm, Captivating Storyteller" — DEPRECATED Default (gone 2026-12-31)
-  brian: 'nPczCjzI2devNBz1zQrb', // "Deep, Resonant and Comforting" — DEPRECATED Default
-  bill: 'pqHfZKP75CvOlQylNhV4', // older, trustworthy, warm narrator — DEPRECATED Default
+  george: 'JBFqnCBsd6RMkjVDRZzb', // "Warm, Captivating Storyteller" — PREMADE (Free-plan OK; sunsets 2026-12-31)
+  adam: 'IRHApOXLvnW57QJPQH2P', // "Adam — American, Dark and Tough" — PROFESSIONAL/library (permanent; needs PAID plan)
+  brian: 'nPczCjzI2devNBz1zQrb', // "Deep, Resonant and Comforting" — PREMADE Default (Free-plan OK; sunsets 2026-12-31)
+  bill: 'pqHfZKP75CvOlQylNhV4', // older, trustworthy, warm narrator — PREMADE Default
 } as const
 
 export type ElevenVoiceId = (typeof ELEVEN_VOICES)[keyof typeof ELEVEN_VOICES]
 
-// The Skipper's voice. Stored VERBATIM as the poi_content cache-key `voice`.
-// `adam` is a professional (permanent) voice — not affected by the Default-voice sunset.
-export const SKIPPER_VOICE_ID: ElevenVoiceId = ELEVEN_VOICES.adam
+// The Skipper's voice. Stored VERBATIM as the poi_content cache-key `voice` (and
+// in the R2 clip key), so changing it after tours exist forces paid re-synthesis.
+// `george` is a premade voice that works on the Free plan; revisit when the
+// ElevenLabs plan is upgraded or before the 2026-12-31 Default-voice sunset.
+export const SKIPPER_VOICE_ID: ElevenVoiceId = ELEVEN_VOICES.george
 
 // voice_settings tuned for a warm/corny/characterful storyteller on
 // eleven_multilingual_v2 (continuous controls). style is moderate — high style

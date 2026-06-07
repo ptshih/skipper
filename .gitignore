@@ -28,6 +28,9 @@ ios/Pods/
 # Logs
 *.log
 
+# Scratch / throwaway verification scripts (agent workspace)
+.scratch/
+
 # Claude Code (local agent runtime state — locks, worktrees)
 .claude/
 
