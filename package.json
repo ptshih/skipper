@@ -11,10 +11,9 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "dotenvx run -f .env.development -- turbo run dev",
-    "typecheck": "turbo run typecheck",
-    "test": "turbo run test",
-    "clean": "turbo run clean",
+    "dev": "dotenvx run -f .env.development -- bun --filter @skipper/api dev",
+    "typecheck": "bun --filter '*' typecheck",
+    "test": "bun --filter '*' test",
     "prepare": "dotenvx ext precommit --install || true",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yaml,yml}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,yaml,yml}\"",
@@ -27,7 +26,6 @@
   "devDependencies": {
     "@dotenvx/dotenvx": "^1.71.0",
     "prettier": "^3.8.3",
-    "turbo": "^2.9.16",
     "typescript": "^6.0.3"
   },
   "trustedDependencies": [

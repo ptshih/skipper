@@ -8,9 +8,6 @@ out/
 .next/
 web-build/
 
-# Turborepo
-.turbo/
-
 # Expo / React Native (apps/mobile — deferred until the CarPlay gate)
 .expo/
 .expo-shared/

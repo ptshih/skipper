@@ -41,7 +41,7 @@ scale-for-a-market, pick polish.
 - **bun everywhere** (package manager + runtime). Internal packages export `.ts`
   source (no dist build); bun runs it, `tsc --noEmit` type-checks. No `tsx`, no
   `@hono/node-server`.
-- Verified pins: TS 6.0.3, turbo 2.9.16, zod 4.4.3 (`z.enum`, top-level
+- Verified pins: TS 6.0.3, zod 4.4.3 (`z.enum`, top-level
   `z.uuid()`/`z.url()`), drizzle-orm 0.45.2 + drizzle-kit 0.31.10 (neon-http,
   stateless — no interactive transactions; use `db.batch`), hono 4.12.23,
   @anthropic-ai/sdk 0.102.0. **TTS = ElevenLabs via REST** (no SDK — raw `fetch`

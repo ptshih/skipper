@@ -37,7 +37,7 @@ skipper/
 │   ├── shared/     @skipper/shared    — Zod schemas + types, imported everywhere.
 │   ├── db/         @skipper/db        — Drizzle schema + Neon client.
 │   └── generator/  @skipper/generator — server-side tour generation (M1).
-├── tsconfig.base.json · turbo.json · package.json (bun workspaces)
+├── tsconfig.base.json · package.json (bun workspaces)
 ```
 
 Internal packages export **TypeScript source** directly (no dist build) — bun
@@ -48,8 +48,8 @@ runs `.ts`, and `tsc --noEmit` type-checks. There is no `tsx`, no
 
 ```bash
 bun install
-bun run dev                 # dotenvx decrypts .env.development, then turbo -> bun --watch the api (http://localhost:8787/health)
-bun run typecheck           # turbo -> tsc --noEmit across all packages
+bun run dev                 # dotenvx decrypts .env.development, then bun --watch the api (http://localhost:8787/health)
+bun run typecheck           # bun --filter -> tsc --noEmit across all packages
 ```
 
 ### Environment & secrets
