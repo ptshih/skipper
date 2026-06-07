@@ -63,14 +63,16 @@ export default function CorridorsScreen() {
           refreshControl={<RefreshControl refreshing={false} onRefresh={load} />}
           ListEmptyComponent={<Text style={[styles.pad, styles.dim]}>No corridors yet.</Text>}
           renderItem={({ item }) => (
-            <View style={styles.card}>
-              <Text style={styles.title}>{item.name}</Text>
-              <Text style={styles.dim}>
-                {item.region}
-                {item.durationSeconds ? ` · ~${Math.round(item.durationSeconds / 60)} min` : ''}
-              </Text>
-              {item.summary ? <Text style={styles.body}>{item.summary}</Text> : null}
-            </View>
+            <Link href={{ pathname: '/corridor/[id]', params: { id: item.id, name: item.name } }} asChild>
+              <Pressable style={styles.card}>
+                <Text style={styles.title}>{item.name}</Text>
+                <Text style={styles.dim}>
+                  {item.region}
+                  {item.durationSeconds ? ` · ~${Math.round(item.durationSeconds / 60)} min` : ''}
+                </Text>
+                {item.summary ? <Text style={styles.body}>{item.summary}</Text> : null}
+              </Pressable>
+            </Link>
           )}
         />
       )}

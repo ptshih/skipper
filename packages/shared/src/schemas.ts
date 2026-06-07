@@ -124,6 +124,18 @@ export type CorridorListItem = z.infer<typeof corridorListItem>
 export const corridorList = z.object({ corridors: z.array(corridorListItem) })
 export type CorridorList = z.infer<typeof corridorList>
 
+/** GET /corridors/:id/tours — ready tours for a corridor (catalog metadata; play is gated). */
+export const tourListItem = z.object({
+  id: z.uuid(),
+  durationBucket,
+  persona,
+  jokeLevel,
+  isPreview: z.boolean(),
+})
+export type TourListItem = z.infer<typeof tourListItem>
+export const corridorTours = z.object({ tours: z.array(tourListItem) })
+export type CorridorTours = z.infer<typeof corridorTours>
+
 /** A stop as the player needs it: location + trigger + whether it has audio. */
 export const tourStopView = z.object({
   seq: z.number().int(),
