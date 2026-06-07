@@ -16,7 +16,12 @@ scale-for-a-market, pick polish.
 
 ## Hard invariants (enforced in code; don't regress them)
 
-- **No auth, no users table, no `createdBy`.** Tours are anonymous/shareable.
+- **Tours stay anonymous/shareable — no `createdBy` on `tours`.** Auth now EXISTS
+  (Better Auth, freemium: anonymous → free account → paid `user.tier`) but is
+  layered AROUND tours, not on them. Signed-in users save via the `saved_tours`
+  join, never ownership columns. Anonymous users get a shareable preview
+  (`tours.isPreview`); full playback needs a free account. Audio is PRIVATE in R2;
+  the API serves presigned URLs after the tier check (so the wall is real).
 - **`pois` deduped by `(source, source_id)`.** Store `source`/`source_id` for
   attribution — Wikipedia is **CC BY-SA**, keep credit (attribution snapshot is
   frozen on `poi_content` at generation time).
@@ -44,6 +49,13 @@ scale-for-a-market, pick polish.
   returns MP3 + char alignment so we get audio + duration in one call). **R2 =
   Bun's native `S3Client`** (no `@aws-sdk`; `region: "auto"`); the generator
   tsconfig needs `types: ["node","bun"]` for it.
+- **Auth = Better Auth** (`apps/api/auth.ts`). It needs interactive transactions,
+  so it runs on its OWN `drizzle-orm/neon-serverless` Pool client (`auth-db.ts`)
+  while the rest of the app stays on neon-http. Its tables live in
+  `@skipper/db/auth-schema.ts` (CLI-generated: `bunx @better-auth/cli generate`,
+  then `db:generate` + `db:migrate`). `user.tier` ('free'|'paid') is the manual
+  freemium flag (no Stripe yet); `accessTier` ('anonymous'|'free'|'paid') is the
+  derived per-request tier in `@skipper/shared`.
 - **Secrets via dotenvx.** `.env.development` / `.env.production` are committed
   ENCRYPTED (public-key); the private keys live only in gitignored `.env.keys`.
   Root scripts wrap commands with `dotenvx run -f .env.development` — so `bun run
