@@ -15,15 +15,13 @@
 // DIFFERENT "personify the place" kickers read as samey but share no words) — that
 // needs an LLM judge and is left as a future extension.
 //
-// TODO(semantic-closer-lint): add an optional LLM-judge pass that scores the
-// assembled CLOSERS for SEMANTIC monotony — the personification-kicker residual
-// ("the water showing off" / "she earned the medal" / "Tahoe generous to a fault"
-// read samey but share no words, so the deterministic rules above can't catch
-// them). It should return the seqs whose closers cluster on one move, then feed
-// each into the SAME `avoid` regen hook (generate.ts) with a note like "do not end
-// by personifying the place; vary the closing move." Gate it behind a flag (one
-// extra Anthropic call per generation); keep this deterministic lint always-on as
-// the baseline. Context: memory note [[first-tour-generated-narration-tuning]].
+// The SEMANTIC-monotony counterpart now lives in pipeline/judge.ts: an optional
+// LLM-judge pass (gated behind --judge-closers) that scores the assembled CLOSERS
+// for shared rhetorical MOVE — the personification-kicker residual ("the water
+// showing off" / "Tahoe generous to a fault" read samey but share no words, so the
+// deterministic rules here can't catch them). It returns the over-used-move seqs in
+// this module's LintFinding shape, so generate.ts feeds them through the SAME regen
+// hook. This deterministic lint stays the always-on baseline.
 
 import type { StopType } from '@skipper/shared'
 

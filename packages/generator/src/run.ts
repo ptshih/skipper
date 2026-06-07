@@ -8,6 +8,8 @@
 //                        Needs ANTHROPIC_API_KEY (+ GOOGLE_MAPS_API_KEY for breaks).
 //   --preview            Mark this tour as the anonymous-playable sample
 //                        (tours.isPreview) — the free "sample, then sign up" tour.
+//   --judge-closers      Run the optional semantic-closer LLM judge after the lint
+//                        (one extra model call) to break up closing-move monotony.
 //   --duration=<bucket>  short | standard | long   (default: standard)
 //
 // A full run additionally needs Google Cloud TTS (GOOGLE_CLOUD_PROJECT + ADC, i.e.
@@ -19,19 +21,28 @@ import type { GenerateResult } from './pipeline/generate'
 const DURATIONS = ['short', 'standard', 'long'] as const
 type Duration = (typeof DURATIONS)[number]
 
-function parseArgs(argv: string[]): { slug: string; dryRun: boolean; preview: boolean; durationBucket: Duration } {
+interface Args {
+  slug: string
+  dryRun: boolean
+  preview: boolean
+  judgeClosers: boolean
+  durationBucket: Duration
+}
+
+function parseArgs(argv: string[]): Args {
   const args = argv.slice(2)
   const slug = args.find((a) => !a.startsWith('--'))
   if (!slug) {
-    throw new Error('Usage: run.ts <corridor-slug> [--dry-run] [--preview] [--duration=short|standard|long]')
+    throw new Error('Usage: run.ts <corridor-slug> [--dry-run] [--preview] [--judge-closers] [--duration=short|standard|long]')
   }
   const dryRun = args.includes('--dry-run')
   const preview = args.includes('--preview')
+  const judgeClosers = args.includes('--judge-closers')
   const durArg = args.find((a) => a.startsWith('--duration='))?.split('=')[1] ?? 'standard'
   if (!DURATIONS.includes(durArg as Duration)) {
     throw new Error(`--duration must be one of ${DURATIONS.join(', ')} (got "${durArg}")`)
   }
-  return { slug, dryRun, preview, durationBucket: durArg as Duration }
+  return { slug, dryRun, preview, judgeClosers, durationBucket: durArg as Duration }
 }
 
 const mmss = (sec: number): string => {
@@ -59,8 +70,8 @@ function printResult(r: GenerateResult): void {
 }
 
 async function main() {
-  const { slug, dryRun, preview, durationBucket } = parseArgs(process.argv)
-  const result = await generateTour({ slug, dryRun, preview, durationBucket })
+  const { slug, dryRun, preview, judgeClosers, durationBucket } = parseArgs(process.argv)
+  const result = await generateTour({ slug, dryRun, preview, judgeClosers, durationBucket })
   printResult(result)
 }
 

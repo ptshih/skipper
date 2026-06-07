@@ -42,6 +42,8 @@ import type { StopPlan } from './select'
 import { narrateStop } from './narrate'
 import type { NarrationRequest } from './narrate'
 import { lintScripts } from './lint'
+import type { LintFinding } from './lint'
+import { judgeCloserDiversity } from './judge'
 import { synthesize } from './tts'
 import { clipKey, uploadAudio } from './storage'
 import {
@@ -61,6 +63,8 @@ export interface GenerateOptions {
   dryRun?: boolean
   /** Flag this tour as the anonymous-playable sample (tours.isPreview). */
   preview?: boolean
+  /** Run the optional semantic-closer judge (one extra model call) after the lint. */
+  judgeClosers?: boolean
 }
 
 export interface StopSummary {
@@ -88,6 +92,7 @@ const firstSentence = (facts: string[]): string | null => facts[0] ?? null
 export async function generateTour(opts: GenerateOptions): Promise<GenerateResult> {
   const durationBucket: DurationBucket = opts.durationBucket ?? 'standard'
   const dryRun = Boolean(opts.dryRun)
+  const judgeClosers = Boolean(opts.judgeClosers)
   const { persona, voice, jokeLevel } = SKIPPER_DEFAULTS
 
   if (!ANTHROPIC_READY()) throw new Error('ANTHROPIC_API_KEY is not set (narration requires it).')
@@ -199,18 +204,15 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   }
 
   // Post-assembly diversity lint: regenerate cross-stop outliers (Anthropic only,
-  // still no TTS). Each flagged stop is re-narrated with the lint's `avoid` notes
+  // still no TTS). Each flagged stop is re-narrated with the finding's `avoid` notes
   // plus FULL awareness of every OTHER stop's opener/closer/kit (not just the
-  // trailing-3 window). Bounded rounds; a regen failure or a stubborn finding
-  // falls back to the current script, so the lint can never block a valid tour.
-  const LINT_ROUNDS = 2
+  // trailing-3 window). A regen failure or a stubborn finding falls back to the
+  // current script, so the lint can never block a valid tour.
   const lintInputs = () => narratedRecs.map((r) => ({ seq: r.s.seq, stopType: r.s.stopType, script: r.script }))
-  for (let round = 0; round < LINT_ROUNDS; round++) {
-    const findings = lintScripts(lintInputs())
-    if (findings.length === 0) break
-    console.log(`Diversity lint (round ${round + 1}): ${findings.length} stop(s) flagged.`)
+  const regenForFindings = async (findings: LintFinding[]) => {
     for (const f of findings) {
-      const rec = narratedRecs.find((r) => r.s.seq === f.seq)!
+      const rec = narratedRecs.find((r) => r.s.seq === f.seq)
+      if (!rec) continue
       console.log(`  regen stop ${f.seq} (${rec.s.name}): ${f.reasons.join('; ')}`)
       const others = narratedRecs.filter((r) => r.s.seq !== f.seq)
       try {
@@ -225,6 +227,34 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       } catch (e) {
         console.warn(`  stop ${f.seq} regen failed (${(e as Error).message}) — keeping original.`)
       }
+    }
+  }
+
+  const LINT_ROUNDS = 2
+  for (let round = 0; round < LINT_ROUNDS; round++) {
+    const findings = lintScripts(lintInputs())
+    if (findings.length === 0) break
+    console.log(`Diversity lint (round ${round + 1}): ${findings.length} stop(s) flagged.`)
+    await regenForFindings(findings)
+  }
+
+  // Optional semantic-closer judge (one extra model call): catches closing-move
+  // monotony the deterministic lint can't see — e.g. several stops personifying the
+  // place in different words. Best-effort (a judge error never blocks the tour);
+  // any regen it triggers is re-checked by one more deterministic lint pass.
+  if (judgeClosers) {
+    try {
+      const judged = await judgeCloserDiversity(narratedRecs.map((r) => ({ seq: r.s.seq, script: r.script })))
+      if (judged.length > 0) {
+        console.log(`Closer judge: ${judged.length} stop(s) flagged for closing-move monotony.`)
+        await regenForFindings(judged)
+        const after = lintScripts(lintInputs())
+        if (after.length > 0) await regenForFindings(after)
+      } else {
+        console.log('Closer judge: closers are varied.')
+      }
+    } catch (e) {
+      console.warn(`Closer judge skipped (${(e as Error).message}).`)
     }
   }
   const stillFlagged = lintScripts(lintInputs())
