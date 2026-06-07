@@ -15,6 +15,15 @@
 // DIFFERENT "personify the place" kickers read as samey but share no words) — that
 // needs an LLM judge and is left as a future extension.
 //
+// LONG-FORM backstop: once a STORY stop targets a Shaka-length ~2 min telling, new
+// failure modes appear WITHIN a single stop that the cross-stop checks miss — the
+// model, given more room, reaches for MULTIPLE wind-up crutches, enumerates facts
+// like a list, ties a reflective bow on the end, or echoes its own phrasing. The
+// per-stop checks below (tic-stacking, list/inventory shape, tidy-bow closer,
+// within-stop repetition) catch those; the persona prompt forbids all of them, so
+// they flag on first occurrence, conservatively (so a valid long stop isn't
+// needlessly regenerated).
+//
 // The SEMANTIC-monotony counterpart now lives in pipeline/judge.ts: an optional
 // LLM-judge pass (gated behind --judge-closers) that scores the assembled CLOSERS
 // for shared rhetorical MOVE — the personification-kicker residual ("the water
@@ -54,7 +63,13 @@ const DROP_KIT =
 // family deal", "here is one that ..."). Note: only "here's"/"here is" — "there is
 // the lighthouse" is legitimate pointing, not a wind-up.
 const BANNED: [RegExp, string][] = [
-  [/\bhere(?:'s| is)\s+(?:the|one|a|an|what|why|how|something)\b/i, 'a "here is the …" reveal wind-up'],
+  // "here's the / here's where it …" reveal wind-ups (incl. the long-form leak
+  // "here's where it gets fancy" / "here is where it turns" the audit caught).
+  [/\bhere(?:'s| is)\s+(?:the|one|a|an|what|why|how|where|something)\b/i, 'a "here is the/where …" reveal wind-up'],
+  [/\bwhere it (?:gets|turns|starts to get|really gets)\b/i, 'a "where it gets/turns …" pivot wind-up'],
+  [/\bwrap your head around\b/i, 'a "wrap your head around …" listener-nudge'],
+  [/\b(?:wait for it|wait (?:till|until) you)\b/i, 'a "wait for it" listener-nudge'],
+  [/\bthe story (?:does ?n'?t|does not) end\b/i, 'a "the story doesn\'t end there" wind-up'],
   [/\bfun fact\b/i, '"fun fact"'],
   [/\bdid you know\b/i, '"did you know"'],
   [/\b(?:but|and)\s+get this\b/i, '"(but/and) get this"'],
@@ -65,6 +80,14 @@ const BANNED: [RegExp, string][] = [
   [/\bnestled\b/i, '"nestled"'],
   [/\brich history\b/i, '"rich history"'],
 ]
+
+// Global-flag variants of BANNED, precomputed once at module load — used to COUNT
+// occurrences for the within-stop tic-stacking check below. The base BANNED forms are
+// single-match (test()), so without this the stacking pass would rebuild a global regex
+// per stop × per pattern on every lintScripts call.
+const BANNED_GLOBAL: RegExp[] = BANNED.map(([re]) =>
+  new RegExp(re.source, re.flags.includes('g') ? re.flags : re.flags + 'g'),
+)
 
 // Crutch phrases the Skipper reaches for: fine ONCE, grating when repeated across a
 // single drive. Matched case-insensitively as substrings.
@@ -97,8 +120,10 @@ const contentWords = (s: string): string[] =>
     .split(/\s+/)
     .filter((w) => w && !FILLER.has(w))
 
+const splitSentences = (s: string): string[] => s.trim().split(/(?<=[.!?])\s+/).filter(Boolean)
+
 const lastSentence = (s: string): string => {
-  const parts = s.trim().split(/(?<=[.!?])\s+/).filter(Boolean)
+  const parts = splitSentences(s)
   return parts.length ? parts[parts.length - 1]! : s.trim()
 }
 
@@ -180,6 +205,89 @@ export function lintScripts(stops: LintInput[]): LintFinding[] {
       const prev = seenClose.get(ck)
       if (prev !== undefined) flag(s.seq, `closes like stop ${prev} ("${ck}")`, `Close DIFFERENTLY — do not end with words like "${ck}".`)
       else seenClose.set(ck, s.seq)
+    }
+  }
+
+  // 4. Tic STACKING within ONE stop — section 0 flags a stop for ANY banned tic;
+  //    at length the model piles several into one telling. Count total occurrences
+  //    so the regen note can say "you stacked N," which the per-pattern flag can't.
+  for (const s of stops) {
+    let ticCount = 0
+    for (const g of BANNED_GLOBAL) ticCount += (s.script.match(g) ?? []).length
+    if (ticCount >= 2) {
+      flag(
+        s.seq,
+        `stacks ${ticCount} wind-up/AI tics in one stop`,
+        'You used several canned setups/wind-ups in this single stop — remove ALL of them and just state each surprising thing plainly.',
+      )
+    }
+  }
+
+  // 5. List / inventory SHAPE — a long stop that ENUMERATES facts ("Next... Also...
+  //    Another thing...") instead of weaving them; the persona prompt bans the
+  //    encyclopedia shape. Flag ≥2 sentence-initial enumerators in one stop.
+  const LIST_MARKER =
+    /^(first(?:ly)?|second(?:ly)?|third(?:ly)?|next|also|lastly|finally|another thing|and another|then there'?s|then there is|plus)\b,?/i
+  for (const s of stops) {
+    const sentences = splitSentences(s.script)
+    const markers = sentences.filter((x) => LIST_MARKER.test(x.trim())).length
+    if (markers >= 2) {
+      flag(
+        s.seq,
+        `reads like a list (${markers} enumerated sentences)`,
+        'Do NOT enumerate the facts ("Next... Also... Another thing..."). Weave them — let one fact hand you to the next with a reaction or a turn, not a list marker.',
+      )
+    }
+  }
+
+  // 6. Tidy bow / reflective recap CLOSER — the wrap the persona prompt bans ("just
+  //    one of the many stories this place has to tell"). Checked on the LAST sentence
+  //    only, so a mid-stop aside doesn't trip it.
+  const TIDY_BOW: RegExp[] = [
+    /one of the many/i,
+    /stor(?:y|ies) this place (?:has|could)/i,
+    /goes to show/i,
+    /at the end of the day/i,
+    /\ball in all\b/i,
+    /there you have it/i,
+    /sums? (?:it|this|the place|this place) up/i,
+    /if that (?:doesn'?t|does not|isn'?t|is not)\b/i,
+    /just one of those (?:places|spots|stories)/i,
+  ]
+  for (const s of stops) {
+    const last = lastSentence(s.script)
+    if (TIDY_BOW.some((re) => re.test(last))) {
+      flag(
+        s.seq,
+        'ends on a tidy bow / reflective recap',
+        'Do NOT end with a reflective bow or summary ("just one of the many stories...", "goes to show...", "all in all..."). Close on a concrete fact, a plain sensory image, or honest understatement.',
+      )
+    }
+  }
+
+  // 7. Within-stop self-repetition — at length a stop can echo its own phrasing. Flag
+  //    any CONTENT-word 4-gram repeated in a single script (filler-stripped, so "the
+  //    a now" don't count; a repeated 4-word content run is a real echo, not chance,
+  //    and 4 words rarely collide with a 2–3-word place name). Long scripts only.
+  for (const s of stops) {
+    const words = contentWords(s.script)
+    if (words.length < 12) continue
+    const seen = new Set<string>()
+    let repeated: string | undefined
+    for (let i = 0; i + 3 < words.length; i++) {
+      const quad = `${words[i]} ${words[i + 1]} ${words[i + 2]} ${words[i + 3]}`
+      if (seen.has(quad)) {
+        repeated = quad
+        break
+      }
+      seen.add(quad)
+    }
+    if (repeated) {
+      flag(
+        s.seq,
+        `repeats the phrase "${repeated}" within the stop`,
+        `Do NOT repeat the phrase "${repeated}" inside this stop — say it once.`,
+      )
     }
   }
 

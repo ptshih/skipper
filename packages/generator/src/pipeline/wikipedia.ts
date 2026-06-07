@@ -9,7 +9,7 @@
 // requests in series. License for reuse is CC BY-SA 4.0 — attribution is
 // snapshotted onto poi_content at generation time (see generate.ts).
 
-import { EXTRACT_CHARS, GEOSEARCH_RADIUS_M, WIKIPEDIA_USER_AGENT } from '../config'
+import { DEEP_EXTRACT_CHARS, EXTRACT_CHARS, GEOSEARCH_RADIUS_M, WIKIPEDIA_USER_AGENT } from '../config'
 import type { LngLat } from './geo'
 import { fetchWithRetry, sleep } from './http'
 
@@ -102,6 +102,48 @@ async function fetchExtracts(pageids: number[]): Promise<ExtractPage[]> {
       inprop: 'url',
     })
     out.push(...(j.query?.pages ?? []))
+  }
+  return out
+}
+
+// Trailing article sections that are NOT narration facts (lists of citations,
+// links, etc.). With exsectionformat=plain these appear as bare heading lines; we
+// cut the deep extract at the first one so the fact sheet stays story material.
+const END_SECTION =
+  /\n\s*(References|See also|External links?|Notes|Further reading|Bibliography|Citations|Sources|Gallery)\s*\n/i
+
+/** Full-article plain-text extract for ONE page (no exintro), capped + trimmed of trailing meta. */
+async function fetchArticleExtract(pageid: number): Promise<string> {
+  // exintro is OFF here (we want the body, not just the lead), and MediaWiki forces
+  // exlimit=1 in that mode — so this is one page per call. exchars caps the size.
+  const j = await wiki<{ query?: { pages?: ExtractPage[] } }>({
+    action: 'query',
+    prop: 'extracts',
+    pageids: String(pageid),
+    explaintext: '1',
+    exsectionformat: 'plain',
+    exchars: String(DEEP_EXTRACT_CHARS),
+  })
+  const raw = (j.query?.pages?.[0]?.extract ?? '').trim()
+  return raw.split(END_SECTION)[0]!.trim()
+}
+
+/**
+ * Deep fact sheets for the SELECTED story POIs: one full-article extract each (in
+ * series, per etiquette). Used to give a chosen story stop more grounded material
+ * than the lead section alone, so the narration can run longer WITHOUT padding. A
+ * per-POI failure is non-fatal — the caller keeps that stop's lead facts.
+ */
+export async function fetchDeepExtracts(pageids: number[]): Promise<Map<number, string>> {
+  const out = new Map<number, string>()
+  for (const id of pageids) {
+    try {
+      const text = await fetchArticleExtract(id)
+      if (text) out.set(id, text)
+    } catch (e) {
+      console.warn(`Deep extract for page ${id} failed (${(e as Error).message}) — keeping lead facts.`)
+    }
+    await sleep(200) // gentle pacing between full-article calls
   }
   return out
 }

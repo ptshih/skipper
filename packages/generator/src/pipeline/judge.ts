@@ -46,16 +46,19 @@ export function toFindings(flagged: FlaggedCloser[]): LintFinding[] {
     reasons: [`closing-move monotony — leans on "${f.move}" (${f.reason})`],
     avoid: [
       `Close with a DIFFERENT KIND of move than "${f.move}". Too many stops on this tour end the same way — ` +
-        `most often by personifying the place or with a tidy one-liner. End THIS stop instead on a concrete ` +
-        `fact, a plain sensory image, a question, or plain understatement; do NOT personify the place and do ` +
-        `NOT end on a cute aphorism.`,
+        `most often by personifying the place, with a tidy one-liner, on a reflective lesson/summary of what ` +
+        `the stop "was about," or on a recap that re-lists facts you already gave. End THIS stop instead on a ` +
+        `concrete fact, a plain sensory image, a question, or plain understatement; do NOT personify the place, ` +
+        `do NOT end on a cute aphorism, a lesson, a moral, a recap/menu of the stop, or an atmospheric no-new-fact ` +
+        `sign-off. And do NOT reach for a wind-up or canned tic ("here is the...", "wait for it") to replace the ` +
+        `ending — just stop on the last real, concrete beat.`,
     ],
   }))
 }
 
 const SYSTEM = `You are a narration editor for an AI-narrated road-trip tour. You are given the CLOSING line(s) of each stop on ONE tour, in order. Your ONLY job is to catch CLOSING-MOVE MONOTONY: when too many stops end with the same RHETORICAL MOVE even though the words differ, so the endings feel formulaic.
 
-The move to watch most is PERSONIFYING THE PLACE or ending on a tidy aphorism — e.g. "the water showing off," "Smart island," "she earned the medal," "Tahoe, generous to a fault," "the meadow gets the last word." Those share no words but are the same trick: hand the landscape a human verb, or sum the stop up with a cute one-liner. Other moves include: a self-deprecating personal aside, a rhetorical question, a plain sensory image, restating the key fact, or dry understatement.
+Three moves to watch most. (1) PERSONIFYING THE PLACE or ending on a tidy aphorism — e.g. "the water showing off," "Smart island," "she earned the medal," "Tahoe, generous to a fault," "the meadow gets the last word." Those share no words but are the same trick: hand the landscape a human verb, or sum the stop up with a cute one-liner. (2) The REFLECTIVE BUTTON — closing on a little lesson, a moral, or a summary of what the stop "was really about": "there's a lesson in there somewhere," "the small one in the room, holding its own," "the lake remembers," "not bad for a place nobody planned." (3) The RECAP CLOSER — a final beat that re-lists facts already given (a little menu of the stop's stats: "a lighthouse, a rock, and a man named Bliss"; "twenty-seven events, thirty flags") or an atmospheric sign-off that adds no new fact ("the quiet does the rest," "and the lake just keeps on being the lake"). All three turn a story into a school essay; they are the move a LONGER stop falls into hardest, so weight them heavily. Other (good) moves include: a self-deprecating personal aside, a rhetorical question, a plain sensory image, restating ONE key fact, or dry understatement.
 
 Rules:
 - A move used once or twice across a tour is GOOD variety. Flag a move only when it is OVERUSED — roughly more than a third of the stops lean on it.

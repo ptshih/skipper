@@ -10,18 +10,25 @@
 // naming a peak/town/business is itself a fact the model was not given.
 //
 // Model constraints (Opus 4.8): adaptive thinking only — NO temperature / top_p /
-// top_k / budget_tokens (all 400). Output is short (~a 30s script), so a single
+// top_k / budget_tokens (all 400). Output is modest (a story stop now targets a
+// Shaka-length ~2 min telling, ~300 spoken words ≈ ~450 output tokens), so a single
 // non-streaming messages.create is right; max_tokens is generous because adaptive
-// thinking tokens count against it. A refusal or a max_tokens truncation is a HARD
-// failure — we never persist a truncated or empty script (quality invariant).
+// thinking tokens count against it AND a long-form grounded telling reasons harder.
+// A refusal or a max_tokens truncation is a HARD failure — we never persist a
+// truncated or empty script (quality invariant), so size for the worst case.
 
 import Anthropic from '@anthropic-ai/sdk'
 import type { JokeLevel, StopType } from '@skipper/shared'
 import { NARRATION_MODEL } from '../models'
 import { SKIPPER_SYSTEM_PROMPT } from '../persona/skipper'
 
-/** Generous ceiling: a 30s script is ~80 words (~120 tokens); the rest is adaptive-thinking headroom. */
-const NARRATION_MAX_TOKENS = 8000
+/**
+ * Generous ceiling. A long-form story script (~2 min ≈ ~300 words ≈ ~450 output
+ * tokens) leaves the rest as adaptive-thinking headroom — and high-effort thinking
+ * on a rich, grounded fact sheet can be substantial. A truncation throws (we never
+ * persist a half script), so we size well above the worst plausible thinking+output.
+ */
+const NARRATION_MAX_TOKENS = 16000
 
 /** Spoken narration runs ~2.5 words/second; used only to translate a target duration into a word hint. */
 const WORDS_PER_SECOND = 2.5
@@ -50,7 +57,7 @@ export interface NarrationRequest {
   corridor: string
   stopType: StopType
   jokeLevel: JokeLevel
-  /** Required for STORY; omitted for SCENIC/BREAK (naming a place is a fact). */
+  /** Required for STORY and BREAK (the curated, stable name + kind); omitted for SCENIC. */
   place?: { name: string; kind?: string | null }
   /** Grounded fact lines (STORY only). The entire well of facts the model may use. */
   facts?: string[]
@@ -95,21 +102,44 @@ export function buildFactSheet(req: NarrationRequest): string {
     lines.push('')
     const facts = (req.facts ?? []).map((f) => f.trim()).filter(Boolean)
     if (facts.length > 0) {
-      lines.push('FACT SHEET (the entire well of facts you may draw from — if it is not here, you do not know it):')
+      lines.push(
+        'FACT SHEET (the entire well of facts you may draw from — if it is not here, you do not know it):',
+      )
       for (const f of facts) lines.push(`- ${f}`)
     } else {
       // STORY requested but nothing groundable arrived: the system prompt tells the
       // Skipper to treat this as a scenic moment rather than invent a story.
-      lines.push('FACT SHEET: (none — no real facts available. Treat this as a scenic moment; do not invent a story.)')
+      lines.push(
+        'FACT SHEET: (none — no real facts available. Treat this as a scenic moment; do not invent a story.)',
+      )
     }
   } else if (req.stopType === 'scenic') {
-    lines.push('SCENIC stop — delivery only, NO facts. Point only at what is plainly, visibly there')
-    lines.push('(light, water color, sky, the road). Do not name any peak, town, island, or landmark.')
+    lines.push(
+      'SCENIC stop — delivery only, NO facts. Point only at what is plainly, visibly there',
+    )
+    lines.push(
+      '(light, water color, sky, the road). Do not name any peak, town, island, or landmark.',
+    )
   } else {
-    // break
-    lines.push('BREAK stop — a rest/food stop is coming up. Narrate it generically and timelessly.')
-    lines.push('Do NOT name the business, its hours, prices, rating, or popularity; the specific spot is')
-    lines.push('resolved fresh when the tour loads. No side of the road is given.')
+    // break — the curated name + kind ARE given and sayable; everything volatile is not.
+    lines.push(`PLACE: ${req.place?.name ?? '(unnamed)'}`)
+    if (req.place?.kind) lines.push(`KIND: ${req.place.kind}`)
+    lines.push('')
+    lines.push(
+      'BREAK stop — a rest/food spot is coming up. You MAY name the PLACE above and say what',
+    )
+    lines.push(
+      'KIND it is. You may NOT add anything else about THIS spot — no hours, prices, rating,',
+    )
+    lines.push(
+      'popularity, menu, quality, or physical features (where it sits, its deck, its view); none',
+    )
+    lines.push(
+      'of that is on the sheet. Name it, give a generic invitation (pull over, stretch, fuel, a',
+    )
+    lines.push(
+      'bite), and stop there. The live details are resolved fresh at tour-load. No side of road.',
+    )
   }
 
   if (req.priorStops && req.priorStops.length > 0) {
@@ -120,19 +150,25 @@ export function buildFactSheet(req: NarrationRequest): string {
 
   if (req.recentOpeners && req.recentOpeners.length > 0) {
     lines.push('')
-    lines.push('YOUR LAST FEW OPENERS (do NOT begin like any of these — open this stop a different way):')
+    lines.push(
+      'YOUR LAST FEW OPENERS (do NOT begin like any of these — open this stop a different way):',
+    )
     for (const o of req.recentOpeners) lines.push(`- "${o}..."`)
   }
 
   if (req.recentClosers && req.recentClosers.length > 0) {
     lines.push('')
-    lines.push('YOUR LAST FEW CLOSINGS (do NOT end like any of these — close this stop a different way, and not on the personal kit if these did):')
+    lines.push(
+      'YOUR LAST FEW CLOSINGS (do NOT end like any of these — close this stop a different way, and not on the personal kit if these did):',
+    )
     for (const c of req.recentClosers) lines.push(`- "...${c}"`)
   }
 
   if (req.recentKitBeats && req.recentKitBeats.length > 0) {
     lines.push('')
-    lines.push('PERSONAL-KIT BEATS USED RECENTLY (spent — do NOT reuse these; the default stop mentions none of the kit at all):')
+    lines.push(
+      'PERSONAL-KIT BEATS USED RECENTLY (spent — do NOT reuse these; the default stop mentions none of the kit at all):',
+    )
     for (const k of req.recentKitBeats) lines.push(`- ${k}`)
   }
 
@@ -146,7 +182,9 @@ export function buildFactSheet(req: NarrationRequest): string {
 
   if (req.avoid && req.avoid.length > 0) {
     lines.push('')
-    lines.push('REVISION NOTES — this is a re-narration to break up tour-wide repetition. Same facts, fresh take. You MUST:')
+    lines.push(
+      'REVISION NOTES — this is a re-narration to break up tour-wide repetition. Same facts, fresh take. You MUST:',
+    )
     for (const a of req.avoid) lines.push(`- ${a}`)
   }
 
@@ -169,10 +207,14 @@ export async function narrateStop(req: NarrationRequest): Promise<NarrationResul
   })
 
   if (response.stop_reason === 'refusal') {
-    throw new Error(`Narration refused for ${describe(req)}: ${JSON.stringify(response.stop_details ?? {})}`)
+    throw new Error(
+      `Narration refused for ${describe(req)}: ${JSON.stringify(response.stop_details ?? {})}`,
+    )
   }
   if (response.stop_reason === 'max_tokens') {
-    throw new Error(`Narration hit max_tokens (truncated) for ${describe(req)} — raise NARRATION_MAX_TOKENS.`)
+    throw new Error(
+      `Narration hit max_tokens (truncated) for ${describe(req)} — raise NARRATION_MAX_TOKENS.`,
+    )
   }
 
   const script = response.content
@@ -182,7 +224,9 @@ export async function narrateStop(req: NarrationRequest): Promise<NarrationResul
     .trim()
 
   if (!script) {
-    throw new Error(`Narration produced no text for ${describe(req)} (stop_reason=${response.stop_reason}).`)
+    throw new Error(
+      `Narration produced no text for ${describe(req)} (stop_reason=${response.stop_reason}).`,
+    )
   }
 
   return {
@@ -193,5 +237,7 @@ export async function narrateStop(req: NarrationRequest): Promise<NarrationResul
 }
 
 function describe(req: NarrationRequest): string {
-  return req.stopType === 'story' ? `STORY "${req.place?.name ?? '?'}"` : `${req.stopType.toUpperCase()} stop`
+  return req.stopType === 'scenic'
+    ? 'SCENIC stop'
+    : `${req.stopType.toUpperCase()} "${req.place?.name ?? '?'}"`
 }

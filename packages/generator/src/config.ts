@@ -78,10 +78,20 @@ export const OFF_ROUTE_MAX_M = 700
  * that 571 m overlap; the next-closest stops are 2.3 km apart, so 1000 m is safe.
  */
 export const MIN_STOP_SEPARATION_M = 1_000
-/** Lead-section extract length to request (chars). ~3–5 sentences of grounded facts. */
+/** Lead-section extract length to request (chars). ~3–5 sentences — used to RANK and
+ * classify candidates at selection time (cheap, batched). The chosen story stops get
+ * a deeper fact sheet (DEEP_EXTRACT_CHARS) before narration. */
 export const EXTRACT_CHARS = 600
 /** Below this extract length a STORY candidate is too thin → downgraded to scenic. */
 export const STORY_MIN_FACT_CHARS = 140
+/**
+ * Full-article extract length (chars) fetched for the SELECTED story stops, so a stop
+ * can be a fuller, longer story than the lead section alone supports (Shaka-Guide-length
+ * storytelling is ~1–3 min, not ~30s — but ONLY when the facts are there to fill it; a
+ * thin article stays short, never padded). Per-POI, one extra fetch each post-selection.
+ * Trimmed of trailing meta sections (References/See also/…) in wikipedia.ts.
+ */
+export const DEEP_EXTRACT_CHARS = 4_000
 
 // --- Pacing (by drive TIME, not distance) -----------------------------------
 
@@ -101,8 +111,11 @@ export const PACING: Record<DurationBucket, BucketPacing> = {
   long: { minGapSec: 180, maxNarratedStops: 20, breakStops: 2 },
 }
 
-/** Target spoken length per stop type (seconds) — honored by narration, never padded. */
-export const TARGET_SECONDS = { story: 35, scenic: 20, break: 15 } as const
+/** Target spoken length per stop type (seconds) — honored by narration, never padded.
+ * `story` targets a Shaka-Guide-length telling (~2 min) so a rich fact sheet gets room
+ * to breathe; the model still stops when the FACTS run out, so thin sheets stay short.
+ * `scenic` stays short (delivery-only, no facts to fill time); `break` is a brief cue. */
+export const TARGET_SECONDS = { story: 120, scenic: 20, break: 15 } as const
 
 /** Default speed-adaptive trigger floor (m). Matches the tour_stops column default. */
 export const TRIGGER_RADIUS_M = 120

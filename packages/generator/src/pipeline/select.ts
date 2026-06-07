@@ -61,8 +61,8 @@ export interface SelectParams {
 const NON_NARRATABLE_TITLE =
   /^(List of |Lists of |National Register of Historic Places listings)|listings in|\(disambiguation\)/i
 
-/** Split a lead-section extract into clean fact sentences for the fact sheet. */
-function toFacts(extract: string): string[] {
+/** Split an extract into clean fact sentences for the fact sheet. */
+export function toFacts(extract: string): string[] {
   return extract
     .split(/(?<=[.!?])\s+/)
     .map((s) => s.trim())

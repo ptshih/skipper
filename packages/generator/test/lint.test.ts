@@ -74,6 +74,70 @@ describe('lintScripts', () => {
     expect(findings).toEqual([])
   })
 
+  test('flags the "here\'s where it …" / "where it gets …" wind-up family', () => {
+    const findings = lintScripts([
+      story(0, 'The resort filled up fast that summer. But here is where it gets fancy: they ran their own steamer.'),
+      story(1, "A quiet village, mostly. Here's where it turns, though: the post office moved twice."),
+      story(2, 'The pines lean over the cove, quiet as a held breath.'),
+    ])
+    expect(findings.map((f) => f.seq)).toContain(0)
+    expect(findings.map((f) => f.seq)).toContain(1)
+    expect(findings.map((f) => f.seq)).not.toContain(2)
+  })
+
+  // --- long-form (per-stop) detectors -------------------------------------
+
+  test('flags tic-stacking: multiple wind-ups/AI tics in ONE stop', () => {
+    const findings = lintScripts([
+      story(0, 'Fun fact, a captain ran this place. And get this, the maps once called it Yanks.'),
+      story(1, 'The pines lean over the cove, quiet as a held breath.'),
+    ])
+    const f0 = findings.find((f) => f.seq === 0)!
+    expect(f0.reasons.join(' ')).toMatch(/stacks \d+ wind-up/i)
+    expect(f0.avoid.join(' ')).toMatch(/remove all/i)
+    expect(findings.map((f) => f.seq)).not.toContain(1)
+  })
+
+  test('flags list/inventory shape: multiple enumerated sentences in one stop', () => {
+    const findings = lintScripts([
+      story(0, 'A grand resort stood here. First, they cleared the pines. Next, they laid the foundation. Also, they built a long pier.'),
+      story(1, 'The water turns the color of old glass right about here.'),
+    ])
+    const f0 = findings.find((f) => f.seq === 0)!
+    expect(f0.reasons.join(' ')).toMatch(/reads like a list/i)
+    expect(f0.avoid.join(' ')).toMatch(/weave/i)
+    expect(findings.map((f) => f.seq)).not.toContain(1)
+  })
+
+  test('flags a tidy-bow / reflective recap closer', () => {
+    const findings = lintScripts([
+      story(0, 'A castle went up here in the trees. Really, it is just one of the many stories this place has to tell.'),
+      story(1, 'Sixty feet of clear water sits off the bow.'),
+    ])
+    const f0 = findings.find((f) => f.seq === 0)!
+    expect(f0.reasons.join(' ')).toMatch(/tidy bow|reflective recap/i)
+    expect(findings.map((f) => f.seq)).not.toContain(1)
+  })
+
+  test('flags within-stop self-repetition (a repeated content 4-gram)', () => {
+    const findings = lintScripts([
+      story(0, 'The steamer hauled silver across mountains every morning, hauled silver across mountains every night, until the mine finally closed.'),
+    ])
+    const f0 = findings.find((f) => f.seq === 0)!
+    expect(f0.reasons.join(' ')).toMatch(/repeats the phrase/i)
+    expect(f0.avoid.join(' ')).toMatch(/do not repeat the phrase/i)
+  })
+
+  test('a clean long-form story stop produces no findings', () => {
+    const findings = lintScripts([
+      story(
+        0,
+        'A woman built a stone house at the head of the bay in the twenties. She brought the masons over from across the ocean to lay it the old way, without a single nail. The roof grew wildflowers. Out on the island she kept a tiny teahouse you could only reach by boat.',
+      ),
+    ])
+    expect(findings).toEqual([])
+  })
+
   test('empty input → no findings', () => {
     expect(lintScripts([])).toEqual([])
   })
