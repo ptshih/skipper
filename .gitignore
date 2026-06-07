@@ -31,6 +31,9 @@ ios/Pods/
 # Logs
 *.log
 
+# Claude Code (local agent runtime state — locks, worktrees)
+.claude/
+
 # OS / editor
 .DS_Store
 .idea/
