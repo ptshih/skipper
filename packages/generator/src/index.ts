@@ -8,7 +8,7 @@
 //     -> Google Places searchAlongRoute        (food/rest break stops)
 //     -> select stops to fit duration           (pace by drive TIME, not distance)
 //     -> skipper narration (Anthropic)          (facts-only prompt; never invent)
-//     -> TTS (ElevenLabs) -> Cloudflare R2
+//     -> TTS (Google Cloud, Gemini-TTS) -> Cloudflare R2
 //     -> write tours + ordered tour_stops (Neon/Drizzle)
 //
 // Invariant: a tour may not be marked `ready` until every story/scenic stop has

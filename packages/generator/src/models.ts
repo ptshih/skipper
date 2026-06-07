@@ -1,7 +1,7 @@
 // AI model identifiers for @skipper/generator.
 //
 // Constants only — this file is the single source of truth for model ids so the
-// narration (Anthropic) and TTS (OpenAI) call sites never hard-code a string.
+// narration (Anthropic) and TTS (Google Cloud TTS) call sites never hard-code a string.
 // Each id below cites where it came from; re-verify against the linked source
 // before bumping.
 

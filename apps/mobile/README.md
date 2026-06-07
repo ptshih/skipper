@@ -1,17 +1,22 @@
 # @skipper/mobile — Expo app (backend wiring scaffolded; phone player TODO, CarPlay deferred)
 
 > **Status:** the JS/TS app is scaffolded and wired to the M2 backend (browse,
-> auth, gated tour fetch). The **native build, Metro/EAS, and the phone player
-> are NOT done** and are NOT verifiable from CI. **CarPlay is deferred past the
-> MVP — it is no longer a hard gate**; the MVP plays through the phone (mount /
-> Bluetooth), and the phone player's EAS build is what decides the SDK pin.
+> auth, gated tour fetch), and a **map-less couch preview player** (simulated
+> drive over `expo-audio`) is built in `app/preview/[id].tsx`. A local iOS
+> **simulator build compiles** (`xcodebuild` succeeds with `expo-audio` linked),
+> but there is **no EAS build, no device run, and no LIVE GPS-triggered phone
+> player yet** — that work (offline download, on-device triggering, lock-screen
+> Now Playing, a real drive) is the M1 phone player still TODO below. **CarPlay is
+> deferred past the MVP — no longer a hard gate**; the MVP plays through the phone
+> (mount / Bluetooth), and the phone player's EAS build is what decides the SDK pin.
 > Version pins below are **candidates** (SDK 56); reconcile them with
 > `bunx expo install --fix` when you materialize the app.
 
 ## What's wired (works against the M2 API)
 
-- **Expo Router** app (`app/`): corridor browse (`index`), `sign-in` (email/
-  password), and `tour/[id]` (gated fetch + presign).
+- **Expo Router** app (`app/`): corridor browse (`index`), corridor detail
+  (`corridor/[id]`), `sign-in` (email/password), `tour/[id]` (gated fetch +
+  presign), and a working **couch preview player** (`preview/[id]`).
 - **Auth:** Better Auth Expo client (`src/lib/auth.ts`) — sessions in
   `expo-secure-store`, scheme `skipper` (matches the server `trustedOrigins` and
   the `expo()` server plugin in `apps/api/src/auth.ts`).
@@ -86,6 +91,6 @@ the bet. When you do:
 - `GET /corridors` (anon) · `GET /tours/:id` + `POST /tours/:id/assets/sign`
   (preview-only for anon, else free account) · `POST /api/auth/*` (Better Auth).
 
-> **Missing for a full browse→play flow:** there is no corridor→tour route yet
-> (you fetch a tour by id). Add `GET /corridors/:id/tours` or an assemble route
-> when generated tours exist.
+> **Browse→play flow is wired:** `GET /corridors/:id/tours` exists in the M2 API
+> and is consumed by `app/corridor/[id].tsx` (corridor list → tours → gated tour
+> detail). The remaining gap is the LIVE phone player itself (see TODO above).

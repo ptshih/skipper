@@ -1,4 +1,4 @@
-// Bounded retry for the raw-fetch external calls (ElevenLabs, Wikipedia, Places).
+// Bounded retry for the raw-fetch external calls (Google Cloud TTS, Wikipedia, Places).
 // A full tour makes ~2N sequential calls; without retry a single transient
 // 429/5xx/network blip fails the whole run. We retry transient failures with
 // exponential backoff (honoring Retry-After) and return the final Response — the

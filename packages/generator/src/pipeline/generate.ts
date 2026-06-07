@@ -5,7 +5,7 @@
 //     -> Google Places searchAlongRoute       (food/rest BREAK anchors)
 //     -> select stops by drive TIME           (pace, not distance)
 //     -> Skipper narration (Anthropic)        (facts-only; story + scenic)
-//     -> TTS (ElevenLabs) -> R2               (audio + duration)
+//     -> TTS (Google Cloud, Gemini-TTS) -> R2 (audio + duration)
 //     -> tours + ordered tour_stops (Neon)    (atomic ready-gate)
 //
 // Invariants honored here:

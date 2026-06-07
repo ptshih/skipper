@@ -1,5 +1,5 @@
-// PCM/WAV helpers — Cloud TTS returns LINEAR16 audio, and unlike ElevenLabs'
-// /with-timestamps there is no duration field, so we derive duration from the
+// PCM/WAV helpers — Cloud TTS returns LINEAR16 audio with no duration field in
+// the response, so we derive duration from the
 // bytes. LINEAR16 is byte-linear, so this is exact (the ready-gate needs a real
 // duration). We also guarantee a playable WAV at rest: if Cloud TTS hands back a
 // RIFF/WAVE container we keep it; if it hands back headerless PCM we wrap it.
