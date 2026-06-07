@@ -76,6 +76,26 @@ dev` and `bun run db:*` get decrypted vars; don't add a plaintext `.env`. Edit
 - The **highest-leverage file** in the repo (once written) is the skipper
   narration system prompt. Iterate on it more than anything.
 
+## Mobile UI — design system ("Trailhead 89")
+
+`apps/mobile` has a real design system; **don't hand-roll styles or hardcode
+values.** Source of truth: `src/theme/` (raw tokens → semantic light/dark color
+ROLES → provider + font gate), `src/ui/` (primitives + a couple of "smart"
+composites like `AccountGate`/`StateView`), and `apps/mobile/DESIGN.md` (the
+language: WPA national-park aesthetic, **dark-mode-first** for night drives,
+glanceable/in-car). Screens compose `@/ui` and reference semantic roles
+(`color="ink"`) — NEVER a raw hex/rgba/`fontFamily`; colors live only in `src/theme`.
+
+- **Enforced, not aspirational** (a review found doc↔code drift is the real failure
+  mode): `bun run lint:tokens` fails on a raw color/font in `app/` or `src/ui/`; a
+  contrast unit test (`bun test`) asserts every text role clears 4.5:1 on
+  surface+raised in both themes (the DESIGN §4 guarantee). `bun run check` =
+  lint:tokens + typecheck + test. Run them when touching mobile UI.
+- **Icons are VECTOR** (`@expo/vector-icons` via `src/ui/Icon.tsx`, semantic names) —
+  NOT emoji. This build has no color-emoji fallback, so emoji render as tofu (`?`).
+- `*.test.ts` run under `bun test` (which provides `bun:test` types); the app `tsc`
+  excludes them (mobile is outside the workspace, no `@types/bun`).
+
 ## Milestones
 
 0. **Content + phone-player spike.** Skipper prompt; ~6–8 Tahoe corridors; stand

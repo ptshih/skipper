@@ -131,8 +131,11 @@ All token-driven and theme-aware. Compose these; don't restyle from scratch.
 - **`Screen`** — paints `surface`, owns safe-area (top inset belongs to the Stack
   header). `scroll` / `padded` / `center` flags.
 - **`Button`** — `primary` (enamel CTA: ranger-green sign by day, campfire-lit amber
-  by dusk, ≥60pt), `secondary` (outlined placard), `ghost` (text link). `glyph` =
-  leading icon (emoji placeholder today).
+  by dusk, ≥60pt), `secondary` (outlined placard), `ghost` (text link). `icon` = a
+  leading vector icon (an `IconName`).
+- **`Icon`** — vector icons (Ionicons via `@expo/vector-icons`); semantic names
+  (`play`, `boat`, `story`…) mapped in `Icon.tsx`. **Use these, NOT emoji** — this
+  build has no color-emoji fallback, so emoji render as tofu (`?`).
 - **`Card`** — the ranger placard. Plain by default (glanceable); `framed` adds the
   carved double-keyline + corner screw-dots — **non-driving surfaces only**.
 - **`Badge`** — enamel pill for stop types, lengths, the joke meter. `tone`
@@ -147,6 +150,10 @@ All token-driven and theme-aware. Compose these; don't restyle from scratch.
 - **`NowCard`** — the now-playing placard; the one surface that earns the amber glow.
 - **`Input`** — themed field, ≥48pt, pine focus ring.
 - **`ThemeToggle`** — Daylight ⇄ Dusk.
+- **`StateView`** — the shared loading / error / empty centered state (`loading`,
+  `tone`, `action`, `title`). Kills the repeated `<Screen center>…` boilerplate.
+- **`AccountGate`** — the shared freemium wall (tour + preview). A "smart" composite:
+  unlike the pure primitives it knows the sign-in route + gate copy.
 
 ## 7. Voice in the UI (`src/ui/voice.ts`)
 
@@ -200,3 +207,16 @@ on day one with emoji placeholders, then gets richer:
 3. New surface → compose `Screen` + `Card` + `Text`; if you're writing a `StyleSheet`
    color, stop and add/lookup a token.
 4. New copy → add it to `voice.ts` in character.
+
+## 11. Enforcement (the guarantees above are executable, not aspirational)
+
+A review found the real failure mode is **drift between this doc and the code** (the
+4.5:1 claim was once false; tokens got hardcoded). So the guarantees self-check:
+
+- **`bun run lint:tokens`** — fails if any file in `app/` or `src/ui/` hardcodes a
+  hex / rgba / `fontFamily` string. Colors + fonts live in `src/theme` ONLY.
+- **`bun test`** (`src/theme/theme.test.ts`) — asserts every text role clears 4.5:1
+  on `surface` + `surfaceRaised` in both themes (this §4 guarantee). A palette tweak
+  that breaks it fails the test.
+- **`bun run check`** runs lint:tokens + typecheck + test together. Run it when you
+  touch the design system; wire it into CI/precommit when there is one.

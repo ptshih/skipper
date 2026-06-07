@@ -7,7 +7,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native'
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
+import { Stack, useLocalSearchParams } from 'expo-router'
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
 import { ApiError, getTour, signTourAudio } from '@/lib/api'
 import { stopLabel } from '@/lib/labels'
@@ -15,6 +15,7 @@ import { buildPreviewTimeline, type PreviewSegment } from '@/lib/preview'
 import { useTheme } from '@/theme'
 import { space } from '@/theme/tokens'
 import {
+  AccountGate,
   Badge,
   Button,
   Card,
@@ -22,6 +23,7 @@ import {
   NowCard,
   RouteTrack,
   Screen,
+  StateView,
   StopRow,
   STOP_ROW_HEIGHT,
   Text,
@@ -316,26 +318,9 @@ export default function PreviewScreen() {
   const mmss = (ms: number) =>
     `${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, '0')}`
 
-  if (needsAccount) return <AccountGate />
-  if (error)
-    return (
-      <Screen center>
-        <Stack.Screen options={{ title: 'Preview drive' }} />
-        <Text variant="body" color="danger" align="center">
-          {error}
-        </Text>
-      </Screen>
-    )
-  if (!data)
-    return (
-      <Screen center>
-        <Stack.Screen options={{ title: 'Preview drive' }} />
-        <ActivityIndicator color={theme.colors.accent} />
-        <Text variant="dim" color="inkFaint">
-          {voice.loading.preview}
-        </Text>
-      </Screen>
-    )
+  if (needsAccount) return <AccountGate note="Anonymous preview is limited to the sample tour." />
+  if (error) return <StateView title="Preview drive" message={error} tone="danger" />
+  if (!data) return <StateView title="Preview drive" loading message={voice.loading.preview} />
 
   const seg = data.segments[idx]
   const nextStopName = seg ? data.stops.find((s) => s.seq === seg.seq)?.name : undefined
@@ -489,30 +474,6 @@ export default function PreviewScreen() {
   )
 }
 
-function AccountGate() {
-  const router = useRouter()
-  return (
-    <Screen center>
-      <Stack.Screen options={{ title: voice.gate.title }} />
-      <Card framed style={styles.gateCard}>
-        <Text variant="placardTitle" color="ink" align="center">
-          {voice.gate.title}
-        </Text>
-        <Text variant="body" color="inkDim" align="center">
-          Anonymous preview is limited to the sample tour. {voice.gate.body}
-        </Text>
-        <Button
-          icon="ticket"
-          title={voice.gate.action}
-          onPress={() => router.push('/sign-in')}
-          style={styles.gateCta}
-        />
-        <Button variant="ghost" title="Back" onPress={() => router.back()} />
-      </Card>
-    </Screen>
-  )
-}
-
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   header: { paddingHorizontal: space.gutter, paddingTop: space.md, gap: space.xs },
@@ -534,6 +495,4 @@ const styles = StyleSheet.create({
   divider: { marginHorizontal: space.gutter },
   list: { flex: 1, marginTop: space.xs },
   listContent: { paddingTop: space.xs, paddingBottom: space.xxl },
-  gateCard: { alignSelf: 'stretch', gap: space.md, alignItems: 'center' },
-  gateCta: { marginTop: space.xs },
 })

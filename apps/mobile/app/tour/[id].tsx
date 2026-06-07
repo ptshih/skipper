@@ -1,17 +1,27 @@
 import { useCallback, useState } from 'react'
-import { ActivityIndicator, StyleSheet, View } from 'react-native'
+import { StyleSheet, View } from 'react-native'
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
 import { ApiError, getTour, signTourAudio, type SignedAudio, type TourDetail } from '@/lib/api'
 import { jokeLabel, stopLabel } from '@/lib/labels'
-import { useTheme } from '@/theme'
 import { space } from '@/theme/tokens'
-import { Badge, Button, Card, Icon, Screen, Text, stopIcon, stopTone, voice } from '@/ui'
+import {
+  AccountGate,
+  Badge,
+  Button,
+  Card,
+  Icon,
+  Screen,
+  StateView,
+  Text,
+  stopIcon,
+  stopTone,
+  voice,
+} from '@/ui'
 
 // Tour detail. Anonymous can open only the preview tour; other tours return 401
 // -> we prompt for a free account. The live PHONE PLAYER is still TODO; this
 // screen offers the simulated-drive preview + shows the route manifest.
 export default function TourScreen() {
-  const theme = useTheme()
   const router = useRouter()
   const { id } = useLocalSearchParams<{ id: string }>()
   const [tour, setTour] = useState<TourDetail | null>(null)
@@ -51,44 +61,24 @@ export default function TourScreen() {
     }
   }
 
-  if (loading)
-    return (
-      <Screen center>
-        <Stack.Screen options={{ title: 'Tour' }} />
-        <ActivityIndicator color={theme.colors.accent} />
-        <Text variant="dim" color="inkFaint">
-          {voice.loading.tour}
-        </Text>
-      </Screen>
-    )
-
+  if (loading) return <StateView title="Tour" loading message={voice.loading.tour} />
   if (needsAccount) return <AccountGate />
-
   if (error)
     return (
-      <Screen center>
-        <Stack.Screen options={{ title: 'Tour' }} />
-        <Text variant="body" color="danger" align="center">
-          {error}
-        </Text>
-        <Button variant="secondary" title={voice.error.retry} fullWidth={false} onPress={load} />
-      </Screen>
+      <StateView
+        title="Tour"
+        message={error}
+        tone="danger"
+        action={{ label: voice.error.retry, onPress: load }}
+      />
     )
-
   if (!tour)
     return (
-      <Screen center>
-        <Stack.Screen options={{ title: 'Tour' }} />
-        <Text variant="body" color="inkDim" align="center">
-          {voice.empty.tour}
-        </Text>
-        <Button
-          variant="secondary"
-          title="Back to tours"
-          fullWidth={false}
-          onPress={() => router.back()}
-        />
-      </Screen>
+      <StateView
+        title="Tour"
+        message={voice.empty.tour}
+        action={{ label: 'Back to tours', onPress: () => router.back() }}
+      />
     )
 
   return (
@@ -160,30 +150,6 @@ export default function TourScreen() {
   )
 }
 
-function AccountGate() {
-  const router = useRouter()
-  return (
-    <Screen center>
-      <Stack.Screen options={{ title: voice.gate.title }} />
-      <Card framed style={styles.gateCard}>
-        <Text variant="placardTitle" color="ink" align="center">
-          {voice.gate.title}
-        </Text>
-        <Text variant="body" color="inkDim" align="center">
-          {voice.gate.body}
-        </Text>
-        <Button
-          icon="ticket"
-          title={voice.gate.action}
-          onPress={() => router.push('/sign-in')}
-          style={styles.gateCta}
-        />
-        <Button variant="ghost" title={voice.gate.secondary} onPress={() => router.back()} />
-      </Card>
-    </Screen>
-  )
-}
-
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   body: { gap: space.md },
@@ -199,6 +165,4 @@ const styles = StyleSheet.create({
     marginTop: space.sm,
     marginBottom: space.xs,
   },
-  gateCard: { alignSelf: 'stretch', gap: space.md },
-  gateCta: { marginTop: space.sm },
 })
