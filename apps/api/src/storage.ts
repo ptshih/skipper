@@ -24,8 +24,11 @@ function getClient(): S3Client {
       accessKeyId: requireEnv('R2_ACCESS_KEY_ID'),
       secretAccessKey: requireEnv('R2_SECRET_ACCESS_KEY'),
       bucket: requireEnv('R2_BUCKET'),
-      endpoint: `https://${requireEnv('R2_ACCOUNT_ID')}.r2.cloudflarestorage.com`,
-      region: 'auto',
+      // R2 by default; set S3_ENDPOINT to point this same S3 code at any other
+      // S3-compatible provider (Tigris, B2, AWS S3) with no rewrite. The `||`
+      // short-circuits, so R2_ACCOUNT_ID is only required when no override is set.
+      endpoint: process.env.S3_ENDPOINT || `https://${requireEnv('R2_ACCOUNT_ID')}.r2.cloudflarestorage.com`,
+      region: process.env.S3_REGION || 'auto', // R2/Tigris use "auto"; AWS needs a real region
     })
   }
   return client

@@ -30,8 +30,11 @@ export function hasEnv(name: string): boolean {
 export const ANTHROPIC_READY = (): boolean => hasEnv('ANTHROPIC_API_KEY')
 export const ELEVENLABS_READY = (): boolean => hasEnv('ELEVENLABS_API_KEY')
 export const GOOGLE_READY = (): boolean => hasEnv('GOOGLE_MAPS_API_KEY')
+// Credentials + bucket are always required; the endpoint comes from either an
+// explicit S3_ENDPOINT override (Tigris, B2, AWS S3) or the R2 account id.
 export const R2_READY = (): boolean =>
-  ['R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET'].every(hasEnv)
+  ['R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET'].every(hasEnv) &&
+  (hasEnv('S3_ENDPOINT') || hasEnv('R2_ACCOUNT_ID'))
 
 // --- Wikipedia etiquette ----------------------------------------------------
 
