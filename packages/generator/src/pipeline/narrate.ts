@@ -62,6 +62,10 @@ export interface NarrationRequest {
   priorStops?: string[]
   /** How the last few stops OPENED — so this stop can open differently (each call is independent). */
   recentOpeners?: string[]
+  /** How the last few stops CLOSED — so this stop can close differently (each call is independent). */
+  recentClosers?: string[]
+  /** Personal-kit beats used in the last few stops (e.g. "the dock guy") — so this stop can avoid repeating them. */
+  recentKitBeats?: string[]
   /** Pacing target; honored but never padded past the facts. */
   targetSeconds?: number
 }
@@ -116,6 +120,18 @@ export function buildFactSheet(req: NarrationRequest): string {
     lines.push('')
     lines.push('YOUR LAST FEW OPENERS (do NOT begin like any of these — open this stop a different way):')
     for (const o of req.recentOpeners) lines.push(`- "${o}..."`)
+  }
+
+  if (req.recentClosers && req.recentClosers.length > 0) {
+    lines.push('')
+    lines.push('YOUR LAST FEW CLOSINGS (do NOT end like any of these — close this stop a different way, and not on the personal kit if these did):')
+    for (const c of req.recentClosers) lines.push(`- "...${c}"`)
+  }
+
+  if (req.recentKitBeats && req.recentKitBeats.length > 0) {
+    lines.push('')
+    lines.push('PERSONAL-KIT BEATS USED RECENTLY (spent — do NOT reuse these; the default stop mentions none of the kit at all):')
+    for (const k of req.recentKitBeats) lines.push(`- ${k}`)
   }
 
   if (req.targetSeconds && req.targetSeconds > 0) {

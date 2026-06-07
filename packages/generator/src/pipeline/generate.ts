@@ -142,7 +142,20 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   // reusing "coming up off the bow" every time.
   const priorStops: string[] = []
   const recentOpeners: string[] = []
+  const recentClosers: string[] = []
+  const recentKit: string[][] = [] // personal-kit beats used per remembered stop
   const openerOf = (script: string) => script.trim().split(/\s+/).slice(0, 8).join(' ')
+  const closerOf = (script: string) => script.trim().split(/\s+/).slice(-8).join(' ')
+  // Detect which personal-kit beats a script leaned on, so later (independently
+  // generated) stops can be told they're spent — the load-bearing fix for kit
+  // overuse, since each stop is narrated in isolation with no view of its siblings.
+  const KIT_BEATS: [RegExp, string][] = [
+    [/dock guy/i, 'the dock guy ("coming Tuesday")'],
+    [/\bRay\b/, 'cousin Ray'],
+    [/\bengine\b/i, 'the boat engine'],
+    [/\bcoffee\b/i, 'his coffee opinions'],
+  ]
+  const kitBeatsOf = (script: string) => KIT_BEATS.filter(([re]) => re.test(script)).map(([, label]) => label)
   const narrate = (s: StopPlan) =>
     narrateStop({
       region: corridor.region,
@@ -152,11 +165,15 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       targetSeconds: s.targetSeconds,
       priorStops: priorStops.slice(-3),
       recentOpeners: recentOpeners.slice(-3),
+      recentClosers: recentClosers.slice(-3),
+      recentKitBeats: [...new Set(recentKit.slice(-3).flat())],
       ...(s.stopType === 'story' ? { place: { name: s.name, kind: s.kind }, facts: s.facts } : {}),
     })
   const rememberStop = (s: StopPlan, script: string) => {
     priorStops.push(s.stopType === 'story' ? s.name : 'a quiet stretch')
     recentOpeners.push(openerOf(script))
+    recentClosers.push(closerOf(script))
+    recentKit.push(kitBeatsOf(script))
   }
 
   // ---- Dry run: narrate story/scenic, print, no writes. -------------------
