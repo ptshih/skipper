@@ -11,11 +11,9 @@
 // is not enough). Callers treat failures here as non-fatal — break stops are a
 // nicety, not the core bet.
 //
-// TODO(places-api): ENABLE "Places API (New)" on the GCP project before break
-// stops will work. As of the last run it was DISABLED — the request 403'd with
-// PERMISSION_DENIED on project 666110297056. Enable it here:
-//   https://console.cloud.google.com/apis/library/places.googleapis.com?project=666110297056
-// Until then break stops are silently skipped (generate.ts catches the error).
+// Places API (New) is ENABLED on the project (verified 2026-06-07). If a request ever
+// 403s with PERMISSION_DENIED, re-check that enablement first (Routes enablement alone
+// is not enough); generate.ts catches the error and skips break stops in the meantime.
 
 import { fetchWithRetry } from './http'
 
@@ -58,7 +56,8 @@ async function searchOneCategory(
       'Content-Type': 'application/json',
       'X-Goog-Api-Key': apiKey,
       // Minimal non-volatile anchor fields (bills at Text Search Pro SKU).
-      'X-Goog-FieldMask': 'places.id,places.displayName,places.location,places.primaryType,places.types',
+      'X-Goog-FieldMask':
+        'places.id,places.displayName,places.location,places.primaryType,places.types',
     },
     body: JSON.stringify({
       textQuery,
@@ -73,13 +72,18 @@ async function searchOneCategory(
   }
   if (!res.ok || json.error) {
     const e = json.error
-    throw new Error(`Places searchText ${res.status}: ${e ? `${e.status} — ${e.message}` : 'unknown error'}`)
+    throw new Error(
+      `Places searchText ${res.status}: ${e ? `${e.status} — ${e.message}` : 'unknown error'}`,
+    )
   }
   return json.places ?? []
 }
 
 /** Find food/rest/gas anchors along the encoded route, merged + deduped by place id. */
-export async function searchBreakStops(encodedPolyline: string, apiKey: string): Promise<BreakAnchor[]> {
+export async function searchBreakStops(
+  encodedPolyline: string,
+  apiKey: string,
+): Promise<BreakAnchor[]> {
   const byId = new Map<string, BreakAnchor>()
   for (const cat of BREAK_CATEGORIES) {
     const places = await searchOneCategory(encodedPolyline, cat.textQuery, cat.includedType, apiKey)

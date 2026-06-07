@@ -22,9 +22,9 @@ over hand-curated driving routes, as phone audio (CarPlay later). First region:
 
 ## Stack
 
-- **TypeScript 6** everywhere · **bun** (package manager + runtime) · **Turborepo**
-- **Backend:** Hono (served natively by bun) · **DB:** Neon + Drizzle · **Audio:** Cloudflare R2
-- **AI:** Anthropic `claude-opus-4-8` (narration) · ElevenLabs `eleven_multilingual_v2` (TTS)
+- **TypeScript 6** everywhere · **bun** (package manager + runtime + workspaces)
+- **Backend:** Hono (served natively by bun) · **DB:** Neon + Drizzle · **Auth:** Better Auth (freemium) · **Audio:** Cloudflare R2 (private; presigned URLs)
+- **AI:** Anthropic `claude-opus-4-8` (narration) · Google Cloud Text-to-Speech — Gemini-TTS voice "Sulafat" (OAuth/ADC, no API key; LINEAR16 → WAV)
 - **Mobile (MVP = phone player):** Expo SDK 56, `expo-audio` + `expo-location`; CarPlay (`@g4rb4g3/react-native-carplay`) deferred past the MVP
 
 ## Layout
@@ -37,7 +37,8 @@ skipper/
 ├── packages/
 │   ├── shared/     @skipper/shared    — Zod schemas + types, imported everywhere.
 │   ├── db/         @skipper/db        — Drizzle schema + Neon client.
-│   └── generator/  @skipper/generator — server-side tour generation (M1).
+│   ├── generator/  @skipper/generator — server-side tour generation (M1).
+│   └── sim/        @skipper/sim       — drive simulator + speed-adaptive trigger core.
 ├── tsconfig.base.json · package.json (bun workspaces)
 ```
 
@@ -77,7 +78,20 @@ bun run db:migrate   # run migrations (db:migrate:prod targets .env.production)
 
 ## Status
 
-**Milestone: monorepo scaffold.** Skeleton + shared schema + Drizzle data model +
-runnable bun-native API health route + AI model constants. The generator pipeline,
-API routes, and the mobile app are stubs/deferred (CarPlay deferred past the MVP). See `CLAUDE.md` for the
-milestone plan and the explicit v1 non-goals.
+The frontier is **M1 — the live on-device phone player** (the MVP bet). What exists today:
+
+- **M1 generator (`@skipper/generator`) — built.** Wikipedia (grounded facts, CC BY-SA
+  attribution) → Claude narration → Google Cloud TTS → R2 → Neon, with grounding/diversity
+  lint + a judge pass. A first Tahoe corridor ("Emerald Bay") is generated and live as a
+  shareable preview.
+- **M2 API (`@skipper/api`) — done.** `GET /corridors`, `GET /corridors/:id/tours`,
+  `GET /tours/:id`, `POST /tours/:id/assets/sign` (presigned R2), behind Better Auth
+  freemium gating (anonymous → preview only; free account → full; paid tier later).
+- **Drive simulator (`@skipper/sim`) — built.** Speed-adaptive trigger core + a headless
+  drive sim + the compressed "preview drive" timeline engine.
+- **Mobile (`@skipper/mobile`) — scaffolded + wired.** The Expo app browses corridors, signs
+  in, and plays the map-less **simulated-drive preview**. The **live phone player** (offline
+  download → GPS triggering → lock-screen Now Playing) is the open M1 work.
+
+Deferred past the MVP: CarPlay, Android Auto, multilingual, the cache/dedup machinery (M4).
+See `CLAUDE.md` for the full milestone plan and the explicit v1 non-goals.
