@@ -125,6 +125,7 @@ app.get('/tours/:tourId', withSession, async (c) => {
     .select({
       seq: tourStops.seq,
       stopType: tourStops.stopType,
+      name: pois.name,
       lat: pois.lat,
       lng: pois.lng,
       triggerRadiusM: tourStops.triggerRadiusM,

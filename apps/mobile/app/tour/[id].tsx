@@ -73,18 +73,23 @@ export default function TourScreen() {
         {tour.tour.isPreview ? ' · preview' : ''}
       </Text>
 
-      <Pressable style={styles.button} onPress={loadAudio}>
-        <Text style={styles.buttonText}>Load audio URLs</Text>
+      <Link href={`/preview/${id}`} style={styles.linkButton}>
+        ▶ Preview the drive
+      </Link>
+      <Text style={styles.dim}>Hear the whole tour from your couch — no driving to the GPS coordinates.</Text>
+
+      <Pressable style={styles.secondary} onPress={loadAudio}>
+        <Text style={styles.secondaryText}>Load audio URLs (debug)</Text>
       </Pressable>
-      <Text style={styles.dim}>Phone playback (expo-audio) is the next build. CarPlay is deferred.</Text>
 
       {tour.stops.map((s) => {
         const signed = audio?.urls.find((u) => u.seq === s.seq)
         return (
           <View key={s.seq} style={styles.card}>
             <Text style={styles.stopTitle}>
-              {s.seq + 1}. {s.stopType.toUpperCase()}
+              {s.seq + 1}. {s.name}
             </Text>
+            <Text style={styles.dim}>{s.stopType.toUpperCase()}</Text>
             <Text style={styles.dim}>
               {s.lat.toFixed(4)}, {s.lng.toFixed(4)} · trigger {s.triggerRadiusM} m
               {s.audioDurationMs ? ` · ${Math.round(s.audioDurationMs / 1000)}s` : ''}
@@ -107,6 +112,9 @@ const styles = StyleSheet.create({
   signed: { fontSize: 13, color: '#137333', marginTop: 2 },
   button: { backgroundColor: '#1e6fd9', borderRadius: 10, paddingVertical: 12, paddingHorizontal: 16, alignItems: 'center', color: '#fff' },
   buttonText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  linkButton: { backgroundColor: '#1e6fd9', borderRadius: 10, paddingVertical: 14, paddingHorizontal: 16, textAlign: 'center', color: '#fff', fontSize: 16, fontWeight: '700', overflow: 'hidden' },
+  secondary: { borderRadius: 10, paddingVertical: 10, paddingHorizontal: 16, alignItems: 'center', backgroundColor: '#f0f0f0' },
+  secondaryText: { color: '#666', fontSize: 13, fontWeight: '600' },
   error: { color: '#b00020' },
   pad: { padding: 16 },
 })

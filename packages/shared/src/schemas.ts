@@ -140,6 +140,7 @@ export type CorridorTours = z.infer<typeof corridorTours>
 export const tourStopView = z.object({
   seq: z.number().int(),
   stopType,
+  name: z.string(),
   lat: z.number(),
   lng: z.number(),
   triggerRadiusM: z.number().int(),
