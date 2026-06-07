@@ -211,6 +211,18 @@ export const tourStops = pgTable(
     }),
     stopType: stopTypeEnum('stop_type').notNull(),
     triggerRadiusM: integer('trigger_radius_m').notNull().default(120),
+    // TRIGGER POINT: the stop's POI snapped onto the route (nearest point on the
+    // frozen polyline), plus the route's heading of travel at that point. Computed
+    // once at generation time so the in-car player triggers as the vehicle passes
+    // the POI's point ON THE ROAD (POIs sit 400–650 m off the road on Tahoe
+    // corridors) and can run a heading gate WITHOUT re-snapping every stop at load.
+    // Nullable for back-compat: tours generated BEFORE these columns existed leave
+    // them null until backfilled (backfill-trigger-points.ts), and the player/sim
+    // then falls back to snapping the POI live. The generator always writes a value
+    // for new stops (a degenerate <2-vertex route would write 0, but corridors are
+    // dense frozen polylines, so that path is unreachable in practice).
+    triggerLat: doublePrecision('trigger_lat'),
+    triggerLng: doublePrecision('trigger_lng'),
     approachHeadingDeg: integer('approach_heading_deg'),
     // Generic break-stop fields only (no baked volatile data).
     meta: jsonb('meta').$type<StopMeta>(),

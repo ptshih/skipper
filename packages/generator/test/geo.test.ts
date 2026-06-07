@@ -1,9 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 import {
+  bearingDeg,
   cumulativeMeters,
   encodePolyline,
   haversineMeters,
   nearestOnRoute,
+  routeBearingAt,
   sampleAlong,
   timeAtAlong,
   totalMeters,
@@ -84,6 +86,40 @@ describe('nearestOnRoute', () => {
     expect(pos.index).toBe(1)
     near(pos.alongM, ONE_DEG_LAT_M, 2)
     expect(pos.offRouteM).toBeLessThan(20)
+  })
+  test('returns the snapped vertex coordinates (the trigger point)', () => {
+    const pos = nearestOnRoute(line, cum, [0.0001, 1.0])
+    expect(pos.lng).toBe(0) // snapped onto the route, not the off-route input lng 0.0001
+    expect(pos.lat).toBe(1)
+  })
+})
+
+describe('bearingDeg', () => {
+  test('due north', () => near(bearingDeg([0, 0], [0, 1]), 0, 1e-6))
+  test('due east at the equator', () => near(bearingDeg([0, 0], [1, 0]), 90, 0.1))
+  test('due south', () => near(bearingDeg([0, 1], [0, 0]), 180, 1e-6))
+  test('due west at the equator', () => near(bearingDeg([1, 0], [0, 0]), 270, 0.1))
+})
+
+describe('routeBearingAt', () => {
+  // A route that runs due north (vertices 0..2) then turns due east (vertices 2..4).
+  const line: LngLat[] = [
+    [0, 0],
+    [0, 1],
+    [0, 2],
+    [1, 2],
+    [2, 2],
+  ]
+  test('uses the forward segment at an interior vertex', () => {
+    near(routeBearingAt(line, 0), 0, 1e-6) // heading north
+    near(routeBearingAt(line, 2), 90, 0.1) // at the corner, the NEXT segment heads east
+  })
+  test('uses the trailing segment at the final vertex', () => {
+    near(routeBearingAt(line, line.length - 1), 90, 0.1) // last leg heads east
+  })
+  test('degenerate polyline → 0', () => {
+    expect(routeBearingAt([[0, 0]], 0)).toBe(0)
+    expect(routeBearingAt([], 0)).toBe(0)
   })
 })
 

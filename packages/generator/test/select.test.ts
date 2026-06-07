@@ -95,6 +95,37 @@ describe('selectStops', () => {
   })
 })
 
+describe('selectStops trigger points + break off-route filter', () => {
+  test('snaps each stop to a trigger point on the route with a sane approach heading', () => {
+    const plan = selectStops(params())
+    for (const s of plan) {
+      // The route runs due north along lng 0, so every trigger point snaps to lng 0
+      // (NOT the off-route POI lng) and the approach heading is ~north (0°/360°).
+      expect(s.triggerLng).toBe(0)
+      expect(s.triggerLat).toBeGreaterThanOrEqual(38.0)
+      expect(s.triggerLat).toBeLessThanOrEqual(38.1)
+      expect(s.approachHeadingDeg === 0 || s.approachHeadingDeg === 360 || s.approachHeadingDeg < 1).toBe(true)
+    }
+  })
+
+  test('drops a break anchor that snaps too far off the route', () => {
+    const farBreak = selectStops({
+      ...params(),
+      // A single break anchor ~1.7 km east of the route (lng 0.02) — past OFF_ROUTE_MAX_M.
+      breakAnchors: [{ placeId: 'far-gas', name: 'Far Gas', lat: 38.05, lng: 0.02, primaryType: 'gas_station' }] as BreakAnchor[],
+    })
+    expect(farBreak.some((s) => s.stopType === 'break')).toBe(false)
+  })
+
+  test('keeps an on-route break anchor', () => {
+    const onRoute = selectStops({
+      ...params(),
+      breakAnchors: [{ placeId: 'near-gas', name: 'Near Gas', lat: 38.05, lng: 0, primaryType: 'gas_station' }] as BreakAnchor[],
+    })
+    expect(onRoute.filter((s) => s.stopType === 'break').length).toBe(1)
+  })
+})
+
 describe('selectStops co-located dedup', () => {
   // A route that runs NORTH then doubles back SOUTH ~88 m to the east, so the two
   // ends sit at OPPOSITE ends of the route (far apart in along-route time) yet only

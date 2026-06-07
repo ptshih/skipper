@@ -15,7 +15,7 @@
 import type { PoiSource, StopType } from '@skipper/shared'
 import { MIN_STOP_SEPARATION_M, OFF_ROUTE_MAX_M, PACING, STORY_MIN_FACT_CHARS, TARGET_SECONDS, TRIGGER_RADIUS_M } from '../config'
 import type { BucketPacing } from '../config'
-import { cumulativeMeters, haversineMeters, nearestOnRoute, timeAtAlong, totalMeters } from './geo'
+import { cumulativeMeters, haversineMeters, nearestOnRoute, routeBearingAt, timeAtAlong, totalMeters } from './geo'
 import type { LngLat } from './geo'
 import type { WikiPoi } from './wikipedia'
 import type { BreakAnchor } from './places'
@@ -35,6 +35,11 @@ export interface StopPlan {
   facts: string[]
   targetSeconds: number
   triggerRadiusM: number
+  /** The POI snapped to the nearest route point (the trigger point) — [lat,lng]. */
+  triggerLat: number
+  triggerLng: number
+  /** Route heading of travel (deg, 0=N) at the trigger point — the approach direction. */
+  approachHeadingDeg: number
   /** STORY only: Wikipedia attribution source (CC BY-SA). */
   wikiUrl?: string
   wikiTitle?: string
@@ -88,12 +93,22 @@ function dedupeColocated(placed: Placed[]): Placed[] {
   return kept
 }
 
+/** A POI snapped to the route: its along-route time, off-route distance, trigger point, and approach heading. */
+interface Snap {
+  alongSec: number
+  offRouteM: number
+  triggerLat: number
+  triggerLng: number
+  approachHeadingDeg: number
+}
+type SnapFn = (p: LngLat) => Snap
+
 /** Choose narrated (story/scenic) stops from Wikipedia POIs, time-paced, richest-first per window. */
-function selectNarrated(params: SelectParams, alongSecOf: (p: LngLat) => { alongSec: number; offRouteM: number }) {
+function selectNarrated(params: SelectParams, snapOf: SnapFn) {
   const placed: Placed[] = []
   for (const poi of params.wikiPois) {
     if (NON_NARRATABLE_TITLE.test(poi.title)) continue
-    const { alongSec, offRouteM } = alongSecOf([poi.lng, poi.lat])
+    const { alongSec, offRouteM } = snapOf([poi.lng, poi.lat])
     if (offRouteM <= OFF_ROUTE_MAX_M) placed.push({ poi, alongSec })
   }
   // Spatial dedup BEFORE time-pacing (two co-located POIs can clear the time gap).
@@ -129,13 +144,21 @@ function selectNarrated(params: SelectParams, alongSecOf: (p: LngLat) => { along
 }
 
 /** Choose `count` break stops spaced through the drive, nearest to even time targets. */
-function selectBreaks(
-  params: SelectParams,
-  alongSecOf: (p: LngLat) => { alongSec: number; offRouteM: number },
-): { anchor: BreakAnchor; alongSec: number }[] {
+function selectBreaks(params: SelectParams, snapOf: SnapFn): { anchor: BreakAnchor; alongSec: number }[] {
   const count = params.pacing.breakStops
   if (count <= 0 || params.breakAnchors.length === 0) return []
-  const placed = params.breakAnchors.map((a) => ({ anchor: a, alongSec: alongSecOf([a.lng, a.lat]).alongSec }))
+  // Filter off-route anchors FIRST: Google Places "search along route" returns spots
+  // it considers near the route, but the corridor is one specific frozen road, so an
+  // anchor can snap far off it (a restaurant 25 km away up a side valley). Drop any
+  // beyond OFF_ROUTE_MAX_M — the same floor narrated stops use and the sim enforces,
+  // so the generator never emits a break the drive simulator would flag as off-route.
+  const placed = params.breakAnchors
+    .map((a) => {
+      const s = snapOf([a.lng, a.lat])
+      return { anchor: a, alongSec: s.alongSec, offRouteM: s.offRouteM }
+    })
+    .filter((p) => p.offRouteM <= OFF_ROUTE_MAX_M)
+  if (placed.length === 0) return []
   const used = new Set<string>()
   const out: { anchor: BreakAnchor; alongSec: number }[] = []
   for (let k = 1; k <= count; k++) {
@@ -162,19 +185,26 @@ function selectBreaks(
 export function selectStops(params: SelectParams): StopPlan[] {
   const cumulative = cumulativeMeters(params.polyline)
   const totalM = totalMeters(cumulative)
-  const alongSecOf = (p: LngLat) => {
+  const snapOf: SnapFn = (p) => {
     const pos = nearestOnRoute(params.polyline, cumulative, p)
-    return { alongSec: timeAtAlong(pos.alongM, totalM, params.totalSec), offRouteM: pos.offRouteM }
+    return {
+      alongSec: timeAtAlong(pos.alongM, totalM, params.totalSec),
+      offRouteM: pos.offRouteM,
+      triggerLat: pos.lat,
+      triggerLng: pos.lng,
+      approachHeadingDeg: Math.round(routeBearingAt(params.polyline, pos.index)) % 360,
+    }
   }
 
-  const narrated = selectNarrated(params, alongSecOf)
-  const breaks = selectBreaks(params, alongSecOf)
+  const narrated = selectNarrated(params, snapOf)
+  const breaks = selectBreaks(params, snapOf)
 
   type Pending = Omit<StopPlan, 'seq'>
   const pending: Pending[] = []
 
   for (const n of narrated) {
     const isStory = n.poi.extract.length >= STORY_MIN_FACT_CHARS
+    const snap = snapOf([n.poi.lng, n.poi.lat])
     pending.push({
       stopType: isStory ? 'story' : 'scenic',
       source: 'wikipedia',
@@ -187,11 +217,15 @@ export function selectStops(params: SelectParams): StopPlan[] {
       facts: isStory ? toFacts(n.poi.extract) : [],
       targetSeconds: isStory ? TARGET_SECONDS.story : TARGET_SECONDS.scenic,
       triggerRadiusM: TRIGGER_RADIUS_M,
+      triggerLat: snap.triggerLat,
+      triggerLng: snap.triggerLng,
+      approachHeadingDeg: snap.approachHeadingDeg,
       ...(isStory ? { wikiUrl: n.poi.url, wikiTitle: n.poi.title, wikiPageId: n.poi.pageid } : {}),
     })
   }
 
   for (const b of breaks) {
+    const snap = snapOf([b.anchor.lng, b.anchor.lat])
     pending.push({
       stopType: 'break',
       source: 'google_places',
@@ -204,6 +238,9 @@ export function selectStops(params: SelectParams): StopPlan[] {
       facts: [],
       targetSeconds: TARGET_SECONDS.break,
       triggerRadiusM: TRIGGER_RADIUS_M,
+      triggerLat: snap.triggerLat,
+      triggerLng: snap.triggerLng,
+      approachHeadingDeg: snap.approachHeadingDeg,
     })
   }
 

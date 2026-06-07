@@ -17,6 +17,7 @@ export type LngLat = [number, number]
 const EARTH_RADIUS_M = 6_371_008.8 // mean Earth radius (IUGG)
 
 const toRad = (deg: number): number => (deg * Math.PI) / 180
+const toDeg = (rad: number): number => (rad * 180) / Math.PI
 
 /** Great-circle distance between two [lng, lat] points, in meters. */
 export function haversineMeters(a: LngLat, b: LngLat): number {
@@ -28,6 +29,21 @@ export function haversineMeters(a: LngLat, b: LngLat): number {
   const sinLng = Math.sin(dLng / 2)
   const h = sinLat * sinLat + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * sinLng * sinLng
   return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(h)))
+}
+
+/**
+ * Initial bearing (degrees, 0=N, 90=E) traveling from `a` to `b`. The direction
+ * the road is heading at the start of the a→b segment.
+ */
+export function bearingDeg(a: LngLat, b: LngLat): number {
+  const [lng1, lat1] = a
+  const [lng2, lat2] = b
+  const φ1 = toRad(lat1)
+  const φ2 = toRad(lat2)
+  const Δλ = toRad(lng2 - lng1)
+  const y = Math.sin(Δλ) * Math.cos(φ2)
+  const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ)
+  return (toDeg(Math.atan2(y, x)) + 360) % 360
 }
 
 /**
@@ -54,6 +70,9 @@ export function totalMeters(cumulative: number[]): number {
 export interface RoutePosition {
   /** Index of the nearest polyline vertex. */
   index: number
+  /** The nearest route point ([lng, lat]) — a POI's "trigger point" on the road. */
+  lng: number
+  lat: number
   /** Straight-line distance from `point` to that vertex (a "how far off the road" proxy). */
   offRouteM: number
   /** Along-route distance to that vertex, in meters. */
@@ -61,9 +80,10 @@ export interface RoutePosition {
 }
 
 /**
- * Snap an arbitrary point (a found POI) onto the route: the nearest vertex, how
- * far off-route it is, and its along-route distance. Linear scan — fine at a few
- * thousand vertices, and we do it a few dozen times per corridor.
+ * Snap an arbitrary point (a found POI) onto the route: the nearest vertex (its
+ * [lng, lat] = the trigger point), how far off-route it is, and its along-route
+ * distance. Linear scan — fine at a few thousand vertices, and we do it a few
+ * dozen times per corridor.
  */
 export function nearestOnRoute(polyline: LngLat[], cumulative: number[], point: LngLat): RoutePosition {
   let bestIndex = 0
@@ -75,7 +95,21 @@ export function nearestOnRoute(polyline: LngLat[], cumulative: number[], point: 
       bestIndex = i
     }
   }
-  return { index: bestIndex, offRouteM: bestDist, alongM: cumulative[bestIndex] ?? 0 }
+  const v = polyline[bestIndex] ?? [0, 0]
+  return { index: bestIndex, lng: v[0], lat: v[1], offRouteM: bestDist, alongM: cumulative[bestIndex] ?? 0 }
+}
+
+/**
+ * The route's heading of travel (degrees, 0=N) at vertex `index` — the direction
+ * a vehicle is moving as it passes that point. Uses the forward segment
+ * (index → index+1), or the trailing segment at the final vertex. Returns 0 for a
+ * degenerate (<2-vertex) polyline, where heading is undefined.
+ */
+export function routeBearingAt(polyline: LngLat[], index: number): number {
+  if (polyline.length < 2) return 0
+  const i = Math.min(Math.max(index, 0), polyline.length - 1)
+  const [from, to] = i < polyline.length - 1 ? [polyline[i]!, polyline[i + 1]!] : [polyline[i - 1]!, polyline[i]!]
+  return bearingDeg(from, to)
 }
 
 /**

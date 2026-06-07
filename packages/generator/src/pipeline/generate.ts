@@ -305,7 +305,16 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
 
       if (s.stopType === 'break') {
         // M1: break stops are silent anchors — no content, no audio.
-        finalStops.push({ seq: s.seq, poiId, poiContentId: null, stopType: 'break', triggerRadiusM: s.triggerRadiusM })
+        finalStops.push({
+          seq: s.seq,
+          poiId,
+          poiContentId: null,
+          stopType: 'break',
+          triggerRadiusM: s.triggerRadiusM,
+          triggerLat: s.triggerLat,
+          triggerLng: s.triggerLng,
+          approachHeadingDeg: s.approachHeadingDeg,
+        })
         summaries.push({ seq: s.seq, stopType: s.stopType, name: s.name, alongSec: s.alongSec })
         continue
       }
@@ -340,7 +349,16 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
         attribution,
       })
 
-      finalStops.push({ seq: s.seq, poiId, poiContentId, stopType: s.stopType, triggerRadiusM: s.triggerRadiusM })
+      finalStops.push({
+        seq: s.seq,
+        poiId,
+        poiContentId,
+        stopType: s.stopType,
+        triggerRadiusM: s.triggerRadiusM,
+        triggerLat: s.triggerLat,
+        triggerLng: s.triggerLng,
+        approachHeadingDeg: s.approachHeadingDeg,
+      })
       summaries.push({ seq: s.seq, stopType: s.stopType, name: s.name, alongSec: s.alongSec, script, durationMs, audioUrl })
     }
 

@@ -134,6 +134,10 @@ export interface FinalStop {
   poiContentId: string | null
   stopType: StopType
   triggerRadiusM: number
+  /** POI snapped to the route (the trigger point) + the route heading there. */
+  triggerLat: number
+  triggerLng: number
+  approachHeadingDeg: number
 }
 
 /**
@@ -150,6 +154,9 @@ export async function finalizeTourReady(tourId: string, stops: FinalStop[]): Pro
     poiContentId: s.poiContentId,
     stopType: s.stopType,
     triggerRadiusM: s.triggerRadiusM,
+    triggerLat: s.triggerLat,
+    triggerLng: s.triggerLng,
+    approachHeadingDeg: s.approachHeadingDeg,
   }))
   await db.batch([
     db.update(tours).set({ status: 'ready' }).where(eq(tours.id, tourId)).returning({ id: tours.id }),
