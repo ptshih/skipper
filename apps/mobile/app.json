@@ -14,9 +14,20 @@
     "android": {
       "package": "tours.skipper.app"
     },
-    "plugins": ["expo-router", "expo-secure-store"],
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-audio"
+    ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "5dded9ce-af00-4c5f-957d-52644d7ab155"
+      }
+    },
+    "owner": "manoa-inc"
   }
 }
