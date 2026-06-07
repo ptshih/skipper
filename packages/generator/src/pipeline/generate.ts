@@ -35,7 +35,7 @@ import { SKIPPER_DEFAULTS } from '../persona/skipper'
 import { cumulativeMeters, encodePolyline, sampleAlong, totalMeters } from './geo'
 import type { LngLat } from './geo'
 import { discoverWikipediaPois, fetchDeepExtracts } from './wikipedia'
-import { searchBreakStops } from './places'
+import { searchBreakStops, spokenKind } from './places'
 import type { BreakAnchor } from './places'
 import { selectStops, toFacts } from './select'
 import type { StopPlan } from './select'
@@ -212,7 +212,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
     ...(s.stopType === 'story'
       ? { place: { name: s.name, kind: s.kind }, facts: s.facts }
       : s.stopType === 'break'
-        ? { place: { name: s.name, kind: s.kind } }
+        ? { place: { name: s.name, kind: spokenKind(s.kind) } } // normalize raw primaryType
         : {}),
   })
   // First-pass narration: thread the trailing-3 window of cross-stop context.
@@ -225,13 +225,18 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       recentKitBeats: [...new Set(recentKit.slice(-3).flat())],
     })
   const rememberStop = (s: StopPlan, script: string) => {
-    // Story + break name a real place (callback-able); scenic is a generic stretch.
-    priorStops.push(s.stopType === 'scenic' ? 'a quiet stretch' : s.name)
+    // Story names the real place (callback-able); break + scenic push a GENERIC token so
+    // a later stop can't call back to a transient food spot and characterize it ("that
+    // nice café back there" = volatile/opinion the break rule forbids).
+    priorStops.push(
+      s.stopType === 'story' ? s.name : s.stopType === 'break' ? 'a rest stop' : 'a quiet stretch',
+    )
     recentOpeners.push(openerOf(script))
     recentClosers.push(closerOf(script))
-    // Breaks are invisible to kit accounting: a café break inviting "a coffee" is a
-    // generic stop cue, not the Skipper's coffee-opinion kit, so it never spends it.
-    recentKit.push(s.stopType === 'break' ? [] : kitBeatsOf(script))
+    // Breaks are invisible to kit accounting (a café break inviting "a coffee" is a
+    // generic cue, not the coffee-opinion kit) AND don't occupy a slot in the trailing-3
+    // window, so they can't flush a real narrated kit beat out of it early.
+    if (s.stopType !== 'break') recentKit.push(kitBeatsOf(script))
   }
 
   // Narrate every stop up front — cheap (no TTS yet), so the lint can see the whole

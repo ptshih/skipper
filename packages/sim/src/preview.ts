@@ -102,9 +102,12 @@ export function buildPreviewTimeline(
   const totalDriveSec = opts.totalDriveSec ?? (totalM > 0 ? totalM / FALLBACK_SPEED_MPS : 0)
 
   // Each stop's along-route distance (m) and 0..1 progress, via its trigger point.
-  const along = ordered.map((s) => (totalM > 0 ? nearestOnRoute(polyline, cum, [s.lng, s.lat]).alongM : 0))
+  const along = ordered.map((s) =>
+    totalM > 0 ? nearestOnRoute(polyline, cum, [s.lng, s.lat]).alongM : 0,
+  )
   const progressOf = (m: number): number => (totalM > 0 ? clamp(m / totalM, 0, 1) : 0)
-  const realMsForMeters = (m: number): number => (totalM > 0 ? (m / totalM) * totalDriveSec * 1000 : 0)
+  const realMsForMeters = (m: number): number =>
+    totalM > 0 ? (m / totalM) * totalDriveSec * 1000 : 0
 
   const segments: PreviewSegment[] = []
   let cursor = 0
@@ -129,8 +132,9 @@ export function buildPreviewTimeline(
         routeProgress: progressOf(along[i]!),
       })
     }
-    // The stop itself: a silent break is a brief REST card; everything else is a CLIP.
-    const isSilent = s.stopType === 'break' || !s.audioDurationMs
+    // The stop itself: a stop with no audio is a brief REST card; everything with
+    // audio is a CLIP. A break WITH audio (a named break clip) now plays like any clip.
+    const isSilent = !s.audioDurationMs
     if (isSilent) {
       push({
         kind: 'rest',

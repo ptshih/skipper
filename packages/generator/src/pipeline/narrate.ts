@@ -126,19 +126,22 @@ export function buildFactSheet(req: NarrationRequest): string {
     if (req.place?.kind) lines.push(`KIND: ${req.place.kind}`)
     lines.push('')
     lines.push(
-      'BREAK stop — a rest/food spot is coming up. You MAY name the PLACE above and say what',
+      'BREAK stop — a rest/food spot is coming up. You MAY name the PLACE above and say what KIND',
     )
     lines.push(
-      'KIND it is. You may NOT add anything else about THIS spot — no hours, prices, rating,',
+      'it is (plainly). You may NOT add anything else about THIS spot — no hours, prices, rating,',
     )
     lines.push(
-      'popularity, menu, quality, or physical features (where it sits, its deck, its view); none',
+      'popularity, menu, quality, character adjectives (cozy/charming/little/family-run), or physical',
     )
     lines.push(
-      'of that is on the sheet. Name it, give a generic invitation (pull over, stretch, fuel, a',
+      'features (where it sits, its deck, its view). Naming it is not license to assert what the name',
     )
     lines.push(
-      'bite), and stop there. The live details are resolved fresh at tour-load. No side of road.',
+      'describes (a Lakeview Café gets no view). Name it, give a generic invitation (pull over, stretch,',
+    )
+    lines.push(
+      'fuel, a bite), and stop there. Live details resolved fresh at tour-load. No side of the road.',
     )
   }
 

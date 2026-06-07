@@ -62,7 +62,11 @@ app.get('/corridors/:corridorId/tours', async (c) => {
   const corridorId = c.req.param('corridorId')
   if (!corridorId || !UUID_RE.test(corridorId)) return c.json({ error: 'not_found' }, 404)
 
-  const exists = await db.select({ id: corridors.id }).from(corridors).where(eq(corridors.id, corridorId)).limit(1)
+  const exists = await db
+    .select({ id: corridors.id })
+    .from(corridors)
+    .where(eq(corridors.id, corridorId))
+    .limit(1)
   if (!exists[0]) return c.json({ error: 'not_found' }, 404)
 
   const filters = [eq(tours.corridorId, corridorId), eq(tours.status, 'ready')]
@@ -70,7 +74,13 @@ app.get('/corridors/:corridorId/tours', async (c) => {
   if (duration !== undefined) {
     const parsed = durationBucket.safeParse(duration)
     if (!parsed.success) {
-      return c.json({ error: 'invalid_duration', message: `duration must be one of ${durationBucket.options.join(', ')}` }, 400)
+      return c.json(
+        {
+          error: 'invalid_duration',
+          message: `duration must be one of ${durationBucket.options.join(', ')}`,
+        },
+        400,
+      )
     }
     filters.push(eq(tours.durationBucket, parsed.data))
   }
@@ -101,9 +111,15 @@ async function loadTourGated(c: Context<ApiEnv>): Promise<{ tour: TourRow } | { 
   const rows = await db.select().from(tours).where(eq(tours.id, tourId)).limit(1)
   const tour = rows[0]
   if (!tour) return { res: c.json({ error: 'not_found' }, 404) }
-  if (tour.status !== 'ready') return { res: c.json({ error: 'not_ready', message: 'Tour is still generating.' }, 409) }
+  if (tour.status !== 'ready')
+    return { res: c.json({ error: 'not_ready', message: 'Tour is still generating.' }, 409) }
   if (!tour.isPreview && !meetsTier(c.get('tier'), FEATURES.playTour)) {
-    return { res: c.json({ error: 'account_required', message: 'Create a free account to play this tour.' }, 401) }
+    return {
+      res: c.json(
+        { error: 'account_required', message: 'Create a free account to play this tour.' },
+        401,
+      ),
+    }
   }
   return { tour }
 }
@@ -154,7 +170,7 @@ app.get('/tours/:tourId', withSession, async (c) => {
   })
 })
 
-// Issue short-lived presigned R2 URLs for the tour's audio clips (story/scenic).
+// Issue short-lived presigned R2 URLs for the tour's audio clips (every stop — story, scenic, break).
 // Same gate as fetch — this is the real wall (hands out the playable bytes).
 app.post('/tours/:tourId/assets/sign', withSession, async (c) => {
   const gated = await loadTourGated(c)
@@ -162,7 +178,11 @@ app.post('/tours/:tourId/assets/sign', withSession, async (c) => {
   const { tour } = gated
 
   const clips = await db
-    .select({ seq: tourStops.seq, key: poiContent.audioUrl, durationMs: poiContent.audioDurationMs })
+    .select({
+      seq: tourStops.seq,
+      key: poiContent.audioUrl,
+      durationMs: poiContent.audioDurationMs,
+    })
     .from(tourStops)
     .innerJoin(poiContent, eq(tourStops.poiContentId, poiContent.id))
     .where(eq(tourStops.tourId, tour.id))

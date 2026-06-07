@@ -8,14 +8,29 @@
 //   - SCENIC = a Wikipedia POI too thin to narrate truthfully → delivery-only
 //     audio at that location (no name, no facts spoken). It still anchors to the
 //     POI so it has a location + a poi_content row (ready-gate).
-//   - BREAK  = a Google Places food/rest anchor; no audio, no volatile data.
+//   - BREAK  = a Google Places food/rest anchor; NAMED audio (name + kind only,
+//     normalized; no volatile data) — mandatory, like story/scenic.
 // Within each spacing window we prefer the richest extract, so good stories win
 // over thin neighbours.
 
 import type { PoiSource, StopType } from '@skipper/shared'
-import { MIN_STOP_SEPARATION_M, OFF_ROUTE_MAX_M, PACING, STORY_MIN_FACT_CHARS, TARGET_SECONDS, TRIGGER_RADIUS_M } from '../config'
+import {
+  MIN_STOP_SEPARATION_M,
+  OFF_ROUTE_MAX_M,
+  PACING,
+  STORY_MIN_FACT_CHARS,
+  TARGET_SECONDS,
+  TRIGGER_RADIUS_M,
+} from '../config'
 import type { BucketPacing } from '../config'
-import { cumulativeMeters, haversineMeters, nearestOnRoute, routeBearingAt, timeAtAlong, totalMeters } from './geo'
+import {
+  cumulativeMeters,
+  haversineMeters,
+  nearestOnRoute,
+  routeBearingAt,
+  timeAtAlong,
+  totalMeters,
+} from './geo'
 import type { LngLat } from './geo'
 import type { WikiPoi } from './wikipedia'
 import type { BreakAnchor } from './places'
@@ -86,7 +101,9 @@ function dedupeColocated(placed: Placed[]): Placed[] {
   const kept: Placed[] = []
   for (const cand of byRichness) {
     const tooClose = kept.some(
-      (k) => haversineMeters([k.poi.lng, k.poi.lat], [cand.poi.lng, cand.poi.lat]) < MIN_STOP_SEPARATION_M,
+      (k) =>
+        haversineMeters([k.poi.lng, k.poi.lat], [cand.poi.lng, cand.poi.lat]) <
+        MIN_STOP_SEPARATION_M,
     )
     if (!tooClose) kept.push(cand)
   }
@@ -128,7 +145,10 @@ function selectNarrated(params: SelectParams, snapOf: SnapFn) {
     let bestIdx = i
     let bestLen = here.poi.extract.length
     let j = i + 1
-    while (j < candidates.length && candidates[j]!.alongSec - here.alongSec <= params.pacing.minGapSec) {
+    while (
+      j < candidates.length &&
+      candidates[j]!.alongSec - here.alongSec <= params.pacing.minGapSec
+    ) {
       if (candidates[j]!.poi.extract.length > bestLen) {
         bestLen = candidates[j]!.poi.extract.length
         bestIdx = j
@@ -144,7 +164,10 @@ function selectNarrated(params: SelectParams, snapOf: SnapFn) {
 }
 
 /** Choose `count` break stops spaced through the drive, nearest to even time targets. */
-function selectBreaks(params: SelectParams, snapOf: SnapFn): { anchor: BreakAnchor; alongSec: number }[] {
+function selectBreaks(
+  params: SelectParams,
+  snapOf: SnapFn,
+): { anchor: BreakAnchor; alongSec: number }[] {
   const count = params.pacing.breakStops
   if (count <= 0 || params.breakAnchors.length === 0) return []
   // Filter off-route anchors FIRST: Google Places "search along route" returns spots

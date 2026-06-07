@@ -100,3 +100,31 @@ export async function searchBreakStops(
   }
   return [...byId.values()]
 }
+
+/**
+ * Normalize a raw Google `primaryType` into a SAFE, plainly-spoken category for break
+ * narration. `includedType` filters which places RETURN, not their `primaryType`, so a
+ * `restaurant` search can hand back `seafood_restaurant` / `fine_dining_restaurant` —
+ * which encode the menu + tier, the exact things a break clip may NOT assert — or a
+ * snake_case / non-eatery enum (`point_of_interest`, `rv_park`, `liquor_store`) that
+ * reads poorly through TTS and baits an invented friendlier category. Collapse cuisine/
+ * tier to a neutral kind; return null for anything we can't safely generalize (the
+ * Skipper then just names the spot, no kind).
+ */
+export function spokenKind(primaryType?: string | null): string | null {
+  if (!primaryType) return null
+  const t = primaryType.toLowerCase()
+  if (t === 'cafe' || t === 'coffee_shop' || t === 'bakery') return 'café'
+  if (t === 'gas_station') return 'gas station'
+  if (t === 'rest_stop' || t === 'rest_area' || t === 'parking') return 'rest stop'
+  if (
+    t === 'restaurant' ||
+    t.endsWith('_restaurant') ||
+    t === 'diner' ||
+    t === 'meal_takeaway' ||
+    t === 'meal_delivery' ||
+    t === 'food'
+  )
+    return 'restaurant'
+  return null // bar/pub, lodging, point_of_interest, rv_park, liquor_store, … → no spoken kind
+}

@@ -33,8 +33,14 @@ scale-for-a-market, pick polish.
 - **Persona lives in DELIVERY, never in FACTS.** "Make it funny" never loosens
   accuracy. A POI with thin/no Wikipedia is downgraded to scenic/break — silence
   beats a hallucinated battle.
-- **Break stops bake NO volatile data** (hours, "open till 9"). Narrate
-  generically; live name/rating/hours are fetched fresh at tour-load.
+- **Break stops MAY name the place + category, but bake NO VOLATILE data**
+  (hours, rating, "open till 9", popularity, features). The break's `name`/`kind`
+  come from the curated Places anchor (a minimal non-volatile field mask) and are
+  spoken in the clip like the region is; everything volatile is fetched fresh at
+  tour-load (and "ask the skipper" later). Break audio is **mandatory** — every
+  selected break gets a `poi_content` clip; the tour can't be `ready` without it.
+  (NOTE: baking the Places name into a frozen R2 clip extends its lifetime past the
+  DB anchor — mind Places ToS; `patch-clip` re-synths one clip if a place renames.)
 
 ## Stack notes
 
@@ -63,7 +69,7 @@ scale-for-a-market, pick polish.
 - **Secrets via dotenvx.** `.env.development` / `.env.production` are committed
   ENCRYPTED (public-key); the private keys live only in gitignored `.env.keys`.
   Root scripts wrap commands with `dotenvx run -f .env.development` — so `bun run
-  dev` and `bun run db:*` get decrypted vars; don't add a plaintext `.env`. Edit
+dev` and `bun run db:*` get decrypted vars; don't add a plaintext `.env`. Edit
   a value with `dotenvx set KEY "v" -f .env.development`; `.env.example` is the
   plaintext catalog of what exists. Deploy: set `DOTENV_PRIVATE_KEY_PRODUCTION`
   in the host env. Onboarding = get `.env.keys` from a teammate.
@@ -169,9 +175,11 @@ From an adversarial review of the scaffold. Verdict: sound foundation. Guardrail
 - **M1 generator MUST populate `poi_content.attribution`** for every
   wikipedia-sourced clip (CC BY-SA is legal, not optional) — put it on the
   generation invariant checklist + the human-review gate.
-- **scenic ≠ break.** A scenic stop is delivery-only ambient audio (no facts) but
-  STILL needs a `poi_content` row with non-null `audioUrl` to satisfy the ready
-  gate. Only `break` stops carry no audio.
+- **scenic ≠ break.** A scenic stop is delivery-only ambient audio (no facts); a
+  break stop names the curated Places anchor (name + kind only). Both — and story —
+  now need a `poi_content` row with non-null `audioUrl`: as of break-narration,
+  **every** stop type carries audio and the ready-gate requires it on all of them
+  (no stop type is silent anymore).
 - **M1 ready-gate is atomic via `db.batch([...])`** — neon-http has no
   interactive transactions, but co-committing the `status='ready'` flip with the
   final stop writes in one batch suffices (no neon-serverless Pool needed).
