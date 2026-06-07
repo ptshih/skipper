@@ -1,0 +1,137 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Skipper design tokens — "Trailhead 89"
+// A 1938 WPA national-park poster that learned to play audio. These are the RAW
+// values + scales. Semantic, theme-aware color roles live in `theme.ts`; never
+// reach past a semantic role to a raw hex inside a component.
+// ─────────────────────────────────────────────────────────────────────────────
+import type { TextStyle } from 'react-native'
+
+// ── Raw palette ──────────────────────────────────────────────────────────────
+// Two moods of the same park: DAY (aged map-paper) and DUSK (the park at night).
+// In-car legibility note: amber is a FILL, never small text on paper (~2:1 fails).
+// `theme.ts` enforces this — there is no "amber text on surface" role in light.
+export const palette = {
+  // Daylight / paper
+  paper: '#F2E7CC', // app background — aged road-atlas paper
+  paperRaised: '#FBF3DD', // ranger-placard card fill (lifts off paper)
+  paperSunken: '#E7D9B5', // inset wells: timer chips, the route track bed
+  paperKeyline: '#FFF8E6', // bright inner keyline that fakes a carved sign edge
+  inkBrown: '#2A2014', // primary text — ~11:1 on paper, the glance workhorse
+  inkFaded: '#5C4A30', // secondary text (region, stop type) — kept ~5:1 for glare
+  inkFaint: '#74603E', // tertiary hints — darkened to clear 4.5:1 on paper (was #8A7550)
+  pine: '#1E5B40', // primary green — CTA fill, active track, success
+  amberSunset: '#DD7A33', // bright amber — FILLS & tokens only (moving dot, glow)
+  amberBurnt: '#9A4D17', // amber that survives as TEXT on paper (~5:1) — kickers
+  lakeTeal: '#2C6E7E', // cool route/water accent + scenic badges
+  tanRule: '#CDB988', // hairlines, dashed inactive track, dividers
+  rustError: '#A8401F', // errors — brick-and-clay, never clinical blue-red
+
+  // Dusk / night-drive-first
+  night: '#14201B', // app background — deep dusk-pine, calmer than true black
+  nightRaised: '#1E2B24', // raised placard at dusk
+  nightSunken: '#101A15', // inset wells at dusk
+  nightKeyline: '#2A3A30', // subtle lifted keyline on dark
+  parchment: '#ECE0C4', // primary text — warm, NOT pure white (cuts night glare)
+  parchFaded: '#A99D80', // secondary text on dark
+  parchFaint: '#9A9075', // tertiary hints on dark — lifted to clear 4.5:1 (was #7C7158)
+  pineGlow: '#5FA877', // pine lifted so "active" still reads on night
+  lanternAmber: '#EBA351', // primary night accent — glow CTA, kicker, token
+  lakeTealNight: '#5FA7B8', // cool accent lifted for dark
+  tanRuleNight: '#3A4A3E', // muted-pine hairlines that read as "off"
+  emberError: '#E97559', // glowing-ember error — clears 4.5:1 on raised too (was #E0664A)
+} as const
+
+// ── Spacing (4-pt grid) ──────────────────────────────────────────────────────
+export const space = {
+  xs: 4,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 20,
+  xxl: 24,
+  xxxl: 32,
+  huge: 48,
+  gutter: 16, // standard screen edge padding
+} as const
+
+// ── Radii ────────────────────────────────────────────────────────────────────
+export const radius = {
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 20,
+  pill: 999,
+} as const
+
+// ── Borders / keylines ───────────────────────────────────────────────────────
+export const border = {
+  hair: 0.5, // ~StyleSheet.hairlineWidth on most devices; kept static for tokens
+  thin: 1,
+  keyline: 1.5, // the carved-placard double-rule
+} as const
+
+// ── Motion ───────────────────────────────────────────────────────────────────
+export const duration = {
+  fast: 120,
+  base: 220,
+  slow: 420,
+  stamp: 520, // the passport-stamp "ink press"
+} as const
+
+// ── Type families (loaded in fonts.ts via @expo-google-fonts) ────────────────
+// Display = the WPA silkscreen headline (heavy = MORE glanceable at large sizes).
+// Body = a screen-tuned slab serif that keeps the placard warmth at UI scale.
+// Mono = the national-park permit / odometer — every number looks stamped.
+export const fonts = {
+  display: 'AlfaSlabOne_400Regular',
+  body: 'Bitter_400Regular',
+  bodyMedium: 'Bitter_600SemiBold',
+  bodyBold: 'Bitter_700Bold',
+  mono: 'SpaceMono_400Regular',
+  monoBold: 'SpaceMono_700Bold',
+} as const
+
+// ── Type scale (semantic variants) ───────────────────────────────────────────
+// Color is applied by the <Text> component, not here. Heavy display faces are
+// reserved for LARGE sizes where slab strokes aid the glance; small UI stays Bitter.
+export type TypeVariant =
+  | 'wordmark'
+  | 'display'
+  | 'placardTitle'
+  | 'titleXL'
+  | 'title'
+  | 'heading'
+  | 'body'
+  | 'bodyStrong'
+  | 'label'
+  | 'dim'
+  | 'mono'
+  | 'monoStrong'
+
+export const typeScale: Record<TypeVariant, TextStyle> = {
+  wordmark: { fontFamily: fonts.display, fontSize: 26, lineHeight: 30, letterSpacing: 0.5 },
+  display: { fontFamily: fonts.display, fontSize: 30, lineHeight: 36 },
+  placardTitle: { fontFamily: fonts.display, fontSize: 22, lineHeight: 27 },
+  titleXL: { fontFamily: fonts.bodyBold, fontSize: 24, lineHeight: 30 },
+  title: { fontFamily: fonts.bodyBold, fontSize: 20, lineHeight: 26 },
+  heading: { fontFamily: fonts.bodyBold, fontSize: 17, lineHeight: 22 },
+  body: { fontFamily: fonts.body, fontSize: 16, lineHeight: 23 },
+  bodyStrong: { fontFamily: fonts.bodyMedium, fontSize: 16, lineHeight: 23 },
+  label: {
+    fontFamily: fonts.bodyMedium,
+    fontSize: 12.5,
+    lineHeight: 16,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  dim: { fontFamily: fonts.body, fontSize: 13.5, lineHeight: 19 },
+  mono: { fontFamily: fonts.mono, fontSize: 14, lineHeight: 18 },
+  monoStrong: { fontFamily: fonts.monoBold, fontSize: 15, lineHeight: 19, letterSpacing: 0.3 },
+}
+
+// ── Hit targets ──────────────────────────────────────────────────────────────
+// In-car: thumbs, gloves, potholes. Nothing tappable below `min`; primary CTAs `cta`.
+export const hit = {
+  min: 48,
+  cta: 60,
+} as const

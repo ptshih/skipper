@@ -1,17 +1,40 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
-import { Link, Stack, useLocalSearchParams } from 'expo-router'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  AccessibilityInfo,
+  ActivityIndicator,
+  Animated,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native'
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
 import { ApiError, getTour, signTourAudio } from '@/lib/api'
+import { stopLabel } from '@/lib/labels'
 import { buildPreviewTimeline, type PreviewSegment } from '@/lib/preview'
+import { useTheme } from '@/theme'
+import { space } from '@/theme/tokens'
+import {
+  Badge,
+  Button,
+  Card,
+  Divider,
+  NowCard,
+  RouteTrack,
+  Screen,
+  StopRow,
+  STOP_ROW_HEIGHT,
+  Text,
+  stopIcon,
+  stopTone,
+  voice,
+} from '@/ui'
 
 // The in-app "simulated drive" preview: play the tour from a couch, no GPS. We walk
 // a compressed timeline (clip / drive / rest) — clips play full length via expo-audio
 // and advance on finish; the silent drive between stops becomes a short dot "zip".
 // Map-less: a route progress line + an auto-scrolling stop list. This is the live
 // driving player minus GPS (later: swap the segment clock for expo-location).
-
-const ROW_H = 56
 
 interface Loaded {
   tourName: string
@@ -24,6 +47,7 @@ interface Loaded {
 }
 
 export default function PreviewScreen() {
+  const theme = useTheme()
   const { id } = useLocalSearchParams<{ id: string }>()
   const [data, setData] = useState<Loaded | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -31,6 +55,7 @@ export default function PreviewScreen() {
   const [idx, setIdx] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [done, setDone] = useState(false)
+  const [stallNote, setStallNote] = useState<string | null>(null)
 
   const player = useAudioPlayer()
   const status = useAudioPlayerStatus(player)
@@ -39,6 +64,7 @@ export default function PreviewScreen() {
   const finishedIdx = useRef<number>(-1) // guard didJustFinish double-advance
   const sawFresh = useRef(false) // have we seen the LOADED clip actually playing yet?
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const watchdog = useRef<ReturnType<typeof setTimeout> | null>(null) // B1: never freeze on a dead clip
   const listRef = useRef<ScrollView | null>(null)
 
   // ---- load: tour geometry + presigned audio + the compressed timeline ----
@@ -49,12 +75,25 @@ export default function PreviewScreen() {
       setError(null)
       setNeedsAccount(false)
       try {
-        await setAudioModeAsync({ playsInSilentMode: true }).catch(() => {})
+        // Background + lock-screen play. doNotMix (not duckOthers) is required by
+        // expo-audio for lock-screen controls; the preview audio IS the content.
+        await setAudioModeAsync({
+          playsInSilentMode: true,
+          shouldPlayInBackground: true,
+          interruptionMode: 'doNotMix',
+        }).catch(() => {})
         const [tour, signed] = await Promise.all([getTour(id), signTourAudio(id)])
         if (cancelled) return
         if (!tour.corridor) throw new Error('This tour has no route to drive.')
         const tl = buildPreviewTimeline(
-          tour.stops.map((s) => ({ seq: s.seq, stopType: s.stopType, name: s.name, lat: s.lat, lng: s.lng, audioDurationMs: s.audioDurationMs })),
+          tour.stops.map((s) => ({
+            seq: s.seq,
+            stopType: s.stopType,
+            name: s.name,
+            lat: s.lat,
+            lng: s.lng,
+            audioDurationMs: s.audioDurationMs,
+          })),
           tour.corridor.polyline as [number, number][],
         )
         setData({
@@ -83,11 +122,14 @@ export default function PreviewScreen() {
       if (next >= data.segments.length) {
         setDone(true)
         setPlaying(false)
+        try {
+          player.setActiveForLockScreen(false)
+        } catch {}
         return
       }
       setIdx(next)
     },
-    [data],
+    [data, player],
   )
 
   // ---- the segment driver: react to the current segment + play state ----
@@ -98,6 +140,10 @@ export default function PreviewScreen() {
     if (timer.current) {
       clearTimeout(timer.current)
       timer.current = null
+    }
+    if (watchdog.current) {
+      clearTimeout(watchdog.current)
+      watchdog.current = null
     }
 
     if (!playing) {
@@ -116,15 +162,47 @@ export default function PreviewScreen() {
       if (loadedSeq.current !== seg.seq) {
         loadedSeq.current = seg.seq
         sawFresh.current = false // must see THIS clip play before a finish counts
+        setStallNote(null)
+        // Stop the OLD clip before loading the new source: replace() loads async,
+        // so without this the previous clip keeps playing until the new one is ready
+        // (the audio "bleed" when jumping forward/back or tapping a stop).
+        player.pause()
         player.replace({ uri })
+        // B2: lock-screen Now Playing for this stop
+        const stopName = data.stops.find((s) => s.seq === seg.seq)?.name ?? 'Skipper'
+        try {
+          player.setActiveForLockScreen(true, {
+            title: stopName,
+            artist: 'Skipper',
+            albumTitle: data.tourName,
+          })
+        } catch {}
       }
       player.play()
+      // B1: if the clip never starts (expired 403 / decode fail / dropped network),
+      // didJustFinish never fires — so skip forward after a grace period.
+      watchdog.current = setTimeout(() => {
+        if (!sawFresh.current) {
+          setStallNote(voice.player.stall)
+          advance(idx + 1)
+        }
+      }, 6000)
       // advance happens in the didJustFinish effect below
     } else {
-      // drive / rest: animate the dot across the gap, then advance after previewMs.
+      // drive / rest: a SILENT segment — make sure no clip audio bleeds into it.
+      player.pause()
       const from = seg.fromProgress ?? seg.routeProgress
       dot.setValue(from)
-      Animated.timing(dot, { toValue: seg.routeProgress, duration: seg.previewMs, useNativeDriver: false }).start()
+      // Animate the dot only when it actually moves (a drive). A break 'rest' holds
+      // in place, so skip the no-op X→X timing that would spin the JS-driven
+      // animation at 60fps for 2s and jank the transition.
+      if (from !== seg.routeProgress) {
+        Animated.timing(dot, {
+          toValue: seg.routeProgress,
+          duration: seg.previewMs,
+          useNativeDriver: false,
+        }).start()
+      }
       timer.current = setTimeout(() => advance(idx + 1), seg.previewMs)
     }
 
@@ -133,6 +211,11 @@ export default function PreviewScreen() {
         clearTimeout(timer.current)
         timer.current = null
       }
+      if (watchdog.current) {
+        clearTimeout(watchdog.current)
+        watchdog.current = null
+      }
+      dot.stopAnimation() // freeze the trail on pause/jump instead of letting it run on
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, idx, playing, done])
@@ -146,7 +229,13 @@ export default function PreviewScreen() {
     if (!data || !playing) return
     const seg = data.segments[idx]
     if (seg?.kind !== 'clip') return
-    if (status.playing && !status.didJustFinish) sawFresh.current = true
+    if (status.playing && !status.didJustFinish) {
+      sawFresh.current = true
+      if (watchdog.current) {
+        clearTimeout(watchdog.current)
+        watchdog.current = null
+      }
+    }
     if (status.didJustFinish && sawFresh.current && finishedIdx.current !== idx) {
       finishedIdx.current = idx
       advance(idx + 1)
@@ -158,13 +247,31 @@ export default function PreviewScreen() {
   useEffect(() => {
     if (!data || activeSeq == null) return
     const row = data.stops.findIndex((s) => s.seq === activeSeq)
-    if (row >= 0) listRef.current?.scrollTo({ y: Math.max(0, row * ROW_H - ROW_H), animated: true })
+    if (row >= 0)
+      listRef.current?.scrollTo({ y: Math.max(0, (row - 1) * STOP_ROW_HEIGHT), animated: true })
   }, [activeSeq, data])
+
+  // ---- A11y: announce the now-playing change for screen readers ----
+  useEffect(() => {
+    if (!data) return
+    let msg = ''
+    if (done) msg = voice.driveComplete
+    else {
+      const s = data.segments[idx]
+      const name = s ? data.stops.find((st) => st.seq === s.seq)?.name : undefined
+      if (s?.kind === 'drive') msg = `Driving to ${name ?? 'the next stop'}`
+      else if (s?.kind === 'rest') msg = `Rest stop. ${name ?? ''}`
+      else if (s?.kind === 'clip')
+        msg = `Now playing. ${name ?? 'Skipper'}, ${stopLabel(s.stopType)}`
+    }
+    if (msg) AccessibilityInfo.announceForAccessibility(msg)
+  }, [idx, done, data])
 
   const restart = () => {
     loadedSeq.current = null
     finishedIdx.current = -1
     dot.setValue(0)
+    setStallNote(null)
     setDone(false)
     setIdx(0)
     setPlaying(true)
@@ -176,6 +283,10 @@ export default function PreviewScreen() {
       try {
         player.pause()
       } catch {}
+      try {
+        player.setActiveForLockScreen(false)
+      } catch {}
+      if (watchdog.current) clearTimeout(watchdog.current)
     }
   }, [player])
 
@@ -184,6 +295,11 @@ export default function PreviewScreen() {
     if (!data) return
     const target = data.segments.findIndex((s) => s.seq === seq && s.kind !== 'drive')
     if (target < 0) return
+    // Silence the current clip immediately on tap (the effect's async replace would
+    // otherwise let it bleed until the new clip loads).
+    try {
+      player.pause()
+    } catch {}
     if (timer.current) {
       clearTimeout(timer.current)
       timer.current = null
@@ -191,143 +307,231 @@ export default function PreviewScreen() {
     loadedSeq.current = null // force the target clip to (re)load from its start
     finishedIdx.current = -1
     dot.setValue(data.segments[target]!.routeProgress)
+    setStallNote(null)
     setDone(false)
     setIdx(target)
     setPlaying(true)
   }
 
-  const mmss = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, '0')}`
+  const mmss = (ms: number) =>
+    `${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, '0')}`
 
-  if (needsAccount) {
+  if (needsAccount) return <AccountGate />
+  if (error)
     return (
-      <View style={styles.center}>
-        <Stack.Screen options={{ title: 'Members only' }} />
-        <Text style={styles.title}>Create a free account to preview this tour</Text>
-        <Text style={styles.dim}>Anonymous preview is limited to the sample tour.</Text>
-        <Link href="/sign-in" style={styles.button}>
-          Sign in / Sign up
-        </Link>
-      </View>
+      <Screen center>
+        <Stack.Screen options={{ title: 'Preview drive' }} />
+        <Text variant="body" color="danger" align="center">
+          {error}
+        </Text>
+      </Screen>
     )
-  }
-  if (error) return <Text style={[styles.pad, styles.error]}>{error}</Text>
-  if (!data) return <ActivityIndicator style={styles.pad} />
+  if (!data)
+    return (
+      <Screen center>
+        <Stack.Screen options={{ title: 'Preview drive' }} />
+        <ActivityIndicator color={theme.colors.accent} />
+        <Text variant="dim" color="inkFaint">
+          {voice.loading.preview}
+        </Text>
+      </Screen>
+    )
 
   const seg = data.segments[idx]
   const nextStopName = seg ? data.stops.find((s) => s.seq === seg.seq)?.name : undefined
+  const activeRow = data.stops.findIndex((s) => s.seq === activeSeq)
+  const isClip = seg?.kind === 'clip'
+  const buffering = isClip && playing && (!status.isLoaded || status.isBuffering)
+  // We've ARRIVED at a stop on a clip/rest segment; a 'drive' is still EN ROUTE to it.
+  // Used so a stop only lights up "active" when you reach it — not while the silent
+  // drive toward it shows "UNDERWAY to <next>", which read as a double-navigation.
+  const atStop = seg?.kind !== 'drive'
+  const hasPrev = activeRow > 0
+  const hasNext = activeRow >= 0 && activeRow < data.stops.length - 1
 
   return (
-    <View style={styles.screen}>
+    <Screen edges={['bottom']}>
       <Stack.Screen options={{ title: 'Preview drive' }} />
 
       <View style={styles.header}>
-        <Text style={styles.title}>{data.tourName}</Text>
-        <Text style={styles.dim}>
-          {data.region} · simulated drive · {mmss(data.totalPreviewMs)} preview of a {mmss(data.totalRealMs)} drive
+        <Text variant="title" color="ink">
+          {data.tourName}
+        </Text>
+        <Text variant="dim" color="inkDim">
+          {data.region} · simulated drive · {mmss(data.totalPreviewMs)} preview of a{' '}
+          {mmss(data.totalRealMs)} drive
         </Text>
       </View>
 
-      {/* Route progress line with the moving dot */}
-      <View style={styles.track}>
-        <Animated.View
-          style={[
-            styles.dot,
-            { left: dot.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) },
-          ]}
-        />
-      </View>
+      {/* Route progress trail with the boat token */}
+      <RouteTrack progress={dot} style={styles.track} />
 
-      {/* NOW card */}
-      <View style={styles.now}>
+      {/* NOW area */}
+      <View style={styles.nowWrap}>
         {done ? (
-          <Text style={styles.nowBig}>🏁 Drive complete</Text>
+          <Card>
+            <Text variant="label" color="accentWarm">
+              DRIVE COMPLETE
+            </Text>
+            <Text variant="placardTitle" color="ink">
+              You’ve docked
+            </Text>
+            <Text variant="body" color="inkDim">
+              {voice.driveComplete}
+            </Text>
+          </Card>
         ) : seg?.kind === 'drive' ? (
-          <>
-            <Text style={styles.nowKicker}>🚗 driving</Text>
-            <Text style={styles.nowBig}>~{((seg.distanceM ?? 0) / 1609).toFixed(1)} mi to {nextStopName ?? 'the next stop'}</Text>
-          </>
+          <NowCard
+            liveRegion
+            glow={false}
+            kicker={voice.player.underway}
+            // Transit, not arrival — headline the DISTANCE, not the destination name,
+            // so the next stop's name appears once (when its clip plays), not twice.
+            title={`~${((seg.distanceM ?? 0) / 1609).toFixed(1)} miles to the next stop`}
+          />
         ) : seg?.kind === 'rest' ? (
-          <>
-            <Text style={styles.nowKicker}>☕ rest stop</Text>
-            <Text style={styles.nowBig}>{nextStopName ?? 'A good spot to stretch'}</Text>
-          </>
+          <NowCard
+            liveRegion
+            glow={false}
+            kicker={voice.player.shoreLeave}
+            title={nextStopName ?? 'A good spot to stretch'}
+          />
         ) : (
-          <>
-            <Text style={styles.nowKicker}>▶ now playing · {seg?.stopType}</Text>
-            <Text style={styles.nowBig}>{nextStopName ?? 'Skipper'}</Text>
-            {status.duration ? (
-              <Text style={styles.dim}>
-                {mmss((status.currentTime ?? 0) * 1000)} / {mmss((status.duration ?? 0) * 1000)}
-              </Text>
-            ) : null}
-          </>
+          <NowCard
+            liveRegion
+            kicker={voice.player.nowPlaying}
+            title={nextStopName ?? 'Skipper'}
+            timer={
+              !buffering && status.duration
+                ? `${mmss((status.currentTime ?? 0) * 1000)} / ${mmss((status.duration ?? 0) * 1000)}`
+                : undefined
+            }
+            right={
+              seg?.stopType ? (
+                <Badge tone={stopTone(seg.stopType)} label={stopLabel(seg.stopType)} />
+              ) : undefined
+            }
+          />
         )}
+        {buffering ? (
+          <View style={styles.buffering}>
+            <ActivityIndicator size="small" color={theme.colors.accentWarm} />
+            <Text variant="dim" color="inkFaint">
+              {voice.player.buffering}
+            </Text>
+          </View>
+        ) : stallNote ? (
+          <Text variant="dim" color="danger" style={styles.stall}>
+            {stallNote}
+          </Text>
+        ) : null}
       </View>
 
       <View style={styles.controls}>
         {done ? (
-          <Pressable style={styles.button} onPress={restart}>
-            <Text style={styles.buttonText}>↺ Drive it again</Text>
-          </Pressable>
+          <Button icon="restart" title={voice.cta.restart} onPress={restart} />
         ) : (
-          <Pressable style={styles.button} onPress={() => setPlaying((p) => !p)}>
-            <Text style={styles.buttonText}>{playing ? '❚❚ Pause' : '▶ Start the drive'}</Text>
-          </Pressable>
+          <View style={styles.controlsRow}>
+            <Button
+              variant="secondary"
+              icon="prev"
+              title=""
+              accessibilityLabel="Previous stop"
+              fullWidth={false}
+              disabled={!hasPrev}
+              onPress={() => hasPrev && jumpToStop(data.stops[activeRow - 1]!.seq)}
+            />
+            <Button
+              icon={playing ? 'pause' : 'play'}
+              title={playing ? voice.cta.pause : voice.cta.play}
+              onPress={() => setPlaying((p) => !p)}
+              style={styles.flex}
+            />
+            <Button
+              variant="secondary"
+              icon="next"
+              title=""
+              accessibilityLabel="Next stop"
+              fullWidth={false}
+              disabled={!hasNext}
+              onPress={() => hasNext && jumpToStop(data.stops[activeRow + 1]!.seq)}
+            />
+          </View>
         )}
       </View>
 
-      <Text style={styles.hint}>Tap any stop to jump there</Text>
+      <Text variant="dim" color="inkFaint" style={styles.hint}>
+        Tap any stop to jump aboard
+      </Text>
+      <Divider dashed style={styles.divider} />
 
       {/* Stop list (map-less timeline) — tap to jump */}
-      <ScrollView ref={listRef} style={styles.list} contentContainerStyle={{ paddingBottom: 24 }}>
-        {data.stops.map((s) => {
-          const active = s.seq === activeSeq && !done
+      <ScrollView ref={listRef} style={styles.list} contentContainerStyle={styles.listContent}>
+        {data.stops.map((s, i) => {
+          const state =
+            done || (activeRow >= 0 && i < activeRow)
+              ? 'passed'
+              : s.seq === activeSeq && atStop
+                ? 'active'
+                : 'upcoming'
           return (
-            <Pressable
+            <StopRow
               key={s.seq}
+              name={s.name}
+              sublabel={stopLabel(s.stopType)}
+              icon={stopIcon(s.stopType)}
+              state={state}
               onPress={() => jumpToStop(s.seq)}
-              style={({ pressed }) => [styles.row, active && styles.rowActive, pressed && styles.rowPressed]}
-            >
-              <View style={[styles.bullet, active && styles.bulletActive]} />
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.rowName, active && styles.rowNameActive]} numberOfLines={1}>
-                  {s.name}
-                </Text>
-                <Text style={styles.dim}>{s.stopType}</Text>
-              </View>
-              <Text style={styles.chev}>{active ? '♪' : '▶'}</Text>
-            </Pressable>
+            />
           )
         })}
       </ScrollView>
-    </View>
+    </Screen>
+  )
+}
+
+function AccountGate() {
+  const router = useRouter()
+  return (
+    <Screen center>
+      <Stack.Screen options={{ title: voice.gate.title }} />
+      <Card framed style={styles.gateCard}>
+        <Text variant="placardTitle" color="ink" align="center">
+          {voice.gate.title}
+        </Text>
+        <Text variant="body" color="inkDim" align="center">
+          Anonymous preview is limited to the sample tour. {voice.gate.body}
+        </Text>
+        <Button
+          icon="ticket"
+          title={voice.gate.action}
+          onPress={() => router.push('/sign-in')}
+          style={styles.gateCta}
+        />
+        <Button variant="ghost" title="Back" onPress={() => router.back()} />
+      </Card>
+    </Screen>
   )
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#fff' },
-  header: { paddingHorizontal: 16, paddingTop: 12, gap: 2 },
-  track: { height: 6, marginHorizontal: 16, marginTop: 14, marginBottom: 6, borderRadius: 3, backgroundColor: '#e6e6e6', justifyContent: 'center' },
-  dot: { position: 'absolute', width: 14, height: 14, borderRadius: 7, marginLeft: -7, backgroundColor: '#1e6fd9' },
-  now: { paddingHorizontal: 16, paddingVertical: 14, gap: 4 },
-  nowKicker: { fontSize: 13, color: '#1e6fd9', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
-  nowBig: { fontSize: 22, fontWeight: '700' },
-  controls: { paddingHorizontal: 16, paddingBottom: 8 },
-  list: { flex: 1, marginTop: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#eee' },
-  hint: { fontSize: 12, color: '#999', paddingHorizontal: 16, paddingBottom: 6 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, height: ROW_H, paddingHorizontal: 16 },
-  rowActive: { backgroundColor: '#eef4fd' },
-  rowPressed: { backgroundColor: '#e3e3e3' },
-  bullet: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#ccc' },
-  bulletActive: { backgroundColor: '#1e6fd9' },
-  rowName: { fontSize: 15, fontWeight: '500', color: '#333' },
-  rowNameActive: { color: '#0a0a0a', fontWeight: '700' },
-  chev: { fontSize: 14, color: '#bbb' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 10 },
-  title: { fontSize: 20, fontWeight: '700' },
-  dim: { fontSize: 13, color: '#666' },
-  button: { backgroundColor: '#1e6fd9', borderRadius: 10, paddingVertical: 14, paddingHorizontal: 16, alignItems: 'center' },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  error: { color: '#b00020' },
-  pad: { padding: 16 },
+  flex: { flex: 1 },
+  header: { paddingHorizontal: space.gutter, paddingTop: space.md, gap: space.xs },
+  track: { marginHorizontal: space.gutter, marginTop: space.lg, marginBottom: space.sm },
+  nowWrap: { paddingHorizontal: space.gutter, paddingTop: space.sm, gap: space.sm },
+  buffering: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    paddingHorizontal: space.xs,
+  },
+  stall: { paddingHorizontal: space.xs },
+  controls: { paddingHorizontal: space.gutter, paddingTop: space.md },
+  controlsRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  hint: { paddingHorizontal: space.gutter, paddingTop: space.md, paddingBottom: space.sm },
+  divider: { marginHorizontal: space.gutter },
+  list: { flex: 1, marginTop: space.xs },
+  listContent: { paddingTop: space.xs, paddingBottom: space.xxl },
+  gateCard: { alignSelf: 'stretch', gap: space.md, alignItems: 'center' },
+  gateCta: { marginTop: space.xs },
 })

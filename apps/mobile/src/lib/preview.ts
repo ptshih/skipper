@@ -20,7 +20,9 @@ const toRad = (deg: number): number => (deg * Math.PI) / 180
 function haversineMeters(a: LngLat, b: LngLat): number {
   const dLat = toRad(b[1] - a[1])
   const dLng = toRad(b[0] - a[0])
-  const s = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a[1])) * Math.cos(toRad(b[1])) * Math.sin(dLng / 2) ** 2
+  const s =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(a[1])) * Math.cos(toRad(b[1])) * Math.sin(dLng / 2) ** 2
   return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(s)))
 }
 
@@ -28,7 +30,8 @@ function cumulativeMeters(polyline: LngLat[]): number[] {
   const out = new Array<number>(polyline.length)
   if (polyline.length === 0) return out
   out[0] = 0
-  for (let i = 1; i < polyline.length; i++) out[i] = out[i - 1]! + haversineMeters(polyline[i - 1]!, polyline[i]!)
+  for (let i = 1; i < polyline.length; i++)
+    out[i] = out[i - 1]! + haversineMeters(polyline[i - 1]!, polyline[i]!)
   return out
 }
 
@@ -104,7 +107,8 @@ export function buildPreviewTimeline(
 
   const along = ordered.map((s) => (totalM > 0 ? alongMeters(polyline, cum, [s.lng, s.lat]) : 0))
   const progressOf = (m: number): number => (totalM > 0 ? clamp(m / totalM, 0, 1) : 0)
-  const realMsForMeters = (m: number): number => (totalM > 0 ? (m / totalM) * totalDriveSec * 1000 : 0)
+  const realMsForMeters = (m: number): number =>
+    totalM > 0 ? (m / totalM) * totalDriveSec * 1000 : 0
 
   const segments: PreviewSegment[] = []
   let cursor = 0
@@ -128,7 +132,9 @@ export function buildPreviewTimeline(
         routeProgress: progressOf(along[i]!),
       })
     }
-    const isSilent = s.stopType === 'break' || !s.audioDurationMs
+    // Silent only if there's no audio. A break WITH audio (a named break clip) now
+    // plays like any clip; a break without audio still falls back to a brief rest beat.
+    const isSilent = !s.audioDurationMs
     push(
       isSilent
         ? {

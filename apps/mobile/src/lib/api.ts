@@ -38,7 +38,8 @@ async function fetchJson(path: string, init?: RequestInit): Promise<unknown> {
   return json
 }
 
-export const listCorridors = async (): Promise<CorridorList> => corridorList.parse(await fetchJson('/corridors'))
+export const listCorridors = async (): Promise<CorridorList> =>
+  corridorList.parse(await fetchJson('/corridors'))
 
 export const listCorridorTours = async (corridorId: string): Promise<CorridorTours> =>
   corridorTours.parse(await fetchJson(`/corridors/${corridorId}/tours`))

@@ -1,7 +1,9 @@
 import { useState } from 'react'
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import { StyleSheet, View } from 'react-native'
 import { Stack, useRouter } from 'expo-router'
 import { signIn, signUp } from '@/lib/auth'
+import { space } from '@/theme/tokens'
+import { Button, Input, Screen, Text, voice } from '@/ui'
 
 // Email/password sign-in + sign-up. (Google/Apple are wired server-side and turn
 // on once their OAuth creds are set; add provider buttons here when they are.)
@@ -30,36 +32,73 @@ export default function SignInScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <Screen scroll padded edges={['bottom']} contentContainerStyle={styles.body}>
       <Stack.Screen options={{ title: mode === 'in' ? 'Sign in' : 'Create account' }} />
+
+      <View style={styles.head}>
+        <Text variant="display" color="ink">
+          {mode === 'in' ? voice.auth.signInHeader : voice.auth.signUpHeader}
+        </Text>
+        <Text variant="body" color="inkDim">
+          {voice.auth.subhead}
+        </Text>
+      </View>
+
       {mode === 'up' ? (
-        <TextInput style={styles.input} placeholder="Name" autoCapitalize="words" value={name} onChangeText={setName} />
+        <Input
+          placeholder="Name"
+          accessibilityLabel="Name"
+          autoCapitalize="words"
+          textContentType="name"
+          autoComplete="name"
+          value={name}
+          onChangeText={setName}
+        />
       ) : null}
-      <TextInput
-        style={styles.input}
+      <Input
         placeholder="Email"
+        accessibilityLabel="Email"
         autoCapitalize="none"
+        autoCorrect={false}
         keyboardType="email-address"
+        textContentType="username"
+        autoComplete="email"
         value={email}
         onChangeText={setEmail}
       />
-      <TextInput style={styles.input} placeholder="Password" secureTextEntry value={password} onChangeText={setPassword} />
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      <Pressable style={styles.button} onPress={submit} disabled={busy}>
-        {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{mode === 'in' ? 'Sign in' : 'Create account'}</Text>}
-      </Pressable>
-      <Pressable onPress={() => setMode(mode === 'in' ? 'up' : 'in')}>
-        <Text style={styles.link}>{mode === 'in' ? 'Need an account? Sign up' : 'Have an account? Sign in'}</Text>
-      </Pressable>
-    </View>
+      <Input
+        placeholder="Password"
+        accessibilityLabel="Password"
+        secureTextEntry
+        textContentType={mode === 'in' ? 'password' : 'newPassword'}
+        autoComplete={mode === 'in' ? 'current-password' : 'new-password'}
+        value={password}
+        onChangeText={setPassword}
+      />
+
+      {error ? (
+        <Text variant="dim" color="danger">
+          {error}
+        </Text>
+      ) : null}
+
+      <Button
+        title={mode === 'in' ? 'Sign in' : 'Create account'}
+        loading={busy}
+        onPress={submit}
+        style={styles.cta}
+      />
+      <Button
+        variant="ghost"
+        title={mode === 'in' ? 'Need an account? Sign up' : 'Have an account? Sign in'}
+        onPress={() => setMode(mode === 'in' ? 'up' : 'in')}
+      />
+    </Screen>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, gap: 12 },
-  input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 16 },
-  button: { backgroundColor: '#1e6fd9', borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginTop: 4 },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  link: { color: '#1e6fd9', textAlign: 'center', marginTop: 8 },
-  error: { color: '#b00020' },
+  body: { gap: space.md },
+  head: { gap: space.xs, marginBottom: space.sm },
+  cta: { marginTop: space.xs },
 })

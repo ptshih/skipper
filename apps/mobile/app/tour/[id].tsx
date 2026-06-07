@@ -1,14 +1,18 @@
 import { useCallback, useState } from 'react'
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
-import { Link, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router'
+import { ActivityIndicator, StyleSheet, View } from 'react-native'
+import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
 import { ApiError, getTour, signTourAudio, type SignedAudio, type TourDetail } from '@/lib/api'
+import { jokeLabel, stopLabel } from '@/lib/labels'
+import { useTheme } from '@/theme'
+import { space } from '@/theme/tokens'
+import { Badge, Button, Card, Icon, Screen, Text, stopIcon, stopTone, voice } from '@/ui'
 
 // Tour detail. Anonymous can open only the preview tour; other tours return 401
-// -> we prompt for a free account. Audio URLs are fetched on demand (gated). The
-// actual PHONE PLAYER (expo-audio + speed-adaptive triggering) is the MVP and is
-// still TODO (see apps/mobile/README.md) — this screen stops at "ready". CarPlay
-// is deferred past the MVP, no longer a gate.
+// -> we prompt for a free account. The live PHONE PLAYER is still TODO; this
+// screen offers the simulated-drive preview + shows the route manifest.
 export default function TourScreen() {
+  const theme = useTheme()
+  const router = useRouter()
   const { id } = useLocalSearchParams<{ id: string }>()
   const [tour, setTour] = useState<TourDetail | null>(null)
   const [audio, setAudio] = useState<SignedAudio | null>(null)
@@ -25,7 +29,7 @@ export default function TourScreen() {
       setTour(await getTour(id))
     } catch (e) {
       if (e instanceof ApiError && e.needsAccount) setNeedsAccount(true)
-      else setError(e instanceof Error ? e.message : 'Failed to load tour')
+      else setError(e instanceof Error ? e.message : voice.error.generic)
     } finally {
       setLoading(false)
     }
@@ -37,84 +41,164 @@ export default function TourScreen() {
     }, [load]),
   )
 
+  // Debug-only: presign + reveal the raw R2 URLs. Dead-code-eliminated in release.
   const loadAudio = async () => {
     if (!id) return
     try {
       setAudio(await signTourAudio(id))
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to sign audio')
+      setError(e instanceof Error ? e.message : voice.error.generic)
     }
   }
 
-  if (loading) return <ActivityIndicator style={styles.pad} />
-
-  if (needsAccount) {
+  if (loading)
     return (
-      <View style={styles.center}>
-        <Stack.Screen options={{ title: 'Members only' }} />
-        <Text style={styles.title}>Create a free account to play this tour</Text>
-        <Text style={styles.dim}>Anonymous play is limited to the preview tour.</Text>
-        <Link href="/sign-in" style={styles.button}>
-          Sign in / Sign up
-        </Link>
-      </View>
+      <Screen center>
+        <Stack.Screen options={{ title: 'Tour' }} />
+        <ActivityIndicator color={theme.colors.accent} />
+        <Text variant="dim" color="inkFaint">
+          {voice.loading.tour}
+        </Text>
+      </Screen>
     )
-  }
 
-  if (error) return <Text style={[styles.pad, styles.error]}>{error}</Text>
-  if (!tour) return null
+  if (needsAccount) return <AccountGate />
+
+  if (error)
+    return (
+      <Screen center>
+        <Stack.Screen options={{ title: 'Tour' }} />
+        <Text variant="body" color="danger" align="center">
+          {error}
+        </Text>
+        <Button variant="secondary" title={voice.error.retry} fullWidth={false} onPress={load} />
+      </Screen>
+    )
+
+  if (!tour)
+    return (
+      <Screen center>
+        <Stack.Screen options={{ title: 'Tour' }} />
+        <Text variant="body" color="inkDim" align="center">
+          {voice.empty.tour}
+        </Text>
+        <Button
+          variant="secondary"
+          title="Back to tours"
+          fullWidth={false}
+          onPress={() => router.back()}
+        />
+      </Screen>
+    )
 
   return (
-    <ScrollView contentContainerStyle={styles.list}>
+    <Screen scroll padded edges={['bottom']} contentContainerStyle={styles.body}>
       <Stack.Screen options={{ title: tour.corridor?.name ?? 'Tour' }} />
-      <Text style={styles.title}>{tour.corridor?.name ?? 'Tour'}</Text>
-      <Text style={styles.dim}>
-        {tour.corridor?.region} · {tour.tour.durationBucket} · {tour.tour.jokeLevel}
-        {tour.tour.isPreview ? ' · preview' : ''}
+
+      <View style={styles.head}>
+        <Text variant="display" color="ink">
+          {tour.corridor?.name ?? 'Tour'}
+        </Text>
+        <View style={styles.metaRow}>
+          {tour.corridor?.region ? (
+            <Text variant="label" color="inkFaint">
+              {tour.corridor.region}
+            </Text>
+          ) : null}
+          <Badge tone="neutral" label={tour.tour.durationBucket.toUpperCase()} />
+          <Badge tone="teal" label={jokeLabel(tour.tour.jokeLevel)} />
+          {tour.tour.isPreview ? <Badge tone="amber" filled label="FREE PREVIEW" /> : null}
+        </View>
+      </View>
+
+      <Button icon="play" title={voice.cta.preview} onPress={() => router.push(`/preview/${id}`)} />
+      <Text variant="dim" color="inkDim">
+        Hear the whole tour from your couch — no driving to the GPS coordinates.
       </Text>
 
-      <Link href={`/preview/${id}`} style={styles.linkButton}>
-        ▶ Preview the drive
-      </Link>
-      <Text style={styles.dim}>Hear the whole tour from your couch — no driving to the GPS coordinates.</Text>
-
-      <Pressable style={styles.secondary} onPress={loadAudio}>
-        <Text style={styles.secondaryText}>Load audio URLs (debug)</Text>
-      </Pressable>
+      <Text variant="label" color="inkFaint" style={styles.sectionLabel}>
+        The route · {tour.stops.length} stops
+      </Text>
 
       {tour.stops.map((s) => {
         const signed = audio?.urls.find((u) => u.seq === s.seq)
         return (
-          <View key={s.seq} style={styles.card}>
-            <Text style={styles.stopTitle}>
-              {s.seq + 1}. {s.name}
-            </Text>
-            <Text style={styles.dim}>{s.stopType.toUpperCase()}</Text>
-            <Text style={styles.dim}>
-              {s.lat.toFixed(4)}, {s.lng.toFixed(4)} · trigger {s.triggerRadiusM} m
-              {s.audioDurationMs ? ` · ${Math.round(s.audioDurationMs / 1000)}s` : ''}
-            </Text>
-            {signed ? <Text style={styles.signed}>audio ready ✓</Text> : null}
-          </View>
+          <Card key={s.seq}>
+            <View style={styles.stopHead}>
+              <Icon name={stopIcon(s.stopType)} size={16} />
+              <Text variant="heading" color="ink" style={styles.flex} numberOfLines={2}>
+                {s.seq + 1}. {s.name}
+              </Text>
+            </View>
+            {/* badge on its OWN row so it never squeezes the title */}
+            <View style={styles.stopMeta}>
+              <Badge tone={stopTone(s.stopType)} label={stopLabel(s.stopType)} />
+              {s.audioDurationMs ? (
+                <Text variant="dim" color="inkDim">
+                  {Math.round(s.audioDurationMs / 1000)} sec
+                </Text>
+              ) : null}
+            </View>
+            {__DEV__ ? (
+              <Text variant="mono" color="inkFaint">
+                {s.lat.toFixed(4)}, {s.lng.toFixed(4)} · trigger {s.triggerRadiusM}m
+              </Text>
+            ) : null}
+            {signed ? (
+              <Text variant="label" color="accent">
+                audio ready
+              </Text>
+            ) : null}
+          </Card>
         )
       })}
-    </ScrollView>
+
+      {__DEV__ ? (
+        <Button variant="ghost" title="Load audio URLs (debug)" onPress={loadAudio} />
+      ) : null}
+    </Screen>
+  )
+}
+
+function AccountGate() {
+  const router = useRouter()
+  return (
+    <Screen center>
+      <Stack.Screen options={{ title: voice.gate.title }} />
+      <Card framed style={styles.gateCard}>
+        <Text variant="placardTitle" color="ink" align="center">
+          {voice.gate.title}
+        </Text>
+        <Text variant="body" color="inkDim" align="center">
+          {voice.gate.body}
+        </Text>
+        <Button
+          icon="ticket"
+          title={voice.gate.action}
+          onPress={() => router.push('/sign-in')}
+          style={styles.gateCta}
+        />
+        <Button variant="ghost" title={voice.gate.secondary} onPress={() => router.back()} />
+      </Card>
+    </Screen>
   )
 }
 
 const styles = StyleSheet.create({
-  list: { padding: 16, gap: 10 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 10 },
-  card: { padding: 14, borderRadius: 10, backgroundColor: '#f3f3f3', gap: 2 },
-  title: { fontSize: 20, fontWeight: '700' },
-  stopTitle: { fontSize: 15, fontWeight: '600' },
-  dim: { fontSize: 13, color: '#666' },
-  signed: { fontSize: 13, color: '#137333', marginTop: 2 },
-  button: { backgroundColor: '#1e6fd9', borderRadius: 10, paddingVertical: 12, paddingHorizontal: 16, alignItems: 'center', color: '#fff' },
-  buttonText: { color: '#fff', fontSize: 15, fontWeight: '600' },
-  linkButton: { backgroundColor: '#1e6fd9', borderRadius: 10, paddingVertical: 14, paddingHorizontal: 16, textAlign: 'center', color: '#fff', fontSize: 16, fontWeight: '700', overflow: 'hidden' },
-  secondary: { borderRadius: 10, paddingVertical: 10, paddingHorizontal: 16, alignItems: 'center', backgroundColor: '#f0f0f0' },
-  secondaryText: { color: '#666', fontSize: 13, fontWeight: '600' },
-  error: { color: '#b00020' },
-  pad: { padding: 16 },
+  flex: { flex: 1 },
+  body: { gap: space.md },
+  head: { gap: space.sm },
+  metaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space.sm },
+  sectionLabel: { marginTop: space.sm },
+  stopHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  stopMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: space.sm,
+    marginTop: space.sm,
+    marginBottom: space.xs,
+  },
+  gateCard: { alignSelf: 'stretch', gap: space.md },
+  gateCta: { marginTop: space.sm },
 })

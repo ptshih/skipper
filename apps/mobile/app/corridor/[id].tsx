@@ -1,13 +1,19 @@
 import { useCallback, useState } from 'react'
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
-import { Link, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router'
+import { ActivityIndicator, StyleSheet, View } from 'react-native'
+import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
 import { listCorridorTours, type CorridorTours } from '@/lib/api'
+import { jokeLabel } from '@/lib/labels'
+import { useTheme } from '@/theme'
+import { space } from '@/theme/tokens'
+import { Badge, Card, Screen, Text, voice } from '@/ui'
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
-// A corridor's available (ready) tours. Tap one to open it (gated). Catalog is
-// visible to guests; the free preview is marked.
+// A corridor's available (ready) tours. Tap one to open it (gated). The free
+// preview is badged.
 export default function CorridorScreen() {
+  const theme = useTheme()
+  const router = useRouter()
   const { id, name } = useLocalSearchParams<{ id: string; name?: string }>()
   const [tours, setTours] = useState<CorridorTours['tours']>([])
   const [loading, setLoading] = useState(true)
@@ -21,7 +27,7 @@ export default function CorridorScreen() {
       const r = await listCorridorTours(id)
       setTours(r.tours)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load tours')
+      setError(e instanceof Error ? e.message : voice.error.generic)
     } finally {
       setLoading(false)
     }
@@ -34,38 +40,48 @@ export default function CorridorScreen() {
   )
 
   return (
-    <View style={styles.container}>
+    <Screen scroll padded edges={['bottom']} contentContainerStyle={styles.list}>
       <Stack.Screen options={{ title: name ?? 'Tours' }} />
       {loading ? (
-        <ActivityIndicator style={styles.pad} />
+        <ActivityIndicator color={theme.colors.accent} style={styles.pad} />
       ) : error ? (
-        <Text style={[styles.pad, styles.error]}>{error}</Text>
+        <Text variant="body" color="danger">
+          {error}
+        </Text>
       ) : tours.length === 0 ? (
-        <Text style={[styles.pad, styles.dim]}>No tours generated for this corridor yet.</Text>
+        <Text variant="body" color="inkDim">
+          {voice.empty.tours}
+        </Text>
       ) : (
-        <ScrollView contentContainerStyle={styles.list}>
-          {tours.map((t) => (
-            <Link key={t.id} href={{ pathname: '/tour/[id]', params: { id: t.id } }} asChild>
-              <Pressable style={styles.card}>
-                <Text style={styles.title}>
-                  {cap(t.durationBucket)} tour{t.isPreview ? ' · free preview' : ''}
-                </Text>
-                <Text style={styles.dim}>{t.jokeLevel}</Text>
-              </Pressable>
-            </Link>
-          ))}
-        </ScrollView>
+        tours.map((t) => (
+          <Card
+            key={t.id}
+            onPress={() => router.push({ pathname: '/tour/[id]', params: { id: t.id } })}
+          >
+            <View style={styles.head}>
+              <Text variant="heading" color="ink">
+                {cap(t.durationBucket)} tour
+              </Text>
+              {t.isPreview ? <Badge tone="amber" filled label="FREE PREVIEW" /> : null}
+            </View>
+            <View style={styles.metaRow}>
+              <Badge tone="teal" label={jokeLabel(t.jokeLevel)} />
+            </View>
+          </Card>
+        ))
       )}
-    </View>
+    </Screen>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  list: { padding: 16, gap: 12 },
-  card: { padding: 16, borderRadius: 12, backgroundColor: '#f3f3f3', gap: 4 },
-  title: { fontSize: 17, fontWeight: '600' },
-  dim: { fontSize: 13, color: '#666' },
-  error: { color: '#b00020' },
-  pad: { padding: 16 },
+  list: { gap: space.md },
+  pad: { padding: space.gutter },
+  head: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: space.sm,
+  },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.sm },
 })
