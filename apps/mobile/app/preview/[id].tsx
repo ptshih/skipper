@@ -37,6 +37,7 @@ export default function PreviewScreen() {
   const dot = useRef(new Animated.Value(0)).current
   const loadedSeq = useRef<number | null>(null) // which clip is loaded in the player
   const finishedIdx = useRef<number>(-1) // guard didJustFinish double-advance
+  const sawFresh = useRef(false) // have we seen the LOADED clip actually playing yet?
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const listRef = useRef<ScrollView | null>(null)
 
@@ -114,6 +115,7 @@ export default function PreviewScreen() {
       dot.setValue(seg.routeProgress)
       if (loadedSeq.current !== seg.seq) {
         loadedSeq.current = seg.seq
+        sawFresh.current = false // must see THIS clip play before a finish counts
         player.replace({ uri })
       }
       player.play()
@@ -135,15 +137,21 @@ export default function PreviewScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, idx, playing, done])
 
-  // ---- clip end → next segment (guarded so it fires once per clip) ----
+  // ---- clip end → next segment ----
+  // didJustFinish stays true across status updates and is still set from the PREVIOUS
+  // clip at the instant we switch (replace() updates the status async), which would
+  // skip the new clip. So we only advance once we've seen THIS clip actually play
+  // (sawFresh) — and at most once per clip (finishedIdx).
   useEffect(() => {
     if (!data || !playing) return
     const seg = data.segments[idx]
-    if (seg?.kind === 'clip' && status.didJustFinish && finishedIdx.current !== idx) {
+    if (seg?.kind !== 'clip') return
+    if (status.playing && !status.didJustFinish) sawFresh.current = true
+    if (status.didJustFinish && sawFresh.current && finishedIdx.current !== idx) {
       finishedIdx.current = idx
       advance(idx + 1)
     }
-  }, [status.didJustFinish, data, idx, playing, advance])
+  }, [status.playing, status.didJustFinish, data, idx, playing, advance])
 
   // ---- auto-scroll the stop list to the active stop ----
   const activeSeq = data?.segments[idx]?.seq
@@ -159,6 +167,32 @@ export default function PreviewScreen() {
     dot.setValue(0)
     setDone(false)
     setIdx(0)
+    setPlaying(true)
+  }
+
+  // Stop playback if the screen unmounts while a clip is going (e.g. back-swipe).
+  useEffect(() => {
+    return () => {
+      try {
+        player.pause()
+      } catch {}
+    }
+  }, [player])
+
+  // Tap a stop to jump the drive there and play it from the start.
+  const jumpToStop = (seq: number) => {
+    if (!data) return
+    const target = data.segments.findIndex((s) => s.seq === seq && s.kind !== 'drive')
+    if (target < 0) return
+    if (timer.current) {
+      clearTimeout(timer.current)
+      timer.current = null
+    }
+    loadedSeq.current = null // force the target clip to (re)load from its start
+    finishedIdx.current = -1
+    dot.setValue(data.segments[target]!.routeProgress)
+    setDone(false)
+    setIdx(target)
     setPlaying(true)
   }
 
@@ -242,12 +276,18 @@ export default function PreviewScreen() {
         )}
       </View>
 
-      {/* Stop list (map-less timeline) */}
+      <Text style={styles.hint}>Tap any stop to jump there</Text>
+
+      {/* Stop list (map-less timeline) — tap to jump */}
       <ScrollView ref={listRef} style={styles.list} contentContainerStyle={{ paddingBottom: 24 }}>
         {data.stops.map((s) => {
           const active = s.seq === activeSeq && !done
           return (
-            <View key={s.seq} style={[styles.row, active && styles.rowActive]}>
+            <Pressable
+              key={s.seq}
+              onPress={() => jumpToStop(s.seq)}
+              style={({ pressed }) => [styles.row, active && styles.rowActive, pressed && styles.rowPressed]}
+            >
               <View style={[styles.bullet, active && styles.bulletActive]} />
               <View style={{ flex: 1 }}>
                 <Text style={[styles.rowName, active && styles.rowNameActive]} numberOfLines={1}>
@@ -255,7 +295,8 @@ export default function PreviewScreen() {
                 </Text>
                 <Text style={styles.dim}>{s.stopType}</Text>
               </View>
-            </View>
+              <Text style={styles.chev}>{active ? '♪' : '▶'}</Text>
+            </Pressable>
           )
         })}
       </ScrollView>
@@ -273,12 +314,15 @@ const styles = StyleSheet.create({
   nowBig: { fontSize: 22, fontWeight: '700' },
   controls: { paddingHorizontal: 16, paddingBottom: 8 },
   list: { flex: 1, marginTop: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#eee' },
+  hint: { fontSize: 12, color: '#999', paddingHorizontal: 16, paddingBottom: 6 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, height: ROW_H, paddingHorizontal: 16 },
   rowActive: { backgroundColor: '#eef4fd' },
+  rowPressed: { backgroundColor: '#e3e3e3' },
   bullet: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#ccc' },
   bulletActive: { backgroundColor: '#1e6fd9' },
   rowName: { fontSize: 15, fontWeight: '500', color: '#333' },
   rowNameActive: { color: '#0a0a0a', fontWeight: '700' },
+  chev: { fontSize: 14, color: '#bbb' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 10 },
   title: { fontSize: 20, fontWeight: '700' },
   dim: { fontSize: 13, color: '#666' },
