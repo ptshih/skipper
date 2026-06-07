@@ -1,9 +1,11 @@
-# @skipper/mobile — Expo app (backend wiring scaffolded; native/CarPlay gated)
+# @skipper/mobile — Expo app (backend wiring scaffolded; phone player TODO, CarPlay deferred)
 
 > **Status:** the JS/TS app is scaffolded and wired to the M2 backend (browse,
-> auth, gated tour fetch). The **native build, Metro/EAS, and CarPlay/player are
-> NOT done** and are NOT verifiable from CI — they belong to the CarPlay day-1
-> gate. Version pins below are **candidates** (SDK 56); reconcile them with
+> auth, gated tour fetch). The **native build, Metro/EAS, and the phone player
+> are NOT done** and are NOT verifiable from CI. **CarPlay is deferred past the
+> MVP — it is no longer a hard gate**; the MVP plays through the phone (mount /
+> Bluetooth), and the phone player's EAS build is what decides the SDK pin.
+> Version pins below are **candidates** (SDK 56); reconcile them with
 > `bunx expo install --fix` when you materialize the app.
 
 ## What's wired (works against the M2 API)
@@ -18,7 +20,7 @@
 - **Gating:** anonymous can open only the preview tour; other tours return 401 →
   the screen prompts for a free account.
 
-## Materialize it (first steps at the gate)
+## Materialize it (first steps toward the phone player)
 
 `apps/mobile` is **deliberately excluded from the root bun workspace** (root
 `workspaces` = `apps/api` + `packages/*`) so RN/Expo don't bloat or destabilize
@@ -35,27 +37,38 @@ bun run typecheck
 Metro (`metro.config.js` sets `watchFolders`/`nodeModulesPaths` to the monorepo
 root). It exports `.ts` source, which Metro transpiles.
 
-## Still TODO — the gate (decides the SDK pin) + the player
+## Still TODO — the phone player (the MVP)
 
-### M0 — CarPlay gate
+### M1 — Phone player (replaces the placeholder in `tour/[id]`)
 
-- [ ] Confirm the SDK 56 pin (or whatever `expo install --fix` resolves) + RN.
-- [ ] Custom dev build via **EAS** (Expo Go can't run the CarPlay fork).
-- [ ] Add **`@g4rb4g3/react-native-carplay`** + config plugin; verify it links
-      under the **New Architecture** and shows a **Now Playing** template in the
-      Xcode CarPlay simulator.
-- [ ] Convert iOS to **UIScene/Scenes** (`CPTemplateApplicationScene` + phone).
-- [ ] **GATE DECISION** → finalize the SDK pin + commit native config.
-
-### M1 — Player (replaces the placeholder in `tour/[id]`)
-
+- [ ] Custom dev build via **EAS** (Expo Go can't run the native player); this
+      build confirms the SDK 56 pin (or whatever `expo install --fix` resolves) + RN.
 - [ ] **`expo-audio`** background playback (`enableBackgroundPlayback`), duck the
       user's music at a trigger.
 - [ ] **`expo-location`** + **`expo-task-manager`**: continuous high-rate
       FOREGROUND service (NOT fixed-radius background polling).
 - [ ] **Drive simulator** — replay a corridor polyline at configurable speed.
+      (The trigger core + a headless drive sim already exist in **`@skipper/sim`**;
+      this is the on-device player driving against it / live GPS.)
 - [ ] Speed-adaptive trigger lead time, heading gate >~5 mph, debounce/queue.
-- [ ] CarPlay Now Playing wired to the `expo-audio` player state.
+      Each tour stop now carries a precomputed **trigger point**
+      (`trigger_lat`/`trigger_lng`) + **`approach_heading_deg`**, so the player
+      triggers as the car passes the POI's point on the road without re-snapping.
+- [ ] **Lock-screen Now Playing** (phone) wired to the `expo-audio` player state.
+
+### Deferred (post-MVP) — CarPlay
+
+CarPlay is **no longer a hard gate**. Revisit only after the phone player proves
+the bet. When you do:
+
+- [ ] Custom dev build that includes the CarPlay fork (Expo Go can't run it).
+- [ ] Add **`@g4rb4g3/react-native-carplay`** + config plugin; verify it links
+      under the **New Architecture** and shows a **Now Playing** template in the
+      Xcode CarPlay simulator.
+- [ ] Convert iOS to **UIScene/Scenes** (`CPTemplateApplicationScene` + phone).
+- [ ] File the **`carplay-audio`** Apple entitlement (slow Apple review — can be
+      started in the background anytime; nothing blocks on it).
+- [ ] CarPlay Now Playing wired to the same `expo-audio` player state.
 
 ## Caveats carried from the original deferral
 

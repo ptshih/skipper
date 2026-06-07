@@ -5,8 +5,9 @@ import { ApiError, getTour, signTourAudio, type SignedAudio, type TourDetail } f
 
 // Tour detail. Anonymous can open only the preview tour; other tours return 401
 // -> we prompt for a free account. Audio URLs are fetched on demand (gated). The
-// actual PLAYER (expo-audio + speed-adaptive triggering + CarPlay) is gated on the
-// CarPlay day-1 gate (see apps/mobile/README.md) — this screen stops at "ready".
+// actual PHONE PLAYER (expo-audio + speed-adaptive triggering) is the MVP and is
+// still TODO (see apps/mobile/README.md) — this screen stops at "ready". CarPlay
+// is deferred past the MVP, no longer a gate.
 export default function TourScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const [tour, setTour] = useState<TourDetail | null>(null)
@@ -75,7 +76,7 @@ export default function TourScreen() {
       <Pressable style={styles.button} onPress={loadAudio}>
         <Text style={styles.buttonText}>Load audio URLs</Text>
       </Pressable>
-      <Text style={styles.dim}>Playback (expo-audio + CarPlay) lands after the CarPlay gate.</Text>
+      <Text style={styles.dim}>Phone playback (expo-audio) is the next build. CarPlay is deferred.</Text>
 
       {tour.stops.map((s) => {
         const signed = audio?.urls.find((u) => u.seq === s.seq)

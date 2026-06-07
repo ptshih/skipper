@@ -2,7 +2,8 @@
 
 An AI-narrated, GPS-triggered driving audio tour. Think _Shaka Guide, but the
 narration is AI-generated_ — played by a charming Jungle-Cruise-skipper persona,
-over hand-curated driving routes, with CarPlay output. First region: **Lake Tahoe**.
+over hand-curated driving routes, as phone audio (CarPlay later). First region:
+**Lake Tahoe**.
 
 > **Posture:** a toy / lifestyle side project. Optimize for _charm_ and for being
 > a thing the founder actually wants to use — not for scale or defensibility.
@@ -24,7 +25,7 @@ over hand-curated driving routes, with CarPlay output. First region: **Lake Taho
 - **TypeScript 6** everywhere · **bun** (package manager + runtime) · **Turborepo**
 - **Backend:** Hono (served natively by bun) · **DB:** Neon + Drizzle · **Audio:** Cloudflare R2
 - **AI:** Anthropic `claude-opus-4-8` (narration) · ElevenLabs `eleven_multilingual_v2` (TTS)
-- **Mobile (deferred):** Expo SDK 56, CarPlay via `@g4rb4g3/react-native-carplay`
+- **Mobile (MVP = phone player):** Expo SDK 56, `expo-audio` + `expo-location`; CarPlay (`@g4rb4g3/react-native-carplay`) deferred past the MVP
 
 ## Layout
 
@@ -32,7 +33,7 @@ over hand-curated driving routes, with CarPlay output. First region: **Lake Taho
 skipper/
 ├── apps/
 │   ├── api/        @skipper/api       — Hono API (M2). Bun-native serve.
-│   └── mobile/     @skipper/mobile    — Expo app. DEFERRED until the CarPlay gate.
+│   └── mobile/     @skipper/mobile    — Expo app. Phone player is the MVP (CarPlay later).
 ├── packages/
 │   ├── shared/     @skipper/shared    — Zod schemas + types, imported everywhere.
 │   ├── db/         @skipper/db        — Drizzle schema + Neon client.
@@ -78,5 +79,5 @@ bun run db:migrate   # run migrations (db:migrate:prod targets .env.production)
 
 **Milestone: monorepo scaffold.** Skeleton + shared schema + Drizzle data model +
 runnable bun-native API health route + AI model constants. The generator pipeline,
-API routes, and the mobile/CarPlay app are stubs/deferred. See `CLAUDE.md` for the
+API routes, and the mobile app are stubs/deferred (CarPlay deferred past the MVP). See `CLAUDE.md` for the
 milestone plan and the explicit v1 non-goals.

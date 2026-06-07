@@ -1,7 +1,7 @@
 # Skipper — working notes for agents
 
 A toy/lifestyle project: an AI-narrated, GPS-triggered driving audio tour with a
-Jungle-Cruise-skipper persona and CarPlay output. **Optimize for charm, not scale.
+Jungle-Cruise-skipper persona, played as phone audio (CarPlay later). **Optimize for charm, not scale.
 The persona is the product.** When a choice trades polish-for-the-builder against
 scale-for-a-market, pick polish.
 
@@ -68,15 +68,19 @@ scale-for-a-market, pick polish.
 
 ## Milestones
 
-0. **Content + entitlement + CarPlay spike.** Skipper prompt; ~6–8 Tahoe
-   corridors; file the `carplay-audio` Apple entitlement (long pole); run the
-   day-1 CarPlay gate (does the fork build a Now Playing template on SDK 56 / RN
-   0.85 / new arch?) — it decides the SDK pin.
+0. **Content + phone-player spike.** Skipper prompt; ~6–8 Tahoe corridors; stand
+   up the **phone** audio player — that is the MVP target, and its build (Expo
+   SDK 56 / RN 0.85 / new arch) decides the SDK pin. **CarPlay is no longer a
+   hard gate** — it's deferred past the MVP (see Deferred). The MVP plays through
+   the phone (in a mount / over Bluetooth), not CarPlay. You may file the
+   `carplay-audio` Apple entitlement in the background since Apple review is slow,
+   but nothing waits on it.
 1. **Walking skeleton.** ONE corridor, ONE duration, `dadpocalypse` only.
    Generator → narration → TTS → R2 → Neon (no cache/dedup/feedback). Build the
    **drive simulator**. Player: download offline → simulated drive → correct
-   speed-adaptive triggering + debounce → audio + CarPlay Now Playing. Then
-   drive it once for real. _This is the whole bet._
+   speed-adaptive triggering + debounce → audio + lock-screen **Now Playing on
+   the phone** (CarPlay deferred). Then drive it once for real. _This is the
+   whole bet._
 2. **`apps/api`:** list corridors, fetch tour, signed R2 URLs.
 3. **Breadth:** more corridors, fixed durations, interest filtering, joke notches,
    live break-stop Places data.
@@ -86,9 +90,13 @@ scale-for-a-market, pick polish.
 ## Deferred — DO NOT build these in v1
 
 Segment trimming / arbitrary start points; the cache-variant + dedup machinery
-(until M4); any automated groundedness gate (human ear instead); the CarPlay
-**map** template (needs `carplay-maps`); Android Auto; multilingual; the live
-conversational agent + on-device fallback.
+(until M4); any automated groundedness gate (human ear instead); **CarPlay
+entirely for v1** — both the audio **Now Playing** template
+(`@g4rb4g3/react-native-carplay` + the `carplay-audio` entitlement) and the
+**map** template (needs `carplay-maps`); the MVP ships phone audio (lock-screen
+Now Playing), and CarPlay is revisited only after the phone player proves the
+bet; Android Auto; multilingual; the live conversational agent + on-device
+fallback.
 
 ## In-car player landmines (when you get there)
 
