@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@better-auth/expo": "^1.6.14",
     "@neondatabase/serverless": "^1.1.0",
     "@skipper/db": "workspace:*",
     "@skipper/shared": "workspace:*",

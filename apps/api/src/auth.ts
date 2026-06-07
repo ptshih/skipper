@@ -11,8 +11,13 @@
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { anonymous } from 'better-auth/plugins'
+import { expo } from '@better-auth/expo'
 import * as authSchema from '@skipper/db/auth-schema'
 import { authDb } from './auth-db'
+
+// The mobile app's deep-link scheme — must match apps/mobile app.json `scheme`
+// and the expoClient `scheme`. OAuth callbacks + cross-origin auth use it.
+const MOBILE_SCHEME = 'skipper'
 
 // Register a social provider only if both its env creds are set.
 const socialProviders: Record<string, { clientId: string; clientSecret: string }> = {}
@@ -26,6 +31,8 @@ if (APPLE_CLIENT_ID && APPLE_CLIENT_SECRET) {
 
 export const auth = betterAuth({
   database: drizzleAdapter(authDb, { provider: 'pg', schema: authSchema }),
+  // Allow the mobile app's deep-link scheme for cross-origin auth + OAuth callbacks.
+  trustedOrigins: [`${MOBILE_SCHEME}://`],
   emailAndPassword: { enabled: true },
   socialProviders,
   // Manual freemium tier on the user (no Stripe yet). 'free' | 'paid'.
@@ -35,6 +42,8 @@ export const auth = betterAuth({
     },
   },
   plugins: [
+    // Expo integration: secure-store session handling + deep-link OAuth for the app.
+    expo(),
     anonymous({
       onLinkAccount: async () => {
         // M2: nothing to migrate yet. When free-account favorites land, move any

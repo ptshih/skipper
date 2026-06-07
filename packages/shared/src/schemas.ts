@@ -105,3 +105,61 @@ export const tourRequest = z.object({
   jokeLevel: jokeLevel.default('dadpocalypse'),
 })
 export type TourRequest = z.infer<typeof tourRequest>
+
+/* -------------------------------------------------------------------------- */
+/*  API response DTOs (apps/api ⇄ clients). Lightweight, no internal columns.   */
+/* -------------------------------------------------------------------------- */
+
+/** GET /corridors — one row (no polyline; that comes with a tour). */
+export const corridorListItem = z.object({
+  id: z.uuid(),
+  slug: z.string(),
+  region: z.string(),
+  name: z.string(),
+  summary: z.string().nullish(),
+  distanceMeters: z.number().int().nullish(),
+  durationSeconds: z.number().int().nullish(),
+})
+export type CorridorListItem = z.infer<typeof corridorListItem>
+export const corridorList = z.object({ corridors: z.array(corridorListItem) })
+export type CorridorList = z.infer<typeof corridorList>
+
+/** A stop as the player needs it: location + trigger + whether it has audio. */
+export const tourStopView = z.object({
+  seq: z.number().int(),
+  stopType,
+  lat: z.number(),
+  lng: z.number(),
+  triggerRadiusM: z.number().int(),
+  approachHeadingDeg: z.number().int().nullish(),
+  poiContentId: z.uuid().nullish(),
+  audioDurationMs: z.number().int().nullish(),
+})
+export type TourStopView = z.infer<typeof tourStopView>
+
+/** GET /tours/:id — the tour, its corridor polyline, and ordered stops. */
+export const tourDetail = z.object({
+  tour: z.object({
+    id: z.uuid(),
+    corridorId: z.uuid(),
+    durationBucket,
+    persona,
+    jokeLevel,
+    status: tourStatus,
+    isPreview: z.boolean(),
+  }),
+  corridor: z
+    .object({ name: z.string(), region: z.string(), polyline })
+    .nullish(),
+  stops: z.array(tourStopView),
+})
+export type TourDetail = z.infer<typeof tourDetail>
+
+/** POST /tours/:id/assets/sign — presigned audio URLs by stop. */
+export const signedClip = z.object({
+  seq: z.number().int(),
+  url: z.url(),
+  durationMs: z.number().int().nullish(),
+})
+export const signedAudio = z.object({ urls: z.array(signedClip) })
+export type SignedAudio = z.infer<typeof signedAudio>
