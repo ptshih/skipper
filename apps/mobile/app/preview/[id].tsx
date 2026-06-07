@@ -381,14 +381,13 @@ export default function PreviewScreen() {
             </Text>
           </Card>
         ) : seg?.kind === 'drive' ? (
-          <NowCard
-            liveRegion
-            glow={false}
-            kicker={voice.player.underway}
-            // Transit, not arrival — headline the DISTANCE, not the destination name,
-            // so the next stop's name appears once (when its clip plays), not twice.
-            title={`~${((seg.distanceM ?? 0) / 1609).toFixed(1)} miles to the next stop`}
-          />
+          // Minimized: a drive is transit, not a stop — a calm distance strip, not a
+          // now-playing-sized card. The boat token sliding the trail carries the motion.
+          <View style={styles.driveStrip} accessibilityLiveRegion="polite">
+            <Text variant="dim" color="inkFaint" align="center">
+              Underway · ~{((seg.distanceM ?? 0) / 1609).toFixed(1)} mi to the next stop
+            </Text>
+          </View>
         ) : seg?.kind === 'rest' ? (
           <NowCard
             liveRegion
@@ -519,6 +518,9 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: space.gutter, paddingTop: space.md, gap: space.xs },
   track: { marginHorizontal: space.gutter, marginTop: space.lg, marginBottom: space.sm },
   nowWrap: { paddingHorizontal: space.gutter, paddingTop: space.sm, gap: space.sm },
+  // Reserve roughly a card's height so the controls below don't jump between a clip
+  // card and the minimal drive strip; the strip sits calm and centered in it.
+  driveStrip: { minHeight: 104, alignItems: 'center', justifyContent: 'center' },
   buffering: {
     flexDirection: 'row',
     alignItems: 'center',
