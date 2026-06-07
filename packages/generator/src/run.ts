@@ -6,6 +6,8 @@
 // Flags:
 //   --dry-run            Narrate + print scripts only (no TTS / R2 / DB writes).
 //                        Needs ANTHROPIC_API_KEY (+ GOOGLE_MAPS_API_KEY for breaks).
+//   --preview            Mark this tour as the anonymous-playable sample
+//                        (tours.isPreview) — the free "sample, then sign up" tour.
 //   --duration=<bucket>  short | standard | long   (default: standard)
 //
 // A full run additionally needs ELEVENLABS_API_KEY and the R2_* vars.
@@ -16,18 +18,19 @@ import type { GenerateResult } from './pipeline/generate'
 const DURATIONS = ['short', 'standard', 'long'] as const
 type Duration = (typeof DURATIONS)[number]
 
-function parseArgs(argv: string[]): { slug: string; dryRun: boolean; durationBucket: Duration } {
+function parseArgs(argv: string[]): { slug: string; dryRun: boolean; preview: boolean; durationBucket: Duration } {
   const args = argv.slice(2)
   const slug = args.find((a) => !a.startsWith('--'))
   if (!slug) {
-    throw new Error('Usage: run.ts <corridor-slug> [--dry-run] [--duration=short|standard|long]')
+    throw new Error('Usage: run.ts <corridor-slug> [--dry-run] [--preview] [--duration=short|standard|long]')
   }
   const dryRun = args.includes('--dry-run')
+  const preview = args.includes('--preview')
   const durArg = args.find((a) => a.startsWith('--duration='))?.split('=')[1] ?? 'standard'
   if (!DURATIONS.includes(durArg as Duration)) {
     throw new Error(`--duration must be one of ${DURATIONS.join(', ')} (got "${durArg}")`)
   }
-  return { slug, dryRun, durationBucket: durArg as Duration }
+  return { slug, dryRun, preview, durationBucket: durArg as Duration }
 }
 
 const mmss = (sec: number): string => {
@@ -55,8 +58,8 @@ function printResult(r: GenerateResult): void {
 }
 
 async function main() {
-  const { slug, dryRun, durationBucket } = parseArgs(process.argv)
-  const result = await generateTour({ slug, dryRun, durationBucket })
+  const { slug, dryRun, preview, durationBucket } = parseArgs(process.argv)
+  const result = await generateTour({ slug, dryRun, preview, durationBucket })
   printResult(result)
 }
 

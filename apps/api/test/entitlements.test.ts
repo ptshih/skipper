@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'bun:test'
-import { meetsTier, tierOf, type AuthSession } from '../src/entitlements'
+import { meetsTier, tierOf, type TierSession } from '../src/tiers'
 
 // Minimal session shape — tierOf only reads user.isAnonymous + user.tier.
-const session = (user: Partial<{ isAnonymous: boolean | null; tier: string | null }>): AuthSession =>
-  ({ session: {}, user: { isAnonymous: false, tier: 'free', ...user } }) as unknown as AuthSession
+const session = (user: Partial<{ isAnonymous: boolean | null; tier: string | null }>): TierSession => ({
+  user: { isAnonymous: false, tier: 'free', ...user },
+})
 
 describe('tierOf', () => {
   test('no session → anonymous', () => {

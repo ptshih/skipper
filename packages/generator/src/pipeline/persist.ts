@@ -115,6 +115,8 @@ export interface CreateTourInput {
   durationBucket: DurationBucket
   persona: Persona
   jokeLevel: JokeLevel
+  /** Mark as the anonymous-playable sample tour. */
+  isPreview: boolean
 }
 
 /** Create the tour in `generating` state; returns its id. */

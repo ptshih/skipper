@@ -57,6 +57,8 @@ export interface GenerateOptions {
   durationBucket?: DurationBucket
   /** Narrate + print scripts only; skip TTS, R2, and all DB writes. */
   dryRun?: boolean
+  /** Flag this tour as the anonymous-playable sample (tours.isPreview). */
+  preview?: boolean
 }
 
 export interface StopSummary {
@@ -90,7 +92,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   if (!dryRun) {
     if (!ELEVENLABS_READY()) throw new Error('ELEVENLABS_API_KEY is not set (needed for TTS; use --dry-run to skip).')
     if (!R2_READY()) {
-      throw new Error('R2_* env (ACCOUNT_ID, ACCESS_KEY_ID, SECRET_ACCESS_KEY, BUCKET, PUBLIC_BASE_URL) is not set.')
+      throw new Error('R2_* env (ACCOUNT_ID, ACCESS_KEY_ID, SECRET_ACCESS_KEY, BUCKET) is not set.')
     }
   }
 
@@ -174,7 +176,13 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   }
 
   // ---- Full run: narrate -> TTS -> R2 -> persist -> atomic ready-gate. -----
-  const tourId = await createTour({ corridorId: corridor.id, durationBucket, persona, jokeLevel })
+  const tourId = await createTour({
+    corridorId: corridor.id,
+    durationBucket,
+    persona,
+    jokeLevel,
+    isPreview: Boolean(opts.preview),
+  })
   try {
     const finalStops: FinalStop[] = []
     const summaries: StopSummary[] = []
