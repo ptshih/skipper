@@ -13,6 +13,7 @@
   "scripts": {
     "dev": "dotenvx run -f .env.development -- turbo run dev",
     "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
     "clean": "turbo run clean",
     "prepare": "dotenvx ext precommit --install || true",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yaml,yml}\"",
