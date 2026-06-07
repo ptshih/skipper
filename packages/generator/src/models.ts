@@ -51,23 +51,23 @@ export const TTS_MODEL = 'eleven_multilingual_v2' as const
 export const TTS_OUTPUT_FORMAT = 'mp3_44100_128' as const
 export const TTS_AUDIO_CONTENT_TYPE = 'audio/mpeg' as const
 
-// Default-library voices that fit a warm, characterful, slightly-older male
-// storyteller — stable, shareable voice_ids.
-// HEADS-UP: ElevenLabs is sunsetting these legacy "Default" voices on
-// 2026-12-31. Before then, add the chosen voice to the account Voice Library to
-// mint a permanent id and update SKIPPER_VOICE_ID. Changing the id changes the
-// poi_content cache-key `voice`, which correctly forces regeneration.
+// ElevenLabs voice options for the Skipper. The ACTIVE pick (`adam`) is a
+// PROFESSIONAL voice → permanent (NOT subject to the 2026-12-31 Default-voice
+// sunset). The george/brian/bill entries are legacy "Default" voices that
+// ElevenLabs RETIRES on 2026-12-31 — kept only as A/B references, do not ship them.
 // Source: https://help.elevenlabs.io/hc/en-us/articles/25844757988753
 export const ELEVEN_VOICES = {
-  george: 'JBFqnCBsd6RMkjVDRZzb', // "Warm, Captivating Storyteller" — best Skipper fit
-  brian: 'nPczCjzI2devNBz1zQrb', // "Deep, Resonant and Comforting"
-  bill: 'pqHfZKP75CvOlQylNhV4', // older, trustworthy, warm narrator
+  adam: 'IRHApOXLvnW57QJPQH2P', // "Adam — American, Dark and Tough" — PROFESSIONAL (permanent)
+  george: 'JBFqnCBsd6RMkjVDRZzb', // "Warm, Captivating Storyteller" — DEPRECATED Default (gone 2026-12-31)
+  brian: 'nPczCjzI2devNBz1zQrb', // "Deep, Resonant and Comforting" — DEPRECATED Default
+  bill: 'pqHfZKP75CvOlQylNhV4', // older, trustworthy, warm narrator — DEPRECATED Default
 } as const
 
 export type ElevenVoiceId = (typeof ELEVEN_VOICES)[keyof typeof ELEVEN_VOICES]
 
 // The Skipper's voice. Stored VERBATIM as the poi_content cache-key `voice`.
-export const SKIPPER_VOICE_ID: ElevenVoiceId = ELEVEN_VOICES.george
+// `adam` is a professional (permanent) voice — not affected by the Default-voice sunset.
+export const SKIPPER_VOICE_ID: ElevenVoiceId = ELEVEN_VOICES.adam
 
 // voice_settings tuned for a warm/corny/characterful storyteller on
 // eleven_multilingual_v2 (continuous controls). style is moderate — high style
