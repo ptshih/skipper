@@ -12,6 +12,7 @@
   ],
   "scripts": {
     "dev": "dotenvx run -f .env.development -- bun --filter @skipper/api dev",
+    "sim": "dotenvx run -f .env.development -- bun packages/sim/src/run.ts",
     "typecheck": "bun --filter '*' typecheck",
     "test": "bun --filter '*' test",
     "prepare": "dotenvx ext precommit --install || true",
