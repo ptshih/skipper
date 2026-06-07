@@ -12,6 +12,7 @@ import {
   index,
 } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
+import { user } from './auth-schema'
 
 /* -------------------------------------------------------------------------- */
 /*  Shared JSON shapes (compile-time only; jsonb does not enforce these)        */
@@ -172,6 +173,10 @@ export const tours = pgTable(
     // Route signature hash — M4 cache/dedup forward-compat. Nullable in v1; do
     // NOT add a (unique) index until M4 actually queries/dedupes on it.
     routeSig: text('route_sig'),
+    // Marks the single anonymous-playable sample tour (freemium "sample, then sign
+    // up"). NOT ownership — tours stay anonymous/shareable; this just flags which
+    // tour a guest may fetch/play without an account.
+    isPreview: boolean('is_preview').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .defaultNow()
@@ -220,6 +225,31 @@ export const tourStops = pgTable(
     uniqueIndex('tour_stops_tour_seq_uq').on(t.tourId, t.seq),
     index('tour_stops_poi_idx').on(t.poiId),
     index('tour_stops_content_idx').on(t.poiContentId),
+  ],
+)
+
+/* -------------------------------------------------------------------------- */
+/*  saved_tours — a free account's saved tours (M2 auth)                        */
+/* -------------------------------------------------------------------------- */
+
+// Tours stay anonymous/shareable: ownership is NOT a column on `tours`. A
+// signed-in user saves a tour through this join (userId -> Better Auth user.id,
+// which is text). On anonymous->account link, move rows from the guest user here.
+export const savedTours = pgTable(
+  'saved_tours',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    tourId: uuid('tour_id')
+      .notNull()
+      .references(() => tours.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex('saved_tours_user_tour_uq').on(t.userId, t.tourId),
+    index('saved_tours_user_idx').on(t.userId),
   ],
 )
 
@@ -281,3 +311,5 @@ export type Tour = typeof tours.$inferSelect
 export type NewTour = typeof tours.$inferInsert
 export type TourStop = typeof tourStops.$inferSelect
 export type NewTourStop = typeof tourStops.$inferInsert
+export type SavedTour = typeof savedTours.$inferSelect
+export type NewSavedTour = typeof savedTours.$inferInsert

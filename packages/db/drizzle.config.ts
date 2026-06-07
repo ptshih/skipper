@@ -11,7 +11,8 @@ if (!url) {
 
 export default defineConfig({
   dialect: 'postgresql',
-  schema: './src/schema.ts',
+  // Both our app schema and the Better Auth (CLI-generated) auth schema.
+  schema: ['./src/schema.ts', './src/auth-schema.ts'],
   out: './drizzle',
   dbCredentials: { url },
   strict: true,

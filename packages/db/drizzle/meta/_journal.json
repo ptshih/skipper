@@ -15,6 +15,13 @@
       "when": 1780784766603,
       "tag": "0001_misty_echo",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1780791214821,
+      "tag": "0002_ambitious_captain_universe",
+      "breakpoints": true
     }
   ]
 }

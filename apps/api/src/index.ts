@@ -1,15 +1,137 @@
-import { Hono } from 'hono'
+// @skipper/api — Hono API (M2), served natively by bun.
+//
+//   GET  /health                     -> liveness (env-free)
+//   *    /api/auth/*                  -> Better Auth (sign-up/in/out, session, OAuth)
+//   GET  /corridors                  -> list corridors (anonymous OK; no polyline)
+//   GET  /tours/:tourId              -> a ready tour + polyline + ordered stops
+//   POST /tours/:tourId/assets/sign  -> presigned R2 URLs for the tour's audio
+//
+// Freemium gating: anonymous may fetch/sign ONLY the preview tour; any other tour
+// needs a free account (the tier check via FEATURES.playTour). Tours stay
+// anonymous/shareable — gating is on access, not ownership.
 
-const app = new Hono()
+import { Hono, type Context } from 'hono'
+import { asc, eq } from 'drizzle-orm'
+import { db } from '@skipper/db'
+import { corridors, poiContent, pois, tours, tourStops } from '@skipper/db/schema'
+import type { Tour as TourRow } from '@skipper/db/schema'
+import { auth } from './auth'
+import { FEATURES, meetsTier, withSession, type ApiEnv } from './entitlements'
+import { presignGet } from './storage'
+
+const app = new Hono<ApiEnv>()
 
 // Health check — used by infra / local smoke tests.
 app.get('/health', (c) => c.json({ ok: true }))
 
-// TODO(M2): real API surface
-//   GET  /corridors                 -> list corridors
-//   GET  /tours/:tourId             -> fetch a single tour (+ ordered stops)
-//   POST /tours/:tourId/assets/sign -> issue signed Cloudflare R2 URLs
-// Pulls from @skipper/db; shares types/validation via @skipper/shared.
+// Better Auth owns everything under /api/auth/* (its own handler).
+app.on(['POST', 'GET'], '/api/auth/*', (c) => auth.handler(c.req.raw))
+
+// List corridors — lightweight (no polyline); anonymous browsing is free.
+app.get('/corridors', async (c) => {
+  const rows = await db
+    .select({
+      id: corridors.id,
+      slug: corridors.slug,
+      region: corridors.region,
+      name: corridors.name,
+      summary: corridors.summary,
+      distanceMeters: corridors.distanceMeters,
+      durationSeconds: corridors.durationSeconds,
+    })
+    .from(corridors)
+    .orderBy(asc(corridors.name))
+  return c.json({ corridors: rows })
+})
+
+/**
+ * Load a tour and enforce the freemium gate:
+ *   - 404 if missing, 409 if not `ready`
+ *   - anonymous allowed only when `isPreview`; otherwise a free account is required
+ * Returns the tour, or a ready-to-return error Response.
+ */
+async function loadTourGated(c: Context<ApiEnv>): Promise<{ tour: TourRow } | { res: Response }> {
+  const tourId = c.req.param('tourId')
+  if (!tourId) return { res: c.json({ error: 'not_found' }, 404) }
+  const rows = await db.select().from(tours).where(eq(tours.id, tourId)).limit(1)
+  const tour = rows[0]
+  if (!tour) return { res: c.json({ error: 'not_found' }, 404) }
+  if (tour.status !== 'ready') return { res: c.json({ error: 'not_ready', message: 'Tour is still generating.' }, 409) }
+  if (!tour.isPreview && !meetsTier(c.get('tier'), FEATURES.playTour)) {
+    return { res: c.json({ error: 'account_required', message: 'Create a free account to play this tour.' }, 401) }
+  }
+  return { tour }
+}
+
+// Fetch a single tour: corridor polyline + ordered stops (with coordinates for
+// the player's geofencing). Audio URLs come from the /sign endpoint.
+app.get('/tours/:tourId', withSession, async (c) => {
+  const gated = await loadTourGated(c)
+  if ('res' in gated) return gated.res
+  const { tour } = gated
+
+  const corridorRows = await db
+    .select({ name: corridors.name, region: corridors.region, polyline: corridors.polyline })
+    .from(corridors)
+    .where(eq(corridors.id, tour.corridorId))
+    .limit(1)
+
+  const stops = await db
+    .select({
+      seq: tourStops.seq,
+      stopType: tourStops.stopType,
+      lat: pois.lat,
+      lng: pois.lng,
+      triggerRadiusM: tourStops.triggerRadiusM,
+      approachHeadingDeg: tourStops.approachHeadingDeg,
+      poiContentId: tourStops.poiContentId,
+      audioDurationMs: poiContent.audioDurationMs,
+    })
+    .from(tourStops)
+    .innerJoin(pois, eq(tourStops.poiId, pois.id))
+    .leftJoin(poiContent, eq(tourStops.poiContentId, poiContent.id))
+    .where(eq(tourStops.tourId, tour.id))
+    .orderBy(asc(tourStops.seq))
+
+  return c.json({
+    tour: {
+      id: tour.id,
+      corridorId: tour.corridorId,
+      durationBucket: tour.durationBucket,
+      persona: tour.persona,
+      jokeLevel: tour.jokeLevel,
+      status: tour.status,
+      isPreview: tour.isPreview,
+    },
+    corridor: corridorRows[0],
+    stops,
+  })
+})
+
+// Issue short-lived presigned R2 URLs for the tour's audio clips (story/scenic).
+// Same gate as fetch — this is the real wall (hands out the playable bytes).
+app.post('/tours/:tourId/assets/sign', withSession, async (c) => {
+  const gated = await loadTourGated(c)
+  if ('res' in gated) return gated.res
+  const { tour } = gated
+
+  const clips = await db
+    .select({ seq: tourStops.seq, key: poiContent.audioUrl, durationMs: poiContent.audioDurationMs })
+    .from(tourStops)
+    .innerJoin(poiContent, eq(tourStops.poiContentId, poiContent.id))
+    .where(eq(tourStops.tourId, tour.id))
+    .orderBy(asc(tourStops.seq))
+
+  try {
+    const urls = clips
+      .filter((clip) => clip.key)
+      .map((clip) => ({ seq: clip.seq, url: presignGet(clip.key!), durationMs: clip.durationMs }))
+    return c.json({ urls })
+  } catch (e) {
+    // R2 not configured yet (no creds) — surface clearly rather than a raw 500.
+    return c.json({ error: 'audio_unavailable', message: (e as Error).message }, 503)
+  }
+})
 
 const port = Number(process.env.PORT ?? 8787)
 

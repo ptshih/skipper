@@ -34,3 +34,13 @@ export type Interest = z.infer<typeof interest>
 /** v1 persona: the Jungle Cruise skipper. */
 export const persona = z.enum(['skipper'])
 export type Persona = z.infer<typeof persona>
+
+/**
+ * Freemium access tier (DERIVED per request, not a column):
+ *  - `anonymous` = no/guest session (basic free use + the preview tour)
+ *  - `free`      = signed-in account
+ *  - `paid`      = subscriber (user.tier = 'paid'; no Stripe wired yet)
+ * `user.tier` only stores `free`/`paid`; `anonymous` is the absence of an account.
+ */
+export const accessTier = z.enum(['anonymous', 'free', 'paid'])
+export type AccessTier = z.infer<typeof accessTier>
