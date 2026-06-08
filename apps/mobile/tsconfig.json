@@ -7,6 +7,6 @@
     }
   },
   "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"],
-  "//": "*.test.ts run under `bun test` (which provides bun:test types); tsc skips them.",
-  "exclude": ["node_modules", "**/*.test.ts", "**/*.test.tsx"]
+  "//": "*.test.ts run under `bun test` + scripts/ run under `bun` (both provide their own types: bun:test, Bun globals); the app has no @types/bun, so tsc skips them.",
+  "exclude": ["node_modules", "scripts", "**/*.test.ts", "**/*.test.tsx"]
 }
