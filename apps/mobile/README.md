@@ -42,8 +42,15 @@ It consumes `@skipper/shared` and `@skipper/drive-core` via `workspace:*` (both
 export `.ts` source). Metro resolves them through the symlinked layout
 (`metro.config.js` sets `watchFolders`/`nodeModulesPaths` to the monorepo root) —
 verified: `bunx expo export` bundles cleanly through bun's isolated node_modules
-(a device `expo run:ios` build is the final word). For the backend deploy, install
-with `--filter @skipper/api` so the RN tree isn't pulled in.
+(a device `expo run:ios` build is the final word).
+
+For the **backend deploy**, keep the Expo/RN tree out of the api image. NOTE:
+`bun install --filter '@skipper/api'` does NOT prune — it still installs the whole
+workspace (verified empirically: 1161 packages, react-native + expo included; bun
+has no `turbo prune` equivalent yet — oven-sh/bun#28600). Instead TRIM the root
+`workspaces` to the api closure (`apps/api` + `packages/db` + `packages/shared`)
+before installing, which yields ~90 packages and zero react-native. `apps/api/Dockerfile`
+does exactly that and launches the server through dotenvx.
 
 ## Still TODO — the phone player (the MVP)
 

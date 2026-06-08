@@ -1,0 +1,29 @@
+# Trim the Docker build context (the repo root) for the lean apps/api image
+# (apps/api/Dockerfile). The Dockerfile COPYs only the api closure; this keeps the
+# heavy + irrelevant stuff out of the context sent to the daemon — above all the
+# mobile React-Native tree and every node_modules.
+
+**/node_modules
+.git
+
+# never ship the dotenvx PRIVATE key, and only .env.production is needed
+.env.keys
+.env.development
+.env.example
+
+# not part of the api closure
+apps/mobile
+packages/sim
+packages/generator
+packages/drive-core
+
+# dev/test/build cruft
+**/.expo
+**/.scratch
+**/*.test.ts
+**/*.test.tsx
+**/*.md
+Dockerfile
+**/Dockerfile
+.dockerignore
+.github
