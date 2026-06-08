@@ -21,13 +21,6 @@ export function deriveRegions(corridors: readonly { region: string }[]): RegionO
     .sort((a, b) => a.region.localeCompare(b.region))
 }
 
-/** The location control is meaningful only with >=2 distinct regions. Below that a region
- *  filter is tautological (today's Lake-Tahoe-only catalog), so the chip stays HIDDEN and
- *  the seam ships unchanged — the pattern is built but dormant until breadth lands. */
-export function showRegionFilter(regions: readonly RegionOption[]): boolean {
-  return regions.length >= 2
-}
-
 /** Narrow corridors to a picked region; null = no filter (the "All regions" default). */
 export function filterByRegion<T extends { region: string }>(
   corridors: readonly T[],

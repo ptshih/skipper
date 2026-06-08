@@ -4,7 +4,7 @@ import { Stack, useFocusEffect, useRouter } from 'expo-router'
 import { listCorridors, type CorridorList } from '@/lib/api'
 import { useSession } from '@/lib/auth'
 import { useDrivesFilter } from '@/lib/drives-filter'
-import { deriveRegions, filterByRegion, showRegionFilter } from '@/lib/regions'
+import { deriveRegions, filterByRegion } from '@/lib/regions'
 import { useTheme } from '@/theme'
 import { space } from '@/theme/tokens'
 import { Badge, Button, Card, Divider, FilterChip, HeaderIconButton, RouteTrack, Screen, Text, voice } from '@/ui'
@@ -138,9 +138,9 @@ export default function CorridorsScreen() {
           <Text variant="label" color="inkFaint" style={styles.flex}>
             {voice.home.section}
           </Text>
-          {/* Dormant until the catalog spans >=2 regions — a region filter is tautological
-              while everything is Lake Tahoe (today), so the seam ships unchanged. */}
-          {showRegionFilter(regions) ? (
+          {/* Show the region filter whenever there's a region to pick. (With one region
+              today, picking it is a no-op — but the chip + picker are live.) */}
+          {regions.length > 0 ? (
             <FilterChip
               label={selectedRegion ?? voice.home.where.all}
               active={selectedRegion !== null}
