@@ -21,12 +21,13 @@ import {
   TTS_SAMPLE_RATE_HZ,
 } from '../models'
 import { GEMINI_PCM, toWavWithDuration } from './wav'
+import { mp3DurationMs } from './mp3'
 
 const SYNTHESIZE_URL = 'https://texttospeech.googleapis.com/v1/text:synthesize'
 const CLOUD_PLATFORM_SCOPE = 'https://www.googleapis.com/auth/cloud-platform'
 
 export interface SynthResult {
-  /** A playable WAV buffer (LINEAR16). */
+  /** The playable clip bytes — an MP3 by default; a WAV when TTS_AUDIO_ENCODING is LINEAR16. */
   audio: Uint8Array
   durationMs: number
 }
@@ -78,9 +79,21 @@ export async function synthesize(text: string, voiceId: string = SKIPPER_VOICE_I
   if (!data.audioContent) throw new Error('Cloud TTS returned no audioContent.')
 
   const raw = new Uint8Array(Buffer.from(data.audioContent, 'base64'))
-  const { wav, durationMs } = toWavWithDuration(raw, GEMINI_PCM)
-  if (!wav.length || durationMs <= 0) {
+  // Cloud TTS returns no duration field, so each encoding derives it from the bytes:
+  //  - MP3: the bytes ARE the .mp3 clip; duration = sum of MPEG frame times (mp3.ts).
+  //  - LINEAR16: wrap headerless PCM as a playable WAV; duration is byte-linear (wav.ts).
+  let audio: Uint8Array
+  let durationMs: number
+  if (TTS_AUDIO_ENCODING === 'MP3') {
+    audio = raw
+    durationMs = mp3DurationMs(raw)
+  } else {
+    const wrapped = toWavWithDuration(raw, GEMINI_PCM)
+    audio = wrapped.wav
+    durationMs = wrapped.durationMs
+  }
+  if (!audio.length || durationMs <= 0) {
     throw new Error('Cloud TTS returned empty audio or a zero-length duration.')
   }
-  return { audio: wav, durationMs }
+  return { audio, durationMs }
 }
