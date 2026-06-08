@@ -180,6 +180,52 @@ bet being proven first.
   - **Sequencing:** a v2 delighter — gate behind the proven phone player (M1), and
     reuse the existing fact sheets + Algenib voice so the skipper sounds continuous.
 
+- **"Tip the skipper" — an end-of-tour tip jar.** At the drive-complete beat (the
+  `voice.driveComplete` screen, AFTER the payoff — never before, never blocking), an
+  optional, low-pressure "tip your skipper," in character, because a corny tour guide
+  works for tips. Charm-forward monetization (delight, not extraction) — the toy-lens +
+  competitive read both point to voluntary/one-time over subscription. What it stresses:
+  - **Payment rails we don't have yet.** `user.tier` is a manual flag (no Stripe/IAP). On
+    iOS a tip for digital content MUST go through Apple IAP (≈30% cut) — it can't route to
+    Stripe; model it as a consumable IAP "tip" product. Lands WITH the same billing
+    integration the paid tier needs, not before.
+  - **A tip is not a toll.** Never gate content behind it — the freemium wall is the
+    playback `AccountGate`; tipping rides on TOP of a tour already enjoyed, fully skippable.
+    Ask warm, ask once.
+  - **Charm hook (optional).** A tip can ink a passport-stamp / postcard, or unlock one
+    bonus aside ("since you're feeling generous, one more for the road…") — reward the
+    gesture; don't make it the point.
+  - **Sequencing:** post-MVP, gated behind the proven phone player; pairs with the
+    Stripe/IAP work.
+
+- **Region-specific skipper identities — a different host per region.** The Tahoe skipper
+  is not the Yosemite skipper: each region gets a named guide with its own persona,
+  backstory, and (optionally) voice — variations on the deadpan pun-machine DNA, not a
+  different species (keep the founder's road-trip-guide heart). The payoff to the new
+  region browse axis: picking "Yosemite" in the "Where to?" picker introduces you to the
+  Yosemite skipper. "The persona is the product," applied per region — a charm multiplier.
+  What it stresses:
+  - **The cache key already has the dimension.** `poi_content` keys on
+    `(poi_id, persona, voice, joke_level)`, so region skippers extend `persona` cleanly (an
+    enum/map per region) — each region generates its own content, no schema fight.
+  - **A region skipper can SOUND different.** `voice` is today a fixed function of persona
+    (`PERSONA_VOICE` in `packages/generator/src/models.ts`: skipper → Algenib), but the key
+    already carries `voice` — so the Yosemite skipper can wear its own Gemini-TTS voice.
+    Tune + ear-judge per region (the voice gate becomes per-region).
+  - **The system prompt becomes region-parameterized.** The highest-leverage file (the
+    narration prompt) gets a base skipper layer + a per-region overlay (backstory, regional
+    idioms, what they riff on). The persona KIT terms are load-bearing in
+    `lint.ts`/`generate.ts` regexes — per-persona kits must sync with those guards.
+  - **Backstory is DELIVERY, never FACTS.** An ex-ski-bum-mechanic Tahoe skipper vs. a
+    grizzled-climber Yosemite skipper colors the jokes and asides — it must NEVER invent
+    regional history. Same rule as "Ask the Skipper": don't let "backstory" become an
+    ungrounded-fact backdoor.
+  - **A "meet your skipper" surface.** Name, rig, one-line backstory — pairs with the
+    deferred enamel-badge / passport ornament and the region picker (the location filter).
+  - **Sequencing:** needs breadth to matter (M4, multiple regions) — pairs with the region
+    expansion; each new region = persona tuning + a voice judged by ear (that per-region
+    content cost IS the charm-per-region multiplier).
+
 ## In-car player landmines (when you get there)
 
 - **Triggering:** do NOT rely on fixed-radius background polling — the OS
