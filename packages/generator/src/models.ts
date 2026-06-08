@@ -62,11 +62,13 @@ export const TTS_CLIP_EXTENSION = 'wav' as const
 export const TTS_LANGUAGE_CODE = 'en-US' as const
 
 // Gemini-TTS prebuilt voices (each carries a one-word timbre descriptor). The
-// ACTIVE pick is `sulafat` ("Warm") — the literal warm-storyteller fit for the
-// skipper. The rest are A/B references to audition alongside it once GCP creds are
-// wired. (~30 voices exist; these are the warm/storyteller-leaning ones.)
+// ACTIVE pick is `algenib` ("Gravelly") — a deep, weathered MALE voice that fits
+// the written "a man" persona, chosen by ear (2026-06-08) from a full-catalog
+// audition reading the canonical Jungle-Cruise jokes deadpan. `sulafat` ("Warm")
+// was the prior pick but reads female; it and the rest stay as A/B references.
 export const GEMINI_VOICES = {
-  sulafat: 'Sulafat', // Warm — the skipper pick
+  algenib: 'Algenib', // Gravelly — THE SKIPPER PICK (deep/weathered, male; matches the persona). Picked 2026-06-08.
+  sulafat: 'Sulafat', // Warm — former pick (female; retired because the persona is a man)
   achird: 'Achird', // Friendly
   gacrux: 'Gacrux', // Mature
   vindemiatrix: 'Vindemiatrix', // Gentle
@@ -78,13 +80,13 @@ export type GeminiVoice = (typeof GEMINI_VOICES)[keyof typeof GEMINI_VOICES]
 // The Skipper's voice. Stored VERBATIM as the poi_content cache-key `voice` (and in
 // the R2 clip key), so changing it after tours exist forces re-synthesis. No
 // ElevenLabs sunset/quota constraint on this provider.
-export const SKIPPER_VOICE_ID: GeminiVoice = GEMINI_VOICES.sulafat
+export const SKIPPER_VOICE_ID: GeminiVoice = GEMINI_VOICES.algenib
 
 // Natural-language DELIVERY directive (Cloud TTS input.prompt). The persona's words
 // already live in the script; this only sets HOW it is read, never WHAT is said —
 // so it can't loosen grounding. (Persona-in-delivery, not in facts.)
 export const SKIPPER_TTS_STYLE_PROMPT =
-  'Read this as a warm, dry river-boat tour captain talking to friends riding along in the car: unhurried, genuinely glad they came, a man who has told these corny jokes a thousand times and still quietly delights in every one. Deliver the jokes completely deadpan — never laugh at your own setup, never sing-song the punchline, never signal "get it?"; land each one flat and matter-of-fact, a little pleased with yourself even when it is terrible. Put a small pause right before the pun and a slightly longer beat right after it, so there is room for the groan. Let the quiet, sincere lines breathe. Conversational and human, the sound of a man noticing things out the window — never a newscaster, never a stand-up comedian working a crowd.'
+  'Read this as a warm, dry, low-and-slow river-boat tour captain talking to friends riding along in the car: unhurried, genuinely glad they came, a man who has told these corny jokes a thousand times and still quietly delights in every one. Deliver the jokes completely deadpan and fully committed to the bit — never laugh at your own setup, never sing-song the punchline, never signal "get it?"; land each one flat and matter-of-fact, a little pleased with yourself even when it is terrible. You are the straight man to your own jokes. Put a small pause right before the pun and a slightly longer beat right after it, so there is room for the groan. Let the quiet, sincere lines breathe. Conversational and human, the sound of a man noticing things out the window — never a newscaster, never a stand-up comedian working a crowd.'
 
 /**
  * Voice is a fixed function of persona in v1 — centralized here so it can't drift
