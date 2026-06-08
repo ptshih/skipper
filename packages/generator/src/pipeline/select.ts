@@ -28,6 +28,7 @@ import {
   haversineMeters,
   nearestOnRoute,
   routeBearingAt,
+  sideOfApproach,
   timeAtAlong,
   totalMeters,
 } from './geo'
@@ -55,6 +56,9 @@ export interface StopPlan {
   triggerLng: number
   /** Route heading of travel (deg, 0=N) at the trigger point — the approach direction. */
   approachHeadingDeg: number
+  /** Which side of the road the POI is on relative to travel ('left'/'right') — only when
+   *  the route geometry calls it confidently; absent when too near dead-ahead/behind. */
+  sideOfRoad?: 'left' | 'right'
   /** STORY only: Wikipedia attribution source (CC BY-SA). */
   wikiUrl?: string
   wikiTitle?: string
@@ -110,13 +114,15 @@ function dedupeColocated(placed: Placed[]): Placed[] {
   return kept
 }
 
-/** A POI snapped to the route: its along-route time, off-route distance, trigger point, and approach heading. */
+/** A POI snapped to the route: its along-route time, off-route distance, trigger point, approach heading, and which side of the road it sits on. */
 interface Snap {
   alongSec: number
   offRouteM: number
   triggerLat: number
   triggerLng: number
   approachHeadingDeg: number
+  /** Which side of the road the POI is on relative to travel — null when too near dead-ahead/behind to call. */
+  sideOfRoad: 'left' | 'right' | null
 }
 type SnapFn = (p: LngLat) => Snap
 
@@ -210,12 +216,15 @@ export function selectStops(params: SelectParams): StopPlan[] {
   const totalM = totalMeters(cumulative)
   const snapOf: SnapFn = (p) => {
     const pos = nearestOnRoute(params.polyline, cumulative, p)
+    const heading = routeBearingAt(params.polyline, pos.index)
     return {
       alongSec: timeAtAlong(pos.alongM, totalM, params.totalSec),
       offRouteM: pos.offRouteM,
       triggerLat: pos.lat,
       triggerLng: pos.lng,
-      approachHeadingDeg: Math.round(routeBearingAt(params.polyline, pos.index)) % 360,
+      approachHeadingDeg: Math.round(heading) % 360,
+      // Side is the POI's bearing off the trigger point relative to the road heading.
+      sideOfRoad: sideOfApproach(heading, [pos.lng, pos.lat], p),
     }
   }
 
@@ -243,6 +252,10 @@ export function selectStops(params: SelectParams): StopPlan[] {
       triggerLat: snap.triggerLat,
       triggerLng: snap.triggerLng,
       approachHeadingDeg: snap.approachHeadingDeg,
+      // Side of the road is delivery-only and only surfaced for STORY stops (a named
+      // landmark to point at — "just off your left"); scenic names nothing, breaks
+      // forbid it. Omitted when the geometry can't call a confident side.
+      ...(isStory && snap.sideOfRoad ? { sideOfRoad: snap.sideOfRoad } : {}),
       ...(isStory ? { wikiUrl: n.poi.url, wikiTitle: n.poi.title, wikiPageId: n.poi.pageid } : {}),
     })
   }

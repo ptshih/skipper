@@ -47,6 +47,21 @@ export function bearingDeg(a: LngLat, b: LngLat): number {
 }
 
 /**
+ * Which side of the road a point sits on, relative to the direction of travel.
+ * `headingDeg` is the compass heading of travel (0=N, clockwise); `from` is the
+ * on-route trigger point and `to` is the off-route POI. Compass bearings increase
+ * clockwise, so a target whose bearing is clockwise of the heading is on the
+ * RIGHT. Returns null when the point is too near dead-ahead/behind to call a side
+ * confidently (the caller then omits it rather than guessing a coin-flip side).
+ */
+export function sideOfApproach(headingDeg: number, from: LngLat, to: LngLat): 'left' | 'right' | null {
+  const rel = ((bearingDeg(from, to) - headingDeg + 540) % 360) - 180 // (-180, 180]
+  const mag = Math.abs(rel)
+  if (mag < 10 || mag > 170) return null // ~collinear with travel — no clear side
+  return rel > 0 ? 'right' : 'left'
+}
+
+/**
  * Cumulative along-route distance (meters) at each vertex. Same length as the
  * polyline; element 0 is 0. `at[n-1]` is the total route length.
  */

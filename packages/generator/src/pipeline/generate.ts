@@ -72,6 +72,8 @@ export interface StopSummary {
   stopType: StopPlan['stopType']
   name: string
   alongSec: number
+  /** STORY only: which side of the road the place is on, when the geometry called it. */
+  sideOfRoad?: 'left' | 'right'
   script?: string
   /** STORY only: the grounded fact sheet the model was given — emitted on dry-run so
    *  the script can be audited against its exact well of facts (grounding invariant). */
@@ -208,9 +210,10 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
     stopType: s.stopType,
     jokeLevel,
     targetSeconds: s.targetSeconds,
-    // STORY: name + facts. BREAK: the curated name + kind (no facts). SCENIC: neither.
+    // STORY: name + facts (+ side of road, when geometry calls it). BREAK: the curated
+    // name + kind (no facts). SCENIC: neither.
     ...(s.stopType === 'story'
-      ? { place: { name: s.name, kind: s.kind }, facts: s.facts }
+      ? { place: { name: s.name, kind: s.kind }, facts: s.facts, ...(s.sideOfRoad ? { sideOfRoad: s.sideOfRoad } : {}) }
       : s.stopType === 'break'
         ? { place: { name: s.name, kind: spokenKind(s.kind) } } // normalize raw primaryType
         : {}),
@@ -349,6 +352,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       stopType: s.stopType,
       name: s.name,
       alongSec: s.alongSec,
+      ...(s.sideOfRoad ? { sideOfRoad: s.sideOfRoad } : {}),
       script: scriptBySeq.get(s.seq),
       // STORY carries the exact (deepened) fact sheet so the dry-run artifact can be
       // audited script-vs-sheet; SCENIC/BREAK have no facts by construction.
@@ -444,6 +448,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
         stopType: s.stopType,
         name: s.name,
         alongSec: s.alongSec,
+        ...(s.sideOfRoad ? { sideOfRoad: s.sideOfRoad } : {}),
         script,
         // Carry the STORY fact sheet so the SERVED tour's scripts can be audited
         // (grounding) straight from the result JSON, same as the dry-run artifact.
