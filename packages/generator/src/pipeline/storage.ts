@@ -21,7 +21,9 @@ function getClient(): S3Client {
       // R2 by default; set S3_ENDPOINT to point this same S3 code at any other
       // S3-compatible provider (Tigris, B2, AWS S3) with no rewrite. The `||`
       // short-circuits, so R2_ACCOUNT_ID is only required when no override is set.
-      endpoint: process.env.S3_ENDPOINT || `https://${requireEnv('R2_ACCOUNT_ID')}.r2.cloudflarestorage.com`,
+      endpoint:
+        process.env.S3_ENDPOINT ||
+        `https://${requireEnv('R2_ACCOUNT_ID')}.r2.cloudflarestorage.com`,
       region: process.env.S3_REGION || 'auto', // R2/Tigris use "auto"; AWS needs a real region
     })
   }
@@ -29,7 +31,12 @@ function getClient(): S3Client {
 }
 
 /** Object key mirroring the poi_content cache key (persona, voice, joke level, poi). */
-export function clipKey(poiId: string, persona: Persona, voice: string, jokeLevel: JokeLevel): string {
+export function clipKey(
+  poiId: string,
+  persona: Persona,
+  voice: string,
+  jokeLevel: JokeLevel,
+): string {
   return `clips/${persona}/${voice}/${jokeLevel}/${poiId}.${TTS_CLIP_EXTENSION}`
 }
 
@@ -43,4 +50,9 @@ export async function uploadAudio(key: string, bytes: Uint8Array): Promise<strin
 /** Whether a clip already exists in R2 (lets callers skip re-synthesis). */
 export async function audioExists(key: string): Promise<boolean> {
   return getClient().file(key).exists()
+}
+
+/** A short-lived presigned GET URL for a private clip KEY (for local listening/auditing). */
+export function presignGet(key: string, expiresInSeconds: number = 60 * 60): string {
+  return getClient().file(key).presign({ method: 'GET', expiresIn: expiresInSeconds })
 }
