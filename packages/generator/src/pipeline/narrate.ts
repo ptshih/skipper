@@ -71,7 +71,7 @@ export interface NarrationRequest {
   recentOpeners?: string[]
   /** How the last few stops CLOSED — so this stop can close differently (each call is independent). */
   recentClosers?: string[]
-  /** Personal-kit beats used in the last few stops (e.g. "the dock guy") — so this stop can avoid repeating them. */
+  /** Personal-kit beats used in the last few stops (e.g. "the mechanic") — so this stop can avoid repeating them. */
   recentKitBeats?: string[]
   /** Recurring frames / self-deprecation flavors already used THIS DRIVE (cumulative) — one-time bits, never reuse. */
   recentMotifs?: string[]

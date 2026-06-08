@@ -198,9 +198,9 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   // generated) stops can be told they're spent — the load-bearing fix for kit
   // overuse, since each stop is narrated in isolation with no view of its siblings.
   const KIT_BEATS: [RegExp, string][] = [
-    [/dock guy/i, 'the dock guy ("coming Tuesday")'],
+    [/mechanic/i, 'the mechanic ("getting to it Tuesday")'],
     [/\bRay\b/, 'cousin Ray'],
-    [/\bengine\b/i, 'the boat engine'],
+    [/\btruck\b/i, 'the truck'],
     [/\bcoffee\b/i, 'his coffee opinions'],
   ]
   const kitBeatsOf = (script: string) =>

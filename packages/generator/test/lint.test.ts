@@ -15,7 +15,7 @@ describe('lintScripts', () => {
 
   test('flags the second stop that CLOSES on the personal kit', () => {
     const findings = lintScripts([
-      story(0, 'The lake runs deep here. Meanwhile my dock guy is still coming Tuesday.'),
+      story(0, 'The lake runs deep here. Meanwhile my mechanic is still getting to it Tuesday.'),
       story(1, 'A fine old road climbs up. Even my cousin Ray would have stayed home.'),
       story(2, 'The pines lean over the water, quiet as anything.'),
     ])
@@ -30,7 +30,7 @@ describe('lintScripts', () => {
     // 3 stops, all mid-script kit → budget 1 → 2 flagged.
     const findings = lintScripts([
       story(0, 'My coffee opinions aside, this water is a remarkable blue today.'),
-      story(1, 'The engine and I disagree, but the cove ahead is worth the trip.'),
+      story(1, 'The truck and I disagree, but the cove ahead is worth the trip.'),
       story(2, 'Ray says hello. The old pier here has stood a hundred winters.'),
     ])
     expect(findings.length).toBeGreaterThanOrEqual(2)

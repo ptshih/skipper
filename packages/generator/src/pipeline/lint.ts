@@ -51,10 +51,10 @@ export interface LintFinding {
 
 // Personal-kit detectors — mirror generate.ts KIT_BEATS so the lint and the
 // generation-time signal agree on what "the kit" is.
-const KIT = [/dock guy/i, /\bRay\b/, /\bengine\b/i, /\bcoffee\b/i]
+const KIT = [/mechanic/i, /\bRay\b/, /\btruck\b/i, /\bcoffee\b/i]
 const kitInText = (t: string): boolean => KIT.some((re) => re.test(t))
 const DROP_KIT =
-  'Do NOT mention the personal kit (cousin Ray, the dock guy, the boat engine, or coffee) anywhere in this stop — close on the place itself.'
+  'Do NOT mention the personal kit (cousin Ray, the mechanic, the truck, or coffee) anywhere in this stop — close on the place itself.'
 
 // HARD-BANNED reveal wind-ups and AI/brochure tics — the persona prompt forbids
 // these outright ("just say the surprising thing plainly"), so flag on the FIRST
