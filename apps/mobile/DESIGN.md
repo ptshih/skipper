@@ -180,8 +180,16 @@ live in `voice.ts`. (Mirrors the generator's "persona lives in DELIVERY" rule.)
 - At most **one** moving/glowing amber element on screen at once (the car token
   _or_ the NOW glow, not a field of them) — peripheral-vision halation is a real
   night-driving distraction.
-- Respect Dynamic Type direction (sizes are starting points; don't cap user scaling
-  hard).
+- **Dynamic Type is intentional, not accidental** (`IN_CAR_MAX_FONT_SCALE` in
+  `tokens.ts`). SCROLLABLE / non-driving surfaces (Settings, Sign-in, the corridor +
+  tour lists, Legal) stay **uncapped** — full iOS Dynamic Type incl. the accessibility
+  (AX) sizes, so all real content honors WCAG 1.4.4. Only the few **glance-critical
+  in-car player surfaces** — the flanked transport labels, the mono timers, the NOW-card
+  title — cap growth (at ~1.35×, iOS's largest _standard_ size) so a label can't blow out
+  the fixed control row or truncate mid-word at 60mph. Nothing is lost on a capped
+  surface: those strings are short and mirrored by an icon + `accessibilityLabel` (timers
+  by the scrubber's spoken `accessibilityValue`). Stop-list auto-scroll multiplies
+  `STOP_ROW_HEIGHT` by `PixelRatio.getFontScale()` so it tracks grown rows.
 
 ## 9. Deferred ornament (earn it later — don't block on it)
 
@@ -198,7 +206,6 @@ on day one with emoji placeholders, then gets richer:
 - **Amber sunburst + postmark watermarks** behind hero headers / empty states
   (`expo-linear-gradient` or a static SVG — never animate color stops on Android).
 - **Splash/app icon** rework to the wordmark + badge (`assets/` is currently empty).
-- **Persist the theme override** to `expo-secure-store` (today it's in-memory).
 
 ## 10. How to extend
 

@@ -5,7 +5,7 @@
 // The center play/pause stays glow-less on purpose: the lit NOW card or the gliding car
 // token owns the single amber glow (DESIGN §8) — never a second one down here.
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
-import { space } from '../theme/tokens'
+import { IN_CAR_MAX_FONT_SCALE, space } from '../theme/tokens'
 import { Button } from './Button'
 import type { IconName } from './Icon'
 import { voice } from './voice'
@@ -46,6 +46,9 @@ export function TransportBar({
         <Button icon={single.icon} title={single.title} onPress={single.onPress} />
       ) : (
         <>
+          {/* Flanked transport row: cap label growth so a long resume label can't
+              truncate between the two ±15 buttons at large Dynamic Type (each button
+              also carries an icon + accessibilityLabel, so nothing is lost). */}
           <View style={styles.row}>
             <Button
               variant="secondary"
@@ -55,6 +58,7 @@ export function TransportBar({
               fullWidth={false}
               disabled={!canSeek}
               onPress={onSeekBack}
+              maxFontScale={IN_CAR_MAX_FONT_SCALE}
               style={styles.skip}
             />
             <Button
@@ -62,6 +66,7 @@ export function TransportBar({
               title={playing ? voice.cta.pause : playLabel}
               onPress={onPlayPause}
               glow={false}
+              maxFontScale={IN_CAR_MAX_FONT_SCALE}
               style={styles.flex}
             />
             <Button
@@ -72,6 +77,7 @@ export function TransportBar({
               fullWidth={false}
               disabled={!canSeek}
               onPress={onSeekForward}
+              maxFontScale={IN_CAR_MAX_FONT_SCALE}
               style={styles.skip}
             />
           </View>

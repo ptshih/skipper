@@ -135,3 +135,15 @@ export const hit = {
   min: 48,
   cta: 60,
 } as const
+
+// ── Dynamic Type policy ──────────────────────────────────────────────────────
+// Deliberate, NOT accidental: SCROLLABLE / non-driving surfaces (settings, sign-in,
+// the corridor + tour lists, legal) stay UNCAPPED so they honor the full iOS Dynamic
+// Type range incl. the accessibility (AX) sizes — WCAG 1.4.4 for all real content.
+// The few GLANCE-CRITICAL in-car player surfaces — the flanked transport labels, the
+// mono timers, the NOW-card title — cap growth here so a label can't blow out the
+// fixed control row or truncate mid-word at a 60mph glance. No information is lost on
+// a capped surface: those labels are short and mirrored by an icon + accessibilityLabel
+// (and the timer by the scrubber's spoken accessibilityValue). 1.35 ≈ iOS's largest
+// *standard* (non-accessibility) text size — generous, but bounded.
+export const IN_CAR_MAX_FONT_SCALE = 1.35

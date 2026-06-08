@@ -3,7 +3,7 @@
 // when the road reaches a stop, not on a timer. Reuses the @/ui player primitives;
 // the clock + fire-queue live in `useDrive`.
 import { useEffect, useRef } from 'react'
-import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, PixelRatio, ScrollView, StyleSheet, View } from 'react-native'
 import { Stack, useLocalSearchParams } from 'expo-router'
 import { useDrive } from '@/lib/useDrive'
 import { stopLabel } from '@/lib/labels'
@@ -37,12 +37,15 @@ export default function DriveScreen() {
   const listRef = useRef<ScrollView | null>(null)
 
   // Auto-scroll the stop list to the active (or next) stop as the drive progresses.
+  // Scale the row height by the user's font scale — rows are minHeight + grow with
+  // Dynamic Type, so a fixed STOP_ROW_HEIGHT would undershoot the target at large text.
   const focusSeq = d.activeSeq ?? d.nextSeq
   useEffect(() => {
     if (focusSeq == null) return
     const row = d.stops.findIndex((s) => s.seq === focusSeq)
+    const rowH = STOP_ROW_HEIGHT * PixelRatio.getFontScale()
     if (row >= 0)
-      listRef.current?.scrollTo({ y: Math.max(0, (row - 1) * STOP_ROW_HEIGHT), animated: true })
+      listRef.current?.scrollTo({ y: Math.max(0, (row - 1) * rowH), animated: true })
   }, [focusSeq, d.stops])
 
   if (d.phase === 'gate')

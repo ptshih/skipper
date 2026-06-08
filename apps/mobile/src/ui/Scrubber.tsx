@@ -18,7 +18,7 @@
 // increment/decrement jog ±15s (mirrors the skip buttons).
 import { useEffect, useRef, useState } from 'react'
 import { PanResponder, StyleSheet, View } from 'react-native'
-import { border, hit, space } from '../theme/tokens'
+import { IN_CAR_MAX_FONT_SCALE, border, hit, space } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'
 import { Text } from './Text'
 
@@ -176,10 +176,10 @@ export function Scrubber({
         />
       </View>
       <View style={styles.times}>
-        <Text variant="mono" color="inkDim">
+        <Text variant="mono" color="inkDim" maxFontSizeMultiplier={IN_CAR_MAX_FONT_SCALE}>
           {mmss(frac * durationMs)}
         </Text>
-        <Text variant="mono" color="inkDim">
+        <Text variant="mono" color="inkDim" maxFontSizeMultiplier={IN_CAR_MAX_FONT_SCALE}>
           {mmss(durationMs)}
         </Text>
       </View>

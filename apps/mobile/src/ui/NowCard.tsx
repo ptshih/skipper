@@ -3,14 +3,16 @@
 // preview player and (later) the live driving player.
 import type { ReactNode } from 'react'
 import { StyleSheet, View } from 'react-native'
-import { border, radius, space } from '../theme/tokens'
+import { IN_CAR_MAX_FONT_SCALE, border, radius, space } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'
 import { Text } from './Text'
 
 /** Reserved height (pt) for the player's NOW-content slot. Sized to a two-line NowCard
  *  (the tallest in-drive now-content) so the transport controls + stop list below hold a
  *  stable position when the content swaps to the shorter rolling strip. The scrubber's
- *  height is reserved separately (it stays mounted, just hidden, between stops). */
+ *  height is reserved separately (it stays mounted, just hidden, between stops).
+ *  Stays valid under Dynamic Type because the title/timer below cap at
+ *  IN_CAR_MAX_FONT_SCALE — a capped two-line title still fits this reserve. */
 export const NOW_AREA_RESERVE = 136
 
 export interface NowCardProps {
@@ -46,11 +48,16 @@ export function NowCard({ kicker, title, timer, glow = true, right, liveRegion }
         </Text>
         {right}
       </View>
-      <Text variant="placardTitle" color="ink" numberOfLines={2}>
+      <Text
+        variant="placardTitle"
+        color="ink"
+        numberOfLines={2}
+        maxFontSizeMultiplier={IN_CAR_MAX_FONT_SCALE}
+      >
         {title}
       </Text>
       {timer ? (
-        <Text variant="mono" color="inkDim">
+        <Text variant="mono" color="inkDim" maxFontSizeMultiplier={IN_CAR_MAX_FONT_SCALE}>
           {timer}
         </Text>
       ) : null}

@@ -3,6 +3,7 @@ import {
   AccessibilityInfo,
   ActivityIndicator,
   Animated,
+  PixelRatio,
   ScrollView,
   StyleSheet,
   View,
@@ -300,8 +301,10 @@ export default function PreviewScreen() {
     seekTarget.current = null // new clip → drop any seek target carried from the last one
     if (!data || activeSeq == null) return
     const row = data.stops.findIndex((s) => s.seq === activeSeq)
+    // Scale by font scale — rows grow with Dynamic Type, so a fixed height undershoots.
+    const rowH = STOP_ROW_HEIGHT * PixelRatio.getFontScale()
     if (row >= 0)
-      listRef.current?.scrollTo({ y: Math.max(0, (row - 1) * STOP_ROW_HEIGHT), animated: true })
+      listRef.current?.scrollTo({ y: Math.max(0, (row - 1) * rowH), animated: true })
   }, [activeSeq, data])
 
   // ---- A11y: announce the now-playing change for screen readers ----
