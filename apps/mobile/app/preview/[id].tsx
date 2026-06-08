@@ -102,8 +102,10 @@ export default function PreviewScreen() {
             audioDurationMs: s.audioDurationMs,
           })),
           tour.corridor.polyline as [number, number][],
-          // TEMP (music audition only — REVERT): stretch the between-stop drives to
-          // 12–20s so the drive loop can be heard sustaining + the fades breathe.
+          // Stretch the preview's compressed drive gaps to 12–20s (vs the engine's
+          // short 1.2–4s default) so the between-stop drive music has room to breathe
+          // in the simulated drive. Kept deliberately — this is preview-only pacing
+          // (the real GPS drive uses actual elapsed time, not these compressed gaps).
           { minGapSec: 12, maxGapSec: 20 },
         )
         setData({
