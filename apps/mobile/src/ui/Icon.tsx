@@ -30,6 +30,8 @@ export type IconName =
   | 'car'
   | 'day'
   | 'night'
+  | 'auto'
+  | 'settings'
 
 const IONICON: Record<IconName, ComponentProps<typeof Ionicons>['name']> = {
   // stop types
@@ -56,6 +58,8 @@ const IONICON: Record<IconName, ComponentProps<typeof Ionicons>['name']> = {
   car: 'car',
   day: 'sunny-outline',
   night: 'moon-outline',
+  auto: 'contrast-outline', // half-lit disc = "follow the phone" (system appearance)
+  settings: 'settings-outline',
 }
 
 export interface IconProps {

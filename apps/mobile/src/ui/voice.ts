@@ -49,5 +49,12 @@ export const voice = {
     signUpHeader: 'Come along for the ride',
     subhead: 'Mind the gap.',
   },
+  settings: {
+    appearance: 'APPEARANCE',
+    // Explains all three options + reassures that the default needs no fiddling: a
+    // night drive dims itself. Persona-light, still informative.
+    appearanceHint:
+      'Auto rides with your phone — dusk-dark when the sun clocks out, bright by day. Pin Day or Dusk to hold one mood.',
+  },
   guest: 'Riding as a guest',
 } as const

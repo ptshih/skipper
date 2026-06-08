@@ -5,7 +5,7 @@ import { listCorridors, type CorridorList } from '@/lib/api'
 import { signOut, useSession } from '@/lib/auth'
 import { useTheme } from '@/theme'
 import { space } from '@/theme/tokens'
-import { Badge, Button, Card, Screen, Text, voice } from '@/ui'
+import { Badge, Button, Card, HeaderIconButton, Screen, Text, voice } from '@/ui'
 
 // Browse corridors — anonymous-friendly. (Tapping a corridor opens its tours.)
 export default function CorridorsScreen() {
@@ -41,6 +41,17 @@ export default function CorridorsScreen() {
     }, [load]),
   )
 
+  // The settings gear (our themed circular chip), shared by headerRight (Android +
+  // iOS<26) and the iOS-26 *Items API below — the latter strips the Liquid Glass capsule
+  // via hidesSharedBackground. See app/_layout.tsx for the full rationale.
+  const settingsButton = (
+    <HeaderIconButton
+      name="settings"
+      accessibilityLabel="Settings"
+      onPress={() => router.push('/settings')}
+    />
+  )
+
   return (
     <Screen edges={['bottom']}>
       <Stack.Screen
@@ -50,6 +61,14 @@ export default function CorridorsScreen() {
               SKIPPER
             </Text>
           ),
+          // A single settings gear — home only, not global chrome. Houses the
+          // Auto/Day/Dusk appearance picker (and future prefs). On iOS 26 the *Items
+          // API strips the Liquid Glass capsule (the bright dusk disc); headerRight
+          // covers Android + iOS<26.
+          headerRight: () => settingsButton,
+          unstable_headerRightItems: () => [
+            { type: 'custom', hidesSharedBackground: true, element: settingsButton },
+          ],
         }}
       />
 
