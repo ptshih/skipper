@@ -219,11 +219,14 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
     )
     let geoHits = 0
     for (const { s, reason } of geoStops) {
-      // Query at the TRIGGER point (the POI snapped onto the road), not the POI centroid:
-      // it is literally "the rock under your tires," it is always on LAND (so it dodges the
-      // fine map's "water" units that force a fallback to a coarse, vaguer world-scale unit),
-      // and it matches the framing the narrator naturally reaches for ("the ground we're rolling over").
-      const geo = await geologyFacts(s.triggerLat, s.triggerLng)
+      // WHICH coordinate: for SPARSE/SCENIC stops, the TRIGGER point (POI snapped onto the
+      // road) — literally "the rock under your tires," always on LAND (dodges the fine map's
+      // "water" units that force a coarse fallback), matching the narrator's "ground we're
+      // rolling over" framing. For ICONIC stops we want the rock that MAKES the place, so we
+      // query the POI/landmark point itself (e.g. Emerald Bay's granite cliffs read as the
+      // Mesozoic intrusive batholith there, where the road below snaps onto valley alluvium).
+      const [glat, glng] = reason === 'iconic' ? [s.lat, s.lng] : [s.triggerLat, s.triggerLng]
+      const geo = await geologyFacts(glat, glng)
       if (geo) {
         s.geology = geo.facts
         s.geologyAttribution = geo.attribution
