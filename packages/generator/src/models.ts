@@ -37,8 +37,8 @@ export const NARRATION_MODEL_ALTERNATES = {
 // paramount). We hit the Cloud TTS REST endpoint (texttospeech.googleapis.com)
 // with a GEMINI-TTS voice so the work bills to the GCP project — GCP Welcome/trial
 // credits are NOT usable on the Gemini Developer API key; only Cloud TTS / Vertex
-// draw GCP credits. Cloud TTS uniquely gives the persona three things: the warm
-// Gemini "Sulafat" voice, a first-class natural-language STYLE prompt
+// draw GCP credits. Cloud TTS uniquely gives the persona three things: a natural,
+// steerable Gemini voice (the active pick is "Algenib" — see below), a first-class natural-language STYLE prompt
 // (input.prompt) to steer delivery, and LINEAR16 output so we get an EXACT duration
 // from the byte length (there is no /with-timestamps equivalent). Auth is OAuth/ADC
 // (text:synthesize takes no API key) — handled in pipeline/tts.ts. No ElevenLabs

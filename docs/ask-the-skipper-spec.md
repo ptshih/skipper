@@ -2,15 +2,17 @@
 
 > Self-contained, build-ready handoff. Grounded against the live repo (`apps/api/src/index.ts`, `apps/api/src/entitlements.ts`, `apps/api/src/auth.ts`, `packages/generator/src/pipeline/{narrate,tts,stt?,select,generate,http,wav}.ts`, `packages/generator/src/persona/skipper.ts`, `packages/generator/src/models.ts`, `packages/generator/src/config.ts`, `packages/shared/src/schemas.ts`, `packages/db/src/schema.ts`, `apps/mobile/`). Model/API facts verified against the `claude-api` skill (Opus 4.8 / Sonnet 4.6 / Haiku 4.5, caching minimums, effort support, the disabled-thinking preamble caveat, pricing, structured outputs) — see §5 and §11. As of the 2026-06-07 founder review, the decisions are **locked** (tagged **[DECIDED]**): Sonnet 4.6 live model, account-required gating (free + paid), hold-to-talk PTT, short per-stop multi-turn memory, current-stop ask scope, and the §A technical defaults. The only substantive open *decision* item is the **M4 cache-reuse drift flag** (§2, future-phase). A second technical-microscope review (2026-06-07) verified the load-bearing claims (grounding round-trip, import-graph safety, gating chain, the Anthropic/Google API facts, and MP3-on-unary-TTS) and sharpened the implementation details inline — no decisions reopened; the build-affecting fixes are the recorder re-prepare (§7), the `facts.extract` string-narrow (§6.3), per-leg deadline budgets (§6.3/§4.4), the `turnActive` freeze of player A's segment-driver (§7), aborting the in-flight ask on `seq` change (§3.2), gating Ask to `atStop` (§5.1), and input caps (§6.2).
 
+> **Reconciliation (2026-06-08, after the review above):** two production changes landed post-review, and this spec's body has been updated to match. (1) The TTS voice switched **Sulafat → Algenib** (`models.ts` `SKIPPER_VOICE_ID`; Sulafat retired as female). (2) The persona was recast **boat-captain → road-trip guide** (`skipper.ts`, `apps/mobile`) — so build against `SKIPPER_VOICE_ID`, never a hard-coded voice name, and read any lingering `[DECIDED 2026-06-07]` boat flavor through the road-trip persona. The live canonical preview is tour `9813e519` (`emerald-bay-run`, Algenib, road-trip).
+
 ---
 
 ## 1. Overview & vision
 
-Ask the Skipper lets a rider, mid-drive, hold a button, ask the Skipper a question out loud, and hear him answer in his own voice — grounded in the exact same facts the tour was built on, ducked over the narration, then drop them back into the tour where they left off. It is a **toy, driving-first** feature. The whole point is charm and trust: the captain you've been listening to turns and answers you, and when he doesn't know, he says so with a grin instead of making something up. Optimize for the builder and for charm, not for scale or latency.
+Ask the Skipper lets a rider, mid-drive, hold a button, ask the Skipper a question out loud, and hear him answer in his own voice — grounded in the exact same facts the tour was built on, ducked over the narration, then drop them back into the tour where they left off. It is a **toy, driving-first** feature. The whole point is charm and trust: the guide you've been listening to turns and answers you, and when he doesn't know, he says so with a grin instead of making something up. Optimize for the builder and for charm, not for scale or latency.
 
 **What success feels like in the car:** you're rolling past Emerald Bay, the Skipper finishes a line about Vikingsholm, you thumb the big button and say "who built that castle?" The tour dips, a soft bell, two seconds later the same voice comes back — "That'd be a woman named Lora Knight, folks, nineteen twenty-nine..." — and the narration swells back up. You never looked at the screen. You ask a follow-up he can't answer and he says "that one's not in my logbook, friend" and you laugh and trust him *more*, not less.
 
-**North star (one paragraph):** A grounded, in-persona, voice-to-voice Q&A turn layered *around* the existing tour — push-to-talk in, the current stop's frozen Wikipedia fact-well as the only source of truth, Claude Sonnet 4.6 (`claude-sonnet-4-6` — the fast tier, NOT the Opus narration model) for the answer, the same Google "Sulafat" voice for continuity, ducked over the tour, ~2–3s to first audio masked by a persona "let me check the charts" filler. The grounding well already exists on `pois.facts.extract`; the persona already exists in `SKIPPER_SYSTEM_PROMPT`; the auth wall, the TTS call, and the Anthropic call already exist in the generator. This feature is mostly *wiring and re-framing* — its highest-leverage new artifact is the ASK system prompt, exactly as the narration prompt is for the tour.
+**North star (one paragraph):** A grounded, in-persona, voice-to-voice Q&A turn layered *around* the existing tour — push-to-talk in, the current stop's frozen Wikipedia fact-well as the only source of truth, Claude Sonnet 4.6 (`claude-sonnet-4-6` — the fast tier, NOT the Opus narration model) for the answer, the same Google "Algenib" voice for continuity, ducked over the tour, ~2–3s to first audio masked by a persona "let me check the logbook" filler. The grounding well already exists on `pois.facts.extract`; the persona already exists in `SKIPPER_SYSTEM_PROMPT`; the auth wall, the TTS call, and the Anthropic call already exist in the generator. This feature is mostly *wiring and re-framing* — its highest-leverage new artifact is the ASK system prompt, exactly as the narration prompt is for the tour.
 
 ---
 
@@ -36,7 +38,7 @@ The load-bearing facts that make this enforceable:
 ## 3. UX & interaction design
 
 ### 3.0 Design stance
-Eyes never leave the road; the screen is a status light, not a UI. The voice is the product (answers are Sulafat audio, never chime-and-text as the primary path). Grounding refusals are delivered with warmth. Every failure is the Skipper's voice in character — never a toast, never a raw error, never silence.
+Eyes never leave the road; the screen is a status light, not a UI. The voice is the product (answers are Algenib audio, never chime-and-text as the primary path). Grounding refusals are delivered with warmth. Every failure is the Skipper's voice in character — never a toast, never a raw error, never silence.
 
 ### 3.1 Invocation — push-to-talk (no wake word) **[DECIDED 2026-06-07: push-to-talk, hold-to-talk; wake word = Phase G]**
 A single large "Ask the Skipper" tap target, the biggest control on the player when a tour is playing. **Build on the preview/simulated-drive player first** (`apps/mobile/app/preview/[id].tsx`) — it owns the only working audio stack — then carry the same code into the live driving player (`apps/mobile/app/tour/[id].tsx`, currently a TODO stub at lines 22-23). Tap target ≥ 88pt, mounted-phone friendly, placed below the transport row (the `<View style={styles.controls}>` at `preview/[id].tsx:414-445`), reusing `@/ui` `Button`.
@@ -50,10 +52,10 @@ Five beats, runnable entirely by ear:
 ```
 [hold PTT] → earcon + duck tour → LISTENING → [release] → THINKING (filler, looping) → SKIPPER ANSWERS → resume tour
 ```
-1. **Cue (press, <100ms, pre-network):** duck the tour to ~0.2 (do not pause — see §3.4), play a short warm earcon (soft boat-bell ~250ms), flip the iOS session to recording, start `recorder.record()`. One light haptic. **[DECIDED — default: synthetic boat-bell earcon (avoids the ~300ms a spoken "Aye?" would add).]**
+1. **Cue (press, <100ms, pre-network):** duck the tour to ~0.2 (do not pause — see §3.4), play a short warm earcon (soft chime ~250ms), flip the iOS session to recording, start `recorder.record()`. One light haptic. **[DECIDED — default: synthetic chime earcon (avoids the ~300ms a spoken "Aye?" would add).]**
 2. **Listening:** button morphs to a pulsing "Listening…" state; ducked tour murmurs underneath (continuity + proof of life).
-3. **Thinking:** on release, stop recording, **restore the playback session bracket** (§3.4 case 2), fire `askTour()`. Immediately play a bundled Sulafat **filler clip** ("Let me check the logbook, friend…") on the **answer player (B)** — it starts at t≈0 and masks the pipeline. **The filler loops** (re-`replace`+`play` the same clip) if the answer hasn't arrived when it ends; the filler's `didJustFinish` NEVER resumes the tour (see the guard below). Rotate 3–5 **founder-approved** variants (these + the refusal lines are persona artifacts to own, like the narration prompt).
-4. **Skipper answers:** when the answer audio (Sulafat MP3) arrives, set B's role to `answer` and `replace`+`play` it on B; the tour (player A) stays ducked. Optionally show a dim "you asked: …" caption (passenger affordance only — never required).
+3. **Thinking:** on release, stop recording, **restore the playback session bracket** (§3.4 case 2), fire `askTour()`. Immediately play a bundled Algenib **filler clip** ("Let me check the logbook, friend…") on the **answer player (B)** — it starts at t≈0 and masks the pipeline. **The filler loops** (re-`replace`+`play` the same clip) if the answer hasn't arrived when it ends; the filler's `didJustFinish` NEVER resumes the tour (see the guard below). Rotate 3–5 **founder-approved** variants (these + the refusal lines are persona artifacts to own, like the narration prompt).
+4. **Skipper answers:** when the answer audio (Algenib MP3) arrives, set B's role to `answer` and `replace`+`play` it on B; the tour (player A) stays ducked. Optionally show a dim "you asked: …" caption (passenger affordance only — never required).
 5. **Resume:** restore the tour to full volume (and `play()` if it was paused) **only on the ANSWER clip's own `didJustFinish`** — guarded, never the filler's. One soft haptic.
 
 **The filler↔answer guard (mirror of `preview/[id].tsx:226-245` `sawFresh`/`finishedIdx`).** Player B holds two different sources in one turn; `replace()` updates status async, so a stale `didJustFinish` from the *filler* can fire after the *answer* is requested, prematurely resuming the tour. Guard with per-clip role + freshness state — **`bRole`/`bSawFresh` MUST be `useRef` (read live via `.current`), not `useState`** (a stale-closure `bRole` lets the filler loop re-`replace` over the answer), and note player B has **TWO `replace()` writers** (the `didJustFinish` loop AND the network answer-arrival) — one more than the single-driver preview it mirrors, so ref-discipline is load-bearing here:
@@ -81,7 +83,7 @@ Five beats, runnable entirely by ear:
 - **Audio + haptics carry the whole turn** (earcon = listening; voice = answering; a tap = done). A driver who never looks can complete a full turn. Transcript/answer text are passenger affordances only. No confirmation dialogs, no "did you mean," no read-required retries.
 
 ### 3.6 Every error / offline state — all spoken in persona
-Pre-render bundled Sulafat clips (rotating set per case) so the offline/timeout paths work *offline*. Grounding refusals are correct answers and are **not** rate-counted as failures. **No dead air, ever** — every error path restores the tour to full volume and the apology plays over the swelling-back narration.
+Pre-render bundled Algenib clips (rotating set per case) so the offline/timeout paths work *offline*. Grounding refusals are correct answers and are **not** rate-counted as failures. **No dead air, ever** — every error path restores the tour to full volume and the apology plays over the swelling-back narration.
 
 | Case | Detection | Behavior | Skipper says (persona) |
 |---|---|---|---|
@@ -92,7 +94,7 @@ Pre-render bundled Sulafat clips (rotating set per case) so the offline/timeout 
 | **Out of well (story stop)** | model declines with a well present (`answer` is a refusal; `grounded` stays `true`) | **the core refusal** — charm + optionally offer what's on the sheet | "That one's not in my logbook, friend. I won't make something up and call it history." |
 | Scenic/break (no well) | `pois.facts == null` → server refuses without the LLM (`grounded:false`) | scenic-mood refusal | "No story on this stretch, folks — just water and good light. Ask me at the next real stop." |
 | Volatile on a break stop ("is it open?") | break stop, volatile question | honest deflect, no invented hours/ratings | "Couldn't tell you the hours — I point at the dock, I don't run the kitchen." |
-| Off-topic ("weather tomorrow", "play music") | model classifies out-of-scope | in-character bounce | "Ha — I'm just the captain, not the whole crew. Ask me what's off the bow." |
+| Off-topic ("weather tomorrow", "play music") | model classifies out-of-scope | in-character bounce | "Ha — I'm just the guide, not the whole crew. Ask me what's out the window." |
 | Unsafe / distracting | model + safety guard | refuse, nudge safe driving | "Let's keep both hands on the wheel and eyes on the road, friend." |
 | Server error / timeout | 5xx / deadline (503) | abort, restore, one-tap retry | "Lost you a second there — my cousin Ray was meant to fix this radio." |
 | Rate-limited | 429 | persona throttle | "Easy now — you've worn me out, folks. Ask me again in a minute." |
@@ -101,7 +103,7 @@ Pre-render bundled Sulafat clips (rotating set per case) so the offline/timeout 
 
 **Hard client deadline** (AbortController, ~6–8s) on the ask request. The client gives `askTour()` its own `AbortController` and aborts on deadline/cancel; the *server* enforces its own bounded deadline across all three upstream legs (§5.4, §6.3) so the deadline is real end-to-end, not just a client give-up that strands an upstream retry storm. **Caveat:** `getAuth().getAccessToken()` (the OAuth step preceding the STT and TTS fetches, `tts.ts:55`) takes no `AbortSignal`, so the signal covers the HTTP call but not token acquisition — the `setTimeout`/`Promise.race` is the *real* (load-bearing) backstop on a cold/expiring token, and an aborted token fetch leaks one orphaned request (fine at toy scale; cache/pre-warm the token to avoid it). (The generator's `fetchWithRetry` at `http.ts:18-38` has **no timeout** and a compounding 0.5→1→2s backoff — the ask path must NOT use it; see §6.8.)
 
-### 3.7 Sample dialog (Sulafat voice, Emerald Bay run, at Vikingsholm — assumes a deep well: 1929 mansion, Lora Knight, Scandinavian masons, built without nails; **verify depth per §12 step 0**)
+### 3.7 Sample dialog (Algenib voice, Emerald Bay run, at Vikingsholm — assumes a deep well: 1929 mansion, Lora Knight, Scandinavian masons, built without nails; **verify depth per §12 step 0**)
 
 > *[earcon: soft bell; tour ducks]*
 > **Rider:** "Hey Skipper — who actually built that castle?"
@@ -112,7 +114,7 @@ Pre-render bundled Sulafat clips (rotating set per case) so the offline/timeout 
 > **Skipper:** "Ha — that one's not in my logbook, friend. I've got who built her and how, but not what it ran. I won't put a number on it just to have one — I'd only get it wrong, and then you'd never trust me on the true stuff."
 
 > **Rider:** "Can you turn up my music?"
-> **Skipper:** "I'm just the captain, not the deejay — my cousin Ray handles requests, and you've met Ray. Ask me what's off the bow and I'm all yours."
+> **Skipper:** "I'm just the guide, not the deejay — my cousin Ray handles requests, and you've met Ray. Ask me what's out the window and I'm all yours."
 
 The refusal borrows the persona register already in the prompt ("that's about all I have got, folks" / "no story here") and turns the constraint into trust-building — the entire bet.
 
@@ -130,8 +132,8 @@ Three homes: **on-device** (Expo/RN), **our API** (`apps/api`, Hono, in the bun 
 │      │         allowsRecording bracket §3.4 case 2)   preview/[id].tsx          │
 │      │                                                 │ volume 1.0→0.2 (duck)  │
 │      ▼                                                 ▼                        │
-│  filler clip (bundled Sulafat, LOOPS) ─▶ play t≈0  answer player (B, 2nd        │
-│      │  "let me check the charts…"  bRole/bSawFresh useAudioPlayer) ◀─ answer   │
+│  filler clip (bundled Algenib, LOOPS) ─▶ play t≈0  answer player (B, 2nd        │
+│      │  "let me check the logbook…" bRole/bSawFresh useAudioPlayer) ◀─ answer   │
 │  askTour({tourId, seq, audio|question}) ─ HTTPS (Better Auth acct cookie       │
 │         (own AbortController ~6-8s)        account required) ───┐  ▲          │
 └──────────────────────────────────────────────────────────────────│──│─────────┘
@@ -151,7 +153,7 @@ Three homes: **on-device** (Expo/RN), **our API** (`apps/api`, Hono, in the bun 
                                                      ▼         ▼          ▼
                                               ┌──────────┐ ┌────────┐ ┌──────────────┐
                                               │STT v2    │ │Anthropic│ │Google TTS    │
-                                              │_:recognize│ │Messages │ │Sulafat       │
+                                              │_:recognize│ │Messages │ │Algenib       │
                                               │global/ADC│ │(stream) │ │text:synthesize│
                                               │bounded   │ │+signal  │ │MP3, bounded   │
                                               └──────────┘ └────────┘ └──────────────┘
@@ -167,28 +169,28 @@ Placement facts:
 | -1 | Ensure ACCOUNT | device | Ask requires a free/paid account. If the rider is anonymous or signed-out, tapping Ask opens sign-up/sign-in (the existing `needsAccount` flow) instead of asking — no anonymous bootstrap |
 | 0 | Tap PTT | device | snapshot session mode, set `allowsRecording:true`, duck A to ~0.2; `NSMicrophoneUsageDescription` must exist (native rebuild) |
 | 1 | Capture | device | `useAudioRecorder` with `ASK_RECORDING` (AAC/m4a, 16k mono); **`prepareToRecordAsync()` before each `record()`** (else turn 2 fails to capture); on release stop, read `uri`, **restore the session bracket in `finally`** |
-| 1b | Play filler | device | bundled Sulafat clip on player B, `bRole='filler'`; **loops** until the answer is ready |
+| 1b | Play filler | device | bundled Algenib clip on player B, `bRole='filler'`; **loops** until the answer is ready |
 | 2 | Send | device→API | `askTour()` with its own AbortController; **server-STT uploads base64 audio in JSON; client-STT sends text** (see §6/§10) |
 | 3 | Gate + identity + rate | API | `withSession` + `loadTourGated` + **`requireAccount`** (anonymous/none → 401) + rate gate keyed on the account `user.id` |
 | 4 | Load well | API | corridors select (region/name) + one select `tour_stops→pois` for `(tourId, seq)`; `facts=null` ⇒ **short-circuit to canned refusal, never call LLM** |
 | 5 | (a) STT | provider | Google STT v2 `_:recognize`, location `global`, model `latest_short`, `autoDecodingConfig`, reuse TTS's ADC → transcript (skip if client sent text); **bounded fetch, deadline signal** |
 | 6 | (b) Answer | provider | Anthropic Messages, **streaming**, fast model (§5), `ASK_SKIPPER_SYSTEM_PROMPT` cached, answer-sheet user turn; **SDK `{ signal }` = deadline signal** |
-| 7 | (c) TTS | provider | `synthesizeAsk(answer, signal)` Sulafat MP3; **own bounded fetch, deadline signal** (NOT `synthesize()`/`fetchWithRetry`) |
+| 7 | (c) TTS | provider | `synthesizeAsk(answer, signal)` Algenib MP3; **own bounded fetch, deadline signal** (NOT `synthesize()`/`fetchWithRetry`) |
 | 8 | Return | API→device | inline base64 MP3 (ephemeral, behind the wall — skips R2 write+presign) |
 | 9 | Play + restore | device | on answer arrival set `bRole='answer'`, `replace`+`play` on B; restore A to 1.0 only on the **answer's** `didJustFinish` |
 
 ### 4.3 KEY DECISION — Composed pipeline vs. unified realtime voice API
-**Recommendation: composed pipeline** (STT → Claude → Sulafat TTS), **not** a unified realtime voice API.
+**Recommendation: composed pipeline** (STT → Claude → Algenib TTS), **not** a unified realtime voice API.
 
 | Prior | Composed pipeline | Unified realtime (Gemini Live / OpenAI Realtime) |
 |---|---|---|
-| Keep Sulafat voice (charm) | ✅ reuses Cloud TTS with `SKIPPER_VOICE_ID` — identical timbre | ❌ realtime APIs speak in *their own* voices — different narrator mid-tour. This alone kills it ("persona is the product") |
+| Keep Algenib voice (charm) | ✅ reuses Cloud TTS with `SKIPPER_VOICE_ID` — identical timbre | ❌ realtime APIs speak in *their own* voices — different narrator mid-tour. This alone kills it ("persona is the product") |
 | Grounding via Claude | ✅ "you only know what you are told" + cached prompt + per-POI well | ⚠️ grounding becomes a different model's adherence; you lose the exact mechanism the feature is built on |
 | ~2–3s tolerable | ✅ hits it, masked by the filler | sub-second advantage is real but unneeded |
 | Toy / reuse | ✅ reuses the persona prompt, Cloud TTS, the auth wall, the ADC | ❌ new vendor, SDK, bidirectional-audio RN plumbing, billing |
 | Existing stack (GCP+Anthropic) | ✅ stays on two wired clouds | ❌ adds a third, inverted integration |
 
-Reconsider realtime only if the founder drops Sulafat continuity **and** sub-second becomes hard-required **and** grounding can move to the realtime model — none hold today. **Inline base64 vs R2-presigned answer audio:** recommend inline (ephemeral, lower latency, already gated; R2+presign only buys replay/cache). **[DECIDED — default: inline base64.]**
+Reconsider realtime only if the founder drops Algenib continuity **and** sub-second becomes hard-required **and** grounding can move to the realtime model — none hold today. **Inline base64 vs R2-presigned answer audio:** recommend inline (ephemeral, lower latency, already gated; R2+presign only buys replay/cache). **[DECIDED — default: inline base64.]**
 
 ### 4.4 Latency budget + persona masking
 > **Caveat:** per project memory the Google Cloud TTS path has been built + unit-tested but **never run live** (GCP creds not wired) — there are **no measured numbers**. STT v2 is likewise unrun here. Treat STT/TTS rows as estimates to validate against **one real call** before committing to the batch path. The Opus→Sonnet swap and streaming are the safe levers; TTS timing is the unknown.
@@ -200,11 +202,11 @@ Estimated time-to-first-answer-audio (short reply ~60–100 output tokens), serv
 | STT (`_:recognize`, short) | ~0.3–0.8s | skipped if client STT |
 | Claude TTFT (Sonnet 4.6, thinking disabled, streamed) | ~0.4–0.9s | Opus 4.8 here would be *several seconds* — why we swap |
 | Claude full short answer | ~0.8–1.6s | first sentence ready well before this |
-| TTS first clip (Sulafat batch) | ~1–3s **(unmeasured)** | `gemini-2.5-flash-tts` is the documented faster swap |
+| TTS first clip (Algenib batch) | ~1–3s **(unmeasured)** | `gemini-2.5-flash-tts` is the documented faster swap |
 | Return + start playback | ~0.2–0.5s | inline base64; `replace()`+`play()` |
 
 - **Naive serial:** ~3.5–5s (over the ~2–3s feel-target, but under the 6–8s abort deadline — the MVP ships this, masked by the looping filler; see §10 row 6). **Pipelined** (stream LLM, synthesize the first sentence as it completes): ~2.5–3.5s (in tolerance).
-- **Masking is what makes it feel instant:** (1) immediate Sulafat filler at t≈0, **looping** until the answer is ready, covers the whole pipeline; (2) duck-don't-stop so the tour never goes dead; (3) pipelined real answer arrives behind the filler; (4) hard AbortController deadline (threaded into all three legs) + persona deflection on miss.
+- **Masking is what makes it feel instant:** (1) immediate Algenib filler at t≈0, **looping** until the answer is ready, covers the whole pipeline; (2) duck-don't-stop so the tour never goes dead; (3) pipelined real answer arrives behind the filler; (4) hard AbortController deadline (threaded into all three legs) + persona deflection on miss.
 
 ### 4.5 Online-only + dead-zone degradation **[DECIDED 2026-06-07: online-only MVP]**
 This *inverts* the offline-first tour invariant — tour audio stays offline, only Ask needs the network at question-time. Pre-flight connectivity check before recording (if offline, don't open the mic — dim the button, play the bundled deflection). Download the deflection clips *with the tour* so they're available in dead zones. **Distinguish the two refusals:** the dead-zone deflection ("can't raise the shore") is a *connectivity* failure (client-side/offline); the grounding refusal ("not in my logbook") is a *content* outcome (model declines with a well, or the scenic/break short-circuit). On-device STT/LLM fallback is explicitly later-phase.
@@ -340,7 +342,7 @@ export const askTour = async (tourId: string, body: AskRequest, signal?: AbortSi
 5. Load context: `select name, region from corridors where id = tour.corridorId` (mirror `index.ts:134-138`); then one select joining `tour_stops→pois→poi_content` for `(tourId, seq)` → `{ name, kind, stopType, facts, attribution }` plus ±1 neighbor names. No active-stop row → 404.
 6. **If `pois.facts == null` (scenic/break) → skip the LLM entirely:** return a canned in-persona refusal, `grounded:false`, synthesized via `synthesizeAsk`, done. This is the load-bearing anti-hallucination gate — the LLM is only ever called *with* a non-empty well.
 7. Else create one `AbortController` (~6–8s TOTAL deadline via `setTimeout(() => ac.abort(), …)`, also raced by `Promise.race`) and thread `ac.signal` into **all three legs** — but **budget per leg** (e.g. STT ≤1.5s, LLM ≤3s, TTS ≤4s), NOT one flat clock: otherwise a slow STT+LLM leaves nothing for TTS and the abort fires *during* `synthesizeAsk`, discarding a fully-computed correct answer and 503-ing the rider (§4.4). Since `askAnswer.audio` is non-optional there's no text-only salvage, so once `answer` exists prefer giving TTS its own deadline / a canned-but-correct delivery over a 503. Legs: `transcribe(audio.dataB64, audio.mimeType, ac.signal)` → transcript (422 if empty, skip if `question` sent); then **narrow the well to a string** — `const extract = typeof facts.extract === 'string' ? facts.extract : ''` (`PoiFacts` is `Record<string, unknown>` so `facts.extract` is `unknown`; this satisfies the `tsc --noEmit` gate, and an empty string would have short-circuited at step 6 anyway) — then `answerQuestion({ region, corridor, place: name, kind, extract, neighbors, jokeLevel, persona, question, signal: ac.signal })` → `{ answer, model }`.
-8. `synthesizeAsk(answer, ac.signal)` → Sulafat **MP3** `{ audio, mime:'audio/mpeg', durationMs:null }` (§6.4).
+8. `synthesizeAsk(answer, ac.signal)` → Algenib **MP3** `{ audio, mime:'audio/mpeg', durationMs:null }` (§6.4).
 9. (Phase D+) insert `ask_turns` row (§6.5) — single INSERT, no txn.
 10. Return `{ transcript, answer, grounded: facts!=null, audio:{ dataB64, mimeType:'audio/mpeg', durationMs:null }, attribution: facts!=null ? stop.attribution : null }`.
 
@@ -430,7 +432,7 @@ The API today depends on `hono`, `drizzle-orm`, `better-auth`, `@better-auth/exp
 5. **Answer audio from inline base64** — `expo-audio` can't play a `data:`/base64 URI, so decode the MP3 to a temp file (**`expo-file-system`** — add it to `apps/mobile/package.json`; it's only present transitively today — via `File`/`writeAsStringAsync` with base64 encoding) then `B.replace({ uri })` + `play()`. NB the existing `:172,:183` pattern loads a *remote presigned https URL*, not a base64→temp-file, so the local-decode step is genuinely new.
 6. **Grounding handle plumbing** — send `{ tourId, seq: activeSeq }` (`activeSeq` already computed, `:248`) and let the server resolve the well. (`poiContentId` is dropped from `PreviewStop`, `apps/mobile/src/lib/preview.ts:52-59` — sending `seq` avoids re-threading it.)
 7. **Client API call** — `askTour(tourId, body, signal)` with a per-turn `AbortController` (~6–8s + cancel/barge-in); account cookie via `fetchJson`; **401 → `needsAccount` → route to sign-up** (do NOT mint an anonymous session and retry).
-8. **Bundled Sulafat clips** — earcon (optional), thinking-fillers (3–5, designed to loop cleanly), and one per error/offline case, shipped with the app so offline/timeout paths work offline.
+8. **Bundled Algenib clips** — earcon (optional), thinking-fillers (3–5, designed to loop cleanly), and one per error/offline case, shipped with the app so offline/timeout paths work offline.
 9. **State machine** — `IDLE → LISTENING → THINKING → ANSWERING → IDLE`, single turn at a time; a press during ANSWERING/THINKING cuts B, aborts the request, restores the session/volume bracket, and re-enters LISTENING (or IDLE). Centralize duck/restore + abort so no path leaks a half-ducked tour or a live request; never let a turn change the tour's `idx` or trigger its `didJustFinish`. **This needs an explicit `turnActive` flag that freezes BOTH the segment-driver effect (`preview/[id].tsx:138-223`) AND the `didJustFinish` advance (`:230-245`) for the turn's duration** — under duck-don't-pause player A keeps playing, so its clip naturally finishes mid-turn → `idx++` → the driver pauses A on a silent segment, and §3.2 beat-5's blind `play()` then replays the *previous* clip at full volume (no `replace()` on silent segs). On resume, re-derive A's correct state from the current segment instead of a bare `play()`, and suppress the `:176` Now-Playing write during an answer (§3.5).
 
 The live driving player (`apps/mobile/app/tour/[id].tsx`) does not exist yet — prototype on preview, carry forward. Remember the offline-first-tour vs online-only-Ask split: degrade in persona, never hang.
@@ -440,9 +442,9 @@ The live driving player (`apps/mobile/app/tour/[id].tsx`) does not exist yet —
 ## 8. MVP scope vs full vision
 
 ### Thinnest shippable MVP (Phases A–D)
-One sentence: **push-to-talk → server STT (STT v2 `_:recognize`) → Claude (`claude-sonnet-4-6`) grounded to the CURRENT stop's `pois.facts.extract` only → Sulafat MP3 TTS → duck-and-play on a second player in the simulated preview player. Online-only, one corridor (the existing `emerald-bay-run` preview tour `5ef6e531…`).**
+One sentence: **push-to-talk → server STT (STT v2 `_:recognize`) → Claude (`claude-sonnet-4-6`) grounded to the CURRENT stop's `pois.facts.extract` only → Algenib MP3 TTS → duck-and-play on a second player in the simulated preview player. Online-only, one corridor (the existing `emerald-bay-run` preview tour `9813e519…`).**
 
-In scope: `POST /tours/:tourId/ask` behind `withSession` + `loadTourGated` + **`requireAccount`** (account-only — anonymous → 401); single-stop grounding; scenic/break short-circuit refusal; `ASK_SKIPPER_SYSTEM_PROMPT`; server STT; Sulafat MP3 answer; inline base64; PTT on the preview player with the bracketed duck/resume + filler-loop guard.
+In scope: `POST /tours/:tourId/ask` behind `withSession` + `loadTourGated` + **`requireAccount`** (account-only — anonymous → 401); single-stop grounding; scenic/break short-circuit refusal; `ASK_SKIPPER_SYSTEM_PROMPT`; server STT; Algenib MP3 answer; inline base64; PTT on the preview player with the bracketed duck/resume + filler-loop guard.
 
 Explicitly OUT of MVP: deixis-as-behavior / multi-stop context (MVP already loads neighbor NAMES for comprehension per §5.1 but resolves any neighbor reference to a refusal; Phase E upgrades that to acting on the names — still names only, never facts); streaming-LLM + per-sentence-TTS pipelining (Phase F); wake word; on-device STT/LLM dead-zone fallback (Phase G); persisted `ask_turns` + real per-tier rate limit (Phase D/E; in-memory bucket stopgap); live Places data for "is it open?" (stays a refusal); R2 caching/replay of answer audio.
 
@@ -473,7 +475,7 @@ Explicitly OUT of MVP: deixis-as-behavior / multi-stop context (MVP already load
 7. Register `POST /tours/:tourId/ask` in `index.ts` (after line 201) with `withSession` + **`requireAccount`** + new `apps/api/src/ask.ts` (§6.3): corridor select, in-memory rate bucket, scenic/break short-circuit. *Accept:* curl with `{seq, question}` + **free-account** cookie returns `{answer, grounded}`; **anonymous cookie → 401 `account_required`**; no-cookie → 401.
 
 **Phase B — voice out:**
-8. Add `encoding` param to `buildSynthesisRequest`/`tts.ts:35` + `synthesizeAsk` (MP3, own bounded fetch, **no `wav.ts`**, `durationMs:null`); return inline base64. *Accept:* decoded `audio.dataB64` plays in the same Sulafat voice as the tour; bytes are valid MP3 (not WAV-wrapped).
+8. Add `encoding` param to `buildSynthesisRequest`/`tts.ts:35` + `synthesizeAsk` (MP3, own bounded fetch, **no `wav.ts`**, `durationMs:null`); return inline base64. *Accept:* decoded `audio.dataB64` plays in the same Algenib voice as the tour; bytes are valid MP3 (not WAV-wrapped).
 
 **Phase C — voice in:**
 9. `packages/generator/src/pipeline/stt.ts` (`_:recognize`, `global`, `latest_short`, `autoDecodingConfig`, reuse `getAuth()`, bounded `signal`) + handler accepts `audio`; pin `ASK_RECORDING`. *Accept:* a spoken AAC/m4a clip → transcript → grounded spoken answer end-to-end; record wall-clock to first audio vs the ~2–3s budget; confirm AAC decodes (else flip to the WAV preset).
@@ -505,7 +507,7 @@ All rows below are **DECIDED** as their recommendation, per the founder review o
 | 8 | `ask_turns` log in MVP | **Defer to Phase D/E**; start with the in-memory bucket. |
 | 9 | Surface: preview vs live player | **Preview first** — it owns the only working `expo-audio` stack. |
 | 10 | Invocation | ✅ **DECIDED (founder, 2026-06-07): push-to-talk, HOLD-to-talk.** Tap-toggle = accessibility fallback only. Wake word = Phase G. |
-| 11 | Earcon identity | **Synthetic boat-bell** over a Sulafat "Aye?". |
+| 11 | Earcon identity | **Synthetic chime** over an Algenib "Aye?". |
 | 12 | Scenic/break asking | **Always-allow-and-refuse** — the refusal is the charm. |
 | 13 | Per-turn memory | ✅ **DECIDED (founder, 2026-06-07): short multi-turn memory, per-stop** (last ≤2 Q&A, resets on stop change). Facts still only from the current well (§2); client sends `history`, clears on `seq` change. |
 | 14 | Deixis | **Active-stop-only** for MVP; never load multiple wells. |
@@ -521,7 +523,7 @@ All rows below are **DECIDED** as their recommendation, per the founder review o
 **Per-question cost (order-of-magnitude — verify before locking; verified unit prices):**
 - **STT** (Google STT v2 standard ~$0.016/min — the cited ~$0.024 is the v1/AWS rate, so this is conservative): a ~10s utterance ≈ **$0.003–0.004**.
 - **LLM** (system prompt cached ~2–3K tokens read at ~0.1×; well ~1.5K uncached input; output ~120 tokens): **Sonnet 4.6 ($3/$15) ≈ $0.007/question**; **Haiku 4.5 ($1/$5) ≈ $0.003/question**.
-- **TTS** (Sulafat `gemini-2.5-pro-tts`): the **least-known cost** and heaviest, batch-only voice; **flag to measure** (never run live). `gemini-2.5-flash-tts` is the cheaper/faster swap (Phase F).
+- **TTS** (Algenib `gemini-2.5-pro-tts`): the **least-known cost** and heaviest, batch-only voice; **flag to measure** (never run live). `gemini-2.5-flash-tts` is the cheaper/faster swap (Phase F).
 
 All-in ≈ **$0.01–$0.03/question**, LLM+TTS-dominated. At toy volume this is pennies — **the rate limit is for abuse, not cost.**
 
@@ -539,9 +541,9 @@ All-in ≈ **$0.01–$0.03/question**, LLM+TTS-dominated. At toy volume this is 
 
 ## 12. End-to-end manual test script
 
-Run the API with creds (`bun run dev` wraps dotenvx). Use the existing `emerald-bay-run` preview tour (`5ef6e531…`, ready/preview).
+Run the API with creds (`bun run dev` wraps dotenvx). Use the existing `emerald-bay-run` preview tour (`9813e519…`, ready/preview).
 
-**Step 0 — verify well depth (do first).** The deep-extract code (`generate.ts:165-184`) was added after the first generation. Inspect a story stop's `pois.facts.extract` length for `5ef6e531`: if it's ~600 chars (`EXTRACT_CHARS` lead) rather than up to 4000 (`DEEP_EXTRACT_CHARS`), the "rich well" asserts (Vikingsholm/Lora Knight depth) may not hold — **regenerate the tour** (the deepening is idempotent on regen) or pick a freshly generated deep tour before relying on §3.7's example. Grounding correctness holds either way; only depth changes.
+**Step 0 — verify well depth (do first).** The deep-extract code (`generate.ts:165-184`) was added after the first generation. Inspect a story stop's `pois.facts.extract` length for `9813e519`: if it's ~600 chars (`EXTRACT_CHARS` lead) rather than up to 4000 (`DEEP_EXTRACT_CHARS`), the "rich well" asserts (Vikingsholm/Lora Knight depth) may not hold — **regenerate the tour** (the deepening is idempotent on regen) or pick a freshly generated deep tour before relying on §3.7's example. Grounding correctness holds either way; only depth changes.
 
 **Server-only (curl, before the app):**
 1. `POST $API/tours/<previewId>/ask` with a **free-account cookie**, body `{ "seq": <story-seq>, "audio": {...} }` (or `{ "seq", "question" }`) → 200, `grounded:true`, plausible in-persona `answer` (no leading meta), non-empty `audio.dataB64`. **Anonymous cookie OR no cookie → 401 `account_required`.**
@@ -549,7 +551,7 @@ Run the API with creds (`bun run dev` wraps dotenvx). Use the existing `emerald-
 3. `seq=<scenic-seq>` → `grounded:false` refusal; confirm via logs that **no Anthropic call was made**.
 4. `seq=<break-seq>`, "is it open?" → refusal (no volatile data; honest source = Places, deferred).
 5. Free/paid account → 200 on any ready tour; **anonymous session → 401 `account_required` (even on the preview tour)**; no session → 401.
-6. Decode `audio.dataB64` to a file — confirm it's valid **MP3** in the Sulafat voice (not a corrupted WAV-wrapped blob).
+6. Decode `audio.dataB64` to a file — confirm it's valid **MP3** in the Algenib voice (not a corrupted WAV-wrapped blob).
 7. Exceed the per-tier cap → 429. Force an upstream timeout (e.g. unreachable STT host) → all legs abort, 503 `skipper_unreachable`.
 8. **Grounding audit:** run the fixed question set against 3–4 story stops; eyeball that every grounded answer's place-facts appear in that stop's `facts.extract`.
 

@@ -52,7 +52,7 @@ scale-for-a-market, pick polish.
   stateless — no interactive transactions; use `db.batch`), hono 4.12.23,
   @anthropic-ai/sdk 0.102.0. **TTS = Google Cloud Text-to-Speech via REST** (no SDK
   — raw `fetch` to `texttospeech.googleapis.com/v1/text:synthesize` with a
-  Gemini-TTS voice (`gemini-2.5-pro-tts`, "Sulafat"); OAuth/ADC via
+  Gemini-TTS voice (`gemini-2.5-pro-tts`, "Algenib"); OAuth/ADC via
   `google-auth-library`, NO API key; returns LINEAR16 PCM → we wrap a playable WAV
   and derive exact duration from the byte length. Switched off ElevenLabs (commit
   `6af019e`) to bill GCP credits and dodge its quota + 2026-12-31 voice sunset).
@@ -137,7 +137,7 @@ bet being proven first.
   deferred "live conversational agent"). While a tour plays, the rider asks a
   spoken follow-up ("hey skipper, tell me more about that island") → **STT**
   (voice→text) → a **grounded, in-persona LLM** answer → **streaming TTS**
-  (text→voice) back in the SAME skipper voice (Sulafat), ducking the tour audio
+  (text→voice) back in the SAME skipper voice (Algenib), ducking the tour audio
   then resuming. Why it's hard / what it stresses:
   - **Inverts the core architecture.** Today we "generate once per place, assemble
     per request" as an OFFLINE batch; this is LIVE, per-utterance, and
@@ -157,7 +157,7 @@ bet being proven first.
     fails in Tahoe dead zones (hence the "on-device fallback" already noted); gate
     or queue it when offline.
   - **Sequencing:** a v2 delighter — gate behind the proven phone player (M1), and
-    reuse the existing fact sheets + Sulafat voice so the skipper sounds continuous.
+    reuse the existing fact sheets + Algenib voice so the skipper sounds continuous.
 
 ## In-car player landmines (when you get there)
 
@@ -189,7 +189,7 @@ From an adversarial review of the scaffold. Verdict: sound foundation. Guardrail
   `duration_bucket` are all pgEnums, so the dedup key can't fragment on a typo.
 - **`voice` is a fixed function of persona in v1** (`PERSONA_VOICE` in
   `packages/generator/src/models.ts`: skipper → the Google Cloud Gemini-TTS voice
-  name "Sulafat", stored verbatim as the cache-key `voice`). Not a request knob
+  name "Algenib", stored verbatim as the cache-key `voice`). Not a request knob
   until M3 (no `tours.voice` / `tourRequest.voice` yet). (Gemini-TTS voice names
   are stable identifiers — no ElevenLabs-style default-voice sunset to mind.)
 - **M1 generator MUST populate `poi_content.attribution`** for every
