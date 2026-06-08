@@ -1,9 +1,9 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Stack } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import * as SplashScreen from 'expo-splash-screen'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
-import { ThemeProvider, useAppFonts, useTheme } from '@/theme'
+import { ThemeProvider, readStoredThemeMode, useAppFonts, useTheme, type ThemeMode } from '@/theme'
 import { fonts } from '@/theme/tokens'
 import { ThemeToggle } from '@/ui'
 
@@ -13,16 +13,25 @@ SplashScreen.preventAutoHideAsync().catch(() => {})
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useAppFonts()
+  // Also hold the splash until the persisted mood is read, so a dark-mode rider never
+  // sees a frame of daylight before their saved DUSK override applies on cold start.
+  const [initialMode, setInitialMode] = useState<ThemeMode | null>(null)
 
   useEffect(() => {
-    if (fontsLoaded || fontError) SplashScreen.hideAsync().catch(() => {})
-  }, [fontsLoaded, fontError])
+    readStoredThemeMode().then(setInitialMode)
+  }, [])
 
-  if (!fontsLoaded && !fontError) return null
+  const ready = (fontsLoaded || fontError) && initialMode !== null
+
+  useEffect(() => {
+    if (ready) SplashScreen.hideAsync().catch(() => {})
+  }, [ready])
+
+  if (!ready) return null
 
   return (
     <SafeAreaProvider>
-      <ThemeProvider>
+      <ThemeProvider initialMode={initialMode ?? 'system'}>
         <ThemedStack />
       </ThemeProvider>
     </SafeAreaProvider>

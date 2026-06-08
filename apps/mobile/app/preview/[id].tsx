@@ -394,8 +394,9 @@ export default function PreviewScreen() {
         </Text>
       </View>
 
-      {/* Route progress trail with the car token */}
-      <RouteTrack progress={dot} style={styles.track} />
+      {/* Route progress trail with the car token. The token glows only OFF a clip
+          (its drive motion cue) — on a clip the NOW card owns the single amber glow. */}
+      <RouteTrack progress={dot} glow={!isClip} style={styles.track} />
 
       {/* NOW area */}
       <View style={styles.nowWrap}>
@@ -429,7 +430,10 @@ export default function PreviewScreen() {
         ) : (
           <NowCard
             liveRegion
-            kicker={voice.player.nowPlaying}
+            // A paused clip must tell the truth: dim the amber halo and stop claiming
+            // "NOW PLAYING" while it's held.
+            glow={playing}
+            kicker={playing ? voice.player.nowPlaying : voice.player.paused}
             title={nextStopName ?? 'Skipper'}
             right={
               seg?.stopType ? (
@@ -483,6 +487,9 @@ export default function PreviewScreen() {
               icon={playing ? 'pause' : 'play'}
               title={playing ? voice.cta.pause : voice.cta.play}
               onPress={() => setPlaying((p) => !p)}
+              // No amber glow here: the lit NOW card (clip) or the gliding token (drive)
+              // is the one allowed glow — a glowing CTA next to it would make two.
+              glow={false}
               style={styles.flex}
             />
             <Button

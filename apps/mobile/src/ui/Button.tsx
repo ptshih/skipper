@@ -23,6 +23,10 @@ export interface ButtonProps {
   loading?: boolean
   fullWidth?: boolean
   accessibilityLabel?: string // overrides `title` for the a11y label (icon-only buttons)
+  /** Dusk primary buttons wear a campfire amber glow by default. Pass `false` to drop
+   *  it (a neutral cast shadow instead) where the design system's one-amber-glow budget
+   *  is already spent — e.g. the in-player play button while the NOW card is lit. */
+  glow?: boolean
   style?: StyleProp<ViewStyle>
 }
 
@@ -35,6 +39,7 @@ export function Button({
   loading,
   fullWidth = true,
   accessibilityLabel,
+  glow = true,
   style,
 }: ButtonProps) {
   const theme = useTheme()
@@ -49,9 +54,14 @@ export function Button({
         borderRadius: radius.lg,
         // campfire glow at dusk; soft cast shadow in daylight — boxShadow so the
         // colored glow renders on Android too (iOS-only shadow* would go gray there).
-        boxShadow: theme.isDark
-          ? [{ offsetX: 0, offsetY: 0, blurRadius: 16, color: colors.glow }]
-          : [{ offsetX: 0, offsetY: 3, blurRadius: 8, color: colors.shadowCast }],
+        // glow=false drops the amber halo (dusk → flat; daylight keeps its neutral cast)
+        // so a player play button doesn't add a second amber glow next to the NOW card.
+        boxShadow:
+          theme.isDark && glow
+            ? [{ offsetX: 0, offsetY: 0, blurRadius: 16, color: colors.glow }]
+            : theme.isDark
+              ? undefined
+              : [{ offsetX: 0, offsetY: 3, blurRadius: 8, color: colors.shadowCast }],
       }
     : isGhost
       ? { minHeight: hit.min, borderRadius: radius.md, backgroundColor: 'transparent' }

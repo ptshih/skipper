@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { StyleSheet, View } from 'react-native'
+import { useRef, useState } from 'react'
+import { StyleSheet, TextInput, View } from 'react-native'
 import { Stack, useRouter } from 'expo-router'
 import { signIn, signUp } from '@/lib/auth'
 import { space } from '@/theme/tokens'
@@ -15,6 +15,10 @@ export default function SignInScreen() {
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Chain the soft keyboard's return key through the form (name → email → password → submit)
+  // so a rider never has to dismiss it to reach the next field or the CTA.
+  const emailRef = useRef<TextInput>(null)
+  const passwordRef = useRef<TextInput>(null)
 
   const submit = async () => {
     setBusy(true)
@@ -51,11 +55,15 @@ export default function SignInScreen() {
           autoCapitalize="words"
           textContentType="name"
           autoComplete="name"
+          returnKeyType="next"
+          submitBehavior="submit"
+          onSubmitEditing={() => emailRef.current?.focus()}
           value={name}
           onChangeText={setName}
         />
       ) : null}
       <Input
+        ref={emailRef}
         placeholder="Email"
         accessibilityLabel="Email"
         autoCapitalize="none"
@@ -63,15 +71,21 @@ export default function SignInScreen() {
         keyboardType="email-address"
         textContentType="username"
         autoComplete="email"
+        returnKeyType="next"
+        submitBehavior="submit"
+        onSubmitEditing={() => passwordRef.current?.focus()}
         value={email}
         onChangeText={setEmail}
       />
       <Input
+        ref={passwordRef}
         placeholder="Password"
         accessibilityLabel="Password"
         secureTextEntry
         textContentType={mode === 'in' ? 'password' : 'newPassword'}
         autoComplete={mode === 'in' ? 'current-password' : 'new-password'}
+        returnKeyType="go"
+        onSubmitEditing={submit}
         value={password}
         onChangeText={setPassword}
       />

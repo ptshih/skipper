@@ -3,6 +3,7 @@
 //   GET  /health                     -> liveness (env-free)
 //   *    /api/auth/*                  -> Better Auth (sign-up/in/out, session, OAuth)
 //   GET  /corridors                  -> list corridors (anonymous OK; no polyline)
+//   GET  /corridors/:id/tours        -> list a corridor's ready tours (anonymous OK)
 //   GET  /tours/:tourId              -> a ready tour + polyline + ordered stops
 //   POST /tours/:tourId/assets/sign  -> presigned R2 URLs for the tour's audio
 //
@@ -11,7 +12,7 @@
 // anonymous/shareable — gating is on access, not ownership.
 
 import { Hono, type Context } from 'hono'
-import { and, asc, desc, eq } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray } from 'drizzle-orm'
 import { durationBucket } from '@skipper/shared'
 import { db } from '@skipper/db'
 import { corridors, poiContent, pois, tours, tourStops } from '@skipper/db/schema'
@@ -96,7 +97,34 @@ app.get('/corridors/:corridorId/tours', async (c) => {
     .from(tours)
     .where(and(...filters))
     .orderBy(desc(tours.createdAt))
-  return c.json({ tours: rows })
+
+  // Build a glanceable place teaser per tour from its marquee anchors, so the catalog
+  // card has an identity ("Emerald Bay & Vikingsholm") without forcing a tap. We take
+  // the first couple of STORY/SCENIC stops (the real named places); breaks are skipped
+  // so a café never headlines, and no volatile data is involved (just the frozen name).
+  const teaserByTour = new Map<string, string>()
+  const tourIds = rows.map((r) => r.id)
+  if (tourIds.length) {
+    const stopRows = await db
+      .select({ tourId: tourStops.tourId, stopType: tourStops.stopType, name: pois.name })
+      .from(tourStops)
+      .innerJoin(pois, eq(tourStops.poiId, pois.id))
+      .where(inArray(tourStops.tourId, tourIds))
+      .orderBy(asc(tourStops.seq))
+    const byTour = new Map<string, { stopType: string; name: string }[]>()
+    for (const s of stopRows) {
+      const arr = byTour.get(s.tourId) ?? []
+      arr.push({ stopType: s.stopType, name: s.name })
+      byTour.set(s.tourId, arr)
+    }
+    for (const [tid, stops] of byTour) {
+      const named = stops.filter((s) => s.stopType === 'story' || s.stopType === 'scenic')
+      const pick = (named.length ? named : stops).slice(0, 2).map((s) => s.name)
+      if (pick.length) teaserByTour.set(tid, pick.join(' & '))
+    }
+  }
+
+  return c.json({ tours: rows.map((r) => ({ ...r, teaser: teaserByTour.get(r.id) ?? null })) })
 })
 
 /**

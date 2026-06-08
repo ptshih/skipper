@@ -57,6 +57,11 @@ export default function CorridorsScreen() {
         <Text variant="body" color="inkDim">
           {voice.greeting}
         </Text>
+        {/* One-line descriptor so a cold newcomer knows what Skipper IS before any
+            audio plays — the "smile before a word" thesis needs a what, not just a wink. */}
+        <Text variant="dim" color="inkFaint">
+          {voice.tagline}
+        </Text>
         {session ? (
           <View style={styles.authRow}>
             <Text variant="dim" color="inkFaint" numberOfLines={1} style={styles.flex}>

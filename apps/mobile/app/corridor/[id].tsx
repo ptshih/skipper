@@ -53,22 +53,37 @@ export default function CorridorScreen() {
           {voice.empty.tours}
         </Text>
       ) : (
-        tours.map((t) => (
-          <Card
-            key={t.id}
-            onPress={() => router.push({ pathname: '/tour/[id]', params: { id: t.id } })}
-          >
-            <View style={styles.head}>
-              <Text variant="heading" color="ink">
-                {cap(t.durationBucket)} tour
-              </Text>
-              {t.isPreview ? <Badge tone="amber" filled label="FREE PREVIEW" /> : null}
-            </View>
-            <View style={styles.metaRow}>
-              <Badge tone="teal" label={jokeLabel(t.jokeLevel)} />
-            </View>
-          </Card>
-        ))
+        // Pin the free preview first and frame it — for an anonymous rider it's the only
+        // playable tour, so it should read as the obvious entry point, not a peer in the list.
+        [...tours]
+          .sort((a, b) => Number(b.isPreview) - Number(a.isPreview))
+          .map((t) => (
+            <Card
+              key={t.id}
+              framed={t.isPreview}
+              onPress={() => router.push({ pathname: '/tour/[id]', params: { id: t.id } })}
+            >
+              {t.isPreview ? (
+                <Text variant="label" color="accentWarm" style={styles.kicker}>
+                  START HERE
+                </Text>
+              ) : null}
+              <View style={styles.head}>
+                <Text variant="heading" color="ink">
+                  {cap(t.durationBucket)} tour
+                </Text>
+                {t.isPreview ? <Badge tone="amber" filled label="FREE PREVIEW" /> : null}
+              </View>
+              {t.teaser ? (
+                <Text variant="body" color="inkDim" numberOfLines={1} style={styles.teaser}>
+                  {t.teaser}
+                </Text>
+              ) : null}
+              <View style={styles.metaRow}>
+                <Badge tone="teal" label={jokeLabel(t.jokeLevel)} />
+              </View>
+            </Card>
+          ))
       )}
     </Screen>
   )
@@ -83,5 +98,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: space.sm,
   },
+  kicker: { marginBottom: space.xs },
+  teaser: { marginTop: space.xs },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.sm },
 })

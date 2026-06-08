@@ -11,12 +11,16 @@ import { Icon } from './Icon'
 export interface RouteTrackProps {
   progress: Animated.Value // 0..1
   height?: number
+  /** The car token wears an amber halo by default (its motion cue on a drive). Pass
+   *  `false` while a stop's NOW card is lit, so the screen never shows two amber glows
+   *  at once (DESIGN §8: at most one moving/glowing amber element). */
+  glow?: boolean
   style?: StyleProp<ViewStyle>
 }
 
 const TOKEN = 24
 
-export function RouteTrack({ progress, height = 6, style }: RouteTrackProps) {
+export function RouteTrack({ progress, height = 6, glow = true, style }: RouteTrackProps) {
   const { colors } = useTheme()
   const pct = progress.interpolate({
     inputRange: [0, 1],
@@ -66,7 +70,9 @@ export function RouteTrack({ progress, height = 6, style }: RouteTrackProps) {
             {
               left: pct,
               backgroundColor: colors.amberToken,
-              boxShadow: [{ offsetX: 0, offsetY: 0, blurRadius: 6, color: colors.glow }],
+              boxShadow: glow
+                ? [{ offsetX: 0, offsetY: 0, blurRadius: 6, color: colors.glow }]
+                : undefined,
             },
           ]}
         >

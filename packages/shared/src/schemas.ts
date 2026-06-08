@@ -131,6 +131,10 @@ export const tourListItem = z.object({
   persona,
   jokeLevel,
   isPreview: z.boolean(),
+  /** A glanceable hook of the tour's marquee places (story/scenic anchors), e.g.
+   *  "Emerald Bay & Vikingsholm" — so a tour card has an identity without a tap.
+   *  Nullish: pre-teaser clients/rows degrade to no hook. */
+  teaser: z.string().nullish(),
 })
 export type TourListItem = z.infer<typeof tourListItem>
 export const corridorTours = z.object({ tours: z.array(tourListItem) })

@@ -35,10 +35,14 @@ export const voice = {
     buffering: 'Warming up the skipper…',
     stall: 'Couldn’t load that stop — skipping ahead.',
     nowPlaying: 'NOW PLAYING', // emoji kept OUT of label strings (custom font = tofu)
+    paused: 'PAUSED', // a held clip — the NOW card must not keep saying "NOW PLAYING"
     rolling: 'ROLLING', // between stops — road-trip, not the flat "DRIVING"
     pitStop: 'PIT STOP', // a rest stop
   },
   greeting: 'Pick a drive. I’ll do the talking.',
+  // The cold-open descriptor: a newcomer should know WHAT this is before any audio
+  // plays. Clear first, persona second — the deadpan stays, just aimed.
+  tagline: 'Narrated road-trip audio tours — one corny guide, all the good stops.',
   driveComplete: 'That’s the end of the road, folks. Watch your step climbing out.',
   auth: {
     signInHeader: 'Welcome back, traveler',
