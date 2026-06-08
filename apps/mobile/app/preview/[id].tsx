@@ -44,18 +44,24 @@ interface Loaded {
   tourName: string
   region: string
   segments: PreviewSegment[]
-  urlBySeq: Map<number, string>
   stops: { seq: number; name: string; stopType: string }[]
   totalPreviewMs: number
   totalRealMs: number
 }
 
+// Grace before a clip that hasn't started is treated as stalled. Generous on purpose:
+// clips are large uncompressed WAVs that can take real time to buffer on weak signal,
+// and presigned URLs live 1h — so on a stall we re-sign once before giving up (below).
+const CLIP_STALL_MS = 12_000
+
 export default function PreviewScreen() {
   const theme = useTheme()
   const { id } = useLocalSearchParams<{ id: string }>()
   const [data, setData] = useState<Loaded | null>(null)
+  const [urls, setUrls] = useState<Map<number, string>>(new Map()) // presigned clip URLs by seq; re-signable
   const [error, setError] = useState<string | null>(null)
   const [needsAccount, setNeedsAccount] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0) // bump to retry the whole load
   const [idx, setIdx] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [done, setDone] = useState(false)
@@ -71,6 +77,7 @@ export default function PreviewScreen() {
   const watchdog = useRef<ReturnType<typeof setTimeout> | null>(null) // B1: never freeze on a dead clip
   const listRef = useRef<ScrollView | null>(null)
   const scrubbing = useRef(false) // a drag is live — hold the clip-finished auto-advance
+  const clipRetried = useRef<Set<number>>(new Set()) // seqs we've re-signed once after a stall
   const seekTarget = useRef<number | null>(null) // last commanded seek (sec) — so ±15 taps accumulate
   // ahead of the lagging polled clock; reset whenever the active clip changes (effect below)
 
@@ -89,9 +96,14 @@ export default function PreviewScreen() {
           shouldPlayInBackground: true,
           interruptionMode: 'doNotMix',
         }).catch(() => {})
-        const [tour, signed] = await Promise.all([getTour(id), signTourAudio(id)])
+        // Load the route first (the timeline needs it), THEN sign the audio. Decoupled
+        // so a transient sign 503 surfaces its own retryable error instead of failing
+        // the whole preview as one opaque load (and so a stall can re-sign in isolation).
+        const tour = await getTour(id)
         if (cancelled) return
         if (!tour.corridor) throw new Error('This tour has no route to drive.')
+        const signed = await signTourAudio(id)
+        if (cancelled) return
         const tl = buildPreviewTimeline(
           tour.stops.map((s) => ({
             seq: s.seq,
@@ -108,11 +120,11 @@ export default function PreviewScreen() {
           // (the real GPS drive uses actual elapsed time, not these compressed gaps).
           { minGapSec: 12, maxGapSec: 20 },
         )
+        setUrls(new Map(signed.urls.map((u) => [u.seq, u.url])))
         setData({
           tourName: tour.corridor.name,
           region: tour.corridor.region,
           segments: tl.segments,
-          urlBySeq: new Map(signed.urls.map((u) => [u.seq, u.url])),
           stops: tour.stops.map((s) => ({ seq: s.seq, name: s.name, stopType: s.stopType })),
           totalPreviewMs: tl.totalPreviewMs,
           totalRealMs: tl.totalRealMs,
@@ -126,7 +138,7 @@ export default function PreviewScreen() {
     return () => {
       cancelled = true
     }
-  }, [id])
+  }, [id, reloadKey])
 
   const advance = useCallback(
     (next: number) => {
@@ -143,6 +155,23 @@ export default function PreviewScreen() {
     },
     [data, player],
   )
+
+  // Re-sign the tour's audio and swap in fresh URLs. Presigned URLs live ~1h; a long
+  // pause or a slow first load can outlast that, so on a stall we re-sign ONCE and
+  // reset loadedSeq — the segment driver re-runs (urls is a dep) and reloads the active
+  // clip from its fresh URL. Bails if the clip recovered on its own while we were
+  // re-signing, so a slow-but-fine clip isn't yanked back to reload.
+  const resign = useCallback(async (): Promise<void> => {
+    if (!id) return
+    try {
+      const signed = await signTourAudio(id)
+      if (sawFresh.current) return // clip started during the re-sign — leave it alone
+      loadedSeq.current = null
+      setUrls(new Map(signed.urls.map((u) => [u.seq, u.url])))
+    } catch {
+      // Re-sign failed (offline / 503) — the watchdog's second pass skips the stop.
+    }
+  }, [id])
 
   // ---- the segment driver: react to the current segment + play state ----
   useEffect(() => {
@@ -164,7 +193,7 @@ export default function PreviewScreen() {
     }
 
     if (seg.kind === 'clip') {
-      const uri = data.urlBySeq.get(seg.seq)
+      const uri = urls.get(seg.seq)
       if (!uri) {
         // No audio for this stop — skip it like a brief rest.
         timer.current = setTimeout(() => advance(idx + 1), 800)
@@ -191,14 +220,20 @@ export default function PreviewScreen() {
         } catch {}
       }
       player.play()
-      // B1: if the clip never starts (expired 403 / decode fail / dropped network),
-      // didJustFinish never fires — so skip forward after a grace period.
+      // B1: a clip that never starts (expired 403 / decode fail / dropped network) never
+      // fires didJustFinish. After a generous grace we re-sign ONCE — that reloads the
+      // clip (loadedSeq reset → this effect re-runs) and re-arms the watchdog. If it STILL
+      // hasn't started on the second pass, the URL isn't the problem; skip the stop.
       watchdog.current = setTimeout(() => {
-        if (!sawFresh.current) {
-          setStallNote(voice.player.stall)
-          advance(idx + 1)
+        if (sawFresh.current) return
+        if (!clipRetried.current.has(seg.seq)) {
+          clipRetried.current.add(seg.seq)
+          void resign()
+          return
         }
-      }, 6000)
+        setStallNote(voice.player.stall)
+        advance(idx + 1)
+      }, CLIP_STALL_MS)
       // advance happens in the didJustFinish effect below
     } else {
       // drive / rest: a SILENT segment — make sure no clip audio bleeds into it.
@@ -230,7 +265,7 @@ export default function PreviewScreen() {
       dot.stopAnimation() // freeze the trail on pause/jump instead of letting it run on
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, idx, playing, done])
+  }, [data, idx, playing, done, urls])
 
   // ---- clip end → next segment ----
   // didJustFinish stays true across status updates and is still set from the PREVIOUS
@@ -284,6 +319,7 @@ export default function PreviewScreen() {
   const restart = () => {
     loadedSeq.current = null
     finishedIdx.current = -1
+    clipRetried.current.clear()
     dot.setValue(0)
     setStallNote(null)
     setDone(false)
@@ -329,6 +365,7 @@ export default function PreviewScreen() {
     }
     loadedSeq.current = null // force the target clip to (re)load from its start
     finishedIdx.current = -1
+    clipRetried.current.clear()
     dot.setValue(data.segments[target]!.routeProgress)
     setStallNote(null)
     setDone(false)
@@ -340,7 +377,15 @@ export default function PreviewScreen() {
     `${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, '0')}`
 
   if (needsAccount) return <AccountGate note="Anonymous preview is limited to the sample tour." />
-  if (error) return <StateView title="Preview drive" message={error} tone="danger" />
+  if (error)
+    return (
+      <StateView
+        title="Preview drive"
+        message={error}
+        tone="danger"
+        action={{ label: voice.error.retry, onPress: () => setReloadKey((k) => k + 1) }}
+      />
+    )
   if (!data) return <StateView title="Preview drive" loading message={voice.loading.preview} />
 
   const seg = data.segments[idx]

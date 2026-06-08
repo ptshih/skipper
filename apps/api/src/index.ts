@@ -222,9 +222,14 @@ app.post('/tours/:tourId/assets/sign', withSession, async (c) => {
       .map((clip) => ({ seq: clip.seq, url: presignGet(clip.key!), durationMs: clip.durationMs }))
     return c.json({ urls })
   } catch (e) {
-    // R2 not configured / presign failed — don't leak which config var is missing.
+    // R2 not configured / presign failed — don't leak which config var is missing,
+    // but give the client a human message so the player can show real copy + a retry
+    // (not a raw "Request failed (503)").
     console.error('[api] presign failed', e)
-    return c.json({ error: 'audio_unavailable' }, 503)
+    return c.json(
+      { error: 'audio_unavailable', message: 'Audio is warming up. Give it a moment and try again.' },
+      503,
+    )
   }
 })
 

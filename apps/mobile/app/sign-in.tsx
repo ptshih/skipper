@@ -21,18 +21,27 @@ export default function SignInScreen() {
   const passwordRef = useRef<TextInput>(null)
 
   const submit = async () => {
+    if (busy) return // guard the unguarded ghost mode-switch from racing a submit
     setBusy(true)
     setError(null)
-    const res =
-      mode === 'in'
-        ? await signIn.email({ email, password })
-        : await signUp.email({ email, password, name: name || email })
-    setBusy(false)
-    if (res.error) {
-      setError(res.error.message ?? 'Authentication failed')
-      return
+    try {
+      const res =
+        mode === 'in'
+          ? await signIn.email({ email, password })
+          : await signUp.email({ email, password, name: name || email })
+      if (res.error) {
+        setError(res.error.message ?? 'Authentication failed')
+        return
+      }
+      router.back()
+    } catch {
+      // A rejected call (no connectivity, DNS/TLS failure, an unexpected throw) must
+      // not wedge the button in its loading state forever — `finally` always clears
+      // busy. Show the in-character generic rather than a raw fetch error string.
+      setError(voice.error.generic)
+    } finally {
+      setBusy(false)
     }
-    router.back()
   }
 
   return (
