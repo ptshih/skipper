@@ -1,6 +1,6 @@
 // Voice & charm harness — the "is the persona actually charming?" check.
 //
-// "THE PERSONA IS THE PRODUCT," yet the Skipper's CHARM (writing + the Sulafat TTS
+// "THE PERSONA IS THE PRODUCT," yet the Skipper's CHARM (writing + the Algenib TTS
 // voice) has never been judged. This reads a generate-result JSON (`run.ts --json=...`)
 // and produces ONE markdown report with two verdicts:
 //   1. WRITING (automated) — an LLM charm-judge (Opus) scores every stop's SCRIPT for
@@ -43,7 +43,15 @@ Judge CHARM, not accuracy — grounding is a different gate; assume the facts ar
 
 Judge each stop appropriately for its TYPE: STORY is the showcase (it should charm); SCENIC is a short mood beat with no facts (judge the feeling, not jokes); BREAK is a brief named "good spot to pull off" cue (judge warmth + a light groan, keep expectations low).
 
-For each stop give: a charm score 1-10, the single BEST beat (quote or tight paraphrase), and where it SAGS (the weakest beat — be specific). Then for the whole tour: an overall 1-10, an honest 2-3 sentence verdict, a recommendation, the weakest stops, and the SINGLE biggest charm risk. recommendation: "ship" = charming enough to bet the player on; "tune" = good bones, specific fixes needed; "rework" = reads as competent AI, not the skipper. Default toward "tune"/"rework" unless it genuinely delights — a generous score here is a disservice. Call the report tool.`
+Use the FULL 1-10 scale, anchored as follows. Do NOT default high or low — place each score at the anchor it actually earns:
+- 1-2: brochure/encyclopedia voice. Reads like an AI reciting Wikipedia. No persona, or off-persona.
+- 3-4: competent but generic. Information is fine; the man is not in the room. Tics, tired shape, no real laugh.
+- 5-6: the persona flickers — one beat lands, the rest is filler or sags. Fixable.
+- 7-8: solidly charming. A clear human voice, jokes that land, fresh shape. This is SHIP-quality writing.
+- 9: genuinely delightful — surprises you, earns a real groan or grin, nothing sags.
+- 10: reserve for a stop you'd quote to a friend. Rare.
+
+For each stop give: a charm score 1-10, the single BEST beat (quote or tight paraphrase), and where it SAGS (the weakest beat — be specific). Then for the whole tour: an overall 1-10, an honest 2-3 sentence verdict, a recommendation, the weakest stops, and the SINGLE biggest charm risk. recommendation: "ship" = overall 7 or higher with no stop below 5; "tune" = good bones but at least one stop drags it down (one or more stops at 3-4, or overall 5-6); "rework" = overall 4 or lower, reads as competent AI, not the skipper. Score what is on the page, not what you wish were there. Call the report tool.`
 
 const REPORT_TOOL: Anthropic.Tool = {
   name: 'report',
