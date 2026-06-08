@@ -375,20 +375,14 @@ export default function PreviewScreen() {
 
   return (
     <Screen edges={['bottom']}>
-      {/* Keep swipe-back, but stop the scrubber from triggering it. On iOS 26+ the
-          back-swipe defaults to a WHOLE-screen gesture (react-native-screens:
-          fullScreenSwipeEnabled defaults true on iOS>=26), so dragging the position
-          bar popped the screen. gestureResponseDistance.start restricts the swipe to
-          begin only within 12pt of the left edge — inside the 16pt gutter, clear of the
-          bar — so the bar never overlaps the back zone while the edge swipe still works.
-          fullScreenGestureEnabled:true makes that restriction apply on iOS<26 too. */}
+      {/* Keep swipe-back, but stop the scrubber from triggering it. iOS 26 turned
+          back-swipe into a WHOLE-screen native gesture by default (react-native-screens
+          fullScreenSwipeEnabled defaults true on iOS>=26) and ignores gestureResponseDistance
+          for it — so any drag on the position bar popped the screen. Turn the whole-screen
+          recognizer OFF so back-swipe reverts to the classic LEFT-EDGE gesture; the bar is
+          then inset (SCRUB_EDGE_INSET) past that edge strip so they no longer overlap. */}
       <Stack.Screen
-        options={{
-          title: 'Preview drive',
-          gestureEnabled: true,
-          fullScreenGestureEnabled: true,
-          gestureResponseDistance: { start: 12 },
-        }}
+        options={{ title: 'Preview drive', gestureEnabled: true, fullScreenGestureEnabled: false }}
       />
 
       <View style={styles.header}>
@@ -445,17 +439,21 @@ export default function PreviewScreen() {
             }
           />
         )}
-        {/* Position bar — scrub within the current clip (drive/rest have no timeline). */}
+        {/* Position bar — scrub within the current clip (drive/rest have no timeline).
+            Inset past the iOS left-edge swipe-back strip so a far-left scrub on the thumb
+            isn't read as a back-swipe (see the Stack.Screen note above). */}
         {isClip ? (
-          <Scrubber
-            positionMs={(status.currentTime ?? 0) * 1000}
-            durationMs={dur * 1000}
-            onSeek={(ms) => seekToSec(ms / 1000)}
-            onScrubbingChange={(active) => {
-              scrubbing.current = active // hold the clip-finished auto-advance
-            }}
-            disabled={!canSeek}
-          />
+          <View style={styles.scrubInset}>
+            <Scrubber
+              positionMs={(status.currentTime ?? 0) * 1000}
+              durationMs={dur * 1000}
+              onSeek={(ms) => seekToSec(ms / 1000)}
+              onScrubbingChange={(active) => {
+                scrubbing.current = active // hold the clip-finished auto-advance
+              }}
+              disabled={!canSeek}
+            />
+          </View>
         ) : null}
         {buffering ? (
           <View style={styles.buffering}>
@@ -556,6 +554,10 @@ const styles = StyleSheet.create({
   // ±15 buttons: trim the wide CTA side-padding so the flanked center label keeps room
   // (it would otherwise truncate to "All a…" on a 320pt phone / large Dynamic Type).
   skip: { paddingHorizontal: space.sm },
+  // Hold the position bar in past the iOS left-edge swipe-back strip (gutter 16 + this
+  // ≈ 40pt from the screen edge) so a far-left scrub on the thumb doesn't trip back-nav.
+  // Tunable: widen if the edge still grabs, narrow if the bar looks too pinched.
+  scrubInset: { paddingHorizontal: space.xxl },
   hint: { paddingHorizontal: space.gutter, paddingTop: space.md, paddingBottom: space.sm },
   divider: { marginHorizontal: space.gutter },
   list: { flex: 1, marginTop: space.xs },
