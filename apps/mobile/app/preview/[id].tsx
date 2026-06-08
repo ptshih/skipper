@@ -98,6 +98,9 @@ export default function PreviewScreen() {
             audioDurationMs: s.audioDurationMs,
           })),
           tour.corridor.polyline as [number, number][],
+          // TEMP (music audition only — REVERT): stretch the between-stop drives to
+          // 12–20s so the drive loop can be heard sustaining + the fades breathe.
+          { minGapSec: 12, maxGapSec: 20 },
         )
         setData({
           tourName: tour.corridor.name,
