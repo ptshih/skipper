@@ -8,6 +8,7 @@
   },
   "workspaces": [
     "apps/api",
+    "apps/mobile",
     "packages/*"
   ],
   "scripts": {

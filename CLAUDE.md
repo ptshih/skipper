@@ -94,7 +94,7 @@ glanceable/in-car). Screens compose `@/ui` and reference semantic roles
 - **Icons are VECTOR** (`@expo/vector-icons` via `src/ui/Icon.tsx`, semantic names) —
   NOT emoji. This build has no color-emoji fallback, so emoji render as tofu (`?`).
 - `*.test.ts` run under `bun test` (which provides `bun:test` types); the app `tsc`
-  excludes them (mobile is outside the workspace, no `@types/bun`).
+  excludes them (mobile has no `@types/bun`).
 
 ## Milestones
 

@@ -27,20 +27,23 @@
 
 ## Materialize it (first steps toward the phone player)
 
-`apps/mobile` is **deliberately excluded from the root bun workspace** (root
-`workspaces` = `apps/api` + `packages/*`) so RN/Expo don't bloat or destabilize
-the backend install. To bring it up:
+`apps/mobile` is a **member of the root bun workspace** (`workspaces` = `apps/api`
++ `apps/mobile` + `packages/*`). One root `bun install` installs everything; bun's
+isolated node_modules symlinks each workspace package into its consumers' own
+`node_modules`. To bring it up:
 
 ```sh
-cd apps/mobile
-bun install              # or npm/yarn if bun fights Expo/EAS (see caveat below)
+bun install              # at the repo root — installs the whole workspace
 bunx expo install --fix  # align expo/react-native/expo-* to the real SDK 56 pins
-bun run typecheck
+bun run check            # in apps/mobile: lint:tokens + typecheck + test
 ```
 
-`@skipper/shared` is referenced via `link:../../packages/shared` and resolved by
-Metro (`metro.config.js` sets `watchFolders`/`nodeModulesPaths` to the monorepo
-root). It exports `.ts` source, which Metro transpiles.
+It consumes `@skipper/shared` and `@skipper/drive-core` via `workspace:*` (both
+export `.ts` source). Metro resolves them through the symlinked layout
+(`metro.config.js` sets `watchFolders`/`nodeModulesPaths` to the monorepo root) —
+verified: `bunx expo export` bundles cleanly through bun's isolated node_modules
+(a device `expo run:ios` build is the final word). For the backend deploy, install
+with `--filter @skipper/api` so the RN tree isn't pulled in.
 
 ## Still TODO — the phone player (the MVP)
 
@@ -53,8 +56,9 @@ root). It exports `.ts` source, which Metro transpiles.
 - [ ] **`expo-location`** + **`expo-task-manager`**: continuous high-rate
       FOREGROUND service (NOT fixed-radius background polling).
 - [ ] **Drive simulator** — replay a corridor polyline at configurable speed.
-      (The trigger core + a headless drive sim already exist in **`@skipper/sim`**;
-      this is the on-device player driving against it / live GPS.)
+      (The trigger core + a headless drive sim live in **`@skipper/drive-core`**,
+      now imported directly by the app; this is the on-device player driving
+      against it / live GPS.)
 - [ ] Speed-adaptive trigger lead time, heading gate >~5 mph, debounce/queue.
       Each tour stop now carries a precomputed **trigger point**
       (`trigger_lat`/`trigger_lng`) + **`approach_heading_deg`**, so the player

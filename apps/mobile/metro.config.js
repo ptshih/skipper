@@ -1,7 +1,8 @@
 // Metro config for the bun monorepo. SDK 56 auto-configures most of this; we add
-// the workspace root so Metro resolves @skipper/shared from the symlinked layout.
-// NOTE (gate): bun's isolated node_modules + Metro is the load-bearing unknown —
-// verify on a real EAS/dev build; if it fights, see apps/mobile/README.md.
+// the workspace root so Metro resolves @skipper/shared + @skipper/drive-core from
+// the symlinked layout. VERIFIED (2026-06-08): `bunx expo export` bundles cleanly
+// through bun's isolated node_modules — a device `expo run:ios` build is the final
+// word; if it ever fights, see apps/mobile/README.md.
 const { getDefaultConfig } = require('expo/metro-config')
 const path = require('path')
 

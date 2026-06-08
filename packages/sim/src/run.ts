@@ -12,9 +12,8 @@
 import { and, asc, desc, eq } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { corridors, poiContent, pois, tours, tourStops } from '@skipper/db/schema'
-import { DEFAULT_MAX_OFF_ROUTE_M, runDrive } from './simulate'
-import type { LngLat } from './geo'
-import type { TourStopRef } from './trigger'
+import { DEFAULT_MAX_OFF_ROUTE_M, runDrive } from '@skipper/drive-core'
+import type { LngLat, TourStopRef } from '@skipper/drive-core'
 
 const mmss = (sec: number): string => {
   const total = Math.round(sec)

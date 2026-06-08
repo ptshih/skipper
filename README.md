@@ -38,7 +38,8 @@ skipper/
 │   ├── shared/     @skipper/shared    — Zod schemas + types, imported everywhere.
 │   ├── db/         @skipper/db        — Drizzle schema + Neon client.
 │   ├── generator/  @skipper/generator — server-side tour generation (M1).
-│   └── sim/        @skipper/sim       — drive simulator + speed-adaptive trigger core.
+│   ├── drive-core/ @skipper/drive-core — pure geo + trigger engine + drive sim + preview timeline (RN-safe; shared by sim & mobile).
+│   └── sim/        @skipper/sim       — DB-backed drive-sim CLI (runs @skipper/drive-core against a real tour).
 ├── tsconfig.base.json · package.json (bun workspaces)
 ```
 
@@ -87,8 +88,9 @@ The frontier is **M1 — the live on-device phone player** (the MVP bet). What e
 - **M2 API (`@skipper/api`) — done.** `GET /corridors`, `GET /corridors/:id/tours`,
   `GET /tours/:id`, `POST /tours/:id/assets/sign` (presigned R2), behind Better Auth
   freemium gating (anonymous → preview only; free account → full; paid tier later).
-- **Drive simulator (`@skipper/sim`) — built.** Speed-adaptive trigger core + a headless
-  drive sim + the compressed "preview drive" timeline engine.
+- **Drive/trigger core (`@skipper/drive-core`) — built.** Speed-adaptive trigger engine,
+  the headless drive sim, and the compressed "preview drive" timeline — a pure, RN-safe
+  package (no DB deps) shared by the `@skipper/sim` CLI and the mobile app.
 - **Mobile (`@skipper/mobile`) — scaffolded + wired.** The Expo app browses corridors, signs
   in, and plays the map-less **simulated-drive preview**. The **live phone player** (offline
   download → GPS triggering → lock-screen Now Playing) is the open M1 work.

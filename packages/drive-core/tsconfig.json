@@ -4,6 +4,6 @@
     "noEmit": true,
     "types": ["node", "bun"]
   },
-  "include": ["src"],
+  "include": ["src", "test"],
   "exclude": ["node_modules"]
 }
