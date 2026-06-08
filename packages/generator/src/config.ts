@@ -60,6 +60,24 @@ export const R2_READY = (): boolean =>
 export const WIKIPEDIA_USER_AGENT =
   'Skipper/0.1 (https://github.com/ptshih/skipper; ptshih@gmail.com) bun/1.3'
 
+// --- Macrostrat geology enrichment ------------------------------------------
+
+// Coordinate-keyed bedrock facts (lithology + age) layered onto story/scenic stops
+// from the public Macrostrat API (keyless, CC BY 4.0; underlying USGS maps are PD).
+// See pipeline/macrostrat.ts. Reuses the same descriptive UA + contact as Wikipedia.
+export const MACROSTRAT_USER_AGENT = WIKIPEDIA_USER_AGENT
+/** Geology enrichment is on by default; set SKIPPER_GEOLOGY=off to skip the per-stop lookup. */
+export const GEOLOGY_ENRICHMENT = (): boolean => process.env.SKIPPER_GEOLOGY !== 'off'
+/**
+ * Who gets geology: SCENIC stops ALWAYS (they carry no Wikipedia facts — geology is the
+ * one true thing they can say), but STORY stops only when their fact sheet is SPARSE
+ * (below this many chars). On a fact-rich story geology just piles on as a repetitive
+ * "deep time vs. our brief lives" closer (observed on emerald-bay-run: 9/9 stops →
+ * monotony); a thin story is exactly where the rock rounds the stop out. Tunable; the
+ * gap on emerald-bay-run sits between ~605 (sparse) and ~877+ (rich), so 700 splits clean.
+ */
+export const GEOLOGY_STORY_MAX_FACT_CHARS = 700
+
 // --- POI discovery ----------------------------------------------------------
 
 /** Geosearch probe spacing along the route (m). ~1.5x radius gives overlap so nothing is missed. */

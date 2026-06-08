@@ -27,13 +27,20 @@ export type PoiFacts = Record<string, unknown>
 /**
  * Attribution snapshot frozen at generation time so credit stays correct even
  * if the source POI row is later edited (e.g. Wikipedia CC BY-SA requirements).
+ *
+ * `source` is the ATTRIBUTION source, a SUPERSET of `poiSourceEnum` (a POI's
+ * discovery source): a clip can blend a Wikipedia POI with coordinate-keyed
+ * enrichment that owns no `pois` row (Macrostrat geology). poi_content.attribution
+ * is therefore an ARRAY — one entry per source the clip drew on — so a multi-source
+ * clip credits each (Wikipedia CC BY-SA + Macrostrat CC BY, etc.). Keep this union
+ * in lockstep with the Zod `attributionSource` enum in @skipper/shared.
  */
 export type AttributionSnapshot = {
-  source: 'wikipedia' | 'google_places'
+  source: 'wikipedia' | 'google_places' | 'macrostrat'
   sourceId: string
   title?: string
   url?: string
-  license?: string // e.g. "CC BY-SA 4.0"
+  license?: string // e.g. "CC BY-SA 4.0", "CC BY 4.0"
   retrievedAt?: string // ISO-8601
 }
 
@@ -137,10 +144,13 @@ export const poiContent = pgTable(
     audioDurationMs: integer('audio_duration_ms'),
     // Human spot-check flag.
     reviewed: boolean('reviewed').default(false).notNull(),
-    // Frozen attribution at generation time. NULLABLE here, but the M1 generator
-    // MUST populate it for every wikipedia-sourced clip (CC BY-SA is legal, not
-    // optional) — enforced in the generation checklist + human-review gate.
-    attribution: jsonb('attribution').$type<AttributionSnapshot>(),
+    // Frozen attribution at generation time — an ARRAY, one entry per source the clip
+    // drew on (Wikipedia + Macrostrat geology, etc.). NULLABLE here, but the M1
+    // generator MUST populate it for every wikipedia-sourced clip (CC BY-SA is legal,
+    // not optional) — enforced in the generation checklist + human-review gate. (jsonb,
+    // so the object→array widening needs no SQL migration; legacy single-object rows,
+    // if any, are read tolerantly via the Zod union in @skipper/shared.)
+    attribution: jsonb('attribution').$type<AttributionSnapshot[]>(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .defaultNow()

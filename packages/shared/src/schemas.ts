@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import {
+  attributionSource,
   durationBucket,
   interest,
   jokeLevel,
@@ -41,9 +42,9 @@ export const poi = z.object({
 })
 export type Poi = z.infer<typeof poi>
 
-/** Attribution snapshot frozen at generation time (keeps CC BY-SA credit correct). */
+/** Attribution snapshot frozen at generation time (keeps CC BY-SA / CC BY credit correct). */
 export const attribution = z.object({
-  source: poiSource,
+  source: attributionSource,
   sourceId: z.string(),
   title: z.string().optional(),
   url: z.url().optional(),
@@ -51,6 +52,16 @@ export const attribution = z.object({
   retrievedAt: z.iso.datetime().optional(),
 })
 export type Attribution = z.infer<typeof attribution>
+
+/**
+ * A clip's frozen attribution: an ARRAY, one entry per source it drew on (Wikipedia +
+ * Macrostrat, etc.). Tolerant of a legacy single-object row (pre-array clips) by
+ * normalizing it to a one-element array on read.
+ */
+export const attributionList = z
+  .union([attribution, z.array(attribution)])
+  .transform((a) => (Array.isArray(a) ? a : [a]))
+export type AttributionList = z.infer<typeof attributionList>
 
 /** Generated narration + audio. The cache: one per (poi, persona, voice, jokeLevel). */
 export const poiContent = z.object({
@@ -63,7 +74,7 @@ export const poiContent = z.object({
   audioUrl: z.string().nullish(),
   audioDurationMs: z.number().int().nullish(),
   reviewed: z.boolean(),
-  attribution: attribution.nullish(),
+  attribution: attributionList.nullish(),
 })
 export type PoiContent = z.infer<typeof poiContent>
 
@@ -165,9 +176,7 @@ export const tourDetail = z.object({
     status: tourStatus,
     isPreview: z.boolean(),
   }),
-  corridor: z
-    .object({ name: z.string(), region: z.string(), polyline })
-    .nullish(),
+  corridor: z.object({ name: z.string(), region: z.string(), polyline }).nullish(),
   stops: z.array(tourStopView),
 })
 export type TourDetail = z.infer<typeof tourDetail>

@@ -16,9 +16,18 @@ export type JokeLevel = z.infer<typeof jokeLevel>
 export const stopType = z.enum(['story', 'scenic', 'break'])
 export type StopType = z.infer<typeof stopType>
 
-/** Where a POI came from. Stored for dedup + attribution (Wikipedia is CC BY-SA). */
+/** Where a POI came from (its DISCOVERY source). Stored for dedup + attribution (Wikipedia is CC BY-SA). */
 export const poiSource = z.enum(['wikipedia', 'google_places'])
 export type PoiSource = z.infer<typeof poiSource>
+
+/**
+ * Attribution source — a SUPERSET of `poiSource`. A clip may credit a source that
+ * owns no `pois` row: coordinate-keyed enrichment like Macrostrat geology (CC BY 4.0)
+ * is layered onto an existing POI, not discovered as its own POI. Keep in lockstep
+ * with the `AttributionSnapshot['source']` union in @skipper/db/schema.
+ */
+export const attributionSource = z.enum(['wikipedia', 'google_places', 'macrostrat'])
+export type AttributionSource = z.infer<typeof attributionSource>
 
 export const tourStatus = z.enum(['draft', 'generating', 'ready', 'failed'])
 export type TourStatus = z.infer<typeof tourStatus>

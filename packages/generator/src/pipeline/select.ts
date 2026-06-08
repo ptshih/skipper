@@ -14,6 +14,7 @@
 // over thin neighbours.
 
 import type { PoiSource, StopType } from '@skipper/shared'
+import type { AttributionSnapshot } from '@skipper/db/schema'
 import {
   MIN_STOP_SEPARATION_M,
   OFF_ROUTE_MAX_M,
@@ -49,6 +50,10 @@ export interface StopPlan {
   alongSec: number
   /** STORY only: grounded fact sentences (the entire well the narrator may use). */
   facts: string[]
+  /** STORY + SCENIC: coordinate-keyed geology facts (Macrostrat), attached post-selection in generate.ts. */
+  geology?: string[]
+  /** Macrostrat attribution (CC BY 4.0) for the geology facts — folded into the clip's attribution array. */
+  geologyAttribution?: AttributionSnapshot
   targetSeconds: number
   triggerRadiusM: number
   /** The POI snapped to the nearest route point (the trigger point) — [lat,lng]. */

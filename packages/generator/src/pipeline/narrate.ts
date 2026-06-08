@@ -61,6 +61,8 @@ export interface NarrationRequest {
   place?: { name: string; kind?: string | null }
   /** Grounded fact lines (STORY only). The entire well of facts the model may use. */
   facts?: string[]
+  /** Coordinate-keyed geology facts (the rock underfoot). Grounded like `facts`; allowed on STORY and SCENIC. */
+  geology?: string[]
   /** Only when actually known from the route geometry. */
   sideOfRoad?: 'left' | 'right'
   /** Pronunciation hint, e.g. "Genoa = JUH-noh-uh". */
@@ -85,6 +87,37 @@ export interface NarrationResult {
   script: string
   stopReason: string | null
   usage: { inputTokens: number; outputTokens: number }
+}
+
+/**
+ * The GEOLOGY block — coordinate-keyed bedrock facts (Macrostrat). These ARE on the
+ * sheet, so they are sayable like any other fact (this is what makes "this point is
+ * granite" grounded instead of invented). Allowed on STORY and, uniquely among fact
+ * categories, on SCENIC — the rock underfoot is plainly there, names no landmark, and
+ * is the one true thing an otherwise-factless stop may speak.
+ */
+function geologyLines(geology: string[] | undefined, stopType: StopType): string[] {
+  const geo = (geology ?? []).map((g) => g.trim()).filter(Boolean)
+  if (geo.length === 0) return []
+  const out: string[] = [
+    '',
+    'GEOLOGY UNDERFOOT (grounded, from geologic maps — the rock you are driving through; treat these as facts on the sheet, sayable like any other):',
+  ]
+  for (const g of geo) out.push(`- ${g}`)
+  if (stopType === 'scenic') {
+    out.push(
+      '(On a SCENIC stop this is the ONE thing you may state as fact. You still name no peak, town, island, or landmark — only the rock and its rough age, exactly as given. Invent nothing beyond these lines; speak the age as the rough range it is.)',
+    )
+  } else {
+    // This STORY stop was deliberately handed geology BECAUSE its own facts are thin (rich
+    // stops never see this block), so the rock is welcome material — work a touch of it in.
+    // Two bans only, to kill the monotony seen when every stop got it: never the closer, and
+    // never the "deep time vs. our fleeting little lives" reflection (it goes stale fast).
+    out.push(
+      '(This stop is light on its own facts, so the rock is good extra material — work a little of it in where it fits, in your own words. Two rules: do NOT make it your closing line, and do NOT reach for the "deep time versus our brief human lives" reflection — that frame gets old fast. Land it mid-telling and end the stop on something else.)',
+    )
+  }
+  return out
 }
 
 /** Build the per-stop USER fact sheet, matching the system prompt's "Reading the fact sheet" contract. */
@@ -115,13 +148,15 @@ export function buildFactSheet(req: NarrationRequest): string {
         'FACT SHEET: (none — no real facts available. Treat this as a scenic moment; do not invent a story.)',
       )
     }
+    for (const l of geologyLines(req.geology, 'story')) lines.push(l)
   } else if (req.stopType === 'scenic') {
     lines.push(
-      'SCENIC stop — delivery only, NO facts. Point only at what is plainly, visibly there',
+      'SCENIC stop — delivery only, NO place-facts. Point only at what is plainly, visibly there',
     )
     lines.push(
       '(light, water color, sky, the road). Do not name any peak, town, island, or landmark.',
     )
+    for (const l of geologyLines(req.geology, 'scenic')) lines.push(l)
   } else {
     // break — the curated name + kind ARE given and sayable; everything volatile is not.
     lines.push(`PLACE: ${req.place?.name ?? '(unnamed)'}`)

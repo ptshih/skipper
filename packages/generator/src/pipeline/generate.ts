@@ -23,6 +23,8 @@ import type { DurationBucket } from '@skipper/shared'
 import type { AttributionSnapshot } from '@skipper/db/schema'
 import {
   ANTHROPIC_READY,
+  GEOLOGY_ENRICHMENT,
+  GEOLOGY_STORY_MAX_FACT_CHARS,
   GOOGLE_TTS_READY,
   FALLBACK_SPEED_MPS,
   GEOSEARCH_STEP_M,
@@ -35,6 +37,7 @@ import { SKIPPER_DEFAULTS } from '../persona/skipper'
 import { cumulativeMeters, encodePolyline, sampleAlong, totalMeters } from './geo'
 import type { LngLat } from './geo'
 import { discoverWikipediaPois, fetchDeepExtracts } from './wikipedia'
+import { geologyFacts } from './macrostrat'
 import { searchBreakStops, spokenKind } from './places'
 import type { BreakAnchor } from './places'
 import { selectStops, toFacts } from './select'
@@ -78,6 +81,8 @@ export interface StopSummary {
   /** STORY only: the grounded fact sheet the model was given — emitted on dry-run so
    *  the script can be audited against its exact well of facts (grounding invariant). */
   facts?: string[]
+  /** STORY + SCENIC: the geology lines (Macrostrat) the model was given — part of the audited well. */
+  geology?: string[]
   durationMs?: number
   audioUrl?: string
 }
@@ -183,6 +188,43 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
     console.log(`Deepened ${deep.size}/${storyStops.length} story fact sheets.`)
   }
 
+  // Geology enrichment (Macrostrat, CC BY 4.0): a coordinate-keyed fact layer — the rock
+  // you are driving through, grounded from geologic maps. Unlike Wikipedia it is keyed on
+  // the POINT, so it can light up a stop that has no article at all. It does NOT change a
+  // stop's type (geology is a separate channel, never counted toward STORY_MIN_FACT_CHARS),
+  // so the scenic↔story classification — and the M4 cache key — are untouched.
+  //   WHO gets it: SCENIC always (it carries no Wikipedia facts, so geology is the one true
+  //   thing it can say — geology's highest-leverage win); STORY only when SPARSE (its fact
+  //   sheet is below GEOLOGY_STORY_MAX_FACT_CHARS) — on a rich story geology just piles on
+  //   as a repetitive deep-time closer.
+  // Per-stop failures are non-fatal (the stop just gets no geology). Set SKIPPER_GEOLOGY=off.
+  if (GEOLOGY_ENRICHMENT()) {
+    const geoStops = plan.filter(
+      (s) =>
+        s.stopType === 'scenic' ||
+        (s.stopType === 'story' && s.facts.join(' ').length < GEOLOGY_STORY_MAX_FACT_CHARS),
+    )
+    const scenicN = geoStops.filter((s) => s.stopType === 'scenic').length
+    console.log(
+      `Enriching ${geoStops.length} stops with Macrostrat geology ` +
+        `(${scenicN} scenic, ${geoStops.length - scenicN} sparse story; rich stories skipped)...`,
+    )
+    let geoHits = 0
+    for (const s of geoStops) {
+      // Query at the TRIGGER point (the POI snapped onto the road), not the POI centroid:
+      // it is literally "the rock under your tires," it is always on LAND (so it dodges the
+      // fine map's "water" units that force a fallback to a coarse, vaguer world-scale unit),
+      // and it matches the framing the narrator naturally reaches for ("the ground we're rolling over").
+      const geo = await geologyFacts(s.triggerLat, s.triggerLng)
+      if (geo) {
+        s.geology = geo.facts
+        s.geologyAttribution = geo.attribution
+        geoHits++
+      }
+    }
+    console.log(`Geology grounded ${geoHits}/${geoStops.length} stops.`)
+  }
+
   // Each stop is an independent narration call, so the model can't see its own
   // prior output. We feed it (a) recent place names for earned callbacks and
   // (b) how the last few stops OPENED, so it can vary its entry instead of
@@ -254,10 +296,14 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
           place: { name: s.name, kind: s.kind },
           facts: s.facts,
           ...(s.sideOfRoad ? { sideOfRoad: s.sideOfRoad } : {}),
+          ...(s.geology?.length ? { geology: s.geology } : {}),
         }
       : s.stopType === 'break'
         ? { place: { name: s.name, kind: spokenKind(s.kind) } } // normalize raw primaryType
-        : {}),
+        : // SCENIC: no place-facts — but geology, when present, is the one grounded thing it may say.
+          s.geology?.length
+          ? { geology: s.geology }
+          : {}),
   })
   // First-pass narration: thread the trailing-3 window of cross-stop context.
   const narrate = (s: StopPlan) =>
@@ -406,8 +452,10 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       ...(s.sideOfRoad ? { sideOfRoad: s.sideOfRoad } : {}),
       script: scriptBySeq.get(s.seq),
       // STORY carries the exact (deepened) fact sheet so the dry-run artifact can be
-      // audited script-vs-sheet; SCENIC/BREAK have no facts by construction.
+      // audited script-vs-sheet; SCENIC/BREAK have no Wikipedia facts by construction.
       ...(s.stopType === 'story' ? { facts: s.facts } : {}),
+      // Geology (story + scenic) is part of the well too — surface it for the audit.
+      ...(s.geology?.length ? { geology: s.geology } : {}),
     }))
     return {
       corridor: corridor.name,
@@ -459,19 +507,22 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       const { audio, durationMs } = await synthesize(script, voice)
       const audioUrl = await uploadAudio(clipKey(poiId, persona, voice, jokeLevel), audio)
 
-      // CC BY-SA attribution is required for story clips (they reuse extract text).
-      // Scenic + break clips reuse no Wikipedia text, so no attribution is snapshotted.
-      const attribution: AttributionSnapshot | null =
-        s.stopType === 'story'
-          ? {
-              source: 'wikipedia',
-              sourceId: String(s.wikiPageId),
-              title: s.wikiTitle,
-              url: s.wikiUrl,
-              license: 'CC BY-SA 4.0',
-              retrievedAt: new Date().toISOString(),
-            }
-          : null
+      // Frozen attribution — an ARRAY, one entry per source this clip drew on. Story
+      // clips reuse Wikipedia extract text (CC BY-SA, required). Any stop — story OR
+      // scenic — that got Macrostrat geology carries a CC BY entry too. A scenic/break
+      // clip with no geology draws on no external text, so its attribution stays null.
+      const attribution: AttributionSnapshot[] = []
+      if (s.stopType === 'story') {
+        attribution.push({
+          source: 'wikipedia',
+          sourceId: String(s.wikiPageId),
+          title: s.wikiTitle,
+          url: s.wikiUrl,
+          license: 'CC BY-SA 4.0',
+          retrievedAt: new Date().toISOString(),
+        })
+      }
+      if (s.geologyAttribution) attribution.push(s.geologyAttribution)
 
       const poiContentId = await upsertPoiContent({
         poiId,
@@ -481,7 +532,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
         script,
         audioUrl,
         audioDurationMs: durationMs,
-        attribution,
+        attribution: attribution.length > 0 ? attribution : null,
       })
 
       finalStops.push({
@@ -504,6 +555,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
         // Carry the STORY fact sheet so the SERVED tour's scripts can be audited
         // (grounding) straight from the result JSON, same as the dry-run artifact.
         ...(s.stopType === 'story' ? { facts: s.facts } : {}),
+        ...(s.geology?.length ? { geology: s.geology } : {}),
         durationMs,
         audioUrl,
       })

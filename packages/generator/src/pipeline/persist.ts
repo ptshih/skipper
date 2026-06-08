@@ -88,7 +88,8 @@ export interface UpsertContentInput {
   script: string
   audioUrl: string
   audioDurationMs: number
-  attribution: AttributionSnapshot | null
+  /** One entry per source the clip drew on (Wikipedia + Macrostrat geology, etc.). */
+  attribution: AttributionSnapshot[] | null
 }
 
 /** Upsert generated content on the cache key (poi, persona, voice, joke_level); returns its id. */
@@ -159,7 +160,11 @@ export async function finalizeTourReady(tourId: string, stops: FinalStop[]): Pro
     approachHeadingDeg: s.approachHeadingDeg,
   }))
   await db.batch([
-    db.update(tours).set({ status: 'ready' }).where(eq(tours.id, tourId)).returning({ id: tours.id }),
+    db
+      .update(tours)
+      .set({ status: 'ready' })
+      .where(eq(tours.id, tourId))
+      .returning({ id: tours.id }),
     db.insert(tourStops).values(rows).returning({ id: tourStops.id }),
   ])
 }
