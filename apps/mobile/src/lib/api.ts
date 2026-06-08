@@ -1,8 +1,14 @@
 // Typed client for the Skipper M2 API. Responses are validated against the shared
 // Zod DTOs (@skipper/shared); auth rides on the Better Auth session cookie, which
 // the Expo client stores in secure-store and hands us via authClient.getCookie().
-import { corridorList, corridorTours, signedAudio, tourDetail } from '@skipper/shared'
-import type { CorridorList, CorridorTours, SignedAudio, TourDetail } from '@skipper/shared'
+import { corridorList, corridorTours, signedAudio, sourcesResponse, tourDetail } from '@skipper/shared'
+import type {
+  CorridorList,
+  CorridorTours,
+  DataSource,
+  SignedAudio,
+  TourDetail,
+} from '@skipper/shared'
 import { API_URL, authClient } from './auth'
 
 export class ApiError extends Error {
@@ -50,4 +56,8 @@ export const getTour = async (tourId: string): Promise<TourDetail> =>
 export const signTourAudio = async (tourId: string): Promise<SignedAudio> =>
   signedAudio.parse(await fetchJson(`/tours/${tourId}/assets/sign`, { method: 'POST' }))
 
-export type { CorridorList, CorridorTours, SignedAudio, TourDetail }
+/** The app-wide data-source/license catalog (authoritative; the app bundles only a fallback). */
+export const getSources = async (): Promise<DataSource[]> =>
+  sourcesResponse.parse(await fetchJson('/sources')).sources
+
+export type { CorridorList, CorridorTours, DataSource, SignedAudio, TourDetail }

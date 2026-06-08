@@ -63,6 +63,32 @@ export const attributionList = z
   .transform((a) => (Array.isArray(a) ? a : [a]))
 export type AttributionList = z.infer<typeof attributionList>
 
+/**
+ * A public data-source credit for the app-wide "Sources & Licenses" screen (NOT per-clip —
+ * that's `attribution`, frozen on poi_content). Served by GET /sources so a NEW fact source
+ * (Wikidata, OSM, public-domain texts…) credits correctly with a backend deploy, never an
+ * App Store release. Keep in step with the generator's actual sources + `attributionSource`.
+ */
+export const dataSource = z.object({
+  /** Display name of the source, e.g. "Wikipedia". */
+  name: z.string(),
+  /** What this source contributes to a drive — plain + accurate, no volatile claims. */
+  use: z.string(),
+  /** Short license code (shown as a tappable badge), or null when not a public-content license. */
+  license: z.string().nullable(),
+  /** Canonical license deed — satisfies CC's "provide a link to the license". */
+  licenseUrl: z.url().optional(),
+  /** The source's own home, for credit. */
+  sourceUrl: z.url(),
+  /** One-line plain-language gloss of the obligation (attribution, share-alike, …). */
+  note: z.string().optional(),
+})
+export type DataSource = z.infer<typeof dataSource>
+
+/** GET /sources — the app-wide data-source/license catalog (anonymous; public legal info). */
+export const sourcesResponse = z.object({ sources: z.array(dataSource) })
+export type SourcesResponse = z.infer<typeof sourcesResponse>
+
 /** Generated narration + audio. The cache: one per (poi, persona, voice, jokeLevel). */
 export const poiContent = z.object({
   id: z.uuid(),

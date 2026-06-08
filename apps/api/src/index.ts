@@ -1,6 +1,7 @@
 // @skipper/api — Hono API (M2), served natively by bun.
 //
 //   GET  /health                     -> liveness (env-free)
+//   GET  /sources                    -> data-source/license catalog (anonymous; env-free)
 //   *    /api/auth/*                  -> Better Auth (sign-up/in/out, session, OAuth)
 //   GET  /corridors                  -> list corridors (anonymous OK; no polyline)
 //   GET  /corridors/:id/tours        -> list a corridor's ready tours (anonymous OK)
@@ -20,6 +21,7 @@ import type { Tour as TourRow } from '@skipper/db/schema'
 import { auth } from './auth'
 import { FEATURES, meetsTier, withSession, type ApiEnv } from './entitlements'
 import { hostForPersona } from './host'
+import { DATA_SOURCES } from './sources'
 import { presignGet } from './storage'
 
 const app = new Hono<ApiEnv>()
@@ -36,6 +38,11 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 // Health check — used by infra / local smoke tests.
 app.get('/health', (c) => c.json({ ok: true }))
+
+// Public data-source/license catalog for the in-app "Sources & Licenses" screen.
+// Anonymous + env-free (no DB) — served from code so a NEW fact source credits without
+// an App Store release (the app bundles only an offline fallback).
+app.get('/sources', (c) => c.json({ sources: DATA_SOURCES }))
 
 // Better Auth owns everything under /api/auth/* (its own handler).
 app.on(['POST', 'GET'], '/api/auth/*', (c) => auth.handler(c.req.raw))

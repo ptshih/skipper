@@ -1,30 +1,20 @@
-// Data-source attribution + licensing — the single source of truth for the in-app
-// "Sources & Licenses" screen (app/legal.tsx). These are LEGAL facts (license codes,
-// the canonical license + source URLs), kept OUT of the persona layer: the skipper's
-// voice colors the page intro (voice.legal), never the credit itself.
+// Data-source attribution + licensing for the in-app "Sources & Licenses" screen
+// (app/legal.tsx). The AUTHORITATIVE catalog now lives SERVER-SIDE (apps/api/src/sources.ts,
+// served by GET /sources) so a new fact source credits without an App Store release; the app
+// fetches it via `getSources()`. The constant below is ONLY an offline fallback so the legal
+// screen never dead-ends in a dead zone — the API list wins whenever it's reachable, so this
+// copy may lag a release without legal harm (new-source content can't be reached offline
+// without first downloading it online, where the live list was available).
 //
-// This mirrors what the generator freezes onto each clip's `poi_content.attribution`
-// at generation time (see packages/generator/src/pipeline: wikipedia → "CC BY-SA 4.0",
-// macrostrat → "CC BY 4.0"; break anchors come from Google Places). When a new source
-// lands in `@skipper/shared` `attributionSource`, add it HERE too so the public legal
-// surface stays in lockstep with what a drive actually draws on.
+// These are LEGAL facts (license codes, the canonical license + source URLs), kept OUT of the
+// persona layer: the skipper's voice colors the page intro (voice.legal), never the credit.
 
-export interface DataSource {
-  /** Display name of the source. */
-  name: string
-  /** What this source contributes to a drive — plain + accurate, no volatile claims. */
-  use: string
-  /** Short license code, shown as a tappable badge. null = not a public-content license. */
-  license: string | null
-  /** Canonical license deed — satisfies CC's "provide a link to the license". */
-  licenseUrl?: string
-  /** The source's own home, for credit. */
-  sourceUrl: string
-  /** One-line plain-language gloss of the obligation (attribution, share-alike, …). */
-  note?: string
-}
+export type { DataSource } from '@skipper/shared'
+import type { DataSource } from '@skipper/shared'
 
-export const DATA_SOURCES: DataSource[] = [
+/** Offline fallback for the credits screen. Source of truth is GET /sources — keep this in
+ *  rough sync, but it is non-authoritative (the live list overrides it whenever online). */
+export const FALLBACK_DATA_SOURCES: DataSource[] = [
   {
     name: 'Wikipedia',
     use: 'The stories — the facts behind the tales the skipper tells at each stop.',
