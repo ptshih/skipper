@@ -56,6 +56,12 @@ export interface StopPlan {
   geologyReason?: 'sparse' | 'iconic'
   /** Macrostrat attribution (CC BY 4.0) for the geology facts — folded into the clip's attribution array. */
   geologyAttribution?: AttributionSnapshot
+  /** STORY only: linked Wikidata QID (from the page's `wikibase_item`) — the enrichment join key. */
+  wikidataQid?: string
+  /** STORY only: Wikidata structured facts (inception/elevation/named-after/…), attached post-selection in generate.ts. */
+  wikidata?: string[]
+  /** Wikidata attribution (CC0) for the structured facts — folded into the clip's attribution array. */
+  wikidataAttribution?: AttributionSnapshot
   targetSeconds: number
   triggerRadiusM: number
   /** The POI snapped to the nearest route point (the trigger point) — [lat,lng]. */
@@ -264,6 +270,8 @@ export function selectStops(params: SelectParams): StopPlan[] {
       // forbid it. Omitted when the geometry can't call a confident side.
       ...(isStory && snap.sideOfRoad ? { sideOfRoad: snap.sideOfRoad } : {}),
       ...(isStory ? { wikiUrl: n.poi.url, wikiTitle: n.poi.title, wikiPageId: n.poi.pageid } : {}),
+      // Carry the Wikidata join key for STORY stops; generate.ts enriches sparse ones.
+      ...(isStory && n.poi.qid ? { wikidataQid: n.poi.qid } : {}),
     })
   }
 

@@ -9,7 +9,12 @@
 // requests in series. License for reuse is CC BY-SA 4.0 — attribution is
 // snapshotted onto poi_content at generation time (see generate.ts).
 
-import { DEEP_EXTRACT_CHARS, EXTRACT_CHARS, GEOSEARCH_RADIUS_M, WIKIPEDIA_USER_AGENT } from '../config'
+import {
+  DEEP_EXTRACT_CHARS,
+  EXTRACT_CHARS,
+  GEOSEARCH_RADIUS_M,
+  WIKIPEDIA_USER_AGENT,
+} from '../config'
 import type { LngLat } from './geo'
 import { fetchWithRetry, sleep } from './http'
 
@@ -32,6 +37,8 @@ interface ExtractPage {
   fullurl?: string
   canonicalurl?: string
   missing?: boolean
+  /** Page properties; `wikibase_item` is the linked Wikidata QID (the enrichment join key). */
+  pageprops?: { wikibase_item?: string }
 }
 
 /** A grounded Wikipedia POI candidate placed by (lat,lng). `extract` may be '' (thin → scenic). */
@@ -42,6 +49,8 @@ export interface WikiPoi {
   lng: number
   extract: string
   url: string
+  /** Linked Wikidata QID (from the page's `wikibase_item` prop), when the page has one. */
+  qid?: string
 }
 
 /**
@@ -53,7 +62,9 @@ export interface WikiPoi {
  */
 async function wiki<T>(params: Record<string, string>, maxlagAttempt = 0): Promise<T> {
   const qs = new URLSearchParams({ format: 'json', formatversion: '2', maxlag: '5', ...params })
-  const res = await fetchWithRetry(`${API}?${qs}`, { headers: { 'User-Agent': WIKIPEDIA_USER_AGENT } })
+  const res = await fetchWithRetry(`${API}?${qs}`, {
+    headers: { 'User-Agent': WIKIPEDIA_USER_AGENT },
+  })
   const body = await res.text()
   let json: ({ error?: { code: string; info: string } } & T) | undefined
   try {
@@ -62,7 +73,8 @@ async function wiki<T>(params: Record<string, string>, maxlagAttempt = 0): Promi
     throw new Error(`Wikipedia returned non-JSON (HTTP ${res.status}): ${body.slice(0, 160)}`)
   }
   if (json!.error?.code === 'maxlag') {
-    if (maxlagAttempt >= MAX_MAXLAG_RETRIES) throw new Error(`Wikipedia maxlag persisted after ${MAX_MAXLAG_RETRIES} retries.`)
+    if (maxlagAttempt >= MAX_MAXLAG_RETRIES)
+      throw new Error(`Wikipedia maxlag persisted after ${MAX_MAXLAG_RETRIES} retries.`)
     const wait = Number(res.headers.get('retry-after') ?? '5')
     await sleep(wait * 1000)
     return wiki<T>(params, maxlagAttempt + 1)
@@ -93,13 +105,14 @@ async function fetchExtracts(pageids: number[]): Promise<ExtractPage[]> {
     const chunk = pageids.slice(i, i + 20)
     const j = await wiki<{ query?: { pages?: ExtractPage[] } }>({
       action: 'query',
-      prop: 'extracts|info',
+      prop: 'extracts|info|pageprops',
       pageids: chunk.join('|'),
       exintro: '1', // lead section only — required to return >1 extract per call
       explaintext: '1', // clean plain text for TTS
       exchars: String(EXTRACT_CHARS),
       exlimit: '20',
       inprop: 'url',
+      ppprop: 'wikibase_item', // the linked Wikidata QID — our enrichment join key
     })
     out.push(...(j.query?.pages ?? []))
   }
@@ -141,7 +154,9 @@ export async function fetchDeepExtracts(pageids: number[]): Promise<Map<number, 
       const text = await fetchArticleExtract(id)
       if (text) out.set(id, text)
     } catch (e) {
-      console.warn(`Deep extract for page ${id} failed (${(e as Error).message}) — keeping lead facts.`)
+      console.warn(
+        `Deep extract for page ${id} failed (${(e as Error).message}) — keeping lead facts.`,
+      )
     }
     await sleep(200) // gentle pacing between full-article calls
   }
@@ -175,6 +190,7 @@ export async function discoverWikipediaPois(samples: { point: LngLat }[]): Promi
       lng: hit.lon,
       extract: (page?.extract ?? '').trim(),
       url: page?.canonicalurl ?? page?.fullurl ?? `https://en.wikipedia.org/?curid=${hit.pageid}`,
+      ...(page?.pageprops?.wikibase_item ? { qid: page.pageprops.wikibase_item } : {}),
     })
   }
   return pois

@@ -22,11 +22,12 @@ export type PoiSource = z.infer<typeof poiSource>
 
 /**
  * Attribution source — a SUPERSET of `poiSource`. A clip may credit a source that
- * owns no `pois` row: coordinate-keyed enrichment like Macrostrat geology (CC BY 4.0)
- * is layered onto an existing POI, not discovered as its own POI. Keep in lockstep
- * with the `AttributionSnapshot['source']` union in @skipper/db/schema.
+ * owns no `pois` row: enrichment layered onto an existing POI, not discovered as its
+ * own POI — coordinate-keyed Macrostrat geology (CC BY 4.0), or QID-keyed Wikidata
+ * structured facts (CC0). Keep in lockstep with the `AttributionSnapshot['source']`
+ * union in @skipper/db/schema.
  */
-export const attributionSource = z.enum(['wikipedia', 'google_places', 'macrostrat'])
+export const attributionSource = z.enum(['wikipedia', 'google_places', 'macrostrat', 'wikidata'])
 export type AttributionSource = z.infer<typeof attributionSource>
 
 export const tourStatus = z.enum(['draft', 'generating', 'ready', 'failed'])

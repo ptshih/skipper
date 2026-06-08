@@ -32,6 +32,8 @@ import {
   GOOGLE_READY,
   PACING,
   R2_READY,
+  WIKIDATA_ENRICHMENT,
+  WIKIDATA_STORY_MAX_FACT_CHARS,
   requireEnv,
 } from '../config'
 import { SKIPPER_DEFAULTS } from '../persona/skipper'
@@ -39,6 +41,7 @@ import { cumulativeMeters, encodePolyline, sampleAlong, totalMeters } from './ge
 import type { LngLat } from './geo'
 import { discoverWikipediaPois, fetchDeepExtracts } from './wikipedia'
 import { geologyFacts } from './macrostrat'
+import { wikidataFacts } from './wikidata'
 import { searchBreakStops, spokenKind } from './places'
 import type { BreakAnchor } from './places'
 import { selectStops, toFacts } from './select'
@@ -84,6 +87,8 @@ export interface StopSummary {
   facts?: string[]
   /** STORY + SCENIC: the geology lines (Macrostrat) the model was given — part of the audited well. */
   geology?: string[]
+  /** STORY only: the Wikidata structured facts the model was given — part of the audited well. */
+  wikidata?: string[]
   durationMs?: number
   audioUrl?: string
 }
@@ -237,6 +242,40 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
     console.log(`Geology grounded ${geoHits}/${geoStops.length} stops.`)
   }
 
+  // Wikidata enrichment (CC0): a QID-keyed layer of discrete facts (inception, elevation,
+  // named-after, heritage designation) joined from the Wikipedia page's `wikibase_item`.
+  // Like geology it is a SEPARATE channel — never counted toward STORY_MIN_FACT_CHARS, so
+  // it can't flip a stop's type or disturb the M4 cache key.
+  //   WHO gets it: STORY stops with a linked QID, but only when SPARSE (fact sheet below
+  //   WIKIDATA_STORY_MAX_FACT_CHARS). A date/elevation/namesake identifies the place, so —
+  //   unlike geology — it can NOT ride a SCENIC stop without breaking the "no place-facts"
+  //   invariant; and a fact-rich story already states these things in prose (piling on is
+  //   the monotony the geology sparse-gate avoids). A thin story is exactly where an exact
+  //   year or elevation rounds it out.
+  // Per-stop failures are non-fatal (the stop just gets no Wikidata). Set SKIPPER_WIKIDATA=off.
+  if (WIKIDATA_ENRICHMENT()) {
+    const wdStops = plan.filter(
+      (s) =>
+        s.stopType === 'story' &&
+        s.wikidataQid &&
+        s.facts.join(' ').length < WIKIDATA_STORY_MAX_FACT_CHARS,
+    )
+    console.log(
+      `Enriching ${wdStops.length} sparse story stops with Wikidata structured facts ` +
+        `(rich stories + scenic skipped)...`,
+    )
+    let wdHits = 0
+    for (const s of wdStops) {
+      const wd = await wikidataFacts(s.wikidataQid!)
+      if (wd) {
+        s.wikidata = wd.facts
+        s.wikidataAttribution = wd.attribution
+        wdHits++
+      }
+    }
+    console.log(`Wikidata grounded ${wdHits}/${wdStops.length} stops.`)
+  }
+
   // Each stop is an independent narration call, so the model can't see its own
   // prior output. We feed it (a) recent place names for earned callbacks and
   // (b) how the last few stops OPENED, so it can vary its entry instead of
@@ -314,6 +353,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
                 ...(s.geologyReason ? { geologyContext: s.geologyReason } : {}),
               }
             : {}),
+          ...(s.wikidata?.length ? { wikidata: s.wikidata } : {}),
         }
       : s.stopType === 'break'
         ? { place: { name: s.name, kind: spokenKind(s.kind) } } // normalize raw primaryType
@@ -471,8 +511,9 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       // STORY carries the exact (deepened) fact sheet so the dry-run artifact can be
       // audited script-vs-sheet; SCENIC/BREAK have no Wikipedia facts by construction.
       ...(s.stopType === 'story' ? { facts: s.facts } : {}),
-      // Geology (story + scenic) is part of the well too — surface it for the audit.
+      // Geology (story + scenic) and Wikidata (story) are part of the well too — surface for the audit.
       ...(s.geology?.length ? { geology: s.geology } : {}),
+      ...(s.wikidata?.length ? { wikidata: s.wikidata } : {}),
     }))
     return {
       corridor: corridor.name,
@@ -526,8 +567,9 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
 
       // Frozen attribution — an ARRAY, one entry per source this clip drew on. Story
       // clips reuse Wikipedia extract text (CC BY-SA, required). Any stop — story OR
-      // scenic — that got Macrostrat geology carries a CC BY entry too. A scenic/break
-      // clip with no geology draws on no external text, so its attribution stays null.
+      // scenic — that got Macrostrat geology carries a CC BY entry too; a sparse story
+      // enriched with Wikidata facts carries a CC0 entry. A scenic/break clip with no
+      // geology and no Wikidata draws on no external text, so its attribution stays null.
       const attribution: AttributionSnapshot[] = []
       if (s.stopType === 'story') {
         attribution.push({
@@ -540,6 +582,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
         })
       }
       if (s.geologyAttribution) attribution.push(s.geologyAttribution)
+      if (s.wikidataAttribution) attribution.push(s.wikidataAttribution)
 
       const poiContentId = await upsertPoiContent({
         poiId,
@@ -573,6 +616,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
         // (grounding) straight from the result JSON, same as the dry-run artifact.
         ...(s.stopType === 'story' ? { facts: s.facts } : {}),
         ...(s.geology?.length ? { geology: s.geology } : {}),
+        ...(s.wikidata?.length ? { wikidata: s.wikidata } : {}),
         durationMs,
         audioUrl,
       })

@@ -65,6 +65,8 @@ export interface NarrationRequest {
   geology?: string[]
   /** STORY only: why geology is here — 'sparse' (thin facts, round it out) or 'iconic' (rich stop, the rock is the headline). */
   geologyContext?: 'sparse' | 'iconic'
+  /** STORY only: discrete Wikidata facts (a date, an elevation, a namesake). Grounded like `facts`. */
+  wikidata?: string[]
   /** Only when actually known from the route geometry. */
   sideOfRoad?: 'left' | 'right'
   /** Pronunciation hint, e.g. "Genoa = JUH-noh-uh". */
@@ -130,6 +132,27 @@ function geologyLines(
   return out
 }
 
+/**
+ * The KEY FACTS block — discrete, verified Wikidata statements (a date, an elevation, a
+ * namesake). These ARE on the sheet, so they are sayable like any other fact. STORY-only
+ * (a date/elevation/namesake identifies the place, so it can't ride a SCENIC stop the way
+ * geology — which names no landmark — can). They are handed over BECAUSE the stop's own
+ * prose is thin, so the model is nudged to weave them in rather than leave them optional.
+ */
+function wikidataLines(wikidata: string[] | undefined): string[] {
+  const wd = (wikidata ?? []).map((w) => w.trim()).filter(Boolean)
+  if (wd.length === 0) return []
+  const out: string[] = [
+    '',
+    'KEY FACTS (grounded, from Wikidata — discrete, verified facts about this place; treat these as facts on the sheet, sayable like any other):',
+  ]
+  for (const w of wd) out.push(`- ${w}`)
+  out.push(
+    '(These are exact, dependable facts the rest of your sheet is thin on — a date, an elevation, a namesake. Work any that fit naturally into your telling, in your own words; do not invent beyond them, and do not let them become your closing line.)',
+  )
+  return out
+}
+
 /** Build the per-stop USER fact sheet, matching the system prompt's "Reading the fact sheet" contract. */
 export function buildFactSheet(req: NarrationRequest): string {
   const lines: string[] = []
@@ -159,6 +182,7 @@ export function buildFactSheet(req: NarrationRequest): string {
       )
     }
     for (const l of geologyLines(req.geology, 'story', req.geologyContext)) lines.push(l)
+    for (const l of wikidataLines(req.wikidata)) lines.push(l)
   } else if (req.stopType === 'scenic') {
     lines.push(
       'SCENIC stop — delivery only, NO place-facts. Point only at what is plainly, visibly there',

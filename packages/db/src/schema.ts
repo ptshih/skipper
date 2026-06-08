@@ -29,18 +29,19 @@ export type PoiFacts = Record<string, unknown>
  * if the source POI row is later edited (e.g. Wikipedia CC BY-SA requirements).
  *
  * `source` is the ATTRIBUTION source, a SUPERSET of `poiSourceEnum` (a POI's
- * discovery source): a clip can blend a Wikipedia POI with coordinate-keyed
- * enrichment that owns no `pois` row (Macrostrat geology). poi_content.attribution
- * is therefore an ARRAY — one entry per source the clip drew on — so a multi-source
- * clip credits each (Wikipedia CC BY-SA + Macrostrat CC BY, etc.). Keep this union
- * in lockstep with the Zod `attributionSource` enum in @skipper/shared.
+ * discovery source): a clip can blend a Wikipedia POI with enrichment that owns no
+ * `pois` row — coordinate-keyed Macrostrat geology, or QID-keyed Wikidata structured
+ * facts. poi_content.attribution is therefore an ARRAY — one entry per source the clip
+ * drew on — so a multi-source clip credits each (Wikipedia CC BY-SA + Macrostrat CC BY
+ * + Wikidata CC0, etc.). Keep this union in lockstep with the Zod `attributionSource`
+ * enum in @skipper/shared.
  */
 export type AttributionSnapshot = {
-  source: 'wikipedia' | 'google_places' | 'macrostrat'
+  source: 'wikipedia' | 'google_places' | 'macrostrat' | 'wikidata'
   sourceId: string
   title?: string
   url?: string
-  license?: string // e.g. "CC BY-SA 4.0", "CC BY 4.0"
+  license?: string // e.g. "CC BY-SA 4.0", "CC BY 4.0", "CC0"
   retrievedAt?: string // ISO-8601
 }
 

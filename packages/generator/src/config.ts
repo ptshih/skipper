@@ -89,6 +89,26 @@ export const GEOLOGY_ICONIC_STOPS: Record<string, string[]> = {
   'emerald-bay-run': ['Emerald Bay State Park'],
 }
 
+// --- Wikidata structured-fact enrichment ------------------------------------
+
+// QID-keyed discrete facts (inception, elevation, named-after, heritage designation)
+// layered onto STORY stops from the public Wikidata Action API (keyless, CC0). The join
+// key is the Wikipedia page's `wikibase_item` property, captured at discovery. See
+// pipeline/wikidata.ts. Reuses the same descriptive UA + contact as Wikipedia.
+export const WIKIDATA_USER_AGENT = WIKIPEDIA_USER_AGENT
+/** Wikidata enrichment is on by default; set SKIPPER_WIKIDATA=off to skip the per-stop lookup. */
+export const WIKIDATA_ENRICHMENT = (): boolean => process.env.SKIPPER_WIKIDATA !== 'off'
+/**
+ * Who gets Wikidata facts: STORY stops only — a date/elevation/namesake identifies the
+ * place, which would break the SCENIC "no place-facts" invariant (geology can ride scenic
+ * because it names no landmark; Wikidata can't). And among stories, only SPARSE ones
+ * (fact sheet below this many chars): a fact-rich lead extract already states these things
+ * in prose, so on a rich stop the structured facts just pile on — exactly the monotony the
+ * geology sparse-gate avoids. A thin story is where an exact year or elevation rounds it
+ * out. Tunable independently of GEOLOGY_STORY_MAX_FACT_CHARS.
+ */
+export const WIKIDATA_STORY_MAX_FACT_CHARS = 700
+
 // --- POI discovery ----------------------------------------------------------
 
 /** Geosearch probe spacing along the route (m). ~1.5x radius gives overlap so nothing is missed. */
