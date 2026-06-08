@@ -60,7 +60,7 @@ export default function CorridorsScreen() {
         {session ? (
           <View style={styles.authRow}>
             <Text variant="dim" color="inkFaint" numberOfLines={1} style={styles.flex}>
-              Aboard as {session.user.email}
+              Riding as {session.user.email}
             </Text>
             <Button variant="ghost" title="Sign out" fullWidth={false} onPress={() => signOut()} />
           </View>

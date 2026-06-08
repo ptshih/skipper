@@ -1,6 +1,6 @@
-// The route as a dashed ATLAS TRAIL with a little boat token gliding along it —
-// the signature motif. The token is the skipper's launch (not a generic dot), so
-// the boat-captain stays present inside the park aesthetic. Driven by an
+// The route as a dashed ATLAS TRAIL with a little car token gliding along it —
+// the signature motif. The token is the skipper's rig (not a generic dot), so
+// the road-trip guide stays present inside the park aesthetic. Driven by an
 // Animated.Value in [0,1]; JS-driven (percentage layout can't use the native
 // driver) — keep it the only thing animating on a frame to stay smooth.
 import { Animated, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
@@ -55,7 +55,7 @@ export function RouteTrack({ progress, height = 6, style }: RouteTrackProps) {
           backgroundColor: colors.trackActive,
         }}
       />
-      {/* The boat token rides a rail inset by half its width on each side, so the disc
+      {/* The car token rides a rail inset by half its width on each side, so the disc
           EDGES stay flush with the track ends instead of the disc CENTER. At 0% its left
           edge sits right at the gutter — lined up with the cards below — rather than half
           the disc hanging past it; same at 100% on the right. */}
@@ -70,7 +70,7 @@ export function RouteTrack({ progress, height = 6, style }: RouteTrackProps) {
             },
           ]}
         >
-          <Icon name="boat" size={14} color="onAmber" />
+          <Icon name="car" size={14} color="onAmber" />
         </Animated.View>
       </View>
     </View>

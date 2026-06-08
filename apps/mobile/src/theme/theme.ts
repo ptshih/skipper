@@ -38,7 +38,7 @@ export interface ThemeColors {
   danger: string
   onDanger: string
   // effects (rgba strings — used for glow/shadow/scrim overlays via boxShadow)
-  glow: string // campfire-amber halo (NOW card, dusk CTA, boat token)
+  glow: string // campfire-amber halo (NOW card, dusk CTA, car token)
   shadowCast: string // neutral ambient cast shadow (daylight elevation)
   scrim: string // dim behind sheets / gates
 }

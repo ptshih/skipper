@@ -350,7 +350,7 @@ export default function PreviewScreen() {
   const buffering = isClip && playing && (!status.isLoaded || status.isBuffering)
   // We've ARRIVED at a stop on a clip/rest segment; a 'drive' is still EN ROUTE to it.
   // Used so a stop only lights up "active" when you reach it — not while the silent
-  // drive toward it shows "UNDERWAY to <next>", which read as a double-navigation.
+  // drive toward it shows "ROLLING to <next>", which read as a double-navigation.
   const atStop = seg?.kind !== 'drive'
 
   // Seeking is only meaningful on a loaded clip with a known duration (drive/rest are
@@ -394,7 +394,7 @@ export default function PreviewScreen() {
         </Text>
       </View>
 
-      {/* Route progress trail with the boat token */}
+      {/* Route progress trail with the car token */}
       <RouteTrack progress={dot} style={styles.track} />
 
       {/* NOW area */}
@@ -405,7 +405,7 @@ export default function PreviewScreen() {
               DRIVE COMPLETE
             </Text>
             <Text variant="placardTitle" color="ink">
-              You’ve docked
+              You’ve arrived
             </Text>
             <Text variant="body" color="inkDim">
               {voice.driveComplete}
@@ -413,17 +413,17 @@ export default function PreviewScreen() {
           </Card>
         ) : seg?.kind === 'drive' ? (
           // Minimized: a drive is transit, not a stop — a calm distance strip, not a
-          // now-playing-sized card. The boat token sliding the trail carries the motion.
+          // now-playing-sized card. The car token sliding the trail carries the motion.
           <View style={styles.driveStrip} accessibilityLiveRegion="polite">
             <Text variant="dim" color="inkFaint" align="center">
-              Underway · ~{((seg.distanceM ?? 0) / 1609).toFixed(1)} mi to the next stop
+              Rolling · ~{((seg.distanceM ?? 0) / 1609).toFixed(1)} mi to the next stop
             </Text>
           </View>
         ) : seg?.kind === 'rest' ? (
           <NowCard
             liveRegion
             glow={false}
-            kicker={voice.player.shoreLeave}
+            kicker={voice.player.pitStop}
             title={nextStopName ?? 'A good spot to stretch'}
           />
         ) : (
@@ -500,7 +500,7 @@ export default function PreviewScreen() {
       </View>
 
       <Text variant="dim" color="inkFaint" style={styles.hint}>
-        Tap any stop to jump aboard
+        Tap any stop to jump ahead
       </Text>
       <Divider dashed style={styles.divider} />
 

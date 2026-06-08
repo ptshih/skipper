@@ -26,7 +26,7 @@ export type IconName =
   | 'passed'
   | 'upcoming'
   | 'ticket'
-  | 'boat'
+  | 'car'
   | 'day'
   | 'night'
 
@@ -51,7 +51,7 @@ const IONICON: Record<IconName, ComponentProps<typeof Ionicons>['name']> = {
   upcoming: 'caret-forward',
   // misc
   ticket: 'ticket-outline',
-  boat: 'boat',
+  car: 'car',
   day: 'sunny-outline',
   night: 'moon-outline',
 }

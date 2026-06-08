@@ -20,10 +20,11 @@ badges, the dog-eared Rand McNally atlas in the glovebox. Dark mode isn't "black
 mode" — it's **dusk settling over the park**: deep pine sky, parchment text that
 won't burn night-driving eyes, a campfire-amber glow on whatever's playing.
 
-The persona is a **skipper** — a boat captain who calls his car a boat and means
-it. So the one moving thing on the route is a little **boat token** gliding the
-trail, and the voice talks in wakes, knots, docks, and boarding passes. The park
-is the _setting_; the skipper is the _star_.
+The persona is **the Skipper** — a road-trip tour guide with the soul of a corny
+old ride-along skipper. So the one moving thing on the route is a little **car
+token** gliding the trail, and the voice talks in engines, pit stops, the open
+road, and his cranky old truck. The park is the _setting_; the Skipper is the
+_star_.
 
 ## 2. Principles (in priority order)
 
@@ -32,7 +33,7 @@ is the _setting_; the skipper is the _star_.
    reserved for **non-driving** surfaces and **large** sizes. When ornament fights
    the glance, ornament loses.
 2. **Charm lives in voice, motif, and warmth — not clutter.** One signature move
-   per screen (the boat on the trail; the glowing NOW card; the passport-stamp on
+   per screen (the car on the trail; the glowing NOW card; the passport-stamp on
    a passed stop). Never six.
 3. **Contrast is enforced by the token set, not by discipline.** See §4. There is
    intentionally no "amber text on paper" role to misuse.
@@ -55,7 +56,7 @@ Raw values + scales. Components reference the **semantic roles** in §4, not the
 Two themes (`lightTheme` / `darkTheme`) map the raw palette onto one role set, so
 light↔dark swap for free. **The contrast footguns are designed out:**
 
-- `amberToken` is a **fill/shape color only** — used for the moving boat token,
+- `amberToken` is a **fill/shape color only** — used for the moving car token,
   meter pips, the active edge-bar. There is **no** amber-text-on-surface role.
 - Warm accent **text** (the NOW kicker, badge labels) uses `accentWarm`, which is a
   **burnt** amber in daylight (`#9A4D17`, ~5:1 on paper) and lantern amber at dusk.
@@ -134,7 +135,7 @@ All token-driven and theme-aware. Compose these; don't restyle from scratch.
   by dusk, ≥60pt), `secondary` (outlined placard), `ghost` (text link). `icon` = a
   leading vector icon (an `IconName`).
 - **`Icon`** — vector icons (Ionicons via `@expo/vector-icons`); semantic names
-  (`play`, `boat`, `story`…) mapped in `Icon.tsx`. **Use these, NOT emoji** — this
+  (`play`, `car`, `story`…) mapped in `Icon.tsx`. **Use these, NOT emoji** — this
   build has no color-emoji fallback, so emoji render as tofu (`?`).
 - **`Card`** — the ranger placard. Plain by default (glanceable); `framed` adds the
   carved double-keyline + corner screw-dots — **non-driving surfaces only**.
@@ -142,7 +143,7 @@ All token-driven and theme-aware. Compose these; don't restyle from scratch.
   (`pine·amber·teal·rust·neutral`) maps to a contrast-safe text color; `filled` for
   a solid disc.
 - **`Divider`** — hairline or `dashed` (the atlas-trail rule).
-- **`RouteTrack`** — the signature motif: a dashed trail with the **boat token**
+- **`RouteTrack`** — the signature motif: a dashed trail with the **car token**
   gliding along it. Driven by an `Animated.Value` in `[0,1]` (JS-driven — keep it
   the only thing animating per frame).
 - **`StopRow`** — a stop with three glance-states: `upcoming` (hollow ▶), `active`
@@ -161,11 +162,11 @@ Microcopy is brand-critical and **centralized** — every empty/error/loading/CT
 string speaks as the skipper. Keep it warm, corny, and short (glanceable). Examples:
 
 - Loading: _"Firing up the engine, folks. She starts when she's good and ready."_
-- Empty: _"No drives charted here yet. We're still out mapping the good water."_
-- Error: _"Well, that's a knot in the line. Give her another pull?"_
-- Play CTA: _"All aboard — start the drive."_
-- Gate: _"Anonymous riders get the sampler. Grab a free boarding pass and the whole lake's yours."_
-- Drive complete: _"That's the dock, folks. Watch your step on the way off."_
+- Empty: _"No drives charted here yet. We’re still out mapping the good roads."_
+- Error: _"Well, that’s a kink in the hose. Give her another pull?"_
+- Play CTA: _"Let’s roll — start the drive."_
+- Gate: _"Anonymous riders get the sampler. Hop in for free and the whole lake’s yours."_
+- Drive complete: _"That’s the end of the road, folks. Watch your step climbing out."_
 
 **Invariant:** voice is _delivery_, never _facts_. No place names, hours, or data
 live in `voice.ts`. (Mirrors the generator's "persona lives in DELIVERY" rule.)
@@ -176,7 +177,7 @@ live in `voice.ts`. (Mirrors the generator's "persona lives in DELIVERY" rule.)
   ~500ms, simplify it.
 - ≥48pt hit targets; ≥60pt primary CTAs; generous spacing between tappables.
 - No low-contrast text on the move. Amber is a fill; warm text is `accentWarm`.
-- At most **one** moving/glowing amber element on screen at once (the boat token
+- At most **one** moving/glowing amber element on screen at once (the car token
   _or_ the NOW glow, not a field of them) — peripheral-vision halation is a real
   night-driving distraction.
 - Respect Dynamic Type direction (sizes are starting points; don't cap user scaling
@@ -189,7 +190,7 @@ on day one with emoji placeholders, then gets richer:
 
 - **Custom enamel-badge SVG set** (`react-native-svg`): replace the emoji glyphs in
   `stops.ts` / buttons with hand-drawn badges — story = open placard, scenic =
-  twin-peaks-with-binoculars, break = enamel coffee cup, the boat token, CA-89
+  twin-peaks-with-binoculars, break = enamel coffee cup, the car token, CA-89
   highway shields for corridor numbers.
 - **Passport-stamp animation:** reaching a stop "inks" a postmark on its row
   (`Animated` scale + rotate + opacity, `duration.stamp`). `StopRow` already models

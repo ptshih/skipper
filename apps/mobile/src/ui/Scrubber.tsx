@@ -1,5 +1,5 @@
 // The playback POSITION BAR — scrub within the current clip. Trailhead-89 language:
-// a sunken atlas well (the track bed), a pine "traveled" fill, and an amber boat-token
+// a sunken atlas well (the track bed), a pine "traveled" fill, and an amber car-token
 // disc as the draggable thumb, with stamped mono time labels.
 //
 // Tap anywhere to seek; drag the thumb to scrub. Correctness notes (each a fixed review

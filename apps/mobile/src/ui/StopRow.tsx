@@ -39,7 +39,7 @@ export function StopRow({ name, sublabel, state = 'upcoming', icon, onPress }: S
       ]}
     >
       {/* active edge-bar — PINE, not amber: amber is reserved for the NOW glow +
-          boat token so only one amber element glows per phase (DESIGN §8) */}
+          car token so only one amber element glows per phase (DESIGN §8) */}
       <View style={[styles.edge, { backgroundColor: active ? colors.accent : 'transparent' }]} />
 
       {/* bullet */}
