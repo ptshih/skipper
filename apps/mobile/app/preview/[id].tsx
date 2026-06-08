@@ -12,6 +12,7 @@ import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-au
 import { ApiError, getTour, signTourAudio } from '@/lib/api'
 import { stopLabel } from '@/lib/labels'
 import { buildPreviewTimeline, type PreviewSegment } from '@/lib/preview'
+import { useDriveMusic } from '@/lib/driveMusic'
 import { useTheme } from '@/theme'
 import { space } from '@/theme/tokens'
 import {
@@ -291,6 +292,15 @@ export default function PreviewScreen() {
       if (watchdog.current) clearTimeout(watchdog.current)
     }
   }, [player])
+
+  // Drive soundtrack: a seamless loop that plays between stops (drive/rest) and
+  // fades OUT under a stop's narration (clip), then back IN on the drive; an outro
+  // sting plays at the end. The voice owns the stops, the music owns the drive.
+  const curKind = data?.segments[idx]?.kind
+  useDriveMusic({
+    active: playing && !done && curKind != null && curKind !== 'clip',
+    ended: done,
+  })
 
   // Tap a stop to jump the drive there and play it from the start.
   const jumpToStop = (seq: number) => {
