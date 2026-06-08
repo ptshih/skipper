@@ -1,50 +1,26 @@
-// Route geometry for the M1 generator — pure functions, no external deps.
+// Route geometry for the M1 generator.
 //
-// The corridor polyline is a FROZEN, dense [lng, lat] point list (Emerald Bay
-// Run: 3,698 pts over ~48 km, so vertices sit ~13 m apart). Two jobs here:
-//   1. Spread Wikipedia geosearch probes evenly along the whole corridor.
-//   2. Place each found POI ON the route — its along-route distance and, via the
-//      frozen total drive time, its along-route TIME. Pacing is by drive TIME,
-//      not distance (the invariant), so everything downstream keys off seconds.
+// The shared PRIMITIVES — haversineMeters, bearingDeg, cumulativeMeters,
+// nearestOnRoute (+ LngLat / RoutePosition) — now live in @skipper/drive-core (the
+// pure, RN-safe driving/trigger core) and are RE-EXPORTED here, so generator call
+// sites keep importing them from './geo' unchanged. This file adds the
+// GENERATION-specific helpers on top: even probe sampling along the route, polyline
+// encoding, side-of-approach, total length, route bearing, and along-route time.
+// [lng, lat] axis order throughout, matching corridors.polyline.
 //
-// Because the polyline is so dense, nearest-VERTEX is a good proxy for nearest-
-// point-on-route (worst-case error ~half the ~13 m vertex spacing), so we skip
-// segment projection and just scan vertices. Cheap at 3,698 points.
+// (Previously these primitives were hand-copied between the generator and the sim;
+// the copy is gone now that both share @skipper/drive-core.)
 
-/** A [lng, lat] pair (GeoJSON axis order) — matches the corridors.polyline column. */
-export type LngLat = [number, number]
+import { bearingDeg, type LngLat } from '@skipper/drive-core'
 
-const EARTH_RADIUS_M = 6_371_008.8 // mean Earth radius (IUGG)
-
-const toRad = (deg: number): number => (deg * Math.PI) / 180
-const toDeg = (rad: number): number => (rad * 180) / Math.PI
-
-/** Great-circle distance between two [lng, lat] points, in meters. */
-export function haversineMeters(a: LngLat, b: LngLat): number {
-  const [lng1, lat1] = a
-  const [lng2, lat2] = b
-  const dLat = toRad(lat2 - lat1)
-  const dLng = toRad(lng2 - lng1)
-  const sinLat = Math.sin(dLat / 2)
-  const sinLng = Math.sin(dLng / 2)
-  const h = sinLat * sinLat + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * sinLng * sinLng
-  return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(h)))
-}
-
-/**
- * Initial bearing (degrees, 0=N, 90=E) traveling from `a` to `b`. The direction
- * the road is heading at the start of the a→b segment.
- */
-export function bearingDeg(a: LngLat, b: LngLat): number {
-  const [lng1, lat1] = a
-  const [lng2, lat2] = b
-  const φ1 = toRad(lat1)
-  const φ2 = toRad(lat2)
-  const Δλ = toRad(lng2 - lng1)
-  const y = Math.sin(Δλ) * Math.cos(φ2)
-  const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ)
-  return (toDeg(Math.atan2(y, x)) + 360) % 360
-}
+export {
+  type LngLat,
+  type RoutePosition,
+  haversineMeters,
+  bearingDeg,
+  cumulativeMeters,
+  nearestOnRoute,
+} from '@skipper/drive-core'
 
 /**
  * Which side of the road a point sits on, relative to the direction of travel.
@@ -61,57 +37,9 @@ export function sideOfApproach(headingDeg: number, from: LngLat, to: LngLat): 'l
   return rel > 0 ? 'right' : 'left'
 }
 
-/**
- * Cumulative along-route distance (meters) at each vertex. Same length as the
- * polyline; element 0 is 0. `at[n-1]` is the total route length.
- */
-export function cumulativeMeters(polyline: LngLat[]): number[] {
-  const out = new Array<number>(polyline.length)
-  if (polyline.length === 0) return out
-  out[0] = 0
-  for (let i = 1; i < polyline.length; i++) {
-    const prev = polyline[i - 1]!
-    const cur = polyline[i]!
-    out[i] = out[i - 1]! + haversineMeters(prev, cur)
-  }
-  return out
-}
-
 /** Total polyline length in meters (0 for a degenerate <2-point line). */
 export function totalMeters(cumulative: number[]): number {
   return cumulative.length ? cumulative[cumulative.length - 1]! : 0
-}
-
-export interface RoutePosition {
-  /** Index of the nearest polyline vertex. */
-  index: number
-  /** The nearest route point ([lng, lat]) — a POI's "trigger point" on the road. */
-  lng: number
-  lat: number
-  /** Straight-line distance from `point` to that vertex (a "how far off the road" proxy). */
-  offRouteM: number
-  /** Along-route distance to that vertex, in meters. */
-  alongM: number
-}
-
-/**
- * Snap an arbitrary point (a found POI) onto the route: the nearest vertex (its
- * [lng, lat] = the trigger point), how far off-route it is, and its along-route
- * distance. Linear scan — fine at a few thousand vertices, and we do it a few
- * dozen times per corridor.
- */
-export function nearestOnRoute(polyline: LngLat[], cumulative: number[], point: LngLat): RoutePosition {
-  let bestIndex = 0
-  let bestDist = Infinity
-  for (let i = 0; i < polyline.length; i++) {
-    const d = haversineMeters(polyline[i]!, point)
-    if (d < bestDist) {
-      bestDist = d
-      bestIndex = i
-    }
-  }
-  const v = polyline[bestIndex] ?? [0, 0]
-  return { index: bestIndex, lng: v[0], lat: v[1], offRouteM: bestDist, alongM: cumulative[bestIndex] ?? 0 }
 }
 
 /**
