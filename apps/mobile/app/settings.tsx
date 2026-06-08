@@ -50,6 +50,17 @@ export default function SettingsScreen() {
           {voice.settings.appearanceHint}
         </Text>
       </View>
+
+      <View style={styles.section}>
+        <Text variant="label" color="inkFaint">
+          {voice.settings.credits}
+        </Text>
+        <Button
+          variant="secondary"
+          title={voice.settings.creditsAction}
+          onPress={() => router.push('/legal')}
+        />
+      </View>
     </Screen>
   )
 }

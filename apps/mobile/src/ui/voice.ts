@@ -82,6 +82,16 @@ export const voice = {
     // night drive dims itself. Persona-light, still informative.
     appearanceHint:
       'Auto rides with your phone — dusk-dark when the sun clocks out, bright by day. Pin Day or Dusk to hold one mood.',
+    credits: 'CREDITS',
+    creditsAction: 'Sources & licenses', // → /legal
+  },
+  // The legal/attribution page (Settings → Credits). Intro is the skipper's; the
+  // source list + license codes are FACTS, kept in @/lib/licenses, never here.
+  legal: {
+    title: 'Sources & Licenses',
+    intro:
+      'The skipper does his homework. Every tale, every rock, every pit stop on a drive is built from the sources below — and we keep the credit where it’s due.',
+    footer: 'Tap a license or a source name to read it in full.',
   },
   guest: 'Riding as a guest',
 } as const
