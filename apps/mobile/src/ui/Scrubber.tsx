@@ -98,6 +98,10 @@ export function Scrubber({
     responderRef.current = PanResponder.create({
       onStartShouldSetPanResponder: () => live.current.seekable,
       onMoveShouldSetPanResponder: () => live.current.seekable,
+      // Hold the drag once we have it — never yield to a competing recognizer (the
+      // screen's swipe-back gesture), so a horizontal scrub can't pop the screen.
+      onPanResponderTerminationRequest: () => false,
+      onShouldBlockNativeResponder: () => true,
       onPanResponderGrant: (e) => {
         const f = fracAtGrantX(e.nativeEvent.locationX)
         startFrac.current = f

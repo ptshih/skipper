@@ -60,6 +60,7 @@ export default function PreviewScreen() {
   const [playing, setPlaying] = useState(false)
   const [done, setDone] = useState(false)
   const [stallNote, setStallNote] = useState<string | null>(null)
+  const [scrubActive, setScrubActive] = useState(false) // a scrub drag is live — suspend swipe-back
 
   const player = useAudioPlayer()
   const status = useAudioPlayerStatus(player)
@@ -375,7 +376,9 @@ export default function PreviewScreen() {
 
   return (
     <Screen edges={['bottom']}>
-      <Stack.Screen options={{ title: 'Preview drive' }} />
+      {/* Suspend the native swipe-back while scrubbing so a horizontal drag on the
+          position bar can't be read as a back-swipe and pop the screen. */}
+      <Stack.Screen options={{ title: 'Preview drive', gestureEnabled: !scrubActive }} />
 
       <View style={styles.header}>
         <Text variant="title" color="ink">
@@ -438,7 +441,8 @@ export default function PreviewScreen() {
             durationMs={dur * 1000}
             onSeek={(ms) => seekToSec(ms / 1000)}
             onScrubbingChange={(active) => {
-              scrubbing.current = active
+              scrubbing.current = active // hold the clip-finished auto-advance
+              setScrubActive(active) // suspend swipe-back for the duration of the drag
             }}
             disabled={!canSeek}
           />
