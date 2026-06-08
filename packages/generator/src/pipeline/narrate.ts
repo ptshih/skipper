@@ -63,6 +63,8 @@ export interface NarrationRequest {
   facts?: string[]
   /** Coordinate-keyed geology facts (the rock underfoot). Grounded like `facts`; allowed on STORY and SCENIC. */
   geology?: string[]
+  /** STORY only: why geology is here — 'sparse' (thin facts, round it out) or 'iconic' (rich stop, the rock is the headline). */
+  geologyContext?: 'sparse' | 'iconic'
   /** Only when actually known from the route geometry. */
   sideOfRoad?: 'left' | 'right'
   /** Pronunciation hint, e.g. "Genoa = JUH-noh-uh". */
@@ -96,7 +98,11 @@ export interface NarrationResult {
  * categories, on SCENIC — the rock underfoot is plainly there, names no landmark, and
  * is the one true thing an otherwise-factless stop may speak.
  */
-function geologyLines(geology: string[] | undefined, stopType: StopType): string[] {
+function geologyLines(
+  geology: string[] | undefined,
+  stopType: StopType,
+  context?: 'sparse' | 'iconic',
+): string[] {
   const geo = (geology ?? []).map((g) => g.trim()).filter(Boolean)
   if (geo.length === 0) return []
   const out: string[] = [
@@ -108,11 +114,15 @@ function geologyLines(geology: string[] | undefined, stopType: StopType): string
     out.push(
       '(On a SCENIC stop this is the ONE thing you may state as fact. You still name no peak, town, island, or landmark — only the rock and its rough age, exactly as given. Invent nothing beyond these lines; speak the age as the rough range it is.)',
     )
+  } else if (context === 'iconic') {
+    // An allowlisted RICH stop where the rock IS the headline (Emerald Bay's granite): do NOT
+    // tell it it's "light on facts" (it isn't) — tell it the geology is genuinely notable.
+    out.push(
+      '(The rock here is a genuinely notable part of what this place IS, so give it a real mention — woven into the telling, in your own words. Two rules: do NOT make it your closing line, and do NOT reach for the "deep time versus our brief human lives" reflection — that frame gets old fast. Land it mid-telling and end the stop on something else.)',
+    )
   } else {
-    // This STORY stop was deliberately handed geology BECAUSE its own facts are thin (rich
-    // stops never see this block), so the rock is welcome material — work a touch of it in.
-    // Two bans only, to kill the monotony seen when every stop got it: never the closer, and
-    // never the "deep time vs. our fleeting little lives" reflection (it goes stale fast).
+    // The default STORY case: this stop was handed geology BECAUSE its own facts are thin, so
+    // the rock is welcome material. Same two bans, to kill the monotony seen when every stop got it.
     out.push(
       '(This stop is light on its own facts, so the rock is good extra material — work a little of it in where it fits, in your own words. Two rules: do NOT make it your closing line, and do NOT reach for the "deep time versus our brief human lives" reflection — that frame gets old fast. Land it mid-telling and end the stop on something else.)',
     )
@@ -148,7 +158,7 @@ export function buildFactSheet(req: NarrationRequest): string {
         'FACT SHEET: (none — no real facts available. Treat this as a scenic moment; do not invent a story.)',
       )
     }
-    for (const l of geologyLines(req.geology, 'story')) lines.push(l)
+    for (const l of geologyLines(req.geology, 'story', req.geologyContext)) lines.push(l)
   } else if (req.stopType === 'scenic') {
     lines.push(
       'SCENIC stop — delivery only, NO place-facts. Point only at what is plainly, visibly there',

@@ -52,6 +52,8 @@ export interface StopPlan {
   facts: string[]
   /** STORY + SCENIC: coordinate-keyed geology facts (Macrostrat), attached post-selection in generate.ts. */
   geology?: string[]
+  /** Why a STORY stop got geology: 'sparse' (thin facts) or 'iconic' (allowlisted rich) — picks the narration cue. */
+  geologyReason?: 'sparse' | 'iconic'
   /** Macrostrat attribution (CC BY 4.0) for the geology facts — folded into the clip's attribution array. */
   geologyAttribution?: AttributionSnapshot
   targetSeconds: number

@@ -24,6 +24,7 @@ import type { AttributionSnapshot } from '@skipper/db/schema'
 import {
   ANTHROPIC_READY,
   GEOLOGY_ENRICHMENT,
+  GEOLOGY_ICONIC_STOPS,
   GEOLOGY_STORY_MAX_FACT_CHARS,
   GOOGLE_TTS_READY,
   FALLBACK_SPEED_MPS,
@@ -194,23 +195,30 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   // stop's type (geology is a separate channel, never counted toward STORY_MIN_FACT_CHARS),
   // so the scenic↔story classification — and the M4 cache key — are untouched.
   //   WHO gets it: SCENIC always (it carries no Wikipedia facts, so geology is the one true
-  //   thing it can say — geology's highest-leverage win); STORY only when SPARSE (its fact
-  //   sheet is below GEOLOGY_STORY_MAX_FACT_CHARS) — on a rich story geology just piles on
-  //   as a repetitive deep-time closer.
+  //   thing it can say — geology's highest-leverage win); STORY only when SPARSE (fact sheet
+  //   below GEOLOGY_STORY_MAX_FACT_CHARS) — on a rich story geology piles on as a repetitive
+  //   deep-time closer — UNLESS the stop is on the per-corridor ICONIC allowlist (the rock IS
+  //   the headline there, e.g. Emerald Bay's granite). Sparse vs iconic picks the narration cue.
   // Per-stop failures are non-fatal (the stop just gets no geology). Set SKIPPER_GEOLOGY=off.
   if (GEOLOGY_ENRICHMENT()) {
-    const geoStops = plan.filter(
-      (s) =>
-        s.stopType === 'scenic' ||
-        (s.stopType === 'story' && s.facts.join(' ').length < GEOLOGY_STORY_MAX_FACT_CHARS),
-    )
-    const scenicN = geoStops.filter((s) => s.stopType === 'scenic').length
+    const iconic = new Set(GEOLOGY_ICONIC_STOPS[corridor.slug] ?? [])
+    const geoReasonOf = (s: StopPlan): 'scenic' | 'sparse' | 'iconic' | null => {
+      if (s.stopType === 'scenic') return 'scenic'
+      if (s.stopType !== 'story') return null
+      if (iconic.has(s.name)) return 'iconic'
+      if (s.facts.join(' ').length < GEOLOGY_STORY_MAX_FACT_CHARS) return 'sparse'
+      return null
+    }
+    const geoStops = plan
+      .map((s) => ({ s, reason: geoReasonOf(s) }))
+      .filter((x) => x.reason !== null)
+    const countOf = (r: string) => geoStops.filter((x) => x.reason === r).length
     console.log(
       `Enriching ${geoStops.length} stops with Macrostrat geology ` +
-        `(${scenicN} scenic, ${geoStops.length - scenicN} sparse story; rich stories skipped)...`,
+        `(${countOf('scenic')} scenic, ${countOf('sparse')} sparse story, ${countOf('iconic')} iconic; rich stories skipped)...`,
     )
     let geoHits = 0
-    for (const s of geoStops) {
+    for (const { s, reason } of geoStops) {
       // Query at the TRIGGER point (the POI snapped onto the road), not the POI centroid:
       // it is literally "the rock under your tires," it is always on LAND (so it dodges the
       // fine map's "water" units that force a fallback to a coarse, vaguer world-scale unit),
@@ -219,6 +227,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       if (geo) {
         s.geology = geo.facts
         s.geologyAttribution = geo.attribution
+        if (reason === 'sparse' || reason === 'iconic') s.geologyReason = reason
         geoHits++
       }
     }
@@ -296,7 +305,12 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
           place: { name: s.name, kind: s.kind },
           facts: s.facts,
           ...(s.sideOfRoad ? { sideOfRoad: s.sideOfRoad } : {}),
-          ...(s.geology?.length ? { geology: s.geology } : {}),
+          ...(s.geology?.length
+            ? {
+                geology: s.geology,
+                ...(s.geologyReason ? { geologyContext: s.geologyReason } : {}),
+              }
+            : {}),
         }
       : s.stopType === 'break'
         ? { place: { name: s.name, kind: spokenKind(s.kind) } } // normalize raw primaryType

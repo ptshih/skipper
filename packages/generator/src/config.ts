@@ -77,6 +77,17 @@ export const GEOLOGY_ENRICHMENT = (): boolean => process.env.SKIPPER_GEOLOGY !==
  * gap on emerald-bay-run sits between ~605 (sparse) and ~877+ (rich), so 700 splits clean.
  */
 export const GEOLOGY_STORY_MAX_FACT_CHARS = 700
+/**
+ * Per-corridor allowlist of ICONIC-but-rich stops that get geology even though their
+ * fact sheet clears the sparse threshold above — places where the rock IS the headline
+ * (Emerald Bay's granite, a famous arch, a volcanic plug). Keyed by corridor slug →
+ * exact stop name (the Wikipedia title). These get a "this rock is notable, give it a
+ * real mention" narration cue rather than the sparse-story "you're light on facts" one,
+ * so the prompt never feeds a rich stop a false premise. Hand-curated, not derived.
+ */
+export const GEOLOGY_ICONIC_STOPS: Record<string, string[]> = {
+  'emerald-bay-run': ['Emerald Bay State Park'],
+}
 
 // --- POI discovery ----------------------------------------------------------
 
