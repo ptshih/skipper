@@ -55,25 +55,34 @@ export function RouteTrack({ progress, height = 6, style }: RouteTrackProps) {
           backgroundColor: colors.trackActive,
         }}
       />
-      {/* the boat token */}
-      <Animated.View
-        style={[
-          styles.token,
-          {
-            left: pct,
-            backgroundColor: colors.amberToken,
-            boxShadow: [{ offsetX: 0, offsetY: 0, blurRadius: 6, color: colors.glow }],
-          },
-        ]}
-      >
-        <Icon name="boat" size={14} color="onAmber" />
-      </Animated.View>
+      {/* The boat token rides a rail inset by half its width on each side, so the disc
+          EDGES stay flush with the track ends instead of the disc CENTER. At 0% its left
+          edge sits right at the gutter — lined up with the cards below — rather than half
+          the disc hanging past it; same at 100% on the right. */}
+      <View style={styles.tokenRail}>
+        <Animated.View
+          style={[
+            styles.token,
+            {
+              left: pct,
+              backgroundColor: colors.amberToken,
+              boxShadow: [{ offsetX: 0, offsetY: 0, blurRadius: 6, color: colors.glow }],
+            },
+          ]}
+        >
+          <Icon name="boat" size={14} color="onAmber" />
+        </Animated.View>
+      </View>
     </View>
   )
 }
 
 const styles = StyleSheet.create({
   wrap: { justifyContent: 'center' },
+  // Inset the token's travel by half its width on each side so its disc EDGES (not its
+  // center) stay flush with the track ends — left edge at the gutter at 0%, lined up with
+  // the cards below; right edge at the far gutter at 100%.
+  tokenRail: { position: 'absolute', left: TOKEN / 2, right: TOKEN / 2, top: 0, bottom: 0 },
   bed: {
     position: 'absolute',
     left: 0,

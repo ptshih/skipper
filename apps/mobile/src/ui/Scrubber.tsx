@@ -165,7 +165,10 @@ export function Scrubber({
           style={[
             styles.thumb,
             {
-              left: frac * width,
+              // Travel the thumb's LEFT EDGE across [0, width-THUMB] so the disc edges stay
+              // flush with the bar ends — left edge at the gutter (the NOW card's border) at
+              // 0%, instead of half the disc hanging past it.
+              left: frac * Math.max(0, width - THUMB),
               backgroundColor: colors.amberToken,
               borderColor: colors.onAmber, // hairline edge so it reads on the pale daylight bed
             },
@@ -204,7 +207,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: THUMB,
     height: THUMB,
-    marginLeft: -THUMB / 2,
     borderRadius: THUMB / 2,
     borderWidth: border.thin,
   },
