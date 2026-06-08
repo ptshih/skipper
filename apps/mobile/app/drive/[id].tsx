@@ -117,7 +117,7 @@ export default function DriveScreen() {
               // A held clip dims the halo and stops claiming "NOW PLAYING".
               glow={d.nowPlaying}
               kicker={d.nowPlaying ? voice.player.nowPlaying : voice.player.paused}
-              title={activeStop?.name ?? 'Skipper'}
+              title={activeStop?.name ?? d.hostName}
               right={
                 activeStop ? (
                   <Badge tone={stopTone(activeStop.stopType)} label={stopLabel(activeStop.stopType)} />

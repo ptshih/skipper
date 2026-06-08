@@ -19,6 +19,7 @@ import { corridors, poiContent, pois, tours, tourStops } from '@skipper/db/schem
 import type { Tour as TourRow } from '@skipper/db/schema'
 import { auth } from './auth'
 import { FEATURES, meetsTier, withSession, type ApiEnv } from './entitlements'
+import { hostForPersona } from './host'
 import { presignGet } from './storage'
 
 const app = new Hono<ApiEnv>()
@@ -194,6 +195,9 @@ app.get('/tours/:tourId', withSession, async (c) => {
       isPreview: tour.isPreview,
     },
     corridor: corridorRows[0],
+    // The narrating host, resolved from persona server-side so the app renders identity
+    // rather than bundling it (host-agnostic: a new host ships without an app update).
+    host: hostForPersona(tour.persona),
     stops,
   })
 })

@@ -44,6 +44,8 @@ import {
 interface Loaded {
   tourName: string
   region: string
+  /** The narrating host's display name, from the API — never bundled (host-agnostic). */
+  hostName: string
   segments: PreviewSegment[]
   stops: { seq: number; name: string; stopType: string }[]
   totalPreviewMs: number
@@ -125,6 +127,7 @@ export default function PreviewScreen() {
         setData({
           tourName: tour.corridor.name,
           region: tour.corridor.region,
+          hostName: tour.host.name,
           segments: tl.segments,
           stops: tour.stops.map((s) => ({ seq: s.seq, name: s.name, stopType: s.stopType })),
           totalPreviewMs: tl.totalPreviewMs,
@@ -211,11 +214,11 @@ export default function PreviewScreen() {
         player.pause()
         player.replace({ uri })
         // B2: lock-screen Now Playing for this stop
-        const stopName = data.stops.find((s) => s.seq === seg.seq)?.name ?? 'Skipper'
+        const stopName = data.stops.find((s) => s.seq === seg.seq)?.name ?? data.hostName
         try {
           player.setActiveForLockScreen(true, {
             title: stopName,
-            artist: 'Skipper',
+            artist: data.hostName,
             albumTitle: data.tourName,
           })
         } catch {}
@@ -312,7 +315,7 @@ export default function PreviewScreen() {
       if (s?.kind === 'drive') msg = `Driving to ${name ?? 'the next stop'}`
       else if (s?.kind === 'rest') msg = `Rest stop. ${name ?? ''}`
       else if (s?.kind === 'clip')
-        msg = `Now playing. ${name ?? 'Skipper'}, ${stopLabel(s.stopType)}`
+        msg = `Now playing. ${name ?? data.hostName}, ${stopLabel(s.stopType)}`
     }
     if (msg) AccessibilityInfo.announceForAccessibility(msg)
   }, [idx, done, data])
@@ -484,7 +487,7 @@ export default function PreviewScreen() {
               // "NOW PLAYING" while it's held.
               glow={playing}
               kicker={playing ? voice.player.nowPlaying : voice.player.paused}
-              title={nextStopName ?? 'Skipper'}
+              title={nextStopName ?? data.hostName}
               right={
                 seg?.stopType ? (
                   <Badge tone={stopTone(seg.stopType)} label={stopLabel(seg.stopType)} />

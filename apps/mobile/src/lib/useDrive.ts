@@ -58,6 +58,8 @@ interface DriveStop {
 interface DriveData {
   tourName: string
   region: string
+  /** The narrating host's display name, from the API — never bundled (host-agnostic). */
+  hostName: string
   polyline: [number, number][]
   /** Total route length (m) — for projecting a fix's alongM onto a 0..1 progress dot. */
   totalM: number
@@ -79,6 +81,8 @@ export interface UseDrive {
 
   tourName: string
   region: string
+  /** The narrating host's display name, served by the API (never bundled). */
+  hostName: string
   stops: DriveStopView[]
   totalStops: number
   firedCount: number
@@ -182,6 +186,7 @@ export function useDrive(tourId: string | undefined): UseDrive {
         setData({
           tourName: tour.corridor.name,
           region: tour.corridor.region,
+          hostName: tour.host.name,
           polyline,
           totalM: cum.length > 0 ? (cum[cum.length - 1] ?? 0) : 0,
           stops: tour.stops.map((s) => ({
@@ -381,11 +386,11 @@ export function useDrive(tourId: string | undefined): UseDrive {
         player.pause()
       } catch {}
       player.replace({ uri })
-      const stopName = data.stops.find((s) => s.seq === activeSeq)?.name ?? 'Skipper'
+      const stopName = data.stops.find((s) => s.seq === activeSeq)?.name ?? data.hostName
       try {
         player.setActiveForLockScreen(true, {
           title: stopName,
-          artist: 'Skipper',
+          artist: data.hostName,
           albumTitle: data.tourName,
         })
       } catch {}
@@ -546,6 +551,7 @@ export function useDrive(tourId: string | undefined): UseDrive {
     retry,
     tourName: data?.tourName ?? '',
     region: data?.region ?? '',
+    hostName: data?.hostName ?? '',
     stops,
     totalStops: stops.length,
     firedCount: firedSeqs.size,

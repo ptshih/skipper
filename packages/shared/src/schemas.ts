@@ -165,7 +165,28 @@ export const tourStopView = z.object({
 })
 export type TourStopView = z.infer<typeof tourStopView>
 
-/** GET /tours/:id — the tour, its corridor polyline, and ordered stops. */
+/**
+ * The narrating host's display identity, resolved SERVER-SIDE from the tour's `persona`.
+ * The app RENDERS this; it must never bundle host identity itself, so a new region/host
+ * ships with a backend deploy, never an App Store release. The GENERATION persona (system
+ * prompt, kit, voice) stays in @skipper/generator and never reaches the client. Art is a
+ * URL (R2), never a bundled asset — same reason.
+ */
+export const hostIdentity = z.object({
+  /** Display name, e.g. "Skipper" — the lock-screen Now Playing artist + meet-your-host title. */
+  name: z.string(),
+  /** One-liner for the meet-your-host card. */
+  tagline: z.string().nullish(),
+  /** A few sentences of in-voice backstory (DELIVERY, never facts). */
+  backstory: z.string().nullish(),
+  /** R2 URL for the host portrait/badge. Null until art exists — never a bundled asset. */
+  portraitUrl: z.url().nullish(),
+  /** R2 URL for a short "hear the host" sample. Null until one exists. */
+  voiceSampleUrl: z.url().nullish(),
+})
+export type HostIdentity = z.infer<typeof hostIdentity>
+
+/** GET /tours/:id — the tour, its corridor polyline, the narrating host, and ordered stops. */
 export const tourDetail = z.object({
   tour: z.object({
     id: z.uuid(),
@@ -177,6 +198,7 @@ export const tourDetail = z.object({
     isPreview: z.boolean(),
   }),
   corridor: z.object({ name: z.string(), region: z.string(), polyline }).nullish(),
+  host: hostIdentity,
   stops: z.array(tourStopView),
 })
 export type TourDetail = z.infer<typeof tourDetail>
