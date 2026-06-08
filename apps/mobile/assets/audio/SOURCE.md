@@ -1,8 +1,8 @@
 # Tour audio assets
 
-**`drive_loop.mp3`** — the between-stops driving soundtrack (seamless ~55s loop).
-**`intro.mp3`** — tour-start sting (staged; not wired into the player yet).
-**`outro.mp3`** — tour-end sting.
+**`drive_loop.mp3`** — the between-stops driving soundtrack (seamless ~55s loop). **In use.**
+**`intro.mp3`** — tour-start sting. **Staged, not wired** (founder deferred intro/outro).
+**`outro.mp3`** — tour-end sting. **Staged, not wired** (founder deferred intro/outro).
 
 ## Source & license
 
