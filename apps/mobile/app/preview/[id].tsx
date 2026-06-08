@@ -347,6 +347,7 @@ export default function PreviewScreen() {
   useDriveMusic({
     active: playing && !done && curKind != null && curKind !== 'clip',
     ended: done,
+    segmentKind: curKind ?? null,
   })
 
   // Tap a stop to jump the drive there and play it from the start.
