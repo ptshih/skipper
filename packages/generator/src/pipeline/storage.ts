@@ -52,6 +52,11 @@ export async function audioExists(key: string): Promise<boolean> {
   return getClient().file(key).exists()
 }
 
+/** Delete a clip object by key — used to sweep an orphan after a key/extension migration. */
+export async function deleteAudio(key: string): Promise<void> {
+  await getClient().file(key).delete()
+}
+
 /** A short-lived presigned GET URL for a private clip KEY (for local listening/auditing). */
 export function presignGet(key: string, expiresInSeconds: number = 60 * 60): string {
   return getClient().file(key).presign({ method: 'GET', expiresIn: expiresInSeconds })

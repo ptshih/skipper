@@ -48,9 +48,13 @@ export const NARRATION_MODEL_ALTERNATES = {
 // Sources: https://docs.cloud.google.com/text-to-speech/docs/gemini-tts
 //          https://docs.cloud.google.com/text-to-speech/docs/basics
 
-// The Gemini-TTS model backing the voice (goes in voice.model_name). `pro` is the
-// most natural/steerable; swap to 'gemini-2.5-flash-tts' for cheaper/faster.
-export const TTS_MODEL = 'gemini-2.5-pro-tts' as const
+// The Gemini-TTS model backing the voice (goes in voice.modelName). Picked 2026-06-08
+// BY EAR over 2.5-pro and 2.5-flash on the real canonical "1960 Winter Olympics" story:
+// 3.1-flash (the newest tier) reads the deadpan a touch more unhurried, which suits the
+// low-and-slow skipper. ⚠ PREVIEW MODEL — it may change or sunset; re-verify by ear if
+// Google revises it, and keep GA 'gemini-2.5-pro-tts' as the fallback. All Gemini-TTS
+// models share the same voices + encoding set, so this does NOT affect the 32k-MP3 output.
+export const TTS_MODEL = 'gemini-3.1-flash-tts-preview' as const
 
 // AUDIO FORMAT. We request MP3 directly from Gemini-TTS (unary text:synthesize supports
 // LINEAR16/MP3/OGG_OPUS/ALAW/MULAW/PCM; MP3 is fixed "32kbps"). MP3 is ~12× smaller than
@@ -102,10 +106,13 @@ export const SKIPPER_VOICE_ID: GeminiVoice = GEMINI_VOICES.algenib
 //
 // FOUNDER-BLESSED canonical delivery (2026-06-07): this low-and-slow / dry / deadpan,
 // "committed-to-the-bit" read on the Algenib voice is the approved one — judged by ear
-// across the production-vs-Frank-Wolff A/B audition. It is what the live canonical
-// preview (tour 9813e519) was synthesized with. Treat it as locked: do NOT re-tune the
-// wording without a fresh ear test, and a non-trivial change means re-synthesizing the
-// canonical clips so the live preview keeps matching what's blessed here.
+// across the production-vs-Frank-Wolff A/B audition. The prompt is unchanged, but the
+// canonical preview (tour 9813e519) was RE-SYNTHESIZED 2026-06-08 on the new model +
+// codec (gemini-3.1-flash-tts-preview + 32k MP3, both ear-approved) — so "blessed" now
+// means this prompt on that model/codec. Treat it as locked: do NOT re-tune the wording
+// without a fresh ear test, and a non-trivial change means re-synthesizing the canonical
+// clips (bun packages/generator/src/resynth-tour.ts --preview) so the live preview keeps
+// matching what's blessed here.
 export const SKIPPER_TTS_STYLE_PROMPT =
   'Read this as a warm, dry, low-and-slow road-trip tour guide talking to friends riding along in the car: unhurried, genuinely glad they came, a man who has told these corny jokes a thousand times and still quietly delights in every one. Deliver the jokes completely deadpan and fully committed to the bit — never laugh at your own setup, never sing-song the punchline, never signal "get it?"; land each one flat and matter-of-fact, a little pleased with yourself even when it is terrible. You are the straight man to your own jokes. Put a small pause right before the pun and a slightly longer beat right after it, so there is room for the groan. Let the quiet, sincere lines breathe. Conversational and human, the sound of a man noticing things out the window — never a newscaster, never a stand-up comedian working a crowd.'
 
