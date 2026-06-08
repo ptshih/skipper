@@ -136,7 +136,7 @@ function buildReport(r: GenerateResult, v: CharmVerdict): string {
     out.push(`> ${s.script.replace(/\n/g, '\n> ')}`)
     if (s.audioUrl) {
       try {
-        out.push(`🔊 ${presignGet(s.audioUrl)}`)
+        out.push(`🔊 ${presignGet(s.audioUrl, 12 * 60 * 60)}`) // 12h TTL — time to listen
       } catch {
         out.push(`🔊 (R2 key ${s.audioUrl} — set R2_* env to presign a playable link)`)
       }

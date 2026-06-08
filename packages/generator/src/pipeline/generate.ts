@@ -191,6 +191,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   const recentOpeners: string[] = []
   const recentClosers: string[] = []
   const recentKit: string[][] = [] // personal-kit beats used per remembered stop
+  const recentMotifs: string[][] = [] // recurring frames / invented self-deprecation flavors per stop
   const openerOf = (script: string) => script.trim().split(/\s+/).slice(0, 8).join(' ')
   const closerOf = (script: string) => script.trim().split(/\s+/).slice(-8).join(' ')
   // Detect which personal-kit beats a script leaned on, so later (independently
@@ -204,6 +205,42 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   ]
   const kitBeatsOf = (script: string) =>
     KIT_BEATS.filter(([re]) => re.test(script)).map(([, label]) => label)
+  // Recurring DEVICES beyond the fixed personal kit — the same-shape gags the charm
+  // judge keeps flagging on a new vector each run (every town's post office, the
+  // name-change rundown, "was nothing"; and self-deprecation flavors the model invents
+  // fresh — the one-room apartment, the handyman who won't show). Same isolation problem
+  // as the kit, so detect them and tell later stops the bit is SPENT. Unlike the kit
+  // (which has a 1/3 budget), a frame is a one-time bit — the spent list is CUMULATIVE.
+  const MOTIF_BEATS: [RegExp, string][] = [
+    [/post ?office/i, 'the post-office (opened/closed/reopened) bit'],
+    [
+      /could ?(n'?t| not) (decide|pick|settle|make up)|make up (your|his|its|their|my)? ?mind|answered to .{0,30}names|changed (its )?names?|(a few|a couple of?|several|different|two|three) names?\b|gone by .{0,15}names?|used to be called|(went|gone) by\b/i,
+      'the "place that changed / could not pick its name" rundown',
+    ],
+    [
+      /(patch|place|stretch|spot|valley|lot) (of |that was )?nothing|was (just )?nothing\b|nobody (could|would) (name|picture)|undeveloped|empty .{0,15}(valley|patch|mountain)/i,
+      'the "was nothing, now something" frame',
+    ],
+    [
+      /the distance from .{0,30}(dock|hat|boat)|surveyed .{0,20}inch|down to the (quarter section|inch|foot)|tape measure|the kind of precision|some poor soul/i,
+      'the surveyed-to-the-inch / tape-measure-precision gag',
+    ],
+    [
+      /one good word|use(d)? it twice|used twice|why (pay|reach|use|go) (for )?two\b|one (word|idea|name).{0,18}(twice|do the|hold the|float)|covering all (your|his) bases|wearing every hat|every hat (the|this|it)|all three (jobs|hats)|namesake.{0,25}(same|are the same)/i,
+      'the "economy of naming / one man did it all and named it after himself" riff',
+    ],
+    [
+      /my (one[- ]room |whole )?apartment|lose my keys|keys? in (it|there)/i,
+      'the one-room-apartment self-deprecation',
+    ],
+    [
+      /(get|find) (a|my) (guy|handyman|fellow).{0,25}(wrench|show|fix)|with a wrench/i,
+      'the handyman-with-a-wrench self-deprecation',
+    ],
+    [/I do this for a living/i, 'the "I do this for a living" self-deprecation'],
+  ]
+  const motifBeatsOf = (script: string) =>
+    MOTIF_BEATS.filter(([re]) => re.test(script)).map(([, label]) => label)
   const baseReq = (s: StopPlan): NarrationRequest => ({
     region: corridor.region,
     corridor: corridor.name,
@@ -213,7 +250,11 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
     // STORY: name + facts (+ side of road, when geometry calls it). BREAK: the curated
     // name + kind (no facts). SCENIC: neither.
     ...(s.stopType === 'story'
-      ? { place: { name: s.name, kind: s.kind }, facts: s.facts, ...(s.sideOfRoad ? { sideOfRoad: s.sideOfRoad } : {}) }
+      ? {
+          place: { name: s.name, kind: s.kind },
+          facts: s.facts,
+          ...(s.sideOfRoad ? { sideOfRoad: s.sideOfRoad } : {}),
+        }
       : s.stopType === 'break'
         ? { place: { name: s.name, kind: spokenKind(s.kind) } } // normalize raw primaryType
         : {}),
@@ -226,6 +267,8 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       recentOpeners: recentOpeners.slice(-3),
       recentClosers: recentClosers.slice(-3),
       recentKitBeats: [...new Set(recentKit.slice(-3).flat())],
+      // CUMULATIVE (all prior stops): a frame/flavor is a one-time bit, not a budget.
+      recentMotifs: [...new Set(recentMotifs.flat())],
     })
   const rememberStop = (s: StopPlan, script: string) => {
     // Story names the real place (callback-able); break + scenic push a GENERIC token so
@@ -239,7 +282,10 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
     // Breaks are invisible to kit accounting (a café break inviting "a coffee" is a
     // generic cue, not the coffee-opinion kit) AND don't occupy a slot in the trailing-3
     // window, so they can't flush a real narrated kit beat out of it early.
-    if (s.stopType !== 'break') recentKit.push(kitBeatsOf(script))
+    if (s.stopType !== 'break') {
+      recentKit.push(kitBeatsOf(script))
+      recentMotifs.push(motifBeatsOf(script))
+    }
   }
 
   // Narrate every stop up front — cheap (no TTS yet), so the lint can see the whole
@@ -279,6 +325,11 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
           recentKitBeats: [
             ...new Set(
               others.filter((r) => r.s.stopType !== 'break').flatMap((r) => kitBeatsOf(r.script)),
+            ),
+          ],
+          recentMotifs: [
+            ...new Set(
+              others.filter((r) => r.s.stopType !== 'break').flatMap((r) => motifBeatsOf(r.script)),
             ),
           ],
           avoid: f.avoid,

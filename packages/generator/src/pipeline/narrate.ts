@@ -73,6 +73,8 @@ export interface NarrationRequest {
   recentClosers?: string[]
   /** Personal-kit beats used in the last few stops (e.g. "the dock guy") — so this stop can avoid repeating them. */
   recentKitBeats?: string[]
+  /** Recurring frames / self-deprecation flavors already used THIS DRIVE (cumulative) — one-time bits, never reuse. */
+  recentMotifs?: string[]
   /** Pacing target; honored but never padded past the facts. */
   targetSeconds?: number
   /** Re-narration notes from the diversity lint — concrete things THIS take must avoid. */
@@ -173,6 +175,14 @@ export function buildFactSheet(req: NarrationRequest): string {
       'PERSONAL-KIT BEATS USED RECENTLY (spent — do NOT reuse these; the default stop mentions none of the kit at all):',
     )
     for (const k of req.recentKitBeats) lines.push(`- ${k}`)
+  }
+
+  if (req.recentMotifs && req.recentMotifs.length > 0) {
+    lines.push('')
+    lines.push(
+      'BITS ALREADY SPENT ON THIS DRIVE (a worn frame or a self-deprecation flavor an earlier stop used — each is a ONE-TIME bit; do NOT reach for any of these again, even reworded. If your facts hand you one of these, state the fact plainly and find your joke elsewhere, or skip the joke):',
+    )
+    for (const m of req.recentMotifs) lines.push(`- ${m}`)
   }
 
   if (req.targetSeconds && req.targetSeconds > 0) {
