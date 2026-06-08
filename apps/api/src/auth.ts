@@ -44,6 +44,27 @@ if (!secret) {
 
 export const auth = betterAuth({
   secret,
+  // Base URL Better Auth uses to build callback / redirect / password-reset links
+  // (it appends its own /api/auth basePath — do NOT put a path here). Resolved
+  // PER-REQUEST from the validated Host header, so dev, the prod service, AND
+  // ephemeral Render PR-preview URLs all work with NO env var to manage (no
+  // BETTER_AUTH_URL). `allowedHosts` is the security allowlist that blocks
+  // Host-header injection of reset/OAuth links and seeds `trustedOrigins`;
+  // `fallback` covers any non-matching host and serves as the init-time base URL
+  // (so there's no "Base URL could not be determined" startup warning).
+  // Render host scheme: prod = <service>.onrender.com, PR preview = <service>-pr-<n>.onrender.com.
+  // TODO(prod): replace the 'skipper-api' placeholder with your real Render service name.
+  // NOTE: social OAuth (Google/Apple) needs EXACT pre-registered redirect URIs and will
+  // NOT follow wildcard preview URLs — route those through the stable prod host.
+  baseURL: {
+    allowedHosts: [
+      'localhost', // local dev
+      'skipper-api.onrender.com', // prod service
+      'skipper-api-pr-*.onrender.com', // PR preview environments
+    ],
+    protocol: 'auto', // http for localhost, https for the Render hosts
+    fallback: 'https://skipper-api.onrender.com', // base URL for any non-matching host + at init
+  },
   database: drizzleAdapter(authDb, { provider: 'pg', schema: authSchema }),
   // Allow the mobile app's deep-link scheme for cross-origin auth + OAuth callbacks.
   trustedOrigins: [`${MOBILE_SCHEME}://`],
