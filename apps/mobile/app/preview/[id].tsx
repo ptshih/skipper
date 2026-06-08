@@ -18,9 +18,9 @@ import { space } from '@/theme/tokens'
 import {
   AccountGate,
   Badge,
-  Button,
   Card,
   Divider,
+  NOW_AREA_RESERVE,
   NowCard,
   RouteTrack,
   Screen,
@@ -29,6 +29,7 @@ import {
   StopRow,
   STOP_ROW_HEIGHT,
   Text,
+  TransportBar,
   stopIcon,
   stopTone,
   voice,
@@ -444,62 +445,73 @@ export default function PreviewScreen() {
           (its drive motion cue) — on a clip the NOW card owns the single amber glow. */}
       <RouteTrack progress={dot} glow={!isClip} style={styles.track} />
 
-      {/* NOW area */}
+      {/* NOW area — a fixed-height reserve (see styles.nowContent) so the transport
+          controls below, and the stop list, hold a stable position as the now-content
+          swaps between a clip's NowCard and the short rolling strip. */}
       <View style={styles.nowWrap}>
-        {done ? (
-          <Card>
-            <Text variant="label" color="accentWarm">
-              DRIVE COMPLETE
-            </Text>
-            <Text variant="placardTitle" color="ink">
-              You’ve arrived
-            </Text>
-            <Text variant="body" color="inkDim">
-              {voice.driveComplete}
-            </Text>
-          </Card>
-        ) : seg?.kind === 'drive' ? (
-          // Minimized: a drive is transit, not a stop — a calm distance strip, not a
-          // now-playing-sized card. The car token sliding the trail carries the motion.
-          <View style={styles.driveStrip} accessibilityLiveRegion="polite">
-            <Text variant="dim" color="inkFaint" align="center">
-              Rolling · ~{((seg.distanceM ?? 0) / 1609).toFixed(1)} mi to the next stop
-            </Text>
-          </View>
-        ) : seg?.kind === 'rest' ? (
-          <NowCard
-            liveRegion
-            glow={false}
-            kicker={voice.player.pitStop}
-            title={nextStopName ?? 'A good spot to stretch'}
-          />
-        ) : (
-          <NowCard
-            liveRegion
-            // A paused clip must tell the truth: dim the amber halo and stop claiming
-            // "NOW PLAYING" while it's held.
-            glow={playing}
-            kicker={playing ? voice.player.nowPlaying : voice.player.paused}
-            title={nextStopName ?? 'Skipper'}
-            right={
-              seg?.stopType ? (
-                <Badge tone={stopTone(seg.stopType)} label={stopLabel(seg.stopType)} />
-              ) : undefined
-            }
-          />
-        )}
-        {/* Position bar — scrub within the current clip (drive/rest have no timeline). */}
-        {isClip ? (
+        <View style={styles.nowContent}>
+          {done ? (
+            <Card>
+              <Text variant="label" color="accentWarm">
+                DRIVE COMPLETE
+              </Text>
+              <Text variant="placardTitle" color="ink">
+                You’ve arrived
+              </Text>
+              <Text variant="body" color="inkDim">
+                {voice.driveComplete}
+              </Text>
+            </Card>
+          ) : seg?.kind === 'drive' ? (
+            // Minimized: a drive is transit, not a stop — a calm distance strip, not a
+            // now-playing-sized card. The car token sliding the trail carries the motion.
+            <View style={styles.driveStrip} accessibilityLiveRegion="polite">
+              <Text variant="dim" color="inkFaint" align="center">
+                Rolling · ~{((seg.distanceM ?? 0) / 1609).toFixed(1)} mi to the next stop
+              </Text>
+            </View>
+          ) : seg?.kind === 'rest' ? (
+            <NowCard
+              liveRegion
+              glow={false}
+              kicker={voice.player.pitStop}
+              title={nextStopName ?? 'A good spot to stretch'}
+            />
+          ) : (
+            <NowCard
+              liveRegion
+              // A paused clip must tell the truth: dim the amber halo and stop claiming
+              // "NOW PLAYING" while it's held.
+              glow={playing}
+              kicker={playing ? voice.player.nowPlaying : voice.player.paused}
+              title={nextStopName ?? 'Skipper'}
+              right={
+                seg?.stopType ? (
+                  <Badge tone={stopTone(seg.stopType)} label={stopLabel(seg.stopType)} />
+                ) : undefined
+              }
+            />
+          )}
+        </View>
+        {/* Position bar — scrub within the current clip (drive/rest have no timeline). Kept
+            MOUNTED but hidden between stops so its height stays reserved and the controls
+            don't jump when it reappears on the next clip. */}
+        <View
+          style={isClip ? undefined : styles.reservedHidden}
+          pointerEvents={isClip ? 'auto' : 'none'}
+          accessibilityElementsHidden={!isClip}
+          importantForAccessibility={isClip ? 'auto' : 'no-hide-descendants'}
+        >
           <Scrubber
-            positionMs={(status.currentTime ?? 0) * 1000}
-            durationMs={dur * 1000}
+            positionMs={isClip ? (status.currentTime ?? 0) * 1000 : 0}
+            durationMs={isClip ? dur * 1000 : 0}
             onSeek={(ms) => seekToSec(ms / 1000)}
             onScrubbingChange={(active) => {
               scrubbing.current = active // hold the clip-finished auto-advance
             }}
             disabled={!canSeek}
           />
-        ) : null}
+        </View>
         {buffering ? (
           <View style={styles.buffering}>
             <ActivityIndicator size="small" color={theme.colors.accentWarm} />
@@ -514,43 +526,19 @@ export default function PreviewScreen() {
         ) : null}
       </View>
 
-      <View style={styles.controls}>
-        {done ? (
-          <Button icon="restart" title={voice.cta.restart} onPress={restart} />
-        ) : (
-          <View style={styles.controlsRow}>
-            <Button
-              variant="secondary"
-              icon="back15"
-              title="15"
-              accessibilityLabel="Rewind 15 seconds"
-              fullWidth={false}
-              disabled={!canSeek}
-              onPress={() => seekBy(-15)}
-              style={styles.skip}
-            />
-            <Button
-              icon={playing ? 'pause' : 'play'}
-              title={playing ? voice.cta.pause : voice.cta.play}
-              onPress={() => setPlaying((p) => !p)}
-              // No amber glow here: the lit NOW card (clip) or the gliding token (drive)
-              // is the one allowed glow — a glowing CTA next to it would make two.
-              glow={false}
-              style={styles.flex}
-            />
-            <Button
-              variant="secondary"
-              icon="forward15"
-              title="15"
-              accessibilityLabel="Forward 15 seconds"
-              fullWidth={false}
-              disabled={!canSeek}
-              onPress={() => seekBy(15)}
-              style={styles.skip}
-            />
-          </View>
-        )}
-      </View>
+      {/* Transport controls. No amber glow on the center play/pause: the lit NOW card
+          (clip) or the gliding token (drive) is the one allowed glow. */}
+      {done ? (
+        <TransportBar single={{ icon: 'restart', title: voice.cta.restart, onPress: restart }} />
+      ) : (
+        <TransportBar
+          playing={playing}
+          onPlayPause={() => setPlaying((p) => !p)}
+          onSeekBack={() => seekBy(-15)}
+          onSeekForward={() => seekBy(15)}
+          canSeek={canSeek}
+        />
+      )}
 
       <Text variant="dim" color="inkFaint" style={styles.hint}>
         Tap any stop to jump ahead
@@ -583,13 +571,15 @@ export default function PreviewScreen() {
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
   header: { paddingHorizontal: space.gutter, paddingTop: space.md, gap: space.xs },
   track: { marginHorizontal: space.gutter, marginTop: space.lg, marginBottom: space.sm },
   nowWrap: { paddingHorizontal: space.gutter, paddingTop: space.sm, gap: space.sm },
-  // Reserve roughly a card's height so the controls below don't jump between a clip
-  // card and the minimal drive strip; the strip sits calm and centered in it.
-  driveStrip: { minHeight: 104, alignItems: 'center', justifyContent: 'center' },
+  // Reserve a clip-card's height (centered) so the controls below — and the stop list —
+  // hold a stable position as the now-content swaps between a NowCard and the short
+  // rolling strip; the scrubber's height is reserved separately (it stays mounted).
+  nowContent: { minHeight: NOW_AREA_RESERVE, justifyContent: 'center' },
+  driveStrip: { alignItems: 'center' },
+  reservedHidden: { opacity: 0 }, // hold the scrubber's layout height without showing it
   buffering: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -597,11 +587,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.xs,
   },
   stall: { paddingHorizontal: space.xs },
-  controls: { paddingHorizontal: space.gutter, paddingTop: space.md },
-  controlsRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  // ±15 buttons: trim the wide CTA side-padding so the flanked center label keeps room
-  // (it would otherwise truncate to "All a…" on a 320pt phone / large Dynamic Type).
-  skip: { paddingHorizontal: space.sm },
   hint: { paddingHorizontal: space.gutter, paddingTop: space.md, paddingBottom: space.sm },
   divider: { marginHorizontal: space.gutter },
   list: { flex: 1, marginTop: space.xs },

@@ -7,6 +7,12 @@ import { border, radius, space } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'
 import { Text } from './Text'
 
+/** Reserved height (pt) for the player's NOW-content slot. Sized to a two-line NowCard
+ *  (the tallest in-drive now-content) so the transport controls + stop list below hold a
+ *  stable position when the content swaps to the shorter rolling strip. The scrubber's
+ *  height is reserved separately (it stays mounted, just hidden, between stops). */
+export const NOW_AREA_RESERVE = 136
+
 export interface NowCardProps {
   kicker: string // e.g. "NOW PLAYING · STORY"
   title: string // the stop name
