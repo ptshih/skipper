@@ -85,6 +85,13 @@ export const SKIPPER_VOICE_ID: GeminiVoice = GEMINI_VOICES.algenib
 // Natural-language DELIVERY directive (Cloud TTS input.prompt). The persona's words
 // already live in the script; this only sets HOW it is read, never WHAT is said —
 // so it can't loosen grounding. (Persona-in-delivery, not in facts.)
+//
+// FOUNDER-BLESSED canonical delivery (2026-06-07): this low-and-slow / dry / deadpan,
+// "committed-to-the-bit" read on the Algenib voice is the approved one — judged by ear
+// across the production-vs-Frank-Wolff A/B audition. It is what the live canonical
+// preview (tour 9813e519) was synthesized with. Treat it as locked: do NOT re-tune the
+// wording without a fresh ear test, and a non-trivial change means re-synthesizing the
+// canonical clips so the live preview keeps matching what's blessed here.
 export const SKIPPER_TTS_STYLE_PROMPT =
   'Read this as a warm, dry, low-and-slow road-trip tour guide talking to friends riding along in the car: unhurried, genuinely glad they came, a man who has told these corny jokes a thousand times and still quietly delights in every one. Deliver the jokes completely deadpan and fully committed to the bit — never laugh at your own setup, never sing-song the punchline, never signal "get it?"; land each one flat and matter-of-fact, a little pleased with yourself even when it is terrible. You are the straight man to your own jokes. Put a small pause right before the pun and a slightly longer beat right after it, so there is room for the groan. Let the quiet, sincere lines breathe. Conversational and human, the sound of a man noticing things out the window — never a newscaster, never a stand-up comedian working a crowd.'
 
