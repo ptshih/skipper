@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Stack } from 'expo-router'
+import { Pressable, StyleSheet } from 'react-native'
+import { Stack, useRouter } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import * as SplashScreen from 'expo-splash-screen'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { ThemeProvider, readStoredThemeMode, useAppFonts, useTheme, type ThemeMode } from '@/theme'
 import { fonts } from '@/theme/tokens'
-import { ThemeToggle } from '@/ui'
+import { Icon, ThemeToggle } from '@/ui'
 
 // Hold the splash until the Trailhead type system is loaded, so nothing renders
 // in a system font first.
@@ -52,6 +53,9 @@ function ThemedStack() {
           headerTitleStyle: { fontFamily: fonts.bodyBold, color: colors.ink },
           headerShadowVisible: false,
           contentStyle: { backgroundColor: colors.surface },
+          // One chevron-in-a-circle back button on every pushed screen — no text label.
+          // Render nothing on the root (canGoBack === false) so home stays clean.
+          headerLeft: ({ canGoBack }) => (canGoBack ? <HeaderBack /> : null),
           // Dusk/Daylight toggle reachable on every screen (night drives need it most)
           headerRight: () => <ThemeToggle />,
         }}
@@ -59,3 +63,26 @@ function ThemedStack() {
     </>
   )
 }
+
+// The global back affordance: a single left-chevron, no text. We DON'T draw our own
+// circle — the header button slot already supplies a round container (the iOS 26 Liquid
+// Glass disc), and a self-drawn ring nests inside it as a double circle. Same lesson as
+// ThemeToggle: let the header's own affordance be the shape; we just own the glyph + tap.
+function HeaderBack() {
+  const router = useRouter()
+  return (
+    <Pressable
+      onPress={() => router.back()}
+      hitSlop={12}
+      accessibilityRole="button"
+      accessibilityLabel="Back"
+      style={({ pressed }) => pressed && styles.pressed}
+    >
+      <Icon name="back" size={22} color="ink" />
+    </Pressable>
+  )
+}
+
+const styles = StyleSheet.create({
+  pressed: { opacity: 0.6 },
+})

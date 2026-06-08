@@ -18,6 +18,7 @@ export type IconName =
   | 'play'
   | 'pause'
   | 'restart'
+  | 'back'
   | 'prev'
   | 'next'
   | 'back15'
@@ -40,6 +41,7 @@ const IONICON: Record<IconName, ComponentProps<typeof Ionicons>['name']> = {
   play: 'play',
   pause: 'pause',
   restart: 'reload',
+  back: 'chevron-back', // the global header back affordance (chevron-in-a-circle)
   prev: 'play-skip-back',
   next: 'play-skip-forward',
   // jog by 15s — the no-bar double-triangle (scan), distinct from the bar'd skip-stop
