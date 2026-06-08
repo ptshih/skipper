@@ -3,6 +3,7 @@ import { Stack, useRouter } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import * as SplashScreen from 'expo-splash-screen'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
+import { DrivesFilterProvider } from '@/lib/drives-filter'
 import { ThemeProvider, readStoredThemeMode, useAppFonts, useTheme, type ThemeMode } from '@/theme'
 import { fonts } from '@/theme/tokens'
 import { HeaderIconButton } from '@/ui'
@@ -32,7 +33,9 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <ThemeProvider initialMode={initialMode ?? 'system'}>
-        <ThemedStack />
+        <DrivesFilterProvider>
+          <ThemedStack />
+        </DrivesFilterProvider>
       </ThemeProvider>
     </SafeAreaProvider>
   )
@@ -70,7 +73,11 @@ function ThemedStack() {
           // every screen. The mood follows the phone by default (Auto); the explicit
           // Auto/Day/Dusk picker lives on Settings, reached from a gear on the home header.
         }}
-      />
+      >
+        {/* The "Where to?" location picker is a modal sheet (chosen over an inline expand).
+            Declared here so it gets the iOS modal presentation/animation. */}
+        <Stack.Screen name="regions" options={{ presentation: 'modal' }} />
+      </Stack>
     </>
   )
 }

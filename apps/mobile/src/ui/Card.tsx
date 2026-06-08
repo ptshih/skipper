@@ -53,6 +53,10 @@ export function Card({ children, framed, active, onPress, style }: CardProps) {
       <Pressable
         onPress={onPress}
         accessibilityRole="button"
+        // `active` doubles as the selected state (e.g. the region picker's chosen row) so a
+        // screen reader announces it, not just the pine border. Undefined on plain cards =
+        // no selected state announced.
+        accessibilityState={{ selected: active }}
         style={({ pressed }) => pressed && styles.pressed}
       >
         {inner}

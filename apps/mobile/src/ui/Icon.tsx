@@ -32,6 +32,11 @@ export type IconName =
   | 'night'
   | 'auto'
   | 'settings'
+  | 'expand'
+  | 'check'
+  | 'region'
+  | 'close'
+  | 'nearMe'
 
 const IONICON: Record<IconName, ComponentProps<typeof Ionicons>['name']> = {
   // stop types
@@ -60,6 +65,12 @@ const IONICON: Record<IconName, ComponentProps<typeof Ionicons>['name']> = {
   night: 'moon-outline',
   auto: 'contrast-outline', // half-lit disc = "follow the phone" (system appearance)
   settings: 'settings-outline',
+  // filters / location picker (THE DRIVES "Where to?")
+  expand: 'chevron-down', // a filter chip that opens a picker
+  check: 'checkmark', // the selected row in the picker
+  region: 'location-outline', // a region/destination row + the location chip glyph
+  close: 'close', // dismiss a modal sheet
+  nearMe: 'navigate', // reserved: the deferred "Drives near you" GPS shortcut (v2)
 }
 
 export interface IconProps {

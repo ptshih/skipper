@@ -39,10 +39,26 @@ export const voice = {
     rolling: 'ROLLING', // between stops — road-trip, not the flat "DRIVING"
     pitStop: 'PIT STOP', // a rest stop
   },
-  greeting: 'Pick a drive. I’ll do the talking.',
+  greeting: 'Hop in. I’ll do the talking.',
   // The cold-open descriptor: a newcomer should know WHAT this is before any audio
   // plays. Clear first, persona second — the deadpan stays, just aimed.
   tagline: 'Narrated road-trip audio tours — one corny guide, all the good stops.',
+  // The home hero's enamel flourishes: a departures-board kicker ABOVE the headline
+  // (deliberately NOT repeating the tagline) + the section seam that turns the corridor
+  // list into "routes posted on the board". Warm, corny, glanceable, no facts.
+  home: {
+    kicker: 'NOW DEPARTING',
+    section: 'THE DRIVES',
+    // The location filter ("Where to?"): the picker title, the default/clear label, the
+    // soft-degrade empty line (we never dead-end — show what's charted), and the reserved
+    // near-me shortcut label (deferred to v2, behind expo-location).
+    where: {
+      all: 'All regions',
+      title: 'Where are we headed?',
+      empty: 'No charted roads out that way yet — here’s everything I’ve mapped so far.',
+      nearMe: 'Drives near you',
+    },
+  },
   driveComplete: 'That’s the end of the road, folks. Watch your step climbing out.',
   auth: {
     signInHeader: 'Welcome back, traveler',
@@ -50,6 +66,7 @@ export const voice = {
     subhead: 'Mind the gap.',
   },
   settings: {
+    account: 'ACCOUNT',
     appearance: 'APPEARANCE',
     // Explains all three options + reassures that the default needs no fiddling: a
     // night drive dims itself. Persona-light, still informative.
