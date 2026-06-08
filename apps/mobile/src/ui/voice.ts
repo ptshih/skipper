@@ -19,7 +19,7 @@ export const voice = {
     retry: 'Give her another pull',
   },
   cta: {
-    play: 'All aboard — start the drive',
+    play: 'All aboard', // short: the center CTA is now flanked by the ±15s skip buttons
     pause: 'Hold here',
     resume: 'Shove off again',
     restart: 'Run it again, skipper',

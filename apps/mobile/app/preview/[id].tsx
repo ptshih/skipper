@@ -24,6 +24,7 @@ import {
   NowCard,
   RouteTrack,
   Screen,
+  Scrubber,
   StateView,
   StopRow,
   STOP_ROW_HEIGHT,
@@ -69,6 +70,9 @@ export default function PreviewScreen() {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const watchdog = useRef<ReturnType<typeof setTimeout> | null>(null) // B1: never freeze on a dead clip
   const listRef = useRef<ScrollView | null>(null)
+  const scrubbing = useRef(false) // a drag is live — hold the clip-finished auto-advance
+  const seekTarget = useRef<number | null>(null) // last commanded seek (sec) — so ±15 taps accumulate
+  // ahead of the lagging polled clock; reset whenever the active clip changes (effect below)
 
   // ---- load: tour geometry + presigned audio + the compressed timeline ----
   useEffect(() => {
@@ -242,7 +246,8 @@ export default function PreviewScreen() {
         watchdog.current = null
       }
     }
-    if (status.didJustFinish && sawFresh.current && finishedIdx.current !== idx) {
+    // Don't let a clip that finishes UNDER an in-progress scrub yank us to the next stop.
+    if (status.didJustFinish && sawFresh.current && finishedIdx.current !== idx && !scrubbing.current) {
       finishedIdx.current = idx
       advance(idx + 1)
     }
@@ -251,6 +256,7 @@ export default function PreviewScreen() {
   // ---- auto-scroll the stop list to the active stop ----
   const activeSeq = data?.segments[idx]?.seq
   useEffect(() => {
+    seekTarget.current = null // new clip → drop any seek target carried from the last one
     if (!data || activeSeq == null) return
     const row = data.stops.findIndex((s) => s.seq === activeSeq)
     if (row >= 0)
@@ -344,8 +350,26 @@ export default function PreviewScreen() {
   // Used so a stop only lights up "active" when you reach it — not while the silent
   // drive toward it shows "UNDERWAY to <next>", which read as a double-navigation.
   const atStop = seg?.kind !== 'drive'
-  const hasPrev = activeRow > 0
-  const hasNext = activeRow >= 0 && activeRow < data.stops.length - 1
+
+  // Seeking is only meaningful on a loaded clip with a known duration (drive/rest are
+  // silent; a buffering clip has no timeline yet). seekTo never changes the play state,
+  // and a seek leaves seg.seq unchanged, so the segment driver won't reload the clip —
+  // it just moves the playhead within the take.
+  const dur = status.duration ?? 0
+  const canSeek = isClip && status.isLoaded && dur > 0 && !buffering
+  const seekToSec = (sec: number) => {
+    if (!canSeek) return
+    const target = Math.min(dur, Math.max(0, sec))
+    seekTarget.current = target
+    try {
+      player.seekTo(target)
+    } catch {}
+  }
+  // Accumulate from the last commanded target when it's ahead of the polled clock — two
+  // quick +15 taps within one status poll must add 30s, not read the same stale 15s twice.
+  // The active-clip effect clears seekTarget so a stale target never leaks across stops.
+  const seekBy = (deltaSec: number) =>
+    seekToSec(Math.max(seekTarget.current ?? 0, status.currentTime ?? 0) + deltaSec)
 
   return (
     <Screen edges={['bottom']}>
@@ -398,11 +422,6 @@ export default function PreviewScreen() {
             liveRegion
             kicker={voice.player.nowPlaying}
             title={nextStopName ?? 'Skipper'}
-            timer={
-              !buffering && status.duration
-                ? `${mmss((status.currentTime ?? 0) * 1000)} / ${mmss((status.duration ?? 0) * 1000)}`
-                : undefined
-            }
             right={
               seg?.stopType ? (
                 <Badge tone={stopTone(seg.stopType)} label={stopLabel(seg.stopType)} />
@@ -410,6 +429,18 @@ export default function PreviewScreen() {
             }
           />
         )}
+        {/* Position bar — scrub within the current clip (drive/rest have no timeline). */}
+        {isClip ? (
+          <Scrubber
+            positionMs={(status.currentTime ?? 0) * 1000}
+            durationMs={dur * 1000}
+            onSeek={(ms) => seekToSec(ms / 1000)}
+            onScrubbingChange={(active) => {
+              scrubbing.current = active
+            }}
+            disabled={!canSeek}
+          />
+        ) : null}
         {buffering ? (
           <View style={styles.buffering}>
             <ActivityIndicator size="small" color={theme.colors.accentWarm} />
@@ -431,12 +462,13 @@ export default function PreviewScreen() {
           <View style={styles.controlsRow}>
             <Button
               variant="secondary"
-              icon="prev"
-              title=""
-              accessibilityLabel="Previous stop"
+              icon="back15"
+              title="15"
+              accessibilityLabel="Rewind 15 seconds"
               fullWidth={false}
-              disabled={!hasPrev}
-              onPress={() => hasPrev && jumpToStop(data.stops[activeRow - 1]!.seq)}
+              disabled={!canSeek}
+              onPress={() => seekBy(-15)}
+              style={styles.skip}
             />
             <Button
               icon={playing ? 'pause' : 'play'}
@@ -446,12 +478,13 @@ export default function PreviewScreen() {
             />
             <Button
               variant="secondary"
-              icon="next"
-              title=""
-              accessibilityLabel="Next stop"
+              icon="forward15"
+              title="15"
+              accessibilityLabel="Forward 15 seconds"
               fullWidth={false}
-              disabled={!hasNext}
-              onPress={() => hasNext && jumpToStop(data.stops[activeRow + 1]!.seq)}
+              disabled={!canSeek}
+              onPress={() => seekBy(15)}
+              style={styles.skip}
             />
           </View>
         )}
@@ -504,6 +537,9 @@ const styles = StyleSheet.create({
   stall: { paddingHorizontal: space.xs },
   controls: { paddingHorizontal: space.gutter, paddingTop: space.md },
   controlsRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  // ±15 buttons: trim the wide CTA side-padding so the flanked center label keeps room
+  // (it would otherwise truncate to "All a…" on a 320pt phone / large Dynamic Type).
+  skip: { paddingHorizontal: space.sm },
   hint: { paddingHorizontal: space.gutter, paddingTop: space.md, paddingBottom: space.sm },
   divider: { marginHorizontal: space.gutter },
   list: { flex: 1, marginTop: space.xs },

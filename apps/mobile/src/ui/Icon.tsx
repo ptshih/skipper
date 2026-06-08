@@ -20,6 +20,8 @@ export type IconName =
   | 'restart'
   | 'prev'
   | 'next'
+  | 'back15'
+  | 'forward15'
   | 'nowPlaying'
   | 'passed'
   | 'upcoming'
@@ -40,6 +42,9 @@ const IONICON: Record<IconName, ComponentProps<typeof Ionicons>['name']> = {
   restart: 'reload',
   prev: 'play-skip-back',
   next: 'play-skip-forward',
+  // jog by 15s — the no-bar double-triangle (scan), distinct from the bar'd skip-stop
+  back15: 'play-back',
+  forward15: 'play-forward',
   // row states
   nowPlaying: 'musical-note',
   passed: 'checkmark-circle',
