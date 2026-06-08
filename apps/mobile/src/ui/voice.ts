@@ -24,12 +24,22 @@ export const voice = {
     resume: 'Roll on again',
     restart: 'Run it again, skipper',
     preview: 'Take the simulated drive',
+    drive: 'Start the drive', // open the live, GPS-triggered player (simulated on-phone for now)
+    endDrive: 'Pull over', // stop the drive and head back to the start line
   },
   gate: {
     title: 'Grab your ticket',
     body: 'The full-length tour needs a (free) ticket — ten seconds, and the skipper never stops talking.',
     action: 'Get my free ticket',
     secondary: 'Just take the sample ride',
+  },
+  // The live, GPS-triggered drive (vs the couch `preview`): the skipper talks when
+  // the road reaches a stop, not on a timer. Kept short + glanceable for the mount.
+  drive: {
+    ready: 'READY TO ROLL', // pre-drive placard kicker
+    readyBody: 'Mount up and start when you’re on the road. I’ll pipe up when we reach the good stuff.',
+    sim: 'SIMULATED DRIVE', // the on-device sim setup — no real GPS yet
+    nextStop: 'next stop', // "ROLLING · next stop: <name>"
   },
   player: {
     buffering: 'Warming up the skipper…',

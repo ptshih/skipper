@@ -20,8 +20,8 @@ import {
 } from '@/ui'
 
 // Tour detail. Anonymous can open only the preview tour; other tours return 401
-// -> we prompt for a free account. The live PHONE PLAYER is still TODO; this
-// screen offers the simulated-drive preview + shows the route manifest.
+// -> we prompt for a free account. Offers the live GPS drive (the M1 phone player,
+// currently fed by a simulated fix source) + the couch preview + the route manifest.
 export default function TourScreen() {
   const router = useRouter()
   const { id } = useLocalSearchParams<{ id: string }>()
@@ -151,7 +151,19 @@ export default function TourScreen() {
         </View>
       </View>
 
-      <Button icon="play" title={voice.cta.preview} onPress={() => router.push(`/preview/${id}`)} />
+      {/* The live, GPS-triggered drive — the M1 headline (a simulated fix source on the
+          phone for now; real device GPS lands in a later phase). */}
+      <Button icon="car" title={voice.cta.drive} onPress={() => router.push(`/drive/${id}`)} />
+      <Text variant="dim" color="inkDim">
+        The skipper talks as you reach each stop on the real roads. Simulated on the phone for now.
+      </Text>
+
+      <Button
+        variant="secondary"
+        icon="play"
+        title={voice.cta.preview}
+        onPress={() => router.push(`/preview/${id}`)}
+      />
       <Text variant="dim" color="inkDim">
         Hear the whole tour from your couch — no driving to the GPS coordinates.
       </Text>
