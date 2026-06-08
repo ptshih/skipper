@@ -5,6 +5,27 @@ Jungle-Cruise-skipper persona, played as phone audio (CarPlay later). **Optimize
 The persona is the product.** When a choice trades polish-for-the-builder against
 scale-for-a-market, pick polish.
 
+**Ground tooling/dependency/version decisions in authoritative docs, not memory.**
+The stack moves fast (bun, Expo/RN, drizzle, the SDKs) and a model's training data
+goes stale — when a build/resolution/config question comes up (e.g. "should this
+workspace be hoisted or isolated?"), pull the actual current docs (official docs,
+changelogs, the package's own pages) and decide from what they SAY, not from
+assumption. The failure mode this prevents: a plausible-sounding fix that papers over
+the recommended path (a real case: forcing `linker = "hoisted"` worked, but the
+docs showed SDK 56 + bun both default to and support **isolated** — and the errors it
+"fixed" were isolated correctly flagging an undeclared `expo-font` import). Cite what
+you found so the next agent can re-check it.
+
+## Git workflow
+
+- **Never create or switch to a new branch without confirming with the human first.**
+  Don't `git switch -c` / `git checkout -b` (or move onto a different branch) on your
+  own — even when committing, and even though the generic "branch before committing on
+  the default branch" habit says otherwise. This repo's default is to **commit directly
+  to `main`**; if you think a branch is warranted, propose it and wait for an explicit
+  yes. (Multiple agents share this one working tree, so unannounced branch switches are
+  especially disruptive.)
+
 ## Two principles that govern the architecture
 
 1. **Assemble per request; generate content once per place.** `pois` +
