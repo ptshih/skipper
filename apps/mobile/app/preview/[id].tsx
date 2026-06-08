@@ -375,11 +375,21 @@ export default function PreviewScreen() {
 
   return (
     <Screen edges={['bottom']}>
-      {/* Swipe-back is OFF on the player: the position bar starts at the left gutter,
-          inside iOS's edge-swipe zone, so a left-edge scrub kept being read as a
-          back-swipe (a per-drag toggle lost the race with the native edge gesture).
-          The header back arrow handles navigation. */}
-      <Stack.Screen options={{ title: 'Preview drive', gestureEnabled: false }} />
+      {/* Keep swipe-back, but stop the scrubber from triggering it. On iOS 26+ the
+          back-swipe defaults to a WHOLE-screen gesture (react-native-screens:
+          fullScreenSwipeEnabled defaults true on iOS>=26), so dragging the position
+          bar popped the screen. gestureResponseDistance.start restricts the swipe to
+          begin only within 12pt of the left edge — inside the 16pt gutter, clear of the
+          bar — so the bar never overlaps the back zone while the edge swipe still works.
+          fullScreenGestureEnabled:true makes that restriction apply on iOS<26 too. */}
+      <Stack.Screen
+        options={{
+          title: 'Preview drive',
+          gestureEnabled: true,
+          fullScreenGestureEnabled: true,
+          gestureResponseDistance: { start: 12 },
+        }}
+      />
 
       <View style={styles.header}>
         <Text variant="title" color="ink">
