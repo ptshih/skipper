@@ -1,11 +1,12 @@
-// Wikidata discovery SPINE (EXPERIMENTAL — gated by WIKIDATA_SPINE, default off).
+// Wikidata discovery SPINE — the route's POI discovery (it replaced Wikipedia-geosearch
+// wholesale; there is no flag).
 //
-// Today discovery is Wikipedia-geosearch: it only finds places that have a Wikipedia
-// ARTICLE. But many named places along a drive have a geocoded Wikidata entity and NO
-// article — the whole bay/beach/cove scenery layer (Sand Harbor is the canonical case: a
-// typed Wikidata "bay" 363m off the road, no Wikipedia article, so geosearch is blind to
-// it). This module flips the spine: Wikidata answers "what exists here, where, what kind"
-// (P625 coords + P31 type), and Wikipedia is demoted to a PROSE layer joined via sitelink.
+// Wikipedia-geosearch only found places that have a Wikipedia ARTICLE. But many named places
+// along a drive have a geocoded Wikidata entity and NO article — the whole bay/beach/cove
+// scenery layer (Sand Harbor is the canonical case: a typed Wikidata "bay" 363m off the road,
+// no Wikipedia article, so geosearch was blind to it). So discovery is the spine: Wikidata
+// answers "what exists here, where, what kind" (P625 coords + P31 type), and Wikipedia is the
+// PROSE layer joined per story candidate via sitelink.
 //
 // It resolves every corridor entity into a tier:
 //   STORY  — has a Wikipedia article with a story-grade lead extract (≥ STORY_MIN_FACT_CHARS).
@@ -17,9 +18,9 @@
 //
 // Provenance: Wikidata is CC0 (the scenic NAME needs no attribution); a story stop still
 // carries its Wikipedia CC BY-SA credit (joined here). This module only DISCOVERS + tiers;
-// it does not narrate or persist — generate.ts (Stage 2, behind the flag) adapts these
-// candidates into the selection pipeline. Pure helpers (tierOf/isAreal/normName/dedupeByName)
-// are exported for unit tests; the network calls are isolated and non-fatal by contract.
+// it does not narrate or persist — generate.ts adapts these candidates (via candidatesToWikiPois)
+// into the selection pipeline. Pure helpers (tierOf/isAreal/normName/dedupeByName) are exported
+// for unit tests; the network calls are isolated and non-fatal by contract.
 
 import {
   STORY_MIN_FACT_CHARS,
@@ -76,10 +77,17 @@ const COMMERCIAL =
 const AREAL =
   /\blake\b|reservoir|\bbay\b|\bcove\b|\bharbor\b|\bpark\b|recreation area|protected area|wilderness|\bforest\b|\bvalley\b|canyon|\branch\b|\bestate\b|golf course|management area/i
 
+// Watercourses crossed in seconds (a creek, a river, a culvert) — never a STORY destination,
+// even with an article: a two-minute telling about a creek the road bridges is the low-charm
+// case. They name no scenery worth a glance either, so they drop. (Lakes/reservoirs/bays are
+// NOT watercourses — they stay scenic/areal.)
+const WATERCOURSE = /\b(creek|stream|brook|watercourse|canal|river)\b/i
+
 /** Classify one entity into a tier from its P31 types, article presence, and prose length. */
 export function tierOf(types: string[], hasArticle: boolean, extractLen: number): Tier {
   const t = types.join(' ; ')
   if (TRUE_NONPLACE.test(t)) return 'drop'
+  if (WATERCOURSE.test(t)) return 'drop' // a creek/river is a crossing, not a stop
   if (hasArticle && extractLen >= STORY_MIN_FACT_CHARS) return 'story'
   if (SCENIC_PLACE.test(t)) return 'scenic'
   if (COMMERCIAL.test(t)) return 'break'
@@ -96,12 +104,24 @@ export function corridorGateM(types: string[]): number {
   return isAreal(types) ? SPINE_AREAL_OFF_ROUTE_MAX_M : OFF_ROUTE_MAX_M
 }
 
-/** Normalize a label for same-place dedup: drop the state suffix + parenthetical + case. */
+/**
+ * Normalize a label for same-place dedup: drop the state suffix, parenthetical, case, and the
+ * protected-area DESIGNATION suffix so a natural feature collapses with its park item
+ * ("Emerald Bay" ⇄ "Emerald Bay State Park"). Only a STATE/NATIONAL-qualified designation is
+ * stripped — a bare "...Park" is usually the real name (Tahoe Park, William B Layton Park) and a
+ * leading word that is part of the name ("Kings Beach" State Rec Area) must survive, so it is left
+ * intact to avoid over-collapse. (Co-located twins like the Sand-Harbor bay vs its rec-area are
+ * caught by the spatial dedup in select.ts instead.)
+ */
 export function normName(label: string): string {
   return label
     .toLowerCase()
     .replace(/\s*\([^)]*\)\s*/g, ' ')
     .replace(/,\s*(california|nevada|ca|nv)\b.*$/, '')
+    .replace(
+      /\s+(state|national)\s+(recreation area|park|beach|historic park|historic site|forest)\b.*$/,
+      '',
+    )
     .replace(/[–—]/g, '-')
     .replace(/\s+/g, ' ')
     .trim()
@@ -136,10 +156,33 @@ export function dedupeByName(cands: WikidataCandidate[]): WikidataCandidate[] {
  *  P31 types name no evocative natural feature (then the stop is named with no KIND). */
 export function featureKind(types: string[]): string | undefined {
   const PREF = [
-    'beach', 'bay', 'cove', 'lake', 'reservoir', 'point', 'cape', 'island', 'peninsula',
-    'waterfall', 'spring', 'meadow', 'summit', 'peak', 'mountain', 'pass', 'ridge', 'hill',
-    'valley', 'canyon', 'recreation area', 'state park', 'park', 'vista', 'viewpoint',
-    'overlook', 'historic district',
+    'beach',
+    'bay',
+    'cove',
+    'lake',
+    'reservoir',
+    'point',
+    'cape',
+    'island',
+    'peninsula',
+    'waterfall',
+    'spring',
+    'meadow',
+    'summit',
+    'peak',
+    'mountain',
+    'pass',
+    'ridge',
+    'hill',
+    'valley',
+    'canyon',
+    'recreation area',
+    'state park',
+    'park',
+    'vista',
+    'viewpoint',
+    'overlook',
+    'historic district',
   ]
   const t = types.join(' ; ')
   for (const p of PREF) if (t.includes(p)) return p

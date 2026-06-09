@@ -51,6 +51,14 @@ describe('tierOf', () => {
     expect(tierOf(['stream'], false, 0)).toBe('drop')
   })
 
+  test('watercourses (creek/river/stream) are DROP even with an article — a crossing, not a stop', () => {
+    expect(tierOf(['river'], true, RICH)).toBe('drop') // the Truckee; Bliss Creek's P31 is also "river"
+    expect(tierOf(['stream'], true, RICH)).toBe('drop') // a creek with an article is still a culvert crossing
+    expect(tierOf(['creek'], false, 0)).toBe('drop')
+    // but a reservoir/lake is NOT a watercourse — it stays scenery
+    expect(tierOf(['reservoir'], false, 0)).toBe('scenic')
+  })
+
   test('an untyped entity with no prose is DROP', () => {
     expect(tierOf([], false, 0)).toBe('drop')
   })
@@ -77,6 +85,20 @@ describe('normName', () => {
     expect(normName('Zephyr Cove')).toBe('zephyr cove')
     expect(normName('Thunderbird Lodge (Lake Tahoe, Nevada)')).toBe('thunderbird lodge')
     expect(normName('Crystal Bay, Nevada')).toBe('crystal bay')
+  })
+
+  test('strips the protected-area designation so a feature collapses with its park item', () => {
+    expect(normName('Emerald Bay State Park')).toBe('emerald bay')
+    expect(normName('Kings Beach State Recreation Area')).toBe('kings beach')
+    // Only the state/national-qualified designation is stripped; a leading word that is part of
+    // the name (here "Beach") stays. (The Sand-Harbor-bay vs rec-area twins are co-located, so
+    // spatial dedup collapses them — name dedup doesn't need to.)
+    expect(normName('Sand Harbor Beach State Recreation Area')).toBe('sand harbor beach')
+  })
+
+  test('leaves a bare "...Park" name intact (no over-collapse with a nearby place)', () => {
+    expect(normName('Tahoe Park')).toBe('tahoe park')
+    expect(normName('William B Layton Park')).toBe('william b layton park')
   })
 })
 
@@ -108,6 +130,15 @@ describe('dedupeByName', () => {
     const out = dedupeByName([cand('Sand Harbor', 'scenic', ['bay'])])
     expect(out).toHaveLength(1)
     expect(out[0]!.name).toBe('Sand Harbor')
+  })
+
+  test('a feature STORY collapses its protected-area twin (Emerald Bay ⇄ Emerald Bay State Park)', () => {
+    const out = dedupeByName([
+      cand('Emerald Bay State Park', 'story', ['state park']),
+      cand('Emerald Bay', 'scenic', ['bay']),
+    ])
+    expect(out).toHaveLength(1)
+    expect(out[0]!.tier).toBe('story')
   })
 
   test('distinct places are all kept', () => {
