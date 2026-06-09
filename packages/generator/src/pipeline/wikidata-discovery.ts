@@ -1,0 +1,265 @@
+// Wikidata discovery SPINE (EXPERIMENTAL — gated by WIKIDATA_SPINE, default off).
+//
+// Today discovery is Wikipedia-geosearch: it only finds places that have a Wikipedia
+// ARTICLE. But many named places along a drive have a geocoded Wikidata entity and NO
+// article — the whole bay/beach/cove scenery layer (Sand Harbor is the canonical case: a
+// typed Wikidata "bay" 363m off the road, no Wikipedia article, so geosearch is blind to
+// it). This module flips the spine: Wikidata answers "what exists here, where, what kind"
+// (P625 coords + P31 type), and Wikipedia is demoted to a PROSE layer joined via sitelink.
+//
+// It resolves every corridor entity into a tier:
+//   STORY  — has a Wikipedia article with a story-grade lead extract (≥ STORY_MIN_FACT_CHARS).
+//   SCENIC — a typed PLACE (bay/beach/lake/park/summit…) with no prose: name + type only,
+//            delivery-only ("on your left, Sand Harbor"), exactly the scenic doctrine.
+//   BREAK  — a commercial anchor (hotel/restaurant) with no article; the Places break layer's job.
+//   DROP   — not a tour-worthy place (a school, a stream, an administrative boundary, a list page).
+// The P31 typing REPLACES the brittle NON_NARRATABLE_TITLE regex and drives the split.
+//
+// Provenance: Wikidata is CC0 (the scenic NAME needs no attribution); a story stop still
+// carries its Wikipedia CC BY-SA credit (joined here). This module only DISCOVERS + tiers;
+// it does not narrate or persist — generate.ts (Stage 2, behind the flag) adapts these
+// candidates into the selection pipeline. Pure helpers (tierOf/isAreal/normName/dedupeByName)
+// are exported for unit tests; the network calls are isolated and non-fatal by contract.
+
+import {
+  STORY_MIN_FACT_CHARS,
+  OFF_ROUTE_MAX_M,
+  SPINE_AREAL_OFF_ROUTE_MAX_M,
+  WDQS_ENDPOINT,
+  WDQS_USER_AGENT,
+} from '../config'
+import { haversineMeters, type LngLat } from './geo'
+import { fetchWithRetry } from './http'
+import { fetchExtractsByTitle } from './wikipedia'
+
+const REQUEST_TIMEOUT_MS = 30_000
+
+export type Tier = 'story' | 'scenic' | 'break' | 'drop'
+
+export interface WikidataCandidate {
+  /** Wikidata QID — the join key for QID-keyed enrichment + the (source, source_id) for scenic pins. */
+  qid: string
+  /** Wikidata label — the spoken NAME for a scenic pin (CC0, non-volatile). */
+  name: string
+  lat: number
+  lng: number
+  /** P31 type labels (lowercased) — what KIND of place this is. */
+  types: string[]
+  tier: Tier
+  /** Nearest distance from the route polyline (m). */
+  offRouteM: number
+  /** STORY tier only: the joined Wikipedia article (CC BY-SA prose). */
+  article?: { title: string; url: string; pageId: number; extract: string }
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Pure tiering (exported for tests)                                          */
+/* -------------------------------------------------------------------------- */
+
+// Types that are NOT a tour destination even WITH an article — drop outright. NOTE: kept
+// tight on purpose. It must NOT match settlement types ("census-designated place", "human
+// settlement" — those are real story stops: Glenbrook, Incline Village) nor incidentally
+// match place compounds ("road tunnel" must stay a STORY candidate — Cave Rock Tunnel — so
+// no bare "road" here; that footgun mis-dropped Cave Rock Tunnel in the throwaway spike).
+const TRUE_NONPLACE =
+  /administrative territorial entity|electoral district|\bcounty\b|wikimedia (list|category|disambiguation|template|page)|disambiguation page|\bschool\b|\buniversity\b|\bcollege\b|public library|library branch|\bhospital\b|fire station|police station|radio station|television station|\bnewspaper\b|power station|substation|sewage|wastewater|\bcemetery\b|\bairport\b|water tower/i
+
+// A typed PLACE worth pointing at even with no prose → the scenic scenery layer.
+const SCENIC_PLACE =
+  /\bbay\b|\bbeach\b|\bcove\b|lagoon|\blake\b|reservoir|\bpond\b|mountain|\bpeak\b|summit|butte|\bdome\b|mountain pass|\bpass\b|\bridge\b|\bhill\b|\bpoint\b|\bcape\b|headland|promontory|\bvalley\b|canyon|gorge|waterfall|\bfalls\b|\bspring\b|geyser|\bisland\b|peninsula|\bmeadow\b|\bgrove\b|\bforest\b|wilderness|state park|national park|\bpark\b|recreation area|protected area|nature reserve|scenic|viewpoint|overlook|\bvista\b|\bcliff\b|rock formation|natural arch|glacier|\bdune\b|historic district|\bharbor\b/i
+
+// Commercial anchors — the Places break layer's territory when they have no notable history.
+const COMMERCIAL =
+  /\bhotel\b|\bresort\b|\bmotel\b|\binn\b|restaurant|\bcasino\b|\bbar\b|\bcafe\b|café|\bstore\b|\bshop\b|\bmall\b|\bbusiness\b|\bcompany\b|theater|theatre|drive-in|amusement/i
+
+// Areal features whose single centroid sits off the road even when the route hugs them.
+const AREAL =
+  /\blake\b|reservoir|\bbay\b|\bcove\b|\bharbor\b|\bpark\b|recreation area|protected area|wilderness|\bforest\b|\bvalley\b|canyon|\branch\b|\bestate\b|golf course|management area/i
+
+/** Classify one entity into a tier from its P31 types, article presence, and prose length. */
+export function tierOf(types: string[], hasArticle: boolean, extractLen: number): Tier {
+  const t = types.join(' ; ')
+  if (TRUE_NONPLACE.test(t)) return 'drop'
+  if (hasArticle && extractLen >= STORY_MIN_FACT_CHARS) return 'story'
+  if (SCENIC_PLACE.test(t)) return 'scenic'
+  if (COMMERCIAL.test(t)) return 'break'
+  return 'drop'
+}
+
+/** Areal features get the wider corridor gate (their centroid can sit off the hugged shore). */
+export function isAreal(types: string[]): boolean {
+  return AREAL.test(types.join(' ; '))
+}
+
+/** The corridor gate for an entity — wider for areal types. */
+export function corridorGateM(types: string[]): number {
+  return isAreal(types) ? SPINE_AREAL_OFF_ROUTE_MAX_M : OFF_ROUTE_MAX_M
+}
+
+/** Normalize a label for same-place dedup: drop the state suffix + parenthetical + case. */
+export function normName(label: string): string {
+  return label
+    .toLowerCase()
+    .replace(/\s*\([^)]*\)\s*/g, ' ')
+    .replace(/,\s*(california|nevada|ca|nv)\b.*$/, '')
+    .replace(/[–—]/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/**
+ * Collapse same-place duplicates: Wikidata often models a settlement and its namesake water
+ * feature as two items ("Zephyr Cove, Nevada" the town = STORY; "Zephyr Cove" the bay =
+ * SCENIC). Keep the STORY (it already names the place in a richer telling) and drop the
+ * same-named scenic/break so the drive doesn't stop twice for one name. Story always wins;
+ * otherwise the richest-typed survivor is kept.
+ */
+export function dedupeByName(cands: WikidataCandidate[]): WikidataCandidate[] {
+  const groups = new Map<string, WikidataCandidate[]>()
+  for (const c of cands) {
+    const k = normName(c.name)
+    ;(groups.get(k) ?? groups.set(k, []).get(k)!).push(c)
+  }
+  const out: WikidataCandidate[] = []
+  for (const group of groups.values()) {
+    if (group.length === 1) {
+      out.push(group[0]!)
+      continue
+    }
+    const story = group.find((g) => g.tier === 'story')
+    out.push(story ?? group.sort((a, b) => b.types.length - a.types.length)[0]!)
+  }
+  return out
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Network — WDQS bbox query + corridor filter + prose join                   */
+/* -------------------------------------------------------------------------- */
+
+interface RawItem {
+  qid: string
+  name: string
+  lat: number
+  lng: number
+  types: Set<string>
+  articleTitle?: string
+}
+
+const titleFromUrl = (u: string): string =>
+  decodeURIComponent((u.split('/wiki/')[1] ?? '').replace(/_/g, ' '))
+
+/** Bounding box [SW, NE] of a polyline, padded so an edge entity isn't clipped. */
+export function boundingBox(polyline: LngLat[], padDeg = 0.025): { sw: LngLat; ne: LngLat } {
+  let latMin = 90,
+    latMax = -90,
+    lngMin = 180,
+    lngMax = -180
+  for (const [lng, lat] of polyline) {
+    if (lat < latMin) latMin = lat
+    if (lat > latMax) latMax = lat
+    if (lng < lngMin) lngMin = lng
+    if (lng > lngMax) lngMax = lng
+  }
+  return { sw: [lngMin - padDeg, latMin - padDeg], ne: [lngMax + padDeg, latMax + padDeg] }
+}
+
+/** Every geocoded Wikidata entity in a bbox, with its P31 types + enwiki sitelink. */
+async function fetchWikidataBox(sw: LngLat, ne: LngLat): Promise<RawItem[]> {
+  const query = `SELECT ?item ?itemLabel ?lat ?lon ?typeLabel ?article WHERE {
+    SERVICE wikibase:box {
+      ?item wdt:P625 ?coord .
+      bd:serviceParam wikibase:cornerSouthWest "Point(${sw[0]} ${sw[1]})"^^geo:wktLiteral .
+      bd:serviceParam wikibase:cornerNorthEast "Point(${ne[0]} ${ne[1]})"^^geo:wktLiteral .
+    }
+    ?item p:P625/psv:P625 ?node . ?node wikibase:geoLatitude ?lat ; wikibase:geoLongitude ?lon .
+    OPTIONAL { ?item wdt:P31 ?type . }
+    OPTIONAL { ?article schema:about ?item ; schema:isPartOf <https://en.wikipedia.org/> . }
+    SERVICE wikibase:label { bd:serviceParam wikibase:language "en,mul". }
+  }`
+  const res = await fetchWithRetry(
+    `${WDQS_ENDPOINT}?query=${encodeURIComponent(query)}`,
+    {
+      headers: { 'User-Agent': WDQS_USER_AGENT, Accept: 'application/sparql-results+json' },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    },
+    { attempts: 3 },
+  )
+  if (!res.ok) throw new Error(`WDQS HTTP ${res.status}`)
+  const json = (await res.json()) as {
+    results?: { bindings?: Record<string, { value: string }>[] }
+  }
+  const items = new Map<string, RawItem>()
+  for (const b of json.results?.bindings ?? []) {
+    const qid = b.item!.value.replace(/^.*\/(Q\d+)$/, '$1')
+    let it = items.get(qid)
+    if (!it) {
+      it = {
+        qid,
+        name: b.itemLabel?.value ?? qid,
+        lat: +b.lat!.value,
+        lng: +b.lon!.value,
+        types: new Set(),
+      }
+      items.set(qid, it)
+    }
+    if (b.typeLabel?.value) it.types.add(b.typeLabel.value.toLowerCase())
+    if (b.article?.value && !it.articleTitle) it.articleTitle = titleFromUrl(b.article.value)
+  }
+  return [...items.values()]
+}
+
+/** Nearest distance (m) from a point to the route — vertex-sampled (dense polyline ⇒ exact enough). */
+function distToRoute(lat: number, lng: number, sampledVerts: LngLat[]): number {
+  let min = Infinity
+  for (const v of sampledVerts) {
+    const d = haversineMeters([lng, lat], v)
+    if (d < min) min = d
+  }
+  return min
+}
+
+/**
+ * Discover + tier Wikidata POIs along a route. SPARQL bbox → corridor filter (areal-aware)
+ * → prose-join story candidates via Wikipedia sitelink → tier → same-place dedup. Network
+ * (WDQS + MediaWiki) — throws on a hard WDQS failure (the caller decides fallback).
+ */
+export async function discoverWikidataPois(polyline: LngLat[]): Promise<WikidataCandidate[]> {
+  const { sw, ne } = boundingBox(polyline)
+  const raw = await fetchWikidataBox(sw, ne)
+
+  // Corridor filter (sample every 8th vertex for speed; ~tens of metres apart on our dense lines).
+  const verts = polyline.filter((_, i) => i % 8 === 0)
+  const inCorridor = raw
+    .map((it) => ({ it, offRouteM: distToRoute(it.lat, it.lng, verts) }))
+    .filter(({ it, offRouteM }) => offRouteM <= corridorGateM([...it.types]))
+
+  // Prose-join: fetch lead extracts only for corridor items that COULD be a story (have an
+  // article and aren't an outright non-place) — never for drop/scenic-only pins.
+  const storyCandidates = inCorridor.filter(
+    ({ it }) => it.articleTitle && !TRUE_NONPLACE.test([...it.types].join(' ; ')),
+  )
+  const extracts = storyCandidates.length
+    ? await fetchExtractsByTitle([...new Set(storyCandidates.map(({ it }) => it.articleTitle!))])
+    : []
+  const extractByTitle = new Map(extracts.map((e) => [e.title.toLowerCase(), e]))
+
+  const candidates: WikidataCandidate[] = inCorridor.map(({ it, offRouteM }) => {
+    const ex = it.articleTitle ? extractByTitle.get(it.articleTitle.toLowerCase()) : undefined
+    const types = [...it.types]
+    const tier = tierOf(types, !!ex, ex?.extract.length ?? 0)
+    return {
+      qid: it.qid,
+      name: it.name,
+      lat: it.lat,
+      lng: it.lng,
+      types,
+      tier,
+      offRouteM: Math.round(offRouteM),
+      ...(tier === 'story' && ex
+        ? { article: { title: ex.title, url: ex.url, pageId: ex.pageId, extract: ex.extract } }
+        : {}),
+    }
+  })
+
+  return dedupeByName(candidates)
+}

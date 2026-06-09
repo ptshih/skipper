@@ -163,6 +163,51 @@ export async function fetchDeepExtracts(pageids: number[]): Promise<Map<number, 
   return out
 }
 
+/** A lead extract resolved by article TITLE (the join key the Wikidata spine has). */
+export interface TitleExtract {
+  title: string
+  pageId: number
+  extract: string
+  url: string
+  /** Linked Wikidata QID (`wikibase_item`), when present. */
+  qid?: string
+}
+
+/**
+ * Lead-section extracts BY ARTICLE TITLE — the prose-join for the Wikidata discovery spine,
+ * which resolves a sitelink to a title (not a pageid). Same batched query as `fetchExtracts`
+ * (≤20/call, the exlimit cap); MediaWiki normalizes titles and drops missing ones. Returns
+ * one entry per resolved page (its normalized title), with the linked QID when present.
+ */
+export async function fetchExtractsByTitle(titles: string[]): Promise<TitleExtract[]> {
+  const out: TitleExtract[] = []
+  for (let i = 0; i < titles.length; i += 20) {
+    const chunk = titles.slice(i, i + 20)
+    const j = await wiki<{ query?: { pages?: ExtractPage[] } }>({
+      action: 'query',
+      prop: 'extracts|info|pageprops',
+      titles: chunk.join('|'),
+      exintro: '1',
+      explaintext: '1',
+      exchars: String(EXTRACT_CHARS),
+      exlimit: '20',
+      inprop: 'url',
+      ppprop: 'wikibase_item',
+    })
+    for (const p of j.query?.pages ?? []) {
+      if (p.missing) continue
+      out.push({
+        title: p.title,
+        pageId: p.pageid,
+        extract: (p.extract ?? '').trim(),
+        url: p.canonicalurl ?? p.fullurl ?? `https://en.wikipedia.org/?curid=${p.pageid}`,
+        ...(p.pageprops?.wikibase_item ? { qid: p.pageprops.wikibase_item } : {}),
+      })
+    }
+  }
+  return out
+}
+
 /**
  * Discover grounded POIs along the corridor: geosearch at each sampled point (in
  * series, per etiquette), dedup by pageid (matches the pois (source, source_id)

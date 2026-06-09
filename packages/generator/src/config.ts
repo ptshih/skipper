@@ -117,6 +117,23 @@ export const GEOSEARCH_STEP_M = 2_500
 export const GEOSEARCH_RADIUS_M = 2_000
 /** Wikipedia POIs farther than this from the road aren't "along the drive" — dropped. */
 export const OFF_ROUTE_MAX_M = 700
+
+// --- Wikidata discovery spine (EXPERIMENTAL, default OFF) --------------------
+// Flip POI discovery from Wikipedia-geosearch to a Wikidata spine: query geocoded
+// entities along the route (P31-typed, P625-located), demote Wikipedia to a prose layer
+// joined via sitelink. Wikidata has far more geocoded entities than Wikipedia has
+// articles, so this surfaces the named bay/beach/cove scenery layer Wikipedia is blind to
+// (e.g. Sand Harbor — no Wikipedia article, but a typed Wikidata pin). Off by default
+// while it's validated; flip with SKIPPER_WIKIDATA_SPINE=on. See pipeline/wikidata-discovery.ts.
+export const WIKIDATA_SPINE = (): boolean => process.env.SKIPPER_WIKIDATA_SPINE === 'on'
+/** Wikidata Query Service (SPARQL) — the geospatial endpoint (distinct from the keyless
+ *  wbgetentities Action API the enrichment uses). Public, rate-limited; needs the UA. */
+export const WDQS_ENDPOINT = 'https://query.wikidata.org/sparql'
+export const WDQS_USER_AGENT = WIKIPEDIA_USER_AGENT
+/** Areal features (a lake, a park, a bay) carry ONE arbitrary centroid that can sit well off
+ *  the road even when the route hugs their shore — so they get a wider corridor gate than the
+ *  point `OFF_ROUTE_MAX_M`, or a shoreline lake/park is wrongly dropped (the Spooner Lake case). */
+export const SPINE_AREAL_OFF_ROUTE_MAX_M = 1_500
 /**
  * Minimum on-the-ground separation between two NARRATED stops (m). A SPATIAL floor
  * complementary to the minGapSec TIME floor: two POIs can clear the time gap yet
