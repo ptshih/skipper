@@ -18,6 +18,9 @@ fully cover the rotation.
 | `acoustic_folk_guitar.mp3` | *Acoustic folk guitar instrumental* — Moonpub | Pixabay Content License | ✅ |
 | `small_town.mp3` | *Small Town* — Mr Smith | CC BY 4.0 | ✅ |
 | `strummin_robin_smith.mp3` | *Strummin' with Robin Smith* — Beat Mekanik | CC BY 4.0 | ✅ |
+| `homeward.mp3` | *Homeward* — Scott Buckley (tender/pastoral) | CC BY 4.0 | ✅ |
+| `simplicity.mp3` | *Simplicity* — Scott Buckley (tender/pastoral) | CC BY 4.0 | ✅ |
+| `wanderlust.mp3` | *Wanderlust* — Scott Buckley (tender/pastoral) | CC BY 4.0 | ✅ |
 | `acoustic_countryside_journey.mp3` | road-trip song (~2:46) | ElevenLabs (⚠️ unverified) | ✅ |
 | `wanderers_tale.mp3` | road-trip song (~2:20) | ElevenLabs (⚠️ unverified) | ✅ |
 | `restless_roads_ahead.mp3` | road-trip song (~2:37) | ElevenLabs (⚠️ unverified) | ✅ |
@@ -55,8 +58,8 @@ work" and fine.)
 
 ### Creative Commons BY 4.0 — attribution **required** (carried in-app)
 
-These two are licensed **CC BY 4.0**: commercial use + editing/looping are allowed,
-but attribution is required. The credits are shown in-app on **Settings → Credits →
+These are licensed **CC BY 4.0**: commercial use + editing/looping are allowed, but
+attribution is required. The credits are shown in-app on **Settings → Credits →
 Sources & Licenses** (`app/legal.tsx`, driven by `src/lib/licenses.ts MUSIC_CREDITS`) —
 keep that surface in sync with this list.
 
@@ -64,6 +67,11 @@ keep that surface in sync with this list.
   <https://freemusicarchive.org/music/mr-smith/a-new-roar/small-town/>
 - *Strummin' with Robin Smith* — **Beat Mekanik** (Free Music Archive), CC BY 4.0 —
   <https://freemusicarchive.org/music/beat-mekanik/single/strummin-with-robin-smith/>
+- *Homeward*, *Simplicity*, and *Wanderlust* — **Scott Buckley**
+  (<https://www.scottbuckley.com.au>), CC BY 4.0
+  <https://creativecommons.org/licenses/by/4.0/>. Tender, pastoral acoustic-orchestral
+  pieces added in the Bluey-"Creek" mood (founder pick). Credit line per his site:
+  "'Title' by Scott Buckley — released under CC-BY 4.0. www.scottbuckley.com.au".
 
 ### ElevenLabs (Eleven Music) — the four original road-trip songs
 

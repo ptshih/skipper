@@ -73,6 +73,14 @@ export interface MusicCredit {
 
 export const MUSIC_CREDITS: MusicCredit[] = [
   {
+    artist: 'Scott Buckley',
+    tracks: ['Homeward', 'Simplicity', 'Wanderlust'],
+    via: 'scottbuckley.com.au',
+    license: 'CC BY 4.0',
+    licenseUrl: 'https://creativecommons.org/licenses/by/4.0/',
+    sourceUrl: 'https://www.scottbuckley.com.au',
+  },
+  {
     artist: 'Mr Smith',
     tracks: ['Small Town'],
     via: 'Free Music Archive',
