@@ -21,7 +21,7 @@ import {
   RouteTrack,
   Screen,
   StateView,
-  StopRow,
+  StopList,
   Text,
   stopIcon,
   voice,
@@ -271,23 +271,17 @@ export default function TourScreen() {
         </Text>
       ) : null}
 
-      {/* THE ITINERARY — one card of StopRows (the player's stop vocabulary), hairline-ruled,
-          instead of a dozen look-alike cards. No raw per-stop seconds — the tally's on the sign. */}
-      <Card style={styles.routeCard}>
-        <Text variant="label" color="inkFaint" style={styles.routeLabel}>
-          THE ROUTE · {tour.stops.length} STOPS
-        </Text>
-        {tour.stops.map((s, i) => (
-          <View key={s.seq}>
-            {i > 0 ? <Divider style={styles.rowRule} /> : null}
-            <StopRow
-              name={cleanPlaceName(s.name)}
-              sublabel={stopLabel(s.stopType)}
-              icon={stopIcon(s.stopType)}
-            />
-          </View>
-        ))}
-      </Card>
+      {/* THE ITINERARY — the shared StopList (same card + hairline-ruled rows as the in-drive
+          player). No raw per-stop seconds — the tally lives on the sign. */}
+      <StopList
+        title={`THE ROUTE · ${tour.stops.length} STOPS`}
+        items={tour.stops.map((s) => ({
+          seq: s.seq,
+          name: cleanPlaceName(s.name),
+          sublabel: stopLabel(s.stopType),
+          icon: stopIcon(s.stopType),
+        }))}
+      />
     </Screen>
   )
 }
@@ -304,9 +298,4 @@ const styles = StyleSheet.create({
     gap: space.sm,
   },
   savedChip: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
-  // No horizontal padding so StopRows (which carry their own) align to the card edge; the
-  // label + dividers inset to match.
-  routeCard: { paddingHorizontal: 0, paddingVertical: space.sm },
-  routeLabel: { paddingHorizontal: space.md, marginBottom: space.xs },
-  rowRule: { marginHorizontal: space.md },
 })

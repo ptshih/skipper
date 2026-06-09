@@ -1,8 +1,9 @@
 // A stop in the route list — clean rows that sit UNDER the player card and echo it.
 // Three states read at a glance, no fussy bullets or double-indicators:
 //   upcoming — stop-type glyph + name (calm)
-//   active   — a subtle RAISED chip (surfaceRaised, like the card) + accent glyph + bold
-//              name. PINE accent, never amber — the player card owns the one amber glow.
+//   active   — a sunken "you-are-here" well (surfaceSunken) + accent glyph + bold name. Sunken
+//              (not raised) so it reads BOTH on the bare screen AND inside the raised route
+//              card. PINE accent, never amber — the player card owns the one amber glow.
 //   passed   — dimmed, with a quiet check
 import { useEffect, useRef } from 'react'
 import { Animated, Pressable, StyleSheet, View } from 'react-native'
@@ -62,9 +63,10 @@ export function StopRow({
       accessibilityLabel={`${name}${sublabel ? `, ${sublabel}` : ''}${active ? ', now playing' : passed ? ', played' : ''}`}
       style={({ pressed }) => [
         styles.row,
-        // active = a raised chip echoing the player card (surfaceRaised); no border/halo so it
-        // stays subordinate to the card and never competes for the single amber glow.
-        active && { backgroundColor: colors.surfaceRaised },
+        // active = a sunken "you-are-here" well — reads on the bare screen AND inside the raised
+        // route card (where a surfaceRaised chip would vanish). No border/halo, so it stays
+        // subordinate and never competes for the single amber glow.
+        active && { backgroundColor: colors.surfaceSunken },
         pressed && styles.pressed,
       ]}
     >
