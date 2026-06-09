@@ -211,6 +211,38 @@ Estimated time-to-first-answer-audio (short reply ~60–100 output tokens), serv
 ### 4.5 Online-only + dead-zone degradation **[DECIDED 2026-06-07: online-only MVP]**
 This *inverts* the offline-first tour invariant — tour audio stays offline, only Ask needs the network at question-time. Pre-flight connectivity check before recording (if offline, don't open the mic — dim the button, play the bundled deflection). Download the deflection clips *with the tour* so they're available in dead zones. **Distinguish the two refusals:** the dead-zone deflection ("can't raise the shore") is a *connectivity* failure (client-side/offline); the grounding refusal ("not in my logbook") is a *content* outcome (model declines with a well, or the scenic/break short-circuit). On-device STT/LLM fallback is explicitly later-phase.
 
+### 4.6 On-device LLM fallback tier — the dead-zone-proof Ask **[EXPLORATORY 2026-06-09 — feasibility scoped, NOT decided]**
+Concretizes §4.5's "on-device STT/LLM fallback is explicitly later-phase." Motivation is the sharpest version of the §4.5 inversion: per `docs/competitor-ux-studies.md`, **"dead air between content" is the category's #1 UX complaint, 4-for-4**, and Ask is the *pull* answer to it — but online-only Ask fails *precisely where dead air is worst* (the long remote stretches hold both the silence AND the dead zones). An on-device tier is the only thing that closes that scissor.
+
+**2026 stack feasibility (bleeding-edge — re-verify against current docs at build time, per CLAUDE.md):**
+- **Apple Foundation Models framework** (WWDC25, expanded WWDC26) exposes a **~3B on-device model that is the OS's, not the app's** (no multi-GB blob to ship) with **Guided Generation** (constrained decoding — an explicit *hallucination reducer*) and grounding/tool hooks; Apple benchmarks it above Llama-3-8B / Mistral-7B on instruction-following + structured output. iOS 26+, Apple-Intelligence-capable devices only.
+- **Expo/RN path exists:** `@react-native-ai/apple` (Callstack, *preview*) wraps Apple FM — needs New Architecture (✅ we're on it), iOS 26, RN 0.80+/Expo Canary — and exposes **text generation, transcription (STT), AND speech synthesis (TTS)** on-device. Confirm it runs on the SDK 56 build before betting.
+
+**The difficulty inverts — the brain is the easy part:**
+1. **STT — solved.** On-device transcription is mature (the bridge / Apple Speech); replaces the Google STT v2 leg (§4.2 step 5) offline.
+2. **The LLM — the *most tractable* piece.** Its job here is NOT open-domain knowledge; it is **extractive reading-comprehension over the bundled fact well** — the exact §2 task ("answer from THESE facts, in persona, or refuse"). A 3B model with **guided generation + a hard refusal bias** suits that, and constrained decoding makes it *more* grounding-disciplined than a free-form model — counter-intuitively aligned with §2's non-negotiable. The offline Skipper is dumber and refuses more, but "not in my logbook" is on-persona anyway.
+3. **The TTS — the *actual* blocker, and it's the §4.3 argument again.** Algenib is a *cloud* Gemini voice; on-device TTS yields a *generic Apple voice* — the same "different narrator mid-tour" that **§4.3 said "alone kills" the realtime-API path.** So a fully-offline Ask either (a) sounds like a stranger (breaks "voice is the product") or (b) keeps TTS cloud-only (then it isn't truly offline). **This — not the model — is the open question** that decides whether the tier is true parity or a lampshaded degrade. (On-device voice-cloning of Algenib is the speculative escape hatch; not v1.)
+
+**Shape: a degradation tier the persona absorbs.** Online → cloud Sonnet + Algenib (the §4 path, best). Dead zone → on-device 3B + (voice TBD), degraded but *present*. The charm-toy advantage a productivity app lacks: the persona **absorbs** the degradation — *"signal's gone, so I'm running on my own steam out here — only what's in the logbook, and I'm a step slow."* Degradation becomes character (cf. §3.6 — every failure is the Skipper in character).
+
+**Where it sits on the pull ladder** (the family of dead-air answers; see `docs/tell-me-more-spec.md`):
+- **tell-me-more** — pre-canned deeper-cut B-side, **zero LLM**, offline. The floor.
+- **on-device Ask** (this tier) — live, answers *your* question, offline, *degraded*. The middle.
+- **cloud Ask** (§4) — live, responsive, online, best. The ceiling.
+
+The on-device LLM is precisely what makes the *offline* tier *responsive* rather than pre-canned.
+
+**Prerequisites & caveats:**
+- **Bundle the fact wells offline.** On-device RAG needs the `pois.facts.extract` wells in the offline download (today it ships clips, not source facts). **Shared prerequisite with tell-me-more** → build tell-me-more first; it lays this foundation and proves the pull UX with zero LLM risk.
+- **Device-gated:** Apple-Intelligence phones + iOS 26 only → older devices get no on-device tier (fall back to cloud, or to tell-me-more's pre-canned content).
+- **3B wit:** extraction it can do; the Skipper's *deadpan comedy* is harder — charm may flatten offline (lean on the persona lampshade).
+- **Latency:** on-device generation is slower; short grounded answers are probably acceptable for conversational feel, but measure on-device before committing.
+- **Preview maturity:** the whole tier rides iOS 26 + a preview library.
+
+**Sequencing:** the LLM is the easy 80%, the **voice is the unsolved 20%.** Build this tier as Ask's dead-zone fallback **after** (1) tell-me-more lays the bundled-facts foundation, and (2) cloud Ask (§4) proves riders actually talk to him. Resolve the voice question before promising offline *parity* (vs. a lampshaded degrade).
+
+**Sources (re-verify):** Apple Foundation Models — developer.apple.com/videos/play/wwdc2025/286, machinelearning.apple.com/research/apple-foundation-models-tech-report-2025; `@react-native-ai/apple` — callstack.com/blog/on-device-apple-llm-support-comes-to-react-native, react-native-ai.dev.
+
 ---
 
 ## 5. Grounding & persona design
