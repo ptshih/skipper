@@ -1,4 +1,4 @@
-// Skipper narration — the Anthropic (claude-opus-4-8) call.
+// Skipper narration — the Anthropic (claude-fable-5) call.
 //
 // The SYSTEM message is the static, hardened SKIPPER_SYSTEM_PROMPT. For each stop
 // we send ONE user message: the grounded FACT SHEET plus the region/corridor,
@@ -9,8 +9,9 @@
 // (story stops). Scenic and break stops carry NO place-facts by construction —
 // naming a peak/town/business is itself a fact the model was not given.
 //
-// Model constraints (Opus 4.8): adaptive thinking only — NO temperature / top_p /
-// top_k / budget_tokens (all 400). Output is modest (a story stop now targets a
+// Model constraints (Fable 5): adaptive thinking only — NO temperature / top_p /
+// top_k / budget_tokens (all 400; an explicit thinking:disabled also 400s on Fable,
+// but we pass adaptive below so it's moot). Output is modest (a story stop now targets a
 // Shaka-length ~2 min telling, ~300 spoken words ≈ ~450 output tokens), so a single
 // non-streaming messages.create is right; max_tokens is generous because adaptive
 // thinking tokens count against it AND a long-form grounded telling reasons harder.

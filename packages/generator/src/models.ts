@@ -9,17 +9,26 @@
 // Narration — Anthropic Messages API
 // ---------------------------------------------------------------------------
 // The spec wants the MOST CAPABLE model for narration quality. Per the current
-// Anthropic model catalog, Claude Opus 4.8 is the most capable model and its
-// API id is the bare string "claude-opus-4-8".
+// Anthropic model catalog, Claude Fable 5 is the most capable model — a new tier
+// ABOVE Opus — and its API id is the bare string "claude-fable-5".
 //
-// IMPORTANT: use the bare id exactly as written — do NOT append a date suffix
-// (date-suffixed Opus ids 404). Opus 4.8 also only supports adaptive thinking
-// (no `budget_tokens` / `temperature` / `top_p` / `top_k`) if/when the actual
-// narration request is wired up later.
+// IMPORTANT: use the bare id exactly as written — do NOT append a date suffix.
+// Fable 5 shares Opus 4.8's request surface — adaptive thinking only, NO
+// `budget_tokens` / `temperature` / `top_p` / `top_k` (all 400) — with TWO extra
+// Fable-only constraints: an explicit `thinking: {type:"disabled"}` ALSO 400s
+// (it's accepted on Opus 4.8), and a FORCED tool_choice ({type:"tool"}) 400s with
+// "tool_choice forces tool use is not compatible with this model" (observed live
+// 2026-06-09, req_011CbtU9f7zsE1V8HegixKaw). narrate.ts ({type:"adaptive"}, no
+// tools) rides the switch; the forced-tool judges (charm.ts, pairwise-judge.ts)
+// can NOT — they pin FORCED_TOOL_JUDGE_MODEL below instead of NARRATION_MODEL.
+//
+// COST (a founder-relevant axis, per CLAUDE.md): Fable 5 is ~2× Opus 4.8 —
+// $10/$50 vs $5/$25 per MTok — so a live regen bills more. Switched 2026-06-09
+// at founder request.
 //
 // Source: Anthropic model catalog (claude-api skill — "Current Models" table,
 // cross-checked against platform.claude.com models overview).
-export const NARRATION_MODEL = 'claude-opus-4-8' as const
+export const NARRATION_MODEL = 'claude-fable-5' as const
 
 // Cheaper / faster Anthropic fallbacks from the same catalog, if narration ever
 // needs to trade capability for cost or latency.
