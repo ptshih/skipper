@@ -42,7 +42,7 @@ permission. See §2.
 | **0** | Audio-session spike: duck music **and** keep lock-screen Now Playing | ❌ not started — riskiest unknown; needs a dev build |
 | **2** | GPS-driven player core, fed by the **simulated** fix source | ✅ **Done** — `src/lib/useDrive.ts` + `app/drive/[id].tsx` + `src/lib/gps.ts`; intro/outro bracket playback added (`ecc78a0`) |
 | **3** | Offline download (clips → disk) | ✅ **Done** — `src/lib/offline.ts`: download to `Paths.document` + offline-first players (`03a52c6`). On-device airplane-mode acceptance pending a dev build |
-| **4** | Real `expo-location` fix source | 🔨 **Code built** — `liveSource` + permission gate + `mode:'sim'\|'live'` seam (`?mode=live` route param) + `useKeepAwake`; `bun run check` + `expo export` green. **On-device acceptance (bike test, teardown verify, duck flip) PENDING a dev build.** |
+| **4** | Real `expo-location` fix source | 🔨 **Code built + review-fixed** (`a0610b4`, fixes `2dd86f5`) — `liveSource` (monotonic projection, onEnd at route end, onError, accuracy/-1 gate) + permission gate (+ AppState recovery) + `mode:'sim'\|'live'` seam + no-GPS watchdog + `useKeepAwake`; `bun run check` + `expo export` green. **⚠️ No UI entry point yet — live is reachable only via `/drive/<id>?mode=live` (the tour CTA still routes to sim).** On-device acceptance (bike test, teardown verify, duck flip) PENDING a dev build. Deferred low-sev review items: #9 pause/resume watch leak, #11 tSec across pause, #13 mode-param typo→sim. |
 | **5** | Drive it once for real | ❌ not started |
 
 Everything ships through the **phone** (mount / Bluetooth). CarPlay is deferred past the MVP
@@ -138,13 +138,21 @@ const fix: GpsFix = {
   speedMps: sane(loc.coords.speed),       // -1/null when stationary → 0 (heading gate then skips, fail-open)
   headingDeg: sane(loc.coords.heading),   // -1/null below ~5 mph; derive from consecutive fixes if you need it
   tSec: (loc.timestamp - startMs) / 1000, // loc.timestamp = ms since epoch; startMs captured at the FIRST fix
-  alongM: nearestOnRoute(polyline, cumulative, [loc.coords.longitude, loc.coords.latitude]).alongM,
-  // ^ a live fix has NO intrinsic along-route distance — project it onto the route so the route dot
-  //   tracks the real position (the engine ignores alongM; it's UI-only — but the dot needs it for live).
+  alongM: projectAlongM(loc.coords.longitude, loc.coords.latitude),
+  // ^ a live fix has NO intrinsic along-route distance. DON'T use a plain `nearestOnRoute` nearest-VERTEX
+  //   scan: on an out-and-back route it snaps return-leg fixes to nearby outbound vertices → the dot jumps
+  //   backward AND alongM never reaches the end (breaking end-of-route detection below). Use a MONOTONIC
+  //   forward cursor instead (gps.ts `projectAlongM`) — also bounds the per-fix work to a forward window.
 }
 // Real GPS settles slowly: the first fixes can carry accuracy 1000 m+, and a wild fix landing near a stop
-// will false-fire it. Gate on horizontal accuracy BEFORE feeding the engine (MAX_FIX_ACCURACY_M ≈ 50–100 m):
-if (loc.coords.accuracy != null && loc.coords.accuracy > MAX_FIX_ACCURACY_M) return // drop this fix
+// will false-fire it. Gate on horizontal accuracy BEFORE feeding the engine (MAX_FIX_ACCURACY_M ≈ 50).
+// ⚠️ iOS reports accuracy = -1 (NOT null) when invalid — the SAME sentinel as speed/heading — so reject
+// `acc < 0` too, else the worst fixes slip through `acc > MAX`:
+if (loc.coords.accuracy != null && (loc.coords.accuracy < 0 || loc.coords.accuracy > MAX_FIX_ACCURACY_M))
+  return // drop this fix
+// End-of-route: live GPS has no fix-stream end like the sim, so call onEnd() once `alongM` reaches the
+// final vertex — that's what queues the outro + finishes the drive. And `.catch` the watchPositionAsync
+// promise → onError() (Location Services off / revoked / native error) so the drive surfaces instead of hanging.
 for (const ev of engine.update(fix)) enqueueClip(ev.seq) // fire each (usually 0–1)
 ```
 
@@ -400,6 +408,10 @@ cone caveat), and the §8 location reference. Sources: expo/expo#5401 (iOS speed
 plugin; `liveSource` + `ensureDrivePermission` (`gps.ts`); `mode:'sim'|'live'` seam + permission gate +
 `useKeepAwake` (`useDrive.ts`); `?mode=live` route param + location gate (`drive/[id].tsx`); voice copy.
 `bun run check` (41 tests) + `expo export` green. NOT device-verified — bike test / teardown / duck flip pending.
+**Phase 4 code-reviewed + fixed 2026-06-09 (`2dd86f5`):** a 4-angle review of `a0610b4` found 13 issues;
+the high+moderate set is fixed (live drive now reaches 'done' via onEnd-at-route-end; monotonic projection;
+iOS accuracy=-1 gate; watch-reject onError; start() guards; AppState Settings recovery; no-GPS watchdog;
+keep-awake pause/race). §3.3/§8/§1 above re-synced to the fixed code. Deferred low-sev: #9/#11/#13 (see §1).
 Related memory: `drive-simulator-and-triggering`, `preview-try-without-driving`,
 `mobile-workspace-isolated-linker`, `carplay-deferred-phone-first-mvp`. Sibling spec (different feature):
 `docs/ask-the-skipper-spec.md`.
