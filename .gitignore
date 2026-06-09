@@ -47,6 +47,9 @@ key/
 .claude/*
 !.claude/settings.json
 
+# Codex
+.codex/*
+
 # OS / editor
 .DS_Store
 .idea/
