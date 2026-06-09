@@ -328,54 +328,49 @@ export default function DriveScreen() {
         style={styles.track}
       />
 
-      {/* Itinerary — the scrolling middle (flex:1) between the trail and the player. By
-          taking all the slack it pushes the player below it down to the bottom edge.
-          Tappable in PREVIEW (jump the simulated drive there); read-only on a real/sim
-          drive (you can't teleport the car) — the hint sits right above the stops. */}
+      {/* Itinerary — the middle (flex:1) between the trail and the player. The same StopList
+          card as tour detail, but here it's a FIXED shell: all four rounded corners stay put
+          while only the rows scroll inside it. Tappable in PREVIEW (jump there); read-only on
+          a real/sim drive — the hint sits right above. The drive-complete cascade stamps the
+          passed checks in. */}
       {isPreview ? (
         <Text variant="dim" color="inkFaint" style={styles.hint}>
           {voice.player.previewHint}
         </Text>
       ) : null}
-      <ScrollView
-        ref={listRef}
-        style={styles.list}
-        contentContainerStyle={styles.listContent}
+      <StopList
+        scroll
+        scrollRef={listRef}
         onScrollBeginDrag={onScrollBeginDrag}
         onScrollEndDrag={onScrollSettled}
         onMomentumScrollEnd={onScrollSettled}
-      >
-        {/* Same StopList card as the tour-detail itinerary — unified stop UX. Tappable in
-            PREVIEW (jump there); read-only on a real/sim drive. The drive-complete cascade
-            stamps the passed checks in. */}
-        <StopList
-          onPressItem={isPreview ? d.jumpToStop : undefined}
-          enterStamp={d.phase === 'done' && !reduce}
-          items={d.stops.map((s, i) => {
-            // PREVIEW: the current segment's seq is the active clip's, or the drive/rest
-            // destination; mark earlier rows passed, and light the row "active" only once we've
-            // ARRIVED (a clip/rest beat) — not while still driving TO it. Live/sim uses firedSeqs.
-            const state = isPreview
-              ? d.phase === 'done' || (focusRow >= 0 && i < focusRow)
-                ? 'passed'
-                : s.seq === focusSeq && d.currentKind !== 'drive'
-                  ? 'active'
-                  : 'upcoming'
-              : d.phase === 'done' || (d.firedSeqs.has(s.seq) && s.seq !== d.activeSeq)
-                ? 'passed'
-                : s.seq === d.activeSeq
-                  ? 'active'
-                  : 'upcoming'
-            return {
-              seq: s.seq,
-              name: s.name,
-              sublabel: stopLabel(s.stopType),
-              icon: stopIcon(s.stopType),
-              state,
-            }
-          })}
-        />
-      </ScrollView>
+        style={styles.listCard}
+        onPressItem={isPreview ? d.jumpToStop : undefined}
+        enterStamp={d.phase === 'done' && !reduce}
+        items={d.stops.map((s, i) => {
+          // PREVIEW: the current segment's seq is the active clip's, or the drive/rest
+          // destination; mark earlier rows passed, and light the row "active" only once we've
+          // ARRIVED (a clip/rest beat) — not while still driving TO it. Live/sim uses firedSeqs.
+          const state = isPreview
+            ? d.phase === 'done' || (focusRow >= 0 && i < focusRow)
+              ? 'passed'
+              : s.seq === focusSeq && d.currentKind !== 'drive'
+                ? 'active'
+                : 'upcoming'
+            : d.phase === 'done' || (d.firedSeqs.has(s.seq) && s.seq !== d.activeSeq)
+              ? 'passed'
+              : s.seq === d.activeSeq
+                ? 'active'
+                : 'upcoming'
+          return {
+            seq: s.seq,
+            name: s.name,
+            sublabel: stopLabel(s.stopType),
+            icon: stopIcon(s.stopType),
+            state,
+          }
+        })}
+      />
 
       {/* ── PLAYER CARD ── now-playing + scrubber + transport, contained in ONE elevated
           card anchored to the bottom edge. A dashed rule fences it off from the itinerary
@@ -486,6 +481,7 @@ const styles = StyleSheet.create({
   simRow: { paddingHorizontal: space.gutter, marginTop: space.lg, gap: space.sm },
   simBtns: { flexDirection: 'row', gap: space.sm },
   divider: { marginTop: space.sm, marginBottom: space.sm }, // fence between the list and the player dock
-  list: { flex: 1 },
-  listContent: { paddingHorizontal: space.gutter, paddingTop: space.sm, paddingBottom: space.sm },
+  // The fixed itinerary shell: fills the slack between the trail and the player dock, with the
+  // gutter margins the rest of the screen uses. Only its rows scroll (StopList `scroll`).
+  listCard: { flex: 1, marginHorizontal: space.gutter, marginTop: space.sm },
 })
