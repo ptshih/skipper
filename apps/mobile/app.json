@@ -25,7 +25,9 @@
         "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS",
         "android.permission.FOREGROUND_SERVICE",
-        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
       ]
     },
     "plugins": [
@@ -61,9 +63,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "5dded9ce-af00-4c5f-957d-52644d7ab155"
+        "projectId": "dd556bd3-5c16-430e-8b1f-cfdeb410f26d"
       }
     },
-    "owner": "ptshih"
+    "owner": "manoa-inc"
   }
 }
