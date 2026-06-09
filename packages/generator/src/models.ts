@@ -30,6 +30,16 @@ export const NARRATION_MODEL_ALTERNATES = {
   haiku: 'claude-haiku-4-5-20251001',
 } as const
 
+// The FORCED-TOOL judges (charm.ts, pairwise-judge.ts — structured reports via
+// tool_choice {type:'tool'}): pinned to Opus 4.8, deliberately NOT NARRATION_MODEL.
+// Two reasons: (a) Claude Fable 5 rejects a forced tool_choice outright (400
+// "tool_choice forces tool use is not compatible with this model" — observed live
+// 2026-06-09, req_011CbtU9f7zsE1V8HegixKaw), so a narration bump to Fable would
+// break them; (b) the judge rubrics/score thresholds were calibrated against
+// Opus-tier judging — a model swap that rides a narration bump would silently
+// shift every score. Bump THIS id only with a fresh calibration pass.
+export const FORCED_TOOL_JUDGE_MODEL = 'claude-opus-4-8' as const
+
 // ---------------------------------------------------------------------------
 // Text-to-speech — Google Cloud Text-to-Speech (Gemini-TTS voices)
 // ---------------------------------------------------------------------------

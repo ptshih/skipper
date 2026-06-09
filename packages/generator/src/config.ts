@@ -66,28 +66,14 @@ export const WIKIPEDIA_USER_AGENT =
 // from the public Macrostrat API (keyless, CC BY 4.0; underlying USGS maps are PD).
 // See pipeline/macrostrat.ts. Reuses the same descriptive UA + contact as Wikipedia.
 export const MACROSTRAT_USER_AGENT = WIKIPEDIA_USER_AGENT
-/** Geology enrichment is on by default; set SKIPPER_GEOLOGY=off to skip the per-stop lookup. */
+/** Geology enrichment is on by default; set SKIPPER_GEOLOGY=off to skip the per-stop lookup
+ * (scenic stops) and withhold the scout's fetch_geology tool (story stops). */
 export const GEOLOGY_ENRICHMENT = (): boolean => process.env.SKIPPER_GEOLOGY !== 'off'
-/**
- * Who gets geology: SCENIC stops ALWAYS (they carry no Wikipedia facts — geology is the
- * one true thing they can say), but STORY stops only when their fact sheet is SPARSE
- * (below this many chars). On a fact-rich story geology just piles on as a repetitive
- * "deep time vs. our brief lives" closer (observed on emerald-bay-run: 9/9 stops →
- * monotony); a thin story is exactly where the rock rounds the stop out. Tunable; the
- * gap on emerald-bay-run sits between ~605 (sparse) and ~877+ (rich), so 700 splits clean.
- */
-export const GEOLOGY_STORY_MAX_FACT_CHARS = 700
-/**
- * Per-corridor allowlist of ICONIC-but-rich stops that get geology even though their
- * fact sheet clears the sparse threshold above — places where the rock IS the headline
- * (Emerald Bay's granite, a famous arch, a volcanic plug). Keyed by corridor slug →
- * exact stop name (the Wikipedia title). These get a "this rock is notable, give it a
- * real mention" narration cue rather than the sparse-story "you're light on facts" one,
- * so the prompt never feeds a rich stop a false premise. Hand-curated, not derived.
- */
-export const GEOLOGY_ICONIC_STOPS: Record<string, string[]> = {
-  'emerald-bay-run': ['Emerald Bay State Park'],
-}
+// Who gets geology: SCENIC stops ALWAYS (they carry no Wikipedia facts — geology is the one
+// true thing they can say; a contract, not a heuristic). STORY stops are decided by the
+// enrichment SCOUT (pipeline/scout.ts) — the old char-count sparse-gate
+// (GEOLOGY_STORY_MAX_FACT_CHARS=700) and the hand-curated GEOLOGY_ICONIC_STOPS allowlist
+// were replaced by per-stop judgment 2026-06-09 (docs/decisions/enrichment-scout.md).
 
 // --- Wikidata structured-fact enrichment ------------------------------------
 
@@ -96,18 +82,26 @@ export const GEOLOGY_ICONIC_STOPS: Record<string, string[]> = {
 // key is the Wikipedia page's `wikibase_item` property, captured at discovery. See
 // pipeline/wikidata.ts. Reuses the same descriptive UA + contact as Wikipedia.
 export const WIKIDATA_USER_AGENT = WIKIPEDIA_USER_AGENT
-/** Wikidata enrichment is on by default; set SKIPPER_WIKIDATA=off to skip the per-stop lookup. */
+/** Wikidata enrichment is on by default; set SKIPPER_WIKIDATA=off to withhold the scout's
+ * fetch_wikidata tool. */
 export const WIKIDATA_ENRICHMENT = (): boolean => process.env.SKIPPER_WIKIDATA !== 'off'
-/**
- * Who gets Wikidata facts: STORY stops only — a date/elevation/namesake identifies the
- * place, which would break the SCENIC "no place-facts" invariant (geology can ride scenic
- * because it names no landmark; Wikidata can't). And among stories, only SPARSE ones
- * (fact sheet below this many chars): a fact-rich lead extract already states these things
- * in prose, so on a rich stop the structured facts just pile on — exactly the monotony the
- * geology sparse-gate avoids. A thin story is where an exact year or elevation rounds it
- * out. Tunable independently of GEOLOGY_STORY_MAX_FACT_CHARS.
- */
-export const WIKIDATA_STORY_MAX_FACT_CHARS = 700
+// Who gets Wikidata facts: STORY stops only — a date/elevation/namesake identifies the
+// place, which would break the SCENIC "no place-facts" invariant (geology can ride scenic
+// because it names no landmark; Wikidata can't). WHICH story stops is the enrichment
+// SCOUT's call (pipeline/scout.ts) — the old WIKIDATA_STORY_MAX_FACT_CHARS=700 sparse-gate
+// was replaced by per-stop judgment 2026-06-09 (docs/decisions/enrichment-scout.md).
+
+// --- The enrichment scout (pipeline/scout.ts) --------------------------------
+
+/** The scout is on by default; set SKIPPER_SCOUT=off to skip story-stop enrichment
+ * entirely (scenic geology is unaffected — it's a contract, not a scout decision). */
+export const SCOUT_ENRICHMENT = (): boolean => process.env.SKIPPER_SCOUT !== 'off'
+/** Max model turns per stop — the ReAct loop's hard bound. A turn is one Sonnet call that
+ * either fetches (possibly several tools at once) or finalizes; 5 covers look-then-decide
+ * with a re-fetch, and a loop that hits the cap yields NO enrichment (logged, non-fatal). */
+export const SCOUT_MAX_TOOL_TURNS = 5
+/** Max output tokens per scout turn (it emits tool calls + a sentence of reason, never prose). */
+export const SCOUT_MAX_TOKENS = 1_000
 
 // --- Eval panel + evaluator-optimizer (the in-pipeline flywheel) -------------
 

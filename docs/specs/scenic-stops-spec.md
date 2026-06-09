@@ -6,7 +6,10 @@ UNBLOCKED — but it was partially overtaken by the **gap-fill + cluster-merge p
 (`d2a2056`, 2026-06-09), which attacks the same silence problem from stop SELECTION instead of new
 scenic anchors (and a factless scenic-anchor approach was built then REVERTED; the `'curated'` enum
 never shipped). **Re-ground against current `select.ts` / `generate.ts` / persist seams before
-building** — line numbers below are 2026-06-08 and WILL have moved.
+building** — line numbers below are 2026-06-08 and WILL have moved. Known drift (2026-06-09):
+`GEOLOGY_ICONIC_STOPS`, cited below as the pattern for `SCENIC_ANCHORS`, no longer exists — story
+enrichment is now scout-decided (`docs/decisions/enrichment-scout.md`); the curated-anchor TABLE
+pattern itself is still fine.
 
 Sits on top of: the **geology channel** (committed — `pipeline/macrostrat.ts`, scenic stops are
 auto-enriched at their trigger point) and the **Wikidata channel** (committed — `pipeline/wikidata.ts`,

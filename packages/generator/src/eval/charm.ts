@@ -11,7 +11,7 @@
 // --charm to keep the default audit cheap (grounding Sonnet + free deterministic dims).
 
 import Anthropic from '@anthropic-ai/sdk'
-import { NARRATION_MODEL } from '../models'
+import { FORCED_TOOL_JUDGE_MODEL } from '../models'
 import type { StopEval } from './types'
 
 /** A stop below this charm score (1-10) is "the man is not in the room" — flag it (advisory). */
@@ -103,7 +103,7 @@ export async function judgeCharm(stops: CharmStop[]): Promise<CharmVerdict> {
     .map((s) => `[stop ${s.seq}] ${s.stopType.toUpperCase()} — ${s.name}\n${s.script}`)
     .join('\n\n')
   const response = await getClient().messages.create({
-    model: NARRATION_MODEL,
+    model: FORCED_TOOL_JUDGE_MODEL,
     max_tokens: 8_000,
     system: CHARM_SYSTEM,
     tools: [REPORT_TOOL],

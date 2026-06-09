@@ -129,10 +129,12 @@ function geologyLines(
       '(The rock here is a genuinely notable part of what this place IS, so give it a real mention — woven into the telling, in your own words. Two rules: do NOT make it your closing line, and do NOT reach for the "deep time versus our brief human lives" reflection — that frame gets old fast. Land it mid-telling and end the stop on something else.)',
     )
   } else {
-    // The default STORY case: this stop was handed geology BECAUSE its own facts are thin, so
-    // the rock is welcome material. Same two bans, to kill the monotony seen when every stop got it.
+    // The default STORY case: supporting texture. The cue asserts nothing about the sheet's
+    // thinness — the enrichment scout may attach supporting geology to a rich telling too,
+    // and a "you're light on facts" premise would then be false. Same two bans, to kill the
+    // monotony seen when every stop got geology.
     out.push(
-      '(This stop is light on its own facts, so the rock is good extra material — work a little of it in where it fits, in your own words. Two rules: do NOT make it your closing line, and do NOT reach for the "deep time versus our brief human lives" reflection — that frame gets old fast. Land it mid-telling and end the stop on something else.)',
+      '(The rock here is good supporting material — work a little of it in where it fits, in your own words. Two rules: do NOT make it your closing line, and do NOT reach for the "deep time versus our brief human lives" reflection — that frame gets old fast. Land it mid-telling and end the stop on something else.)',
     )
   }
   return out

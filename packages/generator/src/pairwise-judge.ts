@@ -20,7 +20,7 @@
 // stays the human-facing 1-10 ship score; do not use its threshold as the gate.
 
 import Anthropic from '@anthropic-ai/sdk'
-import { NARRATION_MODEL } from './models'
+import { FORCED_TOOL_JUDGE_MODEL } from './models'
 
 const PAIRWISE_SYSTEM = `You are a tough, tasteful editor comparing TWO versions of the SAME road-trip-tour stop, narrated by the same persona: a warm, corny road-trip guide with the soul of a Jungle-Cruise ride skipper (default joke notch "dadpocalypse"; he is NOT a boat captain — the car-as-boat framing is retired). Judge ONE thing: which version is MORE CHARMING to a real passenger — a smile, a fond eye-roll/groan, a "huh, really" — NOT which is more accurate (assume both are equally grounded) and NOT which is longer. Reward genuine warmth and earnestness, dad jokes that land the right GROAN (corny on purpose, not clever), surprise, a distinct human voice, fresh openers/closers. Penalize travel-brochure voice, AI-chatbot tics, the encyclopedia shape (topic sentence → facts → reflective bow), sameyness, and jokes that try too hard or don't land. Pick "A", "B", or "tie". Only answer "tie" if they are genuinely indistinguishable in charm — a small but real edge is NOT a tie. Give one sentence of reasoning, then call the report tool.`
 
@@ -48,7 +48,7 @@ export async function comparePairwise(a: string, b: string): Promise<PairVerdict
   if (!process.env.ANTHROPIC_API_KEY)
     throw new Error('ANTHROPIC_API_KEY is not set (the pairwise judge needs it).')
   const res = await new Anthropic().messages.create({
-    model: NARRATION_MODEL,
+    model: FORCED_TOOL_JUDGE_MODEL,
     max_tokens: 1_000,
     system: PAIRWISE_SYSTEM,
     tools: [PAIR_TOOL],

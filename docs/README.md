@@ -52,6 +52,8 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   pre-build review of the tour-structure spec (verdict: build-with-fixes); historical.
 - [audio-compression-spike.md](decisions/audio-compression-spike.md) — WAV → MP3 32 kbps spike;
   shipped 2026-06-08.
+- [enrichment-scout.md](decisions/enrichment-scout.md) — story-stop enrichment decided by a
+  bounded tool-using scout (judgment) instead of char-count sparse-gates; built 2026-06-09.
 
 ### specs/
 - [ask-the-skipper-spec.md](specs/ask-the-skipper-spec.md) — live, grounded voice Q&A mid-drive (the

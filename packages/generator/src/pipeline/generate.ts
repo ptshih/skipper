@@ -28,8 +28,6 @@ import {
   EVAL_MAX_PASSES,
   EVAL_REGEN_BUDGET,
   GEOLOGY_ENRICHMENT,
-  GEOLOGY_ICONIC_STOPS,
-  GEOLOGY_STORY_MAX_FACT_CHARS,
   GOOGLE_TTS_READY,
   GROUNDING_EVAL,
   GROUNDING_REGEN_BUDGET,
@@ -39,8 +37,8 @@ import {
   PACING,
   QUEUE_LAG_WARN_SEC,
   R2_READY,
+  SCOUT_ENRICHMENT,
   WIKIDATA_ENRICHMENT,
-  WIKIDATA_STORY_MAX_FACT_CHARS,
   requireEnv,
 } from '../config'
 import {
@@ -67,6 +65,7 @@ import { fetchDeepExtracts } from './wikipedia'
 import { candidatesToWikiPois, discoverWikidataPois } from './wikidata-discovery'
 import { geologyFacts } from './macrostrat'
 import { wikidataFacts } from './wikidata'
+import { scoutStop } from './scout'
 import { searchBreakStops, spokenKind } from './places'
 import type { BreakAnchor } from './places'
 import { projectQueueLag, selectStops, toFacts } from './select'
@@ -301,86 +300,98 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
     console.log(`Deepened ${deep.size}/${storyStops.length} story fact sheets.`)
   }
 
-  // Geology enrichment (Macrostrat, CC BY 4.0): a coordinate-keyed fact layer — the rock
-  // you are driving through, grounded from geologic maps. Unlike Wikipedia it is keyed on
-  // the POINT, so it can light up a stop that has no article at all. It does NOT change a
-  // stop's type (geology is a separate channel, never counted toward STORY_MIN_FACT_CHARS),
-  // so the scenic↔story classification — and the M4 cache key — are untouched.
-  //   WHO gets it: SCENIC always (it carries no Wikipedia facts, so geology is the one true
-  //   thing it can say — geology's highest-leverage win); STORY only when SPARSE (fact sheet
-  //   below GEOLOGY_STORY_MAX_FACT_CHARS) — on a rich story geology piles on as a repetitive
-  //   deep-time closer — UNLESS the stop is on the per-corridor ICONIC allowlist (the rock IS
-  //   the headline there, e.g. Emerald Bay's granite). Sparse vs iconic picks the narration cue.
+  // Geology enrichment for SCENIC stops (Macrostrat, CC BY 4.0): a coordinate-keyed fact
+  // layer — the rock you are driving through, grounded from geologic maps. SCENIC gets it
+  // ALWAYS: a scenic stop carries no Wikipedia facts, so geology is the one true thing it
+  // can say — a CONTRACT, not a heuristic, so it stays out of the scout's hands. The
+  // TRIGGER point (POI snapped onto the road) is queried — "the rock under your tires,"
+  // always on LAND (dodges the fine map's "water" units that force a coarse fallback).
   // Per-stop failures are non-fatal (the stop just gets no geology). Set SKIPPER_GEOLOGY=off.
   if (GEOLOGY_ENRICHMENT()) {
-    const iconic = new Set(GEOLOGY_ICONIC_STOPS[shell.slug] ?? [])
-    const geoReasonOf = (s: StopPlan): 'scenic' | 'sparse' | 'iconic' | null => {
-      if (s.stopType === 'scenic') return 'scenic'
-      if (s.stopType !== 'story') return null
-      if (iconic.has(s.name)) return 'iconic'
-      if (s.facts.join(' ').length < GEOLOGY_STORY_MAX_FACT_CHARS) return 'sparse'
-      return null
-    }
-    const geoStops = plan
-      .map((s) => ({ s, reason: geoReasonOf(s) }))
-      .filter((x) => x.reason !== null)
-    const countOf = (r: string) => geoStops.filter((x) => x.reason === r).length
-    console.log(
-      `Enriching ${geoStops.length} stops with Macrostrat geology ` +
-        `(${countOf('scenic')} scenic, ${countOf('sparse')} sparse story, ${countOf('iconic')} iconic; rich stories skipped)...`,
-    )
+    const scenicStops = plan.filter((s) => s.stopType === 'scenic')
+    console.log(`Enriching ${scenicStops.length} scenic stops with Macrostrat geology...`)
     let geoHits = 0
-    for (const { s, reason } of geoStops) {
-      // WHICH coordinate: for SPARSE/SCENIC stops, the TRIGGER point (POI snapped onto the
-      // road) — literally "the rock under your tires," always on LAND (dodges the fine map's
-      // "water" units that force a coarse fallback), matching the narrator's "ground we're
-      // rolling over" framing. For ICONIC stops we want the rock that MAKES the place, so we
-      // query the POI/landmark point itself (e.g. Emerald Bay's granite cliffs read as the
-      // Mesozoic intrusive batholith there, where the road below snaps onto valley alluvium).
-      const [glat, glng] = reason === 'iconic' ? [s.lat, s.lng] : [s.triggerLat, s.triggerLng]
-      const geo = await geologyFacts(glat, glng)
+    for (const s of scenicStops) {
+      const geo = await geologyFacts(s.triggerLat, s.triggerLng)
       if (geo) {
         s.geology = geo.facts
         s.geologyAttribution = geo.attribution
-        if (reason === 'sparse' || reason === 'iconic') s.geologyReason = reason
         geoHits++
       }
     }
-    console.log(`Geology grounded ${geoHits}/${geoStops.length} stops.`)
+    console.log(`Geology grounded ${geoHits}/${scenicStops.length} scenic stops.`)
   }
 
-  // Wikidata enrichment (CC0): a QID-keyed layer of discrete facts (inception, elevation,
-  // named-after, heritage designation) joined from the Wikipedia page's `wikibase_item`.
-  // Like geology it is a SEPARATE channel — never counted toward STORY_MIN_FACT_CHARS, so
-  // it can't flip a stop's type or disturb the M4 cache key.
-  //   WHO gets it: STORY stops with a linked QID, but only when SPARSE (fact sheet below
-  //   WIKIDATA_STORY_MAX_FACT_CHARS). A date/elevation/namesake identifies the place, so —
-  //   unlike geology — it can NOT ride a SCENIC stop without breaking the "no place-facts"
-  //   invariant; and a fact-rich story already states these things in prose (piling on is
-  //   the monotony the geology sparse-gate avoids). A thin story is exactly where an exact
-  //   year or elevation rounds it out.
-  // Per-stop failures are non-fatal (the stop just gets no Wikidata). Set SKIPPER_WIKIDATA=off.
-  if (WIKIDATA_ENRICHMENT()) {
-    const wdStops = plan.filter(
-      (s) =>
-        s.stopType === 'story' &&
-        s.wikidataQid &&
-        s.facts.join(' ').length < WIKIDATA_STORY_MAX_FACT_CHARS,
-    )
-    console.log(
-      `Enriching ${wdStops.length} sparse story stops with Wikidata structured facts ` +
-        `(rich stories + scenic skipped)...`,
-    )
-    let wdHits = 0
-    for (const s of wdStops) {
-      const wd = await wikidataFacts(s.wikidataQid!)
-      if (wd) {
-        s.wikidata = wd.facts
-        s.wikidataAttribution = wd.attribution
-        wdHits++
+  // STORY-stop enrichment is the SCOUT's call (pipeline/scout.ts): a bounded tool-using
+  // agent reads each stop's deepened sheet, judges what the telling is missing, fetches
+  // grounded enrichment (geology at the road or the landmark point; Wikidata key facts),
+  // and decides how it should land — replacing the old char-count sparse-gates + the
+  // hand-curated iconic allowlist (docs/decisions/enrichment-scout.md). Its tools are
+  // keyed to the stop's OWN coords/QID, so it can only gather, never assert: every fact
+  // still arrives verbatim from a sourced fetcher, with attribution for the freeze.
+  // Per-stop failures are non-fatal (the stop just gets no enrichment, same as a fetcher
+  // failure under the old gates). Set SKIPPER_SCOUT=off to skip.
+  if (SCOUT_ENRICHMENT()) {
+    const scoutStops = plan.filter((s) => s.stopType === 'story')
+    console.log(`Scouting enrichment for ${scoutStops.length} story stops (judgment, not char-gates)...`)
+    for (const s of scoutStops) {
+      try {
+        const decision = await scoutStop(
+          {
+            name: s.name,
+            kind: s.kind,
+            region: shell.regionName,
+            corridor: shell.headline,
+            facts: s.facts,
+            ...(s.mergedFeatures?.length
+              ? { mergedFeatures: s.mergedFeatures.map((m) => ({ name: m.name, facts: m.facts })) }
+              : {}),
+            targetSeconds: s.targetSeconds,
+          },
+          {
+            // Stop-keyed tools: the scout picks WHICH point ("road" = the trigger point
+            // under the tires; "landmark" = the POI itself, for rock-IS-the-place stops
+            // where the road below snaps onto valley alluvium) — never WHOSE facts.
+            geologyAt: GEOLOGY_ENRICHMENT()
+              ? (point) =>
+                  point === 'landmark'
+                    ? geologyFacts(s.lat, s.lng)
+                    : geologyFacts(s.triggerLat, s.triggerLng)
+              : null,
+            wikidataFacts:
+              WIKIDATA_ENRICHMENT() && s.wikidataQid
+                ? () => wikidataFacts(s.wikidataQid!)
+                : null,
+          },
+        )
+        if (!decision) {
+          console.log(`  stop ${s.seq} ("${s.name}"): scout passed (no enrichment).`)
+          continue
+        }
+        if (decision.geology) {
+          s.geology = decision.geology.facts
+          s.geologyAttribution = decision.geology.attribution
+          // The narration cue keeps the StopPlan vocabulary: 'iconic' = the rock IS the
+          // headline (the old allowlist's cue), 'sparse' = supporting texture.
+          s.geologyReason = decision.geology.emphasis === 'headline' ? 'iconic' : 'sparse'
+        }
+        if (decision.wikidata) {
+          s.wikidata = decision.wikidata.facts
+          s.wikidataAttribution = decision.wikidata.attribution
+        }
+        const got = [
+          ...(decision.geology ? [`geology(${decision.geology.emphasis})`] : []),
+          ...(decision.wikidata ? ['wikidata'] : []),
+        ]
+        console.log(
+          `  stop ${s.seq} ("${s.name}"): ${got.length ? got.join(' + ') : 'nothing included'} — ${decision.reason}`,
+        )
+      } catch (e) {
+        console.warn(
+          `  stop ${s.seq} ("${s.name}") scout failed (${(e as Error).message}) — no enrichment.`,
+        )
       }
     }
-    console.log(`Wikidata grounded ${wdHits}/${wdStops.length} stops.`)
   }
 
   // Each stop is an independent narration call, so the model can't see its own
