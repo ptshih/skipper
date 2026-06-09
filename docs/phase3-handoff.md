@@ -4,6 +4,18 @@
 > `docs/gps-player-spec.md` (the full player spec). Read CLAUDE.md first — it governs
 > workflow, invariants, and tooling.
 
+> ✅ **BUILT 2026-06-09 (commit `03a52c6`).** `src/lib/offline.ts` (`downloadTour` →
+> `Paths.document/tours/<tourId>/` with verify-on-disk + manifest; `isTourDownloaded` /
+> `loadManifest` / `deleteTourDownload`) + `offline-util.ts` (pure helpers + a unit test);
+> `loadPlayback`/`resignPlayback` make `preview/[id].tsx` + `useDrive.ts` **offline-first**;
+> a "Download for offline" CTA on `tour/[id].tsx`. `expo-file-system@~56.0.7` declared.
+> Mobile check green (41 tests). ⚠ **The data contract below is PRE-Phase-2-migration and was
+> corrected in the build:** the tour fetch is now `{ tour{polyline,anchors}, region, host,
+> intro, outro, stops[] }` (no `corridor`; polyline on `tour.tour.polyline`); `/sign` returns
+> `{ stops[], intro, outro }` (NOT `{ urls }`), so the **intro/outro bracket clips are
+> downloaded too**. ⏳ **Remaining:** the on-device airplane-mode acceptance needs an EAS dev
+> build (expo-file-system + expo-audio are native — Expo Go can't run them).
+
 You're working in the Skipper repo (`/Users/ptshih/code/skipper`) — an AI-narrated,
 GPS-triggered driving audio tour, bun monorepo. Optimize for charm; the persona is the
 product.

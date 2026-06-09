@@ -40,8 +40,8 @@ permission. See §2.
 |---|---|---|
 | **1** | Trigger core importable in mobile, no drift | ✅ **Done** — extracted to `@skipper/drive-core`, mobile in the workspace, `app/preview` imports it (commits `e97c453`, `5025827`) |
 | **0** | Audio-session spike: duck music **and** keep lock-screen Now Playing | ❌ not started — riskiest unknown; needs a dev build |
-| **2** | GPS-driven player core, fed by the **simulated** fix source | ❌ not started — the big one |
-| **3** | Offline download (clips → disk) | ❌ not started |
+| **2** | GPS-driven player core, fed by the **simulated** fix source | ✅ **Done** — `src/lib/useDrive.ts` + `app/drive/[id].tsx` + `src/lib/gps.ts`; intro/outro bracket playback added (`ecc78a0`) |
+| **3** | Offline download (clips → disk) | ✅ **Done** — `src/lib/offline.ts`: download to `Paths.document` + offline-first players (`03a52c6`). On-device airplane-mode acceptance pending a dev build |
 | **4** | Real `expo-location` fix source | ❌ not started |
 | **5** | Drive it once for real | ❌ not started |
 
