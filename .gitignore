@@ -39,6 +39,8 @@ key/
 
 # Scratch / throwaway verification scripts (agent workspace)
 .scratch/
+# Scratch audio (generator TTS/clip output dumped during verification)
+.scratch-audio/
 
 # Claude Code (local agent runtime state — locks, worktrees)
 .claude/
