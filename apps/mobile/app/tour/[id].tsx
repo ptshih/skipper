@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { StyleSheet, View } from 'react-native'
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
-import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
 import { ApiError, getTour, signTourAudio, type SignedAudio, type TourDetail } from '@/lib/api'
 import {
   deleteTourDownload,
@@ -84,55 +83,6 @@ export default function TourScreen() {
       load()
       if (id) setDownloaded(isTourDownloaded(id))
     }, [load, id]),
-  )
-
-  // ---- "Hear the skipper": a one-tap voice sample (the head of the first clip) so a
-  // rider falls for the gravelly deadpan BEFORE committing to a whole drive. Reuses the
-  // tour's existing audio — no new assets. Toggles play/stop; auto-resets at clip end.
-  const samplePlayer = useAudioPlayer()
-  const sampleStatus = useAudioPlayerStatus(samplePlayer)
-  const [sample, setSample] = useState<'idle' | 'loading' | 'playing'>('idle')
-
-  const toggleSample = useCallback(async () => {
-    if (sample === 'playing') {
-      try {
-        samplePlayer.pause()
-      } catch {}
-      setSample('idle')
-      return
-    }
-    if (!id) return
-    try {
-      setSample('loading')
-      // The sample IS the content here — play even on the silent switch.
-      await setAudioModeAsync({ playsInSilentMode: true }).catch(() => {})
-      const signed = await signTourAudio(id) // re-sign each tap so the URL is never stale
-      const first = [...signed.stops].sort((a, b) => a.seq - b.seq)[0]
-      if (!first) {
-        setSample('idle')
-        return
-      }
-      samplePlayer.replace({ uri: first.url })
-      samplePlayer.play()
-      setSample('playing')
-    } catch {
-      setSample('idle')
-    }
-  }, [sample, id, samplePlayer])
-
-  // Reset to idle when the sample clip finishes on its own.
-  useEffect(() => {
-    if (sampleStatus.didJustFinish) setSample('idle')
-  }, [sampleStatus.didJustFinish])
-
-  // Stop the sample if you leave the screen (or tap into the full drive) mid-clip.
-  useEffect(
-    () => () => {
-      try {
-        samplePlayer.pause()
-      } catch {}
-    },
-    [samplePlayer],
   )
 
   // Debug-only: presign + reveal the raw R2 URLs. Dead-code-eliminated in release.
@@ -245,15 +195,6 @@ export default function TourScreen() {
           {downloadError}
         </Text>
       ) : null}
-
-      {/* Lower-commitment taste: one tap to hear the skipper before the whole drive. */}
-      <Button
-        variant="secondary"
-        icon={sample === 'playing' ? 'pause' : 'play'}
-        title={sample === 'playing' ? 'Stop the sample' : 'Hear the skipper'}
-        loading={sample === 'loading'}
-        onPress={toggleSample}
-      />
 
       <Text variant="label" color="inkFaint" style={styles.sectionLabel}>
         The route · {tour.stops.length} stops
