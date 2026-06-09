@@ -25,8 +25,10 @@ Refs: CLAUDE.md (top doctrine + Hard invariants), `packages/shared/src/schemas.t
 ## Cost guardrail on `generateTour`
 
 The one stated operational risk is *"a live regen burns GCP credits"* (CLAUDE.md), yet
-`generateTour` has **no programmatic guardrail** — cost control is pure human discipline
-(the "founder OK"). Add a real guard:
+cost control is mostly human discipline (the "founder OK"). Partially addressed
+(2026-06-09): the eval-driven regen loop is hard-capped (`EVAL_REGEN_BUDGET` +
+per-pass/round caps in `config.ts`), so LLM re-narration spend is bounded per tour.
+Still open:
 
 - [ ] Print an **estimated spend** (LLM input/output tokens + TTS characters → rough $)
       BEFORE the TTS/R2 phase, so a full run shows its cost before paying for it.
