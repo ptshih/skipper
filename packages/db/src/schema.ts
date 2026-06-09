@@ -171,9 +171,6 @@ export const tours = pgTable(
     // Optional tour-dedup hash — M4 forward-compat. Do NOT add a (unique) index until
     // M4 actually queries/dedupes on it.
     routeSig: text('route_sig'),
-    // Marks the single anonymous-playable sample tour (freemium "sample, then sign
-    // up"). NOT ownership — tours stay anonymous/shareable.
-    isPreview: boolean('is_preview').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .defaultNow()

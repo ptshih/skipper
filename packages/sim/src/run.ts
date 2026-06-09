@@ -49,7 +49,6 @@ async function main() {
         headline: tours.headline,
         regionName: regions.displayName,
         polyline: tours.polyline,
-        isPreview: tours.isPreview,
       })
       .from(tours)
       .innerJoin(regions, eq(tours.regionId, regions.id))
@@ -88,7 +87,7 @@ async function main() {
 
   const r = report
   console.log('\n' + '='.repeat(78))
-  console.log(`DRIVE SIM — ${tour.headline} (${tour.regionName}) · tour ${tour.id}${tour.isPreview ? ' [preview]' : ''}`)
+  console.log(`DRIVE SIM — ${tour.headline} (${tour.regionName}) · tour ${tour.id}`)
   console.log(
     `${(r.totalRouteM / 1609.344).toFixed(1)} mi @ ${r.speedMph} mph → ${mmss(r.driveSec)} drive · ` +
       `${r.fixCount} fixes @ ${r.tickHz} Hz · lead ${r.trigger.leadSeconds}s, floor varies, cone ${r.trigger.headingConeDeg}°`,

@@ -132,7 +132,6 @@ export default function TourScreen() {
           <Text variant="label" color="inkFaint">
             {tour.region.displayName}
           </Text>
-          {tour.tour.isPreview ? <Badge tone="amber" filled label="FREE PREVIEW" /> : null}
         </View>
       </View>
 

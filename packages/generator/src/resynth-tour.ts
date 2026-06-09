@@ -9,8 +9,7 @@
 // change (e.g. wav→mp3), and then we sweep the orphan unless --keep-old. The tour stays
 // `ready` (every clip keeps a non-null audioUrl + duration).
 //
-//   dotenvx run -f .env.development -- bun packages/generator/src/resynth-tour.ts --preview [--dry-run] [--keep-old]
-//   dotenvx run -f .env.development -- bun packages/generator/src/resynth-tour.ts <tourId|prefix> [--dry-run]
+//   dotenvx run -f .env.development -- bun packages/generator/src/resynth-tour.ts <tourId|prefix> [--dry-run] [--keep-old]
 //
 // Needs Google Cloud TTS (GOOGLE_CLOUD_PROJECT + ADC) and R2_* — same as a full run.
 
@@ -24,16 +23,8 @@ import { synthesize } from './pipeline/tts'
 import { bracketKey, clipKey, deleteAudio, uploadAudio } from './pipeline/storage'
 
 async function resolveTourId(arg: string | undefined): Promise<string> {
-  if (arg === '--preview' || arg === undefined) {
-    const row = (
-      await db
-        .select({ id: tours.id })
-        .from(tours)
-        .where(and(eq(tours.isPreview, true), eq(tours.status, 'ready')))
-        .limit(1)
-    )[0]
-    if (!row) throw new Error('No ready isPreview tour found. Pass an explicit <tourId> instead.')
-    return row.id
+  if (!arg) {
+    throw new Error('Pass an explicit <tourId> (or a unique id prefix) to re-synth.')
   }
   // Exact id, or a unique prefix (convenience for the short 8-char ids we log).
   const all = await db.select({ id: tours.id }).from(tours)
@@ -58,7 +49,7 @@ async function main() {
   const dryRun = argv.includes('--dry-run')
   const keepOld = argv.includes('--keep-old')
   const target = argv.find((a) => !a.startsWith('--'))
-  const tourId = await resolveTourId(target ?? '--preview')
+  const tourId = await resolveTourId(target)
 
   // The persona (voice + delivery style) is resolved from the tour's region.
   const regionRow = (

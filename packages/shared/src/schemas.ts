@@ -128,7 +128,6 @@ export const tour = z.object({
   // enums `jokeLevel`). `tourRequest` below carries it as the generation knob.
   status: tourStatus,
   routeSig: z.string().nullish(),
-  isPreview: z.boolean(),
 })
 export type Tour = z.infer<typeof tour>
 
@@ -160,7 +159,6 @@ export const tourListItem = z.object({
   summary: z.string().nullish(),
   distanceMeters: z.number().int().nullish(),
   durationSeconds: z.number().int().nullish(),
-  isPreview: z.boolean(),
   /** A glanceable hook of the tour's marquee places (story/scenic anchors), e.g.
    *  "Emerald Bay & Vikingsholm" — so a tour card has an identity without a tap.
    *  Nullish: pre-teaser rows degrade to no hook. */
@@ -219,7 +217,6 @@ export const tourDetail = z.object({
     headline: z.string(),
     regionId: z.uuid(),
     status: tourStatus,
-    isPreview: z.boolean(),
     polyline,
     distanceMeters: z.number().int().nullish(),
     durationSeconds: z.number().int().nullish(),

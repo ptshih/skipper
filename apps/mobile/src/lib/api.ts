@@ -47,7 +47,7 @@ export const listTours = async (): Promise<TourList> =>
   tourList.parse(await fetchJson('/tours'))
 
 // `preview: true` adds `?preview=1` — the OPEN funnel path (any ready tour, no account).
-// Omit it for the live drive + offline download, which stay walled behind isPreview/account.
+// Omit it for the live drive + offline download, which stay walled behind a free account.
 const previewQuery = (opts?: { preview?: boolean }) => (opts?.preview ? '?preview=1' : '')
 
 export const getTour = async (tourId: string, opts?: { preview?: boolean }): Promise<TourDetail> =>

@@ -127,12 +127,10 @@ export async function upsertPoi(input: UpsertPoiInput): Promise<string> {
 }
 
 /**
- * Mark the draft tour `generating` (a status marker; the ready-gate does the real
- * write). Also sets `isPreview` — the `--preview` flag is a generation-time choice of
- * which tour the anonymous sample is.
+ * Mark the draft tour `generating` (a status marker; the ready-gate does the real write).
  */
-export async function markTourGenerating(tourId: string, isPreview: boolean): Promise<void> {
-  await db.update(tours).set({ status: 'generating', isPreview }).where(eq(tours.id, tourId))
+export async function markTourGenerating(tourId: string): Promise<void> {
+  await db.update(tours).set({ status: 'generating' }).where(eq(tours.id, tourId))
 }
 
 /** A fully-narrated, fully-synthesized stop, ready to write onto its tour. */

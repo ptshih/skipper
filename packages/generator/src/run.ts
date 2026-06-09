@@ -6,8 +6,6 @@
 // Flags:
 //   --dry-run            Narrate + print scripts only (no TTS / R2 / DB writes).
 //                        Needs ANTHROPIC_API_KEY (+ GOOGLE_MAPS_API_KEY for breaks).
-//   --preview            Mark this tour as the anonymous-playable sample
-//                        (tours.isPreview) — the free "sample, then sign up" tour.
 //   --no-judge-closers   Skip the semantic-closer LLM judge. It is ON by default
 //                        (one extra model call) — it breaks up closing-move monotony
 //                        (the reflective-bow ending the charm judge flags), which the
@@ -33,7 +31,6 @@ type Duration = (typeof DURATIONS)[number]
 interface Args {
   slug: string
   dryRun: boolean
-  preview: boolean
   judgeClosers: boolean
   durationBucket: Duration
   /** The notch to narrate at — a generation input, default dadpocalypse (M1). */
@@ -46,11 +43,10 @@ function parseArgs(argv: string[]): Args {
   const slug = args.find((a) => !a.startsWith('--'))
   if (!slug) {
     throw new Error(
-      'Usage: run.ts <tour-slug> [--dry-run] [--preview] [--no-judge-closers] [--duration=short|standard|long] [--joke-level=off|mild|dad|dadpocalypse] [--json=<path>]',
+      'Usage: run.ts <tour-slug> [--dry-run] [--no-judge-closers] [--duration=short|standard|long] [--joke-level=off|mild|dad|dadpocalypse] [--json=<path>]',
     )
   }
   const dryRun = args.includes('--dry-run')
-  const preview = args.includes('--preview')
   const judgeClosers = !args.includes('--no-judge-closers') // ON by default; opt out to save a call
   const durArg = args.find((a) => a.startsWith('--duration='))?.split('=')[1] ?? 'standard'
   if (!DURATIONS.includes(durArg as Duration)) {
@@ -66,7 +62,6 @@ function parseArgs(argv: string[]): Args {
   return {
     slug,
     dryRun,
-    preview,
     judgeClosers,
     durationBucket: durArg as Duration,
     jokeLevel: jokeArg as JokeLevel,
@@ -143,9 +138,9 @@ function printResult(r: GenerateResult): void {
 }
 
 async function main() {
-  const { slug, dryRun, preview, judgeClosers, durationBucket, jokeLevel, jsonPath } =
+  const { slug, dryRun, judgeClosers, durationBucket, jokeLevel, jsonPath } =
     parseArgs(process.argv)
-  const result = await generateTour({ slug, dryRun, preview, judgeClosers, durationBucket, jokeLevel })
+  const result = await generateTour({ slug, dryRun, judgeClosers, durationBucket, jokeLevel })
   printResult(result)
   if (jsonPath) {
     await Bun.write(jsonPath, JSON.stringify(result, null, 2))

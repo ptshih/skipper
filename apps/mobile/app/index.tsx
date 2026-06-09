@@ -246,14 +246,8 @@ export default function DrivesScreen() {
           renderItem={({ item }) => (
             <View style={styles.row}>
               <Card
-                framed={item.isPreview}
                 onPress={() => router.push({ pathname: '/tour/[id]', params: { id: item.id } })}
               >
-                {item.isPreview ? (
-                  <Text variant="label" color="accentWarm" style={styles.kicker}>
-                    START HERE
-                  </Text>
-                ) : null}
                 <Text variant="title" color="ink">
                   {item.headline}
                 </Text>
@@ -264,7 +258,6 @@ export default function DrivesScreen() {
                   {item.durationSeconds ? (
                     <Badge tone="amber" label={`${Math.round(item.durationSeconds / 60)} MIN`} />
                   ) : null}
-                  {item.isPreview ? <Badge tone="amber" filled label="FREE PREVIEW" /> : null}
                 </View>
                 {item.teaser ? (
                   <Text variant="body" color="inkDim" numberOfLines={1} style={styles.summary}>

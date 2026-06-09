@@ -72,8 +72,6 @@ export interface GenerateOptions {
   jokeLevel?: JokeLevel
   /** Narrate + print scripts only; skip TTS, R2, and all DB writes. */
   dryRun?: boolean
-  /** Flag this tour as the anonymous-playable sample (tours.isPreview). */
-  preview?: boolean
   /** Run the optional semantic-closer judge (one extra model call) after the lint. */
   judgeClosers?: boolean
 }
@@ -618,7 +616,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   // generated up front so the key (clips/<tourId>/<stopId>) is known before upload,
   // and the fully-populated rows land in one atomic ready-gate batch.
   const tourId = shell.id
-  await markTourGenerating(tourId, Boolean(opts.preview))
+  await markTourGenerating(tourId)
   try {
     const finalStops: FinalStop[] = []
     const finalBrackets: FinalBracket[] = []
