@@ -233,7 +233,7 @@ Concretizes §4.5's "on-device STT/LLM fallback is explicitly later-phase." Moti
 The on-device LLM is precisely what makes the *offline* tier *responsive* rather than pre-canned.
 
 **Prerequisites & caveats:**
-- **Bundle the fact wells offline.** On-device RAG needs the `pois.facts.extract` wells in the offline download (today it ships clips, not source facts). **Shared prerequisite with tell-me-more** → build tell-me-more first; it lays this foundation and proves the pull UX with zero LLM risk.
+- **Bundle the fact wells offline.** On-device RAG needs the `pois.facts.extract` wells in the offline download (today it ships clips, not source facts). This is *this tier's own* payload — tell-me-more bundles pre-baked *audio*, not raw facts — but the two share the offline-manifest-extension *pattern* and the pull UX, so **build tell-me-more first** to prove both with zero LLM risk (see `docs/tell-me-more-spec.md` §6).
 - **Device-gated:** Apple-Intelligence phones + iOS 26 only → older devices get no on-device tier (fall back to cloud, or to tell-me-more's pre-canned content).
 - **3B wit:** extraction it can do; the Skipper's *deadpan comedy* is harder — charm may flatten offline (lean on the persona lampshade).
 - **Latency:** on-device generation is slower; short grounded answers are probably acceptable for conversational feel, but measure on-device before committing.
