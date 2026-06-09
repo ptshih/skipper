@@ -1,8 +1,12 @@
 # Ask the Skipper — Build Spec
 
+> **Status:** build-ready spec, UNBUILT — post-MVP (v2), gated behind the proven phone player (M1).
+> §4.6 (on-device fallback) is exploratory, not decided. Canonical-preview tour ids in this doc drift
+> as the preview is regenerated — resolve "the canonical preview" fresh, don't trust a hardcoded id.
+
 > Self-contained, build-ready handoff. Grounded against the live repo (`apps/api/src/index.ts`, `apps/api/src/entitlements.ts`, `apps/api/src/auth.ts`, `packages/generator/src/pipeline/{narrate,tts,stt?,select,generate,http,wav}.ts`, `packages/generator/src/persona/skipper.ts`, `packages/generator/src/models.ts`, `packages/generator/src/config.ts`, `packages/shared/src/schemas.ts`, `packages/db/src/schema.ts`, `apps/mobile/`). Model/API facts verified against the `claude-api` skill (Opus 4.8 / Sonnet 4.6 / Haiku 4.5, caching minimums, effort support, the disabled-thinking preamble caveat, pricing, structured outputs) — see §5 and §11. As of the 2026-06-07 founder review, the decisions are **locked** (tagged **[DECIDED]**): Sonnet 4.6 live model, account-required gating (free + paid), hold-to-talk PTT, short per-stop multi-turn memory, current-stop ask scope, and the §A technical defaults. The only substantive open *decision* item is the **M4 cache-reuse drift flag** (§2, future-phase). A second technical-microscope review (2026-06-07) verified the load-bearing claims (grounding round-trip, import-graph safety, gating chain, the Anthropic/Google API facts, and MP3-on-unary-TTS) and sharpened the implementation details inline — no decisions reopened; the build-affecting fixes are the recorder re-prepare (§7), the `facts.extract` string-narrow (§6.3), per-leg deadline budgets (§6.3/§4.4), the `turnActive` freeze of player A's segment-driver (§7), aborting the in-flight ask on `seq` change (§3.2), gating Ask to `atStop` (§5.1), and input caps (§6.2).
 
-> **Reconciliation (2026-06-08, after the review above):** two production changes landed post-review, and this spec's body has been updated to match. (1) The TTS voice switched **Sulafat → Algenib** (`models.ts` `SKIPPER_VOICE_ID`; Sulafat retired as female). (2) The persona was recast **boat-captain → road-trip guide** (`skipper.ts`, `apps/mobile`) — so build against `SKIPPER_VOICE_ID`, never a hard-coded voice name, and read any lingering `[DECIDED 2026-06-07]` boat flavor through the road-trip persona. The live canonical preview is tour `9813e519` (`emerald-bay-run`, Algenib, road-trip).
+> **Reconciliation (2026-06-08, after the review above):** two production changes landed post-review, and this spec's body has been updated to match. (1) The TTS voice switched **Sulafat → Algenib** (`models.ts` `SKIPPER_VOICE_ID`; Sulafat retired as female). (2) The persona was recast **boat-captain → road-trip guide** (`skipper.ts`, `apps/mobile`) — so build against `SKIPPER_VOICE_ID`, never a hard-coded voice name, and read any lingering `[DECIDED 2026-06-07]` boat flavor through the road-trip persona. The live canonical preview is tour `9ac50db5` (`emerald-bay-run`, Algenib, road-trip; the `9813e519` id below predates the Phase-2 wipe).
 
 ---
 
@@ -212,7 +216,7 @@ Estimated time-to-first-answer-audio (short reply ~60–100 output tokens), serv
 This *inverts* the offline-first tour invariant — tour audio stays offline, only Ask needs the network at question-time. Pre-flight connectivity check before recording (if offline, don't open the mic — dim the button, play the bundled deflection). Download the deflection clips *with the tour* so they're available in dead zones. **Distinguish the two refusals:** the dead-zone deflection ("can't raise the shore") is a *connectivity* failure (client-side/offline); the grounding refusal ("not in my logbook") is a *content* outcome (model declines with a well, or the scenic/break short-circuit). On-device STT/LLM fallback is explicitly later-phase.
 
 ### 4.6 On-device LLM fallback tier — the dead-zone-proof Ask **[EXPLORATORY 2026-06-09 — feasibility scoped, NOT decided]**
-Concretizes §4.5's "on-device STT/LLM fallback is explicitly later-phase." Motivation is the sharpest version of the §4.5 inversion: per `docs/competitor-ux-studies.md`, **"dead air between content" is the category's #1 UX complaint, 4-for-4**, and Ask is the *pull* answer to it — but online-only Ask fails *precisely where dead air is worst* (the long remote stretches hold both the silence AND the dead zones). An on-device tier is the only thing that closes that scissor.
+Concretizes §4.5's "on-device STT/LLM fallback is explicitly later-phase." Motivation is the sharpest version of the §4.5 inversion: per `docs/research/competitor-ux-studies.md`, **"dead air between content" is the category's #1 UX complaint, 4-for-4**, and Ask is the *pull* answer to it — but online-only Ask fails *precisely where dead air is worst* (the long remote stretches hold both the silence AND the dead zones). An on-device tier is the only thing that closes that scissor.
 
 **2026 stack feasibility (bleeding-edge — re-verify against current docs at build time, per CLAUDE.md):**
 - **Apple Foundation Models framework** (WWDC25, expanded WWDC26) exposes a **~3B on-device model that is the OS's, not the app's** (no multi-GB blob to ship) with **Guided Generation** (constrained decoding — an explicit *hallucination reducer*) and grounding/tool hooks; Apple benchmarks it above Llama-3-8B / Mistral-7B on instruction-following + structured output. iOS 26+, Apple-Intelligence-capable devices only.
@@ -225,7 +229,7 @@ Concretizes §4.5's "on-device STT/LLM fallback is explicitly later-phase." Moti
 
 **Shape: a degradation tier the persona absorbs.** Online → cloud Sonnet + Algenib (the §4 path, best). Dead zone → on-device 3B + (voice TBD), degraded but *present*. The charm-toy advantage a productivity app lacks: the persona **absorbs** the degradation — *"signal's gone, so I'm running on my own steam out here — only what's in the logbook, and I'm a step slow."* Degradation becomes character (cf. §3.6 — every failure is the Skipper in character).
 
-**Where it sits on the pull ladder** (the family of dead-air answers; see `docs/tell-me-more-spec.md`):
+**Where it sits on the pull ladder** (the family of dead-air answers; see `docs/specs/tell-me-more-spec.md`):
 - **tell-me-more** — pre-canned deeper-cut B-side, **zero LLM**, offline. The floor.
 - **on-device Ask** (this tier) — live, answers *your* question, offline, *degraded*. The middle.
 - **cloud Ask** (§4) — live, responsive, online, best. The ceiling.
@@ -233,7 +237,7 @@ Concretizes §4.5's "on-device STT/LLM fallback is explicitly later-phase." Moti
 The on-device LLM is precisely what makes the *offline* tier *responsive* rather than pre-canned.
 
 **Prerequisites & caveats:**
-- **Bundle the fact wells offline.** On-device RAG needs the `pois.facts.extract` wells in the offline download (today it ships clips, not source facts). This is *this tier's own* payload — tell-me-more bundles pre-baked *audio*, not raw facts — but the two share the offline-manifest-extension *pattern* and the pull UX, so **build tell-me-more first** to prove both with zero LLM risk (see `docs/tell-me-more-spec.md` §6).
+- **Bundle the fact wells offline.** On-device RAG needs the `pois.facts.extract` wells in the offline download (today it ships clips, not source facts). This is *this tier's own* payload — tell-me-more bundles pre-baked *audio*, not raw facts — but the two share the offline-manifest-extension *pattern* and the pull UX, so **build tell-me-more first** to prove both with zero LLM risk (see `docs/specs/tell-me-more-spec.md` §6).
 - **Device-gated:** Apple-Intelligence phones + iOS 26 only → older devices get no on-device tier (fall back to cloud, or to tell-me-more's pre-canned content).
 - **3B wit:** extraction it can do; the Skipper's *deadpan comedy* is harder — charm may flatten offline (lean on the persona lampshade).
 - **Latency:** on-device generation is slower; short grounded answers are probably acceptable for conversational feel, but measure on-device before committing.
@@ -573,7 +577,7 @@ All-in ≈ **$0.01–$0.03/question**, LLM+TTS-dominated. At toy volume this is 
 
 ## 12. End-to-end manual test script
 
-Run the API with creds (`bun run dev` wraps dotenvx). Use the existing `emerald-bay-run` preview tour (`9813e519…`, ready/preview).
+Run the API with creds (`bun run dev` wraps dotenvx). Use the existing `emerald-bay-run` preview tour (`9ac50db5…`, ready).
 
 **Step 0 — verify well depth (do first).** The deep-extract code (`generate.ts:165-184`) was added after the first generation. Inspect a story stop's `pois.facts.extract` length for `9813e519`: if it's ~600 chars (`EXTRACT_CHARS` lead) rather than up to 4000 (`DEEP_EXTRACT_CHARS`), the "rich well" asserts (Vikingsholm/Lora Knight depth) may not hold — **regenerate the tour** (the deepening is idempotent on regen) or pick a freshly generated deep tour before relying on §3.7's example. Grounding correctness holds either way; only depth changes.
 

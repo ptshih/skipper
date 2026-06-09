@@ -5,7 +5,7 @@
 //
 // Phase 4 adds a `liveSource()` (expo-location `watchPositionAsync` → GpsFix) that
 // implements the SAME `GpsFixSource` shape; the driving hook swaps which one it
-// subscribes and nothing else changes. See docs/gps-player-spec.md §3.4 / §7.
+// subscribes and nothing else changes. See docs/specs/gps-player-spec.md §3.4 / §7.
 import * as Location from 'expo-location'
 import {
   cumulativeMeters,

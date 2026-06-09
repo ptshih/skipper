@@ -1,6 +1,6 @@
 # Tour-structure design review — adversarial critique
 
-**Status:** review output, 2026-06-08. Pressure-test of `docs/tour-structure-spec.md` + `docs/tour-structure-handoff.md` against current code, BEFORE building. No code was changed.
+**Status:** review output, 2026-06-08. Pressure-test of `docs/specs/tour-structure-spec.md` + the tour-structure handoff (doc since deleted) against current code, BEFORE building. No code was changed.
 
 **Method:** 8 reviewer lenses (invariants · schema/migration · directionality · catalog/mobile · persona-registry · intro/outro · narration-coherence · scale/staleness) fanned out over the docs cross-checked against actual code; every finding got an independent skeptic that re-read the cited evidence to confirm/refute; a synthesis pass deduped, ranked, and ran a completeness critic. 62 agents.
 
@@ -9,7 +9,7 @@
 **Verdict:** `build-with-fixes`
 
 > 🔴 **HISTORICAL ARTIFACT — re-grounded 2026-06-08, after this review.** The design it critiques was then
-> simplified; the canonical model is now **`docs/tour-data-model-zero-reuse.md`**. Still-valid findings:
+> simplified; the canonical model is now **`docs/decisions/tour-data-model-zero-reuse.md`**. Still-valid findings:
 > B1/B2 (annotated resolved below) and **M6** — the prompt/lint inversion — which is DONE (committed
 > 67e9313/7860b3f). MOOT because the model changed:
 > - **B3** (reverse-polyline source) — **DISSOLVED**: every tour is independent; there is no "reverse" to source.
@@ -36,7 +36,7 @@ The design is **fundamentally sound and ready to build with a short list of fixe
 > table and no content cache key under zero-reuse; narration is tour-owned on `tour_stops`, so the two
 > directions narrate the shared POI independently and there is no shared clip to collide. The
 > forward/reverse-marker-in-the-key fix below is therefore **moot**. The analysis stands as the OLD-model
-> problem statement. See docs/tour-data-model-zero-reuse.md §5 + tour-structure-spec §8 #7.
+> problem statement. See docs/decisions/tour-data-model-zero-reuse.md §5 + tour-structure-spec §8 #7.
 
 **What's wrong:** Spec §8 #7 calls the missing direction dimension a "v1 non-issue: each directional drive generates its own clips fresh." It is not. The `poi_content` unique index (`schema.ts:163`) and the R2 clip key (`storage.ts:34-42`, `clips/${persona}/${voice}/${jokeLevel}/${poiId}`) are **both** keyed on `(poiId, persona, voice, jokeLevel)` with **no direction component**, and `pois` dedup on `(source, sourceId)` (`schema.ts:96`) → the same landmark resolves to the **same `poiId`** across both runs. When Phase 3 (spec line 195) runs the generator a second time over the shared corridor, `upsertPoiContent` (`generate.ts:587`) UPSERTs over direction 1's script row and `uploadAudio` (`generate.ts:566`) overwrites direction 1's R2 object at the identical key. Direction 2 wins for *both* cards — collapsing the "two discrete drives / slight per-direction variation" premise (§1) and wasting the 2× generation cost.
 **Why it matters:** This is the core of the new model. "Generates fresh" is *precisely* what causes the clobber.
@@ -51,7 +51,7 @@ The design is **fundamentally sound and ready to build with a short list of fixe
 > `tour_stops.poiId` therefore **stays NOT NULL**, the geofence engine stays homogeneous, and brackets
 > have no POI *by construction* — so there is nothing to null and no synthetic anchor to invent.
 > The original analysis below stands as the problem statement. See tour-structure-spec §3 +
-> docs/tour-data-model-zero-reuse.md. (The review's recommended fix — nullable `poiId` shared with the
+> docs/decisions/tour-data-model-zero-reuse.md. (The review's recommended fix — nullable `poiId` shared with the
 > scenic `'curated'` source — was NOT taken; restructuring dissolved the constraint instead, and decoupled
 > the bracket gap from the scenic-anchor gap, which are different problems.)
 

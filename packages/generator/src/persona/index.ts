@@ -2,7 +2,7 @@
 // SLUG. Mirrors apps/api/src/host.ts (the presentation registry): one host per region,
 // defaulting to the Skipper so a freshly-seeded region is never persona-less. Adding a
 // region = a new PersonaDef + one entry here (a backend deploy, never an app update).
-// See docs/persona-registry-handoff.md.
+// Background: docs/ideas/region-skippers.md.
 
 import { SKIPPER } from './skipper'
 import type { PersonaDef } from './types'

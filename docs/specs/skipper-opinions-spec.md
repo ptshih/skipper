@@ -5,7 +5,7 @@ landscape, the stuff off the frozen route — surfaced as opinionated asides tha
 *character*, not an audioguide.** Feature #4 of the future-features brainstorm.
 
 > **Status: SPEC ONLY — nothing built.** Future feature, gated behind the proven phone player
-> like the rest of the charm roadmap. **Builds ON `docs/downtime-callouts-spec.md` — read that
+> like the rest of the charm roadmap. **Builds ON `docs/specs/downtime-callouts-spec.md` — read that
 > first**; this reuses its delivery system and gives its deferred Phase 2 (grounded spatial
 > callouts) a content theory + discovery scope. Decided in a design session 2026-06-09.
 
@@ -198,7 +198,7 @@ the **schema widening** for positioned/attributed callouts + the **second geofen
 ## 11. Provenance
 
 Designed 2026-06-09. Builds on and cites for re-check:
-- `docs/downtime-callouts-spec.md` — the delivery system (scheduler, duck-overlay, sentinel seqs,
+- `docs/specs/downtime-callouts-spec.md` — the delivery system (scheduler, duck-overlay, sentinel seqs,
   the `tour_callouts` table) and its deferred Phase 2 (grounded spatial callouts) that this concretizes.
 - `packages/generator/src/pipeline/macrostrat.ts` — coordinate-keyed CC-BY geology + the persona-prompt
   geology carve-out (already shipped); Wikidata (CC0, QID-join) + OSM (discovery tier) from the

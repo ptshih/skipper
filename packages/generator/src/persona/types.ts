@@ -4,7 +4,7 @@
 //
 // PRESENTATION (the display name/tagline/backstory/portrait served to the app) lives in
 // apps/api/src/host.ts, NOT here — this is the GENERATION half (prompt, voice, kit) that
-// never reaches the client. See docs/persona-registry-handoff.md.
+// never reaches the client. Background: docs/ideas/region-skippers.md.
 
 import type { GeminiVoice } from '../models'
 

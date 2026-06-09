@@ -6,7 +6,7 @@
 //
 // Pure functions, no deps — unit-tested in test/mp3.test.ts (and cross-checked against
 // a real ffmpeg-LAME 32kbps file during the audio-compression spike; see
-// docs/audio-compression-spike.md). Mirrors wav.ts in spirit: parse the container,
+// docs/decisions/audio-compression-spike.md). Mirrors wav.ts in spirit: parse the container,
 // derive the duration.
 //
 // Header reference: an MPEG audio frame begins with an 11-bit sync (0xFFE) followed by

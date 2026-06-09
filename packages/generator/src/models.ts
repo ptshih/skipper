@@ -59,7 +59,7 @@ export const TTS_MODEL = 'gemini-3.1-flash-tts-preview' as const
 // AUDIO FORMAT. We request MP3 directly from Gemini-TTS (unary text:synthesize supports
 // LINEAR16/MP3/OGG_OPUS/ALAW/MULAW/PCM; MP3 is fixed "32kbps"). MP3 is ~12× smaller than
 // the LINEAR16 WAV used through M1 — fixing the slow-buffer clip skips on weak signal and
-// shrinking the future offline tour download (see docs/audio-compression-spike.md).
+// shrinking the future offline tour download (see docs/decisions/audio-compression-spike.md).
 // OGG_OPUS is smaller still but iOS AVPlayer (expo-audio) CANNOT decode Ogg/Opus, so it's
 // disqualified for the phone player. Cloud TTS returns no duration field and MP3 isn't
 // byte-linear, so duration is summed from the MPEG frames (pipeline/mp3.ts) — validated
@@ -105,8 +105,8 @@ export const SKIPPER_VOICE_ID: GeminiVoice = GEMINI_VOICES.algenib
 // so it can't loosen grounding. (Persona-in-delivery, not in facts.)
 //
 // WARMER delivery (Phase 1, 2026-06-08): replaces the prior low-and-slow / dry read —
-// founder-picked over "tightened" / "drier" / "bigger-beat" (docs/tour-structure-handoff
-// Appendix A). Keeps the deadpan, committed-to-the-bit jokes but at a natural, easy talking
+// founder-picked over "tightened" / "drier" / "bigger-beat" (the tour-structure handoff's
+// Appendix A — doc since deleted; see git history). Keeps the deadpan, committed-to-the-bit jokes but at a natural, easy talking
 // pace (relaxed, never dragging), saving the slow-down for the puns with a confiding warmth.
 // ⚠ NOT yet on the live canonical preview: this only affects NEW synthesis. Taking effect
 // means re-synthesizing the canonical clips at Phase 6 (resynth-tour.ts --preview) and the

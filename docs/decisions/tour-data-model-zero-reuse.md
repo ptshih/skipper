@@ -3,9 +3,14 @@
 **Status:** ✅ **BUILT + live-migrated 2026-06-08** (commits `d0f2ba6` schema + cascade, `f1396cf` the
 applied migration baseline; the canonical preview was regenerated into this model = tour `9ac50db5`). The
 design below is now the SHIPPED entity model, not a proposal. It remains the **single source of truth** for
-the entity model + migration; `docs/tour-structure-spec.md` is superseded on the data model (it keeps only
-the `tour_brackets` design + the narration quality gate), and `docs/tour-structure-handoff.md` defers here
-for schema. Supersedes the "`pois` + `poi_content` are a cache" half of CLAUDE.md principle #1.
+the entity model + migration; `docs/specs/tour-structure-spec.md` is superseded on the data model (it keeps only
+the `tour_brackets` design + the narration quality gate), and the tour-structure handoff (doc since
+deleted) deferred here for schema. Supersedes the "`pois` + `poi_content` are a cache" half of
+CLAUDE.md principle #1.
+
+**Addendum 2026-06-09:** `tours.isPreview` was DROPPED (commit `b744f8d`) — every tour previews
+anonymously and the freemium wall gates the live drive + offline for EVERY tour, so the `is_preview`
+column in the §3 DDL no longer exists in `schema.ts`.
 
 ⚠ **No users → the migration was clean + DESTRUCTIVE** (the live dev DB was wiped — `DROP SCHEMA` — and
 rebuilt from a single fresh baseline `0000_worried_hellcat.sql`; no back-compat, no data fold). The DDL in §3

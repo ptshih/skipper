@@ -1,7 +1,7 @@
 # "Replay the last stop" — build spec / handoff
 
 **A one-tap way to re-hear the stop you just passed.** Surfaced by the GuideAlong UX study
-(`docs/competitor-ux-studies.md`) — its #1 reviewed gap is *"difficulty replaying previous
+(`docs/research/competitor-ux-studies.md`) — its #1 reviewed gap is *"difficulty replaying previous
 commentaries,"* and Skipper is *more* exposed: the live drive has **no auto-advance**, so once a
 clip finishes the player returns to ducked-quiet and the stop is simply gone.
 
@@ -104,7 +104,7 @@ time—" persona pre-roll is a future flourish, §6.)
   - **A persona "one more time—" pre-roll** before the replayed clip (charming, but needs a generated
     snippet — overkill for v1).
   - **Voice "hey skipper, say that again"** → this is the natural front door once **Ask the Skipper**
-    exists (`docs/ask-the-skipper-spec.md`); replay-last is the hands-on-button version that ships first.
+    exists (`docs/specs/ask-the-skipper-spec.md`); replay-last is the hands-on-button version that ships first.
 
 ## 7. Edge cases
 
@@ -119,13 +119,13 @@ time—" persona pre-roll is a future flourish, §6.)
 
 ## 8. Provenance
 
-- Surfaced by `docs/competitor-ux-studies.md` (GuideAlong: *"difficulty replaying previous
+- Surfaced by `docs/research/competitor-ux-studies.md` (GuideAlong: *"difficulty replaying previous
   commentaries"*).
 - Built on `apps/mobile/src/lib/useDrive.ts` — `onClipDone`/`pump`/`clipBusy`/`queue`/`handleFix`/
   `activeSeq`/`firedSeqs`/`sawFresh`/the clip-load effect/`setActiveForLockScreen`; complements the
   shipped scrubber (`seekToMs`/`seekBy`, the ±15s + position bar).
-- Preemption rule mirrors the "stops win by construction" principle in `docs/downtime-callouts-spec.md`.
-- Future voice front-door: `docs/ask-the-skipper-spec.md`.
+- Preemption rule mirrors the "stops win by construction" principle in `docs/specs/downtime-callouts-spec.md`.
+- Future voice front-door: `docs/specs/ask-the-skipper-spec.md`.
 
 **Decisions locked:** player-only (no backend); replay the last *completed* clip via the existing
 clip path; a live GPS trigger **preempts** a replay (only replays are preemptible); offered in the

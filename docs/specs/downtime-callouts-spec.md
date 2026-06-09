@@ -332,7 +332,7 @@ Designed 2026-06-09. Grounded against, and citing for re-check:
 - `packages/generator/src/pipeline/narrate.ts` — `narrateIntro`/`narrateOutro`/`persistBracket`,
   the `finalizeTourReady` `db.batch` ready-gate.
 - The per-region persona registry (`personaForRegion`, `PersonaDef`, the kit) and the
-  `tour_brackets` Option-B precedent (docs/tour-structure-handoff.md, docs/tour-structure-spec.md).
+  `tour_brackets` Option-B precedent (docs/specs/tour-structure-spec.md; the tour-structure handoff doc has since been deleted).
 
 **Decisions locked this session:** runtime scheduler over the generator-placed "fold"; separate
 `tour_callouts` table; persona-only v1 (spatial = Phase 2); duck-overlay; stops-win-by-construction;

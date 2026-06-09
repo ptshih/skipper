@@ -1,7 +1,10 @@
 # Audio compression spike — get clips off uncompressed WAV
 
-**Status:** spike / recommendation (not yet implemented). 2026-06-08.
-**Owner decision needed:** one ear test (see §6) before locking the format.
+**Status:** spike → **SHIPPED 2026-06-08** (impl `b38edb3`, canonical preview re-synthed + verified
+live `bcdbda4`): TTS output is **MP3 32 kbps** (`TTS_AUDIO_ENCODING` in `models.ts`), exact duration
+via the frame-sum parser in `pipeline/mp3.ts`; `wav.ts` retained as the LINEAR16 fallback. Historical
+record — the "not yet implemented" framing below is the pre-decision text, and its tour ids /
+`isPreview` references are of-its-time (`isPreview` dropped 2026-06-09).
 
 ## 1. Why
 

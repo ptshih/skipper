@@ -15,7 +15,7 @@ attacks. This is the strongest external validation of the charm roadmap to date:
 
 | Shaka user complaint | Skipper's answer (decided/built) |
 |---|---|
-| **"stretches of *dead air* between stops that could've been filled with stories"** | the **downtime-callouts** feature — `docs/downtime-callouts-spec.md` |
+| **"stretches of *dead air* between stops that could've been filled with stories"** | the **downtime-callouts** feature — `docs/specs/downtime-callouts-spec.md` |
 | Tours run **one way only** — can't reverse if you're lodged elsewhere | every tour is an **independent peer tour** (S→N and N→S separate drives) — `tour-model-simplified` |
 | **"manually running buttons… many steps to the next stop, gets confusing"** | GPS-triggered **FIFO auto-play**, zero manual stepping (the in-car "half-second glance" rule) |
 | **No try-before-buy** — you pay ~$20 *blind* | the **anonymous couch-preview funnel** (every tour previewable; the wall is the live drive/offline) |
@@ -57,7 +57,7 @@ remembering when prioritizing: callouts target a felt, *reviewed* complaint, not
   roadmap.)
 - **"Side quests" / recommended detours with directions.** The sharpest philosophical fork: Shaka
   *routes you* to detours (utility); our #4 skipper deliberately *won't name names* (the vagueness is
-  the bit — `docs/skipper-opinions-spec.md` §3.4). Keep the charm version — eyes open that we trade a
+  the bit — `docs/specs/skipper-opinions-spec.md` §3.4). Keep the charm version — eyes open that we trade a
   sliver of utility for character.
 - **Buy-blind, no preview.** Their funnel is the opposite of ours and a known conversion weakness for
   the category. The preview-first funnel is the deliberate improvement — don't regress toward theirs.

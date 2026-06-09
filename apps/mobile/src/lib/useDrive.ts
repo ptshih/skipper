@@ -10,7 +10,7 @@
 // that auto-advances on `didJustFinish`, each GpsFix runs `engine.update(fix)` and any
 // stop that fires is queued and played. A finished clip returns to ducked-quiet and
 // WAITS for the next GPS trigger — it never advances by a clip ending. See
-// docs/gps-player-spec.md §3.5.
+// docs/specs/gps-player-spec.md §3.5.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Animated, AppState, Linking } from 'react-native'
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake'

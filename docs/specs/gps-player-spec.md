@@ -1,5 +1,10 @@
 # M1 GPS Phone Player — Build Spec / Handoff
 
+> **Status (2026-06-09):** mostly built — Phase 2 (GPS player on the simulated source) and Phase 3
+> (offline download) ✅ shipped; Phase 4 (real `expo-location` source) code-built + reviewed, NOT
+> device-verified. Remaining: the Phase-0 duck flip (audio session still `doNotMix`) + Phase 5 (the
+> real drive), both pending an EAS dev-build session.
+
 > Self-contained handoff for the **live, on-device, GPS-triggered phone player** — the
 > M1 MVP bet. Grounded against the live repo (`packages/drive-core/src/{trigger,simulate,geo,preview}.ts`,
 > `apps/mobile/app/preview/[id].tsx`, `apps/api/src/index.ts`, `packages/shared/src/schemas.ts`,
@@ -414,4 +419,4 @@ iOS accuracy=-1 gate; watch-reject onError; start() guards; AppState Settings re
 keep-awake pause/race). §3.3/§8/§1 above re-synced to the fixed code. Deferred low-sev: #9/#11/#13 (see §1).
 Related memory: `drive-simulator-and-triggering`, `preview-try-without-driving`,
 `mobile-workspace-isolated-linker`, `carplay-deferred-phone-first-mvp`. Sibling spec (different feature):
-`docs/ask-the-skipper-spec.md`.
+`docs/specs/ask-the-skipper-spec.md`.

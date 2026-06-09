@@ -1,9 +1,12 @@
 # Scenic stops spec — deliberately adding scenic stops
 
-**Status:** design, agreed in a PM session (2026-06-08). NOT built. **BLOCKED** — the build is on
-hold pending the **tour-structure / directionality** work (`docs/tour-structure-spec.md`) landing,
-because it reworks the exact `select.ts` / `generate.ts` seams this sits on. **Re-ground against
-current code before building** — line numbers below are 2026-06-08 and WILL have moved.
+**Status:** design, agreed in a PM session (2026-06-08). NOT built. The original blocker (the
+tour-structure / directionality work) has since LANDED (the Phase-2 migration), so this is
+UNBLOCKED — but it was partially overtaken by the **gap-fill + cluster-merge pacing rework**
+(`d2a2056`, 2026-06-09), which attacks the same silence problem from stop SELECTION instead of new
+scenic anchors (and a factless scenic-anchor approach was built then REVERTED; the `'curated'` enum
+never shipped). **Re-ground against current `select.ts` / `generate.ts` / persist seams before
+building** — line numbers below are 2026-06-08 and WILL have moved.
 
 Sits on top of: the **geology channel** (committed — `pipeline/macrostrat.ts`, scenic stops are
 auto-enriched at their trigger point) and the **Wikidata channel** (committed — `pipeline/wikidata.ts`,
@@ -85,7 +88,7 @@ article, so a deliberate scenic stop needs a **synthetic POI anchor**.
 
 ---
 
-## 4. ⚠️ Entanglement with directionality (READ `docs/tour-structure-spec.md` FIRST)
+## 4. ⚠️ Entanglement with directionality (READ `docs/specs/tour-structure-spec.md` FIRST)
 
 The directionality work changes the world this lands in. Do not build scenic stops until it settles,
 and align with it:

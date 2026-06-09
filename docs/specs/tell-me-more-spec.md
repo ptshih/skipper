@@ -6,9 +6,9 @@ middle** of the pull ladder for dead air: `replay-last → tell-me-more → Ask 
 LLM, no STT, no network — works in the dead zones where dead air is worst.
 
 > **Status: SPEC ONLY — nothing built.** A generator + player feature, fully offline. Decided
-> 2026-06-09. Builds on `docs/replay-last-stop-spec.md` (the soft-clip player concept it shares) and
-> `docs/downtime-callouts-spec.md`; it's the pre-canned rung of the pull ladder formalized in
-> `docs/ask-the-skipper-spec.md` §4.6.
+> 2026-06-09. Builds on `docs/specs/replay-last-stop-spec.md` (the soft-clip player concept it shares) and
+> `docs/specs/downtime-callouts-spec.md`; it's the pre-canned rung of the pull ladder formalized in
+> `docs/specs/ask-the-skipper-spec.md` §4.6.
 
 ## 0. TL;DR
 
@@ -24,7 +24,7 @@ LLM, no STT, no network — works in the dead zones where dead air is worst.
 
 ## 1. Why a separate clip (not just a longer main clip)
 
-It resolves a contradiction sitting in the competitor reviews (`docs/competitor-ux-studies.md`):
+It resolves a contradiction sitting in the competitor reviews (`docs/research/competitor-ux-studies.md`):
 users complain about **both** *"dead air, too little"* **and** *"repetitive / too long / just
 driving"* (GuideAlong's Hana review, Autio's "museum tour"). A longer main clip fixes the first and
 *worsens* the second. The deeper cut is the only move that resolves both:
@@ -87,7 +87,7 @@ tour_stops += deeper_cut_script        text   null
 
 ## 5. Player — `replay-last`'s sibling
 
-Same surface, same moment, same mechanics as `docs/replay-last-stop-spec.md`:
+Same surface, same moment, same mechanics as `docs/specs/replay-last-stop-spec.md`:
 - **Affordance:** in the between-stops quiet, alongside **"Replay"**, a **"Tell me more"** button —
   shown only when the **last completed story stop has a deeper cut** (`canTellMore = activeSeq ===
   null && lastCompletedStoryStop?.deeperCut != null`). One big in-car-safe tap target.
@@ -102,7 +102,7 @@ Same surface, same moment, same mechanics as `docs/replay-last-stop-spec.md`:
 
 ## 6. The pull ladder + the Ask relationship
 
-The family of dead-air *pull* answers (`docs/ask-the-skipper-spec.md` §4.6):
+The family of dead-air *pull* answers (`docs/specs/ask-the-skipper-spec.md` §4.6):
 - **replay-last** — *hear that again* (no new content).
 - **tell-me-more** (this) — *a deeper cut on the same stop*, pre-canned, offline.
 - **on-device Ask** — *answers YOUR question*, live, offline, degraded.
@@ -156,8 +156,8 @@ lands, Ask is the natural upgrade: swap the *fixed* B-side for a *responsive* gr
 
 ## 11. Provenance
 
-- Surfaced from the dead-air thread (`docs/competitor-ux-studies.md`: the too-little/too-much
-  contradiction) and the pull-ladder framing (`docs/ask-the-skipper-spec.md` §4.6).
+- Surfaced from the dead-air thread (`docs/research/competitor-ux-studies.md`: the too-little/too-much
+  contradiction) and the pull-ladder framing (`docs/specs/ask-the-skipper-spec.md` §4.6).
 - Generator seams: `packages/generator/src/pipeline/narrate.ts` (the new `narrateDeeperCut`),
   `generate.ts` (within-tour conditioning: `priorStops`/`recentMotifs`), `config.ts`
   (`DEEP_EXTRACT_CHARS=4000`, `TARGET_SECONDS.story=120`), `persist.ts`, the `finalizeTourReady`
@@ -165,7 +165,7 @@ lands, Ask is the natural upgrade: swap the *fixed* B-side for a *responsive* gr
 - Schema: `tour_stops` (zero-reuse narration columns — `script`/`audio_url`/`audio_duration_ms`/
   `attribution`/`facts_hash` — that the `deeper_cut_*` columns mirror).
 - Player: `apps/mobile/src/lib/useDrive.ts` + `offline.ts`; the soft-clip concept + preemption from
-  `docs/replay-last-stop-spec.md`.
+  `docs/specs/replay-last-stop-spec.md`.
 
 **Decisions locked:** pre-generated (not live); a second non-redundant telling from the leftover
 well, exhaustion-gated for eligibility; story-only; nullable columns on `tour_stops` (no new table),

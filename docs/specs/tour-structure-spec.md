@@ -4,10 +4,10 @@
 now ✅ **BUILT**: the quality-gated prompt + intro/outro narration modes (67e9313/7860b3f), the
 `tour_brackets` table + the atomic ready-gate co-committing both brackets (d0f2ba6), and intro/outro
 bracket PLAYBACK in both players (ecc78a0). The §4a R2-path/region-pgEnum migration notes are moot — clips
-are tour-scoped (`clips/<tourId>/…`) and `regions` is a TABLE; see `docs/tour-data-model-zero-reuse.md`.
+are tour-scoped (`clips/<tourId>/…`) and `regions` is a TABLE; see `docs/decisions/tour-data-model-zero-reuse.md`.
 
 > 🔴 **SUPERSEDED ON THE DATA MODEL + STRUCTURE (2026-06-08, after this was written).** The canonical
-> model is now **`docs/tour-data-model-zero-reuse.md`** — read it, not this, for the entity model. Three
+> model is now **`docs/decisions/tour-data-model-zero-reuse.md`** — read it, not this, for the entity model. Three
 > later decisions deleted this spec's spine:
 > 1. **Every tour is INDEPENDENT** — no `direction`/reverse/forward, no "drive family." S→N and N→S are
 >    two PEER tours, related only via the proximity recommender. → §1, §2, §5's directional/family/"2-ways"
@@ -23,7 +23,7 @@ are tour-scoped (`clips/<tourId>/…`) and `regions` is a TABLE; see `docs/tour-
 
 Sits on top of the voice/narration work already shipped this session: Algenib ·
 `gemini-3.1-flash-tts-preview` · 32k MP3 · the **warmer** delivery prompt (see
-docs/audio-compression-spike.md).
+docs/decisions/audio-compression-spike.md).
 
 ## 0. Governing principles
 
@@ -36,7 +36,7 @@ docs/audio-compression-spike.md).
   variations. A new-region AI drive borrows an existing curated skipper or waits for one.
 - **Assemble per request; fetch FACTS once per place, generate NARRATION per tour.** `pois`
   caches facts (deduped, TTL-refreshed); narration is **tour-owned, never reused** across tours
-  (zero-reuse — see docs/tour-data-model-zero-reuse.md). [Updated 2026-06-08; supersedes the
+  (zero-reuse — see docs/decisions/tour-data-model-zero-reuse.md). [Updated 2026-06-08; supersedes the
   earlier "generate content once per place."]
 
 ## 1. Entity model + directionality (LOCKED)
@@ -47,7 +47,7 @@ docs/audio-compression-spike.md).
   **independently generated** (run the generator twice over the same frozen route, once per
   direction) — NOT a mechanically-reversed mirror. This matches the incumbents (Shaka authors
   Classic vs Reverse as distinct experiences; GuideAlong records different return commentary) and
-  is simpler for AI generation. **Under zero-reuse (docs/tour-data-model-zero-reuse.md) each
+  is simpler for AI generation. **Under zero-reuse (docs/decisions/tour-data-model-zero-reuse.md) each
   direction's narration is fully tour-owned** — the two drives share only the deduped `pois` facts,
   never a clip — so independent per-direction telling is the default, free, and collision-proof
   (this is why design-review B1 dissolves). The two still SHOULD read as two ways of one drive, so
@@ -88,7 +88,7 @@ Intro/outro are the drive's **frame**, NOT stops. The earlier "model them as `st
 A cited DB-modeling review (Fowler STI vs Concrete-Table-Inheritance; Karwin; the Postgres CHECK
 three-valued-logic trap; GitLab "don't start new tables as STI") favors **separate homogeneous
 tables** for placeless, fixed-count, integrity-load-bearing subtypes like this. (Upgrade path noted
-at the end; full reasoning in docs/tour-data-model-zero-reuse.md and the design-review.)
+at the end; full reasoning in docs/decisions/tour-data-model-zero-reuse.md and the design-review.)
 
 - **`tour_brackets` — the drive's frame (its own table).** Exactly one `intro` + one `outro` row per
   drive: `(id, tourId→tours, kind ∈ {intro,outro}, script, audioUrl, audioDurationMs, reviewed)` —
@@ -236,14 +236,14 @@ facts}**. Frozen rails (§0); persona human (§0); everything else generates.
   no content key.** Narration is tour-owned (`tour_stops`), so each direction narrates the shared
   POI independently by construction — no shared clip to key, no collision, nothing to defer to M4.
   (This resolves design-review blocker B1; the shared `pois` row still supplies the facts both
-  directions ground on. See docs/tour-data-model-zero-reuse.md.)
+  directions ground on. See docs/decisions/tour-data-model-zero-reuse.md.)
 - **#8 — intro/outro notch-awareness + onboarding placement → RESOLVED.** Onboarding lives in the
   pre-drive UI (§3); the intro/outro generation is notch-parameterized (§3).
 
 ## Build phases (checkpoint the risky ones)
 
 1. Narration prompt (`skipper.ts`): quality-gated + kit→intro + no-recap + intro/outro modes.
-2. Schema: the full **`docs/tour-data-model-zero-reuse.md`** migration — merge `corridors` into `tours`
+2. Schema: the full **`docs/decisions/tour-data-model-zero-reuse.md`** migration — merge `corridors` into `tours`
    (route + `headline` + end-anchors + `region_id`), the `regions` table, the **`tour_brackets`** intro/outro
    table (NOT stop-types; §3), the **zero-reuse reshape** (drop `poi_content`, narration onto `tour_stops`,
    `pois.facts_hash`/`facts_fetched_at`), and drop `durationBucket`/`interests[]`/`persona`. Clean + destructive (no users).
@@ -265,7 +265,7 @@ A large parallel batch landed while this was being designed. State vs. this spec
   `poi_content` cache).** Facts are shared on `pois` (deduped, TTL + `facts_hash`); narration is
   tour-owned on `tour_stops` (no content cache, no cross-tour reuse — "tour 1's Camp Richardson ≠
   tour 2's"). Dissolves §8 #7 and design-review B1, and shrinks the persona→region migration. Full
-  design + migration: docs/tour-data-model-zero-reuse.md.
+  design + migration: docs/decisions/tour-data-model-zero-reuse.md.
 - **§4 persona — presentation half BUILT.** `apps/api/src/host.ts` (`Record<Persona, HostIdentity>`,
   served via the API, host-agnostic player, type-guarded). Generation half (a unified persona
   registry: prompt-overlay + kit + opener + voice, with guards reading from it) is still TODO and
@@ -276,7 +276,7 @@ A large parallel batch landed while this was being designed. State vs. this spec
   content (intro/outro + any new stop type) must carry the array shape.
 - **GPS Phase 2 player exists** (simulated fix source, commit `e7496a6`) — so "wrong-direction
   deferred to the GPS phase" (§6) has a partial scaffold; real device GPS is still Phase 4.
-- **Still TODO:** the `docs/tour-data-model-zero-reuse.md` migration (merge `corridors`→`tours` with
+- **Still TODO:** the `docs/decisions/tour-data-model-zero-reuse.md` migration (merge `corridors`→`tours` with
   `headline`/end-anchors/`region_id`; the `regions` table; `tour_brackets`; the zero-reuse reshape; drop
   the variant columns), the generation persona registry, and the canonical-preview regen. (The
   quality-gated prompt + intro/outro modes are DONE — committed 67e9313/7860b3f. Voice/codec — 3.1-flash
