@@ -5,6 +5,13 @@ Jungle-Cruise-skipper persona, played as phone audio (CarPlay later). **Optimize
 The persona is the product.** When a choice trades polish-for-the-builder against
 scale-for-a-market, pick polish.
 
+**No users yet — break things freely.** The app has ZERO real users, so schema / API /
+storage changes need NO backward-compatibility and NO careful data migration: prefer
+CLEAN, DESTRUCTIVE migrations (drop + recreate) over preserving legacy rows or
+nullable-for-back-compat columns. The only things still worth a founder OK are COST and
+the demo — a live regen burns GCP credits, and the canonical preview IS the demo (don't
+silently break it). (Added 2026-06-08.)
+
 **Ground tooling/dependency/version decisions in authoritative docs, not memory.**
 The stack moves fast (bun, Expo/RN, drizzle, the SDKs) and a model's training data
 goes stale — when a build/resolution/config question comes up (e.g. "should this
@@ -28,8 +35,18 @@ you found so the next agent can re-check it.
 
 ## Two principles that govern the architecture
 
-1. **Assemble per request; generate content once per place.** `pois` +
-   `poi_content` are a cache; `tours` + `tour_stops` are the assembly.
+1. **Assemble per request; fetch FACTS once per place, generate NARRATION per
+   tour.** `pois` is the cache — a place's facts/coords, deduped by
+   `(source, source_id)` and re-fetched on a TTL (`facts_fetched_at`); facts are
+   SHARED by every tour that visits the place. **Narration is NOT cached — it's
+   tour-owned:** a tour's `tour_stops` carry their own `script`/`audio`, so tour 1's
+   Camp Richardson is ALWAYS a different telling from tour 2's, even though both point
+   at the same `pois` row. Delivery belongs to the stop; facts belong to the place
+   (the "persona lives in DELIVERY, never in FACTS" invariant, mapped onto storage).
+   There is **no content cache and no cross-tour content reuse** — by design. When a
+   re-fetch MATERIALLY changes a poi's facts (detected via `pois.facts_hash`), every
+   `tour_stop` that grounded on them is stale and must regenerate. (Decided 2026-06-08,
+   superseding the old `poi_content` cache — see `docs/tour-data-model-zero-reuse.md`.)
 2. **The rails are the route; generation is everything inside the rails.** Routes
    are hand-curated + frozen, never derived. The failure mode to avoid is letting
    "curated" creep into the _contents_ — if the model just reads a fixed script,
@@ -44,13 +61,15 @@ you found so the next agent can re-check it.
   (`tours.isPreview`); full playback needs a free account. Audio is PRIVATE in R2;
   the API serves presigned URLs after the tier check (so the wall is real).
 - **`pois` deduped by `(source, source_id)`.** Store `source`/`source_id` for
-  attribution — Wikipedia is **CC BY-SA**, keep credit (attribution snapshot is
-  frozen on `poi_content` at generation time).
-- **`poi_content` cache key = `(poi_id, persona, voice, joke_level)`.** The
-  Dad-Joke-O-Meter notch (`off`/`mild`/`dad`/`dadpocalypse`) is a
-  GENERATION-time parameter and part of the key — not a live playback toggle.
-- **A tour may not be `ready` until every story/scenic stop has non-null audio.**
-  Generator enforces; player also defends.
+  attribution — Wikipedia is **CC BY-SA**, keep credit (the attribution snapshot is
+  frozen on the `tour_stop` at narration time).
+- **The Dad-Joke-O-Meter notch (`off`/`mild`/`dad`/`dadpocalypse`), persona, and
+  voice are per-TOUR generation parameters** (`tours.joke_level`, `tours.persona`;
+  voice derived from persona) — baked into the narration when the tour is generated,
+  NOT live playback toggles and NOT a content cache key (there is no content cache;
+  narration is tour-owned — see principle #1). Changing any of them = a different tour.
+- **A tour may not be `ready` until every stop has non-null audio** (story, scenic,
+  AND break — audio lives on the `tour_stop` now). Generator enforces; player also defends.
 - **Persona lives in DELIVERY, never in FACTS.** "Make it funny" never loosens
   accuracy. A POI with thin/no Wikipedia is downgraded to scenic/break — silence
   beats a hallucinated battle.
@@ -59,9 +78,10 @@ you found so the next agent can re-check it.
   come from the curated Places anchor (a minimal non-volatile field mask) and are
   spoken in the clip like the region is; everything volatile is fetched fresh at
   tour-load (and "ask the skipper" later). Break audio is **mandatory** — every
-  selected break gets a `poi_content` clip; the tour can't be `ready` without it.
-  (NOTE: baking the Places name into a frozen R2 clip extends its lifetime past the
-  DB anchor — mind Places ToS; `patch-clip` re-synths one clip if a place renames.)
+  selected break gets narration + audio on its `tour_stop`; the tour can't be `ready`
+  without it. (NOTE: baking the Places name into a frozen R2 clip extends its lifetime
+  past the DB anchor — mind Places ToS; `patch-clip` re-synths one stop's clip if a
+  place renames.)
 
 ## Stack notes
 
@@ -119,24 +139,27 @@ glanceable/in-car). Screens compose `@/ui` and reference semantic roles
 
 ## Milestones
 
-0. **Content + phone-player spike.** Skipper prompt; ~6–8 Tahoe corridors; stand
+0. **Content + phone-player spike.** Skipper prompt; ~6–8 Tahoe tours (each a self-contained drive — no separate `corridors` table); stand
    up the **phone** audio player — that is the MVP target, and its build (Expo
    SDK 56 / RN 0.85 / new arch) decides the SDK pin. **CarPlay is no longer a
    hard gate** — it's deferred past the MVP (see Deferred). The MVP plays through
    the phone (in a mount / over Bluetooth), not CarPlay. You may file the
    `carplay-audio` Apple entitlement in the background since Apple review is slow,
    but nothing waits on it.
-1. **Walking skeleton.** ONE corridor, ONE duration, `dadpocalypse` only.
+1. **Walking skeleton.** ONE tour (one route), `dadpocalypse` only.
    Generator → narration → TTS → R2 → Neon (no cache/dedup/feedback). Build the
    **drive simulator**. Player: download offline → simulated drive → correct
    speed-adaptive triggering + debounce → audio + lock-screen **Now Playing on
    the phone** (CarPlay deferred). Then drive it once for real. _This is the
    whole bet._
-2. **`apps/api`:** list corridors, fetch tour, signed R2 URLs.
-3. **Breadth:** more corridors, fixed durations, interest filtering, joke notches,
-   live break-stop Places data.
-4. **Earn the machinery:** the cache + `route_sig` dedup, human-review/feedback,
-   then more regions (Yosemite → Moab; mind seasons).
+2. **`apps/api`:** list tours, fetch tour, signed R2 URLs.
+3. **Breadth:** more tours, joke notches as a per-tour setting (notch = 1-N off a tour),
+   live break-stop Places data. (Duration = skip-stops, interests = a stop filter — both
+   deferred, NOT variant tours.)
+4. **Earn the machinery:** `route_sig` tour-dedup, human-review/feedback, then more
+   regions (Yosemite → Moab; mind seasons). (The old `poi_content` *content* cache is
+   cancelled under zero-reuse — narration is tour-owned; the only "cache" is the `pois`
+   facts TTL + hash-staleness, see `docs/tour-data-model-zero-reuse.md`.)
 
 ## Deferred — DO NOT build these in v1
 
@@ -259,9 +282,9 @@ bet being proven first.
   region browse axis: picking "Yosemite" in the "Where to?" picker introduces you to the
   Yosemite skipper. "The persona is the product," applied per region — a charm multiplier.
   What it stresses:
-  - **The cache key already has the dimension.** `poi_content` keys on
-    `(poi_id, persona, voice, joke_level)`, so region skippers extend `persona` cleanly (an
-    enum/map per region) — each region generates its own content, no schema fight.
+  - **Region is a per-tour generation parameter, not a cache key.** Since narration is
+    tour-owned (no content cache), a per-region persona/voice/prompt-overlay is just a
+    different generation input per tour — each region generates its own content, no schema fight.
   - **A region skipper can SOUND different.** `voice` is today a fixed function of persona
     (`PERSONA_VOICE` in `packages/generator/src/models.ts`: skipper → Algenib), but the key
     already carries `voice` — so the Yosemite skipper can wear its own Gemini-TTS voice.
@@ -296,7 +319,7 @@ From an adversarial review of the scaffold. Verdict: sound foundation. Guardrail
 
 - **Type-name collisions.** `@skipper/shared` (Zod boundary types) and
   `@skipper/db/schema` (Drizzle `$inferSelect` row types) both export `Poi`,
-  `Tour`, `PoiContent`, `Corridor`, `TourStop`, `Polyline` — DIFFERENT shapes
+  `Tour`, `TourStop`, `TourBracket`, `Region`, `Polyline` — DIFFERENT shapes
   (Zod = read DTOs: nullish, omit internal cols like `facts`/`meta`). Use Zod
   types from `@skipper/shared` at boundaries; import DB row types only from the
   `@skipper/db/schema` subpath, aliased (`import type { Poi as PoiRow }`). NEVER
@@ -305,37 +328,34 @@ From an adversarial review of the scaffold. Verdict: sound foundation. Guardrail
 - **`@skipper/db` import is side-effect-free.** The client is lazy (`getDb()` /
   the `db` proxy build on first query) so importing it never forces
   `DATABASE_URL` to exist — env-free routes like `GET /health` keep booting.
-- **Cache-key dimensions are DB-enforced.** `poi_content` uniqueness is
-  `(poi_id, persona, voice, joke_level)`; `persona`, `joke_level`, and
-  `duration_bucket` are all pgEnums, so the dedup key can't fragment on a typo.
+- **~~Cache-key dimensions are DB-enforced.~~ SUPERSEDED (zero-reuse + simplified model, 2026-06-08):**
+  the `poi_content` content cache is dropped; narration is tour-owned. `joke_level` remains a pgEnum
+  (typo-safe) as a per-tour generation param on `tours`; `persona` → a `regions` TABLE, `duration_bucket`
+  dropped (no variant matrix). See `docs/tour-data-model-zero-reuse.md`.
 - **`voice` is a fixed function of persona in v1** (`PERSONA_VOICE` in
   `packages/generator/src/models.ts`: skipper → the Google Cloud Gemini-TTS voice
-  name "Algenib", stored verbatim as the cache-key `voice`). Not a request knob
-  until M3 (no `tours.voice` / `tourRequest.voice` yet). (Gemini-TTS voice names
-  are stable identifiers — no ElevenLabs-style default-voice sunset to mind.)
-- **M1 generator MUST populate `poi_content.attribution`** for every
+  name "Algenib", recorded as a per-tour generation param — there is no content cache
+  key). Not a request knob until M3 (no `tours.voice` / `tourRequest.voice` yet).
+  (Gemini-TTS voice names are stable identifiers — no ElevenLabs-style sunset to mind.)
+- **The generator MUST populate `tour_stops.attribution`** for every
   wikipedia-sourced clip (CC BY-SA is legal, not optional) — put it on the
   generation invariant checklist + the human-review gate.
 - **scenic ≠ break.** A scenic stop is delivery-only ambient audio (no facts); a
   break stop names the curated Places anchor (name + kind only). Both — and story —
-  now need a `poi_content` row with non-null `audioUrl`: as of break-narration,
-  **every** stop type carries audio and the ready-gate requires it on all of them
-  (no stop type is silent anymore).
+  carry non-null `audioUrl` on the `tour_stop`: **every** stop type carries audio and
+  the ready-gate requires it on all of them (no stop type is silent). Only fact-grounded
+  (story) stops carry a `facts_hash`; scenic/break carry none and are never fact-stale.
 - **M1 ready-gate is atomic via `db.batch([...])`** — neon-http has no
   interactive transactions, but co-committing the `status='ready'` flip with the
   final stop writes in one batch suffices (no neon-serverless Pool needed).
-- **M4 cache invalidation.** Deleting a `poi_content` row `SET NULL`s a stop's
-  content pointer without demoting `tours.status` from `ready` — pair content
-  deletes with tour re-validation when the cache/dedup machinery lands.
-- **M4 cache precondition — `stopType` is NOT in the `poi_content` key.** The key
-  is `(poi_id, persona, voice, joke_level)`, but whether a Wikipedia POI is
-  narrated as `story` vs `scenic` is decided by extract length at generation time
-  (`STORY_MIN_FACT_CHARS`). When the cache is reused across tours (M4), a
-  classification flip on regen (a Wikipedia lead-section edit, or tuning
-  `EXTRACT_CHARS`/`STORY_MIN_FACT_CHARS`) makes `upsertPoiContent` overwrite the
-  shared row — a still-`ready` tour could then serve scenic audio for a `story`
-  stop (or a story clip, which NAMES the place, for a `scenic` stop) and lose its
-  attribution. M1 is safe (generate-and-use-the-new-tour, no reuse). Before M4
-  reuse: either fold `stopType` into the key (widens this invariant — a
-  deliberate decision) or store `stopType` on `poi_content` and reject/re-validate
-  cross-type conflicts, paired with tour re-validation.
+- **~~M4 cache invalidation.~~ SUPERSEDED (zero-reuse, 2026-06-08):** no shared
+  `poi_content` rows to invalidate — narration lives on the `tour_stop` (cascade-deleted
+  with its tour). The surviving invalidation concern is FACTS staleness: a poi re-fetch
+  that changes `pois.facts_hash` makes dependent story stops stale (regenerate them);
+  see `docs/tour-data-model-zero-reuse.md`.
+- **~~M4 cache precondition — `stopType` is NOT in the `poi_content` key.~~
+  SUPERSEDED (zero-reuse, 2026-06-08):** the cross-tour content-reuse hazard this
+  guarded against can't occur — narration is tour-owned, so a `story`-vs-`scenic`
+  classification flip on one tour never overwrites another tour's stop. (The
+  classification is still decided by extract length at generation time; it just stays
+  local to its tour.) See `docs/tour-data-model-zero-reuse.md`.

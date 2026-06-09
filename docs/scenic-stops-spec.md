@@ -94,12 +94,12 @@ and align with it:
   directional geometry + ordered stops + intro/outro + name). "Curated rails" reframes to **frozen
   rails** (AI-generate-then-freeze is compatible). The scenic-anchor concept should be framed as
   **frozen** scenic anchors; a human picking them is one valid way to freeze them.
-- **NEW `start`/`finish` stop-types (intro/outro brackets)** are being added to `stopTypeEnum`. They
-  **also need a synthetic POI anchor** ("anchor + audio + ride the existing stop machinery"). **DO NOT
-  build two parallel synthetic-anchor schemes** — coordinate the scenic `'curated'` source with how
-  directionality anchors its `start`/`finish` stops. (Their end-anchors may be real towns via the
-  Places-anchor pattern; scenic points are synthetic. Decide one coherent model: e.g. a shared
-  `'curated'`/`'internal'` source, or per-type sources. This is the #1 thing to settle jointly.)
+- ~~**NEW `start`/`finish` stop-types (intro/outro brackets) … also need a synthetic POI anchor … DO
+  NOT build two parallel synthetic-anchor schemes …**~~ **SUPERSEDED 2026-06-08 (Option-B brackets,
+  tour-structure-spec §3):** intro/outro are NOT stop-types and need NO anchor — they live in a separate
+  **placeless** `tour_brackets` table. The bracket gap is therefore **DECOUPLED** from scenic anchoring,
+  not lumped: scenic stops still need their `'curated'` POI source (a real place with thin/no Wikipedia);
+  brackets need no POI at all. There is no longer a shared scheme to "settle jointly."
 - **Scenic framing is DIRECTION-DEPENDENT.** "The climb out of the basin" is a climb one way and a
   descent the other; a reveal happens in one direction only. Per the spec, a stop can be "only worth
   it one way." So **scenic anchors likely live per-DRIVE (per direction), not per shared route**, or

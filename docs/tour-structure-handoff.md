@@ -1,8 +1,21 @@
-# Build handoff — directional tours, intro/outro, region-keyed host
+# Build handoff — self-contained tours, intro/outro, region-keyed host
 
 **For:** a fresh agent executing the build designed in `docs/tour-structure-spec.md`.
 **From:** a long design session (2026-06-08). The spec is the **design** source of truth; this is
 the **execution** guide + the prompt assets that live only in that session's chat.
+
+> ✅ **UPDATED 2026-06-08 — reflects the final model.** The CANONICAL entity model + migration is
+> **`docs/tour-data-model-zero-reuse.md`** — defer to it for all schema. The decisions:
+> 1. **Zero-reuse:** `poi_content` DROPPED; FACTS shared on `pois` (+ `facts_hash`/`facts_fetched_at`, the
+>    re-fetch mechanism deferred), NARRATION tour-owned on `tour_stops`; no content cache key.
+> 2. **Option-B brackets:** intro/outro in a separate `tour_brackets` table — NOT `start`/`finish` stop-types.
+> 3. **Every tour INDEPENDENT:** no `direction`/reverse/family. S→N & N→S = two PEER tours, related only
+>    via the proximity recommender. **`corridors` MERGED into `tours`** (a tour = the whole self-contained drive).
+> 4. **No variant matrix:** duration/notch/interests are NOT separate tours — one tour = one card
+>    (`durationBucket`/`interests[]` dropped; notch = a per-stop setting; M1 = dadpocalypse only).
+> 5. **regions = a minimal TABLE** (not a pgEnum); **no users → clean DESTRUCTIVE migration**, no back-compat.
+>
+> (Appendices A/B/C — the prompt assets — are unchanged and correct.)
 
 > ⚠ **RE-GROUND BEFORE TOUCHING CODE.** Main moves constantly (multiple parallel streams). Read the
 > current files; any line numbers/snippets here are 2026-06-08 and will have shifted. Verify with
@@ -15,13 +28,14 @@ the **execution** guide + the prompt assets that live only in that session's cha
 ---
 
 ## 0. Read these first
-- `docs/tour-structure-spec.md` — the full design (directionality, intro/outro, naming, catalog,
-  discovery, region-keyed host, AI-gen fit). **All decisions are LOCKED there.**
+- `docs/tour-data-model-zero-reuse.md` — **the canonical entity model + migration** (read this for schema).
+- `docs/tour-structure-spec.md` — keep ONLY §3 (`tour_brackets`) + §4 (narration quality gate); the rest
+  (directionality / family / variant matrix) is SUPERSEDED (see its banner).
 - `docs/scenic-stops-spec.md` — a **concurrent** design that is **BLOCKED on this build landing**,
-  on the *same* `select.ts`/`generate.ts` seams. Coordinate: land this, then scenic stops. Note the
-  shared pattern — scenic stops and our intro/outro are both "curated WHERE + generated WHAT,
-  delivery-only + region/corridor framing, no named place-facts."
-- `CLAUDE.md` invariants (grounding, cache key, ready-gate, break-stop framing).
+  on the *same* `select.ts`/`generate.ts` seams. Coordinate: land this, then scenic stops. (NOTE: the
+  earlier "share one synthetic-anchor scheme with intro/outro" coupling is RESOLVED — Option-B brackets
+  are placeless and need no anchor, so they're DECOUPLED from scenic's `'curated'` POI source.)
+- `CLAUDE.md` invariants (grounding, the facts/narration split, ready-gate, break-stop framing).
 
 ## 1. Current state (regrounded 2026-06-08) — what's built vs. yours
 
@@ -40,10 +54,15 @@ the **execution** guide + the prompt assets that live only in that session's cha
 - Quality-gated narration prompt + intro/outro narration modes.
 - Region-keyed host **registry** (generation side) — replaces the `persona` enum + `PERSONA_VOICE`
   + hardcoded kit regexes; mirrors `host.ts`'s `Record<>` pattern.
-- Schema: `region` pgEnum (was free text, replacing `persona` as the cache-key dim), `headline` +
-  end-anchors on the drive/family, `start`/`finish` stop-types.
-- Per-direction **independent** drive generation + the regenerate tool.
-- API/DTO + mobile catalog (one card per direction, related-drives) + the bracket segments.
+- **The zero-reuse reshape:** drop `poi_content`; fold narration onto `tour_stops`
+  (`script`/`audio_url`/`audio_duration_ms`/`attribution`/`reviewed`/`facts_hash`); add `pois.facts_hash`
+  + `pois.facts_fetched_at`. (docs/tour-data-model-zero-reuse.md)
+- Schema (canonical: docs/tour-data-model-zero-reuse.md): merge `corridors` into `tours` (route +
+  `headline` + end-anchors + `region_id`); a minimal `regions` TABLE; the **`tour_brackets`** intro/outro
+  table; drop `durationBucket`/`interests[]`/`persona`.
+- **One independent tour per route** generation + the regenerate tool.
+- API/DTO (the tour = a drive `{ intro, outro, stops[] }`; drop the `PoiContent` DTO) + mobile catalog
+  (**one card per tour**) + the bracket segments.
 
 ## 2. Validated decisions — carry these, do NOT re-derive
 
@@ -54,9 +73,17 @@ These were settled by ear / research this session:
   story-first, NO pun-chains, **kit banned from stops** (the kit's only home is the intro), no-bow,
   no-mini-recap, grounding ironclad. Two leak-fixes: oblique kit ("before my first cup") + mini-recap.
 - **Intro/outro** (Appendix C): the kit lives in the intro; the sentimental bow lives in the outro.
-- **Model:** discrete per-direction drives (not mechanical reverse); corridor → "drive family";
-  one card per direction + related-drives; region-keyed host (1:1); "Skipper" name kept *for now*
-  (display name decoupled from the `lake-tahoe` region key — renaming later is migration-free).
+- **Model:** every tour is INDEPENDENT (no direction/reverse/family); `corridors` MERGED into `tours`
+  (a tour = the whole self-contained drive); one card per tour; related tours surface via the proximity
+  recommender (deferred). NO variant matrix (duration=skip-stops, notch=per-stop setting, interests=stop
+  filter — all deferred). region-keyed host (1:1); "Skipper" name kept *for now*.
+- **Data model = ZERO-REUSE** (docs/tour-data-model-zero-reuse.md): FACTS shared on `pois` (TTL +
+  `facts_hash`), NARRATION tour-owned on `tour_stops`, `poi_content` dropped, no content cache/reuse —
+  "tour 1's Camp Richardson ≠ tour 2's." Region/persona/voice/notch are per-tour generation params.
+- **Brackets = OPTION B** (spec §3): intro/outro in a separate placeless `tour_brackets` table — NOT
+  stop-types; `tour_stops` stays strict (`poiId` NOT NULL); the geofence engine stays homogeneous.
+  Triggers are player-owned lifecycle (intro on-start; outro on end-anchor OR tour-end). Research-backed
+  (Fowler STI/CTI, Karwin); CTI is the deferred upgrade path.
 - Everything else: see the spec.
 
 ## 3. Build phases (file-level)
@@ -74,46 +101,64 @@ These were settled by ear / research this session:
 
 **Phase 2 — Schema + migration** (CHECKPOINT — live DB).
 - `packages/db/src/schema.ts` + `@skipper/shared/enums.ts`:
-  - `region` → a `pgEnum` (e.g. `lake-tahoe`), becomes the `poi_content` cache-key dim **replacing**
-    `persona`. (`persona` axis dropped — see §4a of the spec.)
-  - `stopType` += `start`, `finish` (the intro/outro brackets).
-  - Drive/family: `headline` + two end-anchors `{name, lat, lng}` (start/end). Decide drive-as-
-    primary vs corridor-as-family per spec §1 — corridor reframes to the family grouping.
-- `bunx @better-auth/cli`? No — use the project's `db:generate` + `db:migrate` (dotenvx). The
-  `region`/`persona` rekey + `start`/`finish` enum values are the migration.
+  - **Zero-reuse reshape** (zero-reuse doc §3/§6): `DROP TABLE poi_content`; add narration cols to
+    `tour_stops` (`script`, `audio_url`, `audio_duration_ms`, `attribution`, `reviewed`, `facts_hash`)
+    and drop `poi_content_id`; add `pois.facts_hash` + `pois.facts_fetched_at`.
+  - **`tour_brackets`** table (intro/outro drive-frame): `(id, tourId→tours, kind ∈ {intro,outro},
+    script, audio_url, audio_duration_ms, reviewed)` + a `bracket_kind` pgEnum. NO `poiId`, NO coords.
+    (NOT `start`/`finish` stop-types — `stopType` enum is UNCHANGED.)
+  - **`regions` TABLE** (minimal: `id, slug, display_name`; seed `('lake-tahoe','Lake Tahoe')`). `tours`
+    gets a `region_id` FK; drop the `persona` column + the `persona` enum. (No pgEnum → no enum-value rename.)
+  - **Merge `corridors` into `tours`:** `tours` absorbs `polyline` + distance/duration + `headline` + the
+    two end-anchors `{name,lat,lng}` (start/end) + `region_id`; DROP the `corridors` table, plus
+    `tours.durationBucket` + `tours.interests[]` (no variant matrix).
+- Migration: `db:generate` + `db:migrate` (dotenvx) — clean + **DESTRUCTIVE** (no users → no back-compat,
+  no data fold). It's all codegen-able (`CREATE TABLE regions`/`tour_brackets`, `ADD`/`DROP COLUMN`,
+  `DROP TABLE poi_content`/`corridors`, `DROP TYPE persona`); the data lands fresh in the Phase-6 regen.
 
-**Phase 3 — Generator: registry + per-direction generation + regen tool.**
+**Phase 3 — Generator: registry + one-tour-per-route generation + regen tool.**
 - New **region/host registry** (generation side): `Record<Region, { host, voice, promptOverlay, kit,
   opener }>`; `Region` type = registry keys; make the kit-overuse lint/`generate.ts` guards read kit
   terms FROM it (not hardcoded). Mirror `host.ts`. Co-locate with or alongside `persona/`.
-- Per-direction **independent** generation: generate each direction as its own discrete drive (run
-  the generator twice over the frozen route); assign both to the same family. drive-core needs NO
-  traversal change (each drive is self-contained + forward).
-- `narrateIntro`/`narrateOutro` wired into `generate.ts`; the intro/outro become `start`/`finish`
-  stops with audio (ready-gate requires it). Attribution = array shape.
+- **Zero-reuse write path:** narration is written onto `tour_stops` (no `upsertPoiContent`, no shared
+  content rows); set `tour_stops.facts_hash` for fact-grounded (story) stops + stamp `pois.facts_hash`/
+  `facts_fetched_at` on fetch. (The TTL re-fetch + staleness sweep are a DEFERRED roadmap TODO — no `FACTS_TTL` yet.)
+- **One independent tour per route:** each tour is self-contained (own route + stops + narration); S→N and
+  N→S are two separate tours authored independently (no "generate twice over one route," no family).
+  drive-core needs NO traversal change — there is no direction concept.
+- `narrateIntro`/`narrateOutro` (persona-only, no fact sheet) → write to **`tour_brackets`** via a new
+  `persistBracket()` (NOT `upsertPoiContent`). **Ready-gate:** the two bracket inserts MUST co-commit in
+  the same `finalizeTourReady` `db.batch` as `status='ready'` (today that batch is `tour_stops`-only).
+  Brackets carry no attribution (no facts).
 - Extend `resynth-tour.ts` (or a new tool) to regenerate the canonical preview's *scripts* (not just
-  re-synth audio) at the new prompt + add the brackets.
+  re-synth audio) at the new prompt + add the brackets; clip keys are tour-scoped (`clips/<tourId>/…`).
 
 **Phase 4 — Shared DTO + API.**
-- `@skipper/shared/schemas.ts`: tour detail carries the directional name, the family/related set,
-  the bracket stops; `region` replaces `persona` where surfaced.
-- `apps/api`: `host.ts` `Record<Persona>` → `Record<Region>`; serve the brackets via `/sign`
-  (they're stops now); the related-drives (same-family siblings) on the tour/corridor endpoints.
+- `@skipper/shared/schemas.ts`: tour detail = a drive `{ intro, outro, stops[] }` carrying route/anchors/
+  region + the composed name (`[headline], [start] to [end]`); drop the `PoiContent` DTO; the stop DTO
+  carries `script`/`audio`/`attribution`.
+- `apps/api`: `host.ts` keyed by region slug; serve the bracket clips via `/sign`
+  (`tour_brackets.audioUrl`, tour-scoped R2 keys) and the stop clips likewise; list tours (one per route).
+  (Nearby/proximity recommender deferred to v2.)
 
 **Phase 5 — Mobile.**
-- `apps/mobile/app/preview/[id].tsx` + `@skipper/drive-core`: prepend `start`, append `finish`
-  segments (intro plays first regardless of position; outro at end). drive-core: **no traversal
-  param** (discrete drives are forward).
-- Catalog: one card per direction; "related drives" (variations) link on the detail; the family
-  "X — 2 ways" cluster. (Nearby/proximity recommender = deferred to the location-filter near-me v2.)
+- `apps/mobile/app/preview/[id].tsx` + `@skipper/drive-core`: **prepend the intro bracket, append the
+  outro bracket** around the stop timeline (intro plays first regardless of position; outro at end) —
+  they're `tour_brackets` clips, NOT `PreviewStop`s, so they bracket the timeline rather than join the
+  route-positioned stop list. The pure geofence engine still consumes only `tour_stops`; drive-core
+  needs **no traversal param** (there is no direction concept). ⚠ The outro tour-end arm needs a player
+  dispatch that doesn't exist today (`finishDrive` plays nothing — spec §3).
+- Catalog: **one card per tour** (no direction/family/variant cards). Related tours surface only via the
+  nearby/proximity recommender (deferred to the location-filter near-me, v2).
 - Pre-drive UI: where-to-start guidance + onboarding (NOT in the skipper's voice).
 
 **Phase 6 — Live regen** (CHECKPOINT — needs explicit founder OK; costs GCP + mutates live R2/DB).
-- Regenerate the canonical preview end-to-end: new scripts (quality-gated) + intro/outro + warmer
-  delivery + the `persona skipper → region lake-tahoe` rekey (cache-key value + R2 path
-  `clips/skipper/…`→`clips/lake-tahoe/…`) — **all in one regen pass** (a standalone rekey orphans
-  the live clips). Verify end-to-end through the presign path (as `resynth-tour` did: ffprobe a
-  clip, durations match, plays). Founder re-validates warmer+quality-gated by ear on the full tour.
+- Regenerate the canonical preview end-to-end: new scripts (quality-gated) + intro/outro brackets +
+  warmer delivery + the `persona`→`region` change (drop `persona`, add `region_id`, seed the `regions`
+  row) — **all in one regen pass**. Under zero-reuse the new clips are written **tour-scoped**
+  (`clips/<tourId>/…`), so there is no R2 rekey to orphan (the old `clips/skipper/…` objects are swept as the regen writes fresh).
+  Verify end-to-end through the presign path (as `resynth-tour` did: ffprobe a clip, durations match,
+  plays; both brackets present). Founder re-validates warmer + quality-gated by ear on the full tour.
 
 ## 4. Gotchas
 - **dotenvx + relative SA key:** run generator scripts from the **repo root** (`GOOGLE_APPLICATION_
@@ -122,8 +167,10 @@ These were settled by ear / research this session:
   `packages/generator/` (transitive deps like `google-logging-utils` fail from outside the workspace).
 - **Persona/kit terms are load-bearing in `lint.ts`/`generate.ts` regexes** — the registry move must
   keep those guards working (read terms from the registry).
-- **Cache key is forward-only at M1** (generate-and-use, no reuse), so the `persona→region` content-
-  key change is safe now; the `direction`-in-key question is deferred to M4 (spec §8 #7).
+- **No content cache key (zero-reuse).** Narration is tour-owned, so the old "`persona→region`
+  content-key" and "`direction`-in-key (M4)" concerns are MOOT — directions narrate independently with
+  no collision. The only invalidation that survives: a poi re-fetch that changes `pois.facts_hash` marks
+  dependent (story) `tour_stops` stale → regenerate (zero-reuse doc §4B).
 
 ---
 
@@ -156,8 +203,8 @@ deleted; ZERO invented specifics. (Validated on the Olympics + D.L. Bliss stops 
 ## Appendix C — Intro / outro
 
 **Intro** (persona-only, no fact sheet; fires on tour-START, not geofenced; position-agnostic):
-welcome aboard + the trip's shape in REGION + drive framing by **destination + direction** (name the
-endpoints descriptively, NEVER "you are now at Tahoe City") + **ONE big standalone personal KIT
+welcome aboard + the trip's shape in REGION + drive framing by **destination + the trip's endpoints**
+(name them descriptively, NEVER "you are now at Tahoe City") + **ONE big standalone personal KIT
 joke** (the one joke freed from grounding — cousin Ray, the "Tuesday" mechanic, the cranky truck,
 coffee). Doubles as "meet your host". Notch-scaled (off = sincere, no big joke). End pointing down
 the road; no bow. *(Validated: the Ray "just keep the wet part on your left" opener.)*
