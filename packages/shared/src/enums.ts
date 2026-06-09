@@ -1,9 +1,13 @@
 import { z } from 'zod'
 
 /**
- * The Dad-Joke-O-Meter notches. A per-tour GENERATION parameter (baked into the
- * narration at generation time), NOT a live playback toggle and NOT a content-cache
- * key (there is no content cache — narration is tour-owned). M1 ships `dadpocalypse`.
+ * The Dad-Joke-O-Meter notches — the narration VOCABULARY. A generation-time INPUT
+ * (baked into the narration audio at generation time), NOT stored tour STATE: there is
+ * no `joke_level` column and the notch is absent from every read DTO and the API. M1 is
+ * `dadpocalypse`-only, so a stored notch would carry no information. When the 1-N notch
+ * ships (M3) the column lands on the NARRATION (tour_stops) — a notch describes a telling,
+ * not a route. This enum stays because the generator's narration is parameterized by it
+ * (the persona prompt's whole notch ladder) and `tourRequest` carries it as the run input.
  */
 export const jokeLevel = z.enum(['off', 'mild', 'dad', 'dadpocalypse'])
 export type JokeLevel = z.infer<typeof jokeLevel>

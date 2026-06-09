@@ -55,7 +55,10 @@ export type StopMeta = Record<string, unknown>
 
 export const poiSourceEnum = pgEnum('poi_source', ['wikipedia', 'google_places'])
 
-export const jokeLevelEnum = pgEnum('joke_level', ['off', 'mild', 'dad', 'dadpocalypse'])
+// NO `joke_level` pgEnum: the Dad-Joke-O-Meter notch is a generation-time INPUT, never a
+// stored column (M1 = dadpocalypse-only — see `tours`). The notch VOCABULARY lives as the
+// `jokeLevel` Zod enum in @skipper/shared; re-add a pgEnum here only when a notch column lands
+// on the narration (tour_stops) at M3.
 
 export const tourStatusEnum = pgEnum('tour_status', ['draft', 'generating', 'ready', 'failed'])
 
@@ -155,9 +158,10 @@ export const tours = pgTable(
     endAnchorName: text('end_anchor_name').notNull(),
     endAnchorLat: doublePrecision('end_anchor_lat').notNull(),
     endAnchorLng: doublePrecision('end_anchor_lng').notNull(),
-    // Per-tour generation param (NOT a content cache key — there is no content cache;
-    // narration is tour-owned). jokeLevel = the one notch generated (M1: dadpocalypse).
-    jokeLevel: jokeLevelEnum('joke_level').notNull(),
+    // NOTE: there is NO joke-notch column. The Dad-Joke-O-Meter notch is a generation-time
+    // INPUT (baked into the narration audio), not stored tour STATE — M1 is dadpocalypse-only,
+    // so a stored notch would carry no information. When the 1-N notch ships (M3) it lands on
+    // the NARRATION (tour_stops), never here: a notch describes a telling, not a route.
     status: tourStatusEnum('status').notNull().default('draft'),
     // Optional tour-dedup hash — M4 forward-compat. Do NOT add a (unique) index until
     // M4 actually queries/dedupes on it.

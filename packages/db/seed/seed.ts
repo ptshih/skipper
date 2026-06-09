@@ -9,7 +9,7 @@
 // `tours` SHELL — route + endpoints + region, status `draft`. The generator then FILLS
 // the shell (stops + intro/outro brackets) and flips it to `ready`. Re-running is safe:
 // the upserts refresh geometry/metadata but never clobber a tour's generation state
-// (status / isPreview / jokeLevel).
+// (status / isPreview). (No notch here — it's a generation INPUT, not stored tour state.)
 //
 // Usage (DATABASE_URL injected via dotenvx):
 //   dotenvx run -f .env.development -- bun packages/db/seed/seed.ts            # all
@@ -112,13 +112,13 @@ async function seedTour(spec: TourSpec): Promise<void> {
       endAnchorName: spec.endAnchorName,
       endAnchorLat: destination.lat,
       endAnchorLng: destination.lng,
-      // M1 ships the dadpocalypse notch; status defaults to 'draft' (the generator fills it).
-      jokeLevel: 'dadpocalypse',
+      // status defaults to 'draft' (the generator fills the shell). The joke notch is NOT
+      // seeded — it's a generation-time INPUT to the generator, not stored tour state.
     })
     .onConflictDoUpdate({
       target: tours.slug,
-      // Refresh route + metadata, but NEVER clobber generation state (status / isPreview /
-      // jokeLevel) — re-seeding a generated tour must not silently reset it to draft.
+      // Refresh route + metadata, but NEVER clobber generation state (status / isPreview) —
+      // re-seeding a generated tour must not silently reset it to draft.
       set: {
         regionId,
         headline: spec.headline,

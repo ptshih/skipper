@@ -52,8 +52,11 @@ catalog fatigue). **One tour per route = one catalog card.**
   **setting**, not separate cards. M1 ships `dadpocalypse` only (N=1). The 1-N narration variants are DEFERRED.
 - **interests** = a stop filter (stop tags) — DEFERRED.
 
-So `tours.durationBucket` and `tours.interests[]` are **dropped**; `tours.jokeLevel` stays as the one
-generated notch.
+So `tours.durationBucket`, `tours.interests[]`, **and `tours.jokeLevel`** are all **dropped**. (UPDATE
+2026-06-09: the notch column is gone too — M1 is dadpocalypse-only, so a stored notch carries no
+information. The notch is now a generation-time INPUT only — `GenerateOptions.jokeLevel` /
+`run.ts --joke-level`, default `dadpocalypse` — and the `jokeLevel` enum lives only in `@skipper/shared`,
+not as a pgEnum. When the 1-N notch ships it lands on the NARRATION — see §3.)
 
 ## 3. Entity model
 
@@ -112,8 +115,8 @@ export const tours = pgTable('tours', {
   endAnchorName: text('end_anchor_name').notNull(),
   endAnchorLat: doublePrecision('end_anchor_lat').notNull(),
   endAnchorLng: doublePrecision('end_anchor_lng').notNull(),
-  // Per-tour generation params (NOT a content cache key). jokeLevel = the one notch generated (M1: dadpocalypse).
-  jokeLevel: jokeLevelEnum('joke_level').notNull(),
+  // NO jokeLevel column (removed 2026-06-09): the notch is a generation-time INPUT, not stored
+  // tour state (M1 = dadpocalypse-only). When the 1-N notch ships it lands on tour_stops, not here.
   status: tourStatusEnum('status').notNull().default('draft'),
   routeSig: text('route_sig'),            // optional tour-dedup, forward-compat
   isPreview: boolean('is_preview').notNull().default(false),
@@ -176,10 +179,13 @@ export const tourBrackets = pgTable('tour_brackets', {
 }, (t) => [uniqueIndex('tour_brackets_tour_kind_uq').on(t.tourId, t.kind)])  // exactly one intro + one outro
 ```
 
-**`tours.jokeLevel`/voice** are per-tour generation params, NOT a content cache key (the
-`(poi, persona, voice, joke_level)` key is gone; voice is still derived from persona via `PERSONA_VOICE`
-in `models.ts`). When the 1-N notch lands, the narration grows from one-per-stop to N-per-stop (a child
-dimension), and `jokeLevel` relocates from the tour to the narration.
+**The notch + voice** are generation params, NOT a content cache key (the
+`(poi, persona, voice, joke_level)` key is gone; voice is still derived from persona via the
+`PersonaDef`). Neither is a `tours` column: voice rides the persona, and the **notch is a
+generation-time INPUT only** (removed from the schema 2026-06-09 — M1 is dadpocalypse-only, so a
+stored notch carries no information). When the 1-N notch lands, the narration grows from one-per-stop
+to N-per-stop (a child dimension), and the notch column is **added to the narration (`tour_stops`),
+never to `tours`** — a notch describes a telling, not a route.
 
 ## 4. Facts freshness (COLUMNS now, MECHANISM deferred)
 

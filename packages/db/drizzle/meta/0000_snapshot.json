@@ -1,5 +1,5 @@
 {
-  "id": "0a3a6fba-6590-40d4-a932-c4e116ed657b",
+  "id": "9efab2f2-230c-432f-b6fb-de23a06c85d4",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -689,13 +689,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "joke_level": {
-          "name": "joke_level",
-          "type": "joke_level",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
         "status": {
           "name": "status",
           "type": "tour_status",
@@ -1177,16 +1170,6 @@
       "values": [
         "intro",
         "outro"
-      ]
-    },
-    "public.joke_level": {
-      "name": "joke_level",
-      "schema": "public",
-      "values": [
-        "off",
-        "mild",
-        "dad",
-        "dadpocalypse"
       ]
     },
     "public.poi_source": {

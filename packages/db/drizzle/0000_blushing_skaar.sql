@@ -1,5 +1,4 @@
 CREATE TYPE "public"."bracket_kind" AS ENUM('intro', 'outro');--> statement-breakpoint
-CREATE TYPE "public"."joke_level" AS ENUM('off', 'mild', 'dad', 'dadpocalypse');--> statement-breakpoint
 CREATE TYPE "public"."poi_source" AS ENUM('wikipedia', 'google_places');--> statement-breakpoint
 CREATE TYPE "public"."stop_type" AS ENUM('story', 'scenic', 'break');--> statement-breakpoint
 CREATE TYPE "public"."tour_status" AS ENUM('draft', 'generating', 'ready', 'failed');--> statement-breakpoint
@@ -82,7 +81,6 @@ CREATE TABLE "tours" (
 	"end_anchor_name" text NOT NULL,
 	"end_anchor_lat" double precision NOT NULL,
 	"end_anchor_lng" double precision NOT NULL,
-	"joke_level" "joke_level" NOT NULL,
 	"status" "tour_status" DEFAULT 'draft' NOT NULL,
 	"route_sig" text,
 	"is_preview" boolean DEFAULT false NOT NULL,

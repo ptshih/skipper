@@ -62,7 +62,6 @@ app.get('/tours', async (c) => {
       summary: tours.summary,
       distanceMeters: tours.distanceMeters,
       durationSeconds: tours.durationSeconds,
-      jokeLevel: tours.jokeLevel,
       isPreview: tours.isPreview,
     })
     .from(tours)
@@ -169,7 +168,6 @@ app.get('/tours/:tourId', withSession, async (c) => {
       headline: tour.headline,
       regionId: tour.regionId,
       status: tour.status,
-      jokeLevel: tour.jokeLevel,
       isPreview: tour.isPreview,
       polyline: tour.polyline,
       distanceMeters: tour.distanceMeters,

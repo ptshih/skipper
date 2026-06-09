@@ -13,12 +13,17 @@
 //                        (the reflective-bow ending the charm judge flags), which the
 //                        deterministic lint can't catch.
 //   --duration=<bucket>  short | standard | long   (default: standard)
+//   --joke-level=<notch> off | mild | dad | dadpocalypse   (default: dadpocalypse)
+//                        The Dad-Joke-O-Meter notch to NARRATE at — a generation input,
+//                        baked into the audio (NOT stored on the tour). M1 = dadpocalypse.
 //   --json=<path>        Also write the full result (scripts + STORY fact sheets) as
 //                        JSON — the artifact for an out-of-band grounding/quality audit.
 //
 // A full run additionally needs Google Cloud TTS (GOOGLE_CLOUD_PROJECT + ADC, i.e.
 // GOOGLE_APPLICATION_CREDENTIALS or `gcloud auth application-default login`) and R2_*.
 
+import { jokeLevel as JOKE_NOTCHES } from '@skipper/shared'
+import type { JokeLevel } from '@skipper/shared'
 import { generateTour } from './pipeline/generate'
 import type { BracketSummary, GenerateResult } from './pipeline/generate'
 
@@ -31,6 +36,8 @@ interface Args {
   preview: boolean
   judgeClosers: boolean
   durationBucket: Duration
+  /** The notch to narrate at — a generation input, default dadpocalypse (M1). */
+  jokeLevel: JokeLevel
   jsonPath?: string
 }
 
@@ -39,7 +46,7 @@ function parseArgs(argv: string[]): Args {
   const slug = args.find((a) => !a.startsWith('--'))
   if (!slug) {
     throw new Error(
-      'Usage: run.ts <tour-slug> [--dry-run] [--preview] [--no-judge-closers] [--duration=short|standard|long] [--json=<path>]',
+      'Usage: run.ts <tour-slug> [--dry-run] [--preview] [--no-judge-closers] [--duration=short|standard|long] [--joke-level=off|mild|dad|dadpocalypse] [--json=<path>]',
     )
   }
   const dryRun = args.includes('--dry-run')
@@ -49,8 +56,22 @@ function parseArgs(argv: string[]): Args {
   if (!DURATIONS.includes(durArg as Duration)) {
     throw new Error(`--duration must be one of ${DURATIONS.join(', ')} (got "${durArg}")`)
   }
+  // The notch is a generation INPUT (not stored): default dadpocalypse, validated against the
+  // canonical @skipper/shared vocabulary so the CLI can never drift from the enum.
+  const jokeArg = args.find((a) => a.startsWith('--joke-level='))?.split('=')[1] ?? 'dadpocalypse'
+  if (!JOKE_NOTCHES.options.includes(jokeArg as JokeLevel)) {
+    throw new Error(`--joke-level must be one of ${JOKE_NOTCHES.options.join(', ')} (got "${jokeArg}")`)
+  }
   const jsonPath = args.find((a) => a.startsWith('--json='))?.split('=')[1] || undefined
-  return { slug, dryRun, preview, judgeClosers, durationBucket: durArg as Duration, jsonPath }
+  return {
+    slug,
+    dryRun,
+    preview,
+    judgeClosers,
+    durationBucket: durArg as Duration,
+    jokeLevel: jokeArg as JokeLevel,
+    jsonPath,
+  }
 }
 
 const mmss = (sec: number): string => {
@@ -69,7 +90,7 @@ const estSpokenSec = (script: string): number =>
 function printResult(r: GenerateResult): void {
   console.log('\n' + '='.repeat(72))
   console.log(
-    `${r.dryRun ? 'DRY RUN' : 'GENERATED'} — ${r.tourName} (${r.region}) · ${r.durationBucket} · ~${Math.round(r.totalSec / 60)} min drive`,
+    `${r.dryRun ? 'DRY RUN' : 'GENERATED'} — ${r.tourName} (${r.region}) · ${r.durationBucket} · ${r.jokeLevel} · ~${Math.round(r.totalSec / 60)} min drive`,
   )
   if (r.tourId) console.log(`tour id: ${r.tourId}`)
   console.log('='.repeat(72))
@@ -122,8 +143,9 @@ function printResult(r: GenerateResult): void {
 }
 
 async function main() {
-  const { slug, dryRun, preview, judgeClosers, durationBucket, jsonPath } = parseArgs(process.argv)
-  const result = await generateTour({ slug, dryRun, preview, judgeClosers, durationBucket })
+  const { slug, dryRun, preview, judgeClosers, durationBucket, jokeLevel, jsonPath } =
+    parseArgs(process.argv)
+  const result = await generateTour({ slug, dryRun, preview, judgeClosers, durationBucket, jokeLevel })
   printResult(result)
   if (jsonPath) {
     await Bun.write(jsonPath, JSON.stringify(result, null, 2))

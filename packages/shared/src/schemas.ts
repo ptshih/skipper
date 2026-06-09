@@ -124,7 +124,8 @@ export const tour = z.object({
   endAnchorName: z.string(),
   endAnchorLat: z.number(),
   endAnchorLng: z.number(),
-  jokeLevel,
+  // No jokeLevel: the notch is a generation INPUT, not stored tour state (see @skipper/shared
+  // enums `jokeLevel`). `tourRequest` below carries it as the generation knob.
   status: tourStatus,
   routeSig: z.string().nullish(),
   isPreview: z.boolean(),
@@ -159,7 +160,6 @@ export const tourListItem = z.object({
   summary: z.string().nullish(),
   distanceMeters: z.number().int().nullish(),
   durationSeconds: z.number().int().nullish(),
-  jokeLevel,
   isPreview: z.boolean(),
   /** A glanceable hook of the tour's marquee places (story/scenic anchors), e.g.
    *  "Emerald Bay & Vikingsholm" — so a tour card has an identity without a tap.
@@ -219,7 +219,6 @@ export const tourDetail = z.object({
     headline: z.string(),
     regionId: z.uuid(),
     status: tourStatus,
-    jokeLevel,
     isPreview: z.boolean(),
     polyline,
     distanceMeters: z.number().int().nullish(),

@@ -19,7 +19,7 @@
 // feedback. Break narration names the curated Places anchor; the volatile live data
 // (open-now/rating) is still fetched fresh at tour-load (and "ask the skipper" later).
 
-import type { BracketKind, DurationBucket } from '@skipper/shared'
+import type { BracketKind, DurationBucket, JokeLevel } from '@skipper/shared'
 import type { AttributionSnapshot } from '@skipper/db/schema'
 import {
   ANTHROPIC_READY,
@@ -67,6 +67,9 @@ import type { FinalBracket, FinalStop } from './persist'
 export interface GenerateOptions {
   slug: string
   durationBucket?: DurationBucket
+  /** The Dad-Joke-O-Meter notch to NARRATE at — a generation input, not stored tour state.
+   *  Baked into the narration audio; defaults to `dadpocalypse` (the M1 notch). */
+  jokeLevel?: JokeLevel
   /** Narrate + print scripts only; skip TTS, R2, and all DB writes. */
   dryRun?: boolean
   /** Flag this tour as the anonymous-playable sample (tours.isPreview). */
@@ -107,6 +110,8 @@ export interface GenerateResult {
   tourName: string
   region: string
   durationBucket: DurationBucket
+  /** The notch this run narrated at (a generation input; not persisted on the tour). */
+  jokeLevel: JokeLevel
   totalSec: number
   dryRun: boolean
   stops: StopSummary[]
@@ -117,6 +122,8 @@ const firstSentence = (facts: string[]): string | null => facts[0] ?? null
 
 export async function generateTour(opts: GenerateOptions): Promise<GenerateResult> {
   const durationBucket: DurationBucket = opts.durationBucket ?? 'standard'
+  // The notch is a generation INPUT (not stored tour state): default to the M1 dadpocalypse.
+  const jokeLevel: JokeLevel = opts.jokeLevel ?? 'dadpocalypse'
   const dryRun = Boolean(opts.dryRun)
   const judgeClosers = Boolean(opts.judgeClosers)
 
@@ -135,10 +142,10 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
 
   // 1. Tour shell: route geometry + drive time (the pacing clock) + endpoints/region.
   const shell = await loadTour(opts.slug)
-  // The generation persona (prompts/voice/style/kit) is resolved from the tour's REGION;
-  // the notch is the tour's own (set by the seed) — not a persona trait.
+  // The generation persona (prompts/voice/style/kit) is resolved from the tour's REGION.
+  // The notch (`jokeLevel`) is a generation input resolved above — not a tour column, not a
+  // persona trait.
   const persona = personaForRegion(shell.regionSlug)
-  const jokeLevel = shell.jokeLevel
   const polyline = shell.polyline as LngLat[]
   const cumulative = cumulativeMeters(polyline)
   const totalM = totalMeters(cumulative)
@@ -588,6 +595,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       tourName: shell.headline,
       region: shell.regionName,
       durationBucket,
+      jokeLevel,
       totalSec,
       dryRun: true,
       stops,
@@ -728,6 +736,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       tourName: shell.headline,
       region: shell.regionName,
       durationBucket,
+      jokeLevel,
       totalSec,
       dryRun: false,
       stops: summaries,

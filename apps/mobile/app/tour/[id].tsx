@@ -8,7 +8,7 @@ import {
   isTourDownloaded,
   type DownloadProgress,
 } from '@/lib/offline'
-import { jokeLabel, stopLabel } from '@/lib/labels'
+import { stopLabel } from '@/lib/labels'
 import { space } from '@/theme/tokens'
 import {
   AccountGate,
@@ -130,7 +130,6 @@ export default function TourScreen() {
           <Text variant="label" color="inkFaint">
             {tour.region.displayName}
           </Text>
-          <Badge tone="teal" label={jokeLabel(tour.tour.jokeLevel)} />
           {tour.tour.isPreview ? <Badge tone="amber" filled label="FREE PREVIEW" /> : null}
         </View>
       </View>

@@ -64,10 +64,16 @@ you found so the next agent can re-check it.
   attribution — Wikipedia is **CC BY-SA**, keep credit (the attribution snapshot is
   frozen on the `tour_stop` at narration time).
 - **The Dad-Joke-O-Meter notch (`off`/`mild`/`dad`/`dadpocalypse`), persona, and
-  voice are per-TOUR generation parameters** (`tours.joke_level`, `tours.persona`;
-  voice derived from persona) — baked into the narration when the tour is generated,
-  NOT live playback toggles and NOT a content cache key (there is no content cache;
-  narration is tour-owned — see principle #1). Changing any of them = a different tour.
+  voice are GENERATION parameters, baked into the narration — never live playback
+  toggles and never a content-cache key** (there is no content cache; narration is
+  tour-owned — see principle #1). Changing any of them = a different telling. None of
+  them is a stored `tours` column: **persona** resolves from the region slug
+  (`PersonaDef`), **voice** derives from the persona, and the **notch** is a
+  generation-time INPUT only (`GenerateOptions.jokeLevel` / `run.ts --joke-level`,
+  default `dadpocalypse`) — it is NOT persisted, because M1 is dadpocalypse-only so a
+  stored notch carries no information. When the 1-N notch ships (M3) the column lands on
+  the NARRATION (`tour_stops`), never on `tours`: a notch describes a telling, not a
+  route. The `jokeLevel` Zod enum in `@skipper/shared` stays as the narration vocabulary.
 - **A tour may not be `ready` until every stop has non-null audio** (story, scenic,
   AND break — audio lives on the `tour_stop` now). Generator enforces; player also defends.
 - **Persona lives in DELIVERY, never in FACTS.** "Make it funny" never loosens
@@ -390,10 +396,11 @@ From an adversarial review of the scaffold. Verdict: sound foundation. Guardrail
 - **`@skipper/db` import is side-effect-free.** The client is lazy (`getDb()` /
   the `db` proxy build on first query) so importing it never forces
   `DATABASE_URL` to exist — env-free routes like `GET /health` keep booting.
-- **~~Cache-key dimensions are DB-enforced.~~ SUPERSEDED (zero-reuse + simplified model, 2026-06-08):**
-  the `poi_content` content cache is dropped; narration is tour-owned. `joke_level` remains a pgEnum
-  (typo-safe) as a per-tour generation param on `tours`; `persona` → a `regions` TABLE, `duration_bucket`
-  dropped (no variant matrix). See `docs/tour-data-model-zero-reuse.md`.
+- **~~Cache-key dimensions are DB-enforced.~~ SUPERSEDED (zero-reuse + simplified model, 2026-06-08;
+  notch removed 2026-06-09):** the `poi_content` content cache is dropped; narration is tour-owned.
+  `persona` → a `regions` TABLE; `duration_bucket` dropped (no variant matrix); and `joke_level` is
+  no longer a column OR a pgEnum at all — the notch is a generation-time INPUT (M1 = dadpocalypse-only),
+  re-added on the narration (`tour_stops`) when the 1-N notch ships. See `docs/tour-data-model-zero-reuse.md`.
 - **`voice` is a fixed function of persona in v1** (each `PersonaDef.voice` in
   `packages/generator/src/persona/`, resolved per-tour by `personaForRegion(slug)`: skipper → the
   Google Cloud Gemini-TTS voice name "Algenib"; `SKIPPER_VOICE_ID` in `models.ts` is the source

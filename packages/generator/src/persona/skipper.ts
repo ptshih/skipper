@@ -233,8 +233,8 @@ Write for the EAR (this is read aloud in a moving car). Short-to-medium sentence
  * The Tahoe Skipper — the v1 generation persona. Bundles the prompts, voice, delivery
  * style, and personal kit into one def so generate.ts/lint.ts read a SINGLE source
  * (resolved by region slug via ./index.ts) instead of scattered constants + the kit
- * regex duplicated across generate.ts/lint.ts. `jokeLevel` is NOT here — it's a per-tour
- * parameter, not a persona trait. The per-region PRESENTATION identity (display name,
+ * regex duplicated across generate.ts/lint.ts. `jokeLevel` is NOT here — it's a per-run
+ * generation INPUT (not stored, not a persona trait). The per-region PRESENTATION identity (display name,
  * tagline, backstory, portrait) is served by the API (apps/api/src/host.ts), never here.
  */
 export const SKIPPER: PersonaDef = {
