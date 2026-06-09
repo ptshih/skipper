@@ -93,6 +93,9 @@ export function StopList({
           ref={scrollRef}
           style={styles.scroll}
           contentContainerStyle={styles.scrollContent}
+          // The default scroll indicator renders as a stark white bar on the cream card — hide
+          // it; the rows clipped at the rounded edge already signal there's more to scroll.
+          showsVerticalScrollIndicator={false}
           onScrollBeginDrag={onScrollBeginDrag}
           onScrollEndDrag={onScrollEndDrag}
           onMomentumScrollEnd={onMomentumScrollEnd}
