@@ -49,7 +49,10 @@ export default function TourScreen() {
       await downloadTour(id, setDownloading)
       setDownloaded(true)
     } catch (e) {
-      setDownloadError(e instanceof Error ? e.message : 'Download failed — check your signal and try again.')
+      // A gated (non-preview) tour download 401s when the account lapsed — show the
+      // AccountGate, not a misleading "check your signal" error (mirrors load()).
+      if (e instanceof ApiError && e.needsAccount) setNeedsAccount(true)
+      else setDownloadError(e instanceof Error ? e.message : 'Download failed — check your signal and try again.')
     } finally {
       setDownloading(null)
     }

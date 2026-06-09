@@ -230,8 +230,7 @@ export function useDrive(tourId: string | undefined): UseDrive {
   const resign = useCallback(async (): Promise<boolean> => {
     if (!tourId) return false
     try {
-      const fresh = await resignPlayback(tourId)
-      if (!fresh) return true // downloaded → local file:// uris never expire; nothing to re-sign
+      const fresh = await resignPlayback(tourId) // local map when downloaded, else freshly re-signed
       if (sawFresh.current) return true // clip started during the re-sign — leave it alone
       loadedSeq.current = null
       setUrls(fresh)

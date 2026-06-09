@@ -182,8 +182,7 @@ export default function PreviewScreen() {
   const resign = useCallback(async (): Promise<void> => {
     if (!id) return
     try {
-      const fresh = await resignPlayback(id)
-      if (!fresh) return // downloaded → local file:// uris never expire, nothing to re-sign
+      const fresh = await resignPlayback(id) // local map when downloaded, else freshly re-signed
       if (sawFresh.current) return // clip started during the re-sign — leave it alone
       loadedSeq.current = null
       setUrls(fresh)

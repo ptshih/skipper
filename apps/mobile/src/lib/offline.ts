@@ -20,6 +20,10 @@ import { extForContentType, urlMapFromSigned } from './offline-util'
 
 export { extForContentType, urlMapFromSigned }
 
+// Manifest schema version — bump on any shape change so a stale-format manifest left by an
+// older app build reads as NOT-downloaded (and re-downloads) instead of crashing the player.
+const MANIFEST_VERSION = 1
+
 /** A downloaded clip — a RELATIVE filename within the tour dir (NOT an absolute uri). */
 interface ClipFile {
   name: string
@@ -29,6 +33,8 @@ interface ClipFile {
 
 export interface OfflineManifest {
   tourId: string
+  /** Manifest schema version (MANIFEST_VERSION) — a mismatch invalidates the download. */
+  version: number
   /** When this download was captured (ISO). */
   savedAt: string
   /** The full drive detail (route/anchors/region/host/intro/outro/stops) — zero-network playback. */
@@ -141,47 +147,54 @@ export async function downloadTour(
     await Promise.all(
       Array.from({ length: Math.min(DOWNLOAD_CONCURRENCY, items.length) }, () => worker()),
     )
+    // Write the manifest INSIDE the try — a manifest-write failure must also sweep the
+    // (verified-but-orphaned) clip files, or they'd leak with no manifest to find them.
+    const manifest: OfflineManifest = {
+      tourId,
+      version: MANIFEST_VERSION,
+      savedAt: new Date().toISOString(),
+      detail,
+      clips: {
+        stops: Object.fromEntries(
+          signed.stops
+            .filter((s) => results.has(`stop:${s.seq}`))
+            .map((s) => [String(s.seq), results.get(`stop:${s.seq}`)!]),
+        ),
+        intro: results.get('intro') ?? null,
+        outro: results.get('outro') ?? null,
+      },
+    }
+    manifestFile(tourId).write(JSON.stringify(manifest))
+    return manifest
   } catch (e) {
-    // Partial download — sweep the dir so it can't read as ready, then surface the error.
+    // Partial download / manifest-write failure — sweep the dir so it can't read as ready
+    // (and no orphaned clips leak), then surface the error.
     try {
       dir.delete()
     } catch {}
     throw e
   }
-
-  const manifest: OfflineManifest = {
-    tourId,
-    savedAt: new Date().toISOString(),
-    detail,
-    clips: {
-      stops: Object.fromEntries(
-        signed.stops
-          .filter((s) => results.has(`stop:${s.seq}`))
-          .map((s) => [String(s.seq), results.get(`stop:${s.seq}`)!]),
-      ),
-      intro: results.get('intro') ?? null,
-      outro: results.get('outro') ?? null,
-    },
-  }
-  manifestFile(tourId).write(JSON.stringify(manifest))
-  return manifest
 }
 
-/** Read the manifest from disk (or null if absent/corrupt). */
+/** Read the manifest from disk; null if absent, corrupt, or a stale/foreign schema version. */
 export function loadManifest(tourId: string): OfflineManifest | null {
   const f = manifestFile(tourId)
   if (!f.exists) return null
   try {
-    return JSON.parse(f.textSync()) as OfflineManifest
+    const m = JSON.parse(f.textSync()) as OfflineManifest
+    // Reject a malformed or stale-format manifest → treat as not-downloaded (re-download)
+    // rather than return a half-shape the player would crash on (e.g. a missing `detail`).
+    if (!m || m.version !== MANIFEST_VERSION || !m.detail || !m.clips || typeof m.clips.stops !== 'object') {
+      return null
+    }
+    return m
   } catch {
     return null
   }
 }
 
-/** True iff a complete, verified download exists (manifest + every referenced clip on disk, nonzero). */
-export function isTourDownloaded(tourId: string): boolean {
-  const m = loadManifest(tourId)
-  if (!m) return false
+/** Every clip the manifest references is present on disk + nonzero. */
+function clipsPresentOnDisk(tourId: string, m: OfflineManifest): boolean {
   const clips = [...Object.values(m.clips.stops), m.clips.intro, m.clips.outro].filter(
     (c): c is ClipFile => c != null,
   )
@@ -190,6 +203,24 @@ export function isTourDownloaded(tourId: string): boolean {
     const f = new File(tourDir(tourId), c.name)
     return f.exists && (f.size ?? 0) > 0
   })
+}
+
+/** Build the seq → local `file://` url map (+ bracket sentinels) from a downloaded manifest. */
+function localUrlMap(tourId: string, m: OfflineManifest): Map<number, string> {
+  const urls = new Map<number, string>()
+  for (const [seqStr, c] of Object.entries(m.clips.stops)) {
+    const seq = Number(seqStr)
+    if (Number.isFinite(seq)) urls.set(seq, clipUri(tourId, c)) // skip a tampered non-numeric key
+  }
+  if (m.clips.intro) urls.set(INTRO_SEQ, clipUri(tourId, m.clips.intro))
+  if (m.clips.outro) urls.set(OUTRO_SEQ, clipUri(tourId, m.clips.outro))
+  return urls
+}
+
+/** True iff a complete, verified download exists (valid manifest + every clip on disk, nonzero). */
+export function isTourDownloaded(tourId: string): boolean {
+  const m = loadManifest(tourId)
+  return m != null && clipsPresentOnDisk(tourId, m)
 }
 
 /** Remove a tour's offline download (manifest + clips). Idempotent. */
@@ -219,13 +250,9 @@ export interface Playback {
  * detail + local `file://` uris with ZERO network. Otherwise fetch + sign and stream online.
  */
 export async function loadPlayback(tourId: string): Promise<Playback> {
-  const m = isTourDownloaded(tourId) ? loadManifest(tourId) : null
-  if (m) {
-    const urls = new Map<number, string>()
-    for (const [seqStr, c] of Object.entries(m.clips.stops)) urls.set(Number(seqStr), clipUri(tourId, c))
-    if (m.clips.intro) urls.set(INTRO_SEQ, clipUri(tourId, m.clips.intro))
-    if (m.clips.outro) urls.set(OUTRO_SEQ, clipUri(tourId, m.clips.outro))
-    return { detail: m.detail, urls, offline: true }
+  const m = loadManifest(tourId) // load ONCE (don't isTourDownloaded() then loadManifest() again)
+  if (m && clipsPresentOnDisk(tourId, m)) {
+    return { detail: m.detail, urls: localUrlMap(tourId, m), offline: true }
   }
   const detail = await getTour(tourId)
   const signed = await signTourAudio(tourId)
@@ -233,11 +260,13 @@ export async function loadPlayback(tourId: string): Promise<Playback> {
 }
 
 /**
- * Re-sign for the ONLINE stall path (presigned URLs live ~1h). Returns a fresh url map, or
- * null when the tour is downloaded (local files never expire — nothing to re-sign).
+ * A fresh url map for the stall-recovery path. When the tour is downloaded it returns the LOCAL
+ * file:// map (which never expires — and re-points a player that loaded ONLINE at the
+ * now-downloaded files); otherwise it re-signs the presigned URLs (~1h TTL). Always returns a map.
  */
-export async function resignPlayback(tourId: string): Promise<Map<number, string> | null> {
-  if (isTourDownloaded(tourId)) return null
+export async function resignPlayback(tourId: string): Promise<Map<number, string>> {
+  const m = loadManifest(tourId)
+  if (m && clipsPresentOnDisk(tourId, m)) return localUrlMap(tourId, m)
   const signed = await signTourAudio(tourId)
   return urlMapFromSigned(signed)
 }
