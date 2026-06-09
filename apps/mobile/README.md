@@ -2,7 +2,8 @@
 
 > **Status:** the JS/TS app is scaffolded and wired to the M2 backend (browse,
 > auth, gated tour fetch), and a **map-less couch preview player** (simulated
-> drive over `expo-audio`) is built in `app/preview/[id].tsx`. A local iOS
+> drive over `expo-audio`) is the `?mode=preview` branch of `app/drive/[id].tsx`
+> (the unified player; the standalone `app/preview/[id].tsx` was folded in). A local iOS
 > **simulator build compiles** (`xcodebuild` succeeds with `expo-audio` linked),
 > but there is **no EAS build, no device run, and no LIVE GPS-triggered phone
 > player yet** — that work (offline download, on-device triggering, lock-screen
@@ -16,7 +17,7 @@
 
 - **Expo Router** app (`app/`): corridor browse (`index`), corridor detail
   (`corridor/[id]`), `sign-in` (email/password), `tour/[id]` (gated fetch +
-  presign), and a working **couch preview player** (`preview/[id]`).
+  presign), and a working **couch preview player** (`drive/[id]?mode=preview`).
 - **Auth:** Better Auth Expo client (`src/lib/auth.ts`) — sessions in
   `expo-secure-store`, scheme `skipper` (matches the server `trustedOrigins` and
   the `expo()` server plugin in `apps/api/src/auth.ts`).

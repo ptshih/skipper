@@ -157,7 +157,7 @@ export default function TourScreen() {
         variant="secondary"
         icon="play"
         title={voice.cta.preview}
-        onPress={() => router.push(`/preview/${id}`)}
+        onPress={() => router.push(`/drive/${id}?mode=preview`)}
       />
       <Text variant="dim" color="inkDim">
         Hear the whole tour from your couch — no driving to the GPS coordinates.
