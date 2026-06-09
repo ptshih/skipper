@@ -10,14 +10,13 @@ import { Button, Input, Screen, Text, voice } from '@/ui'
 export default function SignInScreen() {
   const router = useRouter()
   const [mode, setMode] = useState<'in' | 'up'>('in')
-  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  // Chain the soft keyboard's return key through the form (name → email → password → submit)
-  // so a rider never has to dismiss it to reach the next field or the CTA.
-  const emailRef = useRef<TextInput>(null)
+  // Chain the soft keyboard's return key through the form (email → password → submit)
+  // so a rider never has to dismiss it to reach the next field or the CTA. (Name is
+  // NOT collected at sign-up — it's an optional field in Settings after signing in.)
   const passwordRef = useRef<TextInput>(null)
 
   const submit = async () => {
@@ -28,7 +27,9 @@ export default function SignInScreen() {
       const res =
         mode === 'in'
           ? await signIn.email({ email, password })
-          : await signUp.email({ email, password, name: name || email })
+          : // Name is optional and set later in Settings, so sign-up starts it empty
+            // (the DB column is NOT NULL; '' satisfies it without faking a name).
+            await signUp.email({ email, password, name: '' })
       if (res.error) {
         setError(res.error.message ?? 'Authentication failed')
         return
@@ -57,22 +58,7 @@ export default function SignInScreen() {
         </Text>
       </View>
 
-      {mode === 'up' ? (
-        <Input
-          placeholder="Name"
-          accessibilityLabel="Name"
-          autoCapitalize="words"
-          textContentType="name"
-          autoComplete="name"
-          returnKeyType="next"
-          submitBehavior="submit"
-          onSubmitEditing={() => emailRef.current?.focus()}
-          value={name}
-          onChangeText={setName}
-        />
-      ) : null}
       <Input
-        ref={emailRef}
         placeholder="Email"
         accessibilityLabel="Email"
         autoCapitalize="none"
