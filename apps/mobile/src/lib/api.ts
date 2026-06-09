@@ -46,11 +46,20 @@ async function fetchJson(path: string, init?: RequestInit): Promise<unknown> {
 export const listTours = async (): Promise<TourList> =>
   tourList.parse(await fetchJson('/tours'))
 
-export const getTour = async (tourId: string): Promise<TourDetail> =>
-  tourDetail.parse(await fetchJson(`/tours/${tourId}`))
+// `preview: true` adds `?preview=1` — the OPEN funnel path (any ready tour, no account).
+// Omit it for the live drive + offline download, which stay walled behind isPreview/account.
+const previewQuery = (opts?: { preview?: boolean }) => (opts?.preview ? '?preview=1' : '')
 
-export const signTourAudio = async (tourId: string): Promise<SignedAudio> =>
-  signedAudio.parse(await fetchJson(`/tours/${tourId}/assets/sign`, { method: 'POST' }))
+export const getTour = async (tourId: string, opts?: { preview?: boolean }): Promise<TourDetail> =>
+  tourDetail.parse(await fetchJson(`/tours/${tourId}${previewQuery(opts)}`))
+
+export const signTourAudio = async (
+  tourId: string,
+  opts?: { preview?: boolean },
+): Promise<SignedAudio> =>
+  signedAudio.parse(
+    await fetchJson(`/tours/${tourId}/assets/sign${previewQuery(opts)}`, { method: 'POST' }),
+  )
 
 /** The app-wide data-source/license catalog (authoritative; the app bundles only a fallback). */
 export const getSources = async (): Promise<DataSource[]> =>

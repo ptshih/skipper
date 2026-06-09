@@ -58,6 +58,7 @@ export const voice = {
     nowPlaying: 'NOW PLAYING', // emoji kept OUT of label strings (custom font = tofu)
     paused: 'PAUSED', // a held clip — the NOW card must not keep saying "NOW PLAYING"
     rolling: 'ROLLING', // between stops — road-trip, not the flat "DRIVING"
+    rollingOpen: 'On the open road', // rolling-card title when there's no next stop queued yet
     pitStop: 'PIT STOP', // a rest stop
     gpsSearching: 'Looking for the satellites — hang tight.', // live drive, no usable fix yet
     gpsError: 'Lost the GPS signal, folks. Pull over and give her another go.', // live watch failed

@@ -249,13 +249,17 @@ export interface Playback {
  * Load a tour for playback, OFFLINE-FIRST: if a complete download exists, return the manifest's
  * detail + local `file://` uris with ZERO network. Otherwise fetch + sign and stream online.
  */
-export async function loadPlayback(tourId: string): Promise<Playback> {
+export async function loadPlayback(
+  tourId: string,
+  opts?: { preview?: boolean },
+): Promise<Playback> {
   const m = loadManifest(tourId) // load ONCE (don't isTourDownloaded() then loadManifest() again)
   if (m && clipsPresentOnDisk(tourId, m)) {
     return { detail: m.detail, urls: localUrlMap(tourId, m), offline: true }
   }
-  const detail = await getTour(tourId)
-  const signed = await signTourAudio(tourId)
+  // `preview` streams any ready tour (the open funnel); omit it for the gated live drive.
+  const detail = await getTour(tourId, opts)
+  const signed = await signTourAudio(tourId, opts)
   return { detail, urls: urlMapFromSigned(signed), offline: false }
 }
 
@@ -264,9 +268,12 @@ export async function loadPlayback(tourId: string): Promise<Playback> {
  * file:// map (which never expires — and re-points a player that loaded ONLINE at the
  * now-downloaded files); otherwise it re-signs the presigned URLs (~1h TTL). Always returns a map.
  */
-export async function resignPlayback(tourId: string): Promise<Map<number, string>> {
+export async function resignPlayback(
+  tourId: string,
+  opts?: { preview?: boolean },
+): Promise<Map<number, string>> {
   const m = loadManifest(tourId)
   if (m && clipsPresentOnDisk(tourId, m)) return localUrlMap(tourId, m)
-  const signed = await signTourAudio(tourId)
+  const signed = await signTourAudio(tourId, opts)
   return urlMapFromSigned(signed)
 }

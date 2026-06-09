@@ -9,8 +9,9 @@ import { Text } from './Text'
 
 /** Reserved height (pt) for the player's NOW-content slot. Sized to a two-line NowCard
  *  (the tallest in-drive now-content) so the transport controls + stop list below hold a
- *  stable position when the content swaps to the shorter rolling strip. The scrubber's
- *  height is reserved separately (it stays mounted, just hidden, between stops).
+ *  stable position as the content swaps between the active card and the non-glowing
+ *  rolling/rest variants (also NowCards). The scrubber's height is reserved separately
+ *  (it stays mounted, just hidden, between stops).
  *  Stays valid under Dynamic Type because the title/timer below cap at
  *  IN_CAR_MAX_FONT_SCALE — a capped two-line title still fits this reserve. */
 export const NOW_AREA_RESERVE = 136

@@ -92,7 +92,8 @@ export default function DriveScreen() {
       ? 'Welcome aboard'
       : 'One for the road'
     : (activeStop?.name ?? d.hostName)
-  const nextName = d.nextSeq != null ? d.stops.find((s) => s.seq === d.nextSeq)?.name : undefined
+  const nextStop = d.nextSeq != null ? d.stops.find((s) => s.seq === d.nextSeq) : undefined
+  const nextName = nextStop?.name
 
   return (
     <Screen edges={['bottom']}>
@@ -116,9 +117,48 @@ export default function DriveScreen() {
           while a stop's NOW card is lit, the card owns the single amber glow. */}
       <RouteTrack progress={d.progress} glow={d.activeSeq === null} style={styles.track} />
 
-      {/* NOW area — a fixed-height reserve (see styles.nowContent) so the transport
-          controls below, and the stop list, hold a stable position as the now-content
-          swaps between a clip's NowCard and the short rolling strip. */}
+      {/* Itinerary — the scrolling middle (flex:1) between the trail and the player. By
+          taking all the slack it pushes the player below it down to the bottom edge.
+          Read-only on a drive (you can't teleport the car). */}
+      <ScrollView ref={listRef} style={styles.list} contentContainerStyle={styles.listContent}>
+        {d.stops.map((s) => {
+          const state =
+            d.phase === 'done' || (d.firedSeqs.has(s.seq) && s.seq !== d.activeSeq)
+              ? 'passed'
+              : s.seq === d.activeSeq
+                ? 'active'
+                : 'upcoming'
+          return (
+            <StopRow
+              key={s.seq}
+              name={s.name}
+              sublabel={stopLabel(s.stopType)}
+              icon={stopIcon(s.stopType)}
+              state={state}
+            />
+          )
+        })}
+      </ScrollView>
+
+      {/* ── PLAYER ── status + controls, anchored to the bottom edge as one grounded unit
+          (thumb-height for in-car) instead of floating mid-screen. A dashed rule fences it
+          off from the itinerary above. */}
+      <Divider dashed style={styles.divider} />
+
+      {/* GPS acquisition — a missing fix reads as a "still finding you" status, not a
+          fault with the current clip. */}
+      {d.gpsSearching && !d.paused ? (
+        <View style={styles.gpsSearch} accessibilityLiveRegion="polite">
+          <ActivityIndicator size="small" color={theme.colors.accentWarm} />
+          <Text variant="dim" color="inkFaint">
+            {voice.player.gpsSearching}
+          </Text>
+        </View>
+      ) : null}
+
+      {/* NOW area — a fixed-height reserve (see styles.nowContent) so the transport controls
+          below hold a stable position as the now-content swaps between the active clip's
+          NowCard and the non-glowing rolling variant. */}
       <View style={styles.nowWrap}>
         <View style={styles.nowContent}>
           {d.phase === 'done' ? (
@@ -159,22 +199,38 @@ export default function DriveScreen() {
               }
             />
           ) : (
-            // Between stops: a calm rolling strip, not a now-playing card (transit, not a stop).
-            <View style={styles.driveStrip} accessibilityLiveRegion="polite">
-              <Text variant="dim" color="inkFaint" align="center">
-                {nextName
-                  ? `${voice.player.rolling} · ${voice.drive.nextStop}: ${nextName}`
-                  : voice.player.rolling}
-              </Text>
-            </View>
+            // Between stops: a calm, non-glowing sibling of the NOW card (transit, not a
+            // stop) — same card chrome, but the amber halo stays OFF here so the route
+            // track keeps the single between-stops glow. Mirrors the active card's shape:
+            // kicker → big destination title → the next stop's type badge.
+            <NowCard
+              liveRegion
+              glow={false}
+              kicker={
+                nextName ? `${voice.player.rolling} · ${voice.drive.nextStop}` : voice.player.rolling
+              }
+              title={nextName ?? voice.player.rollingOpen}
+              right={
+                nextStop ? (
+                  <Badge tone={stopTone(nextStop.stopType)} label={stopLabel(nextStop.stopType)} />
+                ) : undefined
+              }
+            />
           )}
         </View>
 
-        {/* In-clip position bar (only meaningful on a loaded clip). Kept MOUNTED but hidden
-            between stops so its height stays reserved and the controls don't shift when it
-            reappears on the next clip. */}
+        {/* In-clip position bar (only meaningful on a loaded clip). MID-DRIVE between stops
+            it's kept mounted but hidden so its height stays reserved and the controls don't
+            shift when it reappears on the next clip. Pre-drive (ready) and at the end (done)
+            there's no clip to swap to, so it's fully collapsed — no dead band above the CTA. */}
         <View
-          style={d.activeSeq != null ? undefined : styles.reservedHidden}
+          style={
+            d.activeSeq != null
+              ? undefined
+              : d.phase === 'driving'
+                ? styles.reservedHidden
+                : styles.collapsed
+          }
           pointerEvents={d.activeSeq != null ? 'auto' : 'none'}
           accessibilityElementsHidden={d.activeSeq == null}
           importantForAccessibility={d.activeSeq != null ? 'auto' : 'no-hide-descendants'}
@@ -199,13 +255,6 @@ export default function DriveScreen() {
           <Text variant="dim" color="danger" style={styles.stall}>
             {d.stallNote}
           </Text>
-        ) : d.gpsSearching && !d.paused ? (
-          <View style={styles.buffering}>
-            <ActivityIndicator size="small" color={theme.colors.accentWarm} />
-            <Text variant="dim" color="inkFaint">
-              {voice.player.gpsSearching}
-            </Text>
-          </View>
         ) : null}
       </View>
 
@@ -250,29 +299,6 @@ export default function DriveScreen() {
           secondary={{ title: voice.cta.endDrive, onPress: d.end }}
         />
       )}
-
-      <Divider dashed style={styles.divider} />
-
-      {/* Stop list — read-only on a drive (you can't teleport the car). */}
-      <ScrollView ref={listRef} style={styles.list} contentContainerStyle={styles.listContent}>
-        {d.stops.map((s) => {
-          const state =
-            d.phase === 'done' || (d.firedSeqs.has(s.seq) && s.seq !== d.activeSeq)
-              ? 'passed'
-              : s.seq === d.activeSeq
-                ? 'active'
-                : 'upcoming'
-          return (
-            <StopRow
-              key={s.seq}
-              name={s.name}
-              sublabel={stopLabel(s.stopType)}
-              icon={stopIcon(s.stopType)}
-              state={state}
-            />
-          )
-        })}
-      </ScrollView>
     </Screen>
   )
 }
@@ -280,18 +306,26 @@ export default function DriveScreen() {
 const styles = StyleSheet.create({
   header: { paddingHorizontal: space.gutter, paddingTop: space.md, gap: space.xs },
   track: { marginHorizontal: space.gutter, marginTop: space.md },
-  nowWrap: { paddingHorizontal: space.gutter, marginTop: space.lg, gap: space.md },
+  nowWrap: { paddingHorizontal: space.gutter, marginTop: space.md, gap: space.md },
   // Reserve a clip-card's height (centered) so the controls below — and the stop list —
-  // hold a stable position as the now-content swaps between a NowCard and the short
-  // rolling strip; the scrubber's height is reserved separately (it stays mounted).
+  // hold a stable position as the now-content swaps between the active and rolling
+  // NowCards; the scrubber's height is reserved separately (it stays mounted).
   nowContent: { minHeight: NOW_AREA_RESERVE, justifyContent: 'center' },
-  driveStrip: { alignItems: 'center' },
   reservedHidden: { opacity: 0 }, // hold the scrubber's layout height without showing it
+  collapsed: { display: 'none' }, // drop the scrubber from layout entirely (ready/done — no clip to reserve for)
   buffering: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  gpsSearch: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: space.sm,
+    paddingHorizontal: space.gutter,
+    marginTop: space.md,
+  },
   stall: { marginTop: space.xs },
   simRow: { paddingHorizontal: space.gutter, marginTop: space.lg, gap: space.sm },
   simBtns: { flexDirection: 'row', gap: space.sm },
-  divider: { marginVertical: space.lg },
+  divider: { marginTop: space.md, marginBottom: space.sm }, // fence between the list and the player dock
   list: { flex: 1 },
-  listContent: { paddingHorizontal: space.gutter, paddingBottom: space.xxl },
+  listContent: { paddingHorizontal: space.gutter, paddingTop: space.sm, paddingBottom: space.sm },
 })

@@ -118,7 +118,9 @@ export default function PreviewScreen() {
         // OFFLINE-FIRST: a downloaded tour loads its detail + local file:// clips with zero
         // network; otherwise this fetches + signs and streams. The clip machinery below is
         // identical either way (player.replace plays a file:// uri like an https one).
-        const { detail: tour, urls } = await loadPlayback(id)
+        // Preview is the OPEN funnel — every tour is previewable anonymously (`preview: true`
+        // → ?preview=1), even ones whose live drive + offline download stay account-walled.
+        const { detail: tour, urls } = await loadPlayback(id, { preview: true })
         if (cancelled) return
         const tl = buildPreviewTimeline(
           tour.stops.map((s) => ({
@@ -182,7 +184,7 @@ export default function PreviewScreen() {
   const resign = useCallback(async (): Promise<void> => {
     if (!id) return
     try {
-      const fresh = await resignPlayback(id) // local map when downloaded, else freshly re-signed
+      const fresh = await resignPlayback(id, { preview: true }) // local when downloaded, else re-sign (open funnel)
       if (sawFresh.current) return // clip started during the re-sign — leave it alone
       loadedSeq.current = null
       setUrls(fresh)
@@ -412,7 +414,8 @@ export default function PreviewScreen() {
   if (!data) return <StateView title="Preview drive" loading message={voice.loading.preview} />
 
   const seg = data.segments[idx]
-  const nextStopName = seg ? data.stops.find((s) => s.seq === seg.seq)?.name : undefined
+  const nextStop = seg ? data.stops.find((s) => s.seq === seg.seq) : undefined
+  const nextStopName = nextStop?.name
   const activeRow = data.stops.findIndex((s) => s.seq === activeSeq)
   // The outro plays AFTER the last stop but before `done` — treat every stop as passed then.
   const isOutro = seg?.bracketKind === 'outro'
@@ -468,9 +471,41 @@ export default function PreviewScreen() {
           (its drive motion cue) — on a clip the NOW card owns the single amber glow. */}
       <RouteTrack progress={dot} glow={!isClip} style={styles.track} />
 
-      {/* NOW area — a fixed-height reserve (see styles.nowContent) so the transport
-          controls below, and the stop list, hold a stable position as the now-content
-          swaps between a clip's NowCard and the short rolling strip. */}
+      {/* Itinerary — the scrolling middle (flex:1) between the trail and the player; by taking
+          the slack it pushes the player below it down to the bottom edge. Tappable here (unlike
+          the live drive) — the hint sits right above the stops it describes. */}
+      <Text variant="dim" color="inkFaint" style={styles.hint}>
+        Tap any stop to jump ahead
+      </Text>
+      <ScrollView ref={listRef} style={styles.list} contentContainerStyle={styles.listContent}>
+        {data.stops.map((s, i) => {
+          const state =
+            done || isOutro || (activeRow >= 0 && i < activeRow)
+              ? 'passed'
+              : s.seq === activeSeq && atStop
+                ? 'active'
+                : 'upcoming'
+          return (
+            <StopRow
+              key={s.seq}
+              name={s.name}
+              sublabel={stopLabel(s.stopType)}
+              icon={stopIcon(s.stopType)}
+              state={state}
+              onPress={() => jumpToStop(s.seq)}
+            />
+          )
+        })}
+      </ScrollView>
+
+      {/* ── PLAYER ── status + controls, anchored to the bottom edge as one grounded unit
+          instead of floating mid-screen, fenced off from the itinerary above by a dashed
+          rule. (Mirrors the live drive screen — keep the two in step.) */}
+      <Divider dashed style={styles.divider} />
+
+      {/* NOW area — a fixed-height reserve (see styles.nowContent) so the transport controls
+          below hold a stable position as the now-content swaps between the active clip's
+          NowCard and the non-glowing rolling/rest variants. */}
       <View style={styles.nowWrap}>
         <View style={styles.nowContent}>
           {done ? (
@@ -486,13 +521,25 @@ export default function PreviewScreen() {
               </Text>
             </Card>
           ) : seg?.kind === 'drive' ? (
-            // Minimized: a drive is transit, not a stop — a calm distance strip, not a
-            // now-playing-sized card. The car token sliding the trail carries the motion.
-            <View style={styles.driveStrip} accessibilityLiveRegion="polite">
-              <Text variant="dim" color="inkFaint" align="center">
-                Rolling · ~{((seg.distanceM ?? 0) / 1609).toFixed(1)} mi to the next stop
-              </Text>
-            </View>
+            // Transit, not a stop: a calm, non-glowing sibling of the NOW card. Same chrome
+            // as the active card minus the amber halo (the car token sliding the trail
+            // carries the motion) — kicker → destination title → distance in the mono slot.
+            <NowCard
+              liveRegion
+              glow={false}
+              kicker={
+                nextStopName
+                  ? `${voice.player.rolling} · ${voice.drive.nextStop}`
+                  : voice.player.rolling
+              }
+              title={nextStopName ?? voice.player.rollingOpen}
+              timer={seg.distanceM ? `~${(seg.distanceM / 1609).toFixed(1)} mi` : undefined}
+              right={
+                nextStop ? (
+                  <Badge tone={stopTone(nextStop.stopType)} label={stopLabel(nextStop.stopType)} />
+                ) : undefined
+              }
+            />
           ) : seg?.kind === 'rest' ? (
             <NowCard
               liveRegion
@@ -516,11 +563,12 @@ export default function PreviewScreen() {
             />
           )}
         </View>
-        {/* Position bar — scrub within the current clip (drive/rest have no timeline). Kept
-            MOUNTED but hidden between stops so its height stays reserved and the controls
-            don't jump when it reappears on the next clip. */}
+        {/* Position bar — scrub within the current clip (drive/rest have no timeline). MID-tour
+            on a drive/rest segment it's kept mounted but hidden so its height stays reserved and
+            the controls don't jump when it reappears on the next clip. At the end (done) there's
+            no clip to swap back to, so it's fully collapsed — no dead band above the CTA. */}
         <View
-          style={isClip ? undefined : styles.reservedHidden}
+          style={isClip ? undefined : done ? styles.collapsed : styles.reservedHidden}
           pointerEvents={isClip ? 'auto' : 'none'}
           accessibilityElementsHidden={!isClip}
           importantForAccessibility={isClip ? 'auto' : 'no-hide-descendants'}
@@ -562,33 +610,6 @@ export default function PreviewScreen() {
           canSeek={canSeek}
         />
       )}
-
-      <Text variant="dim" color="inkFaint" style={styles.hint}>
-        Tap any stop to jump ahead
-      </Text>
-      <Divider dashed style={styles.divider} />
-
-      {/* Stop list (map-less timeline) — tap to jump */}
-      <ScrollView ref={listRef} style={styles.list} contentContainerStyle={styles.listContent}>
-        {data.stops.map((s, i) => {
-          const state =
-            done || isOutro || (activeRow >= 0 && i < activeRow)
-              ? 'passed'
-              : s.seq === activeSeq && atStop
-                ? 'active'
-                : 'upcoming'
-          return (
-            <StopRow
-              key={s.seq}
-              name={s.name}
-              sublabel={stopLabel(s.stopType)}
-              icon={stopIcon(s.stopType)}
-              state={state}
-              onPress={() => jumpToStop(s.seq)}
-            />
-          )
-        })}
-      </ScrollView>
     </Screen>
   )
 }
@@ -598,11 +619,11 @@ const styles = StyleSheet.create({
   track: { marginHorizontal: space.gutter, marginTop: space.lg, marginBottom: space.sm },
   nowWrap: { paddingHorizontal: space.gutter, paddingTop: space.sm, gap: space.sm },
   // Reserve a clip-card's height (centered) so the controls below — and the stop list —
-  // hold a stable position as the now-content swaps between a NowCard and the short
-  // rolling strip; the scrubber's height is reserved separately (it stays mounted).
+  // hold a stable position as the now-content swaps between the active and rolling/rest
+  // NowCards; the scrubber's height is reserved separately (it stays mounted).
   nowContent: { minHeight: NOW_AREA_RESERVE, justifyContent: 'center' },
-  driveStrip: { alignItems: 'center' },
   reservedHidden: { opacity: 0 }, // hold the scrubber's layout height without showing it
+  collapsed: { display: 'none' }, // drop the scrubber from layout entirely (done — no clip to reserve for)
   buffering: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -611,7 +632,7 @@ const styles = StyleSheet.create({
   },
   stall: { paddingHorizontal: space.xs },
   hint: { paddingHorizontal: space.gutter, paddingTop: space.md, paddingBottom: space.sm },
-  divider: { marginHorizontal: space.gutter },
+  divider: { marginHorizontal: space.gutter, marginTop: space.md, marginBottom: space.sm }, // fence between list + player dock
   list: { flex: 1, marginTop: space.xs },
-  listContent: { paddingTop: space.xs, paddingBottom: space.xxl },
+  listContent: { paddingTop: space.xs, paddingBottom: space.sm },
 })

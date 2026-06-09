@@ -8,9 +8,11 @@
 //   POST /tours/:tourId/assets/sign  -> presigned R2 URLs for the drive's audio (stops + brackets)
 //
 // A tour is the whole self-contained drive now (corridors merged in; zero-reuse:
-// narration is tour-owned). Freemium gating: anonymous may fetch/sign ONLY the preview
-// tour; any other tour needs a free account (the tier check via FEATURES.playTour).
-// Tours stay anonymous/shareable — gating is on access, not ownership.
+// narration is tour-owned). Freemium gating: a `?preview=1` fetch/sign is OPEN for any
+// ready tour (the couch preview is the funnel — anyone can stream any tour), while a
+// request WITHOUT the flag still needs `isPreview` or a free account — so the LIVE DRIVE
+// + OFFLINE download stay walled. Tours stay anonymous/shareable — gating is on access,
+// not ownership.
 
 import { Hono, type Context } from 'hono'
 import { asc, desc, eq, inArray } from 'drizzle-orm'
@@ -101,7 +103,11 @@ app.get('/tours', async (c) => {
 /**
  * Load a tour and enforce the freemium gate:
  *   - 404 if missing, 409 if not `ready`
- *   - anonymous allowed only when `isPreview`; otherwise a free account is required
+ *   - `?preview=1` requests are OPEN for any ready tour — the couch preview is the funnel
+ *     (anyone can stream any tour's clips; "the audio is the funnel"). The wall moved to the
+ *     LIVE DRIVE + OFFLINE: a request WITHOUT the flag still needs `isPreview` or a free
+ *     account, so the drive/download stay gated (the existing 401 → AccountGate flow). A
+ *     determined client could pass `preview=1` to stream — that's intended, not a leak.
  * Returns the tour, or a ready-to-return error Response.
  */
 async function loadTourGated(c: Context<ApiEnv>): Promise<{ tour: TourRow } | { res: Response }> {
@@ -112,7 +118,8 @@ async function loadTourGated(c: Context<ApiEnv>): Promise<{ tour: TourRow } | { 
   if (!tour) return { res: c.json({ error: 'not_found' }, 404) }
   if (tour.status !== 'ready')
     return { res: c.json({ error: 'not_ready', message: 'Tour is still generating.' }, 409) }
-  if (!tour.isPreview && !meetsTier(c.get('tier'), FEATURES.playTour)) {
+  const preview = c.req.query('preview') === '1'
+  if (!preview && !tour.isPreview && !meetsTier(c.get('tier'), FEATURES.playTour)) {
     return {
       res: c.json(
         { error: 'account_required', message: 'Create a free account to play this tour.' },
@@ -191,7 +198,8 @@ app.get('/tours/:tourId', withSession, async (c) => {
 })
 
 // Issue short-lived presigned R2 URLs for the drive's audio: every stop (story/scenic/break)
-// plus the intro/outro brackets. Same gate as fetch — this is the real wall (the bytes).
+// plus the intro/outro brackets. Same gate as fetch: `?preview=1` streams any ready tour
+// (the funnel); without it, the bytes stay walled behind isPreview/account (drive + offline).
 app.post('/tours/:tourId/assets/sign', withSession, async (c) => {
   const gated = await loadTourGated(c)
   if ('res' in gated) return gated.res

@@ -24,9 +24,10 @@ import {
   voice,
 } from '@/ui'
 
-// Tour detail. Anonymous can open only the preview tour; other tours return 401
-// -> we prompt for a free account. Offers the live GPS drive (the M1 phone player,
-// currently fed by a simulated fix source) + the couch preview + the route manifest.
+// Tour detail. Open to anyone (the detail fetch uses the `preview` funnel path), so every
+// tour is browsable + previewable anonymously. The wall is on the LIVE DRIVE + OFFLINE
+// download (their gated fetches still 401 anonymous → AccountGate). Offers the live GPS
+// drive (the M1 phone player, fed by a simulated fix source) + the couch preview + manifest.
 export default function TourScreen() {
   const router = useRouter()
   const { id } = useLocalSearchParams<{ id: string }>()
@@ -69,7 +70,8 @@ export default function TourScreen() {
     setError(null)
     setNeedsAccount(false)
     try {
-      setTour(await getTour(id))
+      // Open funnel: any tour's detail is viewable anonymously so the Preview CTA is reachable.
+      setTour(await getTour(id, { preview: true }))
     } catch (e) {
       if (e instanceof ApiError && e.needsAccount) setNeedsAccount(true)
       else setError(e instanceof Error ? e.message : voice.error.generic)

@@ -57,9 +57,18 @@ you found so the next agent can re-check it.
 - **Tours stay anonymous/shareable — no `createdBy` on `tours`.** Auth now EXISTS
   (Better Auth, freemium: anonymous → free account → paid `user.tier`) but is
   layered AROUND tours, not on them. Signed-in users save via the `saved_tours`
-  join, never ownership columns. Anonymous users get a shareable preview
-  (`tours.isPreview`); full playback needs a free account. Audio is PRIVATE in R2;
-  the API serves presigned URLs after the tier check (so the wall is real).
+  join, never ownership columns. **EVERY tour is previewable anonymously** (hard
+  product requirement): a `?preview=1` fetch/sign is OPEN for any ready tour — the
+  couch preview is the funnel, so the audio is intentionally NOT a server wall
+  (anyone can stream any tour's clips). The wall **moved to the LIVE DRIVE +
+  OFFLINE download**: a request WITHOUT `?preview=1` still needs `tours.isPreview`
+  or a free account (the existing 401 → `AccountGate`), so the in-car drive +
+  offline stay gated. (`tours.isPreview` now just flags the canonical demo tour,
+  whose live drive is also anonymous-OK.) NOTE: because preview streams the same
+  presigned bytes, the drive/offline wall is server-enforced only on the
+  *unflagged* path — a real byte-level wall would have to gate offline download
+  specifically (future hardening). Audio is still PRIVATE in R2 (presigned, short
+  TTL). (Changed 2026-06-09: "every tour previewable", wall → the drive.)
 - **`pois` deduped by `(source, source_id)`.** Store `source`/`source_id` for
   attribution — Wikipedia is **CC BY-SA**, keep credit (the attribution snapshot is
   frozen on the `tour_stop` at narration time).
