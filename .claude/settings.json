@@ -1,0 +1,18 @@
+{
+  "worktree": { "bgIsolation": "none" },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun scripts/docs-hook.ts",
+            "timeout": 30,
+            "statusMessage": "Checking docs truth system…"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -5,7 +5,7 @@ where the truth lives, vs. marketing copy), read through Skipper's lens. Shaka G
 reference comp — it's literally the "what we're not" in CLAUDE.md ("if the model just reads a fixed
 script, you've rebuilt Shaka Guide with extra steps").
 
-> **Reference doc, not a spec.** Studied 2026-06-09. No screens captured — this is the *flow* and
+> **Status:** reference doc, not a spec. Studied 2026-06-09. No screens captured — this is the *flow* and
 > *reception* (site + reviews), not the literal in-app UI.
 
 ## The headline: Skipper is already architected against Shaka's top complaints

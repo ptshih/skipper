@@ -1,6 +1,6 @@
 # Competitive & adjacent-app research — UX/product best practices for Skipper
 
-> **Date:** 2026-06-07 · **Method:** multi-agent deep research (web fan-out →
+> **Status:** reference. **Date:** 2026-06-07 · **Method:** multi-agent deep research (web fan-out →
 > source fetch → 3-vote adversarial verification → cited synthesis). Round 1:
 > 22 sources fetched, 101 claims extracted, 25 verified (23 confirmed, 2 killed).
 > A round-2 pass filling the open gaps is appended at the bottom.

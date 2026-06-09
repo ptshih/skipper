@@ -16,6 +16,8 @@
     "sim": "dotenvx run -f .env.development -- bun packages/sim/src/run.ts",
     "typecheck": "bun --filter '*' typecheck",
     "test": "bun --filter '*' test",
+    "lint:docs": "bun scripts/lint-docs.ts",
+    "check": "bun run lint:docs && bun run typecheck && bun run test",
     "prepare": "dotenvx ext precommit --install || true",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yaml,yml}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,yaml,yml}\"",

@@ -35,6 +35,12 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
 4. **CLAUDE.md stays lean.** It gets a paragraph only when violating it breaks an invariant or burns
    money. When something there is superseded, DELETE it and record the history in the relevant
    decision record — no strikethrough graveyards.
+5. **Enforced, not aspirational.** `scripts/lint-docs.ts` (`bun run lint:docs`, first step of root
+   `bun run check`, auto-run by a project hook on docs edits) fails on: a file loose at `docs/`
+   root or in an unknown folder, a doc without a `**Status**` line in its first 12 lines, any
+   `*-handoff.md` under `docs/`, any bare `docs/<file>.md` path reference anywhere in the repo,
+   and CLAUDE.md exceeding its line ceiling. Status SEMANTICS (does the line match reality?) can't
+   be linted — flip statuses in the same commit as the change (CLAUDE.md → Git workflow).
 
 ## Index
 

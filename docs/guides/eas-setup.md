@@ -1,7 +1,9 @@
 # EAS setup — Skipper mobile (phone-player dev build)
 
+> **Status:** guide (written 2026-06-08) — re-verify exact commands against current EAS/Expo docs.
+
 How to build and run the Expo app (`apps/mobile`) on EAS, for the M1 live
-phone-player work. Written 2026-06-08.
+phone-player work.
 
 ## TL;DR
 

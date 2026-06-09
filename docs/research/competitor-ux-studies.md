@@ -4,7 +4,7 @@ UX teardowns of three more direct GPS-audio-tour comps, each a distinct *model*,
 Skipper's lens. Companion to **`docs/research/shaka-guide-ux-study.md`** (Shaka = the 4th comp). Studied site +
 real reviews 2026-06-09 (parallel research agents); the cross-cutting synthesis spans all four.
 
-> Reference doc, not a spec. The *cross-comp* section is the headline — read that first.
+> **Status:** reference doc, not a spec (studied 2026-06-09). The *cross-comp* section is the headline — read that first.
 
 ## THE headline: "dead air" is the category's central wound — now **4-for-4**
 

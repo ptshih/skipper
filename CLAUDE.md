@@ -59,6 +59,14 @@ you found so the next agent can re-check it.
   in someone else's half-finished work — the exact failure this repo's multi-agent setup
   invites.
 
+- **Docs ride along with the change.** If your work ships, supersedes, or invalidates
+  anything described in `docs/` (or in this file), update that doc's status line in the
+  SAME commit — statuses flip in place; files never move on a state change. The structure
+  is enforced: `bun run lint:docs` (root; also first in root `bun run check`, and auto-run
+  by a project hook on docs edits) fails on loose/unknown docs locations, a missing
+  **Status** line, `*-handoff.md` files, bare `docs/<file>.md` paths, and a CLAUDE.md
+  size over its ceiling.
+
 ## Two principles that govern the architecture
 
 1. **Assemble per request; fetch FACTS once per place, generate NARRATION per

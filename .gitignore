@@ -42,8 +42,10 @@ key/
 # Scratch audio (generator TTS/clip output dumped during verification)
 .scratch-audio/
 
-# Claude Code (local agent runtime state — locks, worktrees)
-.claude/
+# Claude Code: local agent runtime state (locks, worktrees) stays ignored,
+# but the SHARED project settings (hooks — the docs lint) are committed.
+.claude/*
+!.claude/settings.json
 
 # OS / editor
 .DS_Store
