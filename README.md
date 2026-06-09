@@ -77,23 +77,3 @@ bun run db:studio    # browse
 bun run db:migrate   # run migrations (db:migrate:prod targets .env.production)
 ```
 
-## Status
-
-The frontier is **M1 — the live on-device phone player** (the MVP bet). What exists today:
-
-- **M1 generator (`@skipper/generator`) — built.** Wikipedia (grounded facts, CC BY-SA
-  attribution) → Claude narration → Google Cloud TTS → R2 → Neon, with grounding/diversity
-  lint + a judge pass. A first Tahoe corridor ("Emerald Bay") is generated and live as a
-  shareable preview.
-- **M2 API (`@skipper/api`) — done.** `GET /corridors`, `GET /corridors/:id/tours`,
-  `GET /tours/:id`, `POST /tours/:id/assets/sign` (presigned R2), behind Better Auth
-  freemium gating (anonymous → preview only; free account → full; paid tier later).
-- **Drive/trigger core (`@skipper/drive-core`) — built.** Speed-adaptive trigger engine,
-  the headless drive sim, and the compressed "preview drive" timeline — a pure, RN-safe
-  package (no DB deps) shared by the `@skipper/sim` CLI and the mobile app.
-- **Mobile (`@skipper/mobile`) — scaffolded + wired.** The Expo app browses corridors, signs
-  in, and plays the map-less **simulated-drive preview**. The **live phone player** (offline
-  download → GPS triggering → lock-screen Now Playing) is the open M1 work.
-
-Deferred past the MVP: CarPlay, Android Auto, multilingual, the cache/dedup machinery (M4).
-See `CLAUDE.md` for the full milestone plan and the explicit v1 non-goals.
