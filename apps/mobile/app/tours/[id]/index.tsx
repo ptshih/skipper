@@ -136,7 +136,7 @@ export default function TourScreen() {
       </View>
 
       {/* The live, GPS-triggered drive — the M1 headline. Routes to real device GPS (`?mode=live`). */}
-      <Button icon="car" title={voice.cta.drive} onPress={() => router.push(`/drive/${id}?mode=live`)} />
+      <Button icon="car" title={voice.cta.drive} onPress={() => router.push(`/tours/${id}/play?mode=live`)} />
       <Text variant="dim" color="inkDim">
         The skipper talks as you reach each stop on the real roads.
       </Text>
@@ -148,7 +148,7 @@ export default function TourScreen() {
           variant="secondary"
           icon="car"
           title={voice.cta.simDrive}
-          onPress={() => router.push(`/drive/${id}`)}
+          onPress={() => router.push(`/tours/${id}/play`)}
         />
       ) : null}
 
@@ -156,7 +156,7 @@ export default function TourScreen() {
         variant="secondary"
         icon="play"
         title={voice.cta.preview}
-        onPress={() => router.push(`/drive/${id}?mode=preview`)}
+        onPress={() => router.push(`/tours/${id}/play?mode=preview`)}
       />
       <Text variant="dim" color="inkDim">
         Hear the whole tour from your couch — no driving to the GPS coordinates.

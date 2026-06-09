@@ -2,7 +2,7 @@
 
 > **Status:** the JS/TS app is scaffolded and wired to the M2 backend (browse,
 > auth, gated tour fetch), and a **map-less couch preview player** (simulated
-> drive over `expo-audio`) is the `?mode=preview` branch of `app/drive/[id].tsx`
+> drive over `expo-audio`) is the `?mode=preview` branch of `app/tours/[id]/play.tsx`
 > (the unified player; the standalone `app/preview/[id].tsx` was folded in). A local iOS
 > **simulator build compiles** (`xcodebuild` succeeds with `expo-audio` linked),
 > but there is **no EAS build, no device run, and no LIVE GPS-triggered phone
@@ -15,9 +15,9 @@
 
 ## What's wired (works against the M2 API)
 
-- **Expo Router** app (`app/`): corridor browse (`index`), corridor detail
-  (`corridor/[id]`), `sign-in` (email/password), `tour/[id]` (gated fetch +
-  presign), and a working **couch preview player** (`drive/[id]?mode=preview`).
+- **Expo Router** app (`app/`): tour browse (`index`), `sign-in` (email/password),
+  `tours/[id]` (gated detail fetch + presign), and the unified **player**
+  (`tours/[id]/play`, with a `?mode=preview` couch-preview branch).
 - **Auth:** Better Auth Expo client (`src/lib/auth.ts`) — sessions in
   `expo-secure-store`, scheme `skipper` (matches the server `trustedOrigins` and
   the `expo()` server plugin in `apps/api/src/auth.ts`).
@@ -55,7 +55,7 @@ does exactly that and launches the server through dotenvx.
 
 ## Still TODO — the phone player (the MVP)
 
-### M1 — Phone player (replaces the placeholder in `tour/[id]`)
+### M1 — Phone player (`tours/[id]/play`)
 
 - [ ] Custom dev build via **EAS** (Expo Go can't run the native player); this
       build confirms the SDK 56 pin (or whatever `expo install --fix` resolves) + RN.

@@ -246,7 +246,7 @@ export default function DrivesScreen() {
           renderItem={({ item }) => (
             <View style={styles.row}>
               <Card
-                onPress={() => router.push({ pathname: '/tour/[id]', params: { id: item.id } })}
+                onPress={() => router.push({ pathname: '/tours/[id]', params: { id: item.id } })}
               >
                 <Text variant="title" color="ink">
                   {item.headline}
