@@ -24,10 +24,25 @@ import { useEffect, useRef } from 'react'
 import { useAudioPlaylist } from 'expo-audio'
 
 // The drive soundtrack rotation, shuffled per hook instance so repeat drives don't
-// always open on the same song. `drive_loop` is the original seamless Pixabay bed;
-// the rest are ElevenLabs road-trip songs (licenses + sources in SOURCE.md).
+// always open on the same song. Per-track sources + licenses live in SOURCE.md; the
+// CC-BY credits also surface in-app on the Sources & Licenses screen (app/legal.tsx).
+// All tracks are loudness-matched (~-13 LUFS) so the rotation never jumps in volume.
 const TRACKS = [
+  // Seamless Pixabay bed — Pixabay Content License (commercial OK, no attribution).
   require('../../assets/audio/drive_loop.mp3'),
+  // Royalty-free road-trip instrumentals — Pixabay Content License (no attribution).
+  require('../../assets/audio/acoustic_road_trip.mp3'),
+  require('../../assets/audio/travel_in_light.mp3'),
+  require('../../assets/audio/golden_twilight.mp3'),
+  require('../../assets/audio/acoustic_folk_guitar.mp3'),
+  // Creative Commons BY 4.0 — attribution carried on the Sources & Licenses screen.
+  require('../../assets/audio/long_road_ahead.mp3'),
+  require('../../assets/audio/americana.mp3'),
+  require('../../assets/audio/small_town.mp3'),
+  require('../../assets/audio/strummin_robin_smith.mp3'),
+  // ElevenLabs road-trip songs — license follows the account tier, UNVERIFIED for paid
+  // distribution (see SOURCE.md). The clean-licensed tracks above can fully replace
+  // these if we want to drop the ElevenLabs dependency.
   require('../../assets/audio/acoustic_countryside_journey.mp3'),
   require('../../assets/audio/wanderers_tale.mp3'),
   require('../../assets/audio/restless_roads_ahead.mp3'),

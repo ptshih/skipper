@@ -9,7 +9,13 @@ import { Pressable, StyleSheet, View } from 'react-native'
 import * as Linking from 'expo-linking'
 import { Stack } from 'expo-router'
 import { getSources } from '@/lib/api'
-import { FALLBACK_DATA_SOURCES, sourceHost, type DataSource } from '@/lib/licenses'
+import {
+  FALLBACK_DATA_SOURCES,
+  MUSIC_CREDITS,
+  MUSIC_FREE_NOTE,
+  sourceHost,
+  type DataSource,
+} from '@/lib/licenses'
 import { space } from '@/theme/tokens'
 import { Card, Screen, Text, voice } from '@/ui'
 
@@ -88,6 +94,40 @@ export default function LegalScreen() {
         ))}
       </View>
 
+      <View style={styles.section}>
+        <Text variant="heading" color="ink">
+          {voice.legal.musicHeading}
+        </Text>
+        <Text variant="dim" color="inkDim">
+          {voice.legal.musicIntro}
+        </Text>
+      </View>
+
+      <View style={styles.list}>
+        {MUSIC_CREDITS.map((credit) => (
+          <Card key={credit.artist}>
+            <View style={styles.card}>
+              <Text variant="heading" color="ink">
+                {credit.artist}
+              </Text>
+              <Text variant="dim" color="inkDim">
+                {credit.tracks.map((t) => `“${t}”`).join(', ')} · via {credit.via}
+              </Text>
+              <View style={styles.links}>
+                <LinkText label={credit.license} url={credit.licenseUrl} />
+                <Text variant="bodyStrong" color="inkFaint">
+                  ·
+                </Text>
+                <LinkText label={sourceHost(credit.sourceUrl)} url={credit.sourceUrl} />
+              </View>
+            </View>
+          </Card>
+        ))}
+        <Text variant="dim" color="inkFaint">
+          {MUSIC_FREE_NOTE}
+        </Text>
+      </View>
+
       <Text variant="dim" color="inkFaint">
         {voice.legal.footer}
       </Text>
@@ -97,6 +137,7 @@ export default function LegalScreen() {
 
 const styles = StyleSheet.create({
   body: { gap: space.lg },
+  section: { gap: space.xs },
   list: { gap: space.md },
   card: { gap: space.sm },
   links: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.xs },

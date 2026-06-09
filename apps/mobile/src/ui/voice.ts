@@ -91,6 +91,8 @@ export const voice = {
     title: 'Sources & Licenses',
     intro:
       'The skipper does his homework. Every tale, every rock, every pit stop on a drive is built from the sources below — and we keep the credit where it’s due.',
+    musicHeading: 'The road music',
+    musicIntro: 'And the songs between stops — the skipper’s glovebox playlist, credited where it counts.',
     footer: 'Tap a license or a source name to read it in full.',
   },
   guest: 'Riding as a guest',
