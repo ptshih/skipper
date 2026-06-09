@@ -43,8 +43,11 @@ export function ThemeModePicker() {
               pressed && styles.pressed,
             ]}
           >
-            <Icon name={opt.icon} size={18} color={selected ? 'accent' : 'inkFaint'} />
-            <Text variant="label" color={selected ? 'ink' : 'inkFaint'}>
+            {/* Unselected uses inkDim (not inkFaint): inkFaint on the sunken track is 4.30:1 in
+                daylight — under the 4.5:1 floor, in the one spot the contrast test doesn't cover.
+                inkDim is 6.05:1 and still reads clearly subordinate to the selected segment. */}
+            <Icon name={opt.icon} size={18} color={selected ? 'accent' : 'inkDim'} />
+            <Text variant="label" color={selected ? 'ink' : 'inkDim'}>
               {opt.label}
             </Text>
           </Pressable>

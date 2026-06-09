@@ -23,7 +23,7 @@ export interface StateViewProps {
 export function StateView({ message, loading, tone = 'dim', title, action }: StateViewProps) {
   const theme = useTheme()
   return (
-    <Screen center>
+    <Screen scroll center>
       {title ? <Stack.Screen options={{ title }} /> : null}
       {loading ? <ActivityIndicator color={theme.colors.accent} /> : null}
       <Text

@@ -42,8 +42,10 @@ export default function DriveScreen() {
   const theme = useTheme()
   const { id, mode } = useLocalSearchParams<{ id: string; mode?: string }>()
   // 'live' = real device GPS (Phase 4); 'preview' = the couch SIMULATED DRIVE (anonymous,
-  // no GPS, tappable stops); anything else = the on-device drive simulator (dev default).
-  const driveMode = mode === 'live' ? 'live' : mode === 'preview' ? 'preview' : 'sim'
+  // no GPS, tappable stops). An unrecognized/missing mode falls back to the dev simulator in
+  // dev, but to the open couch PREVIEW in release — the dev clock must never be one malformed
+  // deep link away from a production rider.
+  const driveMode = mode === 'live' ? 'live' : mode === 'preview' ? 'preview' : __DEV__ ? 'sim' : 'preview'
   const d = useDrive(id, { mode: driveMode })
   const isPreview = driveMode === 'preview'
   const listRef = useRef<ScrollView | null>(null)
@@ -381,7 +383,7 @@ export default function DriveScreen() {
           fault with the current clip. Sits just above the card. */}
       {d.gpsSearching && !d.paused ? (
         <View style={styles.gpsSearch} accessibilityLiveRegion="polite">
-          <ActivityIndicator size="small" color={theme.colors.accentWarm} />
+          <ActivityIndicator size="small" color={theme.colors.accent} />
           <Text variant="dim" color="inkFaint">
             {voice.player.gpsSearching}
           </Text>
@@ -448,7 +450,7 @@ export default function DriveScreen() {
 
           {d.buffering ? (
             <View style={styles.buffering}>
-              <ActivityIndicator size="small" color={theme.colors.accentWarm} />
+              <ActivityIndicator size="small" color={theme.colors.accent} />
               <Text variant="dim" color="inkFaint">
                 {voice.player.buffering}
               </Text>
@@ -467,7 +469,10 @@ export default function DriveScreen() {
 const styles = StyleSheet.create({
   header: { paddingHorizontal: space.gutter, paddingTop: space.md, gap: space.xs },
   track: { marginHorizontal: space.gutter, marginTop: space.md },
-  cardWrap: { paddingHorizontal: space.gutter, marginTop: space.sm },
+  // paddingBottom stacks with the safe-area inset where one exists, and supplies a minimum of
+  // air on zero-bottom-inset devices (button-nav Android, SE-class) so the card + its "Pull
+  // over" ghost never land flush on the bezel.
+  cardWrap: { paddingHorizontal: space.gutter, marginTop: space.sm, paddingBottom: space.sm },
   buffering: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   gpsSearch: {
     flexDirection: 'row',

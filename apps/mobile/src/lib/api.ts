@@ -24,6 +24,12 @@ export class ApiError extends Error {
   }
 }
 
+/** A user-safe error string: server-authored ApiError messages are shown as-is; everything
+ *  else (a raw RN `TypeError: Network request failed`, a multi-line ZodError dump) collapses
+ *  to the in-voice `fallback`. Use at every fetch surface so plumbing never reaches the rider. */
+export const errorMessage = (e: unknown, fallback: string): string =>
+  e instanceof ApiError ? e.message : fallback
+
 async function fetchJson(path: string, init?: RequestInit): Promise<unknown> {
   const cookie = authClient.getCookie()
   const res = await fetch(`${API_URL}${path}`, {

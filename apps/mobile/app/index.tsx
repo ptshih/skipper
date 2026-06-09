@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Animated, FlatList, RefreshControl, StyleSheet, View } from 'react-native'
 import { Stack, useFocusEffect, useRouter } from 'expo-router'
-import { listTours, type TourList } from '@/lib/api'
+import { errorMessage, listTours, type TourList } from '@/lib/api'
 import { useSession } from '@/lib/auth'
 import { listDownloadedTours } from '@/lib/offline'
 import { cleanPlaceName } from '@/lib/labels'
@@ -47,7 +47,7 @@ export default function DrivesScreen() {
         setTours(saved)
         setOffline(true)
       } else {
-        setError(e instanceof Error ? e.message : voice.error.generic)
+        setError(errorMessage(e, voice.error.generic))
       }
     } finally {
       setLoading(false)

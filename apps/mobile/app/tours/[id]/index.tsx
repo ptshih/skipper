@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import { ActionSheetIOS, Alert, Animated, Platform, StyleSheet, View } from 'react-native'
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
-import { ApiError, getTour, type TourDetail } from '@/lib/api'
+import { ApiError, errorMessage, getTour, type TourDetail } from '@/lib/api'
 import {
   deleteTourDownload,
   downloadTour,
@@ -131,7 +131,7 @@ export default function TourScreen() {
           setTour(m.detail)
           setOffline(true)
         } else {
-          setError(e instanceof Error ? e.message : voice.error.generic)
+          setError(errorMessage(e, voice.error.generic))
         }
       }
     } finally {

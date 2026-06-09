@@ -58,7 +58,11 @@ export function StopRow({
   return (
     <Pressable
       onPress={onPress}
-      accessibilityRole="button"
+      // Derive interactivity from the handler: a read-only row (live/sim drive, tour detail)
+      // announces as plain 'text', not a tappable 'button' that does nothing, and skips the
+      // press tracking + pressed dimming. Only the preview (onPress set) reads as a button.
+      disabled={!onPress}
+      accessibilityRole={onPress ? 'button' : 'text'}
       accessibilityState={{ selected: active }}
       accessibilityLabel={`${name}${sublabel ? `, ${sublabel}` : ''}${active ? ', now playing' : passed ? ', played' : ''}`}
       style={({ pressed }) => [
@@ -67,7 +71,7 @@ export function StopRow({
         // route card (where a surfaceRaised chip would vanish). No border/halo, so it stays
         // subordinate and never competes for the single amber glow.
         active && { backgroundColor: colors.surfaceSunken },
-        pressed && styles.pressed,
+        pressed && onPress && styles.pressed,
       ]}
     >
       {/* The single leading marker — the stop-type glyph. Accent when active, faded when passed. */}

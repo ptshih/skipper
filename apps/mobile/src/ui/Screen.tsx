@@ -67,7 +67,10 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   padded: { padding: space.gutter },
   center: {
-    flex: 1,
+    // flexGrow (not flex:1): identical layout when content fits, but inside a ScrollView it
+    // lets an over-tall centered stack (e.g. the gate at large accessibility text) scroll
+    // instead of clipping. The non-scroll path's wrapper still has styles.flex so it fills.
+    flexGrow: 1,
     alignItems: 'center',
     justifyContent: 'center',
     padding: space.xxl,

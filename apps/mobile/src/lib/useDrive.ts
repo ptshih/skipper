@@ -28,7 +28,7 @@ import {
   type GpsFix,
   type PreviewSegment,
 } from '@skipper/drive-core'
-import { ApiError } from './api'
+import { ApiError, errorMessage } from './api'
 import { cleanPlaceName } from './labels'
 import { loadPlayback, resignPlayback } from './offline'
 import {
@@ -39,6 +39,7 @@ import {
   type FixSubscription,
 } from './gps'
 import { useDriveMusic } from './driveMusic'
+import { useReducedMotion } from '@/theme'
 import { voice } from '@/ui'
 
 // Grace before a clip that hasn't started is treated as stalled — same generous window
@@ -200,6 +201,7 @@ export interface UseDriveOptions {
 
 export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {}): UseDrive {
   const mode = opts.mode ?? 'sim'
+  const reducedMotion = useReducedMotion() // honor OS "Reduce Motion" for the preview token glide
   const [data, setData] = useState<DriveData | null>(null)
   const [urls, setUrls] = useState<Map<number, string>>(new Map())
   const [error, setError] = useState<string | null>(null)
@@ -340,7 +342,7 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
       } catch (e) {
         if (cancelled) return
         if (e instanceof ApiError && e.needsAccount) setNeedsAccount(true)
-        else setError(e instanceof Error ? e.message : 'Failed to load the drive')
+        else setError(errorMessage(e, voice.error.generic))
       }
     })()
     return () => {
@@ -667,11 +669,14 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
     // Animate the dot only when it actually moves (a drive). A break 'rest' holds in place, so skip
     // the no-op X→X timing that would spin the JS animation at 60fps and jank the transition.
     if (seg.kind === 'drive' && from !== seg.routeProgress) {
-      Animated.timing(dot, {
-        toValue: seg.routeProgress,
-        duration: seg.previewMs,
-        useNativeDriver: false,
-      }).start()
+      // Reduce Motion: step the token to the segment end instead of gliding it (same end state).
+      if (reducedMotion) dot.setValue(seg.routeProgress)
+      else
+        Animated.timing(dot, {
+          toValue: seg.routeProgress,
+          duration: seg.previewMs,
+          useNativeDriver: false,
+        }).start()
     }
     segTimer.current = setTimeout(() => advanceSegment(), seg.previewMs)
     return () => {
@@ -681,7 +686,7 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
       }
       dot.stopAnimation() // freeze the trail on pause/jump instead of letting it run on
     }
-  }, [mode, data, driving, done, segIdx, paused, segments, dot, advanceSegment, finishDrive])
+  }, [mode, data, driving, done, segIdx, paused, segments, dot, advanceSegment, finishDrive, reducedMotion])
 
   // ---- clip load / play (cloned from the preview): keyed on the active stop ----
   useEffect(() => {
@@ -782,6 +787,18 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
   useEffect(() => {
     seekTarget.current = null
   }, [activeSeq])
+
+  // Drop the pending seek target once the clock catches up to it, so a LATER ±15 tap re-bases
+  // on the real position instead of a stale committed target. (Pairs with seekBy above.)
+  useEffect(() => {
+    if (
+      seekTarget.current != null &&
+      status.currentTime != null &&
+      Math.abs(status.currentTime - seekTarget.current) < 0.4
+    ) {
+      seekTarget.current = null
+    }
+  }, [status.currentTime])
 
   // Between stops (ducked-quiet) while driving: relinquish the lock screen. Otherwise the
   // narration player keeps the FINISHED clip up as "Now Playing" — with transport controls
@@ -914,7 +931,11 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
   const seekBy = useCallback(
     (deltaSec: number) => {
       if (!canSeek) return
-      const base = Math.max(seekTarget.current ?? 0, status.currentTime ?? 0)
+      // Prefer the pending command over the lagging clock in BOTH directions, so rapid taps
+      // accumulate — `Math.max` broke rewinds (a back-15 target sits below currentTime, so the
+      // next tap re-based on the stale clock and re-issued the same -15). seekTarget is cleared
+      // once the clock catches up (below), so a later tap re-bases on the real position.
+      const base = seekTarget.current ?? status.currentTime ?? 0
       seekToMs((base + deltaSec) * 1000)
     },
     [canSeek, status.currentTime, seekToMs],

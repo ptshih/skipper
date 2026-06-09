@@ -14,7 +14,7 @@ import { voice } from './voice'
 export function AccountGate({ note }: { note?: string }) {
   const router = useRouter()
   return (
-    <Screen center>
+    <Screen scroll center>
       <Stack.Screen options={{ title: voice.gate.title }} />
       <Card framed style={styles.card}>
         <Badge tone="amber" filled label="FREE" style={styles.badge} />
