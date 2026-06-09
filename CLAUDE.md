@@ -285,14 +285,17 @@ bet being proven first.
   - **Region is a per-tour generation parameter, not a cache key.** Since narration is
     tour-owned (no content cache), a per-region persona/voice/prompt-overlay is just a
     different generation input per tour — each region generates its own content, no schema fight.
-  - **A region skipper can SOUND different.** `voice` is today a fixed function of persona
-    (`PERSONA_VOICE` in `packages/generator/src/models.ts`: skipper → Algenib), but the key
-    already carries `voice` — so the Yosemite skipper can wear its own Gemini-TTS voice.
-    Tune + ear-judge per region (the voice gate becomes per-region).
-  - **The system prompt becomes region-parameterized.** The highest-leverage file (the
-    narration prompt) gets a base skipper layer + a per-region overlay (backstory, regional
-    idioms, what they riff on). The persona KIT terms are load-bearing in
-    `lint.ts`/`generate.ts` regexes — per-persona kits must sync with those guards.
+  - **A region skipper can SOUND different.** Each `PersonaDef`
+    (`packages/generator/src/persona/`, resolved per-tour by `personaForRegion(slug)`) carries its
+    own `voice` (skipper → Algenib), so a Yosemite skipper just sets a different Gemini-TTS voice on
+    its def. Tune + ear-judge per region (the voice gate is already per-region).
+  - **The generation persona is a per-region `PersonaDef`** (registry BUILT, commit `687c885`):
+    system + bracket prompt, voice, TTS style, and the personal KIT, resolved by region slug. The
+    KIT is now SINGLE-SOURCED on `PersonaDef.kit` and read by BOTH the diversity lint and
+    `generate.ts` — there are no duplicated `lint.ts`/`generate.ts` kit regexes to keep in sync
+    (that silent-drift footgun is closed). Still TODO for a 2nd region: factor the prompt into a
+    base skipper layer + a per-region overlay (backstory, regional idioms) so the shared grounding
+    rules stay single-sourced.
   - **Backstory is DELIVERY, never FACTS.** An ex-ski-bum-mechanic Tahoe skipper vs. a
     grizzled-climber Yosemite skipper colors the jokes and asides — it must NEVER invent
     regional history. Same rule as "Ask the Skipper": don't let "backstory" become an
@@ -391,11 +394,11 @@ From an adversarial review of the scaffold. Verdict: sound foundation. Guardrail
   the `poi_content` content cache is dropped; narration is tour-owned. `joke_level` remains a pgEnum
   (typo-safe) as a per-tour generation param on `tours`; `persona` → a `regions` TABLE, `duration_bucket`
   dropped (no variant matrix). See `docs/tour-data-model-zero-reuse.md`.
-- **`voice` is a fixed function of persona in v1** (`PERSONA_VOICE` in
-  `packages/generator/src/models.ts`: skipper → the Google Cloud Gemini-TTS voice
-  name "Algenib", recorded as a per-tour generation param — there is no content cache
-  key). Not a request knob until M3 (no `tours.voice` / `tourRequest.voice` yet).
-  (Gemini-TTS voice names are stable identifiers — no ElevenLabs-style sunset to mind.)
+- **`voice` is a fixed function of persona in v1** (each `PersonaDef.voice` in
+  `packages/generator/src/persona/`, resolved per-tour by `personaForRegion(slug)`: skipper → the
+  Google Cloud Gemini-TTS voice name "Algenib"; `SKIPPER_VOICE_ID` in `models.ts` is the source
+  constant the def references). Not a request knob until M3 (no `tours.voice` / `tourRequest.voice`
+  yet). (Gemini-TTS voice names are stable identifiers — no ElevenLabs-style sunset to mind.)
 - **The generator MUST populate `tour_stops.attribution`** for every
   wikipedia-sourced clip (CC BY-SA is legal, not optional) — put it on the
   generation invariant checklist + the human-review gate.
