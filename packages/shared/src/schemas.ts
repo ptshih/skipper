@@ -233,6 +233,11 @@ export type TourDetail = z.infer<typeof tourDetail>
 export const signedClip = z.object({
   seq: z.number().int(),
   url: z.url(),
+  /** The clip's MIME type (e.g. "audio/mpeg"), derived server-side from the R2 key's
+   *  extension. The format is DATA, not an assumption: the player can stay format-agnostic
+   *  and the offline download (Phase 3) writes the right extension instead of hardcoding
+   *  `.wav` or parsing the presigned URL. Robust to mixed mp3/legacy-wav clips. */
+  contentType: z.string(),
   durationMs: z.number().int().nullish(),
 })
 export const signedAudio = z.object({ urls: z.array(signedClip) })

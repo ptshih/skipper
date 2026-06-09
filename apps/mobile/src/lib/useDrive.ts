@@ -28,7 +28,7 @@ import { useDriveMusic } from './driveMusic'
 import { voice } from '@/ui'
 
 // Grace before a clip that hasn't started is treated as stalled — same generous window
-// as the preview (large uncompressed WAVs, 1h presigned URLs → re-sign once on a stall).
+// as the preview (32k MP3 clips, 1h presigned URLs → re-sign once on a stall).
 const CLIP_STALL_MS = 12_000
 
 // Real drive speed for the simulator (mph). A FIXED 60 for now; the trigger lead is

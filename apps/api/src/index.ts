@@ -22,7 +22,7 @@ import { auth } from './auth'
 import { FEATURES, meetsTier, withSession, type ApiEnv } from './entitlements'
 import { hostForPersona } from './host'
 import { DATA_SOURCES } from './sources'
-import { presignGet } from './storage'
+import { contentTypeForKey, presignGet } from './storage'
 
 const app = new Hono<ApiEnv>()
 
@@ -230,7 +230,13 @@ app.post('/tours/:tourId/assets/sign', withSession, async (c) => {
   try {
     const urls = clips
       .filter((clip) => clip.key)
-      .map((clip) => ({ seq: clip.seq, url: presignGet(clip.key!), durationMs: clip.durationMs }))
+      .map((clip) => ({
+        seq: clip.seq,
+        url: presignGet(clip.key!),
+        // Format derived from the actual key — so the client never hardcodes/guesses it.
+        contentType: contentTypeForKey(clip.key!),
+        durationMs: clip.durationMs,
+      }))
     return c.json({ urls })
   } catch (e) {
     // R2 not configured / presign failed — don't leak which config var is missing,

@@ -191,20 +191,23 @@ the API does **not** return the persisted `triggerLat/triggerLng` (they exist in
 `schema.ts:~224`, but aren't exposed). → the player **re-snaps** (see §3.2). The corridor `polyline`
 (`[lng,lat][]`) comes inline in the same tour fetch.
 
-**Audio** comes separately: `POST /tours/:tourId/assets/sign` → `{ urls: [{ seq, url, durationMs }] }`
+**Audio** comes separately: `POST /tours/:tourId/assets/sign` → `{ urls: [{ seq, url, contentType, durationMs }] }`
 (one presigned R2 GET per stop with audio). **Presign TTL = 1 hour** (`apps/api/src/storage.ts`).
+`contentType` is the clip's MIME (e.g. `audio/mpeg`), derived server-side from the R2 key — use it to
+pick the on-disk extension; do NOT hardcode the format.
 
 **To drive ONE tour fully offline you must persist:**
 1. the tour JSON (polyline + stops) — for snapping + UI with zero network;
 2. every clip's BYTES (not the URL — it expires) downloaded while online.
 Network to prep: `1× GET /tours` + `1× POST /sign` + `N` audio GETs.
 
-**Offline storage:** `Paths.document/tours/<tourId>/<seq>.wav` (persistent). Write a **manifest**
-(`manifest.json`: tourId, a version/generatedAt, polyline, stops, per-seq file path). At playback prefer
-the local `file://` if present, else the presigned URL (re-sign if the 1 h TTL lapsed).
-Note: clips are **uncompressed LINEAR16 WAV → large** (tens of MB/tour); budget storage + download time +
-a progress UI that gates "Start drive". Gating is real: a non-preview tour needs a signed-in (free)
-account at prep time (the `/tours` + `/sign` tier check).
+**Offline storage:** `Paths.document/tours/<tourId>/<seq>.<ext>` (persistent), where `<ext>` comes from
+each clip's `contentType` in the sign response (`audio/mpeg` → `mp3`) — never hardcoded. Write a
+**manifest** (`manifest.json`: tourId, a version/generatedAt, polyline, stops, per-seq file path +
+contentType). At playback prefer the local `file://` if present, else the presigned URL (re-sign if the
+1 h TTL lapsed). Note: clips are now **32k MP3** (~12× smaller than the old LINEAR16 WAVs — a few MB/tour),
+but still budget storage + download time + a progress UI that gates "Start drive". Gating is real: a
+non-preview tour needs a signed-in (free) account at prep time (the `/tours` + `/sign` tier check).
 
 ---
 
@@ -267,7 +270,8 @@ each, debounce holds, lock-screen updates per stop, music ducks. **This is the b
 
 ### Phase 3 — offline download (~1½ days)
 Add `expo-file-system` (declare it). After sign, download all `N` clips to
-`Paths.document/tours/<tourId>/<seq>.wav` (concurrency-capped) + write the manifest (§4). Gate "Start drive"
+`Paths.document/tours/<tourId>/<seq>.<ext>` — `<ext>` from each clip's `contentType` in the sign response,
+NOT hardcoded (concurrency-capped) + write the manifest (§4). Gate "Start drive"
 on download-complete + verify-on-disk. Player prefers local `file://`, else presigned (re-sign if expired).
 → **Accept:** airplane-mode after download → the full simulated drive plays from disk, zero network.
 

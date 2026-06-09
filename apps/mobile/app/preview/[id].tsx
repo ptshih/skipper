@@ -54,8 +54,10 @@ interface Loaded {
 }
 
 // Grace before a clip that hasn't started is treated as stalled. Generous on purpose:
-// clips are large uncompressed WAVs that can take real time to buffer on weak signal,
-// and presigned URLs live 1h — so on a stall we re-sign once before giving up (below).
+// clips are 32k MP3 (~12× smaller than the old LINEAR16 WAVs) but can still take real time
+// to buffer on weak signal, and presigned URLs live 1h — so on a stall we re-sign once
+// before giving up (below). Only an upper bound on detecting a dead clip, so it stays
+// conservative; could be tightened for MP3 once tuned on-device.
 const CLIP_STALL_MS = 12_000
 
 export default function PreviewScreen() {
