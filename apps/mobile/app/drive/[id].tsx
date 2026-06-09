@@ -54,15 +54,23 @@ export default function DriveScreen() {
   if (d.phase === 'gate')
     return <AccountGate note="The live drive needs a (free) ticket — same as the full tour." />
   if (d.phase === 'locationGate')
+    // Three states: precise-location-off (reduced) and hard-denied-no-reprompt both route to Settings;
+    // only a still-askable denial offers an in-app "Switch on location" re-prompt.
     return (
       <StateView
         title="Drive"
-        message={d.locationCanAskAgain ? voice.drive.locationNeeded : voice.drive.locationBlocked}
+        message={
+          d.locationReduced
+            ? voice.drive.locationReduced
+            : d.locationCanAskAgain
+              ? voice.drive.locationNeeded
+              : voice.drive.locationBlocked
+        }
         tone="danger"
         action={
-          d.locationCanAskAgain
-            ? { label: voice.drive.locationAllow, onPress: d.start }
-            : { label: voice.drive.locationSettings, onPress: d.openLocationSettings }
+          d.locationReduced || !d.locationCanAskAgain
+            ? { label: voice.drive.locationSettings, onPress: d.openLocationSettings }
+            : { label: voice.drive.locationAllow, onPress: d.start }
         }
       />
     )

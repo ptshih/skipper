@@ -42,9 +42,13 @@ export const voice = {
     sim: 'SIMULATED DRIVE', // the on-device sim setup — no real GPS yet
     live: 'LIVE DRIVE', // real device GPS (Phase 4)
     nextStop: 'next stop', // "ROLLING · next stop: <name>"
-    // Location-permission gate (live drive only): two states — can re-ask vs. must visit Settings.
+    // Location-permission gate (live drive only): three states — can re-ask, must visit Settings
+    // (denied), or location’s on but only APPROXIMATE (iOS Precise Location off → fixes too coarse
+    // to trigger stops; the only fix is the Settings toggle, so it routes there like a hard denial).
     locationNeeded: 'I steer by your GPS — switch on location and I’ll call out each stop as we reach it.',
     locationBlocked: 'Location’s switched off for me. Flip it on in Settings and we’ll hit the road.',
+    locationReduced:
+      'You’ve handed me approximate location — at that blur I’d sail right past the stops. Switch on “Precise Location” in Settings and I’ll call them on the nose.',
     locationAllow: 'Switch on location',
     locationSettings: 'Open Settings',
   },

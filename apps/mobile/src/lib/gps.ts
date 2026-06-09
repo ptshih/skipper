@@ -132,23 +132,35 @@ const PROJECT_WINDOW_VERTS = 400
 // device). The type says `number | null` but the runtime yields -1 — so `?? 0` is not enough.
 const sane = (v: number | null | undefined): number => (v != null && v >= 0 ? v : 0)
 
+// True when iOS granted location but only at REDUCED (approximate) accuracy — the Precise Location
+// toggle is off. Such fixes land ~1–3 km wide, so the watch's accuracy gate (MAX_FIX_ACCURACY_M)
+// would reject EVERY fix → the drive silently never triggers a stop. SDK 56 has no
+// `requestTemporaryFullAccuracyAsync`, so there's no in-app upgrade — we must send the rider to
+// Settings. `res.ios?.accuracy` is undefined off iOS, so this is false there (never blocks sim/Android).
+const isReduced = (res: Location.LocationPermissionResponse): boolean => res.ios?.accuracy === 'reduced'
+
 /**
  * Request foreground (When-In-Use) location permission — the live drive needs it before the
  * watch can start. The caller surfaces the denied / open-Settings UX (`canAskAgain === false`
- * means the OS won't prompt again; deep-link to Settings instead). (spec §7 Phase 4)
+ * means the OS won't prompt again; deep-link to Settings instead) AND the `reduced`-accuracy
+ * case (granted but approximate → also Settings-only). (spec §7 Phase 4)
  */
-export async function ensureDrivePermission(): Promise<{ granted: boolean; canAskAgain: boolean }> {
+export async function ensureDrivePermission(): Promise<{
+  granted: boolean
+  canAskAgain: boolean
+  reduced: boolean
+}> {
   const res = await Location.requestForegroundPermissionsAsync()
-  return { granted: res.granted, canAskAgain: res.canAskAgain }
+  return { granted: res.granted, canAskAgain: res.canAskAgain, reduced: isReduced(res) }
 }
 
 /**
  * Read the current foreground-permission status WITHOUT prompting — used to re-check after the rider
- * returns from system Settings (the `canAskAgain === false` recovery path). (review #5)
+ * returns from system Settings (the `canAskAgain === false` AND the reduced-accuracy recovery paths). (review #5)
  */
-export async function getDrivePermission(): Promise<{ granted: boolean }> {
+export async function getDrivePermission(): Promise<{ granted: boolean; reduced: boolean }> {
   const res = await Location.getForegroundPermissionsAsync()
-  return { granted: res.granted }
+  return { granted: res.granted, reduced: isReduced(res) }
 }
 
 /**

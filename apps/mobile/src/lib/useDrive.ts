@@ -99,6 +99,10 @@ export type DrivePhase =
   | 'driving'
   | 'done'
 
+// Why a live drive is blocked at the location gate: a hard DENIAL (canAskAgain decides re-prompt vs
+// Settings) or granted-but-REDUCED (iOS approximate location — Settings-only). See gps.ts.
+type LocationBlock = { kind: 'denied'; canAskAgain: boolean } | { kind: 'reduced' }
+
 export interface DriveStopView {
   seq: number
   name: string
@@ -152,7 +156,9 @@ export interface UseDrive {
   // Location permission (live mode only; null/true in sim mode).
   /** When a live drive is blocked on a denied permission: can the OS still prompt? (false → Settings). */
   locationCanAskAgain: boolean
-  /** Deep-link to the app's system Settings (for `canAskAgain === false`). */
+  /** Blocked because location is granted but only APPROXIMATE (iOS Precise Location off) → Settings-only. */
+  locationReduced: boolean
+  /** Deep-link to the app's system Settings (for `canAskAgain === false` AND the reduced-accuracy case). */
   openLocationSettings: () => void
 
   // Lifecycle.
@@ -182,9 +188,11 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
   const [firedSeqs, setFiredSeqs] = useState<Set<number>>(new Set())
   const [stallNote, setStallNote] = useState<string | null>(null)
   const [fast, setFast] = useState(false)
-  // Set when a live drive is blocked on a denied location permission (carries whether the OS
-  // will still prompt). null = no block (always so in sim mode). Drives the 'locationGate' phase.
-  const [locationDenied, setLocationDenied] = useState<{ canAskAgain: boolean } | null>(null)
+  // Set when a live drive is blocked on location: either DENIED (carries whether the OS will still
+  // prompt — false → Settings-only) or granted-but-REDUCED (iOS approximate location; Settings-only,
+  // since SDK 56 can't upgrade accuracy in-app). null = no block (always so in sim mode). Both kinds
+  // drive the 'locationGate' phase and recover via the same on-return-from-Settings re-check.
+  const [locationBlock, setLocationBlock] = useState<LocationBlock | null>(null)
   // True while a live drive is getting no usable GPS fixes (acquiring / poor accuracy) — so the
   // rider sees "searching" instead of a silently frozen screen. (review #6)
   const [gpsSearching, setGpsSearching] = useState(false)
@@ -383,7 +391,7 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
     setPaused(false)
     setDone(false)
     setDriving(false)
-    setLocationDenied(null)
+    setLocationBlock(null)
     setGpsSearching(false)
   }, [player, dot, teardownSource])
 
@@ -439,18 +447,24 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
     permPending.current = true
     void (async () => {
       try {
-        setLocationDenied(null)
+        setLocationBlock(null)
         const perm = await ensureDrivePermission()
         if (!mountedRef.current) return // navigated away during the dialog — don't setState/subscribe
         if (!perm.granted) {
-          setLocationDenied({ canAskAgain: perm.canAskAgain })
+          setLocationBlock({ kind: 'denied', canAskAgain: perm.canAskAgain })
+          return
+        }
+        if (perm.reduced) {
+          // Granted, but iOS approximate location — fixes too coarse to trigger stops. Gate to
+          // Settings (Precise Location) rather than starting a drive that would silently never fire.
+          setLocationBlock({ kind: 'reduced' })
           return
         }
         beginDrive()
       } catch {
         // requestForegroundPermissionsAsync threw (misconfig / concurrent request) — show the gate
         // with a retry instead of letting the tap silently do nothing.
-        if (mountedRef.current) setLocationDenied({ canAskAgain: true })
+        if (mountedRef.current) setLocationBlock({ kind: 'denied', canAskAgain: true })
       } finally {
         permPending.current = false
       }
@@ -629,19 +643,22 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
     }
   }, [])
 
-  // ---- recover from a permanent denial: re-check permission when the rider returns from Settings ----
-  // The canAskAgain===false branch only opens Settings; without this re-check they'd be stuck on the
-  // gate after granting there. Only active while the gate is up. (review #5)
+  // ---- recover from a denial OR reduced accuracy: re-check permission when the rider returns from
+  // Settings. The Settings-only branches (canAskAgain===false, and reduced accuracy) would otherwise
+  // leave them stuck on the gate after fixing it there. Only active while the gate is up. (review #5)
   useEffect(() => {
-    if (!locationDenied) return
+    if (!locationBlock) return
     const sub = AppState.addEventListener('change', (s) => {
       if (s !== 'active') return
       void getDrivePermission().then((perm) => {
-        if (perm.granted && mountedRef.current) setLocationDenied(null)
+        if (!mountedRef.current) return
+        if (!perm.granted) return // still denied — keep the denied gate as-is
+        if (perm.reduced) setLocationBlock({ kind: 'reduced' }) // granted there, but still approximate
+        else setLocationBlock(null) // granted + precise → drop the gate, ready to roll
       })
     })
     return () => sub.remove()
-  }, [locationDenied])
+  }, [locationBlock])
 
   // ---- no-GPS watchdog (live drive only): if usable fixes stop arriving, show "searching" instead
   // of a silently frozen screen — covers slow acquisition AND a persistently poor-accuracy signal. (review #6)
@@ -676,7 +693,7 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
       ? 'error'
       : !data
         ? 'loading'
-        : locationDenied
+        : locationBlock
           ? 'locationGate'
           : done
             ? 'done'
@@ -750,7 +767,8 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
     setScrubbing,
     fast,
     setFast,
-    locationCanAskAgain: locationDenied?.canAskAgain ?? true,
+    locationCanAskAgain: locationBlock?.kind === 'denied' ? locationBlock.canAskAgain : true,
+    locationReduced: locationBlock?.kind === 'reduced',
     openLocationSettings,
     start,
     togglePause,
