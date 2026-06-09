@@ -6,14 +6,22 @@
 // flywheel grows. No live-pipeline coupling: it audits an artifact, so it never re-runs
 // generation (and the only spend is the eval's own once-per-stop Sonnet calls).
 //
+// Dimensions: grounding (Sonnet, gate) + tts (deterministic, gate) + diversity
+// (deterministic, advisory) run by default; charm (one Opus call, advisory) is opt-in via
+// --charm to keep the default audit cheap.
+//
 // Usage (ANTHROPIC_API_KEY injected via dotenvx):
-//   dotenvx run -f .env.development -- bun packages/generator/src/eval/run.ts <result.json> [--json=<out>]
+//   dotenvx run -f .env.development -- bun packages/generator/src/eval/run.ts <result.json> [--charm] [--json=<out>]
 //
 // To produce the input artifact first (this DOES cost narration tokens):
 //   dotenvx run -f .env.development -- bun packages/generator/src/run.ts <slug> --dry-run --json=<result.json>
 
+import { personaForRegion } from '../persona'
+import type { LintInput } from '../pipeline/lint'
 import { evaluateGrounding, type GroundingInput } from './grounding'
 import { evaluateTts } from './tts'
+import { evaluateDiversity } from './diversity'
+import { charmEvaluator, type CharmStop } from './charm'
 import { buildScorecard } from './scorecard'
 import type { StopEval, TourScorecard } from './types'
 
@@ -35,18 +43,23 @@ interface Artifact {
   stops: ArtifactStop[]
 }
 
-function parseArgs(argv: string[]): { path: string; jsonOut?: string } {
+function parseArgs(argv: string[]): { path: string; jsonOut?: string; charm: boolean } {
   const args = argv.slice(2)
   const path = args.find((a) => !a.startsWith('--'))
   if (!path) {
     throw new Error(
-      'Usage: eval/run.ts <result.json> [--json=<out>]\n' +
+      'Usage: eval/run.ts <result.json> [--charm] [--json=<out>]\n' +
         '  (produce <result.json> via run.ts <slug> --dry-run --json=<result.json>)',
     )
   }
   const jsonOut = args.find((a) => a.startsWith('--json='))?.split('=')[1] || undefined
-  return { path, jsonOut }
+  const charm = args.includes('--charm') // opt-in: one extra Opus call
+  return { path, jsonOut, charm }
 }
+
+/** "Lake Tahoe" → "lake-tahoe" — best-effort region-slug for persona resolution (the artifact
+ *  carries the display name, not the slug; an unknown slug falls back to the Skipper persona). */
+const slugify = (s: string): string => s.toLowerCase().trim().replace(/\s+/g, '-')
 
 function printScorecard(card: TourScorecard): void {
   console.log('\n' + '='.repeat(72))
@@ -71,15 +84,14 @@ function printScorecard(card: TourScorecard): void {
 }
 
 async function main() {
-  const { path, jsonOut } = parseArgs(process.argv)
+  const { path, jsonOut, charm } = parseArgs(process.argv)
   const artifact = (await Bun.file(path).json()) as Artifact
 
   // Audit every NARRATED stop. (Brackets are a separate grounding surface — a future
   // evaluator; they carry no fact well in the artifact.)
   const narrated = artifact.stops.filter((s) => s.script && s.script.trim().length > 0)
-  console.log(
-    `Auditing ${narrated.length} narrated stops — grounding (Sonnet) + tts-cleanliness (deterministic)...`,
-  )
+  const dims = ['grounding (Sonnet)', 'tts', 'diversity', ...(charm ? ['charm (Opus)'] : [])]
+  console.log(`Auditing ${narrated.length} narrated stops — ${dims.join(' + ')}...`)
 
   const inputs: GroundingInput[] = narrated.map((s) => ({
     seq: s.seq,
@@ -93,11 +105,31 @@ async function main() {
     corridor: artifact.tourName,
   }))
 
-  // Once-per-tour offline audit — grounding stops run concurrently (the SDK handles 429
-  // retry); tts is a free deterministic pass. Both dimensions land in the same scorecard.
+  // GATES: grounding (LLM, concurrent — the SDK handles 429 retry) + tts (free, deterministic).
   const grounding: StopEval[] = await Promise.all(inputs.map((i) => evaluateGrounding(i)))
   const tts: StopEval[] = narrated.map((s) => evaluateTts({ seq: s.seq, script: s.script! }))
-  const stops: StopEval[] = [...grounding, ...tts]
+
+  // ADVISORY: diversity (free, cross-stop lint over story+scenic — breaks aren't linted),
+  // keyed on the region's persona kit (resolved by slug; defaults to the Skipper).
+  const lintInputs: LintInput[] = narrated
+    .filter((s) => s.stopType !== 'break')
+    .map((s) => ({ seq: s.seq, stopType: s.stopType, script: s.script! }))
+  const persona = personaForRegion(slugify(artifact.region))
+  const diversity: StopEval[] = evaluateDiversity(lintInputs, persona.kit)
+
+  // ADVISORY: charm (one Opus call) — opt-in.
+  let charmEvals: StopEval[] = []
+  if (charm) {
+    const charmStops: CharmStop[] = narrated.map((s) => ({
+      seq: s.seq,
+      stopType: s.stopType,
+      name: s.name,
+      script: s.script!,
+    }))
+    charmEvals = await charmEvaluator(charmStops)
+  }
+
+  const stops: StopEval[] = [...grounding, ...tts, ...diversity, ...charmEvals]
 
   const card = buildScorecard({
     slug: artifact.slug,

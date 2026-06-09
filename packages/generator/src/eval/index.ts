@@ -6,4 +6,6 @@
 export * from './types'
 export * from './grounding'
 export * from './tts'
+export * from './diversity'
+export * from './charm'
 export * from './scorecard'

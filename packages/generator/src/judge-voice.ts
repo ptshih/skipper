@@ -9,6 +9,10 @@
 //      blank rating line, because a script can be charming on the page and the TTS can
 //      flatten it. Only a human can judge the voice.
 //
+// The charm-judge CORE (system prompt, tool, judgeCharm) now lives in ./eval/charm.ts so
+// the eval panel and this report share one rubric (no drift). This file is the human-facing
+// markdown report + the by-ear VOICE worksheet on top of that core.
+//
 // Usage (env via dotenvx — ANTHROPIC_API_KEY for the judge, R2_* to presign audio):
 //   # writing-only (cheap, no audio — works on a --dry-run JSON):
 //   dotenvx run -f .env.development -- bun packages/generator/src/run.ts emerald-bay-run --dry-run --json=/tmp/tour.json
@@ -17,97 +21,9 @@
 //   dotenvx run -f .env.development -- bun packages/generator/src/run.ts emerald-bay-run --json=/tmp/tour.json
 //   dotenvx run -f .env.development -- bun packages/generator/src/judge-voice.ts /tmp/tour.json --out=/tmp/voice.md
 
-import Anthropic from '@anthropic-ai/sdk'
-import { NARRATION_MODEL } from './models'
-import type { GenerateResult, StopSummary } from './pipeline/generate'
+import type { GenerateResult } from './pipeline/generate'
 import { presignGet } from './pipeline/storage'
-
-interface StopVerdict {
-  seq: number
-  charm: number // 1-10
-  best: string // the beat that works (short quote/paraphrase)
-  sag: string // where it falls flat (short)
-}
-interface CharmVerdict {
-  stops: StopVerdict[]
-  overall: number // 1-10
-  verdict: string
-  recommendation: 'ship' | 'tune' | 'rework'
-  weakestStops: number[]
-  biggestRisk: string
-}
-
-const CHARM_SYSTEM = `You are a tough, tasteful editor judging an AI-narrated road-trip tour for ONE thing: CHARM. The product's whole thesis is "the persona is the product" — the voice is a warm, corny road-trip tour guide with the soul of a Jungle-Cruise ride skipper — a deadpan, pun-cracking showman narrating a drive (he is NOT a boat captain; the car-as-boat framing is retired, so flag nautical conceits as off-persona). The default joke notch is "dadpocalypse" — the corniest setting, but it is QUALITY over quantity: one or two BEST groaners per stop woven into a warm telling, NOT a dense pile of puns or a pun-chain. You are reading the WORDS of each stop (the TTS voice is judged separately, by ear).
-
-Judge CHARM, not accuracy — grounding is a different gate; assume the facts are fine. Be HONEST and skeptical: competent is NOT charming. The bar is a real passenger reaction — a smile, a fond eye-roll/groan, a "huh, really" — versus the failure mode of a capable AI reading Wikipedia with a captain's hat glued on. Reward: genuine warmth and earnestness that means it, dad jokes that land the right GROAN (corny on purpose, not clever), surprise, a distinct human voice, fresh openers/closers. Penalize: travel-brochure voice, AI-chatbot tics, the encyclopedia shape (topic sentence → facts → reflective bow), jokes that try too hard, don't land, pile up into pun-chains, or are absent where the material plainly hands you one, sameyness across stops, and anything that sounds generated rather than spoken by a specific man.
-
-Judge each stop appropriately for its TYPE: STORY is the showcase (it should charm); SCENIC is a short mood beat with no facts (judge the feeling, not jokes); BREAK is a brief named "good spot to pull off" cue (judge warmth + a light groan, keep expectations low).
-
-Use the FULL 1-10 scale, anchored as follows. Do NOT default high or low — place each score at the anchor it actually earns:
-- 1-2: brochure/encyclopedia voice. Reads like an AI reciting Wikipedia. No persona, or off-persona.
-- 3-4: competent but generic. Information is fine; the man is not in the room. Tics, tired shape, no real laugh.
-- 5-6: the persona flickers — one beat lands, the rest is filler or sags. Fixable.
-- 7-8: solidly charming. A clear human voice, jokes that land, fresh shape. This is SHIP-quality writing.
-- 9: genuinely delightful — surprises you, earns a real groan or grin, nothing sags.
-- 10: reserve for a stop you'd quote to a friend. Rare.
-
-For each stop give: a charm score 1-10, the single BEST beat (quote or tight paraphrase), and where it SAGS (the weakest beat — be specific). Then for the whole tour: an overall 1-10, an honest 2-3 sentence verdict, a recommendation, the weakest stops, and the SINGLE biggest charm risk. recommendation: "ship" = overall 7 or higher with no stop below 5; "tune" = good bones but at least one stop drags it down (one or more stops at 3-4, or overall 5-6); "rework" = overall 4 or lower, reads as competent AI, not the skipper. Score what is on the page, not what you wish were there. Call the report tool.`
-
-const REPORT_TOOL: Anthropic.Tool = {
-  name: 'report',
-  description: 'Report per-stop charm scores and the tour-level verdict.',
-  input_schema: {
-    type: 'object',
-    additionalProperties: false,
-    required: ['stops', 'overall', 'verdict', 'recommendation', 'weakestStops', 'biggestRisk'],
-    properties: {
-      stops: {
-        type: 'array',
-        items: {
-          type: 'object',
-          additionalProperties: false,
-          required: ['seq', 'charm', 'best', 'sag'],
-          properties: {
-            seq: { type: 'integer' },
-            charm: { type: 'integer', minimum: 1, maximum: 10 },
-            best: { type: 'string', description: 'the beat that works (short quote/paraphrase)' },
-            sag: { type: 'string', description: 'the weakest beat — specific' },
-          },
-        },
-      },
-      overall: { type: 'integer', minimum: 1, maximum: 10 },
-      verdict: {
-        type: 'string',
-        description: '2-3 honest sentences on whether the persona charms',
-      },
-      recommendation: { type: 'string', enum: ['ship', 'tune', 'rework'] },
-      weakestStops: { type: 'array', items: { type: 'integer' } },
-      biggestRisk: { type: 'string', description: 'the single biggest charm risk, one line' },
-    },
-  },
-}
-
-async function judgeCharm(stops: StopSummary[]): Promise<CharmVerdict> {
-  if (!process.env.ANTHROPIC_API_KEY)
-    throw new Error('ANTHROPIC_API_KEY is not set (the charm judge needs it).')
-  const userMessage = stops
-    .map((s) => `[stop ${s.seq}] ${s.stopType.toUpperCase()} — ${s.name}\n${s.script}`)
-    .join('\n\n')
-
-  const response = await new Anthropic().messages.create({
-    model: NARRATION_MODEL,
-    max_tokens: 8_000,
-    system: CHARM_SYSTEM,
-    tools: [REPORT_TOOL],
-    tool_choice: { type: 'tool', name: 'report' },
-    messages: [
-      { role: 'user', content: `Every narrated stop on the tour, in order:\n\n${userMessage}` },
-    ],
-  })
-  const call = response.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
-  if (!call) throw new Error('Charm judge returned no structured report.')
-  return call.input as CharmVerdict
-}
+import { judgeCharm, type CharmVerdict } from './eval/charm'
 
 const RECO_LABEL: Record<CharmVerdict['recommendation'], string> = {
   ship: '✅ SHIP — charming enough to bet the player on',
@@ -175,7 +91,9 @@ async function main() {
     throw new Error('No narrated scripts in the JSON (did you point at a real run result?).')
 
   console.error(`Judging charm of ${scripted.length} stops on "${result.tourName}"...`)
-  const verdict = await judgeCharm(scripted)
+  const verdict = await judgeCharm(
+    scripted.map((s) => ({ seq: s.seq, stopType: s.stopType, name: s.name, script: s.script! })),
+  )
   const report = buildReport(result, verdict)
 
   if (outPath) {
