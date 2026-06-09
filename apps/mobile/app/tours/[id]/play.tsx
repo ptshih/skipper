@@ -317,24 +317,19 @@ export default function DriveScreen() {
             </Text>
           ) : null}
 
-          {/* In-clip position bar — only mounted while driving. MID-DRIVE between stops it's
-              kept mounted but hidden so its height stays reserved and the transport doesn't
-              shift when it reappears on the next clip. Ready/done collapse it entirely. */}
-          {showScrubber ? (
-            <View
-              style={d.activeSeq != null ? undefined : styles.reservedHidden}
-              pointerEvents={d.activeSeq != null ? 'auto' : 'none'}
-              accessibilityElementsHidden={d.activeSeq == null}
-              importantForAccessibility={d.activeSeq != null ? 'auto' : 'no-hide-descendants'}
-            >
-              <Scrubber
-                positionMs={d.activeSeq != null ? d.positionMs : 0}
-                durationMs={d.activeSeq != null ? d.durationMs : 0}
-                onSeek={d.seekToMs}
-                onScrubbingChange={d.setScrubbing}
-                disabled={!d.canSeek}
-              />
-            </View>
+          {/* In-clip position bar — mounted only while a clip is loaded. Between stops it
+              COLLAPSES (no reserved height): the rolling card hugs kicker → title →
+              transport, and the scrubber reappearing at the next clip reads as part of
+              that wholesale state swap, not a layout jump. (Founder call 2026-06-09 — the
+              old reserved-but-hidden scrubber read as unnecessary blank space.) */}
+          {showScrubber && d.activeSeq != null ? (
+            <Scrubber
+              positionMs={d.positionMs}
+              durationMs={d.durationMs}
+              onSeek={d.seekToMs}
+              onScrubbingChange={d.setScrubbing}
+              disabled={!d.canSeek}
+            />
           ) : null}
 
           {d.buffering ? (
@@ -359,7 +354,6 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: space.gutter, paddingTop: space.md, gap: space.xs },
   track: { marginHorizontal: space.gutter, marginTop: space.md },
   cardWrap: { paddingHorizontal: space.gutter, marginTop: space.sm },
-  reservedHidden: { opacity: 0 }, // hold the scrubber's layout height without showing it
   buffering: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   gpsSearch: {
     flexDirection: 'row',
