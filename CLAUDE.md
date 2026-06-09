@@ -69,14 +69,15 @@ you found so the next agent can re-check it.
   product requirement): a `?preview=1` fetch/sign is OPEN for any ready tour — the
   couch preview is the funnel, so the audio is intentionally NOT a server wall
   (anyone can stream any tour's clips). The wall **moved to the LIVE DRIVE +
-  OFFLINE download**: a request WITHOUT `?preview=1` still needs `tours.isPreview`
-  or a free account (the existing 401 → `AccountGate`), so the in-car drive +
-  offline stay gated. (`tours.isPreview` now just flags the canonical demo tour,
-  whose live drive is also anonymous-OK.) NOTE: because preview streams the same
+  OFFLINE download**: a request WITHOUT `?preview=1` needs a free account (the
+  existing 401 → `AccountGate`), so the in-car drive + offline stay gated — for
+  EVERY tour now (no anonymous-drivable demo). The `tours.isPreview` column is
+  GONE (dropped 2026-06-09): it was vestigial once preview opened, and the drive
+  gate no longer has a per-tour exception. NOTE: because preview streams the same
   presigned bytes, the drive/offline wall is server-enforced only on the
   *unflagged* path — a real byte-level wall would have to gate offline download
   specifically (future hardening). Audio is still PRIVATE in R2 (presigned, short
-  TTL). (Changed 2026-06-09: "every tour previewable", wall → the drive.)
+  TTL). (Changed 2026-06-09: "every tour previewable", wall → the drive, isPreview dropped.)
 - **`pois` deduped by `(source, source_id)`.** Store `source`/`source_id` for
   attribution — Wikipedia is **CC BY-SA**, keep credit (the attribution snapshot is
   frozen on the `tour_stop` at narration time).
