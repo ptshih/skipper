@@ -11,7 +11,7 @@
 // stop that fires is queued and played. A finished clip returns to ducked-quiet and
 // WAITS for the next GPS trigger — it never advances by a clip ending. See
 // docs/specs/gps-player-spec.md §3.5.
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Animated, AppState, Linking } from 'react-native'
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake'
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
@@ -29,6 +29,7 @@ import {
   type PreviewSegment,
 } from '@skipper/drive-core'
 import { ApiError } from './api'
+import { cleanPlaceName } from './labels'
 import { loadPlayback, resignPlayback } from './offline'
 import {
   ensureDrivePermission,
@@ -44,9 +45,10 @@ import { voice } from '@/ui'
 // as the preview (32k MP3 clips, 1h presigned URLs → re-sign once on a stall).
 const CLIP_STALL_MS = 12_000
 
-// Lock-screen / NOW-card title for a bracket clip (intro/outro aren't in the stop list).
+// Lock-screen title for a bracket clip (intro/outro aren't in the stop list). Reads the SAME
+// voice constants as the NOW-card title in play.tsx — single source, so they can't diverge.
 const bracketTitle = (kind: 'intro' | 'outro'): string =>
-  kind === 'intro' ? 'Welcome aboard' : 'One for the road'
+  kind === 'intro' ? voice.player.bracketIntro : voice.player.bracketOutro
 
 // Real drive speed for the simulator (mph). A FIXED 60 for now; the trigger lead is
 // speed-adaptive in @skipper/drive-core, so this is the only knob that matters here.
@@ -299,7 +301,7 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
           totalM: cum.length > 0 ? (cum[cum.length - 1] ?? 0) : 0,
           stops: tour.stops.map((s) => ({
             seq: s.seq,
-            name: s.name,
+            name: cleanPlaceName(s.name), // display-only: drops Wikipedia's ", California" title suffix
             stopType: s.stopType,
             lat: s.lat,
             lng: s.lng,
@@ -922,8 +924,12 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
     scrubbing.current = active
   }, [])
 
-  const stops: DriveStopView[] =
-    data?.stops.map((s) => ({ seq: s.seq, name: s.name, stopType: s.stopType })) ?? []
+  // Stable identity across renders — this rebuilt a fresh array every audio tick, which made
+  // the player's auto-scroll effect (keyed on it) re-fire ~2×/sec and pin the stop list.
+  const stops: DriveStopView[] = useMemo(
+    () => data?.stops.map((s) => ({ seq: s.seq, name: s.name, stopType: s.stopType })) ?? [],
+    [data],
+  )
 
   // The current segment (preview only) — drives currentKind / rollingDistanceM / nextSeq.
   const curSeg = mode === 'preview' ? (segments[segIdx] ?? null) : null

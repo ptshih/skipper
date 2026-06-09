@@ -3,6 +3,8 @@ import { ActivityIndicator, Animated, FlatList, RefreshControl, StyleSheet, View
 import { Stack, useFocusEffect, useRouter } from 'expo-router'
 import { listTours, type TourList } from '@/lib/api'
 import { useSession } from '@/lib/auth'
+import { listDownloadedTours } from '@/lib/offline'
+import { cleanPlaceName } from '@/lib/labels'
 import { useDrivesFilter } from '@/lib/drives-filter'
 import { deriveRegions, filterByRegion } from '@/lib/regions'
 import { useTheme } from '@/theme'
@@ -22,6 +24,8 @@ export default function DrivesScreen() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // True when the catalog fetch failed but saved downloads carried us (dead-zone fallback).
+  const [offline, setOffline] = useState(false)
 
   // The signature car token, parked at the trailhead (~0.12 — clearly ON the road, not
   // flush at the gutter, the rig "ready to roll"). STATIC: created once and never
@@ -34,8 +38,17 @@ export default function DrivesScreen() {
       setError(null)
       const r = await listTours()
       setTours(r.tours)
+      setOffline(false)
     } catch (e) {
-      setError(e instanceof Error ? e.message : voice.error.generic)
+      // Offline-first: in a dead zone the catalog fetch fails — fall back to the drives the
+      // rider has saved so they stay browsable (and reachable) rather than a blank error wall.
+      const saved = listDownloadedTours()
+      if (saved.length > 0) {
+        setTours(saved)
+        setOffline(true)
+      } else {
+        setError(e instanceof Error ? e.message : voice.error.generic)
+      }
     } finally {
       setLoading(false)
     }
@@ -150,6 +163,11 @@ export default function DrivesScreen() {
             />
           ) : null}
         </View>
+        {offline ? (
+          <Text variant="dim" color="inkFaint" style={styles.offlineNote}>
+            {voice.offline.home}
+          </Text>
+        ) : null}
       </View>
     </>
   )
@@ -232,7 +250,7 @@ export default function DrivesScreen() {
                 </Text>
                 <Button
                   variant="ghost"
-                  title="Show all drives"
+                  title={voice.home.where.showAll}
                   fullWidth={false}
                   onPress={() => setSelectedRegion(null)}
                 />
@@ -260,8 +278,10 @@ export default function DrivesScreen() {
                   ) : null}
                 </View>
                 {item.teaser ? (
+                  // The teaser is a names list ("A & B") — clean the ", California" title suffix
+                  // off each (safe here; summary is prose, so it's left untouched).
                   <Text variant="body" color="inkDim" numberOfLines={1} style={styles.summary}>
-                    {item.teaser}
+                    {cleanPlaceName(item.teaser)}
                   </Text>
                 ) : item.summary ? (
                   <Text variant="body" color="inkDim" style={styles.summary}>
@@ -298,6 +318,7 @@ const styles = StyleSheet.create({
   kicker: { marginBottom: space.xs },
   metaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space.sm, marginTop: space.xs },
   summary: { marginTop: space.xs },
+  offlineNote: { marginTop: space.sm },
   loading: {
     flex: 1,
     alignItems: 'center',

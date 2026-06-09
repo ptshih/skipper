@@ -6,13 +6,14 @@
 // compressed segment timeline (clip / drive / rest), tappable stops, no GPS or permission
 // gate. Reuses the @/ui player primitives; the clock + fire-queue + source swap live in
 // `useDrive`.
-import { useEffect, useRef } from 'react'
-import { ActivityIndicator, PixelRatio, ScrollView, StyleSheet, View } from 'react-native'
-import { Stack, useLocalSearchParams } from 'expo-router'
+import { useCallback, useEffect, useRef } from 'react'
+import { ActivityIndicator, Alert, Animated, PixelRatio, ScrollView, StyleSheet, View } from 'react-native'
+import { Stack, useLocalSearchParams, useNavigation } from 'expo-router'
 import { useDrive } from '@/lib/useDrive'
+import { useSession } from '@/lib/auth'
 import { stopLabel } from '@/lib/labels'
-import { useTheme } from '@/theme'
-import { space } from '@/theme/tokens'
+import { useReducedMotion, useTheme } from '@/theme'
+import { duration, space } from '@/theme/tokens'
 import {
   AccountGate,
   Badge,
@@ -46,6 +47,53 @@ export default function DriveScreen() {
   const d = useDrive(id, { mode: driveMode })
   const isPreview = driveMode === 'preview'
   const listRef = useRef<ScrollView | null>(null)
+  const navigation = useNavigation()
+  const { data: session } = useSession()
+
+  // Returning from /sign-in lands back on this STILL-MOUNTED screen, but useDrive's load
+  // effect watches only [tourId, reloadKey, mode] — nothing the session — so a rider who just
+  // got their free ticket would otherwise sit on the same gate. Re-check ONCE per signed-in
+  // user while gated; retry() bumps reloadKey → re-fetches → drops them straight into the drive.
+  const sessionUserId = session?.user?.id ?? null
+  const retriedForUser = useRef<string | null>(null)
+  useEffect(() => {
+    if (d.phase === 'gate' && sessionUserId && retriedForUser.current !== sessionUserId) {
+      retriedForUser.current = sessionUserId
+      d.retry()
+    }
+  }, [d.phase, sessionUserId, d.retry])
+
+  // A rolling drive must not die on one stray tap. The header back chevron dispatches a JS
+  // GO_BACK (HeaderBack → router.back()), which beforeRemove reliably catches → confirm. The
+  // edge-swipe is disabled outright while driving (gestureEnabled below), since the native
+  // gesture can complete before a JS confirm resolves. 'ready'/'done' stay freely poppable.
+  const exitConfirmed = useRef(false)
+  useEffect(() => {
+    const sub = navigation.addListener('beforeRemove', (e) => {
+      if (d.phase !== 'driving' || exitConfirmed.current) return
+      e.preventDefault()
+      Alert.alert(voice.confirm.endTitle, undefined, [
+        { text: voice.confirm.keepRolling, style: 'cancel' },
+        {
+          text: voice.confirm.end,
+          style: 'destructive',
+          onPress: () => {
+            exitConfirmed.current = true // let the re-dispatched action through (no loop)
+            navigation.dispatch(e.data.action)
+          },
+        },
+      ])
+    })
+    return sub
+  }, [navigation, d.phase])
+
+  // Confirm the in-card "Pull over" too — it runs the same unrecoverable reset as a back-out.
+  const confirmEnd = useCallback(() => {
+    Alert.alert(voice.confirm.endTitle, undefined, [
+      { text: voice.confirm.keepRolling, style: 'cancel' },
+      { text: voice.confirm.end, style: 'destructive', onPress: d.end },
+    ])
+  }, [d.end])
 
   // Auto-scroll the stop list to the active (or next) stop as the drive progresses.
   // Scale the row height by the user's font scale — rows are minHeight + grow with
@@ -53,18 +101,56 @@ export default function DriveScreen() {
   const focusSeq = d.activeSeq ?? d.nextSeq
   // Row index of the current segment's stop (preview's passed/active stop-list state).
   const focusRow = focusSeq != null ? d.stops.findIndex((s) => s.seq === focusSeq) : -1
+  // Don't yank the list back while the rider is browsing the itinerary: mark a drag live on
+  // begin, and keep it "browsing" for a grace window after they let go so a stop transition
+  // mid-browse doesn't snatch the list — auto-scroll resumes on the next transition at rest.
+  const userBrowsing = useRef(false)
+  const browseGrace = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const onScrollBeginDrag = useCallback(() => {
+    userBrowsing.current = true
+    if (browseGrace.current) clearTimeout(browseGrace.current)
+  }, [])
+  const onScrollSettled = useCallback(() => {
+    if (browseGrace.current) clearTimeout(browseGrace.current)
+    browseGrace.current = setTimeout(() => {
+      userBrowsing.current = false
+    }, 5000)
+  }, [])
+  useEffect(
+    () => () => {
+      if (browseGrace.current) clearTimeout(browseGrace.current)
+    },
+    [],
+  )
+  // Keyed on focusRow (a NUMBER) — NOT d.stops, which rebuilt every audio tick and re-fired
+  // this scroll several times a second, pinning the list. Now it moves only when the focused
+  // stop actually changes, and never while the rider is browsing.
   useEffect(() => {
-    if (focusSeq == null) return
-    const row = d.stops.findIndex((s) => s.seq === focusSeq)
+    if (focusRow < 0 || userBrowsing.current) return
     const rowH = STOP_ROW_HEIGHT * PixelRatio.getFontScale()
-    if (row >= 0)
-      listRef.current?.scrollTo({ y: Math.max(0, (row - 1) * rowH), animated: true })
-  }, [focusSeq, d.stops])
+    listRef.current?.scrollTo({ y: Math.max(0, (focusRow - 1) * rowH), animated: true })
+  }, [focusRow])
+
+  // Drive-complete beat: on arrival, ease the rig in to the end of the trail — "pulled into
+  // the driveway". Reduce Motion jumps straight to 100%. (The stamp cascade rides StopRow.)
+  const reduce = useReducedMotion()
+  useEffect(() => {
+    if (d.phase !== 'done') return
+    if (reduce) {
+      d.progress.setValue(1)
+      return
+    }
+    Animated.timing(d.progress, {
+      toValue: 1,
+      duration: duration.slow,
+      useNativeDriver: false,
+    }).start()
+  }, [d.phase, reduce, d.progress])
 
   if (d.phase === 'gate')
     // Only the LIVE/SIM drive can gate — preview uses the open `?preview=1` funnel and never
     // 401s, so it never reaches this phase (every tour is previewable; the wall is the drive).
-    return <AccountGate note="The live drive needs a (free) ticket — same as the full tour." />
+    return <AccountGate note={voice.gate.driveNote} />
 
   if (d.phase === 'locationGate')
     // Three states: precise-location-off (reduced) and hard-denied-no-reprompt both route to Settings;
@@ -102,8 +188,8 @@ export default function DriveScreen() {
   // The intro/outro brackets aren't stops; give them a frame title instead of a place name.
   const nowTitle = d.activeBracket
     ? d.activeBracket === 'intro'
-      ? 'Welcome aboard'
-      : 'One for the road'
+      ? voice.player.bracketIntro
+      : voice.player.bracketOutro
     : (activeStop?.name ?? d.hostName)
   const nextStop = d.nextSeq != null ? d.stops.find((s) => s.seq === d.nextSeq) : undefined
   const nextName = nextStop?.name
@@ -128,7 +214,13 @@ export default function DriveScreen() {
   }
   let card: CardConfig
   if (d.phase === 'done') {
-    card = { kicker: 'DRIVE COMPLETE', title: 'You’ve arrived', body: voice.driveComplete, glow: false }
+    card = {
+      kicker: voice.player.driveCompleteKicker,
+      title: voice.player.arrived,
+      body: voice.driveComplete,
+      timer: `${d.totalStops} STOPS`, // the trip tally as a stamped odometer reading
+      glow: true, // the final beat: the done card takes the screen's one amber glow
+    }
   } else if (showReady) {
     card = {
       kicker: voice.drive.ready,
@@ -138,7 +230,7 @@ export default function DriveScreen() {
     }
   } else if (restState) {
     // A silent break stop — a "good spot to stretch" pit-stop (no halo).
-    card = { kicker: voice.player.pitStop, title: nextName ?? 'A good spot to stretch', glow: false }
+    card = { kicker: voice.player.pitStop, title: nextName ?? voice.player.restFallback, glow: false }
   } else if (d.activeSeq != null) {
     // A loaded clip. A held clip dims the halo and stops claiming "NOW PLAYING".
     card = {
@@ -166,7 +258,15 @@ export default function DriveScreen() {
 
   const transport =
     d.phase === 'done' ? (
-      <TransportBar single={{ icon: 'restart', title: voice.cta.restart, onPress: d.restart }} />
+      <TransportBar
+        single={{
+          icon: 'restart',
+          title: voice.cta.restart,
+          onPress: d.restart,
+          glow: false, // the lit done card owns the glow now (one-amber budget)
+          secondary: { title: voice.cta.backToTrailhead, onPress: () => navigation.goBack() },
+        }}
+      />
     ) : showReady ? (
       <TransportBar single={{ icon: 'play', title: voice.cta.play, onPress: d.start }} />
     ) : (
@@ -179,18 +279,19 @@ export default function DriveScreen() {
         onSeekBack={() => d.seekBy(-15)}
         onSeekForward={() => d.seekBy(15)}
         canSeek={d.canSeek}
-        secondary={isPreview ? undefined : { title: voice.cta.endDrive, onPress: d.end }}
+        secondary={isPreview ? undefined : { title: voice.cta.endDrive, onPress: confirmEnd }}
       />
     )
 
   return (
     <Screen edges={['bottom']}>
-      {/* Keep edge-swipe back but stop the Scrubber drag from triggering the iOS-26
-          whole-screen back gesture (same fix the preview uses). */}
+      {/* Edge-swipe back is allowed when parked but DISABLED while a drive is rolling (a stray
+          swipe shouldn't kill the run — the back chevron confirms instead). Also stop the
+          Scrubber drag from triggering the iOS-26 whole-screen back gesture (preview's fix). */}
       <Stack.Screen
         options={{
           title: isPreview ? 'Preview drive' : 'Drive',
-          gestureEnabled: true,
+          gestureEnabled: d.phase !== 'driving',
           fullScreenGestureEnabled: false,
         }}
       />
@@ -201,11 +302,13 @@ export default function DriveScreen() {
         </Text>
         <Text variant="dim" color="inkDim">
           {isPreview ? (
+            // Rider-facing: no "simulated drive" dev-vocab — the "preview of the full drive"
+            // line already says what this is.
             <>
-              {d.region} · simulated drive
+              {d.region}
               {d.totalPreviewMs != null && d.totalRealMs != null
-                ? ` · ${mmss(d.totalPreviewMs)} preview of a ${mmss(d.totalRealMs)} drive`
-                : ''}
+                ? ` · ${mmss(d.totalPreviewMs)} preview of the full ${mmss(d.totalRealMs)} drive`
+                : ' · preview'}
             </>
           ) : (
             <>
@@ -216,9 +319,14 @@ export default function DriveScreen() {
         </Text>
       </View>
 
-      {/* Route trail with the car token. It glows only between stops (the drive cue);
-          while a stop's NOW card is lit, the card owns the single amber glow. */}
-      <RouteTrack progress={d.progress} glow={d.activeSeq === null} style={styles.track} />
+      {/* Route trail with the car token. The halo is a DRIVING cue only — lit between stops
+          while rolling. In ready the Play CTA owns the glow; in done the lit card does; while
+          a clip plays the NOW card does. So the §8 one-amber budget holds in every state. */}
+      <RouteTrack
+        progress={d.progress}
+        glow={d.activeSeq === null && d.phase === 'driving'}
+        style={styles.track}
+      />
 
       {/* Itinerary — the scrolling middle (flex:1) between the trail and the player. By
           taking all the slack it pushes the player below it down to the bottom edge.
@@ -226,10 +334,17 @@ export default function DriveScreen() {
           drive (you can't teleport the car) — the hint sits right above the stops. */}
       {isPreview ? (
         <Text variant="dim" color="inkFaint" style={styles.hint}>
-          Tap any stop to jump ahead
+          {voice.player.previewHint}
         </Text>
       ) : null}
-      <ScrollView ref={listRef} style={styles.list} contentContainerStyle={styles.listContent}>
+      <ScrollView
+        ref={listRef}
+        style={styles.list}
+        contentContainerStyle={styles.listContent}
+        onScrollBeginDrag={onScrollBeginDrag}
+        onScrollEndDrag={onScrollSettled}
+        onMomentumScrollEnd={onScrollSettled}
+      >
         {d.stops.map((s, i) => {
           // PREVIEW: the current segment's seq is the active clip's, or the drive/rest
           // destination; mark earlier rows passed, and light the row "active" only once we've
@@ -253,6 +368,9 @@ export default function DriveScreen() {
               icon={stopIcon(s.stopType)}
               state={state}
               onPress={isPreview ? () => d.jumpToStop(s.seq) : undefined}
+              // Drive-complete cascade: the passed checks stamp in, staggered down the list.
+              enterStamp={d.phase === 'done' && !reduce}
+              stampDelayMs={i * 80}
             />
           )
         })}

@@ -23,8 +23,16 @@ const JOG = 56
 
 export interface TransportBarProps {
   /** One full-width CTA instead of the transport row — the "ready" (Play) and "done"
-   *  (Restart) states. Keeps its default amber CTA glow (it's the only control shown). */
-  single?: { icon?: IconName; title: string; onPress: () => void }
+   *  (Restart) states. Glows by default (it's the only control shown); pass `glow: false`
+   *  where another element owns the screen's one amber glow (e.g. the lit done card). An
+   *  optional low-emphasis ghost sits beneath (e.g. "Back to the trailhead" at done). */
+  single?: {
+    icon?: IconName
+    title: string
+    onPress: () => void
+    glow?: boolean
+    secondary?: { title: string; onPress: () => void }
+  }
   /** Transport-row state: drives the center icon. */
   playing?: boolean
   onPlayPause?: () => void
@@ -95,7 +103,15 @@ export function TransportBar({
   if (single) {
     return (
       <View style={[styles.wrap, style]}>
-        <Button icon={single.icon} title={single.title} onPress={single.onPress} />
+        <Button
+          icon={single.icon}
+          title={single.title}
+          onPress={single.onPress}
+          glow={single.glow}
+        />
+        {single.secondary ? (
+          <Button variant="ghost" title={single.secondary.title} onPress={single.secondary.onPress} />
+        ) : null}
       </View>
     )
   }

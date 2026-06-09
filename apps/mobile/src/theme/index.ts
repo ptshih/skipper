@@ -8,3 +8,4 @@ export {
   type ThemeMode,
 } from './ThemeProvider'
 export { useAppFonts } from './fonts'
+export { useReducedMotion } from './useReducedMotion'

@@ -19,3 +19,15 @@ const titleize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
 export const stopLabel = (type?: string): string =>
   type ? (STOP_LABEL[type] ?? titleize(type)) : ''
+
+// Wikipedia disambiguates place TITLES with a trailing ", <US State>" — "Tahoe Keys,
+// California", "Rubicon, California". Stripped at the VIEW boundary so a scraped article
+// title reads like a place a person would actually say. DISPLAY-ONLY: the data layer keeps
+// the raw name, and the baked narration/coords/facts are untouched — this is delivery, not
+// facts. Global so it also cleans a teaser that strings several names together
+// ("A, California & B, California" → "A & B"). The state set covers the live + roadmapped
+// regions (Tahoe → Yosemite → Moab); extend it when a new region's state can appear.
+const STATE_SUFFIX =
+  /,\s+(?:California|Nevada|Utah|Arizona|Oregon|Washington|Idaho|Wyoming|Colorado|Montana|New Mexico)\b/g
+
+export const cleanPlaceName = (name: string): string => name.replace(STATE_SUFFIX, '')

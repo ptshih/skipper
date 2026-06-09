@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- iOS app icon: the enamel badge on a full-bleed aged-paper field (a sticker on kraft).
+     Composited from badge-master.png. 1024×1024, opaque (iOS icons allow no alpha). -->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <rect width="1024" height="1024" fill="#F2E7CC"/>
+  <image x="80" y="80" width="864" height="864" xlink:href="badge-master.png"/>
+</svg>

@@ -4,7 +4,8 @@
 //   active   — a subtle RAISED chip (surfaceRaised, like the card) + accent glyph + bold
 //              name. PINE accent, never amber — the player card owns the one amber glow.
 //   passed   — dimmed, with a quiet check
-import { Pressable, StyleSheet, View } from 'react-native'
+import { useEffect, useRef } from 'react'
+import { Animated, Pressable, StyleSheet, View } from 'react-native'
 import { radius, space } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'
 import { Icon, type IconName } from './Icon'
@@ -20,12 +21,38 @@ export interface StopRowProps {
   state?: StopState
   icon?: IconName // stop-type icon
   onPress?: () => void
+  /** When set, the passed-state check "stamps" in (the §9 passport-stamp) after `stampDelayMs`
+   *  — the drive-complete cascade. Off by default and during a normal drive; the parent
+   *  also gates it on Reduce Motion. */
+  enterStamp?: boolean
+  stampDelayMs?: number
 }
 
-export function StopRow({ name, sublabel, state = 'upcoming', icon, onPress }: StopRowProps) {
+export function StopRow({
+  name,
+  sublabel,
+  state = 'upcoming',
+  icon,
+  onPress,
+  enterStamp = false,
+  stampDelayMs = 0,
+}: StopRowProps) {
   const { colors } = useTheme()
   const active = state === 'active'
   const passed = state === 'passed'
+
+  // The passed-check "ink press": opacity + scale + a slight rotate settle, staggered by the
+  // parent. Starts at its END state (1) unless asked to stamp in, so a normal drive shows the
+  // check statically — only the drive-complete cascade animates.
+  const stamp = useRef(new Animated.Value(enterStamp ? 0 : 1)).current
+  useEffect(() => {
+    if (!enterStamp) return
+    stamp.setValue(0)
+    Animated.sequence([
+      Animated.delay(stampDelayMs),
+      Animated.spring(stamp, { toValue: 1, friction: 5, tension: 140, useNativeDriver: true }),
+    ]).start()
+  }, [enterStamp, stampDelayMs, stamp])
 
   return (
     <Pressable
@@ -63,7 +90,21 @@ export function StopRow({ name, sublabel, state = 'upcoming', icon, onPress }: S
 
       {/* Only the PASSED state earns a trailing mark (a quiet check) — upcoming/active stay
           clean (the raised chip is the active cue; an upcoming row needs no affordance noise). */}
-      {passed ? <Icon name="passed" size={16} color="inkFaint" /> : null}
+      {passed ? (
+        <Animated.View
+          style={{
+            opacity: stamp,
+            transform: [
+              { scale: stamp.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] }) },
+              {
+                rotate: stamp.interpolate({ inputRange: [0, 1], outputRange: ['-16deg', '0deg'] }),
+              },
+            ],
+          }}
+        >
+          <Icon name="passed" size={16} color="inkFaint" />
+        </Animated.View>
+      ) : null}
     </Pressable>
   )
 }

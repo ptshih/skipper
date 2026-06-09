@@ -4,6 +4,7 @@
     "slug": "skipper",
     "scheme": "skipper",
     "version": "0.0.0",
+    "icon": "./assets/icon.png",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -16,6 +17,10 @@
     },
     "android": {
       "package": "tours.skipper.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#F2E7CC"
+      },
       "permissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS",
@@ -33,6 +38,20 @@
           "locationWhenInUsePermission": "Skipper uses your location to play each stop as you reach it on the drive.",
           "isIosBackgroundLocationEnabled": false,
           "isAndroidBackgroundLocationEnabled": false
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 240,
+          "resizeMode": "contain",
+          "backgroundColor": "#F2E7CC",
+          "dark": {
+            "image": "./assets/splash-icon.png",
+            "imageWidth": 240,
+            "backgroundColor": "#14201B"
+          }
         }
       ]
     ],

@@ -17,6 +17,7 @@ export const voice = {
   error: {
     generic: 'Well, that’s a kink in the hose. Give her another pull?',
     retry: 'Give her another pull',
+    download: 'Couldn’t pull the clips down — signal’s thin out here. Give it another go?',
   },
   cta: {
     play: 'Let’s roll', // short: the center CTA is now flanked by the ±15s skip buttons
@@ -27,18 +28,23 @@ export const voice = {
     drive: 'Start the drive', // open the live, GPS-triggered player (real device GPS)
     simDrive: 'Simulate the drive (dev)', // dev-only: the on-device drive simulator, no real GPS
     endDrive: 'Pull over', // stop the drive and head back to the start line
+    backToTrailhead: 'Back to the trailhead', // leave the drive-complete card without replaying
   },
   gate: {
     title: 'Grab your ticket',
     body: 'The full-length tour needs a (free) ticket — ten seconds, and the skipper never stops talking.',
     action: 'Get my free ticket',
     secondary: 'Just take the sample ride',
+    // Context line for the live-drive gate — carries ONLY what the body lacks (the body
+    // already makes the ticket ask), so the two don't stutter "needs a (free) ticket" twice.
+    driveNote: 'This is the live, on-the-road drive.',
   },
   // The live, GPS-triggered drive (vs the couch `preview`): the skipper talks when
   // the road reaches a stop, not on a timer. Kept short + glanceable for the mount.
   drive: {
     ready: 'READY TO ROLL', // pre-drive placard kicker
     readyBody: 'Mount up and start when you’re on the road. I’ll pipe up when we reach the good stuff.',
+    blurb: 'The skipper talks as you reach each stop on the real roads.', // tour-detail explainer under the Start CTA
     sim: 'SIMULATED DRIVE', // the on-device sim setup — no real GPS yet
     live: 'LIVE DRIVE', // real device GPS (Phase 4)
     nextStop: 'next stop', // "ROLLING · next stop: <name>"
@@ -62,6 +68,14 @@ export const voice = {
     pitStop: 'PIT STOP', // a rest stop
     gpsSearching: 'Looking for the satellites — hang tight.', // live drive, no usable fix yet
     gpsError: 'Lost the GPS signal, folks. Pull over and give her another go.', // live watch failed
+    // The intro/outro bracket clips aren't stops — these title them on BOTH the NOW card and
+    // the lock-screen Now Playing (single source, so the two can't silently diverge).
+    bracketIntro: 'Welcome aboard',
+    bracketOutro: 'One for the road',
+    driveCompleteKicker: 'DRIVE COMPLETE', // the done-card kicker
+    arrived: 'You’ve arrived', // the done-card title
+    restFallback: 'A good spot to stretch', // pit-stop card title when the break carries no name
+    previewHint: 'Tap any stop to jump ahead', // above the preview itinerary
   },
   greeting: 'Hop in. I’ll do the talking.',
   // The cold-open descriptor: a newcomer should know WHAT this is before any audio
@@ -81,13 +95,28 @@ export const voice = {
       title: 'Where are we headed?',
       empty: 'No charted roads out that way yet — here’s everything I’ve mapped so far.',
       nearMe: 'Drives near you',
+      showAll: 'Show all drives', // reset the region filter from the (near-impossible) empty state
     },
   },
   driveComplete: 'That’s the end of the road, folks. Watch your step climbing out.',
+  // Confirm before ending a live drive — one stray thumb shouldn't wipe a run in progress.
+  confirm: {
+    endTitle: 'Pull over and end the drive?',
+    end: 'Pull over',
+    keepRolling: 'Keep rolling',
+  },
+  // Offline-first fallback notes: shown when the network's gone but a saved copy carries us.
+  offline: {
+    home: 'No signal out here — showing the drives you’ve saved.',
+    detail: 'No signal out here — running on the saved copy.',
+  },
   auth: {
-    signInHeader: 'Welcome back, traveler',
+    // "folks" is the skipper's address everywhere else (loading, GPS, drive-complete) — keep
+    // it consistent here instead of the one-off "traveler".
+    signInHeader: 'Welcome back, folks',
     signUpHeader: 'Come along for the ride',
-    subhead: 'Mind the gap.',
+    // Road idiom, not the London-Underground "Mind the gap" (the persona is a road-trip guide).
+    subhead: 'Mind the potholes.',
   },
   settings: {
     account: 'ACCOUNT',

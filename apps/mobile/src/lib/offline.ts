@@ -15,6 +15,7 @@
 
 import { Directory, File, Paths } from 'expo-file-system'
 import { INTRO_SEQ, OUTRO_SEQ } from '@skipper/drive-core'
+import type { TourListItem } from '@skipper/shared'
 import { getTour, signTourAudio, type SignedAudio, type TourDetail } from './api'
 import { extForContentType, urlMapFromSigned } from './offline-util'
 
@@ -221,6 +222,42 @@ function localUrlMap(tourId: string, m: OfflineManifest): Map<number, string> {
 export function isTourDownloaded(tourId: string): boolean {
   const m = loadManifest(tourId)
   return m != null && clipsPresentOnDisk(tourId, m)
+}
+
+/** A downloaded manifest's drive detail projected to a catalog list-item (the home card's shape).
+ *  Detail carries no `teaser`, so the card degrades to its `summary`. */
+function listItemFromDetail(d: TourDetail): TourListItem {
+  return {
+    id: d.tour.id,
+    slug: d.tour.slug,
+    headline: d.tour.headline,
+    regionSlug: d.region.slug,
+    regionName: d.region.displayName,
+    startAnchorName: d.tour.startAnchor.name,
+    endAnchorName: d.tour.endAnchor.name,
+    summary: d.tour.summary,
+    distanceMeters: d.tour.distanceMeters,
+    durationSeconds: d.tour.durationSeconds,
+    teaser: null,
+  }
+}
+
+/**
+ * Every fully-downloaded tour as a catalog list-item, read from disk with ZERO network.
+ * Powers the home screen's offline-first fallback: when the catalog fetch fails in a dead
+ * zone, the saved drives stay browsable (and reachable) instead of a blank error wall.
+ */
+export function listDownloadedTours(): TourListItem[] {
+  const root = new Directory(Paths.document, 'tours')
+  if (!root.exists) return []
+  const out: TourListItem[] = []
+  for (const entry of root.list()) {
+    // tour dirs only; each dir name IS the tourId. A complete download = valid manifest + clips on disk.
+    if (!(entry instanceof Directory)) continue
+    const m = loadManifest(entry.name)
+    if (m && clipsPresentOnDisk(entry.name, m)) out.push(listItemFromDetail(m.detail))
+  }
+  return out
 }
 
 /** Remove a tour's offline download (manifest + clips). Idempotent. */

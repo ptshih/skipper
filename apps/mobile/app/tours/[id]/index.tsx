@@ -1,27 +1,29 @@
-import { useCallback, useState } from 'react'
-import { ActionSheetIOS, Alert, Platform, StyleSheet, View } from 'react-native'
+import { useCallback, useRef, useState } from 'react'
+import { ActionSheetIOS, Alert, Animated, Platform, StyleSheet, View } from 'react-native'
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
-import { ApiError, getTour, signTourAudio, type SignedAudio, type TourDetail } from '@/lib/api'
+import { ApiError, getTour, type TourDetail } from '@/lib/api'
 import {
   deleteTourDownload,
   downloadTour,
   isTourDownloaded,
+  loadManifest,
   type DownloadProgress,
 } from '@/lib/offline'
-import { stopLabel } from '@/lib/labels'
+import { cleanPlaceName, stopLabel } from '@/lib/labels'
 import { space } from '@/theme/tokens'
 import {
   AccountGate,
-  Badge,
   Button,
   Card,
+  Divider,
   HeaderIconButton,
   Icon,
+  RouteTrack,
   Screen,
   StateView,
+  StopRow,
   Text,
   stopIcon,
-  stopTone,
   voice,
 } from '@/ui'
 
@@ -33,14 +35,18 @@ export default function TourScreen() {
   const router = useRouter()
   const { id } = useLocalSearchParams<{ id: string }>()
   const [tour, setTour] = useState<TourDetail | null>(null)
-  const [audio, setAudio] = useState<SignedAudio | null>(null)
   const [needsAccount, setNeedsAccount] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  // True when the detail fetch failed but a saved download carried us (dead-zone fallback).
+  const [offline, setOffline] = useState(false)
   // Offline download state — Tahoe has dead zones, so a rider can save the whole drive.
   const [downloaded, setDownloaded] = useState(false)
   const [downloading, setDownloading] = useState<DownloadProgress | null>(null)
   const [downloadError, setDownloadError] = useState<string | null>(null)
+  // The signature rig, parked at the trailhead (~0.06) on the placard's static trail. Created
+  // once, never animated — a still motif (the Start CTA owns this screen's one amber glow).
+  const parked = useRef(new Animated.Value(0.06)).current
 
   const startDownload = useCallback(async () => {
     if (!id) return
@@ -51,9 +57,10 @@ export default function TourScreen() {
       setDownloaded(true)
     } catch (e) {
       // A gated (non-preview) tour download 401s when the account lapsed — show the
-      // AccountGate, not a misleading "check your signal" error (mirrors load()).
+      // AccountGate. Everything else is a network/verify failure (no useful raw message for
+      // a rider), so speak the persona line instead of leaking e.message.
       if (e instanceof ApiError && e.needsAccount) setNeedsAccount(true)
-      else setDownloadError(e instanceof Error ? e.message : 'Download failed — check your signal and try again.')
+      else setDownloadError(voice.error.download)
     } finally {
       setDownloading(null)
     }
@@ -112,9 +119,21 @@ export default function TourScreen() {
     try {
       // Open funnel: any tour's detail is viewable anonymously so the Preview CTA is reachable.
       setTour(await getTour(id, { preview: true }))
+      setOffline(false)
     } catch (e) {
       if (e instanceof ApiError && e.needsAccount) setNeedsAccount(true)
-      else setError(e instanceof Error ? e.message : voice.error.generic)
+      else {
+        // Offline-first: if this drive is downloaded, render from the saved manifest so "Start
+        // the drive" + the preview stay reachable in a dead zone (the player is offline-first).
+        // Otherwise surface the error. (The error wall used to hide a fully-downloaded drive.)
+        const m = loadManifest(id)
+        if (m) {
+          setTour(m.detail)
+          setOffline(true)
+        } else {
+          setError(e instanceof Error ? e.message : voice.error.generic)
+        }
+      }
     } finally {
       setLoading(false)
     }
@@ -126,16 +145,6 @@ export default function TourScreen() {
       if (id) setDownloaded(isTourDownloaded(id))
     }, [load, id]),
   )
-
-  // Debug-only: presign + reveal the raw R2 URLs. Dead-code-eliminated in release.
-  const loadAudio = async () => {
-    if (!id) return
-    try {
-      setAudio(await signTourAudio(id))
-    } catch (e) {
-      setError(e instanceof Error ? e.message : voice.error.generic)
-    }
-  }
 
   if (loading) return <StateView title="Tour" loading message={voice.loading.tour} />
   if (needsAccount) return <AccountGate />
@@ -157,11 +166,17 @@ export default function TourScreen() {
       />
     )
 
+  const durationMin = tour.tour.durationSeconds
+    ? Math.round(tour.tour.durationSeconds / 60)
+    : null
+
   return (
     <Screen scroll padded edges={['bottom']} contentContainerStyle={styles.body}>
       <Stack.Screen
         options={{
-          title: tour.tour.headline,
+          // The header is a breadcrumb (the region) — the Alfa-Slab hero in the placard owns the
+          // tour name, so the two no longer say the same thing within one glance.
+          title: tour.region.displayName,
           ...(hasMenuActions
             ? {
                 headerRight: () => (
@@ -186,21 +201,30 @@ export default function TourScreen() {
         }}
       />
 
-      <View style={styles.head}>
+      {/* THE TRAILHEAD SIGN — a carved ranger placard: region kicker → headline → start→end
+          anchors → the trail with the rig parked at the start → a stamped permit line. */}
+      <Card framed style={styles.placard}>
+        <Text variant="label" color="accentWarm">
+          {tour.region.displayName.toUpperCase()}
+        </Text>
         <Text variant="display" color="ink">
           {tour.tour.headline}
         </Text>
         <Text variant="label" color="inkFaint">
           {tour.tour.startAnchor.name} → {tour.tour.endAnchor.name}
         </Text>
-        <View style={styles.metaRow}>
-          <Text variant="label" color="inkFaint">
-            {tour.region.displayName}
+        <View style={styles.trail}>
+          <RouteTrack progress={parked} glow={false} />
+        </View>
+        <Divider dashed />
+        <View style={styles.permitRow}>
+          <Text variant="monoStrong" color="inkDim">
+            {tour.stops.length} STOPS{durationMin ? ` · ~${durationMin} MIN` : ''}
           </Text>
           {/* Offline state rides here as a compact chip — the ACTION lives in the ⋯ menu. */}
           {downloading ? (
             <Text variant="label" color="inkFaint">
-              · Downloading {downloading.done}/{downloading.total || '…'}
+              Saving {downloading.done}/{downloading.total || '…'}
             </Text>
           ) : downloaded ? (
             <View style={styles.savedChip}>
@@ -211,14 +235,27 @@ export default function TourScreen() {
             </View>
           ) : null}
         </View>
-      </View>
+      </Card>
+
+      {/* The crown-jewel blurb — finally shown (it was authored but never rendered anywhere). */}
+      {tour.tour.summary ? (
+        <Text variant="body" color="inkDim">
+          {tour.tour.summary}
+        </Text>
+      ) : null}
+
+      {offline ? (
+        <Text variant="dim" color="inkFaint">
+          {voice.offline.detail}
+        </Text>
+      ) : null}
 
       {/* Two real choices only — the live drive (M1 headline) + the free couch preview (the
           funnel, and the only play path for anonymous riders). The dev simulator + offline
           download moved to the header ⋯ menu so this stays glanceable. */}
       <Button icon="car" title={voice.cta.drive} onPress={() => router.push(`/tours/${id}/play?mode=live`)} />
       <Text variant="dim" color="inkDim">
-        The skipper talks as you reach each stop on the real roads.
+        {voice.drive.blurb}
       </Text>
 
       <Button
@@ -234,64 +271,42 @@ export default function TourScreen() {
         </Text>
       ) : null}
 
-      <Text variant="label" color="inkFaint" style={styles.sectionLabel}>
-        The route · {tour.stops.length} stops
-      </Text>
-
-      {tour.stops.map((s) => {
-        const signed = audio?.stops.find((u) => u.seq === s.seq)
-        return (
-          <Card key={s.seq}>
-            <View style={styles.stopHead}>
-              <Icon name={stopIcon(s.stopType)} size={16} />
-              <Text variant="heading" color="ink" style={styles.flex} numberOfLines={2}>
-                {s.seq + 1}. {s.name}
-              </Text>
-            </View>
-            {/* badge on its OWN row so it never squeezes the title */}
-            <View style={styles.stopMeta}>
-              <Badge tone={stopTone(s.stopType)} label={stopLabel(s.stopType)} />
-              {s.audioDurationMs ? (
-                <Text variant="dim" color="inkDim">
-                  {Math.round(s.audioDurationMs / 1000)} sec
-                </Text>
-              ) : null}
-            </View>
-            {__DEV__ ? (
-              <Text variant="mono" color="inkFaint">
-                {s.lat.toFixed(4)}, {s.lng.toFixed(4)} · trigger {s.triggerRadiusM}m
-              </Text>
-            ) : null}
-            {signed ? (
-              <Text variant="label" color="accent">
-                audio ready
-              </Text>
-            ) : null}
-          </Card>
-        )
-      })}
-
-      {__DEV__ ? (
-        <Button variant="ghost" title="Load audio URLs (debug)" onPress={loadAudio} />
-      ) : null}
+      {/* THE ITINERARY — one card of StopRows (the player's stop vocabulary), hairline-ruled,
+          instead of a dozen look-alike cards. No raw per-stop seconds — the tally's on the sign. */}
+      <Card style={styles.routeCard}>
+        <Text variant="label" color="inkFaint" style={styles.routeLabel}>
+          THE ROUTE · {tour.stops.length} STOPS
+        </Text>
+        {tour.stops.map((s, i) => (
+          <View key={s.seq}>
+            {i > 0 ? <Divider style={styles.rowRule} /> : null}
+            <StopRow
+              name={cleanPlaceName(s.name)}
+              sublabel={stopLabel(s.stopType)}
+              icon={stopIcon(s.stopType)}
+            />
+          </View>
+        ))}
+      </Card>
     </Screen>
   )
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
   body: { gap: space.md },
-  head: { gap: space.sm },
-  metaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space.sm },
-  savedChip: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
-  sectionLabel: { marginTop: space.sm },
-  stopHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  stopMeta: {
+  placard: { gap: space.sm },
+  trail: { marginTop: space.xs },
+  permitRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     flexWrap: 'wrap',
     gap: space.sm,
-    marginTop: space.sm,
-    marginBottom: space.xs,
   },
+  savedChip: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
+  // No horizontal padding so StopRows (which carry their own) align to the card edge; the
+  // label + dividers inset to match.
+  routeCard: { paddingHorizontal: 0, paddingVertical: space.sm },
+  routeLabel: { paddingHorizontal: space.md, marginBottom: space.xs },
+  rowRule: { marginHorizontal: space.md },
 })
