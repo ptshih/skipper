@@ -18,9 +18,16 @@ fully cover the rotation.
 | `acoustic_folk_guitar.mp3` | *Acoustic folk guitar instrumental* — Moonpub | Pixabay Content License | ✅ |
 | `small_town.mp3` | *Small Town* — Mr Smith | CC BY 4.0 | ✅ |
 | `strummin_robin_smith.mp3` | *Strummin' with Robin Smith* — Beat Mekanik | CC BY 4.0 | ✅ |
-| `homeward.mp3` | *Homeward* — Scott Buckley (tender/pastoral) | CC BY 4.0 | ✅ |
-| `simplicity.mp3` | *Simplicity* — Scott Buckley (tender/pastoral) | CC BY 4.0 | ✅ |
-| `wanderlust.mp3` | *Wanderlust* — Scott Buckley (tender/pastoral) | CC BY 4.0 | ✅ |
+| `homeward.mp3` | *Homeward* — Scott Buckley (folky/carefree) | CC BY 4.0 | ✅ |
+| `simplicity.mp3` | *Simplicity* — Scott Buckley (folky/carefree) | CC BY 4.0 | ✅ |
+| `wanderlust.mp3` | *Wanderlust* — Scott Buckley (folky/carefree) | CC BY 4.0 | ✅ |
+| `journeys.mp3` | *Journeys* — Scott Buckley (folky/carefree; faint backing vox) | CC BY 4.0 | ✅ |
+| `felicity.mp3` | *Felicity* — Scott Buckley (folky/carefree) | CC BY 4.0 | ✅ |
+| `ice_cream.mp3` | *Ice Cream* — Scott Buckley (folky/carefree) | CC BY 4.0 | ✅ |
+| `green_leaves.mp3` | *Green Leaves* — Jason Shaw (Audionautix) | CC BY 4.0 | ✅ |
+| `redwood_trail.mp3` | *Redwood Trail* — Jason Shaw (Audionautix) | CC BY 4.0 | ✅ |
+| `paper_wings.mp3` | *Paper Wings* — Jason Shaw (Audionautix) | CC BY 4.0 | ✅ |
+| `landras_dream.mp3` | *Landra's Dream* — Jason Shaw (Audionautix) | CC BY 4.0 | ✅ |
 | `acoustic_countryside_journey.mp3` | road-trip song (~2:46) | ElevenLabs (⚠️ unverified) | ✅ |
 | `wanderers_tale.mp3` | road-trip song (~2:20) | ElevenLabs (⚠️ unverified) | ✅ |
 | `restless_roads_ahead.mp3` | road-trip song (~2:37) | ElevenLabs (⚠️ unverified) | ✅ |
@@ -67,11 +74,22 @@ keep that surface in sync with this list.
   <https://freemusicarchive.org/music/mr-smith/a-new-roar/small-town/>
 - *Strummin' with Robin Smith* — **Beat Mekanik** (Free Music Archive), CC BY 4.0 —
   <https://freemusicarchive.org/music/beat-mekanik/single/strummin-with-robin-smith/>
-- *Homeward*, *Simplicity*, and *Wanderlust* — **Scott Buckley**
-  (<https://www.scottbuckley.com.au>), CC BY 4.0
-  <https://creativecommons.org/licenses/by/4.0/>. Tender, pastoral acoustic-orchestral
-  pieces added in the Bluey-"Creek" mood (founder pick). Credit line per his site:
-  "'Title' by Scott Buckley — released under CC-BY 4.0. www.scottbuckley.com.au".
+- *Homeward*, *Simplicity*, *Wanderlust*, *Journeys*, *Felicity*, and *Ice Cream* —
+  **Scott Buckley** (<https://www.scottbuckley.com.au>), CC BY 4.0
+  <https://creativecommons.org/licenses/by/4.0/>. Folky/carefree acoustic pieces —
+  founder picks for the warm Bluey-ish vibe (the founder loves Joff Bush's "Creek").
+  *Journeys* has faint textural backing vocals (no lead lyrics). Credit line per his
+  site: "'Title' by Scott Buckley — released under CC-BY 4.0. www.scottbuckley.com.au".
+- *Green Leaves*, *Redwood Trail*, *Paper Wings*, and *Landra's Dream* — **Jason Shaw**
+  (Audionautix, <https://audionautix.com>), CC BY 4.0
+  <https://creativecommons.org/licenses/by/4.0/>. Warm acoustic-guitar folk. Credit line:
+  "Music by Jason Shaw — Audionautix.com — licensed under CC BY 4.0".
+
+> **A note on Mixkit:** a Mixkit track (*Walking in the Park*, Diego Nava) was auditioned
+> and the founder liked it, but the **Mixkit Stock Music Free License excludes "video
+> games"** (alongside CDs/DVDs/broadcast) — a gray area for an interactive app that
+> bundles music, and we keep frozen bundle assets to unambiguous licenses (CC0 / CC BY /
+> Pixabay). So it was NOT shipped. (<https://mixkit.co/license/>)
 
 ### ElevenLabs (Eleven Music) — the four original road-trip songs
 

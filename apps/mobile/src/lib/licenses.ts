@@ -74,11 +74,19 @@ export interface MusicCredit {
 export const MUSIC_CREDITS: MusicCredit[] = [
   {
     artist: 'Scott Buckley',
-    tracks: ['Homeward', 'Simplicity', 'Wanderlust'],
+    tracks: ['Homeward', 'Simplicity', 'Wanderlust', 'Journeys', 'Felicity', 'Ice Cream'],
     via: 'scottbuckley.com.au',
     license: 'CC BY 4.0',
     licenseUrl: 'https://creativecommons.org/licenses/by/4.0/',
     sourceUrl: 'https://www.scottbuckley.com.au',
+  },
+  {
+    artist: 'Jason Shaw',
+    tracks: ['Green Leaves', 'Redwood Trail', 'Paper Wings', 'Landra’s Dream'],
+    via: 'Audionautix',
+    license: 'CC BY 4.0',
+    licenseUrl: 'https://creativecommons.org/licenses/by/4.0/',
+    sourceUrl: 'https://audionautix.com',
   },
   {
     artist: 'Mr Smith',

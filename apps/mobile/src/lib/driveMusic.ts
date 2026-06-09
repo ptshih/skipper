@@ -38,10 +38,18 @@ const TRACKS = [
   // Creative Commons BY 4.0 — attribution carried on the Sources & Licenses screen.
   require('../../assets/audio/small_town.mp3'),
   require('../../assets/audio/strummin_robin_smith.mp3'),
-  // Tender, pastoral Scott Buckley pieces (a gentler color for scenic legs).
+  // Folky/carefree Scott Buckley pieces (founder picks — a gentler color for scenic legs).
   require('../../assets/audio/homeward.mp3'),
   require('../../assets/audio/simplicity.mp3'),
   require('../../assets/audio/wanderlust.mp3'),
+  require('../../assets/audio/journeys.mp3'),
+  require('../../assets/audio/felicity.mp3'),
+  require('../../assets/audio/ice_cream.mp3'),
+  // Jason Shaw (Audionautix) acoustic folk.
+  require('../../assets/audio/green_leaves.mp3'),
+  require('../../assets/audio/redwood_trail.mp3'),
+  require('../../assets/audio/paper_wings.mp3'),
+  require('../../assets/audio/landras_dream.mp3'),
   // ElevenLabs road-trip songs — license follows the account tier, UNVERIFIED for paid
   // distribution (see SOURCE.md). The clean-licensed tracks above can fully replace
   // these if we want to drop the ElevenLabs dependency.
