@@ -11,7 +11,7 @@
 
 import { and, asc, desc, eq } from 'drizzle-orm'
 import { db } from '@skipper/db'
-import { corridors, poiContent, pois, tours, tourStops } from '@skipper/db/schema'
+import { pois, regions, tours, tourStops } from '@skipper/db/schema'
 import { DEFAULT_MAX_OFF_ROUTE_M, runDrive } from '@skipper/drive-core'
 import type { LngLat, TourStopRef } from '@skipper/drive-core'
 
@@ -23,7 +23,7 @@ const mmss = (sec: number): string => {
 function parseArgs(argv: string[]) {
   const args = argv.slice(2)
   const slug = args.find((a) => !a.startsWith('--'))
-  if (!slug) throw new Error('Usage: run.ts <corridor-slug> [--mph=60] [--tick=4] [--lead=12] [--tour=<id>]')
+  if (!slug) throw new Error('Usage: run.ts <tour-slug> [--mph=60] [--tick=4] [--lead=12] [--tour=<id>]')
   const num = (name: string, def: number) => {
     const raw = args.find((a) => a.startsWith(`--${name}=`))?.split('=')[1]
     return raw === undefined ? def : Number(raw)
@@ -40,22 +40,20 @@ function parseArgs(argv: string[]) {
 async function main() {
   const { slug, mph, tickHz, leadSeconds, tourId } = parseArgs(process.argv)
 
-  const corridor = (
-    await db.select({ id: corridors.id, name: corridors.name, region: corridors.region, polyline: corridors.polyline })
-      .from(corridors)
-      .where(eq(corridors.slug, slug))
-      .limit(1)
-  )[0]
-  if (!corridor) throw new Error(`No corridor seeded for slug "${slug}".`)
-
+  // A tour is the whole self-contained drive now (corridors merged in): its own route +
+  // region. Load it by slug (newest ready) or by explicit --tour id.
   const tour = (
-    await db.select({ id: tours.id, durationBucket: tours.durationBucket, isPreview: tours.isPreview })
+    await db
+      .select({
+        id: tours.id,
+        headline: tours.headline,
+        regionName: regions.displayName,
+        polyline: tours.polyline,
+        isPreview: tours.isPreview,
+      })
       .from(tours)
-      .where(
-        tourId
-          ? eq(tours.id, tourId)
-          : and(eq(tours.corridorId, corridor.id), eq(tours.status, 'ready')),
-      )
+      .innerJoin(regions, eq(tours.regionId, regions.id))
+      .where(tourId ? eq(tours.id, tourId) : and(eq(tours.slug, slug), eq(tours.status, 'ready')))
       .orderBy(desc(tours.createdAt))
       .limit(1)
   )[0]
@@ -69,11 +67,10 @@ async function main() {
       lng: pois.lng,
       name: pois.name,
       triggerRadiusM: tourStops.triggerRadiusM,
-      durationMs: poiContent.audioDurationMs,
+      durationMs: tourStops.audioDurationMs,
     })
     .from(tourStops)
     .innerJoin(pois, eq(tourStops.poiId, pois.id))
-    .leftJoin(poiContent, eq(tourStops.poiContentId, poiContent.id))
     .where(eq(tourStops.tourId, tour.id))
     .orderBy(asc(tourStops.seq))
 
@@ -87,11 +84,11 @@ async function main() {
     durationMs: s.durationMs,
   }))
 
-  const report = runDrive(corridor.polyline as LngLat[], stops, { mph, tickHz, leadSeconds })
+  const report = runDrive(tour.polyline as LngLat[], stops, { mph, tickHz, leadSeconds })
 
   const r = report
   console.log('\n' + '='.repeat(78))
-  console.log(`DRIVE SIM — ${corridor.name} (${corridor.region}) · tour ${tour.id}${tour.isPreview ? ' [preview]' : ''}`)
+  console.log(`DRIVE SIM — ${tour.headline} (${tour.regionName}) · tour ${tour.id}${tour.isPreview ? ' [preview]' : ''}`)
   console.log(
     `${(r.totalRouteM / 1609.344).toFixed(1)} mi @ ${r.speedMph} mph → ${mmss(r.driveSec)} drive · ` +
       `${r.fixCount} fixes @ ${r.tickHz} Hz · lead ${r.trigger.leadSeconds}s, floor varies, cone ${r.trigger.headingConeDeg}°`,

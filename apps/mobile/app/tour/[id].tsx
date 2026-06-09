@@ -73,7 +73,7 @@ export default function TourScreen() {
       // The sample IS the content here — play even on the silent switch.
       await setAudioModeAsync({ playsInSilentMode: true }).catch(() => {})
       const signed = await signTourAudio(id) // re-sign each tap so the URL is never stale
-      const first = [...signed.urls].sort((a, b) => a.seq - b.seq)[0]
+      const first = [...signed.stops].sort((a, b) => a.seq - b.seq)[0]
       if (!first) {
         setSample('idle')
         return
@@ -133,19 +133,19 @@ export default function TourScreen() {
 
   return (
     <Screen scroll padded edges={['bottom']} contentContainerStyle={styles.body}>
-      <Stack.Screen options={{ title: tour.corridor?.name ?? 'Tour' }} />
+      <Stack.Screen options={{ title: tour.tour.headline }} />
 
       <View style={styles.head}>
         <Text variant="display" color="ink">
-          {tour.corridor?.name ?? 'Tour'}
+          {tour.tour.headline}
+        </Text>
+        <Text variant="label" color="inkFaint">
+          {tour.tour.startAnchor.name} → {tour.tour.endAnchor.name}
         </Text>
         <View style={styles.metaRow}>
-          {tour.corridor?.region ? (
-            <Text variant="label" color="inkFaint">
-              {tour.corridor.region}
-            </Text>
-          ) : null}
-          <Badge tone="neutral" label={tour.tour.durationBucket.toUpperCase()} />
+          <Text variant="label" color="inkFaint">
+            {tour.region.displayName}
+          </Text>
           <Badge tone="teal" label={jokeLabel(tour.tour.jokeLevel)} />
           {tour.tour.isPreview ? <Badge tone="amber" filled label="FREE PREVIEW" /> : null}
         </View>
@@ -182,7 +182,7 @@ export default function TourScreen() {
       </Text>
 
       {tour.stops.map((s) => {
-        const signed = audio?.urls.find((u) => u.seq === s.seq)
+        const signed = audio?.stops.find((u) => u.seq === s.seq)
         return (
           <Card key={s.seq}>
             <View style={styles.stopHead}>

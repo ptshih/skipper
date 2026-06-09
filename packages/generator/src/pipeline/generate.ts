@@ -19,7 +19,7 @@
 // feedback. Break narration names the curated Places anchor; the volatile live data
 // (open-now/rating) is still fetched fresh at tour-load (and "ask the skipper" later).
 
-import type { DurationBucket } from '@skipper/shared'
+import type { BracketKind, DurationBucket } from '@skipper/shared'
 import type { AttributionSnapshot } from '@skipper/db/schema'
 import {
   ANTHROPIC_READY,
@@ -46,22 +46,22 @@ import { searchBreakStops, spokenKind } from './places'
 import type { BreakAnchor } from './places'
 import { selectStops, toFacts } from './select'
 import type { StopPlan } from './select'
-import { narrateStop } from './narrate'
+import { narrateIntro, narrateOutro, narrateStop } from './narrate'
 import type { NarrationRequest } from './narrate'
 import { lintScripts } from './lint'
 import type { LintFinding } from './lint'
 import { judgeCloserDiversity } from './judge'
 import { synthesize } from './tts'
-import { clipKey, uploadAudio } from './storage'
+import { bracketKey, clipKey, uploadAudio } from './storage'
 import {
-  createTour,
   finalizeTourReady,
-  loadCorridor,
+  hashFacts,
+  loadTour,
   markTourFailed,
+  markTourGenerating,
   upsertPoi,
-  upsertPoiContent,
 } from './persist'
-import type { FinalStop } from './persist'
+import type { FinalBracket, FinalStop } from './persist'
 
 export interface GenerateOptions {
   slug: string
@@ -93,14 +93,23 @@ export interface StopSummary {
   audioUrl?: string
 }
 
+export interface BracketSummary {
+  kind: BracketKind
+  script?: string
+  durationMs?: number
+}
+
 export interface GenerateResult {
   tourId?: string
-  corridor: string
+  slug: string
+  /** Display label for the drive (the tour's headline, e.g. "Emerald Bay"). */
+  tourName: string
   region: string
   durationBucket: DurationBucket
   totalSec: number
   dryRun: boolean
   stops: StopSummary[]
+  brackets: BracketSummary[]
 }
 
 const firstSentence = (facts: string[]): string | null => facts[0] ?? null
@@ -109,7 +118,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   const durationBucket: DurationBucket = opts.durationBucket ?? 'standard'
   const dryRun = Boolean(opts.dryRun)
   const judgeClosers = Boolean(opts.judgeClosers)
-  const { persona, voice, jokeLevel } = SKIPPER_DEFAULTS
+  const { voice, jokeLevel } = SKIPPER_DEFAULTS
 
   if (!ANTHROPIC_READY()) throw new Error('ANTHROPIC_API_KEY is not set (narration requires it).')
   if (!dryRun) {
@@ -124,15 +133,15 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
     }
   }
 
-  // 1. Corridor geometry + drive time (the pacing clock).
-  const corridor = await loadCorridor(opts.slug)
-  const polyline = corridor.polyline as LngLat[]
+  // 1. Tour shell: route geometry + drive time (the pacing clock) + endpoints/region.
+  const shell = await loadTour(opts.slug)
+  const polyline = shell.polyline as LngLat[]
   const cumulative = cumulativeMeters(polyline)
   const totalM = totalMeters(cumulative)
-  const totalSec = corridor.durationSeconds ?? Math.round(totalM / FALLBACK_SPEED_MPS)
+  const totalSec = shell.durationSeconds ?? Math.round(totalM / FALLBACK_SPEED_MPS)
   console.log(
-    `Corridor "${corridor.name}" (${corridor.region}): ${(totalM / 1609.344).toFixed(1)} mi, ~${Math.round(totalSec / 60)} min` +
-      (corridor.durationSeconds ? '' : ' [estimated drive time]'),
+    `Tour "${shell.headline}" (${shell.regionName}): ${(totalM / 1609.344).toFixed(1)} mi, ~${Math.round(totalSec / 60)} min` +
+      (shell.durationSeconds ? '' : ' [estimated drive time]'),
   )
 
   // 2. Grounded POIs from Wikipedia.
@@ -206,7 +215,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   //   the headline there, e.g. Emerald Bay's granite). Sparse vs iconic picks the narration cue.
   // Per-stop failures are non-fatal (the stop just gets no geology). Set SKIPPER_GEOLOGY=off.
   if (GEOLOGY_ENRICHMENT()) {
-    const iconic = new Set(GEOLOGY_ICONIC_STOPS[corridor.slug] ?? [])
+    const iconic = new Set(GEOLOGY_ICONIC_STOPS[shell.slug] ?? [])
     const geoReasonOf = (s: StopPlan): 'scenic' | 'sparse' | 'iconic' | null => {
       if (s.stopType === 'scenic') return 'scenic'
       if (s.stopType !== 'story') return null
@@ -335,8 +344,8 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   const motifBeatsOf = (script: string) =>
     MOTIF_BEATS.filter(([re]) => re.test(script)).map(([, label]) => label)
   const baseReq = (s: StopPlan): NarrationRequest => ({
-    region: corridor.region,
-    corridor: corridor.name,
+    region: shell.regionName,
+    corridor: shell.headline,
     stopType: s.stopType,
     jokeLevel,
     targetSeconds: s.targetSeconds,
@@ -497,6 +506,32 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   )
   const scriptBySeq = new Map(narratedRecs.map((r) => [r.s.seq, r.script]))
 
+  // Intro + outro brackets — the drive's FRAME (persona-only, no fact sheet). The
+  // personal KIT, banned from stops, lives in the intro; the sentimental bow in the
+  // outro. Mandatory (the ready-gate requires both), so a narration failure aborts.
+  console.log('Narrating intro + outro brackets...')
+  const introScript = (
+    await narrateIntro({
+      region: shell.regionName,
+      startAnchor: shell.startAnchorName,
+      endAnchor: shell.endAnchorName,
+      jokeLevel,
+      headline: shell.headline,
+      hostName: 'Skipper',
+    })
+  ).script
+  const outroScript = (
+    await narrateOutro({
+      region: shell.regionName,
+      endAnchor: shell.endAnchorName,
+      jokeLevel,
+    })
+  ).script
+  const bracketPlan: { kind: BracketKind; script: string }[] = [
+    { kind: 'intro', script: introScript },
+    { kind: 'outro', script: outroScript },
+  ]
+
   // ---- Dry run: print finalized scripts, no writes. -----------------------
   if (dryRun) {
     // Every stop now has a script (breaks included) — print them all so the named
@@ -516,29 +551,36 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       ...(s.wikidata?.length ? { wikidata: s.wikidata } : {}),
     }))
     return {
-      corridor: corridor.name,
-      region: corridor.region,
+      slug: shell.slug,
+      tourName: shell.headline,
+      region: shell.regionName,
       durationBucket,
       totalSec,
       dryRun: true,
       stops,
+      brackets: bracketPlan.map((b) => ({ kind: b.kind, script: b.script })),
     }
   }
 
   // ---- Full run: narrate -> TTS -> R2 -> persist -> atomic ready-gate. -----
-  const tourId = await createTour({
-    corridorId: corridor.id,
-    durationBucket,
-    persona,
-    jokeLevel,
-    isPreview: Boolean(opts.preview),
-  })
+  // The tour SHELL already exists (seeded draft); we FILL it. Stop clip ids are
+  // generated up front so the key (clips/<tourId>/<stopId>) is known before upload,
+  // and the fully-populated rows land in one atomic ready-gate batch.
+  const tourId = shell.id
+  await markTourGenerating(tourId, Boolean(opts.preview))
   try {
     const finalStops: FinalStop[] = []
+    const finalBrackets: FinalBracket[] = []
     const summaries: StopSummary[] = []
 
     for (const s of plan) {
-      // Every stop anchors to a POI (break stops included).
+      // Every stop anchors to a POI (break stops included). Story stops carry facts;
+      // the facts_hash is the narration's grounding fingerprint (staleness detector).
+      const facts =
+        s.stopType === 'story'
+          ? { extract: s.facts.join(' '), title: s.wikiTitle, url: s.wikiUrl, pageId: s.wikiPageId }
+          : null
+      const factsHash = hashFacts(facts)
       const poiId = await upsertPoi({
         source: s.source,
         sourceId: s.sourceId,
@@ -547,23 +589,17 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
         lat: s.lat,
         lng: s.lng,
         summary: s.stopType === 'story' ? firstSentence(s.facts) : null,
-        facts:
-          s.stopType === 'story'
-            ? {
-                extract: s.facts.join(' '),
-                title: s.wikiTitle,
-                url: s.wikiUrl,
-                pageId: s.wikiPageId,
-              }
-            : null,
+        facts,
+        factsHash,
       })
 
-      // Every stop — break included — now narrates + synthesizes. (Break clips name
-      // the curated Places anchor; no Wikipedia text, so no attribution snapshot.)
+      // Every stop — break included — now narrates + synthesizes to a TOUR-scoped key.
+      // (Break clips name the curated Places anchor; no Wikipedia text, no attribution.)
+      const stopId = crypto.randomUUID()
       const script = scriptBySeq.get(s.seq)!
       console.log(`Synthesizing stop ${s.seq} (${s.stopType}) "${s.name}"...`)
       const { audio, durationMs } = await synthesize(script, voice)
-      const audioUrl = await uploadAudio(clipKey(poiId, persona, voice, jokeLevel), audio)
+      const audioUrl = await uploadAudio(clipKey(tourId, stopId), audio)
 
       // Frozen attribution — an ARRAY, one entry per source this clip drew on. Story
       // clips reuse Wikipedia extract text (CC BY-SA, required). Any stop — story OR
@@ -584,22 +620,17 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       if (s.geologyAttribution) attribution.push(s.geologyAttribution)
       if (s.wikidataAttribution) attribution.push(s.wikidataAttribution)
 
-      const poiContentId = await upsertPoiContent({
+      finalStops.push({
+        id: stopId,
+        seq: s.seq,
         poiId,
-        persona,
-        voice,
-        jokeLevel,
+        stopType: s.stopType,
         script,
         audioUrl,
         audioDurationMs: durationMs,
         attribution: attribution.length > 0 ? attribution : null,
-      })
-
-      finalStops.push({
-        seq: s.seq,
-        poiId,
-        poiContentId,
-        stopType: s.stopType,
+        // Only fact-grounded (story) stops carry a facts_hash → only they can go fact-stale.
+        factsHash: s.stopType === 'story' ? factsHash : null,
         triggerRadiusM: s.triggerRadiusM,
         triggerLat: s.triggerLat,
         triggerLng: s.triggerLng,
@@ -622,26 +653,41 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       })
     }
 
+    // Synthesize the brackets to their fixed tour-scoped keys (clips/<tourId>/intro|outro).
+    const bracketSummaries: BracketSummary[] = []
+    for (const b of bracketPlan) {
+      console.log(`Synthesizing ${b.kind} bracket...`)
+      const { audio, durationMs } = await synthesize(b.script, voice)
+      const audioUrl = await uploadAudio(bracketKey(tourId, b.kind), audio)
+      finalBrackets.push({ kind: b.kind, script: b.script, audioUrl, audioDurationMs: durationMs })
+      bracketSummaries.push({ kind: b.kind, script: b.script, durationMs })
+    }
+
     // Ready-gate guard: EVERY stop must have audio before we flip — breaks included
-    // (break audio is now mandatory; a tour never goes ready with a silent stop).
+    // (break audio is mandatory; a tour never goes ready with a silent stop). The
+    // intro/outro bracket audio is enforced inside finalizeTourReady.
     for (const fs of finalStops) {
-      if (!fs.poiContentId) {
+      if (!fs.audioUrl) {
         throw new Error(
           `Stop ${fs.seq} (${fs.stopType}) has no audio — refusing to mark tour ready.`,
         )
       }
     }
 
-    await finalizeTourReady(tourId, finalStops)
-    console.log(`Tour ${tourId} is READY (${finalStops.length} stops).`)
+    await finalizeTourReady(tourId, finalStops, finalBrackets)
+    console.log(
+      `Tour ${tourId} is READY (${finalStops.length} stops, ${finalBrackets.length} brackets).`,
+    )
     return {
       tourId,
-      corridor: corridor.name,
-      region: corridor.region,
+      slug: shell.slug,
+      tourName: shell.headline,
+      region: shell.regionName,
       durationBucket,
       totalSec,
       dryRun: false,
       stops: summaries,
+      brackets: bracketSummaries,
     }
   } catch (e) {
     await markTourFailed(tourId).catch(() => {})

@@ -1,12 +1,13 @@
-// Re-synthesize ALL of a tour's clips from their STORED scripts with the current TTS
-// model + encoding (models.ts), then repoint poi_content.audioUrl + audioDurationMs.
-// For a voice/model/codec migration where the narration is already blessed — this is a
-// delivery re-render, NOT a re-generation: scripts (and thus grounding) are untouched.
+// Re-synthesize ALL of a tour's clips (stops + intro/outro brackets) from their STORED
+// scripts with the current TTS model + encoding (models.ts), then repoint
+// tour_stops.audioUrl / tour_brackets.audioUrl + audioDurationMs. For a voice/model/codec
+// migration where the narration is already blessed — this is a delivery re-render, NOT a
+// re-generation: scripts (and thus grounding) are untouched.
 //
-// When the clip extension changes (e.g. wav→mp3), clipKey() returns a NEW key, so the
-// old object is orphaned — we sweep it unless --keep-old. The poi_content cache key
-// (poi, persona, voice, joke_level) is unchanged, so rows are updated in place and the
-// tour stays `ready` (every clip keeps a non-null audioUrl + duration).
+// Keys are TOUR-scoped and STABLE (clips/<tourId>/<stopId>, clips/<tourId>/intro|outro),
+// so a re-synth overwrites the same object — the only time the key moves is an extension
+// change (e.g. wav→mp3), and then we sweep the orphan unless --keep-old. The tour stays
+// `ready` (every clip keeps a non-null audioUrl + duration).
 //
 //   dotenvx run -f .env.development -- bun packages/generator/src/resynth-tour.ts --preview [--dry-run] [--keep-old]
 //   dotenvx run -f .env.development -- bun packages/generator/src/resynth-tour.ts <tourId|prefix> [--dry-run]
@@ -15,12 +16,11 @@
 
 import { and, asc, eq } from 'drizzle-orm'
 import { db } from '@skipper/db'
-import { poiContent, pois, tours, tourStops } from '@skipper/db/schema'
-import type { JokeLevel, Persona } from '@skipper/shared'
+import { pois, tourBrackets, tourStops, tours } from '@skipper/db/schema'
 import { GOOGLE_TTS_READY, R2_READY } from './config'
-import { TTS_CLIP_EXTENSION, TTS_MODEL } from './models'
+import { SKIPPER_VOICE_ID, TTS_CLIP_EXTENSION, TTS_MODEL } from './models'
 import { synthesize } from './pipeline/tts'
-import { clipKey, deleteAudio, uploadAudio } from './pipeline/storage'
+import { bracketKey, clipKey, deleteAudio, uploadAudio } from './pipeline/storage'
 
 async function resolveTourId(arg: string | undefined): Promise<string> {
   if (arg === '--preview' || arg === undefined) {
@@ -42,6 +42,16 @@ async function resolveTourId(arg: string | undefined): Promise<string> {
   return matches[0]!.id
 }
 
+/** A clip to re-render — a stop or a bracket — normalized to its label/key/script/save. */
+interface Clip {
+  label: string
+  key: string
+  script: string
+  storedAudioUrl: string | null
+  audioDurationMs: number | null
+  save: (audioUrl: string, durationMs: number) => Promise<void>
+}
+
 async function main() {
   const argv = process.argv.slice(2)
   const dryRun = argv.includes('--dry-run')
@@ -49,36 +59,70 @@ async function main() {
   const target = argv.find((a) => !a.startsWith('--'))
   const tourId = await resolveTourId(target ?? '--preview')
 
-  // Distinct clips for this tour, in play order (dedup poi_content shared across stops).
-  const stops = await db
+  const stopRows = await db
     .select({
+      id: tourStops.id,
       seq: tourStops.seq,
       stopType: tourStops.stopType,
       name: pois.name,
-      contentId: poiContent.id,
-      poiId: poiContent.poiId,
-      persona: poiContent.persona,
-      voice: poiContent.voice,
-      jokeLevel: poiContent.jokeLevel,
-      script: poiContent.script,
-      audioUrl: poiContent.audioUrl,
-      audioDurationMs: poiContent.audioDurationMs,
+      script: tourStops.script,
+      audioUrl: tourStops.audioUrl,
+      audioDurationMs: tourStops.audioDurationMs,
     })
     .from(tourStops)
-    .innerJoin(poiContent, eq(tourStops.poiContentId, poiContent.id))
     .innerJoin(pois, eq(tourStops.poiId, pois.id))
     .where(eq(tourStops.tourId, tourId))
     .orderBy(asc(tourStops.seq))
 
-  const seen = new Set<string>()
-  const clips = stops.filter((s) => (seen.has(s.contentId) ? false : (seen.add(s.contentId), true)))
+  const bracketRows = await db
+    .select({
+      kind: tourBrackets.kind,
+      script: tourBrackets.script,
+      audioUrl: tourBrackets.audioUrl,
+      audioDurationMs: tourBrackets.audioDurationMs,
+    })
+    .from(tourBrackets)
+    .where(eq(tourBrackets.tourId, tourId))
+    .orderBy(asc(tourBrackets.kind))
+
+  const clips: Clip[] = [
+    ...bracketRows
+      .filter((b) => b.script !== null)
+      .map((b) => ({
+        label: `${b.kind} bracket`,
+        key: bracketKey(tourId, b.kind),
+        script: b.script!,
+        storedAudioUrl: b.audioUrl,
+        audioDurationMs: b.audioDurationMs,
+        save: (audioUrl: string, durationMs: number) =>
+          db
+            .update(tourBrackets)
+            .set({ audioUrl, audioDurationMs: durationMs, updatedAt: new Date() })
+            .where(and(eq(tourBrackets.tourId, tourId), eq(tourBrackets.kind, b.kind)))
+            .then(() => {}),
+      })),
+    ...stopRows
+      .filter((s) => s.script !== null)
+      .map((s) => ({
+        label: `#${s.seq} ${s.stopType.padEnd(6)} ${s.name}`,
+        key: clipKey(tourId, s.id),
+        script: s.script!,
+        storedAudioUrl: s.audioUrl,
+        audioDurationMs: s.audioDurationMs,
+        save: (audioUrl: string, durationMs: number) =>
+          db
+            .update(tourStops)
+            .set({ audioUrl, audioDurationMs: durationMs, updatedAt: new Date() })
+            .where(eq(tourStops.id, s.id))
+            .then(() => {}),
+      })),
+  ]
 
   console.log(`Tour ${tourId.slice(0, 8)} — ${clips.length} clips → model=${TTS_MODEL}, ext=.${TTS_CLIP_EXTENSION}`)
   if (dryRun) {
     for (const c of clips) {
-      const newKey = clipKey(c.poiId, c.persona as Persona, c.voice, c.jokeLevel as JokeLevel)
-      const change = c.audioUrl === newKey ? '(same key)' : `${c.audioUrl ?? 'null'} → ${newKey}`
-      console.log(`  #${c.seq} ${c.stopType.padEnd(6)} ${c.name} — ${(c.audioDurationMs ?? 0) / 1000}s  ${change}`)
+      const change = c.storedAudioUrl === c.key ? '(same key)' : `${c.storedAudioUrl ?? 'null'} → ${c.key}`
+      console.log(`  ${c.label} — ${(c.audioDurationMs ?? 0) / 1000}s  ${change}`)
     }
     console.log('\nDRY RUN — no synthesis, upload, DB write, or sweep.')
     return
@@ -90,28 +134,23 @@ async function main() {
   let swept = 0
   let totalSec = 0
   for (const c of clips) {
-    const { audio, durationMs } = await synthesize(c.script, c.voice)
-    const newKey = clipKey(c.poiId, c.persona as Persona, c.voice, c.jokeLevel as JokeLevel)
-    await uploadAudio(newKey, audio)
-    await db
-      .update(poiContent)
-      .set({ audioUrl: newKey, audioDurationMs: durationMs, updatedAt: new Date() })
-      .where(eq(poiContent.id, c.contentId))
+    const { audio, durationMs } = await synthesize(c.script, SKIPPER_VOICE_ID)
+    await uploadAudio(c.key, audio)
+    await c.save(c.key, durationMs)
     // Sweep the orphan only when the key actually moved (e.g. the wav→mp3 extension change).
-    const oldKey = c.audioUrl
     let sweptNote = ''
-    if (oldKey && oldKey !== newKey && !keepOld) {
+    if (c.storedAudioUrl && c.storedAudioUrl !== c.key && !keepOld) {
       try {
-        await deleteAudio(oldKey)
+        await deleteAudio(c.storedAudioUrl)
         swept++
-        sweptNote = `  (swept ${oldKey})`
+        sweptNote = `  (swept ${c.storedAudioUrl})`
       } catch (e) {
-        sweptNote = `  (orphan ${oldKey} NOT swept: ${e instanceof Error ? e.message : e})`
+        sweptNote = `  (orphan ${c.storedAudioUrl} NOT swept: ${e instanceof Error ? e.message : e})`
       }
     }
     totalSec += durationMs / 1000
     const was = (c.audioDurationMs ?? 0) / 1000
-    console.log(`  #${c.seq} ${c.stopType.padEnd(6)} ${c.name} — ${was}s → ${(durationMs / 1000).toFixed(1)}s${sweptNote}`)
+    console.log(`  ${c.label} — ${was}s → ${(durationMs / 1000).toFixed(1)}s${sweptNote}`)
   }
   console.log(
     `\nDone. Re-synthesized ${clips.length} clips (${totalSec.toFixed(0)}s total) on ${TTS_MODEL}` +

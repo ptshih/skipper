@@ -118,7 +118,7 @@ const RECO_LABEL: Record<CharmVerdict['recommendation'], string> = {
 function buildReport(r: GenerateResult, v: CharmVerdict): string {
   const bySeq = new Map(v.stops.map((s) => [s.seq, s]))
   const out: string[] = []
-  out.push(`# Voice & charm report — ${r.corridor} (${r.region}) · ${r.durationBucket}`)
+  out.push(`# Voice & charm report — ${r.tourName} (${r.region}) · ${r.durationBucket}`)
   if (r.tourId) out.push(`tour: ${r.tourId}`)
   out.push('')
   out.push('## The bet: is the persona charming enough to build the player on?')
@@ -174,7 +174,7 @@ async function main() {
   if (scripted.length === 0)
     throw new Error('No narrated scripts in the JSON (did you point at a real run result?).')
 
-  console.error(`Judging charm of ${scripted.length} stops on "${result.corridor}"...`)
+  console.error(`Judging charm of ${scripted.length} stops on "${result.tourName}"...`)
   const verdict = await judgeCharm(scripted)
   const report = buildReport(result, verdict)
 

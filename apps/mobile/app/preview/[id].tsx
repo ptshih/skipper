@@ -107,7 +107,6 @@ export default function PreviewScreen() {
         // the whole preview as one opaque load (and so a stall can re-sign in isolation).
         const tour = await getTour(id)
         if (cancelled) return
-        if (!tour.corridor) throw new Error('This tour has no route to drive.')
         const signed = await signTourAudio(id)
         if (cancelled) return
         const tl = buildPreviewTimeline(
@@ -119,17 +118,17 @@ export default function PreviewScreen() {
             lng: s.lng,
             audioDurationMs: s.audioDurationMs,
           })),
-          tour.corridor.polyline as [number, number][],
+          tour.tour.polyline as [number, number][],
           // Stretch the preview's compressed drive gaps to 12–20s (vs the engine's
           // short 1.2–4s default) so the between-stop drive music has room to breathe
           // in the simulated drive. Kept deliberately — this is preview-only pacing
           // (the real GPS drive uses actual elapsed time, not these compressed gaps).
           { minGapSec: 12, maxGapSec: 20 },
         )
-        setUrls(new Map(signed.urls.map((u) => [u.seq, u.url])))
+        setUrls(new Map(signed.stops.map((u) => [u.seq, u.url])))
         setData({
-          tourName: tour.corridor.name,
-          region: tour.corridor.region,
+          tourName: tour.tour.headline,
+          region: tour.region.displayName,
           hostName: tour.host.name,
           segments: tl.segments,
           stops: tour.stops.map((s) => ({ seq: s.seq, name: s.name, stopType: s.stopType })),
@@ -174,7 +173,7 @@ export default function PreviewScreen() {
       const signed = await signTourAudio(id)
       if (sawFresh.current) return // clip started during the re-sign — leave it alone
       loadedSeq.current = null
-      setUrls(new Map(signed.urls.map((u) => [u.seq, u.url])))
+      setUrls(new Map(signed.stops.map((u) => [u.seq, u.url])))
     } catch {
       // Re-sign failed (offline / 503) — the watchdog's second pass skips the stop.
     }

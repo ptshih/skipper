@@ -1,11 +1,11 @@
-// Materialize a corridor's FROZEN polyline from the Google Routes API.
+// Materialize a tour's FROZEN polyline from the Google Routes API.
 //
-// Run ONCE per corridor. It reads a hand-curated spec (./corridors.ts), asks the
+// Run ONCE per tour. It reads a hand-curated spec (./tour-specs.ts), asks the
 // Routes API to compute a road-snapped route through the waypoints, decodes the
 // polyline to GeoJSON [lng, lat] pairs, and writes the result to
 // ./data/<slug>.json. That JSON is the FROZEN artifact (committed, version
 // controlled) — the route is never recomputed at request time. ./seed.ts reads
-// these JSON files; it never calls Google.
+// these JSON files for geometry; it never calls Google.
 //
 // Usage (key injected via dotenvx; never hard-code it):
 //   dotenvx run -f .env.development -- bun packages/db/seed/materialize.ts <slug>
@@ -16,7 +16,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { CORRIDOR_SPECS, specBySlug, type CorridorSpec, type FrozenCorridor } from './corridors'
+import { TOUR_SPECS, specBySlug, type TourSpec, type FrozenTour } from './tour-specs'
 
 const DATA_DIR = join(dirname(fileURLToPath(import.meta.url)), 'data')
 const ROUTES_URL = 'https://routes.googleapis.com/directions/v2:computeRoutes'
@@ -51,7 +51,7 @@ function decodePolyline(encoded: string): [number, number][] {
   return out
 }
 
-async function computeRoute(spec: CorridorSpec, apiKey: string) {
+async function computeRoute(spec: TourSpec, apiKey: string) {
   const toLoc = (w: { lat: number; lng: number }) => ({
     location: { latLng: { latitude: w.lat, longitude: w.lng } },
   })
@@ -94,17 +94,25 @@ async function computeRoute(spec: CorridorSpec, apiKey: string) {
   return route
 }
 
-async function materialize(spec: CorridorSpec, apiKey: string): Promise<FrozenCorridor> {
+async function materialize(spec: TourSpec, apiKey: string): Promise<FrozenTour> {
   const route = await computeRoute(spec, apiKey)
   const polyline = decodePolyline(route.polyline.encodedPolyline)
   // duration comes back like "786s".
   const durationSeconds = Number.parseInt(route.duration.replace(/s$/, ''), 10)
-  const frozen: FrozenCorridor = {
+  const wp = spec.waypoints
+  const origin = wp[0]!
+  const destination = wp[wp.length - 1]!
+  const frozen: FrozenTour = {
     slug: spec.slug,
-    region: spec.region,
-    name: spec.name,
+    regionSlug: spec.regionSlug,
+    regionName: spec.regionName,
+    headline: spec.headline,
+    startAnchorName: spec.startAnchorName,
+    endAnchorName: spec.endAnchorName,
     summary: spec.summary,
     polyline,
+    startAnchor: { name: spec.startAnchorName, lat: origin.lat, lng: origin.lng },
+    endAnchor: { name: spec.endAnchorName, lat: destination.lat, lng: destination.lng },
     provenance: {
       source: 'google-routes-v2',
       waypoints: spec.waypoints,
@@ -137,9 +145,9 @@ async function main() {
   if (!arg) {
     throw new Error('Usage: materialize.ts <slug> | --all')
   }
-  const specs = arg === '--all' ? CORRIDOR_SPECS : [specBySlug(arg)]
+  const specs = arg === '--all' ? TOUR_SPECS : [specBySlug(arg)]
   for (const spec of specs) {
-    if (!spec) throw new Error(`No corridor spec for slug "${arg}"`)
+    if (!spec) throw new Error(`No tour spec for slug "${arg}"`)
     await materialize(spec, apiKey)
   }
 }

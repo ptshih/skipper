@@ -1,20 +1,28 @@
 import { expect, test } from 'bun:test'
 import { deriveRegions, filterByRegion } from './regions'
 
-const C = (region: string) => ({ region, id: region })
+const T = (slug: string, name: string) => ({ regionSlug: slug, regionName: name })
 
 test('deriveRegions: distinct regions with counts, sorted by name', () => {
-  const out = deriveRegions([C('Yosemite'), C('Lake Tahoe'), C('Lake Tahoe'), C('Moab')])
+  const out = deriveRegions([
+    T('yosemite', 'Yosemite'),
+    T('lake-tahoe', 'Lake Tahoe'),
+    T('lake-tahoe', 'Lake Tahoe'),
+    T('moab', 'Moab'),
+  ])
   expect(out).toEqual([
-    { region: 'Lake Tahoe', count: 2 },
-    { region: 'Moab', count: 1 },
-    { region: 'Yosemite', count: 1 },
+    { slug: 'lake-tahoe', name: 'Lake Tahoe', count: 2 },
+    { slug: 'moab', name: 'Moab', count: 1 },
+    { slug: 'yosemite', name: 'Yosemite', count: 1 },
   ])
 })
 
-test('filterByRegion: null returns all; a region returns only its matches', () => {
-  const all = [C('Lake Tahoe'), C('Yosemite'), C('Lake Tahoe')]
+test('filterByRegion: null returns all; a slug returns only its matches', () => {
+  const all = [T('lake-tahoe', 'Lake Tahoe'), T('yosemite', 'Yosemite'), T('lake-tahoe', 'Lake Tahoe')]
   expect(filterByRegion(all, null)).toHaveLength(3)
-  expect(filterByRegion(all, 'Lake Tahoe').map((c) => c.region)).toEqual(['Lake Tahoe', 'Lake Tahoe'])
-  expect(filterByRegion(all, 'Moab')).toHaveLength(0)
+  expect(filterByRegion(all, 'lake-tahoe').map((t) => t.regionSlug)).toEqual([
+    'lake-tahoe',
+    'lake-tahoe',
+  ])
+  expect(filterByRegion(all, 'moab')).toHaveLength(0)
 })

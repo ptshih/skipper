@@ -8,23 +8,26 @@
 // the client. Portrait/voice-sample are URLs (R2 once art exists), never bundled assets,
 // for the same App-Store reason.
 //
-// Keyed by the `persona` enum: `Record<Persona, ...>` makes TypeScript reject adding a new
-// persona without giving it a host here — the completeness guard is the type itself.
+// Keyed by REGION SLUG (regions are a table now, not a finite enum). v1 has a single host
+// (the Skipper) for every region; per-region host identities are the deferred upgrade
+// path — add a slug entry here and it ships with a backend deploy. Unknown/new regions
+// fall back to the Skipper so a freshly-seeded region is never host-less.
 
-import type { HostIdentity, Persona } from '@skipper/shared'
+import type { HostIdentity } from '@skipper/shared'
 
-const HOSTS: Record<Persona, HostIdentity> = {
-  // The original Tahoe host. `name` is what the lock-screen Now Playing shows as the
-  // "artist" today (was hard-coded 'Skipper' in the app before this contract landed).
-  skipper: {
-    name: 'Skipper',
-    tagline: 'Your road-trip guide — every stop, every story, and an unreasonable number of puns.',
-    backstory:
-      'A deadpan pun-machine who knows this lake by heart, drives a cranky old truck that starts when it feels like it, and has strong opinions about coffee. Here to point things out the window and groan at his own jokes.',
-    portraitUrl: null,
-    voiceSampleUrl: null,
-  },
+const SKIPPER: HostIdentity = {
+  // `name` is what the lock-screen Now Playing shows as the "artist".
+  name: 'Skipper',
+  tagline: 'Your road-trip guide — every stop, every story, and an unreasonable number of puns.',
+  backstory:
+    'A deadpan pun-machine who knows this lake by heart, drives a cranky old truck that starts when it feels like it, and has strong opinions about coffee. Here to point things out the window and groan at his own jokes.',
+  portraitUrl: null,
+  voiceSampleUrl: null,
 }
 
-/** Resolve the narrating host's display identity for a tour's persona. */
-export const hostForPersona = (persona: Persona): HostIdentity => HOSTS[persona]
+const HOSTS: Record<string, HostIdentity> = {
+  'lake-tahoe': SKIPPER,
+}
+
+/** Resolve the narrating host's display identity for a tour's region slug. */
+export const hostForRegion = (regionSlug: string): HostIdentity => HOSTS[regionSlug] ?? SKIPPER

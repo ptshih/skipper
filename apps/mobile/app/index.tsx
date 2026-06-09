@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Animated, FlatList, RefreshControl, StyleSheet, View } from 'react-native'
 import { Stack, useFocusEffect, useRouter } from 'expo-router'
-import { listCorridors, type CorridorList } from '@/lib/api'
+import { listTours, type TourList } from '@/lib/api'
 import { useSession } from '@/lib/auth'
 import { useDrivesFilter } from '@/lib/drives-filter'
 import { deriveRegions, filterByRegion } from '@/lib/regions'
@@ -9,16 +9,16 @@ import { useTheme } from '@/theme'
 import { space } from '@/theme/tokens'
 import { Badge, Button, Card, Divider, FilterChip, HeaderIconButton, RouteTrack, Screen, Text, voice } from '@/ui'
 
-// Browse corridors — anonymous-friendly. (Tapping a corridor opens its tours.) The top
-// is a framed travel-poster hero with the signature car-token-on-the-trail motif; below it
-// the "THE DRIVES" seam carries a location filter ("Where to?") — a region chip that's
-// hidden until the catalog spans >=2 regions, so today's Tahoe-only build ships unchanged.
-export default function CorridorsScreen() {
+// Browse drives — anonymous-friendly. A tour is the whole self-contained drive now, so a
+// card opens straight into the drive (gated). The top is a framed travel-poster hero with
+// the signature car-token-on-the-trail motif; below it the "THE DRIVES" seam carries a
+// location filter ("Where to?") — a region chip, live whenever the catalog has a region.
+export default function DrivesScreen() {
   const theme = useTheme()
   const router = useRouter()
   const { data: session } = useSession()
   const { regions, setRegions, selectedRegion, setSelectedRegion } = useDrivesFilter()
-  const [corridors, setCorridors] = useState<CorridorList['corridors']>([])
+  const [tours, setTours] = useState<TourList['tours']>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -32,8 +32,8 @@ export default function CorridorsScreen() {
   const load = useCallback(async () => {
     try {
       setError(null)
-      const r = await listCorridors()
-      setCorridors(r.corridors)
+      const r = await listTours()
+      setTours(r.tours)
     } catch (e) {
       setError(e instanceof Error ? e.message : voice.error.generic)
     } finally {
@@ -57,16 +57,17 @@ export default function CorridorsScreen() {
   // picker reads them), and drop a selected region that's no longer present (e.g. after a
   // refresh removed it) so the list can't get stuck filtered to nothing.
   useEffect(() => {
-    const opts = deriveRegions(corridors)
+    const opts = deriveRegions(tours)
     setRegions(opts)
-    setSelectedRegion((cur) => (cur && opts.some((o) => o.region === cur) ? cur : null))
-  }, [corridors, setRegions, setSelectedRegion])
+    setSelectedRegion((cur) => (cur && opts.some((o) => o.slug === cur) ? cur : null))
+  }, [tours, setRegions, setSelectedRegion])
 
   // The drives shown, narrowed to the picked region (null = all).
-  const visibleCorridors = useMemo(
-    () => filterByRegion(corridors, selectedRegion),
-    [corridors, selectedRegion],
+  const visibleTours = useMemo(
+    () => filterByRegion(tours, selectedRegion),
+    [tours, selectedRegion],
   )
+  const selectedRegionName = regions.find((o) => o.slug === selectedRegion)?.name ?? null
 
   // The settings gear (our themed circular chip), shared by headerRight (Android +
   // iOS<26) and the iOS-26 *Items API below — the latter strips the Liquid Glass capsule
@@ -142,10 +143,10 @@ export default function CorridorsScreen() {
               today, picking it is a no-op — but the chip + picker are live.) */}
           {regions.length > 0 ? (
             <FilterChip
-              label={selectedRegion ?? voice.home.where.all}
+              label={selectedRegionName ?? voice.home.where.all}
               active={selectedRegion !== null}
               onPress={() => router.push('/regions')}
-              accessibilityLabel={`Filter drives by region: ${selectedRegion ?? voice.home.where.all}`}
+              accessibilityLabel={`Filter drives by region: ${selectedRegionName ?? voice.home.where.all}`}
             />
           ) : null}
         </View>
@@ -209,8 +210,8 @@ export default function CorridorsScreen() {
         </>
       ) : (
         <FlatList
-          data={visibleCorridors}
-          keyExtractor={(c) => c.id}
+          data={visibleTours}
+          keyExtractor={(t) => t.id}
           ListHeaderComponent={listHeader}
           contentContainerStyle={styles.list}
           refreshControl={
@@ -245,25 +246,31 @@ export default function CorridorsScreen() {
           renderItem={({ item }) => (
             <View style={styles.row}>
               <Card
-                onPress={() =>
-                  router.push({
-                    pathname: '/corridor/[id]',
-                    params: { id: item.id, name: item.name },
-                  })
-                }
+                framed={item.isPreview}
+                onPress={() => router.push({ pathname: '/tour/[id]', params: { id: item.id } })}
               >
+                {item.isPreview ? (
+                  <Text variant="label" color="accentWarm" style={styles.kicker}>
+                    START HERE
+                  </Text>
+                ) : null}
                 <Text variant="title" color="ink">
-                  {item.name}
+                  {item.headline}
                 </Text>
                 <View style={styles.metaRow}>
-                  <Text variant="label" color="inkFaint">
-                    {item.region}
+                  <Text variant="label" color="inkFaint" style={styles.flex} numberOfLines={1}>
+                    {item.startAnchorName} → {item.endAnchorName}
                   </Text>
                   {item.durationSeconds ? (
                     <Badge tone="amber" label={`${Math.round(item.durationSeconds / 60)} MIN`} />
                   ) : null}
+                  {item.isPreview ? <Badge tone="amber" filled label="FREE PREVIEW" /> : null}
                 </View>
-                {item.summary ? (
+                {item.teaser ? (
+                  <Text variant="body" color="inkDim" numberOfLines={1} style={styles.summary}>
+                    {item.teaser}
+                  </Text>
+                ) : item.summary ? (
                   <Text variant="body" color="inkDim" style={styles.summary}>
                     {item.summary}
                   </Text>
@@ -295,7 +302,8 @@ const styles = StyleSheet.create({
   },
   list: { paddingVertical: space.gutter, gap: space.md },
   row: { paddingHorizontal: space.gutter },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.xs },
+  kicker: { marginBottom: space.xs },
+  metaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space.sm, marginTop: space.xs },
   summary: { marginTop: space.xs },
   loading: {
     flex: 1,

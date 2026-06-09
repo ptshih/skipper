@@ -176,16 +176,15 @@ export function useDrive(tourId: string | undefined): UseDrive {
         }).catch(() => {})
         const tour = await getTour(tourId)
         if (cancelled) return
-        if (!tour.corridor) throw new Error('This tour has no route to drive.')
         const signed = await signTourAudio(tourId)
         if (cancelled) return
-        const polyline = tour.corridor.polyline as [number, number][]
+        const polyline = tour.tour.polyline as [number, number][]
         if (polyline.length < 2) throw new Error('This tour has no drivable route.')
         const cum = cumulativeMeters(polyline)
-        setUrls(new Map(signed.urls.map((u) => [u.seq, u.url])))
+        setUrls(new Map(signed.stops.map((u) => [u.seq, u.url])))
         setData({
-          tourName: tour.corridor.name,
-          region: tour.corridor.region,
+          tourName: tour.tour.headline,
+          region: tour.region.displayName,
           hostName: tour.host.name,
           polyline,
           totalM: cum.length > 0 ? (cum[cum.length - 1] ?? 0) : 0,
@@ -217,7 +216,7 @@ export function useDrive(tourId: string | undefined): UseDrive {
       const signed = await signTourAudio(tourId)
       if (sawFresh.current) return true // clip started during the re-sign — leave it alone
       loadedSeq.current = null
-      setUrls(new Map(signed.urls.map((u) => [u.seq, u.url])))
+      setUrls(new Map(signed.stops.map((u) => [u.seq, u.url])))
       return true
     } catch {
       return false // offline / 503 — the caller skips the stop so the drive never hangs

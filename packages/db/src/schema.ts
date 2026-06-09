@@ -25,16 +25,17 @@ export type Polyline = [number, number][]
 export type PoiFacts = Record<string, unknown>
 
 /**
- * Attribution snapshot frozen at generation time so credit stays correct even
- * if the source POI row is later edited (e.g. Wikipedia CC BY-SA requirements).
+ * Attribution snapshot frozen at narration time so credit stays correct even if
+ * the source POI row is later edited (e.g. Wikipedia CC BY-SA requirements).
  *
- * `source` is the ATTRIBUTION source, a SUPERSET of `poiSourceEnum` (a POI's
- * discovery source): a clip can blend a Wikipedia POI with enrichment that owns no
- * `pois` row — coordinate-keyed Macrostrat geology, or QID-keyed Wikidata structured
- * facts. poi_content.attribution is therefore an ARRAY — one entry per source the clip
- * drew on — so a multi-source clip credits each (Wikipedia CC BY-SA + Macrostrat CC BY
- * + Wikidata CC0, etc.). Keep this union in lockstep with the Zod `attributionSource`
- * enum in @skipper/shared.
+ * Lives on the `tour_stops` row now (narration is tour-owned; there is no
+ * `poi_content`). `source` is the ATTRIBUTION source, a SUPERSET of `poiSourceEnum`
+ * (a POI's discovery source): a clip can blend a Wikipedia POI with enrichment that
+ * owns no `pois` row — coordinate-keyed Macrostrat geology, or QID-keyed Wikidata
+ * structured facts. `tour_stops.attribution` is therefore an ARRAY — one entry per
+ * source the clip drew on — so a multi-source clip credits each (Wikipedia CC BY-SA +
+ * Macrostrat CC BY + Wikidata CC0, etc.). Keep this union in lockstep with the Zod
+ * `attributionSource` enum in @skipper/shared.
  */
 export type AttributionSnapshot = {
   source: 'wikipedia' | 'google_places' | 'macrostrat' | 'wikidata'
@@ -60,44 +61,37 @@ export const tourStatusEnum = pgEnum('tour_status', ['draft', 'generating', 'rea
 
 export const stopTypeEnum = pgEnum('stop_type', ['story', 'scenic', 'break'])
 
-// persona + duration_bucket are poi_content / tour cache-key dimensions, so the
-// DB enforces them (mirrors the Zod enums) — a typo can't fragment the dedup key.
-export const personaEnum = pgEnum('persona', ['skipper'])
-
-export const durationBucketEnum = pgEnum('duration_bucket', ['short', 'standard', 'long'])
+// A drive's FRAME pieces (the intro/outro brackets — see tour_brackets). Kept as a
+// pgEnum (typo-safe) and mirrored by the Zod `bracketKind` enum in @skipper/shared.
+export const bracketKindEnum = pgEnum('bracket_kind', ['intro', 'outro'])
 
 /* -------------------------------------------------------------------------- */
-/*  corridors — hand-curated routes                                            */
+/*  regions — minimal keying TABLE (not a pgEnum). Adding a region = an INSERT.  */
 /* -------------------------------------------------------------------------- */
 
-export const corridors = pgTable(
-  'corridors',
+// Host-presentation columns (portrait/voice-sample URLs, the /regions feed) are
+// deferred to the 2nd region; for now a region is just its key + spoken name.
+export const regions = pgTable(
+  'regions',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    region: text('region').notNull(),
-    name: text('name').notNull(),
-    slug: text('slug').notNull(),
-    // Frozen, precomputed route geometry.
-    polyline: jsonb('polyline').$type<Polyline>().notNull(),
-    // Frozen Routes-API totals for the route. Nullable (older rows predate these);
-    // the generator paces stops by drive TIME and uses durationSeconds when set,
-    // falling back to a speed estimate when null.
-    distanceMeters: integer('distance_meters'),
-    durationSeconds: integer('duration_seconds'),
-    summary: text('summary'),
+    slug: text('slug').notNull(), // 'lake-tahoe' (the key)
+    displayName: text('display_name').notNull(), // 'Lake Tahoe' (spoken + shown in the picker)
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .defaultNow()
       .notNull()
       .$onUpdate(() => new Date()),
   },
-  (t) => [uniqueIndex('corridors_slug_uq').on(t.slug)],
+  (t) => [uniqueIndex('regions_slug_uq').on(t.slug)],
 )
 
 /* -------------------------------------------------------------------------- */
-/*  pois — a place (deduped per external source)                               */
+/*  pois — a shared PLACE (facts/coords, deduped per external source)           */
 /* -------------------------------------------------------------------------- */
 
+// The ONLY cache in the model: a place's facts are SHARED by every tour that visits
+// it. Narration is NOT here — it is tour-owned (see tour_stops).
 export const pois = pgTable(
   'pois',
   {
@@ -111,6 +105,12 @@ export const pois = pgTable(
     lng: doublePrecision('lng').notNull(),
     summary: text('summary'),
     facts: jsonb('facts').$type<PoiFacts>(),
+    // FACTS freshness (COLUMNS ship now; the re-fetch/TTL MECHANISM is DEFERRED):
+    //   facts_fetched_at = TTL clock; facts_hash = change detector (changes only on
+    //   a material change). A tour_stop is fact-stale iff its facts_hash IS DISTINCT
+    //   FROM this row's facts_hash (joined on poiId), for stops whose facts_hash is set.
+    factsHash: text('facts_hash'),
+    factsFetchedAt: timestamp('facts_fetched_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .defaultNow()
@@ -125,68 +125,45 @@ export const pois = pgTable(
 )
 
 /* -------------------------------------------------------------------------- */
-/*  poi_content — generated narration + audio cache                            */
+/*  tours — the whole self-contained DRIVE (route + the generation that fills it)*/
 /* -------------------------------------------------------------------------- */
 
-export const poiContent = pgTable(
-  'poi_content',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-    poiId: uuid('poi_id')
-      .notNull()
-      .references(() => pois.id, { onDelete: 'cascade' }),
-    persona: personaEnum('persona').notNull(),
-    voice: text('voice').notNull(),
-    jokeLevel: jokeLevelEnum('joke_level').notNull(),
-    // Generated narration script.
-    script: text('script').notNull(),
-    // R2 object URL for the rendered audio (null until synthesized).
-    audioUrl: text('audio_url'),
-    audioDurationMs: integer('audio_duration_ms'),
-    // Human spot-check flag.
-    reviewed: boolean('reviewed').default(false).notNull(),
-    // Frozen attribution at generation time — an ARRAY, one entry per source the clip
-    // drew on (Wikipedia + Macrostrat geology, etc.). NULLABLE here, but the M1
-    // generator MUST populate it for every wikipedia-sourced clip (CC BY-SA is legal,
-    // not optional) — enforced in the generation checklist + human-review gate. (jsonb,
-    // so the object→array widening needs no SQL migration; legacy single-object rows,
-    // if any, are read tolerantly via the Zod union in @skipper/shared.)
-    attribution: jsonb('attribution').$type<AttributionSnapshot[]>(),
-    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-    updatedAt: timestamp('updated_at', { withTimezone: true })
-      .defaultNow()
-      .notNull()
-      .$onUpdate(() => new Date()),
-  },
-  (t) => [
-    // Cache key: one row per (poi, persona, voice, joke_level).
-    uniqueIndex('poi_content_key_uq').on(t.poiId, t.persona, t.voice, t.jokeLevel),
-  ],
-)
-
-/* -------------------------------------------------------------------------- */
-/*  tours — an assembled tour                                                  */
-/* -------------------------------------------------------------------------- */
-
+// `corridors` is MERGED IN: a tour carries its OWN polyline, distance/duration,
+// headline, start/end anchors, and region. One tour = one catalog card; there is no
+// direction/family and no duration/interest variant matrix (those are deferred axes).
 export const tours = pgTable(
   'tours',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    corridorId: uuid('corridor_id')
+    regionId: uuid('region_id')
       .notNull()
-      .references(() => corridors.id, { onDelete: 'restrict' }),
-    durationBucket: durationBucketEnum('duration_bucket').notNull(),
-    // Selected interest tags.
-    interests: text('interests').array().notNull().default([]),
-    persona: personaEnum('persona').notNull(),
+      .references(() => regions.id, { onDelete: 'restrict' }),
+    slug: text('slug').notNull(),
+    // Marquee POI ("Emerald Bay"); display name = "[headline], [start] to [end]".
+    headline: text('headline').notNull(),
+    // Route — absorbed from the old `corridors` table; a frozen rail, authored once
+    // via the Routes API and never re-derived.
+    polyline: jsonb('polyline').$type<Polyline>().notNull(),
+    distanceMeters: integer('distance_meters'),
+    durationSeconds: integer('duration_seconds'),
+    summary: text('summary'),
+    // End-anchors {name, lat, lng}: naming, intro/outro anchoring, the GPS-start pin,
+    // and the proximity recommender.
+    startAnchorName: text('start_anchor_name').notNull(),
+    startAnchorLat: doublePrecision('start_anchor_lat').notNull(),
+    startAnchorLng: doublePrecision('start_anchor_lng').notNull(),
+    endAnchorName: text('end_anchor_name').notNull(),
+    endAnchorLat: doublePrecision('end_anchor_lat').notNull(),
+    endAnchorLng: doublePrecision('end_anchor_lng').notNull(),
+    // Per-tour generation param (NOT a content cache key — there is no content cache;
+    // narration is tour-owned). jokeLevel = the one notch generated (M1: dadpocalypse).
     jokeLevel: jokeLevelEnum('joke_level').notNull(),
     status: tourStatusEnum('status').notNull().default('draft'),
-    // Route signature hash — M4 cache/dedup forward-compat. Nullable in v1; do
-    // NOT add a (unique) index until M4 actually queries/dedupes on it.
+    // Optional tour-dedup hash — M4 forward-compat. Do NOT add a (unique) index until
+    // M4 actually queries/dedupes on it.
     routeSig: text('route_sig'),
     // Marks the single anonymous-playable sample tour (freemium "sample, then sign
-    // up"). NOT ownership — tours stay anonymous/shareable; this just flags which
-    // tour a guest may fetch/play without an account.
+    // up"). NOT ownership — tours stay anonymous/shareable.
     isPreview: boolean('is_preview').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
@@ -194,11 +171,15 @@ export const tours = pgTable(
       .notNull()
       .$onUpdate(() => new Date()),
   },
-  (t) => [index('tours_corridor_idx').on(t.corridorId), index('tours_status_idx').on(t.status)],
+  (t) => [
+    uniqueIndex('tours_slug_uq').on(t.slug),
+    index('tours_region_idx').on(t.regionId),
+    index('tours_status_idx').on(t.status),
+  ],
 )
 
 /* -------------------------------------------------------------------------- */
-/*  tour_stops — ordered stops pointing at content                             */
+/*  tour_stops — ordered stops that OWN their narration (per tour)              */
 /* -------------------------------------------------------------------------- */
 
 export const tourStops = pgTable(
@@ -210,28 +191,33 @@ export const tourStops = pgTable(
       .references(() => tours.id, { onDelete: 'cascade' }),
     // Ordering within the tour.
     seq: integer('seq').notNull(),
-    // Every stop anchors to a POI location (including break stops).
+    // The shared PLACE this stop narrates. Stays NOT NULL — intro/outro are NOT stops;
+    // they live in their own `tour_brackets` frame table, so this FK never relaxes.
     poiId: uuid('poi_id')
       .notNull()
       .references(() => pois.id, { onDelete: 'restrict' }),
-    // Null for break / not-yet-generated stops. NOTE (M4): set-null on a deleted
-    // poi_content row does NOT demote tours.status from 'ready' — when cache
-    // invalidation lands, pair content deletes with tour re-validation.
-    poiContentId: uuid('poi_content_id').references(() => poiContent.id, {
-      onDelete: 'set null',
-    }),
     stopType: stopTypeEnum('stop_type').notNull(),
+    // ── Tour-OWNED narration (was poi_content; NEVER shared across tours) ──
+    script: text('script'),
+    // R2 object KEY, TOUR-scoped: clips/<tourId>/<stopId>.<ext>. Private; the API
+    // presigns it after the freemium tier check.
+    audioUrl: text('audio_url'),
+    audioDurationMs: integer('audio_duration_ms'),
+    // Frozen attribution — an ARRAY, one entry per source this clip drew on (Wikipedia
+    // CC BY-SA + Macrostrat CC BY + Wikidata CC0, etc.). Nullable, but the generator
+    // MUST populate it for every wikipedia-sourced clip (CC BY-SA is legal, not optional).
+    attribution: jsonb('attribution').$type<AttributionSnapshot[]>(),
+    reviewed: boolean('reviewed').default(false).notNull(),
+    // The pois.facts_hash this stop's narration was generated from. NULL for stops that
+    // don't ground on facts (scenic/break) → never fact-stale. Stale iff facts_hash IS
+    // DISTINCT FROM pois.facts_hash (joined on poiId).
+    factsHash: text('facts_hash'),
+    // ── Trigger geometry ──
     triggerRadiusM: integer('trigger_radius_m').notNull().default(120),
-    // TRIGGER POINT: the stop's POI snapped onto the route (nearest point on the
-    // frozen polyline), plus the route's heading of travel at that point. Computed
-    // once at generation time so the in-car player triggers as the vehicle passes
-    // the POI's point ON THE ROAD (POIs sit 400–650 m off the road on Tahoe
-    // corridors) and can run a heading gate WITHOUT re-snapping every stop at load.
-    // Nullable for back-compat: tours generated BEFORE these columns existed leave
-    // them null until backfilled (backfill-trigger-points.ts), and the player/sim
-    // then falls back to snapping the POI live. The generator always writes a value
-    // for new stops (a degenerate <2-vertex route would write 0, but corridors are
-    // dense frozen polylines, so that path is unreachable in practice).
+    // TRIGGER POINT: the stop's POI snapped onto the route (nearest point on the frozen
+    // polyline), plus the route's heading of travel at that point. Computed once at
+    // generation time so the in-car player triggers as the vehicle passes the POI's
+    // point ON THE ROAD and can run a heading gate without re-snapping every stop.
     triggerLat: doublePrecision('trigger_lat'),
     triggerLng: doublePrecision('trigger_lng'),
     approachHeadingDeg: integer('approach_heading_deg'),
@@ -247,17 +233,45 @@ export const tourStops = pgTable(
     // Stable ordering: one stop per position within a tour.
     uniqueIndex('tour_stops_tour_seq_uq').on(t.tourId, t.seq),
     index('tour_stops_poi_idx').on(t.poiId),
-    index('tour_stops_content_idx').on(t.poiContentId),
   ],
+)
+
+/* -------------------------------------------------------------------------- */
+/*  tour_brackets — the drive's FRAME (intro/outro). NOT stops.                 */
+/* -------------------------------------------------------------------------- */
+
+// Placeless by construction, fired by drive LIFECYCLE not geofence, so they get their
+// own homogeneous table (Option B). Keeps tour_stops strict (poiId NOT NULL) and the
+// geofence engine pure. No poiId, no trigger coords, no attribution — brackets are
+// about the DRIVE and carry no place-facts.
+export const tourBrackets = pgTable(
+  'tour_brackets',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    tourId: uuid('tour_id')
+      .notNull()
+      .references(() => tours.id, { onDelete: 'cascade' }),
+    kind: bracketKindEnum('kind').notNull(), // 'intro' | 'outro'
+    script: text('script'),
+    audioUrl: text('audio_url'), // clips/<tourId>/intro.mp3, clips/<tourId>/outro.mp3
+    audioDurationMs: integer('audio_duration_ms'),
+    reviewed: boolean('reviewed').default(false).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull()
+      .$onUpdate(() => new Date()),
+  },
+  // Exactly one intro + one outro per tour.
+  (t) => [uniqueIndex('tour_brackets_tour_kind_uq').on(t.tourId, t.kind)],
 )
 
 /* -------------------------------------------------------------------------- */
 /*  saved_tours — a free account's saved tours (M2 auth)                        */
 /* -------------------------------------------------------------------------- */
 
-// Tours stay anonymous/shareable: ownership is NOT a column on `tours`. A
-// signed-in user saves a tour through this join (userId -> Better Auth user.id,
-// which is text). On anonymous->account link, move rows from the guest user here.
+// Tours stay anonymous/shareable: ownership is NOT a column on `tours`. A signed-in
+// user saves a tour through this join (userId -> Better Auth user.id, which is text).
 export const savedTours = pgTable(
   'saved_tours',
   {
@@ -280,29 +294,21 @@ export const savedTours = pgTable(
 /*  Relations                                                                  */
 /* -------------------------------------------------------------------------- */
 
-export const corridorsRelations = relations(corridors, ({ many }) => ({
+export const regionsRelations = relations(regions, ({ many }) => ({
   tours: many(tours),
 }))
 
 export const poisRelations = relations(pois, ({ many }) => ({
-  content: many(poiContent),
-  stops: many(tourStops),
-}))
-
-export const poiContentRelations = relations(poiContent, ({ one, many }) => ({
-  poi: one(pois, {
-    fields: [poiContent.poiId],
-    references: [pois.id],
-  }),
   stops: many(tourStops),
 }))
 
 export const toursRelations = relations(tours, ({ one, many }) => ({
-  corridor: one(corridors, {
-    fields: [tours.corridorId],
-    references: [corridors.id],
+  region: one(regions, {
+    fields: [tours.regionId],
+    references: [regions.id],
   }),
   stops: many(tourStops),
+  brackets: many(tourBrackets),
 }))
 
 export const tourStopsRelations = relations(tourStops, ({ one }) => ({
@@ -314,9 +320,12 @@ export const tourStopsRelations = relations(tourStops, ({ one }) => ({
     fields: [tourStops.poiId],
     references: [pois.id],
   }),
-  content: one(poiContent, {
-    fields: [tourStops.poiContentId],
-    references: [poiContent.id],
+}))
+
+export const tourBracketsRelations = relations(tourBrackets, ({ one }) => ({
+  tour: one(tours, {
+    fields: [tourBrackets.tourId],
+    references: [tours.id],
   }),
 }))
 
@@ -324,15 +333,15 @@ export const tourStopsRelations = relations(tourStops, ({ one }) => ({
 /*  Inferred row types (import via the "@skipper/db/schema" subpath, aliased)   */
 /* -------------------------------------------------------------------------- */
 
-export type Corridor = typeof corridors.$inferSelect
-export type NewCorridor = typeof corridors.$inferInsert
+export type Region = typeof regions.$inferSelect
+export type NewRegion = typeof regions.$inferInsert
 export type Poi = typeof pois.$inferSelect
 export type NewPoi = typeof pois.$inferInsert
-export type PoiContent = typeof poiContent.$inferSelect
-export type NewPoiContent = typeof poiContent.$inferInsert
 export type Tour = typeof tours.$inferSelect
 export type NewTour = typeof tours.$inferInsert
 export type TourStop = typeof tourStops.$inferSelect
 export type NewTourStop = typeof tourStops.$inferInsert
+export type TourBracket = typeof tourBrackets.$inferSelect
+export type NewTourBracket = typeof tourBrackets.$inferInsert
 export type SavedTour = typeof savedTours.$inferSelect
 export type NewSavedTour = typeof savedTours.$inferInsert

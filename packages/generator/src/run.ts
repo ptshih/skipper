@@ -20,7 +20,7 @@
 // GOOGLE_APPLICATION_CREDENTIALS or `gcloud auth application-default login`) and R2_*.
 
 import { generateTour } from './pipeline/generate'
-import type { GenerateResult } from './pipeline/generate'
+import type { BracketSummary, GenerateResult } from './pipeline/generate'
 
 const DURATIONS = ['short', 'standard', 'long'] as const
 type Duration = (typeof DURATIONS)[number]
@@ -39,7 +39,7 @@ function parseArgs(argv: string[]): Args {
   const slug = args.find((a) => !a.startsWith('--'))
   if (!slug) {
     throw new Error(
-      'Usage: run.ts <corridor-slug> [--dry-run] [--preview] [--no-judge-closers] [--duration=short|standard|long] [--json=<path>]',
+      'Usage: run.ts <tour-slug> [--dry-run] [--preview] [--no-judge-closers] [--duration=short|standard|long] [--json=<path>]',
     )
   }
   const dryRun = args.includes('--dry-run')
@@ -69,12 +69,28 @@ const estSpokenSec = (script: string): number =>
 function printResult(r: GenerateResult): void {
   console.log('\n' + '='.repeat(72))
   console.log(
-    `${r.dryRun ? 'DRY RUN' : 'GENERATED'} — ${r.corridor} (${r.region}) · ${r.durationBucket} · ~${Math.round(r.totalSec / 60)} min drive`,
+    `${r.dryRun ? 'DRY RUN' : 'GENERATED'} — ${r.tourName} (${r.region}) · ${r.durationBucket} · ~${Math.round(r.totalSec / 60)} min drive`,
   )
   if (r.tourId) console.log(`tour id: ${r.tourId}`)
   console.log('='.repeat(72))
   let audioMs = 0
   let estSec = 0 // dry-run: summed spoken-length estimate across narrated stops
+  const intro = r.brackets.find((b) => b.kind === 'intro')
+  const outro = r.brackets.find((b) => b.kind === 'outro')
+  const printBracket = (b: BracketSummary | undefined, label: string): void => {
+    if (!b) return
+    const est = b.script ? estSpokenSec(b.script) : 0
+    const lenTag = b.durationMs
+      ? `  (${(b.durationMs / 1000).toFixed(1)}s audio)`
+      : b.script
+        ? `  (~${Math.round(est)}s est)`
+        : ''
+    console.log('\n' + `[${label}]` + lenTag)
+    if (b.script) console.log(b.script.split('\n').map((l) => '     ' + l).join('\n'))
+    audioMs += b.durationMs ?? 0
+    if (!b.durationMs && b.script) estSec += est
+  }
+  printBracket(intro, 'INTRO')
   for (const s of r.stops) {
     const est = s.script ? estSpokenSec(s.script) : 0
     // Real audio duration on a full run; a words/pace estimate on a dry-run.
@@ -96,6 +112,7 @@ function printResult(r: GenerateResult): void {
     audioMs += s.durationMs ?? 0
     if (!s.durationMs && s.script) estSec += est
   }
+  printBracket(outro, 'OUTRO')
   if (audioMs > 0) console.log(`\nTotal narration audio: ${mmss(audioMs / 1000)}`)
   else if (estSec > 0)
     console.log(

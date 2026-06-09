@@ -1,14 +1,12 @@
-// Typed client for the Skipper M2 API. Responses are validated against the shared
-// Zod DTOs (@skipper/shared); auth rides on the Better Auth session cookie, which
-// the Expo client stores in secure-store and hands us via authClient.getCookie().
-import { corridorList, corridorTours, signedAudio, sourcesResponse, tourDetail } from '@skipper/shared'
-import type {
-  CorridorList,
-  CorridorTours,
-  DataSource,
-  SignedAudio,
-  TourDetail,
-} from '@skipper/shared'
+// Typed client for the Skipper API. Responses are validated against the shared Zod
+// DTOs (@skipper/shared); auth rides on the Better Auth session cookie, which the Expo
+// client stores in secure-store and hands us via authClient.getCookie().
+//
+// A tour is the whole self-contained drive now (corridors merged in): GET /tours lists
+// the catalog (one card per drive) and GET /tours/:id returns the drive (route + region
+// + host + intro/outro + stops).
+import { signedAudio, sourcesResponse, tourDetail, tourList } from '@skipper/shared'
+import type { DataSource, SignedAudio, TourDetail, TourList } from '@skipper/shared'
 import { API_URL, authClient } from './auth'
 
 export class ApiError extends Error {
@@ -44,11 +42,9 @@ async function fetchJson(path: string, init?: RequestInit): Promise<unknown> {
   return json
 }
 
-export const listCorridors = async (): Promise<CorridorList> =>
-  corridorList.parse(await fetchJson('/corridors'))
-
-export const listCorridorTours = async (corridorId: string): Promise<CorridorTours> =>
-  corridorTours.parse(await fetchJson(`/corridors/${corridorId}/tours`))
+/** The catalog — one card per ready drive (no polyline). */
+export const listTours = async (): Promise<TourList> =>
+  tourList.parse(await fetchJson('/tours'))
 
 export const getTour = async (tourId: string): Promise<TourDetail> =>
   tourDetail.parse(await fetchJson(`/tours/${tourId}`))
@@ -60,4 +56,4 @@ export const signTourAudio = async (tourId: string): Promise<SignedAudio> =>
 export const getSources = async (): Promise<DataSource[]> =>
   sourcesResponse.parse(await fetchJson('/sources')).sources
 
-export type { CorridorList, CorridorTours, DataSource, SignedAudio, TourDetail }
+export type { DataSource, SignedAudio, TourDetail, TourList }

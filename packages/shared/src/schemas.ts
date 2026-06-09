@@ -1,14 +1,5 @@
 import { z } from 'zod'
-import {
-  attributionSource,
-  durationBucket,
-  interest,
-  jokeLevel,
-  persona,
-  poiSource,
-  stopType,
-  tourStatus,
-} from './enums'
+import { attributionSource, bracketKind, jokeLevel, poiSource, stopType, tourStatus } from './enums'
 
 /** A single [lng, lat] pair (GeoJSON axis order). */
 export const coordinate = z.tuple([z.number(), z.number()])
@@ -18,18 +9,15 @@ export type Coordinate = z.infer<typeof coordinate>
 export const polyline = z.array(coordinate)
 export type Polyline = z.infer<typeof polyline>
 
-/** A hand-curated route. The rails: never derived, never trimmed in v1. */
-export const corridor = z.object({
+/** A region — the minimal keying entity (a tour belongs to one). */
+export const region = z.object({
   id: z.uuid(),
-  region: z.string(),
-  name: z.string(),
   slug: z.string(),
-  polyline,
-  summary: z.string().nullish(),
+  displayName: z.string(),
 })
-export type Corridor = z.infer<typeof corridor>
+export type Region = z.infer<typeof region>
 
-/** A real place. Deduped per (source, sourceId). */
+/** A real place. Deduped per (source, sourceId). FACTS are shared; narration is not. */
 export const poi = z.object({
   id: z.uuid(),
   source: poiSource,
@@ -55,8 +43,8 @@ export type Attribution = z.infer<typeof attribution>
 
 /**
  * A clip's frozen attribution: an ARRAY, one entry per source it drew on (Wikipedia +
- * Macrostrat, etc.). Tolerant of a legacy single-object row (pre-array clips) by
- * normalizing it to a one-element array on read.
+ * Macrostrat, etc.). Tolerant of a legacy single-object row by normalizing it to a
+ * one-element array on read.
  */
 export const attributionList = z
   .union([attribution, z.array(attribution)])
@@ -65,9 +53,9 @@ export type AttributionList = z.infer<typeof attributionList>
 
 /**
  * A public data-source credit for the app-wide "Sources & Licenses" screen (NOT per-clip —
- * that's `attribution`, frozen on poi_content). Served by GET /sources so a NEW fact source
- * (Wikidata, OSM, public-domain texts…) credits correctly with a backend deploy, never an
- * App Store release. Keep in step with the generator's actual sources + `attributionSource`.
+ * that's `attribution`, frozen on the tour_stop). Served by GET /sources so a NEW fact
+ * source (Wikidata, OSM, public-domain texts…) credits correctly with a backend deploy,
+ * never an App Store release. Keep in step with the generator's actual sources.
  */
 export const dataSource = z.object({
   /** Display name of the source, e.g. "Wikipedia". */
@@ -89,29 +77,20 @@ export type DataSource = z.infer<typeof dataSource>
 export const sourcesResponse = z.object({ sources: z.array(dataSource) })
 export type SourcesResponse = z.infer<typeof sourcesResponse>
 
-/** Generated narration + audio. The cache: one per (poi, persona, voice, jokeLevel). */
-export const poiContent = z.object({
-  id: z.uuid(),
-  poiId: z.uuid(),
-  persona,
-  voice: z.string(),
-  jokeLevel,
-  script: z.string(),
-  audioUrl: z.string().nullish(),
-  audioDurationMs: z.number().int().nullish(),
-  reviewed: z.boolean(),
-  attribution: attributionList.nullish(),
-})
-export type PoiContent = z.infer<typeof poiContent>
-
-/** An ordered stop pointing at cached content. */
+/**
+ * An ordered stop that OWNS its narration (per tour). The R2 audio KEY is internal and
+ * never exposed; the player learns audio availability from `audioDurationMs` and gets a
+ * playable URL from the /sign endpoint.
+ */
 export const tourStop = z.object({
   id: z.uuid(),
   tourId: z.uuid(),
   seq: z.number().int(),
   poiId: z.uuid(),
-  poiContentId: z.uuid().nullish(),
   stopType,
+  script: z.string().nullish(),
+  audioDurationMs: z.number().int().nullish(),
+  attribution: attributionList.nullish(),
   /** Floor, not the rule — the player uses speed-adaptive lead time. */
   triggerRadiusM: z.number().int(),
   /** Heading gate only applies above ~5 mph; null = ignore heading. */
@@ -119,26 +98,42 @@ export const tourStop = z.object({
 })
 export type TourStop = z.infer<typeof tourStop>
 
-/** An assembled tour: a curated corridor + ordered stops at a fixed duration. */
+/** A drive's FRAME piece (intro/outro). Placeless; fired by drive lifecycle, not geofence. */
+export const tourBracket = z.object({
+  id: z.uuid(),
+  tourId: z.uuid(),
+  kind: bracketKind,
+  script: z.string().nullish(),
+  audioDurationMs: z.number().int().nullish(),
+})
+export type TourBracket = z.infer<typeof tourBracket>
+
+/** A tour: the whole self-contained drive (route + endpoints + ordered stops + brackets). */
 export const tour = z.object({
   id: z.uuid(),
-  corridorId: z.uuid(),
-  durationBucket,
-  interests: z.array(interest),
-  persona,
+  regionId: z.uuid(),
+  slug: z.string(),
+  headline: z.string(),
+  polyline,
+  distanceMeters: z.number().int().nullish(),
+  durationSeconds: z.number().int().nullish(),
+  summary: z.string().nullish(),
+  startAnchorName: z.string(),
+  startAnchorLat: z.number(),
+  startAnchorLng: z.number(),
+  endAnchorName: z.string(),
+  endAnchorLat: z.number(),
+  endAnchorLng: z.number(),
   jokeLevel,
   status: tourStatus,
-  /** hash(corridorId + duration + interests + persona + jokeLevel). Nullable in v1. */
   routeSig: z.string().nullish(),
+  isPreview: z.boolean(),
 })
 export type Tour = z.infer<typeof tour>
 
-/** The "assemble a tour" request. Flex = duration + interests + persona/jokeLevel. */
+/** The "generate a tour" request. A tour is defined by its route slug; M1 = dadpocalypse. */
 export const tourRequest = z.object({
-  corridorId: z.uuid(),
-  durationBucket,
-  interests: z.array(interest).default([]),
-  persona: persona.default('skipper'),
+  slug: z.string(),
   jokeLevel: jokeLevel.default('dadpocalypse'),
 })
 export type TourRequest = z.infer<typeof tourRequest>
@@ -147,35 +142,33 @@ export type TourRequest = z.infer<typeof tourRequest>
 /*  API response DTOs (apps/api ⇄ clients). Lightweight, no internal columns.   */
 /* -------------------------------------------------------------------------- */
 
-/** GET /corridors — one row (no polyline; that comes with a tour). */
-export const corridorListItem = z.object({
+/**
+ * GET /tours — one card per tour (the whole catalog; no polyline). A tour is the whole
+ * self-contained drive now (corridors merged in), so this replaces the old
+ * /corridors + /corridors/:id/tours pair. Carries the region (for the location filter)
+ * and the endpoints (for the card title), but never the route geometry.
+ */
+export const tourListItem = z.object({
   id: z.uuid(),
   slug: z.string(),
-  region: z.string(),
-  name: z.string(),
+  headline: z.string(),
+  regionSlug: z.string(),
+  regionName: z.string(),
+  startAnchorName: z.string(),
+  endAnchorName: z.string(),
   summary: z.string().nullish(),
   distanceMeters: z.number().int().nullish(),
   durationSeconds: z.number().int().nullish(),
-})
-export type CorridorListItem = z.infer<typeof corridorListItem>
-export const corridorList = z.object({ corridors: z.array(corridorListItem) })
-export type CorridorList = z.infer<typeof corridorList>
-
-/** GET /corridors/:id/tours — ready tours for a corridor (catalog metadata; play is gated). */
-export const tourListItem = z.object({
-  id: z.uuid(),
-  durationBucket,
-  persona,
   jokeLevel,
   isPreview: z.boolean(),
   /** A glanceable hook of the tour's marquee places (story/scenic anchors), e.g.
    *  "Emerald Bay & Vikingsholm" — so a tour card has an identity without a tap.
-   *  Nullish: pre-teaser clients/rows degrade to no hook. */
+   *  Nullish: pre-teaser rows degrade to no hook. */
   teaser: z.string().nullish(),
 })
 export type TourListItem = z.infer<typeof tourListItem>
-export const corridorTours = z.object({ tours: z.array(tourListItem) })
-export type CorridorTours = z.infer<typeof corridorTours>
+export const tourList = z.object({ tours: z.array(tourListItem) })
+export type TourList = z.infer<typeof tourList>
 
 /** A stop as the player needs it: location + trigger + whether it has audio. */
 export const tourStopView = z.object({
@@ -186,13 +179,19 @@ export const tourStopView = z.object({
   lng: z.number(),
   triggerRadiusM: z.number().int(),
   approachHeadingDeg: z.number().int().nullish(),
-  poiContentId: z.uuid().nullish(),
   audioDurationMs: z.number().int().nullish(),
 })
 export type TourStopView = z.infer<typeof tourStopView>
 
+/** A bracket as the player needs it: which frame + how long. Audio comes from /sign. */
+export const tourBracketView = z.object({
+  kind: bracketKind,
+  audioDurationMs: z.number().int().nullish(),
+})
+export type TourBracketView = z.infer<typeof tourBracketView>
+
 /**
- * The narrating host's display identity, resolved SERVER-SIDE from the tour's `persona`.
+ * The narrating host's display identity, resolved SERVER-SIDE from the tour's region.
  * The app RENDERS this; it must never bundle host identity itself, so a new region/host
  * ships with a backend deploy, never an App Store release. The GENERATION persona (system
  * prompt, kit, voice) stays in @skipper/generator and never reaches the client. Art is a
@@ -212,33 +211,54 @@ export const hostIdentity = z.object({
 })
 export type HostIdentity = z.infer<typeof hostIdentity>
 
-/** GET /tours/:id — the tour, its corridor polyline, the narrating host, and ordered stops. */
+/** GET /tours/:id — the drive: route + endpoints, the narrating host, intro/outro, stops. */
 export const tourDetail = z.object({
   tour: z.object({
     id: z.uuid(),
-    corridorId: z.uuid(),
-    durationBucket,
-    persona,
-    jokeLevel,
+    slug: z.string(),
+    headline: z.string(),
+    regionId: z.uuid(),
     status: tourStatus,
+    jokeLevel,
     isPreview: z.boolean(),
+    polyline,
+    distanceMeters: z.number().int().nullish(),
+    durationSeconds: z.number().int().nullish(),
+    summary: z.string().nullish(),
+    startAnchor: z.object({ name: z.string(), lat: z.number(), lng: z.number() }),
+    endAnchor: z.object({ name: z.string(), lat: z.number(), lng: z.number() }),
   }),
-  corridor: z.object({ name: z.string(), region: z.string(), polyline }).nullish(),
+  region: z.object({ slug: z.string(), displayName: z.string() }),
   host: hostIdentity,
+  intro: tourBracketView.nullish(),
+  outro: tourBracketView.nullish(),
   stops: z.array(tourStopView),
 })
 export type TourDetail = z.infer<typeof tourDetail>
 
-/** POST /tours/:id/assets/sign — presigned audio URLs by stop. */
+/** A single presigned audio clip. */
 export const signedClip = z.object({
-  seq: z.number().int(),
   url: z.url(),
   /** The clip's MIME type (e.g. "audio/mpeg"), derived server-side from the R2 key's
-   *  extension. The format is DATA, not an assumption: the player can stay format-agnostic
-   *  and the offline download (Phase 3) writes the right extension instead of hardcoding
-   *  `.wav` or parsing the presigned URL. Robust to mixed mp3/legacy-wav clips. */
+   *  extension. The format is DATA, not an assumption: the player stays format-agnostic
+   *  and the offline download writes the right extension instead of hardcoding `.wav`. */
   contentType: z.string(),
   durationMs: z.number().int().nullish(),
 })
-export const signedAudio = z.object({ urls: z.array(signedClip) })
+export type SignedClip = z.infer<typeof signedClip>
+
+/** A presigned stop clip, keyed by the stop's seq. */
+export const signedStopClip = signedClip.extend({ seq: z.number().int() })
+export type SignedStopClip = z.infer<typeof signedStopClip>
+
+/**
+ * POST /tours/:id/assets/sign — presigned audio URLs for the drive. `stops` are keyed
+ * by seq; `intro`/`outro` are the bracket clips (null until a tour has them — the player
+ * may ignore them until bracket playback lands).
+ */
+export const signedAudio = z.object({
+  stops: z.array(signedStopClip),
+  intro: signedClip.nullish(),
+  outro: signedClip.nullish(),
+})
 export type SignedAudio = z.infer<typeof signedAudio>

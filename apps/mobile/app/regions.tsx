@@ -14,8 +14,8 @@ export default function RegionsScreen() {
   const router = useRouter()
   const { regions, selectedRegion, setSelectedRegion } = useDrivesFilter()
 
-  const choose = (region: string | null) => {
-    setSelectedRegion(region)
+  const choose = (slug: string | null) => {
+    setSelectedRegion(slug)
     router.back()
   }
 
@@ -49,11 +49,11 @@ export default function RegionsScreen() {
       <Divider />
       {regions.map((opt) => (
         <RegionRow
-          key={opt.region}
-          label={opt.region}
+          key={opt.slug}
+          label={opt.name}
           meta={`${opt.count} ${opt.count === 1 ? 'drive' : 'drives'}`}
-          selected={selectedRegion === opt.region}
-          onPress={() => choose(opt.region)}
+          selected={selectedRegion === opt.slug}
+          onPress={() => choose(opt.slug)}
         />
       ))}
     </Screen>

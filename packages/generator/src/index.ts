@@ -16,4 +16,9 @@
 // CLI entry point: ./run.ts.
 export * from './models'
 export { generateTour } from './pipeline/generate'
-export type { GenerateOptions, GenerateResult, StopSummary } from './pipeline/generate'
+export type {
+  BracketSummary,
+  GenerateOptions,
+  GenerateResult,
+  StopSummary,
+} from './pipeline/generate'

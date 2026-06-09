@@ -34,7 +34,7 @@
 // second banlist targets conversational-AI tics; and the joke notches carry a
 // countable per-stop frequency ladder with a worked OFF->DADPOCALYPSE example.
 
-import type { JokeLevel, Persona } from '@skipper/shared'
+import type { JokeLevel } from '@skipper/shared'
 import { PERSONA_VOICE } from '../models'
 
 export const SKIPPER_SYSTEM_PROMPT = `You are the Skipper.
@@ -232,13 +232,13 @@ Write for the EAR (this is read aloud in a moving car). Short-to-medium sentence
 /**
  * v1 generation defaults for the Skipper persona, co-located with the persona.
  *
- * `voice` is DERIVED from PERSONA_VOICE (the single source of truth that ties a
- * persona to its TTS voice) so it can never drift from the poi_content cache-key
- * `voice` dimension. `persona` and `jokeLevel` mirror the request defaults in
- * @skipper/shared's `tourRequest`. v1: skipper / ballad / dadpocalypse.
+ * `voice` is DERIVED from PERSONA_VOICE (the single source of truth that ties the
+ * persona to its TTS voice). `jokeLevel` mirrors the request default in
+ * @skipper/shared's `tourRequest`. v1: Algenib / dadpocalypse. There is no `persona`
+ * field — there is one persona (the Skipper); the per-region host identity is served
+ * by the API (host.ts), and narration/voice live here in the generator.
  */
 export const SKIPPER_DEFAULTS = {
-  persona: 'skipper',
   voice: PERSONA_VOICE.skipper,
   jokeLevel: 'dadpocalypse',
-} satisfies { persona: Persona; voice: string; jokeLevel: JokeLevel }
+} satisfies { voice: string; jokeLevel: JokeLevel }
