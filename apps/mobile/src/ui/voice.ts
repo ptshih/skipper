@@ -54,6 +54,8 @@ export const voice = {
     paused: 'PAUSED', // a held clip — the NOW card must not keep saying "NOW PLAYING"
     rolling: 'ROLLING', // between stops — road-trip, not the flat "DRIVING"
     pitStop: 'PIT STOP', // a rest stop
+    gpsSearching: 'Looking for the satellites — hang tight.', // live drive, no usable fix yet
+    gpsError: 'Lost the GPS signal, folks. Pull over and give her another go.', // live watch failed
   },
   greeting: 'Hop in. I’ll do the talking.',
   // The cold-open descriptor: a newcomer should know WHAT this is before any audio

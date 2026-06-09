@@ -12,7 +12,7 @@
 // WAITS for the next GPS trigger — it never advances by a clip ending. See
 // docs/gps-player-spec.md §3.5.
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Animated, Linking } from 'react-native'
+import { Animated, AppState, Linking } from 'react-native'
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake'
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
 import {
@@ -28,7 +28,13 @@ import {
 } from '@skipper/drive-core'
 import { ApiError } from './api'
 import { loadPlayback, resignPlayback } from './offline'
-import { ensureDrivePermission, liveSource, simulatedSource, type FixSubscription } from './gps'
+import {
+  ensureDrivePermission,
+  getDrivePermission,
+  liveSource,
+  simulatedSource,
+  type FixSubscription,
+} from './gps'
 import { useDriveMusic } from './driveMusic'
 import { voice } from '@/ui'
 
@@ -58,6 +64,10 @@ const DRIVE_INTERRUPTION_MODE = 'doNotMix' as const
 // Keep-awake lock tag — the foreground GPS watch dies on screen-lock, so hold the screen on
 // while actively driving (scoped to `driving`, not the whole screen). (spec §5)
 const KEEP_AWAKE_TAG = 'skipper-drive'
+
+// No accepted live fix for this long → surface a "searching for GPS" note rather than a silently
+// frozen screen (covers slow acquisition + persistently poor accuracy). (review #6)
+const GPS_SEARCH_MS = 8_000
 
 interface DriveStop {
   seq: number
@@ -123,6 +133,8 @@ export interface UseDrive {
   nowPlaying: boolean
   buffering: boolean
   stallNote: string | null
+  /** True while a live drive is getting no usable GPS fixes — show a "searching" cue. (review #6) */
+  gpsSearching: boolean
   paused: boolean
 
   // In-clip scrub (drive/quiet segments have no timeline).
@@ -173,6 +185,9 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
   // Set when a live drive is blocked on a denied location permission (carries whether the OS
   // will still prompt). null = no block (always so in sim mode). Drives the 'locationGate' phase.
   const [locationDenied, setLocationDenied] = useState<{ canAskAgain: boolean } | null>(null)
+  // True while a live drive is getting no usable GPS fixes (acquiring / poor accuracy) — so the
+  // rider sees "searching" instead of a silently frozen screen. (review #6)
+  const [gpsSearching, setGpsSearching] = useState(false)
 
   const player = useAudioPlayer()
   const status = useAudioPlayerStatus(player)
@@ -185,6 +200,9 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
   const clipBusy = useRef(false) // a clip is currently loaded+playing (gates the pump)
   const reachedEnd = useRef(false) // the simulated source has run out of fixes
   const subRef = useRef<FixSubscription | null>(null)
+  const mountedRef = useRef(true) // false after unmount — guards setState in the async permission flow (review #4)
+  const permPending = useRef(false) // a permission request is in flight — blocks double-tap (review #4)
+  const lastFixAt = useRef(0) // ms of the last accepted live fix — feeds the no-GPS watchdog (review #6)
   // Which brackets this tour has (set on load); the intro is queued at start, the outro
   // (once) at the end. Refs so the queueing reads current values without dep churn.
   const bracketsRef = useRef<{ intro: boolean; outro: boolean }>({ intro: false, outro: false })
@@ -307,6 +325,8 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
   // ---- each GPS fix: advance the route dot + run the trigger engine ----
   const handleFix = useCallback(
     (fix: GpsFix) => {
+      lastFixAt.current = Date.now() // a usable fix arrived — feed the no-GPS watchdog (review #6)
+      setGpsSearching(false) // no-op when already false (React bails on unchanged state)
       const total = data?.totalM ?? 0
       dot.setValue(total > 0 ? Math.min(1, Math.max(0, fix.alongM / total)) : 0)
       const events = engineRef.current?.update(fix) ?? []
@@ -364,7 +384,14 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
     setDone(false)
     setDriving(false)
     setLocationDenied(null)
+    setGpsSearching(false)
   }, [player, dot, teardownSource])
+
+  // ---- the live fix source couldn't produce GPS (watch failed to acquire) — surface, don't hang ----
+  const handleSourceError = useCallback(() => {
+    resetForReady()
+    setError(voice.player.gpsError) // → 'error' phase with a retry, instead of a silent frozen drive
+  }, [resetForReady])
 
   // ---- begin the drive: fresh engine (TriggerEngine has no reset) + subscribe the source ----
   // The source is the one seam between the simulator and the real drive: a `simulatedSource`
@@ -398,8 +425,8 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
       mode === 'live'
         ? liveSource(data.polyline)
         : simulatedSource(data.polyline, { mph: SIM_MPH, timeScale: fast ? SIM_FAST_SCALE : 1 })
-    subRef.current = source(handleFix, handleEnd)
-  }, [data, mode, fast, resetForReady, handleFix, handleEnd, pump])
+    subRef.current = source(handleFix, handleEnd, handleSourceError)
+  }, [data, mode, fast, resetForReady, handleFix, handleEnd, handleSourceError, pump])
 
   // ---- start: in live mode, gate on location permission first; sim starts immediately ----
   const start = useCallback(() => {
@@ -408,14 +435,25 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
       beginDrive()
       return
     }
+    if (permPending.current) return // ignore a double-tap while the OS prompt is up (review #4)
+    permPending.current = true
     void (async () => {
-      setLocationDenied(null)
-      const perm = await ensureDrivePermission()
-      if (!perm.granted) {
-        setLocationDenied({ canAskAgain: perm.canAskAgain })
-        return
+      try {
+        setLocationDenied(null)
+        const perm = await ensureDrivePermission()
+        if (!mountedRef.current) return // navigated away during the dialog — don't setState/subscribe
+        if (!perm.granted) {
+          setLocationDenied({ canAskAgain: perm.canAskAgain })
+          return
+        }
+        beginDrive()
+      } catch {
+        // requestForegroundPermissionsAsync threw (misconfig / concurrent request) — show the gate
+        // with a retry instead of letting the tap silently do nothing.
+        if (mountedRef.current) setLocationDenied({ canAskAgain: true })
+      } finally {
+        permPending.current = false
       }
-      beginDrive()
     })()
   }, [data, mode, beginDrive])
 
@@ -437,6 +475,11 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
   }, [start])
 
   const retry = useCallback(() => setReloadKey((k) => k + 1), [])
+
+  // Deep-link to system Settings (the canAskAgain===false recovery; AppState re-checks on return).
+  const openLocationSettings = useCallback(() => {
+    void Linking.openSettings()
+  }, [])
 
   // ---- clip load / play (cloned from the preview): keyed on the active stop ----
   useEffect(() => {
@@ -561,15 +604,56 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
   })
 
   // ---- hold the screen awake while actively driving (foreground GPS dies on screen-lock) ----
-  // Scoped to `driving` so the pre-drive 'ready' and post-drive 'done' screens don't hold the
-  // lock. expo-keep-awake needs no config plugin. (spec §5)
+  // Scoped to `driving && !paused` so 'ready'/'done' and a long pause don't hold the lock and burn
+  // battery (review #7). The `active` flag releases the lock if the drive ends before the async
+  // activate resolves, so it can't stick on (review #8). expo-keep-awake needs no config plugin. (spec §5)
   useEffect(() => {
-    if (!driving) return
+    if (!driving || paused) return
+    let active = true
     void activateKeepAwakeAsync(KEEP_AWAKE_TAG)
+      .then(() => {
+        if (!active) void deactivateKeepAwake(KEEP_AWAKE_TAG)
+      })
+      .catch(() => {})
     return () => {
+      active = false
       void deactivateKeepAwake(KEEP_AWAKE_TAG)
     }
-  }, [driving])
+  }, [driving, paused])
+
+  // ---- track mount state for the async permission flow (review #4) ----
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
+  // ---- recover from a permanent denial: re-check permission when the rider returns from Settings ----
+  // The canAskAgain===false branch only opens Settings; without this re-check they'd be stuck on the
+  // gate after granting there. Only active while the gate is up. (review #5)
+  useEffect(() => {
+    if (!locationDenied) return
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s !== 'active') return
+      void getDrivePermission().then((perm) => {
+        if (perm.granted && mountedRef.current) setLocationDenied(null)
+      })
+    })
+    return () => sub.remove()
+  }, [locationDenied])
+
+  // ---- no-GPS watchdog (live drive only): if usable fixes stop arriving, show "searching" instead
+  // of a silently frozen screen — covers slow acquisition AND a persistently poor-accuracy signal. (review #6)
+  useEffect(() => {
+    if (mode !== 'live' || !driving || paused) return
+    lastFixAt.current = Date.now() // grace period before the first "searching"
+    setGpsSearching(false)
+    const iv = setInterval(() => {
+      if (Date.now() - lastFixAt.current > GPS_SEARCH_MS) setGpsSearching(true)
+    }, 2_000)
+    return () => clearInterval(iv)
+  }, [mode, driving, paused])
 
   // ---- unmount: stop the drive cleanly (back-swipe / nav away) ----
   useEffect(() => {
@@ -656,6 +740,7 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
     nowPlaying,
     buffering,
     stallNote,
+    gpsSearching,
     paused,
     positionMs,
     durationMs,
@@ -666,9 +751,7 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
     fast,
     setFast,
     locationCanAskAgain: locationDenied?.canAskAgain ?? true,
-    openLocationSettings: () => {
-      void Linking.openSettings()
-    },
+    openLocationSettings,
     start,
     togglePause,
     end,

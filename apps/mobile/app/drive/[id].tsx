@@ -191,6 +191,13 @@ export default function DriveScreen() {
           <Text variant="dim" color="danger" style={styles.stall}>
             {d.stallNote}
           </Text>
+        ) : d.gpsSearching && !d.paused ? (
+          <View style={styles.buffering}>
+            <ActivityIndicator size="small" color={theme.colors.accentWarm} />
+            <Text variant="dim" color="inkFaint">
+              {voice.player.gpsSearching}
+            </Text>
+          </View>
         ) : null}
       </View>
 

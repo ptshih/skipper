@@ -10,7 +10,7 @@ import * as Location from 'expo-location'
 import {
   cumulativeMeters,
   generateDrive,
-  nearestOnRoute,
+  haversineMeters,
   type GpsFix,
   type LngLat,
 } from '@skipper/drive-core'
@@ -29,8 +29,18 @@ export interface FixSubscription {
   resume: () => void
 }
 
-/** Subscribe to a stream of GPS fixes. `onEnd` fires when a finite source (the sim) runs out. */
-export type GpsFixSource = (onFix: (fix: GpsFix) => void, onEnd?: () => void) => FixSubscription
+/**
+ * Subscribe to a stream of GPS fixes.
+ * - `onEnd` fires when the route is done — a finite source (the sim) running out of fixes, or the
+ *   live source's position reaching the final vertex. It's what queues the outro + finishes the drive.
+ * - `onError` fires when the source fails to produce fixes at all (e.g. the live watch can't acquire);
+ *   the consumer surfaces it instead of hanging silently.
+ */
+export type GpsFixSource = (
+  onFix: (fix: GpsFix) => void,
+  onEnd?: () => void,
+  onError?: (err: unknown) => void,
+) => FixSubscription
 
 export interface SimSourceOptions {
   /** Constant drive speed (mph), passed to `generateDrive`. Default 60. */
@@ -111,6 +121,13 @@ export function simulatedSource(polyline: LngLat[], opts: SimSourceOptions = {})
 // are normally well under 10 m, so this only rejects the unsettled ones. (spec §3.3)
 const MAX_FIX_ACCURACY_M = 50
 
+// Fire onEnd once the projected position is within this of the final route vertex (m). (review #1)
+const ROUTE_END_EPSILON_M = 25
+
+// Forward search window for the monotonic projection, in polyline vertices (~13 m apart → ~5 km).
+// Big enough to span a multi-second GPS gap without an O(n) full-polyline scan per fix. (review #10/#12)
+const PROJECT_WINDOW_VERTS = 400
+
 // iOS (CLLocation) returns -1, NOT null, for invalid speed/heading (expo/expo#5401, sim AND
 // device). The type says `number | null` but the runtime yields -1 — so `?? 0` is not enough.
 const sane = (v: number | null | undefined): number => (v != null && v >= 0 ? v : 0)
@@ -123,6 +140,15 @@ const sane = (v: number | null | undefined): number => (v != null && v >= 0 ? v 
 export async function ensureDrivePermission(): Promise<{ granted: boolean; canAskAgain: boolean }> {
   const res = await Location.requestForegroundPermissionsAsync()
   return { granted: res.granted, canAskAgain: res.canAskAgain }
+}
+
+/**
+ * Read the current foreground-permission status WITHOUT prompting — used to re-check after the rider
+ * returns from system Settings (the `canAskAgain === false` recovery path). (review #5)
+ */
+export async function getDrivePermission(): Promise<{ granted: boolean }> {
+  const res = await Location.getForegroundPermissionsAsync()
+  return { granted: res.granted }
 }
 
 /**
@@ -142,40 +168,76 @@ export async function ensureDrivePermission(): Promise<{ granted: boolean; canAs
  */
 export function liveSource(polyline: LngLat[]): GpsFixSource {
   const cumulative = cumulativeMeters(polyline)
-  return (onFix) => {
+  const routeEndM = cumulative[cumulative.length - 1] ?? 0
+  return (onFix, onEnd, onError) => {
     let sub: Location.LocationSubscription | null = null
     let stopped = false
     let paused = false
     let startMs: number | null = null
+    let ended = false
+    // Monotonic projection cursor. A plain nearest-VERTEX scan (geo.nearestOnRoute) snaps return-leg
+    // fixes to nearby OUTBOUND vertices on an out-and-back route — the dot jumps backward AND alongM
+    // never reaches the end, so end-of-route detection below would never fire. Searching FORWARD from
+    // the cursor keeps alongM monotonic and bounds the per-fix work to the window ahead. (review #1/#10/#12)
+    let cursor = 0
+
+    const projectAlongM = (lng: number, lat: number): number => {
+      const end = Math.min(polyline.length, cursor + PROJECT_WINDOW_VERTS)
+      let bestIdx = cursor
+      let bestDist = haversineMeters(polyline[cursor]!, [lng, lat])
+      for (let i = cursor + 1; i < end; i++) {
+        const d = haversineMeters(polyline[i]!, [lng, lat])
+        if (d < bestDist) {
+          bestDist = d
+          bestIdx = i
+        }
+      }
+      cursor = bestIdx // never decreases → monotonic
+      return cumulative[bestIdx] ?? 0
+    }
 
     const onLocation = (loc: Location.LocationObject) => {
       if (stopped || paused) return // teardown-leak guard (#35925/#35926) + pause guard
       const acc = loc.coords.accuracy
-      if (acc != null && acc > MAX_FIX_ACCURACY_M) return // unsettled fix — don't risk a false fire
+      // Drop unsettled fixes. iOS reports a NEGATIVE accuracy (-1) when invalid — the same sentinel
+      // as speed/heading — so reject acc < 0 too, else the worst fixes slip past the gate. (review #2)
+      if (acc != null && (acc < 0 || acc > MAX_FIX_ACCURACY_M)) return
       if (startMs === null) startMs = loc.timestamp
-      const pos = nearestOnRoute(polyline, cumulative, [loc.coords.longitude, loc.coords.latitude])
+      const alongM = projectAlongM(loc.coords.longitude, loc.coords.latitude)
       onFix({
         lat: loc.coords.latitude,
         lng: loc.coords.longitude,
         speedMps: sane(loc.coords.speed),
         headingDeg: sane(loc.coords.heading),
         tSec: (loc.timestamp - startMs) / 1000, // loc.timestamp = ms since epoch
-        alongM: pos.alongM, // projected onto the route so the dot follows the real position
+        alongM, // projected onto the route so the dot follows the real position
       })
+      // Live GPS has no fix-stream end like the sim, so signal end-of-route ourselves once the
+      // projected position reaches the final vertex — that's what queues the outro + finishes. (review #1)
+      if (!ended && routeEndM > 0 && alongM >= routeEndM - ROUTE_END_EPSILON_M) {
+        ended = true
+        onEnd?.()
+      }
     }
 
     const startWatch = () => {
       void Location.watchPositionAsync(
         { accuracy: Location.Accuracy.BestForNavigation, distanceInterval: 0, timeInterval: 500 },
         onLocation,
-      ).then((s) => {
-        // If stop()/pause() landed while the watch was being acquired, don't keep it.
-        if (stopped || paused) {
-          s.remove()
-          return
-        }
-        sub = s
-      })
+      )
+        .then((s) => {
+          // If stop()/pause() landed while the watch was being acquired, don't keep it.
+          if (stopped || paused) {
+            s.remove()
+            return
+          }
+          sub = s
+        })
+        // watchPositionAsync rejects if Location Services are off at the OS level, permission was
+        // revoked, or on a native error — surface it instead of letting the drive hang silently. (review #3)
+        .catch((err) => {
+          if (!stopped) onError?.(err)
+        })
     }
 
     startWatch()
