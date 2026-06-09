@@ -68,6 +68,8 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   unbuilt, cheap, player-only.
 - [skipper-opinions-spec.md](specs/skipper-opinions-spec.md) — opinionated asides ("the world off
   the rails"); unbuilt, builds on downtime-callouts.
+- [drive-thesis-spec.md](specs/drive-thesis-spec.md) — the drive's through-idea (the keystone:
+  plant in intro → evidence in stops → land at the payoff); unbuilt, generation-only.
 - [scenic-stops-spec.md](specs/scenic-stops-spec.md) — deliberately adding scenic stops; unblocked
   but partially overtaken by the pacing rework — re-ground before building.
 
