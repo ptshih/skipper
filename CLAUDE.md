@@ -33,6 +33,14 @@ you found so the next agent can re-check it.
   yes. (Multiple agents share this one working tree, so unannounced branch switches are
   especially disruptive.)
 
+- **Commits on `main` must be surgical and explicit.** NEVER `git add -A` / `git add .`
+  / `git commit -a`. Multiple agents share this one working tree, so the working set is
+  almost always a MIX of your changes and other agents' (and pre-existing) uncommitted
+  work. Stage by explicit path (`git add path/a path/b`), then `git diff --cached --stat`
+  to confirm ONLY your intended files are staged before committing. A blanket add sweeps
+  in someone else's half-finished work — the exact failure this repo's multi-agent setup
+  invites.
+
 ## Two principles that govern the architecture
 
 1. **Assemble per request; fetch FACTS once per place, generate NARRATION per
