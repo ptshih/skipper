@@ -5,29 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1780782700154,
-      "tag": "0000_keen_spot",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1780784766603,
-      "tag": "0001_misty_echo",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1780791214821,
-      "tag": "0002_ambitious_captain_universe",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1780854904066,
-      "tag": "0003_powerful_lady_ursula",
+      "when": 1780981059911,
+      "tag": "0000_worried_hellcat",
       "breakpoints": true
     }
   ]
