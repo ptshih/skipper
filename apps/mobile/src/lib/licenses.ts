@@ -24,6 +24,14 @@ export const FALLBACK_DATA_SOURCES: DataSource[] = [
     note: 'Article text is reused under CC BY-SA: credit is required, and adaptations carry the same license.',
   },
   {
+    name: 'Wikidata',
+    use: 'The details — the dates, elevations, and namesakes behind certain stops.',
+    license: 'CC0 1.0',
+    licenseUrl: 'https://creativecommons.org/publicdomain/zero/1.0/',
+    sourceUrl: 'https://www.wikidata.org',
+    note: 'Structured data dedicated to the public domain under CC0 — free to use without attribution; credited here for transparency.',
+  },
+  {
     name: 'Macrostrat',
     use: 'The ground — the bedrock type and age under each stop, for the geology asides.',
     license: 'CC BY 4.0',
@@ -42,4 +50,7 @@ export const FALLBACK_DATA_SOURCES: DataSource[] = [
 
 /** Display host for a source link, e.g. "macrostrat.org" — protocol + www. stripped. */
 export const sourceHost = (url: string): string =>
-  url.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, '')
+  url
+    .replace(/^https?:\/\//, '')
+    .replace(/^www\./, '')
+    .replace(/\/$/, '')

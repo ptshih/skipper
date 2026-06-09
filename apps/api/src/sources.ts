@@ -6,7 +6,7 @@
 // These are LEGAL facts (license codes, canonical license + source URLs), kept OUT of the
 // persona layer. This mirrors what the generator freezes onto each clip's
 // `poi_content.attribution` at generation time (wikipedia → "CC BY-SA 4.0", macrostrat →
-// "CC BY 4.0"; break anchors come from Google Places). When a new source lands in
+// "CC BY 4.0", wikidata → "CC0"; break anchors come from Google Places). When a new source lands in
 // `@skipper/shared` `attributionSource`, add it HERE so the public legal surface stays in
 // lockstep with what a drive actually draws on.
 
@@ -20,6 +20,14 @@ export const DATA_SOURCES: DataSource[] = [
     licenseUrl: 'https://creativecommons.org/licenses/by-sa/4.0/',
     sourceUrl: 'https://www.wikipedia.org',
     note: 'Article text is reused under CC BY-SA: credit is required, and adaptations carry the same license.',
+  },
+  {
+    name: 'Wikidata',
+    use: 'The details — the dates, elevations, and namesakes behind certain stops.',
+    license: 'CC0 1.0',
+    licenseUrl: 'https://creativecommons.org/publicdomain/zero/1.0/',
+    sourceUrl: 'https://www.wikidata.org',
+    note: 'Structured data dedicated to the public domain under CC0 — free to use without attribution; credited here for transparency.',
   },
   {
     name: 'Macrostrat',
