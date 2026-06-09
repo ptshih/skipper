@@ -125,6 +125,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.md,
     borderRadius: radius.md,
   },
-  body: { flex: 1, gap: 1 },
+  body: { flex: 1, gap: 1 }, // deliberate 1pt name↔sublabel gap (off-grid; a grid step is too loose)
   pressed: { opacity: 0.7 },
 })

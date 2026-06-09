@@ -11,7 +11,16 @@ import { Screen } from './Screen'
 import { Text } from './Text'
 import { voice } from './voice'
 
-export function AccountGate({ note }: { note?: string }) {
+export function AccountGate({
+  note,
+  secondaryAction,
+}: {
+  note?: string
+  /** Overrides the ghost button. Without it the label ("Just take the sample ride") is a no-op
+   *  back() — so every call site that shows the gate SHOULD pass a real action (route to the
+   *  preview, or dismiss the gate), keeping the funnel's one explicit offer honest. */
+  secondaryAction?: { label: string; onPress: () => void }
+}) {
   const router = useRouter()
   return (
     <Screen scroll center>
@@ -31,7 +40,11 @@ export function AccountGate({ note }: { note?: string }) {
           onPress={() => router.push('/sign-in')}
           style={styles.cta}
         />
-        <Button variant="ghost" title={voice.gate.secondary} onPress={() => router.back()} />
+        <Button
+          variant="ghost"
+          title={secondaryAction?.label ?? voice.gate.secondary}
+          onPress={secondaryAction?.onPress ?? (() => router.back())}
+        />
       </Card>
     </Screen>
   )

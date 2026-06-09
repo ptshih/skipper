@@ -8,7 +8,7 @@
 // `useDrive`.
 import { useCallback, useEffect, useRef } from 'react'
 import { ActivityIndicator, Alert, Animated, PixelRatio, ScrollView, StyleSheet, View } from 'react-native'
-import { Stack, useLocalSearchParams, useNavigation } from 'expo-router'
+import { Stack, useLocalSearchParams, useNavigation, useRouter } from 'expo-router'
 import { useDrive } from '@/lib/useDrive'
 import { useSession } from '@/lib/auth'
 import { stopLabel } from '@/lib/labels'
@@ -50,6 +50,7 @@ export default function DriveScreen() {
   const isPreview = driveMode === 'preview'
   const listRef = useRef<ScrollView | null>(null)
   const navigation = useNavigation()
+  const router = useRouter()
   const { data: session } = useSession()
 
   // Returning from /sign-in lands back on this STILL-MOUNTED screen, but useDrive's load
@@ -152,7 +153,17 @@ export default function DriveScreen() {
   if (d.phase === 'gate')
     // Only the LIVE/SIM drive can gate — preview uses the open `?preview=1` funnel and never
     // 401s, so it never reaches this phase (every tour is previewable; the wall is the drive).
-    return <AccountGate note={voice.gate.driveNote} />
+    return (
+      <AccountGate
+        note={voice.gate.driveNote}
+        // "Just take the sample ride" now keeps its promise: swap the gated live drive for the
+        // open couch preview (the funnel), instead of a no-op back().
+        secondaryAction={{
+          label: voice.gate.secondary,
+          onPress: () => router.replace(`/tours/${id}/play?mode=preview`),
+        }}
+      />
+    )
 
   if (d.phase === 'locationGate')
     // Three states: precise-location-off (reduced) and hard-denied-no-reprompt both route to Settings;

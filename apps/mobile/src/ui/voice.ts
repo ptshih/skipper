@@ -34,7 +34,8 @@ export const voice = {
     title: 'Grab your ticket',
     body: 'The full-length tour needs a (free) ticket — ten seconds, and the skipper never stops talking.',
     action: 'Get my free ticket',
-    secondary: 'Just take the sample ride',
+    secondary: 'Just take the sample ride', // the play-screen gate → routes to the open preview
+    keepBrowsing: 'Keep browsing', // the detail download-gate → dismiss back to the tour
     // Context line for the live-drive gate — carries ONLY what the body lacks (the body
     // already makes the ticket ask), so the two don't stutter "needs a (free) ticket" twice.
     driveNote: 'This is the live, on-the-road drive.',

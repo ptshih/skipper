@@ -2,7 +2,7 @@
 // ref to the underlying TextInput so forms can chain the return key (email → password).
 import { forwardRef, useState } from 'react'
 import { StyleSheet, TextInput, type TextInputProps } from 'react-native'
-import { border, fonts, hit, radius, space } from '../theme/tokens'
+import { border, hit, radius, space, typeScale } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'
 
 export const Input = forwardRef<TextInput, TextInputProps>(function Input(
@@ -39,12 +39,11 @@ export const Input = forwardRef<TextInput, TextInputProps>(function Input(
 
 const styles = StyleSheet.create({
   input: {
+    ...typeScale.body, // compose the body variant (font + size + lineHeight) — no parallel copy
     minHeight: hit.min,
     borderWidth: border.keyline,
     borderRadius: radius.md,
     paddingHorizontal: space.lg,
     paddingVertical: space.md,
-    fontFamily: fonts.body,
-    fontSize: 16,
   },
 })

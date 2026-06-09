@@ -31,7 +31,9 @@ function LinkText({ label, url, shrink }: { label: string; url: string; shrink?:
     <Pressable
       onPress={() => openUrl(url)}
       accessibilityRole="link"
-      hitSlop={space.sm}
+      // Clear the 48pt floor vertically (~23pt line + 2×12); keep horizontal slop tight so two
+      // links sharing a row (license · source) don't overlap across the separator.
+      hitSlop={{ top: space.md, bottom: space.md, left: space.xs, right: space.xs }}
       style={shrink ? styles.shrink : undefined}
     >
       <Text variant="bodyStrong" color="accent" numberOfLines={shrink ? 1 : undefined}>

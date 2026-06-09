@@ -60,7 +60,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: space.xs,
     paddingHorizontal: space.sm,
-    paddingVertical: 3,
+    paddingVertical: 3, // intentional optical tuning for the pill (between xs=4 and 2); not a grid value
     borderRadius: radius.pill,
     alignSelf: 'flex-start',
   },

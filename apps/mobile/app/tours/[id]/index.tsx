@@ -147,7 +147,14 @@ export default function TourScreen() {
   )
 
   if (loading) return <StateView title="Tour" loading message={voice.loading.tour} />
-  if (needsAccount) return <AccountGate />
+  if (needsAccount)
+    // A download 401 swaps the whole detail for the gate; "Keep browsing" dismisses BACK to the
+    // tour (clears the gate) rather than the old back() that popped all the way to home.
+    return (
+      <AccountGate
+        secondaryAction={{ label: voice.gate.keepBrowsing, onPress: () => setNeedsAccount(false) }}
+      />
+    )
   if (error)
     return (
       <StateView
