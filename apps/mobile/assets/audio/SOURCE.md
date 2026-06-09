@@ -16,8 +16,6 @@ fully cover the rotation.
 | `travel_in_light.mp3` | *Travel in Light* — Sonican | Pixabay Content License | ✅ |
 | `golden_twilight.mp3` | *Golden Twilight (Country Folk Instrumental)* — kaazoom | Pixabay Content License | ✅ |
 | `acoustic_folk_guitar.mp3` | *Acoustic folk guitar instrumental* — Moonpub | Pixabay Content License | ✅ |
-| `long_road_ahead.mp3` | *Long Road Ahead* — Kevin MacLeod | CC BY 4.0 | ✅ |
-| `americana.mp3` | *Americana* — Kevin MacLeod | CC BY 4.0 | ✅ |
 | `small_town.mp3` | *Small Town* — Mr Smith | CC BY 4.0 | ✅ |
 | `strummin_robin_smith.mp3` | *Strummin' with Robin Smith* — Beat Mekanik | CC BY 4.0 | ✅ |
 | `acoustic_countryside_journey.mp3` | road-trip song (~2:46) | ElevenLabs (⚠️ unverified) | ✅ |
@@ -57,17 +55,11 @@ work" and fine.)
 
 ### Creative Commons BY 4.0 — attribution **required** (carried in-app)
 
-These four are licensed **CC BY 4.0**: commercial use + editing/looping are allowed,
+These two are licensed **CC BY 4.0**: commercial use + editing/looping are allowed,
 but attribution is required. The credits are shown in-app on **Settings → Credits →
 Sources & Licenses** (`app/legal.tsx`, driven by `src/lib/licenses.ts MUSIC_CREDITS`) —
 keep that surface in sync with this list.
 
-- *Long Road Ahead* and *Americana* — **Kevin MacLeod** (incompetech.com),
-  CC BY 4.0 <https://creativecommons.org/licenses/by/4.0/>. Files obtained from the
-  Internet Archive mirror of his discography
-  (`archive.org/details/KevinMacLeod_2019-04_Discography`). Kevin MacLeod's canonical
-  license is CC BY — some archive.org mirrors mislabel individual tracks as CC0, so we
-  attribute him regardless (compliant either way).
 - *Small Town* — **Mr Smith** (Free Music Archive), CC BY 4.0 —
   <https://freemusicarchive.org/music/mr-smith/a-new-roar/small-town/>
 - *Strummin' with Robin Smith* — **Beat Mekanik** (Free Music Archive), CC BY 4.0 —

@@ -73,14 +73,6 @@ export interface MusicCredit {
 
 export const MUSIC_CREDITS: MusicCredit[] = [
   {
-    artist: 'Kevin MacLeod',
-    tracks: ['Long Road Ahead', 'Americana'],
-    via: 'incompetech.com',
-    license: 'CC BY 4.0',
-    licenseUrl: 'https://creativecommons.org/licenses/by/4.0/',
-    sourceUrl: 'https://incompetech.com',
-  },
-  {
     artist: 'Mr Smith',
     tracks: ['Small Town'],
     via: 'Free Music Archive',

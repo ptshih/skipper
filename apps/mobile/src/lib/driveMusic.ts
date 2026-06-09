@@ -36,8 +36,6 @@ const TRACKS = [
   require('../../assets/audio/golden_twilight.mp3'),
   require('../../assets/audio/acoustic_folk_guitar.mp3'),
   // Creative Commons BY 4.0 — attribution carried on the Sources & Licenses screen.
-  require('../../assets/audio/long_road_ahead.mp3'),
-  require('../../assets/audio/americana.mp3'),
   require('../../assets/audio/small_town.mp3'),
   require('../../assets/audio/strummin_robin_smith.mp3'),
   // ElevenLabs road-trip songs — license follows the account tier, UNVERIFIED for paid
