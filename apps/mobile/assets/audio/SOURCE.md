@@ -4,10 +4,10 @@ The drive soundtrack is a **shuffled rotation** (`src/lib/driveMusic.ts`): a fre
 fades in for each leg between stops, ducking out under narration. All tracks below are
 loudness-matched (~-13 LUFS integrated) so the rotation never jumps in volume.
 
-The rotation now leans on **cleanly-licensed royalty-free** tracks (Pixabay Content
-License + Creative Commons BY 4.0); the four ElevenLabs songs are kept but carry an
-**unverified** commercial license (see below) and can be dropped — the clean tracks
-fully cover the rotation.
+The rotation is **fully cleanly-licensed royalty-free** — Pixabay Content License (no
+attribution) + Creative Commons BY 4.0 (attribution carried in-app). The four original
+ElevenLabs songs (unverified commercial license) were **removed** once the clean tracks
+covered the rotation, so there's no longer any license ambiguity in the bundle.
 
 | File | Track / artist | License | In rotation |
 |------|----------------|---------|-------------|
@@ -28,16 +28,12 @@ fully cover the rotation.
 | `redwood_trail.mp3` | *Redwood Trail* — Jason Shaw (Audionautix) | CC BY 4.0 | ✅ |
 | `paper_wings.mp3` | *Paper Wings* — Jason Shaw (Audionautix) | CC BY 4.0 | ✅ |
 | `landras_dream.mp3` | *Landra's Dream* — Jason Shaw (Audionautix) | CC BY 4.0 | ✅ |
-| `acoustic_countryside_journey.mp3` | road-trip song (~2:46) | ElevenLabs (⚠️ unverified) | ✅ |
-| `wanderers_tale.mp3` | road-trip song (~2:20) | ElevenLabs (⚠️ unverified) | ✅ |
-| `restless_roads_ahead.mp3` | road-trip song (~2:37) | ElevenLabs (⚠️ unverified) | ✅ |
-| `seaside_cafe.mp3` | road-trip song (~1:34) | ElevenLabs (⚠️ unverified) | ✅ |
 | `intro.mp3` / `outro.mp3` | tour-start / tour-end sting (Pixabay) | Pixabay Content License | Staged, not wired |
 
 > **Loudness:** each added track was normalized with
-> `ffmpeg -af loudnorm=I=-13:TP=-1.5:LRA=11` and re-encoded to 192 kbps stereo MP3
-> (matching the existing rotation), metadata stripped. The existing five tracks were
-> left as-is (they already sit within the -16…-11 LUFS band the new ones target).
+> `ffmpeg -af loudnorm=I=-13:TP=-1.5:LRA=11` and re-encoded to 192 kbps stereo MP3,
+> metadata stripped. Only `drive_loop.mp3` is un-normalized (it sits ~-15 LUFS, within
+> band).
 
 ## Source & license
 
@@ -91,19 +87,13 @@ keep that surface in sync with this list.
 > bundles music, and we keep frozen bundle assets to unambiguous licenses (CC0 / CC BY /
 > Pixabay). So it was NOT shipped. (<https://mixkit.co/license/>)
 
-### ElevenLabs (Eleven Music) — the four original road-trip songs
+### ElevenLabs (Eleven Music) — REMOVED
 
-Generated with **ElevenLabs (Eleven Music)** (original filenames
-`ElevenLabs_Acoustic_Countryside_Journey`, `ElevenLabs_The_Wanderer's_Tale`,
-`ElevenLabs_Restless_Roads_Ahead`, `ElevenLabs_Seaside_Cafe`; renamed to snake_case for
-`require()`).
-
-⚠️ **License = confirm before any paid distribution.** Commercial-use rights for
-ElevenLabs-generated music follow the **account's ElevenLabs subscription tier** and have
-NOT been verified against the founder's plan. Fine for this toy/dev build; the
-clean-licensed tracks above were added specifically so the rotation no longer depends on
-this — **the four ElevenLabs files can be removed** from `TRACKS` (in `driveMusic.ts`)
-to ship a fully clean-licensed soundtrack.
+The four original road-trip songs (`acoustic_countryside_journey`, `wanderers_tale`,
+`restless_roads_ahead`, `seaside_cafe`) were generated with ElevenLabs (Eleven Music),
+whose commercial-use rights follow the account's subscription tier and were never verified.
+They were **removed** once the clean-licensed tracks covered the rotation, so the bundle
+now carries no license ambiguity. (Recorded here so the next agent doesn't resurrect them.)
 
 ## How the Pixabay `drive_loop` assets were derived (reproducible)
 

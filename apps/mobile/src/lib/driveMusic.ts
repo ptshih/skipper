@@ -50,13 +50,6 @@ const TRACKS = [
   require('../../assets/audio/redwood_trail.mp3'),
   require('../../assets/audio/paper_wings.mp3'),
   require('../../assets/audio/landras_dream.mp3'),
-  // ElevenLabs road-trip songs — license follows the account tier, UNVERIFIED for paid
-  // distribution (see SOURCE.md). The clean-licensed tracks above can fully replace
-  // these if we want to drop the ElevenLabs dependency.
-  require('../../assets/audio/acoustic_countryside_journey.mp3'),
-  require('../../assets/audio/wanderers_tale.mp3'),
-  require('../../assets/audio/restless_roads_ahead.mp3'),
-  require('../../assets/audio/seaside_cafe.mp3'),
 ]
 
 const FULL = 0.95 // music is foreground between stops (not under voice) → near full
