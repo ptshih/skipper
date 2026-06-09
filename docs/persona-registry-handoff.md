@@ -2,10 +2,19 @@
 
 **For:** an agent building the GENERATION-side persona/host registry (the one piece of the
 directional-tours/intro-outro arc left after Phase 2). **From:** the session that landed the zero-reuse
-migration (2026-06-08). **Status:** NOT built — design decided, scoped here.
+migration (2026-06-08).
 
-> ⚠ **RE-GROUND BEFORE TOUCHING CODE.** Line numbers/snippets below are 2026-06-08 and will shift.
-> Verify with `git log --oneline -15` and re-read each file.
+> ✅ **BUILT 2026-06-08 (commit `687c885`).** The mechanical decoupling (§1–§6) is done: `persona/types.ts`
+> (`PersonaDef`/`KitBeat`), `persona/skipper.ts` (`SKIPPER` def), `persona/index.ts` (`personaForRegion`),
+> the kit pulled out of `generate.ts`/`lint.ts` into `PersonaDef.kit`, prompts/voice/style/kit threaded
+> through generate/narrate/tts/lint, the tools (resynth/patch-clip) resolving voice by region, and a
+> `persona.test.ts` (resolution + fallback + the prose↔regex sync guard). Behavior-preserving at one region;
+> generator 102 tests + all 7 packages typecheck green. **Still DEFERRED (intentionally — §4/§7):** the
+> prompt **base/overlay split** (do it when a 2nd region's prompt exists to diff against) and the `GET /regions`
+> "meet your skipper" feed. So this doc now reads as the record of the refactor + the region-#2 checklist.
+
+> ⚠ **RE-GROUND BEFORE TOUCHING CODE** if extending — line numbers/snippets below are 2026-06-08 and will
+> shift. Verify with `git log --oneline -15` and re-read each file.
 
 ## 0. Read first
 - This doc. Then `docs/tour-structure-handoff.md` §3 Phase 3 (the one-paragraph outline this expands) and the

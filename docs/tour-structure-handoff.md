@@ -88,15 +88,15 @@ These were settled by ear / research this session:
 
 ## 3. Build phases (file-level)
 
-> ✅ **STATUS 2026-06-08 — Phases 1, 2, 4, 5, 6 DONE + bracket playback** (commits `67e9313`/`7860b3f`
-> Phase 1; `d0f2ba6`/`f1396cf` Phases 2/4/5 + the live migration + the canonical-preview regen of Phase 6;
-> `ecc78a0` the intro/outro bracket PLAYBACK that Phase 5's caveat below flagged as missing). All packages
-> typecheck + tests green. **The ONE remaining piece is Phase 3's _generation-side region/host registry_**
-> (the `Record<Region, {host,voice,promptOverlay,kit,opener}>` + kit-guard rewire) — deliberately deferred:
-> it only matters when a SECOND region/host lands. For the single Tahoe/Skipper region today, the existing
-> `SKIPPER_SYSTEM_PROMPT` + `PERSONA_VOICE.skipper` + `host.ts` `hostForRegion` fallback cover it. Phase 3's
-> OTHER bullets (zero-reuse write path, one-tour-per-route, `narrateIntro/Outro`→`persistBracket` ready-gate,
-> `resynth-tour` tool) all landed with Phase 2.
+> ✅ **STATUS 2026-06-08 — Phases 1–6 DONE + bracket playback** (commits `67e9313`/`7860b3f` Phase 1;
+> `d0f2ba6`/`f1396cf` Phases 2/4/5 + the live migration + the canonical-preview regen of Phase 6; `ecc78a0`
+> the intro/outro bracket PLAYBACK that Phase 5's caveat below flagged as missing; **`687c885` Phase 3's
+> generation-side persona registry** — `personaForRegion(slug)` + the kit pulled out of `generate.ts`/`lint.ts`
+> into one `PersonaDef`, see `docs/persona-registry-handoff.md`). All packages typecheck + tests green.
+> **What's left is region #2 itself** (a new `PersonaDef`: prompt overlay + kit + an ear-judged voice +
+> content) and two intentional deferrals: the prompt **base/overlay split** (do it when a 2nd prompt exists)
+> and the optional `GET /regions` "meet your skipper" feed. Phase 3's other bullets (zero-reuse write path,
+> one-tour-per-route, `narrateIntro/Outro`→`persistBracket` ready-gate, `resynth-tour`) landed with Phase 2.
 
 **Phase 1 — Narration prompt + intro/outro modes (generator-only, safest, fully validated).**
 - `packages/generator/src/persona/skipper.ts`: fold Appendix B in — recalibrate the DADPOCALYPSE
