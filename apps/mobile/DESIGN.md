@@ -37,8 +37,10 @@ _star_.
    a passed stop). Never six.
 3. **Contrast is enforced by the token set, not by discipline.** See §4. There is
    intentionally no "amber text on paper" role to misuse.
-4. **Dark mode is a peer, not an afterthought.** Night is the headline drive. The
-   mood toggle (`◑ DAY` / `◐ DUSK`) is a first-class, always-reachable control.
+4. **Dark mode is a peer, not an afterthought.** Night is the headline drive. **Auto**
+   follows the phone (dusk-dark at night by default); the explicit Auto/Day/Dusk picker
+   (`ThemeModePicker`) lives on Settings behind the home gear — deliberately NOT in global
+   chrome, so nothing tempts a mid-drive fiddle.
 5. **Big thumbs, gloves, potholes.** Nothing tappable below 48pt; primary CTAs ≥60pt.
 
 ## 3. Tokens (`src/theme/tokens.ts`)
@@ -56,8 +58,9 @@ Raw values + scales. Components reference the **semantic roles** in §4, not the
 Two themes (`lightTheme` / `darkTheme`) map the raw palette onto one role set, so
 light↔dark swap for free. **The contrast footguns are designed out:**
 
-- `amberToken` is a **fill/shape color only** — used for the moving car token,
-  meter pips, the active edge-bar. There is **no** amber-text-on-surface role.
+- `amberToken` is a **fill/shape color only** — used for the moving car token, meter
+  pips, the Scrubber thumb. There is **no** amber-text-on-surface role. (The route list's
+  active row is a **pine/sunken** cue, not amber — the card owns the one glow.)
 - Warm accent **text** (the NOW kicker, badge labels) uses `accentWarm`, which is a
   **burnt** amber in daylight (`#9A4D17`, ~5:1 on paper) and lantern amber at dusk.
 - A **filled** amber disc takes `onAmber` (= ink-brown in both themes, 5.25:1 light /
@@ -146,11 +149,21 @@ All token-driven and theme-aware. Compose these; don't restyle from scratch.
 - **`RouteTrack`** — the signature motif: a dashed trail with the **car token**
   gliding along it. Driven by an `Animated.Value` in `[0,1]` (JS-driven — keep it
   the only thing animating per frame).
-- **`StopRow`** — a stop with three glance-states: `upcoming` (hollow ▶), `active`
-  (amber edge-bar + tinted bed, ♪), `passed` (filled bullet + ✦ stamp).
-- **`NowCard`** — the now-playing placard; the one surface that earns the amber glow.
+- **`StopRow`** — a stop with three glance-states: `upcoming` (calm glyph + name),
+  `active` (a sunken "you-are-here" well + **pine** accent glyph + bold name — never amber;
+  the player card owns the one glow), `passed` (dimmed + a quiet check). Composed by `StopList`.
+- **`StopList`** — the route itinerary: one card of `StopRow`s, hairline-ruled, shared by
+  tour detail and the player. A `scroll` mode makes it a fixed shell (rows scroll inside,
+  the player) vs content-sized (the host page scrolls, tour detail).
+- **`NowCard`** — the now-playing placard; the one surface that earns the amber glow. Holds a
+  kicker + title (+ optional mono timer/badge), a state-dependent middle, and the transport.
+- **`TransportBar`** — the player transport: a glow-less center play/pause flanked by ±15
+  jogs, plus a `single`-CTA mode (ready/done) with an optional ghost secondary.
+- **`Scrubber`** — the in-clip position bar (sunken bed, pine fill, amber car-token thumb).
+- **`FilterChip`** — the home "Where to?" region chip. **`HeaderIconButton`** — the
+  self-drawn circular nav-bar chip (strips the iOS-26 Liquid Glass capsule).
 - **`Input`** — themed field, ≥48pt, pine focus ring.
-- **`ThemeToggle`** — Daylight ⇄ Dusk.
+- **`ThemeModePicker`** — Auto / Day / Dusk segmented control (lives on Settings).
 - **`StateView`** — the shared loading / error / empty centered state (`loading`,
   `tone`, `action`, `title`). Kills the repeated `<Screen center>…` boilerplate.
 - **`AccountGate`** — the shared freemium wall (tour + preview). A "smart" composite:
@@ -193,19 +206,21 @@ live in `voice.ts`. (Mirrors the generator's "persona lives in DELIVERY" rule.)
 
 ## 9. Deferred ornament (earn it later — don't block on it)
 
-These are **specced, not built** — the bet is that the system reads as Trailhead 89
-on day one with emoji placeholders, then gets richer:
+The system reads as Trailhead 89 today on the **vector Ionicon** set (`stops.ts`,
+`Icon.tsx`); these enrich it further. Some have since shipped (noted ✅):
 
-- **Custom enamel-badge SVG set** (`react-native-svg`): replace the emoji glyphs in
+- **Custom enamel-badge SVG set** (`react-native-svg`): replace the Ionicon glyphs in
   `stops.ts` / buttons with hand-drawn badges — story = open placard, scenic =
   twin-peaks-with-binoculars, break = enamel coffee cup, the car token, CA-89
   highway shields for corridor numbers.
 - **Passport-stamp animation:** reaching a stop "inks" a postmark on its row
-  (`Animated` scale + rotate + opacity, `duration.stamp`). `StopRow` already models
-  the `passed` state; this is the motion on top.
+  (`Animated` scale + rotate + opacity, `duration.stamp`). ✅ First home shipped: the
+  drive-complete cascade stamps the passed rows in (gated on Reduce Motion). The live
+  per-stop ink is the remaining piece.
 - **Amber sunburst + postmark watermarks** behind hero headers / empty states
   (`expo-linear-gradient` or a static SVG — never animate color stops on Android).
-- **Splash/app icon** rework to the wordmark + badge (`assets/` is currently empty).
+- **Splash/app icon.** ✅ Shipped: an enamel travel badge (pine disc + cream keyline ring +
+  the amber car token) — SVG sources + `build.sh` in `assets/brand/`, wired in `app.json`.
 
 ## 10. How to extend
 
