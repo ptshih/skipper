@@ -110,9 +110,11 @@ export const MUSIC_CREDITS: MusicCredit[] = [
 export const MUSIC_FREE_NOTE =
   'Additional drive music by Sonican, kaazoom, and Moonpub, free under the Pixabay Content License.'
 
-/** Display host for a source link, e.g. "macrostrat.org" — protocol + www. stripped. */
+/** Display host for a source link, e.g. "macrostrat.org" — protocol, www., and any
+ *  path stripped (the link target keeps the full URL; only the visible label is the bare
+ *  host, so a deep path like /music/beat-mekanik/ can't overflow the credit row). */
 export const sourceHost = (url: string): string =>
   url
     .replace(/^https?:\/\//, '')
     .replace(/^www\./, '')
-    .replace(/\/$/, '')
+    .replace(/\/.*$/, '')

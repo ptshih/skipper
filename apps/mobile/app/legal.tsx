@@ -23,10 +23,18 @@ const openUrl = (url: string) => {
   Linking.openURL(url).catch(() => {})
 }
 
-function LinkText({ label, url }: { label: string; url: string }) {
+// `shrink` lets a long label (a host) give up width and ellipsize rather than push past the
+// card edge — the fixed badge + separator hold their size, the host yields. Guards the row
+// against deep URLs and large Dynamic Type sizes alike.
+function LinkText({ label, url, shrink }: { label: string; url: string; shrink?: boolean }) {
   return (
-    <Pressable onPress={() => openUrl(url)} accessibilityRole="link" hitSlop={space.sm}>
-      <Text variant="bodyStrong" color="accent">
+    <Pressable
+      onPress={() => openUrl(url)}
+      accessibilityRole="link"
+      hitSlop={space.sm}
+      style={shrink ? styles.shrink : undefined}
+    >
+      <Text variant="bodyStrong" color="accent" numberOfLines={shrink ? 1 : undefined}>
         {label}
       </Text>
     </Pressable>
@@ -87,7 +95,7 @@ export default function LegalScreen() {
                     ·
                   </Text>
                 ) : null}
-                <LinkText label={sourceHost(source.sourceUrl)} url={source.sourceUrl} />
+                <LinkText label={sourceHost(source.sourceUrl)} url={source.sourceUrl} shrink />
               </View>
             </View>
           </Card>
@@ -118,7 +126,7 @@ export default function LegalScreen() {
                 <Text variant="bodyStrong" color="inkFaint">
                   ·
                 </Text>
-                <LinkText label={sourceHost(credit.sourceUrl)} url={credit.sourceUrl} />
+                <LinkText label={sourceHost(credit.sourceUrl)} url={credit.sourceUrl} shrink />
               </View>
             </View>
           </Card>
@@ -141,4 +149,5 @@ const styles = StyleSheet.create({
   list: { gap: space.md },
   card: { gap: space.sm },
   links: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.xs },
+  shrink: { flexShrink: 1 },
 })
