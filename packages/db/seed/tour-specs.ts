@@ -55,6 +55,30 @@ export const TOUR_SPECS: TourSpec[] = [
       { label: 'Tahoe City', lat: 39.1658, lng: -120.1426 },
     ],
   },
+  {
+    slug: 'east-shore-run',
+    regionSlug: 'lake-tahoe',
+    regionName: 'Lake Tahoe',
+    headline: 'Cave Rock',
+    startAnchorName: 'South Lake Tahoe',
+    endAnchorName: 'Kings Beach',
+    summary:
+      'The East Shore run: from South Lake Tahoe up Highway 50 and 28 past Cave Rock, Sand Harbor, and Thunderbird Lodge, through Incline Village to Kings Beach.',
+    // Origin at Stateline (where US-50 meets the lake and heads up the east shore),
+    // then NV-28 north along the East Shore. Minimal pins: the Stateline->Kings Beach
+    // lakeside run is already the shortest path, so we only anchor two on-highway
+    // points (Cave Rock on US-50, Sand Harbor on NV-28) to keep it honest. Earlier
+    // lakeshore-village pins (Spooner Lake, Thunderbird) snapped to backcountry forest
+    // roads and sent the router on huge Carson-Range detours — don't reintroduce them.
+    // POI discovery samples the whole polyline, so the line still passes Zephyr Cove,
+    // Glenbrook, Spooner, Thunderbird Lodge, Incline, and Crystal Bay regardless.
+    waypoints: [
+      { label: 'Stateline, South Lake Tahoe', lat: 38.9655, lng: -119.9425 },
+      { label: 'Cave Rock', lat: 39.047, lng: -119.9478 },
+      { label: 'Sand Harbor', lat: 39.1984, lng: -119.9308 },
+      { label: 'Kings Beach', lat: 39.2371, lng: -120.026 },
+    ],
+  },
 ]
 
 export function specBySlug(slug: string): TourSpec | undefined {
