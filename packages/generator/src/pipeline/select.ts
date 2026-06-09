@@ -16,6 +16,9 @@
 import type { PoiSource, StopType } from '@skipper/shared'
 import type { AttributionSnapshot } from '@skipper/db/schema'
 import {
+  BREAK_MIN_GAP_SEC,
+  MERGE_EXTRA_SEC,
+  MERGE_MAX_MEMBERS,
   MIN_STOP_SEPARATION_M,
   OFF_ROUTE_MAX_M,
   PACING,
@@ -76,6 +79,16 @@ export interface StopPlan {
   wikiUrl?: string
   wikiTitle?: string
   wikiPageId?: number
+  /** STORY only: co-located landmarks MERGED into this stop — their facts + sources. A separate
+   *  channel (survives fact-sheet deepening, which only touches `facts`); each adds attribution. */
+  mergedFeatures?: {
+    name: string
+    facts: string[]
+    wikiUrl: string
+    wikiTitle: string
+    wikiPageId: number
+    wikidataQid?: string
+  }[]
 }
 
 export interface SelectParams {
@@ -104,25 +117,39 @@ export function toFacts(extract: string): string[] {
 interface Placed {
   poi: WikiPoi
   alongSec: number
+  /** Co-located POIs folded INTO this one (instead of dropped) — merged into one richer stop. */
+  merged?: WikiPoi[]
 }
 
 /**
- * Drop co-located candidates: when two POIs sit within MIN_STOP_SEPARATION_M of
- * each other on the ground they are effectively the same physical stop (e.g.
- * Fannette Island ⊂ Emerald Bay State Park), and narrating both repeats the place.
- * Keep the RICHER extract in each spatial cluster — a duplicate stop is worse than
- * one good one. Greedy richest-first, so the survivor is the longest extract.
+ * Cluster co-located candidates: when two POIs sit within MIN_STOP_SEPARATION_M of each other
+ * on the ground they are the same physical stop (e.g. Fannette Island ⊂ Emerald Bay), so they
+ * must not be two separate stops. Keep the RICHEST extract as the survivor and, instead of
+ * DISCARDING the co-located ones, FOLD them into the survivor as `merged` members — so a
+ * highlight like Emerald Bay becomes one richer telling (bay + castle + island + falls) rather
+ * than losing the castle and island entirely. Only story-grade extracts merge, capped per stop
+ * (MERGE_MAX_MEMBERS) so a survivor can't bloat. Greedy richest-first, so survivors win.
  */
 function dedupeColocated(placed: Placed[]): Placed[] {
   const byRichness = [...placed].sort((a, b) => b.poi.extract.length - a.poi.extract.length)
   const kept: Placed[] = []
   for (const cand of byRichness) {
-    const tooClose = kept.some(
+    const host = kept.find(
       (k) =>
         haversineMeters([k.poi.lng, k.poi.lat], [cand.poi.lng, cand.poi.lat]) <
         MIN_STOP_SEPARATION_M,
     )
-    if (!tooClose) kept.push(cand)
+    if (!host) {
+      kept.push(cand)
+      continue
+    }
+    // Co-located with a richer kept stop → fold its facts in rather than drop them.
+    if (
+      cand.poi.extract.length >= STORY_MIN_FACT_CHARS &&
+      (host.merged?.length ?? 0) < MERGE_MAX_MEMBERS
+    ) {
+      ;(host.merged ??= []).push(cand.poi)
+    }
   }
   return kept
 }
@@ -182,10 +209,12 @@ function selectNarrated(params: SelectParams, snapOf: SnapFn) {
   return chosen
 }
 
-/** Choose `count` break stops spaced through the drive, nearest to even time targets. */
+/** Choose `count` break stops spaced through the drive, nearest to even time targets but
+ *  kept clear of the narrated stops (a break that lands on a story queues behind its clip). */
 function selectBreaks(
   params: SelectParams,
   snapOf: SnapFn,
+  narratedSecs: number[],
 ): { anchor: BreakAnchor; alongSec: number }[] {
   const count = params.pacing.breakStops
   if (count <= 0 || params.breakAnchors.length === 0) return []
@@ -203,24 +232,56 @@ function selectBreaks(
   if (placed.length === 0) return []
   const used = new Set<string>()
   const out: { anchor: BreakAnchor; alongSec: number }[] = []
+  // A break only LAGS if the stop just BEFORE it is still mid-clip when the break fires — so
+  // the metric is the gap to the nearest PRECEDING narrated stop, NOT the nearest stop on
+  // either side. (A story right AFTER a break doesn't make the break late; the break plays
+  // first.) ≥ BREAK_MIN_GAP_SEC ⇒ the preceding clip has finished, so the break is on time.
+  // Infinity when nothing plays before it. The queue guard in generate.ts is the backstop for
+  // any residual lag (e.g. behind a longer merged clip).
+  const precedingGap = (p: (typeof placed)[number]) => {
+    let prev = -Infinity
+    for (const ns of narratedSecs) if (ns <= p.alongSec && ns > prev) prev = ns
+    return prev === -Infinity ? Infinity : p.alongSec - prev
+  }
   for (let k = 1; k <= count; k++) {
     const targetSec = (k / (count + 1)) * params.totalSec
-    let best: (typeof placed)[number] | undefined
-    let bestDelta = Infinity
-    for (const p of placed) {
-      if (used.has(p.anchor.placeId)) continue
-      const delta = Math.abs(p.alongSec - targetSec)
-      if (delta < bestDelta) {
-        bestDelta = delta
-        best = p
-      }
-    }
-    if (best) {
-      used.add(best.anchor.placeId)
-      out.push(best)
-    }
+    // Eligible = unused, clear of the PRECEDING story, and not stacked on an already-picked
+    // break (food anchors bunch at a town, so two can sit seconds apart). Food only exists at
+    // the towns, so this naturally caps how many fit; when nothing's eligible we stop — breaks
+    // are optional, and a badly-lagging break is worse than one fewer.
+    const avail = placed.filter(
+      (p) =>
+        !used.has(p.anchor.placeId) &&
+        precedingGap(p) >= BREAK_MIN_GAP_SEC &&
+        out.every((b) => Math.abs(b.alongSec - p.alongSec) >= BREAK_MIN_GAP_SEC),
+    )
+    if (avail.length === 0) break
+    const best = avail.reduce((a, b) =>
+      Math.abs(a.alongSec - targetSec) <= Math.abs(b.alongSec - targetSec) ? a : b,
+    )
+    used.add(best.anchor.placeId)
+    out.push(best)
   }
   return out
+}
+
+/**
+ * Project FIFO-queue playback lag across the plan. The player plays clips sequentially — a
+ * clip can't start until the previous one ends — so when triggers fire faster than clips
+ * play, the audio backs up and drifts behind the car. This simulates that queue using each
+ * stop's `targetSeconds` as the clip-length estimate and returns, per stop, how many seconds
+ * AFTER its trigger the clip would actually start. Pure (drive-time = the frozen `alongSec`
+ * pace); conservative (ignores the speed-adaptive early trigger, which only adds slack). The
+ * overlap/density guard reads this at generation time so a too-dense pacing is caught off-road.
+ */
+export function projectQueueLag(plan: StopPlan[]): { seq: number; name: string; lagSec: number }[] {
+  const sorted = [...plan].sort((a, b) => a.alongSec - b.alongSec)
+  let playEnd = 0
+  return sorted.map((s) => {
+    const start = Math.max(s.alongSec, playEnd)
+    playEnd = start + s.targetSeconds
+    return { seq: s.seq, name: s.name, lagSec: Math.round(start - s.alongSec) }
+  })
 }
 
 /** Build the final ordered stop plan for one corridor + duration bucket. */
@@ -242,7 +303,12 @@ export function selectStops(params: SelectParams): StopPlan[] {
   }
 
   const narrated = selectNarrated(params, snapOf)
-  const breaks = selectBreaks(params, snapOf)
+  // Breaks avoid stacking on a narrated stop (their alongSec is already computed).
+  const breaks = selectBreaks(
+    params,
+    snapOf,
+    narrated.map((n) => n.alongSec),
+  )
 
   type Pending = Omit<StopPlan, 'seq'>
   const pending: Pending[] = []
@@ -250,6 +316,19 @@ export function selectStops(params: SelectParams): StopPlan[] {
   for (const n of narrated) {
     const isStory = n.poi.extract.length >= STORY_MIN_FACT_CHARS
     const snap = snapOf([n.poi.lng, n.poi.lat])
+    // STORY stops carry their co-located cluster (merged in dedup) as a separate fact channel,
+    // and run a little longer so the fuller telling (e.g. Emerald Bay + its landmarks) has room.
+    const merged = (isStory ? (n.merged ?? []) : []).filter(
+      (m) => m.extract.length >= STORY_MIN_FACT_CHARS,
+    )
+    const mergedFeatures = merged.map((m) => ({
+      name: m.title,
+      facts: toFacts(m.extract),
+      wikiUrl: m.url,
+      wikiTitle: m.title,
+      wikiPageId: m.pageid,
+      ...(m.qid ? { wikidataQid: m.qid } : {}),
+    }))
     pending.push({
       stopType: isStory ? 'story' : 'scenic',
       source: 'wikipedia',
@@ -260,11 +339,13 @@ export function selectStops(params: SelectParams): StopPlan[] {
       lng: n.poi.lng,
       alongSec: n.alongSec,
       facts: isStory ? toFacts(n.poi.extract) : [],
-      targetSeconds: isStory ? TARGET_SECONDS.story : TARGET_SECONDS.scenic,
+      targetSeconds:
+        (isStory ? TARGET_SECONDS.story : TARGET_SECONDS.scenic) + merged.length * MERGE_EXTRA_SEC,
       triggerRadiusM: TRIGGER_RADIUS_M,
       triggerLat: snap.triggerLat,
       triggerLng: snap.triggerLng,
       approachHeadingDeg: snap.approachHeadingDeg,
+      ...(mergedFeatures.length > 0 ? { mergedFeatures } : {}),
       // Side of the road is delivery-only and only surfaced for STORY stops (a named
       // landmark to point at — "just off your left"); scenic names nothing, breaks
       // forbid it. Omitted when the geometry can't call a confident side.

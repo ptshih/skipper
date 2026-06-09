@@ -66,6 +66,9 @@ export interface NarrationRequest {
   geologyContext?: 'sparse' | 'iconic'
   /** STORY only: discrete Wikidata facts (a date, an elevation, a namesake). Grounded like `facts`. */
   wikidata?: string[]
+  /** STORY only: co-located landmarks merged into this stop — each {name, facts}. Grounded;
+   *  the narrator may name them and weave them into ONE telling of the place. */
+  mergedFeatures?: { name: string; facts: string[] }[]
   /** Only when actually known from the route geometry. */
   sideOfRoad?: 'left' | 'right'
   /** Pronunciation hint, e.g. "Genoa = JUH-noh-uh". */
@@ -152,6 +155,30 @@ function wikidataLines(wikidata: string[] | undefined): string[] {
   return out
 }
 
+/**
+ * The ALSO-AT-THIS-STOP block — landmarks that sit right here with the main place (folded in
+ * from the co-located cluster). Each is grounded by its own facts, so the narrator MAY name it
+ * and weave it in — the whole point is to cover the highlight (e.g. Emerald Bay AND its castle,
+ * island, and falls) as ONE flowing telling, not several stops. Same grounding rule: only what
+ * is listed here is known.
+ */
+function mergedFeatureLines(features: { name: string; facts: string[] }[] | undefined): string[] {
+  const fs = (features ?? []).filter((f) => f.name && f.facts.length > 0)
+  if (fs.length === 0) return []
+  const out: string[] = [
+    '',
+    'ALSO RIGHT HERE — landmarks at this same stop (grounded; you MAY name each and weave them into ONE telling of this place, not separate asides — only what is listed is known):',
+  ]
+  for (const f of fs) {
+    out.push(`• ${f.name}:`)
+    for (const fact of f.facts) out.push(`    - ${fact}`)
+  }
+  out.push(
+    '(Cover these as part of the SAME stop — the place plus its notable features — in one flowing pass. Name them freely; invent nothing beyond their facts above.)',
+  )
+  return out
+}
+
 /** Build the per-stop USER fact sheet, matching the system prompt's "Reading the fact sheet" contract. */
 export function buildFactSheet(req: NarrationRequest): string {
   const lines: string[] = []
@@ -182,6 +209,7 @@ export function buildFactSheet(req: NarrationRequest): string {
     }
     for (const l of geologyLines(req.geology, 'story', req.geologyContext)) lines.push(l)
     for (const l of wikidataLines(req.wikidata)) lines.push(l)
+    for (const l of mergedFeatureLines(req.mergedFeatures)) lines.push(l)
   } else if (req.stopType === 'scenic') {
     lines.push(
       'SCENIC stop — delivery only, NO place-facts. Point only at what is plainly, visibly there',

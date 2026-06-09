@@ -27,7 +27,9 @@ const params = (): SelectParams => ({
   polyline,
   totalSec: TOTAL_SEC,
   pacing: { minGapSec: 180, maxNarratedStops: 5, breakStops: 1 },
-  breakAnchors: [{ placeId: 'gas-1', name: 'Gas Stop', lat: 38.06, lng: 0, primaryType: 'gas_station' }] as BreakAnchor[],
+  // ~495s — placed in a clear slot (>90s after Rich B @330s) so it isn't rejected as
+  // stacking on a narrated stop's clip (selectBreaks' preceding-gap rule).
+  breakAnchors: [{ placeId: 'gas-1', name: 'Gas Stop', lat: 38.075, lng: 0, primaryType: 'gas_station' }] as BreakAnchor[],
   wikiPois: [
     wiki({ lat: 38.01, title: 'Rich A', extract: RICHER }), // ~66s — richest in its window
     wiki({ lat: 38.015, title: 'Near-A F', extract: RICH }), // ~83s — within minGap of A → skipped
@@ -120,9 +122,21 @@ describe('selectStops trigger points + break off-route filter', () => {
   test('keeps an on-route break anchor', () => {
     const onRoute = selectStops({
       ...params(),
-      breakAnchors: [{ placeId: 'near-gas', name: 'Near Gas', lat: 38.05, lng: 0, primaryType: 'gas_station' }] as BreakAnchor[],
+      // lat 38.075 ≈ 495s — on-route AND clear of the preceding story (so it isn't dropped
+      // for stacking); this test is about the OFF-ROUTE filter keeping an on-route anchor.
+      breakAnchors: [{ placeId: 'near-gas', name: 'Near Gas', lat: 38.075, lng: 0, primaryType: 'gas_station' }] as BreakAnchor[],
     })
     expect(onRoute.filter((s) => s.stopType === 'break').length).toBe(1)
+  })
+
+  test('drops a break that would stack on the preceding story (queue would back up)', () => {
+    const stacked = selectStops({
+      ...params(),
+      // The only anchor sits ~7s after Rich B (@~330s) — inside the preceding-gap floor, so it
+      // would queue behind Rich B's clip and play late. No clear slot ⇒ no break.
+      breakAnchors: [{ placeId: 'stacked', name: 'Stacked Gas', lat: 38.051, lng: 0, primaryType: 'gas_station' }] as BreakAnchor[],
+    })
+    expect(stacked.some((s) => s.stopType === 'break')).toBe(false)
   })
 })
 
@@ -148,8 +162,17 @@ describe('selectStops co-located dedup', () => {
 
   test('collapses two co-located POIs to one, keeping the richer extract', () => {
     expect(plan.some((s) => s.name === 'Start Rich')).toBe(true) // RICHER wins
-    expect(plan.some((s) => s.name === 'End Rich')).toBe(false) // within MIN_STOP_SEPARATION_M → dropped
+    expect(plan.some((s) => s.name === 'End Rich')).toBe(false) // not its own stop
     expect(plan.filter((s) => s.stopType !== 'break').length).toBe(1)
+  })
+
+  test('FOLDS the co-located POI into the survivor as a merged feature (not discarded)', () => {
+    const survivor = plan.find((s) => s.name === 'Start Rich')
+    expect(survivor?.mergedFeatures?.length).toBe(1)
+    expect(survivor?.mergedFeatures?.[0]?.name).toBe('End Rich')
+    expect(survivor?.mergedFeatures?.[0]?.facts.length).toBeGreaterThan(0) // its facts survive
+    // The merged telling runs a little longer than a lone story.
+    expect(survivor!.targetSeconds).toBeGreaterThan(120)
   })
 
   test('the survivor sits at opposite end in TIME, proving spatial (not time-gap) dedup', () => {

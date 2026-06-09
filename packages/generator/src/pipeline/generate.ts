@@ -31,6 +31,7 @@ import {
   GEOSEARCH_STEP_M,
   GOOGLE_READY,
   PACING,
+  QUEUE_LAG_WARN_SEC,
   R2_READY,
   WIKIDATA_ENRICHMENT,
   WIKIDATA_STORY_MAX_FACT_CHARS,
@@ -44,7 +45,7 @@ import { geologyFacts } from './macrostrat'
 import { wikidataFacts } from './wikidata'
 import { searchBreakStops, spokenKind } from './places'
 import type { BreakAnchor } from './places'
-import { selectStops, toFacts } from './select'
+import { projectQueueLag, selectStops, toFacts } from './select'
 import type { StopPlan } from './select'
 import { narrateIntro, narrateOutro, narrateStop } from './narrate'
 import type { NarrationRequest } from './narrate'
@@ -184,6 +185,24 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       `${plan.filter((s) => s.stopType === 'scenic').length} scenic, ` +
       `${plan.filter((s) => s.stopType === 'break').length} break.`,
   )
+
+  // Overlap guard: tighter pacing admits more stops, but clips play through a sequential
+  // FIFO queue, so stops paced closer than their clips are long make the audio lag behind
+  // the car. Surface that HERE (at generation), never on the road — a flagged tour wants a
+  // higher minGapSec or fewer stops (see PACING / QUEUE_LAG_WARN_SEC).
+  const lag = projectQueueLag(plan)
+  const backedUp = lag.filter((l) => l.lagSec > QUEUE_LAG_WARN_SEC)
+  if (backedUp.length > 0) {
+    console.warn(
+      `⚠ Queue backup: ${backedUp.length} clip(s) start >${QUEUE_LAG_WARN_SEC}s after their trigger ` +
+        `(pacing too dense — audio will lag behind the car):`,
+    )
+    for (const l of backedUp) console.warn(`    +${l.lagSec}s late · "${l.name}"`)
+  } else {
+    console.log(
+      `Queue pacing OK — worst clip lag ${Math.max(0, ...lag.map((l) => l.lagSec))}s (no stop outruns the drive).`,
+    )
+  }
 
   // Deepen the fact sheets for the CHOSEN story stops. Selection ranked + classified
   // candidates on the cheap batched LEAD extract; a fuller, longer telling needs more
@@ -362,6 +381,9 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
               }
             : {}),
           ...(s.wikidata?.length ? { wikidata: s.wikidata } : {}),
+          ...(s.mergedFeatures?.length
+            ? { mergedFeatures: s.mergedFeatures.map((m) => ({ name: m.name, facts: m.facts })) }
+            : {}),
         }
       : s.stopType === 'break'
         ? { place: { name: s.name, kind: spokenKind(s.kind) } } // normalize raw primaryType
@@ -624,6 +646,17 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
           sourceId: String(s.wikiPageId),
           title: s.wikiTitle,
           url: s.wikiUrl,
+          license: 'CC BY-SA 4.0',
+          retrievedAt: new Date().toISOString(),
+        })
+      }
+      // Each merged co-located landmark contributed its own Wikipedia text — credit every one.
+      for (const m of s.mergedFeatures ?? []) {
+        attribution.push({
+          source: 'wikipedia',
+          sourceId: String(m.wikiPageId),
+          title: m.wikiTitle,
+          url: m.wikiUrl,
           license: 'CC BY-SA 4.0',
           retrievedAt: new Date().toISOString(),
         })

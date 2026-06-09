@@ -154,10 +154,19 @@ export interface BucketPacing {
 }
 
 // M1 ships `standard` only; short/long are defined for forward use (M3).
+// minGapSec is the floor between consecutive stops — it directly governs the SILENCE
+// between clips (a ~120s clip with a 180s floor leaves ~60s of quiet, vs the ~120s+ of
+// dead air a 240s floor left). Lowered to admit more of the already-discovered grounded
+// POIs (discovery finds ~40+ along a route; the old floor used only ~9) so the drive
+// stops having 5–7 min silent stretches. Stays ABOVE the clip length so the sequential
+// player never backs up (the QUEUE_LAG guard in generate.ts asserts this per tour).
+// breakStops is a TARGET, not a guarantee — breaks are optional rest/food callouts, so we
+// scatter a few through the drive (selectBreaks prefers slots clear of a story, but keeps the
+// least-stacked rather than dropping one). Generous on purpose; the rider takes them or not.
 export const PACING: Record<DurationBucket, BucketPacing> = {
-  short: { minGapSec: 360, maxNarratedStops: 6, breakStops: 0 },
-  standard: { minGapSec: 240, maxNarratedStops: 14, breakStops: 1 },
-  long: { minGapSec: 180, maxNarratedStops: 20, breakStops: 2 },
+  short: { minGapSec: 300, maxNarratedStops: 8, breakStops: 1 },
+  standard: { minGapSec: 180, maxNarratedStops: 16, breakStops: 3 },
+  long: { minGapSec: 150, maxNarratedStops: 24, breakStops: 4 },
 }
 
 /** Target spoken length per stop type (seconds) — honored by narration, never padded.
@@ -165,6 +174,25 @@ export const PACING: Record<DurationBucket, BucketPacing> = {
  * to breathe; the model still stops when the FACTS run out, so thin sheets stay short.
  * `scenic` stays short (delivery-only, no facts to fill time); `break` is a brief cue. */
 export const TARGET_SECONDS = { story: 120, scenic: 20, break: 15 } as const
+
+/** Generation-time overlap guard: the player plays clips through a sequential FIFO queue,
+ *  so if stops are paced TIGHTER than their clips are long, the audio backs up and lags
+ *  behind the car. Warn if any clip would start more than this many seconds after its
+ *  trigger — a signal the pacing is too dense (lower the stop count or shorten clips). */
+export const QUEUE_LAG_WARN_SEC = 45
+
+/** Co-located cluster MERGE: when dedup would drop a POI sitting within MIN_STOP_SEPARATION_M
+ *  of a kept stop, FOLD its facts onto that stop instead of discarding them — so a highlight
+ *  like Emerald Bay becomes ONE richer telling (bay + castle + island + falls) rather than 3
+ *  dropped landmarks (or 3 overlapping clips). Cap members so a survivor can't bloat; only
+ *  fold members with a real (story-grade) extract; each adds room to the clip target. */
+export const MERGE_MAX_MEMBERS = 3
+export const MERGE_EXTRA_SEC = 40
+
+/** Keep a BREAK from stacking on a narrated stop: a break within this many seconds of a story
+ *  would queue behind that story's ~120s clip and play late (the +115s lag the guard caught).
+ *  Breaks are flexible, so we just skip anchors this close to a chosen narrated stop. */
+export const BREAK_MIN_GAP_SEC = 90
 
 /** Default speed-adaptive trigger floor (m). Matches the tour_stops column default. */
 export const TRIGGER_RADIUS_M = 120
