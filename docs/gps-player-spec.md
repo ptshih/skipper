@@ -129,25 +129,40 @@ const engine = new TriggerEngine(triggerable, { leadSeconds: 12 })
 
 ```ts
 // expo-location LocationObject → GpsFix
+// ⚠️ iOS returns -1 (NOT null) for invalid speed/heading (CLLocation; expo/expo#5401, sim AND device).
+// The docs TYPE these `number | null` but the RUNTIME yields -1 — so `?? 0` is NOT enough; sanitize.
+const sane = (v: number | null | undefined) => (v != null && v >= 0 ? v : 0)
 const fix: GpsFix = {
   lat: loc.coords.latitude,
   lng: loc.coords.longitude,
-  speedMps: loc.coords.speed ?? 0,       // null/-1 when stationary → 0 (heading gate then skips, fail-open)
-  headingDeg: loc.coords.heading ?? 0,    // null below ~5 mph; derive from consecutive fixes if you need it
-  tSec: (loc.timestamp - startMs) / 1000, // startMs captured when the drive begins
+  speedMps: sane(loc.coords.speed),       // -1/null when stationary → 0 (heading gate then skips, fail-open)
+  headingDeg: sane(loc.coords.heading),   // -1/null below ~5 mph; derive from consecutive fixes if you need it
+  tSec: (loc.timestamp - startMs) / 1000, // loc.timestamp = ms since epoch; startMs captured at the FIRST fix
   alongM: 0,
 }
+// Real GPS settles slowly: the first fixes can carry accuracy 1000 m+, and a wild fix landing near a stop
+// will false-fire it. Gate on horizontal accuracy BEFORE feeding the engine (MAX_FIX_ACCURACY_M ≈ 50–100 m):
+if (loc.coords.accuracy != null && loc.coords.accuracy > MAX_FIX_ACCURACY_M) return // drop this fix
 for (const ev of engine.update(fix)) enqueueClip(ev.seq) // fire each (usually 0–1)
 ```
 
 ### 3.4 The swappable source
 
 ```ts
-type GpsFixSource = (onFix: (f: GpsFix) => void) => () => void // subscribe → returns unsubscribe
-// simulatedSource(polyline, { mph }) — replays generateDrive(...) on a timer (NO GPS; Phase 2)
-// liveSource() — watchPositionAsync → GpsFix (Phase 4)
+// The SHIPPED seam (apps/mobile/src/lib/gps.ts) is RICHER than this spec's original sketch — it returns a
+// FixSubscription (not a bare unsubscribe) and takes an onEnd. liveSource() must implement the SAME shape:
+type GpsFixSource = (onFix: (f: GpsFix) => void, onEnd?: () => void) => FixSubscription
+interface FixSubscription { stop(): void; pause(): void; resume(): void }
+// simulatedSource(polyline, { mph, tickHz, timeScale }) — replays generateDrive on a timer (NO GPS) ✅ built
+// liveSource() — watchPositionAsync → GpsFix (Phase 4), mapping to the SAME FixSubscription:
+//   stop()  → sub.remove() + set a `stopped` guard (the #35925/#35926 leak — see §5)
+//   pause() → sub.remove();   resume() → re-acquire the watch
+//   onEnd   → never fires (live is an infinite stream; finite-source only)
 ```
-Build Phase 2 against `simulatedSource`; Phase 4 only adds `liveSource` and flips which one the screen uses.
+Build Phase 2 against `simulatedSource`; Phase 4 adds `liveSource` and flips which one the screen uses.
+**⚠️ Today `useDrive` HARDWIRES `simulatedSource`** (direct import + construct, ~`gps.ts` line 30/367) — so
+Phase 4 must first add the seam: thread a `source` (or `mode: 'sim' | 'live'`) param through the hook/screen.
+The on-device drive *simulator* keeps `simulatedSource`; the real drive picks `liveSource()`. Same engine path.
 
 ### 3.5 The preview player — reuse vs. change (`apps/mobile/app/preview/[id].tsx`)
 
@@ -222,9 +237,12 @@ non-preview tour needs a signed-in (free) account at prep time (the `/tours` + `
 - **Download BYTES, not URLs** (presigned URLs die in 1 h) — write to `Paths.document`, never the evictable
   `Paths.cache`.
 - **Don't auto-advance on clip end.** The next stop fires from GPS, not from `didJustFinish` (§3.5).
-- **Verify the Android `watchPositionAsync` teardown.** Known bug: the subscription may keep capturing after
-  `.remove()` (oven of expo issues #35925/#35926) — confirm GPS actually stops on unmount or you leak
-  battery all session.
+- **`watchPositionAsync` teardown is BROKEN — verify on YOUR target platform.** The subscription can keep
+  capturing after `.remove()` (expo/expo #35925 + #35926, Apr–Jun 2025, still open; reported on Android AND
+  iOS — not Android-only). Two-layer defense: (1) hold a `stopped` guard in `liveSource` and ignore `onFix`
+  after `stop()`, so even a leaked native watch can't fire a stop or pollute the route dot; (2) the leaked
+  NATIVE watch still drains battery — confirm GPS actually stops on unmount during the Phase 4 test, or you
+  bleed battery all session. The JS guard fixes correctness; only the verified teardown fixes the battery.
 - **Battery.** Continuous BestForNavigation GPS + screen-kept-awake + background audio is the heaviest load;
   plan for the phone on power in the mount; consider downshifting accuracy when `speed ≈ 0`.
 - **Mobile is in the workspace on bun's ISOLATED linker** — every dep the player uses must be **declared**
@@ -244,7 +262,9 @@ non-preview tour needs a signed-in (free) account at prep time (the `/tours` + `
 2. **`@skipper/drive-core` tests** (`bun test`) — the trigger math is behavior-locked; don't regress it.
 3. **`bun run check`** in `apps/mobile` (lint:tokens + typecheck + test) on every UI change.
 4. **`bunx expo export`** — headless Metro bundle; catches resolution/import breakage without a device.
-5. **Phase 4 walk/bike test** — `liveSource` fires stops from real device GPS at low speed.
+5. **Phase 4 bike test (>5 mph)** — `liveSource` fires stops from real device GPS. A *walking* test is below
+   `headingGateMps` so it skips the heading cone (validates wiring + distance, not the cone — see §7 Phase 4).
+   Smoke-test wiring first on the iOS Simulator via *Features → Location → Freeway Drive*.
 6. **Phase 5 real drive** — EAS dev build, phone mounted on power, drive `emerald-bay-run`, tune
    `leadSeconds`/cone/accuracy from the trace.
 
@@ -275,13 +295,31 @@ NOT hardcoded (concurrency-capped) + write the manifest (§4). Gate "Start drive
 on download-complete + verify-on-disk. Player prefers local `file://`, else presigned (re-sign if expired).
 → **Accept:** airplane-mode after download → the full simulated drive plays from disk, zero network.
 
-### Phase 4 — real `expo-location` source (~1½ days)
-`bunx expo install expo-location expo-keep-awake`. Config plugin: `locationWhenInUsePermission`
-(→ `NSLocationWhenInUseUsageDescription`); no background-location. `liveSource`:
-`watchPositionAsync({ accuracy: Location.Accuracy.BestForNavigation, distanceInterval: 0 })` → map
-`LocationObject` → `GpsFix` (§3.3). `useKeepAwake()` while driving. Carefully `.remove()` on teardown
-(§5 Android bug). Same `engine.update` path — sim and live sources interchangeable.
-→ **Accept:** a walk/bike test fires stops from real device GPS.
+### Phase 4 — real `expo-location` source (~1½–2 days, needs a dev build)
+1. **Deps (declared — isolated linker):** `bunx expo install expo-location expo-keep-awake`. Config plugin in
+   `app.json`: `["expo-location", { "locationWhenInUsePermission": "Skipper uses your location to play each
+   stop as you reach it." }]` → `NSLocationWhenInUseUsageDescription`. Set NO background keys
+   (`isIosBackgroundLocationEnabled`/`isAndroidBackgroundLocationEnabled` stay off — foreground-only; on
+   Android you do NOT need `FOREGROUND_SERVICE_LOCATION` because the watch only runs foregrounded).
+   `expo-keep-awake` needs no plugin. No new `app/*` route → no typegen step.
+2. **Permission gate (new UX):** `requestForegroundPermissionsAsync()` before the watch. Gate "Start drive"
+   on `granted`; on denied with `canAskAgain === false`, deep-link to Settings (`Linking.openSettings()`).
+   Pairs with the existing account-gate pattern.
+3. **`liveSource()` in `gps.ts`** — implement the SAME `FixSubscription` the sim source returns (§3.4):
+   `watchPositionAsync({ accuracy: Location.Accuracy.BestForNavigation, distanceInterval: 0, timeInterval: 500 })`
+   (`timeInterval` is Android-only — pins cadence near the 4 Hz sim; iOS streams continuously at
+   `distanceInterval: 0`). Map `LocationObject → GpsFix` via the **sanitized** adapter (§3.3): sanitize the
+   iOS `-1`, gate on `coords.accuracy`, capture `startMs` at the first fix for `tSec`. `stop()` →
+   `sub.remove()` + `stopped` guard (§5); `pause/resume` → remove / re-watch; `onEnd` unused.
+4. **Swap the source (new seam):** `useDrive` HARDWIRES `simulatedSource` today — thread a `source` (or
+   `mode: 'sim' | 'live'`) param through the hook/screen so the driving screen picks `liveSource()`. The
+   on-device drive *simulator* keeps `simulatedSource`; same `engine.update` path for both.
+5. **`useKeepAwake()`** while the drive screen is mounted.
+→ **Accept:** a **bike** test (>5 mph) fires stops from real device GPS at the right place/lead, once each,
+   and GPS verifiably STOPS on unmount (battery). ⚠️ A **walking** test (~3 mph) sits BELOW `headingGateMps`
+   (2.2 m/s ≈ 5 mph) so the heading cone is SKIPPED — it validates wiring + distance triggering but NOT the
+   cone (which only exercises at driving speed: bike partially, Phase 5 fully). Smoke-test the wiring first on
+   the iOS Simulator via *Features → Location → Freeway Drive* before going outside.
 
 ### Phase 5 — drive it once for real
 EAS dev build; phone mounted on power; drive `emerald-bay-run` offline; tune `leadSeconds`/cone/accuracy.
@@ -293,14 +331,20 @@ EAS dev build; phone mounted on power; drive `emerald-bay-run` offline; tune `le
 Pins (`apps/mobile/package.json`): `expo ~56.0.9`, `react-native 0.85.3`, `expo-audio ~56.0.11`,
 `newArchEnabled: true`. **Need to add: `expo-location`, `expo-keep-awake`, and declare `expo-file-system`.**
 
-- **expo-location** — `watchPositionAsync(options, callback, errorHandler) → Promise<LocationSubscription>`
-  (`.remove()` to stop). **Foreground only.** `LocationOptions`: `accuracy` (`Accuracy.BestForNavigation = 6`
-  for automotive), **`distanceInterval: 0`** (pure time-driven stream — gating on distance reintroduces the
-  geofence miss), `timeInterval` (ms, Android). `LocationObject.coords`: `latitude, longitude, accuracy,
-  speed` (m/s, nullable), `heading` (deg, null below ~5 mph). Permission:
-  `requestForegroundPermissionsAsync()` (When-In-Use; enough). Config-plugin key:
-  `locationWhenInUsePermission` → `NSLocationWhenInUseUsageDescription`. (Do NOT set
-  `isIosBackgroundLocationEnabled` / `isAndroidBackgroundLocationEnabled` — foreground-only.)
+- **expo-location** (re-verified 2026-06-09) — `watchPositionAsync(options, callback, errorHandler?) →
+  Promise<LocationSubscription>` (await it, THEN `.remove()` to stop). **Foreground only.** `LocationOptions`:
+  `accuracy` (enum is exported as **`Accuracy`**, `Accuracy.BestForNavigation = 6` for automotive — `import *
+  as Location` makes `Location.Accuracy.BestForNavigation` resolve), **`distanceInterval: 0`** (pure
+  time-driven stream — gating on distance reintroduces the geofence miss), `timeInterval` (ms, **Android
+  only**), `mayShowUserSettingsDialog` (Android). `LocationObject`: `coords`, `timestamp` (ms since epoch),
+  `mocked?` (Android — flags injected fixes, handy in dev). `LocationObject.coords`: `latitude, longitude`
+  (always present), `accuracy, altitude, altitudeAccuracy, heading, speed` (all typed `number | null`).
+  **⚠️ The TYPE lies about speed/heading: on iOS the RUNTIME returns `-1` (not null) when invalid/stationary
+  (CLLocation; expo/expo#5401, sim AND device) — sanitize `-1` AND `null`, don't just `?? 0` (§3.3).**
+  Permission: `requestForegroundPermissionsAsync()` → `{ granted, status, canAskAgain, ios?, android? }`
+  (When-In-Use; enough). Config-plugin key: `locationWhenInUsePermission` → `NSLocationWhenInUseUsageDescription`.
+  (Do NOT set `isIosBackgroundLocationEnabled` / `isAndroidBackgroundLocationEnabled` — foreground-only.)
+  **Teardown bug:** `.remove()` may not stop updates — #35925/#35926, both platforms (§5).
   Docs: https://docs.expo.dev/versions/v56.0.0/sdk/location/
 - **expo-keep-awake** — `useKeepAwake(tag?)` hook (screen stays on while mounted) or
   `activateKeepAwakeAsync`/`deactivateKeepAwake`. No plugin/Info.plist/manifest needed.
@@ -343,6 +387,11 @@ Pins (`apps/mobile/package.json`): `expo ~56.0.9`, `react-native 0.85.3`, `expo-
 Synthesized 2026-06-08 from a 4-agent research workflow (sim core, preview player, tour data/offline, Expo
 SDK 56 APIs) + the founder-locked scope (foreground-only). The prerequisite refactor (drive-core leaf +
 workspace merge + geo dedup) is committed (`e97c453`, `5025827`); this spec covers everything after it.
+**Re-grounded 2026-06-09 (Phase 4 pass):** Phases 2–3 are now ✅ built (§1); re-verified expo-location
+against live SDK 56 docs + issue tracker and corrected the §3.3 adapter (iOS `-1` sanitize + accuracy gate),
+the §3.4 source signature (the shipped `FixSubscription` + the hardwired-`simulatedSource` seam gap), the §5
+teardown landmine (both platforms, not Android-only), §7 Phase 4 (permission gate, source-swap, walk-vs-bike
+cone caveat), and the §8 location reference. Sources: expo/expo#5401 (iOS speed=-1), #35925/#35926 (teardown).
 Related memory: `drive-simulator-and-triggering`, `preview-try-without-driving`,
 `mobile-workspace-isolated-linker`, `carplay-deferred-phone-first-mvp`. Sibling spec (different feature):
 `docs/ask-the-skipper-spec.md`.
