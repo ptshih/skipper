@@ -30,7 +30,7 @@ import {
 } from '../config'
 import { haversineMeters, type LngLat } from './geo'
 import { fetchWithRetry } from './http'
-import { fetchExtractsByTitle } from './wikipedia'
+import { fetchExtractsByTitle, type WikiPoi } from './wikipedia'
 
 const REQUEST_TIMEOUT_MS = 30_000
 
@@ -128,6 +128,58 @@ export function dedupeByName(cands: WikidataCandidate[]): WikidataCandidate[] {
     }
     const story = group.find((g) => g.tier === 'story')
     out.push(story ?? group.sort((a, b) => b.types.length - a.types.length)[0]!)
+  }
+  return out
+}
+
+/** A clean, spoken feature KIND for a named scenic pin (e.g. 'bay'), or undefined when the
+ *  P31 types name no evocative natural feature (then the stop is named with no KIND). */
+export function featureKind(types: string[]): string | undefined {
+  const PREF = [
+    'beach', 'bay', 'cove', 'lake', 'reservoir', 'point', 'cape', 'island', 'peninsula',
+    'waterfall', 'spring', 'meadow', 'summit', 'peak', 'mountain', 'pass', 'ridge', 'hill',
+    'valley', 'canyon', 'recreation area', 'state park', 'park', 'vista', 'viewpoint',
+    'overlook', 'historic district',
+  ]
+  const t = types.join(' ; ')
+  for (const p of PREF) if (t.includes(p)) return p
+  return undefined
+}
+
+/**
+ * Adapt spine candidates into selection candidates (WikiPoi). Only STORY + SCENIC flow into
+ * selection: a STORY carries its Wikipedia prose (source 'wikipedia', pageid + extract); a
+ * SCENIC is a named Wikidata feature with no prose (source 'wikidata', extract '', a KIND).
+ * BREAK is the Google Places layer's job and DROP is discarded, so neither is emitted.
+ */
+export function candidatesToWikiPois(cands: WikidataCandidate[]): WikiPoi[] {
+  const out: WikiPoi[] = []
+  for (const c of cands) {
+    if (c.tier === 'story' && c.article) {
+      out.push({
+        source: 'wikipedia',
+        sourceId: String(c.article.pageId),
+        title: c.article.title,
+        lat: c.lat,
+        lng: c.lng,
+        extract: c.article.extract,
+        url: c.article.url,
+        pageid: c.article.pageId,
+        ...(c.qid ? { qid: c.qid } : {}),
+      })
+    } else if (c.tier === 'scenic') {
+      const kind = featureKind(c.types)
+      out.push({
+        source: 'wikidata',
+        sourceId: c.qid,
+        title: c.name,
+        lat: c.lat,
+        lng: c.lng,
+        extract: '',
+        qid: c.qid,
+        ...(kind ? { kind } : {}),
+      })
+    }
   }
   return out
 }

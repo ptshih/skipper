@@ -56,7 +56,8 @@ export interface NarrationRequest {
   corridor: string
   stopType: StopType
   jokeLevel: JokeLevel
-  /** Required for STORY and BREAK (the curated, stable name + kind); omitted for SCENIC. */
+  /** Required for STORY and BREAK (the curated, stable name + kind). OPTIONAL for SCENIC: a
+   *  NAMED natural feature (a bay/beach) — its name + kind are sayable like a break's, no facts. */
   place?: { name: string; kind?: string | null }
   /** Grounded fact lines (STORY only). The entire well of facts the model may use. */
   facts?: string[]
@@ -106,6 +107,7 @@ function geologyLines(
   geology: string[] | undefined,
   stopType: StopType,
   context?: 'sparse' | 'iconic',
+  namedScenic = false,
 ): string[] {
   const geo = (geology ?? []).map((g) => g.trim()).filter(Boolean)
   if (geo.length === 0) return []
@@ -116,7 +118,9 @@ function geologyLines(
   for (const g of geo) out.push(`- ${g}`)
   if (stopType === 'scenic') {
     out.push(
-      '(On a SCENIC stop this is the ONE thing you may state as fact. You still name no peak, town, island, or landmark — only the rock and its rough age, exactly as given. Invent nothing beyond these lines; speak the age as the rough range it is.)',
+      namedScenic
+        ? '(On a SCENIC stop this is the ONE extra fact you may state. Beyond the named feature on your sheet you still name no OTHER peak, town, or island — only this feature, the rock, and its rough age, exactly as given. Invent nothing beyond these lines; speak the age as the rough range it is.)'
+        : '(On a SCENIC stop this is the ONE thing you may state as fact. You still name no peak, town, island, or landmark — only the rock and its rough age, exactly as given. Invent nothing beyond these lines; speak the age as the rough range it is.)',
     )
   } else if (context === 'iconic') {
     // An allowlisted RICH stop where the rock IS the headline (Emerald Bay's granite): do NOT
@@ -211,13 +215,43 @@ export function buildFactSheet(req: NarrationRequest): string {
     for (const l of wikidataLines(req.wikidata)) lines.push(l)
     for (const l of mergedFeatureLines(req.mergedFeatures)) lines.push(l)
   } else if (req.stopType === 'scenic') {
-    lines.push(
-      'SCENIC stop — delivery only, NO place-facts. Point only at what is plainly, visibly there',
-    )
-    lines.push(
-      '(light, water color, sky, the road). Do not name any peak, town, island, or landmark.',
-    )
-    for (const l of geologyLines(req.geology, 'scenic')) lines.push(l)
+    const namedScenic = Boolean(req.place?.name)
+    if (namedScenic) {
+      lines.push(`PLACE: ${req.place!.name}`)
+      if (req.place!.kind) lines.push(`KIND: ${req.place!.kind}`)
+      if (req.sideOfRoad) lines.push(`SIDE OF ROAD: on the ${req.sideOfRoad}`)
+      lines.push('')
+      lines.push(
+        'SCENIC stop, NAMED — a natural feature you are passing. You MAY name the PLACE above and say',
+      )
+      lines.push(
+        'what KIND it is (a bay, a beach, a cove — plainly), and which side it is on. That is ALL the',
+      )
+      lines.push(
+        'name buys you: no history, no how it got its name, no size/depth/temperature, no "famous",',
+      )
+      lines.push(
+        '"popular", "hidden gem", or "local favorite", no who owns it, no events. Naming it is not',
+      )
+      lines.push(
+        'license to assert what the name implies, and you cannot see THIS feature, so do not hand it a',
+      )
+      lines.push(
+        "specific (its sand, its boulders, its crowds): the water's general blue and the light are",
+      )
+      lines.push(
+        "everyone's to see; this named feature's particulars are not. Name it, gesture at it, react to the",
+      )
+      lines.push('plain look of the water and sky in your own voice, and stop — a glance, not a story.')
+    } else {
+      lines.push(
+        'SCENIC stop — delivery only, NO place-facts. Point only at what is plainly, visibly there',
+      )
+      lines.push(
+        '(light, water color, sky, the road). Do not name any peak, town, island, or landmark.',
+      )
+    }
+    for (const l of geologyLines(req.geology, 'scenic', undefined, namedScenic)) lines.push(l)
   } else {
     // break — the curated name + kind ARE given and sayable; everything volatile is not.
     lines.push(`PLACE: ${req.place?.name ?? '(unnamed)'}`)

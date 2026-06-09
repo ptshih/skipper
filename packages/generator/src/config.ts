@@ -118,14 +118,13 @@ export const GEOSEARCH_RADIUS_M = 2_000
 /** Wikipedia POIs farther than this from the road aren't "along the drive" — dropped. */
 export const OFF_ROUTE_MAX_M = 700
 
-// --- Wikidata discovery spine (EXPERIMENTAL, default OFF) --------------------
-// Flip POI discovery from Wikipedia-geosearch to a Wikidata spine: query geocoded
-// entities along the route (P31-typed, P625-located), demote Wikipedia to a prose layer
-// joined via sitelink. Wikidata has far more geocoded entities than Wikipedia has
-// articles, so this surfaces the named bay/beach/cove scenery layer Wikipedia is blind to
-// (e.g. Sand Harbor — no Wikipedia article, but a typed Wikidata pin). Off by default
-// while it's validated; flip with SKIPPER_WIKIDATA_SPINE=on. See pipeline/wikidata-discovery.ts.
-export const WIKIDATA_SPINE = (): boolean => process.env.SKIPPER_WIKIDATA_SPINE === 'on'
+// --- Wikidata discovery spine ----------------------------------------------
+// Discovery IS the Wikidata spine (it replaced Wikipedia-geosearch wholesale): query
+// geocoded entities along the route (P31-typed, P625-located), with Wikipedia demoted to a
+// prose layer joined via sitelink. Wikidata has far more geocoded entities than Wikipedia
+// has articles, so this surfaces the named bay/beach/cove scenery layer Wikipedia is blind
+// to (e.g. Sand Harbor — no Wikipedia article, but a typed Wikidata pin). See
+// pipeline/wikidata-discovery.ts.
 /** Wikidata Query Service (SPARQL) — the geospatial endpoint (distinct from the keyless
  *  wbgetentities Action API the enrichment uses). Public, rate-limited; needs the UA. */
 export const WDQS_ENDPOINT = 'https://query.wikidata.org/sparql'

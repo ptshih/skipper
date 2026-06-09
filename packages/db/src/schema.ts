@@ -53,7 +53,12 @@ export type StopMeta = Record<string, unknown>
 /*  Enums — keep these in lockstep with the Zod enums in @skipper/shared        */
 /* -------------------------------------------------------------------------- */
 
-export const poiSourceEnum = pgEnum('poi_source', ['wikipedia', 'google_places'])
+// Discovery sources for a `pois` row. `wikidata` joined when discovery flipped to the
+// Wikidata spine: a scenic pin (a named bay/beach with no Wikipedia article) is discovered
+// AND owns its `pois` row from Wikidata (CC0 name), so wikidata is now a discovery source,
+// not just an enrichment-attribution one. (Macrostrat stays attribution-only — it never owns
+// a `pois` row — so the AttributionSnapshot union remains a superset of this enum by one.)
+export const poiSourceEnum = pgEnum('poi_source', ['wikipedia', 'google_places', 'wikidata'])
 
 // NO `joke_level` pgEnum: the Dad-Joke-O-Meter notch is a generation-time INPUT, never a
 // stored column (M1 = dadpocalypse-only — see `tours`). The notch VOCABULARY lives as the

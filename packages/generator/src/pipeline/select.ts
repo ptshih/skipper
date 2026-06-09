@@ -3,15 +3,18 @@
 // on the route, its along-route distance converted to seconds via the frozen
 // total drive time, and stops are spaced by a minimum time gap.
 //
+// Candidates come from the Wikidata discovery spine (pipeline/wikidata-discovery.ts).
 // Rules baked in here:
-//   - STORY  = a Wikipedia POI with a sufficiently rich lead extract.
-//   - SCENIC = a Wikipedia POI too thin to narrate truthfully → delivery-only
-//     audio at that location (no name, no facts spoken). It still anchors to the
-//     POI so it has a location + a poi_content row (ready-gate).
+//   - STORY  = a candidate with a Wikipedia article (source 'wikipedia') whose lead extract
+//     is rich enough to ground a telling.
+//   - SCENIC = a NAMED Wikidata feature with no prose (source 'wikidata', extract '') — a bay,
+//     a beach, a cove. Delivery-only: it speaks its NAME + KIND (sayable like a break's, CC0)
+//     but asserts no facts. Carries an empty extract, so it loses any spacing window to a real
+//     story and only lands where there is no story — filling the silent gaps.
 //   - BREAK  = a Google Places food/rest anchor; NAMED audio (name + kind only,
 //     normalized; no volatile data) — mandatory, like story/scenic.
 // Within each spacing window we prefer the richest extract, so good stories win
-// over thin neighbours.
+// over thin/scenic neighbours.
 
 import type { PoiSource, StopType } from '@skipper/shared'
 import type { AttributionSnapshot } from '@skipper/db/schema'
@@ -321,20 +324,26 @@ export function selectStops(params: SelectParams): StopPlan[] {
     const merged = (isStory ? (n.merged ?? []) : []).filter(
       (m) => m.extract.length >= STORY_MIN_FACT_CHARS,
     )
+    // Merged members are co-located STORY-grade candidates, so they are always Wikipedia-sourced
+    // (a pageid + url); the extract≥STORY_MIN_FACT_CHARS gate already excludes scenic pins.
     const mergedFeatures = merged.map((m) => ({
       name: m.title,
       facts: toFacts(m.extract),
-      wikiUrl: m.url,
+      wikiUrl: m.url!,
       wikiTitle: m.title,
-      wikiPageId: m.pageid,
+      wikiPageId: m.pageid!,
       ...(m.qid ? { wikidataQid: m.qid } : {}),
     }))
     pending.push({
       stopType: isStory ? 'story' : 'scenic',
-      source: 'wikipedia',
-      sourceId: String(n.poi.pageid),
+      // Source is the candidate's own: STORY grounds on Wikipedia prose (source 'wikipedia',
+      // sourceId = pageid); a named SCENIC pin owns its row from Wikidata (source 'wikidata',
+      // sourceId = QID). This is the (source, source_id) the pois row dedups on.
+      source: n.poi.source,
+      sourceId: n.poi.sourceId,
       name: n.poi.title,
-      kind: null,
+      // A NAMED scenic pin speaks its feature KIND (a bay/beach) like a break's; story keeps null.
+      kind: isStory ? null : (n.poi.kind ?? null),
       lat: n.poi.lat,
       lng: n.poi.lng,
       alongSec: n.alongSec,
@@ -346,11 +355,13 @@ export function selectStops(params: SelectParams): StopPlan[] {
       triggerLng: snap.triggerLng,
       approachHeadingDeg: snap.approachHeadingDeg,
       ...(mergedFeatures.length > 0 ? { mergedFeatures } : {}),
-      // Side of the road is delivery-only and only surfaced for STORY stops (a named
-      // landmark to point at — "just off your left"); scenic names nothing, breaks
-      // forbid it. Omitted when the geometry can't call a confident side.
-      ...(isStory && snap.sideOfRoad ? { sideOfRoad: snap.sideOfRoad } : {}),
-      ...(isStory ? { wikiUrl: n.poi.url, wikiTitle: n.poi.title, wikiPageId: n.poi.pageid } : {}),
+      // Side of the road is delivery-only: a STORY landmark to point at, or a NAMED scenic
+      // feature to gesture at ("just off your left"). Breaks forbid it (built separately).
+      // Omitted when the geometry can't call a confident side.
+      ...(snap.sideOfRoad ? { sideOfRoad: snap.sideOfRoad } : {}),
+      ...(isStory
+        ? { wikiUrl: n.poi.url, wikiTitle: n.poi.title, wikiPageId: n.poi.pageid }
+        : {}),
       // Carry the Wikidata join key for STORY stops; generate.ts enriches sparse ones.
       ...(isStory && n.poi.qid ? { wikidataQid: n.poi.qid } : {}),
     })

@@ -1,34 +1,21 @@
-// Wikipedia grounded facts — the well of truth for STORY stops.
+// Wikipedia grounded facts — the PROSE layer for STORY stops.
 //
-// Two phases against the public MediaWiki Action API (no key, bun's global
-// fetch): geosearch probes along the route, then batched lead-section extracts.
-// The extract text IS the grounded fact source — a POI with a thin/empty extract
-// is later downgraded to scenic (silence beats a hallucinated battle).
+// Discovery is the Wikidata spine now (pipeline/wikidata-discovery.ts); Wikipedia is the
+// prose well joined onto a story candidate by article title (`fetchExtractsByTitle`) and
+// deepened to the full article for the chosen stops (`fetchDeepExtracts`). The extract text
+// IS the grounded fact source — a story candidate whose extract is thin is downgraded to
+// scenic (silence beats a hallucinated battle).
 //
 // Etiquette honored: descriptive User-Agent (required), maxlag=5, formatversion=2,
-// requests in series. License for reuse is CC BY-SA 4.0 — attribution is
-// snapshotted onto poi_content at generation time (see generate.ts).
+// requests in series. License for reuse is CC BY-SA 4.0 — attribution is snapshotted onto
+// the tour_stop at generation time (see generate.ts).
 
-import {
-  DEEP_EXTRACT_CHARS,
-  EXTRACT_CHARS,
-  GEOSEARCH_RADIUS_M,
-  WIKIPEDIA_USER_AGENT,
-} from '../config'
-import type { LngLat } from './geo'
+import { DEEP_EXTRACT_CHARS, EXTRACT_CHARS, WIKIPEDIA_USER_AGENT } from '../config'
 import { fetchWithRetry, sleep } from './http'
 
 const API = 'https://en.wikipedia.org/w/api.php'
 /** Cap maxlag retries so sustained Wikimedia replication lag fails loudly instead of hanging forever. */
 const MAX_MAXLAG_RETRIES = 5
-
-interface GeoHit {
-  pageid: number
-  title: string
-  lat: number
-  lon: number
-  dist: number
-}
 
 interface ExtractPage {
   pageid: number
@@ -41,16 +28,31 @@ interface ExtractPage {
   pageprops?: { wikibase_item?: string }
 }
 
-/** A grounded Wikipedia POI candidate placed by (lat,lng). `extract` may be '' (thin → scenic). */
+/**
+ * A selection candidate placed by (lat,lng) — produced by the Wikidata discovery spine
+ * (pipeline/wikidata-discovery.ts). A STORY candidate carries Wikipedia prose (source
+ * 'wikipedia', a pageid + a non-empty extract); a SCENIC candidate is a named Wikidata
+ * feature with no prose (source 'wikidata', extract ''). `extract.length` still drives the
+ * story↔scenic split in select.ts, and `source`/`sourceId` become the pois (source, source_id).
+ */
 export interface WikiPoi {
-  pageid: number
+  /** Discovery source for the pois row: 'wikipedia' (story prose) | 'wikidata' (named scenic). */
+  source: 'wikipedia' | 'wikidata'
+  /** Dedup id paired with source: a Wikipedia pageid (story) or a Wikidata QID (scenic). */
+  sourceId: string
   title: string
   lat: number
   lng: number
+  /** Lead extract — the grounded story well; '' for a scenic pin (no prose). */
   extract: string
-  url: string
-  /** Linked Wikidata QID (from the page's `wikibase_item` prop), when the page has one. */
+  /** Wikipedia article url (story) — the CC BY-SA attribution link; absent for a scenic pin. */
+  url?: string
+  /** Wikipedia pageid (story) — for the deep-extract fetch + attribution; absent for a scenic pin. */
+  pageid?: number
+  /** Linked Wikidata QID — the enrichment join key (story) and the source id (scenic). */
   qid?: string
+  /** P31 feature type for a NAMED scenic pin (e.g. 'bay') — spoken as the KIND, sayable like a break's. */
+  kind?: string
 }
 
 /**
@@ -82,41 +84,6 @@ async function wiki<T>(params: Record<string, string>, maxlagAttempt = 0): Promi
   if (json!.error) throw new Error(`Wikipedia API ${json!.error.code}: ${json!.error.info}`)
   if (!res.ok) throw new Error(`Wikipedia HTTP ${res.status}`)
   return json as T
-}
-
-/** Pages with a coordinate within `radiusM` of a point. gsprimary=all catches secondary-coord pages too. */
-async function geosearch(lat: number, lng: number, radiusM: number): Promise<GeoHit[]> {
-  const j = await wiki<{ query?: { geosearch?: GeoHit[] } }>({
-    action: 'query',
-    list: 'geosearch',
-    gscoord: `${lat}|${lng}`,
-    gsradius: String(Math.min(radiusM, 10_000)),
-    gslimit: '50',
-    gsnamespace: '0',
-    gsprimary: 'all',
-  })
-  return j.query?.geosearch ?? []
-}
-
-/** Batched lead-section extracts (≤20 pageids per call — the exlimit hard cap). */
-async function fetchExtracts(pageids: number[]): Promise<ExtractPage[]> {
-  const out: ExtractPage[] = []
-  for (let i = 0; i < pageids.length; i += 20) {
-    const chunk = pageids.slice(i, i + 20)
-    const j = await wiki<{ query?: { pages?: ExtractPage[] } }>({
-      action: 'query',
-      prop: 'extracts|info|pageprops',
-      pageids: chunk.join('|'),
-      exintro: '1', // lead section only — required to return >1 extract per call
-      explaintext: '1', // clean plain text for TTS
-      exchars: String(EXTRACT_CHARS),
-      exlimit: '20',
-      inprop: 'url',
-      ppprop: 'wikibase_item', // the linked Wikidata QID — our enrichment join key
-    })
-    out.push(...(j.query?.pages ?? []))
-  }
-  return out
 }
 
 // Trailing article sections that are NOT narration facts (lists of citations,
@@ -208,35 +175,3 @@ export async function fetchExtractsByTitle(titles: string[]): Promise<TitleExtra
   return out
 }
 
-/**
- * Discover grounded POIs along the corridor: geosearch at each sampled point (in
- * series, per etiquette), dedup by pageid (matches the pois (source, source_id)
- * invariant), then batch-fetch extracts. Returns one WikiPoi per unique page.
- */
-export async function discoverWikipediaPois(samples: { point: LngLat }[]): Promise<WikiPoi[]> {
-  const byId = new Map<number, GeoHit>()
-  for (const s of samples) {
-    const [lng, lat] = s.point
-    const hits = await geosearch(lat, lng, GEOSEARCH_RADIUS_M)
-    for (const h of hits) if (!byId.has(h.pageid)) byId.set(h.pageid, h)
-  }
-
-  const pages = await fetchExtracts([...byId.keys()])
-  const extractById = new Map<number, ExtractPage>()
-  for (const p of pages) if (!p.missing) extractById.set(p.pageid, p)
-
-  const pois: WikiPoi[] = []
-  for (const hit of byId.values()) {
-    const page = extractById.get(hit.pageid)
-    pois.push({
-      pageid: hit.pageid,
-      title: hit.title,
-      lat: hit.lat,
-      lng: hit.lon,
-      extract: (page?.extract ?? '').trim(),
-      url: page?.canonicalurl ?? page?.fullurl ?? `https://en.wikipedia.org/?curid=${hit.pageid}`,
-      ...(page?.pageprops?.wikibase_item ? { qid: page.pageprops.wikibase_item } : {}),
-    })
-  }
-  return pois
-}

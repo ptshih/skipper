@@ -26,8 +26,9 @@ export type StopType = z.infer<typeof stopType>
 export const bracketKind = z.enum(['intro', 'outro'])
 export type BracketKind = z.infer<typeof bracketKind>
 
-/** Where a POI came from (its DISCOVERY source). Stored for dedup + attribution (Wikipedia is CC BY-SA). */
-export const poiSource = z.enum(['wikipedia', 'google_places'])
+/** Where a POI came from (its DISCOVERY source). Stored for dedup + attribution (Wikipedia is
+ *  CC BY-SA; a named scenic pin is discovered from Wikidata, CC0). */
+export const poiSource = z.enum(['wikipedia', 'google_places', 'wikidata'])
 export type PoiSource = z.infer<typeof poiSource>
 
 /**

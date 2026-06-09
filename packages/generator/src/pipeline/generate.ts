@@ -28,7 +28,6 @@ import {
   GEOLOGY_STORY_MAX_FACT_CHARS,
   GOOGLE_TTS_READY,
   FALLBACK_SPEED_MPS,
-  GEOSEARCH_STEP_M,
   GOOGLE_READY,
   PACING,
   QUEUE_LAG_WARN_SEC,
@@ -38,9 +37,10 @@ import {
   requireEnv,
 } from '../config'
 import { personaForRegion } from '../persona'
-import { cumulativeMeters, encodePolyline, sampleAlong, totalMeters } from './geo'
+import { cumulativeMeters, encodePolyline, totalMeters } from './geo'
 import type { LngLat } from './geo'
-import { discoverWikipediaPois, fetchDeepExtracts } from './wikipedia'
+import { fetchDeepExtracts } from './wikipedia'
+import { candidatesToWikiPois, discoverWikidataPois } from './wikidata-discovery'
 import { geologyFacts } from './macrostrat'
 import { wikidataFacts } from './wikidata'
 import { searchBreakStops, spokenKind } from './places'
@@ -155,11 +155,17 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       (shell.durationSeconds ? '' : ' [estimated drive time]'),
   )
 
-  // 2. Grounded POIs from Wikipedia.
-  const samples = sampleAlong(polyline, cumulative, GEOSEARCH_STEP_M)
-  console.log(`Probing Wikipedia at ${samples.length} points along the route...`)
-  const wikiPois = await discoverWikipediaPois(samples)
-  console.log(`Found ${wikiPois.length} unique Wikipedia POIs.`)
+  // 2. Candidates from the Wikidata discovery spine: STORY = a Wikipedia article (prose),
+  //    SCENIC = a named Wikidata feature with no article (a bay/beach). Wikipedia is the
+  //    PROSE layer now, joined per story candidate by sitelink — not the discovery layer.
+  console.log('Discovering POIs along the route (Wikidata spine)...')
+  const candidates = await discoverWikidataPois(polyline)
+  const wikiPois = candidatesToWikiPois(candidates)
+  const storyCount = wikiPois.filter((p) => p.source === 'wikipedia').length
+  console.log(
+    `Found ${candidates.length} corridor entities → ${wikiPois.length} candidates ` +
+      `(${storyCount} story-grade, ${wikiPois.length - storyCount} named-scenic).`,
+  )
 
   // 3. Break-stop anchors from Places (non-fatal — breaks are a nicety).
   let breakAnchors: BreakAnchor[] = []
@@ -394,10 +400,14 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
         }
       : s.stopType === 'break'
         ? { place: { name: s.name, kind: spokenKind(s.kind) } } // normalize raw primaryType
-        : // SCENIC: no place-facts — but geology, when present, is the one grounded thing it may say.
-          s.geology?.length
-          ? { geology: s.geology }
-          : {}),
+        : // SCENIC: a NAMED Wikidata feature — its name + KIND are sayable like a break's (no
+          // facts), plus the side to gesture at and geology when present. (All spine scenic
+          // pins carry a name; a bare/nameless scenic just omits place and stays mood-only.)
+          {
+            ...(s.name ? { place: { name: s.name, kind: s.kind } } : {}),
+            ...(s.sideOfRoad ? { sideOfRoad: s.sideOfRoad } : {}),
+            ...(s.geology?.length ? { geology: s.geology } : {}),
+          }),
   })
   // First-pass narration: thread the trailing-3 window of cross-stop context.
   const narrate = (s: StopPlan) =>

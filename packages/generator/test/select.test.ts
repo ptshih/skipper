@@ -14,14 +14,19 @@ const RICH =
   'This stop has a real grounded fact about the place that runs comfortably past the one hundred forty character minimum, so it stays a story stop.'
 const RICHER = RICH + ' And one extra sentence makes this the longest candidate in its window.'
 
-const wiki = (over: Partial<WikiPoi> & { lat: number }): WikiPoi => ({
-  pageid: Math.round(over.lat * 1000),
-  title: 'Place',
-  lng: 0,
-  extract: RICH,
-  url: `https://en.wikipedia.org/?curid=${Math.round(over.lat * 1000)}`,
-  ...over,
-})
+const wiki = (over: Partial<WikiPoi> & { lat: number }): WikiPoi => {
+  const pageid = Math.round(over.lat * 1000)
+  return {
+    source: 'wikipedia',
+    sourceId: String(pageid),
+    pageid,
+    title: 'Place',
+    lng: 0,
+    extract: RICH,
+    url: `https://en.wikipedia.org/?curid=${pageid}`,
+    ...over,
+  }
+}
 
 const params = (): SelectParams => ({
   polyline,
