@@ -1,7 +1,10 @@
 # Tour structure spec — intro/outro brackets + quality-gated narration
 
 **Status:** design, 2026-06-08. Most of this is SUPERSEDED (see the banner). The live parts (§3, §4) are
-partly built — the quality-gated prompt + intro/outro modes are committed (67e9313/7860b3f).
+now ✅ **BUILT**: the quality-gated prompt + intro/outro narration modes (67e9313/7860b3f), the
+`tour_brackets` table + the atomic ready-gate co-committing both brackets (d0f2ba6), and intro/outro
+bracket PLAYBACK in both players (ecc78a0). The §4a R2-path/region-pgEnum migration notes are moot — clips
+are tour-scoped (`clips/<tourId>/…`) and `regions` is a TABLE; see `docs/tour-data-model-zero-reuse.md`.
 
 > 🔴 **SUPERSEDED ON THE DATA MODEL + STRUCTURE (2026-06-08, after this was written).** The canonical
 > model is now **`docs/tour-data-model-zero-reuse.md`** — read it, not this, for the entity model. Three

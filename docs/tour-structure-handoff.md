@@ -88,6 +88,16 @@ These were settled by ear / research this session:
 
 ## 3. Build phases (file-level)
 
+> ✅ **STATUS 2026-06-08 — Phases 1, 2, 4, 5, 6 DONE + bracket playback** (commits `67e9313`/`7860b3f`
+> Phase 1; `d0f2ba6`/`f1396cf` Phases 2/4/5 + the live migration + the canonical-preview regen of Phase 6;
+> `ecc78a0` the intro/outro bracket PLAYBACK that Phase 5's caveat below flagged as missing). All packages
+> typecheck + tests green. **The ONE remaining piece is Phase 3's _generation-side region/host registry_**
+> (the `Record<Region, {host,voice,promptOverlay,kit,opener}>` + kit-guard rewire) — deliberately deferred:
+> it only matters when a SECOND region/host lands. For the single Tahoe/Skipper region today, the existing
+> `SKIPPER_SYSTEM_PROMPT` + `PERSONA_VOICE.skipper` + `host.ts` `hostForRegion` fallback cover it. Phase 3's
+> OTHER bullets (zero-reuse write path, one-tour-per-route, `narrateIntro/Outro`→`persistBracket` ready-gate,
+> `resynth-tour` tool) all landed with Phase 2.
+
 **Phase 1 — Narration prompt + intro/outro modes (generator-only, safest, fully validated).**
 - `packages/generator/src/persona/skipper.ts`: fold Appendix B in — recalibrate the DADPOCALYPSE
   rung to quality-gated (1–2 best, NOT "3–4 groaners"); ban the kit from stops (move it to the intro);
@@ -146,8 +156,10 @@ These were settled by ear / research this session:
   outro bracket** around the stop timeline (intro plays first regardless of position; outro at end) —
   they're `tour_brackets` clips, NOT `PreviewStop`s, so they bracket the timeline rather than join the
   route-positioned stop list. The pure geofence engine still consumes only `tour_stops`; drive-core
-  needs **no traversal param** (there is no direction concept). ⚠ The outro tour-end arm needs a player
-  dispatch that doesn't exist today (`finishDrive` plays nothing — spec §3).
+  needs **no traversal param** (there is no direction concept). ✅ **DONE (`ecc78a0`):** a bracket is a
+  clip with a sentinel seq (`INTRO_SEQ`/`OUTRO_SEQ` in drive-core); the preview emits intro/outro segments
+  at the timeline head/tail, and `useDrive` queues the intro at `start()` and the outro at `reachedEnd`
+  (the outro plays before the drive ends — the old "`finishDrive` plays nothing" gap is closed).
 - Catalog: **one card per tour** (no direction/family/variant cards). Related tours surface only via the
   nearby/proximity recommender (deferred to the location-filter near-me, v2).
 - Pre-drive UI: where-to-start guidance + onboarding (NOT in the skipper's voice).

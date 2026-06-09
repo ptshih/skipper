@@ -1,13 +1,15 @@
 # Tour data model (canonical)
 
-**Status:** the canonical data-model design, settled across a working session (2026-06-08). NOT yet built.
-This is the **single source of truth** for the entity model + migration; `docs/tour-structure-spec.md` is
-superseded on the data model (it keeps only the `tour_brackets` design + the narration quality gate), and
-`docs/tour-structure-handoff.md` defers here for schema. Supersedes the "`pois` + `poi_content` are a
-cache" half of CLAUDE.md principle #1.
+**Status:** ✅ **BUILT + live-migrated 2026-06-08** (commits `d0f2ba6` schema + cascade, `f1396cf` the
+applied migration baseline; the canonical preview was regenerated into this model = tour `9ac50db5`). The
+design below is now the SHIPPED entity model, not a proposal. It remains the **single source of truth** for
+the entity model + migration; `docs/tour-structure-spec.md` is superseded on the data model (it keeps only
+the `tour_brackets` design + the narration quality gate), and `docs/tour-structure-handoff.md` defers here
+for schema. Supersedes the "`pois` + `poi_content` are a cache" half of CLAUDE.md principle #1.
 
-⚠ **No users yet → the Phase-2 migration is clean + DESTRUCTIVE** (drop + recreate), no back-compat, no
-careful data fold. The only sign-off it needs is COST + the demo (the canonical preview).
+⚠ **No users → the migration was clean + DESTRUCTIVE** (the live dev DB was wiped — `DROP SCHEMA` — and
+rebuilt from a single fresh baseline `0000_worried_hellcat.sql`; no back-compat, no data fold). The DDL in §3
+matches `packages/db/src/schema.ts` as shipped.
 
 The model rests on three decisions, in order:
 1. **Zero-reuse** — facts shared, narration tour-owned (§1).

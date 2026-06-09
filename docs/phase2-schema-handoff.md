@@ -3,8 +3,16 @@
 **For:** a fresh agent executing Phase 2 of the directional-tours/intro-outro build (now simplified).
 **From:** a long design session (2026-06-08). Phase 1 is DONE + committed.
 
-> ⚠ **RE-GROUND BEFORE TOUCHING CODE.** Re-read each file — line numbers/snippets here are 2026-06-08
-> and will have shifted. Verify with `git log --oneline -15`.
+> ✅ **EXECUTED 2026-06-08 — steps 2a–2g all done** (commits `d0f2ba6` source cascade, `f1396cf` migration
+> baseline, `ecc78a0` bracket playback). All packages typecheck + tests green; the live dev DB was migrated
+> (clean `DROP SCHEMA` + single fresh baseline `0000_worried_hellcat.sql`) and re-seeded; the canonical
+> preview was regenerated into the new model (tour `9ac50db5`, 10 stops + intro/outro brackets, presign-
+> verified). This doc is kept as the record of what landed. The one piece intentionally left for the NEXT
+> phase is the **generation-side per-region persona registry** (a §4 gotcha + tour-structure-handoff Phase 3)
+> — not needed while there is a single region (Tahoe/Skipper).
+>
+> ⚠ **(original note) RE-GROUND BEFORE TOUCHING CODE** if revisiting — line numbers/snippets here are
+> 2026-06-08 and will have shifted. Verify with `git log --oneline -15`.
 
 ## 0. Read first
 - **`docs/tour-data-model-zero-reuse.md` — THE CANONICAL entity model + migration.** This handoff just
