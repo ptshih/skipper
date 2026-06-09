@@ -86,15 +86,42 @@ docs/audio-compression-spike.md).
   **no pun-chains**, **kit banned from stops**, **no bow / no mini-recap**, grounding ironclad
   ("fact survives the joke being deleted"). Two leak-fixes: **oblique kit** ("before my first cup")
   and **mini-recap** closes.
-- **The kit is a per-PERSONA opener pool** (it's banned from stops, so its only job is the intro).
-  The `poi_content` key already carries `persona`. **Now-action (even with one skipper):** attach
-  kit + backstory overlay + opener material + **voice** to a **persona config object**, and make
-  the kit-overuse lint/generate **guards read kit terms FROM that config** (not hardcoded) — so a
-  region-skipper is a drop-in, not a regex rewrite.
+- **The kit is the host's opener pool** (banned from stops, so its only job is the intro). It lives
+  in the per-region host **registry** (§4a) alongside the voice + prompt-overlay, and the
+  kit-overuse lint/generate **guards read kit terms FROM that registry** (not hardcoded) — so a new
+  region host is a drop-in, not a regex rewrite. The PRESENTATION half already shipped
+  (`host.ts`, the "meet your skipper" data); this registry is the GENERATION half.
 - **Opener variety:** distinct opener per drive via the existing `recentKitBeats` avoidance,
   **lifted from per-tour to per-catalog** (within a persona). At scale the opener **blends the
   persona's kit with the drive's own identity**, so variety scales with the drive count, not the
   finite kit. Region-skippers multiply the pool.
+
+### 4a. Persona / host model (LOCKED)
+
+- **Curated + code-defined** (not data/user/AI-driven) — the add-a-host friction is the curation
+  gate; "the persona is the product."
+- **Keyed by REGION, 1:1.** The standalone `persona` axis is **DROPPED**; the curated dimension is
+  **`region`**, and each region has exactly ONE host (its headline attribute). Matches
+  "region-specific skipper identities" + the region-keyed DRIVES picker, and collapses two curated
+  axes into one. *(Forecloses multi-host-per-region, host-across-regions, and non-geographic
+  personas — all unplanned; the notch covers tone. Reintroduce a persona axis only if a
+  non-regional host is ever wanted.)*
+- **One registry, keyed by region:** `Record<Region, { host: HostIdentity, voice, prompt-overlay,
+  kit, opener }>`; **`Region` type = registry keys**; every `Record<Region>` guard derives from it;
+  adding a region = ONE entry. host.ts's presentation `Record<Persona>` becomes `Record<Region>`;
+  replaces the scattered enum + `PERSONA_VOICE` + hardcoded kit regexes.
+- **`region` becomes a `pgEnum`** cache-key dimension (was free text) — a DB migration per new
+  region, for integrity (the dedup key can't fragment on a typo). Since a POI sits in one region,
+  region is derivable-from-POI → a **denormalized-but-explicit** key dim (kept explicit for clarity
+  + a future user-selectable voice).
+- **First region = `lake-tahoe`** (display "Lake Tahoe"), hosted **— for now — by "Skipper".** The
+  host *name* is a display attribute, **decoupled from the region key**, so renaming later is a
+  one-line registry edit with **NO migration**. His kit (cousin Ray, the "Tuesday" mechanic, the
+  cranky truck, coffee opinions) lives in his entry.
+- ⚠ **Migration:** the cache-key dimension changes `persona`→`region` (value `skipper`→`lake-tahoe`,
+  pgEnum, **R2 path** `clips/skipper/…`→`clips/lake-tahoe/…`) — **fold into the canonical-preview
+  regen** the build already requires; never a standalone edit (it would orphan live clips). The host
+  display name ("Skipper") is unchanged.
 
 ## 5. Catalog + discovery (LOCKED)
 
@@ -173,3 +200,21 @@ facts}**. Frozen rails (§0); persona human (§0); everything else generates.
 6. Live regen of the canonical preview (needs explicit OK).
 7. Later: nearby/proximity recommender (with the location-filter near-me, v2); dedup guardrail at
    generation scale.
+
+## Reconciliation with landed main (re-grounded 2026-06-08)
+
+A large parallel batch landed while this was being designed. State vs. this spec:
+
+- **§4 persona — presentation half BUILT.** `apps/api/src/host.ts` (`Record<Persona, HostIdentity>`,
+  served via the API, host-agnostic player, type-guarded). Generation half (a unified persona
+  registry: prompt-overlay + kit + opener + voice, with guards reading from it) is still TODO and
+  mirrors that pattern. The `persona` enum is still `['skipper']` (one persona); the multi-persona
+  infra (HostIdentity + the completeness guard) is ready.
+- **Attribution is now an ARRAY** (`AttributionSnapshot[]`) — multi-source enrichment landed
+  (Wikidata CC0 + Macrostrat CC BY; a `/sources` catalog page; `/sign` returns `contentType`). New
+  content (intro/outro + any new stop type) must carry the array shape.
+- **GPS Phase 2 player exists** (simulated fix source, commit `e7496a6`) — so "wrong-direction
+  deferred to the GPS phase" (§6) has a partial scaffold; real device GPS is still Phase 4.
+- **Still TODO (unchanged):** directional schema (`headline`/end-anchors/drive-family/direction),
+  `start`/`finish` stop-types, the quality-gated prompt, the generation persona registry. The
+  voice/codec work (3.1-flash + 32k MP3 + Algenib) is in and intact.
