@@ -33,6 +33,7 @@
 // hook. This deterministic lint stays the always-on baseline.
 
 import type { StopType } from '@skipper/shared'
+import type { KitBeat } from '../persona/types'
 
 export interface LintInput {
   seq: number
@@ -49,12 +50,9 @@ export interface LintFinding {
   avoid: string[]
 }
 
-// Personal-kit detectors — mirror generate.ts KIT_BEATS so the lint and the
-// generation-time signal agree on what "the kit" is.
-const KIT = [/mechanic/i, /\bRay\b/, /\btruck\b/i, /\bcoffee\b/i]
-const kitInText = (t: string): boolean => KIT.some((re) => re.test(t))
-const DROP_KIT =
-  'Do NOT mention the personal kit (cousin Ray, the mechanic, the truck, or coffee) anywhere in this stop — the kit lives in the intro now; close on the place itself.'
+// Personal-kit detectors come from the active persona (passed in), so the lint and the
+// generator's spent-beat tracking read the SAME source — they can never desync (the bug
+// the per-region registry fixed). See packages/generator/src/persona/.
 
 // HARD-BANNED reveal wind-ups and AI/brochure tics — the persona prompt forbids
 // these outright ("just say the surprising thing plainly"), so flag on the FIRST
@@ -137,7 +135,10 @@ const closerKey = (s: string): string => contentWords(s).slice(-4).join(' ')
  * per flagged stop (each with the reasons and the `avoid` notes to regenerate with).
  * Pass story/scenic stops only — break stops carry no script.
  */
-export function lintScripts(stops: LintInput[]): LintFinding[] {
+export function lintScripts(
+  stops: LintInput[],
+  kit: { beats: KitBeat[]; dropNote: string },
+): LintFinding[] {
   const findings = new Map<number, LintFinding>()
   const flag = (seq: number, reason: string, avoid: string): void => {
     const f = findings.get(seq) ?? { seq, reasons: [], avoid: [] }
@@ -166,8 +167,8 @@ export function lintScripts(stops: LintInput[]): LintFinding[] {
   //    intro/outro brackets are never passed to this lint (Option B — they are not
   //    tour_stops), so the kit is free there.
   for (const s of stops) {
-    if (kitInText(s.script)) {
-      flag(s.seq, 'mentions the personal kit (banned from stops — the kit lives in the intro now)', DROP_KIT)
+    if (kit.beats.some((b) => b.match.test(s.script))) {
+      flag(s.seq, 'mentions the personal kit (banned from stops — the kit lives in the intro now)', kit.dropNote)
     }
   }
 

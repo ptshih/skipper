@@ -24,9 +24,9 @@ import type {
   PoiFacts,
   Polyline,
 } from '@skipper/db/schema'
-import type { BracketKind, PoiSource, StopType } from '@skipper/shared'
+import type { BracketKind, JokeLevel, PoiSource, StopType } from '@skipper/shared'
 
-/** The seeded draft tour the generator fills — route geometry, endpoints, region. */
+/** The seeded draft tour the generator fills — route geometry, endpoints, region, notch. */
 export interface TourShell {
   id: string
   slug: string
@@ -43,6 +43,8 @@ export interface TourShell {
   endAnchorName: string
   endAnchorLat: number
   endAnchorLng: number
+  /** The tour's generated notch (set by the seed; M1 = dadpocalypse). */
+  jokeLevel: JokeLevel
 }
 
 /** Load the seeded draft tour (geometry + endpoints + region) by slug. */
@@ -64,6 +66,7 @@ export async function loadTour(slug: string): Promise<TourShell> {
       endAnchorName: tours.endAnchorName,
       endAnchorLat: tours.endAnchorLat,
       endAnchorLng: tours.endAnchorLng,
+      jokeLevel: tours.jokeLevel,
     })
     .from(tours)
     .innerJoin(regions, eq(tours.regionId, regions.id))

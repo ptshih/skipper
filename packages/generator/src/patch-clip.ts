@@ -17,9 +17,9 @@
 
 import { eq } from 'drizzle-orm'
 import { db } from '@skipper/db'
-import { tourBrackets, tourStops } from '@skipper/db/schema'
+import { regions, tourBrackets, tourStops, tours } from '@skipper/db/schema'
 import { GOOGLE_TTS_READY, R2_READY } from './config'
-import { SKIPPER_VOICE_ID } from './models'
+import { personaForRegion } from './persona'
 import { synthesize } from './pipeline/tts'
 import { bracketKey, clipKey, uploadAudio } from './pipeline/storage'
 
@@ -57,6 +57,8 @@ function parseArgs(argv: string[]): Args {
 /** A clip to patch — either a stop or a bracket — normalized to its key + script. */
 interface ClipTarget {
   label: string
+  /** The owning tour — used to resolve the region's persona (voice + delivery style). */
+  tourId: string
   key: string
   script: string
   storedAudioUrl: string | null
@@ -84,6 +86,7 @@ async function resolveTarget(id: string): Promise<ClipTarget | null> {
     if (stop.script === null) throw new Error(`Stop ${id} has no script to patch.`)
     return {
       label: `stop #${stop.seq} (${stop.stopType}) of tour ${stop.tourId.slice(0, 8)}`,
+      tourId: stop.tourId,
       key: clipKey(stop.tourId, stop.id),
       script: stop.script,
       storedAudioUrl: stop.audioUrl,
@@ -112,6 +115,7 @@ async function resolveTarget(id: string): Promise<ClipTarget | null> {
     if (bracket.script === null) throw new Error(`Bracket ${id} has no script to patch.`)
     return {
       label: `${bracket.kind} bracket of tour ${bracket.tourId.slice(0, 8)}`,
+      tourId: bracket.tourId,
       key: bracketKey(bracket.tourId, bracket.kind),
       script: bracket.script,
       storedAudioUrl: bracket.audioUrl,
@@ -154,8 +158,19 @@ async function main() {
   }
   if (!R2_READY()) throw new Error('R2_* env is not set.')
 
+  // Resolve the persona (voice + delivery style) from the clip's tour's region.
+  const regionRow = (
+    await db
+      .select({ slug: regions.slug })
+      .from(tours)
+      .innerJoin(regions, eq(tours.regionId, regions.id))
+      .where(eq(tours.id, target.tourId))
+      .limit(1)
+  )[0]
+  const persona = personaForRegion(regionRow?.slug ?? '')
+
   console.log('\nSynthesizing edited script...')
-  const { audio, durationMs } = await synthesize(newScript, SKIPPER_VOICE_ID)
+  const { audio, durationMs } = await synthesize(newScript, persona.voice, persona.ttsStyle)
 
   // The clip key is tour-scoped (clips/<tourId>/<stopId|kind>), so re-uploading
   // overwrites the SAME object — audioUrl (the stored key) does not change.

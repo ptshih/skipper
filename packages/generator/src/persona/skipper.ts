@@ -34,8 +34,8 @@
 // second banlist targets conversational-AI tics; and the joke notches carry a
 // countable per-stop frequency ladder with a worked OFF->DADPOCALYPSE example.
 
-import type { JokeLevel } from '@skipper/shared'
-import { PERSONA_VOICE } from '../models'
+import { SKIPPER_TTS_STYLE_PROMPT, SKIPPER_VOICE_ID } from '../models'
+import type { PersonaDef } from './types'
 
 export const SKIPPER_SYSTEM_PROMPT = `You are the Skipper.
 
@@ -230,15 +230,29 @@ You have arrived. Name the END-ANCHOR you are given and bring the drive in for a
 Write for the EAR (this is read aloud in a moving car). Short-to-medium sentences, contractions, talk to "folks" directly. Kill the travel-brochure voice ("nestled," "rich history," "boasts," stacked adjectives) and the AI-chatbot tics ("fun fact," "did you know," "here is the thing"). Return ONLY the words the Skipper says — no title, no labels, no stage directions, no brackets like [pause], no markdown, no emoji, no URLs. Write numbers and names the way they are spoken ("South Lake Tahoe," "Highway Fifty"). They are DRIVING — never tell them to close their eyes or take their hands off the wheel.`
 
 /**
- * v1 generation defaults for the Skipper persona, co-located with the persona.
- *
- * `voice` is DERIVED from PERSONA_VOICE (the single source of truth that ties the
- * persona to its TTS voice). `jokeLevel` mirrors the request default in
- * @skipper/shared's `tourRequest`. v1: Algenib / dadpocalypse. There is no `persona`
- * field — there is one persona (the Skipper); the per-region host identity is served
- * by the API (host.ts), and narration/voice live here in the generator.
+ * The Tahoe Skipper — the v1 generation persona. Bundles the prompts, voice, delivery
+ * style, and personal kit into one def so generate.ts/lint.ts read a SINGLE source
+ * (resolved by region slug via ./index.ts) instead of scattered constants + the kit
+ * regex duplicated across generate.ts/lint.ts. `jokeLevel` is NOT here — it's a per-tour
+ * parameter, not a persona trait. The per-region PRESENTATION identity (display name,
+ * tagline, backstory, portrait) is served by the API (apps/api/src/host.ts), never here.
  */
-export const SKIPPER_DEFAULTS = {
-  voice: PERSONA_VOICE.skipper,
-  jokeLevel: 'dadpocalypse',
-} satisfies { voice: string; jokeLevel: JokeLevel }
+export const SKIPPER: PersonaDef = {
+  hostName: 'Skipper',
+  voice: SKIPPER_VOICE_ID,
+  ttsStyle: SKIPPER_TTS_STYLE_PROMPT,
+  systemPrompt: SKIPPER_SYSTEM_PROMPT,
+  bracketPrompt: SKIPPER_BRACKET_PROMPT,
+  kit: {
+    // Keep in lockstep with the kit prose in the two prompts above (cousin Ray; the
+    // mechanic "getting to it Tuesday"; the cranky truck; the coffee opinions).
+    beats: [
+      { match: /mechanic/i, label: 'the mechanic ("getting to it Tuesday")' },
+      { match: /\bRay\b/, label: 'cousin Ray' },
+      { match: /\btruck\b/i, label: 'the truck' },
+      { match: /\bcoffee\b/i, label: 'his coffee opinions' },
+    ],
+    dropNote:
+      'Do NOT mention the personal kit (cousin Ray, the mechanic, the truck, or coffee) anywhere in this stop — the kit lives in the intro now; close on the place itself.',
+  },
+}

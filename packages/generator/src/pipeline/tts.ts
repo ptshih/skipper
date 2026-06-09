@@ -32,11 +32,16 @@ export interface SynthResult {
   durationMs: number
 }
 
-/** Build the Cloud TTS text:synthesize request body (pure — unit-tested). */
-export function buildSynthesisRequest(text: string, voiceName: string) {
+/** Build the Cloud TTS text:synthesize request body (pure — unit-tested). The delivery
+ *  `style` is the persona's `ttsStyle` (defaults to the Skipper's). */
+export function buildSynthesisRequest(
+  text: string,
+  voiceName: string,
+  style: string = SKIPPER_TTS_STYLE_PROMPT,
+) {
   return {
     // input.prompt sets DELIVERY (the persona's words are already in input.text).
-    input: { text, prompt: SKIPPER_TTS_STYLE_PROMPT },
+    input: { text, prompt: style },
     voice: { languageCode: TTS_LANGUAGE_CODE, name: voiceName, modelName: TTS_MODEL },
     audioConfig: { audioEncoding: TTS_AUDIO_ENCODING, sampleRateHertz: TTS_SAMPLE_RATE_HZ },
   }
@@ -50,8 +55,13 @@ function getAuth(): GoogleAuth {
   return auth
 }
 
-/** Synthesize one narration script to a WAV buffer + duration (ms). Throws on API error. */
-export async function synthesize(text: string, voiceId: string = SKIPPER_VOICE_ID): Promise<SynthResult> {
+/** Synthesize one narration script to a clip + duration (ms). Throws on API error. The
+ *  `voiceId`/`style` come from the persona (default to the Skipper's). */
+export async function synthesize(
+  text: string,
+  voiceId: string = SKIPPER_VOICE_ID,
+  style: string = SKIPPER_TTS_STYLE_PROMPT,
+): Promise<SynthResult> {
   const project = requireEnv('GOOGLE_CLOUD_PROJECT')
   const token = await getAuth().getAccessToken()
   if (!token) {
@@ -68,7 +78,7 @@ export async function synthesize(text: string, voiceId: string = SKIPPER_VOICE_I
       'x-goog-user-project': project,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(buildSynthesisRequest(text, voiceId)),
+    body: JSON.stringify(buildSynthesisRequest(text, voiceId, style)),
   })
 
   if (!res.ok) {

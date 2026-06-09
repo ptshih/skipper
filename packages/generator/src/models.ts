@@ -114,11 +114,6 @@ export const SKIPPER_VOICE_ID: GeminiVoice = GEMINI_VOICES.algenib
 export const SKIPPER_TTS_STYLE_PROMPT =
   'Read this as a warm road-trip tour guide letting friends in on jokes you all secretly enjoy — genuinely glad they came, a man who has told these corny jokes a thousand times and quietly loves every one. Keep the narration moving at a natural, easy talking pace, like a man telling you about the view out the window — relaxed but never sleepy, never dragging. Save the slow-down for the jokes: deliver them deadpan and fully committed, but with a confiding warmth, as if you and the riders both know it is corny and that is exactly why it is good. Never laugh at your own setup, never sing-song the punchline; land each one flat and matter-of-fact. Put a small pause right before the pun and a beat right after for the groan, then roll on. Let the sincere lines breathe, but keep everything else moving. Talking WITH friends, not at a crowd.'
 
-/**
- * Voice is a fixed function of persona in v1 — centralized here so it can't drift
- * from the poi_content cache-key `voice` dimension. The stored value is the Cloud
- * TTS Gemini voice name. (A user-selectable voice knob is deferred to M3.)
- */
-export const PERSONA_VOICE = {
-  skipper: SKIPPER_VOICE_ID,
-} as const
+// (The voice↔persona binding now lives in the persona registry — each PersonaDef carries
+// its own `voice`; see packages/generator/src/persona/. `SKIPPER_VOICE_ID` above is the
+// source constant the Skipper def references + the synthesize() default.)

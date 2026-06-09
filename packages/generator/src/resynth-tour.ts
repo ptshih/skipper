@@ -16,9 +16,10 @@
 
 import { and, asc, eq } from 'drizzle-orm'
 import { db } from '@skipper/db'
-import { pois, tourBrackets, tourStops, tours } from '@skipper/db/schema'
+import { pois, regions, tourBrackets, tourStops, tours } from '@skipper/db/schema'
 import { GOOGLE_TTS_READY, R2_READY } from './config'
-import { SKIPPER_VOICE_ID, TTS_CLIP_EXTENSION, TTS_MODEL } from './models'
+import { TTS_CLIP_EXTENSION, TTS_MODEL } from './models'
+import { personaForRegion } from './persona'
 import { synthesize } from './pipeline/tts'
 import { bracketKey, clipKey, deleteAudio, uploadAudio } from './pipeline/storage'
 
@@ -58,6 +59,17 @@ async function main() {
   const keepOld = argv.includes('--keep-old')
   const target = argv.find((a) => !a.startsWith('--'))
   const tourId = await resolveTourId(target ?? '--preview')
+
+  // The persona (voice + delivery style) is resolved from the tour's region.
+  const regionRow = (
+    await db
+      .select({ slug: regions.slug })
+      .from(tours)
+      .innerJoin(regions, eq(tours.regionId, regions.id))
+      .where(eq(tours.id, tourId))
+      .limit(1)
+  )[0]
+  const persona = personaForRegion(regionRow?.slug ?? '')
 
   const stopRows = await db
     .select({
@@ -134,7 +146,7 @@ async function main() {
   let swept = 0
   let totalSec = 0
   for (const c of clips) {
-    const { audio, durationMs } = await synthesize(c.script, SKIPPER_VOICE_ID)
+    const { audio, durationMs } = await synthesize(c.script, persona.voice, persona.ttsStyle)
     await uploadAudio(c.key, audio)
     await c.save(c.key, durationMs)
     // Sweep the orphan only when the key actually moved (e.g. the wav→mp3 extension change).

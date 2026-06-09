@@ -36,7 +36,7 @@ import {
   WIKIDATA_STORY_MAX_FACT_CHARS,
   requireEnv,
 } from '../config'
-import { SKIPPER_DEFAULTS } from '../persona/skipper'
+import { personaForRegion } from '../persona'
 import { cumulativeMeters, encodePolyline, sampleAlong, totalMeters } from './geo'
 import type { LngLat } from './geo'
 import { discoverWikipediaPois, fetchDeepExtracts } from './wikipedia'
@@ -118,7 +118,6 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   const durationBucket: DurationBucket = opts.durationBucket ?? 'standard'
   const dryRun = Boolean(opts.dryRun)
   const judgeClosers = Boolean(opts.judgeClosers)
-  const { voice, jokeLevel } = SKIPPER_DEFAULTS
 
   if (!ANTHROPIC_READY()) throw new Error('ANTHROPIC_API_KEY is not set (narration requires it).')
   if (!dryRun) {
@@ -135,6 +134,10 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
 
   // 1. Tour shell: route geometry + drive time (the pacing clock) + endpoints/region.
   const shell = await loadTour(opts.slug)
+  // The generation persona (prompts/voice/style/kit) is resolved from the tour's REGION;
+  // the notch is the tour's own (set by the seed) — not a persona trait.
+  const persona = personaForRegion(shell.regionSlug)
+  const jokeLevel = shell.jokeLevel
   const polyline = shell.polyline as LngLat[]
   const cumulative = cumulativeMeters(polyline)
   const totalM = totalMeters(cumulative)
@@ -299,14 +302,10 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   // Detect which personal-kit beats a script leaned on, so later (independently
   // generated) stops can be told they're spent — the load-bearing fix for kit
   // overuse, since each stop is narrated in isolation with no view of its siblings.
-  const KIT_BEATS: [RegExp, string][] = [
-    [/mechanic/i, 'the mechanic ("getting to it Tuesday")'],
-    [/\bRay\b/, 'cousin Ray'],
-    [/\btruck\b/i, 'the truck'],
-    [/\bcoffee\b/i, 'his coffee opinions'],
-  ]
+  // The kit is per-PERSONA (persona.kit.beats) — the SAME source the diversity lint
+  // bans in stops, so the two can never desync.
   const kitBeatsOf = (script: string) =>
-    KIT_BEATS.filter(([re]) => re.test(script)).map(([, label]) => label)
+    persona.kit.beats.filter((b) => b.match.test(script)).map((b) => b.label)
   // Recurring DEVICES beyond the fixed personal kit — the same-shape gags the charm
   // judge keeps flagging on a new vector each run (every town's post office, the
   // name-change rundown, "was nothing"; and self-deprecation flavors the model invents
@@ -373,15 +372,18 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   })
   // First-pass narration: thread the trailing-3 window of cross-stop context.
   const narrate = (s: StopPlan) =>
-    narrateStop({
-      ...baseReq(s),
-      priorStops: priorStops.slice(-3),
-      recentOpeners: recentOpeners.slice(-3),
-      recentClosers: recentClosers.slice(-3),
-      recentKitBeats: [...new Set(recentKit.slice(-3).flat())],
-      // CUMULATIVE (all prior stops): a frame/flavor is a one-time bit, not a budget.
-      recentMotifs: [...new Set(recentMotifs.flat())],
-    })
+    narrateStop(
+      {
+        ...baseReq(s),
+        priorStops: priorStops.slice(-3),
+        recentOpeners: recentOpeners.slice(-3),
+        recentClosers: recentClosers.slice(-3),
+        recentKitBeats: [...new Set(recentKit.slice(-3).flat())],
+        // CUMULATIVE (all prior stops): a frame/flavor is a one-time bit, not a budget.
+        recentMotifs: [...new Set(recentMotifs.flat())],
+      },
+      persona.systemPrompt,
+    )
   const rememberStop = (s: StopPlan, script: string) => {
     // Story names the real place (callback-able); break + scenic push a GENERIC token so
     // a later stop can't call back to a transient food spot and characterize it ("that
@@ -430,30 +432,33 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       console.log(`  regen stop ${f.seq} (${rec.s.name}): ${f.reasons.join('; ')}`)
       const others = narratedRecs.filter((r) => r.s.seq !== f.seq)
       try {
-        const { script } = await narrateStop({
-          ...baseReq(rec.s),
-          recentOpeners: others.map((r) => openerOf(r.script)),
-          recentClosers: others.map((r) => closerOf(r.script)),
-          recentKitBeats: [
-            ...new Set(
-              others.filter((r) => r.s.stopType !== 'break').flatMap((r) => kitBeatsOf(r.script)),
-            ),
-          ],
-          recentMotifs: [
-            ...new Set(
-              others.filter((r) => r.s.stopType !== 'break').flatMap((r) => motifBeatsOf(r.script)),
-            ),
-          ],
-          avoid: f.avoid,
-        })
+        const { script } = await narrateStop(
+          {
+            ...baseReq(rec.s),
+            recentOpeners: others.map((r) => openerOf(r.script)),
+            recentClosers: others.map((r) => closerOf(r.script)),
+            recentKitBeats: [
+              ...new Set(
+                others.filter((r) => r.s.stopType !== 'break').flatMap((r) => kitBeatsOf(r.script)),
+              ),
+            ],
+            recentMotifs: [
+              ...new Set(
+                others.filter((r) => r.s.stopType !== 'break').flatMap((r) => motifBeatsOf(r.script)),
+              ),
+            ],
+            avoid: f.avoid,
+          },
+          persona.systemPrompt,
+        )
         // Accept the regen ONLY if it doesn't INCREASE this stop's deterministic lint
         // findings. A later round or the closer-judge pass must never trade one tic for
         // another (observed: a closer-fix regen reintroducing a banned wind-up). This
         // makes "kept best available" actually keep the cleaner take, not just the latest.
         const inputs = lintInputs()
-        const before = lintScripts(inputs).filter((x) => x.seq === rec.s.seq).length
+        const before = lintScripts(inputs, persona.kit).filter((x) => x.seq === rec.s.seq).length
         const candidate = inputs.map((r) => (r.seq === rec.s.seq ? { ...r, script } : r))
-        const after = lintScripts(candidate).filter((x) => x.seq === rec.s.seq).length
+        const after = lintScripts(candidate, persona.kit).filter((x) => x.seq === rec.s.seq).length
         if (after <= before) rec.script = script
         else
           console.warn(
@@ -471,7 +476,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   // (Anthropic only, no TTS) and each round is a no-op once the lint comes back clean.
   const LINT_ROUNDS = 4
   for (let round = 0; round < LINT_ROUNDS; round++) {
-    const findings = lintScripts(lintInputs())
+    const findings = lintScripts(lintInputs(), persona.kit)
     if (findings.length === 0) break
     console.log(`Diversity lint (round ${round + 1}): ${findings.length} stop(s) flagged.`)
     await regenForFindings(findings)
@@ -489,7 +494,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       if (judged.length > 0) {
         console.log(`Closer judge: ${judged.length} stop(s) flagged for closing-move monotony.`)
         await regenForFindings(judged)
-        const after = lintScripts(lintInputs())
+        const after = lintScripts(lintInputs(), persona.kit)
         if (after.length > 0) await regenForFindings(after)
       } else {
         console.log('Closer judge: closers are varied.')
@@ -498,7 +503,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       console.warn(`Closer judge skipped (${(e as Error).message}).`)
     }
   }
-  const stillFlagged = lintScripts(lintInputs())
+  const stillFlagged = lintScripts(lintInputs(), persona.kit)
   console.log(
     stillFlagged.length === 0
       ? 'Diversity lint: clean.'
@@ -511,21 +516,27 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   // outro. Mandatory (the ready-gate requires both), so a narration failure aborts.
   console.log('Narrating intro + outro brackets...')
   const introScript = (
-    await narrateIntro({
-      region: shell.regionName,
-      startAnchor: shell.startAnchorName,
-      endAnchor: shell.endAnchorName,
-      jokeLevel,
-      headline: shell.headline,
-      hostName: 'Skipper',
-    })
+    await narrateIntro(
+      {
+        region: shell.regionName,
+        startAnchor: shell.startAnchorName,
+        endAnchor: shell.endAnchorName,
+        jokeLevel,
+        headline: shell.headline,
+        hostName: persona.hostName,
+      },
+      persona.bracketPrompt,
+    )
   ).script
   const outroScript = (
-    await narrateOutro({
-      region: shell.regionName,
-      endAnchor: shell.endAnchorName,
-      jokeLevel,
-    })
+    await narrateOutro(
+      {
+        region: shell.regionName,
+        endAnchor: shell.endAnchorName,
+        jokeLevel,
+      },
+      persona.bracketPrompt,
+    )
   ).script
   const bracketPlan: { kind: BracketKind; script: string }[] = [
     { kind: 'intro', script: introScript },
@@ -598,7 +609,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       const stopId = crypto.randomUUID()
       const script = scriptBySeq.get(s.seq)!
       console.log(`Synthesizing stop ${s.seq} (${s.stopType}) "${s.name}"...`)
-      const { audio, durationMs } = await synthesize(script, voice)
+      const { audio, durationMs } = await synthesize(script, persona.voice, persona.ttsStyle)
       const audioUrl = await uploadAudio(clipKey(tourId, stopId), audio)
 
       // Frozen attribution — an ARRAY, one entry per source this clip drew on. Story
@@ -657,7 +668,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
     const bracketSummaries: BracketSummary[] = []
     for (const b of bracketPlan) {
       console.log(`Synthesizing ${b.kind} bracket...`)
-      const { audio, durationMs } = await synthesize(b.script, voice)
+      const { audio, durationMs } = await synthesize(b.script, persona.voice, persona.ttsStyle)
       const audioUrl = await uploadAudio(bracketKey(tourId, b.kind), audio)
       finalBrackets.push({ kind: b.kind, script: b.script, audioUrl, audioDurationMs: durationMs })
       bracketSummaries.push({ kind: b.kind, script: b.script, durationMs })

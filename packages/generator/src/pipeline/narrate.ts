@@ -20,7 +20,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import type { JokeLevel, StopType } from '@skipper/shared'
 import { NARRATION_MODEL } from '../models'
-import { SKIPPER_BRACKET_PROMPT, SKIPPER_SYSTEM_PROMPT } from '../persona/skipper'
 
 /**
  * Generous ceiling. A long-form story script (~2 min ≈ ~300 words ≈ ~450 output
@@ -316,9 +315,13 @@ async function runNarration(
   }
 }
 
-/** Narrate one stop. Throws on refusal or truncation — callers must not persist a bad script. */
-export async function narrateStop(req: NarrationRequest): Promise<NarrationResult> {
-  return runNarration(SKIPPER_SYSTEM_PROMPT, buildFactSheet(req), describe(req))
+/** Narrate one stop with the persona's stop system prompt. Throws on refusal/truncation —
+ *  callers must not persist a bad script. */
+export async function narrateStop(
+  req: NarrationRequest,
+  systemPrompt: string,
+): Promise<NarrationResult> {
+  return runNarration(systemPrompt, buildFactSheet(req), describe(req))
 }
 
 function describe(req: NarrationRequest): string {
@@ -391,12 +394,18 @@ export function buildOutroSheet(req: OutroRequest): string {
   return lines.join('\n')
 }
 
-/** Narrate the INTRO bracket. Persona-only, no fact sheet. Throws on refusal/truncation/empty. */
-export async function narrateIntro(req: IntroRequest): Promise<NarrationResult> {
-  return runNarration(SKIPPER_BRACKET_PROMPT, buildIntroSheet(req), `INTRO (${req.region})`)
+/** Narrate the INTRO bracket with the persona's bracket prompt. Persona-only, no fact sheet. */
+export async function narrateIntro(
+  req: IntroRequest,
+  bracketPrompt: string,
+): Promise<NarrationResult> {
+  return runNarration(bracketPrompt, buildIntroSheet(req), `INTRO (${req.region})`)
 }
 
-/** Narrate the OUTRO bracket. Persona-only, no fact sheet. Throws on refusal/truncation/empty. */
-export async function narrateOutro(req: OutroRequest): Promise<NarrationResult> {
-  return runNarration(SKIPPER_BRACKET_PROMPT, buildOutroSheet(req), `OUTRO (${req.region})`)
+/** Narrate the OUTRO bracket with the persona's bracket prompt. Persona-only, no fact sheet. */
+export async function narrateOutro(
+  req: OutroRequest,
+  bracketPrompt: string,
+): Promise<NarrationResult> {
+  return runNarration(bracketPrompt, buildOutroSheet(req), `OUTRO (${req.region})`)
 }
