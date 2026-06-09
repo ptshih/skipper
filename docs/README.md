@@ -74,7 +74,12 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   but partially overtaken by the pacing rework — re-ground before building.
 
 ### ideas/
-All post-MVP, gated behind the proven phone player:
+- [journey-layer.md](ideas/journey-layer.md) — **the north-star vision**: Skipper as the
+  entertainment/meaning layer of the journey (the self-driving age) + "any road, anywhere, generated
+  live" — the demand and supply of one endgame the feature-ideas below ladder toward. Direction, not
+  commitment.
+
+The rest are post-MVP features, gated behind the proven phone player:
 - [drive-complete-moment.md](ideas/drive-complete-moment.md) — the payoff beat as motion + sound
   (the stage the next two plug into).
 - [tip-the-skipper.md](ideas/tip-the-skipper.md) — end-of-tour tip jar (IAP; delight, not extraction).
