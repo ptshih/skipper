@@ -32,15 +32,72 @@ const GROUNDING_MAX_TOKENS = 4_000
 export interface GroundingInput {
   seq: number
   stopType: StopType
-  /** The named place (story/break). Omitted for scenic (which names no landmark). */
+  /** The named place (story/break, and a NAMED scenic feature — whose name/kind/side line
+   *  must then be ON the well; an unnamed scenic omits this and may name no landmark). */
   placeName?: string
   /** The narration script under test. */
   script: string
-  /** The permitted facts — the whole well the narrator was given (facts + geology + wikidata). */
+  /** The permitted facts — the whole well the narrator was given. Build it with
+   *  buildGroundingWell so it carries EVERYTHING the narrator could legitimately say
+   *  (facts + geology + wikidata + merged-feature facts + the named-scenic/side lines) —
+   *  a well thinner than the narrator's sheet false-flags grounded claims. */
   well: string[]
   /** Ambient carve-out: NAMING these (not asserting facts about them) is allowed sheet-free. */
   region: string
   corridor: string
+  /** Sanctioned-callback carve-out: names of OTHER stops on this drive. The narrator is fed
+   *  earlier stops for earned callbacks, so RECALLING one (asserting nothing new about it)
+   *  is delivery, not an invented place-fact. */
+  tourStops?: string[]
+}
+
+/**
+ * The minimal stop shape the well builder reads — structural, so both the LIVE pipeline
+ * (generate.ts, from a StopPlan) and the artifact auditor (eval/run.ts, from result JSON)
+ * build the SAME well and can never drift apart on what the narrator was permitted to say.
+ */
+export interface GroundingWellStop {
+  stopType: StopType
+  /** The place name as narrated (story/break; a NAMED scenic feature). */
+  name?: string | null
+  /** Sayable kind (story/scenic: the POI kind; break: the SPOKEN kind, post-spokenKind). */
+  kind?: string | null
+  sideOfRoad?: 'left' | 'right'
+  facts?: string[]
+  geology?: string[]
+  wikidata?: string[]
+  /** Co-located landmarks merged into this stop — their facts are part of the permitted well. */
+  mergedFeatures?: { name: string; facts: string[] }[]
+}
+
+/**
+ * Build the EXACT permitted well for one stop, mirroring what narrate.ts put on the sheet:
+ * story facts, geology, wikidata, each merged feature's facts (name-prefixed so a claim about
+ * the feature traces), plus the sayable-by-contract lines that aren't "facts" on the sheet but
+ * ARE licensed delivery — a named scenic's name/kind/side, a break's name/kind, the side of
+ * the road. Omitting those false-flags the narrator for saying what it was told to say.
+ */
+export function buildGroundingWell(s: GroundingWellStop): string[] {
+  const well: string[] = []
+  if (s.stopType === 'story') {
+    // facts / wikidata / merged features are STORY-only channels — gating them here keeps a
+    // mislabeled input from ever blessing identifying place-facts on a scenic/break well.
+    well.push(...(s.facts ?? []))
+    if (s.sideOfRoad)
+      well.push(`${s.name || 'This place'} is on the ${s.sideOfRoad} side of the road.`)
+    well.push(...(s.wikidata ?? []))
+    for (const m of s.mergedFeatures ?? []) for (const f of m.facts) well.push(`${m.name}: ${f}`)
+  } else if (s.stopType === 'scenic' && s.name) {
+    // The named-scenic contract (narrate.ts): name + kind + side are sayable; nothing the name implies is.
+    well.push(
+      `You are passing ${s.name}${s.kind ? `, a ${s.kind},` : ''}${s.sideOfRoad ? ` on the ${s.sideOfRoad}` : ''} — its name, its kind, and which side it is on are the only things this line licenses.`,
+    )
+  } else if (s.stopType === 'break' && s.name) {
+    well.push(`A rest spot named ${s.name}${s.kind ? ` (a ${s.kind})` : ''} is coming up.`)
+  }
+  // Geology rides story AND scenic (the one fact channel a scenic stop is permitted).
+  if (s.stopType !== 'break') well.push(...(s.geology ?? []))
+  return well
 }
 
 /** The model call that decomposes a script into classified claims. Injectable for tests. */
@@ -52,14 +109,14 @@ const SYSTEM = `You audit ONE stop of an AI-narrated road-trip tour for GROUNDIN
 
 Decompose the SCRIPT into every distinct factual CLAIM IT MAKES ABOUT A PLACE — a name, date, year, number (elevation/depth/height/distance/age/acreage/count), event, cause or reason, significance or ranking, comparison, or relationship to something nearby. For EACH claim, classify it:
 
-- "grounded": it traces to a specific FACT SHEET line. Put that line (quoted or closely paraphrased) in "evidence".
-- "ambient": it ONLY names or frames the tour's REGION or CORRIDOR (you are told both), OR is plain world-knowledge that asserts no fact about any specific place (the sky is big, mountain mornings are cold). Put which carve-out in "evidence".
+- "grounded": it traces to a specific FACT SHEET line — including a claim that merely RESTATES a line in equivalent terms: the same relationship read from the other side ("hired by his aunt X" grounds "he was X's nephew"), or a plain rewording that adds no new quantity, date, entity, or cause. Put that line (quoted or closely paraphrased) in "evidence".
+- "ambient": it ONLY names or frames the tour's REGION or CORRIDOR (you are told both), OR is plain world-knowledge that asserts no fact about any specific place (the sky is big, mountain mornings are cold), OR it merely RECALLS an earlier stop on this drive (the input may list the drive's other stops; a callback that names one while asserting nothing new about it is delivery — any NEW fact about it must still trace to the sheet). Put which carve-out in "evidence".
 - "ungrounded": it is a place-fact that is NOT on the sheet. This includes a claim wrapped in a hedge ("I bet", "probably", "must have been", "I imagine", "they say", "legend has it") — hedging does NOT launder an invented fact — AND a number COMPUTED from sheet facts (e.g. subtracting two given years to state a span/age). Put null in "evidence".
 
 Rules:
 - Be adversarial: when a place-claim is borderline, prefer "ungrounded" over letting a possibly-invented fact pass. Naming/ranking/relating the stop to the REGION itself ("one of Tahoe's prettiest coves") is a place-fact unless it is on the sheet.
 - Judge ONLY assertions of fact. Do NOT flag delivery, jokes, voice, or sensory coloring that asserts no place-fact ("she's a beaut", "the water's that impossible blue").
-- Stop-type rules: a SCENIC stop may assert NO place-fact at all — only plainly-visible things and any GEOLOGY lines given in the sheet; naming a peak/town/island/landmark on a scenic stop is "ungrounded". A BREAK stop may name only the given place + its category; anything else about it is "ungrounded".
+- Stop-type rules: a SCENIC stop may assert NO place-fact beyond its sheet — the sheet may carry GEOLOGY lines and (for a NAMED scenic feature) a line giving its name, kind, and side of the road, each sayable exactly as given; naming any OTHER peak/town/island/landmark on a scenic stop is "ungrounded", and a given name licenses NOTHING it implies (no history, no size or depth, no "famous"/"popular", no character). A BREAK stop may name only the given place + its category; anything else about it is "ungrounded".
 
 Call the report tool with one entry per claim. If the script makes no factual place-claims at all, report an empty list.`
 
@@ -108,11 +165,19 @@ function buildUserMessage(input: GroundingInput): string {
     input.well.length > 0
       ? input.well.map((f) => `- ${f}`).join('\n')
       : '(empty — this stop was given NO place-facts)'
+  const otherStops = (input.tourStops ?? []).filter((n) => n && n !== input.placeName)
   return [
     `REGION: ${input.region}`,
     `CORRIDOR: ${input.corridor}`,
     `STOP TYPE: ${input.stopType.toUpperCase()}`,
     input.placeName ? `PLACE: ${input.placeName}` : 'PLACE: (unnamed scenic stop)',
+    ...(otherStops.length > 0
+      ? [
+          '',
+          'OTHER STOPS ON THIS DRIVE (recalling one by name is a sanctioned callback — ambient; any NEW fact about one must still trace to the sheet):',
+          ...otherStops.map((n) => `- ${n}`),
+        ]
+      : []),
     '',
     'FACT SHEET (the entire permitted well — anything not here is not on the sheet):',
     well,

@@ -11,7 +11,7 @@
 // unit-tested with fakes (no API) and adoptable by generate.ts via a thin adapter. See the
 // WIRING NOTE at the bottom.
 
-import { DIMENSION_KIND, type StopEval } from './types'
+import { DIMENSION_KIND, type EvalDimension, type StopEval } from './types'
 
 // A finding on a GATE dimension (grounding/tts) weighs heavier than an advisory one
 // (charm/diversity), so the loop spends its budget killing hard violations before polish.
@@ -28,6 +28,30 @@ export function findingScore(evals: StopEval[]): number {
 }
 
 const isGate = (e: StopEval): boolean => DIMENSION_KIND[e.dimension] === 'gate'
+
+/** Finding count per GATE dimension — the per-dimension ledger behind the Pareto guard. */
+function gateFindingCounts(evals: StopEval[]): Map<EvalDimension, number> {
+  const counts = new Map<EvalDimension, number>()
+  for (const e of evals) {
+    if (isGate(e)) counts.set(e.dimension, (counts.get(e.dimension) ?? 0) + e.findings.length)
+  }
+  return counts
+}
+
+/**
+ * The PARETO guard on gates: a candidate may not be worse on ANY gate dimension, no matter
+ * what it clears elsewhere. The flattened findingScore alone would happily trade gate for
+ * gate (one new hallucination for one cleared markdown leak scores as a tie) or buy a gate
+ * violation with a pile of cleared advisory tics — and a regen must NEVER add a gate
+ * violation the previous take didn't have. Dimensions absent from a side count as clean.
+ */
+export function gatesNotWorse(candidate: StopEval[], best: StopEval[]): boolean {
+  const bestCounts = gateFindingCounts(best)
+  for (const [dim, n] of gateFindingCounts(candidate)) {
+    if (n > (bestCounts.get(dim) ?? 0)) return false
+  }
+  return true
+}
 
 /**
  * Fold the failing evals into actionable avoid-notes for the next regen. Gate dimensions lead
@@ -85,10 +109,11 @@ export interface OptimizeResult<T> {
 
 /**
  * Run the evaluator-optimizer loop on one item. Accepts a candidate only if it is NOT WORSE
- * than the best so far (ties allowed — a not-worse alternative is taken), and STOPS as soon as
- * a round fails to strictly improve the score (so it never thrashes one tic for another), or
- * when clean, or at the round budget. Returns the best item found — the loop can only hold or
- * improve quality, never regress it.
+ * than the best so far — on the weighted score AND per gate dimension (the Pareto guard:
+ * clearing tics can never buy a new gate violation; ties on both are allowed, so a not-worse
+ * alternative is taken). STOPS as soon as a round fails to strictly improve the score (so it
+ * never thrashes one tic for another), or when clean, or at the round budget. Returns the
+ * best item found — the loop can only hold or improve quality, never regress it.
  */
 export async function optimize<T>(initial: T, opts: OptimizeOptions<T>): Promise<OptimizeResult<T>> {
   const maxRounds = opts.maxRounds ?? 3
@@ -104,8 +129,8 @@ export async function optimize<T>(initial: T, opts: OptimizeOptions<T>): Promise
     const candidate = await opts.regenerate(avoid, best)
     const candidateEvals = [...(await opts.evaluate(candidate))]
     const candidateScore = findingScore(candidateEvals)
-    const notWorse = candidateScore <= bestScore
-    const improved = candidateScore < bestScore
+    const notWorse = candidateScore <= bestScore && gatesNotWorse(candidateEvals, bestEvals)
+    const improved = notWorse && candidateScore < bestScore
     if (notWorse) {
       best = candidate
       bestEvals = candidateEvals

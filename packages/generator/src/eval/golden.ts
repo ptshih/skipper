@@ -16,6 +16,7 @@
 // (the recap-bow closer, kit overuse, the "was nothing" frame, an invented number, a markdown
 // leak); fix the label only with a human in the loop.
 
+import { buildGroundingWell } from './grounding'
 import type { GroundingInput } from './grounding'
 import type { TtsInput } from './tts'
 import type { LintInput } from '../pipeline/lint'
@@ -150,6 +151,109 @@ export const GROUNDING_CASES: GroundingCase[] = [
     },
     expect: { pass: true, ungrounded: [] },
     why: 'scenic done right: only the given geology + delivery ("impossible blue", "quiet") — no place-fact.',
+  },
+  {
+    id: 'grounding-scenic-named-clean',
+    dimension: 'grounding',
+    input: {
+      seq: 8,
+      stopType: 'scenic',
+      placeName: 'Sand Harbor',
+      script:
+        "Off to the right — that's Sand Harbor, a beach, and the water there is doing that show-off blue it does. Just look. That's the whole assignment.",
+      // Built by the SHARED well builder (not hand-copied) so a phrasing change there
+      // re-calibrates here instead of silently drifting.
+      well: buildGroundingWell({
+        stopType: 'scenic',
+        name: 'Sand Harbor',
+        kind: 'beach',
+        sideOfRoad: 'right',
+      }),
+      ...LT,
+    },
+    expect: { pass: true, ungrounded: [] },
+    why: 'a NAMED scenic may say its given name + kind + side (the narrate.ts contract) — the well line licenses exactly that; must not false-positive.',
+  },
+  {
+    id: 'grounding-scenic-named-overreach',
+    dimension: 'grounding',
+    input: {
+      seq: 9,
+      stopType: 'scenic',
+      placeName: 'Sand Harbor',
+      script:
+        "Sand Harbor on the right, folks — softest sand on the lake, and the most popular beach in Nevada. Locals line up at dawn for a spot.",
+      well: buildGroundingWell({
+        stopType: 'scenic',
+        name: 'Sand Harbor',
+        kind: 'beach',
+        sideOfRoad: 'right',
+      }),
+      ...LT,
+    },
+    expect: { pass: false, ungrounded: ['popular'] },
+    why: 'the name licenses NOTHING it implies — softness/popularity/crowds on a named scenic are invented place-facts.',
+  },
+  {
+    id: 'grounding-callback-ambient',
+    dimension: 'grounding',
+    input: {
+      seq: 10,
+      stopType: 'story',
+      placeName: 'Cave Rock',
+      script:
+        'Cave Rock, dead ahead — the tunnel runs right through it. Volcanic rock, says my sheet. Quite a morning we are having: first Vikingsholm, now a road that drives through a rock.',
+      well: ['Cave Rock is a tunnel formation of volcanic rock on the east shore of Lake Tahoe.'],
+      tourStops: ['Vikingsholm', 'Emerald Bay State Park'],
+      ...LT,
+    },
+    expect: { pass: true, ungrounded: [] },
+    why: 'recalling an earlier stop BY NAME while asserting nothing new about it is a sanctioned callback — ambient, not invention. (A callback that DOES add a fact, e.g. where Vikingsholm sits, is still ungrounded — this stop was not given that.)',
+  },
+  {
+    id: 'grounding-merged-feature',
+    dimension: 'grounding',
+    input: {
+      seq: 11,
+      stopType: 'story',
+      placeName: 'Emerald Bay State Park',
+      script:
+        'Emerald Bay — the postcard itself. And that speck of granite out in the middle is Fannette Island, the only island in all of Lake Tahoe. One island. The lake said "perfect, no notes."',
+      well: buildGroundingWell({
+        stopType: 'story',
+        name: 'Emerald Bay State Park',
+        facts: ['Emerald Bay State Park is a state park on the southwest shore of Lake Tahoe.'],
+        mergedFeatures: [
+          {
+            name: 'Fannette Island',
+            facts: [
+              'Fannette Island is the only island in Lake Tahoe.',
+              'The island is composed of granite.',
+            ],
+          },
+        ],
+      }),
+      ...LT,
+    },
+    expect: { pass: true, ungrounded: [] },
+    why: 'a co-located MERGED feature\'s facts are part of the permitted well (name-prefixed lines) — naming the island + its sheet facts must not false-positive.',
+  },
+  {
+    id: 'grounding-inverse-relation',
+    dimension: 'grounding',
+    input: {
+      seq: 12,
+      stopType: 'story',
+      placeName: 'Vikingsholm',
+      script:
+        "The house was drawn up by Leonard Palme — Lora Knight's nephew, which made family dinners double as design reviews.",
+      well: [
+        'The architect was Leonard Palme, who was hired by his aunt Lora Josephine Knight to design and build Vikingsholm.',
+      ],
+      ...LT,
+    },
+    expect: { pass: true, ungrounded: [] },
+    why: 'restating a sheet relationship from the other side ("his aunt X" ⇒ "he was X\'s nephew") is entailment, not invention — a real false-positive caught on a live run (2026-06-09).',
   },
   {
     id: 'grounding-ambient-ok',

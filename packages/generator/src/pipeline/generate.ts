@@ -5,6 +5,8 @@
 //     -> Google Places searchAlongRoute       (food/rest BREAK anchors)
 //     -> select stops by drive TIME           (pace, not distance)
 //     -> Skipper narration (Anthropic)        (story + scenic + break)
+//     -> eval panel + optimizer               (free dims per pass; grounding once;
+//                                              drives regen, RECORDS — never gates `ready`)
 //     -> TTS (Google Cloud, Gemini-TTS) -> R2 (audio + duration)
 //     -> tours + ordered tour_stops (Neon)    (atomic ready-gate)
 //
@@ -23,10 +25,15 @@ import type { BracketKind, DurationBucket, JokeLevel } from '@skipper/shared'
 import type { AttributionSnapshot } from '@skipper/db/schema'
 import {
   ANTHROPIC_READY,
+  EVAL_MAX_PASSES,
+  EVAL_REGEN_BUDGET,
   GEOLOGY_ENRICHMENT,
   GEOLOGY_ICONIC_STOPS,
   GEOLOGY_STORY_MAX_FACT_CHARS,
   GOOGLE_TTS_READY,
+  GROUNDING_EVAL,
+  GROUNDING_REGEN_BUDGET,
+  GROUNDING_REGEN_MAX_ROUNDS,
   FALLBACK_SPEED_MPS,
   GOOGLE_READY,
   PACING,
@@ -36,6 +43,23 @@ import {
   WIKIDATA_STORY_MAX_FACT_CHARS,
   requireEnv,
 } from '../config'
+import {
+  buildGroundingWell,
+  buildScorecard,
+  evaluateDiversity,
+  evaluateGrounding,
+  evaluateTts,
+  findingScore,
+  gatesNotWorse,
+  optimize,
+} from '../eval'
+import type {
+  GroundingInput,
+  OptimizeResult,
+  OptimizeRound,
+  StopEval,
+  TourScorecard,
+} from '../eval'
 import { personaForRegion } from '../persona'
 import { cumulativeMeters, encodePolyline, totalMeters } from './geo'
 import type { LngLat } from './geo'
@@ -49,8 +73,6 @@ import { projectQueueLag, selectStops, toFacts } from './select'
 import type { StopPlan } from './select'
 import { narrateIntro, narrateOutro, narrateStop } from './narrate'
 import type { NarrationRequest } from './narrate'
-import { lintScripts } from './lint'
-import type { LintFinding } from './lint'
 import { judgeCloserDiversity } from './judge'
 import { synthesize } from './tts'
 import { bracketKey, clipKey, uploadAudio } from './storage'
@@ -81,6 +103,9 @@ export interface StopSummary {
   stopType: StopPlan['stopType']
   name: string
   alongSec: number
+  /** SAYABLE kind — story/scenic: the POI kind; break: the SPOKEN kind (post-spokenKind).
+   *  Emitted so the artifact auditor builds the same permitted well the narrator had. */
+  kind?: string
   /** STORY only: which side of the road the place is on, when the geometry called it. */
   sideOfRoad?: 'left' | 'right'
   script?: string
@@ -91,6 +116,8 @@ export interface StopSummary {
   geology?: string[]
   /** STORY only: the Wikidata structured facts the model was given — part of the audited well. */
   wikidata?: string[]
+  /** STORY only: co-located landmarks merged into this stop — their facts are part of the audited well. */
+  mergedFeatures?: { name: string; facts: string[] }[]
   durationMs?: number
   audioUrl?: string
 }
@@ -99,6 +126,36 @@ export interface BracketSummary {
   kind: BracketKind
   script?: string
   durationMs?: number
+}
+
+/** One optimizer engagement on one stop — the per-pass trajectory the eval flywheel records. */
+export interface EvalPassTrace {
+  seq: number
+  /** Which pass engaged the stop: 'panel pass N' (free dims), 'closer-judge', 'grounding'. */
+  phase: string
+  rounds: number
+  stop: OptimizeResult<string>['stop']
+  history: OptimizeRound[]
+  /** Rounds ran but the take did not change — a failed/budget-capped regen returns the
+   *  previous take (which scores as an accepted tie); this flag keeps the trace honest. */
+  unchanged?: boolean
+}
+
+/** Re-narration ATTEMPTS (a failed attempt still burned spend) vs the configured cap. */
+export interface RegenSpend {
+  used: number
+  budget: number
+}
+
+/** The generation-time eval ride-along: the final scorecard + every optimizer trajectory.
+ *  RECORDING only — a failing gate dimension here never blocks `ready` (CLAUDE.md: no
+ *  automated groundedness gate; the human ear stays the ship decision). */
+export interface TourEvalReport {
+  scorecard: TourScorecard
+  passes: EvalPassTrace[]
+  /** The two cost-guard pools: free-dim passes + closer judge, and the grounding pass —
+   *  separate so a tic-heavy tour can't starve the grounding regens (see config.ts). */
+  regens: { panel: RegenSpend; grounding: RegenSpend }
 }
 
 export interface GenerateResult {
@@ -114,9 +171,17 @@ export interface GenerateResult {
   dryRun: boolean
   stops: StopSummary[]
   brackets: BracketSummary[]
+  /** The eval panel's scorecard + optimizer trace for this run (persisted via --json). */
+  eval: TourEvalReport
 }
 
 const firstSentence = (facts: string[]): string | null => facts[0] ?? null
+
+/** The kind as the narrator may SAY it — break kinds go through spokenKind (a raw Places
+ *  primaryType isn't speakable); story/scenic use the POI kind as-is. Drives both the
+ *  artifact's `kind` field and the grounding well, so the audit matches the narration. */
+const sayableKind = (s: StopPlan): string | null =>
+  s.stopType === 'break' ? spokenKind(s.kind) : s.kind
 
 export async function generateTour(opts: GenerateOptions): Promise<GenerateResult> {
   const durationBucket: DurationBucket = opts.durationBucket ?? 'standard'
@@ -451,78 +516,131 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
     narratedRecs.push({ s, script })
   }
 
-  // Post-assembly diversity lint: regenerate cross-stop outliers (Anthropic only,
-  // still no TTS). Each flagged stop is re-narrated with the finding's `avoid` notes
-  // plus FULL awareness of every OTHER stop's opener/closer/kit (not just the
-  // trailing-3 window). A regen failure or a stubborn finding falls back to the
-  // current script, so the lint can never block a valid tour.
+  // ---- The eval panel + evaluator-optimizer (the in-pipeline flywheel). ----------------
+  // Findings feed regeneration through optimize() (accept-if-not-worse, gate-weighted, per-
+  // round trace) — generalizing the old bespoke lint→regen loop. Cost shape (deliberate, see
+  // config): the PASS loop below runs only the FREE deterministic dims (tts + diversity);
+  // GROUNDING (one Sonnet call per story/scenic stop) runs ONCE as a final pass further down.
+  // Nothing in this section can BLOCK the tour — every pass keeps the best available take.
+
   // Breaks are excluded from the diversity lint — short generic cues, and the kit
   // detector's /coffee/ would misfire on a café break inviting a coffee.
   const lintInputs = () =>
     narratedRecs
       .filter((r) => r.s.stopType !== 'break')
       .map((r) => ({ seq: r.s.seq, stopType: r.s.stopType, script: r.script }))
-  const regenForFindings = async (findings: LintFinding[]) => {
-    for (const f of findings) {
-      const rec = narratedRecs.find((r) => r.s.seq === f.seq)
-      if (!rec) continue
-      console.log(`  regen stop ${f.seq} (${rec.s.name}): ${f.reasons.join('; ')}`)
-      const others = narratedRecs.filter((r) => r.s.seq !== f.seq)
+
+  // The FREE per-stop panel: tts on every stop (every clip is synthesized verbatim, breaks
+  // included), diversity on story/scenic. Diversity is CROSS-stop, so a candidate script is
+  // judged by swapping it into the assembled set and keeping only this stop's eval — the
+  // same trick the old loop used, now expressed as an evaluator optimize() can drive.
+  const cheapPanel = (rec: { s: StopPlan; script: string }, script: string): StopEval[] => {
+    const evals: StopEval[] = [evaluateTts({ seq: rec.s.seq, script })]
+    if (rec.s.stopType !== 'break') {
+      const swapped = lintInputs().map((r) => (r.seq === rec.s.seq ? { ...r, script } : r))
+      evals.push(...evaluateDiversity(swapped, persona.kit).filter((e) => e.seq === rec.s.seq))
+    }
+    return evals
+  }
+
+  // COST GUARD: hard caps on re-narration attempts. TWO pools — the free-dim passes + the
+  // closer judge draw on one, the grounding pass on its own — so a tic-heavy tour can't
+  // starve the crown-jewel dimension to zero regens. When a pool runs out, each stop keeps
+  // its best take so far (safe — accept-if-not-worse) and the cap is logged.
+  const panelBudget = { left: EVAL_REGEN_BUDGET }
+  const groundingBudget = { left: GROUNDING_REGEN_BUDGET }
+  const passTraces: EvalPassTrace[] = []
+
+  // Full-context re-narration of one stop: the same prompt threading as the old lint loop —
+  // FULL awareness of every OTHER stop's opener/closer/kit/motifs (not just the trailing-3
+  // window) plus the avoid-notes. optimize() owns accept/stop; this owns the prompt.
+  const regenScript = async (rec: { s: StopPlan; script: string }, avoid: string[]) => {
+    const others = narratedRecs.filter((r) => r.s.seq !== rec.s.seq)
+    const { script } = await narrateStop(
+      {
+        ...baseReq(rec.s),
+        recentOpeners: others.map((r) => openerOf(r.script)),
+        recentClosers: others.map((r) => closerOf(r.script)),
+        recentKitBeats: [
+          ...new Set(
+            others.filter((r) => r.s.stopType !== 'break').flatMap((r) => kitBeatsOf(r.script)),
+          ),
+        ],
+        recentMotifs: [
+          ...new Set(
+            others.filter((r) => r.s.stopType !== 'break').flatMap((r) => motifBeatsOf(r.script)),
+          ),
+        ],
+        avoid,
+      },
+      persona.systemPrompt,
+    )
+    return script
+  }
+
+  // optimize()'s regenerate hook: budget-capped and never-throwing. On a spent budget or a
+  // narration failure it returns the PREVIOUS take — optimize() scores it identical, holds
+  // the best, and stops (thrash guard) — so a mid-loop failure can't discard an improvement
+  // already accepted, and the loop can never block a valid tour. `seed` carries findings an
+  // evaluator can't re-derive (the closer judge's notes).
+  const regenerateFor =
+    (rec: { s: StopPlan; script: string }, budget: { left: number }, seed: string[] = []) =>
+    async (avoid: string[], prev: string): Promise<string> => {
+      if (budget.left <= 0) {
+        console.warn(`  stop ${rec.s.seq}: regen budget exhausted — keeping best take.`)
+        return prev
+      }
+      budget.left--
       try {
-        const { script } = await narrateStop(
-          {
-            ...baseReq(rec.s),
-            recentOpeners: others.map((r) => openerOf(r.script)),
-            recentClosers: others.map((r) => closerOf(r.script)),
-            recentKitBeats: [
-              ...new Set(
-                others.filter((r) => r.s.stopType !== 'break').flatMap((r) => kitBeatsOf(r.script)),
-              ),
-            ],
-            recentMotifs: [
-              ...new Set(
-                others.filter((r) => r.s.stopType !== 'break').flatMap((r) => motifBeatsOf(r.script)),
-              ),
-            ],
-            avoid: f.avoid,
-          },
-          persona.systemPrompt,
-        )
-        // Accept the regen ONLY if it doesn't INCREASE this stop's deterministic lint
-        // findings. A later round or the closer-judge pass must never trade one tic for
-        // another (observed: a closer-fix regen reintroducing a banned wind-up). This
-        // makes "kept best available" actually keep the cleaner take, not just the latest.
-        const inputs = lintInputs()
-        const before = lintScripts(inputs, persona.kit).filter((x) => x.seq === rec.s.seq).length
-        const candidate = inputs.map((r) => (r.seq === rec.s.seq ? { ...r, script } : r))
-        const after = lintScripts(candidate, persona.kit).filter((x) => x.seq === rec.s.seq).length
-        if (after <= before) rec.script = script
-        else
-          console.warn(
-            `  stop ${f.seq} regen would add findings (${before}→${after}) — keeping previous take.`,
-          )
+        return await regenScript(rec, [...seed, ...avoid])
       } catch (e) {
-        console.warn(`  stop ${f.seq} regen failed (${(e as Error).message}) — keeping original.`)
+        console.warn(`  stop ${rec.s.seq} regen failed (${(e as Error).message}) — keeping best take.`)
+        return prev
       }
     }
+
+  // One pass of the free panel: optimize every flagged stop once (the OUTER pass loop is the
+  // round budget — fixing stop A changes the set stop B is linted against, so flagging is
+  // recomputed each pass). Each engagement's history lands in the trace.
+  const optimizeFlagged = async (phase: string): Promise<number> => {
+    const flagged = narratedRecs.filter((r) => findingScore(cheapPanel(r, r.script)) > 0)
+    if (flagged.length === 0) return 0
+    console.log(`Eval panel (${phase}): ${flagged.length} stop(s) flagged.`)
+    for (const rec of flagged) {
+      const findings = cheapPanel(rec, rec.script).flatMap((e) => e.findings)
+      console.log(`  regen stop ${rec.s.seq} (${rec.s.name}): ${findings.join('; ')}`)
+      const entryScript = rec.script
+      const result = await optimize<string>(rec.script, {
+        evaluate: (script) => cheapPanel(rec, script),
+        regenerate: regenerateFor(rec, panelBudget),
+        maxRounds: 1,
+      })
+      rec.script = result.item
+      if (result.rounds > 0 && result.item === entryScript)
+        console.warn(`  stop ${rec.s.seq}: take unchanged (regen rejected or unavailable).`)
+      passTraces.push({
+        seq: rec.s.seq,
+        phase,
+        rounds: result.rounds,
+        stop: result.stop,
+        history: result.history,
+        ...(result.rounds > 0 && result.item === entryScript ? { unchanged: true } : {}),
+      })
+    }
+    return flagged.length
   }
 
-  // 4 rounds (was 2): long-form stops surface more per-stop findings (tic-stacking,
-  // list shape, tidy bows) that can take extra regens to fully clear, and the
-  // accept-only-if-not-worse guard above can hold a take across a round. Still cheap
-  // (Anthropic only, no TTS) and each round is a no-op once the lint comes back clean.
-  const LINT_ROUNDS = 4
-  for (let round = 0; round < LINT_ROUNDS; round++) {
-    const findings = lintScripts(lintInputs(), persona.kit)
-    if (findings.length === 0) break
-    console.log(`Diversity lint (round ${round + 1}): ${findings.length} stop(s) flagged.`)
-    await regenForFindings(findings)
+  for (let pass = 1; pass <= EVAL_MAX_PASSES; pass++) {
+    if (panelBudget.left <= 0) break
+    if ((await optimizeFlagged(`panel pass ${pass}`)) === 0) break
   }
 
-  // Optional semantic-closer judge (one extra model call): catches closing-move
-  // monotony the deterministic lint can't see — e.g. several stops personifying the
-  // place in different words. Best-effort (a judge error never blocks the tour);
-  // any regen it triggers is re-checked by one more deterministic lint pass.
+  // Optional semantic-closer judge (one extra model call): catches closing-move monotony
+  // the deterministic lint can't see — e.g. several stops personifying the place in
+  // different words. A semantic finding can't be re-derived by the free panel, so it rides
+  // in as a SEED on one guarded regen per flagged stop (accepted only if the free panel
+  // isn't worse — the same never-trade-a-tic guard), then one cleanup pass re-checks the
+  // set. Best-effort: a judge error never blocks the tour.
   if (judgeClosers) {
     try {
       const judged = await judgeCloserDiversity(
@@ -530,9 +648,31 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       )
       if (judged.length > 0) {
         console.log(`Closer judge: ${judged.length} stop(s) flagged for closing-move monotony.`)
-        await regenForFindings(judged)
-        const after = lintScripts(lintInputs(), persona.kit)
-        if (after.length > 0) await regenForFindings(after)
+        for (const f of judged) {
+          const rec = narratedRecs.find((r) => r.s.seq === f.seq)
+          if (!rec) continue
+          console.log(`  regen stop ${f.seq} (${rec.s.name}): ${f.reasons.join('; ')}`)
+          const before = cheapPanel(rec, rec.script)
+          const candidate = await regenerateFor(rec, panelBudget, f.avoid)([], rec.script)
+          const unchanged = candidate === rec.script // budget/failure — kept the take, already logged
+          const after = cheapPanel(rec, candidate)
+          const accepted =
+            !unchanged && findingScore(after) <= findingScore(before) && gatesNotWorse(after, before)
+          if (accepted) rec.script = candidate
+          else if (!unchanged)
+            console.warn(`  stop ${f.seq} regen would add findings — keeping previous take.`)
+          passTraces.push({
+            seq: f.seq,
+            phase: 'closer-judge',
+            rounds: 1,
+            stop: accepted && findingScore(after) === 0 ? 'clean' : 'converged',
+            history: [
+              { round: 1, avoid: f.avoid, candidateScore: findingScore(after), accepted },
+            ],
+            ...(unchanged ? { unchanged: true } : {}),
+          })
+        }
+        await optimizeFlagged('post-judge pass')
       } else {
         console.log('Closer judge: closers are varied.')
       }
@@ -540,12 +680,126 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       console.warn(`Closer judge skipped (${(e as Error).message}).`)
     }
   }
-  const stillFlagged = lintScripts(lintInputs(), persona.kit)
+
+  // GROUNDING — the crown-jewel dimension, run ONCE per story/scenic stop after the free
+  // passes settle (N Sonnet calls, not N×rounds; breaks stay covered by the offline eval
+  // CLI). A failing stop gets a bounded targeted re-narration seeded with its ungrounded
+  // claims via optimize() — gate-weighted, so killing a violation outweighs any advisory
+  // tic the retake picks up. RECORDED + regen-driving ONLY: per CLAUDE.md ("Deferred — DO
+  // NOT build: any automated groundedness gate"), a still-failing stop NEVER blocks the
+  // tour from `ready` — it surfaces on the scorecard for the human review pass.
+  const groundingFinal = new Map<number, StopEval>()
+  if (GROUNDING_EVAL()) {
+    const gRecs = narratedRecs.filter((r) => r.s.stopType !== 'break')
+    const inputFor = (rec: { s: StopPlan }, script: string): GroundingInput => ({
+      seq: rec.s.seq,
+      stopType: rec.s.stopType,
+      placeName: rec.s.name || undefined,
+      script,
+      well: buildGroundingWell(rec.s),
+      region: shell.regionName,
+      corridor: shell.headline,
+      // Callback carve-out: only stops BEFORE this one — the narrator is fed earlier stops,
+      // so a "callback" to a later place would be invention and must not be blessed.
+      tourStops: narratedRecs
+        .filter((r) => r.s.stopType === 'story' && r.s.seq < rec.s.seq)
+        .map((r) => r.s.name),
+    })
+    console.log(`Grounding audit: ${gRecs.length} story/scenic stops (one judge call each)...`)
+    // The first sweep is concurrent (the SDK retries 429s) and SETTLED, never failed: an
+    // errored eval just leaves that stop un-audited (logged, absent from the scorecard) —
+    // an eval outage must never block generation (the never-gates invariant, in practice).
+    const firstPass = await Promise.allSettled(
+      gRecs.map((rec) => evaluateGrounding(inputFor(rec, rec.script))),
+    )
+    for (let i = 0; i < gRecs.length; i++) {
+      const rec = gRecs[i]!
+      const first = firstPass[i]!
+      if (first.status === 'rejected') {
+        console.warn(
+          `  stop ${rec.s.seq} ("${rec.s.name}"): grounding eval failed (${(first.reason as Error)?.message ?? first.reason}) — stop not audited.`,
+        )
+        continue
+      }
+      // Memoize per-script evals so optimize()'s re-evaluation of the initial take is free.
+      const memo = new Map<string, StopEval>([[rec.script, first.value]])
+      const evalGrounding = async (script: string): Promise<StopEval> => {
+        let g = memo.get(script)
+        if (!g) {
+          g = await evaluateGrounding(inputFor(rec, script))
+          memo.set(script, g)
+        }
+        return g
+      }
+      if (!first.value.pass && groundingBudget.left <= 0) {
+        // No silent caps: a failing stop skipped on an exhausted pool is still recorded
+        // (its sweep verdict lands on the scorecard) but must be SAID, not swallowed.
+        console.warn(
+          `  stop ${rec.s.seq} ("${rec.s.name}"): ${first.value.findings.length} ungrounded claim(s), grounding regen budget exhausted — recorded for human review.`,
+        )
+      }
+      if (!first.value.pass && groundingBudget.left > 0) {
+        console.log(
+          `  stop ${rec.s.seq} ("${rec.s.name}"): ${first.value.findings.length} ungrounded claim(s) — targeted re-narration...`,
+        )
+        const entryScript = rec.script
+        try {
+          const result = await optimize<string>(rec.script, {
+            evaluate: async (script) => [await evalGrounding(script), ...cheapPanel(rec, script)],
+            regenerate: regenerateFor(rec, groundingBudget),
+            maxRounds: GROUNDING_REGEN_MAX_ROUNDS,
+          })
+          rec.script = result.item
+          passTraces.push({
+            seq: rec.s.seq,
+            phase: 'grounding',
+            rounds: result.rounds,
+            stop: result.stop,
+            history: result.history,
+            ...(result.rounds > 0 && result.item === entryScript ? { unchanged: true } : {}),
+          })
+        } catch (e) {
+          // A candidate's re-audit threw (regenerate never throws): keep the initial take —
+          // its sweep verdict is already in the memo — and move on. Never block the tour.
+          console.warn(
+            `  stop ${rec.s.seq} grounding regen pass failed (${(e as Error).message}) — keeping take.`,
+          )
+        }
+      }
+      groundingFinal.set(rec.s.seq, memo.get(rec.script)!)
+    }
+  }
+
+  // The final scorecard: free dims re-run over the SETTLED scripts + the grounding verdicts.
+  // It RIDES the result (and the --json artifact) for the human review pass; the tour
+  // proceeds regardless — the eval records, the ear decides.
+  const finalEvals: StopEval[] = [
+    ...narratedRecs.map((r) => evaluateTts({ seq: r.s.seq, script: r.script })),
+    ...evaluateDiversity(lintInputs(), persona.kit),
+    ...groundingFinal.values(),
+  ]
+  const scorecard = buildScorecard({
+    slug: shell.slug,
+    tourName: shell.headline,
+    evaluatedAt: new Date().toISOString(),
+    stops: finalEvals,
+  })
+  for (const d of scorecard.dimensions) {
+    console.log(
+      `Eval ${d.dimension} (${d.kind}): ${d.pass ? 'pass' : 'FAIL'} · score ${d.score.toFixed(2)} · ${d.stopsFailed}/${d.stopsEvaluated} stop(s) flagged`,
+    )
+  }
+  const regens = {
+    panel: { used: EVAL_REGEN_BUDGET - panelBudget.left, budget: EVAL_REGEN_BUDGET },
+    grounding: { used: GROUNDING_REGEN_BUDGET - groundingBudget.left, budget: GROUNDING_REGEN_BUDGET },
+  }
   console.log(
-    stillFlagged.length === 0
-      ? 'Diversity lint: clean.'
-      : `Diversity lint: ${stillFlagged.length} finding(s) remain after ${LINT_ROUNDS} rounds (kept best available).`,
+    (scorecard.pass
+      ? 'Eval scorecard: gates clean'
+      : 'Eval scorecard: a gate dimension still fails — recorded for human review, NOT blocking ready') +
+      ` (regen attempts: panel ${regens.panel.used}/${regens.panel.budget}, grounding ${regens.grounding.used}/${regens.grounding.budget}).`,
   )
+  const evalReport: TourEvalReport = { scorecard, passes: passTraces, regens }
   const scriptBySeq = new Map(narratedRecs.map((r) => [r.s.seq, r.script]))
 
   // Intro + outro brackets — the drive's FRAME (persona-only, no fact sheet). The
@@ -589,14 +843,19 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       stopType: s.stopType,
       name: s.name,
       alongSec: s.alongSec,
+      ...(sayableKind(s) ? { kind: sayableKind(s)! } : {}),
       ...(s.sideOfRoad ? { sideOfRoad: s.sideOfRoad } : {}),
       script: scriptBySeq.get(s.seq),
       // STORY carries the exact (deepened) fact sheet so the dry-run artifact can be
       // audited script-vs-sheet; SCENIC/BREAK have no Wikipedia facts by construction.
       ...(s.stopType === 'story' ? { facts: s.facts } : {}),
-      // Geology (story + scenic) and Wikidata (story) are part of the well too — surface for the audit.
+      // Geology (story + scenic), Wikidata (story), and merged co-located landmarks are
+      // part of the well too — surface them all so the audit sees the narrator's full sheet.
       ...(s.geology?.length ? { geology: s.geology } : {}),
       ...(s.wikidata?.length ? { wikidata: s.wikidata } : {}),
+      ...(s.mergedFeatures?.length
+        ? { mergedFeatures: s.mergedFeatures.map((m) => ({ name: m.name, facts: m.facts })) }
+        : {}),
     }))
     return {
       slug: shell.slug,
@@ -608,6 +867,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       dryRun: true,
       stops,
       brackets: bracketPlan.map((b) => ({ kind: b.kind, script: b.script })),
+      eval: evalReport,
     }
   }
 
@@ -701,6 +961,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
         stopType: s.stopType,
         name: s.name,
         alongSec: s.alongSec,
+        ...(sayableKind(s) ? { kind: sayableKind(s)! } : {}),
         ...(s.sideOfRoad ? { sideOfRoad: s.sideOfRoad } : {}),
         script,
         // Carry the STORY fact sheet so the SERVED tour's scripts can be audited
@@ -708,6 +969,9 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
         ...(s.stopType === 'story' ? { facts: s.facts } : {}),
         ...(s.geology?.length ? { geology: s.geology } : {}),
         ...(s.wikidata?.length ? { wikidata: s.wikidata } : {}),
+        ...(s.mergedFeatures?.length
+          ? { mergedFeatures: s.mergedFeatures.map((m) => ({ name: m.name, facts: m.facts })) }
+          : {}),
         durationMs,
         audioUrl,
       })
@@ -749,6 +1013,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       dryRun: false,
       stops: summaries,
       brackets: bracketSummaries,
+      eval: evalReport,
     }
   } catch (e) {
     await markTourFailed(tourId).catch(() => {})

@@ -18,7 +18,7 @@
 
 import { personaForRegion } from '../persona'
 import type { LintInput } from '../pipeline/lint'
-import { evaluateGrounding, type GroundingInput } from './grounding'
+import { buildGroundingWell, evaluateGrounding, type GroundingInput } from './grounding'
 import { evaluateTts } from './tts'
 import { evaluateDiversity } from './diversity'
 import { charmEvaluator, type CharmStop } from './charm'
@@ -31,10 +31,15 @@ interface ArtifactStop {
   seq: number
   stopType: 'story' | 'scenic' | 'break'
   name: string
+  /** Sayable kind (break: already the SPOKEN kind) — part of the permitted well. */
+  kind?: string
+  sideOfRoad?: 'left' | 'right'
   script?: string
   facts?: string[]
   geology?: string[]
   wikidata?: string[]
+  /** Co-located landmarks merged into the stop — their facts are part of the permitted well. */
+  mergedFeatures?: { name: string; facts: string[] }[]
 }
 interface Artifact {
   slug: string
@@ -96,13 +101,22 @@ async function main() {
   const inputs: GroundingInput[] = narrated.map((s) => ({
     seq: s.seq,
     stopType: s.stopType,
-    // Scenic stops name no landmark by contract, so don't hand the auditor a place name to
-    // bless; story/break may name their place.
-    placeName: s.stopType === 'scenic' ? undefined : s.name,
+    // Story/break name their place; a NAMED scenic may too (its name/kind/side line is on
+    // the well — the narrate.ts contract); only an unnamed scenic stays placeless.
+    placeName: s.name || undefined,
     script: s.script!,
-    well: [...(s.facts ?? []), ...(s.geology ?? []), ...(s.wikidata ?? [])],
+    // The SAME permitted well the live pipeline audits against (facts + geology + wikidata
+    // + merged-feature facts + the sayable name/kind/side lines) — built by the shared
+    // helper so the two auditors can never drift on what the narrator was allowed to say.
+    well: buildGroundingWell(s),
     region: artifact.region,
     corridor: artifact.tourName,
+    // Sanctioned-callback carve-out: the narrator is fed EARLIER stops for earned callbacks,
+    // so only story names BEFORE this stop are blessed — a "callback" to a later place
+    // would be invention and must not pass.
+    tourStops: artifact.stops
+      .filter((o) => o.stopType === 'story' && o.seq < s.seq)
+      .map((o) => o.name),
   }))
 
   // GATES: grounding (LLM, concurrent — the SDK handles 429 retry) + tts (free, deterministic).
