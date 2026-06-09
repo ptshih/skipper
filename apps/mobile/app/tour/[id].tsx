@@ -3,6 +3,12 @@ import { StyleSheet, View } from 'react-native'
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
 import { ApiError, getTour, signTourAudio, type SignedAudio, type TourDetail } from '@/lib/api'
+import {
+  deleteTourDownload,
+  downloadTour,
+  isTourDownloaded,
+  type DownloadProgress,
+} from '@/lib/offline'
 import { jokeLabel, stopLabel } from '@/lib/labels'
 import { space } from '@/theme/tokens'
 import {
@@ -30,6 +36,30 @@ export default function TourScreen() {
   const [needsAccount, setNeedsAccount] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  // Offline download state — Tahoe has dead zones, so a rider can save the whole drive.
+  const [downloaded, setDownloaded] = useState(false)
+  const [downloading, setDownloading] = useState<DownloadProgress | null>(null)
+  const [downloadError, setDownloadError] = useState<string | null>(null)
+
+  const startDownload = useCallback(async () => {
+    if (!id) return
+    setDownloadError(null)
+    setDownloading({ done: 0, total: 0 })
+    try {
+      await downloadTour(id, setDownloading)
+      setDownloaded(true)
+    } catch (e) {
+      setDownloadError(e instanceof Error ? e.message : 'Download failed — check your signal and try again.')
+    } finally {
+      setDownloading(null)
+    }
+  }, [id])
+
+  const removeDownload = useCallback(() => {
+    if (!id) return
+    deleteTourDownload(id)
+    setDownloaded(false)
+  }, [id])
 
   const load = useCallback(async () => {
     if (!id) return
@@ -49,7 +79,8 @@ export default function TourScreen() {
   useFocusEffect(
     useCallback(() => {
       load()
-    }, [load]),
+      if (id) setDownloaded(isTourDownloaded(id))
+    }, [load, id]),
   )
 
   // ---- "Hear the skipper": a one-tap voice sample (the head of the first clip) so a
@@ -168,6 +199,40 @@ export default function TourScreen() {
         Hear the whole tour from your couch — no driving to the GPS coordinates.
       </Text>
 
+      {/* Offline download — save the whole drive so it plays in Tahoe dead zones with no signal.
+          Once saved, the drive + preview load entirely from disk (zero network). */}
+      {downloaded ? (
+        <View style={styles.offlineRow}>
+          <Icon name="downloaded" size={18} color="accent" />
+          <Text variant="label" color="accent" style={styles.flex}>
+            Saved for offline
+          </Text>
+          <Button variant="ghost" title="Remove" fullWidth={false} onPress={removeDownload} />
+        </View>
+      ) : (
+        <>
+          <Button
+            variant="secondary"
+            icon="download"
+            title={
+              downloading
+                ? `Downloading ${downloading.done}/${downloading.total || '…'}`
+                : 'Download for offline'
+            }
+            loading={Boolean(downloading)}
+            onPress={startDownload}
+          />
+          <Text variant="dim" color="inkDim">
+            Save the whole drive to your phone — plays in Tahoe dead zones, no signal needed.
+          </Text>
+        </>
+      )}
+      {downloadError ? (
+        <Text variant="dim" color="danger">
+          {downloadError}
+        </Text>
+      ) : null}
+
       {/* Lower-commitment taste: one tap to hear the skipper before the whole drive. */}
       <Button
         variant="secondary"
@@ -226,6 +291,7 @@ const styles = StyleSheet.create({
   body: { gap: space.md },
   head: { gap: space.sm },
   metaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space.sm },
+  offlineRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   sectionLabel: { marginTop: space.sm },
   stopHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   stopMeta: {

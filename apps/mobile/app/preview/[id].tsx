@@ -10,9 +10,10 @@ import {
 } from 'react-native'
 import { Stack, useLocalSearchParams } from 'expo-router'
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
-import { ApiError, getTour, signTourAudio, type SignedAudio } from '@/lib/api'
+import { ApiError } from '@/lib/api'
+import { loadPlayback, resignPlayback } from '@/lib/offline'
 import { stopLabel } from '@/lib/labels'
-import { buildPreviewTimeline, INTRO_SEQ, OUTRO_SEQ, type PreviewSegment } from '@skipper/drive-core'
+import { buildPreviewTimeline, type PreviewSegment } from '@skipper/drive-core'
 import { useDriveMusic } from '@/lib/driveMusic'
 import { useTheme } from '@/theme'
 import { space } from '@/theme/tokens'
@@ -72,15 +73,6 @@ function segmentTitle(
   return (seg ? stops.find((s) => s.seq === seg.seq)?.name : undefined) ?? hostName
 }
 
-// Presigned URL map keyed by stop seq + the bracket sentinels — rebuilt on every (re)sign
-// so a re-sign never drops the intro/outro URLs.
-function urlMapFromSigned(signed: SignedAudio): Map<number, string> {
-  const m = new Map<number, string>(signed.stops.map((u) => [u.seq, u.url]))
-  if (signed.intro) m.set(INTRO_SEQ, signed.intro.url)
-  if (signed.outro) m.set(OUTRO_SEQ, signed.outro.url)
-  return m
-}
-
 export default function PreviewScreen() {
   const theme = useTheme()
   const { id } = useLocalSearchParams<{ id: string }>()
@@ -123,12 +115,10 @@ export default function PreviewScreen() {
           shouldPlayInBackground: true,
           interruptionMode: 'doNotMix',
         }).catch(() => {})
-        // Load the route first (the timeline needs it), THEN sign the audio. Decoupled
-        // so a transient sign 503 surfaces its own retryable error instead of failing
-        // the whole preview as one opaque load (and so a stall can re-sign in isolation).
-        const tour = await getTour(id)
-        if (cancelled) return
-        const signed = await signTourAudio(id)
+        // OFFLINE-FIRST: a downloaded tour loads its detail + local file:// clips with zero
+        // network; otherwise this fetches + signs and streams. The clip machinery below is
+        // identical either way (player.replace plays a file:// uri like an https one).
+        const { detail: tour, urls } = await loadPlayback(id)
         if (cancelled) return
         const tl = buildPreviewTimeline(
           tour.stops.map((s) => ({
@@ -147,7 +137,7 @@ export default function PreviewScreen() {
           // intro/outro brackets bookend the timeline (played full length, not compressed).
           { minGapSec: 12, maxGapSec: 20, intro: tour.intro, outro: tour.outro },
         )
-        setUrls(urlMapFromSigned(signed))
+        setUrls(urls)
         setData({
           tourName: tour.tour.headline,
           region: tour.region.displayName,
@@ -192,10 +182,11 @@ export default function PreviewScreen() {
   const resign = useCallback(async (): Promise<void> => {
     if (!id) return
     try {
-      const signed = await signTourAudio(id)
+      const fresh = await resignPlayback(id)
+      if (!fresh) return // downloaded → local file:// uris never expire, nothing to re-sign
       if (sawFresh.current) return // clip started during the re-sign — leave it alone
       loadedSeq.current = null
-      setUrls(urlMapFromSigned(signed))
+      setUrls(fresh)
     } catch {
       // Re-sign failed (offline / 503) — the watchdog's second pass skips the stop.
     }

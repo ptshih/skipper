@@ -25,7 +25,8 @@ import {
   TriggerEngine,
   type GpsFix,
 } from '@skipper/drive-core'
-import { ApiError, getTour, signTourAudio, type SignedAudio } from './api'
+import { ApiError } from './api'
+import { loadPlayback, resignPlayback } from './offline'
 import { simulatedSource, type FixSubscription } from './gps'
 import { useDriveMusic } from './driveMusic'
 import { voice } from '@/ui'
@@ -37,15 +38,6 @@ const CLIP_STALL_MS = 12_000
 // Lock-screen / NOW-card title for a bracket clip (intro/outro aren't in the stop list).
 const bracketTitle = (kind: 'intro' | 'outro'): string =>
   kind === 'intro' ? 'Welcome aboard' : 'One for the road'
-
-// Presigned URL map keyed by stop seq + the bracket sentinels — rebuilt on every (re)sign
-// so a re-sign never drops the intro/outro URLs.
-function urlMapFromSigned(signed: SignedAudio): Map<number, string> {
-  const m = new Map<number, string>(signed.stops.map((u) => [u.seq, u.url]))
-  if (signed.intro) m.set(INTRO_SEQ, signed.intro.url)
-  if (signed.outro) m.set(OUTRO_SEQ, signed.outro.url)
-  return m
-}
 
 // Real drive speed for the simulator (mph). A FIXED 60 for now; the trigger lead is
 // speed-adaptive in @skipper/drive-core, so this is the only knob that matters here.
@@ -197,15 +189,16 @@ export function useDrive(tourId: string | undefined): UseDrive {
           shouldPlayInBackground: true,
           interruptionMode: DRIVE_INTERRUPTION_MODE,
         }).catch(() => {})
-        const tour = await getTour(tourId)
-        if (cancelled) return
-        const signed = await signTourAudio(tourId)
+        // OFFLINE-FIRST: a downloaded tour loads detail + local file:// clips with zero
+        // network; otherwise this fetches + signs and streams. The url map keys stops by
+        // seq and the brackets under INTRO_SEQ/OUTRO_SEQ, either way.
+        const { detail: tour, urls } = await loadPlayback(tourId)
         if (cancelled) return
         const polyline = tour.tour.polyline as [number, number][]
         if (polyline.length < 2) throw new Error('This tour has no drivable route.')
         const cum = cumulativeMeters(polyline)
-        bracketsRef.current = { intro: Boolean(signed.intro), outro: Boolean(signed.outro) }
-        setUrls(urlMapFromSigned(signed))
+        bracketsRef.current = { intro: urls.has(INTRO_SEQ), outro: urls.has(OUTRO_SEQ) }
+        setUrls(urls)
         setData({
           tourName: tour.tour.headline,
           region: tour.region.displayName,
@@ -233,14 +226,15 @@ export function useDrive(tourId: string | undefined): UseDrive {
     }
   }, [tourId, reloadKey])
 
-  // ---- re-sign expired presigned URLs (same as the preview) ----
+  // ---- re-sign expired presigned URLs (online stall only; downloaded files never expire) ----
   const resign = useCallback(async (): Promise<boolean> => {
     if (!tourId) return false
     try {
-      const signed = await signTourAudio(tourId)
+      const fresh = await resignPlayback(tourId)
+      if (!fresh) return true // downloaded → local file:// uris never expire; nothing to re-sign
       if (sawFresh.current) return true // clip started during the re-sign — leave it alone
       loadedSeq.current = null
-      setUrls(urlMapFromSigned(signed))
+      setUrls(fresh)
       return true
     } catch {
       return false // offline / 503 — the caller skips the stop so the drive never hangs

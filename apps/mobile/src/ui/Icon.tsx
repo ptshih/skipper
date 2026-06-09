@@ -37,6 +37,8 @@ export type IconName =
   | 'region'
   | 'close'
   | 'nearMe'
+  | 'download'
+  | 'downloaded'
 
 const IONICON: Record<IconName, ComponentProps<typeof Ionicons>['name']> = {
   // stop types
@@ -71,6 +73,8 @@ const IONICON: Record<IconName, ComponentProps<typeof Ionicons>['name']> = {
   region: 'location-outline', // a region/destination row + the location chip glyph
   close: 'close', // dismiss a modal sheet
   nearMe: 'navigate', // reserved: the deferred "Drives near you" GPS shortcut (v2)
+  download: 'download-outline', // grab a tour for offline play (Tahoe dead zones)
+  downloaded: 'cloud-done-outline', // a tour that's saved to disk + plays with no signal
 }
 
 export interface IconProps {
