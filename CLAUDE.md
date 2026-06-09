@@ -223,6 +223,35 @@ bet being proven first.
   - **Sequencing:** post-MVP, gated behind the proven phone player; pairs with the
     Stripe/IAP work.
 
+- **"This tour is sponsored by…" — an AI-voiced sponsor read in the intro.** The
+  podcast/YouTube host-read ad, in the skipper's voice: a short, in-character sponsor
+  spot baked into the **intro bracket** (the `tour_brackets` drive-frame, where the
+  skipper introduces the drive — see [[bracket-architecture-decision]]), never mid-stop.
+  The charm bet is that a corny tour guide doing a corny sponsor read is *part of the
+  bit*, not an interruption — same instinct as the tip jar (a corny guide works for
+  tips; a corny guide can also do a wink-wink ad read). What it stresses:
+  - **Ads are EXTRACTION; the tip jar is DELIGHT — opposite ends of the toy-lens.** The
+    whole project optimizes for charm over scale ("the persona is the product"), so this
+    is the riskiest monetization idea here: an ad that reads as a toll poisons the charm.
+    It only works if it stays warm, short, in-persona, skippable, and front-loaded into
+    the intro (never gating or interrupting the drive). If it can't be charming, don't ship it.
+  - **Sponsor copy is DELIVERY, never FACTS.** The skipper voices the read in-character,
+    but the sponsor's claims are NOT grounded narration — they must never leak into or
+    contaminate the fact-grounded story stops. Keep the ad isolated to the bracket; the
+    "persona lives in DELIVERY, never in FACTS" wall applies (a sponsor read is pure delivery).
+  - **A new generation input + a per-tour bracket variant.** Like persona/joke-level, a
+    sponsor is a per-tour generation parameter (an intro-bracket overlay), not a cache key
+    — narration is tour-owned, so a sponsored intro is just a different bracket generation.
+    Needs sponsor name + a short brief the skipper riffs on (in the persona's idiom), then
+    re-synth that one bracket clip (cf. `patch-clip`).
+  - **Voice continuity + the same TTS path.** Reuses the existing Algenib voice and the
+    batch LINEAR16→MP3 synthesis — the ad is one more bracket clip, so the skipper sounds
+    continuous from sponsor read into the drive.
+  - **Sequencing:** post-MVP, needs the intro-bracket infra built first
+    ([[bracket-architecture-decision]]) AND a real sponsor; pairs with — but is distinct
+    from — the tip-jar/billing work. Lowest-priority of the monetization ideas precisely
+    because it's the one most in tension with the toy-lens; explore only if the charm read works.
+
 - **Region-specific skipper identities — a different host per region.** The Tahoe skipper
   is not the Yosemite skipper: each region gets a named guide with its own persona,
   backstory, and (optionally) voice — variations on the deadpan pun-machine DNA, not a
