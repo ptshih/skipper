@@ -1,5 +1,5 @@
 CREATE TYPE "public"."bracket_kind" AS ENUM('intro', 'outro');--> statement-breakpoint
-CREATE TYPE "public"."poi_source" AS ENUM('wikipedia', 'google_places');--> statement-breakpoint
+CREATE TYPE "public"."poi_source" AS ENUM('wikipedia', 'google_places', 'wikidata');--> statement-breakpoint
 CREATE TYPE "public"."stop_type" AS ENUM('story', 'scenic', 'break');--> statement-breakpoint
 CREATE TYPE "public"."tour_status" AS ENUM('draft', 'generating', 'ready', 'failed');--> statement-breakpoint
 CREATE TABLE "pois" (

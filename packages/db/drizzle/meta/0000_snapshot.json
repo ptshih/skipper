@@ -1,5 +1,5 @@
 {
-  "id": "9efab2f2-230c-432f-b6fb-de23a06c85d4",
+  "id": "4b92c849-b891-492a-b89f-8b881a46f220",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -1177,7 +1177,8 @@
       "schema": "public",
       "values": [
         "wikipedia",
-        "google_places"
+        "google_places",
+        "wikidata"
       ]
     },
     "public.stop_type": {
