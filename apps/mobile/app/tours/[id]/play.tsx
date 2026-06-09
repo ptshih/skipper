@@ -366,7 +366,7 @@ export default function DriveScreen() {
 const styles = StyleSheet.create({
   header: { paddingHorizontal: space.gutter, paddingTop: space.md, gap: space.xs },
   track: { marginHorizontal: space.gutter, marginTop: space.md },
-  nowWrap: { paddingHorizontal: space.gutter, marginTop: space.md, gap: space.md },
+  nowWrap: { paddingHorizontal: space.gutter, marginTop: space.sm, gap: space.sm },
   // Reserve a clip-card's height (centered) so the controls below — and the stop list —
   // hold a stable position as the now-content swaps between the active and rolling
   // NowCards; the scrubber's height is reserved separately (it stays mounted).
@@ -386,7 +386,7 @@ const styles = StyleSheet.create({
   hint: { paddingHorizontal: space.gutter, paddingTop: space.md, paddingBottom: space.sm }, // preview only
   simRow: { paddingHorizontal: space.gutter, marginTop: space.lg, gap: space.sm },
   simBtns: { flexDirection: 'row', gap: space.sm },
-  divider: { marginTop: space.md, marginBottom: space.sm }, // fence between the list and the player dock
+  divider: { marginTop: space.sm, marginBottom: space.sm }, // fence between the list and the player dock
   list: { flex: 1 },
   listContent: { paddingHorizontal: space.gutter, paddingTop: space.sm, paddingBottom: space.sm },
 })

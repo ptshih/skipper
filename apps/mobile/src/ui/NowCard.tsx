@@ -7,14 +7,16 @@ import { IN_CAR_MAX_FONT_SCALE, border, radius, space } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'
 import { Text } from './Text'
 
-/** Reserved height (pt) for the player's NOW-content slot. Sized to a two-line NowCard
- *  (the tallest in-drive now-content) so the transport controls + stop list below hold a
- *  stable position as the content swaps between the active card and the non-glowing
- *  rolling/rest variants (also NowCards). The scrubber's height is reserved separately
- *  (it stays mounted, just hidden, between stops).
- *  Stays valid under Dynamic Type because the title/timer below cap at
- *  IN_CAR_MAX_FONT_SCALE — a capped two-line title still fits this reserve. */
-export const NOW_AREA_RESERVE = 136
+/** Reserved height (pt) for the player's NOW-content slot. Sized SNUG to a two-line NowCard
+ *  (md padding + a label row + a 2-line placard title + the keyline ≈ 105pt) so the transport
+ *  controls below stay put as the content swaps between the active card and the rolling/rest
+ *  variants. Deliberately NOT padded out to the tallest case: a one-line bracket card
+ *  ("Welcome aboard") now sits with only ~9pt of centering air per side instead of floating.
+ *  A rare two-line stop name grows the slot a hair (the controls nudge down ~a line) — a fair
+ *  trade for not surrounding every card in dead space. The scrubber's height is reserved
+ *  separately (it stays mounted, just hidden, between stops). Title/timer cap at
+ *  IN_CAR_MAX_FONT_SCALE under Dynamic Type. */
+export const NOW_AREA_RESERVE = 96
 
 export interface NowCardProps {
   kicker: string // e.g. "NOW PLAYING · STORY"
@@ -71,7 +73,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     borderWidth: border.keyline,
     paddingHorizontal: space.lg,
-    paddingVertical: space.lg,
+    paddingVertical: space.md, // was lg — trimmed so the card hugs its content, not floats in it
     gap: space.sm,
   },
   head: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
