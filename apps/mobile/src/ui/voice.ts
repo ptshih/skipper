@@ -39,7 +39,13 @@ export const voice = {
     ready: 'READY TO ROLL', // pre-drive placard kicker
     readyBody: 'Mount up and start when you’re on the road. I’ll pipe up when we reach the good stuff.',
     sim: 'SIMULATED DRIVE', // the on-device sim setup — no real GPS yet
+    live: 'LIVE DRIVE', // real device GPS (Phase 4)
     nextStop: 'next stop', // "ROLLING · next stop: <name>"
+    // Location-permission gate (live drive only): two states — can re-ask vs. must visit Settings.
+    locationNeeded: 'I steer by your GPS — switch on location and I’ll call out each stop as we reach it.',
+    locationBlocked: 'Location’s switched off for me. Flip it on in Settings and we’ll hit the road.',
+    locationAllow: 'Switch on location',
+    locationSettings: 'Open Settings',
   },
   player: {
     buffering: 'Warming up the skipper…',

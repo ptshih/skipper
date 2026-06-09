@@ -42,7 +42,7 @@ permission. See §2.
 | **0** | Audio-session spike: duck music **and** keep lock-screen Now Playing | ❌ not started — riskiest unknown; needs a dev build |
 | **2** | GPS-driven player core, fed by the **simulated** fix source | ✅ **Done** — `src/lib/useDrive.ts` + `app/drive/[id].tsx` + `src/lib/gps.ts`; intro/outro bracket playback added (`ecc78a0`) |
 | **3** | Offline download (clips → disk) | ✅ **Done** — `src/lib/offline.ts`: download to `Paths.document` + offline-first players (`03a52c6`). On-device airplane-mode acceptance pending a dev build |
-| **4** | Real `expo-location` fix source | ❌ not started |
+| **4** | Real `expo-location` fix source | 🔨 **Code built** — `liveSource` + permission gate + `mode:'sim'\|'live'` seam (`?mode=live` route param) + `useKeepAwake`; `bun run check` + `expo export` green. **On-device acceptance (bike test, teardown verify, duck flip) PENDING a dev build.** |
 | **5** | Drive it once for real | ❌ not started |
 
 Everything ships through the **phone** (mount / Bluetooth). CarPlay is deferred past the MVP
@@ -138,7 +138,9 @@ const fix: GpsFix = {
   speedMps: sane(loc.coords.speed),       // -1/null when stationary → 0 (heading gate then skips, fail-open)
   headingDeg: sane(loc.coords.heading),   // -1/null below ~5 mph; derive from consecutive fixes if you need it
   tSec: (loc.timestamp - startMs) / 1000, // loc.timestamp = ms since epoch; startMs captured at the FIRST fix
-  alongM: 0,
+  alongM: nearestOnRoute(polyline, cumulative, [loc.coords.longitude, loc.coords.latitude]).alongM,
+  // ^ a live fix has NO intrinsic along-route distance — project it onto the route so the route dot
+  //   tracks the real position (the engine ignores alongM; it's UI-only — but the dot needs it for live).
 }
 // Real GPS settles slowly: the first fixes can carry accuracy 1000 m+, and a wild fix landing near a stop
 // will false-fire it. Gate on horizontal accuracy BEFORE feeding the engine (MAX_FIX_ACCURACY_M ≈ 50–100 m):
@@ -329,7 +331,9 @@ EAS dev build; phone mounted on power; drive `emerald-bay-run` offline; tune `le
 ## 8. Expo SDK 56 API reference (verified against docs — cite these, don't assume)
 
 Pins (`apps/mobile/package.json`): `expo ~56.0.9`, `react-native 0.85.3`, `expo-audio ~56.0.11`,
-`newArchEnabled: true`. **Need to add: `expo-location`, `expo-keep-awake`, and declare `expo-file-system`.**
+`newArchEnabled: true`. **Added for Phase 4 (`bunx expo install`): `expo-location ~56.0.16`,
+`expo-keep-awake ~56.0.3`** (+ the `expo-location` config plugin in `app.json` with
+`locationWhenInUsePermission`, both background keys `false`). `expo-file-system ~56.0.7` already declared.
 
 - **expo-location** (re-verified 2026-06-09) — `watchPositionAsync(options, callback, errorHandler?) →
   Promise<LocationSubscription>` (await it, THEN `.remove()` to stop). **Foreground only.** `LocationOptions`:
@@ -392,6 +396,10 @@ against live SDK 56 docs + issue tracker and corrected the §3.3 adapter (iOS `-
 the §3.4 source signature (the shipped `FixSubscription` + the hardwired-`simulatedSource` seam gap), the §5
 teardown landmine (both platforms, not Android-only), §7 Phase 4 (permission gate, source-swap, walk-vs-bike
 cone caveat), and the §8 location reference. Sources: expo/expo#5401 (iOS speed=-1), #35925/#35926 (teardown).
+**Phase 4 code built 2026-06-09:** `expo install expo-location@56.0.16 expo-keep-awake@56.0.3` + `app.json`
+plugin; `liveSource` + `ensureDrivePermission` (`gps.ts`); `mode:'sim'|'live'` seam + permission gate +
+`useKeepAwake` (`useDrive.ts`); `?mode=live` route param + location gate (`drive/[id].tsx`); voice copy.
+`bun run check` (41 tests) + `expo export` green. NOT device-verified — bike test / teardown / duck flip pending.
 Related memory: `drive-simulator-and-triggering`, `preview-try-without-driving`,
 `mobile-workspace-isolated-linker`, `carplay-deferred-phone-first-mvp`. Sibling spec (different feature):
 `docs/ask-the-skipper-spec.md`.

@@ -12,7 +12,8 @@
 // WAITS for the next GPS trigger — it never advances by a clip ending. See
 // docs/gps-player-spec.md §3.5.
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Animated } from 'react-native'
+import { Animated, Linking } from 'react-native'
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake'
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
 import {
   bracketKindForSeq,
@@ -27,7 +28,7 @@ import {
 } from '@skipper/drive-core'
 import { ApiError } from './api'
 import { loadPlayback, resignPlayback } from './offline'
-import { simulatedSource, type FixSubscription } from './gps'
+import { ensureDrivePermission, liveSource, simulatedSource, type FixSubscription } from './gps'
 import { useDriveMusic } from './driveMusic'
 import { voice } from '@/ui'
 
@@ -46,12 +47,17 @@ const SIM_MPH = 60
 // a couple minutes on the couch (the fix DATA — speeds, headings — is unchanged).
 const SIM_FAST_SCALE = 8
 
-// The audio interruption mode for the drive. KEPT as 'doNotMix' (not 'duckOthers') for
-// Phase 2: 'doNotMix' is what's PROVEN to keep lock-screen Now Playing working, and the
-// Phase-2 accept criteria require lock-screen on the simulator. Phase 0 (the audio spike,
-// needs a dev build) flips this to 'duckOthers' once duck + lock-screen coexistence is
-// verified on a device — that's the one line to change. See spec §3.5 / §7.
+// The audio interruption mode for the drive. KEPT as 'doNotMix' (the proven-safe default that
+// keeps lock-screen Now Playing working on the simulator). Phase 0 — the audio-duck spike —
+// flips this ONE line to 'duckOthers' and verifies on a device that ducking the rider's music
+// and lock-screen Now Playing coexist (the spec's riskiest assumption). Since Phase 4 forces a
+// dev build anyway, do the flip + Spotify test in that same session. The flip is JS-only
+// (hot-reloadable, no native rebuild). See spec §3.5 / §7 (Phase 0).
 const DRIVE_INTERRUPTION_MODE = 'doNotMix' as const
+
+// Keep-awake lock tag — the foreground GPS watch dies on screen-lock, so hold the screen on
+// while actively driving (scoped to `driving`, not the whole screen). (spec §5)
+const KEEP_AWAKE_TAG = 'skipper-drive'
 
 interface DriveStop {
   seq: number
@@ -74,7 +80,14 @@ interface DriveData {
   stops: DriveStop[]
 }
 
-export type DrivePhase = 'loading' | 'error' | 'gate' | 'ready' | 'driving' | 'done'
+export type DrivePhase =
+  | 'loading'
+  | 'error'
+  | 'gate'
+  | 'locationGate'
+  | 'ready'
+  | 'driving'
+  | 'done'
 
 export interface DriveStopView {
   seq: number
@@ -124,6 +137,12 @@ export interface UseDrive {
   fast: boolean
   setFast: (fast: boolean) => void
 
+  // Location permission (live mode only; null/true in sim mode).
+  /** When a live drive is blocked on a denied permission: can the OS still prompt? (false → Settings). */
+  locationCanAskAgain: boolean
+  /** Deep-link to the app's system Settings (for `canAskAgain === false`). */
+  openLocationSettings: () => void
+
   // Lifecycle.
   start: () => void
   togglePause: () => void
@@ -131,7 +150,13 @@ export interface UseDrive {
   restart: () => void
 }
 
-export function useDrive(tourId: string | undefined): UseDrive {
+export interface UseDriveOptions {
+  /** 'sim' = the on-device drive simulator (default, couch-testable); 'live' = real device GPS (Phase 4). */
+  mode?: 'sim' | 'live'
+}
+
+export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {}): UseDrive {
+  const mode = opts.mode ?? 'sim'
   const [data, setData] = useState<DriveData | null>(null)
   const [urls, setUrls] = useState<Map<number, string>>(new Map())
   const [error, setError] = useState<string | null>(null)
@@ -145,6 +170,9 @@ export function useDrive(tourId: string | undefined): UseDrive {
   const [firedSeqs, setFiredSeqs] = useState<Set<number>>(new Set())
   const [stallNote, setStallNote] = useState<string | null>(null)
   const [fast, setFast] = useState(false)
+  // Set when a live drive is blocked on a denied location permission (carries whether the OS
+  // will still prompt). null = no block (always so in sim mode). Drives the 'locationGate' phase.
+  const [locationDenied, setLocationDenied] = useState<{ canAskAgain: boolean } | null>(null)
 
   const player = useAudioPlayer()
   const status = useAudioPlayerStatus(player)
@@ -335,10 +363,13 @@ export function useDrive(tourId: string | undefined): UseDrive {
     setPaused(false)
     setDone(false)
     setDriving(false)
+    setLocationDenied(null)
   }, [player, dot, teardownSource])
 
-  // ---- start the drive: fresh engine (TriggerEngine has no reset) + subscribe the source ----
-  const start = useCallback(() => {
+  // ---- begin the drive: fresh engine (TriggerEngine has no reset) + subscribe the source ----
+  // The source is the one seam between the simulator and the real drive: a `simulatedSource`
+  // (couch-testable) or the `liveSource` (real device GPS), interchangeable behind GpsFixSource.
+  const beginDrive = useCallback(() => {
     if (!data) return
     resetForReady()
     // Re-snap RAW POI coords to the route (the API ships raw coords, not trigger points),
@@ -363,12 +394,30 @@ export function useDrive(tourId: string | undefined): UseDrive {
       queue.current.push(INTRO_SEQ)
       pump()
     }
-    const source = simulatedSource(data.polyline, {
-      mph: SIM_MPH,
-      timeScale: fast ? SIM_FAST_SCALE : 1,
-    })
+    const source =
+      mode === 'live'
+        ? liveSource(data.polyline)
+        : simulatedSource(data.polyline, { mph: SIM_MPH, timeScale: fast ? SIM_FAST_SCALE : 1 })
     subRef.current = source(handleFix, handleEnd)
-  }, [data, fast, resetForReady, handleFix, handleEnd, pump])
+  }, [data, mode, fast, resetForReady, handleFix, handleEnd, pump])
+
+  // ---- start: in live mode, gate on location permission first; sim starts immediately ----
+  const start = useCallback(() => {
+    if (!data) return
+    if (mode !== 'live') {
+      beginDrive()
+      return
+    }
+    void (async () => {
+      setLocationDenied(null)
+      const perm = await ensureDrivePermission()
+      if (!perm.granted) {
+        setLocationDenied({ canAskAgain: perm.canAskAgain })
+        return
+      }
+      beginDrive()
+    })()
+  }, [data, mode, beginDrive])
 
   const togglePause = useCallback(() => {
     setPaused((p) => {
@@ -511,6 +560,17 @@ export function useDrive(tourId: string | undefined): UseDrive {
     segmentKind: activeSeq !== null ? 'clip' : 'drive',
   })
 
+  // ---- hold the screen awake while actively driving (foreground GPS dies on screen-lock) ----
+  // Scoped to `driving` so the pre-drive 'ready' and post-drive 'done' screens don't hold the
+  // lock. expo-keep-awake needs no config plugin. (spec §5)
+  useEffect(() => {
+    if (!driving) return
+    void activateKeepAwakeAsync(KEEP_AWAKE_TAG)
+    return () => {
+      void deactivateKeepAwake(KEEP_AWAKE_TAG)
+    }
+  }, [driving])
+
   // ---- unmount: stop the drive cleanly (back-swipe / nav away) ----
   useEffect(() => {
     return () => {
@@ -532,11 +592,13 @@ export function useDrive(tourId: string | undefined): UseDrive {
       ? 'error'
       : !data
         ? 'loading'
-        : done
-          ? 'done'
-          : driving
-            ? 'driving'
-            : 'ready'
+        : locationDenied
+          ? 'locationGate'
+          : done
+            ? 'done'
+            : driving
+              ? 'driving'
+              : 'ready'
 
   const clipLoaded = activeSeq !== null
   const buffering = clipLoaded && !paused && (!status.isLoaded || !!status.isBuffering)
@@ -603,6 +665,10 @@ export function useDrive(tourId: string | undefined): UseDrive {
     setScrubbing,
     fast,
     setFast,
+    locationCanAskAgain: locationDenied?.canAskAgain ?? true,
+    openLocationSettings: () => {
+      void Linking.openSettings()
+    },
     start,
     togglePause,
     end,

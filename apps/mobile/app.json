@@ -26,7 +26,15 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
-      "expo-audio"
+      "expo-audio",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Skipper uses your location to play each stop as you reach it on the drive.",
+          "isIosBackgroundLocationEnabled": false,
+          "isAndroidBackgroundLocationEnabled": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

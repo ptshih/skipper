@@ -1,7 +1,8 @@
-// The live, GPS-triggered driving player (Phase 2: driven by the SIMULATED fix
-// source — couch-testable on the iOS Simulator, no device GPS). The skipper talks
-// when the road reaches a stop, not on a timer. Reuses the @/ui player primitives;
-// the clock + fire-queue live in `useDrive`.
+// The live, GPS-triggered driving player. The skipper talks when the road reaches a
+// stop, not on a timer. Two interchangeable fix sources behind one code path (the
+// `?mode=` param): the couch SIMULATOR (default — testable on the iOS Simulator, no
+// device GPS) and the real device GPS (`?mode=live`, Phase 4). Reuses the @/ui player
+// primitives; the clock + fire-queue + source swap live in `useDrive`.
 import { useEffect, useRef } from 'react'
 import { ActivityIndicator, PixelRatio, ScrollView, StyleSheet, View } from 'react-native'
 import { Stack, useLocalSearchParams } from 'expo-router'
@@ -32,8 +33,10 @@ import {
 
 export default function DriveScreen() {
   const theme = useTheme()
-  const { id } = useLocalSearchParams<{ id: string }>()
-  const d = useDrive(id)
+  const { id, mode } = useLocalSearchParams<{ id: string; mode?: string }>()
+  // 'live' = real device GPS (Phase 4); anything else = the couch simulator (default).
+  const driveMode = mode === 'live' ? 'live' : 'sim'
+  const d = useDrive(id, { mode: driveMode })
   const listRef = useRef<ScrollView | null>(null)
 
   // Auto-scroll the stop list to the active (or next) stop as the drive progresses.
@@ -50,6 +53,19 @@ export default function DriveScreen() {
 
   if (d.phase === 'gate')
     return <AccountGate note="The live drive needs a (free) ticket — same as the full tour." />
+  if (d.phase === 'locationGate')
+    return (
+      <StateView
+        title="Drive"
+        message={d.locationCanAskAgain ? voice.drive.locationNeeded : voice.drive.locationBlocked}
+        tone="danger"
+        action={
+          d.locationCanAskAgain
+            ? { label: voice.drive.locationAllow, onPress: d.start }
+            : { label: voice.drive.locationSettings, onPress: d.openLocationSettings }
+        }
+      />
+    )
   if (d.phase === 'error')
     return (
       <StateView
@@ -83,7 +99,8 @@ export default function DriveScreen() {
           {d.tourName}
         </Text>
         <Text variant="dim" color="inkDim">
-          {d.region} · simulated drive · {d.firedCount}/{d.totalStops} stops
+          {d.region} · {driveMode === 'live' ? 'live drive' : 'simulated drive'} ·{' '}
+          {d.firedCount}/{d.totalStops} stops
         </Text>
       </View>
 
@@ -177,8 +194,9 @@ export default function DriveScreen() {
         ) : null}
       </View>
 
-      {/* Sim setup — pre-drive only (the on-device drive simulator's one knob). */}
-      {d.phase === 'ready' ? (
+      {/* Sim setup — pre-drive only, SIM mode only (the on-device drive simulator's one knob;
+          a live drive runs at real GPS speed, so the time-scale toggle is meaningless). */}
+      {driveMode === 'sim' && d.phase === 'ready' ? (
         <View style={styles.simRow}>
           <Text variant="label" color="inkFaint">
             {voice.drive.sim}

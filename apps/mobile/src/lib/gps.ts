@@ -6,7 +6,14 @@
 // Phase 4 adds a `liveSource()` (expo-location `watchPositionAsync` → GpsFix) that
 // implements the SAME `GpsFixSource` shape; the driving hook swaps which one it
 // subscribes and nothing else changes. See docs/gps-player-spec.md §3.4 / §7.
-import { generateDrive, type GpsFix, type LngLat } from '@skipper/drive-core'
+import * as Location from 'expo-location'
+import {
+  cumulativeMeters,
+  generateDrive,
+  nearestOnRoute,
+  type GpsFix,
+  type LngLat,
+} from '@skipper/drive-core'
 
 /**
  * A controller for an active fix stream. `stop()` ends it for good; `pause()`/`resume()`
@@ -99,6 +106,96 @@ export function simulatedSource(polyline: LngLat[], opts: SimSourceOptions = {})
   }
 }
 
-// Phase 4: liveSource() — wraps expo-location watchPositionAsync into this same
-// GpsFixSource shape (LocationObject → GpsFix per spec §3.3). Not built for Phase 2:
-// the simulated source proves the entire bet minus real positioning, on the simulator.
+// Drop a fix whose horizontal accuracy is worse than this (m). A just-acquired GPS fix can
+// carry 1000 m+ accuracy, and a wild fix landing near a stop would false-fire it. Driving fixes
+// are normally well under 10 m, so this only rejects the unsettled ones. (spec §3.3)
+const MAX_FIX_ACCURACY_M = 50
+
+// iOS (CLLocation) returns -1, NOT null, for invalid speed/heading (expo/expo#5401, sim AND
+// device). The type says `number | null` but the runtime yields -1 — so `?? 0` is not enough.
+const sane = (v: number | null | undefined): number => (v != null && v >= 0 ? v : 0)
+
+/**
+ * Request foreground (When-In-Use) location permission — the live drive needs it before the
+ * watch can start. The caller surfaces the denied / open-Settings UX (`canAskAgain === false`
+ * means the OS won't prompt again; deep-link to Settings instead). (spec §7 Phase 4)
+ */
+export async function ensureDrivePermission(): Promise<{ granted: boolean; canAskAgain: boolean }> {
+  const res = await Location.requestForegroundPermissionsAsync()
+  return { granted: res.granted, canAskAgain: res.canAskAgain }
+}
+
+/**
+ * The live `GpsFixSource`: wraps expo-location `watchPositionAsync` into the SAME
+ * `FixSubscription` the simulated source returns, so the driving hook swaps one for the other
+ * and nothing else changes. Maps each `LocationObject → GpsFix` (spec §3.3): sanitizes the iOS
+ * -1, gates on accuracy, projects the fix onto `polyline` so the route dot's `alongM` tracks the
+ * real position (a live fix has no intrinsic along-route distance), and derives `tSec` from the
+ * first fix's timestamp.
+ *
+ * ASSUMES foreground permission is already granted — call `ensureDrivePermission()` first.
+ *
+ * ⚠️ `watchPositionAsync`'s `.remove()` can fail to stop updates (expo/expo #35925/#35926, both
+ * platforms). A `stopped` guard drops any fix arriving after `stop()`, so a leaked native watch
+ * is harmless to the engine + UI — but it still drains battery, so verify GPS actually stops on
+ * unmount during the on-device test. (spec §5)
+ */
+export function liveSource(polyline: LngLat[]): GpsFixSource {
+  const cumulative = cumulativeMeters(polyline)
+  return (onFix) => {
+    let sub: Location.LocationSubscription | null = null
+    let stopped = false
+    let paused = false
+    let startMs: number | null = null
+
+    const onLocation = (loc: Location.LocationObject) => {
+      if (stopped || paused) return // teardown-leak guard (#35925/#35926) + pause guard
+      const acc = loc.coords.accuracy
+      if (acc != null && acc > MAX_FIX_ACCURACY_M) return // unsettled fix — don't risk a false fire
+      if (startMs === null) startMs = loc.timestamp
+      const pos = nearestOnRoute(polyline, cumulative, [loc.coords.longitude, loc.coords.latitude])
+      onFix({
+        lat: loc.coords.latitude,
+        lng: loc.coords.longitude,
+        speedMps: sane(loc.coords.speed),
+        headingDeg: sane(loc.coords.heading),
+        tSec: (loc.timestamp - startMs) / 1000, // loc.timestamp = ms since epoch
+        alongM: pos.alongM, // projected onto the route so the dot follows the real position
+      })
+    }
+
+    const startWatch = () => {
+      void Location.watchPositionAsync(
+        { accuracy: Location.Accuracy.BestForNavigation, distanceInterval: 0, timeInterval: 500 },
+        onLocation,
+      ).then((s) => {
+        // If stop()/pause() landed while the watch was being acquired, don't keep it.
+        if (stopped || paused) {
+          s.remove()
+          return
+        }
+        sub = s
+      })
+    }
+
+    startWatch()
+
+    return {
+      stop: () => {
+        stopped = true
+        sub?.remove()
+        sub = null
+      },
+      pause: () => {
+        paused = true
+        sub?.remove() // free the GPS while held (battery); re-acquired on resume
+        sub = null
+      },
+      resume: () => {
+        if (stopped || !paused) return
+        paused = false
+        startWatch()
+      },
+    }
+  }
+}
