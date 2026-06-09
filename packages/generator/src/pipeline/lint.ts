@@ -54,7 +54,7 @@ export interface LintFinding {
 const KIT = [/mechanic/i, /\bRay\b/, /\btruck\b/i, /\bcoffee\b/i]
 const kitInText = (t: string): boolean => KIT.some((re) => re.test(t))
 const DROP_KIT =
-  'Do NOT mention the personal kit (cousin Ray, the mechanic, the truck, or coffee) anywhere in this stop — close on the place itself.'
+  'Do NOT mention the personal kit (cousin Ray, the mechanic, the truck, or coffee) anywhere in this stop — the kit lives in the intro now; close on the place itself.'
 
 // HARD-BANNED reveal wind-ups and AI/brochure tics — the persona prompt forbids
 // these outright ("just say the surprising thing plainly"), so flag on the FIRST
@@ -159,26 +159,15 @@ export function lintScripts(stops: LintInput[]): LintFinding[] {
     }
   }
 
-  // 1. Personal-kit budget — at most floor(n/3) stops may touch the kit, and at
-  //    most ONE may close on it. Flag the worst offenders (closers first, then the
-  //    latest stops) to drop the kit.
-  const kitStops = stops.filter((s) => kitInText(s.script))
-  const kitCloserStops = stops.filter((s) => kitInText(lastSentence(s.script)))
-  const kitBudget = Math.max(1, Math.floor(n / 3))
-  const kitFlagged = new Set<number>()
-  const flagKit = (seq: number, reason: string): void => {
-    if (kitFlagged.has(seq)) return
-    kitFlagged.add(seq)
-    flag(seq, reason, DROP_KIT)
-  }
-  // (a) every kit-closer beyond the first
-  for (const s of kitCloserStops.slice(1)) flagKit(s.seq, 'closes on the personal kit (max one closer-on-kit per tour)')
-  // (b) total kit-touching stops beyond budget → flag the latest until within budget
-  const overBy = kitStops.length - kitFlagged.size - kitBudget
-  if (overBy > 0) {
-    const remaining = kitStops.filter((s) => !kitFlagged.has(s.seq)).sort((a, b) => b.seq - a.seq)
-    for (const s of remaining.slice(0, overBy)) {
-      flagKit(s.seq, `personal kit used in ${kitStops.length}/${n} stops (budget ${kitBudget})`)
+  // 1. Personal kit is BANNED from stops — it lives in the INTRO bracket now (the kit's
+  //    only home), so the per-stop budget INVERTS to zero: flag ANY stop that touches
+  //    Ray / the mechanic / the truck / coffee. (Oblique refs — "before my first cup",
+  //    "balance a checkbook" — slip this regex and are caught by ear, not here.) The
+  //    intro/outro brackets are never passed to this lint (Option B — they are not
+  //    tour_stops), so the kit is free there.
+  for (const s of stops) {
+    if (kitInText(s.script)) {
+      flag(s.seq, 'mentions the personal kit (banned from stops — the kit lives in the intro now)', DROP_KIT)
     }
   }
 

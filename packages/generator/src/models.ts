@@ -104,17 +104,15 @@ export const SKIPPER_VOICE_ID: GeminiVoice = GEMINI_VOICES.algenib
 // already live in the script; this only sets HOW it is read, never WHAT is said —
 // so it can't loosen grounding. (Persona-in-delivery, not in facts.)
 //
-// FOUNDER-BLESSED canonical delivery (2026-06-07): this low-and-slow / dry / deadpan,
-// "committed-to-the-bit" read on the Algenib voice is the approved one — judged by ear
-// across the production-vs-Frank-Wolff A/B audition. The prompt is unchanged, but the
-// canonical preview (tour 9813e519) was RE-SYNTHESIZED 2026-06-08 on the new model +
-// codec (gemini-3.1-flash-tts-preview + 32k MP3, both ear-approved) — so "blessed" now
-// means this prompt on that model/codec. Treat it as locked: do NOT re-tune the wording
-// without a fresh ear test, and a non-trivial change means re-synthesizing the canonical
-// clips (bun packages/generator/src/resynth-tour.ts --preview) so the live preview keeps
-// matching what's blessed here.
+// WARMER delivery (Phase 1, 2026-06-08): replaces the prior low-and-slow / dry read —
+// founder-picked over "tightened" / "drier" / "bigger-beat" (docs/tour-structure-handoff
+// Appendix A). Keeps the deadpan, committed-to-the-bit jokes but at a natural, easy talking
+// pace (relaxed, never dragging), saving the slow-down for the puns with a confiding warmth.
+// ⚠ NOT yet on the live canonical preview: this only affects NEW synthesis. Taking effect
+// means re-synthesizing the canonical clips at Phase 6 (resynth-tour.ts --preview) and the
+// founder re-validating by ear. Do NOT re-tune the wording without a fresh ear test.
 export const SKIPPER_TTS_STYLE_PROMPT =
-  'Read this as a warm, dry, low-and-slow road-trip tour guide talking to friends riding along in the car: unhurried, genuinely glad they came, a man who has told these corny jokes a thousand times and still quietly delights in every one. Deliver the jokes completely deadpan and fully committed to the bit — never laugh at your own setup, never sing-song the punchline, never signal "get it?"; land each one flat and matter-of-fact, a little pleased with yourself even when it is terrible. You are the straight man to your own jokes. Put a small pause right before the pun and a slightly longer beat right after it, so there is room for the groan. Let the quiet, sincere lines breathe. Conversational and human, the sound of a man noticing things out the window — never a newscaster, never a stand-up comedian working a crowd.'
+  'Read this as a warm road-trip tour guide letting friends in on jokes you all secretly enjoy — genuinely glad they came, a man who has told these corny jokes a thousand times and quietly loves every one. Keep the narration moving at a natural, easy talking pace, like a man telling you about the view out the window — relaxed but never sleepy, never dragging. Save the slow-down for the jokes: deliver them deadpan and fully committed, but with a confiding warmth, as if you and the riders both know it is corny and that is exactly why it is good. Never laugh at your own setup, never sing-song the punchline; land each one flat and matter-of-fact. Put a small pause right before the pun and a beat right after for the groan, then roll on. Let the sincere lines breathe, but keep everything else moving. Talking WITH friends, not at a crowd.'
 
 /**
  * Voice is a fixed function of persona in v1 — centralized here so it can't drift

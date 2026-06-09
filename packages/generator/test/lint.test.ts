@@ -13,27 +13,28 @@ describe('lintScripts', () => {
     expect(findings).toEqual([])
   })
 
-  test('flags the second stop that CLOSES on the personal kit', () => {
+  test('flags ANY stop that touches the personal kit (banned from stops)', () => {
     const findings = lintScripts([
       story(0, 'The lake runs deep here. Meanwhile my mechanic is still getting to it Tuesday.'),
       story(1, 'A fine old road climbs up. Even my cousin Ray would have stayed home.'),
       story(2, 'The pines lean over the water, quiet as anything.'),
     ])
     const seqs = findings.map((f) => f.seq)
-    expect(seqs).toContain(1) // second kit-closer flagged
+    expect(seqs).toContain(0) // kit is banned now — every kit stop flagged, not just the 2nd
+    expect(seqs).toContain(1)
     expect(seqs).not.toContain(2) // clean stop untouched
     const f1 = findings.find((f) => f.seq === 1)!
     expect(f1.avoid.join(' ')).toMatch(/personal kit/i)
   })
 
-  test('flags over-budget kit usage (more than floor(n/3) stops touch the kit)', () => {
-    // 3 stops, all mid-script kit → budget 1 → 2 flagged.
+  test('flags EVERY kit-touching stop (zero budget — the kit lives in the intro)', () => {
+    // 3 stops, all touch the kit → all 3 flagged (no budget anymore).
     const findings = lintScripts([
       story(0, 'My coffee opinions aside, this water is a remarkable blue today.'),
       story(1, 'The truck and I disagree, but the cove ahead is worth the trip.'),
       story(2, 'Ray says hello. The old pier here has stood a hundred winters.'),
     ])
-    expect(findings.length).toBeGreaterThanOrEqual(2)
+    expect(findings.map((f) => f.seq)).toEqual([0, 1, 2])
   })
 
   test('flags a repeated stock phrase, keeping the first use', () => {

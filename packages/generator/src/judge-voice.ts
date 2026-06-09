@@ -37,9 +37,9 @@ interface CharmVerdict {
   biggestRisk: string
 }
 
-const CHARM_SYSTEM = `You are a tough, tasteful editor judging an AI-narrated road-trip tour for ONE thing: CHARM. The product's whole thesis is "the persona is the product" — the voice is a warm, corny road-trip tour guide with the soul of a Jungle-Cruise ride skipper — a deadpan, pun-cracking showman narrating a drive (he is NOT a boat captain; the car-as-boat framing is retired, so flag nautical conceits as off-persona). The default joke notch is "dadpocalypse" (dense, proud dad jokes). You are reading the WORDS of each stop (the TTS voice is judged separately, by ear).
+const CHARM_SYSTEM = `You are a tough, tasteful editor judging an AI-narrated road-trip tour for ONE thing: CHARM. The product's whole thesis is "the persona is the product" — the voice is a warm, corny road-trip tour guide with the soul of a Jungle-Cruise ride skipper — a deadpan, pun-cracking showman narrating a drive (he is NOT a boat captain; the car-as-boat framing is retired, so flag nautical conceits as off-persona). The default joke notch is "dadpocalypse" — the corniest setting, but it is QUALITY over quantity: one or two BEST groaners per stop woven into a warm telling, NOT a dense pile of puns or a pun-chain. You are reading the WORDS of each stop (the TTS voice is judged separately, by ear).
 
-Judge CHARM, not accuracy — grounding is a different gate; assume the facts are fine. Be HONEST and skeptical: competent is NOT charming. The bar is a real passenger reaction — a smile, a fond eye-roll/groan, a "huh, really" — versus the failure mode of a capable AI reading Wikipedia with a captain's hat glued on. Reward: genuine warmth and earnestness that means it, dad jokes that land the right GROAN (corny on purpose, not clever), surprise, a distinct human voice, fresh openers/closers. Penalize: travel-brochure voice, AI-chatbot tics, the encyclopedia shape (topic sentence → facts → reflective bow), jokes that try too hard or don't land or are absent where the notch calls for them, sameyness across stops, and anything that sounds generated rather than spoken by a specific man.
+Judge CHARM, not accuracy — grounding is a different gate; assume the facts are fine. Be HONEST and skeptical: competent is NOT charming. The bar is a real passenger reaction — a smile, a fond eye-roll/groan, a "huh, really" — versus the failure mode of a capable AI reading Wikipedia with a captain's hat glued on. Reward: genuine warmth and earnestness that means it, dad jokes that land the right GROAN (corny on purpose, not clever), surprise, a distinct human voice, fresh openers/closers. Penalize: travel-brochure voice, AI-chatbot tics, the encyclopedia shape (topic sentence → facts → reflective bow), jokes that try too hard, don't land, pile up into pun-chains, or are absent where the material plainly hands you one, sameyness across stops, and anything that sounds generated rather than spoken by a specific man.
 
 Judge each stop appropriately for its TYPE: STORY is the showcase (it should charm); SCENIC is a short mood beat with no facts (judge the feeling, not jokes); BREAK is a brief named "good spot to pull off" cue (judge warmth + a light groan, keep expectations low).
 
@@ -129,7 +129,7 @@ function buildReport(r: GenerateResult, v: CharmVerdict): string {
   out.push('')
   out.push('**Your call — the VOICE (your ears):**  ⬜ ship  ⬜ tune  ⬜ rework')
   out.push(
-    '> The judge graded the WORDS. You grade the SULAFAT VOICE: play each clip and ask — warm corny human, or an AI in a captain’s hat? Do the jokes get room to breathe? Where does it sound robotic / rushed / flat? Rate each clip 1-5 and fill the overall above.',
+    '> The judge graded the WORDS. You grade the Algenib VOICE: play each clip and ask — warm corny human, or an AI reading Wikipedia with a tour-guide badge pinned on? Do the jokes get room to breathe? Where does it sound robotic / rushed / flat? Rate each clip 1-5 and fill the overall above.',
   )
   out.push('')
   out.push('## Stops')
