@@ -10,9 +10,9 @@ import {
 } from 'react-native'
 import { Stack, useLocalSearchParams } from 'expo-router'
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
-import { ApiError, getTour, signTourAudio } from '@/lib/api'
+import { ApiError, getTour, signTourAudio, type SignedAudio } from '@/lib/api'
 import { stopLabel } from '@/lib/labels'
-import { buildPreviewTimeline, type PreviewSegment } from '@skipper/drive-core'
+import { buildPreviewTimeline, INTRO_SEQ, OUTRO_SEQ, type PreviewSegment } from '@skipper/drive-core'
 import { useDriveMusic } from '@/lib/driveMusic'
 import { useTheme } from '@/theme'
 import { space } from '@/theme/tokens'
@@ -59,6 +59,27 @@ interface Loaded {
 // before giving up (below). Only an upper bound on detecting a dead clip, so it stays
 // conservative; could be tightened for MP3 once tuned on-device.
 const CLIP_STALL_MS = 12_000
+
+// Display title for a segment's NOW card / lock screen. Intro/outro brackets aren't in
+// the stop list, so they get a frame label; a real stop uses its place name.
+function segmentTitle(
+  seg: PreviewSegment | undefined,
+  stops: { seq: number; name: string }[],
+  hostName: string,
+): string {
+  if (seg?.bracketKind === 'intro') return 'Welcome aboard'
+  if (seg?.bracketKind === 'outro') return 'One for the road'
+  return (seg ? stops.find((s) => s.seq === seg.seq)?.name : undefined) ?? hostName
+}
+
+// Presigned URL map keyed by stop seq + the bracket sentinels — rebuilt on every (re)sign
+// so a re-sign never drops the intro/outro URLs.
+function urlMapFromSigned(signed: SignedAudio): Map<number, string> {
+  const m = new Map<number, string>(signed.stops.map((u) => [u.seq, u.url]))
+  if (signed.intro) m.set(INTRO_SEQ, signed.intro.url)
+  if (signed.outro) m.set(OUTRO_SEQ, signed.outro.url)
+  return m
+}
 
 export default function PreviewScreen() {
   const theme = useTheme()
@@ -123,9 +144,10 @@ export default function PreviewScreen() {
           // short 1.2–4s default) so the between-stop drive music has room to breathe
           // in the simulated drive. Kept deliberately — this is preview-only pacing
           // (the real GPS drive uses actual elapsed time, not these compressed gaps).
-          { minGapSec: 12, maxGapSec: 20 },
+          // intro/outro brackets bookend the timeline (played full length, not compressed).
+          { minGapSec: 12, maxGapSec: 20, intro: tour.intro, outro: tour.outro },
         )
-        setUrls(new Map(signed.stops.map((u) => [u.seq, u.url])))
+        setUrls(urlMapFromSigned(signed))
         setData({
           tourName: tour.tour.headline,
           region: tour.region.displayName,
@@ -173,7 +195,7 @@ export default function PreviewScreen() {
       const signed = await signTourAudio(id)
       if (sawFresh.current) return // clip started during the re-sign — leave it alone
       loadedSeq.current = null
-      setUrls(new Map(signed.stops.map((u) => [u.seq, u.url])))
+      setUrls(urlMapFromSigned(signed))
     } catch {
       // Re-sign failed (offline / 503) — the watchdog's second pass skips the stop.
     }
@@ -215,8 +237,8 @@ export default function PreviewScreen() {
         // (the audio "bleed" when jumping forward/back or tapping a stop).
         player.pause()
         player.replace({ uri })
-        // B2: lock-screen Now Playing for this stop
-        const stopName = data.stops.find((s) => s.seq === seg.seq)?.name ?? data.hostName
+        // B2: lock-screen Now Playing for this stop (or the intro/outro bracket)
+        const stopName = segmentTitle(seg, data.stops, data.hostName)
         try {
           player.setActiveForLockScreen(true, {
             title: stopName,
@@ -319,7 +341,9 @@ export default function PreviewScreen() {
       if (s?.kind === 'drive') msg = `Driving to ${name ?? 'the next stop'}`
       else if (s?.kind === 'rest') msg = `Rest stop. ${name ?? ''}`
       else if (s?.kind === 'clip')
-        msg = `Now playing. ${name ?? data.hostName}, ${stopLabel(s.stopType)}`
+        msg = s.bracketKind
+          ? `Now playing. ${segmentTitle(s, data.stops, data.hostName)}`
+          : `Now playing. ${name ?? data.hostName}, ${stopLabel(s.stopType)}`
     }
     if (msg) AccessibilityInfo.announceForAccessibility(msg)
   }, [idx, done, data])
@@ -400,6 +424,8 @@ export default function PreviewScreen() {
   const seg = data.segments[idx]
   const nextStopName = seg ? data.stops.find((s) => s.seq === seg.seq)?.name : undefined
   const activeRow = data.stops.findIndex((s) => s.seq === activeSeq)
+  // The outro plays AFTER the last stop but before `done` — treat every stop as passed then.
+  const isOutro = seg?.bracketKind === 'outro'
   const isClip = seg?.kind === 'clip'
   const buffering = isClip && playing && (!status.isLoaded || status.isBuffering)
   // We've ARRIVED at a stop on a clip/rest segment; a 'drive' is still EN ROUTE to it.
@@ -491,7 +517,7 @@ export default function PreviewScreen() {
               // "NOW PLAYING" while it's held.
               glow={playing}
               kicker={playing ? voice.player.nowPlaying : voice.player.paused}
-              title={nextStopName ?? data.hostName}
+              title={segmentTitle(seg, data.stops, data.hostName)}
               right={
                 seg?.stopType ? (
                   <Badge tone={stopTone(seg.stopType)} label={stopLabel(seg.stopType)} />
@@ -556,7 +582,7 @@ export default function PreviewScreen() {
       <ScrollView ref={listRef} style={styles.list} contentContainerStyle={styles.listContent}>
         {data.stops.map((s, i) => {
           const state =
-            done || (activeRow >= 0 && i < activeRow)
+            done || isOutro || (activeRow >= 0 && i < activeRow)
               ? 'passed'
               : s.seq === activeSeq && atStop
                 ? 'active'

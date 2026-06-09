@@ -15,14 +15,17 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Animated } from 'react-native'
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
 import {
+  bracketKindForSeq,
   cumulativeMeters,
   DEFAULT_MAX_OFF_ROUTE_M,
   DEFAULT_TRIGGER,
+  INTRO_SEQ,
+  OUTRO_SEQ,
   snapStopsToRoute,
   TriggerEngine,
   type GpsFix,
 } from '@skipper/drive-core'
-import { ApiError, getTour, signTourAudio } from './api'
+import { ApiError, getTour, signTourAudio, type SignedAudio } from './api'
 import { simulatedSource, type FixSubscription } from './gps'
 import { useDriveMusic } from './driveMusic'
 import { voice } from '@/ui'
@@ -30,6 +33,19 @@ import { voice } from '@/ui'
 // Grace before a clip that hasn't started is treated as stalled — same generous window
 // as the preview (32k MP3 clips, 1h presigned URLs → re-sign once on a stall).
 const CLIP_STALL_MS = 12_000
+
+// Lock-screen / NOW-card title for a bracket clip (intro/outro aren't in the stop list).
+const bracketTitle = (kind: 'intro' | 'outro'): string =>
+  kind === 'intro' ? 'Welcome aboard' : 'One for the road'
+
+// Presigned URL map keyed by stop seq + the bracket sentinels — rebuilt on every (re)sign
+// so a re-sign never drops the intro/outro URLs.
+function urlMapFromSigned(signed: SignedAudio): Map<number, string> {
+  const m = new Map<number, string>(signed.stops.map((u) => [u.seq, u.url]))
+  if (signed.intro) m.set(INTRO_SEQ, signed.intro.url)
+  if (signed.outro) m.set(OUTRO_SEQ, signed.outro.url)
+  return m
+}
 
 // Real drive speed for the simulator (mph). A FIXED 60 for now; the trigger lead is
 // speed-adaptive in @skipper/drive-core, so this is the only knob that matters here.
@@ -89,8 +105,11 @@ export interface UseDrive {
 
   /** 0..1 route position for `RouteTrack`, driven imperatively by each GPS fix. */
   progress: Animated.Value
-  /** The stop whose clip is currently loaded/playing, or null between stops (ducked-quiet). */
+  /** The stop whose clip is currently loaded/playing, or null between stops (ducked-quiet).
+   *  A bracket carries its sentinel seq; use `activeBracket` to tell intro/outro apart. */
   activeSeq: number | null
+  /** Set while the intro/outro bracket clip is the active audio (vs a real stop or quiet). */
+  activeBracket: 'intro' | 'outro' | null
   /** Seqs whose trigger has fired (for the stop list's passed/active states). */
   firedSeqs: Set<number>
   /** First not-yet-fired stop, for the "ROLLING · next stop: X" strip. */
@@ -146,6 +165,10 @@ export function useDrive(tourId: string | undefined): UseDrive {
   const clipBusy = useRef(false) // a clip is currently loaded+playing (gates the pump)
   const reachedEnd = useRef(false) // the simulated source has run out of fixes
   const subRef = useRef<FixSubscription | null>(null)
+  // Which brackets this tour has (set on load); the intro is queued at start, the outro
+  // (once) at the end. Refs so the queueing reads current values without dep churn.
+  const bracketsRef = useRef<{ intro: boolean; outro: boolean }>({ intro: false, outro: false })
+  const outroQueued = useRef(false)
 
   // Audio-playback refs (cloned from the preview player).
   const loadedSeq = useRef<number | null>(null) // which clip is loaded in the player
@@ -181,7 +204,8 @@ export function useDrive(tourId: string | undefined): UseDrive {
         const polyline = tour.tour.polyline as [number, number][]
         if (polyline.length < 2) throw new Error('This tour has no drivable route.')
         const cum = cumulativeMeters(polyline)
-        setUrls(new Map(signed.stops.map((u) => [u.seq, u.url])))
+        bracketsRef.current = { intro: Boolean(signed.intro), outro: Boolean(signed.outro) }
+        setUrls(urlMapFromSigned(signed))
         setData({
           tourName: tour.tour.headline,
           region: tour.region.displayName,
@@ -216,7 +240,7 @@ export function useDrive(tourId: string | undefined): UseDrive {
       const signed = await signTourAudio(tourId)
       if (sawFresh.current) return true // clip started during the re-sign — leave it alone
       loadedSeq.current = null
-      setUrls(new Map(signed.stops.map((u) => [u.seq, u.url])))
+      setUrls(urlMapFromSigned(signed))
       return true
     } catch {
       return false // offline / 503 — the caller skips the stop so the drive never hangs
@@ -279,7 +303,13 @@ export function useDrive(tourId: string | undefined): UseDrive {
 
   const handleEnd = useCallback(() => {
     reachedEnd.current = true
-    pump() // if nothing's playing/queued, this ends the drive
+    // Outro bracket — queued LAST (after any pending stops), so the sign-off plays before
+    // the drive actually ends. Queued at most once.
+    if (bracketsRef.current.outro && !outroQueued.current) {
+      outroQueued.current = true
+      queue.current.push(OUTRO_SEQ)
+    }
+    pump() // plays the outro (or any remaining stop); ends the drive once the queue drains
   }, [pump])
 
   // ---- reset all drive state back to the pre-drive "ready" line ----
@@ -303,6 +333,7 @@ export function useDrive(tourId: string | undefined): UseDrive {
     sawFresh.current = false
     finishedSeq.current = null
     clipRetried.current.clear()
+    outroQueued.current = false
     seekTarget.current = null
     dot.setValue(0)
     setActiveSeq(null)
@@ -334,12 +365,17 @@ export function useDrive(tourId: string | undefined): UseDrive {
     const triggerable = snapped.filter((s) => s.offRouteM <= DEFAULT_MAX_OFF_ROUTE_M)
     engineRef.current = new TriggerEngine(triggerable, { leadSeconds: DEFAULT_TRIGGER.leadSeconds })
     setDriving(true)
+    // Intro bracket — the welcome, played FIRST (before any geofence trigger fires).
+    if (bracketsRef.current.intro) {
+      queue.current.push(INTRO_SEQ)
+      pump()
+    }
     const source = simulatedSource(data.polyline, {
       mph: SIM_MPH,
       timeScale: fast ? SIM_FAST_SCALE : 1,
     })
     subRef.current = source(handleFix, handleEnd)
-  }, [data, fast, resetForReady, handleFix, handleEnd])
+  }, [data, fast, resetForReady, handleFix, handleEnd, pump])
 
   const togglePause = useCallback(() => {
     setPaused((p) => {
@@ -385,7 +421,10 @@ export function useDrive(tourId: string | undefined): UseDrive {
         player.pause()
       } catch {}
       player.replace({ uri })
-      const stopName = data.stops.find((s) => s.seq === activeSeq)?.name ?? data.hostName
+      const bk = bracketKindForSeq(activeSeq)
+      const stopName = bk
+        ? bracketTitle(bk)
+        : (data.stops.find((s) => s.seq === activeSeq)?.name ?? data.hostName)
       try {
         player.setActiveForLockScreen(true, {
           title: stopName,
@@ -556,6 +595,7 @@ export function useDrive(tourId: string | undefined): UseDrive {
     firedCount: firedSeqs.size,
     progress: dot,
     activeSeq,
+    activeBracket: activeSeq === null ? null : bracketKindForSeq(activeSeq),
     firedSeqs,
     nextSeq,
     nowPlaying,

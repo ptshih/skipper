@@ -22,6 +22,17 @@ import type { LngLat } from './geo'
 /** Fallback average drive speed (m/s ≈ 30 mph) when a tour lacks a frozen drive time. */
 const FALLBACK_SPEED_MPS = 13.4
 
+// Intro/outro brackets are the drive's FRAME — placeless audio fired by lifecycle, not by
+// a geofence. In a player they reuse the exact stop-clip machinery, keyed by a SENTINEL seq
+// (negative, so it can never collide with a real stop seq) instead of a route position. The
+// player maps the presigned bracket clip URL under these seqs.
+export const INTRO_SEQ = -1
+export const OUTRO_SEQ = -2
+/** A bracket's sentinel seq → its kind (null for a real stop seq). */
+export function bracketKindForSeq(seq: number): 'intro' | 'outro' | null {
+  return seq === INTRO_SEQ ? 'intro' : seq === OUTRO_SEQ ? 'outro' : null
+}
+
 /** One tour stop, as the preview needs it (a subset of the tour_stops/poi_content join). */
 export interface PreviewStop {
   seq: number
@@ -38,8 +49,11 @@ export type PreviewSegmentKind = 'clip' | 'rest' | 'drive'
 
 export interface PreviewSegment {
   kind: PreviewSegmentKind
-  /** The stop this segment belongs to (for `drive`, the stop being driven TO). */
+  /** The stop this segment belongs to (for `drive`, the stop being driven TO). A bracket
+   *  carries a SENTINEL seq (INTRO_SEQ / OUTRO_SEQ). */
   seq: number
+  /** Set on a `clip` segment that is an intro/outro bracket (vs a real stop). */
+  bracketKind?: 'intro' | 'outro'
   name?: string
   stopType?: PreviewStop['stopType']
   /** Start offset of this segment in the PREVIEW timeline (ms). */
@@ -76,6 +90,10 @@ export interface PreviewOptions {
   restSec?: number
   /** Real total drive time (s) for labels/progress. Falls back to a speed estimate. */
   totalDriveSec?: number
+  /** Intro bracket (plays FULL length at the very start; null/absent = none). */
+  intro?: { audioDurationMs?: number | null } | null
+  /** Outro bracket (plays FULL length at the very end; null/absent = none). */
+  outro?: { audioDurationMs?: number | null } | null
 }
 
 const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v))
@@ -114,6 +132,12 @@ export function buildPreviewTimeline(
   const push = (seg: Omit<PreviewSegment, 'startMs'>): void => {
     segments.push({ ...seg, startMs: cursor })
     cursor += seg.previewMs
+  }
+
+  // INTRO bracket — the welcome, played full-length at the very start (route position 0).
+  const introMs = opts.intro?.audioDurationMs ?? 0
+  if (introMs > 0) {
+    push({ kind: 'clip', seq: INTRO_SEQ, bracketKind: 'intro', previewMs: introMs, realMs: introMs, routeProgress: 0 })
   }
 
   ordered.forEach((s, i) => {
@@ -157,6 +181,12 @@ export function buildPreviewTimeline(
       })
     }
   })
+
+  // OUTRO bracket — the sign-off, played full-length at the very end (route position 1).
+  const outroMs = opts.outro?.audioDurationMs ?? 0
+  if (outroMs > 0) {
+    push({ kind: 'clip', seq: OUTRO_SEQ, bracketKind: 'outro', previewMs: outroMs, realMs: outroMs, routeProgress: 1 })
+  }
 
   const totalRealMs = segments.reduce((sum, seg) => sum + seg.realMs, 0)
   return {

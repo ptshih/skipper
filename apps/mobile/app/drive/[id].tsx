@@ -62,6 +62,12 @@ export default function DriveScreen() {
   if (d.phase === 'loading') return <StateView title="Drive" loading message={voice.loading.tour} />
 
   const activeStop = d.activeSeq != null ? d.stops.find((s) => s.seq === d.activeSeq) : undefined
+  // The intro/outro brackets aren't stops; give them a frame title instead of a place name.
+  const nowTitle = d.activeBracket
+    ? d.activeBracket === 'intro'
+      ? 'Welcome aboard'
+      : 'One for the road'
+    : (activeStop?.name ?? d.hostName)
   const nextName = d.nextSeq != null ? d.stops.find((s) => s.seq === d.nextSeq)?.name : undefined
 
   return (
@@ -120,7 +126,7 @@ export default function DriveScreen() {
               // A held clip dims the halo and stops claiming "NOW PLAYING".
               glow={d.nowPlaying}
               kicker={d.nowPlaying ? voice.player.nowPlaying : voice.player.paused}
-              title={activeStop?.name ?? d.hostName}
+              title={nowTitle}
               right={
                 activeStop ? (
                   <Badge tone={stopTone(activeStop.stopType)} label={stopLabel(activeStop.stopType)} />
