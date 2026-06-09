@@ -13,6 +13,7 @@
 //   dotenvx run -f .env.development -- bun packages/generator/src/run.ts <slug> --dry-run --json=<result.json>
 
 import { evaluateGrounding, type GroundingInput } from './grounding'
+import { evaluateTts } from './tts'
 import { buildScorecard } from './scorecard'
 import type { StopEval, TourScorecard } from './types'
 
@@ -51,10 +52,13 @@ function printScorecard(card: TourScorecard): void {
   console.log('\n' + '='.repeat(72))
   console.log(`GROUNDING EVAL — ${card.tourName} (${card.slug})`)
   console.log('='.repeat(72))
-  for (const s of card.stops) {
-    const tag = s.pass ? '✓ grounded' : `✗ ${s.findings.length} ungrounded`
-    console.log(`[${String(s.seq).padStart(2, '0')}] ${tag}`)
-    for (const f of s.findings) console.log(`      - ${f}`)
+  const bySeq = new Map<number, StopEval[]>()
+  for (const s of card.stops) bySeq.set(s.seq, [...(bySeq.get(s.seq) ?? []), s])
+  for (const seq of [...bySeq.keys()].sort((a, b) => a - b)) {
+    const evals = bySeq.get(seq)!
+    const summary = evals.map((e) => `${e.dimension} ${e.pass ? '✓' : '✗'}`).join('  ')
+    console.log(`[${String(seq).padStart(2, '0')}] ${summary}`)
+    for (const e of evals) for (const f of e.findings) console.log(`      · ${f}`)
   }
   console.log('-'.repeat(72))
   for (const d of card.dimensions) {
@@ -73,7 +77,9 @@ async function main() {
   // Audit every NARRATED stop. (Brackets are a separate grounding surface — a future
   // evaluator; they carry no fact well in the artifact.)
   const narrated = artifact.stops.filter((s) => s.script && s.script.trim().length > 0)
-  console.log(`Auditing ${narrated.length} narrated stops for grounding (model: Sonnet)...`)
+  console.log(
+    `Auditing ${narrated.length} narrated stops — grounding (Sonnet) + tts-cleanliness (deterministic)...`,
+  )
 
   const inputs: GroundingInput[] = narrated.map((s) => ({
     seq: s.seq,
@@ -87,8 +93,11 @@ async function main() {
     corridor: artifact.tourName,
   }))
 
-  // Once-per-tour offline audit — run the stops concurrently (the SDK handles 429 retry).
-  const stops: StopEval[] = await Promise.all(inputs.map((i) => evaluateGrounding(i)))
+  // Once-per-tour offline audit — grounding stops run concurrently (the SDK handles 429
+  // retry); tts is a free deterministic pass. Both dimensions land in the same scorecard.
+  const grounding: StopEval[] = await Promise.all(inputs.map((i) => evaluateGrounding(i)))
+  const tts: StopEval[] = narrated.map((s) => evaluateTts({ seq: s.seq, script: s.script! }))
+  const stops: StopEval[] = [...grounding, ...tts]
 
   const card = buildScorecard({
     slug: artifact.slug,
