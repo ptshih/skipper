@@ -185,12 +185,22 @@ export default function TourScreen() {
         </View>
       </View>
 
-      {/* The live, GPS-triggered drive — the M1 headline (a simulated fix source on the
-          phone for now; real device GPS lands in a later phase). */}
-      <Button icon="car" title={voice.cta.drive} onPress={() => router.push(`/drive/${id}`)} />
+      {/* The live, GPS-triggered drive — the M1 headline. Routes to real device GPS (`?mode=live`). */}
+      <Button icon="car" title={voice.cta.drive} onPress={() => router.push(`/drive/${id}?mode=live`)} />
       <Text variant="dim" color="inkDim">
-        The skipper talks as you reach each stop on the real roads. Simulated on the phone for now.
+        The skipper talks as you reach each stop on the real roads.
       </Text>
+
+      {/* Dev-only: the on-device drive SIMULATOR (no real GPS) — couch-testable on the iOS Simulator.
+          Hidden in production; the shipped path is the live GPS drive above. */}
+      {__DEV__ ? (
+        <Button
+          variant="secondary"
+          icon="car"
+          title={voice.cta.simDrive}
+          onPress={() => router.push(`/drive/${id}`)}
+        />
+      ) : null}
 
       <Button
         variant="secondary"

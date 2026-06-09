@@ -24,7 +24,8 @@ export const voice = {
     resume: 'Roll on again',
     restart: 'Run it again, skipper',
     preview: 'Take the simulated drive',
-    drive: 'Start the drive', // open the live, GPS-triggered player (simulated on-phone for now)
+    drive: 'Start the drive', // open the live, GPS-triggered player (real device GPS)
+    simDrive: 'Simulate the drive (dev)', // dev-only: the on-device drive simulator, no real GPS
     endDrive: 'Pull over', // stop the drive and head back to the start line
   },
   gate: {
