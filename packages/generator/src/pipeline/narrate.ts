@@ -20,7 +20,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import type { JokeLevel, StopType } from '@skipper/shared'
 import { NARRATION_MODEL } from '../models'
-import { SKIPPER_SYSTEM_PROMPT } from '../persona/skipper'
+import { SKIPPER_BRACKET_PROMPT, SKIPPER_SYSTEM_PROMPT } from '../persona/skipper'
 
 /**
  * Generous ceiling. A long-form story script (~2 min ≈ ~300 words ≈ ~450 output
@@ -273,30 +273,30 @@ export function buildFactSheet(req: NarrationRequest): string {
   return lines.join('\n')
 }
 
-/** Narrate one stop. Throws on refusal or truncation — callers must not persist a bad script. */
-export async function narrateStop(req: NarrationRequest): Promise<NarrationResult> {
+/**
+ * Shared narration call — a system prompt + ONE user message → the script. Throws on
+ * refusal, truncation, or empty output (callers must NEVER persist a bad script). The
+ * system prompt is cached (cache_control) so a run's later calls read it cheaply.
+ */
+async function runNarration(
+  system: string,
+  userMessage: string,
+  label: string,
+): Promise<NarrationResult> {
   const client = getClient()
-  const userMessage = buildFactSheet(req)
-
   const response = await client.messages.create({
     model: NARRATION_MODEL,
     max_tokens: NARRATION_MAX_TOKENS,
     thinking: { type: 'adaptive' }, // grounding adherence benefits from reasoning; effort defaults to high
-    // System prompt is identical across every stop in a run — cache it so the
-    // ~dozen stops after the first read it cheaply (no-op if under the cache min).
-    system: [{ type: 'text', text: SKIPPER_SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
+    system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
     messages: [{ role: 'user', content: userMessage }],
   })
 
   if (response.stop_reason === 'refusal') {
-    throw new Error(
-      `Narration refused for ${describe(req)}: ${JSON.stringify(response.stop_details ?? {})}`,
-    )
+    throw new Error(`Narration refused for ${label}: ${JSON.stringify(response.stop_details ?? {})}`)
   }
   if (response.stop_reason === 'max_tokens') {
-    throw new Error(
-      `Narration hit max_tokens (truncated) for ${describe(req)} — raise NARRATION_MAX_TOKENS.`,
-    )
+    throw new Error(`Narration hit max_tokens (truncated) for ${label} — raise NARRATION_MAX_TOKENS.`)
   }
 
   const script = response.content
@@ -306,9 +306,7 @@ export async function narrateStop(req: NarrationRequest): Promise<NarrationResul
     .trim()
 
   if (!script) {
-    throw new Error(
-      `Narration produced no text for ${describe(req)} (stop_reason=${response.stop_reason}).`,
-    )
+    throw new Error(`Narration produced no text for ${label} (stop_reason=${response.stop_reason}).`)
   }
 
   return {
@@ -318,8 +316,87 @@ export async function narrateStop(req: NarrationRequest): Promise<NarrationResul
   }
 }
 
+/** Narrate one stop. Throws on refusal or truncation — callers must not persist a bad script. */
+export async function narrateStop(req: NarrationRequest): Promise<NarrationResult> {
+  return runNarration(SKIPPER_SYSTEM_PROMPT, buildFactSheet(req), describe(req))
+}
+
 function describe(req: NarrationRequest): string {
   return req.stopType === 'scenic'
     ? 'SCENIC stop'
     : `${req.stopType.toUpperCase()} "${req.place?.name ?? '?'}"`
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Intro / outro brackets (Option B: the drive's FRAME, not stops)            */
+/*                                                                             */
+/*  Persona-only, NO fact sheet — they assert no place-fact (they NAME + FRAME  */
+/*  the region/endpoints only). The personal KIT, banned from stops, lives in   */
+/*  the intro; the sentimental bow lives in the outro. Persistence is to         */
+/*  `tour_brackets` (Phase 3), never `tour_stops`.                              */
+/* -------------------------------------------------------------------------- */
+
+export interface IntroRequest {
+  /** e.g. "Lake Tahoe". Named + framed, never asserted as a fact. */
+  region: string
+  /** Descriptive START endpoint, e.g. "Tahoe City" (for destination + direction framing). */
+  startAnchor: string
+  /** Descriptive END endpoint, e.g. "South Lake Tahoe". */
+  endAnchor: string
+  jokeLevel: JokeLevel
+  /** Optional: what this drive is "about" (the family headline, e.g. "Emerald Bay"). */
+  headline?: string
+  /** Optional: the host's display name, for "meet your host" (e.g. "Skipper"). */
+  hostName?: string
+}
+
+export interface OutroRequest {
+  region: string
+  /** The arrival endpoint to name, e.g. "South Lake Tahoe". */
+  endAnchor: string
+  jokeLevel: JokeLevel
+  /** Optional hook from the intro, to bookend the drive. */
+  introCallback?: string
+}
+
+/** Build the INTRO bracket's user message (position-agnostic; destination + direction). */
+export function buildIntroSheet(req: IntroRequest): string {
+  const lines: string[] = []
+  lines.push('BRACKET: INTRO (the welcome — plays when the drive STARTS; position-agnostic)')
+  lines.push(`REGION: ${req.region}`)
+  if (req.headline) lines.push(`THIS DRIVE: ${req.headline}`)
+  lines.push(`FROM: ${req.startAnchor}`)
+  lines.push(`TO: ${req.endAnchor}`)
+  lines.push(`JOKE NOTCH: ${req.jokeLevel.toUpperCase()}`)
+  if (req.hostName) lines.push(`YOUR NAME: ${req.hostName}`)
+  lines.push('')
+  lines.push(
+    'Welcome the folks aboard and set the trip\'s shape by DESTINATION + DIRECTION (from where, to where, descriptively — NEVER "you are now at ..."; they may be anywhere). Land ONE big standalone personal KIT joke — this doubles as "meet your host". End pointing down the road; no bow. Assert NO place-fact: name and frame only.',
+  )
+  return lines.join('\n')
+}
+
+/** Build the OUTRO bracket's user message (arrive + warm sign-off). */
+export function buildOutroSheet(req: OutroRequest): string {
+  const lines: string[] = []
+  lines.push('BRACKET: OUTRO (the sign-off — plays on arrival / tour-end)')
+  lines.push(`REGION: ${req.region}`)
+  lines.push(`ARRIVING AT: ${req.endAnchor}`)
+  lines.push(`JOKE NOTCH: ${req.jokeLevel.toUpperCase()}`)
+  if (req.introCallback) lines.push(`INTRO HOOK (optional bookend callback): ${req.introCallback}`)
+  lines.push('')
+  lines.push(
+    'Bring the drive in: name the arrival anchor, give the warm SIGN-OFF (the sentimental bow lives HERE, and only here), land a notch-scaled closing groaner, and optionally bookend the intro hook. Send them off warm. Assert NO place-fact: name and frame only.',
+  )
+  return lines.join('\n')
+}
+
+/** Narrate the INTRO bracket. Persona-only, no fact sheet. Throws on refusal/truncation/empty. */
+export async function narrateIntro(req: IntroRequest): Promise<NarrationResult> {
+  return runNarration(SKIPPER_BRACKET_PROMPT, buildIntroSheet(req), `INTRO (${req.region})`)
+}
+
+/** Narrate the OUTRO bracket. Persona-only, no fact sheet. Throws on refusal/truncation/empty. */
+export async function narrateOutro(req: OutroRequest): Promise<NarrationResult> {
+  return runNarration(SKIPPER_BRACKET_PROMPT, buildOutroSheet(req), `OUTRO (${req.region})`)
 }
