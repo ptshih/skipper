@@ -39,6 +39,7 @@ export type IconName =
   | 'nearMe'
   | 'download'
   | 'downloaded'
+  | 'more'
 
 const IONICON: Record<IconName, ComponentProps<typeof Ionicons>['name']> = {
   // stop types
@@ -75,6 +76,7 @@ const IONICON: Record<IconName, ComponentProps<typeof Ionicons>['name']> = {
   nearMe: 'navigate', // reserved: the deferred "Drives near you" GPS shortcut (v2)
   download: 'download-outline', // grab a tour for offline play (Tahoe dead zones)
   downloaded: 'cloud-done-outline', // a tour that's saved to disk + plays with no signal
+  more: 'ellipsis-horizontal', // header overflow menu (secondary/utility actions)
 }
 
 export interface IconProps {

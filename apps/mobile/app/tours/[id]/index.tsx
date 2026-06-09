@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { StyleSheet, View } from 'react-native'
+import { ActionSheetIOS, Alert, Platform, StyleSheet, View } from 'react-native'
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
 import { ApiError, getTour, signTourAudio, type SignedAudio, type TourDetail } from '@/lib/api'
 import {
@@ -15,6 +15,7 @@ import {
   Badge,
   Button,
   Card,
+  HeaderIconButton,
   Icon,
   Screen,
   StateView,
@@ -63,6 +64,45 @@ export default function TourScreen() {
     deleteTourDownload(id)
     setDownloaded(false)
   }, [id])
+
+  // Secondary/utility actions live in a header ⋯ menu (native iOS action sheet) instead of
+  // stacked buttons — the offline download (state-aware) + the dev-only on-device simulator.
+  const openMenu = useCallback(() => {
+    const actions: { label: string; onPress: () => void; destructive?: boolean }[] = []
+    if (downloaded) {
+      actions.push({ label: 'Remove offline download', onPress: removeDownload, destructive: true })
+    } else if (!downloading) {
+      actions.push({ label: 'Download for offline', onPress: () => void startDownload() })
+    }
+    if (__DEV__) {
+      actions.push({ label: voice.cta.simDrive, onPress: () => router.push(`/tours/${id}/play`) })
+    }
+    if (actions.length === 0) return
+    const destructive = actions.findIndex((a) => a.destructive)
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: [...actions.map((a) => a.label), 'Cancel'],
+          cancelButtonIndex: actions.length,
+          destructiveButtonIndex: destructive >= 0 ? destructive : undefined,
+        },
+        (i) => actions[i]?.onPress(),
+      )
+    } else {
+      Alert.alert('Tour options', undefined, [
+        ...actions.map((a) => ({
+          text: a.label,
+          onPress: a.onPress,
+          style: a.destructive ? ('destructive' as const) : undefined,
+        })),
+        { text: 'Cancel', style: 'cancel' as const },
+      ])
+    }
+  }, [downloaded, downloading, id, router, startDownload, removeDownload])
+
+  // Don't render a dead header button: download/remove is offer-able except mid-download;
+  // the dev simulator is always there in __DEV__.
+  const hasMenuActions = __DEV__ || downloaded || !downloading
 
   const load = useCallback(async () => {
     if (!id) return
@@ -119,7 +159,32 @@ export default function TourScreen() {
 
   return (
     <Screen scroll padded edges={['bottom']} contentContainerStyle={styles.body}>
-      <Stack.Screen options={{ title: tour.tour.headline }} />
+      <Stack.Screen
+        options={{
+          title: tour.tour.headline,
+          ...(hasMenuActions
+            ? {
+                headerRight: () => (
+                  <HeaderIconButton name="more" accessibilityLabel="More actions" onPress={openMenu} />
+                ),
+                // iOS 26: strip the Liquid Glass capsule so the chip isn't a second glow (mirrors index).
+                unstable_headerRightItems: () => [
+                  {
+                    type: 'custom',
+                    hidesSharedBackground: true,
+                    element: (
+                      <HeaderIconButton
+                        name="more"
+                        accessibilityLabel="More actions"
+                        onPress={openMenu}
+                      />
+                    ),
+                  },
+                ],
+              }
+            : {}),
+        }}
+      />
 
       <View style={styles.head}>
         <Text variant="display" color="ink">
@@ -132,25 +197,29 @@ export default function TourScreen() {
           <Text variant="label" color="inkFaint">
             {tour.region.displayName}
           </Text>
+          {/* Offline state rides here as a compact chip — the ACTION lives in the ⋯ menu. */}
+          {downloading ? (
+            <Text variant="label" color="inkFaint">
+              · Downloading {downloading.done}/{downloading.total || '…'}
+            </Text>
+          ) : downloaded ? (
+            <View style={styles.savedChip}>
+              <Icon name="downloaded" size={14} color="accent" />
+              <Text variant="label" color="accent">
+                Saved offline
+              </Text>
+            </View>
+          ) : null}
         </View>
       </View>
 
-      {/* The live, GPS-triggered drive — the M1 headline. Routes to real device GPS (`?mode=live`). */}
+      {/* Two real choices only — the live drive (M1 headline) + the free couch preview (the
+          funnel, and the only play path for anonymous riders). The dev simulator + offline
+          download moved to the header ⋯ menu so this stays glanceable. */}
       <Button icon="car" title={voice.cta.drive} onPress={() => router.push(`/tours/${id}/play?mode=live`)} />
       <Text variant="dim" color="inkDim">
         The skipper talks as you reach each stop on the real roads.
       </Text>
-
-      {/* Dev-only: the on-device drive SIMULATOR (no real GPS) — couch-testable on the iOS Simulator.
-          Hidden in production; the shipped path is the live GPS drive above. */}
-      {__DEV__ ? (
-        <Button
-          variant="secondary"
-          icon="car"
-          title={voice.cta.simDrive}
-          onPress={() => router.push(`/tours/${id}/play`)}
-        />
-      ) : null}
 
       <Button
         variant="secondary"
@@ -158,38 +227,7 @@ export default function TourScreen() {
         title={voice.cta.preview}
         onPress={() => router.push(`/tours/${id}/play?mode=preview`)}
       />
-      <Text variant="dim" color="inkDim">
-        Hear the whole tour from your couch — no driving to the GPS coordinates.
-      </Text>
 
-      {/* Offline download — save the whole drive so it plays in Tahoe dead zones with no signal.
-          Once saved, the drive + preview load entirely from disk (zero network). */}
-      {downloaded ? (
-        <View style={styles.offlineRow}>
-          <Icon name="downloaded" size={18} color="accent" />
-          <Text variant="label" color="accent" style={styles.flex}>
-            Saved for offline
-          </Text>
-          <Button variant="ghost" title="Remove" fullWidth={false} onPress={removeDownload} />
-        </View>
-      ) : (
-        <>
-          <Button
-            variant="secondary"
-            icon="download"
-            title={
-              downloading
-                ? `Downloading ${downloading.done}/${downloading.total || '…'}`
-                : 'Download for offline'
-            }
-            loading={Boolean(downloading)}
-            onPress={startDownload}
-          />
-          <Text variant="dim" color="inkDim">
-            Save the whole drive to your phone — plays in Tahoe dead zones, no signal needed.
-          </Text>
-        </>
-      )}
       {downloadError ? (
         <Text variant="dim" color="danger">
           {downloadError}
@@ -245,7 +283,7 @@ const styles = StyleSheet.create({
   body: { gap: space.md },
   head: { gap: space.sm },
   metaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space.sm },
-  offlineRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  savedChip: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   sectionLabel: { marginTop: space.sm },
   stopHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   stopMeta: {
