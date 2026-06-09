@@ -1,15 +1,16 @@
-// A stop in the route list. Three states read at a glance:
-//   upcoming — hollow bullet, dim name, ▶
-//   active   — amber edge-bar + tinted bed, bold name, ♪
-//   passed   — filled bullet, "stamped" mark (the passport-stamp beat)
-// Optional stop-type glyph keeps story/scenic/break legible without color alone.
+// A stop in the route list — clean rows that sit UNDER the player card and echo it.
+// Three states read at a glance, no fussy bullets or double-indicators:
+//   upcoming — stop-type glyph + name (calm)
+//   active   — a subtle RAISED chip (surfaceRaised, like the card) + accent glyph + bold
+//              name. PINE accent, never amber — the player card owns the one amber glow.
+//   passed   — dimmed, with a quiet check
 import { Pressable, StyleSheet, View } from 'react-native'
 import { radius, space } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'
 import { Icon, type IconName } from './Icon'
 import { Text } from './Text'
 
-export const STOP_ROW_HEIGHT = 60
+export const STOP_ROW_HEIGHT = 56
 
 export type StopState = 'upcoming' | 'active' | 'passed'
 
@@ -34,50 +35,35 @@ export function StopRow({ name, sublabel, state = 'upcoming', icon, onPress }: S
       accessibilityLabel={`${name}${sublabel ? `, ${sublabel}` : ''}${active ? ', now playing' : passed ? ', played' : ''}`}
       style={({ pressed }) => [
         styles.row,
+        // active = a raised chip echoing the player card (surfaceRaised); no border/halo so it
+        // stays subordinate to the card and never competes for the single amber glow.
         active && { backgroundColor: colors.surfaceRaised },
         pressed && styles.pressed,
       ]}
     >
-      {/* active edge-bar — PINE, not amber: amber is reserved for the NOW glow +
-          car token so only one amber element glows per phase (DESIGN §8) */}
-      <View style={[styles.edge, { backgroundColor: active ? colors.accent : 'transparent' }]} />
-
-      {/* bullet */}
-      <View
-        style={[
-          styles.bullet,
-          {
-            borderColor: passed || active ? colors.accent : colors.trackInactive,
-            backgroundColor: passed || active ? colors.accent : 'transparent',
-          },
-        ]}
-      />
+      {/* The single leading marker — the stop-type glyph. Accent when active, faded when passed. */}
+      {icon ? (
+        <Icon name={icon} size={18} color={active ? 'accent' : passed ? 'inkFaint' : 'inkDim'} />
+      ) : null}
 
       <View style={styles.body}>
-        <View style={styles.nameRow}>
-          {icon ? <Icon name={icon} size={16} color={passed ? 'inkDim' : 'ink'} /> : null}
-          <Text
-            variant={active ? 'bodyStrong' : 'body'}
-            color={active ? 'ink' : passed ? 'inkDim' : 'ink'}
-            numberOfLines={1}
-            style={styles.name}
-          >
-            {name}
-          </Text>
-        </View>
+        <Text
+          variant={active ? 'bodyStrong' : 'body'}
+          color={active ? 'ink' : passed ? 'inkDim' : 'ink'}
+          numberOfLines={1}
+        >
+          {name}
+        </Text>
         {sublabel ? (
-          <Text variant="dim" color="inkFaint">
+          <Text variant="dim" color="inkFaint" numberOfLines={1}>
             {sublabel}
           </Text>
         ) : null}
       </View>
 
-      <Icon
-        name={active ? 'nowPlaying' : passed ? 'passed' : 'upcoming'}
-        size={16}
-        color={active ? 'accent' : 'inkFaint'}
-        style={styles.trailing}
-      />
+      {/* Only the PASSED state earns a trailing mark (a quiet check) — upcoming/active stay
+          clean (the raised chip is the active cue; an upcoming row needs no affordance noise). */}
+      {passed ? <Icon name="passed" size={16} color="inkFaint" /> : null}
     </Pressable>
   )
 }
@@ -89,20 +75,9 @@ const styles = StyleSheet.create({
     gap: space.md,
     minHeight: STOP_ROW_HEIGHT, // minHeight, not height — survives Dynamic Type
     paddingVertical: space.sm,
-    paddingHorizontal: space.gutter,
-    borderRadius: radius.sm,
+    paddingHorizontal: space.md,
+    borderRadius: radius.md,
   },
-  edge: {
-    width: 4,
-    alignSelf: 'stretch',
-    marginVertical: space.sm,
-    borderRadius: 2,
-    marginLeft: -space.sm,
-  },
-  bullet: { width: 12, height: 12, borderRadius: 6, borderWidth: 2 },
   body: { flex: 1, gap: 1 },
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  name: { flexShrink: 1 },
-  trailing: { width: 22, textAlign: 'center' },
   pressed: { opacity: 0.7 },
 })

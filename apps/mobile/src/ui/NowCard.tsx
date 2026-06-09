@@ -1,33 +1,42 @@
-// The NOW-PLAYING placard — the one surface that earns the campfire-amber glow.
-// kicker (warm label) → big placard title → optional mono timer. Used by the
-// preview player and (later) the live driving player.
+// The PLAYER CARD — the one contained, elevated surface that holds the now-playing
+// content, the scrubber (or a body line), AND the transport as a single grounded unit.
+// It's the one surface that earns the campfire-amber glow (DESIGN §8), and only while a
+// clip is actively playing (`glow`) — paused / rolling / ready / done it sits flat and
+// the route track owns the glow.
+//
+// Top → bottom: header row (warm kicker + optional badge) → big placard title (with an
+// optional mono timer beside it) → a state-dependent MIDDLE slot (a body line in
+// ready/done, the Scrubber while driving) → the transport row. Used by the live driving
+// player and the preview, both via app/tours/[id]/play.tsx.
 import type { ReactNode } from 'react'
 import { StyleSheet, View } from 'react-native'
 import { IN_CAR_MAX_FONT_SCALE, border, radius, space } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'
 import { Text } from './Text'
 
-/** Reserved height (pt) for the player's NOW-content slot. Sized SNUG to a two-line NowCard
- *  (md padding + a label row + a 2-line placard title + the keyline ≈ 105pt) so the transport
- *  controls below stay put as the content swaps between the active card and the rolling/rest
- *  variants. Deliberately NOT padded out to the tallest case: a one-line bracket card
- *  ("Welcome aboard") now sits with only ~9pt of centering air per side instead of floating.
- *  A rare two-line stop name grows the slot a hair (the controls nudge down ~a line) — a fair
- *  trade for not surrounding every card in dead space. The scrubber's height is reserved
- *  separately (it stays mounted, just hidden, between stops). Title/timer cap at
- *  IN_CAR_MAX_FONT_SCALE under Dynamic Type. */
-export const NOW_AREA_RESERVE = 96
-
 export interface NowCardProps {
   kicker: string // e.g. "NOW PLAYING · STORY"
   title: string // the stop name
-  timer?: string // mono, e.g. "0:48 / 1:22"
-  glow?: boolean // the amber halo (on for an active clip)
-  right?: ReactNode
+  timer?: string // mono, e.g. "~2.3 mi" (the rolling-leg distance) — sits beside the title
+  glow?: boolean // the amber halo (on only while a clip is actively playing)
+  right?: ReactNode // a stop-type badge in the header row
+  /** The state-dependent middle: a body line (ready/done) or the Scrubber (driving). */
+  children?: ReactNode
+  /** The transport row — rendered at the bottom of the card. */
+  transport?: ReactNode
   liveRegion?: boolean // announce kicker/title changes to Android screen readers
 }
 
-export function NowCard({ kicker, title, timer, glow = true, right, liveRegion }: NowCardProps) {
+export function NowCard({
+  kicker,
+  title,
+  timer,
+  glow = true,
+  right,
+  children,
+  transport,
+  liveRegion,
+}: NowCardProps) {
   const theme = useTheme()
   const { colors } = theme
   return (
@@ -51,19 +60,24 @@ export function NowCard({ kicker, title, timer, glow = true, right, liveRegion }
         </Text>
         {right}
       </View>
-      <Text
-        variant="placardTitle"
-        color="ink"
-        numberOfLines={2}
-        maxFontSizeMultiplier={IN_CAR_MAX_FONT_SCALE}
-      >
-        {title}
-      </Text>
-      {timer ? (
-        <Text variant="mono" color="inkDim" maxFontSizeMultiplier={IN_CAR_MAX_FONT_SCALE}>
-          {timer}
+      <View style={styles.titleRow}>
+        <Text
+          variant="placardTitle"
+          color="ink"
+          numberOfLines={2}
+          maxFontSizeMultiplier={IN_CAR_MAX_FONT_SCALE}
+          style={styles.flex}
+        >
+          {title}
         </Text>
-      ) : null}
+        {timer ? (
+          <Text variant="mono" color="inkDim" maxFontSizeMultiplier={IN_CAR_MAX_FONT_SCALE}>
+            {timer}
+          </Text>
+        ) : null}
+      </View>
+      {children}
+      {transport ? <View style={styles.transport}>{transport}</View> : null}
     </View>
   )
 }
@@ -73,9 +87,13 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     borderWidth: border.keyline,
     paddingHorizontal: space.lg,
-    paddingVertical: space.md, // was lg — trimmed so the card hugs its content, not floats in it
-    gap: space.sm,
+    paddingVertical: space.lg,
+    gap: space.md,
   },
   head: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  // Title left, the optional mono timer hugged to the right and baseline-aligned-ish.
+  titleRow: { flexDirection: 'row', alignItems: 'flex-end', gap: space.sm },
   flex: { flex: 1 },
+  // A little breathing room above the transport so it reads as its own zone in the card.
+  transport: { marginTop: space.xs },
 })

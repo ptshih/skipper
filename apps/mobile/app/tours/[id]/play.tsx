@@ -17,9 +17,7 @@ import {
   AccountGate,
   Badge,
   Button,
-  Card,
   Divider,
-  NOW_AREA_RESERVE,
   NowCard,
   RouteTrack,
   Screen,
@@ -33,6 +31,7 @@ import {
   stopTone,
   voice,
 } from '@/ui'
+import type { BadgeTone } from '@/ui'
 
 // mm:ss for the preview header's "X preview of a Y drive" subtitle.
 const mmss = (ms: number) =>
@@ -109,6 +108,81 @@ export default function DriveScreen() {
   const nextStop = d.nextSeq != null ? d.stops.find((s) => s.seq === d.nextSeq) : undefined
   const nextName = nextStop?.name
 
+  // ── ONE player card, FIVE states ──────────────────────────────────────────────
+  // Collapse the done / ready / rest / active-clip / rolling variants into a single
+  // config (kicker, title, optional badge + timer, glow, and which transport to show),
+  // then render ONE elevated card instead of five sibling cards. `mid` is the card's
+  // state-dependent middle: a body line (ready/done) or the Scrubber (driving). The
+  // transport stays at the bottom of the same card.
+  const restState = d.currentKind === 'rest'
+  const showReady = !isPreview && d.phase === 'ready'
+  const showScrubber = !showReady && d.phase !== 'done'
+
+  type CardConfig = {
+    kicker: string
+    title: string
+    body?: string
+    timer?: string
+    badge?: { tone: BadgeTone; label: string }
+    glow: boolean
+  }
+  let card: CardConfig
+  if (d.phase === 'done') {
+    card = { kicker: 'DRIVE COMPLETE', title: 'You’ve arrived', body: voice.driveComplete, glow: false }
+  } else if (showReady) {
+    card = {
+      kicker: voice.drive.ready,
+      title: d.tourName,
+      body: voice.drive.readyBody,
+      glow: false,
+    }
+  } else if (restState) {
+    // A silent break stop — a "good spot to stretch" pit-stop (no halo).
+    card = { kicker: voice.player.pitStop, title: nextName ?? 'A good spot to stretch', glow: false }
+  } else if (d.activeSeq != null) {
+    // A loaded clip. A held clip dims the halo and stops claiming "NOW PLAYING".
+    card = {
+      kicker: d.nowPlaying ? voice.player.nowPlaying : voice.player.paused,
+      title: nowTitle,
+      glow: d.nowPlaying,
+      badge: activeStop
+        ? { tone: stopTone(activeStop.stopType), label: stopLabel(activeStop.stopType) }
+        : undefined,
+    }
+  } else {
+    // Between stops: transit, not a stop — the amber halo stays OFF (the route track
+    // keeps the single between-stops glow). kicker → big destination title → next badge.
+    card = {
+      kicker: nextName ? `${voice.player.rolling} · ${voice.drive.nextStop}` : voice.player.rolling,
+      title: nextName ?? voice.player.rollingOpen,
+      timer:
+        d.rollingDistanceM != null ? `~${(d.rollingDistanceM / 1609).toFixed(1)} mi` : undefined,
+      glow: false,
+      badge: nextStop
+        ? { tone: stopTone(nextStop.stopType), label: stopLabel(nextStop.stopType) }
+        : undefined,
+    }
+  }
+
+  const transport =
+    d.phase === 'done' ? (
+      <TransportBar single={{ icon: 'restart', title: voice.cta.restart, onPress: d.restart }} />
+    ) : showReady ? (
+      <TransportBar single={{ icon: 'play', title: voice.cta.play, onPress: d.start }} />
+    ) : (
+      // PREVIEW just plays (autostarts, no fix source to "pull over" from) — no secondary
+      // "Pull over" button; the live/sim drive keeps it to end the drive.
+      <TransportBar
+        playing={!d.paused}
+        playLabel={voice.cta.resume}
+        onPlayPause={d.togglePause}
+        onSeekBack={() => d.seekBy(-15)}
+        onSeekForward={() => d.seekBy(15)}
+        canSeek={d.canSeek}
+        secondary={isPreview ? undefined : { title: voice.cta.endDrive, onPress: d.end }}
+      />
+    )
+
   return (
     <Screen edges={['bottom']}>
       {/* Keep edge-swipe back but stop the Scrubber drag from triggering the iOS-26
@@ -184,13 +258,13 @@ export default function DriveScreen() {
         })}
       </ScrollView>
 
-      {/* ── PLAYER ── status + controls, anchored to the bottom edge as one grounded unit
-          (thumb-height for in-car) instead of floating mid-screen. A dashed rule fences it
-          off from the itinerary above. */}
+      {/* ── PLAYER CARD ── now-playing + scrubber + transport, contained in ONE elevated
+          card anchored to the bottom edge. A dashed rule fences it off from the itinerary
+          above; the card sizes to its content (no fixed reserve) so it hugs the bottom. */}
       <Divider dashed style={styles.divider} />
 
       {/* GPS acquisition — a missing fix reads as a "still finding you" status, not a
-          fault with the current clip. */}
+          fault with the current clip. Sits just above the card. */}
       {d.gpsSearching && !d.paused ? (
         <View style={styles.gpsSearch} accessibilityLiveRegion="polite">
           <ActivityIndicator size="small" color={theme.colors.accentWarm} />
@@ -200,124 +274,9 @@ export default function DriveScreen() {
         </View>
       ) : null}
 
-      {/* NOW area — a fixed-height reserve (see styles.nowContent) so the transport controls
-          below hold a stable position as the now-content swaps between the active clip's
-          NowCard and the non-glowing rolling variant. */}
-      <View style={styles.nowWrap}>
-        <View style={styles.nowContent}>
-          {d.phase === 'done' ? (
-            <Card>
-              <Text variant="label" color="accentWarm">
-                DRIVE COMPLETE
-              </Text>
-              <Text variant="placardTitle" color="ink">
-                You’ve arrived
-              </Text>
-              <Text variant="body" color="inkDim">
-                {voice.driveComplete}
-              </Text>
-            </Card>
-          ) : !isPreview && d.phase === 'ready' ? (
-            <Card>
-              <Text variant="label" color="accentWarm">
-                {voice.drive.ready}
-              </Text>
-              <Text variant="placardTitle" color="ink">
-                {d.tourName}
-              </Text>
-              <Text variant="body" color="inkDim">
-                {voice.drive.readyBody}
-              </Text>
-            </Card>
-          ) : d.currentKind === 'rest' ? (
-            // PREVIEW: a silent break stop — a "good spot to stretch" pit-stop card (no halo).
-            <NowCard
-              liveRegion
-              glow={false}
-              kicker={voice.player.pitStop}
-              title={nextName ?? 'A good spot to stretch'}
-            />
-          ) : d.activeSeq != null ? (
-            <NowCard
-              liveRegion
-              // A held clip dims the halo and stops claiming "NOW PLAYING".
-              glow={d.nowPlaying}
-              kicker={d.nowPlaying ? voice.player.nowPlaying : voice.player.paused}
-              title={nowTitle}
-              right={
-                activeStop ? (
-                  <Badge tone={stopTone(activeStop.stopType)} label={stopLabel(activeStop.stopType)} />
-                ) : undefined
-              }
-            />
-          ) : (
-            // Between stops: a calm, non-glowing sibling of the NOW card (transit, not a
-            // stop) — same card chrome, but the amber halo stays OFF here so the route
-            // track keeps the single between-stops glow. Mirrors the active card's shape:
-            // kicker → big destination title → the next stop's type badge. PREVIEW shows the
-            // compressed leg's distance in the mono timer slot.
-            <NowCard
-              liveRegion
-              glow={false}
-              kicker={
-                nextName ? `${voice.player.rolling} · ${voice.drive.nextStop}` : voice.player.rolling
-              }
-              title={nextName ?? voice.player.rollingOpen}
-              timer={
-                d.rollingDistanceM != null
-                  ? `~${(d.rollingDistanceM / 1609).toFixed(1)} mi`
-                  : undefined
-              }
-              right={
-                nextStop ? (
-                  <Badge tone={stopTone(nextStop.stopType)} label={stopLabel(nextStop.stopType)} />
-                ) : undefined
-              }
-            />
-          )}
-        </View>
-
-        {/* In-clip position bar (only meaningful on a loaded clip). MID-DRIVE between stops
-            it's kept mounted but hidden so its height stays reserved and the controls don't
-            shift when it reappears on the next clip. Pre-drive (ready) and at the end (done)
-            there's no clip to swap to, so it's fully collapsed — no dead band above the CTA. */}
-        <View
-          style={
-            d.activeSeq != null
-              ? undefined
-              : d.phase === 'driving'
-                ? styles.reservedHidden
-                : styles.collapsed
-          }
-          pointerEvents={d.activeSeq != null ? 'auto' : 'none'}
-          accessibilityElementsHidden={d.activeSeq == null}
-          importantForAccessibility={d.activeSeq != null ? 'auto' : 'no-hide-descendants'}
-        >
-          <Scrubber
-            positionMs={d.activeSeq != null ? d.positionMs : 0}
-            durationMs={d.activeSeq != null ? d.durationMs : 0}
-            onSeek={d.seekToMs}
-            onScrubbingChange={d.setScrubbing}
-            disabled={!d.canSeek}
-          />
-        </View>
-
-        {d.buffering ? (
-          <View style={styles.buffering}>
-            <ActivityIndicator size="small" color={theme.colors.accentWarm} />
-            <Text variant="dim" color="inkFaint">
-              {voice.player.buffering}
-            </Text>
-          </View>
-        ) : d.stallNote ? (
-          <Text variant="dim" color="danger" style={styles.stall}>
-            {d.stallNote}
-          </Text>
-        ) : null}
-      </View>
-
       {/* Sim setup — pre-drive only, SIM mode only (the on-device drive simulator's one knob;
-          a live drive runs at real GPS speed, so the time-scale toggle is meaningless). */}
+          a live drive runs at real GPS speed, so the time-scale toggle is meaningless). Sits
+          just above the card so the card stays purely the player. */}
       {driveMode === 'sim' && d.phase === 'ready' ? (
         <View style={styles.simRow}>
           <Text variant="label" color="inkFaint">
@@ -342,23 +301,56 @@ export default function DriveScreen() {
         </View>
       ) : null}
 
-      {d.phase === 'done' ? (
-        <TransportBar single={{ icon: 'restart', title: voice.cta.restart, onPress: d.restart }} />
-      ) : !isPreview && d.phase === 'ready' ? (
-        <TransportBar single={{ icon: 'play', title: voice.cta.play, onPress: d.start }} />
-      ) : (
-        // PREVIEW just plays (autostarts, no fix source to "pull over" from) — no secondary
-        // "Pull over" button; the live/sim drive keeps it to end the drive.
-        <TransportBar
-          playing={!d.paused}
-          playLabel={voice.cta.resume}
-          onPlayPause={d.togglePause}
-          onSeekBack={() => d.seekBy(-15)}
-          onSeekForward={() => d.seekBy(15)}
-          canSeek={d.canSeek}
-          secondary={isPreview ? undefined : { title: voice.cta.endDrive, onPress: d.end }}
-        />
-      )}
+      <View style={styles.cardWrap}>
+        <NowCard
+          liveRegion
+          glow={card.glow}
+          kicker={card.kicker}
+          title={card.title}
+          timer={card.timer}
+          right={card.badge ? <Badge tone={card.badge.tone} label={card.badge.label} /> : undefined}
+          transport={transport}
+        >
+          {card.body ? (
+            <Text variant="body" color="inkDim">
+              {card.body}
+            </Text>
+          ) : null}
+
+          {/* In-clip position bar — only mounted while driving. MID-DRIVE between stops it's
+              kept mounted but hidden so its height stays reserved and the transport doesn't
+              shift when it reappears on the next clip. Ready/done collapse it entirely. */}
+          {showScrubber ? (
+            <View
+              style={d.activeSeq != null ? undefined : styles.reservedHidden}
+              pointerEvents={d.activeSeq != null ? 'auto' : 'none'}
+              accessibilityElementsHidden={d.activeSeq == null}
+              importantForAccessibility={d.activeSeq != null ? 'auto' : 'no-hide-descendants'}
+            >
+              <Scrubber
+                positionMs={d.activeSeq != null ? d.positionMs : 0}
+                durationMs={d.activeSeq != null ? d.durationMs : 0}
+                onSeek={d.seekToMs}
+                onScrubbingChange={d.setScrubbing}
+                disabled={!d.canSeek}
+              />
+            </View>
+          ) : null}
+
+          {d.buffering ? (
+            <View style={styles.buffering}>
+              <ActivityIndicator size="small" color={theme.colors.accentWarm} />
+              <Text variant="dim" color="inkFaint">
+                {voice.player.buffering}
+              </Text>
+            </View>
+          ) : d.stallNote ? (
+            <Text variant="dim" color="danger">
+              {d.stallNote}
+            </Text>
+          ) : null}
+        </NowCard>
+      </View>
     </Screen>
   )
 }
@@ -366,13 +358,8 @@ export default function DriveScreen() {
 const styles = StyleSheet.create({
   header: { paddingHorizontal: space.gutter, paddingTop: space.md, gap: space.xs },
   track: { marginHorizontal: space.gutter, marginTop: space.md },
-  nowWrap: { paddingHorizontal: space.gutter, marginTop: space.sm, gap: space.sm },
-  // Reserve a clip-card's height (centered) so the controls below — and the stop list —
-  // hold a stable position as the now-content swaps between the active and rolling
-  // NowCards; the scrubber's height is reserved separately (it stays mounted).
-  nowContent: { minHeight: NOW_AREA_RESERVE, justifyContent: 'center' },
+  cardWrap: { paddingHorizontal: space.gutter, marginTop: space.sm },
   reservedHidden: { opacity: 0 }, // hold the scrubber's layout height without showing it
-  collapsed: { display: 'none' }, // drop the scrubber from layout entirely (ready/done — no clip to reserve for)
   buffering: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   gpsSearch: {
     flexDirection: 'row',
@@ -382,7 +369,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.gutter,
     marginTop: space.md,
   },
-  stall: { marginTop: space.xs },
   hint: { paddingHorizontal: space.gutter, paddingTop: space.md, paddingBottom: space.sm }, // preview only
   simRow: { paddingHorizontal: space.gutter, marginTop: space.lg, gap: space.sm },
   simBtns: { flexDirection: 'row', gap: space.sm },
