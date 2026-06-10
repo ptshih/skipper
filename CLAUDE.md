@@ -260,14 +260,14 @@ proven first. Full write-ups live in `docs/ideas/` (pre-spec) and `docs/specs/`
 
 From an adversarial review of the scaffold. Verdict: sound foundation. Guardrails:
 
-- **Type-name collisions.** `@skipper/shared` (Zod boundary types) and
-  `@skipper/db/schema` (Drizzle `$inferSelect` row types) both export `Poi`,
-  `Tour`, `TourStop`, `TourBracket`, `Region`, `Polyline` — DIFFERENT shapes
-  (Zod = read DTOs: nullish, omit internal cols like `facts`/`meta`). Use Zod
-  types from `@skipper/shared` at boundaries; import DB row types only from the
-  `@skipper/db/schema` subpath, aliased (`import type { Poi as PoiRow }`). NEVER
-  `export * from` both in one barrel. The `@skipper/db` client deliberately does
-  NOT re-export the schema.
+- **Type-name collisions (enforced: `bun run lint:types`).** `@skipper/shared` (Zod
+  boundary types) and `@skipper/db/schema` (Drizzle `$inferSelect` row types) both export
+  `Poi`, `Tour`, `TourStop`, `TourBracket`, `Region` — DIFFERENT shapes (Zod = read DTOs:
+  nullish, omit internal cols like `facts`/`meta`). Use Zod types from `@skipper/shared` at
+  boundaries; import a DB ROW type only from the `@skipper/db/schema` subpath, ALIASED
+  (`import type { Poi as PoiRow }`). NEVER `export * from` both in one barrel. (`Polyline`
+  collides by name too but is the SAME shape, so the guard ignores it.) The guard derives the
+  set from the schema each run; the `@skipper/db` client deliberately does NOT re-export the schema.
 - **`@skipper/db` import is side-effect-free.** The client is lazy (`getDb()` /
   the `db` proxy build on first query) so importing it never forces
   `DATABASE_URL` to exist — env-free routes like `GET /health` keep booting.
