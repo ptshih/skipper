@@ -87,23 +87,15 @@ export function specBySlug(slug: string): TourSpec | undefined {
 
 /**
  * The frozen tour artifact written to ./data/<slug>.json by ./materialize.ts and read
- * back by ./seed.ts. The polyline is GeoJSON [lng, lat] pairs (matching the
- * tours.polyline column); provenance documents how it was frozen so the route is never
- * silently re-derived. (seed.ts takes the route GEOMETRY from here and the
- * headline/region/anchor METADATA from the spec above, so an older frozen artifact that
- * predates the metadata fields still seeds correctly.)
+ * back by ./seed.ts. It stores ONLY the route geometry + provenance: the polyline is
+ * GeoJSON [lng, lat] pairs (matching the tours.polyline column) and provenance documents
+ * how it was frozen so the route is never silently re-derived. All tour METADATA
+ * (headline/region/anchors/summary) lives in the spec (TourSpec) above — seed.ts reads it
+ * from there, never from this artifact.
  */
 export interface FrozenTour {
   slug: string
-  regionSlug: string
-  regionName: string
-  headline: string
-  startAnchorName: string
-  endAnchorName: string
-  summary: string
   polyline: [number, number][]
-  startAnchor: { name: string; lat: number; lng: number }
-  endAnchor: { name: string; lat: number; lng: number }
   provenance: {
     source: 'google-routes-v2'
     waypoints: Waypoint[]

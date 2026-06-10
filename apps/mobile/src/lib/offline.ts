@@ -19,8 +19,6 @@ import type { TourListItem } from '@skipper/shared'
 import { getTour, signTourAudio, type SignedAudio, type TourDetail } from './api'
 import { extForContentType, urlMapFromSigned } from './offline-util'
 
-export { extForContentType, urlMapFromSigned }
-
 // Manifest schema version — bump on any shape change so a stale-format manifest left by an
 // older app build reads as NOT-downloaded (and re-downloads) instead of crashing the player.
 const MANIFEST_VERSION = 1

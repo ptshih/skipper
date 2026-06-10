@@ -99,20 +99,9 @@ async function materialize(spec: TourSpec, apiKey: string): Promise<FrozenTour> 
   const polyline = decodePolyline(route.polyline.encodedPolyline)
   // duration comes back like "786s".
   const durationSeconds = Number.parseInt(route.duration.replace(/s$/, ''), 10)
-  const wp = spec.waypoints
-  const origin = wp[0]!
-  const destination = wp[wp.length - 1]!
   const frozen: FrozenTour = {
     slug: spec.slug,
-    regionSlug: spec.regionSlug,
-    regionName: spec.regionName,
-    headline: spec.headline,
-    startAnchorName: spec.startAnchorName,
-    endAnchorName: spec.endAnchorName,
-    summary: spec.summary,
     polyline,
-    startAnchor: { name: spec.startAnchorName, lat: origin.lat, lng: origin.lng },
-    endAnchor: { name: spec.endAnchorName, lat: destination.lat, lng: destination.lng },
     provenance: {
       source: 'google-routes-v2',
       waypoints: spec.waypoints,

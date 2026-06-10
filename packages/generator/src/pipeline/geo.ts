@@ -68,35 +68,6 @@ export function timeAtAlong(alongM: number, totalRouteM: number, totalRouteSec: 
   return (alongM / totalRouteM) * totalRouteSec
 }
 
-export interface RouteSample {
-  point: LngLat
-  alongM: number
-}
-
-/**
- * Evenly-spaced probe points along the route (one per ~`stepMeters` traveled),
- * covering the whole route rather than just the named waypoints. Always
- * includes the first and last vertex.
- */
-export function sampleAlong(polyline: LngLat[], cumulative: number[], stepMeters: number): RouteSample[] {
-  const samples: RouteSample[] = []
-  if (polyline.length === 0) return samples
-  let nextAt = 0
-  for (let i = 0; i < polyline.length; i++) {
-    if (cumulative[i]! >= nextAt) {
-      samples.push({ point: polyline[i]!, alongM: cumulative[i]! })
-      nextAt = cumulative[i]! + stepMeters
-    }
-  }
-  // Guarantee the final vertex is covered (the corridor's far end).
-  const lastIdx = polyline.length - 1
-  const last = samples[samples.length - 1]
-  if (!last || last.alongM < cumulative[lastIdx]!) {
-    samples.push({ point: polyline[lastIdx]!, alongM: cumulative[lastIdx]! })
-  }
-  return samples
-}
-
 /**
  * Encode an [lng, lat] polyline to Google's precision-5 encoded-polyline string.
  *

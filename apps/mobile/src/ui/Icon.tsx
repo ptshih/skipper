@@ -18,11 +18,8 @@ export type IconName =
   | 'pause'
   | 'restart'
   | 'back'
-  | 'prev'
-  | 'next'
   | 'back15'
   | 'forward15'
-  | 'nowPlaying'
   | 'passed'
   | 'upcoming'
   | 'ticket'
@@ -35,8 +32,6 @@ export type IconName =
   | 'check'
   | 'region'
   | 'close'
-  | 'nearMe'
-  | 'download'
   | 'downloaded'
   | 'more'
 
@@ -50,13 +45,10 @@ const IONICON: Record<IconName, ComponentProps<typeof Ionicons>['name']> = {
   pause: 'pause',
   restart: 'reload',
   back: 'chevron-back', // the global header back affordance (chevron-in-a-circle)
-  prev: 'play-skip-back',
-  next: 'play-skip-forward',
   // jog by 15s — the no-bar double-triangle (scan), distinct from the bar'd skip-stop
   back15: 'play-back',
   forward15: 'play-forward',
   // row states
-  nowPlaying: 'musical-note',
   passed: 'checkmark-circle',
   upcoming: 'caret-forward',
   // misc
@@ -71,8 +63,6 @@ const IONICON: Record<IconName, ComponentProps<typeof Ionicons>['name']> = {
   check: 'checkmark', // the selected row in the picker
   region: 'location-outline', // a region/destination row + the location chip glyph
   close: 'close', // dismiss a modal sheet
-  nearMe: 'navigate', // reserved: the deferred "Drives near you" GPS shortcut (v2)
-  download: 'download-outline', // grab a tour for offline play (Tahoe dead zones)
   downloaded: 'cloud-done-outline', // a tour that's saved to disk + plays with no signal
   more: 'ellipsis-horizontal', // header overflow menu (secondary/utility actions)
 }

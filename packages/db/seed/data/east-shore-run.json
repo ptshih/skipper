@@ -1,11 +1,5 @@
 {
   "slug": "east-shore-run",
-  "regionSlug": "lake-tahoe",
-  "regionName": "Lake Tahoe",
-  "headline": "Sand Harbor",
-  "startAnchorName": "South Lake Tahoe",
-  "endAnchorName": "Kings Beach",
-  "summary": "The East Shore run: from South Lake Tahoe up Highway 50 and 28 past Cave Rock, Sand Harbor, and Thunderbird Lodge, through Incline Village to Kings Beach.",
   "polyline": [
     [
       -119.94231,
@@ -11668,16 +11662,6 @@
       39.23727
     ]
   ],
-  "startAnchor": {
-    "name": "South Lake Tahoe",
-    "lat": 38.9655,
-    "lng": -119.9425
-  },
-  "endAnchor": {
-    "name": "Kings Beach",
-    "lat": 39.2371,
-    "lng": -120.026
-  },
   "provenance": {
     "source": "google-routes-v2",
     "waypoints": [

@@ -44,8 +44,6 @@ export interface DiversityCase {
   expect: { failingSeqs: number[] }
   why: string
 }
-export type GoldenCase = GroundingCase | TtsCase | DiversityCase
-
 const LT = { region: 'Lake Tahoe', corridor: 'Emerald Bay Run' }
 
 export const GROUNDING_CASES: GroundingCase[] = [
@@ -308,5 +306,3 @@ export const DIVERSITY_CASES: DiversityCase[] = [
     why: 'locks the banned "here\'s the …" reveal wind-up the persona prompt forbids.',
   },
 ]
-
-export const GOLDEN: GoldenCase[] = [...GROUNDING_CASES, ...TTS_CASES, ...DIVERSITY_CASES]

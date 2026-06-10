@@ -157,10 +157,6 @@ export const GROUNDING_REGEN_BUDGET = 12
 
 // --- POI discovery ----------------------------------------------------------
 
-/** Geosearch probe spacing along the route (m). ~1.5x radius gives overlap so nothing is missed. */
-export const GEOSEARCH_STEP_M = 2_500
-/** Geosearch circle radius per probe (m). Max allowed by the API is 10 km. */
-export const GEOSEARCH_RADIUS_M = 2_000
 /** Wikipedia POIs farther than this from the road aren't "along the drive" — dropped. */
 export const OFF_ROUTE_MAX_M = 700
 

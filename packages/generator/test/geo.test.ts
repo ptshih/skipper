@@ -6,7 +6,6 @@ import {
   haversineMeters,
   nearestOnRoute,
   routeBearingAt,
-  sampleAlong,
   sideOfApproach,
   timeAtAlong,
   totalMeters,
@@ -152,17 +151,5 @@ describe('timeAtAlong', () => {
   })
   test('guards zero-length route', () => {
     expect(timeAtAlong(100, 0, 3600)).toBe(0)
-  })
-})
-
-describe('sampleAlong', () => {
-  // ~11.1 km north-south line at ~111 m spacing.
-  const line: LngLat[] = Array.from({ length: 101 }, (_, i) => [0, i * 0.001] as LngLat)
-  const cum = cumulativeMeters(line)
-  test('samples roughly every step and always includes the last vertex', () => {
-    const samples = sampleAlong(line, cum, 2_000) // every ~2 km over ~11.1 km
-    expect(samples.length).toBeGreaterThanOrEqual(6)
-    expect(samples[0]!.alongM).toBe(0)
-    expect(samples[samples.length - 1]!.alongM).toBe(totalMeters(cum))
   })
 })

@@ -58,11 +58,6 @@ export async function uploadAudio(key: string, bytes: Uint8Array): Promise<strin
   return key
 }
 
-/** Whether a clip already exists in R2 (lets callers skip re-synthesis). */
-export async function audioExists(key: string): Promise<boolean> {
-  return getClient().file(key).exists()
-}
-
 /** Delete a clip object by key — used to sweep an orphan after a key/extension migration. */
 export async function deleteAudio(key: string): Promise<void> {
   await getClient().file(key).delete()

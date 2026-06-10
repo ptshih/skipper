@@ -74,8 +74,6 @@ export interface NarrationRequest {
   mergedFeatures?: { name: string; facts: string[] }[]
   /** Only when actually known from the route geometry. */
   sideOfRoad?: 'left' | 'right'
-  /** Pronunciation hint, e.g. "Genoa = JUH-noh-uh". */
-  pronunciation?: string
   /** Short reminders of earlier stops, for earned callbacks. */
   priorStops?: string[]
   /** How the last few stops OPENED — so this stop can open differently (each call is independent). */
@@ -200,7 +198,6 @@ export function buildFactSheet(req: NarrationRequest): string {
     lines.push(`PLACE: ${req.place?.name ?? '(unnamed)'}`)
     if (req.place?.kind) lines.push(`KIND: ${req.place.kind}`)
     if (req.sideOfRoad) lines.push(`SIDE OF ROAD: on the ${req.sideOfRoad}`)
-    if (req.pronunciation) lines.push(`PRONUNCIATION: ${req.pronunciation}`)
     lines.push('')
     const facts = (req.facts ?? []).map((f) => f.trim()).filter(Boolean)
     if (facts.length > 0) {
@@ -425,8 +422,6 @@ export interface OutroRequest {
   /** The arrival endpoint to name, e.g. "South Lake Tahoe". */
   endAnchor: string
   jokeLevel: JokeLevel
-  /** Optional hook from the intro, to bookend the drive. */
-  introCallback?: string
 }
 
 /** Build the INTRO bracket's user message (position-agnostic; destination + direction). */
@@ -453,10 +448,9 @@ export function buildOutroSheet(req: OutroRequest): string {
   lines.push(`REGION: ${req.region}`)
   lines.push(`ARRIVING AT: ${req.endAnchor}`)
   lines.push(`JOKE NOTCH: ${req.jokeLevel.toUpperCase()}`)
-  if (req.introCallback) lines.push(`INTRO HOOK (optional bookend callback): ${req.introCallback}`)
   lines.push('')
   lines.push(
-    'Bring the drive in: name the arrival anchor, give the warm SIGN-OFF (the sentimental bow lives HERE, and only here), land a notch-scaled closing groaner, and optionally bookend the intro hook. Send them off warm. Assert NO place-fact: name and frame only.',
+    'Bring the drive in: name the arrival anchor, give the warm SIGN-OFF (the sentimental bow lives HERE, and only here), and land a notch-scaled closing groaner. Send them off warm. Assert NO place-fact: name and frame only.',
   )
   return lines.join('\n')
 }

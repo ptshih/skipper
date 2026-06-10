@@ -37,7 +37,6 @@ interface ThemeContextValue {
   theme: Theme
   mode: ThemeMode
   setMode: (mode: ThemeMode) => void
-  toggle: () => void // flips the *resolved* mood to its opposite
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null)
@@ -67,7 +66,6 @@ export function ThemeProvider({
       theme,
       mode,
       setMode,
-      toggle: () => setMode(theme.isDark ? 'light' : 'dark'),
     }
   }, [mode, system, setMode])
 
