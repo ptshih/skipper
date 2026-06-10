@@ -91,6 +91,15 @@ export class TriggerEngine {
 
   /** Feed one fix; returns the stops that fired on it (usually 0 or 1). */
   update(fix: GpsFix): TriggerEvent[] {
+    // Defense-in-depth: a malformed fix (non-finite coords/speed) must NEVER fire. Without this,
+    // a NaN distance — or a NaN effective radius from a NaN speed — makes `d > radius` read FALSE,
+    // so the stop fires; and since every unfired stop shares the one bad fix, the WHOLE tour would
+    // dump into the queue at once. The live source sanitizes the iOS -1 sentinel (gps.ts `sane()`),
+    // but this engine is the SHARED safety-critical choke point (sim, live drive, free-roam) and
+    // must not trust each source to do so. A malformed fix is useless for triggering anyway → drop it.
+    if (!Number.isFinite(fix.lat) || !Number.isFinite(fix.lng) || !Number.isFinite(fix.speedMps)) {
+      return []
+    }
     const here: [number, number] = [fix.lng, fix.lat]
     const events: TriggerEvent[] = []
     for (const stop of this.stops) {

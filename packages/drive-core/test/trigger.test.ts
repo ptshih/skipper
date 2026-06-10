@@ -61,6 +61,23 @@ describe('TriggerEngine', () => {
     expect(new TriggerEngine([NORTH]).update(slow)).toHaveLength(0) // 300 > 120 floor
   })
 
+  test('ignores a malformed fix — a NaN coord/speed fires nothing and never consumes a stop', () => {
+    // The catastrophic case: ONE bad fix would otherwise fire EVERY unfired stop at once,
+    // because a NaN distance (or a NaN effective radius from a NaN speed) makes `d > radius`
+    // read FALSE — so the distance gate is skipped and the stop fires.
+    const stops: TourStopRef[] = [
+      { seq: 1, lat: 0.008, lng: 0, triggerRadiusM: 120, durationMs: 30_000, name: 'A' },
+      { seq: 2, lat: 0.0081, lng: 0, triggerRadiusM: 120, durationMs: 30_000, name: 'B' },
+    ]
+    const e = new TriggerEngine(stops)
+    expect(e.update(fix(NaN, 0, MPH60, 0))).toHaveLength(0) // NaN coord
+    expect(e.update(fix(0.008, 0, NaN, 0))).toHaveLength(0) // NaN speed (valid coords, in range)
+    expect(e.firedCount).toBe(0) // neither bad fix CONSUMED a stop (no debounce side effect)
+    // A subsequent VALID, in-range fix still fires both normally — the engine isn't corrupted.
+    const fired = e.update(fix(0.0079, 0, MPH60, 0))
+    expect(fired.map((ev) => ev.seq).sort((a, b) => a - b)).toEqual([1, 2])
+  })
+
   test('snapStopsToRoute moves the trigger point onto the road, keeps the POI, records off-route', () => {
     const route: LngLat[] = Array.from({ length: 11 }, (_, i) => [0, i * 0.001] as LngLat) // lat 0..0.01 along lng 0
     const stops: TourStopRef[] = [{ seq: 0, lat: 0.005, lng: 0.001, triggerRadiusM: 120 }] // ~111 m east of the line
