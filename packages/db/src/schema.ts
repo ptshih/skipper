@@ -9,6 +9,7 @@ import {
   boolean,
   timestamp,
   uniqueIndex,
+  unique,
   index,
 } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
@@ -68,6 +69,18 @@ export const poiSourceEnum = pgEnum('poi_source', ['wikipedia', 'google_places',
 export const tourStatusEnum = pgEnum('tour_status', ['draft', 'generating', 'ready', 'failed'])
 
 export const stopTypeEnum = pgEnum('stop_type', ['story', 'scenic', 'break'])
+
+// poi_overrides vocabulary (typo-safe like stop_type). `kind` discriminates the two
+// correction shapes; `upstream_status` tracks the contribute-back workflow (agent DRAFTS a
+// Wikipedia correction, human SUBMITS it — never autonomous bot edits, per WP:BOT/COI norms).
+export const poiOverrideKindEnum = pgEnum('poi_override_kind', ['fact_edit', 'side_anchor'])
+export const upstreamStatusEnum = pgEnum('upstream_status', [
+  'not_filed', // confirmed + corrected locally; nothing filed with the source yet
+  'filed', // a correction (edit or talk-page post) has been submitted upstream
+  'merged', // the source accepted the fix — the local find-string should now no-op
+  'reverted', // the source rejected/reverted the fix — local override stays load-bearing
+  'not_applicable', // nothing to file (e.g. a side_of_road call — our judgment, not their error)
+])
 
 // A drive's FRAME pieces (the intro/outro brackets — see tour_brackets). Kept as a
 // pgEnum (typo-safe) and mirrored by the Zod `bracketKind` enum in @skipper/shared.
@@ -129,6 +142,77 @@ export const pois = pgTable(
     // One row per (source, source_id) — primary dedup invariant.
     uniqueIndex('pois_source_source_id_uq').on(t.source, t.sourceId),
     index('pois_kind_idx').on(t.kind),
+  ],
+)
+
+/* -------------------------------------------------------------------------- */
+/*  poi_overrides — curated corrections for places whose SOURCE is wrong        */
+/* -------------------------------------------------------------------------- */
+
+// The fix layer for UPSTREAM source errors. The grounding gate verifies script ↔ sheet, so
+// it is structurally blind to a sheet whose source is wrong (found live 2026-06-09:
+// Wikipedia's "Leonard" for Lennart Palme; the Pope Estate's builder/decade). Each row is
+// ONE documented correction, applied by the generator at fetch time (the seam every fact
+// flows through), so the corrected text reaches the narration sheet, pois.facts, and
+// facts_hash identically — and old tour_stops become detectably stale.
+//
+// Keyed by the pois dedup identity (source, source_id), NOT poiId: overrides apply at FETCH
+// time, before generation has upserted the place, so the poi row may not exist yet.
+//
+// Two correction kinds (the `kind` discriminator):
+//   fact_edit   — literal find→replace on the fetched extract text (find/replace columns).
+//                 Applies ONLY to Wikipedia-fetched prose today (geology/wikidata enrichment
+//                 lines do not pass the fetch seam). An unmatched find is a no-op — but the
+//                 generator WARNS on it, because "source healed" and "source reworded, still
+//                 wrong" are indistinguishable without a human look. `source_url` is the
+//                 AUTHORITATIVE source justifying the correction.
+//   side_anchor — a corrected COORDINATE for the place's speakable content (lat/lng columns),
+//                 used ONLY for the side-of-road computation when the source pin misleads
+//                 (an inland park centroid whose famous content is lakeside). Deliberately a
+//                 coordinate, not a stored 'left'/'right': side flips with travel direction,
+//                 and S→N / N→S are peer tours — the heading-aware geometry resolves the
+//                 anchor to the correct side per drive. Trigger geometry untouched.
+//
+// Discipline: a row is a repair of a VERIFIABLE error, never an editorial rewrite — `reason`
+// is mandatory. The eval CLI's --veracity dimension is the CATCH side; a human adjudicates
+// its findings into rows here. `upstream_status` then tracks contributing the fix back to
+// the source (agent drafts, human submits). Bootstrap rows: packages/db/seed/poi-overrides.ts.
+export const poiOverrides = pgTable(
+  'poi_overrides',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    source: poiSourceEnum('source').notNull(),
+    sourceId: text('source_id').notNull(),
+    /** Human label for the place (audit readability; never used by apply logic). */
+    name: text('name').notNull(),
+    kind: poiOverrideKindEnum('kind').notNull(),
+    /** fact_edit: exact substring to find in the fetched extract. */
+    find: text('find'),
+    /** fact_edit: replacement text ('' deletes the match). */
+    replace: text('replace'),
+    /** side_anchor: where the place's SPEAKABLE content actually is (side computation only). */
+    sideAnchorLat: doublePrecision('side_anchor_lat'),
+    sideAnchorLng: doublePrecision('side_anchor_lng'),
+    /** Why the source is wrong / why the geometry misleads — every row documents itself. */
+    reason: text('reason').notNull(),
+    /** fact_edit: the authoritative source for the correction (not the erroneous one). */
+    sourceUrl: text('source_url'),
+    upstreamStatus: upstreamStatusEnum('upstream_status').notNull().default('not_filed'),
+    /** The filed correction (talk-page post / edit diff URL) once upstream_status = filed+. */
+    upstreamUrl: text('upstream_url'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    // One row per correction identity. NULLS NOT DISTINCT so a place can carry at most ONE
+    // side_anchor row (find is null there) while fact_edits stay distinct by find-string.
+    unique('poi_overrides_identity_uq')
+      .on(t.source, t.sourceId, t.kind, t.find)
+      .nullsNotDistinct(),
+    index('poi_overrides_source_idx').on(t.source, t.sourceId),
   ],
 )
 
@@ -297,6 +381,91 @@ export const savedTours = pgTable(
 )
 
 /* -------------------------------------------------------------------------- */
+/*  eval_runs / eval_scores — the DURABLE eval record (observability, not state) */
+/* -------------------------------------------------------------------------- */
+
+// The eval loop's system of record (decided 2026-06-09 after a best-practices survey —
+// see docs/decisions/fact-overrides-and-veracity.md): every eval platform converges on
+// "the run is a DB record keyed to a pinned artifact; local files are dev transport".
+// Two tables, Langfuse-style: a run row (with the full GenerateResult artifact as jsonb —
+// ~100KB, squarely in-DB territory) + one score row per (run × stop × dimension), with
+// judge and HUMAN verdicts as the same primitive distinguished by `source` — so judge↔human
+// calibration is a GROUP BY, and run-over-run regression is a join on the stable place
+// identity (poi source/source_id; stop ids regenerate, places don't).
+//
+// These tables are OBSERVABILITY, never product state: nothing in the player/API reads
+// them, and a dry-run generation MAY write here (recording the eval is the point) while
+// still writing no tour state.
+
+export const evalRunKindEnum = pgEnum('eval_run_kind', [
+  'generation', // the in-pipeline panel that runs inside generateTour (live or dry)
+  'offline_audit', // the eval CLI scoring an artifact after the fact
+])
+export const evalScoreSourceEnum = pgEnum('eval_score_source', ['judge', 'human'])
+
+export const evalRuns = pgTable(
+  'eval_runs',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    /** The tour the artifact came from; survives as slug if the tour row is deleted. */
+    tourId: uuid('tour_id').references(() => tours.id, { onDelete: 'set null' }),
+    slug: text('slug').notNull(),
+    kind: evalRunKindEnum('kind').notNull(),
+    dryRun: boolean('dry_run').notNull().default(false),
+    /** Best-effort provenance pins for run-over-run comparison. */
+    gitSha: text('git_sha'),
+    narrationModel: text('narration_model'),
+    judgeModel: text('judge_model'),
+    /** The scorecard's gate verdict (AND of gate dimensions). */
+    pass: boolean('pass').notNull(),
+    /** Per-dimension rollup scores (0..1; null = dimension not run) — the trend columns. */
+    groundingScore: doublePrecision('grounding_score'),
+    ttsScore: doublePrecision('tts_score'),
+    diversityScore: doublePrecision('diversity_score'),
+    charmScore: doublePrecision('charm_score'),
+    veracityScore: doublePrecision('veracity_score'),
+    /** The full GenerateResult artifact (scripts + fact wells + embedded scorecard). */
+    artifact: jsonb('artifact').$type<Record<string, unknown>>().notNull(),
+    /** The TourScorecard this run produced (the offline CLI's may differ from the embedded one). */
+    scorecard: jsonb('scorecard').$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index('eval_runs_slug_idx').on(t.slug, t.createdAt)],
+)
+
+export const evalScores = pgTable(
+  'eval_scores',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => evalRuns.id, { onDelete: 'cascade' }),
+    /** Stable cross-run case identity (the pois dedup key); null for pre-identity artifacts. */
+    poiSource: text('poi_source'),
+    poiSourceId: text('poi_source_id'),
+    seq: integer('seq').notNull(),
+    stopType: text('stop_type').$type<'story' | 'scenic' | 'break'>(),
+    dimension: text('dimension').notNull(),
+    /** judge = an automated evaluator; human = an adjudication row added later. */
+    source: evalScoreSourceEnum('source').notNull().default('judge'),
+    pass: boolean('pass').notNull(),
+    /** 0..1 (1 = clean) — the StopEval score. */
+    value: doublePrecision('value').notNull(),
+    findings: jsonb('findings').$type<string[]>().notNull(),
+    /** Dimension-specific payload (ClaimVerdict[] / VeracityVerdict[] / …). */
+    detail: jsonb('detail'),
+    /** Free-text annotation (human rows). */
+    comment: text('comment'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index('eval_scores_run_idx').on(t.runId),
+    // The regression join: same place + dimension across runs.
+    index('eval_scores_case_idx').on(t.poiSource, t.poiSourceId, t.dimension),
+  ],
+)
+
+/* -------------------------------------------------------------------------- */
 /*  Relations                                                                  */
 /* -------------------------------------------------------------------------- */
 
@@ -343,6 +512,12 @@ export type Region = typeof regions.$inferSelect
 export type NewRegion = typeof regions.$inferInsert
 export type Poi = typeof pois.$inferSelect
 export type NewPoi = typeof pois.$inferInsert
+export type PoiOverride = typeof poiOverrides.$inferSelect
+export type NewPoiOverride = typeof poiOverrides.$inferInsert
+export type EvalRun = typeof evalRuns.$inferSelect
+export type NewEvalRun = typeof evalRuns.$inferInsert
+export type EvalScore = typeof evalScores.$inferSelect
+export type NewEvalScore = typeof evalScores.$inferInsert
 export type Tour = typeof tours.$inferSelect
 export type NewTour = typeof tours.$inferInsert
 export type TourStop = typeof tourStops.$inferSelect

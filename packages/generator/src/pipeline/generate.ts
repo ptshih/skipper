@@ -50,7 +50,9 @@ import {
   findingScore,
   gatesNotWorse,
   optimize,
+  recordGenerationEval,
 } from '../eval'
+import { NARRATION_MODEL } from '../models'
 import type {
   GroundingInput,
   OptimizeResult,
@@ -62,6 +64,7 @@ import { personaForRegion } from '../persona'
 import { cumulativeMeters, encodePolyline, totalMeters } from './geo'
 import type { LngLat } from './geo'
 import { fetchDeepExtracts } from './wikipedia'
+import { ensurePoiOverridesLoaded } from './poi-overrides'
 import { candidatesToWikiPois, discoverWikidataPois } from './wikidata-discovery'
 import { geologyFacts } from './macrostrat'
 import { wikidataFacts } from './wikidata'
@@ -91,7 +94,8 @@ export interface GenerateOptions {
   /** The Dad-Joke-O-Meter notch to NARRATE at — a generation input, not stored tour state.
    *  Baked into the narration audio; defaults to `dadpocalypse` (the M1 notch). */
   jokeLevel?: JokeLevel
-  /** Narrate + print scripts only; skip TTS, R2, and all DB writes. */
+  /** Narrate + print scripts only; skip TTS, R2, and all TOUR-STATE writes. (The run's
+   *  eval scorecard IS still recorded to eval_runs — observability, not state.) */
   dryRun?: boolean
   /** Run the optional semantic-closer judge (one extra model call) after the lint. */
   judgeClosers?: boolean
@@ -100,6 +104,10 @@ export interface GenerateOptions {
 export interface StopSummary {
   seq: number
   stopType: StopPlan['stopType']
+  /** The pois dedup identity — the STABLE cross-run case key for eval comparison
+   *  (stop ids regenerate every telling; places don't). */
+  source: string
+  sourceId: string
   name: string
   alongSec: number
   /** SAYABLE kind — story/scenic: the POI kind; break: the SPOKEN kind (post-spokenKind).
@@ -163,6 +171,8 @@ export interface GenerateResult {
   /** Display label for the drive (the tour's headline, e.g. "Emerald Bay"). */
   tourName: string
   region: string
+  /** Provenance pin for the eval record: which model narrated this telling. */
+  narrationModel: string
   durationBucket: DurationBucket
   /** The notch this run narrated at (a generation input; not persisted on the tour). */
   jokeLevel: JokeLevel
@@ -201,6 +211,10 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       throw new Error('R2_* env (ACCOUNT_ID, ACCESS_KEY_ID, SECRET_ACCESS_KEY, BUCKET) is not set.')
     }
   }
+
+  // 0. Curated corrections (poi_overrides) load once per run — BEFORE discovery/selection,
+  // so the Wikipedia fetch seam and the sync side-anchor lookup in select.ts both see them.
+  await ensurePoiOverridesLoaded()
 
   // 1. Tour shell: route geometry + drive time (the pacing clock) + endpoints/region.
   const shell = await loadTour(opts.slug)
@@ -852,6 +866,8 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
     const stops: StopSummary[] = plan.map((s) => ({
       seq: s.seq,
       stopType: s.stopType,
+      source: s.source,
+      sourceId: s.sourceId,
       name: s.name,
       alongSec: s.alongSec,
       ...(sayableKind(s) ? { kind: sayableKind(s)! } : {}),
@@ -868,10 +884,12 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
         ? { mergedFeatures: s.mergedFeatures.map((m) => ({ name: m.name, facts: m.facts })) }
         : {}),
     }))
-    return {
+    const dryResult: GenerateResult = {
+      tourId: shell.id,
       slug: shell.slug,
       tourName: shell.headline,
       region: shell.regionName,
+      narrationModel: NARRATION_MODEL,
       durationBucket,
       jokeLevel,
       totalSec,
@@ -880,6 +898,12 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       brackets: bracketPlan.map((b) => ({ kind: b.kind, script: b.script })),
       eval: evalReport,
     }
+    // Record the eval run durably (eval_runs/eval_scores — observability, not tour state;
+    // the ONE thing a dry run writes). Best-effort: a recording failure never kills a run.
+    await recordGenerationEval(dryResult).catch((e) =>
+      console.warn(`eval record failed (non-fatal): ${(e as Error).message}`),
+    )
+    return dryResult
   }
 
   // ---- Full run: narrate -> TTS -> R2 -> persist -> atomic ready-gate. -----
@@ -970,6 +994,8 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       summaries.push({
         seq: s.seq,
         stopType: s.stopType,
+        source: s.source,
+        sourceId: s.sourceId,
         name: s.name,
         alongSec: s.alongSec,
         ...(sayableKind(s) ? { kind: sayableKind(s)! } : {}),
@@ -1013,11 +1039,12 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
     console.log(
       `Tour ${tourId} is READY (${finalStops.length} stops, ${finalBrackets.length} brackets).`,
     )
-    return {
+    const liveResult: GenerateResult = {
       tourId,
       slug: shell.slug,
       tourName: shell.headline,
       region: shell.regionName,
+      narrationModel: NARRATION_MODEL,
       durationBucket,
       jokeLevel,
       totalSec,
@@ -1026,6 +1053,11 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       brackets: bracketSummaries,
       eval: evalReport,
     }
+    // Record the eval run durably (observability — see the dry path's note).
+    await recordGenerationEval(liveResult).catch((e) =>
+      console.warn(`eval record failed (non-fatal): ${(e as Error).message}`),
+    )
+    return liveResult
   } catch (e) {
     await markTourFailed(tourId).catch(() => {})
     throw e

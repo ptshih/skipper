@@ -42,6 +42,7 @@ import {
 import type { LngLat } from './geo'
 import type { WikiPoi } from './wikipedia'
 import type { BreakAnchor } from './places'
+import { poiOverrideFor } from './poi-overrides'
 
 export interface StopPlan {
   seq: number
@@ -357,8 +358,22 @@ export function selectStops(params: SelectParams): StopPlan[] {
       ...(mergedFeatures.length > 0 ? { mergedFeatures } : {}),
       // Side of the road is delivery-only: a STORY landmark to point at, or a NAMED scenic
       // feature to gesture at ("just off your left"). Breaks forbid it (built separately).
-      // Omitted when the geometry can't call a confident side.
-      ...(snap.sideOfRoad ? { sideOfRoad: snap.sideOfRoad } : {}),
+      // Omitted when the geometry can't call a confident side. A curated side ANCHOR wins
+      // over the pin when the pin misleads (an inland park centroid whose speakable content
+      // is lakeside — pipeline/poi-overrides.ts): the side is recomputed from where the
+      // content actually IS, through the same heading-aware geometry — so it stays correct
+      // per travel direction (S→N and N→S are peer tours). Trigger geometry is untouched.
+      ...((): { sideOfRoad?: 'left' | 'right' } => {
+        const anchor = poiOverrideFor(n.poi.source, n.poi.sourceId)?.sideAnchor
+        const side = anchor
+          ? sideOfApproach(
+              snap.approachHeadingDeg,
+              [snap.triggerLng, snap.triggerLat],
+              [anchor.lng, anchor.lat],
+            )
+          : snap.sideOfRoad
+        return side ? { sideOfRoad: side } : {}
+      })(),
       ...(isStory
         ? { wikiUrl: n.poi.url, wikiTitle: n.poi.title, wikiPageId: n.poi.pageid }
         : {}),

@@ -12,6 +12,11 @@
 
 import { DEEP_EXTRACT_CHARS, EXTRACT_CHARS, WIKIPEDIA_USER_AGENT } from '../config'
 import { fetchWithRetry, sleep } from './http'
+import {
+  applyFactEditsChecked,
+  ensurePoiOverridesLoaded,
+  reportMissedEdits,
+} from './poi-overrides'
 
 const API = 'https://en.wikipedia.org/w/api.php'
 /** Cap maxlag retries so sustained Wikimedia replication lag fails loudly instead of hanging forever. */
@@ -94,6 +99,7 @@ const END_SECTION =
 
 /** Full-article plain-text extract for ONE page (no exintro), capped + trimmed of trailing meta. */
 async function fetchArticleExtract(pageid: number): Promise<string> {
+  await ensurePoiOverridesLoaded()
   // exintro is OFF here (we want the body, not just the lead), and MediaWiki forces
   // exlimit=1 in that mode — so this is one page per call. exchars caps the size.
   const j = await wiki<{ query?: { pages?: ExtractPage[] } }>({
@@ -105,7 +111,14 @@ async function fetchArticleExtract(pageid: number): Promise<string> {
     exchars: String(DEEP_EXTRACT_CHARS),
   })
   const raw = (j.query?.pages?.[0]?.extract ?? '').trim()
-  return raw.split(END_SECTION)[0]!.trim()
+  // Curated upstream-error corrections ride EVERY fetch (pipeline/poi-overrides.ts), so the
+  // fixed text is what reaches the sheet, pois.facts, and facts_hash. NB: edits apply AFTER
+  // the server-side exchars cap — a find-string straddling the truncation boundary misses
+  // (and warns), it can never half-apply.
+  const cut = raw.split(END_SECTION)[0]!.trim()
+  const { text, missed } = applyFactEditsChecked('wikipedia', String(pageid), cut)
+  reportMissedEdits('wikipedia', String(pageid), missed, 'deep-extract')
+  return text
 }
 
 /**
@@ -147,6 +160,7 @@ export interface TitleExtract {
  * one entry per resolved page (its normalized title), with the linked QID when present.
  */
 export async function fetchExtractsByTitle(titles: string[]): Promise<TitleExtract[]> {
+  await ensurePoiOverridesLoaded()
   const out: TitleExtract[] = []
   for (let i = 0; i < titles.length; i += 20) {
     const chunk = titles.slice(i, i + 20)
@@ -163,10 +177,19 @@ export async function fetchExtractsByTitle(titles: string[]): Promise<TitleExtra
     })
     for (const p of j.query?.pages ?? []) {
       if (p.missing) continue
+      // Curated upstream-error corrections ride lead extracts too — this is the path
+      // mergedFeatures facts come from (pipeline/poi-overrides.ts). A lead miss can be
+      // benign (the target sentence sits deeper than the lead cap) — the warn says so.
+      const { text, missed } = applyFactEditsChecked(
+        'wikipedia',
+        String(p.pageid),
+        (p.extract ?? '').trim(),
+      )
+      reportMissedEdits('wikipedia', String(p.pageid), missed, 'lead-extract')
       out.push({
         title: p.title,
         pageId: p.pageid,
-        extract: (p.extract ?? '').trim(),
+        extract: text,
         url: p.canonicalurl ?? p.fullurl ?? `https://en.wikipedia.org/?curid=${p.pageid}`,
         ...(p.pageprops?.wikibase_item ? { qid: p.pageprops.wikibase_item } : {}),
       })

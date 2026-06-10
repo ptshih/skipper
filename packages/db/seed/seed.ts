@@ -22,6 +22,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '../src/client'
 import { regions, tours } from '../src/schema'
 import { TOUR_SPECS, specBySlug, type TourSpec } from './tour-specs'
+import { seedPoiOverrides } from './poi-overrides'
 
 const DATA_DIR = join(dirname(fileURLToPath(import.meta.url)), 'data')
 
@@ -148,6 +149,10 @@ async function main() {
     if (!spec) throw new Error(`No tour spec for slug "${slug}"`)
     await seedTour(spec)
   }
+
+  // Canonical content rows ride every seed: the curated upstream-error corrections
+  // (idempotent; never clobbers upstream workflow state — see ./poi-overrides.ts).
+  await seedPoiOverrides()
 
   const tourCount = await db.select({ count: sql<number>`count(*)::int` }).from(tours)
   const regionCount = await db.select({ count: sql<number>`count(*)::int` }).from(regions)

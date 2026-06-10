@@ -4,7 +4,8 @@
 //   dotenvx run -f .env.development -- bun packages/generator/src/run.ts <slug> [flags]
 //
 // Flags:
-//   --dry-run            Narrate + print scripts only (no TTS / R2 / DB writes).
+//   --dry-run            Narrate + print scripts only (no TTS / R2 / tour-state writes;
+//                        the run's eval IS still recorded to eval_runs — observability).
 //                        Needs ANTHROPIC_API_KEY (+ GOOGLE_MAPS_API_KEY for breaks).
 //   --no-judge-closers   Skip the semantic-closer LLM judge. It is ON by default
 //                        (one extra model call) — it breaks up closing-move monotony

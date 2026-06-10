@@ -4,14 +4,16 @@
 // fact well), runs the grounding gate on every narrated stop, prints a scorecard, and
 // exits NON-ZERO if the gate fails — so it can become a CI/regression gate as the eval
 // flywheel grows. No live-pipeline coupling: it audits an artifact, so it never re-runs
-// generation (and the only spend is the eval's own once-per-stop Sonnet calls).
+// generation (and the only spend is the eval's own once-per-stop Opus calls).
 //
-// Dimensions: grounding (Sonnet, gate) + tts (deterministic, gate) + diversity
+// Dimensions: grounding (Opus, gate) + tts (deterministic, gate) + diversity
 // (deterministic, advisory) run by default; charm (one Opus call, advisory) is opt-in via
-// --charm to keep the default audit cheap.
+// --charm, and veracity (Opus + web_search per STORY stop — the external-truth check the
+// grounding gate is blind to, advisory) is opt-in via --veracity, to keep the default audit
+// cheap.
 //
 // Usage (ANTHROPIC_API_KEY injected via dotenvx):
-//   dotenvx run -f .env.development -- bun packages/generator/src/eval/run.ts <result.json> [--charm] [--json=<out>]
+//   dotenvx run -f .env.development -- bun packages/generator/src/eval/run.ts <result.json> [--charm] [--veracity] [--json=<out>]
 //
 // To produce the input artifact first (this DOES cost narration tokens):
 //   dotenvx run -f .env.development -- bun packages/generator/src/run.ts <slug> --dry-run --json=<result.json>
@@ -22,14 +24,20 @@ import { buildGroundingWell, evaluateGrounding, type GroundingInput } from './gr
 import { evaluateTts } from './tts'
 import { evaluateDiversity } from './diversity'
 import { charmEvaluator, type CharmStop } from './charm'
+import { evaluateVeracity, type VeracityInput } from './veracity'
+import { recordEvalRun, tourIdForSlug, type StopIdentity } from './record'
 import { buildScorecard } from './scorecard'
 import type { StopEval, TourScorecard } from './types'
+import { JUDGMENT_MODEL } from '../models'
 
 // Minimal shape we read from the GenerateResult artifact (kept structural so it tolerates
 // extra fields and stays decoupled from the generate.ts type, which is actively changing).
 interface ArtifactStop {
   seq: number
   stopType: 'story' | 'scenic' | 'break'
+  /** Stable place identity (pois dedup key) — on artifacts from 2026-06-09 onward. */
+  source?: string
+  sourceId?: string
   name: string
   /** Sayable kind (break: already the SPOKEN kind) — part of the permitted well. */
   kind?: string
@@ -45,21 +53,31 @@ interface Artifact {
   slug: string
   tourName: string
   region: string
+  /** Present on artifacts from 2026-06-09 onward (tolerated absent on older ones). */
+  tourId?: string
+  dryRun?: boolean
+  narrationModel?: string
   stops: ArtifactStop[]
 }
 
-function parseArgs(argv: string[]): { path: string; jsonOut?: string; charm: boolean } {
+function parseArgs(argv: string[]): {
+  path: string
+  jsonOut?: string
+  charm: boolean
+  veracity: boolean
+} {
   const args = argv.slice(2)
   const path = args.find((a) => !a.startsWith('--'))
   if (!path) {
     throw new Error(
-      'Usage: eval/run.ts <result.json> [--charm] [--json=<out>]\n' +
+      'Usage: eval/run.ts <result.json> [--charm] [--veracity] [--json=<out>]\n' +
         '  (produce <result.json> via run.ts <slug> --dry-run --json=<result.json>)',
     )
   }
   const jsonOut = args.find((a) => a.startsWith('--json='))?.split('=')[1] || undefined
   const charm = args.includes('--charm') // opt-in: one extra Opus call
-  return { path, jsonOut, charm }
+  const veracity = args.includes('--veracity') // opt-in: Opus + web searches per STORY stop
+  return { path, jsonOut, charm, veracity }
 }
 
 /** "Lake Tahoe" → "lake-tahoe" — best-effort region-slug for persona resolution (the artifact
@@ -89,13 +107,19 @@ function printScorecard(card: TourScorecard): void {
 }
 
 async function main() {
-  const { path, jsonOut, charm } = parseArgs(process.argv)
+  const { path, jsonOut, charm, veracity } = parseArgs(process.argv)
   const artifact = (await Bun.file(path).json()) as Artifact
 
   // Audit every NARRATED stop. (Brackets are a separate grounding surface — a future
   // evaluator; they carry no fact well in the artifact.)
   const narrated = artifact.stops.filter((s) => s.script && s.script.trim().length > 0)
-  const dims = ['grounding (Sonnet)', 'tts', 'diversity', ...(charm ? ['charm (Opus)'] : [])]
+  const dims = [
+    'grounding (Opus)',
+    'tts',
+    'diversity',
+    ...(charm ? ['charm (Opus)'] : []),
+    ...(veracity ? ['veracity (Opus + web search)'] : []),
+  ]
   console.log(`Auditing ${narrated.length} narrated stops — ${dims.join(' + ')}...`)
 
   const inputs: GroundingInput[] = narrated.map((s) => ({
@@ -143,7 +167,39 @@ async function main() {
     charmEvals = await charmEvaluator(charmStops)
   }
 
-  const stops: StopEval[] = [...grounding, ...tts, ...diversity, ...charmEvals]
+  // ADVISORY: veracity (Opus + web_search, STORY stops only — they carry the Wikipedia-
+  // derived sheet the grounding gate can't see past) — opt-in. Same well as grounding, so
+  // the two auditors test the same permitted facts from opposite sides (sheet↔script vs
+  // sheet↔world). Concurrent like grounding; the SDK handles 429 retry.
+  let veracityEvals: StopEval[] = []
+  if (veracity) {
+    const vInputs: VeracityInput[] = narrated
+      .filter((s) => s.stopType === 'story')
+      .map((s) => ({
+        seq: s.seq,
+        name: s.name,
+        script: s.script!,
+        well: buildGroundingWell(s),
+      }))
+    // Per-stop isolation: one stop's checker dying must not throw away every other stop's
+    // completed spend. An errored stop is WARNED and omitted (not evaluated ≠ failed).
+    veracityEvals = (
+      await Promise.all(
+        vInputs.map(async (i) => {
+          try {
+            return await evaluateVeracity(i)
+          } catch (e) {
+            console.warn(
+              `veracity: stop ${i.seq} ("${i.name}") not evaluated — ${(e as Error).message}`,
+            )
+            return null
+          }
+        }),
+      )
+    ).filter((x): x is StopEval => x !== null)
+  }
+
+  const stops: StopEval[] = [...grounding, ...tts, ...diversity, ...charmEvals, ...veracityEvals]
 
   const card = buildScorecard({
     slug: artifact.slug,
@@ -157,6 +213,35 @@ async function main() {
     await Bun.write(jsonOut, JSON.stringify(card, null, 2))
     console.log(`Wrote scorecard JSON → ${jsonOut}`)
   }
+
+  // Persist the run durably (eval_runs/eval_scores — the system of record; the file above
+  // is an export). Best-effort: a recording failure never fails the audit itself.
+  try {
+    const identityBySeq = new Map<number, StopIdentity>(
+      artifact.stops.map((s) => [
+        s.seq,
+        {
+          ...(s.source ? { poiSource: s.source } : {}),
+          ...(s.sourceId ? { poiSourceId: s.sourceId } : {}),
+          stopType: s.stopType,
+        },
+      ]),
+    )
+    await recordEvalRun({
+      slug: artifact.slug,
+      tourId: artifact.tourId ?? (await tourIdForSlug(artifact.slug)),
+      kind: 'offline_audit',
+      dryRun: artifact.dryRun ?? false,
+      narrationModel: artifact.narrationModel ?? null,
+      judgeModel: JUDGMENT_MODEL,
+      scorecard: card,
+      artifact,
+      identityBySeq,
+    })
+  } catch (e) {
+    console.warn(`eval record failed (non-fatal): ${(e as Error).message}`)
+  }
+
   // Non-zero exit on a gate failure so this can wire into CI / a regression suite.
   if (!card.pass) process.exitCode = 1
 }
