@@ -175,7 +175,12 @@ export const WDQS_ENDPOINT = 'https://query.wikidata.org/sparql'
 export const WDQS_USER_AGENT = WIKIPEDIA_USER_AGENT
 /** Areal features (a lake, a park, a bay) carry ONE arbitrary centroid that can sit well off
  *  the road even when the route hugs their shore — so they get a wider corridor gate than the
- *  point `OFF_ROUTE_MAX_M`, or a shoreline lake/park is wrongly dropped (the Spooner Lake case). */
+ *  point `OFF_ROUTE_MAX_M`, or a shoreline lake/park is wrongly dropped (the Spooner Lake case).
+ *  SCOPE: this widens the DISCOVERY candidate pool ONLY (pipeline/wikidata-discovery.ts). Final
+ *  stop SELECTION (pipeline/select.ts) — and therefore the sim + the player — cap placement at
+ *  the flat `OFF_ROUTE_MAX_M` for every stop, so an areal centroid 700–1500 m off enters the
+ *  pool but does NOT become a stop today. Persisting areal stops out to 1500 m would need
+ *  areal-aware selection + the sim/player to honor it (a deferred feature, not just this gate). */
 export const SPINE_AREAL_OFF_ROUTE_MAX_M = 1_500
 /**
  * Minimum on-the-ground separation between two NARRATED stops (m). A SPATIAL floor

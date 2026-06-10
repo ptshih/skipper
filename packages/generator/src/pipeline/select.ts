@@ -176,6 +176,9 @@ function selectNarrated(params: SelectParams, snapOf: SnapFn) {
   for (const poi of params.wikiPois) {
     if (NON_NARRATABLE_TITLE.test(poi.title)) continue
     const { alongSec, offRouteM } = snapOf([poi.lng, poi.lat])
+    // Flat OFF_ROUTE_MAX_M for EVERY stop — the discovery spine's wider areal gate
+    // (SPINE_AREAL_OFF_ROUTE_MAX_M) is candidate-pool-only; an areal centroid 700–1500 m off
+    // enters the pool but isn't placed here (keeps the sim + player honest at one floor).
     if (offRouteM <= OFF_ROUTE_MAX_M) placed.push({ poi, alongSec })
   }
   // Spatial dedup BEFORE time-pacing (two co-located POIs can clear the time gap).
