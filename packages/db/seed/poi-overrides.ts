@@ -49,8 +49,12 @@ export const POI_OVERRIDE_SEED: NewPoiOverride[] = [
     kind: 'fact_edit',
     find: 'Constructed in the 1960s,',
     replace: 'Constructed beginning in the mid-1950s,',
+    // RETIRED 2026-06-10: Wikipedia removed the construction-date sentence from the article
+    // entirely (lead + full text now state no decade), so `find` matches nothing and the
+    // correction no longer applies. Kept inactive for provenance in case the claim returns.
+    active: false,
     reason:
-      'The article dates construction to the 1960s; the California Tahoe Conservancy and the Tahoe Daily Tribune date the development to the 1950s and 1960s, with construction beginning in the mid-1950s. Founder-adjudicated from a --veracity finding 2026-06-09.',
+      'The article dated construction to the 1960s; the California Tahoe Conservancy and the Tahoe Daily Tribune date the development to the 1950s/1960s, with construction beginning in the mid-1950s. Founder-adjudicated from a --veracity finding 2026-06-09. RETIRED 2026-06-10: the source removed the dated sentence, so this no longer matches anything.',
     sourceUrl: 'https://tahoe.ca.gov/upper-truckee-marsh/',
   },
   {

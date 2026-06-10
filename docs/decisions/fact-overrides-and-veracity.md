@@ -48,6 +48,14 @@ away from the lakeside content the script describes.
 - **No silent misses** (review-caught): an unmatched find-string is "source healed" OR
   "source reworded, still wrong" — indistinguishable without a human look, so the generator
   **warns** per unmatched edit per fetch context, never no-ops silently.
+- **Retire, never delete** (the staleness stamp is max-over-EXISTING-rows, so a DELETE can't
+  bust caches holding a withdrawn correction). Two cases: when the source text is still there
+  but the correction is no longer needed, set `replace = find` (a no-op that still matches +
+  bumps `updated_at`); when the source REMOVED the text so `find` matches nothing (it would
+  warn forever), set **`active = false`** (added 2026-06-10) — the row is skipped at load (no
+  apply, no warn, no cache-suspect) but still stamps freshness so the retirement busts adopted
+  caches, and stays on the books for provenance. First retired: the Tahoe Keys construction-decade
+  edit, after Wikipedia removed the dated sentence entirely.
 - **Contribute back** — `upstream_status` (`not_filed → filed → merged/reverted`;
   `not_applicable` for our-judgment rows like side anchors) + `upstream_url` track fixing
   the source itself. Posture: **agent drafts, human submits** — Wikipedia's bot policy

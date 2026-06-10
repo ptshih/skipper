@@ -46,9 +46,12 @@ export interface PlaceOverride {
   sideAnchor?: { lat: number; lng: number }
   /** Newest row's updated_at for this place — the facts read-through's staleness stamp
    *  (pois facts fetched BEFORE this instant predate the correction and must re-fetch).
-   *  ⚠ The stamp is max-over-EXISTING-rows, so it cannot see a DELETE: retire a stale
-   *  edit by UPDATE (set replace = find for a no-op — bumps updated_at, busts the cache),
-   *  NEVER by deleting the row (the retraction would keep serving from cached facts). */
+   *  ⚠ The stamp is max-over-EXISTING-rows, so it cannot see a DELETE — always retire by
+   *  UPDATE, never by deleting the row. Two retire cases: (a) the correction is no longer
+   *  NEEDED but the source text is still there → set replace = find (a no-op that still
+   *  matches, bumps updated_at, busts the cache); (b) the source REMOVED the text so `find`
+   *  matches nothing (it would warn forever) → set active = false (skipped at load, still
+   *  stamps freshness). */
   latestOverrideAt?: Date
 }
 
@@ -65,6 +68,10 @@ export interface OverrideRowLike {
   reason: string
   sourceUrl?: string | null
   updatedAt?: Date | null
+  /** A retired (healed) override: skipped for APPLY/warn/suspect, but still stamps freshness
+   *  (its retirement bumps updated_at → busts caches holding the withdrawn correction).
+   *  Undefined = active (back-compat for test rows). */
+  active?: boolean | null
 }
 
 const key = (source: string, sourceId: string): string => `${source}:${sourceId}`
@@ -80,18 +87,24 @@ export function aggregateOverrideRows(rows: OverrideRowLike[]): Map<string, Plac
       name: r.name,
       factEdits: [],
     }
-    if (r.kind === 'fact_edit' && r.find) {
-      entry.factEdits.push({
-        find: r.find,
-        replace: r.replace ?? '',
-        reason: r.reason,
-        sourceUrl: r.sourceUrl ?? null,
-      })
-    } else if (r.kind === 'side_anchor' && r.sideAnchorLat != null && r.sideAnchorLng != null) {
-      entry.sideAnchor = { lat: r.sideAnchorLat, lng: r.sideAnchorLng }
+    // A retired (active === false) row contributes NOTHING to apply/warn/suspect — but it
+    // STILL stamps freshness below, so the retirement itself busts caches that adopted the
+    // now-withdrawn correction. (undefined/true both apply — back-compat for test rows.)
+    if (r.active !== false) {
+      if (r.kind === 'fact_edit' && r.find) {
+        entry.factEdits.push({
+          find: r.find,
+          replace: r.replace ?? '',
+          reason: r.reason,
+          sourceUrl: r.sourceUrl ?? null,
+        })
+      } else if (r.kind === 'side_anchor' && r.sideAnchorLat != null && r.sideAnchorLng != null) {
+        entry.sideAnchor = { lat: r.sideAnchorLat, lng: r.sideAnchorLng }
+      }
     }
-    // EVERY row kind stamps freshness (a side-anchor adjudication invalidates cached facts
-    // too — conservative on purpose; the cost of a false-stale is one re-fetch).
+    // EVERY row stamps freshness — active OR retired (a side-anchor adjudication and a
+    // retirement both invalidate cached facts; conservative, the cost of a false-stale is
+    // one re-fetch).
     if (r.updatedAt && (!entry.latestOverrideAt || r.updatedAt > entry.latestOverrideAt)) {
       entry.latestOverrideAt = r.updatedAt
     }
@@ -118,7 +131,14 @@ export function ensurePoiOverridesLoaded(): Promise<void> {
   loadPromise ??= (async () => {
     const rows = await db.select().from(poiOverridesTable)
     cache = aggregateOverrideRows(rows)
-    if (rows.length > 0) console.log(`poi-overrides: ${rows.length} correction row(s) loaded.`)
+    if (rows.length > 0) {
+      const retired = rows.filter((r) => r.active === false).length
+      console.log(
+        `poi-overrides: ${rows.length - retired} correction row(s) loaded` +
+          (retired > 0 ? ` (+${retired} retired)` : '') +
+          '.',
+      )
+    }
   })()
   return loadPromise
 }

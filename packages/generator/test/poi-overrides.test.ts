@@ -92,6 +92,33 @@ describe('apply mechanism (injected rows, no DB)', () => {
   })
 })
 
+describe('retired (active === false) overrides', () => {
+  test('a retired fact_edit is NOT applied and NOT reported missed', () => {
+    setPoiOverridesForTest([{ ...EDIT_ROW, active: false }])
+    const out = applyFactEditsChecked('wikipedia', '111', 'Leonard Palme designed it.')
+    expect(out.text).toBe('Leonard Palme designed it.') // untouched — skipped, not applied
+    expect(out.missed).toEqual([]) // and no warn (it would warn forever otherwise)
+  })
+
+  test('a retired row STILL stamps freshness (its retirement busts adopted caches)', () => {
+    const when = new Date('2026-06-10T00:00:00Z')
+    const agg = aggregateOverrideRows([{ ...EDIT_ROW, active: false, updatedAt: when }])
+    const place = agg.get('wikipedia:111')
+    expect(place?.factEdits).toEqual([]) // skipped for application
+    expect(place?.latestOverrideAt).toEqual(when) // but freshness preserved
+  })
+
+  test('undefined active is treated as active (back-compat for existing rows)', () => {
+    setPoiOverridesForTest([EDIT_ROW]) // no active field
+    expect(applyFactEdits('wikipedia', '111', 'Leonard Palme')).toBe('Lennart Palme')
+  })
+
+  test('the healed Tahoe Keys seed row is retired (active === false)', () => {
+    const tahoeKeys = POI_OVERRIDE_SEED.find((r) => r.sourceId === '22764866')
+    expect(tahoeKeys?.active).toBe(false)
+  })
+})
+
 describe('bootstrap seed rows (2026-06-09 review findings)', () => {
   test('every fact_edit documents its reason and an authoritative source', () => {
     for (const r of POI_OVERRIDE_SEED) {

@@ -202,6 +202,12 @@ export const poiOverrides = pgTable(
     upstreamStatus: upstreamStatusEnum('upstream_status').notNull().default('not_filed'),
     /** The filed correction (talk-page post / edit diff URL) once upstream_status = filed+. */
     upstreamUrl: text('upstream_url'),
+    /** Retire a HEALED override without deleting it. An inactive row is skipped at load —
+     *  no apply, no missed-edit warn, no cache-suspect — but its updated_at bump still busts
+     *  caches that adopted the now-withdrawn correction, and it stays on the books for
+     *  provenance. Covers the "source removed the text" case the find=replace no-op retire
+     *  can't (the find no longer matches, so the row would warn every run forever). */
+    active: boolean('active').notNull().default(true),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .defaultNow()
