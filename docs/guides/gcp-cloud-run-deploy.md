@@ -81,10 +81,13 @@ gcloud builds repositories create skipper \
   --remote-uri=https://github.com/ptshih/skipper.git \
   --connection=skipper-gh --region=us-east4
 
-# 3. Trigger: push to main -> run cloudbuild.yaml
+# 3. Trigger: push to main -> run cloudbuild.yaml. --service-account is REQUIRED on this
+#    project (no usable default Cloud Build SA → a regional 2nd-gen trigger must name one;
+#    omitting it fails with a bare INVALID_ARGUMENT). The compute SA already has the roles.
 gcloud builds triggers create github --name=skipper-api-deploy --region=us-east4 \
   --repository=projects/lithe-window-491818-k8/locations/us-east4/connections/skipper-gh/repositories/skipper \
-  --branch-pattern='^main$' --build-config=cloudbuild.yaml
+  --branch-pattern='^main$' --build-config=cloudbuild.yaml \
+  --service-account=projects/lithe-window-491818-k8/serviceAccounts/666110297056-compute@developer.gserviceaccount.com
 
 # Kick the first CD build without waiting for a new commit:
 gcloud builds triggers run skipper-api-deploy --branch=main --region=us-east4
@@ -120,6 +123,7 @@ curl -s "$URL/tours"    # {"tours":[...]}        — DB reachable + secret decry
 | Deploy: secret `versions/latest was not found` | `gcloud secrets create` stored an empty value (`$DOTENV_PRIVATE_KEY_PRODUCTION` wasn't set in the shell) | Re-add the version reading from `.env.keys` (see One-time setup) |
 | `--allow-unauthenticated` → `One or more users named in the policy do not belong to a permitted customer` | Domain Restricted Sharing org policy blocks `allUsers` | Use `--no-invoker-iam-check` instead (public without an `allUsers` binding; app auth still applies) |
 | `connections create github` → `could not assert Secret Manager permissions … P4SA … secretmanager.secrets.create denied` | The Cloud Build service agent (`…@gcp-sa-cloudbuild…`, not the Compute SA) stores the GitHub token as a secret | Grant that service agent `roles/secretmanager.admin` |
+| `triggers create github` → bare `INVALID_ARGUMENT` (even with a valid `--repository`) | Secure-by-default: no usable default Cloud Build SA, so a regional 2nd-gen trigger must name one | Add `--service-account=projects/<id>/serviceAccounts/<compute-SA>` |
 
 ## Files
 
