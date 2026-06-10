@@ -25,11 +25,12 @@
 import Anthropic from '@anthropic-ai/sdk'
 import type { AttributionSnapshot } from '@skipper/db/schema'
 import { SCOUT_MAX_TOKENS, SCOUT_MAX_TOOL_TURNS } from '../config'
-import { NARRATION_MODEL_ALTERNATES } from '../models'
+import { JUDGMENT_MODEL } from '../models'
 
-// Judgment-tier, not narration-tier: the scout reads a sheet and picks fetches — Sonnet
-// (the judge-tier default, matches grounding/judge.ts) at a few short turns per stop.
-const SCOUT_MODEL = NARRATION_MODEL_ALTERNATES.sonnet
+// Judgment-tier, not narration-tier: the scout reads a sheet and picks fetches — the shared
+// JUDGMENT_MODEL (Opus) at a few short turns per stop. It forces tool_choice {type:'any'}
+// every turn (below), which is exactly why it can't ride NARRATION_MODEL/Fable.
+const SCOUT_MODEL = JUDGMENT_MODEL
 
 /** A sourced fact bundle exactly as a fetcher returned it (facts verbatim + provenance). */
 export interface SourcedFacts {
@@ -159,7 +160,7 @@ function buildUserMessage(stop: ScoutStop): string {
   return lines.join('\n')
 }
 
-/** One model turn — injectable for tests (the real one is a Sonnet messages.create). */
+/** One model turn — injectable for tests (the real one is a JUDGMENT_MODEL messages.create). */
 export type ScoutModelCall = (params: {
   system: string
   tools: Anthropic.Tool[]

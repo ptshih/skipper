@@ -14,12 +14,12 @@
 // the deterministic lint stays the always-on baseline.
 
 import Anthropic from '@anthropic-ai/sdk'
-import { NARRATION_MODEL_ALTERNATES } from '../models'
+import { JUDGMENT_MODEL } from '../models'
 import type { LintFinding } from './lint'
 
-// A light classification task — Sonnet is plenty (and cheaper/faster than Opus for
-// a once-per-tour call). Bump to NARRATION_MODEL if closer-judging needs more nuance.
-const JUDGE_MODEL = NARRATION_MODEL_ALTERNATES.sonnet
+// A light classification task on the shared JUDGMENT_MODEL (Opus) — one forced-tool
+// ({type:'tool'}) call per tour, which is why it can't ride NARRATION_MODEL/Fable.
+const JUDGE_MODEL = JUDGMENT_MODEL
 const JUDGE_MAX_TOKENS = 2_000
 
 export interface CloserInput {

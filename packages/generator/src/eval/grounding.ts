@@ -18,14 +18,14 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import type { StopType } from '@skipper/shared'
-import { NARRATION_MODEL_ALTERNATES } from '../models'
+import { JUDGMENT_MODEL } from '../models'
 import type { ClaimStatus, ClaimVerdict, StopEval } from './types'
 
-// A well-scoped entailment task — Sonnet is the judge-tier default (matches judge.ts), and
-// this is a once-per-stop offline call. BUT grounding is the crown-jewel gate, so if
-// judge↔human calibration (the eval flywheel) shows Sonnet MISSING violations, bump this to
-// NARRATION_MODEL (Opus) — a false negative here lets a hallucination ship.
-const GROUNDING_MODEL = NARRATION_MODEL_ALTERNATES.sonnet
+// A well-scoped, once-per-stop entailment task on the shared JUDGMENT_MODEL (Opus).
+// Grounding is the crown-jewel gate — a false negative lets a hallucination ship — so it
+// rides the strongest forced-tool-capable model. It's a forced-tool ({type:'tool'}) call,
+// so it can't use NARRATION_MODEL/Fable. Re-run eval/calibrate.ts after any model change.
+const GROUNDING_MODEL = JUDGMENT_MODEL
 const GROUNDING_MAX_TOKENS = 4_000
 
 /** One stop's narration + the EXACT well of facts it was permitted to draw from. */

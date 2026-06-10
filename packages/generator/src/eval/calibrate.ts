@@ -5,7 +5,7 @@
 // each known-answer pass/fail verdict right, and did it catch each expected violation (recall)?
 // Run it after a model or prompt change to confirm the judge still tracks the founder's ear.
 //
-// Costs one grounding (Sonnet) call per case — ON DEMAND, not CI. The deterministic golden
+// Costs one grounding (Opus) call per case — ON DEMAND, not CI. The deterministic golden
 // cases (tts/diversity) are the always-on gate (test/eval-golden.test.ts); this is the
 // periodic calibration check. Exits non-zero if the judge disagrees with any verdict label.
 //
@@ -51,7 +51,7 @@ function scoreCase(c: GroundingCase, ev: StopEval): CaseResult {
 }
 
 async function main() {
-  console.log(`Calibrating the grounding judge against ${GROUNDING_CASES.length} golden cases (Sonnet)...\n`)
+  console.log(`Calibrating the grounding judge against ${GROUNDING_CASES.length} golden cases (Opus)...\n`)
   const evals = await Promise.all(GROUNDING_CASES.map((c) => evaluateGrounding(c.input)))
   const results = GROUNDING_CASES.map((c, i) => scoreCase(c, evals[i]!))
 

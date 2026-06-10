@@ -20,7 +20,7 @@
 // "tool_choice forces tool use is not compatible with this model" (observed live
 // 2026-06-09, req_011CbtU9f7zsE1V8HegixKaw). narrate.ts ({type:"adaptive"}, no
 // tools) rides the switch; the forced-tool judges (charm.ts, pairwise-judge.ts)
-// can NOT — they pin FORCED_TOOL_JUDGE_MODEL below instead of NARRATION_MODEL.
+// can NOT — they pin JUDGMENT_MODEL below instead of NARRATION_MODEL.
 //
 // COST (a founder-relevant axis, per CLAUDE.md): Fable 5 is ~2× Opus 4.8 —
 // $10/$50 vs $5/$25 per MTok — so a live regen bills more. Switched 2026-06-09
@@ -30,24 +30,19 @@
 // cross-checked against platform.claude.com models overview).
 export const NARRATION_MODEL = 'claude-fable-5' as const
 
-// Cheaper / faster Anthropic fallbacks from the same catalog, if narration ever
-// needs to trade capability for cost or latency.
-export const NARRATION_MODEL_ALTERNATES = {
-  /** best speed / intelligence balance */
-  sonnet: 'claude-sonnet-4-6',
-  /** fastest & cheapest */
-  haiku: 'claude-haiku-4-5-20251001',
-} as const
-
-// The FORCED-TOOL judges (charm.ts, pairwise-judge.ts — structured reports via
-// tool_choice {type:'tool'}): pinned to Opus 4.8, deliberately NOT NARRATION_MODEL.
-// Two reasons: (a) Claude Fable 5 rejects a forced tool_choice outright (400
-// "tool_choice forces tool use is not compatible with this model" — observed live
-// 2026-06-09, req_011CbtU9f7zsE1V8HegixKaw), so a narration bump to Fable would
-// break them; (b) the judge rubrics/score thresholds were calibrated against
-// Opus-tier judging — a model swap that rides a narration bump would silently
-// shift every score. Bump THIS id only with a fresh calibration pass.
-export const FORCED_TOOL_JUDGE_MODEL = 'claude-opus-4-8' as const
+// JUDGMENT tier — every NON-narration model call: the enrichment scout (pipeline/scout.ts)
+// and the structured-report / spot-check judges (eval/charm.ts, pairwise-judge.ts,
+// pipeline/judge.ts, eval/grounding.ts, eval/veracity.ts). Opus 4.8, deliberately NOT
+// NARRATION_MODEL. Two reasons it can't ride the narration model:
+//   (a) Five of the six FORCE tool use (tool_choice {type:'tool'} or {type:'any'}), which
+//       Claude Fable 5 rejects outright (400 "tool_choice forces tool use is not compatible
+//       with this model" — observed live 2026-06-09, req_011CbtU9f7zsE1V8HegixKaw); only
+//       veracity (auto tool_choice + web_search) is exempt.
+//   (b) The judge rubrics/score thresholds were calibrated against Opus-tier judging — a
+//       model swap would silently shift every score (re-run eval/calibrate.ts after a bump).
+// Upgraded Sonnet→Opus 2026-06-09 at founder request (these were the judgment-tier
+// "Sonnet is plenty" calls; the old NARRATION_MODEL_ALTERNATES catalog is gone with them).
+export const JUDGMENT_MODEL = 'claude-opus-4-8' as const
 
 // ---------------------------------------------------------------------------
 // Text-to-speech — Google Cloud Text-to-Speech (Gemini-TTS voices)
