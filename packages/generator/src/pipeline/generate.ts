@@ -35,6 +35,7 @@ import {
   GROUNDING_REGEN_BUDGET,
   GROUNDING_REGEN_CONCURRENCY,
   GROUNDING_REGEN_MAX_ROUNDS,
+  NARRATION_CONCURRENCY,
   PANEL_REGEN_CONCURRENCY,
   FALLBACK_SPEED_MPS,
   GOOGLE_READY,
@@ -516,15 +517,11 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   }
   lap('scout')
 
-  // Each stop is an independent narration call, so the model can't see its own
-  // prior output. We feed it (a) recent place names for earned callbacks and
-  // (b) how the last few stops OPENED, so it can vary its entry instead of
-  // reusing "coming up off the bow" every time.
-  const priorStops: string[] = []
-  const recentOpeners: string[] = []
-  const recentClosers: string[] = []
-  const recentKit: string[][] = [] // personal-kit beats used per remembered stop
-  const recentMotifs: string[][] = [] // recurring frames / invented self-deprecation flavors per stop
+  // Cross-stop variety is enforced AFTER narration, not threaded through it: the first pass
+  // narrates every stop in PARALLEL, blind to its siblings (see the narration loop below), then
+  // the diversity lint + regen pass catches and fixes collisions. These extractors feed THAT
+  // editor (regenScript), giving a re-narrated stop full awareness of every OTHER stop's
+  // opener/closer/kit/motifs — the context the first pass no longer threads.
   const openerOf = (script: string) => script.trim().split(/\s+/).slice(0, 8).join(' ')
   const closerOf = (script: string) => script.trim().split(/\s+/).slice(-8).join(' ')
   // Detect which personal-kit beats a script leaned on, so later (independently
@@ -605,49 +602,26 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
             ...(s.geology?.length ? { geology: s.geology } : {}),
           }),
   })
-  // First-pass narration: thread the trailing-3 window of cross-stop context.
-  const narrate = (s: StopPlan) =>
-    narrateStop(
-      {
-        ...baseReq(s),
-        priorStops: priorStops.slice(-3),
-        recentOpeners: recentOpeners.slice(-3),
-        recentClosers: recentClosers.slice(-3),
-        recentKitBeats: [...new Set(recentKit.slice(-3).flat())],
-        // CUMULATIVE (all prior stops): a frame/flavor is a one-time bit, not a budget.
-        recentMotifs: [...new Set(recentMotifs.flat())],
-      },
-      persona.systemPrompt,
-    )
-  const rememberStop = (s: StopPlan, script: string) => {
-    // Story names the real place (callback-able); break + scenic push a GENERIC token so
-    // a later stop can't call back to a transient food spot and characterize it ("that
-    // nice café back there" = volatile/opinion the break rule forbids).
-    priorStops.push(
-      s.stopType === 'story' ? s.name : s.stopType === 'break' ? 'a rest stop' : 'a quiet stretch',
-    )
-    recentOpeners.push(openerOf(script))
-    recentClosers.push(closerOf(script))
-    // Breaks are invisible to kit accounting (a café break inviting "a coffee" is a
-    // generic cue, not the coffee-opinion kit) AND don't occupy a slot in the trailing-3
-    // window, so they can't flush a real narrated kit beat out of it early.
-    if (s.stopType !== 'break') {
-      recentKit.push(kitBeatsOf(script))
-      recentMotifs.push(motifBeatsOf(script))
-    }
-  }
-
-  // Narrate every stop up front — cheap (no TTS yet), so the lint can see the whole
-  // tour and regenerate outliers BEFORE we pay to synthesize. Breaks are narrated too
-  // (named, mandatory audio) with cross-stop opener/closer context, but they're kept
-  // OUT of the diversity lint + kit accounting below (short generic cues).
-  const narratedRecs: { s: StopPlan; script: string }[] = []
-  for (const s of plan) {
-    console.log(`Narrating stop ${s.seq} (${s.stopType}) "${s.name}"...`)
-    const { script } = await narrate(s)
-    rememberStop(s, script)
-    narratedRecs.push({ s, script })
-  }
+  // First-pass narration: each stop drafts BLIND of its siblings (no cross-stop threading), so
+  // the whole tour narrates in PARALLEL instead of one-await-at-a-time — the draft phase is now
+  // bounded by its slowest stop, not their sum. The price is that two stops can independently
+  // reach for the same opener/kit/motif; that collision is caught and fixed by the diversity
+  // lint + regen pass below, which threads FULL sibling context into each retake (regenScript).
+  // Trade recorded: parallel draft + after-the-fact cleanup, vs the old serial draft that dodged
+  // collisions up front (it cost ~the sum of every stop's latency). mapLimit keeps ITEM ORDER,
+  // so narratedRecs stays seq-ordered. Breaks narrate too (named, mandatory audio) but stay OUT
+  // of the diversity lint + kit accounting below (short generic cues).
+  const narrate = (s: StopPlan) => narrateStop(baseReq(s), persona.systemPrompt)
+  console.log(`Narrating ${plan.length} stops in parallel (concurrency ${NARRATION_CONCURRENCY()})...`)
+  const narratedRecs: { s: StopPlan; script: string }[] = await mapLimit(
+    plan,
+    NARRATION_CONCURRENCY(),
+    async (s) => {
+      console.log(`  narrating stop ${s.seq} (${s.stopType}) "${s.name}"...`)
+      const { script } = await narrate(s)
+      return { s, script }
+    },
+  )
   lap('narration')
 
   // ---- The eval panel + evaluator-optimizer (the in-pipeline flywheel). ----------------

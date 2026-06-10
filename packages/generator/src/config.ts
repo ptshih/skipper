@@ -110,6 +110,13 @@ function intKnob(raw: string | undefined, fallback: number): number {
   const n = Number(raw)
   return Number.isFinite(n) && n >= 1 ? Math.floor(n) : fallback
 }
+/** Concurrent FIRST-PASS narration calls. Each stop drafts independently (BLIND of its
+ * siblings — cross-stop variety is enforced AFTER, by the diversity lint + regen pass in
+ * generate.ts), so the draft phase is bounded by its SLOWEST stop instead of the sum. This is
+ * the rate-limit dial: narration runs in its own phase with full TPM headroom, but it's the
+ * largest-output Anthropic call, so drop it if a fan-out spikes 429s (the SDK retries them).
+ * Override: SKIPPER_NARRATION_CONCURRENCY. */
+export const NARRATION_CONCURRENCY = (): number => intKnob(process.env.SKIPPER_NARRATION_CONCURRENCY, 6)
 /** Concurrent TTS synth+upload calls on a full run. The clips are independent (scripts
  * frozen, per-run keys), so the phase is bounded by its LONGEST clip instead of the sum —
  * measured 2026-06-09: a 27-min tour spent ~10 min synthesizing serially at ~0.38× audio
