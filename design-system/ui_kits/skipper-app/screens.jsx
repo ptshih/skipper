@@ -115,7 +115,19 @@ function StatusBar() {
   );
 }
 
-function NavHeader({ title, wordmark, onBack, onClose, right }) {
+function NavHeader({ title, wordmark, onBack, onClose, left, right }) {
+  // Home (wordmark): a balanced 3-slot bar — equal-flex sides so the wordmark sits
+  // DEAD-CENTER no matter how wide the left/right affordances are (Sign in vs. gear).
+  if (wordmark) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", padding: "var(--space-sm) var(--gutter)", minHeight: 44 }}>
+        <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", justifyContent: "flex-start" }}>{left}</div>
+        <Text variant="wordmark" color="ink">SKIPPER</Text>
+        <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", justifyContent: "flex-end" }}>{right}</div>
+      </div>
+    );
+  }
+  // Back/close screens: title rides left of the chevron-free flex column (unchanged).
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)", padding: "var(--space-sm) var(--gutter)", minHeight: 44 }}>
       {onBack ? (
@@ -126,8 +138,7 @@ function NavHeader({ title, wordmark, onBack, onClose, right }) {
       ) : null}
       {onClose ? <HeaderIconButton name="close" accessibilityLabel="Close" onPress={onClose} /> : null}
       <div style={{ flex: 1, minWidth: 0 }}>
-        {wordmark ? <Text variant="wordmark" color="ink">SKIPPER</Text>
-          : <Text variant="title" color="ink" style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</Text>}
+        <Text variant="title" color="ink" style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</Text>
       </div>
       {right}
     </div>
@@ -153,12 +164,10 @@ function HomeScreen({ onOpenTour, onSignIn, onSettings, onOpenRegions, selectedR
   const tours = selectedRegion ? TOURS.filter((t) => t.region === selectedRegion) : TOURS;
   return (
     <>
-      <NavHeader wordmark right={
-        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
-          {signedIn ? null : <Button variant="ghost" title="Sign in" fullWidth={false} onPress={onSignIn} />}
-          <HeaderIconButton name="settings" accessibilityLabel="Settings" onPress={onSettings} />
-        </div>
-      } />
+      <NavHeader wordmark
+        left={signedIn ? null : <Button variant="ghost" title="Sign in" fullWidth={false} onPress={onSignIn} />}
+        right={<HeaderIconButton name="settings" accessibilityLabel="Settings" onPress={onSettings} />}
+      />
       <div style={{ flex: 1, overflowY: "auto", padding: "var(--space-sm) var(--gutter) var(--gutter)" }}>
         <Card framed>
           <Text variant="label" color="accentWarm">{VOICE.home.kicker}</Text>

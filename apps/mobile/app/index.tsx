@@ -181,28 +181,26 @@ export default function DrivesScreen() {
               SKIPPER
             </Text>
           ),
-          // headerRight covers Android + iOS<26: a quiet ghost "Sign in" link sits left of
-          // the settings gear (gear only once signed in). On iOS 26 the *Items API below
-          // overrides it so we can strip the Liquid Glass capsule on BOTH chips.
-          headerRight: () =>
-            session ? (
-              settingsButton
-            ) : (
-              <View style={styles.headerCluster}>
-                {signInButton}
-                {settingsButton}
-              </View>
-            ),
+          // The wordmark sits DEAD-CENTER, so the two affordances balance across it: "Sign in"
+          // rides headerLeft, the gear headerRight (gear-only once signed in). Without this the
+          // one-sided [Sign in + gear] cluster shoved SKIPPER off to the left.
+          // headerTitleAlign keeps it centered on Android too (iOS centers by default).
+          headerTitleAlign: 'center',
+          // headerLeft / headerRight cover Android + iOS<26; the *Items API below overrides
+          // them on iOS 26 to strip the Liquid Glass capsule. (Home is root — no back button
+          // contends for headerLeft.)
+          headerLeft: () => (session ? undefined : signInButton),
+          headerRight: () => settingsButton,
           // iOS 26: every nav-bar button MUST carry hidesSharedBackground:true or its bright
           // Liquid Glass capsule becomes a second glowing element on the dusk bar (it would
           // break the one-amber-glow budget). Mirrors the back/gear handling in _layout.tsx.
-          unstable_headerRightItems: () =>
+          unstable_headerLeftItems: () =>
             session
-              ? [{ type: 'custom', hidesSharedBackground: true, element: settingsButton }]
-              : [
-                  { type: 'custom', hidesSharedBackground: true, element: signInButton },
-                  { type: 'custom', hidesSharedBackground: true, element: settingsButton },
-                ],
+              ? []
+              : [{ type: 'custom', hidesSharedBackground: true, element: signInButton }],
+          unstable_headerRightItems: () => [
+            { type: 'custom', hidesSharedBackground: true, element: settingsButton },
+          ],
         }}
       />
 
@@ -298,7 +296,6 @@ export default function DrivesScreen() {
 }
 
 const styles = StyleSheet.create({
-  headerCluster: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   flex: { flex: 1 },
   // Hero + seam each carry their own horizontal gutter so they line up whether rendered
   // standalone (loading/error) or inside the FlatList, whose content padding is vertical.
