@@ -1,13 +1,14 @@
 // Post-assembly diversity lint — the cross-stop backstop the per-stop generator
 // can't be.
 //
-// poi_content is narrated ONCE per place, IN ISOLATION (the cache key carries no
-// tour/sibling context, per CLAUDE.md), so a stop can't know what its neighbours
-// did. The generator threads a recent-openers/closers/kit window to dampen
-// repetition, but a window can't catch a gag that recurs >3 stops apart, and a
-// per-stop prompt quota can't enforce a tour-level budget. After every stop is
-// narrated, this lints the ASSEMBLED scripts and emits per-stop `avoid` notes the
-// generator feeds into a bounded re-narration (see generate.ts `lintAndRegen`).
+// Each stop's narration is an INDEPENDENT per-stop LLM call (narrateStop) with no
+// view of its siblings, so a stop can't know what its neighbours did. The generator
+// threads a recent-openers/closers/kit window to dampen repetition, but a window
+// can't catch a gag that recurs >3 stops apart, and a per-stop prompt quota can't
+// enforce a tour-level budget. After every stop is narrated, this lints the
+// ASSEMBLED scripts and emits per-stop `avoid` notes. It's consumed via
+// eval/diversity.ts (evaluateDiversity), whose findings drive optimize() in
+// generate.ts for a bounded re-narration.
 //
 // Detection is DETERMINISTIC (fast, free, predictable) and targets LEXICAL/
 // STRUCTURAL repeats: personal-kit overuse, repeated stock phrases, and duplicate

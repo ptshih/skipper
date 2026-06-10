@@ -6,7 +6,7 @@
 // sites keep importing them from './geo' unchanged. This file adds the
 // GENERATION-specific helpers on top: even probe sampling along the route, polyline
 // encoding, side-of-approach, total length, route bearing, and along-route time.
-// [lng, lat] axis order throughout, matching corridors.polyline.
+// [lng, lat] axis order throughout, matching tours.polyline.
 //
 // (Previously these primitives were hand-copied between the generator and the sim;
 // the copy is gone now that both share @skipper/drive-core.)
@@ -75,8 +75,8 @@ export interface RouteSample {
 
 /**
  * Evenly-spaced probe points along the route (one per ~`stepMeters` traveled),
- * used to seed Wikipedia geosearch so we cover the whole corridor rather than
- * just the named waypoints. Always includes the first and last vertex.
+ * covering the whole route rather than just the named waypoints. Always
+ * includes the first and last vertex.
  */
 export function sampleAlong(polyline: LngLat[], cumulative: number[], stepMeters: number): RouteSample[] {
   const samples: RouteSample[] = []

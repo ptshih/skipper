@@ -2,19 +2,19 @@
 
 Hand-curated driving corridors for the first region, Lake Tahoe. **Approved by the
 founder.** This is authoring output, not data: it is the source the follow-up
-polyline/seed step reads from. **No DB seeding has happened yet.**
+polyline/seed step reads from. **Tours are now seeded and the canonical preview has shipped** (see Materialization + seeding status below).
 
 > **The rails are the route.** Routes are hand-curated and frozen, never derived.
-> Groundability below = a Wikipedia-geosearch coverage proxy (narratable articles
-> exist along the route); it is NOT a guarantee each article's extract is rich.
+> Groundability below = a Wikidata-spine coverage proxy (narratable POIs/articles
+> exist along the route); it is NOT a guarantee each one's prose extract is rich.
 > Per the invariant, any stop that turns out thin on prose downgrades to scenic.
 
 ## Materialization + seeding status
 
 Seeding subsystem lives in `packages/db/seed/`:
-- `corridors.ts` — hand-curated specs (the rails: name + ordered waypoints).
-- `materialize.ts` — Routes API → decode → **frozen** `data/<slug>.json` (run once per corridor; never recomputed at request time).
-- `seed.ts` — idempotent upsert of `data/*.json` into the `corridors` table.
+- `tour-specs.ts` — hand-curated specs (the rails: name + ordered waypoints).
+- `materialize.ts` — Routes API → decode → **frozen** `data/<slug>.json` (run once per tour; never recomputed at request time).
+- `seed.ts` — idempotent upsert of `data/*.json` into the `tours` table.
 
 Run (keys injected via dotenvx; env lives in `.env.development`, not `.env`):
 ```
@@ -22,9 +22,9 @@ dotenvx run -f .env.development -- bun packages/db/seed/materialize.ts <slug>
 dotenvx run -f .env.development -- bun packages/db/seed/seed.ts <slug>
 ```
 
-- ✅ **Schema applied to Neon** (`bun run db:generate` + `db:migrate`; migration `0000_keen_spot`). NOTE: `db:push` can't be used non-interactively here — the drizzle config has `strict: true`, which forces a TTY confirm. Use generate+migrate.
-- ✅ **`emerald-bay-run` materialized + seeded** (M1 walking-skeleton corridor): frozen polyline = 3,698 points, ~30 mi / ~59 min; corridor id `4f911a27-2e2e-482d-a39e-70e4d9bc6370`.
-- ⬜ Corridors 2–8: add specs to `corridors.ts`, then materialize + seed each.
+- ✅ **Schema applied to Neon** (`bun run db:generate` + `db:migrate`; baseline migration `0000_unusual_angel`). NOTE: `db:push` can't be used non-interactively here — the drizzle config has `strict: true`, which forces a TTY confirm. Use generate+migrate.
+- ✅ **`emerald-bay-run` materialized + seeded** (M1 walking-skeleton tour): frozen polyline = 3,698 points, ~30 mi / ~59 min. Tour ids are destroyed/regenerated on every migration — never hardcode one.
+- ⬜ Tours 2–8: add specs to `tour-specs.ts`, then materialize + seed each.
 
 ---
 

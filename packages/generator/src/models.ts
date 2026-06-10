@@ -86,7 +86,8 @@ export const TTS_MODEL = 'gemini-3.1-flash-tts-preview' as const
 // ⚠ Re-synth + EAR-TEST gate before relying on this: existing R2 clips are still WAV;
 // flipping only affects NEW generation. Run ONE live synth (needs GCP creds) to confirm
 // Gemini's MP3 parses, ear-test 32kbps MP3 vs AAC@48k on the founder-blessed Algenib
-// read, then re-synth the canonical preview (tour 9813e519, 10 clips) + sweep orphaned .wav.
+// read, then re-synth the CURRENT canonical preview (its id is destroyed/regenerated on
+// each migration — look it up): resynth-tour.ts <canonical> + sweep orphaned .wav.
 export const TTS_AUDIO_ENCODING: 'LINEAR16' | 'MP3' = 'MP3'
 export const TTS_SAMPLE_RATE_HZ = 24_000 as const // honored for LINEAR16; MP3 is fixed 32kbps (rate may be ignored)
 export const TTS_AUDIO_CONTENT_TYPE = 'audio/mpeg' as const
@@ -109,9 +110,9 @@ export const GEMINI_VOICES = {
 
 export type GeminiVoice = (typeof GEMINI_VOICES)[keyof typeof GEMINI_VOICES]
 
-// The Skipper's voice. Stored VERBATIM as the poi_content cache-key `voice` (and in
-// the R2 clip key), so changing it after tours exist forces re-synthesis. No
-// ElevenLabs sunset/quota constraint on this provider.
+// The Skipper's voice. Baked into the tour-OWNED narration audio, so changing it
+// after tours exist forces re-synthesis (resynth-tour.ts). No ElevenLabs
+// sunset/quota constraint on this provider.
 export const SKIPPER_VOICE_ID: GeminiVoice = GEMINI_VOICES.algenib
 
 // Natural-language DELIVERY directive (Cloud TTS input.prompt). The persona's words

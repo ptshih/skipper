@@ -8,14 +8,12 @@ const ICON: Record<string, IconName> = {
   story: 'story',
   scenic: 'scenic',
   break: 'break',
-  finish: 'finish',
 }
 
 const TONE: Record<string, BadgeTone> = {
   story: 'pine',
   scenic: 'teal',
   break: 'amber',
-  finish: 'rust',
 }
 
 export const stopIcon = (type?: string): IconName => (type ? (ICON[type] ?? 'scenic') : 'scenic')

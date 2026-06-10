@@ -297,6 +297,8 @@ export const tourStops = pgTable(
     // CC BY-SA + Macrostrat CC BY + Wikidata CC0, etc.). Nullable, but the generator
     // MUST populate it for every wikipedia-sourced clip (CC BY-SA is legal, not optional).
     attribution: jsonb('attribution').$type<AttributionSnapshot[]>(),
+    // FORWARD-COMPAT PLACEHOLDER for the M4-deferred human-review gate. Declared but never
+    // read/written yet — no review workflow exists; don't assume one. (Same on tour_brackets.)
     reviewed: boolean('reviewed').default(false).notNull(),
     // The pois.facts_hash this stop's narration was generated from. NULL for stops that
     // don't ground on facts (scenic/break) → never fact-stale. Stale iff facts_hash IS
@@ -345,6 +347,8 @@ export const tourBrackets = pgTable(
     script: text('script'),
     audioUrl: text('audio_url'), // clips/<tourId>/intro.mp3, clips/<tourId>/outro.mp3
     audioDurationMs: integer('audio_duration_ms'),
+    // FORWARD-COMPAT PLACEHOLDER for the M4-deferred human-review gate — same as tour_stops.reviewed:
+    // declared but never read/written yet, no review workflow exists.
     reviewed: boolean('reviewed').default(false).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true })

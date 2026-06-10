@@ -137,7 +137,7 @@ export interface SnappedStop extends TourStopRef {
  * Move each stop's trigger location from its POI to the nearest point on the route,
  * so it fires as the vehicle passes the POI's point on the road. This is the
  * preprocessing both the simulator and the real player run once at tour-load
- * (the player has the corridor polyline) before feeding stops to TriggerEngine.
+ * (the player has the tour's polyline) before feeding stops to TriggerEngine.
  */
 export function snapStopsToRoute(polyline: LngLat[], stops: TourStopRef[]): SnappedStop[] {
   const cum = cumulativeMeters(polyline)

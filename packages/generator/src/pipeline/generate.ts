@@ -1,21 +1,22 @@
-// The M1 generator pipeline — assemble ONE tour for ONE corridor.
+// The M1 generator pipeline — assemble ONE tour from its seeded shell.
 //
-//   corridor (DB)
-//     -> Wikipedia geosearch + extracts      (grounded story facts)
-//     -> Google Places searchAlongRoute       (food/rest BREAK anchors)
-//     -> select stops by drive TIME           (pace, not distance)
-//     -> Skipper narration (Anthropic)        (story + scenic + break)
-//     -> eval panel + optimizer               (free dims per pass; grounding once;
-//                                              drives regen, RECORDS — never gates `ready`)
+//   tour shell (DB, loaded by slug)          (frozen route + endpoints + region)
+//     -> Wikidata SPARQL spine               (discover candidate POIs in the route box)
+//     -> Wikipedia prose + Places            (per-candidate fact enrichment + BREAK anchors)
+//     -> select stops by drive TIME          (pace, not distance)
+//     -> Skipper narration (Anthropic)       (persona resolved from the region slug;
+//                                             story + scenic + break)
+//     -> eval panel + optimizer              (free dims per pass; grounding once;
+//                                             drives regen, RECORDS — never gates `ready`)
 //     -> TTS (Google Cloud, Gemini-TTS) -> R2 (audio + duration)
-//     -> tours + ordered tour_stops (Neon)    (atomic ready-gate)
+//     -> tours + ordered tour_stops (Neon)   (atomic ready-gate)
 //
 // Invariants honored here:
 //   - Persona lives in delivery, never in facts: story stops get a fact sheet;
 //     scenic stops carry none; break stops carry only the curated NAME + KIND
 //     (sayable), never volatile data (hours/rating/features — live at tour-load).
 //   - Story attribution (CC BY-SA) is snapshotted on every story clip.
-//   - EVERY stop — story, scenic, AND break — gets a poi_content row with non-null
+//   - EVERY stop — story, scenic, AND break — gets a tour_stops row with non-null
 //     audio; a tour reaches `ready` only via the atomic batch, after every stop has it.
 // M1 scope: no cache reuse, no dedup beyond the (source,source_id) upsert, no
 // feedback. Break narration names the curated Places anchor; the volatile live data
@@ -610,7 +611,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   // Findings feed regeneration through optimize() (accept-if-not-worse, gate-weighted, per-
   // round trace) — generalizing the old bespoke lint→regen loop. Cost shape (deliberate, see
   // config): the PASS loop below runs only the FREE deterministic dims (tts + diversity);
-  // GROUNDING (one Sonnet call per story/scenic stop) runs ONCE as a final pass further down.
+  // GROUNDING (one Opus call per story/scenic stop) runs ONCE as a final pass further down.
   // Nothing in this section can BLOCK the tour — every pass keeps the best available take.
 
   // Breaks are excluded from the diversity lint — short generic cues, and the kit
@@ -772,7 +773,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   }
 
   // GROUNDING — the crown-jewel dimension, run ONCE per story/scenic stop after the free
-  // passes settle (N Sonnet calls, not N×rounds; breaks stay covered by the offline eval
+  // passes settle (N Opus calls, not N×rounds; breaks stay covered by the offline eval
   // CLI). A failing stop gets a bounded targeted re-narration seeded with its ungrounded
   // claims via optimize() — gate-weighted, so killing a violation outweighs any advisory
   // tic the retake picks up. RECORDED + regen-driving ONLY: per CLAUDE.md ("Deferred — DO

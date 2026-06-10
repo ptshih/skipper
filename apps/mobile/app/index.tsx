@@ -212,7 +212,7 @@ export default function DrivesScreen() {
           <View style={styles.loading}>
             <ActivityIndicator color={theme.colors.accent} />
             <Text variant="dim" color="inkFaint" align="center">
-              {voice.loading.corridors}
+              {voice.loading.drives}
             </Text>
           </View>
         </>
@@ -257,7 +257,7 @@ export default function DrivesScreen() {
               </View>
             ) : (
               <Text variant="body" color="inkDim" align="center" style={styles.pad}>
-                {voice.empty.corridors}
+                {voice.empty.drives}
               </Text>
             )
           }
@@ -315,7 +315,6 @@ const styles = StyleSheet.create({
   },
   list: { paddingVertical: space.gutter, gap: space.md },
   row: { paddingHorizontal: space.gutter },
-  kicker: { marginBottom: space.xs },
   metaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space.sm, marginTop: space.xs },
   summary: { marginTop: space.xs },
   offlineNote: { marginTop: space.sm },

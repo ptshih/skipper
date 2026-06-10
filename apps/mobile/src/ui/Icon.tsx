@@ -14,7 +14,6 @@ export type IconName =
   | 'story'
   | 'scenic'
   | 'break'
-  | 'finish'
   | 'play'
   | 'pause'
   | 'restart'
@@ -46,7 +45,6 @@ const IONICON: Record<IconName, ComponentProps<typeof Ionicons>['name']> = {
   story: 'book-outline',
   scenic: 'telescope-outline',
   break: 'cafe-outline',
-  finish: 'flag-outline',
   // transport
   play: 'play',
   pause: 'pause',

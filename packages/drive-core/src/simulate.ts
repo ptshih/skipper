@@ -1,4 +1,4 @@
-// The drive simulator — replay a corridor polyline as a GPS fix stream and run the
+// The drive simulator — replay a tour's polyline as a GPS fix stream and run the
 // trigger core against the tour's stops, so we can validate speed-adaptive
 // triggering, debounce, and audio overlap WITHOUT a car or live GPS.
 

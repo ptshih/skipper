@@ -96,7 +96,7 @@ export const WIKIDATA_ENRICHMENT = (): boolean => process.env.SKIPPER_WIKIDATA !
 /** The scout is on by default; set SKIPPER_SCOUT=off to skip story-stop enrichment
  * entirely (scenic geology is unaffected — it's a contract, not a scout decision). */
 export const SCOUT_ENRICHMENT = (): boolean => process.env.SKIPPER_SCOUT !== 'off'
-/** Max model turns per stop — the ReAct loop's hard bound. A turn is one Sonnet call that
+/** Max model turns per stop — the ReAct loop's hard bound. A turn is one Opus call that
  * either fetches (possibly several tools at once) or finalizes; 5 covers look-then-decide
  * with a re-fetch, and a loop that hits the cap yields NO enrichment (logged, non-fatal). */
 export const SCOUT_MAX_TOOL_TURNS = 5
@@ -127,11 +127,11 @@ export const SCOUT_CONCURRENCY = (): number => intKnob(process.env.SKIPPER_SCOUT
 // generate.ts runs the eval panel (src/eval/) DURING generation and feeds findings back
 // through the evaluator-optimizer (eval/optimize.ts). Cost shape (deliberate): the per-pass
 // loop is driven ONLY by the FREE deterministic dims (tts + diversity); GROUNDING (one
-// Sonnet call per story/scenic stop) runs ONCE as a final pass, and only a stop that FAILS
+// Opus call per story/scenic stop) runs ONCE as a final pass, and only a stop that FAILS
 // it gets a bounded targeted re-narration. Grounding findings drive regen + are recorded on
 // the scorecard but NEVER block `ready` — the human ear stays the ship decision (CLAUDE.md:
 // "Deferred — DO NOT build: any automated groundedness gate").
-/** Grounding eval is on by default; set SKIPPER_GROUNDING_EVAL=off to skip the Sonnet pass. */
+/** Grounding eval is on by default; set SKIPPER_GROUNDING_EVAL=off to skip the Opus pass. */
 export const GROUNDING_EVAL = (): boolean => process.env.SKIPPER_GROUNDING_EVAL !== 'off'
 /** Tour-level passes of the FREE panel (tts + diversity) → regen loop. Each pass re-lints the
  * assembled set (fixing stop A can clear or create a cross-stop finding on stop B) and is a
@@ -139,7 +139,7 @@ export const GROUNDING_EVAL = (): boolean => process.env.SKIPPER_GROUNDING_EVAL 
  * regens to clear stacked findings. */
 export const EVAL_MAX_PASSES = 4
 /** Max targeted re-narrations for ONE stop that failed the grounding pass. Kept small: each
- * round costs an Opus regen + a Sonnet re-audit, and the ungrounded-claim avoid-notes land
+ * round costs an Opus regen + an Opus re-audit, and the ungrounded-claim avoid-notes land
  * the fix in round 1 almost always. */
 export const GROUNDING_REGEN_MAX_ROUNDS = 2
 /** HARD cap on re-narration ATTEMPTS per tour for the FREE-dim passes + the closer judge.
@@ -150,7 +150,7 @@ export const GROUNDING_REGEN_MAX_ROUNDS = 2
 export const EVAL_REGEN_BUDGET = 24
 /** SEPARATE hard cap on re-narration attempts for the GROUNDING pass, so a tic-heavy tour
  * that burns the panel budget above can never starve the crown-jewel dimension to zero
- * regens. Each attempt also costs one Sonnet re-audit. 12 = six failing stops at the full
+ * regens. Each attempt also costs one Opus re-audit. 12 = six failing stops at the full
  * GROUNDING_REGEN_MAX_ROUNDS (the first live audit of a 14-stop tour flagged EIGHT, so 8
  * proved tight); beyond the cap the verdicts just land on the scorecard for human review. */
 export const GROUNDING_REGEN_BUDGET = 12

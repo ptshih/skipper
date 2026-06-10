@@ -4,12 +4,12 @@
 export const voice = {
   loading: {
     app: 'Firing up the engine, folks. She starts when she’s good and ready.',
-    corridors: 'Charting the good roads…',
+    drives: 'Charting the good roads…',
     tour: 'Pulling the logbook…',
     preview: 'Warming up the route…',
   },
   empty: {
-    corridors:
+    drives:
       'No drives charted here yet. We’re still out mapping the good roads — check back soon.',
     tours: 'No tours run this corridor yet. The skipper’s still scouting it.',
     tour: 'This tour took a wrong turn. Head back and pick another.',

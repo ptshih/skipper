@@ -33,7 +33,7 @@ export function bracketKindForSeq(seq: number): 'intro' | 'outro' | null {
   return seq === INTRO_SEQ ? 'intro' : seq === OUTRO_SEQ ? 'outro' : null
 }
 
-/** One tour stop, as the preview needs it (a subset of the tour_stops/poi_content join). */
+/** One tour stop, as the preview needs it (a subset of the tour_stops row joined to its pois anchor). */
 export interface PreviewStop {
   seq: number
   stopType: 'story' | 'scenic' | 'break'
@@ -100,7 +100,7 @@ const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.m
 
 /**
  * Build the compressed preview timeline for a tour. `stops` need not be pre-sorted;
- * they are ordered by seq. `polyline` is the corridor's frozen geometry — each stop's
+ * they are ordered by seq. `polyline` is the tour's frozen geometry — each stop's
  * trigger point is snapped to it to get an along-route position, so the dot's progress
  * matches where the stop really sits on the drive.
  */

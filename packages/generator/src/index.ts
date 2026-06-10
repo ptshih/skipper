@@ -1,11 +1,12 @@
 // @skipper/generator — server-side tour generation. Runs entirely before the
 // app downloads anything.
 //
-// M1 (walking skeleton) implements, for ONE hardcoded corridor / duration /
-// persona / dadpocalypse:
-//   corridor polyline
-//     -> Wikipedia geosearch + extracts        (grounded story facts)
-//     -> Google Places searchAlongRoute        (food/rest break stops)
+// M1 (walking skeleton) implements, for ONE seeded tour shell (loaded by slug) /
+// duration / persona / dadpocalypse:
+//   tour polyline (from the seeded shell)
+//     -> Wikidata SPARQL spine                  (the POI discovery spine)
+//     -> Wikipedia extracts                     (per-candidate PROSE enrichment)
+//     -> Google Places searchAlongRoute         (food/rest break stops)
 //     -> select stops to fit duration           (pace by drive TIME, not distance)
 //     -> skipper narration (Anthropic)          (facts-only prompt; never invent)
 //     -> TTS (Google Cloud, Gemini-TTS) -> Cloudflare R2

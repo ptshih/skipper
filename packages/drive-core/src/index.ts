@@ -1,4 +1,4 @@
-// @skipper/sim — the drive simulator + the trigger core the in-car player reuses.
+// @skipper/drive-core — pure geo + trigger engine + drive sim + preview timeline (RN-safe; shared by sim & mobile).
 export * from './geo'
 export * from './trigger'
 export * from './simulate'

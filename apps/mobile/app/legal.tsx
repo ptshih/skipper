@@ -1,6 +1,6 @@
 // Sources & Licenses — the public attribution surface, reached from Settings → Credits.
 // CC BY-SA / CC BY oblige us to credit our sources and link the license; this is where
-// that credit lives app-wide (per-clip credit is frozen on poi_content.attribution).
+// that credit lives app-wide (per-clip credit is frozen on tour_stops.attribution).
 // The catalog is served by GET /sources (authoritative) so a new fact source credits
 // without an App Store release; we seed from the bundled FALLBACK so the page never
 // dead-ends offline, then upgrade to the live list. Theme roles only (no raw hex/font).

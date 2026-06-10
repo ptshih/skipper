@@ -1,5 +1,5 @@
 // Shared state for THE DRIVES location filter. The home screen publishes the regions
-// present in the catalog (derived from the loaded corridors) and reads the selection; the
+// present in the catalog (derived from the loaded tours) and reads the selection; the
 // "Where are we headed?" modal (app/regions.tsx) reads those regions and writes the
 // selection. A context (mirrors ThemeProvider) so the picked region survives the modal hop
 // without threading it back through navigation params.

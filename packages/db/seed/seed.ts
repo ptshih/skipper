@@ -32,11 +32,12 @@ const DATA_DIR = join(dirname(fileURLToPath(import.meta.url)), 'data')
 /** Tahoe-region sanity box; a polyline outside this means bad coordinate order. */
 const BBOX = { latMin: 38, latMax: 40, lngMin: -121, lngMax: -119 }
 
-/** The frozen route geometry — read tolerantly so a legacy artifact shape still loads. */
+/** The frozen route geometry. materialize.ts always emits provenance totals; a stale
+ *  artifact missing them is a HARD ERROR (re-materialize, no back-compat — see below). */
 interface Geometry {
   polyline: [number, number][]
-  distanceMeters: number | null
-  durationSeconds: number | null
+  distanceMeters: number
+  durationSeconds: number
 }
 
 function loadGeometry(slug: string): Geometry {
@@ -54,10 +55,18 @@ function loadGeometry(slug: string): Geometry {
   if (!Array.isArray(j.polyline) || j.polyline.length < 2) {
     throw new Error(`${slug}: frozen artifact has no usable polyline (run materialize.ts ${slug}).`)
   }
+  // materialize.ts always writes both totals; a stale artifact missing them is re-materialized,
+  // not nursed (no back-compat). Fail loud so the operator re-runs materialize.ts.
+  if (typeof j.provenance?.distanceMeters !== 'number' || typeof j.provenance?.durationSeconds !== 'number') {
+    throw new Error(
+      `${slug}: frozen artifact missing provenance.distanceMeters/durationSeconds — ` +
+        `re-run materialize.ts ${slug}.`,
+    )
+  }
   return {
     polyline: j.polyline,
-    distanceMeters: j.provenance?.distanceMeters ?? null,
-    durationSeconds: j.provenance?.durationSeconds ?? null,
+    distanceMeters: j.provenance.distanceMeters,
+    durationSeconds: j.provenance.durationSeconds,
   }
 }
 

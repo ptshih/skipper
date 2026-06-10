@@ -1,6 +1,6 @@
 // R2 access for the API — issues short-lived PRESIGNED GET URLs for gated audio.
 //
-// Audio objects are PRIVATE in R2; poi_content.audioUrl stores the object KEY.
+// Audio objects are PRIVATE in R2; tour_stops.audioUrl (and tour_brackets.audioUrl) store the object KEY.
 // The API presigns on demand AFTER the tier check, so a leaked/shared URL expires
 // and the account wall is real. (Client config mirrors @skipper/generator's
 // storage.ts — ~10 stable lines; extract a shared @skipper/storage package if a

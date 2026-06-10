@@ -2,7 +2,7 @@
 //
 // Mirrors @skipper/generator's geo helpers (kept local so the sim + the eventual
 // player core stay decoupled from the generator). [lng, lat] axis order throughout,
-// matching corridors.polyline.
+// matching tours.polyline.
 
 export type LngLat = [number, number]
 

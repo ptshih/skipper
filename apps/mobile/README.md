@@ -22,9 +22,12 @@
   `expo-secure-store`, scheme `skipper` (matches the server `trustedOrigins` and
   the `expo()` server plugin in `apps/api/src/auth.ts`).
 - **API client:** `src/lib/api.ts` — typed against `@skipper/shared` DTOs
-  (`corridorList`/`tourDetail`/`signedAudio`); auth via `authClient.getCookie()`.
-- **Gating:** anonymous can open only the preview tour; other tours return 401 →
-  the screen prompts for a free account.
+  (`tourList`/`tourDetail`/`signedAudio`); auth via `authClient.getCookie()`.
+- **Gating:** anonymous can PREVIEW any ready tour — a `?preview=1` fetch/sign is
+  OPEN for every tour (the couch preview is the funnel; `tours.isPreview` is gone,
+  there's no single "preview tour"). The wall is the LIVE DRIVE + OFFLINE download:
+  an UNFLAGGED fetch needs a free account, so it returns 401 → the screen prompts to
+  sign up (`AccountGate`).
 
 ## Materialize it (first steps toward the phone player)
 
@@ -63,7 +66,7 @@ does exactly that and launches the server through dotenvx.
       user's music at a trigger.
 - [ ] **`expo-location`** + **`expo-task-manager`**: continuous high-rate
       FOREGROUND service (NOT fixed-radius background polling).
-- [ ] **Drive simulator** — replay a corridor polyline at configurable speed.
+- [ ] **Drive simulator** — replay a tour's polyline at configurable speed.
       (The trigger core + a headless drive sim live in **`@skipper/drive-core`**,
       now imported directly by the app; this is the on-device player driving
       against it / live GPS.)
@@ -100,9 +103,9 @@ the bet. When you do:
 
 ## Backend endpoints consumed
 
-- `GET /corridors` (anon) · `GET /tours/:id` + `POST /tours/:id/assets/sign`
-  (preview-only for anon, else free account) · `POST /api/auth/*` (Better Auth).
+- `GET /tours` (anon list) · `GET /tours/:id` + `POST /tours/:id/assets/sign`
+  (open with `?preview=1` for anon, else free account) · `POST /api/auth/*` (Better Auth).
 
-> **Browse→play flow is wired:** `GET /corridors/:id/tours` exists in the M2 API
-> and is consumed by `app/corridor/[id].tsx` (corridor list → tours → gated tour
-> detail). The remaining gap is the LIVE phone player itself (see TODO above).
+> **Browse→play flow is wired:** `GET /tours` (anon list) and `GET /tours/:id` are
+> consumed by `app/tours/[id]/*` (tour detail → gated player); the region picker is
+> `app/regions.tsx`. The remaining gap is the LIVE phone player itself (see TODO above).
