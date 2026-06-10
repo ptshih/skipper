@@ -84,6 +84,12 @@ Any-road-anywhere stresses three principles. Each survives:
 3. **Truly live / wandering** (hardest) — no known destination, narrate-as-you-go. Maximal coverage,
    hardest to keep paced and charming.
 
+*(Added 2026-06-10)* A **rung 1.5** sits between curated and live: **pre-generated regional
+free-roam** — the POI corpus batch-narrated as standalone proximity-triggered encounters, no route
+at all. It approximates rung 3 *inside covered regions* on today's batch stack (no live gen, no
+on-device LLM), and de-risks the climb: it forces the rail-less trigger the later rungs need.
+Captured as [free-roam-mode.md](free-roam-mode.md).
+
 "Any road" need not mean "abandon curation" — the middle rung is **curate-on-the-fly from the user's
 real route.**
 

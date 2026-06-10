@@ -83,6 +83,9 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   entertainment/meaning layer of the journey (the self-driving age) + "any road, anywhere, generated
   live" — the demand and supply of one endgame the feature-ideas below ladder toward. Direction, not
   commitment.
+- [free-roam-mode.md](ideas/free-roam-mode.md) — **a second product** (tours stay primary): the POI
+  corpus as a proximity-triggered "skipper rides shotgun" roam mode — Autio's shape, Skipper's soul,
+  region-gated by density; rung 1.5 of the journey-layer spectrum. Captured 2026-06-10.
 
 The rest are post-MVP features, gated behind the proven phone player:
 - [drive-complete-moment.md](ideas/drive-complete-moment.md) — the payoff beat as motion + sound
