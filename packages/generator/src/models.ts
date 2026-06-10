@@ -19,7 +19,7 @@
 // (it's accepted on Opus 4.8), and a FORCED tool_choice ({type:"tool"}) 400s with
 // "tool_choice forces tool use is not compatible with this model" (observed live
 // 2026-06-09, req_011CbtU9f7zsE1V8HegixKaw). narrate.ts ({type:"adaptive"}, no
-// tools) rides the switch; the forced-tool judges (charm.ts, pairwise-judge.ts)
+// tools) rides the switch; the forced-tool judges (charm.ts)
 // can NOT — they pin JUDGMENT_MODEL below instead of NARRATION_MODEL.
 //
 // COST (a founder-relevant axis, per CLAUDE.md): Fable 5 is ~2× Opus 4.8 —
@@ -31,10 +31,10 @@
 export const NARRATION_MODEL = 'claude-fable-5' as const
 
 // JUDGMENT tier — every NON-narration model call: the enrichment scout (pipeline/scout.ts)
-// and the structured-report / spot-check judges (eval/charm.ts, pairwise-judge.ts,
+// and the structured-report / spot-check judges (eval/charm.ts,
 // pipeline/judge.ts, eval/grounding.ts, eval/veracity.ts). Opus 4.8, deliberately NOT
 // NARRATION_MODEL. Two reasons it can't ride the narration model:
-//   (a) Five of the six FORCE tool use (tool_choice {type:'tool'} or {type:'any'}), which
+//   (a) Four of the five FORCE tool use (tool_choice {type:'tool'} or {type:'any'}), which
 //       Claude Fable 5 rejects outright (400 "tool_choice forces tool use is not compatible
 //       with this model" — observed live 2026-06-09, req_011CbtU9f7zsE1V8HegixKaw); only
 //       veracity (auto tool_choice + web_search) is exempt.
@@ -127,11 +127,17 @@ export const SKIPPER_VOICE_ID: GeminiVoice = GEMINI_VOICES.algenib
 // beat now serves deadpan RHYTHM, not a groan — the skipper-craft research found a beat held
 // FOR an audience reaction is a live-boat artifact (docs/research/jungle-cruise-skipper-craft.md
 // §5); in solo audio the pause just lets the pun sit.
+// ANTI-FADE (2026-06-10, founder direction — fix the mumble at the prompt): measured tail
+// collapse on 8/30 live clips (worst: emerald seq 13's final sentence at near-silence; see
+// TODO.md "TTS audio QA"). The volume-lowering cues ("confiding", "quiet beat", bare
+// "breathe") are gone and an explicit hold-the-level-to-the-last-word rule is in. Founder
+// ear-tested this wording vs the prior one on the Dam clip + outro (no regression). NOTE:
+// takes are stochastic — judge the fix across the next regen's full clip set, not one take.
 // ⚠ NOT yet on the live canonical preview: this only affects NEW synthesis. Taking effect
 // means re-synthesizing the canonical clips at Phase 6 (resynth-tour.ts --preview) and the
 // founder re-validating by ear. Do NOT re-tune the wording without a fresh ear test.
 export const SKIPPER_TTS_STYLE_PROMPT =
-  'Read this as a warm road-trip tour guide letting friends in on jokes you all secretly enjoy — genuinely glad they came, a man who has told these corny jokes a thousand times and quietly loves every one. Keep the narration moving at a natural, easy talking pace, like a man telling you about the view out the window — relaxed but never sleepy, never dragging. Save the slow-down for the jokes: deliver them deadpan and fully committed, but with a confiding warmth, as if you and the riders both know it is corny and that is exactly why it is good. Never laugh at your own setup, never sing-song the punchline; land each one flat and matter-of-fact. Put a small pause right before the pun, and after it lands hold one quiet beat — not waiting for anything, just letting it sit — then roll on. Let the sincere lines breathe, but keep everything else moving. Talking WITH friends, not at a crowd.'
+  'Read this as a warm road-trip tour guide letting friends in on jokes you all secretly enjoy — genuinely glad they came, a man who has told these corny jokes a thousand times and quietly loves every one. Keep the narration moving at a natural, easy talking pace, like a man telling you about the view out the window — relaxed but never sleepy, never dragging. Save the slow-down for the jokes: deliver them deadpan and fully committed, but with warmth — close and friendly, never dropping to a murmur — as if you and the riders both know it is corny and that is exactly why it is good. Never laugh at your own setup, never sing-song the punchline; land each one flat and matter-of-fact. Put a small pause right before the pun, and after it lands hold one short beat — not waiting for anything, just letting it sit — then roll on. Let the sincere lines breathe without fading — keep the voice clear, present, and at full conversational volume from the first sentence to the very last; never trail off, drop low, or swallow the closing words. Talking WITH friends, not at a crowd.'
 
 // (The voice↔persona binding now lives in the persona registry — each PersonaDef carries
 // its own `voice`; see packages/generator/src/persona/. `SKIPPER_VOICE_ID` above is the
