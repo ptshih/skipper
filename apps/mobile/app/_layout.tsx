@@ -6,7 +6,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { DrivesFilterProvider } from '@/lib/drives-filter'
 import { ThemeProvider, readStoredThemeMode, useAppFonts, useTheme, type ThemeMode } from '@/theme'
 import { fonts } from '@/theme/tokens'
-import { HeaderIconButton } from '@/ui'
+import { HeaderIconButton, VersionGate } from '@/ui'
 
 // Hold the splash until the Trailhead type system is loaded, so nothing renders
 // in a system font first.
@@ -36,6 +36,9 @@ export default function RootLayout() {
         <DrivesFilterProvider>
           <ThemedStack />
         </DrivesFilterProvider>
+        {/* Launch-time update gate — floats above the whole navigator. Renders nothing
+            unless the server /version floor says this build must nudge or force-update. */}
+        <VersionGate />
       </ThemeProvider>
     </SafeAreaProvider>
   )

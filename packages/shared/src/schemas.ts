@@ -1,5 +1,13 @@
 import { z } from 'zod'
-import { attributionSource, bracketKind, jokeLevel, poiSource, stopType, tourStatus } from './enums'
+import {
+  attributionSource,
+  bracketKind,
+  jokeLevel,
+  platform,
+  poiSource,
+  stopType,
+  tourStatus,
+} from './enums'
 
 /** A single [lng, lat] pair (GeoJSON axis order). */
 export const coordinate = z.tuple([z.number(), z.number()])
@@ -76,6 +84,27 @@ export type DataSource = z.infer<typeof dataSource>
 /** GET /sources — the app-wide data-source/license catalog (anonymous; public legal info). */
 export const sourcesResponse = z.object({ sources: z.array(dataSource) })
 export type SourcesResponse = z.infer<typeof sourcesResponse>
+
+/**
+ * The per-platform app-version policy. The client reads its OWN version, compares against
+ * `minimum`/`recommended`, and decides the update gate (see `gateFor` in ./version). The
+ * authoritative copy lives in apps/api server code, so the floor is raised by a BACKEND
+ * deploy — never an App Store release. `storeUrl` deep-links the right store.
+ */
+export const versionPolicy = z.object({
+  platform,
+  /** Below this (semver "x.y.z") the client is FORCED to update (blocking wall). */
+  minimum: z.string(),
+  /** Below this (but at/above `minimum`) the client is NUDGED (dismissible). */
+  recommended: z.string(),
+  /** App Store / Play Store deep link for this platform. */
+  storeUrl: z.url(),
+})
+export type VersionPolicy = z.infer<typeof versionPolicy>
+
+/** GET /version — the per-platform update policy (anonymous; env-free). */
+export const versionResponse = z.object({ policies: z.array(versionPolicy) })
+export type VersionResponse = z.infer<typeof versionResponse>
 
 /**
  * An ordered stop that OWNS its narration (per tour). The R2 audio KEY is internal and

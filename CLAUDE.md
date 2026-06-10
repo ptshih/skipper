@@ -13,8 +13,9 @@ the demo — a live regen burns GCP credits, and the canonical preview IS the de
 silently break it). (Added 2026-06-08.) **Scope (2026-06-09):** this licenses breaking
 STORAGE, not the wire contract — once v1 is in the App Store, installed clients lag, so
 the API/DTO surface (`@skipper/shared` + `apps/api` routes) stops being break-freely even
-while the DB stays destructive-OK. Pick an API-versioning posture BEFORE the first store
-submission (see `TODO.md`).
+while the DB stays destructive-OK. Posture now SET (`docs/decisions/api-versioning-posture.md`):
+**no URL versioning** — evolve the contract additively; the shipped server-`/version`
+force-upgrade gate is the sole escape hatch for a hard break.
 
 **Ground tooling/dependency/version decisions in authoritative docs, not memory.**
 The stack moves fast (bun, Expo/RN, drizzle, the SDKs) and a model's training data

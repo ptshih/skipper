@@ -5,23 +5,6 @@ Carry-forward **engineering** items (the near-term layer of the truth system —
 Each item has enough context to action without re-deriving the reasoning. **Delete items
 when done** — git history is the archive.
 
-## API contract: pick a versioning posture BEFORE the first App Store submission
-
-CLAUDE.md's **"break things freely"** doctrine is now explicitly scoped to STORAGE
-(done 2026-06-09) — but the open decision remains: once the mobile app is in the App
-Store, installed clients won't update instantly, so the **API / DTO contract
-(`@skipper/shared` + `apps/api` routes) can no longer break freely** even though the DB
-still can.
-
-- [ ] Decide an **API-versioning posture BEFORE the first App Store submission**:
-      - version the routes (`/v1/tours`) and/or the DTOs, and/or
-      - keep N−1 compatibility for a deprecation window matched to app-update lag.
-- Today there is no versioning (`/tours`, not `/v1/tours`) — fine pre-launch, a trap
-  post-launch (an old installed app hitting a changed contract → silent breakage).
-
-Refs: CLAUDE.md (top doctrine + Hard invariants), `packages/shared/src/schemas.ts`,
-`apps/api/src/index.ts`.
-
 ## Generation is not resumable — checkpoint the TTS spend
 
 The cost *guardrail* shipped 2026-06-09: every Anthropic call records its usage

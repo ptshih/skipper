@@ -2,6 +2,7 @@
 //
 //   GET  /health                     -> liveness (env-free)
 //   GET  /sources                    -> data-source/license catalog (anonymous; env-free)
+//   GET  /version                    -> per-platform app-version policy (anonymous; env-free)
 //   *    /api/auth/*                  -> Better Auth (sign-up/in/out, session, OAuth)
 //   GET  /tours                      -> list ready tours, one card per drive (anonymous OK)
 //   GET  /tours/:tourId              -> a ready drive: route + region + host + intro/outro + stops
@@ -24,6 +25,7 @@ import { FEATURES, meetsTier, withSession, type ApiEnv } from './entitlements'
 import { hostForRegion } from './host'
 import { DATA_SOURCES } from './sources'
 import { contentTypeForKey, presignGet } from './storage'
+import { VERSION_POLICIES } from './version-policy'
 
 const app = new Hono<ApiEnv>()
 
@@ -44,6 +46,12 @@ app.get('/health', (c) => c.json({ ok: true }))
 // Anonymous + env-free (no DB) — served from code so a NEW fact source credits without
 // an App Store release (the app bundles only an offline fallback).
 app.get('/sources', (c) => c.json({ sources: DATA_SOURCES }))
+
+// Per-platform app-version policy for the client's update gate. Anonymous + env-free (no
+// DB) — served from code so the minimum/recommended floor is raised by a backend deploy,
+// never an App Store release. The client compares its own version (@skipper/shared
+// `gateFor`) and shows a dismissible nudge or a blocking "update required" wall.
+app.get('/version', (c) => c.json({ policies: VERSION_POLICIES }))
 
 // Better Auth owns everything under /api/auth/* (its own handler).
 app.on(['POST', 'GET'], '/api/auth/*', (c) => auth.handler(c.req.raw))

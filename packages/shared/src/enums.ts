@@ -68,3 +68,7 @@ export type Interest = z.infer<typeof interest>
  */
 export const accessTier = z.enum(['anonymous', 'free', 'paid'])
 export type AccessTier = z.infer<typeof accessTier>
+
+/** Mobile client platform — keys the per-platform app-version policy served by GET /version. */
+export const platform = z.enum(['ios', 'android'])
+export type Platform = z.infer<typeof platform>
