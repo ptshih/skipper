@@ -122,11 +122,15 @@ export const SKIPPER_VOICE_ID: GeminiVoice = GEMINI_VOICES.algenib
 // founder-picked over "tightened" / "drier" / "bigger-beat" (the tour-structure handoff's
 // Appendix A — doc since deleted; see git history). Keeps the deadpan, committed-to-the-bit jokes but at a natural, easy talking
 // pace (relaxed, never dragging), saving the slow-down for the puns with a confiding warmth.
+// PAUSE re-anchored (2026-06-10, founder A/B ear test on the Chambers clip): the post-pun
+// beat now serves deadpan RHYTHM, not a groan — the skipper-craft research found a beat held
+// FOR an audience reaction is a live-boat artifact (docs/research/jungle-cruise-skipper-craft.md
+// §5); in solo audio the pause just lets the pun sit.
 // ⚠ NOT yet on the live canonical preview: this only affects NEW synthesis. Taking effect
 // means re-synthesizing the canonical clips at Phase 6 (resynth-tour.ts --preview) and the
 // founder re-validating by ear. Do NOT re-tune the wording without a fresh ear test.
 export const SKIPPER_TTS_STYLE_PROMPT =
-  'Read this as a warm road-trip tour guide letting friends in on jokes you all secretly enjoy — genuinely glad they came, a man who has told these corny jokes a thousand times and quietly loves every one. Keep the narration moving at a natural, easy talking pace, like a man telling you about the view out the window — relaxed but never sleepy, never dragging. Save the slow-down for the jokes: deliver them deadpan and fully committed, but with a confiding warmth, as if you and the riders both know it is corny and that is exactly why it is good. Never laugh at your own setup, never sing-song the punchline; land each one flat and matter-of-fact. Put a small pause right before the pun and a beat right after for the groan, then roll on. Let the sincere lines breathe, but keep everything else moving. Talking WITH friends, not at a crowd.'
+  'Read this as a warm road-trip tour guide letting friends in on jokes you all secretly enjoy — genuinely glad they came, a man who has told these corny jokes a thousand times and quietly loves every one. Keep the narration moving at a natural, easy talking pace, like a man telling you about the view out the window — relaxed but never sleepy, never dragging. Save the slow-down for the jokes: deliver them deadpan and fully committed, but with a confiding warmth, as if you and the riders both know it is corny and that is exactly why it is good. Never laugh at your own setup, never sing-song the punchline; land each one flat and matter-of-fact. Put a small pause right before the pun, and after it lands hold one quiet beat — not waiting for anything, just letting it sit — then roll on. Let the sincere lines breathe, but keep everything else moving. Talking WITH friends, not at a crowd.'
 
 // (The voice↔persona binding now lives in the persona registry — each PersonaDef carries
 // its own `voice`; see packages/generator/src/persona/. `SKIPPER_VOICE_ID` above is the
