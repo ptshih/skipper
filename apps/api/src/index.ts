@@ -184,41 +184,45 @@ app.get('/tours/:tourId', withSession, async (c) => {
   if ('res' in gated) return gated.res
   const { tour } = gated
 
-  const regionRows = await db
-    .select({ slug: regions.slug, displayName: regions.displayName })
-    .from(regions)
-    .where(eq(regions.id, tour.regionId))
-    .limit(1)
+  // Region, stops, and brackets are INDEPENDENT reads (each keyed only on the already-loaded
+  // tour, none on another's result). neon-http is one HTTP round-trip per query, so serial
+  // awaits would pay that latency three times back-to-back — fan them out and collapse to ~the
+  // slowest single query. (A reject still surfaces as a 500 via onError, same as serial.)
+  const [regionRows, stops, brackets] = await Promise.all([
+    db
+      .select({ slug: regions.slug, displayName: regions.displayName })
+      .from(regions)
+      .where(eq(regions.id, tour.regionId))
+      .limit(1),
+    db
+      .select({
+        seq: tourStops.seq,
+        stopType: tourStops.stopType,
+        name: pois.name,
+        lat: pois.lat,
+        lng: pois.lng,
+        triggerRadiusM: tourStops.triggerRadiusM,
+        approachHeadingDeg: tourStops.approachHeadingDeg,
+        audioDurationMs: tourStops.audioDurationMs,
+        // The offline-staleness token (Date → ISO via c.json). Bumps on any clip re-synth/regen,
+        // so a downloaded drive can detect it's behind the server. See shared `tourStopView.revisedAt`.
+        revisedAt: tourStops.updatedAt,
+      })
+      .from(tourStops)
+      .innerJoin(pois, eq(tourStops.poiId, pois.id))
+      .where(eq(tourStops.tourId, tour.id))
+      .orderBy(asc(tourStops.seq)),
+    db
+      .select({
+        kind: tourBrackets.kind,
+        audioDurationMs: tourBrackets.audioDurationMs,
+        revisedAt: tourBrackets.updatedAt,
+      })
+      .from(tourBrackets)
+      .where(eq(tourBrackets.tourId, tour.id)),
+  ])
   // tours.regionId is a NOT NULL FK with onDelete: restrict, so the region always exists.
   const region = regionRows[0]!
-
-  const stops = await db
-    .select({
-      seq: tourStops.seq,
-      stopType: tourStops.stopType,
-      name: pois.name,
-      lat: pois.lat,
-      lng: pois.lng,
-      triggerRadiusM: tourStops.triggerRadiusM,
-      approachHeadingDeg: tourStops.approachHeadingDeg,
-      audioDurationMs: tourStops.audioDurationMs,
-      // The offline-staleness token (Date → ISO via c.json). Bumps on any clip re-synth/regen,
-      // so a downloaded drive can detect it's behind the server. See shared `tourStopView.revisedAt`.
-      revisedAt: tourStops.updatedAt,
-    })
-    .from(tourStops)
-    .innerJoin(pois, eq(tourStops.poiId, pois.id))
-    .where(eq(tourStops.tourId, tour.id))
-    .orderBy(asc(tourStops.seq))
-
-  const brackets = await db
-    .select({
-      kind: tourBrackets.kind,
-      audioDurationMs: tourBrackets.audioDurationMs,
-      revisedAt: tourBrackets.updatedAt,
-    })
-    .from(tourBrackets)
-    .where(eq(tourBrackets.tourId, tour.id))
   const intro = brackets.find((b) => b.kind === 'intro')
   const outro = brackets.find((b) => b.kind === 'outro')
 
@@ -262,24 +266,26 @@ app.post('/tours/:tourId/assets/sign', withSession, async (c) => {
   if ('res' in gated) return gated.res
   const { tour } = gated
 
-  const stopClips = await db
-    .select({
-      seq: tourStops.seq,
-      key: tourStops.audioUrl,
-      durationMs: tourStops.audioDurationMs,
-    })
-    .from(tourStops)
-    .where(eq(tourStops.tourId, tour.id))
-    .orderBy(asc(tourStops.seq))
-
-  const bracketClips = await db
-    .select({
-      kind: tourBrackets.kind,
-      key: tourBrackets.audioUrl,
-      durationMs: tourBrackets.audioDurationMs,
-    })
-    .from(tourBrackets)
-    .where(eq(tourBrackets.tourId, tour.id))
+  // Independent reads → fan out (see /tours/:tourId): two neon-http round-trips become one.
+  const [stopClips, bracketClips] = await Promise.all([
+    db
+      .select({
+        seq: tourStops.seq,
+        key: tourStops.audioUrl,
+        durationMs: tourStops.audioDurationMs,
+      })
+      .from(tourStops)
+      .where(eq(tourStops.tourId, tour.id))
+      .orderBy(asc(tourStops.seq)),
+    db
+      .select({
+        kind: tourBrackets.kind,
+        key: tourBrackets.audioUrl,
+        durationMs: tourBrackets.audioDurationMs,
+      })
+      .from(tourBrackets)
+      .where(eq(tourBrackets.tourId, tour.id)),
+  ])
 
   try {
     const stops = stopClips
