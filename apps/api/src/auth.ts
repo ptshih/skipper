@@ -57,15 +57,13 @@ export const auth = betterAuth({
   // and the /t/<id> share pages at the root (app.json claims applinks:skipper.fm). Mapped
   // via a Cloud Run domain mapping (us-east4, Google-managed cert); a subdomain maps with a
   // CNAME to ghs.googlehosted.com, held DNS-only (grey cloud) in Cloudflare so Google can
-  // provision the cert. The run.app host stays listed for cutover; Render is an alt target.
+  // provision the cert. The run.app host stays listed for direct access during cutover.
   // NOTE: social OAuth (Google/Apple) needs EXACT pre-registered redirect URIs — use api.skipper.fm.
   baseURL: {
     allowedHosts: [
       'localhost', // local dev
       'api.skipper.fm', // custom domain — the API host
       'skipper-api-csslmysz7q-uk.a.run.app', // Cloud Run direct (cutover / fallback)
-      'skipper-api.onrender.com', // Render prod (alternate target)
-      'skipper-api-pr-*.onrender.com', // Render PR preview environments
     ],
     protocol: 'auto', // http for localhost, https for the custom domain / Cloud Run hosts
     fallback: 'https://api.skipper.fm', // base URL for any non-matching host + at init
