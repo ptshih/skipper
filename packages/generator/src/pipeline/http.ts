@@ -1,12 +1,43 @@
-// Bounded retry for the raw-fetch external calls (Google Cloud TTS, Wikipedia, Places).
-// A full tour makes ~2N sequential calls; without retry a single transient
-// 429/5xx/network blip fails the whole run. We retry transient failures with
-// exponential backoff (honoring Retry-After) and return the final Response — the
-// caller still checks res.ok for terminal errors.
+// Bounded retry for transient external + DB calls. A full tour makes ~2N sequential fetches
+// (Google Cloud TTS, Wikipedia, Places) PLUS several Neon reads; without retry a single
+// transient 429/5xx/network/cold-start blip fails the whole run. `fetchWithRetry` retries the
+// raw-fetch path (exponential backoff, honoring Retry-After) and returns the final Response;
+// `withRetry` is the generic async-thunk form the stateless neon-http READS use (a cold-start
+// blip on the FIRST query otherwise kills a run at $0 — observed 2026-06-10).
 
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504, 529])
 
 export const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
+
+/**
+ * Retry a transient async operation (a DB READ, any non-fetch call) with exponential backoff.
+ * READS only — the caller must be idempotent, since a retried op runs again (a write could
+ * double-apply). Logs each retry so a transient blip is visible, then throws the last error if
+ * all `attempts` fail (a non-transient error just fails ~a few seconds later, harmlessly).
+ */
+export async function withRetry<T>(
+  fn: () => Promise<T>,
+  opts: { attempts?: number; baseDelayMs?: number; label?: string } = {},
+): Promise<T> {
+  const attempts = opts.attempts ?? 4
+  const base = opts.baseDelayMs ?? 500
+  let lastError: unknown
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn()
+    } catch (e) {
+      lastError = e
+      if (i === attempts - 1) break
+      if (opts.label) {
+        console.warn(
+          `${opts.label}: attempt ${i + 1}/${attempts} failed (${(e as Error).message}) — retrying...`,
+        )
+      }
+      await sleep(base * 2 ** i)
+    }
+  }
+  throw lastError
+}
 
 export interface RetryOptions {
   /** Total attempts including the first (default 4). */

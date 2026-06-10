@@ -27,6 +27,7 @@
 
 import { db } from '@skipper/db'
 import { poiOverrides as poiOverridesTable } from '@skipper/db/schema'
+import { withRetry } from './http'
 
 /** One literal text correction (a `fact_edit` row). */
 export interface FactEdit {
@@ -129,7 +130,14 @@ let loadPromise: Promise<void> | undefined
  */
 export function ensurePoiOverridesLoaded(): Promise<void> {
   loadPromise ??= (async () => {
-    const rows = await db.select().from(poiOverridesTable)
+    // This is the FIRST DB read of a run — most exposed to a Neon cold-start blip, and a
+    // failure here kills the run before any work ($0 but maddening). neon-http is stateless
+    // (each query is its own HTTP request) and this read is pure, so retry it. The retry sits
+    // INSIDE the memoized promise: wrapping the CALL wouldn't help — a rejected loadPromise is
+    // cached, so re-awaiting it just re-throws the same error.
+    const rows = await withRetry(() => db.select().from(poiOverridesTable), {
+      label: 'poi-overrides load',
+    })
     cache = aggregateOverrideRows(rows)
     if (rows.length > 0) {
       const retired = rows.filter((r) => r.active === false).length
