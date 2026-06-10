@@ -44,6 +44,28 @@ export const POI_OVERRIDE_SEED: NewPoiOverride[] = [
   },
   {
     source: 'wikipedia',
+    sourceId: '22764866',
+    name: 'Tahoe Keys, California',
+    kind: 'fact_edit',
+    find: 'Constructed in the 1960s,',
+    replace: 'Constructed beginning in the mid-1950s,',
+    reason:
+      'The article dates construction to the 1960s; the California Tahoe Conservancy and the Tahoe Daily Tribune date the development to the 1950s and 1960s, with construction beginning in the mid-1950s. Founder-adjudicated from a --veracity finding 2026-06-09.',
+    sourceUrl: 'https://tahoe.ca.gov/upper-truckee-marsh/',
+  },
+  {
+    source: 'wikipedia',
+    sourceId: '32308786',
+    name: 'Chambers Lodge, California',
+    kind: 'fact_edit',
+    find: 'first established in 1854',
+    replace: 'first established in 1863',
+    reason:
+      "The article says 1854; multiple consistent sources (Rubicon Trail Foundation, tahoecountry.com, L.W. Currey) say John McKinney established Hunter's Retreat at this site in 1863. Founder-adjudicated from a --veracity finding 2026-06-09.",
+    sourceUrl: 'https://donsnotes.com/tahoe/chambers-landing.html',
+  },
+  {
+    source: 'wikipedia',
     sourceId: '41195091',
     name: "Ed Z'berg Sugar Pine Point State Park",
     kind: 'side_anchor',
