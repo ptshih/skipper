@@ -62,3 +62,31 @@ optimization — only matters once tours are large or strangers hold many offlin
 Refs: `apps/mobile/src/lib/offline.ts` (manifest + `isDownloadStale`),
 `apps/mobile/app/tours/[id]/index.tsx` (chip + ⋯ action), `packages/shared/src/schemas.ts`
 (`tourStopView`/`tourBracketView` `revisedAt`), `apps/api/src/index.ts` (detail route).
+
+## Upstream-contribution drafts for the active poi_overrides (agent drafts, human submits)
+
+The fact-overrides loop's "contribute back" half is designed but UNBUILT: we correct upstream
+source errors locally (`poi_overrides`), and the right thing is to also fix the SOURCE. Posture
+(from the decision doc): **agent drafts, human submits** — Wikipedia's bot policy (WP:BOT) + COI
+norms rule out autonomous editing, so an agent reads the `not_filed` rows (each already carries the
+correction + an authoritative `source_url`) and drafts the talk-page post / edit; a human reviews
+and files it, then sets `upstream_status` → `filed` (+ `upstream_url`).
+
+Three ACTIVE fact_edits are draftable (all `upstream_status = not_filed`):
+- **Lennart Palme** — Vikingsholm's architect (Emerald Bay State Park, wikipedia `1985884`); the
+  article says "Leonard." Source: vikingsholm.com + Wikipedia's own Vikingsholm article.
+- **Pope Estate builder/decade** (wikipedia `39007559`) — the article credits Lloyd Tevis / 1880s;
+  correct is George Tallant (Crocker Bank) 1894, with the Tevis family buying it in 1899. Source:
+  taylortallac.org history.
+- **Chambers Lodge 1863** (wikipedia `32308786`) — the article says "first established in 1854";
+  John McKinney established Hunter's Retreat at the site in 1863. Source: donsnotes.com + others.
+
+NOT this list: the Tahoe Keys row is RETIRED (`active = false`, 2026-06-10) — Wikipedia already
+removed the dated construction sentence, so there's nothing left to file.
+
+- [ ] Draft a per-row talk-page correction (claim → correction → authoritative source, in
+      Wikipedia's neutral register) for the 3 active rows; surface for human review + filing.
+
+Refs: `docs/decisions/fact-overrides-and-veracity.md` ("Contribute back" + the discipline line),
+`packages/db/seed/poi-overrides.ts` (the rows + reasons + source_urls),
+`poi_overrides.upstream_status` / `upstream_url` (the workflow columns).
