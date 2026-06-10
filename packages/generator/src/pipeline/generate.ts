@@ -82,8 +82,8 @@ import {
   finalizeTourReady,
   hashFacts,
   loadTour,
-  markTourFailed,
   markTourGenerating,
+  restoreAfterFailedRun,
   upsertPoi,
 } from './persist'
 import type { FinalBracket, FinalStop } from './persist'
@@ -218,6 +218,14 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
 
   // 1. Tour shell: route geometry + drive time (the pacing clock) + endpoints/region.
   const shell = await loadTour(opts.slug)
+  if (shell.status === 'generating') {
+    // Not fatal (a hard-killed run leaves this status behind and the blind marker below is
+    // the self-heal), but a CONCURRENT run would be double spend — say so loudly.
+    console.warn(
+      `Tour "${opts.slug}" is already 'generating' — another run may be in flight (or a prior ` +
+        `run crashed). Per-run clip/bracket keys keep R2 safe, but prefer one run at a time.`,
+    )
+  }
   // The generation persona (prompts/voice/style/kit) is resolved from the tour's REGION.
   // The notch (`jokeLevel`) is a generation input resolved above — not a tour column, not a
   // persona trait.
@@ -1014,12 +1022,15 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       })
     }
 
-    // Synthesize the brackets to their fixed tour-scoped keys (clips/<tourId>/intro|outro).
+    // Synthesize the brackets to PER-RUN keys (clips/<tourId>/<runId>-intro|outro) so this
+    // run can never overwrite the live telling's bracket bytes before its own ready-gate
+    // commits (see bracketKey). One id per run — both brackets share it.
+    const bracketRunId = crypto.randomUUID()
     const bracketSummaries: BracketSummary[] = []
     for (const b of bracketPlan) {
       console.log(`Synthesizing ${b.kind} bracket...`)
       const { audio, durationMs } = await synthesize(b.script, persona.voice, persona.ttsStyle)
-      const audioUrl = await uploadAudio(bracketKey(tourId, b.kind), audio)
+      const audioUrl = await uploadAudio(bracketKey(tourId, b.kind, bracketRunId), audio)
       finalBrackets.push({ kind: b.kind, script: b.script, audioUrl, audioDurationMs: durationMs })
       bracketSummaries.push({ kind: b.kind, script: b.script, durationMs })
     }
@@ -1059,7 +1070,10 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
     )
     return liveResult
   } catch (e) {
-    await markTourFailed(tourId).catch(() => {})
+    // Restore the pre-run status: a failed REGEN of a ready tour stays 'ready' (its old
+    // telling is fully intact — the deletes live inside the never-run finalize batch);
+    // anything else concludes 'failed'.
+    await restoreAfterFailedRun(tourId, shell.status).catch(() => {})
     throw e
   }
 }

@@ -14,7 +14,7 @@
 // failure the caller marks the tour `failed`.
 
 import { createHash } from 'node:crypto'
-import { eq, sql } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { pois, regions, tourBrackets, tourStops, tours } from '@skipper/db/schema'
 import type {
@@ -30,6 +30,9 @@ import type { BracketKind, PoiSource, StopType } from '@skipper/shared'
 export interface TourShell {
   id: string
   slug: string
+  /** Status at LOAD time — the snapshot a failed run restores (see restoreAfterFailedRun)
+   *  and the signal that another run may already be in flight ('generating'). */
+  status: 'draft' | 'generating' | 'ready' | 'failed'
   headline: string
   regionId: string
   regionSlug: string
@@ -51,6 +54,7 @@ export async function loadTour(slug: string): Promise<TourShell> {
     .select({
       id: tours.id,
       slug: tours.slug,
+      status: tours.status,
       headline: tours.headline,
       regionId: tours.regionId,
       regionSlug: regions.slug,
@@ -127,7 +131,13 @@ export async function upsertPoi(input: UpsertPoiInput): Promise<string> {
 }
 
 /**
- * Mark the draft tour `generating` (a status marker; the ready-gate does the real write).
+ * Mark the tour `generating` (a status marker; the ready-gate does the real write).
+ *
+ * Deliberately a BLIND update, not a compare-and-set: a hard-killed run leaves the status
+ * stuck on 'generating', and this write is the self-heal that lets the next run proceed.
+ * The caller WARNS when the loaded shell already said 'generating' (a concurrent run may be
+ * in flight); the damage a true race could do is contained by per-run-unique clip AND
+ * bracket keys (storage.ts) — two runs never write the same R2 object.
  */
 export async function markTourGenerating(tourId: string): Promise<void> {
   await db.update(tours).set({ status: 'generating' }).where(eq(tours.id, tourId))
@@ -214,7 +224,22 @@ export async function finalizeTourReady(
   ])
 }
 
-/** Mark a tour `failed` (best-effort cleanup when generation throws). */
-export async function markTourFailed(tourId: string): Promise<void> {
-  await db.update(tours).set({ status: 'failed' }).where(eq(tours.id, tourId))
+/**
+ * Conclude a run that THREW, restoring the right status (best-effort cleanup).
+ *
+ * A failed RE-generation of a previously-ready tour must restore 'ready', not 'failed':
+ * the old telling's rows and clips are fully intact and servable — finalizeTourReady's
+ * deletes live inside the never-executed batch — so flipping to 'failed' would silently
+ * take a live tour (the demo!) offline over one mid-run hiccup. Anything else concludes
+ * 'failed' as before. Guarded by `status = 'generating'` so it can never clobber a state
+ * some other actor has since set (e.g. a concurrent run that finalized to 'ready').
+ */
+export async function restoreAfterFailedRun(
+  tourId: string,
+  priorStatus: TourShell['status'],
+): Promise<void> {
+  await db
+    .update(tours)
+    .set({ status: priorStatus === 'ready' ? 'ready' : 'failed' })
+    .where(and(eq(tours.id, tourId), eq(tours.status, 'generating')))
 }

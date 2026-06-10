@@ -4,10 +4,11 @@
 // migration where the narration is already blessed — this is a delivery re-render, NOT a
 // re-generation: scripts (and thus grounding) are untouched.
 //
-// Keys are TOUR-scoped and STABLE (clips/<tourId>/<stopId>, clips/<tourId>/intro|outro),
-// so a re-synth overwrites the same object — the only time the key moves is an extension
-// change (e.g. wav→mp3), and then we sweep the orphan unless --keep-old. The tour stays
-// `ready` (every clip keeps a non-null audioUrl + duration).
+// A re-synth writes each clip at its row's EXISTING key (a stop's clips/<tourId>/<stopId>;
+// a bracket's stored audioUrl — bracket keys are per-RUN now), so it overwrites the same
+// object in place — the only time a stop key moves is an extension change (e.g. wav→mp3),
+// and then we sweep the orphan unless --keep-old. The tour stays `ready` (every clip keeps
+// a non-null audioUrl + duration).
 //
 //   dotenvx run -f .env.development -- bun packages/generator/src/resynth-tour.ts <tourId|prefix> [--dry-run] [--keep-old]
 //
@@ -20,7 +21,7 @@ import { GOOGLE_TTS_READY, R2_READY } from './config'
 import { TTS_CLIP_EXTENSION, TTS_MODEL } from './models'
 import { personaForRegion } from './persona'
 import { synthesize } from './pipeline/tts'
-import { bracketKey, clipKey, deleteAudio, uploadAudio } from './pipeline/storage'
+import { clipKey, deleteAudio, uploadAudio } from './pipeline/storage'
 
 async function resolveTourId(arg: string | undefined): Promise<string> {
   if (!arg) {
@@ -90,10 +91,13 @@ async function main() {
 
   const clips: Clip[] = [
     ...bracketRows
-      .filter((b) => b.script !== null)
+      .filter((b) => b.script !== null && b.audioUrl !== null)
       .map((b) => ({
         label: `${b.kind} bracket`,
-        key: bracketKey(tourId, b.kind),
+        // Re-synth IN PLACE at the row's stored key — bracket keys are per-run now
+        // (bracketKey), so recomputing one here would strand the row's pointer. A future
+        // FORMAT migration (extension change) should mint new keys + update rows + sweep.
+        key: b.audioUrl!,
         script: b.script!,
         storedAudioUrl: b.audioUrl,
         audioDurationMs: b.audioDurationMs,

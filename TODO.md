@@ -42,3 +42,26 @@ Still open:
 Refs: `packages/generator/src/pipeline/generate.ts` (the narrate → TTS → upload loop +
 the atomic ready-gate), `packages/generator/src/run.ts` (`--dry-run` already skips spend),
 `packages/generator/src/pipeline/tts.ts`.
+
+## R2 orphan sweep (cost cruft from regens)
+
+Every successful regen orphans the previous telling's clips in R2: stop AND bracket keys
+are per-run unique (deliberate — see `storage.ts`), so old objects under
+`clips/<tourId>/…` are simply abandoned when `finalizeTourReady` replaces the rows. Known
++ accepted (private, unreferenced bytes), but it accrues. A small sweep tool — list
+`clips/<tourId>/`, delete every key not referenced by a current `tour_stops.audioUrl` /
+`tour_brackets.audioUrl` — caps it. Run it manually after blessed regens.
+
+Refs: `packages/generator/src/pipeline/storage.ts` (`deleteAudio` exists),
+2026-06-09 DB-write audit (verified-minor finding).
+
+## Offline downloads never see patched clips
+
+`patch-clip` re-synthesizes in place at the stored key, but a device that already
+DOWNLOADED the tour keeps its local bytes forever — the exact bad word the tool fixed
+stays on-device until the user manually re-downloads. Real fix is a manifest version (bump
+on any clip update; the app re-fetches changed clips). Post-MVP; matters once strangers
+hold offline tours.
+
+Refs: `packages/generator/src/patch-clip.ts`, `apps/mobile/src/lib/offline.ts` (manifest),
+2026-06-09 DB-write audit (verified-minor finding).

@@ -4,9 +4,11 @@
 // the model, so a human-approved clip stays approved except for the fix.
 //
 // The target is a tour_stop OR a tour_bracket row (narration is tour-owned now; there
-// is no poi_content). The clip key is TOUR-scoped (clips/<tourId>/<stopId> for a stop,
-// clips/<tourId>/intro|outro for a bracket), so re-uploading overwrites the SAME object
-// and audioUrl never changes. The voice is the persona's fixed voice (models.ts).
+// is no poi_content). Patching writes to the row's EXISTING key (a stop's
+// clips/<tourId>/<stopId>; a bracket's stored audioUrl — bracket keys are per-RUN now),
+// so re-uploading overwrites the SAME object and audioUrl never changes. The voice is
+// the persona's fixed voice (models.ts). NB: a patched clip does NOT reach tours already
+// DOWNLOADED offline (the device keeps its bytes until a re-download) — known gap.
 //
 //   dotenvx run -f .env.development -- bun packages/generator/src/patch-clip.ts \
 //     <tourStopId|tourBracketId> --find "fiftehundred" --replace "fifteen hundred" [--dry-run]
@@ -21,7 +23,7 @@ import { regions, tourBrackets, tourStops, tours } from '@skipper/db/schema'
 import { GOOGLE_TTS_READY, R2_READY } from './config'
 import { personaForRegion } from './persona'
 import { synthesize } from './pipeline/tts'
-import { bracketKey, clipKey, uploadAudio } from './pipeline/storage'
+import { clipKey, uploadAudio } from './pipeline/storage'
 
 interface Args {
   id: string
@@ -113,10 +115,15 @@ async function resolveTarget(id: string): Promise<ClipTarget | null> {
   )[0]
   if (bracket) {
     if (bracket.script === null) throw new Error(`Bracket ${id} has no script to patch.`)
+    if (bracket.audioUrl === null) {
+      throw new Error(`Bracket ${id} has no audio yet — generate the tour before patching.`)
+    }
     return {
       label: `${bracket.kind} bracket of tour ${bracket.tourId.slice(0, 8)}`,
       tourId: bracket.tourId,
-      key: bracketKey(bracket.tourId, bracket.kind),
+      // Patch IN PLACE at the row's stored key — bracket keys are per-run now (bracketKey),
+      // so minting a fresh key here would strand the row's pointer.
+      key: bracket.audioUrl,
       script: bracket.script,
       storedAudioUrl: bracket.audioUrl,
       save: (script, audioUrl, durationMs) =>

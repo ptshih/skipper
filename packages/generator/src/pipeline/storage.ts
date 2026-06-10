@@ -36,9 +36,19 @@ export function clipKey(tourId: string, stopId: string): string {
   return `clips/${tourId}/${stopId}.${TTS_CLIP_EXTENSION}`
 }
 
-/** Tour-scoped object key for an intro/outro bracket clip: clips/<tourId>/intro|outro.<ext>. */
-export function bracketKey(tourId: string, kind: BracketKind): string {
-  return `clips/${tourId}/${kind}.${TTS_CLIP_EXTENSION}`
+/**
+ * Bracket clip key — PER-RUN unique: clips/<tourId>/<runId>-intro|outro.<ext>.
+ *
+ * The runId component is deliberate (audit-caught): with a fixed per-tour key, a regen (or
+ * a stray concurrent run) overwrites the LIVE telling's bracket bytes in place before its
+ * own ready-gate commits — leaving rows that describe someone else's audio. Stop clips are
+ * immune via fresh per-run stop ids; this gives brackets the same property. The row's
+ * audioUrl is the only pointer to the key, and superseded keys orphan in R2 on regen —
+ * the same accepted trade as stop clips. Tools that PATCH an existing bracket in place
+ * write to the row's stored audioUrl, never to a freshly minted key.
+ */
+export function bracketKey(tourId: string, kind: BracketKind, runId: string): string {
+  return `clips/${tourId}/${runId}-${kind}.${TTS_CLIP_EXTENSION}`
 }
 
 /** Upload an MP3 (private) and return its R2 object KEY to store on the stop/bracket row. */

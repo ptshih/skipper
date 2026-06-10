@@ -8,17 +8,20 @@
 // For each spec it (1) upserts a `regions` row (deduped by slug) and (2) upserts the
 // `tours` SHELL — route + endpoints + region, status `draft`. The generator then FILLS
 // the shell (stops + intro/outro brackets) and flips it to `ready`. Re-running is safe:
-// the upserts refresh geometry/metadata but never clobber a tour's generation state
-// (status). (No notch here — it's a generation INPUT, not stored tour state.)
+// the upserts refresh metadata but never clobber a tour's generation state (status) —
+// and for a NON-DRAFT tour they hold GEOMETRY too (a generated tour's trigger points were
+// computed against its polyline; --force-geometry overrides, after which the tour must be
+// regenerated). (No notch here — it's a generation INPUT, not stored tour state.)
 //
 // Usage (DATABASE_URL injected via dotenvx):
 //   dotenvx run -f .env.development -- bun packages/db/seed/seed.ts            # all
 //   dotenvx run -f .env.development -- bun packages/db/seed/seed.ts <slug>     # one
+//   ... seed.ts <slug> --force-geometry   # update a generated tour's route (then REGENERATE)
 
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { sql } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { db } from '../src/client'
 import { regions, tours } from '../src/schema'
 import { TOUR_SPECS, specBySlug, type TourSpec } from './tour-specs'
@@ -89,13 +92,43 @@ async function upsertRegion(slug: string, displayName: string): Promise<string> 
   return id
 }
 
-async function seedTour(spec: TourSpec): Promise<void> {
+async function seedTour(spec: TourSpec, forceGeometry: boolean): Promise<void> {
   const geom = loadGeometry(spec.slug)
   validatePolyline(spec.slug, geom.polyline)
 
   const regionId = await upsertRegion(spec.regionSlug, spec.regionName)
   const origin = spec.waypoints[0]!
   const destination = spec.waypoints[spec.waypoints.length - 1]!
+
+  // GEOMETRY GUARD (audit-caught): a generated tour's stops carry trigger points computed
+  // against the polyline it was generated WITH — refreshing geometry under a non-draft tour
+  // silently desyncs triggers from the route. For those tours, refresh METADATA only;
+  // geometry moves only with an explicit --force-geometry (after which the tour must be
+  // REGENERATED before it is driven).
+  const existing = (
+    await db
+      .select({ status: tours.status })
+      .from(tours)
+      .where(eq(tours.slug, spec.slug))
+      .limit(1)
+  )[0]
+  if (existing && existing.status !== 'draft' && !forceGeometry) {
+    await db
+      .update(tours)
+      .set({ regionId, headline: spec.headline, summary: spec.summary, updatedAt: sql`now()` })
+      .where(eq(tours.slug, spec.slug))
+    console.log(
+      `✓ ${spec.slug} [${spec.regionSlug}] — status=${existing.status}: metadata refreshed; ` +
+        `GEOMETRY HELD (pass --force-geometry to update it, then regenerate the tour)`,
+    )
+    return
+  }
+  if (existing && existing.status !== 'draft' && forceGeometry) {
+    console.warn(
+      `⚠ ${spec.slug}: refreshing geometry under a '${existing.status}' tour — its existing ` +
+        `stops' trigger points are now STALE; regenerate before driving it.`,
+    )
+  }
 
   const [row] = await db
     .insert(tours)
@@ -143,11 +176,13 @@ async function seedTour(spec: TourSpec): Promise<void> {
 }
 
 async function main() {
-  const slug = process.argv[2]
+  const args = process.argv.slice(2)
+  const forceGeometry = args.includes('--force-geometry')
+  const slug = args.find((a) => !a.startsWith('--'))
   const specs = slug ? [specBySlug(slug)] : TOUR_SPECS
   for (const spec of specs) {
     if (!spec) throw new Error(`No tour spec for slug "${slug}"`)
-    await seedTour(spec)
+    await seedTour(spec, forceGeometry)
   }
 
   // Canonical content rows ride every seed: the curated upstream-error corrections
