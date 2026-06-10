@@ -105,7 +105,8 @@ export const TTS_MODEL = 'gemini-3.1-flash-tts-preview' as const
 // flipping only affects NEW generation. Run ONE live synth (needs GCP creds) to confirm
 // Gemini's MP3 parses, ear-test 32kbps MP3 vs AAC@48k on the founder-blessed Algenib
 // read, then re-synth the CURRENT canonical preview (its id is destroyed/regenerated on
-// each migration — look it up): resynth-tour.ts <canonical> + sweep orphaned .wav.
+// each migration — look it up): resynth-tour.ts <canonical> --apply, then
+// sweep-orphans.ts <canonical> --apply for any stray .wav left behind.
 export const TTS_AUDIO_ENCODING: 'LINEAR16' | 'MP3' = 'MP3'
 export const TTS_SAMPLE_RATE_HZ = 24_000 as const // honored for LINEAR16; MP3 is fixed 32kbps (rate may be ignored)
 export const TTS_AUDIO_CONTENT_TYPE = 'audio/mpeg' as const
@@ -156,8 +157,8 @@ export const SKIPPER_VOICE_ID: GeminiVoice = GEMINI_VOICES.charon
 // ear-tested this wording vs the prior one on the Dam clip + outro (no regression). NOTE:
 // takes are stochastic — judge the fix across the next regen's full clip set, not one take.
 // ⚠ NOT yet on the live canonical preview: this only affects NEW synthesis. Taking effect
-// means re-synthesizing the canonical clips at Phase 6 (resynth-tour.ts --preview) and the
-// founder re-validating by ear. Do NOT re-tune the wording without a fresh ear test.
+// means re-synthesizing the canonical clips at Phase 6 (resynth-tour.ts <canonical> --apply)
+// and the founder re-validating by ear. Do NOT re-tune the wording without a fresh ear test.
 export const SKIPPER_TTS_STYLE_PROMPT =
   'Read this as a warm road-trip tour guide letting friends in on jokes you all secretly enjoy — genuinely glad they came, a man who has told these corny jokes a thousand times and quietly loves every one. Keep the narration moving at a natural, easy talking pace, like a man telling you about the view out the window — relaxed but never sleepy, never dragging. Save the slow-down for the jokes: deliver them deadpan and fully committed, but with warmth — close and friendly, never dropping to a murmur — as if you and the riders both know it is corny and that is exactly why it is good. Never laugh at your own setup, never sing-song the punchline; land each one flat and matter-of-fact. Put a small pause right before the pun, and after it lands hold one short beat — not waiting for anything, just letting it sit — then roll on. Let the sincere lines breathe without fading — keep the voice clear, present, and at full conversational volume from the first sentence to the very last; never trail off, drop low, or swallow the closing words. Talking WITH friends, not at a crowd.'
 

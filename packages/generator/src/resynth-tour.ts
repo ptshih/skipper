@@ -10,30 +10,21 @@
 // and then we sweep the orphan unless --keep-old. The tour stays `ready` (every clip keeps
 // a non-null audioUrl + duration).
 //
-//   dotenvx run -f .env.development -- bun packages/generator/src/resynth-tour.ts <tourId|prefix> [--dry-run] [--keep-old]
+//   dotenvx run -f .env.development -- bun packages/generator/src/resynth-tour.ts <tourId|prefix> [--apply] [--keep-old]
 //
-// Needs Google Cloud TTS (GOOGLE_CLOUD_PROJECT + ADC) and R2_* — same as a full run.
+// Blast radius: SPENDS $ (re-synth EVERY clip) + MUTATES DB (repoints audioUrl/duration) +
+// DELETES BYTES (sweeps a moved key unless --keep-old). DEFAULT DRY RUN — pass --apply to
+// run. An --apply run needs Google Cloud TTS (GOOGLE_CLOUD_PROJECT + ADC) and R2_*. See
+// docs/guides/ops-scripts-sop.md.
 
 import { and, asc, eq } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { pois, regions, tourBrackets, tourStops, tours } from '@skipper/db/schema'
-import { GOOGLE_TTS_READY, R2_READY } from './config'
 import { TTS_CLIP_EXTENSION, TTS_MODEL } from './models'
+import { announce, assertReady, parseFlags, resolveTourId } from './pipeline/ops'
 import { personaForRegion } from './persona'
 import { synthesize } from './pipeline/tts'
 import { clipKey, deleteAudio, uploadAudio } from './pipeline/storage'
-
-async function resolveTourId(arg: string | undefined): Promise<string> {
-  if (!arg) {
-    throw new Error('Pass an explicit <tourId> (or a unique id prefix) to re-synth.')
-  }
-  // Exact id, or a unique prefix (convenience for the short 8-char ids we log).
-  const all = await db.select({ id: tours.id }).from(tours)
-  const matches = all.filter((t) => t.id === arg || t.id.startsWith(arg))
-  if (matches.length === 0) throw new Error(`No tour matches "${arg}".`)
-  if (matches.length > 1) throw new Error(`"${arg}" matches ${matches.length} tours — use the full id.`)
-  return matches[0]!.id
-}
 
 /** A clip to re-render — a stop or a bracket — normalized to its label/key/script/save. */
 interface Clip {
@@ -46,11 +37,11 @@ interface Clip {
 }
 
 async function main() {
-  const argv = process.argv.slice(2)
-  const dryRun = argv.includes('--dry-run')
-  const keepOld = argv.includes('--keep-old')
-  const target = argv.find((a) => !a.startsWith('--'))
-  const tourId = await resolveTourId(target)
+  const flags = parseFlags(process.argv.slice(2))
+  const apply = flags.has('apply')
+  const keepOld = flags.has('keep-old')
+  announce({ tool: 'resynth-tour', blast: ['SPENDS $', 'MUTATES DB', 'DELETES BYTES'], apply })
+  const tourId = await resolveTourId(flags.positionals[0])
 
   // The persona (voice + delivery style) is resolved from the tour's region.
   const regionRow = (
@@ -126,17 +117,16 @@ async function main() {
   ]
 
   console.log(`Tour ${tourId.slice(0, 8)} — ${clips.length} clips → model=${TTS_MODEL}, ext=.${TTS_CLIP_EXTENSION}`)
-  if (dryRun) {
+  if (!apply) {
     for (const c of clips) {
       const change = c.storedAudioUrl === c.key ? '(same key)' : `${c.storedAudioUrl ?? 'null'} → ${c.key}`
       console.log(`  ${c.label} — ${(c.audioDurationMs ?? 0) / 1000}s  ${change}`)
     }
-    console.log('\nDRY RUN — no synthesis, upload, DB write, or sweep.')
+    console.log('\nPreview only — pass --apply to synthesize + write (+ sweep moved keys).')
     return
   }
 
-  if (!GOOGLE_TTS_READY()) throw new Error('Google Cloud TTS not configured (GOOGLE_CLOUD_PROJECT + ADC).')
-  if (!R2_READY()) throw new Error('R2_* env is not set.')
+  assertReady(['tts', 'r2'])
 
   let swept = 0
   let totalSec = 0

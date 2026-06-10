@@ -44,3 +44,25 @@ export async function uploadAudio(key: string, bytes: Uint8Array): Promise<strin
 export async function deleteAudio(key: string): Promise<void> {
   await getR2Client().file(key).delete()
 }
+
+/** Every object KEY under a prefix. Paginates (R2/S3 returns ≤1000 per page). */
+export async function listAudioKeys(prefix: string): Promise<string[]> {
+  const client = getR2Client()
+  const keys: string[] = []
+  let startAfter: string | undefined
+  for (;;) {
+    const res = await client.list({ prefix, maxKeys: 1000, startAfter })
+    const page = res.contents ?? []
+    for (const o of page) keys.push(o.key)
+    if (!res.isTruncated || page.length === 0) break
+    startAfter = page[page.length - 1]!.key
+  }
+  return keys
+}
+
+/** Keys present in R2 (`listed`) that NO current DB row references (`referenced`) — i.e. the
+ *  orphans safe to delete. Pure (the decision the sweep tool acts on); a referenced key can
+ *  never be returned. */
+export function orphanKeys(listed: string[], referenced: Set<string>): string[] {
+  return listed.filter((k) => !referenced.has(k))
+}

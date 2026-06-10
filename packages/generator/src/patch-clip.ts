@@ -11,16 +11,18 @@
 // DOWNLOADED offline (the device keeps its bytes until a re-download) — known gap.
 //
 //   dotenvx run -f .env.development -- bun packages/generator/src/patch-clip.ts \
-//     <tourStopId|tourBracketId> --find "fiftehundred" --replace "fifteen hundred" [--dry-run]
+//     <tourStopId|tourBracketId> --find "fiftehundred" --replace "fifteen hundred" [--all] [--apply]
 //
-// --find/--replace does a literal substring replacement in the stored script (the
-// match must be present, and must be unique unless --all is passed). Needs Google
-// Cloud TTS (GOOGLE_CLOUD_PROJECT + ADC) and R2_* — same as a full generation run.
+// Blast radius: SPENDS $ (one TTS synth) + MUTATES DB (repoints the row's audioUrl in place).
+// DEFAULT DRY RUN — pass --apply to synthesize + write. --find/--replace does a literal
+// substring replacement in the stored script (the match must be present, and unique unless
+// --all). An --apply run needs Google Cloud TTS (GOOGLE_CLOUD_PROJECT + ADC) and R2_*. See
+// docs/guides/ops-scripts-sop.md.
 
 import { eq } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { regions, tourBrackets, tourStops, tours } from '@skipper/db/schema'
-import { GOOGLE_TTS_READY, R2_READY } from './config'
+import { announce, assertReady, parseFlags } from './pipeline/ops'
 import { personaForRegion } from './persona'
 import { synthesize } from './pipeline/tts'
 import { clipKey, uploadAudio } from './pipeline/storage'
@@ -30,51 +32,25 @@ interface Args {
   find: string
   replace: string
   all: boolean
-  dryRun: boolean
-}
-
-/** Flags that take a following token as their value (so the positional id isn't mistaken
- *  for one, and a value that happens to equal the id doesn't shadow it). */
-const VALUE_FLAGS = new Set(['--find', '--replace'])
-
-function flag(args: string[], name: string): string | undefined {
-  const eqForm = args.find((a) => a.startsWith(`--${name}=`))
-  if (eqForm) return eqForm.slice(name.length + 3)
-  const i = args.indexOf(`--${name}`)
-  if (i < 0) return undefined
-  const next = args[i + 1]
-  // A following token that is itself a flag means this flag was given no value — so
-  // `<id> --find --replace x` makes flag('find') undefined (a usage error) rather than the
-  // literal "--replace".
-  return next !== undefined && !next.startsWith('--') ? next : undefined
-}
-
-/** The first positional (non-flag) token that is NOT the value of a value-flag — found by
- *  position, not by value, so an id that coincides with a find/replace string still resolves. */
-function positionalId(args: string[]): string | undefined {
-  for (let i = 0; i < args.length; i++) {
-    const a = args[i]!
-    if (a.startsWith('--')) continue
-    if (i > 0 && VALUE_FLAGS.has(args[i - 1]!)) continue
-    return a
-  }
-  return undefined
+  apply: boolean
 }
 
 function parseArgs(argv: string[]): Args {
-  const args = argv.slice(2)
-  const id = positionalId(args)
-  const find = flag(args, 'find')
-  const replace = flag(args, 'replace')
+  // --find/--replace are value flags so the positional id isn't mistaken for one (and an id
+  // that coincides with a find/replace string still resolves by position).
+  const flags = parseFlags(argv, { valueFlags: ['find', 'replace'] })
+  const id = flags.positionals[0]
+  const find = flags.value('find')
+  const replace = flags.value('replace')
   if (!id || find === undefined || replace === undefined) {
     throw new Error(
-      'Usage: patch-clip.ts <tourStopId|tourBracketId> --find "<text>" --replace "<text>" [--all] [--dry-run]',
+      'Usage: patch-clip.ts <tourStopId|tourBracketId> --find "<text>" --replace "<text>" [--all] [--apply]',
     )
   }
   // An empty --find would, with --all, interleave the replacement between every
   // character of the script (split('').join(x)) — garbage. Refuse it.
   if (find === '') throw new Error('--find must be a non-empty string.')
-  return { id, find, replace, all: args.includes('--all'), dryRun: args.includes('--dry-run') }
+  return { id, find, replace, all: flags.has('all'), apply: flags.has('apply') }
 }
 
 /** A clip to patch — either a stop or a bracket — normalized to its key + script. */
@@ -159,7 +135,8 @@ async function resolveTarget(id: string): Promise<ClipTarget | null> {
 }
 
 async function main() {
-  const { id, find, replace, all, dryRun } = parseArgs(process.argv)
+  const { id, find, replace, all, apply } = parseArgs(process.argv.slice(2))
+  announce({ tool: 'patch-clip', blast: ['SPENDS $', 'MUTATES DB'], apply })
 
   const target = await resolveTarget(id)
   if (!target) throw new Error(`No tour_stop or tour_bracket row with id "${id}".`)
@@ -176,15 +153,12 @@ async function main() {
   console.log(`  + ${newScript}`)
   console.log(`  ${occurrences} replacement(s): "${find}" → "${replace}"`)
 
-  if (dryRun) {
-    console.log('\nDRY RUN — no synthesis, upload, or DB write.')
+  if (!apply) {
+    console.log('\nPreview only — pass --apply to synthesize + write.')
     return
   }
 
-  if (!GOOGLE_TTS_READY()) {
-    throw new Error('Google Cloud TTS is not configured (GOOGLE_CLOUD_PROJECT + ADC). Use --dry-run to preview.')
-  }
-  if (!R2_READY()) throw new Error('R2_* env is not set.')
+  assertReady(['tts', 'r2'])
 
   // Resolve the persona (voice + delivery style) from the clip's tour's region.
   const regionRow = (

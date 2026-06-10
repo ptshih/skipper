@@ -5,23 +5,21 @@ Carry-forward **engineering** items (the near-term layer of the truth system —
 Each item has enough context to action without re-deriving the reasoning. **Delete items
 when done** — git history is the archive.
 
-## Generation is not resumable — checkpoint the TTS spend
+## Generation resumability — SHELVED 2026-06-10 (low ROI)
 
-The cost *guardrail* shipped 2026-06-09: every Anthropic call records its usage
-(`pipeline/spend.ts`), generate.ts prints the sunk LLM spend + a token-based TTS estimate
-right before the TTS/R2 phase, and `--max-cost` aborts there (scripts + eval record still
-land, tour state untouched); the regen loop was already hard-capped (`EVAL_REGEN_BUDGET`).
-What remains is the ROBUSTNESS half: generation is **not resumable** — a crash mid-run
-wastes all prior LLM+TTS spend (fresh per-run clip ids mean a retry re-synthesizes
-everything) and orphans R2 objects. `storage.ts` already exposes `audioExists` ("lets
-callers skip re-synthesis") with zero callers.
+The cost *guardrail* shipped 2026-06-09 (`pipeline/spend.ts` usage tally + the `--max-cost`
+pre-TTS abort + the hard-capped regen loop). The remaining ROBUSTNESS half — resuming a
+crashed run instead of re-paying narration + TTS — was evaluated 2026-06-10 and **shelved as
+low ROI**: the pipeline already retries transients (`pipeline/http.ts` 4× backoff on every
+external call incl. TTS; the eval loop is budgeted + `allSettled` + never-gates; per-stop
+failures are non-fatal), so only ~5% of failures are hard crashes, each wasting only
+~$0.20–0.35 (narration ~$0.04–0.15, TTS ~$0.20–0.30). A durable checkpoint (DB table +
+journal + resume branches in the demo-sensitive `generate.ts`) plus its correctness landmines
+(stale-narration, truncated-clip reuse) isn't worth that. **Revisit ONLY if** crash/stage
+logging later shows hard crashes are common.
 
-- [ ] Checkpoint synthesized clips (key by script hash, or persist run progress) so a
-      retry resumes instead of re-paying the whole TTS phase.
-
-Refs: `packages/generator/src/pipeline/generate.ts` (the bounded synth pool + atomic
-ready-gate), `packages/generator/src/pipeline/storage.ts` (`audioExists`), and the R2
-orphan sweep item below (the other half of the blast radius).
+Refs: 2026-06-10 ROI validation (this session); `pipeline/generate.ts` (all in-memory until
+the atomic ready-gate), `pipeline/http.ts` (the retry that already covers most failures).
 
 ## TTS audio QA: tail-collapse retake + clip loudness normalization
 
@@ -46,18 +44,6 @@ Gemini-TTS takes are non-deterministic in LEVEL, two distinct defects —
 Refs: `packages/generator/src/pipeline/tts.ts`, `pipeline/mp3.ts`,
 `docs/decisions/audio-compression-spike.md` (the encode-path options),
 `eval/tts.ts` (where the tail verdict should record).
-
-## R2 orphan sweep (cost cruft from regens)
-
-Every successful regen orphans the previous telling's clips in R2: stop AND bracket keys
-are per-run unique (deliberate — see `storage.ts`), so old objects under
-`clips/<tourId>/…` are simply abandoned when `finalizeTourReady` replaces the rows. Known
-+ accepted (private, unreferenced bytes), but it accrues. A small sweep tool — list
-`clips/<tourId>/`, delete every key not referenced by a current `tour_stops.audioUrl` /
-`tour_brackets.audioUrl` — caps it. Run it manually after blessed regens.
-
-Refs: `packages/generator/src/pipeline/storage.ts` (`deleteAudio` exists),
-2026-06-09 DB-write audit (verified-minor finding).
 
 ## Offline downloads never see patched clips
 
