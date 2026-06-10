@@ -43,22 +43,42 @@ export class ContractError extends Error {
 export const errorMessage = (e: unknown, fallback: string): string =>
   e instanceof ContractError || e instanceof ApiError ? e.message : fallback
 
+// Time-box every request. RN's fetch has NO default timeout, so a half-open connection in a
+// cellular dead zone (the core Tahoe-drive concern — CLAUDE.md "Offline-first… Tahoe dead zones")
+// would hang FOREVER: the load effect's await never settles (an infinite spinner, no retry
+// surfaced), and a mid-drive re-sign never rejects, so the skip-the-stop fallback in useDrive that
+// keeps the drive moving never runs. We use an AbortController + timer — the portable RN pattern;
+// AbortSignal.timeout()'s Hermes support is uncertain — and keep it armed across BOTH the response
+// AND the body read (res.json()), so a body that stalls mid-stream aborts too. A fired abort
+// rejects with an AbortError the callers already handle (errorMessage → retryable error on load;
+// resign's catch → skip-the-stop). 15s: generous enough not to false-abort a slow-but-alive
+// request; the in-drive path inherits it (worst case ~CLIP_STALL_MS + this before a dead-zone stop
+// skips — BOUNDED, vs the infinite hang today). A shorter per-call override is a future refinement.
+const REQUEST_TIMEOUT_MS = 15_000
+
 async function fetchJson(path: string, init?: RequestInit): Promise<unknown> {
   const cookie = authClient.getCookie()
-  const res = await fetch(`${API_URL}${path}`, {
-    ...init,
-    headers: {
-      ...(init?.headers ?? {}),
-      ...(cookie ? { Cookie: cookie } : {}),
-    },
-    // The session cookie is set manually above; 'include' would interfere on RN.
-    credentials: 'omit',
-  })
-  const json = (await res.json().catch(() => ({}))) as { error?: string; message?: string }
-  if (!res.ok) {
-    throw new ApiError(res.status, json.error, json.message ?? `Request failed (${res.status})`)
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+  try {
+    const res = await fetch(`${API_URL}${path}`, {
+      ...init,
+      headers: {
+        ...(init?.headers ?? {}),
+        ...(cookie ? { Cookie: cookie } : {}),
+      },
+      // The session cookie is set manually above; 'include' would interfere on RN.
+      credentials: 'omit',
+      signal: controller.signal,
+    })
+    const json = (await res.json().catch(() => ({}))) as { error?: string; message?: string }
+    if (!res.ok) {
+      throw new ApiError(res.status, json.error, json.message ?? `Request failed (${res.status})`)
+    }
+    return json
+  } finally {
+    clearTimeout(timer)
   }
-  return json
 }
 
 // Detect a Zod validation failure without importing `zod` into the app bundle (it isn't a
