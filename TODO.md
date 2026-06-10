@@ -23,6 +23,30 @@ Refs: `packages/generator/src/pipeline/generate.ts` (the bounded synth pool + at
 ready-gate), `packages/generator/src/pipeline/storage.ts` (`audioExists`), and the R2
 orphan sweep item below (the other half of the blast radius).
 
+## TTS audio QA: tail-collapse retake + clip loudness normalization
+
+Measured 2026-06-10 (ffmpeg volumedetect over all 30 live clips, founder-ear-confirmed):
+Gemini-TTS takes are non-deterministic in LEVEL, two distinct defects —
+
+1. **Tail collapse (the "mumble"):** 8/30 clips have a ≥3 dB tail-vs-body drop; the worst
+   (emerald seq 13, Lake Tahoe Dam) ends with its final sentence at near-silence
+   (−22.5 dB drop — silencedetect shows the closing words barely register). Fresh takes of
+   the same scripts come out clean → take variance, NOT the voice and NOT the style prompt.
+   - [ ] In the TTS phase: after each synthesize, measure tail(12s)-vs-body mean volume
+         (ffmpeg read-only on the MP3 — no re-encode; graceful skip if ffmpeg absent) and
+         RE-SYNTH once when drop ≥3 dB; keep the better take; record on the tts eval dim.
+         Should land BEFORE the next regen so a Dam-class take can never ship again.
+
+2. **Clip-to-clip level spread:** body mean volume ranges −26.7 → −19.5 dB across the 30
+   clips (7.2 dB) — audible volume jumps stop-to-stop. Fix = per-clip loudness
+   normalization (speech target, e.g. −16 LUFS; drive music is already matched at −13).
+   Needs a small encode-path spike: loudnorm requires decode→re-encode, so either accept a
+   32k→32k MP3 re-encode or request LINEAR16 and encode MP3 ourselves post-normalize.
+
+Refs: `packages/generator/src/pipeline/tts.ts`, `pipeline/mp3.ts`,
+`docs/decisions/audio-compression-spike.md` (the encode-path options),
+`eval/tts.ts` (where the tail verdict should record).
+
 ## R2 orphan sweep (cost cruft from regens)
 
 Every successful regen orphans the previous telling's clips in R2: stop AND bracket keys
