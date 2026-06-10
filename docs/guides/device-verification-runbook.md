@@ -38,19 +38,28 @@ share the build, so do them together.
   Requires your Apple ID to be a member of the Manoa, Inc. team with `fm.skipper.app` registered as
   an App ID there (the personal team `AYA5T52A22` whose dev cert is in the keychain can NOT sign it). First
   launch of a dev-cert build: trust the profile in iOS Settings → General → VPN & Device Management.
-- **Mac runs the API *and* (for a dev build) Metro at once:**
+- **Simplest — target the production API (`https://api.skipper.fm`).** The Cloud Run API is live and
+  serves the same tours (it reads the same Neon DB), so bake `EXPO_PUBLIC_API_URL=https://api.skipper.fm`
+  and skip the local-API + Tailscale + ATS dance below entirely. It's HTTPS, so **no ATS exception is
+  needed** (the `ts.net` caveat is moot), and a **standalone Release build then needs nothing local for
+  the in-car drive** — no Mac, no Metro, no tailnet, the phone is self-sufficient against production.
+  (A *dev* build still needs Metro on the Mac for the JS bundle during the static-screen checks; only
+  the API moves to prod.) The local-Mac path below is the alternative when you're iterating on the API
+  itself. (api.skipper.fm verified live + serving the tours 2026-06-10.)
+- **(Local-API alternative) Mac runs the API *and* (for a dev build) Metro at once:**
   - repo root: `bun run dev` → API on `:8787`
   - `apps/mobile`: `bun start` → Metro
-- **Bake a phone-reachable API URL.** `EXPO_PUBLIC_API_URL` is an `EXPO_PUBLIC_*` var — inlined into
-  the JS bundle at *build* time, not read at runtime. The fallback is `http://localhost:8787`, which
-  a physical phone can't reach (`apps/mobile/src/lib/auth.ts:8`). Set it when you build, e.g.
-  `EXPO_PUBLIC_API_URL=http://hayrik.tail97e2d7.ts.net:8787` over Tailscale, or
+- **Bake a phone-reachable API URL** (local-API path). `EXPO_PUBLIC_API_URL` is an `EXPO_PUBLIC_*` var
+  — inlined into the JS bundle at *build* time, not read at runtime. The fallback is
+  `http://localhost:8787`, which a physical phone can't reach (`apps/mobile/src/lib/auth.ts:8`). Set it
+  when you build, e.g. `EXPO_PUBLIC_API_URL=http://hayrik.tail97e2d7.ts.net:8787` over Tailscale, or
   `http://<Mac-LAN-IP>:8787` on the same Wi-Fi. Phone and Mac must share that network (the same
   tailnet if using the `ts.net` host).
-- **Release-build cleartext caveat.** A standalone *Release* build embeds the JS and enforces iOS
-  App Transport Security. The committed ATS exception covers **only `*.ts.net`** (`app.json:16-23`)
-  — so a LAN-IP API URL works in a *Debug/dev* build (ATS relaxed) but is **blocked in Release**.
-  For a Release smoke test use the Tailscale `ts.net` host; otherwise stay on a dev build.
+- **Release-build cleartext caveat** (local-API path only — moot on `https://api.skipper.fm`). A
+  standalone *Release* build embeds the JS and enforces iOS App Transport Security. The committed ATS
+  exception covers **only `*.ts.net`** (`app.json:16-23`) — so a LAN-IP API URL works in a *Debug/dev*
+  build (ATS relaxed) but is **blocked in Release**. For a Release smoke test against the local API use
+  the Tailscale `ts.net` host; otherwise stay on a dev build, or just use the production API above.
 - **Fastest path** (avoids EAS project resolution entirely, per the local-build memory): from
   `apps/mobile`, `EXPO_PUBLIC_API_URL=… bunx expo run:ios --device <udid>` (a.k.a. `bun run ios`).
   Signing auto-resolves from the keychain dev cert. The EAS *cloud* path is in
