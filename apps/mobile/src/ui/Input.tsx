@@ -39,7 +39,10 @@ export const Input = forwardRef<TextInput, TextInputProps>(function Input(
 
 const styles = StyleSheet.create({
   input: {
-    ...typeScale.body, // compose the body variant (font + size + lineHeight) — no parallel copy
+    ...typeScale.body, // compose the body variant (font + size) — no parallel copy
+    // …but NOT its 23px lineHeight: an explicit lineHeight on a single-line TextInput
+    // clips descenders (g/p/y) on iOS. Let the control center text with natural metrics.
+    lineHeight: undefined,
     minHeight: hit.min,
     borderWidth: border.keyline,
     borderRadius: radius.md,

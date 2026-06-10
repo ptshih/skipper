@@ -103,6 +103,8 @@ function Input({ value, onChange, placeholder, type = "text", autoComplete, onSu
         padding: "var(--space-md) var(--space-lg)", borderRadius: "var(--radius-md)",
         border: `var(--border-keyline) solid ${focused ? "var(--accent)" : "var(--rule)"}`,
         background: "var(--surface-raised)", color: "var(--ink)", outline: "none",
+        // override the .type-body 23px line-height — a single-line field clips descenders; let it center naturally
+        lineHeight: "normal",
         transition: "border-color var(--duration-fast) var(--ease-standard)", ...style,
       }}
     />
