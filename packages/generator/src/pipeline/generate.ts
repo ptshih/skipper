@@ -31,7 +31,9 @@ import {
   GEOLOGY_ENRICHMENT,
   GOOGLE_TTS_READY,
   GROUNDING_EVAL,
+  FACTS_TTL_HOURS,
   GROUNDING_REGEN_BUDGET,
+  GROUNDING_REGEN_CONCURRENCY,
   GROUNDING_REGEN_MAX_ROUNDS,
   FALLBACK_SPEED_MPS,
   GOOGLE_READY,
@@ -86,6 +88,7 @@ import { bracketKey, clipKey, uploadAudio } from './storage'
 import {
   finalizeTourReady,
   hashFacts,
+  loadFreshPoiFacts,
   loadTour,
   markTourGenerating,
   restoreAfterFailedRun,
@@ -241,6 +244,10 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
 
   // 0. Curated corrections (poi_overrides) load once per run — BEFORE discovery/selection,
   // so the Wikipedia fetch seam and the sync side-anchor lookup in select.ts both see them.
+  // The instant BEFORE the load is the run's facts stamp (review-caught): facts fetched
+  // this run carry corrections as-of this snapshot, so an override adjudicated at ANY
+  // later point — even mid-run — reads as newer than the fetch and busts the cache.
+  const factsSnapshotAt = new Date()
   await ensurePoiOverridesLoaded()
 
   // 1. Tour shell: route geometry + drive time (the pacing clock) + endpoints/region.
@@ -351,23 +358,58 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
 
   // Deepen the fact sheets for the CHOSEN story stops. Selection ranked + classified
   // candidates on the cheap batched LEAD extract; a fuller, longer telling needs more
-  // than the lead, so we now pull the full article (capped, meta-trimmed) for each
-  // story stop and use it as the fact well. Grounding is unchanged — still only that
-  // POI's Wikipedia text — and any per-POI failure falls back to its lead facts.
+  // than the lead, so we pull the full article (capped, meta-trimmed) for each story
+  // stop the pois cache can't serve (the read-through below) and use it as the fact
+  // well. Grounding is unchanged — still only that POI's Wikipedia text — and any
+  // per-POI failure falls back to its lead facts.
+  // seq → the freshness stamp the persist phase must write for that stop's facts: a cache
+  // HIT carries its row's ORIGINAL stamp (set in the read-through below); every fetched
+  // stop falls back to this run's overrides-snapshot instant (factsSnapshotAt).
+  const factsStampBySeq = new Map<number, Date>()
   const storyStops = plan.filter(
     (s): s is StopPlan & { wikiPageId: number } =>
       s.stopType === 'story' && s.wikiPageId !== undefined,
   )
   if (storyStops.length > 0) {
-    console.log(
-      `Deepening fact sheets for ${storyStops.length} story stops (full-article extracts)...`,
+    // READ-THROUGH (principle #1's TTL mechanism, read side): a place narrated before
+    // already carries its deepened, override-CORRECTED extract on pois — reuse it while
+    // fresh instead of re-fetching the full article. Fresh = within FACTS_TTL_HOURS and
+    // not predating the place's newest poi_override row (a correction adjudicated since
+    // the fetch makes the row stale, so the re-fetch applies it — see loadFreshPoiFacts).
+    const cached = await loadFreshPoiFacts(
+      storyStops.map((s) => ({ source: s.source, sourceId: s.sourceId })),
+      FACTS_TTL_HOURS(),
     )
-    const deep = await fetchDeepExtracts(storyStops.map((s) => s.wikiPageId))
+    const toFetch: typeof storyStops = []
     for (const s of storyStops) {
-      const text = deep.get(s.wikiPageId)
-      if (text && text.length > s.facts.join(' ').length) s.facts = toFacts(text)
+      const hit = cached.get(`${s.source}:${s.sourceId}`)
+      // A hit counts ONLY when its extract would actually be adopted (outsizes the lead —
+      // the live fetch's adopt rule). A hit that doesn't outsize the lead is a MISS
+      // (review-caught): pois can't tell a deep extract from a lead-only row stored by a
+      // run whose deep fetch FAILED, so treating it as satisfied would pin that place to
+      // a thin sheet for the whole TTL. Re-fetching lets it heal — one polite wiki call.
+      if (hit && hit.extract.length > s.facts.join(' ').length) {
+        s.facts = toFacts(hit.extract)
+        // Reuse keeps the row's ORIGINAL fetch stamp (review-caught: re-stamping a cache
+        // hit would slide the TTL forever for frequently-regenerated places).
+        factsStampBySeq.set(s.seq, hit.factsFetchedAt)
+      } else {
+        toFetch.push(s)
+      }
     }
-    console.log(`Deepened ${deep.size}/${storyStops.length} story fact sheets.`)
+    console.log(
+      `Deepening fact sheets: ${storyStops.length - toFetch.length}/${storyStops.length} fresh ` +
+        `from pois (TTL ${FACTS_TTL_HOURS()}h)` +
+        (toFetch.length > 0 ? `; fetching ${toFetch.length} full-article extract(s)...` : '.'),
+    )
+    if (toFetch.length > 0) {
+      const deep = await fetchDeepExtracts(toFetch.map((s) => s.wikiPageId))
+      for (const s of toFetch) {
+        const text = deep.get(s.wikiPageId)
+        if (text && text.length > s.facts.join(' ').length) s.facts = toFacts(text)
+      }
+      console.log(`Deepened ${deep.size}/${toFetch.length} fetched story fact sheets.`)
+    }
   }
   lap('deepenFacts')
 
@@ -803,6 +845,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
     const firstPass = await Promise.allSettled(
       gRecs.map((rec) => evaluateGrounding(inputFor(rec, rec.script))),
     )
+    const audited: { rec: (typeof gRecs)[number]; first: StopEval }[] = []
     for (let i = 0; i < gRecs.length; i++) {
       const rec = gRecs[i]!
       const first = firstPass[i]!
@@ -812,8 +855,35 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
         )
         continue
       }
+      audited.push({ rec, first: first.value })
+    }
+
+    // PARALLEL-SAFE advisory panel for the concurrent regens below: the live cheapPanel
+    // reads sibling scripts mid-mutation, so each candidate is judged against the set as
+    // it stood when grounding BEGAN (own script swapped in). Cross-stop truth is unharmed:
+    // the final scorecard below re-runs the LIVE panel over the settled scripts.
+    const frozenSet = lintInputs()
+    const cheapPanelFrozen = (rec: { s: StopPlan; script: string }, script: string): StopEval[] => {
+      const evals: StopEval[] = [evaluateTts({ seq: rec.s.seq, script })]
+      if (rec.s.stopType !== 'break') {
+        const swapped = frozenSet.map((r) => (r.seq === rec.s.seq ? { ...r, script } : r))
+        evals.push(...evaluateDiversity(swapped, persona.kit).filter((e) => e.seq === rec.s.seq))
+      }
+      return evals
+    }
+
+    // The per-stop regen loops run CONCURRENTLY — independent by construction: per-stop
+    // memo, the shared budget is spent with a SYNCHRONOUS check+decrement (regenerateFor —
+    // no await between, so no over-spend race), traces carry seq (array order is not
+    // meaningful), and the advisory panel uses the frozen snapshot above. Wall-clock falls
+    // from rounds×stops in series to ~the slowest single stop. SECOND accepted difference
+    // vs the serial loop (review-named): regenScript's prompt context (recent openers/
+    // closers/kit/motifs) reads sibling scripts LIVE, so a concurrent retake sees siblings
+    // nondeterministically mid- or post-regen — advisory prompt context only; the final
+    // LIVE scorecard below records any resulting cross-stop collision for the human pass.
+    await mapLimit(audited, GROUNDING_REGEN_CONCURRENCY(), async ({ rec, first }) => {
       // Memoize per-script evals so optimize()'s re-evaluation of the initial take is free.
-      const memo = new Map<string, StopEval>([[rec.script, first.value]])
+      const memo = new Map<string, StopEval>([[rec.script, first]])
       const evalGrounding = async (script: string): Promise<StopEval> => {
         let g = memo.get(script)
         if (!g) {
@@ -822,21 +892,24 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
         }
         return g
       }
-      if (!first.value.pass && groundingBudget.left <= 0) {
+      if (!first.pass && groundingBudget.left <= 0) {
         // No silent caps: a failing stop skipped on an exhausted pool is still recorded
         // (its sweep verdict lands on the scorecard) but must be SAID, not swallowed.
         console.warn(
-          `  stop ${rec.s.seq} ("${rec.s.name}"): ${first.value.findings.length} ungrounded claim(s), grounding regen budget exhausted — recorded for human review.`,
+          `  stop ${rec.s.seq} ("${rec.s.name}"): ${first.findings.length} ungrounded claim(s), grounding regen budget exhausted — recorded for human review.`,
         )
       }
-      if (!first.value.pass && groundingBudget.left > 0) {
+      if (!first.pass && groundingBudget.left > 0) {
         console.log(
-          `  stop ${rec.s.seq} ("${rec.s.name}"): ${first.value.findings.length} ungrounded claim(s) — targeted re-narration...`,
+          `  stop ${rec.s.seq} ("${rec.s.name}"): ${first.findings.length} ungrounded claim(s) — targeted re-narration...`,
         )
         const entryScript = rec.script
         try {
           const result = await optimize<string>(rec.script, {
-            evaluate: async (script) => [await evalGrounding(script), ...cheapPanel(rec, script)],
+            evaluate: async (script) => [
+              await evalGrounding(script),
+              ...cheapPanelFrozen(rec, script),
+            ],
             regenerate: regenerateFor(rec, groundingBudget),
             maxRounds: GROUNDING_REGEN_MAX_ROUNDS,
           })
@@ -858,7 +931,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
         }
       }
       groundingFinal.set(rec.s.seq, memo.get(rec.script)!)
-    }
+    })
   }
 
   // The final scorecard: free dims re-run over the SETTLED scripts + the grounding verdicts.
@@ -1053,6 +1126,9 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
         summary: p.s.stopType === 'story' ? firstSentence(p.s.facts) : null,
         facts: p.facts,
         factsHash: p.factsHash,
+        // Cache-HIT stops carry their row's ORIGINAL fetch stamp; fetched stops carry the
+        // run's overrides-snapshot instant. Never persist-time now() — see UpsertPoiInput.
+        factsFetchedAt: p.factsHash ? (factsStampBySeq.get(p.s.seq) ?? factsSnapshotAt) : null,
       }),
     )
 

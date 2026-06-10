@@ -121,6 +121,22 @@ export const TTS_CONCURRENCY = (): number => intKnob(process.env.SKIPPER_TTS_CON
  * stop-keyed tools). No prompt-cache interplay: scout calls carry no cache_control and
  * their prefix is under the Opus cacheable minimum. */
 export const SCOUT_CONCURRENCY = (): number => intKnob(process.env.SKIPPER_SCOUT_CONCURRENCY, 4)
+/** Concurrent grounding-REGEN optimize() loops — independent per stop (per-stop memo, the
+ * shared budget spends synchronously, the advisory panel judges against a frozen snapshot;
+ * see generate.ts). Override: SKIPPER_GROUNDING_REGEN_CONCURRENCY. */
+export const GROUNDING_REGEN_CONCURRENCY = (): number =>
+  intKnob(process.env.SKIPPER_GROUNDING_REGEN_CONCURRENCY, 4)
+
+// --- pois facts freshness (principle #1's TTL mechanism — READ side) ----------
+
+/** Re-use a place's stored deepened facts on regen when fetched within this many hours AND
+ * no poi_override row for the place is NEWER than the fetch (a fresh adjudication must
+ * reach the sheet immediately — the override-stamp check in persist.loadFreshPoiFacts).
+ * 0 disables the read-through (always re-fetch). Override: SKIPPER_FACTS_TTL_HOURS. */
+export const FACTS_TTL_HOURS = (): number => {
+  const n = Number(process.env.SKIPPER_FACTS_TTL_HOURS)
+  return Number.isFinite(n) && n >= 0 ? n : 168
+}
 
 // --- Eval panel + evaluator-optimizer (the in-pipeline flywheel) -------------
 

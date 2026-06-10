@@ -12,6 +12,18 @@ CLAUDE.md principle #1.
 anonymously and the freemium wall gates the live drive + offline for EVERY tour, so the `is_preview`
 column in the §3 DDL no longer exists in `schema.ts`.
 
+**Addendum 2026-06-10:** the §4A facts-TTL **READ side SHIPPED** — `FACTS_TTL_HOURS` (generator
+`config.ts`, default 168 h, env `SKIPPER_FACTS_TTL_HOURS`, 0 disables) + `persist.loadFreshPoiFacts`
+/ `isFactsFresh`: a regen reuses a place's stored deepened extract when (a) it would actually be
+ADOPTED (outsizes the lead — a lead-only row from a failed deep fetch re-fetches and heals), (b)
+`facts_fetched_at` is within the TTL — the stamp is CALLER-owned now (a cache hit re-persists its
+ORIGINAL stamp, a fetch persists the run's overrides-snapshot instant, so reuse never slides the
+clock), (c) no `poi_overrides` row for the `(source, source_id)` is newer than the fetch (an
+override-stamp invalidation §4A never anticipated — retire override rows by UPDATE, never DELETE),
+and (d) no fact-edit reads as suspect on the cached text (`cachedExtractSuspect` — the
+"reworded, still wrong" case keeps re-fetching so the missed-edit warn recurs). Still open from
+§4/§8: the SCHEDULED re-fetch sweep and the §4B `facts_hash` staleness-driven regen.
+
 ⚠ **No users → the migration was clean + DESTRUCTIVE** (the live dev DB was wiped — `DROP SCHEMA` — and
 rebuilt from a single fresh baseline `0000_worried_hellcat.sql`; no back-compat, no data fold). The DDL in §3
 matches `packages/db/src/schema.ts` as shipped.

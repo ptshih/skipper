@@ -126,10 +126,12 @@ export const pois = pgTable(
     lng: doublePrecision('lng').notNull(),
     summary: text('summary'),
     facts: jsonb('facts').$type<PoiFacts>(),
-    // FACTS freshness (COLUMNS ship now; the re-fetch/TTL MECHANISM is DEFERRED):
-    //   facts_fetched_at = TTL clock; facts_hash = change detector (changes only on
-    //   a material change). A tour_stop is fact-stale iff its facts_hash IS DISTINCT
-    //   FROM this row's facts_hash (joined on poiId), for stops whose facts_hash is set.
+    // FACTS freshness: facts_fetched_at = the TTL clock; facts_hash = change detector
+    //   (changes only on a material change). The READ side shipped 2026-06-10
+    //   (generator persist.loadFreshPoiFacts: a regen reuses facts within FACTS_TTL_HOURS
+    //   unless a newer poi_overrides row invalidates them); a SCHEDULED re-fetch sweep is
+    //   still unbuilt. A tour_stop is fact-stale iff its facts_hash IS DISTINCT FROM this
+    //   row's facts_hash (joined on poiId), for stops whose facts_hash is set.
     factsHash: text('facts_hash'),
     factsFetchedAt: timestamp('facts_fetched_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
