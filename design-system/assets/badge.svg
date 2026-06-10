@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <clipPath id="disc"><circle cx="512" cy="512" r="436"></circle></clipPath>
+
+  
+  <circle cx="512" cy="512" r="436" fill="#1E5B40"></circle>
+
+  <g clip-path="url(#disc)">
+    
+    <path d="M 76 556 L 250 372 L 330 452 L 452 300 L 560 446 L 664 360 L 792 500 L 948 556&#xA;             L 948 980 L 76 980 Z" fill="#15402F"></path>
+    <path d="M 452 300 L 416 346 L 452 360 L 488 346 Z" fill="#FBF3DD"></path>
+    <path d="M 664 360 L 638 394 L 664 404 L 690 394 Z" fill="#FBF3DD"></path>
+    <path d="M 250 372 L 224 406 L 250 416 L 276 406 Z" fill="#FBF3DD"></path>
+    
+    <path d="M 96 628 Q 336 580 512 600 T 928 576" fill="none" stroke="#CDB988" stroke-width="17" stroke-linecap="round" stroke-dasharray="1 32" opacity="0.95"></path>
+  </g>
+
+  
+  <circle cx="512" cy="512" r="410" fill="none" stroke="#FFF8E6" stroke-width="26"></circle>
+  <circle cx="512" cy="512" r="372" fill="none" stroke="#FBF3DD" stroke-width="7" opacity="0.5"></circle>
+
+  
+  <g>
+    <circle cx="436" cy="596" r="46" fill="#2A2014"></circle>
+    <circle cx="600" cy="596" r="46" fill="#2A2014"></circle>
+    <circle cx="436" cy="596" r="17" fill="#DD7A33"></circle>
+    <circle cx="600" cy="596" r="17" fill="#DD7A33"></circle>
+    <path d="M 366 572&#xA;             C 366 554 375 545 392 543&#xA;             L 432 538 L 460 504&#xA;             C 469 490 483 483 502 483&#xA;             L 560 483&#xA;             C 581 483 596 492 606 511&#xA;             L 624 542 L 648 546&#xA;             C 665 549 674 559 674 574&#xA;             L 674 580&#xA;             C 674 591 666 598 655 598&#xA;             L 385 598&#xA;             C 375 598 366 589 366 579 Z" fill="#DD7A33"></path>
+    <path d="M 472 510 L 491 490 L 524 490 L 524 512 L 470 512 Z" fill="#2A2014"></path>
+    <path d="M 536 490 L 558 490 C 574 490 587 498 596 512 L 536 512 Z" fill="#2A2014"></path>
+  </g>
+</svg>

@@ -1,0 +1,98 @@
+<!-- @dsCard group="Colors" viewport="700x250" name="The amber rule — fill, never text" subtitle="Bright amber is a FILL/shape only; warm TEXT uses burnt/lantern amber" -->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="../styles.css" />
+    <style>
+      body {
+        margin: 0;
+        padding: var(--space-xxl);
+        background: var(--surface);
+        font-family: var(--font-body);
+        display: flex;
+        gap: var(--space-xl);
+      }
+      .col {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-md);
+      }
+      .tag {
+        font-family: var(--font-body);
+        font-weight: 600;
+        font-size: 12.5px;
+        letter-spacing: 0.6px;
+        text-transform: uppercase;
+      }
+      .ok {
+        color: var(--accent);
+      }
+      .no {
+        color: var(--danger);
+      }
+      .token {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: var(--amber-token);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 0 14px var(--glow);
+      }
+      .token svg {
+        width: 22px;
+        height: 22px;
+        fill: var(--on-amber);
+      }
+      .demo {
+        background: var(--surface-raised);
+        border: var(--border-thin) solid var(--rule);
+        border-radius: var(--radius-md);
+        padding: var(--space-md) var(--space-lg);
+      }
+      .amber-text {
+        font-family: var(--font-display);
+        font-size: 22px;
+        color: var(--amber-sunset);
+      }
+      .warm-text {
+        font-family: var(--font-display);
+        font-size: 22px;
+        color: var(--accent-warm);
+      }
+      .strike {
+        position: relative;
+      }
+      .note {
+        font-size: 12px;
+        color: var(--ink-dim);
+        line-height: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="col">
+      <span class="tag ok">✓ Amber as a FILL</span>
+      <div class="demo" style="display: flex; align-items: center; gap: var(--space-md)">
+        <span class="token">
+          <svg viewBox="0 0 24 24"><path d="M5 11l1.5-4.5A2 2 0 018.4 5h7.2a2 2 0 011.9 1.5L19 11l1.3.4a1 1 0 01.7 1V16a1 1 0 01-1 1h-1a2 2 0 01-4 0H9a2 2 0 01-4 0H4a1 1 0 01-1-1v-3.6a1 1 0 01.7-1L5 11zm2 5a1 1 0 100 2 1 1 0 000-2zm10 0a1 1 0 100 2 1 1 0 000-2z"/></svg>
+        </span>
+        <span style="color: var(--ink); font-size: 13px">The moving car token, scrubber thumb, meter pips.</span>
+      </div>
+      <span class="note">amber-token <code style="font-family: var(--font-mono)">#DD7A33</code> — bright enamel, only ever a shape.</span>
+    </div>
+    <div class="col">
+      <span class="tag no">✗ Amber as TEXT on paper</span>
+      <div class="demo">
+        <span class="amber-text">NORTH SHORE</span>
+      </div>
+      <span class="note">Bright amber text on paper is ~2:1 — fails the glance. Use the burnt/lantern accent instead:</span>
+      <div class="demo">
+        <span class="warm-text">NORTH SHORE</span>
+      </div>
+    </div>
+  </body>
+</html>

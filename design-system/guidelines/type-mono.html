@@ -1,0 +1,50 @@
+<!-- @dsCard group="Type" viewport="700x180" name="Mono — Space Mono" subtitle="The park-permit / odometer numerals. Timers, coords, mileage." -->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="../styles.css" />
+    <style>
+      body {
+        margin: 0;
+        padding: var(--space-xxl);
+        background: var(--surface);
+        color: var(--ink);
+      }
+      .spec {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-lg);
+      }
+      .row {
+        display: flex;
+        align-items: baseline;
+        gap: var(--space-lg);
+      }
+      .meta {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--ink-dim);
+        white-space: nowrap;
+        width: 150px;
+        flex: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="spec">
+      <div class="row">
+        <span class="meta">monoStrong · 700 · 15</span>
+        <span class="type-monoStrong" style="color: var(--ink-dim)">10 STOPS · ~42 MIN</span>
+      </div>
+      <div class="row">
+        <span class="meta">mono · 400 · 14</span>
+        <span class="type-mono" style="color: var(--ink-dim)">02:18 / 06:45</span>
+      </div>
+      <div class="row">
+        <span class="meta">mono · coords</span>
+        <span class="type-mono" style="color: var(--ink-dim)">39.0968° N, 120.0324° W</span>
+      </div>
+    </div>
+  </body>
+</html>

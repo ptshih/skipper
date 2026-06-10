@@ -1,0 +1,83 @@
+<!-- @dsCard group="Colors" viewport="700x230" name="Dusk — the park at night" subtitle="The peer theme: deep pine sky, parchment text, a campfire-amber CTA" -->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="../styles.css" />
+    <style>
+      body {
+        margin: 0;
+        font-family: var(--font-body);
+      }
+      .stage {
+        background: var(--surface);
+        padding: var(--space-xxl);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-lg);
+      }
+      .row {
+        display: flex;
+        gap: var(--space-md);
+      }
+      .sw {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .chip {
+        height: 48px;
+        border-radius: var(--radius-md);
+        border: var(--border-thin) solid var(--rule);
+      }
+      .name {
+        font-weight: 700;
+        font-size: 12px;
+        color: var(--ink);
+      }
+      code {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--ink-dim);
+      }
+      .cta {
+        align-self: flex-start;
+        background: var(--primary-fill);
+        color: var(--on-primary);
+        font-family: var(--font-body);
+        font-weight: 700;
+        font-size: 15px;
+        padding: var(--space-md) var(--space-xl);
+        border-radius: var(--radius-lg);
+        box-shadow: 0 0 16px var(--glow);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stage" data-theme="dusk">
+      <div class="row">
+        <div class="sw">
+          <div class="chip" style="background: var(--surface)"></div>
+          <span class="name">surface</span><code>#14201B</code>
+        </div>
+        <div class="sw">
+          <div class="chip" style="background: var(--surface-raised)"></div>
+          <span class="name">surface-raised</span><code>#1E2B24</code>
+        </div>
+        <div class="sw">
+          <div class="chip" style="background: var(--accent)"></div>
+          <span class="name">accent · pine-glow</span><code>#5FA877</code>
+        </div>
+        <div class="sw">
+          <div class="chip" style="background: var(--amber-token)"></div>
+          <span class="name">amber · lantern</span><code>#EBA351</code>
+        </div>
+      </div>
+      <div class="row" style="align-items: center; gap: var(--space-xl)">
+        <span style="color: var(--ink); font-family: var(--font-display); font-size: 20px">Parchment text, never pure white</span>
+        <span class="cta">Let's roll</span>
+      </div>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,72 @@
+<!-- @dsCard group="Brand" viewport="700x200" name="The signature motif" subtitle="The car token glides a dashed atlas trail — one moving thing per screen" -->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="../styles.css" />
+    <style>
+      body {
+        margin: 0;
+        padding: var(--space-xxl) var(--space-xxxl);
+        background: var(--surface);
+        font-family: var(--font-body);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: var(--space-xl);
+      }
+      .track {
+        position: relative;
+        height: 24px;
+        display: flex;
+        align-items: center;
+      }
+      /* dashed inactive bed */
+      .bed {
+        position: absolute;
+        left: 12px;
+        right: 12px;
+        height: 0;
+        border-top: var(--border-keyline) dashed var(--track-inactive);
+      }
+      /* traveled portion */
+      .filled {
+        position: absolute;
+        left: 12px;
+        height: 6px;
+        border-radius: 3px;
+        background: var(--track-active);
+      }
+      .token {
+        position: absolute;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: var(--amber-token);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 0 8px var(--glow);
+      }
+      .token svg {
+        width: 14px;
+        height: 14px;
+        fill: var(--on-amber);
+      }
+      .note {
+        font-size: 13px;
+        color: var(--ink-dim);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="track">
+      <div class="bed"></div>
+      <div class="filled" style="width: 38%"></div>
+      <div class="token" style="left: calc(38% - 0px)">
+        <svg viewBox="0 0 24 24"><path d="M5 11l1.5-4.5A2 2 0 018.4 5h7.2a2 2 0 011.9 1.5L19 11l1.3.4a1 1 0 01.7 1V16a1 1 0 01-1 1h-1a2 2 0 01-4 0H9a2 2 0 01-4 0H4a1 1 0 01-1-1v-3.6a1 1 0 01.7-1L5 11zm2 5a1 1 0 100 2 1 1 0 000-2zm10 0a1 1 0 100 2 1 1 0 000-2z"/></svg>
+      </div>
+    </div>
+    <p class="note">The skipper's rig — not a generic dot — rides the trail as the drive progresses. Its amber halo is the screen's <em>one</em> moving glow.</p>
+  </body>
+</html>

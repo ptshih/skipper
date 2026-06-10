@@ -1,0 +1,63 @@
+<!-- @dsCard group="Components" viewport="700x260" name="Cards & dividers" subtitle="The ranger placard — plain, framed, and selected; hairline & dashed rules" -->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="../../styles.css" />
+    <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
+    <script type="module" src="https://cdn.jsdelivr.net/npm/ionicons@7.4.0/dist/ionicons/ionicons.esm.js"></script>
+    <script type="text/babel" data-presets="react" src="../../_ds_bundle.js"></script>
+    <style>
+      body {
+        margin: 0;
+        padding: var(--space-xxl);
+        background: var(--surface);
+        font-family: var(--font-body);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: var(--space-lg);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="text/babel" data-presets="react">
+      const NS = window.Skipper || Object.values(window).find((v) => v && v.Card && v.Text) || {};
+      const { Card, Divider, Text } = NS;
+      function Demo() {
+        return (
+          <div className="grid">
+            <Card>
+              <Text variant="title" color="ink">Plain placard</Text>
+              <div style={{ height: 8 }} />
+              <Text variant="dim" color="inkDim">Glanceable default — for in-car lists.</Text>
+            </Card>
+            <Card framed>
+              <Text variant="label" color="accentWarm">Now Departing</Text>
+              <div style={{ height: 6 }} />
+              <Text variant="placardTitle" color="ink">Framed</Text>
+              <div style={{ height: 8 }} />
+              <Text variant="dim" color="inkDim">Carved keyline + screw-dots.</Text>
+            </Card>
+            <Card active>
+              <Text variant="title" color="ink">Selected</Text>
+              <div style={{ height: 8 }} />
+              <Text variant="dim" color="inkDim">Pine keyline = chosen row.</Text>
+            </Card>
+            <div style={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", gap: 12 }}>
+              <Text variant="label" color="inkFaint">Hairline</Text>
+              <Divider />
+              <Text variant="label" color="inkFaint">Dashed (the atlas trail)</Text>
+              <Divider dashed />
+            </div>
+          </div>
+        );
+      }
+      ReactDOM.createRoot(document.getElementById("root")).render(<Demo />);
+    </script>
+  </body>
+</html>

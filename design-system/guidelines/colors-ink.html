@@ -1,0 +1,58 @@
+<!-- @dsCard group="Colors" viewport="700x210" name="Ink — text on paper" subtitle="Three text weights, each cleared to ≥4.5:1 on paper" -->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="../styles.css" />
+    <style>
+      body {
+        margin: 0;
+        padding: var(--space-xxl);
+        background: var(--surface);
+        font-family: var(--font-body);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-md);
+      }
+      .line {
+        display: flex;
+        align-items: baseline;
+        gap: var(--space-md);
+      }
+      .dot {
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        flex: none;
+        align-self: center;
+      }
+      .label {
+        font-weight: 700;
+        font-size: 15px;
+      }
+      code {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        color: var(--ink-dim);
+        margin-left: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="line">
+      <span class="dot" style="background: var(--ink)"></span>
+      <span class="label" style="color: var(--ink)">ink — primary text, the glance workhorse (~11:1)</span>
+      <code>#2A2014</code>
+    </div>
+    <div class="line">
+      <span class="dot" style="background: var(--ink-dim)"></span>
+      <span class="label" style="color: var(--ink-dim)">ink-dim — region, stop type, timers (~5:1)</span>
+      <code>#5C4A30</code>
+    </div>
+    <div class="line">
+      <span class="dot" style="background: var(--ink-faint-role)"></span>
+      <span class="label" style="color: var(--ink-faint-role)">ink-faint — tertiary hints (cleared to ≥4.5:1)</span>
+      <code>#74603E</code>
+    </div>
+  </body>
+</html>

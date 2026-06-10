@@ -1,0 +1,56 @@
+<!-- @dsCard group="Components" viewport="700x180" name="Badges" subtitle="Enamel travel pills — outlined & filled, across the five tones" -->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="../../styles.css" />
+    <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
+    <script type="module" src="https://cdn.jsdelivr.net/npm/ionicons@7.4.0/dist/ionicons/ionicons.esm.js"></script>
+    <script type="text/babel" data-presets="react" src="../../_ds_bundle.js"></script>
+    <style>
+      body {
+        margin: 0;
+        padding: var(--space-xxl);
+        background: var(--surface);
+        font-family: var(--font-body);
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-md);
+        align-items: center;
+        margin-bottom: var(--space-lg);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="text/babel" data-presets="react">
+      const NS = window.Skipper || Object.values(window).find((v) => v && v.Badge) || {};
+      const { Badge } = NS;
+      function Demo() {
+        return (
+          <div>
+            <div className="row">
+              <Badge tone="pine" icon="story" label="Story" />
+              <Badge tone="teal" icon="scenic" label="Scenic" />
+              <Badge tone="amber" icon="break" label="Pit stop" />
+              <Badge tone="rust" label="Offline" />
+              <Badge tone="neutral" label="10 stops" />
+            </div>
+            <div className="row">
+              <Badge tone="pine" filled label="Story" />
+              <Badge tone="teal" filled label="Scenic" />
+              <Badge tone="amber" filled label="42 MIN" />
+              <Badge tone="rust" filled label="Error" />
+              <Badge tone="neutral" filled label="Draft" />
+            </div>
+          </div>
+        );
+      }
+      ReactDOM.createRoot(document.getElementById("root")).render(<Demo />);
+    </script>
+  </body>
+</html>

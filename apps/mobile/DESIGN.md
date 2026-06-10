@@ -9,6 +9,11 @@ This is the source of truth for the app's look, feel, and voice. The code lives 
 `src/theme/` (tokens + themes) and `src/ui/` (primitives). Screens compose
 primitives and never hardcode a hex, font, or spacing number.
 
+> A browsable HTML **mirror** of this system (a specimen book + brand front door,
+> exported from Claude Design) lives at the repo root in `/design-system` — open
+> `design-system/index.html`. It's generated *from* this code, so when they
+> disagree, this code wins; see `design-system/README.md`.
+
 ---
 
 ## 1. The feeling

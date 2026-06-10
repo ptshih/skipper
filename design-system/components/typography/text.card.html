@@ -1,0 +1,44 @@
+<!-- @dsCard group="Components" viewport="700x230" name="Text" subtitle="The one text primitive — variant × semantic color role" -->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="../../styles.css" />
+    <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
+    <script type="text/babel" data-presets="react" src="../../_ds_bundle.js"></script>
+    <style>
+      body {
+        margin: 0;
+        padding: var(--space-xxl);
+        background: var(--surface);
+        font-family: var(--font-body);
+      }
+      .stack {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-md);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="text/babel" data-presets="react">
+      const NS = window.Skipper || Object.values(window).find((v) => v && v.Text) || {};
+      const { Text } = NS;
+      function Demo() {
+        return (
+          <div className="stack">
+            <Text variant="display" color="ink">Hop in. I'll do the talking.</Text>
+            <Text variant="label" color="accentWarm">Now Departing · the warm kicker</Text>
+            <Text variant="title" color="ink">The North Shore Drive</Text>
+            <Text variant="body" color="inkDim">A screen-tuned slab serif carries the placard warmth down to UI scale.</Text>
+            <Text variant="monoStrong" color="inkDim">10 STOPS · ~42 MIN</Text>
+          </div>
+        );
+      }
+      ReactDOM.createRoot(document.getElementById("root")).render(<Demo />);
+    </script>
+  </body>
+</html>

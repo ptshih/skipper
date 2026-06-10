@@ -1,0 +1,50 @@
+<!-- @dsCard group="Type" viewport="700x180" name="Labels & dim" subtitle="Uppercase kickers/badges, and the quiet sublabel" -->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="../styles.css" />
+    <style>
+      body {
+        margin: 0;
+        padding: var(--space-xxl);
+        background: var(--surface);
+        color: var(--ink);
+      }
+      .spec {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-lg);
+      }
+      .row {
+        display: flex;
+        align-items: baseline;
+        gap: var(--space-lg);
+      }
+      .meta {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--ink-dim);
+        white-space: nowrap;
+        width: 170px;
+        flex: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="spec">
+      <div class="row">
+        <span class="meta">label · 600 · 12.5 · UPPER</span>
+        <span class="type-label" style="color: var(--accent-warm)">Now Departing</span>
+      </div>
+      <div class="row">
+        <span class="meta">label · on ink</span>
+        <span class="type-label" style="color: var(--ink-faint-role)">The Drives</span>
+      </div>
+      <div class="row">
+        <span class="meta">dim · 400 · 13.5</span>
+        <span class="type-dim" style="color: var(--ink-dim)">Narrated road-trip audio tours — one corny guide, all the good stops.</span>
+      </div>
+    </div>
+  </body>
+</html>

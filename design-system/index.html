@@ -1,0 +1,526 @@
+<!-- @dsCard group="Skipper App" viewport="1200x900" name="Design system — front door" subtitle="The whole of Trailhead 89: foundations, components, brand, and the app" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="day">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Skipper — Trailhead 89 · Design System</title>
+    <link rel="stylesheet" href="styles.css" />
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        background: var(--surface);
+        color: var(--ink);
+        font-family: var(--font-body);
+        -webkit-font-smoothing: antialiased;
+      }
+      body {
+        padding: 0 0 var(--space-huge);
+        transition: background var(--duration-base) var(--ease-standard),
+          color var(--duration-base) var(--ease-standard);
+      }
+      .wrap {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 0 var(--space-xxl);
+      }
+
+      /* ── Hero ─────────────────────────────────────────────────────────── */
+      .hero {
+        display: flex;
+        align-items: center;
+        gap: var(--space-xxl);
+        padding: var(--space-huge) 0 var(--space-xxxl);
+        border-bottom: var(--border-keyline) solid var(--rule);
+        position: relative;
+      }
+      .hero__badge {
+        width: 120px;
+        height: 120px;
+        flex: none;
+        filter: drop-shadow(0 6px 18px var(--shadow-cast));
+      }
+      .hero__text {
+        flex: 1;
+        min-width: 0;
+      }
+      .hero__kicker {
+        font-family: var(--font-body);
+        font-weight: 600;
+        font-size: 12.5px;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        color: var(--accent-warm);
+        margin: 0 0 var(--space-sm);
+      }
+      .hero__wordmark {
+        font-family: var(--font-display);
+        font-size: 56px;
+        line-height: 0.96;
+        letter-spacing: 0.5px;
+        color: var(--ink);
+        margin: 0;
+      }
+      .hero__sub {
+        font-family: var(--font-body);
+        font-size: 17px;
+        line-height: 25px;
+        color: var(--ink-dim);
+        max-width: 54ch;
+        margin: var(--space-md) 0 0;
+        text-wrap: pretty;
+      }
+      .hero__meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-sm);
+        margin-top: var(--space-lg);
+      }
+      .pill {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        letter-spacing: 0.3px;
+        color: var(--ink-dim);
+        border: var(--border-thin) solid var(--rule);
+        border-radius: var(--radius-pill);
+        padding: 5px 12px;
+        background: var(--surface-raised);
+      }
+
+      /* ── Theme toggle ─────────────────────────────────────────────────── */
+      .theme-toggle {
+        position: absolute;
+        top: var(--space-xxxl);
+        right: 0;
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-sm);
+        font-family: var(--font-body);
+        font-weight: 700;
+        font-size: 13px;
+        letter-spacing: 0.4px;
+        text-transform: uppercase;
+        color: var(--accent);
+        background: var(--surface-raised);
+        border: var(--border-keyline) solid var(--accent);
+        border-radius: var(--radius-pill);
+        min-height: 44px;
+        padding: 0 var(--space-lg);
+        cursor: pointer;
+        transition: opacity var(--duration-fast) var(--ease-standard);
+      }
+      .theme-toggle:hover {
+        opacity: 0.82;
+      }
+      .theme-toggle__dot {
+        width: 12px;
+        height: 12px;
+        border-radius: var(--radius-pill);
+        background: var(--amber-token);
+        box-shadow: 0 0 10px var(--glow);
+      }
+
+      /* ── Sections ─────────────────────────────────────────────────────── */
+      section.group {
+        padding-top: var(--space-huge);
+      }
+      .group__head {
+        display: flex;
+        align-items: baseline;
+        gap: var(--space-md);
+        margin-bottom: var(--space-xl);
+      }
+      .group__title {
+        font-family: var(--font-display);
+        font-size: 26px;
+        color: var(--ink);
+        margin: 0;
+      }
+      .group__note {
+        font-family: var(--font-body);
+        font-size: 14px;
+        color: var(--ink-faint-role);
+      }
+      .group__rule {
+        flex: 1;
+        height: var(--border-thin);
+        background: var(--rule);
+        align-self: center;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+        gap: var(--space-xl);
+        align-items: start;
+      }
+
+      /* ── Specimen tile ────────────────────────────────────────────────── */
+      .tile {
+        display: flex;
+        flex-direction: column;
+        background: var(--surface-raised);
+        border: var(--border-thin) solid var(--rule);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+        text-decoration: none;
+        color: inherit;
+        transition: transform var(--duration-fast) var(--ease-standard),
+          box-shadow var(--duration-base) var(--ease-standard),
+          border-color var(--duration-fast) var(--ease-standard);
+      }
+      .tile:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 10px 26px var(--shadow-cast);
+        border-color: var(--accent);
+      }
+      .tile__preview {
+        position: relative;
+        width: 100%;
+        background: var(--surface);
+        border-bottom: var(--border-thin) solid var(--rule);
+        overflow: hidden;
+      }
+      .tile__preview iframe {
+        border: 0;
+        transform-origin: top left;
+        pointer-events: none;
+        background: var(--surface);
+      }
+      .tile__cap {
+        padding: var(--space-lg) var(--space-lg) var(--space-xl);
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .tile__name {
+        font-family: var(--font-body);
+        font-weight: 700;
+        font-size: 17px;
+        line-height: 22px;
+        color: var(--ink);
+      }
+      .tile__sub {
+        font-family: var(--font-body);
+        font-size: 13.5px;
+        line-height: 19px;
+        color: var(--ink-dim);
+        text-wrap: pretty;
+      }
+      .tile__open {
+        margin-top: var(--space-sm);
+        font-family: var(--font-body);
+        font-weight: 700;
+        font-size: 12px;
+        letter-spacing: 0.6px;
+        text-transform: uppercase;
+        color: var(--accent);
+        opacity: 0;
+        transform: translateX(-4px);
+        transition: opacity var(--duration-fast) var(--ease-standard),
+          transform var(--duration-fast) var(--ease-standard);
+      }
+      .tile:hover .tile__open {
+        opacity: 1;
+        transform: translateX(0);
+      }
+
+      /* The app — a wide feature tile */
+      .grid--feature {
+        grid-template-columns: 1fr;
+      }
+      .tile--feature {
+        flex-direction: row;
+        align-items: stretch;
+      }
+      .tile--feature .tile__preview {
+        border-bottom: 0;
+        border-right: var(--border-thin) solid var(--rule);
+        flex: none;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: var(--space-xl);
+      }
+      .tile--feature .tile__cap {
+        justify-content: center;
+        padding: var(--space-xxxl);
+        max-width: 520px;
+      }
+      .tile--feature .tile__name {
+        font-family: var(--font-display);
+        font-size: 30px;
+        line-height: 36px;
+      }
+      .tile--feature .tile__sub {
+        font-size: 16px;
+        line-height: 23px;
+        margin-top: var(--space-sm);
+      }
+      .foot {
+        padding-top: var(--space-huge);
+        color: var(--ink-faint-role);
+        font-size: 13px;
+        line-height: 19px;
+      }
+      .foot code {
+        font-family: var(--font-mono);
+        color: var(--ink-dim);
+      }
+      @media (max-width: 720px) {
+        .hero {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+        .hero__wordmark {
+          font-size: 42px;
+        }
+        .theme-toggle {
+          position: static;
+          margin-bottom: var(--space-lg);
+        }
+        .tile--feature {
+          flex-direction: column;
+        }
+        .tile--feature .tile__preview {
+          border-right: 0;
+          border-bottom: var(--border-thin) solid var(--rule);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="hero">
+        <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle day / dusk">
+          <span class="theme-toggle__dot"></span>
+          <span id="themeLabel">Dusk</span>
+        </button>
+        <img class="hero__badge" src="assets/badge.svg" alt="Skipper enamel travel badge" />
+        <div class="hero__text">
+          <p class="hero__kicker">Design System</p>
+          <h1 class="hero__wordmark">SKIPPER</h1>
+          <p class="hero__sub">
+            <strong>Trailhead 89.</strong> A 1938 WPA national-park poster that
+            learned to play audio — warm cream map-paper, a confident pine green,
+            a campfire-amber glow, ink-brown lettering thick enough to read
+            through a windshield at 60&nbsp;mph. Charm is the product; legibility
+            is non-negotiable.
+          </p>
+          <div class="hero__meta">
+            <span class="pill">3 type families</span>
+            <span class="pill">2 themes · day / dusk</span>
+            <span class="pill">14 components</span>
+            <span class="pill">4-pt grid</span>
+          </div>
+        </div>
+      </header>
+
+      <main id="sections"></main>
+
+      <p class="foot">
+        Every specimen on this page is a live page in this project — click any
+        tile to open it full size. Foundations live in <code>tokens/</code> and
+        <code>guidelines/</code>; components in <code>components/</code> (canonical
+        <code>.jsx</code> sources + the assembled <code>_ds_bundle.js</code>); the
+        app in <code>ui_kits/skipper-app/</code>. Mirrors the native source of
+        truth in <code>src/theme/</code> + <code>src/ui/</code>.
+      </p>
+    </div>
+
+    <script>
+      // Each entry is a real specimen page in the project. w/h mirror its @dsCard viewport.
+      const GROUPS = [
+        {
+          title: "Color",
+          note: "Foundations · two moods of the same park",
+          items: [
+            { file: "guidelines/colors-surfaces.html", name: "Daylight surfaces", sub: "Aged map-paper — background, placards, inset wells", w: 700, h: 180 },
+            { file: "guidelines/colors-dusk.html", name: "Dusk — the park at night", sub: "The peer theme: deep pine sky, parchment text, a campfire-amber CTA", w: 700, h: 230 },
+            { file: "guidelines/colors-ink.html", name: "Ink — text on paper", sub: "Three text weights, each cleared to ≥4.5:1 on paper", w: 700, h: 210 },
+            { file: "guidelines/colors-accents.html", name: "Pine, teal & warm accents", sub: "Pine is the brand green; teal is scenic/water; warm text is burnt amber", w: 700, h: 200 },
+            { file: "guidelines/colors-amber-rule.html", name: "The amber rule", sub: "Bright amber is a FILL/shape only; warm TEXT uses burnt/lantern amber", w: 700, h: 250 },
+            { file: "guidelines/colors-status.html", name: "Status & effects", sub: "Rust/ember errors; the campfire glow; the scrim", w: 700, h: 180 },
+          ],
+        },
+        {
+          title: "Type",
+          note: "Foundations · three families, large-display reserved",
+          items: [
+            { file: "guidelines/type-display.html", name: "Display — Alfa Slab One", sub: "The WPA silkscreen headline. Large only — never below ~20pt.", w: 700, h: 250 },
+            { file: "guidelines/type-ui.html", name: "UI text — Bitter", sub: "The screen-tuned slab serif: all titles, body, list names", w: 700, h: 290 },
+            { file: "guidelines/type-labels.html", name: "Labels & dim", sub: "Uppercase kickers/badges, and the quiet sublabel", w: 700, h: 180 },
+            { file: "guidelines/type-mono.html", name: "Mono — Space Mono", sub: "The park-permit / odometer numerals. Timers, coords, mileage.", w: 700, h: 180 },
+          ],
+        },
+        {
+          title: "Spacing",
+          note: "Foundations · 4-pt grid, in-car hit floors",
+          items: [
+            { file: "guidelines/spacing-scale.html", name: "Spacing — 4-pt grid", sub: "xs 4 · sm 8 · md 12 · lg 16 · xl 20 · xxl 24 · xxxl 32 · huge 48", w: 700, h: 230 },
+            { file: "guidelines/spacing-radii.html", name: "Radii", sub: "sm 8 · md 12 · lg 16 · xl 20 · pill — placards round at lg", w: 700, h: 200 },
+            { file: "guidelines/spacing-borders-motion.html", name: "Borders & motion", sub: "hair · thin · keyline (the carved double-rule); fast→stamp timing", w: 700, h: 190 },
+            { file: "guidelines/spacing-hit-targets.html", name: "Hit targets", sub: "Thumbs, gloves, potholes — min 48, primary CTA ≥60", w: 700, h: 200 },
+          ],
+        },
+        {
+          title: "Components",
+          note: "Token-driven, theme-aware primitives",
+          items: [
+            { file: "components/typography/text.card.html", name: "Text", sub: "The one text primitive — variant × semantic color role", w: 700, h: 230 },
+            { file: "components/buttons/buttons.card.html", name: "Buttons & chips", sub: "Primary / secondary / ghost CTAs, filter chip, header chip", w: 700, h: 230 },
+            { file: "components/feedback/badges.card.html", name: "Badges", sub: "Enamel travel pills — outlined & filled, across the five tones", w: 700, h: 180 },
+            { file: "components/surfaces/surfaces.card.html", name: "Cards & dividers", sub: "The ranger placard — plain, framed, and selected; hairline & dashed rules", w: 700, h: 260 },
+            { file: "components/player/player.card.html", name: "The player — composed", sub: "RouteTrack + StopList + NowCard + Scrubber + TransportBar", w: 700, h: 520 },
+          ],
+        },
+        {
+          title: "Brand",
+          note: "Voice, motif, and the enamel mark",
+          items: [
+            { file: "guidelines/brand-voice.html", name: "Voice — the skipper speaks", sub: "Warm, corny, short. Voice is delivery; facts live elsewhere.", w: 700, h: 280 },
+            { file: "guidelines/brand-motif.html", name: "The signature motif", sub: "The car token glides a dashed atlas trail — one moving thing per screen", w: 700, h: 200 },
+            { file: "guidelines/brand-badge.html", name: "The enamel badge", sub: "Pine disc · cream keyline ring · the amber car token on a dashed trail", w: 700, h: 260 },
+          ],
+        },
+      ];
+
+      const APP = {
+        file: "ui_kits/skipper-app/index.html",
+        name: "Skipper — the app",
+        sub: "The system composed end to end: THE DRIVES, the region picker, tour detail, the live player, sign-in, the free-ticket gate, settings & credits — plus the skipper's loading/empty/error states. Switchable day ↔ dusk, with a jump-bar to every screen.",
+        w: 480,
+        h: 880,
+      };
+
+      const sections = document.getElementById("sections");
+      const previews = []; // { wrap, iframe, w, h }
+
+      function makeTile(item, opts = {}) {
+        const a = document.createElement("a");
+        a.className = "tile" + (opts.feature ? " tile--feature" : "");
+        a.href = item.file;
+
+        const prev = document.createElement("div");
+        prev.className = "tile__preview";
+        const iframe = document.createElement("iframe");
+        iframe.setAttribute("scrolling", "no");
+        iframe.setAttribute("tabindex", "-1");
+        iframe.setAttribute("aria-hidden", "true");
+        iframe.style.width = item.w + "px";
+        iframe.style.height = item.h + "px";
+        prev.appendChild(iframe);
+        a.appendChild(prev);
+
+        const cap = document.createElement("div");
+        cap.className = "tile__cap";
+        cap.innerHTML =
+          '<span class="tile__name"></span><span class="tile__sub"></span><span class="tile__open">Open specimen →</span>';
+        cap.querySelector(".tile__name").textContent = item.name;
+        cap.querySelector(".tile__sub").textContent = item.sub;
+        a.appendChild(cap);
+
+        previews.push({ wrap: prev, iframe, file: item.file, w: item.w, h: item.h, feature: !!opts.feature });
+        return a;
+      }
+
+      GROUPS.forEach((g) => {
+        const sec = document.createElement("section");
+        sec.className = "group";
+        const head = document.createElement("div");
+        head.className = "group__head";
+        head.innerHTML =
+          '<h2 class="group__title"></h2><span class="group__note"></span><span class="group__rule"></span>';
+        head.querySelector(".group__title").textContent = g.title;
+        head.querySelector(".group__note").textContent = g.note;
+        sec.appendChild(head);
+        const grid = document.createElement("div");
+        grid.className = "grid";
+        g.items.forEach((it) => grid.appendChild(makeTile(it)));
+        sec.appendChild(grid);
+        sections.appendChild(sec);
+      });
+
+      // The app — feature row
+      const appSec = document.createElement("section");
+      appSec.className = "group";
+      const appHead = document.createElement("div");
+      appHead.className = "group__head";
+      appHead.innerHTML =
+        '<h2 class="group__title">The app</h2><span class="group__note">The system, composed end to end</span><span class="group__rule"></span>';
+      appSec.appendChild(appHead);
+      const appGrid = document.createElement("div");
+      appGrid.className = "grid grid--feature";
+      appGrid.appendChild(makeTile(APP, { feature: true }));
+      appSec.appendChild(appGrid);
+      sections.appendChild(appSec);
+
+      // ── Scale every preview iframe to fit its tile, faithfully ──────────
+      function scalePreview(p) {
+        const availW = p.wrap.clientWidth;
+        if (!availW) return;
+        let scale;
+        if (p.feature) {
+          // size the feature preview by a fixed target height instead
+          const targetH = 360;
+          scale = Math.min(targetH / p.h, 300 / p.w);
+        } else {
+          scale = availW / p.w;
+        }
+        p.iframe.style.transform = "scale(" + scale + ")";
+        const boxH = Math.round(p.h * scale);
+        p.wrap.style.height = boxH + "px";
+        if (p.feature) {
+          p.wrap.style.width = Math.round(p.w * scale) + "px";
+        }
+      }
+      function scaleAll() {
+        previews.forEach(scalePreview);
+      }
+      window.addEventListener("resize", scaleAll);
+      window.addEventListener("load", scaleAll);
+      // attach load handlers, THEN navigate each iframe (it's now in the document)
+      previews.forEach((p) => {
+        p.iframe.addEventListener("load", () => {
+          scalePreview(p);
+          applyThemeTo(p.iframe);
+        });
+        p.iframe.src = p.file;
+      });
+      scaleAll();
+
+      // ── Day / dusk toggle, propagated into same-origin previews ─────────
+      let theme = "day";
+      const toggle = document.getElementById("themeToggle");
+      const label = document.getElementById("themeLabel");
+
+      function applyThemeTo(iframe) {
+        try {
+          const doc = iframe.contentDocument;
+          if (doc && doc.documentElement) {
+            doc.documentElement.setAttribute("data-theme", theme);
+            if (doc.body) doc.body.setAttribute("data-theme", theme);
+          }
+        } catch (e) {
+          /* cross-origin — ignore */
+        }
+      }
+      function applyTheme() {
+        document.documentElement.setAttribute("data-theme", theme);
+        label.textContent = theme === "day" ? "Dusk" : "Day";
+        previews.forEach((p) => applyThemeTo(p.iframe));
+      }
+      toggle.addEventListener("click", () => {
+        theme = theme === "day" ? "dusk" : "day";
+        applyTheme();
+      });
+      applyTheme();
+    </script>
+  </body>
+</html>

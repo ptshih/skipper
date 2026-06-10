@@ -1,0 +1,60 @@
+<!-- @dsCard group="Components" viewport="700x230" name="Buttons & chips" subtitle="Primary / secondary / ghost CTAs, filter chip, header chip" -->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="../../styles.css" />
+    <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
+    <script type="module" src="https://cdn.jsdelivr.net/npm/ionicons@7.4.0/dist/ionicons/ionicons.esm.js"></script>
+    <script nomodule src="https://cdn.jsdelivr.net/npm/ionicons@7.4.0/dist/ionicons/ionicons.js"></script>
+    <script type="text/babel" data-presets="react" src="../../_ds_bundle.js"></script>
+    <style>
+      body {
+        margin: 0;
+        padding: var(--space-xxl);
+        background: var(--surface);
+        font-family: var(--font-body);
+      }
+      .grid {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-lg);
+      }
+      .stack {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-sm);
+        min-width: 200px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="text/babel" data-presets="react">
+      const NS = window.Skipper || Object.values(window).find((v) => v && v.Button && v.Card) || {};
+      const { Button, FilterChip, HeaderIconButton } = NS;
+      function Demo() {
+        return (
+          <div className="grid">
+            <div className="stack">
+              <Button title="Start the drive" icon="car" />
+              <Button variant="secondary" icon="play" title="Take the simulated drive" />
+              <Button variant="ghost" title="Back to the trailhead" />
+            </div>
+            <div className="grid">
+              <Button title="Disabled" disabled fullWidth={false} />
+              <FilterChip label="North Shore" active />
+              <FilterChip label="All regions" />
+              <HeaderIconButton name="settings" accessibilityLabel="Settings" />
+              <HeaderIconButton name="more" accessibilityLabel="More" />
+            </div>
+          </div>
+        );
+      }
+      ReactDOM.createRoot(document.getElementById("root")).render(<Demo />);
+    </script>
+  </body>
+</html>

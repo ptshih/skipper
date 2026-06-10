@@ -1,0 +1,60 @@
+<!-- @dsCard group="Spacing" viewport="700x200" name="Hit targets" subtitle="Thumbs, gloves, potholes — min 48, primary CTA ≥60" -->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="../styles.css" />
+    <style>
+      body {
+        margin: 0;
+        padding: var(--space-xxl);
+        background: var(--surface);
+        font-family: var(--font-body);
+        display: flex;
+        align-items: center;
+        gap: var(--space-xxl);
+      }
+      .demo {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-sm);
+        align-items: flex-start;
+      }
+      .min {
+        width: 48px;
+        height: 48px;
+        border-radius: var(--radius-pill);
+        background: var(--surface-raised);
+        border: var(--border-keyline) solid var(--accent);
+      }
+      .cta {
+        height: 60px;
+        min-width: 220px;
+        border-radius: var(--radius-lg);
+        background: var(--primary-fill);
+        color: var(--on-primary);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 17px;
+        box-shadow: 0 3px 8px var(--shadow-cast);
+      }
+      .name {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        color: var(--ink-dim);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="demo">
+      <div class="min"></div>
+      <span class="name">hit-min · 48 — every tappable</span>
+    </div>
+    <div class="demo">
+      <div class="cta">Start the drive</div>
+      <span class="name">hit-cta · 60 — primary CTAs</span>
+    </div>
+  </body>
+</html>

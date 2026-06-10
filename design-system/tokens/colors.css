@@ -1,0 +1,107 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   Skipper — Color tokens ("Trailhead 89")
+   Two moods of the same park: DAY (aged map-paper) and DUSK (the park at night).
+   Base palette = raw hexes (mirror src/theme/tokens.ts → palette).
+   Semantic roles = what components actually reference (mirror src/theme/theme.ts).
+   Light is the :root default; [data-theme="dusk"] remaps the semantic roles.
+
+   In-car legibility footgun, designed out: amber is a FILL, never small text on
+   paper (~2:1 fails). There is intentionally NO "amber text on surface" role —
+   warm accent TEXT uses --accent-warm (burnt amber by day, lantern at dusk).
+   ───────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ── Raw palette · Daylight (aged road-atlas paper) ───────────────────── */
+  --paper: #f2e7cc; /* app background */
+  --paper-raised: #fbf3dd; /* ranger-placard card fill */
+  --paper-sunken: #e7d9b5; /* inset wells: timer chips, route track bed */
+  --paper-keyline: #fff8e6; /* bright inner keyline — fakes a carved sign edge */
+  --ink-brown: #2a2014; /* primary text — ~11:1 on paper */
+  --ink-faded: #5c4a30; /* secondary text — ~5:1, holds up against glare */
+  --ink-faint: #74603e; /* tertiary hints — cleared to ≥4.5:1 on paper */
+  --pine: #1e5b40; /* primary green — CTA fill, active track, success */
+  --amber-sunset: #dd7a33; /* bright amber — FILLS & tokens only */
+  --amber-burnt: #9a4d17; /* amber that survives as TEXT on paper (~5:1) */
+  --lake-teal: #2c6e7e; /* cool route/water accent + scenic badges */
+  --tan-rule: #cdb988; /* hairlines, dashed inactive track, dividers */
+  --rust-error: #a8401f; /* errors — brick-and-clay, never clinical blue-red */
+
+  /* ── Raw palette · Dusk (night-drive-first) ───────────────────────────── */
+  --night: #14201b; /* app background — deep dusk-pine, calmer than black */
+  --night-raised: #1e2b24; /* raised placard at dusk */
+  --night-sunken: #101a15; /* inset wells at dusk */
+  --night-keyline: #2a3a30; /* subtle lifted keyline on dark */
+  --parchment: #ece0c4; /* primary text — warm, NOT pure white */
+  --parch-faded: #a99d80; /* secondary text on dark */
+  --parch-faint: #9a9075; /* tertiary hints on dark — cleared to ≥4.5:1 */
+  --pine-glow: #5fa877; /* pine lifted so "active" reads on night */
+  --lantern-amber: #eba351; /* primary night accent — glow CTA, kicker, token */
+  --lake-teal-night: #5fa7b8; /* cool accent lifted for dark */
+  --tan-rule-night: #3a4a3e; /* muted-pine hairlines that read as "off" */
+  --ember-error: #e97559; /* glowing-ember error — clears 4.5:1 on raised too */
+
+  /* ── Semantic roles · LIGHT (the default theme) ───────────────────────── */
+  /* surfaces */
+  --surface: var(--paper);
+  --surface-raised: var(--paper-raised);
+  --surface-sunken: var(--paper-sunken);
+  --keyline: var(--paper-keyline);
+  /* text */
+  --ink: var(--ink-brown);
+  --ink-dim: var(--ink-faded);
+  --ink-faint-role: var(--ink-faint);
+  /* brand accents */
+  --accent: var(--pine); /* active bullets, icons, links, success TEXT */
+  --accent-warm: var(--amber-burnt); /* warm accent TEXT (kickers, badges) */
+  --amber-token: var(--amber-sunset); /* bright amber FILL/shape only */
+  --on-amber: var(--ink-brown); /* ink on a filled amber disc (5.25:1) */
+  --water: var(--lake-teal); /* scenic / water motif */
+  /* interactive */
+  --primary-fill: var(--pine); /* primary button + active-track fill */
+  --on-primary: var(--paper-raised); /* text/glyphs on primary-fill (cream) */
+  --track-active: var(--pine); /* traveled portion of the route trail */
+  --track-inactive: var(--tan-rule); /* dashed untraveled trail + hairlines */
+  --rule: var(--tan-rule); /* dividers, card keylines */
+  /* status */
+  --danger: var(--rust-error);
+  --on-danger: var(--paper-raised);
+  /* effects (rgba — glow / shadow / scrim overlays) */
+  --glow: rgba(221, 122, 51, 0.3); /* campfire-amber halo */
+  --shadow-cast: rgba(42, 32, 20, 0.2); /* neutral daylight cast shadow */
+  --scrim: rgba(42, 32, 20, 0.42); /* dim behind sheets / gates */
+
+  color-scheme: light;
+}
+
+/* ── Semantic roles · DUSK ──────────────────────────────────────────────── */
+[data-theme="dusk"] {
+  --surface: var(--night);
+  --surface-raised: var(--night-raised);
+  --surface-sunken: var(--night-sunken);
+  --keyline: var(--night-keyline);
+
+  --ink: var(--parchment);
+  --ink-dim: var(--parch-faded);
+  --ink-faint-role: var(--parch-faint);
+
+  --accent: var(--pine-glow);
+  --accent-warm: var(--lantern-amber);
+  --amber-token: var(--lantern-amber);
+  --on-amber: var(--ink-brown); /* ink on lantern-amber = 7.52:1 */
+  --water: var(--lake-teal-night);
+
+  --primary-fill: var(--lantern-amber); /* a campfire-lit button */
+  --on-primary: var(--ink-brown); /* dark ink glows on amber */
+  --track-active: var(--pine-glow);
+  --track-inactive: var(--tan-rule-night);
+  --rule: var(--tan-rule-night);
+
+  --danger: var(--ember-error);
+  --on-danger: var(--ink-brown);
+
+  --glow: rgba(235, 163, 81, 0.42);
+  --shadow-cast: rgba(0, 0, 0, 0.5);
+  --scrim: rgba(0, 0, 0, 0.55);
+
+  color-scheme: dark;
+}

@@ -1,0 +1,10 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   Skipper — Webfonts (Trailhead 89 type system)
+   Three families, loaded from Google Fonts (the app loads the same families via
+   @expo-google-fonts; the web design system mirrors them from the CDN):
+     • Alfa Slab One — the WPA silkscreen DISPLAY face (single weight). Large only.
+     • Bitter        — a screen-tuned slab serif: all body/heading/label (400/600/700).
+     • Space Mono    — the park-permit / odometer numerals (400/700).
+   ───────────────────────────────────────────────────────────────────────── */
+
+@import url("https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Bitter:wght@400;600;700&family=Space+Mono:wght@400;700&display=swap");

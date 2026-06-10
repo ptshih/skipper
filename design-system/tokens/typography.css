@@ -1,0 +1,99 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   Skipper — Typography tokens (Trailhead 89 type scale)
+   Mirrors src/theme/tokens.ts → fonts + typeScale. Heavy display faces are
+   reserved for LARGE sizes (slab strokes aid the glance); small in-car-critical
+   text stays Bitter — never Alfa Slab below ~20pt (it muddies the glance).
+
+   Each variant ships as a `.type-<name>` utility class so specimen cards and UI
+   recreations get the exact family/size/line-height/tracking without re-typing.
+   ───────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* Families */
+  --font-display: "Alfa Slab One", Georgia, serif; /* WPA silkscreen headline */
+  --font-body: "Bitter", Georgia, serif; /* screen-tuned slab serif */
+  --font-mono: "Space Mono", "SFMono-Regular", ui-monospace, monospace; /* odometer */
+
+  /* Weights (Bitter) */
+  --weight-regular: 400;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+}
+
+/* ── Type-scale utilities ────────────────────────────────────────────────── */
+.type-wordmark {
+  font-family: var(--font-display);
+  font-size: 26px;
+  line-height: 30px;
+  letter-spacing: 0.5px;
+  font-weight: 400;
+}
+.type-display {
+  font-family: var(--font-display);
+  font-size: 30px;
+  line-height: 36px;
+  font-weight: 400;
+}
+.type-placardTitle {
+  font-family: var(--font-display);
+  font-size: 22px;
+  line-height: 27px;
+  font-weight: 400;
+}
+.type-titleXL {
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 24px;
+  line-height: 30px;
+}
+.type-title {
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 20px;
+  line-height: 26px;
+}
+.type-heading {
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 17px;
+  line-height: 22px;
+}
+.type-body {
+  font-family: var(--font-body);
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 23px;
+}
+.type-bodyStrong {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 16px;
+  line-height: 23px;
+}
+.type-label {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 12.5px;
+  line-height: 16px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+.type-dim {
+  font-family: var(--font-body);
+  font-weight: 400;
+  font-size: 13.5px;
+  line-height: 19px;
+}
+.type-mono {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 18px;
+}
+.type-monoStrong {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 15px;
+  line-height: 19px;
+  letter-spacing: 0.3px;
+}

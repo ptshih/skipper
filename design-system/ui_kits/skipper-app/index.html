@@ -1,0 +1,223 @@
+<!-- @dsCard group="Skipper App" viewport="480x880" name="Skipper — the app" subtitle="Drives, regions, detail, player, sign-in, gate, settings & states — day & dusk" -->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Skipper — UI kit</title>
+    <link rel="stylesheet" href="../../styles.css" />
+    <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+    <script type="module" src="https://cdn.jsdelivr.net/npm/ionicons@7.4.0/dist/ionicons/ionicons.esm.js"></script>
+    <script nomodule src="https://cdn.jsdelivr.net/npm/ionicons@7.4.0/dist/ionicons/ionicons.js"></script>
+    <style>
+      html, body {
+        margin: 0;
+        min-height: 100%;
+        background: #e3ddcd;
+        font-family: var(--font-body);
+      }
+      #root {
+        display: flex;
+        justify-content: center;
+        padding: 40px 20px;
+      }
+      @keyframes skipper-spin { to { transform: rotate(360deg); } }
+      .jumpbar {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 6px;
+        max-width: 430px;
+      }
+      .jumpbar__pill {
+        font-family: var(--font-body);
+        font-weight: 700;
+        font-size: 12px;
+        letter-spacing: 0.3px;
+        padding: 7px 13px;
+        border-radius: 999px;
+        border: 1px solid #c9c2b0;
+        background: #fbf7ec;
+        color: #5c4a30;
+        cursor: pointer;
+        transition: all 0.12s ease;
+      }
+      .jumpbar__pill:hover { border-color: #1e5b40; color: #1e5b40; }
+      .jumpbar__pill[aria-current="true"] {
+        background: #1e5b40;
+        border-color: #1e5b40;
+        color: #fbf3dd;
+      }
+      .jumpbar__group {
+        display: inline-flex;
+        gap: 6px;
+        padding-left: 10px;
+        margin-left: 4px;
+        border-left: 1px solid #c9c2b0;
+      }
+      .daytoggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 9px 18px;
+        border-radius: 999px;
+        border: 1px solid #c9c2b0;
+        background: #fff;
+        color: #33291a;
+        font-family: var(--font-body);
+        font-weight: 700;
+        font-size: 13px;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="text/babel" data-presets="react" src="components.jsx"></script>
+    <script type="text/babel" data-presets="react" src="screens.jsx"></script>
+    <script type="text/babel" data-presets="react">
+      const NATURAL = ["home", "regions", "detail", "player", "signin", "settings", "gate", "legal"];
+      const JUMP = [
+        { screen: "home", label: "Home" },
+        { screen: "regions", label: "Regions" },
+        { screen: "detail", label: "Tour" },
+        { screen: "player", label: "Player" },
+        { screen: "signin", label: "Sign in" },
+        { screen: "settings", label: "Settings" },
+        { screen: "gate", label: "Gate" },
+        { screen: "legal", label: "Legal" },
+      ];
+      const STATES = [
+        { screen: "loading", label: "Loading" },
+        { screen: "empty", label: "Empty" },
+        { screen: "error", label: "Error" },
+      ];
+
+      function App() {
+        const [themeMode, setThemeMode] = React.useState("light"); // system | light | dark
+        const [nav, setNav] = React.useState({ screen: "home", tourId: "west-shore" });
+        const [returnTo, setReturnTo] = React.useState("home");
+        const [selectedRegion, setSelectedRegion] = React.useState(null);
+        const [auth, setAuth] = React.useState({ signedIn: false, email: "", name: "" });
+        const [savingName, setSavingName] = React.useState(false);
+
+        // Auto follows the phone — in this preview that's daylight; Day/Dusk pin a mood.
+        const theme = themeMode === "dark" ? "dusk" : "day";
+        const go = (screen, patch = {}) => setNav((n) => ({ ...n, screen, ...patch }));
+        const tour = TOURS.find((t) => t.id === nav.tourId) || TOURS[0];
+
+        const saveName = (value) => {
+          setSavingName(true);
+          setTimeout(() => { setAuth((a) => ({ ...a, name: value })); setSavingName(false); }, 800);
+        };
+
+        let view;
+        switch (nav.screen) {
+          case "home":
+            view = (
+              <HomeScreen
+                signedIn={auth.signedIn}
+                selectedRegion={selectedRegion}
+                onOpenTour={(id) => go("detail", { tourId: id })}
+                onSignIn={() => { setReturnTo("home"); go("signin"); }}
+                onSettings={() => go("settings")}
+                onOpenRegions={() => go("regions")}
+              />
+            );
+            break;
+          case "regions":
+            view = (
+              <RegionsScreen
+                selectedRegion={selectedRegion}
+                onChoose={(slug) => { setSelectedRegion(slug); go("home"); }}
+                onClose={() => go("home")}
+              />
+            );
+            break;
+          case "detail":
+            view = (
+              <TourDetailScreen
+                tour={tour}
+                onBack={() => go("home")}
+                onDrive={() => (auth.signedIn ? go("player") : go("gate"))}
+                onPreview={() => go("player")}
+              />
+            );
+            break;
+          case "player":
+            view = <PlayerScreen tour={tour} onBack={() => go("detail")} />;
+            break;
+          case "signin":
+            view = (
+              <SignInScreen
+                onBack={() => go(returnTo)}
+                onAuthed={(email) => { setAuth({ signedIn: true, email, name: "" }); go(returnTo); }}
+              />
+            );
+            break;
+          case "settings":
+            view = (
+              <SettingsScreen
+                signedIn={auth.signedIn}
+                email={auth.email}
+                name={auth.name}
+                savingName={savingName}
+                themeMode={themeMode}
+                onBack={() => go("home")}
+                onSignIn={() => { setReturnTo("settings"); go("signin"); }}
+                onSignOut={() => setAuth({ signedIn: false, email: "", name: "" })}
+                onSaveName={saveName}
+                onChangeThemeMode={setThemeMode}
+                onOpenLegal={() => go("legal")}
+              />
+            );
+            break;
+          case "gate":
+            view = (
+              <GateScreen
+                onBack={() => go("detail")}
+                onGetTicket={() => { setReturnTo("player"); go("signin"); }}
+                onSample={() => go("player")}
+              />
+            );
+            break;
+          case "legal":
+            view = <LegalScreen onBack={() => go("settings")} />;
+            break;
+          default:
+            view = <StateScreen kind={nav.screen} />;
+        }
+
+        const footer = (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+            <button type="button" className="daytoggle"
+              onClick={() => setThemeMode((m) => (m === "dark" ? "light" : "dark"))}>
+              {theme === "dusk" ? "☀ Switch to Day" : "☾ Switch to Dusk"}
+            </button>
+            <div className="jumpbar">
+              {JUMP.map((j) => (
+                <button key={j.screen} type="button" className="jumpbar__pill"
+                  aria-current={nav.screen === j.screen} onClick={() => go(j.screen)}>
+                  {j.label}
+                </button>
+              ))}
+              <span className="jumpbar__group">
+                {STATES.map((s) => (
+                  <button key={s.screen} type="button" className="jumpbar__pill"
+                    aria-current={nav.screen === s.screen} onClick={() => go(s.screen)}>
+                    {s.label}
+                  </button>
+                ))}
+              </span>
+            </div>
+          </div>
+        );
+
+        return <Phone theme={theme} footer={footer}>{view}</Phone>;
+      }
+      ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+    </script>
+  </body>
+</html>

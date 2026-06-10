@@ -1,0 +1,44 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   Skipper — Spacing, radius, border, motion, hit targets
+   Mirrors src/theme/tokens.ts. 4-pt grid; in-car hit floors are non-negotiable.
+   ───────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ── Spacing · 4-pt grid ───────────────────────────────────────────────── */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 20px;
+  --space-xxl: 24px;
+  --space-xxxl: 32px;
+  --space-huge: 48px;
+  --gutter: 16px; /* standard screen-edge padding */
+
+  /* ── Radii ──────────────────────────────────────────────────────────────── */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-pill: 999px;
+
+  /* ── Borders / keylines ───────────────────────────────────────────────────
+     hair ≈ device hairline; keyline 1.5 is the carved-placard double-rule. */
+  --border-hair: 0.5px;
+  --border-thin: 1px;
+  --border-keyline: 1.5px;
+
+  /* ── Motion ──────────────────────────────────────────────────────────────
+     stamp = the passport-stamp "ink press". */
+  --duration-fast: 120ms;
+  --duration-base: 220ms;
+  --duration-slow: 420ms;
+  --duration-stamp: 520ms;
+  /* The in-car ease — calm, no overshoot on glance-critical surfaces. */
+  --ease-standard: cubic-bezier(0.2, 0.7, 0.2, 1);
+
+  /* ── Hit targets ──────────────────────────────────────────────────────────
+     Thumbs, gloves, potholes: nothing tappable below min; primary CTAs ≥ cta. */
+  --hit-min: 48px;
+  --hit-cta: 60px;
+}

@@ -1,0 +1,67 @@
+<!-- @dsCard group="Colors" viewport="700x200" name="Pine, teal & warm accents" subtitle="Pine is the brand green; teal is scenic/water; warm text is burnt amber" -->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="../styles.css" />
+    <style>
+      body {
+        margin: 0;
+        padding: var(--space-xxl);
+        background: var(--surface);
+        font-family: var(--font-body);
+      }
+      .row {
+        display: flex;
+        gap: var(--space-lg);
+      }
+      .sw {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-sm);
+      }
+      .chip {
+        height: 60px;
+        border-radius: var(--radius-md);
+      }
+      .name {
+        font-weight: 700;
+        font-size: 13px;
+        color: var(--ink);
+      }
+      .use {
+        font-size: 12px;
+        color: var(--ink-dim);
+        line-height: 16px;
+      }
+      code {
+        font-family: var(--font-mono);
+        font-size: 11.5px;
+        color: var(--ink-dim);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="row">
+      <div class="sw">
+        <div class="chip" style="background: var(--pine)"></div>
+        <span class="name">accent · pine</span>
+        <code>#1E5B40</code>
+        <span class="use">Active bullets, icons, links, success text, primary CTA fill.</span>
+      </div>
+      <div class="sw">
+        <div class="chip" style="background: var(--lake-teal)"></div>
+        <span class="name">water · teal</span>
+        <code>#2C6E7E</code>
+        <span class="use">Scenic / water motif, "scenic" stop badges.</span>
+      </div>
+      <div class="sw">
+        <div class="chip" style="background: var(--amber-burnt)"></div>
+        <span class="name">accent-warm</span>
+        <code>#9A4D17</code>
+        <span class="use">Warm accent TEXT — kickers, badge labels (~5:1 on paper).</span>
+      </div>
+    </div>
+  </body>
+</html>

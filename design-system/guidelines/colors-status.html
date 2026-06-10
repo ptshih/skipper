@@ -1,0 +1,61 @@
+<!-- @dsCard group="Colors" viewport="700x180" name="Status & effects" subtitle="Rust/ember errors; the campfire glow; the scrim" -->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="../styles.css" />
+    <style>
+      body {
+        margin: 0;
+        padding: var(--space-xxl);
+        background: var(--surface);
+        font-family: var(--font-body);
+        display: flex;
+        gap: var(--space-lg);
+      }
+      .sw {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-sm);
+      }
+      .chip {
+        height: 56px;
+        border-radius: var(--radius-md);
+        border: var(--border-thin) solid var(--rule);
+      }
+      .name {
+        font-weight: 700;
+        font-size: 12.5px;
+        color: var(--ink);
+      }
+      .use {
+        font-size: 11.5px;
+        color: var(--ink-dim);
+        line-height: 15px;
+      }
+      code {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--ink-dim);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="sw">
+      <div class="chip" style="background: var(--danger)"></div>
+      <span class="name">danger · rust</span><code>#A8401F</code>
+      <span class="use">Errors — brick & clay, never clinical blue-red. Ember at dusk.</span>
+    </div>
+    <div class="sw">
+      <div class="chip" style="background: var(--amber-token); box-shadow: 0 0 18px var(--glow), inset 0 0 0 1px var(--rule)"></div>
+      <span class="name">glow</span><code>amber 30% α</code>
+      <span class="use">The campfire halo (boxShadow) — one element at a time.</span>
+    </div>
+    <div class="sw">
+      <div class="chip" style="background: var(--scrim)"></div>
+      <span class="name">scrim</span><code>ink 42% α</code>
+      <span class="use">Dim behind sheets & freemium gates.</span>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,70 @@
+<!-- @dsCard group="Components" viewport="700x520" name="The player — composed" subtitle="RouteTrack + StopList + NowCard + Scrubber + TransportBar, the signature unit" -->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="../../styles.css" />
+    <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
+    <script type="module" src="https://cdn.jsdelivr.net/npm/ionicons@7.4.0/dist/ionicons/ionicons.esm.js"></script>
+    <script type="text/babel" data-presets="react" src="../../_ds_bundle.js"></script>
+    <style>
+      body {
+        margin: 0;
+        padding: var(--space-xxl);
+        background: var(--surface);
+        font-family: var(--font-body);
+      }
+      .phone {
+        max-width: 380px;
+        margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-md);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="text/babel" data-presets="react">
+      const NS = window.Skipper || Object.values(window).find((v) => v && v.NowCard) || {};
+      const { RouteTrack, StopList, NowCard, Scrubber, TransportBar, Badge } = NS;
+      const STOPS = [
+        { seq: 1, name: "Tahoe City Trailhead", sublabel: "Story", icon: "story", state: "passed" },
+        { seq: 2, name: "Emerald Bay Overlook", sublabel: "Scenic", icon: "scenic", state: "active" },
+        { seq: 3, name: "Eagle Falls", sublabel: "Scenic", icon: "scenic", state: "upcoming" },
+        { seq: 4, name: "Camp Richardson", sublabel: "Pit stop", icon: "break", state: "upcoming" },
+      ];
+      function Demo() {
+        const [pos, setPos] = React.useState(138000);
+        const [playing, setPlaying] = React.useState(true);
+        return (
+          <div className="phone">
+            <RouteTrack progress={0.42} glow={false} />
+            <StopList title="THE ROUTE · 10 STOPS" items={STOPS} />
+            <NowCard
+              kicker="NOW PLAYING · STORY"
+              title="Emerald Bay Overlook"
+              glow={playing}
+              right={<Badge tone="pine" label="Story" />}
+              transport={
+                <TransportBar
+                  playing={playing}
+                  onPlayPause={() => setPlaying((p) => !p)}
+                  canSeek
+                  onSeekBack={() => setPos((p) => Math.max(0, p - 15000))}
+                  onSeekForward={() => setPos((p) => Math.min(405000, p + 15000))}
+                  secondary={{ title: "Pull over", onPress: () => {} }}
+                />
+              }
+            >
+              <Scrubber positionMs={pos} durationMs={405000} onSeek={setPos} />
+            </NowCard>
+          </div>
+        );
+      }
+      ReactDOM.createRoot(document.getElementById("root")).render(<Demo />);
+    </script>
+  </body>
+</html>

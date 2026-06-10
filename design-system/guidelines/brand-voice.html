@@ -1,0 +1,63 @@
+<!-- @dsCard group="Brand" viewport="700x280" name="Voice — the skipper speaks" subtitle="Warm, corny, short. Voice is delivery; facts live elsewhere." -->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="../styles.css" />
+    <style>
+      body {
+        margin: 0;
+        padding: var(--space-xxl);
+        background: var(--surface);
+        font-family: var(--font-body);
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: var(--space-lg) var(--space-xxl);
+      }
+      .item {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .ctx {
+        font-family: var(--font-body);
+        font-weight: 600;
+        font-size: 11px;
+        letter-spacing: 0.6px;
+        text-transform: uppercase;
+        color: var(--ink-faint-role);
+      }
+      .say {
+        font-size: 14.5px;
+        color: var(--ink);
+        line-height: 19px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="item">
+      <span class="ctx">Loading</span>
+      <span class="say">"Charting the good roads…"</span>
+    </div>
+    <div class="item">
+      <span class="ctx">Error</span>
+      <span class="say">"Well, that's a kink in the hose. Give her another pull?"</span>
+    </div>
+    <div class="item">
+      <span class="ctx">Empty</span>
+      <span class="say">"No drives charted here yet. We're still out mapping the good roads."</span>
+    </div>
+    <div class="item">
+      <span class="ctx">Play CTA</span>
+      <span class="say">"Let's roll — start the drive."</span>
+    </div>
+    <div class="item">
+      <span class="ctx">Freemium gate</span>
+      <span class="say">"Grab your ticket — ten seconds, and the skipper never stops talking."</span>
+    </div>
+    <div class="item">
+      <span class="ctx">Drive complete</span>
+      <span class="say">"That's the end of the road, folks. Watch your step climbing out."</span>
+    </div>
+  </body>
+</html>
