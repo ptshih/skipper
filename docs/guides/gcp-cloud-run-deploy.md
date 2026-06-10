@@ -66,6 +66,12 @@ policy enforces `constraints/run.managed.requireInvokerIam`, relax it for this p
 ## Continuous deployment (the GitHub trigger)
 
 ```bash
+# 0. One-time: the Cloud Build SERVICE AGENT (P4SA, distinct from the Compute SA) stores
+#    the GitHub OAuth token in Secret Manager, so it needs secretmanager.admin first.
+gcloud projects add-iam-policy-binding lithe-window-491818-k8 \
+  --member=serviceAccount:service-666110297056@gcp-sa-cloudbuild.iam.gserviceaccount.com \
+  --role=roles/secretmanager.admin
+
 # 1. Connect GitHub (one interactive OAuth step — follow the printed link to install
 #    the Cloud Build GitHub App on ptshih/skipper). Region must match the trigger.
 gcloud builds connections create github skipper-gh --region=us-east4
@@ -113,6 +119,7 @@ curl -s "$URL/tours"    # {"tours":[...]}        — DB reachable + secret decry
 | Deploy: `Permission denied on secret … for Revision service account` | Runtime SA lacked secret access | Grant the Compute SA `secretmanager.secretAccessor` on the secret |
 | Deploy: secret `versions/latest was not found` | `gcloud secrets create` stored an empty value (`$DOTENV_PRIVATE_KEY_PRODUCTION` wasn't set in the shell) | Re-add the version reading from `.env.keys` (see One-time setup) |
 | `--allow-unauthenticated` → `One or more users named in the policy do not belong to a permitted customer` | Domain Restricted Sharing org policy blocks `allUsers` | Use `--no-invoker-iam-check` instead (public without an `allUsers` binding; app auth still applies) |
+| `connections create github` → `could not assert Secret Manager permissions … P4SA … secretmanager.secrets.create denied` | The Cloud Build service agent (`…@gcp-sa-cloudbuild…`, not the Compute SA) stores the GitHub token as a secret | Grant that service agent `roles/secretmanager.admin` |
 
 ## Files
 
