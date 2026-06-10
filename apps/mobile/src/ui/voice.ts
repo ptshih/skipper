@@ -105,6 +105,10 @@ export const voice = {
   offline: {
     home: 'No signal out here — showing the drives you’ve saved.',
     detail: 'No signal out here — running on the saved copy.',
+    // A saved drive whose clips were re-cut on the server: the chip flag + the ⋯ menu action to
+    // re-pull. Never forced — offline play keeps working on the copy you’ve got.
+    updateReady: 'Fresh cut ready',
+    update: 'Pull the fresh copy',
   },
   auth: {
     // "folks" is the skipper's address everywhere else (loading, GPS, drive-complete) — keep

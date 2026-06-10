@@ -5,6 +5,7 @@ import { ApiError, errorMessage, getTour, type TourDetail } from '@/lib/api'
 import {
   deleteTourDownload,
   downloadTour,
+  isDownloadStale,
   isTourDownloaded,
   loadManifest,
   type DownloadProgress,
@@ -44,6 +45,9 @@ export default function TourScreen() {
   const [downloaded, setDownloaded] = useState(false)
   const [downloading, setDownloading] = useState<DownloadProgress | null>(null)
   const [downloadError, setDownloadError] = useState<string | null>(null)
+  // True when this drive IS downloaded but the server has re-cut its clips since (a re-synth or
+  // regen). Detected on the online detail fetch; offers a re-pull. Never blocks offline play.
+  const [updatable, setUpdatable] = useState(false)
   // The signature rig, parked at the trailhead (~0.06) on the placard's static trail. Created
   // once, never animated — a still motif (the Start CTA owns this screen's one amber glow).
   const parked = useRef(new Animated.Value(0.06)).current
@@ -55,6 +59,7 @@ export default function TourScreen() {
     try {
       await downloadTour(id, setDownloading)
       setDownloaded(true)
+      setUpdatable(false) // a fresh pull writes the current tokens — no longer behind the server
     } catch (e) {
       // A gated (non-preview) tour download 401s when the account lapsed — show the
       // AccountGate. Everything else is a network/verify failure (no useful raw message for
@@ -77,6 +82,10 @@ export default function TourScreen() {
   const openMenu = useCallback(() => {
     const actions: { label: string; onPress: () => void; destructive?: boolean }[] = []
     if (downloaded) {
+      if (updatable && !downloading) {
+        // Re-pull overwrites the saved manifest + clips with the server's fresh cut.
+        actions.push({ label: voice.offline.update, onPress: () => void startDownload() })
+      }
       actions.push({ label: 'Remove offline download', onPress: removeDownload, destructive: true })
     } else if (!downloading) {
       actions.push({ label: 'Download for offline', onPress: () => void startDownload() })
@@ -105,7 +114,7 @@ export default function TourScreen() {
         { text: 'Cancel', style: 'cancel' as const },
       ])
     }
-  }, [downloaded, downloading, id, router, startDownload, removeDownload])
+  }, [downloaded, downloading, updatable, id, router, startDownload, removeDownload])
 
   // Don't render a dead header button: download/remove is offer-able except mid-download;
   // the dev simulator is always there in __DEV__.
@@ -118,8 +127,12 @@ export default function TourScreen() {
     setNeedsAccount(false)
     try {
       // Open funnel: any tour's detail is viewable anonymously so the Preview CTA is reachable.
-      setTour(await getTour(id, { preview: true }))
+      const fresh = await getTour(id, { preview: true })
+      setTour(fresh)
       setOffline(false)
+      // Online: flag a saved copy whose clips the server has re-cut since the download (free —
+      // we already hold the fresh detail). Returns false when nothing's downloaded.
+      setUpdatable(isDownloadStale(id, fresh))
     } catch (e) {
       if (e instanceof ApiError && e.needsAccount) setNeedsAccount(true)
       else {
@@ -130,6 +143,7 @@ export default function TourScreen() {
         if (m) {
           setTour(m.detail)
           setOffline(true)
+          setUpdatable(false) // dead zone: no fresh detail to compare — never nag offline
         } else {
           setError(errorMessage(e, voice.error.generic))
         }
@@ -233,6 +247,15 @@ export default function TourScreen() {
             <Text variant="label" color="inkFaint">
               Saving {downloading.done}/{downloading.total || '…'}
             </Text>
+          ) : downloaded && updatable ? (
+            // A re-cut waits on the server — amber to read as "there's something new" (the ACTION
+            // is in the ⋯ menu). Offline play still uses the saved copy until the rider re-pulls.
+            <View style={styles.savedChip}>
+              <Icon name="update" size={14} color="accentWarm" />
+              <Text variant="label" color="accentWarm">
+                {voice.offline.updateReady}
+              </Text>
+            </View>
           ) : downloaded ? (
             <View style={styles.savedChip}>
               <Icon name="downloaded" size={14} color="accent" />

@@ -207,6 +207,14 @@ export const tourStopView = z.object({
   triggerRadiusM: z.number().int(),
   approachHeadingDeg: z.number().int().nullish(),
   audioDurationMs: z.number().int().nullish(),
+  /**
+   * When this stop's narration/audio was last revised (ISO) — the OFFLINE-STALENESS token.
+   * A re-synth (patch-clip / resynth-tour) or a regen bumps `tour_stops.updated_at`, surfaced
+   * here. The offline manifest embeds the detail, so a downloaded drive compares this against a
+   * fresh fetch to detect its clips are behind the server (see mobile `isDownloadStale`). The
+   * player ignores it; it's a content fingerprint, not playback state.
+   */
+  revisedAt: z.iso.datetime().nullish(),
 })
 export type TourStopView = z.infer<typeof tourStopView>
 
@@ -214,6 +222,9 @@ export type TourStopView = z.infer<typeof tourStopView>
 export const tourBracketView = z.object({
   kind: bracketKind,
   audioDurationMs: z.number().int().nullish(),
+  /** When this bracket's audio was last revised (ISO) — the offline-staleness token; see
+   *  `tourStopView.revisedAt`. */
+  revisedAt: z.iso.datetime().nullish(),
 })
 export type TourBracketView = z.infer<typeof tourBracketView>
 

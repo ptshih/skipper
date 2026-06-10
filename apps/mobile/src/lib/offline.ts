@@ -21,7 +21,9 @@ import { extForContentType, urlMapFromSigned } from './offline-util'
 
 // Manifest schema version — bump on any shape change so a stale-format manifest left by an
 // older app build reads as NOT-downloaded (and re-downloads) instead of crashing the player.
-const MANIFEST_VERSION = 1
+// v2: the embedded `detail` now carries per-clip `revisedAt` content tokens (offline staleness);
+// a v1 download lacked them, so it's invalidated → re-downloaded with tokens.
+const MANIFEST_VERSION = 2
 
 /** A downloaded clip — a RELATIVE filename within the tour dir (NOT an absolute uri). */
 interface ClipFile {
@@ -220,6 +222,34 @@ function localUrlMap(tourId: string, m: OfflineManifest): Map<number, string> {
 export function isTourDownloaded(tourId: string): boolean {
   const m = loadManifest(tourId)
   return m != null && clipsPresentOnDisk(tourId, m)
+}
+
+/**
+ * Fold a detail's per-clip content tokens (`revisedAt`) + stop set + bracket presence into one
+ * comparable string. Any drift changes it: a clip re-synth (token bumps), a regen (fresh stop ids
+ * → fresh tokens), a stop added/removed (seq set changes), a bracket appearing/vanishing.
+ */
+function contentSignature(d: TourDetail): string {
+  const stops = d.stops
+    .slice()
+    .sort((a, b) => a.seq - b.seq)
+    .map((s) => `${s.seq}:${s.revisedAt ?? ''}`)
+    .join(',')
+  return `stops[${stops}]|intro:${d.intro?.revisedAt ?? ''}|outro:${d.outro?.revisedAt ?? ''}`
+}
+
+/**
+ * Is a downloaded tour's audio STALE vs the server's current content? Compares the content
+ * tokens embedded in the saved manifest's detail against a freshly-fetched detail. ONLINE-ONLY by
+ * nature — the caller already holds fresh detail (the tour screen fetches it to render), so this
+ * costs ZERO extra network and is never run in a dead zone. Returns false when nothing is
+ * downloaded. NEVER blocks playback: it only powers a "pull the fresh copy" affordance — offline
+ * driving always plays the bytes on disk, stale or not.
+ */
+export function isDownloadStale(tourId: string, fresh: TourDetail): boolean {
+  const m = loadManifest(tourId)
+  if (!m) return false
+  return contentSignature(m.detail) !== contentSignature(fresh)
 }
 
 /** A downloaded manifest's drive detail projected to a catalog list-item (the home card's shape).

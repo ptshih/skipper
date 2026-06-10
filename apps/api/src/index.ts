@@ -162,6 +162,9 @@ app.get('/tours/:tourId', withSession, async (c) => {
       triggerRadiusM: tourStops.triggerRadiusM,
       approachHeadingDeg: tourStops.approachHeadingDeg,
       audioDurationMs: tourStops.audioDurationMs,
+      // The offline-staleness token (Date → ISO via c.json). Bumps on any clip re-synth/regen,
+      // so a downloaded drive can detect it's behind the server. See shared `tourStopView.revisedAt`.
+      revisedAt: tourStops.updatedAt,
     })
     .from(tourStops)
     .innerJoin(pois, eq(tourStops.poiId, pois.id))
@@ -169,7 +172,11 @@ app.get('/tours/:tourId', withSession, async (c) => {
     .orderBy(asc(tourStops.seq))
 
   const brackets = await db
-    .select({ kind: tourBrackets.kind, audioDurationMs: tourBrackets.audioDurationMs })
+    .select({
+      kind: tourBrackets.kind,
+      audioDurationMs: tourBrackets.audioDurationMs,
+      revisedAt: tourBrackets.updatedAt,
+    })
     .from(tourBrackets)
     .where(eq(tourBrackets.tourId, tour.id))
   const intro = brackets.find((b) => b.kind === 'intro')
@@ -197,8 +204,12 @@ app.get('/tours/:tourId', withSession, async (c) => {
     // The narrating host, resolved from the region server-side so the app renders identity
     // rather than bundling it (host-agnostic: a new host ships without an app update).
     host: hostForRegion(region.slug),
-    intro: intro ? { kind: 'intro', audioDurationMs: intro.audioDurationMs } : null,
-    outro: outro ? { kind: 'outro', audioDurationMs: outro.audioDurationMs } : null,
+    intro: intro
+      ? { kind: 'intro', audioDurationMs: intro.audioDurationMs, revisedAt: intro.revisedAt }
+      : null,
+    outro: outro
+      ? { kind: 'outro', audioDurationMs: outro.audioDurationMs, revisedAt: outro.revisedAt }
+      : null,
     stops,
   })
 })

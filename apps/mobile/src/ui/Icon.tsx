@@ -33,6 +33,7 @@ export type IconName =
   | 'region'
   | 'close'
   | 'downloaded'
+  | 'update'
   | 'more'
 
 const IONICON: Record<IconName, ComponentProps<typeof Ionicons>['name']> = {
@@ -64,6 +65,7 @@ const IONICON: Record<IconName, ComponentProps<typeof Ionicons>['name']> = {
   region: 'location-outline', // a region/destination row + the location chip glyph
   close: 'close', // dismiss a modal sheet
   downloaded: 'cloud-done-outline', // a tour that's saved to disk + plays with no signal
+  update: 'cloud-download-outline', // a saved tour whose clips were re-cut server-side — pull again
   more: 'ellipsis-horizontal', // header overflow menu (secondary/utility actions)
 }
 

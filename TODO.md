@@ -45,13 +45,20 @@ Refs: `packages/generator/src/pipeline/tts.ts`, `pipeline/mp3.ts`,
 `docs/decisions/audio-compression-spike.md` (the encode-path options),
 `eval/tts.ts` (where the tail verdict should record).
 
-## Offline downloads never see patched clips
+## Offline downloads: full re-pull only (no per-clip diff)
 
-`patch-clip` re-synthesizes in place at the stored key, but a device that already
-DOWNLOADED the tour keeps its local bytes forever — the exact bad word the tool fixed
-stays on-device until the user manually re-downloads. Real fix is a manifest version (bump
-on any clip update; the app re-fetches changed clips). Post-MVP; matters once strangers
-hold offline tours.
+DONE (2026-06-10): a re-cut clip (patch-clip / resynth-tour / a regen) is now DETECTABLE +
+recoverable on-device. Each stop/bracket carries a `revisedAt` content token (the DB
+`updated_at`, which every re-synth path already bumps, surfaced on the tour-detail DTO); the
+offline manifest embeds the detail, and the tour screen compares a fresh fetch against the
+saved copy (`isDownloadStale`, zero extra network) → a "Fresh cut ready" chip + a "Pull the
+fresh copy" ⋯ action. NEVER forced; offline play keeps using the saved bytes until the rider
+re-pulls. Manifest bumped to v2 (a v1 download lacks tokens → re-downloads).
 
-Refs: `packages/generator/src/patch-clip.ts`, `apps/mobile/src/lib/offline.ts` (manifest),
-2026-06-09 DB-write audit (verified-minor finding).
+REMAINING (post-MVP): the re-pull re-downloads EVERY clip, not just the changed ones. A
+per-clip diff (download only the stale clips, merge into the existing manifest) is the
+optimization — only matters once tours are large or strangers hold many offline tours.
+
+Refs: `apps/mobile/src/lib/offline.ts` (manifest + `isDownloadStale`),
+`apps/mobile/app/tours/[id]/index.tsx` (chip + ⋯ action), `packages/shared/src/schemas.ts`
+(`tourStopView`/`tourBracketView` `revisedAt`), `apps/api/src/index.ts` (detail route).
