@@ -52,21 +52,22 @@ export const auth = betterAuth({
   // Host-header injection of reset/OAuth links and seeds `trustedOrigins`;
   // `fallback` covers any non-matching host and serves as the init-time base URL
   // (so there's no "Base URL could not be determined" startup warning).
-  // LIVE: deployed to Cloud Run (us-east4). The host uses Cloud Run's older URL scheme
-  // <service>-<hash>-<regioncode>.a.run.app (uk = us-east4); the hash is stable for the
-  // life of the service. TODO(prod): once a custom domain is mapped, add it here and make
-  // it the `fallback`. Render entries are kept as an alternate deploy target.
-  // NOTE: social OAuth (Google/Apple) needs EXACT pre-registered redirect URIs and will
-  // NOT follow wildcard preview URLs — route those through the stable prod host.
+  // Custom domain: skipper.fm (apex). It also serves the iOS universal-links AASA and the
+  // /t/<id> share landing pages, so the apex MUST resolve to THIS service — mapped via a
+  // Cloud Run domain mapping (us-east4, Google-managed cert), with Cloudflare DNS holding
+  // the records as DNS-only (grey cloud) so Google can provision the cert directly. The
+  // run.app host stays listed for direct access during cutover; Render is an alt target.
+  // NOTE: social OAuth (Google/Apple) needs EXACT pre-registered redirect URIs — use skipper.fm.
   baseURL: {
     allowedHosts: [
       'localhost', // local dev
-      'skipper-api-csslmysz7q-uk.a.run.app', // Cloud Run prod (us-east4)
+      'skipper.fm', // custom domain (apex) — primary host
+      'skipper-api-csslmysz7q-uk.a.run.app', // Cloud Run direct (cutover / fallback)
       'skipper-api.onrender.com', // Render prod (alternate target)
       'skipper-api-pr-*.onrender.com', // Render PR preview environments
     ],
-    protocol: 'auto', // http for localhost, https for the Cloud Run / Render hosts
-    fallback: 'https://skipper-api-csslmysz7q-uk.a.run.app', // base URL for any non-matching host + at init
+    protocol: 'auto', // http for localhost, https for the custom domain / Cloud Run hosts
+    fallback: 'https://skipper.fm', // base URL for any non-matching host + at init
   },
   database: drizzleAdapter(authDb, { provider: 'pg', schema: authSchema }),
   // Allow the mobile app's deep-link scheme for cross-origin auth + OAuth callbacks.
