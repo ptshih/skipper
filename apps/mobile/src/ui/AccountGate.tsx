@@ -37,7 +37,8 @@ export function AccountGate({
         <Button
           icon="ticket"
           title={voice.gate.action}
-          onPress={() => router.push('/sign-in')}
+          // The gate is the free-ACCOUNT funnel, so route to create-account mode, not sign-in.
+          onPress={() => router.push('/sign-in?mode=up')}
           style={styles.cta}
         />
         <Button

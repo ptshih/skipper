@@ -121,7 +121,7 @@
                 signedIn={auth.signedIn}
                 selectedRegion={selectedRegion}
                 onOpenTour={(id) => go("detail", { tourId: id })}
-                onSignIn={() => { setReturnTo("home"); go("signin"); }}
+                onSignIn={() => { setReturnTo("home"); go("signin", { authMode: "in" }); }}
                 onSettings={() => go("settings")}
                 onOpenRegions={() => go("regions")}
               />
@@ -152,6 +152,7 @@
           case "signin":
             view = (
               <SignInScreen
+                initialMode={nav.authMode}
                 onBack={() => go(returnTo)}
                 onAuthed={(email) => { setAuth({ signedIn: true, email, name: "" }); go(returnTo); }}
               />
@@ -166,7 +167,7 @@
                 savingName={savingName}
                 themeMode={themeMode}
                 onBack={() => go("home")}
-                onSignIn={() => { setReturnTo("settings"); go("signin"); }}
+                onSignIn={() => { setReturnTo("settings"); go("signin", { authMode: "in" }); }}
                 onSignOut={() => setAuth({ signedIn: false, email: "", name: "" })}
                 onSaveName={saveName}
                 onChangeThemeMode={setThemeMode}
@@ -178,7 +179,7 @@
             view = (
               <GateScreen
                 onBack={() => go("detail")}
-                onGetTicket={() => { setReturnTo("player"); go("signin"); }}
+                onGetTicket={() => { setReturnTo("player"); go("signin", { authMode: "up" }); }}
                 onSample={() => go("player")}
               />
             );

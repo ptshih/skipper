@@ -312,8 +312,10 @@ function RegionsScreen({ selectedRegion, onChoose, onClose }) {
 }
 
 // ── Sign in / Create account ───────────────────────────────────────────────
-function SignInScreen({ onBack, onAuthed }) {
-  const [mode, setMode] = React.useState("in");
+function SignInScreen({ onBack, onAuthed, initialMode }) {
+  // The free-ticket gate opens this in "up" (create account); the header/settings
+  // "Sign in" links open it in "in".
+  const [mode, setMode] = React.useState(initialMode === "up" ? "up" : "in");
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [busy, setBusy] = React.useState(false);

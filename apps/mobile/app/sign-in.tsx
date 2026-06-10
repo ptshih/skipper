@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { StyleSheet, TextInput, View } from 'react-native'
-import { Stack, useRouter } from 'expo-router'
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import { signIn, signUp } from '@/lib/auth'
 import { space } from '@/theme/tokens'
 import { Button, Input, Screen, Text, voice } from '@/ui'
@@ -9,7 +9,10 @@ import { Button, Input, Screen, Text, voice } from '@/ui'
 // on once their OAuth creds are set; add provider buttons here when they are.)
 export default function SignInScreen() {
   const router = useRouter()
-  const [mode, setMode] = useState<'in' | 'up'>('in')
+  // The free-ticket AccountGate links here to CREATE an account (?mode=up); the
+  // header/settings "Sign in" links omit the param and land on sign-in ('in').
+  const { mode: modeParam } = useLocalSearchParams<{ mode?: string }>()
+  const [mode, setMode] = useState<'in' | 'up'>(modeParam === 'up' ? 'up' : 'in')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
