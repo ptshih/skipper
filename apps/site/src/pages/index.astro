@@ -5,6 +5,10 @@
 const title = 'Skipper — AI-narrated driving tours'
 const description =
   'An AI skipper narrates the drive — GPS-triggered audio tours with a Jungle-Cruise heart.'
+
+// Absolute URLs for canonical + social cards (Astro.site = https://skipper.fm).
+const canonical = new URL(Astro.url.pathname, Astro.site)
+const ogImage = new URL('/og.png', Astro.site)
 ---
 
 <!doctype html>
@@ -15,9 +19,17 @@ const description =
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>{title}</title>
     <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Skipper" />
+    <meta property="og:url" content={canonical} />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
-    <meta property="og:type" content="website" />
+    <meta property="og:image" content={ogImage} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
     <style>
       :root {
         color-scheme: dark;
