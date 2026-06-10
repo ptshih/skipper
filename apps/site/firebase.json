@@ -1,5 +1,6 @@
 {
   "hosting": {
+    "site": "lithe-window-491818-k8",
     "public": "dist",
     "appAssociation": "NONE",
     "cleanUrls": true,

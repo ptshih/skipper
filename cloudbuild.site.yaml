@@ -1,0 +1,26 @@
+# Cloud Build pipeline for @skipper/site (the skipper.fm apex) on Firebase Hosting.
+#
+# build the static Astro site with bun -> deploy dist/ via the OFFICIAL Firebase builder
+# image (auth = the Cloud Build service account via ADC; no FIREBASE_TOKEN, no GitHub
+# secret). Driven by a push-to-main Cloud Build trigger that reuses the skipper-gh GitHub
+# connection, path-filtered to apps/site/** so it only fires on site changes.
+#
+# The build SA needs, BEYOND the API roles, roles/firebase.admin + roles/serviceusage.apiKeysViewer
+# on the FIREBASE project. See docs/guides/gcp-cloud-run-deploy.md.
+
+steps:
+  # 1. Install workspace deps + build the static site to apps/site/dist.
+  - name: 'oven/bun:1'
+    entrypoint: bash
+    args: ['-c', 'bun install --frozen-lockfile && bun --filter @skipper/site build']
+
+  # 2. Deploy to Firebase Hosting (official firebase image; ADC from the build SA).
+  - name: 'us-docker.pkg.dev/firebase-cli/us/firebase'
+    dir: 'apps/site'
+    args: ['deploy', '--only=hosting', '--project=${_FIREBASE_PROJECT}', '--non-interactive']
+
+substitutions:
+  _FIREBASE_PROJECT: 'lithe-window-491818-k8' # Firebase + Cloud Run share this project; trigger may override
+
+options:
+  logging: CLOUD_LOGGING_ONLY

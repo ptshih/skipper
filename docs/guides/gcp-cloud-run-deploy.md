@@ -125,8 +125,44 @@ curl -s "$URL/tours"    # {"tours":[...]}        — DB reachable + secret decry
 | `connections create github` → `could not assert Secret Manager permissions … P4SA … secretmanager.secrets.create denied` | The Cloud Build service agent (`…@gcp-sa-cloudbuild…`, not the Compute SA) stores the GitHub token as a secret | Grant that service agent `roles/secretmanager.admin` |
 | `triggers create github` → bare `INVALID_ARGUMENT` (even with a valid `--repository`) | Secure-by-default: no usable default Cloud Build SA, so a regional 2nd-gen trigger must name one | Add `--service-account=projects/<id>/serviceAccounts/<compute-SA>` |
 
+## The apex site (skipper.fm) — Firebase Hosting
+
+`apps/site` is a static Astro app for the `skipper.fm` apex, deployed to **Firebase
+Hosting** in the SAME project (`lithe-window-491818-k8`). It serves the iOS
+universal-links AASA as a static file (`public/.well-known/apple-app-site-association`);
+`firebase.json` sets `appAssociation:NONE` + the `application/json` Content-Type and drops
+the `**/.*` ignore glob so the dotfolder deploys. CD reuses the SAME `skipper-gh` GitHub
+connection via a second trigger (`cloudbuild.site.yaml`), path-filtered to `apps/site/**`,
+deploying with the official `us-docker.pkg.dev/firebase-cli/us/firebase` image (ADC, no token).
+
+```bash
+SA=666110297056-compute@developer.gserviceaccount.com
+# Build SA roles for Firebase deploy (per Cloud Build→Firebase docs; firebase.admin can be
+# narrowed to firebasehosting.admin if a hosting-only deploy is enough)
+gcloud projects add-iam-policy-binding lithe-window-491818-k8 --member=serviceAccount:$SA --role=roles/firebase.admin
+gcloud projects add-iam-policy-binding lithe-window-491818-k8 --member=serviceAccount:$SA --role=roles/serviceusage.apiKeysViewer
+
+# Ensure the default Hosting site exists (id = project id). If empty, use the console
+# (Build → Hosting → Get started) or:
+gcloud firebase hosting:sites:list --project lithe-window-491818-k8
+
+# Second trigger (reuses skipper-gh; only fires on apps/site changes)
+gcloud builds triggers create github --name=skipper-site-deploy --region=us-east4 \
+  --repository=projects/lithe-window-491818-k8/locations/us-east4/connections/skipper-gh/repositories/skipper \
+  --branch-pattern='^main$' --build-config=cloudbuild.site.yaml \
+  --included-files='apps/site/**,cloudbuild.site.yaml' \
+  --substitutions=_FIREBASE_PROJECT=lithe-window-491818-k8 \
+  --service-account=projects/lithe-window-491818-k8/serviceAccounts/$SA
+```
+
+Custom domain: Hosting console → Add custom domain → `skipper.fm` → add its records at
+Cloudflare as **DNS-only (grey cloud)**. Manual deploy: `firebase deploy --only hosting`
+from `apps/site` (a `.firebaserc` pins the project).
+
 ## Files
 
-- `cloudbuild.yaml` — the build → push → deploy pipeline (this is the contract).
+- `cloudbuild.yaml` — the API build → push → deploy pipeline (this is the contract).
+- `cloudbuild.site.yaml` — the apex site build → Firebase Hosting deploy.
 - `.gcloudignore` — trims the Cloud Build upload; re-excludes `.env.keys`.
 - `apps/api/Dockerfile` — the lean Bun image (header explains the workspace trim).
+- `apps/site/` — the Astro apex site (`firebase.json`, `.firebaserc`, static AASA).
