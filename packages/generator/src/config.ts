@@ -103,6 +103,25 @@ export const SCOUT_MAX_TOOL_TURNS = 5
 /** Max output tokens per scout turn (it emits tool calls + a sentence of reason, never prose). */
 export const SCOUT_MAX_TOKENS = 1_000
 
+// --- Bounded fan-out (pipeline/concurrency.ts) --------------------------------
+
+/** Env-overridable positive-int knob (≥1); falls back to the default when unset/garbage. */
+function intKnob(raw: string | undefined, fallback: number): number {
+  const n = Number(raw)
+  return Number.isFinite(n) && n >= 1 ? Math.floor(n) : fallback
+}
+/** Concurrent TTS synth+upload calls on a full run. The clips are independent (scripts
+ * frozen, per-run keys), so the phase is bounded by its LONGEST clip instead of the sum —
+ * measured 2026-06-09: a 27-min tour spent ~10 min synthesizing serially at ~0.38× audio
+ * length per clip. Gemini-TTS 3.1-preview has NO fixed QPM quota (dynamic Standard-PayGo
+ * throughput); Google's guidance is steady traffic + exponential backoff on 429, which
+ * fetchWithRetry already provides. 6 keeps the fan-out modest (no second-level spikes). */
+export const TTS_CONCURRENCY = (): number => intKnob(process.env.SKIPPER_TTS_CONCURRENCY, 6)
+/** Concurrent scout agent runs — independent per stop (each reads only its OWN sheet and
+ * stop-keyed tools). No prompt-cache interplay: scout calls carry no cache_control and
+ * their prefix is under the Opus cacheable minimum. */
+export const SCOUT_CONCURRENCY = (): number => intKnob(process.env.SKIPPER_SCOUT_CONCURRENCY, 4)
+
 // --- Eval panel + evaluator-optimizer (the in-pipeline flywheel) -------------
 
 // generate.ts runs the eval panel (src/eval/) DURING generation and feeds findings back

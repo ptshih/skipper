@@ -37,10 +37,14 @@ import {
   PACING,
   QUEUE_LAG_WARN_SEC,
   R2_READY,
+  SCOUT_CONCURRENCY,
   SCOUT_ENRICHMENT,
+  TTS_CONCURRENCY,
   WIKIDATA_ENRICHMENT,
   requireEnv,
 } from '../config'
+import { mapLimit } from './concurrency'
+import { estimateTtsUsd, llmSpendLines, llmSpentUsd, unpricedModels } from './spend'
 import {
   buildGroundingWell,
   buildScorecard,
@@ -99,6 +103,10 @@ export interface GenerateOptions {
   dryRun?: boolean
   /** Run the optional semantic-closer judge (one extra model call) after the lint. */
   judgeClosers?: boolean
+  /** Abort BEFORE the TTS/R2 phase if (LLM spent so far + estimated TTS) exceeds this many
+   *  USD. LLM spend is already SUNK at the gate — the cap saves the TTS bill and leaves the
+   *  tour untouched (scripts + the eval record still land, like a dry run). */
+  maxCostUsd?: number
 }
 
 export interface StopSummary {
@@ -182,6 +190,12 @@ export interface GenerateResult {
   brackets: BracketSummary[]
   /** The eval panel's scorecard + optimizer trace for this run (persisted via --json). */
   eval: TourEvalReport
+  /** Wall-clock per pipeline phase (ms) — rides the artifact into eval_runs so profiling
+   *  a run is a query, not R2-timestamp archaeology. */
+  timings?: Record<string, number>
+  /** True when the --max-cost gate stopped the run before TTS (dryRun is also true then:
+   *  no tour state was written — that is what dry means in the eval record). */
+  costCapped?: boolean
 }
 
 const firstSentence = (facts: string[]): string | null => facts[0] ?? null
@@ -200,6 +214,14 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   const judgeClosers = Boolean(opts.judgeClosers)
 
   if (!ANTHROPIC_READY()) throw new Error('ANTHROPIC_API_KEY is not set (narration requires it).')
+  // A money guardrail must never be silently OFF: NaN satisfies `!== undefined` while every
+  // `>` comparison reads false — fail fast BEFORE any model call is paid for (review-caught).
+  if (
+    opts.maxCostUsd !== undefined &&
+    !(Number.isFinite(opts.maxCostUsd) && opts.maxCostUsd > 0)
+  ) {
+    throw new Error(`maxCostUsd must be a finite positive dollar amount (got ${opts.maxCostUsd})`)
+  }
   if (!dryRun) {
     if (!GOOGLE_TTS_READY())
       throw new Error(
@@ -239,6 +261,25 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       (shell.durationSeconds ? '' : ' [estimated drive time]'),
   )
 
+  // Phase wall-clock (ms) — recorded on the result so eval_runs carries the profile.
+  const runStart = Date.now()
+  const timings: Record<string, number> = {}
+  let lapStart = runStart
+  const lap = (phase: string): void => {
+    timings[phase] = Date.now() - lapStart
+    lapStart = Date.now()
+  }
+  const finishTimings = (): Record<string, number> => {
+    timings.total = Date.now() - runStart
+    console.log(
+      'Phase timings: ' +
+        Object.entries(timings)
+          .map(([k, v]) => `${k} ${(v / 1000).toFixed(1)}s`)
+          .join(' · '),
+    )
+    return timings
+  }
+
   // 2. Candidates from the Wikidata discovery spine: STORY = a Wikipedia article (prose),
   //    SCENIC = a named Wikidata feature with no article (a bay/beach). Wikipedia is the
   //    PROSE layer now, joined per story candidate by sitelink — not the discovery layer.
@@ -250,6 +291,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
     `Found ${candidates.length} corridor entities → ${wikiPois.length} candidates ` +
       `(${storyCount} story-grade, ${wikiPois.length - storyCount} named-scenic).`,
   )
+  lap('discovery')
 
   // 3. Break-stop anchors from Places (non-fatal — breaks are a nicety).
   let breakAnchors: BreakAnchor[] = []
@@ -266,6 +308,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   } else {
     console.warn('GOOGLE_MAPS_API_KEY not set — skipping break stops.')
   }
+  lap('places')
 
   // 4. Select + time-pace stops.
   const plan = selectStops({
@@ -321,6 +364,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
     }
     console.log(`Deepened ${deep.size}/${storyStops.length} story fact sheets.`)
   }
+  lap('deepenFacts')
 
   // Geology enrichment for SCENIC stops (Macrostrat, CC BY 4.0): a coordinate-keyed fact
   // layer — the rock you are driving through, grounded from geologic maps. SCENIC gets it
@@ -332,17 +376,19 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   if (GEOLOGY_ENRICHMENT()) {
     const scenicStops = plan.filter((s) => s.stopType === 'scenic')
     console.log(`Enriching ${scenicStops.length} scenic stops with Macrostrat geology...`)
+    // Independent coordinate lookups — bounded fan-out instead of one-at-a-time.
     let geoHits = 0
-    for (const s of scenicStops) {
+    await mapLimit(scenicStops, 4, async (s) => {
       const geo = await geologyFacts(s.triggerLat, s.triggerLng)
       if (geo) {
         s.geology = geo.facts
         s.geologyAttribution = geo.attribution
         geoHits++
       }
-    }
+    })
     console.log(`Geology grounded ${geoHits}/${scenicStops.length} scenic stops.`)
   }
+  lap('geology')
 
   // STORY-stop enrichment is the SCOUT's call (pipeline/scout.ts): a bounded tool-using
   // agent reads each stop's deepened sheet, judges what the telling is missing, fetches
@@ -356,7 +402,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   if (SCOUT_ENRICHMENT()) {
     const scoutStops = plan.filter((s) => s.stopType === 'story')
     console.log(`Scouting enrichment for ${scoutStops.length} story stops (judgment, not char-gates)...`)
-    for (const s of scoutStops) {
+    const runScout = async (s: StopPlan): Promise<void> => {
       try {
         const decision = await scoutStop(
           {
@@ -388,7 +434,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
         )
         if (!decision) {
           console.log(`  stop ${s.seq} ("${s.name}"): scout passed (no enrichment).`)
-          continue
+          return
         }
         if (decision.geology) {
           s.geology = decision.geology.facts
@@ -414,7 +460,13 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
         )
       }
     }
+    // The scouts are independent per stop (each touches only its OWN StopPlan) — bounded
+    // fan-out. NOTE (review-caught): no warm-first staggering — scout calls set no
+    // cache_control, so there is no prompt cache to warm (and the scout's small
+    // tools+system prefix sits under Opus's 4096-token cacheable minimum anyway).
+    await mapLimit(scoutStops, SCOUT_CONCURRENCY(), runScout)
   }
+  lap('scout')
 
   // Each stop is an independent narration call, so the model can't see its own
   // prior output. We feed it (a) recent place names for earned callbacks and
@@ -548,6 +600,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
     rememberStop(s, script)
     narratedRecs.push({ s, script })
   }
+  lap('narration')
 
   // ---- The eval panel + evaluator-optimizer (the in-pipeline flywheel). ----------------
   // Findings feed regeneration through optimize() (accept-if-not-worse, gate-weighted, per-
@@ -833,14 +886,16 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       ` (regen attempts: panel ${regens.panel.used}/${regens.panel.budget}, grounding ${regens.grounding.used}/${regens.grounding.budget}).`,
   )
   const evalReport: TourEvalReport = { scorecard, passes: passTraces, regens }
+  lap('evalPanel')
   const scriptBySeq = new Map(narratedRecs.map((r) => [r.s.seq, r.script]))
 
   // Intro + outro brackets — the drive's FRAME (persona-only, no fact sheet). The
   // personal KIT, banned from stops, lives in the intro; the sentimental bow in the
   // outro. Mandatory (the ready-gate requires both), so a narration failure aborts.
   console.log('Narrating intro + outro brackets...')
-  const introScript = (
-    await narrateIntro(
+  // Two independent calls (the bracket prompt threads no cross-stop state) — run together.
+  const [introScript, outroScript] = await Promise.all([
+    narrateIntro(
       {
         region: shell.regionName,
         startAnchor: shell.startAnchorName,
@@ -850,25 +905,57 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
         hostName: persona.hostName,
       },
       persona.bracketPrompt,
-    )
-  ).script
-  const outroScript = (
-    await narrateOutro(
+    ).then((r) => r.script),
+    narrateOutro(
       {
         region: shell.regionName,
         endAnchor: shell.endAnchorName,
         jokeLevel,
       },
       persona.bracketPrompt,
-    )
-  ).script
+    ).then((r) => r.script),
+  ])
   const bracketPlan: { kind: BracketKind; script: string }[] = [
     { kind: 'intro', script: introScript },
     { kind: 'outro', script: outroScript },
   ]
+  lap('bracketNarration')
 
-  // ---- Dry run: print finalized scripts, no writes. -----------------------
-  if (dryRun) {
+  // ---- Run spend: the sunk LLM tally + the TTS estimate (the --max-cost gate). --------
+  // This is the LAST moment a cap can save real money: narration/judging is already paid
+  // (and recorded per call in pipeline/spend.ts); TTS + R2 are the one cost still ahead.
+  const ttsEstimate = estimateTtsUsd(
+    [...plan.map((s) => scriptBySeq.get(s.seq)!), ...bracketPlan.map((b) => b.script)],
+    persona.ttsStyle.length,
+  )
+  for (const line of llmSpendLines()) console.log(line)
+  const llmUsd = llmSpentUsd()
+  console.log(
+    `TTS estimate: ~$${ttsEstimate.usd.toFixed(2)} (~${Math.round(ttsEstimate.estSeconds / 60)} min audio)` +
+      ` · run total ≈ $${(llmUsd + ttsEstimate.usd).toFixed(2)}`,
+  )
+  // An unpriced model would read as $0 spend — with a cap set that must fail SAFE
+  // (treat as exceeded), never silently under-count (review-caught).
+  const unpriced = unpricedModels()
+  if (opts.maxCostUsd !== undefined && unpriced.length > 0) {
+    console.warn(
+      `⚠ --max-cost is set but spend for ${unpriced.join(', ')} is UNPRICED — add it to ` +
+        `MODEL_PRICING (pipeline/spend.ts). Failing safe: treating the cap as exceeded.`,
+    )
+  }
+  const costCapped =
+    !dryRun &&
+    opts.maxCostUsd !== undefined &&
+    (unpriced.length > 0 || llmUsd + ttsEstimate.usd > opts.maxCostUsd)
+  if (costCapped) {
+    console.warn(
+      `⛔ --max-cost $${opts.maxCostUsd!.toFixed(2)} would be exceeded (≈$${(llmUsd + ttsEstimate.usd).toFixed(2)})` +
+        ` — skipping TTS/R2/tour-state writes. Scripts + the eval record still land below.`,
+    )
+  }
+
+  // ---- Dry run (or cost-capped): finalized scripts, NO tour-state writes. ---
+  if (dryRun || costCapped) {
     // Every stop now has a script (breaks included) — print them all so the named
     // break narration can be eyeballed before any TTS spend.
     const stops: StopSummary[] = plan.map((s) => ({
@@ -901,10 +988,14 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       durationBucket,
       jokeLevel,
       totalSec,
+      // Cost-capped runs report dryRun too — it is the honest record shape (no tour state
+      // was written); `costCapped` is what distinguishes them in the artifact.
       dryRun: true,
       stops,
       brackets: bracketPlan.map((b) => ({ kind: b.kind, script: b.script })),
       eval: evalReport,
+      timings: finishTimings(),
+      ...(costCapped ? { costCapped: true } : {}),
     }
     // Record the eval run durably (eval_runs/eval_scores — observability, not tour state;
     // the ONE thing a dry run writes). Best-effort: a recording failure never kills a run.
@@ -925,33 +1016,75 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
     const finalBrackets: FinalBracket[] = []
     const summaries: StopSummary[] = []
 
-    for (const s of plan) {
+    // Per-stop identity first (facts hash, per-run clip id), then the poi upserts as a
+    // bounded fan-out — independent rows, kept OUT of the synth pool so a DB hiccup
+    // surfaces before any TTS spend.
+    const prep = plan.map((s) => {
       // Every stop anchors to a POI (break stops included). Story stops carry facts;
       // the facts_hash is the narration's grounding fingerprint (staleness detector).
       const facts =
         s.stopType === 'story'
           ? { extract: s.facts.join(' '), title: s.wikiTitle, url: s.wikiUrl, pageId: s.wikiPageId }
           : null
-      const factsHash = hashFacts(facts)
-      const poiId = await upsertPoi({
-        source: s.source,
-        sourceId: s.sourceId,
-        name: s.name,
-        kind: s.kind,
-        lat: s.lat,
-        lng: s.lng,
-        summary: s.stopType === 'story' ? firstSentence(s.facts) : null,
+      return {
+        s,
         facts,
-        factsHash,
-      })
+        factsHash: hashFacts(facts),
+        // Every stop — break included — synthesizes to a TOUR-scoped per-run key.
+        // (Break clips name the curated Places anchor; no Wikipedia text, no attribution.)
+        stopId: crypto.randomUUID(),
+        script: scriptBySeq.get(s.seq)!,
+      }
+    })
+    const poiIds = await mapLimit(prep, 6, (p) =>
+      upsertPoi({
+        source: p.s.source,
+        sourceId: p.s.sourceId,
+        name: p.s.name,
+        kind: p.s.kind,
+        lat: p.s.lat,
+        lng: p.s.lng,
+        summary: p.s.stopType === 'story' ? firstSentence(p.s.facts) : null,
+        facts: p.facts,
+        factsHash: p.factsHash,
+      }),
+    )
 
-      // Every stop — break included — now narrates + synthesizes to a TOUR-scoped key.
-      // (Break clips name the curated Places anchor; no Wikipedia text, no attribution.)
-      const stopId = crypto.randomUUID()
-      const script = scriptBySeq.get(s.seq)!
-      console.log(`Synthesizing stop ${s.seq} (${s.stopType}) "${s.name}"...`)
+    // ONE bounded synth+upload pool over every clip — all stops plus both brackets. The
+    // clips are independent (scripts frozen above, ids per-run), so wall-clock is bounded
+    // by the longest clip, not the sum (the serial loop measured ~10 min on a 27-min
+    // tour). A failure rejects the pool and the catch below restores status; in-flight
+    // siblings settle as orphaned R2 objects — the same accepted per-run-key trade as a
+    // failed serial run. Bracket keys are PER-RUN (see bracketKey) so this run can never
+    // overwrite the live telling's bracket bytes before its own ready-gate commits.
+    const bracketRunId = crypto.randomUUID()
+    const synthOne = async (script: string, key: string, label: string) => {
+      console.log(`Synthesizing ${label}...`)
       const { audio, durationMs } = await synthesize(script, persona.voice, persona.ttsStyle)
-      const audioUrl = await uploadAudio(clipKey(tourId, stopId), audio)
+      const audioUrl = await uploadAudio(key, audio)
+      return { audioUrl, durationMs }
+    }
+    console.log(
+      `Synthesizing ${prep.length} stop clips + ${bracketPlan.length} brackets (concurrency ${TTS_CONCURRENCY()})...`,
+    )
+    const clipTasks: (() => Promise<{ audioUrl: string; durationMs: number }>)[] = [
+      ...prep.map(
+        (p) => () =>
+          synthOne(p.script, clipKey(tourId, p.stopId), `stop ${p.s.seq} (${p.s.stopType}) "${p.s.name}"`),
+      ),
+      ...bracketPlan.map(
+        (b) => () => synthOne(b.script, bracketKey(tourId, b.kind, bracketRunId), `${b.kind} bracket`),
+      ),
+    ]
+    const clips = await mapLimit(clipTasks, TTS_CONCURRENCY(), (task) => task())
+
+    // Assemble the final rows in plan order (mapLimit preserves item order: first the
+    // stops, then the two brackets).
+    for (const [i, p] of prep.entries()) {
+      const s = p.s
+      const poiId = poiIds[i]!
+      const { audioUrl, durationMs } = clips[i]!
+      const { stopId, script, factsHash } = p
 
       // Frozen attribution — an ARRAY, one entry per source this clip drew on. Story
       // clips reuse Wikipedia extract text (CC BY-SA, required). Any stop — story OR
@@ -1022,18 +1155,14 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       })
     }
 
-    // Synthesize the brackets to PER-RUN keys (clips/<tourId>/<runId>-intro|outro) so this
-    // run can never overwrite the live telling's bracket bytes before its own ready-gate
-    // commits (see bracketKey). One id per run — both brackets share it.
-    const bracketRunId = crypto.randomUUID()
+    // Bracket rows — their clips came through the same pool, after the stop entries.
     const bracketSummaries: BracketSummary[] = []
-    for (const b of bracketPlan) {
-      console.log(`Synthesizing ${b.kind} bracket...`)
-      const { audio, durationMs } = await synthesize(b.script, persona.voice, persona.ttsStyle)
-      const audioUrl = await uploadAudio(bracketKey(tourId, b.kind, bracketRunId), audio)
+    for (const [j, b] of bracketPlan.entries()) {
+      const { audioUrl, durationMs } = clips[prep.length + j]!
       finalBrackets.push({ kind: b.kind, script: b.script, audioUrl, audioDurationMs: durationMs })
       bracketSummaries.push({ kind: b.kind, script: b.script, durationMs })
     }
+    lap('tts')
 
     // Ready-gate guard: EVERY stop must have audio before we flip — breaks included
     // (break audio is mandatory; a tour never goes ready with a silent stop). The
@@ -1047,6 +1176,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
     }
 
     await finalizeTourReady(tourId, finalStops, finalBrackets)
+    lap('finalize')
     console.log(
       `Tour ${tourId} is READY (${finalStops.length} stops, ${finalBrackets.length} brackets).`,
     )
@@ -1063,6 +1193,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       stops: summaries,
       brackets: bracketSummaries,
       eval: evalReport,
+      timings: finishTimings(),
     }
     // Record the eval run durably (observability — see the dry path's note).
     await recordGenerationEval(liveResult).catch((e) =>

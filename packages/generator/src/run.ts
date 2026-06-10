@@ -15,6 +15,9 @@
 //   --joke-level=<notch> off | mild | dad | dadpocalypse   (default: dadpocalypse)
 //                        The Dad-Joke-O-Meter notch to NARRATE at — a generation input,
 //                        baked into the audio (NOT stored on the tour). M1 = dadpocalypse.
+//   --max-cost=<usd>     Abort BEFORE the TTS/R2 phase if (LLM spent + estimated TTS)
+//                        exceeds this. LLM spend is sunk by then — the cap saves the TTS
+//                        bill; scripts + the eval record still land (like a dry run).
 //   --json=<path>        Also write the full result (scripts + STORY fact sheets) as
 //                        JSON — the artifact for an out-of-band grounding/quality audit.
 //
@@ -36,6 +39,7 @@ interface Args {
   durationBucket: Duration
   /** The notch to narrate at — a generation input, default dadpocalypse (M1). */
   jokeLevel: JokeLevel
+  maxCostUsd?: number
   jsonPath?: string
 }
 
@@ -44,8 +48,18 @@ function parseArgs(argv: string[]): Args {
   const slug = args.find((a) => !a.startsWith('--'))
   if (!slug) {
     throw new Error(
-      'Usage: run.ts <tour-slug> [--dry-run] [--no-judge-closers] [--duration=short|standard|long] [--joke-level=off|mild|dad|dadpocalypse] [--json=<path>]',
+      'Usage: run.ts <tour-slug> [--dry-run] [--no-judge-closers] [--duration=short|standard|long] [--joke-level=off|mild|dad|dadpocalypse] [--max-cost=<usd>] [--json=<path>]',
     )
+  }
+  // Reject unrecognized flags loudly — a dropped flag is harmless for most of these, but a
+  // silently ignored `--max-cost 5` (space instead of =) would run UNCAPPED and spend money.
+  const KNOWN_FLAGS = ['--dry-run', '--no-judge-closers']
+  const KNOWN_PREFIXES = ['--duration=', '--joke-level=', '--max-cost=', '--json=']
+  const unknown = args.filter(
+    (a) => a.startsWith('--') && !KNOWN_FLAGS.includes(a) && !KNOWN_PREFIXES.some((p) => a.startsWith(p)),
+  )
+  if (unknown.length > 0) {
+    throw new Error(`Unrecognized flag(s): ${unknown.join(' ')} — value flags use =, e.g. --max-cost=5`)
   }
   const dryRun = args.includes('--dry-run')
   const judgeClosers = !args.includes('--no-judge-closers') // ON by default; opt out to save a call
@@ -59,6 +73,14 @@ function parseArgs(argv: string[]): Args {
   if (!JOKE_NOTCHES.options.includes(jokeArg as JokeLevel)) {
     throw new Error(`--joke-level must be one of ${JOKE_NOTCHES.options.join(', ')} (got "${jokeArg}")`)
   }
+  const costArg = args.find((a) => a.startsWith('--max-cost='))?.split('=')[1]
+  let maxCostUsd: number | undefined
+  if (costArg !== undefined) {
+    maxCostUsd = Number(costArg)
+    if (!Number.isFinite(maxCostUsd) || maxCostUsd <= 0) {
+      throw new Error(`--max-cost must be a positive dollar amount (got "${costArg}")`)
+    }
+  }
   const jsonPath = args.find((a) => a.startsWith('--json='))?.split('=')[1] || undefined
   return {
     slug,
@@ -66,6 +88,7 @@ function parseArgs(argv: string[]): Args {
     judgeClosers,
     durationBucket: durArg as Duration,
     jokeLevel: jokeArg as JokeLevel,
+    ...(maxCostUsd !== undefined ? { maxCostUsd } : {}),
     jsonPath,
   }
 }
@@ -85,8 +108,9 @@ const estSpokenSec = (script: string): number =>
 
 function printResult(r: GenerateResult): void {
   console.log('\n' + '='.repeat(72))
+  const mode = r.costCapped ? 'COST-CAPPED (scripts only — TTS skipped)' : r.dryRun ? 'DRY RUN' : 'GENERATED'
   console.log(
-    `${r.dryRun ? 'DRY RUN' : 'GENERATED'} — ${r.tourName} (${r.region}) · ${r.durationBucket} · ${r.jokeLevel} · ~${Math.round(r.totalSec / 60)} min drive`,
+    `${mode} — ${r.tourName} (${r.region}) · ${r.durationBucket} · ${r.jokeLevel} · ~${Math.round(r.totalSec / 60)} min drive`,
   )
   if (r.tourId) console.log(`tour id: ${r.tourId}`)
   console.log('='.repeat(72))
@@ -139,9 +163,16 @@ function printResult(r: GenerateResult): void {
 }
 
 async function main() {
-  const { slug, dryRun, judgeClosers, durationBucket, jokeLevel, jsonPath } =
+  const { slug, dryRun, judgeClosers, durationBucket, jokeLevel, maxCostUsd, jsonPath } =
     parseArgs(process.argv)
-  const result = await generateTour({ slug, dryRun, judgeClosers, durationBucket, jokeLevel })
+  const result = await generateTour({
+    slug,
+    dryRun,
+    judgeClosers,
+    durationBucket,
+    jokeLevel,
+    ...(maxCostUsd !== undefined ? { maxCostUsd } : {}),
+  })
   printResult(result)
   if (jsonPath) {
     await Bun.write(jsonPath, JSON.stringify(result, null, 2))

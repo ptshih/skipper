@@ -15,6 +15,7 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import { JUDGMENT_MODEL } from '../models'
+import { recordModelUsage } from './spend'
 import type { LintFinding } from './lint'
 
 // A light classification task on the shared JUDGMENT_MODEL (Opus) — one forced-tool
@@ -135,6 +136,7 @@ export async function judgeCloserDiversity(stops: CloserInput[]): Promise<LintFi
     tool_choice: { type: 'tool', name: 'report' },
     messages: [{ role: 'user', content: userMessage }],
   })
+  recordModelUsage(JUDGE_MODEL, response.usage)
 
   const call = response.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
   if (!call) return []

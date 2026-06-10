@@ -21,6 +21,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import type { JokeLevel, StopType } from '@skipper/shared'
 import { NARRATION_MODEL } from '../models'
+import { recordModelUsage } from './spend'
 
 /**
  * Generous ceiling. A long-form story script (~2 min ≈ ~300 words ≈ ~450 output
@@ -355,6 +356,7 @@ async function runNarration(
     system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
     messages: [{ role: 'user', content: userMessage }],
   })
+  recordModelUsage(NARRATION_MODEL, response.usage)
 
   if (response.stop_reason === 'refusal') {
     throw new Error(`Narration refused for ${label}: ${JSON.stringify(response.stop_details ?? {})}`)

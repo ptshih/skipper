@@ -19,6 +19,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import type { StopType } from '@skipper/shared'
 import { JUDGMENT_MODEL } from '../models'
+import { recordModelUsage } from '../pipeline/spend'
 import type { ClaimStatus, ClaimVerdict, StopEval } from './types'
 
 // A well-scoped, once-per-stop entailment task on the shared JUDGMENT_MODEL (Opus).
@@ -197,6 +198,7 @@ export const anthropicDecomposer: ClaimDecomposer = async (input) => {
     tool_choice: { type: 'tool', name: 'report' },
     messages: [{ role: 'user', content: buildUserMessage(input) }],
   })
+  recordModelUsage(GROUNDING_MODEL, response.usage)
   const call = response.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
   if (!call) throw new Error(`Grounding eval: model returned no tool call for stop ${input.seq}.`)
   const raw = (call.input as { claims?: unknown[] }).claims ?? []

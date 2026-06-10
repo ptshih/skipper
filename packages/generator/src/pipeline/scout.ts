@@ -26,6 +26,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import type { AttributionSnapshot } from '@skipper/db/schema'
 import { SCOUT_MAX_TOKENS, SCOUT_MAX_TOOL_TURNS } from '../config'
 import { JUDGMENT_MODEL } from '../models'
+import { recordModelUsage } from './spend'
 
 // Judgment-tier, not narration-tier: the scout reads a sheet and picks fetches — the shared
 // JUDGMENT_MODEL (Opus) at a few short turns per stop. It forces tool_choice {type:'any'}
@@ -178,8 +179,8 @@ function getClient(): Anthropic {
   return cached
 }
 
-const anthropicScoutCall: ScoutModelCall = async ({ system, tools, messages }) =>
-  getClient().messages.create({
+const anthropicScoutCall: ScoutModelCall = async ({ system, tools, messages }) => {
+  const response = await getClient().messages.create({
     model: SCOUT_MODEL,
     max_tokens: SCOUT_MAX_TOKENS,
     system,
@@ -187,6 +188,9 @@ const anthropicScoutCall: ScoutModelCall = async ({ system, tools, messages }) =
     tool_choice: { type: 'any' }, // every turn acts: fetch or finalize — no free prose
     messages,
   })
+  recordModelUsage(SCOUT_MODEL, response.usage) // real calls only — injected test fakes don't tally
+  return response
+}
 
 /**
  * Run the scout for one story stop. Returns the enrichment decision, or null when the stop

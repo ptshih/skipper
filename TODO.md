@@ -22,26 +22,23 @@ still can.
 Refs: CLAUDE.md (top doctrine + Hard invariants), `packages/shared/src/schemas.ts`,
 `apps/api/src/index.ts`.
 
-## Cost guardrail on `generateTour`
+## Generation is not resumable — checkpoint the TTS spend
 
-The one stated operational risk is *"a live regen burns GCP credits"* (CLAUDE.md), yet
-cost control is mostly human discipline (the "founder OK"). Partially addressed
-(2026-06-09): the eval-driven regen loop is hard-capped (`EVAL_REGEN_BUDGET` +
-per-pass/round caps in `config.ts`), so LLM re-narration spend is bounded per tour.
-Still open:
+The cost *guardrail* shipped 2026-06-09: every Anthropic call records its usage
+(`pipeline/spend.ts`), generate.ts prints the sunk LLM spend + a token-based TTS estimate
+right before the TTS/R2 phase, and `--max-cost` aborts there (scripts + eval record still
+land, tour state untouched); the regen loop was already hard-capped (`EVAL_REGEN_BUDGET`).
+What remains is the ROBUSTNESS half: generation is **not resumable** — a crash mid-run
+wastes all prior LLM+TTS spend (fresh per-run clip ids mean a retry re-synthesizes
+everything) and orphans R2 objects. `storage.ts` already exposes `audioExists` ("lets
+callers skip re-synthesis") with zero callers.
 
-- [ ] Print an **estimated spend** (LLM input/output tokens + TTS characters → rough $)
-      BEFORE the TTS/R2 phase, so a full run shows its cost before paying for it.
-- [ ] Optionally a `--max-cost` / `--max-tts-chars` abort, and/or a confirmation gate on a
-      full (non-`--dry-run`) regen.
-- Related robustness (compounds the cost win; promote to its own item if tackled): generation
-  is **not resumable** and clip uploads are **not transactional** with the final `db.batch` —
-  a crash mid-run wastes all prior LLM+TTS spend and can orphan R2 objects (no cleanup).
-  Checkpointing synthesized clips and/or an orphan sweep would cap the blast radius.
+- [ ] Checkpoint synthesized clips (key by script hash, or persist run progress) so a
+      retry resumes instead of re-paying the whole TTS phase.
 
-Refs: `packages/generator/src/pipeline/generate.ts` (the narrate → TTS → upload loop +
-the atomic ready-gate), `packages/generator/src/run.ts` (`--dry-run` already skips spend),
-`packages/generator/src/pipeline/tts.ts`.
+Refs: `packages/generator/src/pipeline/generate.ts` (the bounded synth pool + atomic
+ready-gate), `packages/generator/src/pipeline/storage.ts` (`audioExists`), and the R2
+orphan sweep item below (the other half of the blast radius).
 
 ## R2 orphan sweep (cost cruft from regens)
 
