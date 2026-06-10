@@ -7,6 +7,8 @@
 //   GET  /tours                      -> list ready tours, one card per drive (anonymous OK)
 //   GET  /tours/:tourId              -> a ready drive: route + region + host + intro/outro + stops
 //   POST /tours/:tourId/assets/sign  -> presigned R2 URLs for the drive's audio (stops + brackets)
+//   GET  /.well-known/apple-app-site-association -> iOS universal-links AASA (claims /t/*)
+//   GET  /t/:tourId                  -> shareable tour link: in-app universal link + OG web fallback
 //
 // A tour is the whole self-contained drive now (corridors merged in; zero-reuse:
 // narration is tour-owned). Freemium gating: a `?preview=1` fetch/sign is OPEN for any
@@ -23,6 +25,7 @@ import type { Tour as TourRow } from '@skipper/db/schema'
 import { auth } from './auth'
 import { FEATURES, meetsTier, withSession, type ApiEnv } from './entitlements'
 import { hostForRegion } from './host'
+import { APPLE_APP_SITE_ASSOCIATION, shareLandingHtml } from './share'
 import { DATA_SOURCES } from './sources'
 import { contentTypeForKey, presignGet } from './storage'
 import { VERSION_POLICIES } from './version-policy'
@@ -52,6 +55,48 @@ app.get('/sources', (c) => c.json({ sources: DATA_SOURCES }))
 // never an App Store release. The client compares its own version (@skipper/shared
 // `gateFor`) and shows a dismissible nudge or a blocking "update required" wall.
 app.get('/version', (c) => c.json({ policies: VERSION_POLICIES }))
+
+// iOS universal links: claim https://skipper.fm/t/* for the app so a shared tour link opens
+// in-app, not Safari. Anonymous + env-free (no DB), like /sources + /version. c.json sets the
+// required Content-Type: application/json; the file must stay 200 / no-redirect / no-auth at
+// this exact /.well-known path with no extension — Apple's crawler rejects anything else. The
+// payload (modern appIDs + components form) lives in ./share. Once skipper.fm points at this
+// server, verify: curl -i https://skipper.fm/.well-known/apple-app-site-association.
+app.get('/.well-known/apple-app-site-association', (c) => c.json(APPLE_APP_SITE_ASSOCIATION))
+
+// Human/crawler fallback for a shared tour link — the app intercepts it on an installed
+// iPhone; everyone else (Android, desktop, iMessage/social unfurlers) lands here. Open, since
+// tours are shareable/anonymous. Names the tour so the link unfurls with Open Graph tags;
+// falls back to generic copy on a bad id, a missing/not-ready tour, or a DB hiccup — the
+// share page never 500s.
+app.get('/t/:id', async (c) => {
+  const id = c.req.param('id')
+  let title = 'Skipper'
+  let description = 'An AI-narrated, GPS-triggered road-trip audio tour.'
+  if (UUID_RE.test(id)) {
+    try {
+      const rows = await db
+        .select({
+          headline: tours.headline,
+          summary: tours.summary,
+          status: tours.status,
+          region: regions.displayName,
+        })
+        .from(tours)
+        .innerJoin(regions, eq(tours.regionId, regions.id))
+        .where(eq(tours.id, id))
+        .limit(1)
+      const t = rows[0]
+      if (t && t.status === 'ready') {
+        title = t.headline ?? title
+        description = t.summary ?? `A Skipper road-trip tour of ${t.region}.`
+      }
+    } catch (e) {
+      console.error('[api] /t/:id share-page lookup failed', e) // fall through to generic copy
+    }
+  }
+  return c.html(shareLandingHtml({ title, description, url: `https://skipper.fm/t/${id}` }))
+})
 
 // Better Auth owns everything under /api/auth/* (its own handler).
 app.on(['POST', 'GET'], '/api/auth/*', (c) => auth.handler(c.req.raw))

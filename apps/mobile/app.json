@@ -9,8 +9,9 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "bundleIdentifier": "tours.skipper.app",
+      "bundleIdentifier": "fm.skipper.app",
       "supportsTablet": true,
+      "associatedDomains": ["applinks:skipper.fm"],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSAppTransportSecurity": {
@@ -24,7 +25,7 @@
       }
     },
     "android": {
-      "package": "tours.skipper.app",
+      "package": "fm.skipper.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#F2E7CC"

@@ -34,7 +34,9 @@ share the build, so do them together.
 
 ### Build prerequisites
 - **Signing.** Apple Developer membership; the iPhone's UDID registered. The native project signs
-  automatically — team `AYA5T52A22`, bundle `tours.skipper.app` (`apps/mobile/app.json`). First
+  automatically — team `L24UJYJ5DK` (Manoa, Inc.), bundle `fm.skipper.app` (`apps/mobile/app.json`).
+  Requires your Apple ID to be a member of the Manoa, Inc. team with `fm.skipper.app` registered as
+  an App ID there (the personal team `AYA5T52A22` whose dev cert is in the keychain can NOT sign it). First
   launch of a dev-cert build: trust the profile in iOS Settings → General → VPN & Device Management.
 - **Mac runs the API *and* (for a dev build) Metro at once:**
   - repo root: `bun run dev` → API on `:8787`
@@ -83,7 +85,7 @@ share the build, so do them together.
 
 - [ ] **Signed build installs & launches.** Do: build & install via `expo run:ios --device <udid>`
   (or the EAS dev-build). Expect: the Skipper icon appears, launches past the splash to the home
-  tour list; bundle `tours.skipper.app`. Watch-for: signing failure (no membership / UDID not
+  tour list; bundle `fm.skipper.app`. Watch-for: signing failure (no membership / UDID not
   registered); iOS blocking launch until the dev profile is trusted. (`app.json:11-13,71-78`)
 - [ ] **API is reachable (the #1 setup failure).** Do: with the Mac API (+ Metro) running, open the
   home screen. Expect: the tour catalogue loads real drive cards within a couple seconds; opening a

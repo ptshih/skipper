@@ -23,6 +23,6 @@ export const VERSION_POLICIES: VersionPolicy[] = [
     platform: 'android',
     minimum: '0.0.0',
     recommended: '0.0.0',
-    storeUrl: 'https://play.google.com/store/apps/details?id=tours.skipper.app',
+    storeUrl: 'https://play.google.com/store/apps/details?id=fm.skipper.app',
   },
 ]
