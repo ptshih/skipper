@@ -297,6 +297,8 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   // 2. Candidates from the Wikidata discovery spine: STORY = a Wikipedia article (prose),
   //    SCENIC = a named Wikidata feature with no article (a bay/beach). Wikipedia is the
   //    PROSE layer now, joined per story candidate by sitelink — not the discovery layer.
+  //    HARD dependency, no fallback (the spine replaced geosearch): a WDQS outage throws an
+  //    actionable "retry later" error here and aborts at $0 — before any paid LLM/TTS call.
   console.log('Discovering POIs along the route (Wikidata spine)...')
   const candidates = await discoverWikidataPois(polyline)
   const wikiPois = candidatesToWikiPois(candidates)

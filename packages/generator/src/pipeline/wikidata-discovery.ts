@@ -271,12 +271,33 @@ async function fetchWikidataBox(sw: LngLat, ne: LngLat): Promise<RawItem[]> {
     OPTIONAL { ?article schema:about ?item ; schema:isPartOf <https://en.wikipedia.org/> . }
     SERVICE wikibase:label { bd:serviceParam wikibase:language "en,mul". }
   }`
-  const res = await fetchWithRetry(
-    `${WDQS_ENDPOINT}?query=${encodeURIComponent(query)}`,
-    { headers: { 'User-Agent': WDQS_USER_AGENT, Accept: 'application/sparql-results+json' } },
-    { attempts: 3, timeoutMs: REQUEST_TIMEOUT_MS },
-  )
-  if (!res.ok) throw new Error(`WDQS HTTP ${res.status}`)
+  // WDQS is the discovery spine's single hard dependency (no fallback). Surface BOTH failure
+  // shapes — a network/timeout exhaustion and an HTTP error — as ONE actionable message: this is
+  // almost always transient rate-limiting/overload, the run spent $0 (discovery precedes every
+  // paid call), so "retry later" is the whole recovery. (Keeps a human from reading a bare
+  // "WDQS HTTP 429" as a code bug.)
+  let res: Response
+  try {
+    res = await fetchWithRetry(
+      `${WDQS_ENDPOINT}?query=${encodeURIComponent(query)}`,
+      { headers: { 'User-Agent': WDQS_USER_AGENT, Accept: 'application/sparql-results+json' } },
+      { attempts: 3, timeoutMs: REQUEST_TIMEOUT_MS },
+    )
+  } catch (e) {
+    throw new Error(
+      `Wikidata Query Service (WDQS) unreachable after retries (${(e as Error).message}). ` +
+        `Discovery has no fallback, but no spend was incurred — retry later.`,
+    )
+  }
+  if (!res.ok) {
+    const retryAfter = res.headers.get('retry-after')
+    throw new Error(
+      `Wikidata Query Service (WDQS) returned HTTP ${res.status}` +
+        (retryAfter ? ` (Retry-After: ${retryAfter}s)` : '') +
+        ` — usually rate-limited or overloaded. Discovery has no fallback, but no spend was ` +
+        `incurred — retry later.`,
+    )
+  }
   const json = (await res.json()) as {
     results?: { bindings?: Record<string, { value: string }>[] }
   }
@@ -313,7 +334,15 @@ function distToRoute(lat: number, lng: number, sampledVerts: LngLat[]): number {
 /**
  * Discover + tier Wikidata POIs along a route. SPARQL bbox → corridor filter (areal-aware)
  * → prose-join story candidates via Wikipedia sitelink → tier → same-place dedup. Network
- * (WDQS + MediaWiki) — throws on a hard WDQS failure (the caller decides fallback).
+ * (WDQS + MediaWiki).
+ *
+ * Discovery is a HARD dependency with NO fallback — the Wikidata spine replaced the old
+ * Wikipedia-geosearch path wholesale (see the wikidata-discovery-spine decision), so there is
+ * no second discovery source to fall back to. A hard WDQS failure (after fetchWithRetry's
+ * retries) throws an actionable error and aborts the run — cheaply: discovery runs BEFORE any
+ * paid LLM/TTS call, so the run fails at $0 with the seeded tour shell untouched, and "retry
+ * later" is the whole recovery. (An EMPTY result is not an error here — it surfaces downstream
+ * as generate.ts's "No narratable stops found" once selection yields nothing.)
  */
 export async function discoverWikidataPois(polyline: LngLat[]): Promise<WikidataCandidate[]> {
   const { sw, ne } = boundingBox(polyline)
