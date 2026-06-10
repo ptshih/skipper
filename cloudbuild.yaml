@@ -1,34 +1,44 @@
-# Cloud Build config for the @skipper/api Cloud Run image.
+# Cloud Build pipeline for the @skipper/api Cloud Run service.
 #
-# Builds the lean Bun image from apps/api/Dockerfile (build context = repo root,
-# trimmed by .dockerignore) and pushes it to Artifact Registry. The `images:` block
-# handles the push — no separate step needed.
+# build (apps/api/Dockerfile, context = repo root, trimmed by .dockerignore)
+#   -> push to Artifact Registry -> deploy to Cloud Run.
+# ONE source of truth for BOTH manual runs (`gcloud builds submit --config
+# cloudbuild.yaml`) and the GitHub push-to-main trigger (continuous deployment).
 #
-# Build (no flags needed; $PROJECT_ID is auto-filled, region/repo default below):
-#   gcloud builds submit --config cloudbuild.yaml
+# Identity: the build runs as the project's Cloud Build service account (the Compute
+# Engine default SA on new projects). Beyond build/push it needs roles/run.admin +
+# roles/iam.serviceAccountUser to deploy. See docs/guides/gcp-cloud-run-deploy.md.
 #
-# Then deploy — ONE secret (the dotenvx private key); everything else rides in the
-# committed, encrypted .env.production that the Dockerfile bakes in:
-#   gcloud run deploy skipper-api \
-#     --image us-west1-docker.pkg.dev/$(gcloud config get-value project)/skipper/api:latest \
-#     --region us-west1 --allow-unauthenticated \
-#     --set-secrets DOTENV_PRIVATE_KEY_PRODUCTION=dotenv-private-key-production:latest
+# Secrets: the image bakes the committed, dotenvx-ENCRYPTED .env.production; the
+# runtime gets DOTENV_PRIVATE_KEY_PRODUCTION from Secret Manager (--set-secrets) to
+# decrypt it at boot. Nothing secret enters GitHub or this file.
 #
-# Cloud Run injects PORT; the Dockerfile's `dotenvx run` has no --overload, so that
-# injected PORT wins over .env.production's PORT and Bun binds it. Nothing to change.
+# Public access: --no-invoker-iam-check makes the service publicly invokable WITHOUT
+# an allUsers IAM binding (which Domain Restricted Sharing blocks); the app's own
+# Better Auth does the real authorization. Cloud Run injects PORT; the Dockerfile's
+# `dotenvx run` has no --overload, so the injected PORT wins and Bun binds it.
 
 steps:
+  # 1. Build. Tag :latest — Cloud Run pins the image DIGEST per revision, so rollback
+  #    is by revision (`gcloud run services update-traffic`), not by tag.
   - name: 'gcr.io/cloud-builders/docker'
-    args:
-      - build
-      - -f
-      - apps/api/Dockerfile
-      - -t
-      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/api:latest'
-      - .
+    args: ['build', '-f', 'apps/api/Dockerfile', '-t', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/api:latest', '.']
 
-images:
-  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/api:latest'
+  # 2. Push to Artifact Registry — MUST precede deploy (the deploy pulls this tag).
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/api:latest']
+
+  # 3. Deploy to Cloud Run (public + secret-mounted, idempotent on every run).
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:slim'
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - skipper-api
+      - --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/api:latest
+      - --region=${_REGION}
+      - --no-invoker-iam-check
+      - --set-secrets=DOTENV_PRIVATE_KEY_PRODUCTION=dotenv-private-key-production:latest
 
 substitutions:
   _REGION: us-east4

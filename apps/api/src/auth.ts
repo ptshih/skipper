@@ -52,23 +52,21 @@ export const auth = betterAuth({
   // Host-header injection of reset/OAuth links and seeds `trustedOrigins`;
   // `fallback` covers any non-matching host and serves as the init-time base URL
   // (so there's no "Base URL could not be determined" startup warning).
-  // Render host scheme: prod = <service>.onrender.com, PR preview = <service>-pr-<n>.onrender.com.
-  // Cloud Run host scheme: <service>-<project-number>.<region>.run.app (stable per service).
-  // TODO(prod): after the first `gcloud run deploy`, paste the EXACT printed Service URL
-  // host into the run.app entry below (the wildcard assumes region us-east4; adjust if you
-  // deploy elsewhere) and point `fallback` at it if Cloud Run is your primary host. Also
-  // replace the 'skipper-api' placeholder with your real Render service name if using Render.
+  // LIVE: deployed to Cloud Run (us-east4). The host uses Cloud Run's older URL scheme
+  // <service>-<hash>-<regioncode>.a.run.app (uk = us-east4); the hash is stable for the
+  // life of the service. TODO(prod): once a custom domain is mapped, add it here and make
+  // it the `fallback`. Render entries are kept as an alternate deploy target.
   // NOTE: social OAuth (Google/Apple) needs EXACT pre-registered redirect URIs and will
   // NOT follow wildcard preview URLs — route those through the stable prod host.
   baseURL: {
     allowedHosts: [
       'localhost', // local dev
-      'skipper-api.onrender.com', // Render prod service
+      'skipper-api-csslmysz7q-uk.a.run.app', // Cloud Run prod (us-east4)
+      'skipper-api.onrender.com', // Render prod (alternate target)
       'skipper-api-pr-*.onrender.com', // Render PR preview environments
-      'skipper-api-*.us-east4.run.app', // Cloud Run (replace with your real Service URL host)
     ],
-    protocol: 'auto', // http for localhost, https for the Render / Cloud Run hosts
-    fallback: 'https://skipper-api.onrender.com', // base URL for any non-matching host + at init
+    protocol: 'auto', // http for localhost, https for the Cloud Run / Render hosts
+    fallback: 'https://skipper-api-csslmysz7q-uk.a.run.app', // base URL for any non-matching host + at init
   },
   database: drizzleAdapter(authDb, { provider: 'pg', schema: authSchema }),
   // Allow the mobile app's deep-link scheme for cross-origin auth + OAuth callbacks.
