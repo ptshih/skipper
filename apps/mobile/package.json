@@ -7,6 +7,7 @@
     "start": "expo start",
     "ios": "expo run:ios",
     "android": "expo run:android",
+    "testflight": "eas build --platform ios --profile production --auto-submit",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "lint:tokens": "bun scripts/check-tokens.ts",
