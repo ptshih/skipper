@@ -25,6 +25,12 @@ import { mp3DurationMs } from './mp3'
 
 const SYNTHESIZE_URL = 'https://texttospeech.googleapis.com/v1/text:synthesize'
 const CLOUD_PLATFORM_SCOPE = 'https://www.googleapis.com/auth/cloud-platform'
+/** Per-attempt timeout (ms) for one synth. TTS is the most-called external API on a full run
+ *  (one clip per stop + brackets) and runs in a bounded pool — a single HUNG synth (no timeout)
+ *  would hold a worker slot forever and stall the whole synth phase AFTER all narration is paid
+ *  for. Generous: a ~2-min clip synthesizes in ~45s (measured ~0.38× audio length), so 90s is
+ *  ~2× headroom; a fired timeout is a transient and gets a fresh clock on retry (fetchWithRetry). */
+const TTS_REQUEST_TIMEOUT_MS = 90_000
 
 export interface SynthResult {
   /** The playable clip bytes — an MP3 by default; a WAV when TTS_AUDIO_ENCODING is LINEAR16. */
@@ -71,15 +77,19 @@ export async function synthesize(
     )
   }
 
-  const res = await fetchWithRetry(SYNTHESIZE_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'x-goog-user-project': project,
-      'Content-Type': 'application/json',
+  const res = await fetchWithRetry(
+    SYNTHESIZE_URL,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'x-goog-user-project': project,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(buildSynthesisRequest(text, voiceId, style)),
     },
-    body: JSON.stringify(buildSynthesisRequest(text, voiceId, style)),
-  })
+    { timeoutMs: TTS_REQUEST_TIMEOUT_MS },
+  )
 
   if (!res.ok) {
     throw new Error(`Cloud TTS ${res.status}: ${await res.text()}`)

@@ -21,6 +21,10 @@ import {
 const API = 'https://en.wikipedia.org/w/api.php'
 /** Cap maxlag retries so sustained Wikimedia replication lag fails loudly instead of hanging forever. */
 const MAX_MAXLAG_RETRIES = 5
+/** Per-attempt timeout (ms). A hung connection (TCP open, server never responds) never rejects,
+ *  so without this the retry machinery never fires and one stalled MediaWiki call hangs the whole
+ *  run. Payloads are small JSON; generous-but-finite. (Mirrors wikidata/macrostrat.) */
+const REQUEST_TIMEOUT_MS = 15_000
 
 interface ExtractPage {
   pageid: number
@@ -69,9 +73,11 @@ export interface WikiPoi {
  */
 async function wiki<T>(params: Record<string, string>, maxlagAttempt = 0): Promise<T> {
   const qs = new URLSearchParams({ format: 'json', formatversion: '2', maxlag: '5', ...params })
-  const res = await fetchWithRetry(`${API}?${qs}`, {
-    headers: { 'User-Agent': WIKIPEDIA_USER_AGENT },
-  })
+  const res = await fetchWithRetry(
+    `${API}?${qs}`,
+    { headers: { 'User-Agent': WIKIPEDIA_USER_AGENT } },
+    { timeoutMs: REQUEST_TIMEOUT_MS },
+  )
   const body = await res.text()
   let json: ({ error?: { code: string; info: string } } & T) | undefined
   try {

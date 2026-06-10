@@ -18,6 +18,9 @@
 import { fetchWithRetry } from './http'
 
 const SEARCH_TEXT_URL = 'https://places.googleapis.com/v1/places:searchText'
+/** Per-attempt timeout (ms). Break-anchor search is non-fatal, but a HUNG call never throws —
+ *  so generate.ts's try/catch can't skip past it; only a finite timeout can. Small payloads. */
+const REQUEST_TIMEOUT_MS = 15_000
 
 // includedType (Table A) + a matching natural-language query, one request each.
 const BREAK_CATEGORIES: { textQuery: string; includedType: string }[] = [
@@ -50,22 +53,26 @@ async function searchOneCategory(
   includedType: string,
   apiKey: string,
 ): Promise<PlaceResult[]> {
-  const res = await fetchWithRetry(SEARCH_TEXT_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Goog-Api-Key': apiKey,
-      // Minimal non-volatile anchor fields (bills at Text Search Pro SKU).
-      'X-Goog-FieldMask':
-        'places.id,places.displayName,places.location,places.primaryType,places.types',
+  const res = await fetchWithRetry(
+    SEARCH_TEXT_URL,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': apiKey,
+        // Minimal non-volatile anchor fields (bills at Text Search Pro SKU).
+        'X-Goog-FieldMask':
+          'places.id,places.displayName,places.location,places.primaryType,places.types',
+      },
+      body: JSON.stringify({
+        textQuery,
+        includedType,
+        pageSize: 10, // 1–20; maxResultCount is deprecated
+        searchAlongRouteParameters: { polyline: { encodedPolyline } },
+      }),
     },
-    body: JSON.stringify({
-      textQuery,
-      includedType,
-      pageSize: 10, // 1–20; maxResultCount is deprecated
-      searchAlongRouteParameters: { polyline: { encodedPolyline } },
-    }),
-  })
+    { timeoutMs: REQUEST_TIMEOUT_MS },
+  )
   const json = (await res.json()) as {
     error?: { code: number; status: string; message: string }
     places?: PlaceResult[]
