@@ -1,19 +1,22 @@
 // Bounded retry for transient external + DB calls. A full tour makes ~2N sequential fetches
-// (Google Cloud TTS, Wikipedia, Places) PLUS several Neon reads; without retry a single
+// (Google Cloud TTS, Wikipedia, Places) PLUS several Neon reads/writes; without retry a single
 // transient 429/5xx/network/cold-start blip fails the whole run. `fetchWithRetry` retries the
 // raw-fetch path (exponential backoff, honoring Retry-After) and returns the final Response;
-// `withRetry` is the generic async-thunk form the stateless neon-http READS use (a cold-start
-// blip on the FIRST query otherwise kills a run at $0 — observed 2026-06-10).
+// `withRetry` is the generic async-thunk form the stateless neon-http reads AND idempotent
+// writes use (a cold-start blip on the FIRST query otherwise kills a run at $0 — observed
+// 2026-06-10; and a blip on the FINAL ready-gate batch would discard the whole run's spend).
 
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504, 529])
 
 export const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
 /**
- * Retry a transient async operation (a DB READ, any non-fetch call) with exponential backoff.
- * READS only — the caller must be idempotent, since a retried op runs again (a write could
- * double-apply). Logs each retry so a transient blip is visible, then throws the last error if
- * all `attempts` fail (a non-transient error just fails ~a few seconds later, harmlessly).
+ * Retry a transient async operation (a DB read/write, any non-fetch call) with exponential
+ * backoff. The op must be IDEMPOTENT — a retried op runs again, so a read or a repeat-safe write
+ * (upsert, blind/guarded status set, or a delete-all+insert-fixed batch) is fine, but a
+ * non-idempotent write (a bare insert, an increment) could double-apply. Logs each retry so a
+ * transient blip is visible, then throws the last error if all `attempts` fail (a non-transient
+ * error just fails ~a few seconds later, harmlessly).
  */
 export async function withRetry<T>(
   fn: () => Promise<T>,

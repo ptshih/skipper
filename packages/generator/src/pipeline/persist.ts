@@ -18,6 +18,7 @@ import { and, eq, or, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { pois, regions, tourBrackets, tourStops, tours } from '@skipper/db/schema'
 import { cachedExtractSuspect, latestOverrideAtFor } from './poi-overrides'
+import { withRetry } from './http'
 import type {
   AttributionSnapshot,
   NewTourBracket,
@@ -51,29 +52,35 @@ export interface TourShell {
 
 /** Load the seeded draft tour (geometry + endpoints + region) by slug. */
 export async function loadTour(slug: string): Promise<TourShell> {
-  const rows = await db
-    .select({
-      id: tours.id,
-      slug: tours.slug,
-      status: tours.status,
-      headline: tours.headline,
-      regionId: tours.regionId,
-      regionSlug: regions.slug,
-      regionName: regions.displayName,
-      polyline: tours.polyline,
-      distanceMeters: tours.distanceMeters,
-      durationSeconds: tours.durationSeconds,
-      startAnchorName: tours.startAnchorName,
-      startAnchorLat: tours.startAnchorLat,
-      startAnchorLng: tours.startAnchorLng,
-      endAnchorName: tours.endAnchorName,
-      endAnchorLat: tours.endAnchorLat,
-      endAnchorLng: tours.endAnchorLng,
-    })
-    .from(tours)
-    .innerJoin(regions, eq(tours.regionId, regions.id))
-    .where(eq(tours.slug, slug))
-    .limit(1)
+  // Retry only the read (idempotent) — a "no tour seeded" miss is a real error, not a
+  // transient, so the !row throw stays OUTSIDE the retry (fail fast, no confusing retries).
+  const rows = await withRetry(
+    () =>
+      db
+        .select({
+          id: tours.id,
+          slug: tours.slug,
+          status: tours.status,
+          headline: tours.headline,
+          regionId: tours.regionId,
+          regionSlug: regions.slug,
+          regionName: regions.displayName,
+          polyline: tours.polyline,
+          distanceMeters: tours.distanceMeters,
+          durationSeconds: tours.durationSeconds,
+          startAnchorName: tours.startAnchorName,
+          startAnchorLat: tours.startAnchorLat,
+          startAnchorLng: tours.startAnchorLng,
+          endAnchorName: tours.endAnchorName,
+          endAnchorLat: tours.endAnchorLat,
+          endAnchorLng: tours.endAnchorLng,
+        })
+        .from(tours)
+        .innerJoin(regions, eq(tours.regionId, regions.id))
+        .where(eq(tours.slug, slug))
+        .limit(1),
+    { label: `loadTour(${slug})` },
+  )
   const row = rows[0]
   if (!row) throw new Error(`No tour seeded for slug "${slug}" — run the seed step first.`)
   return row
@@ -144,17 +151,21 @@ export async function loadFreshPoiFacts(
 ): Promise<Map<string, FreshFacts>> {
   const out = new Map<string, FreshFacts>()
   if (identities.length === 0 || ttlHours <= 0) return out
-  const rows = await db
-    .select({
-      source: pois.source,
-      sourceId: pois.sourceId,
-      facts: pois.facts,
-      factsFetchedAt: pois.factsFetchedAt,
-    })
-    .from(pois)
-    .where(
-      or(...identities.map((i) => and(eq(pois.source, i.source), eq(pois.sourceId, i.sourceId)))),
-    )
+  const rows = await withRetry(
+    () =>
+      db
+        .select({
+          source: pois.source,
+          sourceId: pois.sourceId,
+          facts: pois.facts,
+          factsFetchedAt: pois.factsFetchedAt,
+        })
+        .from(pois)
+        .where(
+          or(...identities.map((i) => and(eq(pois.source, i.source), eq(pois.sourceId, i.sourceId)))),
+        ),
+    { label: 'loadFreshPoiFacts' },
+  )
   const now = new Date()
   for (const r of rows) {
     const extract = r.facts?.extract
@@ -174,30 +185,36 @@ export async function upsertPoi(input: UpsertPoiInput): Promise<string> {
   // Only a stop with real facts (a story stop) carries the freshness clock; the stamp
   // itself is caller-owned (see UpsertPoiInput.factsFetchedAt).
   const factsFetchedAt = factsHash ? providedStamp : null
-  const rows = await db
-    .insert(pois)
-    .values({ ...rest, factsHash, factsFetchedAt })
-    .onConflictDoUpdate({
-      target: [pois.source, pois.sourceId],
-      set: {
-        // Location is always current — refresh it.
-        name: sql`excluded.name`,
-        kind: sql`excluded.kind`,
-        lat: sql`excluded.lat`,
-        lng: sql`excluded.lng`,
-        // FACTS are SHARED across tours: the SAME place can be a story stop on one tour and
-        // a (factless) scenic/break stop on another. NEVER let a factless write blank a place
-        // that already carries facts — COALESCE keeps the richest known facts/summary, while a
-        // genuine re-fetch (non-null incoming) still overwrites. (Upholds the "pois is the
-        // shared facts cache" invariant + keeps the facts_hash staleness contract honest.)
-        summary: sql`coalesce(excluded.summary, ${pois.summary})`,
-        facts: sql`coalesce(excluded.facts, ${pois.facts})`,
-        factsHash: sql`coalesce(excluded.facts_hash, ${pois.factsHash})`,
-        factsFetchedAt: sql`coalesce(excluded.facts_fetched_at, ${pois.factsFetchedAt})`,
-        updatedAt: new Date(),
-      },
-    })
-    .returning({ id: pois.id })
+  // Retry-safe: an upsert (onConflictDoUpdate) is idempotent — a retried attempt lands on the
+  // same row by (source, source_id) and writes the same facts (only updatedAt's now() differs).
+  const rows = await withRetry(
+    () =>
+      db
+        .insert(pois)
+        .values({ ...rest, factsHash, factsFetchedAt })
+        .onConflictDoUpdate({
+          target: [pois.source, pois.sourceId],
+          set: {
+            // Location is always current — refresh it.
+            name: sql`excluded.name`,
+            kind: sql`excluded.kind`,
+            lat: sql`excluded.lat`,
+            lng: sql`excluded.lng`,
+            // FACTS are SHARED across tours: the SAME place can be a story stop on one tour and
+            // a (factless) scenic/break stop on another. NEVER let a factless write blank a place
+            // that already carries facts — COALESCE keeps the richest known facts/summary, while a
+            // genuine re-fetch (non-null incoming) still overwrites. (Upholds the "pois is the
+            // shared facts cache" invariant + keeps the facts_hash staleness contract honest.)
+            summary: sql`coalesce(excluded.summary, ${pois.summary})`,
+            facts: sql`coalesce(excluded.facts, ${pois.facts})`,
+            factsHash: sql`coalesce(excluded.facts_hash, ${pois.factsHash})`,
+            factsFetchedAt: sql`coalesce(excluded.facts_fetched_at, ${pois.factsFetchedAt})`,
+            updatedAt: new Date(),
+          },
+        })
+        .returning({ id: pois.id }),
+    { label: `upsertPoi(${input.source}:${input.sourceId})` },
+  )
   return rows[0]!.id
 }
 
@@ -211,7 +228,11 @@ export async function upsertPoi(input: UpsertPoiInput): Promise<string> {
  * bracket keys (storage.ts) — two runs never write the same R2 object.
  */
 export async function markTourGenerating(tourId: string): Promise<void> {
-  await db.update(tours).set({ status: 'generating' }).where(eq(tours.id, tourId))
+  // Retry-safe: a blind status set is idempotent (re-applying writes the same value).
+  await withRetry(
+    () => db.update(tours).set({ status: 'generating' }).where(eq(tours.id, tourId)),
+    { label: `markTourGenerating(${tourId})` },
+  )
 }
 
 /** A fully-narrated, fully-synthesized stop, ready to write onto its tour. */
@@ -282,17 +303,27 @@ export async function finalizeTourReady(
     audioUrl: b.audioUrl,
     audioDurationMs: b.audioDurationMs,
   }))
-  await db.batch([
-    db.delete(tourStops).where(eq(tourStops.tourId, tourId)),
-    db.delete(tourBrackets).where(eq(tourBrackets.tourId, tourId)),
-    db
-      .update(tours)
-      .set({ status: 'ready' })
-      .where(eq(tours.id, tourId))
-      .returning({ id: tours.id }),
-    db.insert(tourStops).values(stopRows).returning({ id: tourStops.id }),
-    db.insert(tourBrackets).values(bracketRows).returning({ id: tourBrackets.id }),
-  ])
+  // Retry the ATOMIC commit — the highest-EV retry in the pipeline. This is the LAST step of
+  // a run, so a transient Neon blip here would discard the run's ENTIRE spend (all narration +
+  // the whole TTS bill). The batch is one transaction AND idempotent by construction
+  // (delete-all-by-tourId + insert fixed client-id rows), so a transient failure rolls the
+  // whole batch back and a retry re-runs to the identical end state. Validation throws (zero
+  // stops / missing brackets) stay above this — they are real errors, not transients.
+  await withRetry(
+    () =>
+      db.batch([
+        db.delete(tourStops).where(eq(tourStops.tourId, tourId)),
+        db.delete(tourBrackets).where(eq(tourBrackets.tourId, tourId)),
+        db
+          .update(tours)
+          .set({ status: 'ready' })
+          .where(eq(tours.id, tourId))
+          .returning({ id: tours.id }),
+        db.insert(tourStops).values(stopRows).returning({ id: tourStops.id }),
+        db.insert(tourBrackets).values(bracketRows).returning({ id: tourBrackets.id }),
+      ]),
+    { label: `finalizeTourReady(${tourId})` },
+  )
 }
 
 /**
@@ -309,8 +340,15 @@ export async function restoreAfterFailedRun(
   tourId: string,
   priorStatus: TourShell['status'],
 ): Promise<void> {
-  await db
-    .update(tours)
-    .set({ status: priorStatus === 'ready' ? 'ready' : 'failed' })
-    .where(and(eq(tours.id, tourId), eq(tours.status, 'generating')))
+  // Retry-safe: the status='generating' guard makes a second apply a no-op (the first attempt
+  // already moved it off 'generating'), so a transient blip on the cleanup write can't leave a
+  // crashed run stranded on 'generating'. The caller still .catch()es a full exhaustion.
+  await withRetry(
+    () =>
+      db
+        .update(tours)
+        .set({ status: priorStatus === 'ready' ? 'ready' : 'failed' })
+        .where(and(eq(tours.id, tourId), eq(tours.status, 'generating'))),
+    { label: `restoreAfterFailedRun(${tourId})` },
+  )
 }
