@@ -102,3 +102,6 @@ The rest are post-MVP features, gated behind the proven phone player:
 
 ### guides/
 - [eas-setup.md](guides/eas-setup.md) — building + running the Expo app on EAS (dev build).
+- [device-verification-runbook.md](guides/device-verification-runbook.md) — the one-sitting
+  on-device pass that clears the last M1 gate (phone-player feel + real GPS); checklist of what only
+  a physical iPhone can verify, with the duck-flip + open native risks called out.
