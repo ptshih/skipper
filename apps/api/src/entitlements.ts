@@ -5,6 +5,7 @@
 import type { MiddlewareHandler } from 'hono'
 import type { AccessTier } from '@skipper/shared'
 import { auth } from './auth'
+import { resolveSessionSafely } from './session'
 import { FEATURES, meetsTier, tierOf } from './tiers'
 
 /** Better Auth's inferred session shape ({ session, user }), incl. tier + isAnonymous. */
@@ -17,9 +18,15 @@ export type ApiEnv = {
   }
 }
 
-/** Resolve the session + tier once and stash on context. Apply to gated data routes. */
+/** Resolve the session + tier once and stash on context. Apply to gated data routes.
+ *
+ *  FAIL-OPEN: resolving the session reads the auth DB, and this middleware runs BEFORE the
+ *  per-route gate — so a transient auth-DB blip must not 500 the request (it would needlessly
+ *  take down the open `?preview=1` funnel, which needs no session). resolveSessionSafely retries
+ *  the read, then degrades to null → tierOf(null) = 'anonymous': the secure direction (a gated
+ *  route falls back to its AccountGate 401, never a leak; preview keeps serving). See ./session. */
 export const withSession: MiddlewareHandler<ApiEnv> = async (c, next) => {
-  const session = await auth.api.getSession({ headers: c.req.raw.headers })
+  const session = await resolveSessionSafely(() => auth.api.getSession({ headers: c.req.raw.headers }))
   c.set('session', session)
   c.set('tier', tierOf(session))
   await next()
