@@ -35,6 +35,7 @@ import {
   GROUNDING_REGEN_BUDGET,
   GROUNDING_REGEN_CONCURRENCY,
   GROUNDING_REGEN_MAX_ROUNDS,
+  PANEL_REGEN_CONCURRENCY,
   FALLBACK_SPEED_MPS,
   GOOGLE_READY,
   PACING,
@@ -667,14 +668,24 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   // included), diversity on story/scenic. Diversity is CROSS-stop, so a candidate script is
   // judged by swapping it into the assembled set and keeping only this stop's eval — the
   // same trick the old loop used, now expressed as an evaluator optimize() can drive.
-  const cheapPanel = (rec: { s: StopPlan; script: string }, script: string): StopEval[] => {
+  // Evaluate ONE stop's FREE dims (tts + cross-stop diversity) with `script` swapped into a
+  // given assembled `set`. `cheapPanel` passes the LIVE set (snapshot-at-call); the concurrent
+  // regen loops below pass a FROZEN snapshot so a parallel retake can't read a sibling
+  // mid-mutation (diversity is cross-stop). One helper, three callers.
+  const cheapPanelVs = (
+    set: ReturnType<typeof lintInputs>,
+    rec: { s: StopPlan },
+    script: string,
+  ): StopEval[] => {
     const evals: StopEval[] = [evaluateTts({ seq: rec.s.seq, script })]
     if (rec.s.stopType !== 'break') {
-      const swapped = lintInputs().map((r) => (r.seq === rec.s.seq ? { ...r, script } : r))
+      const swapped = set.map((r) => (r.seq === rec.s.seq ? { ...r, script } : r))
       evals.push(...evaluateDiversity(swapped, persona.kit).filter((e) => e.seq === rec.s.seq))
     }
     return evals
   }
+  const cheapPanel = (rec: { s: StopPlan; script: string }, script: string): StopEval[] =>
+    cheapPanelVs(lintInputs(), rec, script)
 
   // COST GUARD: hard caps on re-narration attempts. TWO pools — the free-dim passes + the
   // closer judge draw on one, the grounding pass on its own — so a tic-heavy tour can't
@@ -739,12 +750,20 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
     const flagged = narratedRecs.filter((r) => findingScore(cheapPanel(r, r.script)) > 0)
     if (flagged.length === 0) return 0
     console.log(`Eval panel (${phase}): ${flagged.length} stop(s) flagged.`)
-    for (const rec of flagged) {
-      const findings = cheapPanel(rec, rec.script).flatMap((e) => e.findings)
+    // Freeze the assembled set for this pass so the concurrent regens below judge each
+    // candidate against the tour as it stood at pass START — the grounding-pass pattern. A
+    // sibling improved DURING this pass is invisible until the next pass re-lints the LIVE set
+    // (the outer for-loop is the round budget), so convergence is unharmed; the only cost is
+    // the occasional redundant regen the live serial loop would have skipped (safe —
+    // accept-if-not-worse, budget-capped). The shared panelBudget is race-free (regenerateFor's
+    // synchronous check+decrement), and each task mutates only its OWN rec.script.
+    const frozen = lintInputs()
+    await mapLimit(flagged, PANEL_REGEN_CONCURRENCY(), async (rec) => {
+      const findings = cheapPanelVs(frozen, rec, rec.script).flatMap((e) => e.findings)
       console.log(`  regen stop ${rec.s.seq} (${rec.s.name}): ${findings.join('; ')}`)
       const entryScript = rec.script
       const result = await optimize<string>(rec.script, {
-        evaluate: (script) => cheapPanel(rec, script),
+        evaluate: (script) => cheapPanelVs(frozen, rec, script),
         regenerate: regenerateFor(rec, panelBudget),
         maxRounds: 1,
       })
@@ -759,7 +778,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
         history: result.history,
         ...(result.rounds > 0 && result.item === entryScript ? { unchanged: true } : {}),
       })
-    }
+    })
     return flagged.length
   }
 
@@ -781,14 +800,19 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       )
       if (judged.length > 0) {
         console.log(`Closer judge: ${judged.length} stop(s) flagged for closing-move monotony.`)
-        for (const f of judged) {
+        // Same parallel-safe shape as the panel passes: judge each retake against a snapshot
+        // frozen before the concurrent regens, share panelBudget via regenerateFor's atomic
+        // check+decrement, mutate only the task's own rec.script. The post-judge
+        // optimizeFlagged below re-lints the LIVE settled set.
+        const frozen = lintInputs()
+        await mapLimit(judged, PANEL_REGEN_CONCURRENCY(), async (f) => {
           const rec = narratedRecs.find((r) => r.s.seq === f.seq)
-          if (!rec) continue
+          if (!rec) return
           console.log(`  regen stop ${f.seq} (${rec.s.name}): ${f.reasons.join('; ')}`)
-          const before = cheapPanel(rec, rec.script)
+          const before = cheapPanelVs(frozen, rec, rec.script)
           const candidate = await regenerateFor(rec, panelBudget, f.avoid)([], rec.script)
           const unchanged = candidate === rec.script // budget/failure — kept the take, already logged
-          const after = cheapPanel(rec, candidate)
+          const after = cheapPanelVs(frozen, rec, candidate)
           const accepted =
             !unchanged && findingScore(after) <= findingScore(before) && gatesNotWorse(after, before)
           if (accepted) rec.script = candidate
@@ -804,7 +828,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
             ],
             ...(unchanged ? { unchanged: true } : {}),
           })
-        }
+        })
         await optimizeFlagged('post-judge pass')
       } else {
         console.log('Closer judge: closers are varied.')
@@ -863,14 +887,8 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
     // it stood when grounding BEGAN (own script swapped in). Cross-stop truth is unharmed:
     // the final scorecard below re-runs the LIVE panel over the settled scripts.
     const frozenSet = lintInputs()
-    const cheapPanelFrozen = (rec: { s: StopPlan; script: string }, script: string): StopEval[] => {
-      const evals: StopEval[] = [evaluateTts({ seq: rec.s.seq, script })]
-      if (rec.s.stopType !== 'break') {
-        const swapped = frozenSet.map((r) => (r.seq === rec.s.seq ? { ...r, script } : r))
-        evals.push(...evaluateDiversity(swapped, persona.kit).filter((e) => e.seq === rec.s.seq))
-      }
-      return evals
-    }
+    const cheapPanelFrozen = (rec: { s: StopPlan }, script: string): StopEval[] =>
+      cheapPanelVs(frozenSet, rec, script)
 
     // The per-stop regen loops run CONCURRENTLY — independent by construction: per-stop
     // memo, the shared budget is spent with a SYNCHRONOUS check+decrement (regenerateFor —

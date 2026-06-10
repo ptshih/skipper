@@ -126,6 +126,14 @@ export const SCOUT_CONCURRENCY = (): number => intKnob(process.env.SKIPPER_SCOUT
  * see generate.ts). Override: SKIPPER_GROUNDING_REGEN_CONCURRENCY. */
 export const GROUNDING_REGEN_CONCURRENCY = (): number =>
   intKnob(process.env.SKIPPER_GROUNDING_REGEN_CONCURRENCY, 4)
+/** Concurrent FREE-DIM (tts+diversity) PANEL + closer-judge regen narrations — the same
+ * parallel-safe shape as the grounding regens above: each candidate is judged against a
+ * FROZEN snapshot of the assembled set taken at pass start (so a concurrent retake can't read
+ * a sibling mid-mutation), the shared panel budget is spent with a synchronous check+decrement
+ * (no over-spend race), and the OUTER pass loop re-lints the LIVE set between passes so
+ * convergence is unharmed. Override: SKIPPER_PANEL_REGEN_CONCURRENCY. */
+export const PANEL_REGEN_CONCURRENCY = (): number =>
+  intKnob(process.env.SKIPPER_PANEL_REGEN_CONCURRENCY, 4)
 
 // --- pois facts freshness (principle #1's TTL mechanism — READ side) ----------
 
