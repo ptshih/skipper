@@ -1,0 +1,46 @@
+# Controls what `gcloud builds submit` UPLOADS to Cloud Build (a different layer
+# than .dockerignore, which trims the build CONTEXT once the tarball is on the
+# builder). IMPORTANT: when this file exists, gcloud STOPS consulting .gitignore —
+# so every sensitive/heavy path that .gitignore covered is re-listed here.
+#
+# The apps/api/Dockerfile only COPYs the api closure (root package.json,
+# apps/api, packages/db, packages/shared, .env.production), so everything else is
+# safe to leave out of the upload.
+
+# Dependencies + VCS
+**/node_modules
+.git
+.gitignore
+
+# SECRETS — never upload. .env.keys holds the dotenvx PRIVATE keys; only the
+# encrypted .env.production is needed (and the Dockerfile COPYs it).
+.env.keys
+.env
+.env.development
+.env.*.local
+
+# Service-account JSON etc.
+keys/
+key/
+*-sa-key.json
+
+# Not part of the api image closure (the heavy RN tree + unrelated packages)
+apps/mobile
+packages/sim
+packages/generator
+packages/drive-core
+
+# Build / dev / scratch cruft
+dist/
+build/
+out/
+.expo/
+.expo-shared/
+**/*.tsbuildinfo
+.scratch/
+.scratch-audio/
+.design-review/
+*.log
+.DS_Store
+.idea/
+.vscode/

@@ -53,16 +53,21 @@ export const auth = betterAuth({
   // `fallback` covers any non-matching host and serves as the init-time base URL
   // (so there's no "Base URL could not be determined" startup warning).
   // Render host scheme: prod = <service>.onrender.com, PR preview = <service>-pr-<n>.onrender.com.
-  // TODO(prod): replace the 'skipper-api' placeholder with your real Render service name.
+  // Cloud Run host scheme: <service>-<project-number>.<region>.run.app (stable per service).
+  // TODO(prod): after the first `gcloud run deploy`, paste the EXACT printed Service URL
+  // host into the run.app entry below (the wildcard assumes region us-east4; adjust if you
+  // deploy elsewhere) and point `fallback` at it if Cloud Run is your primary host. Also
+  // replace the 'skipper-api' placeholder with your real Render service name if using Render.
   // NOTE: social OAuth (Google/Apple) needs EXACT pre-registered redirect URIs and will
   // NOT follow wildcard preview URLs — route those through the stable prod host.
   baseURL: {
     allowedHosts: [
       'localhost', // local dev
-      'skipper-api.onrender.com', // prod service
-      'skipper-api-pr-*.onrender.com', // PR preview environments
+      'skipper-api.onrender.com', // Render prod service
+      'skipper-api-pr-*.onrender.com', // Render PR preview environments
+      'skipper-api-*.us-east4.run.app', // Cloud Run (replace with your real Service URL host)
     ],
-    protocol: 'auto', // http for localhost, https for the Render hosts
+    protocol: 'auto', // http for localhost, https for the Render / Cloud Run hosts
     fallback: 'https://skipper-api.onrender.com', // base URL for any non-matching host + at init
   },
   database: drizzleAdapter(authDb, { provider: 'pg', schema: authSchema }),

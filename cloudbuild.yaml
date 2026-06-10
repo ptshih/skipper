@@ -1,0 +1,40 @@
+# Cloud Build config for the @skipper/api Cloud Run image.
+#
+# Builds the lean Bun image from apps/api/Dockerfile (build context = repo root,
+# trimmed by .dockerignore) and pushes it to Artifact Registry. The `images:` block
+# handles the push — no separate step needed.
+#
+# Build (no flags needed; $PROJECT_ID is auto-filled, region/repo default below):
+#   gcloud builds submit --config cloudbuild.yaml
+#
+# Then deploy — ONE secret (the dotenvx private key); everything else rides in the
+# committed, encrypted .env.production that the Dockerfile bakes in:
+#   gcloud run deploy skipper-api \
+#     --image us-west1-docker.pkg.dev/$(gcloud config get-value project)/skipper/api:latest \
+#     --region us-west1 --allow-unauthenticated \
+#     --set-secrets DOTENV_PRIVATE_KEY_PRODUCTION=dotenv-private-key-production:latest
+#
+# Cloud Run injects PORT; the Dockerfile's `dotenvx run` has no --overload, so that
+# injected PORT wins over .env.production's PORT and Bun binds it. Nothing to change.
+
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - build
+      - -f
+      - apps/api/Dockerfile
+      - -t
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/api:latest'
+      - .
+
+images:
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/api:latest'
+
+substitutions:
+  _REGION: us-east4
+  _REPO: skipper
+
+options:
+  # Avoids the "build must specify a logs bucket" error new projects hit when no
+  # default Cloud Build logging bucket / custom build SA is configured.
+  logging: CLOUD_LOGGING_ONLY
