@@ -78,32 +78,38 @@ function gitShaBestEffort(): string | null {
   }
 }
 
-/** Insert one run + its score rows. Returns the run id. */
+/** Insert one run + its score rows ATOMICALLY. Returns the run id.
+ *
+ *  The run id is generated CLIENT-side so both inserts can ride one `db.batch` — neon-http
+ *  runs a batch as a single non-interactive transaction, so a run row can never land
+ *  without its score rows (and no interactive-transaction driver is needed for it). */
 export async function recordEvalRun(input: EvalRunInput): Promise<string> {
   const card = input.scorecard
-  const rows = await db
-    .insert(evalRuns)
-    .values({
-      tourId: input.tourId ?? null,
-      slug: input.slug,
-      kind: input.kind,
-      dryRun: input.dryRun,
-      gitSha: gitShaBestEffort(),
-      narrationModel: input.narrationModel ?? null,
-      judgeModel: input.judgeModel ?? null,
-      pass: card.pass,
-      groundingScore: dimensionRollupScore(card, 'grounding'),
-      ttsScore: dimensionRollupScore(card, 'tts'),
-      diversityScore: dimensionRollupScore(card, 'diversity'),
-      charmScore: dimensionRollupScore(card, 'charm'),
-      veracityScore: dimensionRollupScore(card, 'veracity'),
-      artifact: input.artifact as Record<string, unknown>,
-      scorecard: card as unknown as Record<string, unknown>,
-    })
-    .returning({ id: evalRuns.id })
-  const runId = rows[0]!.id
+  const runId = crypto.randomUUID()
+  const insertRun = db.insert(evalRuns).values({
+    id: runId,
+    tourId: input.tourId ?? null,
+    slug: input.slug,
+    kind: input.kind,
+    dryRun: input.dryRun,
+    gitSha: gitShaBestEffort(),
+    narrationModel: input.narrationModel ?? null,
+    judgeModel: input.judgeModel ?? null,
+    pass: card.pass,
+    groundingScore: dimensionRollupScore(card, 'grounding'),
+    ttsScore: dimensionRollupScore(card, 'tts'),
+    diversityScore: dimensionRollupScore(card, 'diversity'),
+    charmScore: dimensionRollupScore(card, 'charm'),
+    veracityScore: dimensionRollupScore(card, 'veracity'),
+    artifact: input.artifact as Record<string, unknown>,
+    scorecard: card as unknown as Record<string, unknown>,
+  })
   const scoreRows = buildScoreRows(runId, card, input.identityBySeq)
-  if (scoreRows.length > 0) await db.insert(evalScores).values(scoreRows)
+  if (scoreRows.length > 0) {
+    await db.batch([insertRun, db.insert(evalScores).values(scoreRows)])
+  } else {
+    await insertRun
+  }
   console.log(`Eval run recorded → eval_runs ${runId} (${scoreRows.length} score rows).`)
   return runId
 }
