@@ -18,6 +18,7 @@
     "@skipper/db": "workspace:*",
     "@skipper/drive-core": "workspace:*",
     "@skipper/shared": "workspace:*",
+    "@skipper/storage": "workspace:*",
     "drizzle-orm": "^0.45.2",
     "google-auth-library": "^10.7.0"
   },

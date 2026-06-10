@@ -20,7 +20,7 @@
 // unit-tested with a deterministic fake and zero API spend (test/eval-veracity.test.ts).
 
 import Anthropic from '@anthropic-ai/sdk'
-import { JUDGMENT_MODEL } from '../models'
+import { getAnthropic, JUDGMENT_MODEL } from '../models'
 import type { StopEval } from './types'
 
 // The shared JUDGMENT_MODEL (Opus), matching grounding.ts. The task is retrieval +
@@ -123,17 +123,6 @@ const WEB_SEARCH_TOOL = {
   max_uses: VERACITY_MAX_SEARCHES,
 }
 
-let cached: Anthropic | undefined
-function getClient(): Anthropic {
-  if (!cached) {
-    if (!process.env.ANTHROPIC_API_KEY) {
-      throw new Error('ANTHROPIC_API_KEY is not set (veracity eval needs it).')
-    }
-    cached = new Anthropic()
-  }
-  return cached
-}
-
 function buildUserMessage(input: VeracityInput): string {
   const well =
     input.well.length > 0
@@ -168,7 +157,7 @@ function normalize(raw: unknown[]): VeracityVerdict[] {
 
 /** The real, Anthropic-backed checker: web_search loop → report tool. */
 export const anthropicChecker: VeracityChecker = async (input) => {
-  const client = getClient()
+  const client = getAnthropic('veracity eval needs it')
   const messages: Anthropic.MessageParam[] = [
     { role: 'user', content: buildUserMessage(input) },
   ]

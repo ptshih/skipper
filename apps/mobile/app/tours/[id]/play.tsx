@@ -33,10 +33,7 @@ import {
   voice,
 } from '@/ui'
 import type { BadgeTone } from '@/ui'
-
-// mm:ss for the preview header's "X preview of a Y drive" subtitle.
-const mmss = (ms: number) =>
-  `${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, '0')}`
+import { formatMmssMs, METERS_PER_MILE } from '@skipper/drive-core'
 
 export default function DriveScreen() {
   const theme = useTheme()
@@ -261,7 +258,7 @@ export default function DriveScreen() {
       kicker: nextName ? `${voice.player.rolling} · ${voice.drive.nextStop}` : voice.player.rolling,
       title: nextName ?? voice.player.rollingOpen,
       timer:
-        d.rollingDistanceM != null ? `~${(d.rollingDistanceM / 1609).toFixed(1)} mi` : undefined,
+        d.rollingDistanceM != null ? `~${(d.rollingDistanceM / METERS_PER_MILE).toFixed(1)} mi` : undefined,
       glow: false,
       badge: nextStop
         ? { tone: stopTone(nextStop.stopType), label: stopLabel(nextStop.stopType) }
@@ -320,7 +317,7 @@ export default function DriveScreen() {
             <>
               {d.region}
               {d.totalPreviewMs != null && d.totalRealMs != null
-                ? ` · ${mmss(d.totalPreviewMs)} preview of the full ${mmss(d.totalRealMs)} drive`
+                ? ` · ${formatMmssMs(d.totalPreviewMs)} preview of the full ${formatMmssMs(d.totalRealMs)} drive`
                 : ' · preview'}
             </>
           ) : (

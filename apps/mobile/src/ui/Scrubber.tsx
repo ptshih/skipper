@@ -18,6 +18,7 @@
 // increment/decrement jog ±15s (mirrors the skip buttons).
 import { useEffect, useRef, useState } from 'react'
 import { PanResponder, StyleSheet, View } from 'react-native'
+import { formatMmssMs } from '@skipper/drive-core'
 import { IN_CAR_MAX_FONT_SCALE, border, hit, space } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'
 import { Text } from './Text'
@@ -39,11 +40,6 @@ const JOG_MS = 15_000 // a11y increment/decrement = the same 15s the skip button
 const CAUGHT_UP = 0.02 // drop the optimistic committed frac once the clock is within 2%
 
 const clamp01 = (n: number) => (n < 0 ? 0 : n > 1 ? 1 : n)
-
-const mmss = (ms: number) => {
-  const s = Math.max(0, Math.round(ms / 1000))
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
-}
 
 const spokenTime = (ms: number) => {
   const t = Math.max(0, Math.round(ms / 1000))
@@ -177,10 +173,10 @@ export function Scrubber({
       </View>
       <View style={styles.times}>
         <Text variant="mono" color="inkDim" maxFontSizeMultiplier={IN_CAR_MAX_FONT_SCALE}>
-          {mmss(frac * durationMs)}
+          {formatMmssMs(frac * durationMs)}
         </Text>
         <Text variant="mono" color="inkDim" maxFontSizeMultiplier={IN_CAR_MAX_FONT_SCALE}>
-          {mmss(durationMs)}
+          {formatMmssMs(durationMs)}
         </Text>
       </View>
     </View>

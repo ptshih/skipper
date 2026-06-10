@@ -25,7 +25,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import type { AttributionSnapshot } from '@skipper/db/schema'
 import { SCOUT_MAX_TOKENS, SCOUT_MAX_TOOL_TURNS } from '../config'
-import { JUDGMENT_MODEL } from '../models'
+import { getAnthropic, JUDGMENT_MODEL } from '../models'
 import { recordModelUsage } from './spend'
 
 // Judgment-tier, not narration-tier: the scout reads a sheet and picks fetches — the shared
@@ -168,19 +168,8 @@ export type ScoutModelCall = (params: {
   messages: Anthropic.MessageParam[]
 }) => Promise<Anthropic.Message>
 
-let cached: Anthropic | undefined
-function getClient(): Anthropic {
-  if (!cached) {
-    if (!process.env.ANTHROPIC_API_KEY) {
-      throw new Error('ANTHROPIC_API_KEY is not set (the enrichment scout needs it).')
-    }
-    cached = new Anthropic()
-  }
-  return cached
-}
-
 const anthropicScoutCall: ScoutModelCall = async ({ system, tools, messages }) => {
-  const response = await getClient().messages.create({
+  const response = await getAnthropic('the enrichment scout needs it').messages.create({
     model: SCOUT_MODEL,
     max_tokens: SCOUT_MAX_TOKENS,
     system,

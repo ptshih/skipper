@@ -12,13 +12,8 @@
 import { and, asc, desc, eq } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { pois, regions, tours, tourStops } from '@skipper/db/schema'
-import { DEFAULT_MAX_OFF_ROUTE_M, runDrive } from '@skipper/drive-core'
+import { OFF_ROUTE_MAX_M, METERS_PER_MILE, formatMmss, runDrive } from '@skipper/drive-core'
 import type { LngLat, TourStopRef } from '@skipper/drive-core'
-
-const mmss = (sec: number): string => {
-  const total = Math.round(sec)
-  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
-}
 
 function parseArgs(argv: string[]) {
   const args = argv.slice(2)
@@ -89,13 +84,13 @@ async function main() {
   console.log('\n' + '='.repeat(78))
   console.log(`DRIVE SIM — ${tour.headline} (${tour.regionName}) · tour ${tour.id}`)
   console.log(
-    `${(r.totalRouteM / 1609.344).toFixed(1)} mi @ ${r.speedMph} mph → ${mmss(r.driveSec)} drive · ` +
+    `${(r.totalRouteM / METERS_PER_MILE).toFixed(1)} mi @ ${r.speedMph} mph → ${formatMmss(r.driveSec)} drive · ` +
       `${r.fixCount} fixes @ ${r.tickHz} Hz · lead ${r.trigger.leadSeconds}s, floor varies, cone ${r.trigger.headingConeDeg}°`,
   )
   console.log('='.repeat(78))
   console.log('     seq  type     fire@   lead   off-route  stop')
   for (const s of r.stops) {
-    const fire = s.fired ? `@${mmss(s.fireSec!)}`.padStart(6) : '  ——  '
+    const fire = s.fired ? `@${formatMmss(s.fireSec!)}`.padStart(6) : '  ——  '
     const lead = s.fired ? `${s.leadSec!.toFixed(0)}s`.padStart(5) : '   — '
     const off = `${Math.round(s.offRouteM)}m`.padStart(8)
     const flag = s.excluded ? '⤬' : s.fired ? '·' : '✗'
@@ -104,9 +99,9 @@ async function main() {
 
   const onRoute = r.stops.filter((s) => !s.excluded).length
   console.log('')
-  console.log(`Fired ${r.stops.filter((s) => s.fired).length}/${onRoute} on-route stops · narration coverage ${(r.coverageRatio * 100).toFixed(0)}% (${mmss(r.stops.reduce((a, s) => a + (s.durationMs ?? 0) / 1000, 0))} audio).`)
+  console.log(`Fired ${r.stops.filter((s) => s.fired).length}/${onRoute} on-route stops · narration coverage ${(r.coverageRatio * 100).toFixed(0)}% (${formatMmss(r.stops.reduce((a, s) => a + (s.durationMs ?? 0) / 1000, 0))} audio).`)
   if (r.excludedOffRoute.length) {
-    console.log(`⤬ Off-route (POI > ${DEFAULT_MAX_OFF_ROUTE_M}m from the road, no trigger point): stops ${r.excludedOffRoute.join(', ')} — bad anchor, or POI too far to narrate honestly.`)
+    console.log(`⤬ Off-route (POI > ${OFF_ROUTE_MAX_M}m from the road, no trigger point): stops ${r.excludedOffRoute.join(', ')} — bad anchor, or POI too far to narrate honestly.`)
   }
   if (r.neverFired.length) {
     console.log(`⚠ On-route but never fired: stops ${r.neverFired.join(', ')} — a real triggering miss to investigate.`)

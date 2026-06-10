@@ -11,7 +11,7 @@
 // (Previously these primitives were hand-copied between the generator and the sim;
 // the copy is gone now that both share @skipper/drive-core.)
 
-import { bearingDeg, type LngLat } from '@skipper/drive-core'
+import { bearingDeg, signedBearingDeltaDeg, type LngLat } from '@skipper/drive-core'
 
 export {
   type LngLat,
@@ -20,6 +20,7 @@ export {
   bearingDeg,
   cumulativeMeters,
   nearestOnRoute,
+  METERS_PER_MILE,
 } from '@skipper/drive-core'
 
 /**
@@ -31,7 +32,7 @@ export {
  * confidently (the caller then omits it rather than guessing a coin-flip side).
  */
 export function sideOfApproach(headingDeg: number, from: LngLat, to: LngLat): 'left' | 'right' | null {
-  const rel = ((bearingDeg(from, to) - headingDeg + 540) % 360) - 180 // (-180, 180]
+  const rel = signedBearingDeltaDeg(bearingDeg(from, to), headingDeg) // (-180, 180]
   const mag = Math.abs(rel)
   if (mag < 10 || mag > 170) return null // ~collinear with travel — no clear side
   return rel > 0 ? 'right' : 'left'

@@ -5,6 +5,24 @@
 // Each id below cites where it came from; re-verify against the linked source
 // before bumping.
 
+import Anthropic from '@anthropic-ai/sdk'
+
+// ---------------------------------------------------------------------------
+// Shared Anthropic client — ONE lazily-built singleton for every call site.
+// ---------------------------------------------------------------------------
+// Lazily build the Anthropic client on first use, so importing this module stays
+// side-effect-free (ANTHROPIC_API_KEY is required only when a model call runs) —
+// mirrors the lazy @skipper/db client. Every generator/eval module shares this one
+// instance via getAnthropic(); `label` is a per-call-site descriptive parenthetical
+// woven into the missing-key error so the message still names what needed the key.
+let _anthropic: Anthropic | null = null
+export function getAnthropic(label = 'a model call needs it'): Anthropic {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw new Error(`ANTHROPIC_API_KEY is not set (${label}).`)
+  }
+  return (_anthropic ??= new Anthropic())
+}
+
 // ---------------------------------------------------------------------------
 // Narration — Anthropic Messages API
 // ---------------------------------------------------------------------------

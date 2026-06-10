@@ -8,6 +8,13 @@ export type LngLat = [number, number]
 
 const EARTH_RADIUS_M = 6_371_008.8
 export const MPH_TO_MPS = 0.44704
+/** Meters per statute mile (exact) — the one constant for every meters→miles display. */
+export const METERS_PER_MILE = 1609.344
+/** A POI farther off the road than this isn't honestly "along the drive" — it has no
+ *  trustworthy trigger point. The SINGLE source for the off-route floor: the generator's
+ *  selection floor (`OFF_ROUTE_MAX_M`, re-exported from config), the sim, and the live
+ *  player all read THIS, so "a stop the generator accepts will trigger" holds by construction. */
+export const OFF_ROUTE_MAX_M = 700
 
 const toRad = (deg: number): number => (deg * Math.PI) / 180
 const toDeg = (rad: number): number => (rad * 180) / Math.PI
@@ -36,10 +43,16 @@ export function bearingDeg(a: LngLat, b: LngLat): number {
   return (toDeg(Math.atan2(y, x)) + 360) % 360
 }
 
+/** Signed shortest difference a−b between two bearings, in (−180, 180] (positive = a is
+ *  clockwise of b). The one place the modular wrap lives; callers that need the side/sign
+ *  (e.g. left-vs-right of travel) build on this instead of re-deriving the trick. */
+export function signedBearingDeltaDeg(a: number, b: number): number {
+  return ((a - b + 540) % 360) - 180
+}
+
 /** Smallest absolute difference between two bearings (degrees), 0..180. */
 export function angularDiffDeg(a: number, b: number): number {
-  const diff = Math.abs(((a - b + 540) % 360) - 180)
-  return diff
+  return Math.abs(signedBearingDeltaDeg(a, b))
 }
 
 /** Linear interpolation between two [lng, lat] points (fine over the ~13 m vertex spacing). */

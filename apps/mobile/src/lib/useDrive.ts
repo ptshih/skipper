@@ -19,7 +19,7 @@ import {
   bracketKindForSeq,
   buildPreviewTimeline,
   cumulativeMeters,
-  DEFAULT_MAX_OFF_ROUTE_M,
+  OFF_ROUTE_MAX_M,
   DEFAULT_TRIGGER,
   INTRO_SEQ,
   OUTRO_SEQ,
@@ -512,7 +512,7 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
         stopType: s.stopType,
       })),
     )
-    const triggerable = snapped.filter((s) => s.offRouteM <= DEFAULT_MAX_OFF_ROUTE_M)
+    const triggerable = snapped.filter((s) => s.offRouteM <= OFF_ROUTE_MAX_M)
     engineRef.current = new TriggerEngine(triggerable, { leadSeconds: DEFAULT_TRIGGER.leadSeconds })
     setDriving(true)
     // Intro bracket — the welcome, played FIRST (before any geofence trigger fires).

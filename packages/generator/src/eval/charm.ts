@@ -11,7 +11,7 @@
 // --charm to keep the default audit cheap (grounding Opus + free deterministic dims).
 
 import Anthropic from '@anthropic-ai/sdk'
-import { JUDGMENT_MODEL } from '../models'
+import { getAnthropic, JUDGMENT_MODEL } from '../models'
 import type { StopEval } from './types'
 
 /** A stop below this charm score (1-10) is "the man is not in the room" — flag it (advisory). */
@@ -88,21 +88,12 @@ const REPORT_TOOL: Anthropic.Tool = {
   },
 }
 
-let cached: Anthropic | undefined
-function getClient(): Anthropic {
-  if (!cached) {
-    if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY is not set (the charm judge needs it).')
-    cached = new Anthropic()
-  }
-  return cached
-}
-
 /** The charm judge — one Opus call scoring every stop's writing. Throws on a missing report. */
 export async function judgeCharm(stops: CharmStop[]): Promise<CharmVerdict> {
   const userMessage = stops
     .map((s) => `[stop ${s.seq}] ${s.stopType.toUpperCase()} — ${s.name}\n${s.script}`)
     .join('\n\n')
-  const response = await getClient().messages.create({
+  const response = await getAnthropic('the charm judge needs it').messages.create({
     model: JUDGMENT_MODEL,
     max_tokens: 8_000,
     system: CHARM_SYSTEM,

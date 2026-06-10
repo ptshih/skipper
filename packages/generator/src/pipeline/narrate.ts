@@ -20,7 +20,7 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import type { JokeLevel, StopType } from '@skipper/shared'
-import { NARRATION_MODEL } from '../models'
+import { getAnthropic, NARRATION_MODEL } from '../models'
 import { recordModelUsage } from './spend'
 
 /**
@@ -33,23 +33,6 @@ const NARRATION_MAX_TOKENS = 16000
 
 /** Spoken narration runs ~2.5 words/second; used only to translate a target duration into a word hint. */
 const WORDS_PER_SECOND = 2.5
-
-let cached: Anthropic | undefined
-
-/**
- * Lazily build the Anthropic client on first use, so importing this module is
- * side-effect-free (ANTHROPIC_API_KEY is required only when narration runs) —
- * mirrors the lazy @skipper/db client.
- */
-function getClient(): Anthropic {
-  if (!cached) {
-    if (!process.env.ANTHROPIC_API_KEY) {
-      throw new Error('ANTHROPIC_API_KEY is not set (run via dotenvx -f .env.development).')
-    }
-    cached = new Anthropic()
-  }
-  return cached
-}
 
 export interface NarrationRequest {
   /** e.g. "Lake Tahoe". Naming the region is allowed without the sheet. */
@@ -345,7 +328,7 @@ async function runNarration(
   userMessage: string,
   label: string,
 ): Promise<NarrationResult> {
-  const client = getClient()
+  const client = getAnthropic('run via dotenvx -f .env.development')
   const response = await client.messages.create({
     model: NARRATION_MODEL,
     max_tokens: NARRATION_MAX_TOKENS,

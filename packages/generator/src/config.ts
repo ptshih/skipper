@@ -157,8 +157,10 @@ export const GROUNDING_REGEN_BUDGET = 12
 
 // --- POI discovery ----------------------------------------------------------
 
-/** Wikipedia POIs farther than this from the road aren't "along the drive" — dropped. */
-export const OFF_ROUTE_MAX_M = 700
+/** The off-route floor (m) for POIs that are honestly "along the drive". Single-sourced in
+ *  @skipper/drive-core and re-exported here, so selection, the sim, and the live player all
+ *  read ONE number (a stop the generator accepts is a stop that triggers). */
+export { OFF_ROUTE_MAX_M } from '@skipper/drive-core'
 
 // --- Wikidata discovery spine ----------------------------------------------
 // Discovery IS the Wikidata spine (it replaced Wikipedia-geosearch wholesale): query

@@ -26,6 +26,7 @@
 
 import { jokeLevel as JOKE_NOTCHES } from '@skipper/shared'
 import type { JokeLevel } from '@skipper/shared'
+import { formatMmss } from '@skipper/drive-core'
 import { generateTour } from './pipeline/generate'
 import type { BracketSummary, GenerateResult } from './pipeline/generate'
 
@@ -93,13 +94,6 @@ function parseArgs(argv: string[]): Args {
   }
 }
 
-const mmss = (sec: number): string => {
-  const total = Math.round(sec) // round first so seconds can't carry to 60 (e.g. 6:60)
-  const m = Math.floor(total / 60)
-  const s = total % 60
-  return `${m}:${String(s).padStart(2, '0')}`
-}
-
 // Spoken pace for the dry-run length ESTIMATE (no TTS yet) — mirrors narrate.ts's
 // WORDS_PER_SECOND so the printed "~Xs est" tracks the target the model was given.
 const WORDS_PER_SECOND = 2.5
@@ -140,7 +134,7 @@ function printResult(r: GenerateResult): void {
       : s.script
         ? `  (~${Math.round(est)}s est)`
         : ''
-    const head = `[${String(s.seq).padStart(2, '0')}] @${mmss(s.alongSec)}  ${s.stopType.toUpperCase()}  ${s.name}`
+    const head = `[${String(s.seq).padStart(2, '0')}] @${formatMmss(s.alongSec)}  ${s.stopType.toUpperCase()}  ${s.name}`
     console.log('\n' + head + lenTag)
     if (s.audioUrl) console.log(`     ${s.audioUrl}`)
     if (s.script)
@@ -154,10 +148,10 @@ function printResult(r: GenerateResult): void {
     if (!s.durationMs && s.script) estSec += est
   }
   printBracket(outro, 'OUTRO')
-  if (audioMs > 0) console.log(`\nTotal narration audio: ${mmss(audioMs / 1000)}`)
+  if (audioMs > 0) console.log(`\nTotal narration audio: ${formatMmss(audioMs / 1000)}`)
   else if (estSec > 0)
     console.log(
-      `\nEstimated narration audio: ~${mmss(estSec)} (dry-run, words/${WORDS_PER_SECOND}/s)`,
+      `\nEstimated narration audio: ~${formatMmss(estSec)} (dry-run, words/${WORDS_PER_SECOND}/s)`,
     )
   console.log('')
 }

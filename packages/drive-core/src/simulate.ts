@@ -2,16 +2,10 @@
 // trigger core against the tour's stops, so we can validate speed-adaptive
 // triggering, debounce, and audio overlap WITHOUT a car or live GPS.
 
-import { bearingDeg, cumulativeMeters, interpolate, MPH_TO_MPS } from './geo'
+import { bearingDeg, cumulativeMeters, interpolate, MPH_TO_MPS, OFF_ROUTE_MAX_M } from './geo'
 import type { LngLat } from './geo'
 import { DEFAULT_TRIGGER, snapStopsToRoute, TriggerEngine } from './trigger'
 import type { GpsFix, TourStopRef, TriggerEvent, TriggerOptions } from './trigger'
-
-// A POI farther off the road than this isn't really "along the drive" — it has no
-// honest trigger point. Matches the generator's OFF_ROUTE_MAX_M selection floor, so
-// a stop the generator would accept will trigger, and a bogus far anchor (e.g. a
-// break snapped 25 km away) is flagged, not fired.
-export const DEFAULT_MAX_OFF_ROUTE_M = 700
 
 export interface DriveOptions extends Partial<TriggerOptions> {
   /** Constant drive speed (mph). Default 60. */
@@ -95,7 +89,7 @@ export interface SimReport {
 export function runDrive(polyline: LngLat[], stops: TourStopRef[], opts: DriveOptions = {}): SimReport {
   const fixes = generateDrive(polyline, opts)
   const trigger: TriggerOptions = { ...DEFAULT_TRIGGER, ...opts }
-  const maxOffRouteM = opts.maxOffRouteM ?? DEFAULT_MAX_OFF_ROUTE_M
+  const maxOffRouteM = opts.maxOffRouteM ?? OFF_ROUTE_MAX_M
 
   // Snap each POI to its trigger point on the road; only on-route POIs can fire.
   const snapped = snapStopsToRoute(polyline, stops)

@@ -66,7 +66,7 @@ import type {
   TourScorecard,
 } from '../eval'
 import { personaForRegion } from '../persona'
-import { cumulativeMeters, encodePolyline, totalMeters } from './geo'
+import { cumulativeMeters, encodePolyline, METERS_PER_MILE, totalMeters } from './geo'
 import type { LngLat } from './geo'
 import { fetchDeepExtracts } from './wikipedia'
 import { ensurePoiOverridesLoaded } from './poi-overrides'
@@ -262,7 +262,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   const totalM = totalMeters(cumulative)
   const totalSec = shell.durationSeconds ?? Math.round(totalM / FALLBACK_SPEED_MPS)
   console.log(
-    `Tour "${shell.headline}" (${shell.regionName}): ${(totalM / 1609.344).toFixed(1)} mi, ~${Math.round(totalSec / 60)} min` +
+    `Tour "${shell.headline}" (${shell.regionName}): ${(totalM / METERS_PER_MILE).toFixed(1)} mi, ~${Math.round(totalSec / 60)} min` +
       (shell.durationSeconds ? '' : ' [estimated drive time]'),
   )
 

@@ -14,7 +14,7 @@
 // the deterministic lint stays the always-on baseline.
 
 import Anthropic from '@anthropic-ai/sdk'
-import { JUDGMENT_MODEL } from '../models'
+import { getAnthropic, JUDGMENT_MODEL } from '../models'
 import { recordModelUsage } from './spend'
 import type { LintFinding } from './lint'
 
@@ -108,15 +108,6 @@ const REPORT_TOOL: Anthropic.Tool = {
   },
 }
 
-let cached: Anthropic | undefined
-function getClient(): Anthropic {
-  if (!cached) {
-    if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY is not set (closer judge needs it).')
-    cached = new Anthropic()
-  }
-  return cached
-}
-
 /**
  * Judge the assembled closers for semantic monotony. Returns findings (lint shape)
  * for the over-used-move stops, or [] if the endings are varied. Best-effort: any
@@ -128,7 +119,7 @@ export async function judgeCloserDiversity(stops: CloserInput[]): Promise<LintFi
     'Closing line(s) of each stop, in order:\n\n' +
     stops.map((s) => `[stop ${s.seq}] ${lastSentences(s.script)}`).join('\n')
 
-  const response = await getClient().messages.create({
+  const response = await getAnthropic('closer judge needs it').messages.create({
     model: JUDGE_MODEL,
     max_tokens: JUDGE_MAX_TOKENS,
     system: SYSTEM,

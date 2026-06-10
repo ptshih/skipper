@@ -18,7 +18,7 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import type { StopType } from '@skipper/shared'
-import { JUDGMENT_MODEL } from '../models'
+import { getAnthropic, JUDGMENT_MODEL } from '../models'
 import { recordModelUsage } from '../pipeline/spend'
 import type { ClaimStatus, ClaimVerdict, StopEval } from './types'
 
@@ -150,17 +150,6 @@ const REPORT_TOOL: Anthropic.Tool = {
   },
 }
 
-let cached: Anthropic | undefined
-function getClient(): Anthropic {
-  if (!cached) {
-    if (!process.env.ANTHROPIC_API_KEY) {
-      throw new Error('ANTHROPIC_API_KEY is not set (grounding eval needs it).')
-    }
-    cached = new Anthropic()
-  }
-  return cached
-}
-
 function buildUserMessage(input: GroundingInput): string {
   const well =
     input.well.length > 0
@@ -190,7 +179,7 @@ function buildUserMessage(input: GroundingInput): string {
 
 /** The real, Anthropic-backed decomposer (tool-use structured output). */
 export const anthropicDecomposer: ClaimDecomposer = async (input) => {
-  const response = await getClient().messages.create({
+  const response = await getAnthropic('grounding eval needs it').messages.create({
     model: GROUNDING_MODEL,
     max_tokens: GROUNDING_MAX_TOKENS,
     system: SYSTEM,
