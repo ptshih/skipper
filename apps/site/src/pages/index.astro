@@ -1,0 +1,54 @@
+---
+// The skipper.fm landing page — placeholder for the real marketing site.
+// This apex also serves the iOS universal-links AASA statically from
+// public/.well-known/apple-app-site-association (the API no longer serves it).
+const title = 'Skipper — AI-narrated driving tours'
+const description =
+  'An AI skipper narrates the drive — GPS-triggered audio tours with a Jungle-Cruise heart.'
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        display: grid;
+        place-items: center;
+        background: #14201b;
+        color: #f2e7cc;
+        font-family: ui-serif, Georgia, 'Times New Roman', serif;
+        text-align: center;
+        padding: 2rem;
+      }
+      h1 {
+        font-size: clamp(2.5rem, 8vw, 4rem);
+        margin: 0 0 0.5rem;
+        letter-spacing: -0.02em;
+      }
+      p {
+        margin: 0;
+        opacity: 0.7;
+        font-size: 1.125rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Skipper</h1>
+      <p>AI-narrated driving tours. Coming soon.</p>
+    </main>
+  </body>
+</html>

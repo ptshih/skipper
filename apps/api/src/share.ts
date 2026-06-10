@@ -1,9 +1,10 @@
 // Shareable-tour link surface for skipper.fm/t/<tourId> universal links — the couch-preview
 // share funnel's public face. Two server jobs (the iOS app + Expo Router do the rest):
-//   1. APPLE_APP_SITE_ASSOCIATION — the AASA payload served at
-//      /.well-known/apple-app-site-association so iOS claims /t/* for the app and a shared
-//      link opens in-app instead of Safari.
-//   2. shareLandingHtml — the human/crawler fallback page for the SAME URL when the app
+//   1. APPLE_APP_SITE_ASSOCIATION — the canonical AASA payload (iOS claims /t/* for the app).
+//      NO LONGER served by this API (api.skipper.fm isn't an associated domain): the apex site
+//      (apps/site) serves it as a STATIC file at public/.well-known/apple-app-site-association.
+//      Keep that file in sync with this constant — the test below validates the shape.
+//   2. shareLandingHtml — the human/crawler fallback page for the /t/<id> URL when the app
 //      isn't there to intercept (Android, desktop, iMessage/social link unfurlers).
 //
 // AASA serving rules the route MUST honor (see src/index.ts) — verified against Apple's

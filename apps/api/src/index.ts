@@ -7,7 +7,6 @@
 //   GET  /tours                      -> list ready tours, one card per drive (anonymous OK)
 //   GET  /tours/:tourId              -> a ready drive: route + region + host + intro/outro + stops
 //   POST /tours/:tourId/assets/sign  -> presigned R2 URLs for the drive's audio (stops + brackets)
-//   GET  /.well-known/apple-app-site-association -> iOS universal-links AASA (claims /t/*)
 //   GET  /t/:tourId                  -> shareable tour link: in-app universal link + OG web fallback
 //
 // A tour is the whole self-contained drive now (corridors merged in; zero-reuse:
@@ -25,7 +24,7 @@ import type { Tour as TourRow } from '@skipper/db/schema'
 import { auth } from './auth'
 import { FEATURES, meetsTier, withSession, type ApiEnv } from './entitlements'
 import { hostForRegion } from './host'
-import { APPLE_APP_SITE_ASSOCIATION, shareLandingHtml } from './share'
+import { shareLandingHtml } from './share'
 import { DATA_SOURCES } from './sources'
 import { contentTypeForKey, presignGet } from './storage'
 import { VERSION_POLICIES } from './version-policy'
@@ -56,13 +55,9 @@ app.get('/sources', (c) => c.json({ sources: DATA_SOURCES }))
 // `gateFor`) and shows a dismissible nudge or a blocking "update required" wall.
 app.get('/version', (c) => c.json({ policies: VERSION_POLICIES }))
 
-// iOS universal links: claim https://skipper.fm/t/* for the app so a shared tour link opens
-// in-app, not Safari. Anonymous + env-free (no DB), like /sources + /version. c.json sets the
-// required Content-Type: application/json; the file must stay 200 / no-redirect / no-auth at
-// this exact /.well-known path with no extension — Apple's crawler rejects anything else. The
-// payload (modern appIDs + components form) lives in ./share. Once skipper.fm points at this
-// server, verify: curl -i https://skipper.fm/.well-known/apple-app-site-association.
-app.get('/.well-known/apple-app-site-association', (c) => c.json(APPLE_APP_SITE_ASSOCIATION))
+// NOTE: the iOS universal-links AASA is served by the apex site (apps/site → skipper.fm)
+// as a static file at /.well-known/apple-app-site-association. The API is api.skipper.fm,
+// which is NOT an associated domain, so it does not serve the AASA — single source of truth.
 
 // Human/crawler fallback for a shared tour link — the app intercepts it on an installed
 // iPhone; everyone else (Android, desktop, iMessage/social unfurlers) lands here. Open, since
