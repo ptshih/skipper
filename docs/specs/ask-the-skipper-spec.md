@@ -8,6 +8,8 @@
 
 > **Reconciliation (2026-06-08, after the review above):** two production changes landed post-review, and this spec's body has been updated to match. (1) The TTS voice switched **Sulafat → Algenib** (`models.ts` `SKIPPER_VOICE_ID`; Sulafat retired as female). (2) The persona was recast **boat-captain → road-trip guide** (`skipper.ts`, `apps/mobile`) — so build against `SKIPPER_VOICE_ID`, never a hard-coded voice name, and read any lingering `[DECIDED 2026-06-07]` boat flavor through the road-trip persona. The live canonical preview is tour `9ac50db5` (`emerald-bay-run`, Algenib, road-trip; the `9813e519` id below predates the Phase-2 wipe).
 
+> **Reconciliation (2026-06-10):** the TTS voice switched **Algenib → Charon** (`models.ts` `SKIPPER_VOICE_ID`; founder six-voice audition under the anti-fade delivery prompt). Same rule as above: build against `SKIPPER_VOICE_ID`, never a hard-coded voice name — read "Algenib" below as the persona voice. The live canonical audio stays Algenib until the next regen/resynth.
+
 ---
 
 ## 1. Overview & vision

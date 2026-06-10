@@ -17,7 +17,7 @@ What it stresses:
   different generation input per tour — each region generates its own content, no schema fight.
 - **A region skipper can SOUND different.** Each `PersonaDef`
   (`packages/generator/src/persona/`, resolved per-tour by `personaForRegion(slug)`) carries its
-  own `voice` (skipper → Algenib), so a Yosemite skipper just sets a different Gemini-TTS voice on
+  own `voice` (skipper → Charon), so a Yosemite skipper just sets a different Gemini-TTS voice on
   its def. Tune + ear-judge per region (the voice gate is already per-region).
 - **The generation persona is a per-region `PersonaDef`** (registry BUILT, commit `687c885`):
   system + bracket prompt, voice, TTS style, and the personal KIT, resolved by region slug. The

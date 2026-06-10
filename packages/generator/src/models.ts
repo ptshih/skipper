@@ -52,7 +52,7 @@ export const JUDGMENT_MODEL = 'claude-opus-4-8' as const
 // with a GEMINI-TTS voice so the work bills to the GCP project — GCP Welcome/trial
 // credits are NOT usable on the Gemini Developer API key; only Cloud TTS / Vertex
 // draw GCP credits. Cloud TTS uniquely gives the persona three things: a natural,
-// steerable Gemini voice (the active pick is "Algenib" — see below), a first-class natural-language STYLE prompt
+// steerable Gemini voice (the active pick is "Charon" — see below), a first-class natural-language STYLE prompt
 // (input.prompt) to steer delivery, and flexible output encodings (we now use MP3 —
 // see the AUDIO FORMAT note below; duration, which the API never returns, is summed
 // from the frames in pipeline/mp3.ts). Auth is OAuth/ADC
@@ -95,25 +95,29 @@ export const TTS_CLIP_EXTENSION = 'mp3' as const
 export const TTS_LANGUAGE_CODE = 'en-US' as const
 
 // Gemini-TTS prebuilt voices (each carries a one-word timbre descriptor). The
-// ACTIVE pick is `algenib` ("Gravelly") — a deep, weathered MALE voice that fits
-// the written "a man" persona, chosen by ear (2026-06-08) from a full-catalog
-// audition reading the canonical Jungle-Cruise jokes deadpan. `sulafat` ("Warm")
-// was the prior pick but reads female; it and the rest stay as A/B references.
+// ACTIVE pick is `charon` ("Informative" — the tour-guide register), chosen by ear
+// 2026-06-10 over Algenib in a six-voice audition on the Chambers passage under the
+// anti-fade style prompt. `algenib` ("Gravelly") was the pick 2026-06-08→06-10 and
+// stays as the A/B reference. This catalog is the AUDITIONED shortlist, not the full
+// table: Cloud TTS lists 16 MALE Gemini voices (docs, fetched 2026-06-10) — still
+// unauditioned: Algieba, Alnilam, Enceladus, Fenrir, Iapetus, Orus, Puck, Rasalgethi,
+// Sadachbia, Sadaltager, Schedar, Umbriel, Zubenelgenubi.
 export const GEMINI_VOICES = {
-  algenib: 'Algenib', // Gravelly — THE SKIPPER PICK (deep/weathered, male; matches the persona). Picked 2026-06-08.
+  charon: 'Charon', // Informative (tour-guide register) — THE SKIPPER PICK. Picked 2026-06-10.
+  algenib: 'Algenib', // Gravelly — former pick (2026-06-08→06-10; deep/weathered, male)
   sulafat: 'Sulafat', // Warm — former pick (female; retired because the persona is a man)
   achird: 'Achird', // Friendly
-  gacrux: 'Gacrux', // Mature
-  vindemiatrix: 'Vindemiatrix', // Gentle
-  charon: 'Charon', // Informative (tour-guide register)
+  gacrux: 'Gacrux', // Mature (NOTE: the Cloud TTS table lists Gacrux as FEMALE)
+  vindemiatrix: 'Vindemiatrix', // Gentle (female per the Cloud TTS table)
 } as const
 
 export type GeminiVoice = (typeof GEMINI_VOICES)[keyof typeof GEMINI_VOICES]
 
 // The Skipper's voice. Baked into the tour-OWNED narration audio, so changing it
 // after tours exist forces re-synthesis (resynth-tour.ts). No ElevenLabs
-// sunset/quota constraint on this provider.
-export const SKIPPER_VOICE_ID: GeminiVoice = GEMINI_VOICES.algenib
+// sunset/quota constraint on this provider. ⚠ The live canonical tours still carry
+// Algenib audio until the next regen/resynth — Charon ships with that run.
+export const SKIPPER_VOICE_ID: GeminiVoice = GEMINI_VOICES.charon
 
 // Natural-language DELIVERY directive (Cloud TTS input.prompt). The persona's words
 // already live in the script; this only sets HOW it is read, never WHAT is said —

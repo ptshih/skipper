@@ -145,7 +145,7 @@ you found so the next agent can re-check it.
   @anthropic-ai/sdk 0.102.0.
 - **TTS = Google Cloud Text-to-Speech via REST** (no SDK — raw `fetch` to
   `texttospeech.googleapis.com/v1/text:synthesize`), model `gemini-3.1-flash-tts-preview`
-  with Gemini-TTS voice "Algenib" (`TTS_MODEL` / `SKIPPER_VOICE_ID` in `models.ts`);
+  with Gemini-TTS voice "Charon" (`TTS_MODEL` / `SKIPPER_VOICE_ID` in `models.ts`);
   OAuth/ADC via `google-auth-library`, NO API key. Output is **MP3 32 kbps**
   (`TTS_AUDIO_ENCODING = 'MP3'`; exact duration via the frame-sum parser in
   `pipeline/mp3.ts`; `wav.ts` is the retained LINEAR16 fallback — see
@@ -273,7 +273,7 @@ From an adversarial review of the scaffold. Verdict: sound foundation. Guardrail
   `DATABASE_URL` to exist — env-free routes like `GET /health` keep booting.
 - **`voice` is a fixed function of persona in v1** (each `PersonaDef.voice` in
   `packages/generator/src/persona/`, resolved per-tour by `personaForRegion(slug)`:
-  skipper → the Google Cloud Gemini-TTS voice name "Algenib"; `SKIPPER_VOICE_ID` in
+  skipper → the Google Cloud Gemini-TTS voice name "Charon"; `SKIPPER_VOICE_ID` in
   `models.ts` is the source constant the def references). Not a request knob until M3
   (no `tours.voice` / `tourRequest.voice` yet). (Gemini-TTS voice names are stable
   identifiers — no ElevenLabs-style sunset to mind.)
