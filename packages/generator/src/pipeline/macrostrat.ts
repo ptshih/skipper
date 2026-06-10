@@ -139,11 +139,8 @@ export async function geologyFacts(lat: number, lng: number): Promise<GeologyRes
   try {
     const res = await fetchWithRetry(
       `${API}?lat=${lat}&lng=${lng}`,
-      {
-        headers: { 'User-Agent': MACROSTRAT_USER_AGENT },
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-      },
-      { attempts: 3 },
+      { headers: { 'User-Agent': MACROSTRAT_USER_AGENT } },
+      { attempts: 3, timeoutMs: REQUEST_TIMEOUT_MS },
     )
     if (!res.ok) return null
     json = (await res.json()) as MacrostratResponse

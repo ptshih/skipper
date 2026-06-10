@@ -273,11 +273,8 @@ async function fetchWikidataBox(sw: LngLat, ne: LngLat): Promise<RawItem[]> {
   }`
   const res = await fetchWithRetry(
     `${WDQS_ENDPOINT}?query=${encodeURIComponent(query)}`,
-    {
-      headers: { 'User-Agent': WDQS_USER_AGENT, Accept: 'application/sparql-results+json' },
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    },
-    { attempts: 3 },
+    { headers: { 'User-Agent': WDQS_USER_AGENT, Accept: 'application/sparql-results+json' } },
+    { attempts: 3, timeoutMs: REQUEST_TIMEOUT_MS },
   )
   if (!res.ok) throw new Error(`WDQS HTTP ${res.status}`)
   const json = (await res.json()) as {

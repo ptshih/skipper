@@ -231,11 +231,8 @@ async function getEntities(ids: string[], props: string): Promise<Record<string,
   })
   const res = await fetchWithRetry(
     `${API}?${qs}`,
-    {
-      headers: { 'User-Agent': WIKIDATA_USER_AGENT },
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    },
-    { attempts: 3 },
+    { headers: { 'User-Agent': WIKIDATA_USER_AGENT } },
+    { attempts: 3, timeoutMs: REQUEST_TIMEOUT_MS },
   )
   if (!res.ok) throw new Error(`Wikidata HTTP ${res.status}`)
   const json = (await res.json()) as WbGetEntitiesResponse

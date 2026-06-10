@@ -79,6 +79,12 @@ async function wiki<T>(params: Record<string, string>, maxlagAttempt = 0): Promi
   } catch {
     throw new Error(`Wikipedia returned non-JSON (HTTP ${res.status}): ${body.slice(0, 160)}`)
   }
+  // JSON.parse succeeds for a literal `null`/scalar body (a misbehaving proxy could send
+  // 200 + "null"); guard the shape before reading `.error` so it surfaces as a clear message
+  // rather than a raw "Cannot read properties of null" TypeError thrown outside the catch.
+  if (json === null || typeof json !== 'object') {
+    throw new Error(`Wikipedia returned a non-object body (HTTP ${res.status}): ${body.slice(0, 160)}`)
+  }
   if (json!.error?.code === 'maxlag') {
     if (maxlagAttempt >= MAX_MAXLAG_RETRIES)
       throw new Error(`Wikipedia maxlag persisted after ${MAX_MAXLAG_RETRIES} retries.`)

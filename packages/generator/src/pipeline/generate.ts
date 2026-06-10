@@ -179,6 +179,10 @@ export interface GenerateResult {
   /** Display label for the drive (the tour's headline, e.g. "Emerald Bay"). */
   tourName: string
   region: string
+  /** Region SLUG (the persona-registry key) — single-sourced from the tour shell so the
+   *  offline eval resolves the SAME persona kit the live pipeline used, instead of guessing
+   *  it by slugifying the display name. */
+  regionSlug: string
   /** Provenance pin for the eval record: which model narrated this telling. */
   narrationModel: string
   durationBucket: DurationBucket
@@ -984,6 +988,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       slug: shell.slug,
       tourName: shell.headline,
       region: shell.regionName,
+      regionSlug: shell.regionSlug,
       narrationModel: NARRATION_MODEL,
       durationBucket,
       jokeLevel,
@@ -1185,6 +1190,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       slug: shell.slug,
       tourName: shell.headline,
       region: shell.regionName,
+      regionSlug: shell.regionSlug,
       narrationModel: NARRATION_MODEL,
       durationBucket,
       jokeLevel,

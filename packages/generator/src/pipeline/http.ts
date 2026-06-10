@@ -13,6 +13,11 @@ export interface RetryOptions {
   attempts?: number
   /** Base backoff in ms; doubles per attempt (default 500). */
   baseDelayMs?: number
+  /** Per-attempt timeout in ms. A FRESH AbortSignal.timeout is minted for EACH attempt —
+   *  passing a single `signal: AbortSignal.timeout(N)` in `init` would start the clock once
+   *  for the whole sequence and, once it fired, make every remaining retry reject INSTANTLY
+   *  (defeating the retry exactly when upstream is slow). Combined with any caller `init.signal`. */
+  timeoutMs?: number
 }
 
 export async function fetchWithRetry(url: string, init?: RequestInit, opts: RetryOptions = {}): Promise<Response> {
@@ -21,8 +26,15 @@ export async function fetchWithRetry(url: string, init?: RequestInit, opts: Retr
   let lastError: unknown
   for (let i = 0; i < attempts; i++) {
     const isLast = i === attempts - 1
+    // Mint the timeout PER ATTEMPT so each retry gets a full, fresh budget (a timeout that
+    // fires is a transient failure and is retried below, with a new clock next pass).
+    const timeoutSignal = opts.timeoutMs ? AbortSignal.timeout(opts.timeoutMs) : undefined
+    const signal =
+      timeoutSignal && init?.signal
+        ? AbortSignal.any([init.signal, timeoutSignal])
+        : (timeoutSignal ?? init?.signal)
     try {
-      const res = await fetch(url, init)
+      const res = await fetch(url, signal ? { ...init, signal } : init)
       if (!RETRYABLE_STATUS.has(res.status) || isLast) return res
       const retryAfter = Number(res.headers.get('retry-after'))
       const delay = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : base * 2 ** i

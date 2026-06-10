@@ -53,6 +53,9 @@ interface Artifact {
   slug: string
   tourName: string
   region: string
+  /** Region slug = the persona-registry key (single-sourced from the tour shell). Present on
+   *  artifacts from 2026-06-10 onward; older ones are tolerated via slugify(region) below. */
+  regionSlug?: string
   /** Present on artifacts from 2026-06-09 onward (tolerated absent on older ones). */
   tourId?: string
   dryRun?: boolean
@@ -80,8 +83,10 @@ function parseArgs(argv: string[]): {
   return { path, jsonOut, charm, veracity }
 }
 
-/** "Lake Tahoe" → "lake-tahoe" — best-effort region-slug for persona resolution (the artifact
- *  carries the display name, not the slug; an unknown slug falls back to the Skipper persona). */
+/** Fallback ONLY for pre-2026-06-10 artifacts that lack `regionSlug`: best-effort slug from
+ *  the display name ("Lake Tahoe" → "lake-tahoe"). Current artifacts carry regionSlug directly,
+ *  so the offline auditor uses the SAME persona key the live pipeline did; an unknown slug still
+ *  falls back to the Skipper persona (personaForRegion). */
 const slugify = (s: string): string => s.toLowerCase().trim().replace(/\s+/g, '-')
 
 function printScorecard(card: TourScorecard): void {
@@ -144,7 +149,24 @@ async function main() {
   }))
 
   // GATES: grounding (LLM, concurrent — the SDK handles 429 retry) + tts (free, deterministic).
-  const grounding: StopEval[] = await Promise.all(inputs.map((i) => evaluateGrounding(i)))
+  // Per-stop isolation (mirrors the veracity pass below + the live pipeline's allSettled):
+  // one stop's grounding call dying — transient API error, or a malformed completion with no
+  // tool call — must NOT throw away every OTHER stop's completed Opus spend AND the durable
+  // eval record. An errored stop is WARNED and omitted (un-audited ≠ failed).
+  const grounding: StopEval[] = (
+    await Promise.all(
+      inputs.map(async (i) => {
+        try {
+          return await evaluateGrounding(i)
+        } catch (e) {
+          console.warn(
+            `grounding: stop ${i.seq} ("${i.placeName ?? 'scenic'}") not evaluated — ${(e as Error).message}`,
+          )
+          return null
+        }
+      }),
+    )
+  ).filter((x): x is StopEval => x !== null)
   const tts: StopEval[] = narrated.map((s) => evaluateTts({ seq: s.seq, script: s.script! }))
 
   // ADVISORY: diversity (free, cross-stop lint over story+scenic — breaks aren't linted),
@@ -152,7 +174,7 @@ async function main() {
   const lintInputs: LintInput[] = narrated
     .filter((s) => s.stopType !== 'break')
     .map((s) => ({ seq: s.seq, stopType: s.stopType, script: s.script! }))
-  const persona = personaForRegion(slugify(artifact.region))
+  const persona = personaForRegion(artifact.regionSlug ?? slugify(artifact.region))
   const diversity: StopEval[] = evaluateDiversity(lintInputs, persona.kit)
 
   // ADVISORY: charm (one Opus call) — opt-in.

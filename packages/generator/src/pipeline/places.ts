@@ -86,7 +86,18 @@ export async function searchBreakStops(
 ): Promise<BreakAnchor[]> {
   const byId = new Map<string, BreakAnchor>()
   for (const cat of BREAK_CATEGORIES) {
-    const places = await searchOneCategory(encodedPolyline, cat.textQuery, cat.includedType, apiKey)
+    let places: PlaceResult[]
+    try {
+      places = await searchOneCategory(encodedPolyline, cat.textQuery, cat.includedType, apiKey)
+    } catch (e) {
+      // Per-category isolation: one category 500ing past its retries must not discard the
+      // anchors already collected from the categories that succeeded — break stops are a
+      // nicety, and partial results beat zero.
+      console.warn(
+        `Places searchText "${cat.includedType}" failed (${(e as Error).message}) — skipping that category.`,
+      )
+      continue
+    }
     for (const p of places) {
       if (byId.has(p.id) || !p.location || !p.displayName?.text) continue
       byId.set(p.id, {

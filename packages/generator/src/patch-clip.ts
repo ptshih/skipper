@@ -33,16 +33,37 @@ interface Args {
   dryRun: boolean
 }
 
+/** Flags that take a following token as their value (so the positional id isn't mistaken
+ *  for one, and a value that happens to equal the id doesn't shadow it). */
+const VALUE_FLAGS = new Set(['--find', '--replace'])
+
 function flag(args: string[], name: string): string | undefined {
   const eqForm = args.find((a) => a.startsWith(`--${name}=`))
   if (eqForm) return eqForm.slice(name.length + 3)
   const i = args.indexOf(`--${name}`)
-  return i >= 0 ? args[i + 1] : undefined
+  if (i < 0) return undefined
+  const next = args[i + 1]
+  // A following token that is itself a flag means this flag was given no value — so
+  // `<id> --find --replace x` makes flag('find') undefined (a usage error) rather than the
+  // literal "--replace".
+  return next !== undefined && !next.startsWith('--') ? next : undefined
+}
+
+/** The first positional (non-flag) token that is NOT the value of a value-flag — found by
+ *  position, not by value, so an id that coincides with a find/replace string still resolves. */
+function positionalId(args: string[]): string | undefined {
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i]!
+    if (a.startsWith('--')) continue
+    if (i > 0 && VALUE_FLAGS.has(args[i - 1]!)) continue
+    return a
+  }
+  return undefined
 }
 
 function parseArgs(argv: string[]): Args {
   const args = argv.slice(2)
-  const id = args.find((a) => !a.startsWith('--') && a !== flag(args, 'find') && a !== flag(args, 'replace'))
+  const id = positionalId(args)
   const find = flag(args, 'find')
   const replace = flag(args, 'replace')
   if (!id || find === undefined || replace === undefined) {
