@@ -116,6 +116,9 @@ export interface DriveStopView {
   seq: number
   name: string
   stopType: string
+  /** Raw POI coordinates — for the map's stop markers. */
+  lat: number
+  lng: number
 }
 
 export interface UseDrive {
@@ -130,6 +133,8 @@ export interface UseDrive {
   stops: DriveStopView[]
   totalStops: number
   firedCount: number
+  /** The route as [lng, lat] pairs — for the map overlay's route line. */
+  polyline: [number, number][]
 
   /** 0..1 route position for `RouteTrack`, driven imperatively by each GPS fix. */
   progress: Animated.Value
@@ -951,7 +956,14 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
   // Stable identity across renders — this rebuilt a fresh array every audio tick, which made
   // the player's auto-scroll effect (keyed on it) re-fire ~2×/sec and pin the stop list.
   const stops: DriveStopView[] = useMemo(
-    () => data?.stops.map((s) => ({ seq: s.seq, name: s.name, stopType: s.stopType })) ?? [],
+    () =>
+      data?.stops.map((s) => ({
+        seq: s.seq,
+        name: s.name,
+        stopType: s.stopType,
+        lat: s.lat,
+        lng: s.lng,
+      })) ?? [],
     [data],
   )
 
@@ -980,6 +992,7 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
     stops,
     totalStops: stops.length,
     firedCount: firedSeqs.size,
+    polyline: data?.polyline ?? [],
     progress: dot,
     activeSeq,
     activeBracket: activeSeq === null ? null : bracketKindForSeq(activeSeq),

@@ -5,8 +5,11 @@
 // ⇄ encounter sheet → sign-off. Silence is the DEFAULT state — the idle base must feel
 // alive (the RoamMotif is the one moving thing), never like a spinner.
 // `?mode=sim` replays a ready tour's polyline through the same engine for couch testing.
-// Alpha cuts vs the full design: waves + B-sides ("Tell me more") wait on their clips;
-// the offline region pack + logbook wait on their backends — honest UI shows none of them.
+// The encounter sheet reuses the EXACT story-player transport (Scrubber + play/pause + ±15s)
+// so both players feel identical (founder call, superseding the alpha's read-only bar).
+// Alpha cuts vs the full design: the encounter PATTER line (grounded, from roam_clips), waves
+// + B-sides ("Tell me more"), and the offline region pack + logbook wait on their backends —
+// honest UI shows none of them.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Animated, Linking, Pressable, StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -25,8 +28,10 @@ import {
   Icon,
   RouteTrack,
   Screen,
+  Scrubber,
   StateView,
   Text,
+  TransportBar,
   voice,
 } from '@/ui'
 
@@ -65,6 +70,8 @@ export default function RoamScreen() {
   const { mode } = useLocalSearchParams<{ mode?: string }>()
   const roamMode = mode === 'sim' ? 'sim' : 'live'
   const r = useRoam(roamMode)
+  // The entry card's trail sits parked at 0 — the road not yet traveled.
+  const entryTrail = useRef(new Animated.Value(0)).current
 
   // First-run ambient contract — he sets the deal ONCE before the first session.
   const [contractSeen, setContractSeen] = useState<boolean | null>(null)
@@ -246,8 +253,8 @@ export default function RoamScreen() {
         </View>
 
         {/* The encounter sheet — slides up over the idle base; the base stays visible.
-            Glanceable, never required, dismissable (Skip / scrim). NOT a scrubber: roam
-            has no seeking — the thin bar is read-only progress. */}
+            Glanceable, never required, dismissable (Skip / scrim). Carries the full story-
+            player transport so seeking + pause feel identical across the two players. */}
         {sheetVisible && (
           <>
             <Pressable
@@ -280,28 +287,33 @@ export default function RoamScreen() {
               <View style={[styles.handle, { backgroundColor: colors.trackInactive }]} />
               <View style={styles.sheetTop}>
                 <Badge tone="pine" label={voice.roam.storyBadge} />
-                <Duck label={voice.roam.musicDucked} active />
+                {/* Ducked while he talks; un-ducks (music back up) when held. */}
+                <Duck
+                  label={r.clipPlaying ? voice.roam.musicDucked : voice.roam.musicHeld}
+                  active={r.clipPlaying}
+                />
               </View>
               <Text variant="placardTitle" color="ink" numberOfLines={2}>
                 {r.activeName}
               </Text>
-              <View style={styles.progressRow}>
-                <View style={[styles.progressTrack, { backgroundColor: colors.trackInactive }]}>
-                  <View
-                    style={[
-                      styles.progressFill,
-                      {
-                        backgroundColor: colors.trackActive,
-                        width: `${Math.min(100, (r.clipElapsedSec / Math.max(1, r.clipDurationSec)) * 100)}%`,
-                      },
-                    ]}
-                  />
-                </View>
-                <Text variant="mono" color="inkFaint">
-                  {`${Math.floor(r.clipElapsedSec / 60)}:${String(Math.floor(r.clipElapsedSec % 60)).padStart(2, '0')}`}
-                </Text>
-              </View>
-              <Button variant="ghost" onPress={r.skip} title={voice.roam.skip} />
+              {/* The SAME transport as the story player — interactive scrubber + center
+                  play/pause + ±15s jogs — so the two players feel identical. Skip rides the
+                  ghost secondary beneath the row. */}
+              <Scrubber
+                positionMs={r.clipPositionMs}
+                durationMs={r.clipDurationMs}
+                onSeek={r.seekClipTo}
+                onScrubbingChange={r.setClipScrubbing}
+                disabled={!r.clipCanSeek}
+              />
+              <TransportBar
+                playing={r.clipPlaying}
+                onPlayPause={r.toggleClipPlay}
+                canSeek={r.clipCanSeek}
+                onSeekBack={() => r.seekClipBy(-15)}
+                onSeekForward={() => r.seekClipBy(15)}
+                secondary={{ title: voice.roam.skip, onPress: r.skip }}
+              />
             </Animated.View>
           </>
         )}
@@ -327,8 +339,18 @@ export default function RoamScreen() {
           <Text variant="body" color="inkDim">
             {voice.roam.entryBlurb}
           </Text>
+          {/* The trail, not yet traveled — the signature motif parked at 0. No glow: the
+              Ride-along button owns the screen's one amber element (DESIGN §8). */}
+          <RouteTrack progress={entryTrail} glow={false} />
+          <Button
+            variant="primary"
+            fullWidth
+            glow
+            icon="car"
+            onPress={onRideAlong}
+            title={voice.roam.start}
+          />
         </Card>
-        <Button variant="primary" fullWidth glow onPress={onRideAlong} title={voice.roam.start} />
       </View>
     </Screen>
   )
@@ -379,7 +401,4 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
   },
   sheetTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  progressRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  progressTrack: { flex: 1, height: 3, borderRadius: radius.pill, overflow: 'hidden' },
-  progressFill: { height: '100%' },
 })

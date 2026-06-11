@@ -72,9 +72,21 @@ export interface RoamState {
   pinCount: number
   /** The encounter currently PLAYING (null = companionable silence). */
   activeName: string | null
-  /** Clip progress for the sheet's thin non-interactive bar. */
-  clipElapsedSec: number
-  clipDurationSec: number
+  /** The encounter clip's transport — roam reuses the EXACT tour-player controls
+   *  (Scrubber + play/pause + ±15s jogs) so both players feel identical (founder call,
+   *  superseding the alpha's read-only progress bar). */
+  clipPositionMs: number
+  clipDurationMs: number
+  clipPlaying: boolean
+  clipCanSeek: boolean
+  /** Pause/resume the encounter clip (music un-ducks while held). */
+  toggleClipPlay: () => void
+  /** Seek to an absolute position (scrubber release / a11y jog). */
+  seekClipTo: (ms: number) => void
+  /** Jog ±seconds (the ±15s buttons). */
+  seekClipBy: (deltaSec: number) => void
+  /** Hold the clip-finished auto-dismiss while a scrub drag is live. */
+  setClipScrubbing: (active: boolean) => void
   /** Encounters told this session (the stat pill + the sign-off tally). */
   toldCount: number
   /** Alpha drive-test diagnostics: seconds since the last accepted fix + straight-line
@@ -104,6 +116,7 @@ export function useRoam(mode: RoamMode): RoamState {
   const [openerLine, setOpenerLine] = useState<string>(voice.roam.sessionStart[0]!)
   const [chattiness, setChattinessState] = useState<ChattinessLevel>('normal')
   const [gpsSearching, setGpsSearching] = useState(false)
+  const [clipPaused, setClipPaused] = useState(false) // encounter held by hand (music un-ducks)
   const [diag, setDiag] = useState<{ fixAgeSec: number | null; nearestM: number | null }>({
     fixAgeSec: null,
     nearestM: null,
@@ -123,6 +136,9 @@ export function useRoam(mode: RoamMode): RoamState {
   const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const sawFresh = useRef(false)
   const clipRetried = useRef<Set<string>>(new Set()) // poiIds given the one stall recovery
+  const pausedRef = useRef(false) // mirrors clipPaused for the stall watchdog
+  const scrubbingRef = useRef(false) // a scrub drag is live — hold the clip-finished handler
+  const seekTarget = useRef<number | null>(null) // pending seek (sec), so ±15 taps accumulate
 
   const player = useAudioPlayer()
   const status = useAudioPlayerStatus(player)
@@ -215,8 +231,11 @@ export function useRoam(mode: RoamMode): RoamState {
     } catch {}
     player.replace({ uri: pin.url })
     player.play()
+    setClipPaused(false) // a fresh encounter always opens playing
+    pausedRef.current = false
+    seekTarget.current = null
     stallTimer.current = setTimeout(() => {
-      if (sawFresh.current) return
+      if (sawFresh.current || pausedRef.current) return
       if (!clipRetried.current.has(activePoiId)) {
         clipRetried.current.add(activePoiId)
         void recoverStalledClip(activePoiId)
@@ -239,11 +258,28 @@ export function useRoam(mode: RoamMode): RoamState {
   useEffect(() => {
     if (activePoiId === null) return
     if (status.playing && (status.currentTime ?? 0) > 0.25) sawFresh.current = true
-    if (status.didJustFinish && sawFresh.current && finishedPoi.current !== activePoiId) {
+    if (
+      status.didJustFinish &&
+      sawFresh.current &&
+      !scrubbingRef.current && // a scrub through the final seconds isn't an end
+      finishedPoi.current !== activePoiId
+    ) {
       finishedPoi.current = activePoiId
       onClipDone(activePoiId)
     }
   }, [status.playing, status.didJustFinish, status.currentTime, activePoiId, onClipDone])
+
+  // Drop the pending seek target once the clock catches it, so a later ±15 tap re-bases on
+  // the real position instead of a stale target (mirrors useDrive's seek bookkeeping).
+  useEffect(() => {
+    if (
+      seekTarget.current != null &&
+      status.currentTime != null &&
+      Math.abs(status.currentTime - seekTarget.current) < 0.4
+    ) {
+      seekTarget.current = null
+    }
+  }, [status.currentTime])
 
   // Session tick (roaming only): the GPS quiet-watchdog (live) + the diagnostics line
   // (fix age + nearest pin) that lets a real-road alpha test self-diagnose.
@@ -407,6 +443,52 @@ export function useRoam(mode: RoamMode): RoamState {
       ? 0
       : (pinsRef.current.find((p) => p.poiId === activePoiId)?.durationMs ?? 0)
 
+  // ---- encounter transport (the standard story-player controls, reused 1:1) ----
+  // Prefer the real decoded duration; the manifest's durationMs covers the pre-load gap.
+  const clipDurSec =
+    status.duration && status.duration > 0 ? status.duration : activeDurationMs / 1000
+  const clipCanSeek = activePoiId !== null && !!status.isLoaded && clipDurSec > 0
+
+  const seekClipTo = useCallback(
+    (ms: number) => {
+      if (!clipCanSeek) return
+      const target = Math.min(clipDurSec, Math.max(0, ms / 1000))
+      seekTarget.current = target
+      try {
+        player.seekTo(target)
+      } catch {}
+    },
+    [clipCanSeek, clipDurSec, player],
+  )
+
+  const seekClipBy = useCallback(
+    (deltaSec: number) => {
+      if (!clipCanSeek) return
+      // Prefer the pending command over the lagging clock so rapid taps accumulate.
+      const base = seekTarget.current ?? status.currentTime ?? 0
+      seekClipTo((base + deltaSec) * 1000)
+    },
+    [clipCanSeek, status.currentTime, seekClipTo],
+  )
+
+  const toggleClipPlay = useCallback(() => {
+    if (activePoiId === null) return
+    setClipPaused((p) => {
+      const next = !p
+      pausedRef.current = next
+      try {
+        // duckOthers: pausing un-ducks the rider's audio; resuming re-ducks under the skipper.
+        if (next) player.pause()
+        else player.play()
+      } catch {}
+      return next
+    })
+  }, [activePoiId, player])
+
+  const setClipScrubbing = useCallback((active: boolean) => {
+    scrubbingRef.current = active
+  }, [])
+
   return {
     phase,
     mode,
@@ -414,8 +496,14 @@ export function useRoam(mode: RoamMode): RoamState {
     gate,
     pinCount,
     activeName,
-    clipElapsedSec: status.currentTime ?? 0,
-    clipDurationSec: activeDurationMs / 1000,
+    clipPositionMs: (status.currentTime ?? 0) * 1000,
+    clipDurationMs: clipDurSec * 1000,
+    clipPlaying: !clipPaused,
+    clipCanSeek,
+    toggleClipPlay,
+    seekClipTo,
+    seekClipBy,
+    setClipScrubbing,
     toldCount,
     diag,
     openerLine,

@@ -109,6 +109,7 @@ export const voice = {
     stories: 'stories', // the stat pill: "<n> stories"
     musicPlaying: 'Your music · playing',
     musicDucked: 'Your music · ducked',
+    musicHeld: 'Held · music back up', // encounter PAUSED — the rider's audio un-ducks
     // Chattiness — a SELECTION knob (which/how-many encounters fire), never a generation one.
     chattiness: {
       quiet: 'Quiet',

@@ -6,19 +6,21 @@
 // compressed segment timeline (clip / drive / rest), tappable stops, no GPS or permission
 // gate. Reuses the @/ui player primitives; the clock + fire-queue + source swap live in
 // `useDrive`.
-import { useCallback, useEffect, useRef } from 'react'
-import { ActivityIndicator, Alert, Animated, PixelRatio, ScrollView, StyleSheet, View } from 'react-native'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { ActivityIndicator, Alert, Animated, PixelRatio, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { Stack, useLocalSearchParams, useNavigation, useRouter } from 'expo-router'
+import * as SecureStore from 'expo-secure-store'
 import { useDrive } from '@/lib/useDrive'
 import { useSession } from '@/lib/auth'
 import { stopLabel } from '@/lib/labels'
 import { useReducedMotion, useTheme } from '@/theme'
-import { duration, space } from '@/theme/tokens'
+import { border, duration, radius, space } from '@/theme/tokens'
 import {
   AccountGate,
   Badge,
   Button,
   Divider,
+  Icon,
   NowCard,
   RouteTrack,
   Screen,
@@ -32,7 +34,12 @@ import {
   stopTone,
   voice,
 } from '@/ui'
+import { DriveMap } from '@/ui/DriveMap'
 import type { BadgeTone } from '@/ui'
+
+// Map vs List is a per-rider preference that survives sessions (real-map spec §4).
+const VIEW_KEY = 'skipper.drivePlayerView'
+type PlayerView = 'map' | 'list'
 import { formatMmssMs, METERS_PER_MILE } from '@skipper/drive-core'
 
 export default function DriveScreen() {
@@ -45,6 +52,25 @@ export default function DriveScreen() {
   const driveMode = mode === 'live' ? 'live' : mode === 'preview' ? 'preview' : __DEV__ ? 'sim' : 'preview'
   const d = useDrive(id, { mode: driveMode })
   const isPreview = driveMode === 'preview'
+
+  // Map ⇄ List — the real map (route + live puck) or the bare itinerary. List stays the
+  // offline + accessibility-complete equivalent; the choice persists across sessions.
+  const [view, setView] = useState<PlayerView>('map')
+  useEffect(() => {
+    SecureStore.getItemAsync(VIEW_KEY)
+      .then((v) => {
+        if (v === 'map' || v === 'list') setView(v)
+      })
+      .catch(() => {})
+  }, [])
+  const changeView = useCallback((next: PlayerView) => {
+    setView(next)
+    SecureStore.setItemAsync(VIEW_KEY, next).catch(() => {})
+  }, [])
+  // Map mode floats the player as an expandable PEEK sheet (mini-bar ↔ full card). Pre-drive
+  // (ready) and arrival (done) force the full card — there's nothing to peek past.
+  const [expanded, setExpanded] = useState(false)
+
   const listRef = useRef<ScrollView | null>(null)
   const navigation = useNavigation()
   const router = useRouter()
@@ -293,6 +319,178 @@ export default function DriveScreen() {
       />
     )
 
+  // Per-stop state, shared by the itinerary List rows and the Map markers.
+  const stopViews = d.stops.map((s, i) => {
+    const state: 'passed' | 'active' | 'upcoming' = isPreview
+      ? d.phase === 'done' || (focusRow >= 0 && i < focusRow)
+        ? 'passed'
+        : s.seq === focusSeq && d.currentKind !== 'drive'
+          ? 'active'
+          : 'upcoming'
+      : d.phase === 'done' || (d.firedSeqs.has(s.seq) && s.seq !== d.activeSeq)
+        ? 'passed'
+        : s.seq === d.activeSeq
+          ? 'active'
+          : 'upcoming'
+    return { seq: s.seq, name: s.name, stopType: s.stopType, lat: s.lat, lng: s.lng, state }
+  })
+
+  // The Map ⇄ List header switch (real-map spec §4). Hidden in preview-on-a-zero-route
+  // edge cases by simply having no polyline → the map shows an empty basemap, still valid.
+  const viewToggle = () => (
+    <View style={[styles.toggle, { backgroundColor: theme.colors.surfaceRaised, borderColor: theme.colors.rule }]}>
+      {(['map', 'list'] as const).map((m) => {
+        const on = view === m
+        return (
+          <Pressable
+            key={m}
+            onPress={() => changeView(m)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: on }}
+            accessibilityLabel={m === 'map' ? 'Map view' : 'List view'}
+            style={[styles.toggleBtn, on && { backgroundColor: theme.colors.accent }]}
+          >
+            <Icon name={m} size={15} color={on ? 'onPrimary' : 'inkDim'} />
+          </Pressable>
+        )
+      })}
+    </View>
+  )
+
+  // The player card — now-playing + scrubber + transport in ONE elevated card. Shared by the
+  // List dock and the Map mode's expanded sheet.
+  const playerCard = (
+    <NowCard
+      liveRegion
+      glow={card.glow}
+      kicker={card.kicker}
+      title={card.title}
+      timer={card.timer}
+      right={card.badge ? <Badge tone={card.badge.tone} label={card.badge.label} /> : undefined}
+      transport={transport}
+    >
+      {card.body ? (
+        <Text variant="body" color="inkDim">
+          {card.body}
+        </Text>
+      ) : null}
+      {showScrubber && d.activeSeq != null ? (
+        <Scrubber
+          positionMs={d.positionMs}
+          durationMs={d.durationMs}
+          onSeek={d.seekToMs}
+          onScrubbingChange={d.setScrubbing}
+          disabled={!d.canSeek}
+        />
+      ) : null}
+      {d.buffering ? (
+        <View style={styles.buffering}>
+          <ActivityIndicator size="small" color={theme.colors.accent} />
+          <Text variant="dim" color="inkFaint">
+            {voice.player.buffering}
+          </Text>
+        </View>
+      ) : d.stallNote ? (
+        <Text variant="dim" color="danger">
+          {d.stallNote}
+        </Text>
+      ) : null}
+    </NowCard>
+  )
+
+  // ── MAP mode: a full-bleed map with the player floating as an expandable PEEK sheet ──
+  // Collapsed = a mini-bar (play/pause + title + progress); tap to expand to the full card
+  // (scrubber + ±15 transport). Ready/done force the full card. Recenter chip rides on the map.
+  if (view === 'map') {
+    const sheetExpanded = d.phase !== 'driving' || expanded
+    const pct = Math.min(100, (d.positionMs / Math.max(1, d.durationMs)) * 100)
+    return (
+      <Screen edges={['bottom']}>
+        <Stack.Screen
+          options={{
+            title: isPreview ? 'Preview drive' : 'Drive',
+            gestureEnabled: d.phase !== 'driving',
+            fullScreenGestureEnabled: false,
+            headerRight: viewToggle,
+          }}
+        />
+        <View style={styles.mapFill}>
+          <DriveMap
+            polyline={d.polyline}
+            stops={stopViews}
+            progress={d.progress}
+            clipActive={d.activeSeq != null}
+            hideRecenter={sheetExpanded}
+            recenterBottom={96}
+          />
+
+          {d.gpsSearching && !d.paused ? (
+            <View
+              style={[styles.mapGps, { backgroundColor: theme.colors.surfaceRaised, borderColor: theme.colors.rule }]}
+              accessibilityLiveRegion="polite"
+            >
+              <ActivityIndicator size="small" color={theme.colors.accent} />
+              <Text variant="dim" color="inkFaint">
+                {voice.player.gpsSearching}
+              </Text>
+            </View>
+          ) : null}
+
+          <View style={styles.sheetWrap}>
+            {sheetExpanded ? (
+              <View>
+                {d.phase === 'driving' ? (
+                  <Pressable
+                    onPress={() => setExpanded(false)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Collapse player"
+                    style={styles.collapseHandle}
+                  >
+                    <View style={[styles.handleBar, { backgroundColor: theme.colors.rule }]} />
+                  </Pressable>
+                ) : null}
+                {playerCard}
+              </View>
+            ) : (
+              <Pressable
+                onPress={() => setExpanded(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Expand player"
+                style={[
+                  styles.peekBar,
+                  { backgroundColor: theme.colors.surfaceRaised, borderColor: theme.colors.amberToken, shadowColor: theme.colors.shadowCast },
+                ]}
+              >
+                <Pressable
+                  onPress={d.togglePause}
+                  accessibilityRole="button"
+                  accessibilityLabel={d.paused ? voice.cta.resume : voice.cta.pause}
+                  style={[styles.peekPlay, { backgroundColor: theme.colors.primaryFill }]}
+                >
+                  <Icon name={d.paused ? 'play' : 'pause'} size={22} color="onPrimary" />
+                </Pressable>
+                <View style={styles.peekText}>
+                  <Text variant="label" color="accentWarm">
+                    {card.kicker}
+                  </Text>
+                  <Text variant="bodyStrong" color="ink" numberOfLines={1}>
+                    {card.title}
+                  </Text>
+                  {d.activeSeq != null ? (
+                    <View style={[styles.peekTrack, { backgroundColor: theme.colors.surfaceSunken }]}>
+                      <View style={[styles.peekFill, { backgroundColor: theme.colors.trackActive, width: `${pct}%` }]} />
+                    </View>
+                  ) : null}
+                </View>
+                <Icon name="chevronUp" size={20} color="inkFaint" />
+              </Pressable>
+            )}
+          </View>
+        </View>
+      </Screen>
+    )
+  }
+
   return (
     <Screen edges={['bottom']}>
       {/* Edge-swipe back is allowed when parked but DISABLED while a drive is rolling (a stray
@@ -303,6 +501,7 @@ export default function DriveScreen() {
           title: isPreview ? 'Preview drive' : 'Drive',
           gestureEnabled: d.phase !== 'driving',
           fullScreenGestureEnabled: false,
+          headerRight: viewToggle,
         }}
       />
 
@@ -338,11 +537,10 @@ export default function DriveScreen() {
         style={styles.track}
       />
 
-      {/* Itinerary — the middle (flex:1) between the trail and the player. The same StopList
-          card as tour detail, but here it's a FIXED shell: all four rounded corners stay put
-          while only the rows scroll inside it. Tappable in PREVIEW (jump there); read-only on
-          a real/sim drive — the hint sits right above. The drive-complete cascade stamps the
-          passed checks in. */}
+      {/* The itinerary (flex:1) — a FIXED shell: all four rounded corners stay put while only
+          the rows scroll; tappable in PREVIEW (jump there), read-only on a real/sim drive (the
+          hint sits right above); the drive-complete cascade stamps the passed checks in. (Map
+          mode is a separate full-bleed layout above.) */}
       {isPreview ? (
         <Text variant="dim" color="inkFaint" style={styles.hint}>
           {voice.player.previewHint}
@@ -357,29 +555,13 @@ export default function DriveScreen() {
         style={styles.listCard}
         onPressItem={isPreview ? d.jumpToStop : undefined}
         enterStamp={d.phase === 'done' && !reduce}
-        items={d.stops.map((s, i) => {
-          // PREVIEW: the current segment's seq is the active clip's, or the drive/rest
-          // destination; mark earlier rows passed, and light the row "active" only once we've
-          // ARRIVED (a clip/rest beat) — not while still driving TO it. Live/sim uses firedSeqs.
-          const state = isPreview
-            ? d.phase === 'done' || (focusRow >= 0 && i < focusRow)
-              ? 'passed'
-              : s.seq === focusSeq && d.currentKind !== 'drive'
-                ? 'active'
-                : 'upcoming'
-            : d.phase === 'done' || (d.firedSeqs.has(s.seq) && s.seq !== d.activeSeq)
-              ? 'passed'
-              : s.seq === d.activeSeq
-                ? 'active'
-                : 'upcoming'
-          return {
-            seq: s.seq,
-            name: s.name,
-            sublabel: stopLabel(s.stopType),
-            icon: stopIcon(s.stopType),
-            state,
-          }
-        })}
+        items={stopViews.map((s) => ({
+          seq: s.seq,
+          name: s.name,
+          sublabel: stopLabel(s.stopType),
+          icon: stopIcon(s.stopType),
+          state: s.state,
+        }))}
       />
 
       {/* ── PLAYER CARD ── now-playing + scrubber + transport, contained in ONE elevated
@@ -425,51 +607,7 @@ export default function DriveScreen() {
         </View>
       ) : null}
 
-      <View style={styles.cardWrap}>
-        <NowCard
-          liveRegion
-          glow={card.glow}
-          kicker={card.kicker}
-          title={card.title}
-          timer={card.timer}
-          right={card.badge ? <Badge tone={card.badge.tone} label={card.badge.label} /> : undefined}
-          transport={transport}
-        >
-          {card.body ? (
-            <Text variant="body" color="inkDim">
-              {card.body}
-            </Text>
-          ) : null}
-
-          {/* In-clip position bar — mounted only while a clip is loaded. Between stops it
-              COLLAPSES (no reserved height): the rolling card hugs kicker → title →
-              transport, and the scrubber reappearing at the next clip reads as part of
-              that wholesale state swap, not a layout jump. (Founder call 2026-06-09 — the
-              old reserved-but-hidden scrubber read as unnecessary blank space.) */}
-          {showScrubber && d.activeSeq != null ? (
-            <Scrubber
-              positionMs={d.positionMs}
-              durationMs={d.durationMs}
-              onSeek={d.seekToMs}
-              onScrubbingChange={d.setScrubbing}
-              disabled={!d.canSeek}
-            />
-          ) : null}
-
-          {d.buffering ? (
-            <View style={styles.buffering}>
-              <ActivityIndicator size="small" color={theme.colors.accent} />
-              <Text variant="dim" color="inkFaint">
-                {voice.player.buffering}
-              </Text>
-            </View>
-          ) : d.stallNote ? (
-            <Text variant="dim" color="danger">
-              {d.stallNote}
-            </Text>
-          ) : null}
-        </NowCard>
-      </View>
+      <View style={styles.cardWrap}>{playerCard}</View>
     </Screen>
   )
 }
@@ -497,4 +635,48 @@ const styles = StyleSheet.create({
   // The fixed itinerary shell: fills the slack between the trail and the player dock, with the
   // gutter margins the rest of the screen uses. Only its rows scroll (StopList `scroll`).
   listCard: { flex: 1, marginHorizontal: space.gutter, marginTop: space.sm },
+  // ── Map mode: a full-bleed map with the player floating as a peek/expand sheet ──
+  mapFill: { flex: 1 },
+  mapGps: {
+    position: 'absolute',
+    top: space.md,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    borderRadius: radius.pill,
+    borderWidth: border.hair,
+  },
+  sheetWrap: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: space.sm, paddingBottom: space.sm },
+  collapseHandle: { alignItems: 'center', paddingTop: space.xs, paddingBottom: space.sm },
+  handleBar: { width: 40, height: 4, borderRadius: 2 },
+  peekBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.md,
+    borderRadius: radius.lg,
+    borderWidth: border.keyline,
+    shadowOpacity: 0.22,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: -4 },
+    elevation: 8,
+  },
+  peekPlay: { width: 50, height: 50, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  peekText: { flex: 1, minWidth: 0, gap: 3 },
+  peekTrack: { height: 4, borderRadius: 2, overflow: 'hidden', marginTop: 2 },
+  peekFill: { height: '100%' },
+  // Map ⇄ List header segmented control.
+  toggle: { flexDirection: 'row', padding: 2, gap: 2, borderRadius: radius.pill, borderWidth: border.hair },
+  toggleBtn: {
+    minWidth: 36,
+    height: 30,
+    paddingHorizontal: space.sm,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 })

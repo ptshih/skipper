@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
-import { ActionSheetIOS, Alert, Animated, Platform, StyleSheet, View } from 'react-native'
+import { ActionSheetIOS, Alert, Animated, Linking, Platform, Share, StyleSheet, View } from 'react-native'
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
 import { ApiError, errorMessage, getTour, type TourDetail } from '@/lib/api'
 import {
@@ -10,7 +10,7 @@ import {
   loadManifest,
   type DownloadProgress,
 } from '@/lib/offline'
-import { cleanPlaceName, stopLabel } from '@/lib/labels'
+import { cleanPlaceName } from '@/lib/labels'
 import { space } from '@/theme/tokens'
 import {
   AccountGate,
@@ -27,6 +27,13 @@ import {
   stopIcon,
   voice,
 } from '@/ui'
+
+// The shareable web face of a drive — the AASA-claimed universal link (apps/api/src/share.ts,
+// app/t/[id].tsx). Override per-environment; defaults to the canonical brand domain.
+const SHARE_BASE = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://skipper.fm'
+// "Report an issue" opens the rider's mail composer (no in-app support backend yet — alpha).
+// Set EXPO_PUBLIC_SUPPORT_EMAIL to the real inbox; the default is a brand-domain placeholder.
+const SUPPORT_EMAIL = process.env.EXPO_PUBLIC_SUPPORT_EMAIL ?? 'feedback@skipper.fm'
 
 // Tour detail. Open to anyone (the detail fetch uses the `preview` funnel path), so every
 // tour is browsable + previewable anonymously. The wall is on the LIVE DRIVE + OFFLINE
@@ -77,19 +84,40 @@ export default function TourScreen() {
     setDownloaded(false)
   }, [id])
 
+  // Share the drive's universal link (skipper.fm/t/<id>) via the OS share sheet.
+  const shareTour = useCallback(() => {
+    if (!id) return
+    const url = `${SHARE_BASE}/t/${id}`
+    const headline = tour?.tour.headline
+    void Share.share({
+      message: headline ? `${headline} — a narrated road-trip drive on Skipper\n${url}` : url,
+      url, // iOS attaches the link as its own item
+    })
+  }, [id, tour])
+
+  // Report an issue → the rider's mail composer, pre-filled with the drive's context (no
+  // in-app support backend yet — alpha). The address is env-configurable (SUPPORT_EMAIL).
+  const reportIssue = useCallback(() => {
+    const subject = encodeURIComponent('Skipper — report an issue')
+    const body = encodeURIComponent(`\n\n—\nDrive: ${tour?.tour.headline ?? id ?? '—'}\nID: ${id ?? '—'}`)
+    void Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`).catch(() => {})
+  }, [id, tour])
+
   // Secondary/utility actions live in a header ⋯ menu (native iOS action sheet) instead of
   // stacked buttons — the offline download (state-aware) + the dev-only on-device simulator.
   const openMenu = useCallback(() => {
     const actions: { label: string; onPress: () => void; destructive?: boolean }[] = []
+    actions.push({ label: 'Share this drive', onPress: shareTour })
     if (downloaded) {
       if (updatable && !downloading) {
         // Re-pull overwrites the saved manifest + clips with the server's fresh cut.
         actions.push({ label: voice.offline.update, onPress: () => void startDownload() })
       }
-      actions.push({ label: 'Remove offline download', onPress: removeDownload, destructive: true })
+      actions.push({ label: 'Remove download', onPress: removeDownload, destructive: true })
     } else if (!downloading) {
       actions.push({ label: 'Download for offline', onPress: () => void startDownload() })
     }
+    actions.push({ label: 'Report an issue', onPress: reportIssue })
     if (__DEV__) {
       actions.push({ label: voice.cta.simDrive, onPress: () => router.push(`/tours/${id}/play`) })
     }
@@ -114,11 +142,11 @@ export default function TourScreen() {
         { text: 'Cancel', style: 'cancel' as const },
       ])
     }
-  }, [downloaded, downloading, updatable, id, router, startDownload, removeDownload])
+  }, [downloaded, downloading, updatable, id, router, startDownload, removeDownload, shareTour, reportIssue])
 
-  // Don't render a dead header button: download/remove is offer-able except mid-download;
-  // the dev simulator is always there in __DEV__.
-  const hasMenuActions = __DEV__ || downloaded || !downloading
+  // The ⋯ always has actions now — Share + Report are always offer-able (download/remove are
+  // the state-aware extras).
+  const hasMenuActions = true
 
   const load = useCallback(async () => {
     if (!id) return
@@ -281,15 +309,18 @@ export default function TourScreen() {
       ) : null}
 
       {/* Two real choices only — the live drive (M1 headline) + the free couch preview (the
-          funnel, and the only play path for anonymous riders). The dev simulator + offline
-          download moved to the header ⋯ menu so this stays glanceable. */}
-      <Button icon="car" title={voice.cta.drive} onPress={() => router.push(`/tours/${id}/play?mode=live`)} />
-      <Text variant="dim" color="inkDim">
-        {voice.drive.blurb}
-      </Text>
+          funnel, and the only play path for anonymous riders). Flattened: ONE bold primary
+          with its caption tucked under it, and the preview demoted to a ghost link. The dev
+          simulator + offline download live in the header ⋯ menu so this stays glanceable. */}
+      <View style={styles.ctaGroup}>
+        <Button icon="car" title={voice.cta.drive} onPress={() => router.push(`/tours/${id}/play?mode=live`)} />
+        <Text variant="dim" color="inkFaint" align="center">
+          {voice.drive.blurb}
+        </Text>
+      </View>
 
       <Button
-        variant="secondary"
+        variant="ghost"
         icon="play"
         title={voice.cta.preview}
         onPress={() => router.push(`/tours/${id}/play?mode=preview`)}
@@ -308,7 +339,6 @@ export default function TourScreen() {
         items={tour.stops.map((s) => ({
           seq: s.seq,
           name: cleanPlaceName(s.name),
-          sublabel: stopLabel(s.stopType),
           icon: stopIcon(s.stopType),
         }))}
       />
@@ -328,4 +358,5 @@ const styles = StyleSheet.create({
     gap: space.sm,
   },
   savedChip: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
+  ctaGroup: { gap: space.xs }, // the bold Start CTA + its tucked caption read as one unit
 })

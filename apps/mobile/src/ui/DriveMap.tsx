@@ -1,0 +1,315 @@
+// The live-drive MAP — a tinted Google basemap (Trailhead 89, day/dusk) with our
+// brand-owned overlay drawn on top: the route line (traveled pine / untraveled dashed
+// tan), the stop markers (passed / upcoming / active), and the live-position puck. The
+// puck rides the ROUTE at `progress` — the same 0..1 the car token uses on `RouteTrack`
+// — so it's mode-agnostic (live GPS, sim, and the couch preview all drive `progress`)
+// and always sits on the road, never in the gutter.
+//
+// Camera follows the puck and re-frames as it moves; panning the map drops follow mode
+// and floats a "recenter" chip (the standard nav pattern). The basemap tint is Google-
+// only — without a key (EXPO_PUBLIC_GOOGLE_MAPS_API_KEY) iOS falls back to Apple Maps
+// (untinted) and List mode stays the offline + accessibility-complete equivalent.
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Animated, Platform, Pressable, StyleSheet, View } from 'react-native'
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE, type LatLng, type Region } from 'react-native-maps'
+import { border, radius, space } from '../theme/tokens'
+import { mapStyle } from '../theme/mapStyle'
+import { useReducedMotion, useTheme } from '../theme'
+import { Icon } from './Icon'
+import { Text } from './Text'
+
+/** A map stop = a place to pin, with its current drive state (mirrors the StopList rows). */
+export interface DriveMapStop {
+  seq: number
+  name: string
+  lat: number
+  lng: number
+  state: 'passed' | 'active' | 'upcoming'
+}
+
+export interface DriveMapProps {
+  /** The route as [lng, lat] pairs (GeoJSON axis order — same as the API ships). */
+  polyline: [number, number][]
+  stops: DriveMapStop[]
+  /** 0..1 route position — drives the puck + the traveled/untraveled split. */
+  progress: Animated.Value
+  /** A clip is playing → the NOW sheet owns the screen's one amber glow, so dim the map's
+   *  amber accents (DESIGN §8 one-amber budget). */
+  clipActive?: boolean
+  /** Hide the recenter chip (e.g. while the player sheet is expanded over the map). */
+  hideRecenter?: boolean
+  /** Lift the recenter chip above a floating sheet (px from the bottom). */
+  recenterBottom?: number
+}
+
+const toLatLng = ([lng, lat]: [number, number]): LatLng => ({ latitude: lat, longitude: lng })
+
+// Initial-bearing between two [lng,lat] points, for the puck's heading wedge.
+function bearingDeg(a: [number, number], b: [number, number]): number {
+  const rad = (d: number) => (d * Math.PI) / 180
+  const deg = (r: number) => (r * 180) / Math.PI
+  const φ1 = rad(a[1])
+  const φ2 = rad(b[1])
+  const Δλ = rad(b[0] - a[0])
+  const y = Math.sin(Δλ) * Math.cos(φ2)
+  const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ)
+  return (deg(Math.atan2(y, x)) + 360) % 360
+}
+
+// Google styling only applies to the Google provider. On Android react-native-maps is
+// always Google; on iOS we need a key (else Apple Maps, untinted). No key → undefined
+// provider (the native default) so it never crashes claiming a missing SDK.
+const HAS_GOOGLE_KEY = !!process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
+const PROVIDER = Platform.OS === 'android' || HAS_GOOGLE_KEY ? PROVIDER_GOOGLE : undefined
+
+export function DriveMap({ polyline, stops, progress, clipActive, hideRecenter, recenterBottom }: DriveMapProps) {
+  const { colors, isDark } = useTheme()
+  const reducedMotion = useReducedMotion()
+  const mapRef = useRef<MapView | null>(null)
+  const [following, setFollowing] = useState(true)
+  const followingRef = useRef(true)
+  followingRef.current = following
+
+  // Cumulative along-route distances — for projecting `progress` (a fraction) to a point.
+  const cum = useMemo(() => {
+    const out = [0]
+    for (let i = 1; i < polyline.length; i++) {
+      const a = polyline[i - 1]!
+      const b = polyline[i]!
+      const dx = b[0] - a[0]
+      const dy = b[1] - a[1]
+      out.push(out[i - 1]! + Math.hypot(dx, dy))
+    }
+    return out
+  }, [polyline])
+  const total = cum[cum.length - 1] ?? 0
+
+  // The route framed as a region (first paint shows the whole drive before follow kicks in).
+  const routeRegion = useMemo<Region | undefined>(() => {
+    if (polyline.length === 0) return undefined
+    let minLat = Infinity
+    let maxLat = -Infinity
+    let minLng = Infinity
+    let maxLng = -Infinity
+    for (const [lng, lat] of polyline) {
+      if (lat < minLat) minLat = lat
+      if (lat > maxLat) maxLat = lat
+      if (lng < minLng) minLng = lng
+      if (lng > maxLng) maxLng = lng
+    }
+    return {
+      latitude: (minLat + maxLat) / 2,
+      longitude: (minLng + maxLng) / 2,
+      latitudeDelta: Math.max(0.02, (maxLat - minLat) * 1.5),
+      longitudeDelta: Math.max(0.02, (maxLng - minLng) * 1.5),
+    }
+  }, [polyline])
+
+  // Project a 0..1 fraction onto the route: the puck point + the traveled/untraveled split.
+  const project = (frac: number) => {
+    if (polyline.length < 2 || total <= 0) {
+      const p = polyline[0]
+      return {
+        puck: p ? toLatLng(p) : null,
+        heading: 0,
+        traveled: [] as LatLng[],
+        untraveled: polyline.map(toLatLng),
+      }
+    }
+    const target = Math.max(0, Math.min(1, frac)) * total
+    let i = 0
+    while (i < cum.length - 2 && (cum[i + 1] ?? 0) < target) i++
+    const a = polyline[i]!
+    const b = polyline[i + 1] ?? a
+    const segLen = (cum[i + 1] ?? cum[i]!) - cum[i]!
+    const segFrac = segLen > 0 ? (target - cum[i]!) / segLen : 0
+    const puckLng = a[0] + (b[0] - a[0]) * segFrac
+    const puckLat = a[1] + (b[1] - a[1]) * segFrac
+    const puck: LatLng = { latitude: puckLat, longitude: puckLng }
+    return {
+      puck,
+      heading: bearingDeg(a, b),
+      traveled: [...polyline.slice(0, i + 1).map(toLatLng), puck],
+      untraveled: [puck, ...polyline.slice(i + 1).map(toLatLng)],
+    }
+  }
+
+  const [route, setRoute] = useState(() => project(0))
+
+  // Follow `progress` (driven by GPS/sim/preview). Recompute the puck + split, and glide
+  // the camera onto the puck while in follow mode. A small epsilon avoids re-rendering the
+  // overlay on sub-pixel ticks.
+  const lastFrac = useRef(-1)
+  useEffect(() => {
+    const id = progress.addListener(({ value }) => {
+      if (Math.abs(value - lastFrac.current) < 0.0005) return
+      lastFrac.current = value
+      const next = project(value)
+      setRoute(next)
+      if (followingRef.current && next.puck) {
+        mapRef.current?.animateCamera(
+          { center: next.puck, zoom: 14 },
+          { duration: reducedMotion ? 0 : 500 },
+        )
+      }
+    })
+    return () => progress.removeListener(id)
+    // project/colors are stable enough; re-subscribe only if the route geometry changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [progress, cum, total, reducedMotion])
+
+  const recenter = () => {
+    setFollowing(true)
+    if (route.puck) {
+      mapRef.current?.animateCamera(
+        { center: route.puck, zoom: 14 },
+        { duration: reducedMotion ? 0 : 400 },
+      )
+    }
+  }
+
+  const amber = clipActive ? colors.trackInactive : colors.amberToken // dim while a clip owns the glow
+
+  return (
+    <View style={styles.fill}>
+      <MapView
+        ref={mapRef}
+        provider={PROVIDER}
+        style={styles.fill}
+        customMapStyle={mapStyle(isDark)}
+        initialRegion={routeRegion}
+        showsUserLocation={false} // we draw our OWN puck (route-snapped) — not the raw blue dot
+        showsCompass={false}
+        showsPointsOfInterests={false}
+        showsMyLocationButton={false}
+        toolbarEnabled={false}
+        rotateEnabled={false}
+        pitchEnabled={false}
+        onPanDrag={() => following && setFollowing(false)}
+      >
+        {/* Untraveled: dashed tan, drawn first so the traveled pine sits on top at the puck. */}
+        {route.untraveled.length > 1 ? (
+          <Polyline
+            coordinates={route.untraveled}
+            strokeColor={colors.trackInactive}
+            strokeWidth={4}
+            lineDashPattern={[2, 10]}
+          />
+        ) : null}
+        {route.traveled.length > 1 ? (
+          <Polyline coordinates={route.traveled} strokeColor={colors.trackActive} strokeWidth={5} />
+        ) : null}
+
+        {/* Stop markers — passed (filled pine), upcoming (hollow), active (amber, larger). */}
+        {stops.map((s) => {
+          const active = s.state === 'active'
+          const passed = s.state === 'passed'
+          return (
+            <Marker
+              key={s.seq}
+              coordinate={{ latitude: s.lat, longitude: s.lng }}
+              anchor={{ x: 0.5, y: 0.5 }}
+              title={s.name}
+              tracksViewChanges={false}
+            >
+              <View style={styles.markerBox}>
+                {active ? (
+                  <View
+                    style={[
+                      styles.activeHalo,
+                      { backgroundColor: clipActive ? 'transparent' : colors.glow },
+                    ]}
+                  />
+                ) : null}
+                <View
+                  style={[
+                    styles.stopDot,
+                    active
+                      ? { width: 22, height: 22, borderRadius: 11, backgroundColor: amber, borderColor: colors.surface, borderWidth: 3 }
+                      : passed
+                        ? { backgroundColor: colors.trackActive }
+                        : { backgroundColor: colors.surface, borderColor: colors.trackInactive, borderWidth: 2 },
+                  ]}
+                >
+                  {active ? <View style={[styles.activeCore, { backgroundColor: colors.onAmber }]} /> : null}
+                </View>
+              </View>
+            </Marker>
+          )
+        })}
+
+        {/* The live-position puck — "you are here", riding the route at `progress`. */}
+        {route.puck ? (
+          <Marker coordinate={route.puck} anchor={{ x: 0.5, y: 0.5 }} flat>
+            <View style={styles.markerBox}>
+              <View style={[styles.puckHalo, { backgroundColor: colors.glow }]} />
+              <View style={[styles.puckWedge, { transform: [{ rotate: `${route.heading}deg` }] }]}>
+                <View style={[styles.wedgeTriangle, { borderBottomColor: amber }]} />
+              </View>
+              <View style={[styles.puckDot, { backgroundColor: amber, borderColor: colors.surface }]} />
+            </View>
+          </Marker>
+        ) : null}
+      </MapView>
+
+      {/* Recenter chip — appears once the rider pans the map away from the puck (and isn't
+          hidden behind an expanded player sheet). */}
+      {!following && !hideRecenter ? (
+        <Pressable
+          onPress={recenter}
+          accessibilityRole="button"
+          accessibilityLabel="Recenter the map on me"
+          style={[
+            styles.recenter,
+            recenterBottom != null ? { bottom: recenterBottom } : null,
+            { backgroundColor: colors.surfaceRaised, borderColor: colors.rule, shadowColor: colors.shadowCast },
+          ]}
+        >
+          <Icon name="locate" size={18} color="accent" />
+          <Text variant="label" color="ink">
+            Recenter
+          </Text>
+        </Pressable>
+      ) : null}
+    </View>
+  )
+}
+
+const PUCK = 18
+const styles = StyleSheet.create({
+  fill: { flex: 1 },
+  markerBox: { width: 56, height: 56, alignItems: 'center', justifyContent: 'center' },
+  stopDot: { width: 12, height: 12, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
+  activeHalo: { position: 'absolute', width: 38, height: 38, borderRadius: 19, opacity: 0.6 },
+  activeCore: { width: 6, height: 6, borderRadius: 3 },
+  puckHalo: { position: 'absolute', width: 34, height: 34, borderRadius: 17, opacity: 0.55 },
+  puckDot: { width: PUCK, height: PUCK, borderRadius: PUCK / 2, borderWidth: border.keyline },
+  // the heading wedge sits just outside the dot, pointing in travel direction
+  puckWedge: { position: 'absolute', width: 56, height: 56, alignItems: 'center' },
+  wedgeTriangle: {
+    width: 0,
+    height: 0,
+    marginTop: 2,
+    borderLeftWidth: 5,
+    borderRightWidth: 5,
+    borderBottomWidth: 8,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+  },
+  recenter: {
+    position: 'absolute',
+    right: space.md,
+    bottom: space.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.xs,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    borderRadius: radius.pill,
+    borderWidth: border.hair,
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+})

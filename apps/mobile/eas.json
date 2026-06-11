@@ -7,6 +7,9 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyALwfidcKl0T3EOgNKwuryPg3PDIpRk5BQ"
+      },
       "ios": {
         "simulator": true
       }
@@ -20,13 +23,15 @@
     "preview": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.skipper.fm"
+        "EXPO_PUBLIC_API_URL": "https://api.skipper.fm",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyALwfidcKl0T3EOgNKwuryPg3PDIpRk5BQ"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.skipper.fm"
+        "EXPO_PUBLIC_API_URL": "https://api.skipper.fm",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyALwfidcKl0T3EOgNKwuryPg3PDIpRk5BQ"
       }
     }
   },

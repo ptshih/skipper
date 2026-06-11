@@ -10,7 +10,7 @@ import { useDrivesFilter } from '@/lib/drives-filter'
 import { deriveRegions, filterByRegion } from '@/lib/regions'
 import { useTheme } from '@/theme'
 import { space } from '@/theme/tokens'
-import { Badge, Button, Card, Divider, EdgeFade, FilterChip, HeaderIconButton, Icon, RouteTrack, Screen, Text, voice } from '@/ui'
+import { Badge, Button, Card, Divider, EdgeFade, FilterChip, HeaderIconButton, Icon, RouteTrack, Screen, Sunburst, Text, voice } from '@/ui'
 
 // Browse drives — anonymous-friendly. A tour is the whole self-contained drive now, so a
 // card opens straight into the drive (gated). The top is a framed travel-poster hero with
@@ -112,35 +112,37 @@ export default function DrivesScreen() {
     />
   )
 
-  // The travel-poster hero: enamel kicker → big Alfa-Slab headline (the persona's line) →
-  // the signature trail with the parked rig (the one amber glow) → the quiet "what is
-  // this" tagline. `framed` is sanctioned here — the home is a non-driving surface.
+  // The travel-poster hero, now a FRAMELESS MASTHEAD (not a card) so the Roam card is the
+  // only card on the home → cleaner hierarchy: a faint WPA sunburst watermark behind the
+  // enamel kicker → big Alfa-Slab headline (the persona's line) → the signature trail with
+  // the parked rig (the one amber glow) → the quiet "what is this" tagline.
   const hero = (
-    <View style={styles.heroWrap}>
-      <Card framed>
-        <Text variant="label" color="accentWarm">
-          {voice.home.kicker}
-        </Text>
-        {/* Keep the Alfa-Slab display face but auto-shrink to a single line — the headline
-            is a fixed string, so adjustsFontSizeToFit fits it on every width (it wrapped to
-            two lines at the full 30pt) without hardcoding a size that re-wraps on narrow phones. */}
-        <Text
-          variant="display"
-          color="ink"
-          numberOfLines={1}
-          adjustsFontSizeToFit
-          minimumFontScale={0.5}
-          style={styles.heroHeadline}
-        >
-          {voice.greeting}
-        </Text>
-        <View style={styles.heroTrail}>
-          <RouteTrack progress={parkedAnim} glow />
-        </View>
-        <Text variant="dim" color="inkDim">
-          {voice.tagline}
-        </Text>
-      </Card>
+    <View style={styles.hero}>
+      <View style={styles.heroSunburst} pointerEvents="none">
+        <Sunburst size={168} opacity={0.09} />
+      </View>
+      <Text variant="label" color="accentWarm">
+        {voice.home.kicker}
+      </Text>
+      {/* Keep the Alfa-Slab display face but auto-shrink to a single line — the headline
+          is a fixed string, so adjustsFontSizeToFit fits it on every width (it wrapped to
+          two lines at the full 30pt) without hardcoding a size that re-wraps on narrow phones. */}
+      <Text
+        variant="display"
+        color="ink"
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.5}
+        style={styles.heroHeadline}
+      >
+        {voice.greeting}
+      </Text>
+      <View style={styles.heroTrail}>
+        <RouteTrack progress={parkedAnim} glow />
+      </View>
+      <Text variant="dim" color="inkDim">
+        {voice.tagline}
+      </Text>
     </View>
   )
 
@@ -342,7 +344,8 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   // Hero + seam each carry their own horizontal gutter so they line up whether rendered
   // standalone (loading/error) or inside the FlatList, whose content padding is vertical.
-  heroWrap: { paddingHorizontal: space.gutter, paddingTop: space.sm },
+  hero: { paddingHorizontal: space.gutter, paddingTop: space.sm, paddingBottom: space.md, overflow: 'hidden' },
+  heroSunburst: { position: 'absolute', top: -54, right: -38 },
   heroHeadline: { marginTop: space.sm },
   heroTrail: { marginTop: space.md, marginBottom: space.md },
   roamWrap: { paddingHorizontal: space.gutter, marginTop: space.md },

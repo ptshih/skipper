@@ -38,6 +38,10 @@ export type IconName =
   | 'roam'
   | 'music'
   | 'patter'
+  | 'map'
+  | 'list'
+  | 'locate'
+  | 'chevronUp'
 
 const IONICON: Record<IconName, ComponentProps<typeof Ionicons>['name']> = {
   // stop types
@@ -73,6 +77,10 @@ const IONICON: Record<IconName, ComponentProps<typeof Ionicons>['name']> = {
   roam: 'compass-outline', // free-roam mode — no route, the skipper rides shotgun
   music: 'musical-notes-outline', // the rider's own audio (roam ducks it, never stops it)
   patter: 'chatbubble-ellipses-outline', // the skipper talking (roam contract chip)
+  map: 'map-outline', // the live-drive Map view (vs the itinerary List)
+  list: 'list-outline', // the itinerary List view
+  locate: 'locate-outline', // recenter-on-me chip when the rider pans the map away
+  chevronUp: 'chevron-up', // the map peek-bar's "drag/tap up to expand the player" affordance
 }
 
 export interface IconProps {
