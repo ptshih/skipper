@@ -1,11 +1,19 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { Activity, Anchor, Map } from 'lucide-react'
+import { Activity, Anchor, BookOpen, Map } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const nav = [
   { to: '/runs', label: 'Runs', icon: Activity },
   { to: '/tours', label: 'Tours', icon: Map },
 ]
+
+const navLinkClass = ({ isActive }: { isActive: boolean }) =>
+  cn(
+    'flex items-center gap-3 rounded-lg px-2 py-2 text-sm transition-colors',
+    isActive
+      ? 'bg-zinc-950/5 font-medium text-foreground dark:bg-white/5'
+      : 'text-muted-foreground hover:bg-zinc-950/5 hover:text-foreground dark:hover:bg-white/5',
+  )
 
 export function Layout() {
   return (
@@ -23,24 +31,19 @@ export function Layout() {
           {nav.map((n) => {
             const Icon = n.icon
             return (
-              <NavLink
-                key={n.to}
-                to={n.to}
-                className={({ isActive }) =>
-                  cn(
-                    'flex items-center gap-3 rounded-lg px-2 py-2 text-sm transition-colors',
-                    isActive
-                      ? 'bg-zinc-950/5 font-medium text-foreground dark:bg-white/5'
-                      : 'text-muted-foreground hover:bg-zinc-950/5 hover:text-foreground dark:hover:bg-white/5',
-                  )
-                }
-              >
+              <NavLink key={n.to} to={n.to} className={navLinkClass}>
                 <Icon className="h-4 w-4 shrink-0" />
                 {n.label}
               </NavLink>
             )
           })}
         </nav>
+
+        {/* Secondary nav — the cheat sheet */}
+        <NavLink to="/reference" className={navLinkClass}>
+          <BookOpen className="h-4 w-4 shrink-0" />
+          Reference
+        </NavLink>
 
         {/* Account block (Catalyst footer) */}
         <div className="mt-3 flex items-center gap-3 px-2 py-2">
