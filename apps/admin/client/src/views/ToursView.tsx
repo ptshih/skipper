@@ -2,10 +2,15 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, type TourCard } from '@/lib/api'
 import { Badge, type BadgeProps } from '@/components/ui/badge'
+import { Card } from '@/components/ui/card'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { PageHeader } from '@/components/PageHeader'
 import { fmtDuration, fmtMiles, timeAgo } from '@/lib/format'
 
 const statusVariant = (s: TourCard['status']): BadgeProps['variant'] =>
   s === 'ready' ? 'success' : s === 'failed' ? 'destructive' : s === 'generating' ? 'default' : 'secondary'
+
+const COLS = ['Tour', 'Region', 'Status', 'Stops', 'Authored', 'Distance', 'Duration', 'Updated']
 
 export function ToursView() {
   const [tours, setTours] = useState<TourCard[]>([])
@@ -18,46 +23,46 @@ export function ToursView() {
   }, [])
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-xl font-semibold">Tours</h1>
+    <div>
+      <PageHeader title="Tours" description="Every tour in the catalog — drafts included." />
       {err && (
-        <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">{err}</div>
+        <div className="mb-4 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">{err}</div>
       )}
-      <div className="overflow-x-auto rounded-lg border">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/50 text-left text-muted-foreground">
-            <tr>
-              {['Tour', 'Region', 'Status', 'Stops', 'Authored', 'Distance', 'Duration', 'Updated'].map((h) => (
-                <th key={h} className="px-3 py-2 font-medium">{h}</th>
+      <Card>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              {COLS.map((h) => (
+                <TableHead key={h}>{h}</TableHead>
               ))}
-            </tr>
-          </thead>
-          <tbody>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {tours.map((t) => (
-              <tr key={t.id} className="border-t hover:bg-muted/30">
-                <td className="px-3 py-2">
+              <TableRow key={t.id}>
+                <TableCell>
                   <Link to={`/tours/${t.id}`} className="font-medium hover:underline">{t.headline}</Link>
                   <div className="font-mono text-xs text-muted-foreground">{t.slug}</div>
-                </td>
-                <td className="px-3 py-2">{t.regionName}</td>
-                <td className="px-3 py-2"><Badge variant={statusVariant(t.status)}>{t.status}</Badge></td>
-                <td className="px-3 py-2">{t.stops} + {t.brackets}</td>
-                <td className="px-3 py-2">
+                </TableCell>
+                <TableCell>{t.regionName}</TableCell>
+                <TableCell><Badge variant={statusVariant(t.status)}>{t.status}</Badge></TableCell>
+                <TableCell>{t.stops} + {t.brackets}</TableCell>
+                <TableCell>
                   <Badge variant={t.authored === 'admin' ? 'default' : 'outline'}>{t.authored}</Badge>
-                </td>
-                <td className="px-3 py-2">{fmtMiles(t.distanceMeters)}</td>
-                <td className="px-3 py-2">{fmtDuration(t.durationSeconds)}</td>
-                <td className="px-3 py-2 text-xs text-muted-foreground">{timeAgo(t.updatedAt)}</td>
-              </tr>
+                </TableCell>
+                <TableCell>{fmtMiles(t.distanceMeters)}</TableCell>
+                <TableCell>{fmtDuration(t.durationSeconds)}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">{timeAgo(t.updatedAt)}</TableCell>
+              </TableRow>
             ))}
             {tours.length === 0 && (
-              <tr>
-                <td colSpan={8} className="px-3 py-10 text-center text-muted-foreground">No tours yet.</td>
-              </tr>
+              <TableRow>
+                <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">No tours yet.</TableCell>
+              </TableRow>
             )}
-          </tbody>
-        </table>
-      </div>
+          </TableBody>
+        </Table>
+      </Card>
     </div>
   )
 }

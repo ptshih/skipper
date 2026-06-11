@@ -13,6 +13,9 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
+import { Card } from '@/components/ui/card'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { PageHeader } from '@/components/PageHeader'
 import { fmtCost, fmtDate, timeAgo } from '@/lib/format'
 
 const statusVariant = (s: GenJob['status']): BadgeProps['variant'] =>
@@ -45,51 +48,52 @@ export function RunsView() {
   }, [])
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Runs</h1>
-        <Button onClick={() => setOpen(true)}>New run</Button>
-      </div>
+    <div>
+      <PageHeader
+        title="Runs"
+        description="Generation, patch, resynth, and sweep jobs — each triggered as a Cloud Run job."
+        actions={<Button onClick={() => setOpen(true)}>New run</Button>}
+      />
       {err && (
-        <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">{err}</div>
+        <div className="mb-4 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">{err}</div>
       )}
-      <div className="overflow-x-auto rounded-lg border">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/50 text-left text-muted-foreground">
-            <tr>
+      <Card>
+        <Table>
+          <TableHeader>
+            <TableRow>
               {['Kind', 'Target', 'Status', 'Mode', 'Cost', 'By', 'When'].map((h) => (
-                <th key={h} className="px-3 py-2 font-medium">{h}</th>
+                <TableHead key={h}>{h}</TableHead>
               ))}
-            </tr>
-          </thead>
-          <tbody>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {jobs.map((j) => (
-              <tr key={j.id} className="border-t hover:bg-muted/30">
-                <td className="px-3 py-2 font-mono text-xs">{j.kind}</td>
-                <td className="px-3 py-2">{j.targetSlug ?? j.targetId ?? '—'}</td>
-                <td className="px-3 py-2">
+              <TableRow key={j.id}>
+                <TableCell className="font-mono text-xs">{j.kind}</TableCell>
+                <TableCell>{j.targetSlug ?? j.targetId ?? '—'}</TableCell>
+                <TableCell>
                   <Badge variant={statusVariant(j.status)}>
                     {j.status === 'running' && j.phase ? `running · ${j.phase}` : j.status}
                   </Badge>
-                </td>
-                <td className="px-3 py-2">
+                </TableCell>
+                <TableCell>
                   {j.dryRun ? <Badge variant="secondary">dry-run</Badge> : <Badge variant="warning">spend</Badge>}
-                </td>
-                <td className="px-3 py-2">{fmtCost(j.costUsd)}</td>
-                <td className="px-3 py-2 text-xs text-muted-foreground">{j.triggeredBy}</td>
-                <td className="px-3 py-2 text-xs text-muted-foreground" title={fmtDate(j.createdAt)}>
+                </TableCell>
+                <TableCell>{fmtCost(j.costUsd)}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">{j.triggeredBy}</TableCell>
+                <TableCell className="text-xs text-muted-foreground" title={fmtDate(j.createdAt)}>
                   {timeAgo(j.createdAt)}
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ))}
             {jobs.length === 0 && (
-              <tr>
-                <td colSpan={7} className="px-3 py-10 text-center text-muted-foreground">No runs yet.</td>
-              </tr>
+              <TableRow>
+                <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">No runs yet.</TableCell>
+              </TableRow>
             )}
-          </tbody>
-        </table>
-      </div>
+          </TableBody>
+        </Table>
+      </Card>
       <NewRunDialog
         open={open}
         onOpenChange={setOpen}

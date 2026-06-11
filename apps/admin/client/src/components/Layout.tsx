@@ -1,39 +1,62 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { Activity, Anchor, Map, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-const tabs = [
-  { to: '/runs', label: 'Runs' },
-  { to: '/tours', label: 'Tours' },
-  { to: '/create', label: 'Create' },
+const nav = [
+  { to: '/runs', label: 'Runs', icon: Activity },
+  { to: '/tours', label: 'Tours', icon: Map },
+  { to: '/create', label: 'Create', icon: Plus },
 ]
 
 export function Layout() {
+  const { pathname } = useLocation()
+  const current = nav.find((n) => pathname.startsWith(n.to))?.label ?? 'Admin'
+
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b">
-        <div className="mx-auto flex max-w-6xl items-center gap-6 px-6 py-3">
-          <div className="font-semibold tracking-tight">⚓ Skipper Admin</div>
-          <nav className="flex gap-1">
-            {tabs.map((t) => (
+    <div className="flex min-h-screen bg-background text-foreground">
+      {/* Sidebar */}
+      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r bg-muted/40 md:flex">
+        <div className="flex h-14 items-center gap-2 border-b px-4">
+          <Anchor className="h-5 w-5" />
+          <span className="font-semibold tracking-tight">Skipper Admin</span>
+        </div>
+        <nav className="flex-1 space-y-1 p-2">
+          {nav.map((n) => {
+            const Icon = n.icon
+            return (
               <NavLink
-                key={t.to}
-                to={t.to}
+                key={n.to}
+                to={n.to}
                 className={({ isActive }) =>
                   cn(
-                    'rounded-md px-3 py-1.5 text-sm transition-colors',
-                    isActive ? 'bg-secondary text-secondary-foreground' : 'text-muted-foreground hover:text-foreground',
+                    'flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                    isActive
+                      ? 'bg-accent text-accent-foreground'
+                      : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground',
                   )
                 }
               >
-                {t.label}
+                <Icon className="h-4 w-4" />
+                {n.label}
               </NavLink>
-            ))}
-          </nav>
-        </div>
-      </header>
-      <main className="mx-auto max-w-6xl px-6 py-6">
-        <Outlet />
-      </main>
+            )
+          })}
+        </nav>
+        <div className="border-t px-4 py-3 text-xs text-muted-foreground">Founder-only · IAP</div>
+      </aside>
+
+      {/* Main */}
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-10 flex h-14 items-center gap-2 border-b bg-background/95 px-6 text-sm backdrop-blur supports-[backdrop-filter]:bg-background/60">
+          <Anchor className="h-4 w-4 md:hidden" />
+          <span className="text-muted-foreground">Admin</span>
+          <span className="text-muted-foreground">/</span>
+          <span className="font-medium">{current}</span>
+        </header>
+        <main className="flex-1 p-6">
+          <Outlet />
+        </main>
+      </div>
     </div>
   )
 }

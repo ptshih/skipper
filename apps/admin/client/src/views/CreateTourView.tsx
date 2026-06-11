@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { WaypointMap, type MapWaypoint } from '@/components/WaypointMap'
+import { PageHeader } from '@/components/PageHeader'
 
 interface EditWaypoint {
   label: string
@@ -116,10 +117,10 @@ export function CreateTourView() {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-xl font-semibold">Create a tour</h1>
-      <p className="-mt-2 max-w-2xl text-sm text-muted-foreground">
-        The skipper proposes the rails; you approve them on the map; then it freezes into a draft you can generate.
-      </p>
+      <PageHeader
+        title="Create a tour"
+        description="The skipper proposes the rails; you approve them on the map; then it freezes into a draft you can generate."
+      />
 
       {/* Phase 1 — prompt */}
       <div className="grid gap-3 rounded-lg border p-4 sm:grid-cols-2">
