@@ -209,6 +209,9 @@ export function useRoam(mode: RoamMode): RoamState {
           if (fresh.pins.length > 0) pinsRef.current = fresh.pins
         }
       } catch {} // offline/dead zone: the reload below retries the old URL — then skips
+      // Audio may have started playing during the async manifest fetch — if sawFresh flipped
+      // true in that window the stall resolved itself; reloading here would restart the clip.
+      if (sawFresh.current) return
       setReloadKey((k) => k + 1) // re-run the clip-load effect for the SAME poi
     },
     [],

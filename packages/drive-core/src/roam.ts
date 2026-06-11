@@ -87,6 +87,9 @@ export class RoamEngine {
   private opts: RoamTriggerOptions
   /** poiId → tSec it fired (cooldown clock). */
   private readonly firedAt = new Map<string, number>()
+  /** name → tSec it fired — same cooldown as poiId; guards against two DB rows for the
+   *  same physical place (different poiIds, identical name) playing back-to-back. */
+  private readonly firedNameAt = new Map<string, number>()
   /** When the governor next allows an encounter start (tSec). */
   private gateOpenAtSec = 0
   /** Where + when the LAST encounter fired (cluster suppression anchor; window-bounded). */
@@ -107,6 +110,10 @@ export class RoamEngine {
     for (const pin of this.pins) {
       const fired = this.firedAt.get(pin.poiId)
       if (fired !== undefined && fix.tSec - fired < this.opts.cooldownSec) continue
+      if (pin.name) {
+        const nameFired = this.firedNameAt.get(pin.name)
+        if (nameFired !== undefined && fix.tSec - nameFired < this.opts.cooldownSec) continue
+      }
       const d = haversineMeters(here, [pin.lng, pin.lat])
       const floor = pin.radiusM ?? this.opts.floorM
       if (d > Math.max(floor, fix.speedMps * this.opts.leadSeconds)) continue
@@ -130,6 +137,7 @@ export class RoamEngine {
     }
     if (!best) return []
     this.firedAt.set(best.pin.poiId, fix.tSec)
+    if (best.pin.name) this.firedNameAt.set(best.pin.name, fix.tSec)
     this.lastFire = { lat: best.pin.lat, lng: best.pin.lng, tSec: fix.tSec }
     // Hold the gate for the clip's length plus the min gap — the next encounter never
     // talks over this one, and the companion gets a breath between stories.
