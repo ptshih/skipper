@@ -560,6 +560,12 @@ app.get('/admin/jobs/:id', async (c) => {
       }
     }
   }
+  // Retry log capture: Cloud Logging has a propagation delay (30s–2min). If the initial
+  // fire-and-forget capture ran before logs were indexed, outputLog is null even though the
+  // job succeeded. Re-trigger (idempotent — skips instantly if outputLog is already set).
+  if (job.status === 'succeeded' && job.cloudRunExecution && job.outputLog == null) {
+    void captureJobOutput(job.id, job.cloudRunExecution, job.kind)
+  }
   const logsUrl = job.cloudRunExecution ? jobExecutionLogsUrl(job.cloudRunExecution) : null
   return c.json({ job, logsUrl })
 })
