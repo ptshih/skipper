@@ -1,4 +1,21 @@
+import { Navigate, Route, Routes } from 'react-router-dom'
+import { Layout } from './components/Layout'
+import { RunsView } from './views/RunsView'
+import { ToursView } from './views/ToursView'
+import { TourDetailView } from './views/TourDetailView'
+import { CreateTourView } from './views/CreateTourView'
+
 export default function App() {
-  // Scaffold placeholder — the layout, router, and views land in the next chunk.
-  return <div className="p-8 text-foreground">Skipper Admin — scaffold OK</div>
+  return (
+    <Routes>
+      <Route element={<Layout />}>
+        <Route index element={<Navigate to="/runs" replace />} />
+        <Route path="/runs" element={<RunsView />} />
+        <Route path="/tours" element={<ToursView />} />
+        <Route path="/tours/:id" element={<TourDetailView />} />
+        <Route path="/create" element={<CreateTourView />} />
+        <Route path="*" element={<Navigate to="/runs" replace />} />
+      </Route>
+    </Routes>
+  )
 }
