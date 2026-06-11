@@ -1,11 +1,10 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { Activity, Anchor, Map, Plus } from 'lucide-react'
+import { Activity, Anchor, Map } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const nav = [
   { to: '/runs', label: 'Runs', icon: Activity },
   { to: '/tours', label: 'Tours', icon: Map },
-  { to: '/create', label: 'Create', icon: Plus },
 ]
 
 export function Layout() {

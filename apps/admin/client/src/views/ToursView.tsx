@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { Plus } from 'lucide-react'
 import { api, type TourCard } from '@/lib/api'
 import { Badge, type BadgeProps } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { PageHeader } from '@/components/PageHeader'
@@ -24,7 +26,18 @@ export function ToursView() {
 
   return (
     <div>
-      <PageHeader title="Tours" description="Every tour in the catalog — drafts included." />
+      <PageHeader
+        title="Tours"
+        description="Every tour in the catalog — drafts included."
+        actions={
+          <Button asChild>
+            <Link to="/create">
+              <Plus className="h-4 w-4" />
+              Create tour
+            </Link>
+          </Button>
+        }
+      />
       {err && (
         <div className="mb-4 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">{err}</div>
       )}
