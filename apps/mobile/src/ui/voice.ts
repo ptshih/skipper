@@ -218,6 +218,11 @@ export const voice = {
     simModeReal: 'Real GPS',
     simModeSimulated: 'Simulated',
     simModeA11y: 'GPS source',
+    showDiagShow: 'Show',
+    showDiagHide: 'Hide',
+    showDiagA11y: 'Diagnostics overlay',
+    showDiagHint:
+      'Show the pin count + GPS fix age + nearest-pin distance on the roam canvas. Useful for field-testing real drives; hidden by default so the idle reads clean.',
   },
   // The legal/attribution page (Settings → Credits). Intro is the skipper's; the
   // source list + license codes are FACTS, kept in @/lib/licenses, never here.

@@ -42,6 +42,8 @@ export type IconName =
   | 'list'
   | 'locate'
   | 'chevronUp'
+  | 'eye'
+  | 'eyeOff'
 
 const IONICON: Record<IconName, ComponentProps<typeof Ionicons>['name']> = {
   // stop types
@@ -81,6 +83,8 @@ const IONICON: Record<IconName, ComponentProps<typeof Ionicons>['name']> = {
   list: 'list-outline', // the itinerary List view
   locate: 'locate-outline', // recenter-on-me chip when the rider pans the map away
   chevronUp: 'chevron-up', // the map peek-bar's "drag/tap up to expand the player" affordance
+  eye: 'eye-outline', // show diagnostics overlay
+  eyeOff: 'eye-off-outline', // hide diagnostics overlay
 }
 
 export interface IconProps {

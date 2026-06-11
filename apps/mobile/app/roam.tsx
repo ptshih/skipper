@@ -75,7 +75,7 @@ export default function RoamScreen() {
   const { mode } = useLocalSearchParams<{ mode?: string }>()
   // The global Settings → Developer toggle forces sim; the `?mode=sim` deep link still works
   // as a one-off (either path → the simulated drive source).
-  const { simMode } = useSimMode()
+  const { simMode, showDiag } = useSimMode()
   const roamMode = simMode || mode === 'sim' ? 'sim' : 'live'
   const r = useRoam(roamMode)
 
@@ -306,7 +306,7 @@ export default function RoamScreen() {
               kept on dev builds + sim so a road test can still self-report (free-roam-mode
               §Idle-canvas — open Q on a TestFlight-live toggle). */}
           <View style={styles.footer}>
-            {(__DEV__ || roamMode === 'sim') && (
+            {(__DEV__ || roamMode === 'sim' || showDiag) && (
               <Text variant="mono" color="inkFaint">
                 {`${r.pinCount} pins · GPS ${r.diag.fixAgeSec ?? '—'}s · nearest ${r.diag.nearestM != null ? `${r.diag.nearestM} m` : '—'}`}
               </Text>
