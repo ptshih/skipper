@@ -32,10 +32,12 @@ export async function fetchExecutionLog(cloudRunExecution: string): Promise<stri
   }
   try {
     const token = await accessToken()
-    // Filter only by execution_name — no resource type or logName restriction so we catch
-    // logs regardless of whether Cloud Run emits them under cloud_run_job or cloud_run_task,
-    // and regardless of what log stream name the runtime assigns.
-    const filter = `resource.labels.execution_name="${cloudRunExecution}"`
+    // Cloud Run Jobs: resource.type="cloud_run_job" has only project_id/location/job_name as
+    // resource labels. The execution name lives in the log entry's labels field, not resource.labels.
+    const filter = [
+      'resource.type="cloud_run_job"',
+      `labels."run.googleapis.com/execution_name"="${cloudRunExecution}"`,
+    ].join('\n')
 
     let lines: string[] = []
     let pageToken: string | undefined
