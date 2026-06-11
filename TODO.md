@@ -5,6 +5,31 @@ Carry-forward **engineering** items (the near-term layer of the truth system —
 Each item has enough context to action without re-deriving the reasoning. **Delete items
 when done** — git history is the archive.
 
+## Roam build pass 2 — LOCKED by the founder 2026-06-11 (the "companion grows up" pass)
+
+Three items locked from the 2026-06-11 brainstorm (full capture: `docs/ideas/free-roam-mode.md`
+§Alpha learnings). Order within the pass is free; all three are founder-facing on his daily drive.
+
+- [ ] **Waves: narrate the scenic tier.** ~126 swept scenic pins sit unnarrated (`pois` story/scenic
+      tiers — `sweep-roam-pois.ts`). Schema first: `roam_clips` has NO `form` column and a
+      `roam_clips_poi_uq` unique index on poiId (one telling per place) — the schema comment
+      already names the move: a clean DESTRUCTIVE migration adding `form` ('story'|'wave';
+      'bside' later) + uniqueness on (poiId, form). Then the 10–20s WAVE form in
+      `generate-roam.ts` (grammar: one-liner, self-contained, no laterality/volatile; no "ask
+      me about it" tease until B-sides exist). Engine + manifest: waves suppressed on quiet
+      chattiness, story-over-wave priority on simultaneous candidates. Prompt work is the real
+      cost — a wave must sound like HIM, not a gazetteer caption. ⚠ The --apply generation run is
+      a PAID run (~$3–5 + TTS) — needs an explicit founder go, never inferred from this lock.
+- [ ] **The sonic cue.** ~1s entry motif before every encounter (the duck gets a reason; the
+      startle dies) + a soft exit/resolve note as the duck releases. Client-side bundled assets
+      (`apps/mobile`), played around the clip in `useRoam`. Sound design taste-gate: founder ear
+      on the motif BEFORE wiring (charm shortlist already names sound design).
+- [ ] **Persistent encounter history + per-pin mute.** Local store (poiId, lastPlayedAt, count,
+      muted) — survives sessions (today's cooldown is session-scoped, `RoamEngine` 4h). Feed the
+      engine's cooldown from it; "Don't tell me this one again" action on the encounter sheet
+      writes `muted`. Unlocks later: deep-cuts rotation targeting, the corpus meter, revisit
+      preambles, mute-as-curation-telemetry. Keep it client-side (toy lens: no server surveillance).
+
 ## Generation resumability — SHELVED 2026-06-10 (low ROI)
 
 The cost *guardrail* shipped 2026-06-09 (`pipeline/spend.ts` usage tally + the `--max-cost`
@@ -21,29 +46,65 @@ logging later shows hard crashes are common.
 Refs: 2026-06-10 ROI validation (this session); `pipeline/generate.ts` (all in-memory until
 the atomic ready-gate), `pipeline/http.ts` (the retry that already covers most failures).
 
-## TTS audio QA: tail-collapse retake + clip loudness normalization
+## Generation pipeline: overlap independent phases (perf, output-neutral)
+
+Three top-level phases in `generate.ts` run SERIALLY but are independent — overlapping them
+trims wall-clock with NO change to the scripts/audio produced. Modest (seconds–tens of seconds
+each); the big parallel wins (first-pass narration + the regen passes) already shipped (B +
+A-simple, commits `be83c7e` / `5283fe6`). Surfaced 2026-06-10 while hardening the pipeline;
+backlogged not built (the gain didn't justify reordering the orchestrator on the spot).
+
+- [ ] **bracket-narration ‖ eval-panel** (the clean one): intro/outro narration threads ZERO
+      cross-stop state, yet today runs AFTER the whole eval panel settles. Start the two bracket
+      calls before the panel and await them just before TTS — overlaps 2 Opus calls with the panel.
+- [ ] **geology ‖ scout**: operate on DISJOINT stop sets (scenic vs story) but run serially today.
+- [ ] **places ‖ discovery**: independent external fetches (break anchors vs the Wikidata spine).
+
+Watch when implementing: keep each phase's `lap()` timing honest if phases overlap (the per-phase
+ms in `timings` assumes serial), and don't let a bracket-narration failure (mandatory — it must
+abort the run) get swallowed by a panel running concurrently. Refs: `pipeline/generate.ts` (the
+phase sequence + `lap()`).
+
+## MAYBE — API read-retry to mask Neon cold-start blips (judgment call, not committed)
+
+Logged as a MAYBE, not a decision. The API's neon-http reads (`loadTourGated`, `GET /tours`,
+the queries inside the `/tours/:id` + `/sign` `Promise.all`s) are bare `db.select` — a transient
+blip (Neon serverless wakes a compute on the first query after idle) throws → `onError` → a 500
+for a real user. The generator already retries its reads (`8189bd5`); the API doesn't.
+
+Shape if built: a small `withRetry<T>(fn)` that retries a transient throw then RE-THROWS (a read
+can't fail open — empty rows would silently 404 a real tour / blank the catalog; after a bounded
+effort a 500 is the honest answer). Distinct from `session.ts`'s `resolveSessionSafely`, which
+retries-then-fails-OPEN-to-null (a missing session legitimately means anonymous) — `retry.ts`
+could host the shared core. Budget must be SHORTER/FEWER than the generator's (this is on the
+USER's latency path): ~2–3 attempts, ~100–150 ms base. Composes with the `Promise.all` fan-out
+(`a94cf8c`) — wrap each arm's thunk, concurrency preserved.
+
+Why only a MAYBE: it adds latency to the FAILURE path (a genuinely-down Neon now waits ~300–450 ms
+before 500-ing instead of failing instantly). Favorable for THIS traffic profile (idle, cold-start
+prone) — the common case is a single blip masked into a slightly-slower success — but a smaller,
+less clear-cut win than the fail-open session fix (`aa0f113`, product-critical) or the read fan-out
+(`a94cf8c`, pure latency). Revisit if request logs ever show cold-start 500s actually happening.
+
+## TTS audio QA: clip loudness normalization
 
 Measured 2026-06-10 (ffmpeg volumedetect over all 30 live clips, founder-ear-confirmed):
-Gemini-TTS takes are non-deterministic in LEVEL, two distinct defects —
+Gemini-TTS takes are non-deterministic in LEVEL. The first defect — **tail collapse (the
+"mumble")** — shipped its fix 2026-06-11: every ship path (generate, generate-roam,
+resynth-tour, patch-clip) now measures tail(12s)-vs-body after each synth and re-synths
+once on a ≥3 dB drop, keeping the better take; a still-collapsed shipped take fails that
+stop's tts eval row (`pipeline/tail.ts` + `synthesizeWithTailRetake` in `pipeline/tts.ts`;
+graceful skip when ffmpeg is absent; the skipper-gen Dockerfile installs ffmpeg so cloud
+Job runs measure too).
 
-1. **Tail collapse (the "mumble"):** 8/30 clips have a ≥3 dB tail-vs-body drop; the worst
-   (emerald seq 13, Lake Tahoe Dam) ends with its final sentence at near-silence
-   (−22.5 dB drop — silencedetect shows the closing words barely register). Fresh takes of
-   the same scripts come out clean → take variance, NOT the voice and NOT the style prompt.
-   - [ ] In the TTS phase: after each synthesize, measure tail(12s)-vs-body mean volume
-         (ffmpeg read-only on the MP3 — no re-encode; graceful skip if ffmpeg absent) and
-         RE-SYNTH once when drop ≥3 dB; keep the better take; record on the tts eval dim.
-         Should land BEFORE the next regen so a Dam-class take can never ship again.
+REMAINING — **clip-to-clip level spread:** body mean volume ranges −26.7 → −19.5 dB across
+the 30 clips (7.2 dB) — audible volume jumps stop-to-stop. Fix = per-clip loudness
+normalization (speech target, e.g. −16 LUFS; drive music is already matched at −13).
+Needs a small encode-path spike: loudnorm requires decode→re-encode, so either accept a
+32k→32k MP3 re-encode or request LINEAR16 and encode MP3 ourselves post-normalize.
 
-2. **Clip-to-clip level spread:** body mean volume ranges −26.7 → −19.5 dB across the 30
-   clips (7.2 dB) — audible volume jumps stop-to-stop. Fix = per-clip loudness
-   normalization (speech target, e.g. −16 LUFS; drive music is already matched at −13).
-   Needs a small encode-path spike: loudnorm requires decode→re-encode, so either accept a
-   32k→32k MP3 re-encode or request LINEAR16 and encode MP3 ourselves post-normalize.
-
-Refs: `packages/generator/src/pipeline/tts.ts`, `pipeline/mp3.ts`,
-`docs/decisions/audio-compression-spike.md` (the encode-path options),
-`eval/tts.ts` (where the tail verdict should record).
+Refs: `packages/generator/src/pipeline/tts.ts`, `pipeline/tail.ts`, `pipeline/mp3.ts`,
+`docs/decisions/audio-compression-spike.md` (the encode-path options).
 
 ## Offline downloads: full re-pull only (no per-clip diff)
 
@@ -90,3 +151,34 @@ removed the dated construction sentence, so there's nothing left to file.
 Refs: `docs/decisions/fact-overrides-and-veracity.md` ("Contribute back" + the discipline line),
 `packages/db/seed/poi-overrides.ts` (the rows + reasons + source_urls),
 `poi_overrides.upstream_status` / `upstream_url` (the workflow columns).
+
+## Autio competitive borrows (small in-car/UX wins)
+
+From a 2026-06-10 teardown of Autio (formerly HearHere — the closest real-world comp:
+curated, celebrity-narrated, GPS-triggered road-trip audio; 4.8★, ~70% renewal). Their
+ceiling is coverage gaps + multi-narrator inconsistency — both things our generation +
+single-Charon model already answer, so the moat (persona continuity, in-car quality) is NOT
+a feature to copy. These three borrows are small and serve that moat. NOT borrowing:
+subscription-first pricing, celebrity narrator roster, national free-roam pin-map,
+over-broad trigger radius (all anti-charm or anti-doctrine).
+
+- [ ] **Duck the rider's MUSIC, not just nav prompts.** Autio's single most-cited audio
+      complaint is that it plays *over* your music (it only ducks turn-by-turn nav). Our
+      "duck, don't stop" rule must cover BOTH background media and nav. Pairs directly with
+      the pending Phase-0 duck flip — when flipping `doNotMix`→`duckOthers`, verify the
+      rider's own music ducks too, not only the nav voice. (Watch the lock-screen landmine:
+      `setActiveForLockScreen` wants `doNotMix` — see the device-verification runbook.)
+- [ ] **Heard/unheard stop-progress affordance on the drive screen.** Autio grays out
+      played map pins so you can glance at what's coming. Cheap, in-car-safe charm: a
+      "stop N of M" / dimmed-completed-stops indicator on the drive screen. Costs almost
+      nothing, reads at 60 mph.
+- [ ] **Upfront permission-explainer screens before Location-Always.** Autio runs a short
+      onboarding that *explains* why it needs Location-Always + Notifications before firing
+      the OS prompt, cutting denial. We hit this exact wall on the real-drive device pass —
+      a 1–2 screen explainer before the system dialog. (Note: no `UIBackgroundModes:['audio']`
+      yet — locked-screen live audio is still unverified; see the runbook.)
+
+Refs: `apps/mobile/src/lib/useDrive.ts` (the duck flip), the drive screen
+(`apps/mobile/app/tours/[id]/play.tsx`), `docs/guides/device-verification-runbook.md` (duck +
+lock-screen landmines). Validated-already (no action): our anonymous couch preview = Autio's
+tap-a-pin preview; the M3 notch/interests-as-setting = their interest-ordered queue.
