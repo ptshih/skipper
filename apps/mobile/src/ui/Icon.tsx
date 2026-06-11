@@ -36,6 +36,8 @@ export type IconName =
   | 'update'
   | 'more'
   | 'roam'
+  | 'music'
+  | 'patter'
 
 const IONICON: Record<IconName, ComponentProps<typeof Ionicons>['name']> = {
   // stop types
@@ -69,6 +71,8 @@ const IONICON: Record<IconName, ComponentProps<typeof Ionicons>['name']> = {
   update: 'cloud-download-outline', // a saved tour whose clips were re-cut server-side — pull again
   more: 'ellipsis-horizontal', // header overflow menu (secondary/utility actions)
   roam: 'compass-outline', // free-roam mode — no route, the skipper rides shotgun
+  music: 'musical-notes-outline', // the rider's own audio (roam ducks it, never stops it)
+  patter: 'chatbubble-ellipses-outline', // the skipper talking (roam contract chip)
 }
 
 export interface IconProps {

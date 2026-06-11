@@ -310,6 +310,10 @@ export const roamPin = z.object({
   lat: z.number(),
   lng: z.number(),
   durationMs: z.number().int(),
+  /** Kind-aware proximity radius (m) — roam pins are un-snapped POI centroids, so areal
+   *  places (a peak's summit, a lake's open water) need a wider trigger floor than a
+   *  building. Optional for wire-compat; the server always sends it. */
+  radiusM: z.number().int().optional(),
   url: z.url(),
   /** MIME type derived server-side from the R2 key (see signedClip.contentType). */
   contentType: z.string(),

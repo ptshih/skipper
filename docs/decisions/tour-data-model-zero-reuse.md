@@ -272,3 +272,15 @@ Clean + **destructive** (no users → no back-compat, no data fold). Mostly `db:
 - **Whether to materialize a `needs_regen` worklist flag** from the §4B hash comparison.
 - **`route_sig` tour-dedup / overlap guardrail** — relevant once breadth produces near-duplicate tours
   (two independent tours over ~the same road); a discovery-layer concern, computed from anchors.
+
+## 9. Addendum (2026-06-10): a THIRD narration owner — `roam_clips` (free-roam alpha)
+
+Free-roam mode (`docs/specs/free-roam-alpha-spec.md`) added a third owner to the model without
+bending the rule: **`pois` = shared FACTS, `tour_stops` = a TOUR's telling, `roam_clips` = the
+ROAM telling.** The reasoning that holds it: a tour's clip already replays for every driver *of
+that tour* — a roam clip replays for every roamer *of that region*. Narration still belongs to
+its telling-context; the contexts never cross-feed (tours never read `roam_clips`, roam never
+reads `tour_stops`), so this is NOT a `poi_content` resurrection. One telling per POI in v0
+(unique on `poiId`); staleness rides the same `facts_hash` contract as `tour_stops`; attribution
+snapshots freeze on the row identically. The "no content cache and no cross-tour content reuse"
+invariant is unchanged — roam is a different product surface with its own single owner.

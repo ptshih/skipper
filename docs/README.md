@@ -57,6 +57,7 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
 - [fact-overrides-and-veracity.md](decisions/fact-overrides-and-veracity.md) — the
   upstream-source-error loop (`poi_overrides` corrections + the web-checking `--veracity`
   eval) and the durable eval record (`eval_runs`/`eval_scores`); built 2026-06-09.
+  (Zero-reuse gained a §9 addendum 2026-06-10: `roam_clips` as the THIRD narration owner.)
 
 ### specs/
 - [ask-the-skipper-spec.md](specs/ask-the-skipper-spec.md) — live, grounded voice Q&A mid-drive (the
@@ -81,6 +82,9 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   tour-ops CLIs (generate/patch/resynth/sweep) as **Cloud Run Jobs** (v0), then a deployed `apps/admin`
   (Vite + Hono) behind **Google IAP** with a `gen_jobs` record + ear-pass/eval monitor (v1);
   build-ready, unbuilt, greenlit + microscope-hardened 2026-06-10.
+- [free-roam-alpha-spec.md](specs/free-roam-alpha-spec.md) — what the free-roam ALPHA actually is
+  (roam_clips third owner, basin sweep, ~60s encounters, RoamEngine, duckOthers posture) + its
+  deliberate cuts; BUILT 2026-06-10, founder-only TestFlight.
 
 ### ideas/
 - [journey-layer.md](ideas/journey-layer.md) — **the north-star vision**: Skipper as the
@@ -89,7 +93,9 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   commitment.
 - [free-roam-mode.md](ideas/free-roam-mode.md) — **a second product** (tours stay primary): the POI
   corpus as a proximity-triggered "skipper rides shotgun" roam mode — Autio's shape, Skipper's soul,
-  region-gated by density; rung 1.5 of the journey-layer spectrum. Captured 2026-06-10.
+  region-gated by density; rung 1.5 of the journey-layer spectrum. Captured 2026-06-10; the ALPHA
+  shipped same day (see [free-roam-alpha-spec.md](specs/free-roam-alpha-spec.md)) — this doc keeps
+  the unbuilt vision layers.
 
 The rest are post-MVP features, gated behind the proven phone player:
 - [drive-complete-moment.md](ideas/drive-complete-moment.md) — the payoff beat as motion + sound

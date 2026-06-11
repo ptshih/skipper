@@ -317,6 +317,19 @@ app.post('/tours/:tourId/assets/sign', withSession, async (c) => {
   }
 })
 
+// Kind-aware roam trigger radius (m). Roam pins are raw POI centroids — never road-snapped
+// (no route exists to snap to) — so an areal place needs a floor that matches its body: a
+// peak's pin is its SUMMIT, a lake's is open water, while a building sits near the curb.
+// Measured on the first live drive: at a flat 250 m only 8 of 77 basin pins were reachable
+// from the highway. The client's speed-adaptive lead still extends these at speed.
+function roamRadiusM(kind: string | null): number {
+  if (!kind) return 600
+  if (/mountain|peak|summit|ridge|hill/.test(kind)) return 1500
+  if (/lake|reservoir|bay|valley|canyon|island|peninsula/.test(kind)) return 1200
+  if (/park|recreation area|beach|cove|meadow|historic district/.test(kind)) return 1000
+  return 600
+}
+
 // Straight-line distance (m) — the same haversine as @skipper/drive-core's; inlined here
 // because the API's only geo need is this one filter (keep the dep graph flat).
 function haversineMeters(aLat: number, aLng: number, bLat: number, bLng: number): number {
@@ -349,6 +362,7 @@ app.get('/roam', async (c) => {
     .select({
       poiId: roamClips.poiId,
       name: pois.name,
+      kind: pois.kind,
       lat: pois.lat,
       lng: pois.lng,
       key: roamClips.audioUrl,
@@ -367,6 +381,7 @@ app.get('/roam', async (c) => {
         lat: r.lat,
         lng: r.lng,
         durationMs: r.durationMs,
+        radiusM: roamRadiusM(r.kind),
         url: presignGet(r.key),
         contentType: contentTypeForKey(r.key),
       })),

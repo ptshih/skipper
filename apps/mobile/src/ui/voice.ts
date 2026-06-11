@@ -77,24 +77,54 @@ export const voice = {
   },
   // FREE-ROAM (alpha): no route, no plan — the skipper rides shotgun and pipes up when
   // the road passes something he knows. Silence is the DEFAULT state, so the copy's whole
-  // job is making quiet feel companionable (the ambient contract, set up front).
+  // job is making quiet feel companionable (the ambient contract, set IN COPY up front).
+  // Strings follow the design handoff (design_handoff_roam); encounter NAMES + tellings
+  // come from roam_clips (grounded) — never from here.
   roam: {
-    entry: 'Free roam', // home affordance label
-    entryAlpha: 'ALPHA', // tiny badge beside it
-    entryBlurb: 'No route — I pipe up when we pass something I know.',
-    kicker: 'RIDING SHOTGUN', // live-session placard kicker
-    simKicker: 'SHOTGUN, SIMULATED', // sim-session placard kicker (dev/couch)
+    entry: 'Roam', // the mode's display title (home card + screen header)
+    entryKicker: 'NEW · RIDE ALONG', // home card kicker (label face uppercases anyway)
+    entryAlpha: 'ALPHA', // tiny honesty badge
+    entryBlurb: 'No route, no plan — I pipe up when we pass something I know a story about.',
     start: 'Ride along',
-    end: 'Drop me off',
+    end: 'End', // ghost header affordance → the sign-off
+    // First-run ambient contract — the dead-air inoculation, done as a bit, shown ONCE.
+    contract:
+      'Here’s the deal: I talk when there’s something worth saying. The rest of the time I’m enjoying the view. It’s not awkward unless you make it awkward.',
+    contractReassure:
+      'You can change how chatty I am anytime — and a quiet drive is a perfectly good drive.',
+    contractCta: 'Got it — let’s ride',
+    // Session start — one line from a small placeless rotating pool, then settle into idle.
+    sessionKicker: 'NOW ROLLING',
+    sessionStart: [
+      'Mornin’. Don’t mind me — just along for the ride.',
+      'Hop in, hop in. Pretend I’m not even here.',
+      'Go where you’re going — I’ll mind the scenery.',
+      'Well, look who’s driving. I’ll keep an eye out for the good stuff.',
+    ],
+    // Riding-along idle — alive, never a spinner.
+    ridingKicker: 'Riding along',
+    simBadge: 'SIMULATED', // couch/dev clock
+    idleTitle: 'All quiet — and that’s fine.',
+    idle: 'Enjoying the view. I’ll pipe up when there’s something worth saying.',
+    stories: 'stories', // the stat pill: "<n> stories"
+    musicPlaying: 'Your music · playing',
+    musicDucked: 'Your music · ducked',
+    // Chattiness — a SELECTION knob (which/how-many encounters fire), never a generation one.
+    chattiness: {
+      quiet: 'Quiet',
+      normal: 'Normal',
+      talkative: 'Talkative',
+      a11y: 'How chatty the skipper is',
+    },
+    storyBadge: 'STORY', // encounter sheet badge (waves/B-sides arrive with their clips)
+    skip: 'Skip',
+    // Sign-off — the only ending; hand-ended sessions deserve a warm out.
+    signoff: 'That’s me out, friend. Holler when you want company.',
+    signoffTally: 'stories this drive',
+    done: 'Done',
     locating: 'Getting my bearings…',
     loading: 'Checking which stories live out here…',
-    watching: 'Just enjoying the view', // idle (no clip) card title
-    watchingBody: 'I talk when there’s something worth saying. It’s not awkward unless you make it awkward.',
-    told: 'told', // "<n> stories in range · <m> told"
-    inRange: 'stories in range',
     noCoverage: 'I don’t know these roads yet, folks. Get me near Lake Tahoe and I’ve got stories.',
-    confirmEndTitle: 'Drop the skipper off?',
-    keepRiding: 'Keep riding',
   },
   greeting: 'Hop in. I’ll do the talking.',
   // The cold-open descriptor: a newcomer should know WHAT this is before any audio

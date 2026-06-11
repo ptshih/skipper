@@ -32,6 +32,8 @@ export default function DrivesScreen() {
   // animated, so it satisfies both the one-thing-animating and the one-glowing-amber
   // rules. The home has no NOW card, so this halo is the screen's sole amber glow.
   const parkedAnim = useRef(new Animated.Value(0.12)).current
+  // The roam card's trail sits at progress 0 — the road not yet traveled (design handoff).
+  const roamParked = useRef(new Animated.Value(0)).current
 
   const load = useCallback(async () => {
     try {
@@ -146,26 +148,35 @@ export default function DrivesScreen() {
   const listHeader = (
     <>
       {hero}
-      {/* FREE-ROAM (alpha) entry — not a drive (no route), so it sits between the hero and
-          THE DRIVES seam rather than in the catalog. Quiet by design; the alpha badge keeps
-          expectations honest. */}
+      {/* FREE-ROAM (alpha) entry — a MODE beside THE DRIVES (never a tab), so it sits
+          between the hero and the seam, prominent per the design handoff: framed card,
+          kicker + alpha badge, display title, the untraveled trail (progress 0, NO glow —
+          the hero's parked rig owns the home screen's one amber glow), and the primary
+          "Ride along". The alpha badge keeps expectations honest. */}
       <View style={styles.roamWrap}>
-        <Card onPress={() => router.push('/roam')}>
-          <View style={styles.roamRow}>
-            <Icon name="roam" size={20} color="accent" />
-            <View style={styles.flex}>
-              <View style={styles.roamTitleRow}>
-                <Text variant="heading" color="ink">
-                  {voice.roam.entry}
-                </Text>
-                <Badge tone="teal" label={voice.roam.entryAlpha} />
-              </View>
-              <Text variant="dim" color="inkDim">
-                {voice.roam.entryBlurb}
-              </Text>
-            </View>
-            <Icon name="upcoming" size={16} color="inkFaint" />
+        <Card framed onPress={() => router.push('/roam')}>
+          <View style={styles.roamKickerRow}>
+            <Text variant="label" color="accentWarm" style={styles.flex}>
+              {voice.roam.entryKicker}
+            </Text>
+            <Badge tone="teal" label={voice.roam.entryAlpha} />
           </View>
+          <Text variant="display" color="ink">
+            {voice.roam.entry}
+          </Text>
+          <Text variant="body" color="inkDim">
+            {voice.roam.entryBlurb}
+          </Text>
+          <View style={styles.roamTrail}>
+            <RouteTrack progress={roamParked} glow={false} />
+          </View>
+          <Button
+            icon="car"
+            title={voice.roam.start}
+            onPress={() => router.push('/roam')}
+            glow={false}
+            fullWidth
+          />
         </Card>
       </View>
       <View style={styles.seam}>
@@ -325,8 +336,8 @@ const styles = StyleSheet.create({
   heroHeadline: { marginTop: space.sm },
   heroTrail: { marginTop: space.md, marginBottom: space.md },
   roamWrap: { paddingHorizontal: space.gutter, marginTop: space.md },
-  roamRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  roamTitleRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  roamKickerRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  roamTrail: { marginTop: space.sm, marginBottom: space.sm },
   seam: { paddingHorizontal: space.gutter, marginTop: space.lg },
   seamRow: {
     flexDirection: 'row',
