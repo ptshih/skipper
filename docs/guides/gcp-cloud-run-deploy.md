@@ -178,10 +178,20 @@ otherwise); the IAP accessor binds via `iap web … --resource-type=cloud-run`, 
 add-iam-policy-binding` (which rejects the role); direct IAP walls the WHOLE service, so an
 external `curl /health` returns "Invalid IAP credentials: empty token" — that's success, not a
 broken route. **Admin identity = `peter@manoa.health`** (in-domain): a personal-gmail accessor
-needs DRS relaxed, so we switched to the Workspace account and re-enabled DRS. **Footgun:**
-`.env.production` lives at the repo ROOT, outside the admin trigger's `--included-files`
-(`apps/admin/**,…`), so an `ADMIN_EMAIL`/prod-env change does NOT auto-deploy — push, then
-`gcloud builds triggers run skipper-admin-deploy --branch=main --region=us-east4` by hand.
+needs DRS relaxed, so we switched to the Workspace account and re-enabled DRS. **Gen image
+context:** the root `.dockerignore` (api-tuned) excluded `packages/generator` + `packages/drive-core`,
+which the gen Dockerfile COPYs → "file does not exist in build context"; it's SHARED across all
+three image builds, so it must only exclude what NO build COPYs (fixed + commented in the file).
+**Prod GCP auth = ADC, not a key file:** `.env.production` carried a dev-local
+`GOOGLE_APPLICATION_CREDENTIALS=./keys/…json` (absent in the container) → the admin's `jobs:run`
+`GoogleAuth` and the gen Job's TTS both ENOENT'd; fix = empty `GOOGLE_APPLICATION_CREDENTIALS` +
+`GOOGLE_TTS_USE_ADC=true` in prod so both use the runtime SA's ADC (`config.ts:39` predicts this
+exact trap). **Footgun:** `.env.production` lives at the repo ROOT, outside EVERY trigger's
+`--included-files`, so a prod-env change (`ADMIN_EMAIL`, the ADC vars, …) does NOT auto-deploy AND
+is baked into BOTH the admin service and the gen Job images — push, then manually rebuild **both**:
+`gcloud builds triggers run skipper-admin-deploy --branch=main --region=us-east4` and
+`… skipper-gen-deploy …`. **Smoke-tested 2026-06-11:** New run → Sweep orphans (dry-run) ran the
+full IAP→jobs:run→reconcile chain green.
 
 ```bash
 PROJECT=lithe-window-491818-k8

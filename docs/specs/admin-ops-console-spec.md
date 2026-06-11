@@ -13,14 +13,14 @@
 > job trigger/reconcile, Create Tour) + the React/Vite/Tailwind/shadcn SPA in `client/` (the
 > Google-Maps Create-Tour flow), served as one container behind IAP, plus the admin Dockerfile/
 > cloudbuild. All packages typecheck/build, 238 generator tests pass.
-> **Deployed 2026-06-11:** admin service behind IAP, **identity `peter@manoa.health`** (in-domain;
-> a personal-gmail accessor needed DRS relaxed, so we switched + re-enabled DRS). Deploy gotchas
-> now folded into the guide §"admin console" runbook (job-IAM ordering, `iap web` accessor grant,
-> IAP walls `/health`, `.env.production` outside the trigger path filter → manual rebuild).
-> **Pending:** functional smoke-test of the skipper-gen Job + the New-run button (the only
-> unverified path). Migrations `0005`/`0006` are already on prod (dev+prod share ONE Neon DB), so
-> the read-only views (Tours/Runs/route map) work against real data now; the Create-Tour SPA still
-> wants a hands-on pass.
+> **Deployed + smoke-tested 2026-06-11:** admin service behind IAP, **identity `peter@manoa.health`**
+> (in-domain; a personal-gmail accessor needed DRS relaxed, so we switched + re-enabled DRS); the
+> `skipper-gen` Job is deployed and the full **New run → jobs:run → reconcile** chain ran green (a
+> dry-run Sweep orphans). Deploy gotchas folded into the guide §"admin console" runbook (job-IAM
+> ordering, `iap web` accessor grant, IAP walls `/health`, the shared `.dockerignore`, prod GCP
+> auth via ADC not a baked key file, `.env.production` outside the trigger path filter → manual
+> rebuild of BOTH images). Migrations `0005`/`0006` are on prod (dev+prod share ONE Neon DB).
+> **Pending:** a hands-on pass of the Create-Tour SPA + a real dry-run Generate.
 > Contracts below (line numbers, SA emails, project id) are real as of writing — the
 > code wins if they drift. Pairs with [the Cloud Run deploy guide](../guides/gcp-cloud-run-deploy.md)
 > and [the ops-scripts SOP](../guides/ops-scripts-sop.md) (whose safe-by-default contract the
