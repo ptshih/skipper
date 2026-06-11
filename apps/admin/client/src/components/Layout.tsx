@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { NavLink, Outlet } from 'react-router-dom'
 import { Activity, Anchor, Map } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -8,18 +8,18 @@ const nav = [
 ]
 
 export function Layout() {
-  const { pathname } = useLocation()
-  const current = nav.find((n) => pathname.startsWith(n.to))?.label ?? 'Admin'
-
   return (
-    <div className="flex min-h-screen bg-background text-foreground">
-      {/* Sidebar */}
-      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r bg-muted/40 md:flex">
-        <div className="flex h-14 items-center gap-2 border-b px-4">
-          <Anchor className="h-5 w-5" />
+    <div className="min-h-svh bg-zinc-100 text-foreground dark:bg-zinc-950">
+      {/* Sidebar — borderless, sits on the page (Catalyst) */}
+      <aside className="fixed inset-y-0 left-0 hidden w-64 flex-col px-4 py-4 lg:flex">
+        <div className="flex items-center gap-2 px-2 py-2">
+          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-foreground text-background">
+            <Anchor className="h-4 w-4" />
+          </span>
           <span className="font-semibold tracking-tight">Skipper Admin</span>
         </div>
-        <nav className="flex-1 space-y-1 p-2">
+
+        <nav className="mt-3 flex-1 space-y-0.5">
           {nav.map((n) => {
             const Icon = n.icon
             return (
@@ -28,32 +28,38 @@ export function Layout() {
                 to={n.to}
                 className={({ isActive }) =>
                   cn(
-                    'flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                    'flex items-center gap-3 rounded-lg px-2 py-2 text-sm transition-colors',
                     isActive
-                      ? 'bg-accent text-accent-foreground'
-                      : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground',
+                      ? 'bg-zinc-950/5 font-medium text-foreground dark:bg-white/5'
+                      : 'text-muted-foreground hover:bg-zinc-950/5 hover:text-foreground dark:hover:bg-white/5',
                   )
                 }
               >
-                <Icon className="h-4 w-4" />
+                <Icon className="h-4 w-4 shrink-0" />
                 {n.label}
               </NavLink>
             )
           })}
         </nav>
-        <div className="border-t px-4 py-3 text-xs text-muted-foreground">Founder-only · IAP</div>
+
+        {/* Account block (Catalyst footer) */}
+        <div className="mt-3 flex items-center gap-3 px-2 py-2">
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-foreground/10 text-xs font-semibold">
+            F
+          </span>
+          <div className="min-w-0 leading-tight">
+            <div className="truncate text-sm font-medium">Founder</div>
+            <div className="truncate text-xs text-muted-foreground">IAP-gated</div>
+          </div>
+        </div>
       </aside>
 
-      {/* Main */}
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-10 flex h-14 items-center gap-2 border-b bg-background/95 px-6 text-sm backdrop-blur supports-[backdrop-filter]:bg-background/60">
-          <Anchor className="h-4 w-4 md:hidden" />
-          <span className="text-muted-foreground">Admin</span>
-          <span className="text-muted-foreground">/</span>
-          <span className="font-medium">{current}</span>
-        </header>
-        <main className="flex-1 p-6">
-          <Outlet />
+      {/* Main — floating content panel */}
+      <div className="lg:pl-64">
+        <main className="p-2 lg:p-3">
+          <div className="min-h-[calc(100svh-1.5rem)] rounded-xl bg-background p-6 shadow-sm ring-1 ring-zinc-950/5 lg:p-10 dark:ring-white/10">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>

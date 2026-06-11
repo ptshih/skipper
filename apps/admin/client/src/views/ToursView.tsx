@@ -4,7 +4,6 @@ import { Plus } from 'lucide-react'
 import { api, type TourCard } from '@/lib/api'
 import { Badge, type BadgeProps } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { PageHeader } from '@/components/PageHeader'
 import { fmtDuration, fmtMiles, timeAgo } from '@/lib/format'
@@ -41,7 +40,7 @@ export function ToursView() {
       {err && (
         <div className="mb-4 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">{err}</div>
       )}
-      <Card>
+      <div className="overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow>
@@ -75,7 +74,7 @@ export function ToursView() {
             )}
           </TableBody>
         </Table>
-      </Card>
+      </div>
     </div>
   )
 }

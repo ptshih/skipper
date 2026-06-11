@@ -28,11 +28,12 @@
   }
 
   .dark {
-    --background: 240 10% 3.9%;
+    /* panel surface = zinc-900; the page behind it is zinc-950 (set on the Layout shell) */
+    --background: 240 6% 10%;
     --foreground: 0 0% 98%;
-    --card: 240 10% 3.9%;
+    --card: 240 6% 10%;
     --card-foreground: 0 0% 98%;
-    --popover: 240 10% 3.9%;
+    --popover: 240 6% 10%;
     --popover-foreground: 0 0% 98%;
     --primary: 0 0% 98%;
     --primary-foreground: 240 5.9% 10%;

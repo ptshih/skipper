@@ -13,7 +13,6 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
-import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { PageHeader } from '@/components/PageHeader'
 import { fmtCost, fmtDate, timeAgo } from '@/lib/format'
@@ -57,7 +56,7 @@ export function RunsView() {
       {err && (
         <div className="mb-4 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">{err}</div>
       )}
-      <Card>
+      <div className="overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow>
@@ -93,7 +92,7 @@ export function RunsView() {
             )}
           </TableBody>
         </Table>
-      </Card>
+      </div>
       <NewRunDialog
         open={open}
         onOpenChange={setOpen}
