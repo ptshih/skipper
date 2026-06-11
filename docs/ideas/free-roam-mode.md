@@ -4,7 +4,9 @@
 > its deliberate cuts) is recorded in `docs/specs/free-roam-alpha-spec.md`. THIS doc remains the
 > full product vision (second product, tours primary; the grammar/logbook/monetization layers are
 > still future). Originally captured + fleshed out 2026-06-10 as the buildable-now rung missing
-> from [journey-layer.md](journey-layer.md)'s coverage spectrum.
+> from [journey-layer.md](journey-layer.md)'s coverage spectrum. 2026-06-11: post-field-drive
+> improvement backlog captured (§Alpha learnings); founder LOCKED waves + sonic cue +
+> history/mute as the next build pass (TODO.md carries the build context).
 
 **The idea (founder, 2026-06-10):** the POI corpus we accumulate building tours becomes a product of
 its own — open the app anywhere in a covered region, just drive, and the skipper pipes up when you
@@ -186,6 +188,64 @@ proximity + heading + cooldown + frequency governor; session-start pool + edge-o
 chattiness only. No B-sides, no logbook, no revisit preambles, no gating (founder-only TestFlight
 toy first). **Acceptance test: does the founder grin when he pipes up unprompted on a real errand
 around the basin.** That's the whole bet in one drive.
+
+## Alpha learnings → improvement backlog (brainstormed 2026-06-11)
+
+Two rounds with the founder, grounded in the first real field drives (the founder daily-drives
+in-corpus, so roam's stress case is the REPEATED commute, not the one-shot outing). **Locked as
+the next build pass: waves + the sonic cue + persistent history/mute** (the TODO.md entry carries
+the build context). Everything else captured here, unscheduled.
+
+**Locked next pass:**
+- **Narrate the scenic tier as waves** (~126 swept pins sit unnarrated) — the cheapest density
+  win; makes talkative-chattiness real; the wave form-clip prompt work was needed eventually anyway.
+- **A pre-speech sonic cue** (~1s motif before he talks, a soft resolve when the duck releases) —
+  kills the voice-in-your-podcast startle, frames the encounter, becomes the sonic brand.
+- **Persistent encounter history + per-pin mute** — cooldowns that survive sessions (the daily
+  commute exhausts the home pins in a week otherwise); "don't tell me this one again" on the
+  sheet is the rider's relief valve AND free curation telemetry (a much-muted clip is a bad clip).
+
+**Reliability (before any non-founder rider):**
+- **Locked-screen session survival** — roam claims no Now Playing and there's no
+  `UIBackgroundModes:['audio']`; a pocketed phone likely kills the session. Tours assume a mount;
+  an errand companion doesn't get that assumption. Needs the device pass.
+- **The offline roam pack doubles as the presign fix** — dead zones AND >1h-session stalls both
+  trace to streaming presigns; one region pack (~70 MB) erases both failure classes.
+
+**Pull, not just push:**
+- **"What's that?" manual fire** — a button that plays the nearest unplayed pin's clip on demand,
+  radius be damned. Rescues every pin the trigger math can't reach (the field drive's 8/77
+  lesson), is Ask-the-Skipper's experience with zero live machinery, and logs real demand signal
+  for the eventual agent.
+
+**Session lifecycle:**
+- **Auto-end on park** (~3 min stationary → sign-off → clean end; battery) with **kind-aware
+  sign-offs** — a placeless pool keyed to the nearest pin's kind (trailhead: "go earn the view").
+- **Conditions beats, selection-side** — a tiny placeless pool ("first snow of the season") fired
+  at most once per session when a CLIENT-side check (date/daylight/weather-at-start) matches.
+  The knob selects, never generates — doctrine-clean topicality; presence without live gen.
+
+**Corpus & trigger engineering:**
+- **Road-snap pins at sweep time** — store each pin's nearest drivable point (Overpass/OSRM at
+  sweep) and trigger on THAT; the honest fix the kind-aware radii patched around. Plus a
+  sweep-time **reachability report** (a pin that can never fire from a road is dead weight).
+- **Deep-cuts rotation** — history shows which ~10 pins dominate real drives; generate 2nd/3rd
+  tellings for JUST those and rotate (zero-reuse-clean: roam owns its variants).
+- **Roam joins the eval panel + admin ear-pass** — batch the offline grounding audit over
+  `roam_clips`; give the admin console ear-pass a roam tab; mute data feeds the same view.
+- **A post-session debrief, client-side** — extend the sign-off tally with the silent stretches
+  and passed-unreachable pins; the demand heatmap as a screenshot, zero server telemetry.
+
+**Progression & strategy:**
+- **The corpus meter** — "23 of 77 stories" on the sign-off card; the logbook's first rung,
+  working before any stamp art exists.
+- **Roam-first region expansion** — a roam region costs a sweep + ~$10–15 of generation, NO route
+  curation; the beachhead inversion: roam opens a region, its heatmap picks the tour to build.
+  The density bar still gates.
+
+**One-liners:** home quiet-zone (maybe redundant under history+mute); maneuver-hold (don't talk
+over the roundabout); the scenic-detour whisper (nav-adjacent, riskier, someday); time-of-day
+opener selection (free charm on the existing pool).
 
 ## Open questions (founder decision surface)
 
