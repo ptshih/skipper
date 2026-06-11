@@ -369,6 +369,53 @@ export const tourBrackets = pgTable(
 )
 
 /* -------------------------------------------------------------------------- */
+/*  roam_clips — ROAM-owned narration (free-roam mode; the THIRD owner)         */
+/* -------------------------------------------------------------------------- */
+
+// Free-roam's telling of a place. The zero-reuse model has THREE narration owners now:
+// pois = shared FACTS, tour_stops = a TOUR's telling, roam_clips = the ROAM telling
+// (one per POI in v0 — replayed for every roamer of the region, exactly as a tour's
+// clip replays for every driver of that tour). Tours and roam NEVER cross-feed.
+// A row only lands COMPLETE (script + audio together — the ready-gate invariant,
+// mapped onto roam), so existence = playable; there is no status column.
+// Background: docs/ideas/free-roam-mode.md.
+export const roamClips = pgTable(
+  'roam_clips',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    poiId: uuid('poi_id')
+      .notNull()
+      .references(() => pois.id, { onDelete: 'cascade' }),
+    // ── ROAM-owned narration (never shared with tour_stops) ──
+    script: text('script').notNull(),
+    // R2 object KEY, per-CLIP unique: roam/<poiId>/<clipId>.<ext>. A regen mints a new
+    // key (the old object orphans for sweep-orphans), so live bytes are never
+    // overwritten in place — same property bracket keys earned (see generator storage.ts).
+    audioUrl: text('audio_url').notNull(),
+    audioDurationMs: integer('audio_duration_ms').notNull(),
+    // Frozen attribution — MANDATORY for wikipedia-grounded clips (CC BY-SA).
+    attribution: jsonb('attribution').$type<AttributionSnapshot[]>(),
+    // The pois.facts_hash this telling grounded on — the staleness contract,
+    // identical to tour_stops (stale iff DISTINCT FROM pois.facts_hash).
+    factsHash: text('facts_hash'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull()
+      .$onUpdate(() => new Date()),
+  },
+  // v0: ONE roam telling per place (B-side/wave variants are a later, destructive migration).
+  (t) => [uniqueIndex('roam_clips_poi_uq').on(t.poiId)],
+)
+
+export const roamClipsRelations = relations(roamClips, ({ one }) => ({
+  poi: one(pois, {
+    fields: [roamClips.poiId],
+    references: [pois.id],
+  }),
+}))
+
+/* -------------------------------------------------------------------------- */
 /*  saved_tours — a free account's saved tours (M2 auth)                        */
 /* -------------------------------------------------------------------------- */
 
@@ -536,5 +583,7 @@ export type TourStop = typeof tourStops.$inferSelect
 export type NewTourStop = typeof tourStops.$inferInsert
 export type TourBracket = typeof tourBrackets.$inferSelect
 export type NewTourBracket = typeof tourBrackets.$inferInsert
+export type RoamClip = typeof roamClips.$inferSelect
+export type NewRoamClip = typeof roamClips.$inferInsert
 export type SavedTour = typeof savedTours.$inferSelect
 export type NewSavedTour = typeof savedTours.$inferInsert
