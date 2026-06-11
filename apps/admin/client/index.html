@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -10,6 +10,16 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
+    <script>
+      // Follow the OS theme automatically (toggles shadcn's `.dark` on <html>).
+      // Runs before paint to avoid a flash; live-updates if the system theme changes.
+      (function () {
+        var m = window.matchMedia('(prefers-color-scheme: dark)')
+        var apply = function () { document.documentElement.classList.toggle('dark', m.matches) }
+        apply()
+        m.addEventListener('change', apply)
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

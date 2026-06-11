@@ -30,16 +30,18 @@ export function TourDetailView() {
   return (
     <div className="space-y-5">
       <div>
-        <Link to="/tours" className="text-sm text-muted-foreground hover:underline">← Tours</Link>
-        <div className="mt-1 flex items-center gap-3">
-          <h1 className="text-xl font-semibold">{tour.headline}</h1>
+        <Link to="/tours" className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground">
+          ← Tours
+        </Link>
+        <div className="mt-2 flex flex-wrap items-center gap-3">
+          <h1 className="text-2xl font-semibold tracking-tight">{tour.headline}</h1>
           <Badge variant={tour.status === 'ready' ? 'success' : 'secondary'}>{tour.status}</Badge>
+          <span className="font-mono text-xs text-muted-foreground">{tour.slug}</span>
         </div>
-        <div className="font-mono text-xs text-muted-foreground">{tour.slug}</div>
-        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{tour.summary}</p>
-        <div className="mt-2 text-sm text-muted-foreground">
+        {tour.summary && <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{tour.summary}</p>}
+        <p className="mt-1 text-sm text-muted-foreground">
           {region?.displayName} · {tour.startAnchor.name} → {tour.endAnchor.name} · {fmtMiles(tour.distanceMeters)} · {fmtDuration(tour.durationSeconds)}
-        </div>
+        </p>
       </div>
 
       {ev && (
