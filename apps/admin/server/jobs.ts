@@ -40,6 +40,7 @@ const SCRIPTS = {
   generate: 'packages/generator/src/run.ts',
   patch_clip: 'packages/generator/src/patch-clip.ts',
   resynth: 'packages/generator/src/resynth-tour.ts',
+  resynth_roam_clip: 'packages/generator/src/resynth-roam-clip.ts',
   sweep_orphans: 'packages/generator/src/sweep-orphans.ts',
   sweep_roam_pois: 'packages/generator/src/sweep-roam-pois.ts',
   generate_roam: 'packages/generator/src/generate-roam.ts',
@@ -91,6 +92,15 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     if (body.all) args.push('--all')
     if (apply) args.push('--apply')
     return { args, dryRun: !apply, spends: apply, targetId: id }
+  }
+
+  if (kind === 'resynth_roam_clip') {
+    const poiId = str(body.poiId)
+    if (!poiId) throw new HttpError(400, 'resynth_roam_clip needs poiId')
+    const apply = body.apply === true
+    const args = [script, poiId]
+    if (apply) args.push('--apply')
+    return { args, dryRun: !apply, spends: apply, targetId: poiId }
   }
 
   if (kind === 'resynth') {

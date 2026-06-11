@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { MapPin, RefreshCw, Search, Trash2 } from 'lucide-react'
-import { api, type PoiRow } from '@/lib/api'
+import { useNavigate } from 'react-router-dom'
+import { ChevronDown, ChevronRight, MapPin, RefreshCw, Search, Trash2 } from 'lucide-react'
+import { api, type PoiRow, type RoamClipDetail } from '@/lib/api'
 import { timeAgo } from '@/lib/format'
 
 type Tab = 'corpus' | 'coverage' | 'retire'
@@ -50,7 +51,7 @@ export function PoisView() {
   }, [])
 
   const live = pois  // no retired field; all pois are live for now
-  const flagged = pois.filter((p) => p.staleFacts || (!p.attributed && p.tourCount > 0))
+  const flagged = pois.filter((p) => p.staleFacts || p.suspiciousDuration || (!p.attributed && p.tourCount > 0))
   const coverage = useMemo(() => buildCoverage(pois), [pois])
 
   const tabs: { id: Tab; label: string; count: number; alert?: boolean }[] = [
@@ -91,12 +92,90 @@ export function PoisView() {
   )
 }
 
+/* ── ROAM CLIP PLAYER ── */
+
+function RoamPlayer({ poiId }: { poiId: string }) {
+  const navigate = useNavigate()
+  const [clip, setClip] = useState<RoamClipDetail | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [resynthing, setResynthing] = useState(false)
+
+  useEffect(() => {
+    setLoading(true)
+    api.roamSign(poiId)
+      .then((r) => setClip(r.clip))
+      .catch((e) => setErr(e instanceof Error ? e.message : String(e)))
+      .finally(() => setLoading(false))
+  }, [poiId])
+
+  if (loading) return <div className="muted" style={{ fontSize: 12, padding: '8px 0' }}>Loading…</div>
+  if (err) return <div style={{ fontSize: 12, color: 'var(--bad)', padding: '8px 0' }}>{err}</div>
+  if (!clip) return null
+
+  const durationSec = Math.round(clip.audioDurationMs / 1000)
+  const mins = Math.floor(durationSec / 60)
+  const secs = durationSec % 60
+  const durLabel = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`
+
+  const wordCount = clip.script?.trim().split(/\s+/).filter(Boolean).length ?? 0
+  const wpm = wordCount > 0 ? Math.round(wordCount / (clip.audioDurationMs / 1000 / 60)) : 0
+  const suspicious = wpm > 0 && wpm < 90
+
+  async function handleResynth() {
+    if (!window.confirm(`Re-synthesize the roam clip for this POI? This spends ~$0.01 in TTS credits and replaces the current clip.`)) return
+    setResynthing(true)
+    try {
+      const { job } = await api.createJob({ kind: 'resynth_roam_clip', poiId, apply: true, confirm: true })
+      navigate(`/runs#${job.id}`)
+    } catch (e) {
+      alert(`Re-synth failed: ${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setResynthing(false)
+    }
+  }
+
+  return (
+    <div style={{ paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <audio controls preload="none" src={clip.url} style={{ width: '100%', height: 36 }} />
+      <div style={{ fontSize: 12, color: 'var(--ink-3)', display: 'flex', gap: 10, alignItems: 'center' }}>
+        <span className="cell-mono">{durLabel}</span>
+        {wpm > 0 && (
+          <span className={`cell-mono${suspicious ? '' : ''}`} style={{ color: suspicious ? 'var(--bad)' : 'var(--ink-4)' }}>
+            {wpm} wpm{suspicious ? ' ⚠ suspicious' : ''}
+          </span>
+        )}
+        {clip.factsHash && <span className="tag">{clip.factsHash.slice(0, 7)}</span>}
+        <span style={{ flex: 1 }} />
+        <button
+          className="btn btn--default btn--sm"
+          onClick={handleResynth}
+          disabled={resynthing}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}
+        >
+          <RefreshCw size={12} />
+          {resynthing ? 'Queuing…' : 'Re-synth clip'}
+        </button>
+      </div>
+      {suspicious && (
+        <div style={{ fontSize: 12, color: 'var(--bad)', background: 'var(--bad-bg)', padding: '6px 10px', borderRadius: 4 }}>
+          Clip duration ({durLabel} for {wordCount} words) looks like a TTS duplicate-audio defect. Re-synth to fix.
+        </div>
+      )}
+      <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
+        {clip.script}
+      </div>
+    </div>
+  )
+}
+
 /* ── CORPUS ── */
 
 function CorpusTab({ pois }: { pois: PoiRow[] }) {
   const [q, setQ] = useState('')
   const [region, setRegion] = useState('all')
   const [source, setSource] = useState('all')
+  const [expanded, setExpanded] = useState<string | null>(null)
 
   const regions = useMemo(() => {
     const seen = new Set<string>()
@@ -176,41 +255,66 @@ function CorpusTab({ pois }: { pois: PoiRow[] }) {
           <tbody>
             {filtered.map((p) => {
               const sm = SOURCE_META[p.source]
+              const isOpen = expanded === p.id
+              const toggleExpand = p.roamClipCount > 0
+                ? () => setExpanded(isOpen ? null : p.id)
+                : undefined
               return (
-                <tr key={p.id}>
-                  <td>
-                    <div className="cell-strong">{p.name}</div>
-                    {p.staleFacts && (
-                      <div style={{ marginTop: 2 }}>
-                        <span className="badge badge--warn" style={{ fontSize: 10.5 }}>stale facts</span>
-                      </div>
-                    )}
-                  </td>
-                  <td>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: sm?.color ?? 'var(--ink-4)', flexShrink: 0 }} />
-                      <span className="cell-dim">{sm?.label ?? p.source}</span>
-                      <span className="tag">{p.sourceId}</span>
-                    </span>
-                  </td>
-                  <td className="cell-dim">{p.regionName ?? <span className="muted">—</span>}</td>
-                  <td style={{ textAlign: 'right' }} className="cell-mono">
-                    {p.tourCount > 0 ? p.tourCount : <span className="muted">—</span>}
-                  </td>
-                  <td style={{ textAlign: 'right' }} className="cell-mono">
-                    {p.roamClipCount > 0 ? p.roamClipCount : <span className="muted">—</span>}
-                  </td>
-                  <td>
-                    {p.tourCount > 0
-                      ? <span className={`badge ${p.attributed ? 'badge--ok' : 'badge--bad'}`}>{p.attributed ? '✓' : 'missing'}</span>
-                      : <span className="muted">n/a</span>
-                    }
-                  </td>
-                  <td className="cell-mono cell-dim">
-                    {p.factsHash ? p.factsHash.slice(0, 7) : <span className="muted">—</span>}
-                  </td>
-                  <td style={{ textAlign: 'right' }} className="cell-dim">{timeAgo(p.createdAt)}</td>
-                </tr>
+                <>
+                  <tr key={p.id}>
+                    <td>
+                      <div className="cell-strong">{p.name}</div>
+                      {(p.staleFacts || p.suspiciousDuration) && (
+                        <div style={{ marginTop: 2, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                          {p.staleFacts && <span className="badge badge--warn" style={{ fontSize: 10.5 }}>stale facts</span>}
+                          {p.suspiciousDuration && <span className="badge badge--bad" style={{ fontSize: 10.5 }}>⚠ clip defect</span>}
+                        </div>
+                      )}
+                    </td>
+                    <td>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: sm?.color ?? 'var(--ink-4)', flexShrink: 0 }} />
+                        <span className="cell-dim">{sm?.label ?? p.source}</span>
+                        <span className="tag">{p.sourceId}</span>
+                      </span>
+                    </td>
+                    <td className="cell-dim">{p.regionName ?? <span className="muted">—</span>}</td>
+                    <td style={{ textAlign: 'right' }} className="cell-mono">
+                      {p.tourCount > 0 ? p.tourCount : <span className="muted">—</span>}
+                    </td>
+                    <td style={{ textAlign: 'right' }} className="cell-mono">
+                      {p.roamClipCount > 0
+                        ? (
+                          <button
+                            onClick={toggleExpand}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--run)', fontFamily: 'var(--mono)', fontSize: 'inherit', padding: 0 }}
+                          >
+                            {isOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                            {p.roamClipCount}
+                          </button>
+                        )
+                        : <span className="muted">—</span>
+                      }
+                    </td>
+                    <td>
+                      {p.tourCount > 0
+                        ? <span className={`badge ${p.attributed ? 'badge--ok' : 'badge--bad'}`}>{p.attributed ? '✓' : 'missing'}</span>
+                        : <span className="muted">n/a</span>
+                      }
+                    </td>
+                    <td className="cell-mono cell-dim">
+                      {p.factsHash ? p.factsHash.slice(0, 7) : <span className="muted">—</span>}
+                    </td>
+                    <td style={{ textAlign: 'right' }} className="cell-dim">{timeAgo(p.createdAt)}</td>
+                  </tr>
+                  {isOpen && (
+                    <tr key={`${p.id}-player`}>
+                      <td colSpan={8} style={{ paddingTop: 0, paddingBottom: 12, background: 'var(--surface-2)' }}>
+                        <RoamPlayer poiId={p.id} />
+                      </td>
+                    </tr>
+                  )}
+                </>
               )
             })}
             {filtered.length === 0 && (

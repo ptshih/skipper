@@ -50,6 +50,13 @@
       "when": 1781138574124,
       "tag": "0006_previous_wendell_vaughn",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1781208813140,
+      "tag": "0007_clean_fat_cobra",
+      "breakpoints": true
     }
   ]
 }

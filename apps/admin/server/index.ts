@@ -20,6 +20,7 @@
 //   POST /admin/jobs/:id/cancel   -> stop a running execution (gen_job_status='canceled') (§14.8)
 //   GET  /admin/integrity         -> ready tours violating the audio/attribution invariant (§14.9)
 //   GET  /admin/pois              -> POI corpus: sources, tour + roam usage, attribution, region coverage
+//   GET  /admin/roam/sign/:poiId  -> presigned R2 URL + metadata for a POI's roam clip
 //   POST /admin/tours/propose     -> Create Tour, phase 1: LLM + geocode  (create-tour.ts — Phase 4)
 //   POST /admin/tours             -> Create Tour, phase 2: freeze + draft  (create-tour.ts — Phase 4)
 
@@ -654,15 +655,15 @@ app.get('/admin/pois', async (c) => {
       .innerJoin(pois, eq(tourStops.poiId, pois.id))
       .where(inArray(tourStops.poiId, poiIds))
       .groupBy(tourStops.poiId),
-    // Per-poi: roam clip count
+    // Per-poi: roam clip metadata (unique per poi by DB constraint; duration + script for anomaly detection)
     db
       .select({
         poiId: roamClips.poiId,
-        clipCount: count(),
+        audioDurationMs: roamClips.audioDurationMs,
+        script: roamClips.script,
       })
       .from(roamClips)
-      .where(inArray(roamClips.poiId, poiIds))
-      .groupBy(roamClips.poiId),
+      .where(inArray(roamClips.poiId, poiIds)),
     // Per-poi: region slug + name (pick first per poi in JS)
     db
       .select({
@@ -677,7 +678,16 @@ app.get('/admin/pois', async (c) => {
   ])
 
   const stopMap = new Map(stopStats.map((s) => [s.poiId, s]))
-  const clipMap = new Map(clipStats.map((s) => [s.poiId, Number(s.clipCount)]))
+  // Suspicious duration: < 90 WPM indicates TTS returned duplicated audio in a single file.
+  // Normal corpus average is ~155 WPM; 90 WPM is a conservative floor well below any legit clip.
+  const WPM_FLOOR = 90
+  const clipMap = new Map(clipStats.map((s) => {
+    const wordCount = s.script?.trim().split(/\s+/).filter(Boolean).length ?? 0
+    const wpm = wordCount > 0 && s.audioDurationMs
+      ? wordCount / (s.audioDurationMs / 1000 / 60)
+      : null
+    return [s.poiId, { hasClip: true, suspiciousDuration: wpm !== null && wpm < WPM_FLOOR }]
+  }))
   // Pick first region per poi
   const regionMap = new Map<string, { regionSlug: string; regionName: string }>()
   for (const r of regionRows) {
@@ -696,7 +706,8 @@ app.get('/admin/pois', async (c) => {
       factsHash: p.factsHash,
       createdAt: p.createdAt,
       tourCount: s ? Number(s.tourCount) : 0,
-      roamClipCount: clipMap.get(p.id) ?? 0,
+      roamClipCount: clipMap.get(p.id) ? 1 : 0,
+      suspiciousDuration: clipMap.get(p.id)?.suspiciousDuration ?? false,
       staleFacts: s ? Number(s.staleCount) > 0 : false,
       attributed: s ? Number(s.unattribCount) === 0 : true,
       regionSlug: region?.regionSlug ?? null,
@@ -705,6 +716,46 @@ app.get('/admin/pois', async (c) => {
   })
 
   return c.json({ pois: result })
+})
+
+// Presigned R2 URL + metadata for a single POI's roam clip (founder ear-pass).
+app.get('/admin/roam/sign/:poiId', async (c) => {
+  const poiId = c.req.param('poiId')
+  if (!UUID_RE.test(poiId)) return c.json({ error: 'not_found' }, 404)
+
+  const clip = (
+    await db
+      .select({
+        id: roamClips.id,
+        script: roamClips.script,
+        audioUrl: roamClips.audioUrl,
+        audioDurationMs: roamClips.audioDurationMs,
+        attribution: roamClips.attribution,
+        factsHash: roamClips.factsHash,
+      })
+      .from(roamClips)
+      .where(eq(roamClips.poiId, poiId))
+      .limit(1)
+  )[0]
+
+  if (!clip) return c.json({ error: 'not_found' }, 404)
+
+  try {
+    return c.json({
+      clip: {
+        id: clip.id,
+        script: clip.script,
+        url: presignGet(clip.audioUrl),
+        contentType: contentTypeForKey(clip.audioUrl),
+        audioDurationMs: clip.audioDurationMs,
+        attribution: clip.attribution,
+        factsHash: clip.factsHash,
+      },
+    })
+  } catch (e) {
+    console.error('[admin] roam presign failed', e)
+    return c.json({ error: 'audio_unavailable', message: 'R2 not configured or presign failed.' }, 503)
+  }
 })
 
 // Serve the built SPA. In prod the Hono service serves it (one Cloud Run service behind IAP);

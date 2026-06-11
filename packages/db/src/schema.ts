@@ -569,6 +569,7 @@ export const genJobKindEnum = pgEnum('gen_job_kind', [
   'generate', // run.ts — discover/narrate/eval/synthesize a tour
   'patch_clip', // patch-clip.ts — re-synth one stop/bracket clip
   'resynth', // resynth-tour.ts — re-synth every clip of a tour
+  'resynth_roam_clip', // resynth-roam-clip.ts — re-synth one roam clip (fixes TTS duplicate-audio defects)
   'sweep_orphans', // sweep-orphans.ts — delete unreferenced R2 clips
   'sweep_roam_pois', // sweep-roam-pois.ts — fetch + upsert roam POIs (added with the roam job triggers, 287a64a)
   'generate_roam', // generate-roam.ts — narrate + synthesize roam clips

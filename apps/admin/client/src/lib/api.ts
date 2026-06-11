@@ -25,7 +25,7 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 
 /* ------------------------------- types ------------------------------- */
 
-export type JobKind = 'generate' | 'patch_clip' | 'resynth' | 'sweep_orphans' | 'sweep_roam_pois' | 'generate_roam'
+export type JobKind = 'generate' | 'patch_clip' | 'resynth' | 'resynth_roam_clip' | 'sweep_orphans' | 'sweep_roam_pois' | 'generate_roam'
 export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled'
 
 export interface GenJob {
@@ -188,6 +188,16 @@ export interface IntegrityReport {
   tours: IntegrityTour[]
 }
 
+export interface RoamClipDetail {
+  id: string
+  script: string
+  url: string
+  contentType: string
+  audioDurationMs: number
+  attribution: unknown
+  factsHash: string | null
+}
+
 export interface PoiRow {
   id: string
   source: string
@@ -200,6 +210,7 @@ export interface PoiRow {
   roamClipCount: number
   staleFacts: boolean
   attributed: boolean
+  suspiciousDuration: boolean
   regionSlug: string | null
   regionName: string | null
 }
@@ -256,6 +267,7 @@ export const api = {
   cancelJob: (id: string) => req<{ job: GenJob }>(`/admin/jobs/${id}/cancel`, { method: 'POST' }),
   integrity: () => req<IntegrityReport>('/admin/integrity'),
   pois: () => req<{ pois: PoiRow[] }>('/admin/pois'),
+  roamSign: (poiId: string) => req<{ clip: RoamClipDetail }>(`/admin/roam/sign/${poiId}`),
   createJob: (body: Record<string, unknown>) =>
     req<{ job: GenJob }>('/admin/jobs', { method: 'POST', body: JSON.stringify(body) }),
   propose: (body: Record<string, unknown>) =>
