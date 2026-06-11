@@ -6,7 +6,9 @@
 > still future). Originally captured + fleshed out 2026-06-10 as the buildable-now rung missing
 > from [journey-layer.md](journey-layer.md)'s coverage spectrum. 2026-06-11: post-field-drive
 > improvement backlog captured (§Alpha learnings); founder LOCKED waves + sonic cue +
-> history/mute as the next build pass (TODO.md carries the build context).
+> history/mute as the next build pass (TODO.md carries the build context). 2026-06-11: idle-canvas
+> redesign brainstormed + founder picked "calmer & composed" — the cheap composition pass is being
+> BUILT now (§Idle-canvas redesign).
 
 **The idea (founder, 2026-06-10):** the POI corpus we accumulate building tours becomes a product of
 its own — open the app anywhere in a covered region, just drive, and the skipper pipes up when you
@@ -249,6 +251,69 @@ the build context). Everything else captured here, unscheduled.
 over the roundabout); the scenic-detour whisper (nav-adjacent, riskier, someday); time-of-day
 opener selection (free charm on the existing pool).
 
+## Idle-canvas redesign (brainstormed 2026-06-11)
+
+The "riding along" IDLE state (`phase === 'roaming'`, no encounter sheet) is the DOMINANT screen of a
+roam session — silence is the default, so the rider stares at THIS, not the encounter sheet. Founder:
+"feels unfinished." A 5-lens divergent design panel (motif-as-hero / anticipation / session-memory /
+companionship / restraint) + synthesis. **Verdict the founder picked: "calmer & composed" — the void
+is NOT the bug.** What makes a calm screen read as a paused debug build is three things masquerading as
+emptiness: a top-heavy single-spacer layout, a raw mono dev-readout where warmth should be, and a
+frozen idle line. The fix is a composition pass + the persona filling the quiet with a wandering
+thought — NOT a dashboard.
+
+**North star:** "riding shotgun with someone who's quietly watching the road" — a centered national-park
+vista with the car-on-trail as its ONE signature move; negative space that reads intentional, not empty.
+
+**The cheap pass (BUILDING NOW, 2026-06-11) — no new deps, doctrine-clean:**
+1. **Re-compose** `styles.base`: vertically center the hero cluster (kicker + motif + title + murmur +
+   stat) with symmetric flex above/below; pin Chattiness (+ diagnostics) to a bottom footer. The actual
+   fix for "feels unfinished" — top-weight + an unowned gap, not genuine emptiness.
+2. **Demote the dev readout** — the mono `77 pins · GPS Ns · nearest M m` line is the most "paused dev
+   build" element + is neither delivery nor warmth (DESIGN §7). Gated to dev/sim only (`__DEV__ ||
+   roamMode==='sim'`) so shipped riders get a clean vista; the composition footer makes it feel
+   intentional even when shown. (OPEN Q below: a manual toggle for TestFlight-LIVE field drives.)
+3. **A wandering thought** — replace the frozen `voice.roam.idle` line with a placeless, time-of-day
+   murmur pool that slow-crossfades (≥25s; frozen under Reduce Motion; paused while a sheet is up). The
+   biggest "person at rest vs app at rest" lever, pure voice+warmth. SCREEN-SIDE of the backlog
+   "time-of-day opener" one-liner — visualizes idle presence, doesn't fire audio. `idleTitle` stays a
+   fixed anchor.
+4. **Right-size the motif** — bump the trail bed + give it room so the car-on-trail anchors the centered
+   cluster as the clear signature move (still exactly ONE moving/glowing amber element, DESIGN §8). NOTE:
+   `RouteTrack`'s wrap is fixed at the 24pt token height, so the `height` prop only thickens the bed —
+   a taller/meandering motif needs new props (deferred).
+
+**Fast-follow (the standout new charm beat):** the **breathing trail** — map the already-computed
+`r.diag.nearestM` to the motif's loop duration: lazy ~14s when nothing's near, easing toward the ~9s
+cruise as a pin closes in. Zero new elements, reuses the one mover, honest (too slow to read as a
+countdown — keep the far↔near delta ~5s or it becomes a speedometer and breaks trigger-miss honesty).
+Needs `MOTIF_LOOP_MS` promoted from a const to a prop + ~3-bucket hysteresis on the 2s tick.
+
+**Deferred / NOT now:**
+- **§9 amber-sunburst/postmark watermark** behind the empty state — proposed by 4 of 5 lenses + DESIGN
+  §9 explicitly sanctions it here, but a TRAP at "cheap": `react-native-svg`/`expo-linear-gradient`
+  aren't installed (faithful version = a real dep add), and the giant-faint-compass-`Icon` fallback
+  reads as a blown-up UI glyph. The centered composition already buys the "intentional negative space"
+  the watermark was meant to. HARD CONSTRAINT if ever built: ink/paper-toned + static, NEVER
+  amber/glowing — the car token owns the single amber budget (§8). (A dep decision with reach: also
+  unlocks the deferred enamel-badge set + per-stop passport ink. Ground in current Expo SDK 56 docs.)
+- **Trail-accretion session memory** (told pins ink as static pine waypoint stamps on the traveled
+  trail, reusing the passport-stamp recipe) — charming, client-only, but needs a new `RouteTrack`
+  `marks?` prop + capping at high counts (medium). Screen-side of the deferred logbook + corpus-meter.
+- **Day↔dusk ridgeline atmosphere band** — wants SVG to not look crude; pairs with the watermark dep.
+- **Proximity-driven idle status line** ("Couple things out this way…" / "Hang on — I know this one") —
+  richer than the murmur but the "imminent" line MUST fire only when the engine has actually QUEUED a
+  clip (expose a `pending` flag from `useRoam`), never on raw proximity, or a missed trigger becomes a
+  broken promise (violates the ambient contract).
+
+**Cut / relocate:** the single bottom-only `flex:1` spacer (it creates the top-heavy block + dangling
+void); the raw diagnostics line out of the rider-facing path; CONSIDER relocating the permanently-parked
+Chattiness control off the idle footer later (it's a set-once knob; DESIGN §4.4 keeps the theme picker
+out of global chrome "so nothing tempts a mid-drive fiddle" — same logic) — medium, needs a mid-session
+re-entry path, only if the centered layout still feels cluttered. **Do NOT** surface a live "23 of 77"
+corpus meter during a quiet drive (it's a SIGN-OFF-card backlog item; live it risks idle feeling like a
+failing score).
+
 ## Open questions (founder decision surface)
 
 1. **Name:** "Shotgun"? "Free-roam"? "Ride along"?
@@ -258,6 +323,13 @@ opener selection (free charm on the existing pool).
 4. **Does this tilt the Wikidata-spine punch-list up the priority list now,** or just annotate it?
 5. **Free taste size:** N encounters? per region or lifetime?
 6. **Revisit preambles in v0.2** (cheap, very him) — yes/no?
+7. **Idle diagnostics gating** (from the idle-canvas pass): the cheap build hides the dev readout on
+   shipped/prod (`__DEV__ || roamMode==='sim'`). But a TestFlight build doing a real LIVE field drive
+   would then lack the self-report line. Add an explicit "Show diagnostics" toggle in Settings →
+   Developer (works on any build) — yes/no? (Cheap upgrade if wanted.)
+8. **Idle murmur cadence/pool** (from the idle-canvas pass): ≥25s rotation, ~6-8 placeless lines per
+   morning/day/dusk bucket. Confirm cadence + whether `idleTitle` should also rotate or stay a fixed
+   anchor (current build: title fixed, body rotates).
 
 ## Provenance
 

@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import { StyleSheet, View } from 'react-native'
 import { Stack, useRouter } from 'expo-router'
 import { signOut, updateUser, useSession } from '@/lib/auth'
+import { useSimMode } from '@/lib/sim-mode'
 import { space } from '@/theme/tokens'
-import { Button, Input, Screen, Text, ThemeModePicker, voice } from '@/ui'
+import { Button, Input, Screen, SimModePicker, Text, ThemeModePicker, voice } from '@/ui'
 
 // Settings — the deliberate, parked-context home for preferences + account. The home
 // body stays 100% drive-focused, so identity ("Riding as …") and the rare/destructive
@@ -12,6 +13,7 @@ import { Button, Input, Screen, Text, ThemeModePicker, voice } from '@/ui'
 export default function SettingsScreen() {
   const router = useRouter()
   const { data: session } = useSession()
+  const { simMode, setSimMode } = useSimMode()
 
   // Name is optional and lives HERE, not at sign-up. Seed the field from the saved
   // name and re-sync whenever it changes — a successful save pings $sessionSignal,
@@ -110,6 +112,16 @@ export default function SettingsScreen() {
           title={voice.settings.creditsAction}
           onPress={() => router.push('/legal')}
         />
+      </View>
+
+      <View style={styles.section}>
+        <Text variant="label" color="inkFaint">
+          {voice.settings.developer}
+        </Text>
+        <SimModePicker value={simMode} onChange={setSimMode} />
+        <Text variant="dim" color="inkFaint">
+          {voice.settings.developerHint}
+        </Text>
       </View>
     </Screen>
   )

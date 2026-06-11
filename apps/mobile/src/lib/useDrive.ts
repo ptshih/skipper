@@ -202,6 +202,11 @@ export interface UseDriveOptions {
    *  (Phase 4); 'preview' = the map-less couch SIMULATED DRIVE (anonymous-friendly open funnel,
    *  no GPS, no permission gate) — a compressed segment-timeline clock instead of a fix source. */
   mode?: 'sim' | 'live' | 'preview'
+  /** Seed the sim fast-replay (8×) ON. Used when the GLOBAL Settings→Developer sim toggle
+   *  forced this drive into sim — couch-testing a full tour at real 1× is impractical (a
+   *  30-min tour takes 30 real min), so default to fast there; the pre-drive knob still
+   *  lets the rider switch back to real-time for trigger-timing tests. (Ignored unless sim.) */
+  defaultFast?: boolean
 }
 
 export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {}): UseDrive {
@@ -219,7 +224,7 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
   const [activeSeq, setActiveSeq] = useState<number | null>(null)
   const [firedSeqs, setFiredSeqs] = useState<Set<number>>(new Set())
   const [stallNote, setStallNote] = useState<string | null>(null)
-  const [fast, setFast] = useState(false)
+  const [fast, setFast] = useState(opts.defaultFast ?? false)
   // Set when a live drive is blocked on location: either DENIED (carries whether the OS will still
   // prompt — false → Settings-only) or granted-but-REDUCED (iOS approximate location; Settings-only,
   // since SDK 56 can't upgrade accuracy in-app). null = no block (always so in sim mode). Both kinds

@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar'
 import * as SplashScreen from 'expo-splash-screen'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { DrivesFilterProvider } from '@/lib/drives-filter'
+import { SimModeProvider, readStoredSimMode } from '@/lib/sim-mode'
 import { ThemeProvider, readStoredThemeMode, useAppFonts, useTheme, type ThemeMode } from '@/theme'
 import { fonts } from '@/theme/tokens'
 import { HeaderIconButton, VersionGate } from '@/ui'
@@ -17,12 +18,16 @@ export default function RootLayout() {
   // Also hold the splash until the persisted mood is read, so a dark-mode rider never
   // sees a frame of daylight before their saved DUSK override applies on cold start.
   const [initialMode, setInitialMode] = useState<ThemeMode | null>(null)
+  // Read the persisted sim-mode flag alongside the mood (parallel; splash already held) so
+  // roam/drive see the real value on their first read — no live→sim flip race on first tap.
+  const [initialSimMode, setInitialSimMode] = useState<boolean | null>(null)
 
   useEffect(() => {
     readStoredThemeMode().then(setInitialMode)
+    readStoredSimMode().then(setInitialSimMode)
   }, [])
 
-  const ready = (fontsLoaded || fontError) && initialMode !== null
+  const ready = (fontsLoaded || fontError) && initialMode !== null && initialSimMode !== null
 
   useEffect(() => {
     if (ready) SplashScreen.hideAsync().catch(() => {})
@@ -33,9 +38,11 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <ThemeProvider initialMode={initialMode ?? 'system'}>
-        <DrivesFilterProvider>
-          <ThemedStack />
-        </DrivesFilterProvider>
+        <SimModeProvider initialSimMode={initialSimMode ?? false}>
+          <DrivesFilterProvider>
+            <ThemedStack />
+          </DrivesFilterProvider>
+        </SimModeProvider>
         {/* Launch-time update gate — floats above the whole navigator. Renders nothing
             unless the server /version floor says this build must nudge or force-update. */}
         <VersionGate />

@@ -12,6 +12,7 @@ import { Stack, useLocalSearchParams, useNavigation, useRouter } from 'expo-rout
 import * as SecureStore from 'expo-secure-store'
 import { useDrive } from '@/lib/useDrive'
 import { useSession } from '@/lib/auth'
+import { useSimMode } from '@/lib/sim-mode'
 import { stopLabel } from '@/lib/labels'
 import { useReducedMotion, useTheme } from '@/theme'
 import { border, duration, radius, space } from '@/theme/tokens'
@@ -49,8 +50,24 @@ export default function DriveScreen() {
   // no GPS, tappable stops). An unrecognized/missing mode falls back to the dev simulator in
   // dev, but to the open couch PREVIEW in release — the dev clock must never be one malformed
   // deep link away from a production rider.
-  const driveMode = mode === 'live' ? 'live' : mode === 'preview' ? 'preview' : __DEV__ ? 'sim' : 'preview'
-  const d = useDrive(id, { mode: driveMode })
+  // The global Settings → Developer sim toggle swaps the real-GPS 'live' drive (and the
+  // release fallback) for the on-device SIMULATOR — but never overrides an explicit
+  // `?mode=preview` (that anonymous funnel is GPS-less by design and stays untouched).
+  const { simMode } = useSimMode()
+  const driveMode =
+    mode === 'preview'
+      ? 'preview'
+      : simMode
+        ? 'sim'
+        : mode === 'live'
+          ? 'live'
+          : __DEV__
+            ? 'sim'
+            : 'preview'
+  // When the GLOBAL dev toggle forced sim, default the replay to fast (couch-testing a full
+  // tour at 1× is impractical); explicit ?mode=sim / the dev fallback keep real-time so
+  // trigger-timing tests are unchanged. The pre-drive knob still lets the rider switch.
+  const d = useDrive(id, { mode: driveMode, defaultFast: simMode && driveMode === 'sim' })
   const isPreview = driveMode === 'preview'
 
   // Map ⇄ List — the real map (route + live puck) or the bare itinerary. List stays the

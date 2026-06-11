@@ -106,7 +106,38 @@ export const voice = {
     simBadge: 'SIMULATED', // couch/dev clock
     idleTitle: 'All quiet — and that’s fine.',
     idle: 'Enjoying the view. I’ll pipe up when there’s something worth saying.',
-    stories: 'stories', // the stat pill: "<n> stories"
+    // The idle "wandering thought" — a placeless, time-of-day-keyed murmur pool that slow-
+    // crossfades under idleTitle so the quiet reads as a person enjoying the ride, not a paused
+    // app. PLACELESS + no facts (DESIGN §7) — pure companionable presence; the SELECTION knob
+    // (clock bucket) picks, nothing generates. Screen-side of the "time-of-day opener" idea.
+    idleMurmur: {
+      morning: [
+        'Roads are ours this hour. Half the world’s still asleep.',
+        'Light’s still soft. Good time to be moving.',
+        'Empty road, full tank. Can’t beat it.',
+        'Fog’ll burn off up ahead. Patience — it’ll be a looker.',
+        'Morning shift, just you and me. Drive easy.',
+        'Nothing like an early start. I’ll mind the quiet.',
+      ],
+      day: [
+        'Sun’s up, road’s open. This is the good part.',
+        'Just here for the scenery, same as you.',
+        'No rush. The good stuff finds us when it finds us.',
+        'Plenty of road behind us, plenty ahead.',
+        'Windows-down kind of light, if you ask me.',
+        'Quiet stretch. Don’t mind me — I’m watching the hills.',
+      ],
+      dusk: [
+        'Light’s going gold. My favorite hour to ride.',
+        'Sun’s clocking out. Roads get honest about now.',
+        'Headlights and quiet. Suits me fine.',
+        'Cooler now. Engine likes it, so do I.',
+        'Stars’ll be out before long. Keep her steady.',
+        'Long shadows, easy pace. No place I’d rather be.',
+      ],
+    },
+    storiesNearby: 'nearby', // stat pill before first encounter: "<n> nearby"
+    storiesTold: 'told', // stat pill once encounters fire: "<n> told"
     musicPlaying: 'Your music · playing',
     musicDucked: 'Your music · ducked',
     musicHeld: 'Held · music back up', // encounter PAUSED — the rider's audio un-ducks
@@ -179,6 +210,14 @@ export const voice = {
       'Auto rides with your phone — dusk-dark when the sun clocks out, bright by day. Pin Day or Dusk to hold one mood.',
     credits: 'CREDITS',
     creditsAction: 'Sources & licenses', // → /legal
+    // Developer section: the sim-mode toggle (Settings → Developer). Visible on every
+    // build for now (zero real users) — gate before GA if it ever needs hiding.
+    developer: 'DEVELOPER',
+    developerHint:
+      'Simulated GPS replays a recorded Tahoe drive through the real engine — test free-roam and the live drive from the couch, no car required. Takes effect next time you start one.',
+    simModeReal: 'Real GPS',
+    simModeSimulated: 'Simulated',
+    simModeA11y: 'GPS source',
   },
   // The legal/attribution page (Settings → Credits). Intro is the skipper's; the
   // source list + license codes are FACTS, kept in @/lib/licenses, never here.

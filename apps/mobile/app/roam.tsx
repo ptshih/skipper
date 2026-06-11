@@ -1,21 +1,23 @@
 // FREE-ROAM (alpha) — the skipper rides shotgun on YOUR drive. No route, no tour shape:
 // fetch the roam pins near here, watch live GPS, and pipe up (over the rider's own audio —
-// duckOthers) when the road passes a place he knows. Built to the design handoff
-// (design_handoff_roam): entry → (first-run contract) → session start → riding-along idle
-// ⇄ encounter sheet → sign-off. Silence is the DEFAULT state — the idle base must feel
-// alive (the RoamMotif is the one moving thing), never like a spinner.
+// duckOthers) when the road passes a place he knows.
+// Flow: tapping "Roam" on home IS the start action — no separate entry screen. Returning
+// users auto-start on mount; first-timers see the ambient contract first (shown immediately,
+// not gated behind a redundant entry card). Silence is the DEFAULT state — the idle base
+// must feel alive (the RoamMotif is the one moving thing), never like a spinner.
 // `?mode=sim` replays a ready tour's polyline through the same engine for couch testing.
 // The encounter sheet reuses the EXACT story-player transport (Scrubber + play/pause + ±15s)
 // so both players feel identical (founder call, superseding the alpha's read-only bar).
 // Alpha cuts vs the full design: the encounter PATTER line (grounded, from roam_clips), waves
 // + B-sides ("Tell me more"), and the offline region pack + logbook wait on their backends —
 // honest UI shows none of them.
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Animated, Linking, Pressable, StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Stack, useLocalSearchParams } from 'expo-router'
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import * as SecureStore from 'expo-secure-store'
 import { useRoam } from '@/lib/useRoam'
+import { useSimMode } from '@/lib/sim-mode'
 import { useReducedMotion, useTheme } from '@/theme'
 import { duration, radius, space } from '@/theme/tokens'
 import {
@@ -59,35 +61,43 @@ function RoamMotif({ glow }: { glow: boolean }) {
     loop.start()
     return () => loop.stop()
   }, [reducedMotion, progress])
-  // RouteTrack is the existing trail+token primitive — the motif IS that vocabulary.
-  return <RouteTrack progress={progress} glow={glow} />
+  // RouteTrack is the existing trail+token primitive — the motif IS that vocabulary. A bolder
+  // bed (height 10 vs the default 6) lets the trail anchor the centered idle cluster as the
+  // screen's one signature move; the token stays the single moving/glowing amber element (§8).
+  return <RouteTrack progress={progress} glow={glow} height={10} />
 }
 
 export default function RoamScreen() {
   const { colors } = useTheme()
   const insets = useSafeAreaInsets()
   const reducedMotion = useReducedMotion()
+  const router = useRouter()
   const { mode } = useLocalSearchParams<{ mode?: string }>()
-  const roamMode = mode === 'sim' ? 'sim' : 'live'
+  // The global Settings → Developer toggle forces sim; the `?mode=sim` deep link still works
+  // as a one-off (either path → the simulated drive source).
+  const { simMode } = useSimMode()
+  const roamMode = simMode || mode === 'sim' ? 'sim' : 'live'
   const r = useRoam(roamMode)
-  // The entry card's trail sits parked at 0 — the road not yet traveled.
-  const entryTrail = useRef(new Animated.Value(0)).current
 
-  // First-run ambient contract — he sets the deal ONCE before the first session.
+  // First-run ambient contract — shown immediately on mount if not yet seen.
+  // Returning users skip it and auto-start below.
   const [contractSeen, setContractSeen] = useState<boolean | null>(null)
   const [showContract, setShowContract] = useState(false)
   useEffect(() => {
     SecureStore.getItemAsync(CONTRACT_SEEN_KEY)
-      .then((v) => setContractSeen(v === '1'))
-      .catch(() => setContractSeen(false))
+      .then((v) => {
+        const seen = v === '1'
+        setContractSeen(seen)
+        if (!seen) setShowContract(true) // first-run: contract before start
+      })
+      .catch(() => {
+        setContractSeen(false)
+        setShowContract(true)
+      })
   }, [])
-  const onRideAlong = useCallback(() => {
-    if (contractSeen === false) {
-      setShowContract(true)
-      return
-    }
-    r.start()
-  }, [contractSeen, r.start])
+  // Auto-start for returning users — tapping "Roam" on home IS the ride-along action.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (contractSeen === true) r.start() }, [contractSeen])
   const onContractAccept = useCallback(() => {
     setShowContract(false)
     setContractSeen(true)
@@ -109,6 +119,42 @@ export default function RoamScreen() {
       useNativeDriver: true,
     }).start()
   }, [sheetVisible, reducedMotion, sheetAnim])
+
+  // The idle "wandering thought": under the fixed idleTitle, a placeless murmur from a
+  // time-of-day pool slow-crossfades every ~26s — so the quiet reads as a companion enjoying
+  // the ride, not a paused app. The clock bucket is a SELECTION knob (picks a pool), never
+  // generation. Frozen under Reduce Motion; paused while an encounter sheet owns the screen.
+  const murmurBucket = useMemo<keyof typeof voice.roam.idleMurmur>(() => {
+    const h = new Date().getHours()
+    return h < 10 ? 'morning' : h < 17 ? 'day' : 'dusk'
+  }, [])
+  const murmurPool = voice.roam.idleMurmur[murmurBucket]
+  const [murmurIdx, setMurmurIdx] = useState(() => Math.floor(Math.random() * murmurPool.length))
+  const murmurOpacity = useRef(new Animated.Value(1)).current
+  useEffect(() => {
+    if (r.phase !== 'roaming' || sheetVisible) return
+    const id = setInterval(() => {
+      if (reducedMotion) {
+        setMurmurIdx((i) => (i + 1) % murmurPool.length)
+        return
+      }
+      // dip → swap the line at the trough → bring it back, so the change reads as a calm
+      // crossfade, not a snap (the only motion here besides the car token).
+      Animated.timing(murmurOpacity, {
+        toValue: 0,
+        duration: duration.fast,
+        useNativeDriver: true,
+      }).start(() => {
+        setMurmurIdx((i) => (i + 1) % murmurPool.length)
+        Animated.timing(murmurOpacity, {
+          toValue: 1,
+          duration: duration.base,
+          useNativeDriver: true,
+        }).start()
+      })
+    }, 26_000)
+    return () => clearInterval(id)
+  }, [r.phase, sheetVisible, reducedMotion, murmurPool.length, murmurOpacity])
 
   const title = voice.roam.entry
 
@@ -199,7 +245,7 @@ export default function RoamScreen() {
               </Text>
             </View>
           </Card>
-          <Button variant="primary" fullWidth onPress={r.finishSignoff} title={voice.roam.done} />
+          <Button variant="primary" fullWidth onPress={() => router.back()} title={voice.roam.done} />
         </View>
       </Screen>
     )
@@ -214,42 +260,59 @@ export default function RoamScreen() {
           }}
         />
         <View style={styles.base}>
-          <View style={styles.kickerRow}>
-            <Text variant="label" color="inkFaint">
-              {voice.roam.ridingKicker}
-            </Text>
-            {roamMode === 'sim' && <Badge tone="teal" label={voice.roam.simBadge} />}
-          </View>
-          <View style={styles.motif}>
-            <RoamMotif glow={!sheetVisible} />
-          </View>
-          <Text variant="heading" color="ink">
-            {voice.roam.idleTitle}
-          </Text>
-          <Text variant="body" color="inkDim">
-            {voice.roam.idle}
-          </Text>
-          <View style={styles.statRow}>
-            <View style={[styles.pill, { backgroundColor: colors.surfaceSunken }]}>
-              <Icon name="story" size={14} color="accent" />
-              <Text variant="label" color="ink">
-                {`${r.toldCount} ${voice.roam.stories}`}
+          <View style={styles.flexSpace} />
+          {/* The centered idle cluster — kicker → motif → title → wandering thought → one stat.
+              Symmetric flex above/below frames it as a poster's intentional negative space,
+              not a top-piled block dangling over a void (the "feels unfinished" fix). */}
+          <View style={styles.hero}>
+            <View style={styles.kickerRow}>
+              <Text variant="label" color="inkFaint">
+                {voice.roam.ridingKicker}
               </Text>
+              {roamMode === 'sim' && <Badge tone="teal" label={voice.roam.simBadge} />}
             </View>
-            <Duck label={sheetVisible ? voice.roam.musicDucked : voice.roam.musicPlaying} active={sheetVisible} />
-          </View>
-          {r.gpsSearching && (
-            <Text variant="dim" color="inkDim">
-              {voice.player.gpsSearching}
+            <View style={styles.motif}>
+              <RoamMotif glow={!sheetVisible} />
+            </View>
+            <Text variant="heading" color="ink">
+              {voice.roam.idleTitle}
             </Text>
-          )}
-          <View style={styles.spacer} />
-          {/* Alpha drive-test diagnostics — quiet, mono, self-explanatory; lets a real
-              road test report itself (pins in range, fix freshness, nearest pin). */}
-          <Text variant="mono" color="inkFaint">
-            {`${r.pinCount} pins · GPS ${r.diag.fixAgeSec ?? '—'}s · nearest ${r.diag.nearestM != null ? `${r.diag.nearestM} m` : '—'}`}
-          </Text>
-          <Chattiness value={r.chattiness} onChange={r.setChattiness} />
+            {/* The wandering thought — slow-crossfades through the time-of-day murmur pool. */}
+            <Animated.View style={{ opacity: murmurOpacity }}>
+              <Text variant="body" color="inkDim">
+                {murmurPool[murmurIdx] ?? murmurPool[0]}
+              </Text>
+            </Animated.View>
+            <View style={styles.statRow}>
+              <View style={[styles.pill, { backgroundColor: colors.surfaceSunken }]}>
+                <Icon name="story" size={14} color="accent" />
+                <Text variant="label" color="ink">
+                  {r.toldCount === 0
+                    ? `${r.pinCount} ${voice.roam.storiesNearby}`
+                    : `${r.toldCount} ${voice.roam.storiesTold}`}
+                </Text>
+              </View>
+              <Duck label={sheetVisible ? voice.roam.musicDucked : voice.roam.musicPlaying} active={sheetVisible} />
+            </View>
+            {r.gpsSearching && (
+              <Text variant="dim" color="inkDim">
+                {voice.player.gpsSearching}
+              </Text>
+            )}
+          </View>
+          <View style={styles.flexSpace} />
+          {/* Footer: the set-once chattiness knob and — DEV/SIM ONLY — the drive-test
+              diagnostics. Hidden for shipped live riders so the idle reads as a clean vista;
+              kept on dev builds + sim so a road test can still self-report (free-roam-mode
+              §Idle-canvas — open Q on a TestFlight-live toggle). */}
+          <View style={styles.footer}>
+            {(__DEV__ || roamMode === 'sim') && (
+              <Text variant="mono" color="inkFaint">
+                {`${r.pinCount} pins · GPS ${r.diag.fixAgeSec ?? '—'}s · nearest ${r.diag.nearestM != null ? `${r.diag.nearestM} m` : '—'}`}
+              </Text>
+            )}
+            <Chattiness value={r.chattiness} onChange={r.setChattiness} />
+          </View>
         </View>
 
         {/* The encounter sheet — slides up over the idle base; the base stays visible.
@@ -321,44 +384,17 @@ export default function RoamScreen() {
     )
   }
 
-  // idle — the start surface (the home card is the front door; this is the trailhead)
-  return (
-    <Screen edges={['bottom']}>
-      <Stack.Screen options={{ title }} />
-      <View style={styles.body}>
-        <Card framed style={styles.card}>
-          <View style={styles.kickerRow}>
-            <Text variant="label" color="accentWarm">
-              {voice.roam.entryKicker}
-            </Text>
-            <Badge tone="teal" label={voice.roam.entryAlpha} />
-          </View>
-          <Text variant="display" color="ink">
-            {voice.roam.entry}
-          </Text>
-          <Text variant="body" color="inkDim">
-            {voice.roam.entryBlurb}
-          </Text>
-          {/* The trail, not yet traveled — the signature motif parked at 0. No glow: the
-              Ride-along button owns the screen's one amber element (DESIGN §8). */}
-          <RouteTrack progress={entryTrail} glow={false} />
-          <Button
-            variant="primary"
-            fullWidth
-            glow
-            icon="car"
-            onPress={onRideAlong}
-            title={voice.roam.start}
-          />
-        </Card>
-      </View>
-    </Screen>
-  )
+  // idle: contractSeen still loading (< 10ms) or auto-start in flight — render nothing
+  return null
 }
 
 const styles = StyleSheet.create({
   body: { flex: 1, padding: space.gutter, gap: space.lg, justifyContent: 'center' },
-  base: { flex: 1, padding: space.gutter, gap: space.md },
+  base: { flex: 1, padding: space.gutter },
+  // Symmetric flex above + below the hero centers the idle cluster; the footer pins below it.
+  flexSpace: { flex: 1 },
+  hero: { gap: space.md },
+  footer: { gap: space.md },
   card: { gap: space.md, padding: space.xl },
   chip: {
     width: 44,
@@ -368,7 +404,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   kickerRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  motif: { marginVertical: space.md },
+  motif: { marginVertical: space.sm }, // a touch of extra room around the signature element
   statRow: { flexDirection: 'row', alignItems: 'center', gap: space.lg, marginTop: space.sm },
   pill: {
     flexDirection: 'row',
@@ -379,7 +415,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
   },
   tallyRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  spacer: { flex: 1 },
   sheet: {
     position: 'absolute',
     left: space.sm,
