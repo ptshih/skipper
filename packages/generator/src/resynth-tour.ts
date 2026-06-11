@@ -23,7 +23,7 @@ import { pois, regions, tourBrackets, tourStops, tours } from '@skipper/db/schem
 import { TTS_CLIP_EXTENSION, TTS_MODEL } from './models'
 import { announce, assertReady, parseFlags, resolveTourId } from './pipeline/ops'
 import { personaForRegion } from './persona'
-import { synthesize } from './pipeline/tts'
+import { synthesizeWithTailRetake } from './pipeline/tts'
 import { clipKey, deleteAudio, uploadAudio } from './pipeline/storage'
 import { beginJob, finishJob } from './pipeline/job-progress'
 
@@ -133,7 +133,12 @@ async function main() {
   let swept = 0
   let totalSec = 0
   for (const c of clips) {
-    const { audio, durationMs } = await synthesize(c.script, persona.voice, persona.ttsStyle)
+    const { audio, durationMs } = await synthesizeWithTailRetake(
+      c.script,
+      persona.voice,
+      persona.ttsStyle,
+      c.key,
+    )
     await uploadAudio(c.key, audio)
     await c.save(c.key, durationMs)
     // Sweep the orphan only when the key actually moved (e.g. the wav→mp3 extension change).

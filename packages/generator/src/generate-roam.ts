@@ -33,7 +33,7 @@ import { ensurePoiOverridesLoaded } from './pipeline/poi-overrides'
 import { fetchDeepExtracts } from './pipeline/wikipedia'
 import { narrateStop } from './pipeline/narrate'
 import { toFacts } from './pipeline/select'
-import { synthesize } from './pipeline/tts'
+import { synthesizeWithTailRetake } from './pipeline/tts'
 import { roamClipKey, uploadAudio } from './pipeline/storage'
 import { hashFacts, upsertPoi } from './pipeline/persist'
 import { withRetry } from './pipeline/http'
@@ -245,7 +245,14 @@ let synthDone = 0
 const results = await mapLimit(queue, TTS_CONCURRENCY(), async (c, i) => {
   const script = scripts[i]!
   const clipId = crypto.randomUUID()
-  const { audio, durationMs } = await synthesize(script, persona.voice, persona.ttsStyle)
+  // Tail-collapse retake (pipeline/tts.ts): roam clips ship unheard, so a mumbled
+  // closing sentence would reach riders' ears first — measure + retake here too.
+  const { audio, durationMs } = await synthesizeWithTailRetake(
+    script,
+    persona.voice,
+    persona.ttsStyle,
+    `"${c.title}"`,
+  )
   const audioUrl = await uploadAudio(roamClipKey(c.poiId, clipId), audio)
   const attribution: AttributionSnapshot[] = [
     {

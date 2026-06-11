@@ -22,6 +22,7 @@ import {
 } from '../models'
 import { GEMINI_PCM, toWavWithDuration } from './wav'
 import { mp3DurationMs } from './mp3'
+import { keepFirstTake, measureTailCollapse, TAIL_COLLAPSE_DB } from './tail'
 
 const SYNTHESIZE_URL = 'https://texttospeech.googleapis.com/v1/text:synthesize'
 const CLOUD_PLATFORM_SCOPE = 'https://www.googleapis.com/auth/cloud-platform'
@@ -116,4 +117,58 @@ export async function synthesize(
     throw new Error('Cloud TTS returned empty audio or a zero-length duration.')
   }
   return { audio, durationMs }
+}
+
+/** What the tail probe + retake decided for one clip (null = probe skipped: clip too
+ *  short or ffmpeg absent — see pipeline/tail.ts). */
+export interface TailOutcome {
+  /** Tail-vs-body drop (dB) of the FIRST take. */
+  firstDropDb: number
+  /** Drop of the take that actually shipped (null = the retake couldn't be measured). */
+  keptDropDb: number | null
+  retook: boolean
+  /** True when the SHIPPED take still measures collapsed — flag it for the human pass. */
+  shippedCollapsed: boolean
+}
+
+export type SynthWithTailResult = SynthResult & { tail: TailOutcome | null }
+
+/**
+ * Synthesize with the tail-collapse retake (TODO.md audio-QA #1): Gemini-TTS takes are
+ * non-deterministic in level and ~1 in 4 collapses over the closing sentence(s) — the
+ * "mumble". Measure tail-vs-body after the synth; on a drop ≥ TAIL_COLLAPSE_DB re-synth
+ * ONCE and keep the better take, so a Dam-class take can never ship silently again.
+ * Every SHIP path (generate, generate-roam, resynth-tour, patch-clip) goes through this.
+ */
+export async function synthesizeWithTailRetake(
+  text: string,
+  voiceId: string = SKIPPER_VOICE_ID,
+  style: string = SKIPPER_TTS_STYLE_PROMPT,
+  label = 'clip',
+): Promise<SynthWithTailResult> {
+  const first = await synthesize(text, voiceId, style)
+  const m1 = await measureTailCollapse(first.audio, first.durationMs)
+  if (m1 === null) return { ...first, tail: null } // probe skipped — ship unmeasured
+  if (m1.dropDb < TAIL_COLLAPSE_DB) {
+    return {
+      ...first,
+      tail: { firstDropDb: m1.dropDb, keptDropDb: m1.dropDb, retook: false, shippedCollapsed: false },
+    }
+  }
+  console.warn(
+    `  ⚠ tail collapse on ${label}: tail ${m1.tailDb.toFixed(1)} dB vs body ${m1.bodyDb.toFixed(1)} dB ` +
+      `(drop ${m1.dropDb.toFixed(1)} dB ≥ ${TAIL_COLLAPSE_DB}) — re-synthesizing once...`,
+  )
+  const second = await synthesize(text, voiceId, style)
+  const m2 = await measureTailCollapse(second.audio, second.durationMs)
+  const keepFirst = keepFirstTake(m1, m2)
+  const kept = keepFirst ? first : second
+  const keptDropDb = keepFirst ? m1.dropDb : (m2?.dropDb ?? null)
+  const shippedCollapsed = keptDropDb !== null && keptDropDb >= TAIL_COLLAPSE_DB
+  console.warn(
+    shippedCollapsed
+      ? `  ⚠ ${label}: BOTH takes collapsed — shipping the better one (drop ${keptDropDb!.toFixed(1)} dB), flagged for the human pass.`
+      : `  ✓ ${label}: retake ${keptDropDb === null ? 'unmeasured, shipped on the odds' : `clean (drop ${keptDropDb.toFixed(1)} dB)`}.`,
+  )
+  return { ...kept, tail: { firstDropDb: m1.dropDb, keptDropDb, retook: true, shippedCollapsed } }
 }

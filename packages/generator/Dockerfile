@@ -23,6 +23,13 @@
 FROM oven/bun:1
 WORKDIR /app
 
+# ffmpeg powers the TTS tail-collapse probe (pipeline/tail.ts) — without it the probe
+# skips gracefully and cloud-generated takes would ship UNMEASURED (the mumble guard
+# exists precisely for unattended runs like this Job).
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ffmpeg \
+ && rm -rf /var/lib/apt/lists/*
+
 # dotenvx for deploy-time secret decryption (a ROOT devDependency, dropped by --production).
 RUN bun add -g @dotenvx/dotenvx
 

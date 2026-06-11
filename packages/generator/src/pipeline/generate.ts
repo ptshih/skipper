@@ -51,6 +51,7 @@ import {
 import { mapLimit } from './concurrency'
 import { estimateTtsUsd, llmSpendLines, llmSpentUsd, unpricedModels } from './spend'
 import {
+  applyTailOutcomes,
   buildGroundingWell,
   buildScorecard,
   evaluateDiversity,
@@ -85,7 +86,8 @@ import type { StopPlan } from './select'
 import { narrateIntro, narrateOutro, narrateStop } from './narrate'
 import type { NarrationRequest } from './narrate'
 import { judgeCloserDiversity } from './judge'
-import { synthesize } from './tts'
+import { synthesizeWithTailRetake } from './tts'
+import type { TailOutcome } from './tts'
 import { bracketKey, clipKey, uploadAudio } from './storage'
 import {
   finalizeTourReady,
@@ -1136,14 +1138,25 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
     const bracketRunId = crypto.randomUUID()
     const synthOne = async (script: string, key: string, label: string) => {
       console.log(`Synthesizing ${label}...`)
-      const { audio, durationMs } = await synthesize(script, persona.voice, persona.ttsStyle)
+      // The tail-collapse retake rides every synth: a take whose closing sentences
+      // collapse in level gets ONE re-synth, and the better take ships (pipeline/tts.ts).
+      const { audio, durationMs, tail } = await synthesizeWithTailRetake(
+        script,
+        persona.voice,
+        persona.ttsStyle,
+        label,
+      )
       const audioUrl = await uploadAudio(key, audio)
-      return { audioUrl, durationMs }
+      return { audioUrl, durationMs, tail }
     }
     console.log(
       `Synthesizing ${prep.length} stop clips + ${bracketPlan.length} brackets (concurrency ${TTS_CONCURRENCY()})...`,
     )
-    const clipTasks: (() => Promise<{ audioUrl: string; durationMs: number }>)[] = [
+    const clipTasks: (() => Promise<{
+      audioUrl: string
+      durationMs: number
+      tail: TailOutcome | null
+    }>)[] = [
       ...prep.map(
         (p) => () =>
           synthOne(p.script, clipKey(tourId, p.stopId), `stop ${p.s.seq} (${p.s.stopType}) "${p.s.name}"`),
@@ -1237,6 +1250,33 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       const { audioUrl, durationMs } = clips[prep.length + j]!
       finalBrackets.push({ kind: b.kind, script: b.script, audioUrl, audioDurationMs: durationMs })
       bracketSummaries.push({ kind: b.kind, script: b.script, durationMs })
+    }
+
+    // Fold the tail-collapse verdicts into the recorded scorecard (the panel scored the
+    // SCRIPTS pre-synthesis; eval_runs must also describe the shipped AUDIO). A fixed
+    // retake rides as detail; a still-collapsed shipped take fails that stop's tts gate
+    // row — recorded for the human pass, never blocking ready (the standing posture).
+    // Brackets get the same retake in the pool but have no per-seq eval rows; their
+    // outcomes surface in the retake log lines + the summary count here.
+    const allTails = clips.map((c) => c.tail)
+    const retakes = allTails.filter((t) => t?.retook).length
+    if (retakes > 0) {
+      const stillCollapsed = allTails.filter((t) => t?.shippedCollapsed).length
+      console.log(
+        `Tail check: ${retakes}/${clips.length} clip(s) retaken; ` +
+          (stillCollapsed > 0
+            ? `${stillCollapsed} still collapsed — flagged on the tts dim for the human pass.`
+            : 'all shipped takes clean.'),
+      )
+      const tailBySeq = new Map<number, TailOutcome | null>(
+        prep.map((p, i) => [p.s.seq, clips[i]!.tail]),
+      )
+      evalReport.scorecard = buildScorecard({
+        slug: shell.slug,
+        tourName: shell.headline,
+        evaluatedAt: evalReport.scorecard.evaluatedAt,
+        stops: applyTailOutcomes(finalEvals, tailBySeq),
+      })
     }
     lap('tts')
 

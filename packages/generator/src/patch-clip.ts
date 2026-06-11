@@ -24,7 +24,7 @@ import { db } from '@skipper/db'
 import { regions, tourBrackets, tourStops, tours } from '@skipper/db/schema'
 import { announce, assertReady, parseFlags } from './pipeline/ops'
 import { personaForRegion } from './persona'
-import { synthesize } from './pipeline/tts'
+import { synthesizeWithTailRetake } from './pipeline/tts'
 import { clipKey, uploadAudio } from './pipeline/storage'
 import { beginJob, finishJob } from './pipeline/job-progress'
 
@@ -174,7 +174,12 @@ async function main() {
   const persona = personaForRegion(regionRow?.slug ?? '')
 
   console.log('\nSynthesizing edited script...')
-  const { audio, durationMs } = await synthesize(newScript, persona.voice, persona.ttsStyle)
+  const { audio, durationMs } = await synthesizeWithTailRetake(
+    newScript,
+    persona.voice,
+    persona.ttsStyle,
+    'edited clip',
+  )
 
   // The clip key is tour-scoped (clips/<tourId>/<stopId|kind>), so re-uploading
   // overwrites the SAME object — audioUrl (the stored key) does not change.
