@@ -43,6 +43,12 @@ import { NARRATION_CONCURRENCY, TTS_CONCURRENCY } from './config'
 import { estimateTtsUsd, llmSpendLines, llmSpentUsd } from './pipeline/spend'
 
 const ROAM_TARGET_SECONDS = 60
+/** TASTE gate: articles about violent crime / personal tragedy are never roadside
+ *  encounters — a joke-forward persona cannot carry them (the sweep is breadth-first, so
+ *  these slip in; the Jaycee Dugard kidnapping article surfaced on the first basin run).
+ *  Historical/civic tragedy (a wildfire, a shipwreck) stays — the prompt can play those
+ *  straight — but gets the founder ear. Title-keyed; widen as the corpus widens. */
+const TASTE_DENYLIST = /kidnap|murder|killing of|death of|massacre|homicide|suicide|assault/i
 /** Roam grounds on real material: lead extracts below this stay out of v0 (no thin tellings). */
 const DEFAULT_MIN_EXTRACT = 400
 /** Default corpus bbox — the Tahoe basin (matches sweep-roam-pois.ts). */
@@ -114,6 +120,10 @@ const candidates: Candidate[] = []
 for (const r of rows) {
   const extract = typeof r.facts?.extract === 'string' ? (r.facts.extract as string) : ''
   if (extract.length < minExtract) continue
+  if (TASTE_DENYLIST.test(r.name)) {
+    console.log(`  taste-gate: skipping "${r.name}"`)
+    continue
+  }
   const f = r.facts as { title?: string; url?: string; pageId?: number } | null
   candidates.push({
     poiId: r.id,
