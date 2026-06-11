@@ -5,8 +5,8 @@
 # browser key, the image name, and NO --no-invoker-iam-check (IAP gates invocation, not allUsers).
 #
 # Trigger: a 3rd Cloud Build trigger on the existing `skipper-gh` connection, path-filtered to
-#   apps/admin/** (+ db/shared/storage). Set the _VITE_MAPS_KEY substitution on the trigger
-#   (a referrer-restricted browser key — public, not a secret).
+#   apps/admin/** (+ db/shared/storage). The Maps browser key is hardcoded in the --build-arg
+#   below (a referrer-restricted, in-the-bundle client key; private repo — not a secret).
 #
 # ONE-TIME setup (NOT here — see docs/specs/admin-ops-console-spec.md §7/§10):
 #   - SA `skipper-admin@$PROJECT_ID...`: roles/run.developer on the `skipper-gen` job
@@ -22,7 +22,7 @@ steps:
       - -f
       - apps/admin/Dockerfile
       - --build-arg
-      - VITE_GOOGLE_MAPS_BROWSER_KEY=${_VITE_MAPS_KEY}
+      - VITE_GOOGLE_MAPS_BROWSER_KEY=AIzaSyDkyHLA573TyTMJ7DN9JoXW82IpXY2hBVU
       - -t
       - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/admin:latest
       - .
@@ -44,7 +44,6 @@ steps:
 substitutions:
   _REGION: us-east4
   _REPO: skipper
-  _VITE_MAPS_KEY: ''
 
 options:
   logging: CLOUD_LOGGING_ONLY
