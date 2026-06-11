@@ -122,6 +122,7 @@ export function useRoam(mode: RoamMode): RoamState {
   const stallTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const sawFresh = useRef(false)
+  const clipRetried = useRef<Set<string>>(new Set()) // poiIds given the one stall recovery
 
   const player = useAudioPlayer()
   const status = useAudioPlayerStatus(player)
@@ -169,7 +170,9 @@ export function useRoam(mode: RoamMode): RoamState {
         clearTimeout(stallTimer.current)
         stallTimer.current = null
       }
-      setToldCount((n) => n + 1)
+      // The tally counts encounters that made SOUND — a stall-skipped clip the rider
+      // never heard isn't a story told.
+      if (sawFresh.current) setToldCount((n) => n + 1)
       setActivePoiId((cur) => (cur === poiId ? null : cur))
       clipBusy.current = false
       pump()
@@ -177,8 +180,27 @@ export function useRoam(mode: RoamMode): RoamState {
     [pump],
   )
 
-  // Clip load/play, keyed on the active encounter (the useDrive pattern, leaner: no
-  // pause, no re-sign — a clip that won't start within the grace is skipped).
+  // Stall recovery: ONE re-fetch of the manifest (fresh presigned URLs — covers both a
+  // transient cellular stall and a >1h session's expired signs) + a clip reload; a second
+  // stall skips. Field-found (first live drive): a clip hung at 0:00 forever on thin 5G.
+  const [reloadKey, setReloadKey] = useState(0)
+  const recoverStalledClip = useCallback(
+    async (poiId: string) => {
+      try {
+        const pos = lastFixPos.current
+        if (pos) {
+          const fresh = await getRoamManifest(pos.lat, pos.lng)
+          if (fresh.pins.length > 0) pinsRef.current = fresh.pins
+        }
+      } catch {} // offline/dead zone: the reload below retries the old URL — then skips
+      setReloadKey((k) => k + 1) // re-run the clip-load effect for the SAME poi
+    },
+    [],
+  )
+
+  // Clip load/play, keyed on the active encounter (the useDrive pattern, leaner).
+  // A clip that never produces REAL audio within the grace gets one recovery, then skips
+  // — a missed encounter is invisible by design; a frozen sheet is not.
   useEffect(() => {
     if (activePoiId === null) return
     const pin = pinsRef.current.find((p) => p.poiId === activePoiId)
@@ -194,7 +216,13 @@ export function useRoam(mode: RoamMode): RoamState {
     player.replace({ uri: pin.url })
     player.play()
     stallTimer.current = setTimeout(() => {
-      if (!sawFresh.current) onClipDone(activePoiId)
+      if (sawFresh.current) return
+      if (!clipRetried.current.has(activePoiId)) {
+        clipRetried.current.add(activePoiId)
+        void recoverStalledClip(activePoiId)
+        return
+      }
+      onClipDone(activePoiId)
     }, CLIP_STALL_MS)
     return () => {
       if (stallTimer.current) {
@@ -202,17 +230,20 @@ export function useRoam(mode: RoamMode): RoamState {
         stallTimer.current = null
       }
     }
-  }, [activePoiId, player, onClipDone])
+  }, [activePoiId, reloadKey, player, onClipDone, recoverStalledClip])
 
   // Clip end → back to companionable silence (ducked audio restores itself).
+  // FRESH means audio actually ADVANCED — expo-audio flips `playing` true on the play()
+  // INTENT while a stream buffers forever, so trusting it let a stalled clip evade the
+  // watchdog (the field hang: a sheet frozen at 0:00 on thin 5G).
   useEffect(() => {
     if (activePoiId === null) return
-    if (status.playing && !status.didJustFinish) sawFresh.current = true
+    if (status.playing && (status.currentTime ?? 0) > 0.25) sawFresh.current = true
     if (status.didJustFinish && sawFresh.current && finishedPoi.current !== activePoiId) {
       finishedPoi.current = activePoiId
       onClipDone(activePoiId)
     }
-  }, [status.playing, status.didJustFinish, activePoiId, onClipDone])
+  }, [status.playing, status.didJustFinish, status.currentTime, activePoiId, onClipDone])
 
   // Session tick (roaming only): the GPS quiet-watchdog (live) + the diagnostics line
   // (fix age + nearest pin) that lets a real-road alpha test self-diagnose.
@@ -292,6 +323,7 @@ export function useRoam(mode: RoamMode): RoamState {
         pinsRef.current = manifest.pins
         setPinCount(manifest.pins.length)
         setToldCount(0)
+        clipRetried.current.clear() // a new session earns every clip a fresh recovery
         engineRef.current = new RoamEngine(
           manifest.pins.map((p) => ({
             poiId: p.poiId,
