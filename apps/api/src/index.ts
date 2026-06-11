@@ -7,6 +7,7 @@
 //   GET  /tours                      -> list ready tours, one card per drive (anonymous OK)
 //   GET  /tours/:tourId              -> a ready drive: route + region + host + intro/outro + stops
 //   POST /tours/:tourId/assets/sign  -> presigned R2 URLs for the drive's audio (stops + brackets)
+//   GET  /roam                       -> free-roam pins near a point + presigned clips (ALPHA: open)
 //   GET  /t/:tourId                  -> shareable tour link: in-app universal link + OG web fallback
 //
 // A tour is the whole self-contained drive now (corridors merged in; zero-reuse:
@@ -19,7 +20,7 @@
 import { Hono, type Context } from 'hono'
 import { asc, desc, eq, inArray } from 'drizzle-orm'
 import { db } from '@skipper/db'
-import { pois, regions, tourBrackets, tourStops, tours } from '@skipper/db/schema'
+import { pois, regions, roamClips, tourBrackets, tourStops, tours } from '@skipper/db/schema'
 import type { Tour as TourRow } from '@skipper/db/schema'
 import { auth } from './auth'
 import { FEATURES, meetsTier, withSession, type ApiEnv } from './entitlements'
@@ -309,6 +310,69 @@ app.post('/tours/:tourId/assets/sign', withSession, async (c) => {
     // but give the client a human message so the player can show real copy + a retry
     // (not a raw "Request failed (503)").
     console.error('[api] presign failed', e)
+    return c.json(
+      { error: 'audio_unavailable', message: 'Audio is warming up. Give it a moment and try again.' },
+      503,
+    )
+  }
+})
+
+// Straight-line distance (m) — the same haversine as @skipper/drive-core's; inlined here
+// because the API's only geo need is this one filter (keep the dep graph flat).
+function haversineMeters(aLat: number, aLng: number, bLat: number, bLng: number): number {
+  const R = 6_371_000
+  const dLat = ((bLat - aLat) * Math.PI) / 180
+  const dLng = ((bLng - aLng) * Math.PI) / 180
+  const s =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((aLat * Math.PI) / 180) * Math.cos((bLat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2
+  return 2 * R * Math.asin(Math.sqrt(s))
+}
+
+// FREE-ROAM manifest: every roam-narratable place near a point, with presigned clip URLs
+// (shared schema: roamManifest). Roam narration is ROAM-owned (`roam_clips` — the third
+// owner beside pois/tour_stops; docs/ideas/free-roam-mode.md); a row exists only complete,
+// so everything returned is playable. Geo filter runs in JS — the corpus is a few hundred
+// rows per region at most, so a bbox prefilter + haversine beats dragging in PostGIS.
+// ALPHA: OPEN, like ?preview=1 (founder TestFlight toy; no UI links it for anyone else).
+// When roam ships for real it takes the live-drive wall (free account), same as tours.
+app.get('/roam', async (c) => {
+  const lat = Number(c.req.query('lat'))
+  const lng = Number(c.req.query('lng'))
+  // Default generously (a basin is ~40 km across); cap so "near a point" stays honest.
+  const radiusKm = Math.min(Number(c.req.query('radiusKm') ?? 50), 100)
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || !Number.isFinite(radiusKm)) {
+    return c.json({ error: 'bad_request', message: 'lat and lng are required numbers.' }, 400)
+  }
+
+  const rows = await db
+    .select({
+      poiId: roamClips.poiId,
+      name: pois.name,
+      lat: pois.lat,
+      lng: pois.lng,
+      key: roamClips.audioUrl,
+      durationMs: roamClips.audioDurationMs,
+    })
+    .from(roamClips)
+    .innerJoin(pois, eq(roamClips.poiId, pois.id))
+
+  const near = rows.filter((r) => haversineMeters(lat, lng, r.lat, r.lng) <= radiusKm * 1000)
+
+  try {
+    return c.json({
+      pins: near.map((r) => ({
+        poiId: r.poiId,
+        name: r.name,
+        lat: r.lat,
+        lng: r.lng,
+        durationMs: r.durationMs,
+        url: presignGet(r.key),
+        contentType: contentTypeForKey(r.key),
+      })),
+    })
+  } catch (e) {
+    console.error('[api] roam presign failed', e)
     return c.json(
       { error: 'audio_unavailable', message: 'Audio is warming up. Give it a moment and try again.' },
       503,

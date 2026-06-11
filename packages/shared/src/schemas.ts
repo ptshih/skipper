@@ -298,3 +298,24 @@ export const signedAudio = z.object({
   outro: signedClip.nullish(),
 })
 export type SignedAudio = z.infer<typeof signedAudio>
+
+/* -------------------------------------------------------------------------- */
+/*  Free-roam (ALPHA surface — docs/ideas/free-roam-mode.md)                    */
+/* -------------------------------------------------------------------------- */
+
+/** GET /roam — one free-roam encounter pin: a place + its presigned roam clip. */
+export const roamPin = z.object({
+  poiId: z.uuid(),
+  name: z.string(),
+  lat: z.number(),
+  lng: z.number(),
+  durationMs: z.number().int(),
+  url: z.url(),
+  /** MIME type derived server-side from the R2 key (see signedClip.contentType). */
+  contentType: z.string(),
+})
+export type RoamPin = z.infer<typeof roamPin>
+
+/** GET /roam?lat=&lng=&radiusKm= — every roam-narratable place near a point. */
+export const roamManifest = z.object({ pins: z.array(roamPin) })
+export type RoamManifest = z.infer<typeof roamManifest>
