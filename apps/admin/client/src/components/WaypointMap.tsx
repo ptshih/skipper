@@ -1,16 +1,10 @@
 import { useEffect, useRef } from 'react'
-import { Loader } from '@googlemaps/js-api-loader'
+import { loadMaps, MAPS_KEY } from '@/lib/maps'
 
 export interface MapWaypoint {
   label: string
   lat: number | null
   lng: number | null
-}
-
-let loaderPromise: Promise<typeof google> | null = null
-function loadMaps(key: string): Promise<typeof google> {
-  loaderPromise ??= new Loader({ apiKey: key, version: 'weekly' }).load()
-  return loaderPromise
 }
 
 // Draggable waypoint markers + the connecting line, on a Google terrain basemap. Dragging a
@@ -30,7 +24,7 @@ export function WaypointMap({
   const lineRef = useRef<google.maps.Polyline | null>(null)
   const onMoveRef = useRef(onMove)
   onMoveRef.current = onMove
-  const key = import.meta.env.VITE_GOOGLE_MAPS_BROWSER_KEY as string | undefined
+  const key = MAPS_KEY
 
   useEffect(() => {
     if (!key || !ref.current) return

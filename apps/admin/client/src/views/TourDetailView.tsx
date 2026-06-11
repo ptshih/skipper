@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { api, type EvalRunSummary, type EvalScore, type SignResult, type TourDetail } from '@/lib/api'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { RouteMap, STOP_TYPE_COLOR, type RouteStopPin } from '@/components/RouteMap'
 import { fmtDate, fmtDuration, fmtMiles, fmtScore, fmtSec, timeAgo } from '@/lib/format'
 
 export function TourDetailView() {
@@ -34,6 +35,9 @@ export function TourDetailView() {
     ev?.scores.find((s) => s.seq === seq && s.dimension === 'grounding') ?? null
   const intro = brackets.find((b) => b.kind === 'intro')
   const outro = brackets.find((b) => b.kind === 'outro')
+  const stopPins: RouteStopPin[] = stops
+    .filter((s) => s.triggerLat != null && s.triggerLng != null)
+    .map((s) => ({ seq: s.seq, name: s.name, stopType: s.stopType, lat: s.triggerLat!, lng: s.triggerLng!, radiusM: s.triggerRadiusM }))
 
   return (
     <div className="space-y-6">
@@ -51,6 +55,23 @@ export function TourDetailView() {
           {region?.displayName} · {tour.startAnchor.name} → {tour.endAnchor.name} · {fmtMiles(tour.distanceMeters)} · {fmtDuration(tour.durationSeconds)}
         </p>
       </div>
+
+      {tour.polyline.length > 1 && (
+        <section>
+          <div className="mb-2 flex items-baseline justify-between">
+            <h2 className="text-sm font-medium">Route</h2>
+            <span className="text-xs text-muted-foreground">{stopPins.length} of {stops.length} stops placed</span>
+          </div>
+          <RouteMap polyline={tour.polyline} start={tour.startAnchor} end={tour.endAnchor} stops={stopPins} />
+          <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
+            <LegendDot color="#10b981" label="Start" />
+            <LegendDot color="#ef4444" label="End" />
+            <LegendDot color={STOP_TYPE_COLOR.story} label="story" />
+            <LegendDot color={STOP_TYPE_COLOR.scenic} label="scenic" />
+            <LegendDot color={STOP_TYPE_COLOR.break} label="break" />
+          </div>
+        </section>
+      )}
 
       {ev && (
         <section className="rounded-xl border">
@@ -145,6 +166,15 @@ function RunHistory({ runs, currentId }: { runs: EvalRunSummary[]; currentId?: s
         </Table>
       </div>
     </section>
+  )
+}
+
+function LegendDot({ color, label }: { color: string; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
+      {label}
+    </span>
   )
 }
 

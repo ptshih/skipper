@@ -141,6 +141,9 @@ app.get('/admin/tours/:id', async (c) => {
         audioDurationMs: tourStops.audioDurationMs,
         attribution: tourStops.attribution,
         factsHash: tourStops.factsHash,
+        triggerLat: tourStops.triggerLat,
+        triggerLng: tourStops.triggerLng,
+        triggerRadiusM: tourStops.triggerRadiusM,
         revisedAt: tourStops.updatedAt,
       })
       .from(tourStops)

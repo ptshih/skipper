@@ -103,6 +103,9 @@ export interface TourStopDetail {
   audioDurationMs: number | null
   attribution: unknown
   factsHash: string | null
+  triggerLat: number | null
+  triggerLng: number | null
+  triggerRadiusM: number | null
   revisedAt: string
   hasAudio: boolean
 }
