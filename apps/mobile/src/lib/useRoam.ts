@@ -1,15 +1,18 @@
 // useRoam — the FREE-ROAM session hook (alpha). The skipper rides shotgun on the rider's
 // OWN drive: no route, no tour shape — fetch the roam pins near here, feed live GPS fixes
 // to the RoamEngine (proximity + heading + governors; @skipper/drive-core/roam), and play
-// each fired encounter through a FIFO queue.
+// each fired encounter through a FIFO queue. State machine per the design handoff:
+//   idle → sessionStart → roaming ⇄ (encounter sheet) ; roaming → signoff → idle
 //
 // Deliberate differences from useDrive (the tour player):
 //   - AUDIO SESSION = `duckOthers`, not `doNotMix`: roam's whole premise is piping up OVER
 //     the rider's podcast/music and getting out of the way. And NO lock-screen Now Playing
 //     claim — `setActiveForLockScreen` is documented to want doNotMix, and an ambient 60s
 //     encounter doesn't need transport controls (alpha cut; revisit with the duck-flip).
+//   - CHATTINESS (quiet/normal/talkative) retunes the engine's min-gap governor live — a
+//     SELECTION knob (which/how-many encounters fire), never a generation knob.
 //   - No offline pack (alpha streams presigned URLs), no re-sign-on-stall (a stalled clip
-//     just skips — the manifest's URLs outlive any one session), no music bed (the rider's
+//     just skips — a missed encounter is invisible by design), no music bed (the rider's
 //     own audio IS the bed), no end-of-route (the session ends when the rider ends it).
 //
 // Sim mode (couch/dev): replays the first ready tour's polyline through the SAME engine —
@@ -25,17 +28,20 @@ import { errorMessage, getRoamManifest, getTour, listTours } from './api'
 import type { RoamManifest } from './api'
 import { ensureDrivePermission, liveRoamSource, simulatedSource } from './gps'
 import type { FixSubscription } from './gps'
+import type { ChattinessLevel } from '@/ui'
 import { voice } from '@/ui/voice'
 
 export type RoamMode = 'live' | 'sim'
 
 export type RoamPhase =
-  | 'idle' // pre-session (the start card)
+  | 'idle' // pre-session (the entry/start surface)
   | 'locationGate' // live only: permission denied / reduced
   | 'loading' // locating + fetching the manifest
   | 'error'
   | 'noCoverage' // manifest came back empty — outside the known roads
-  | 'roaming' // session live
+  | 'sessionStart' // the opener line card (~2.5s, or a tap)
+  | 'roaming' // session live (idle base; encounters overlay)
+  | 'signoff' // hand-ended: the warm out + session tally
 
 export interface RoamGateInfo {
   canAskAgain: boolean
@@ -48,21 +54,41 @@ const KEEP_AWAKE_TAG = 'skipper-roam'
 const CLIP_STALL_MS = 12_000
 /** Live roam watchdog: no accepted fix for this long → show the GPS-searching note. */
 const GPS_QUIET_MS = 8_000
+/** The session-start card settles into the quiet idle on its own. */
+const SESSION_START_MS = 2_500
+/** Chattiness → the engine's min-gap governor (seconds between encounter STARTS). */
+const CHATTINESS_GAP_SEC: Record<ChattinessLevel, number> = {
+  quiet: 240,
+  normal: 75,
+  talkative: 30,
+}
 
 export interface RoamState {
   phase: RoamPhase
   mode: RoamMode
   error: string | null
   gate: RoamGateInfo | null
-  /** Pins in range (the manifest), for the "<n> stories in range" line. */
+  /** Pins in range (the manifest), for honesty lines. */
   pinCount: number
   /** The encounter currently PLAYING (null = companionable silence). */
   activeName: string | null
-  /** Encounters told this session. */
+  /** Clip progress for the sheet's thin non-interactive bar. */
+  clipElapsedSec: number
+  clipDurationSec: number
+  /** Encounters told this session (the stat pill + the sign-off tally). */
   toldCount: number
+  /** The session-start opener line (rotates per session). */
+  openerLine: string
+  chattiness: ChattinessLevel
+  setChattiness: (level: ChattinessLevel) => void
   gpsSearching: boolean
   start: () => void
+  /** Skip the playing encounter (the sheet's ghost action / scrim tap). */
+  skip: () => void
+  /** Hand-end the session → the sign-off state (teardown happens here). */
   end: () => void
+  /** Leave the sign-off → back to idle/entry. */
+  finishSignoff: () => void
 }
 
 export function useRoam(mode: RoamMode): RoamState {
@@ -72,6 +98,8 @@ export function useRoam(mode: RoamMode): RoamState {
   const [pinCount, setPinCount] = useState(0)
   const [activePoiId, setActivePoiId] = useState<string | null>(null)
   const [toldCount, setToldCount] = useState(0)
+  const [openerLine, setOpenerLine] = useState<string>(voice.roam.sessionStart[0]!)
+  const [chattiness, setChattinessState] = useState<ChattinessLevel>('normal')
   const [gpsSearching, setGpsSearching] = useState(false)
 
   const engineRef = useRef<RoamEngine | null>(null)
@@ -84,6 +112,7 @@ export function useRoam(mode: RoamMode): RoamState {
   const lastFixAt = useRef(0)
   const finishedPoi = useRef<string | null>(null) // didJustFinish double-fire guard
   const stallTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const sawFresh = useRef(false)
 
   const player = useAudioPlayer()
@@ -98,6 +127,10 @@ export function useRoam(mode: RoamMode): RoamState {
     if (stallTimer.current) {
       clearTimeout(stallTimer.current)
       stallTimer.current = null
+    }
+    if (settleTimer.current) {
+      clearTimeout(settleTimer.current)
+      settleTimer.current = null
     }
     try {
       player.pause()
@@ -182,6 +215,11 @@ export function useRoam(mode: RoamMode): RoamState {
     return () => clearInterval(t)
   }, [phase, mode])
 
+  const setChattiness = useCallback((level: ChattinessLevel) => {
+    setChattinessState(level)
+    engineRef.current?.setMinGap(CHATTINESS_GAP_SEC[level])
+  }, [])
+
   const start = useCallback(() => {
     if (startPending.current) return
     startPending.current = true
@@ -241,6 +279,7 @@ export function useRoam(mode: RoamMode): RoamState {
             durationMs: p.durationMs,
             name: p.name,
           })),
+          { minGapSec: CHATTINESS_GAP_SEC[chattiness] },
         )
 
         const source =
@@ -266,7 +305,13 @@ export function useRoam(mode: RoamMode): RoamState {
           },
         )
         activateKeepAwakeAsync(KEEP_AWAKE_TAG).catch(() => {})
-        setPhase('roaming')
+        // Session start: one line from the placeless rotating pool, then settle into idle.
+        const pool = voice.roam.sessionStart
+        setOpenerLine(pool[Math.floor(Math.random() * pool.length)]!)
+        setPhase('sessionStart')
+        settleTimer.current = setTimeout(() => {
+          if (mountedRef.current) setPhase((p) => (p === 'sessionStart' ? 'roaming' : p))
+        }, SESSION_START_MS)
       } catch (e) {
         if (!mountedRef.current) return
         setError(errorMessage(e, voice.error.generic))
@@ -275,19 +320,36 @@ export function useRoam(mode: RoamMode): RoamState {
         startPending.current = false
       }
     })()
-  }, [mode, pump, teardown])
+  }, [mode, chattiness, pump, teardown])
+
+  const skip = useCallback(() => {
+    if (activePoiId !== null) {
+      try {
+        player.pause()
+      } catch {}
+      onClipDone(activePoiId)
+    }
+  }, [activePoiId, player, onClipDone])
 
   const end = useCallback(() => {
     teardown()
     setActivePoiId(null)
-    setPhase('idle')
     setGpsSearching(false)
+    setPhase('signoff') // toldCount survives for the tally; finishSignoff resets
   }, [teardown])
+
+  const finishSignoff = useCallback(() => {
+    setPhase('idle')
+  }, [])
 
   const activeName =
     activePoiId === null
       ? null
       : (pinsRef.current.find((p) => p.poiId === activePoiId)?.name ?? null)
+  const activeDurationMs =
+    activePoiId === null
+      ? 0
+      : (pinsRef.current.find((p) => p.poiId === activePoiId)?.durationMs ?? 0)
 
   return {
     phase,
@@ -296,9 +358,16 @@ export function useRoam(mode: RoamMode): RoamState {
     gate,
     pinCount,
     activeName,
+    clipElapsedSec: status.currentTime ?? 0,
+    clipDurationSec: activeDurationMs / 1000,
     toldCount,
+    openerLine,
+    chattiness,
+    setChattiness,
     gpsSearching,
     start,
+    skip,
     end,
+    finishSignoff,
   }
 }
