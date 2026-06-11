@@ -1,9 +1,10 @@
 # Free-roam mode — the skipper rides shotgun
 
-> **Status:** idea, pre-spec — a SECOND PRODUCT (guided tours stay primary). Post-MVP, M4-adjacent:
-> gated behind the proven phone player AND a regional POI-density bar (it's only as good as the
-> corpus). Captured 2026-06-10 (founder moonshot session); fleshed out same day. This is the
-> buildable-now rung missing from [journey-layer.md](journey-layer.md)'s coverage spectrum.
+> **Status:** ALPHA BUILT 2026-06-10 — founder greenlit a same-day prototype; the shipped v0 (and
+> its deliberate cuts) is recorded in `docs/specs/free-roam-alpha-spec.md`. THIS doc remains the
+> full product vision (second product, tours primary; the grammar/logbook/monetization layers are
+> still future). Originally captured + fleshed out 2026-06-10 as the buildable-now rung missing
+> from [journey-layer.md](journey-layer.md)'s coverage spectrum.
 
 **The idea (founder, 2026-06-10):** the POI corpus we accumulate building tours becomes a product of
 its own — open the app anywhere in a covered region, just drive, and the skipper pipes up when you
