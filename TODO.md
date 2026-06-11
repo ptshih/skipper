@@ -7,6 +7,11 @@ when done** — git history is the archive.
 
 ## Roam build pass 2 — LOCKED by the founder 2026-06-11 (the "companion grows up" pass)
 
+> ⚠ **Chattiness toggles (quiet/normal/talkative) are not very useful** (founder feedback
+> 2026-06-11). The min-gap governor knob is too coarse and blunt in practice. Before
+> building anything that assumes the quiet/normal/talkative axis (e.g. wave suppression
+> on quiet), reconsider whether to replace it with auto-adaptation or drop it entirely.
+
 Three items locked from the 2026-06-11 brainstorm (full capture: `docs/ideas/free-roam-mode.md`
 §Alpha learnings). Order within the pass is free; all three are founder-facing on his daily drive.
 
