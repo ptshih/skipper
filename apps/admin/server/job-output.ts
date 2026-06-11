@@ -26,14 +26,19 @@ interface LogEntry {
  *  lines joined as plain text, oldest-first. Empty string if none found or on error. */
 export async function fetchExecutionLog(cloudRunExecution: string): Promise<string> {
   const project = process.env.GOOGLE_CLOUD_PROJECT
-  if (!project) return ''
+  if (!project) {
+    console.error('[job-output] GOOGLE_CLOUD_PROJECT not set — cannot fetch logs')
+    return ''
+  }
   try {
     const token = await accessToken()
-    // Cloud Run Jobs emit under resource.type=cloud_run_job; the execution name is the
-    // short-name segment (e.g. "skipper-gen-jvbvr") in resource.labels.execution_name.
+    // Cloud Run Jobs emit stdout/stderr under resource.type=cloud_run_job with the execution
+    // name in resource.labels.execution_name. We also accept cloud_run_task (same execution
+    // label) in case the job runs multi-task — drop the type restriction so both are captured.
     const filter = [
-      'resource.type="cloud_run_job"',
+      '(resource.type="cloud_run_job" OR resource.type="cloud_run_task")',
       `resource.labels.execution_name="${cloudRunExecution}"`,
+      '(logName=~"stdout" OR logName=~"stderr")',
     ].join(' ')
 
     let lines: string[] = []
@@ -51,8 +56,13 @@ export async function fetchExecutionLog(cloudRunExecution: string): Promise<stri
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
-      if (!res.ok) break
+      if (!res.ok) {
+        const errBody = await res.text().catch(() => '')
+        console.error(`[job-output] Cloud Logging ${res.status} for ${cloudRunExecution}: ${errBody}`)
+        break
+      }
       const data = (await res.json()) as { entries?: LogEntry[]; nextPageToken?: string }
+      console.log(`[job-output] Cloud Logging page: ${data.entries?.length ?? 0} entries for ${cloudRunExecution}`)
       for (const e of data.entries ?? []) {
         const text =
           e.textPayload ??
@@ -64,7 +74,8 @@ export async function fetchExecutionLog(cloudRunExecution: string): Promise<stri
     } while (pageToken)
 
     return lines.join('\n')
-  } catch {
+  } catch (e) {
+    console.error(`[job-output] fetchExecutionLog threw for ${cloudRunExecution}:`, e)
     return ''
   }
 }
