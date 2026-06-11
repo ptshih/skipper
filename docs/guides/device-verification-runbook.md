@@ -329,6 +329,12 @@ Foreground When-In-Use only. Mode resolves to `live` via "Start the drive" (`ind
   dropped. Watch-for: a stop firing the instant the drive starts while you're far away (a wild
   low-accuracy first fix slipped the gate); the heading gate permanently blocking all stops (−1
   treated as a real bearing). (`apps/mobile/src/lib/gps.ts:133,216,222`)
+  **⚠ CONFIRMED IN THE FIELD (2026-06-10, free-roam's first live drive):** the −1→0 coercion DID
+  read as a real northbound heading and gated out everything non-north. Roam's fix: `liveRoamSource`
+  passes the RAW course and `RoamEngine` skips the gate when `headingDeg < 0` (unknown). The TOUR
+  path still coerces (`sane()` in `liveSource` + `TriggerEngine` gates unconditionally at speed) —
+  on this checklist item, either verify the tour gate behaves with course −1 or port the same
+  sentinel contract before the real drive.
 - [ ] **★ Triggers fire at the right points while moving (the core bet).** Do: bike/drive the real
   route at a steady pace; note where narration starts relative to each stop; ideally test an
   out-and-back leg or a stop the road passes close to but doesn't reach. Expect: narration begins a
