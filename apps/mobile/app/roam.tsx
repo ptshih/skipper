@@ -9,6 +9,7 @@
 // the offline region pack + logbook wait on their backends — honest UI shows none of them.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Animated, Linking, Pressable, StyleSheet, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Stack, useLocalSearchParams } from 'expo-router'
 import * as SecureStore from 'expo-secure-store'
 import { useRoam } from '@/lib/useRoam'
@@ -59,6 +60,7 @@ function RoamMotif({ glow }: { glow: boolean }) {
 
 export default function RoamScreen() {
   const { colors } = useTheme()
+  const insets = useSafeAreaInsets()
   const reducedMotion = useReducedMotion()
   const { mode } = useLocalSearchParams<{ mode?: string }>()
   const roamMode = mode === 'sim' ? 'sim' : 'live'
@@ -249,7 +251,11 @@ export default function RoamScreen() {
         {sheetVisible && (
           <>
             <Pressable
-              style={[StyleSheet.absoluteFill, { backgroundColor: colors.scrim }]}
+              // Extend PAST the bottom safe-area inset: absoluteFill is bounded by the Screen's
+              // SafeAreaView content box, so a plain scrim stops at the top of the home-indicator
+              // padding and leaves a bare `surface` strip bordering the very bottom (a lighter bar
+              // under the dimmed screen). -insets.bottom pulls the scrim down to the true edge.
+              style={[StyleSheet.absoluteFill, { bottom: -insets.bottom, backgroundColor: colors.scrim }]}
               onPress={r.skip}
               accessibilityLabel={voice.roam.skip}
             />
