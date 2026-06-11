@@ -13,7 +13,8 @@
 //   GET  /admin/tours/:id         -> the ear-pass: stops/brackets + scripts + latest eval
 //   GET  /admin/tours/:id/sign    -> presigned R2 URLs for every clip (no tier gate)
 //   GET  /admin/evals?slug=       -> eval_runs history for a slug (the trend)
-//   GET  /admin/jobs              -> recent gen_jobs (the Runs view)
+//   GET  /admin/jobs              -> recent gen_jobs (operational record; powers job polling)
+//   GET  /admin/runs              -> unified Runs timeline: gen_jobs + orphan eval_runs
 //   GET  /admin/jobs/:id          -> one run (reconciled against its Cloud Run execution)
 //   POST /admin/jobs              -> trigger an op as a skipper-gen Job  (jobs.ts — Phase 3)
 //   POST /admin/tours/propose     -> Create Tour, phase 1: LLM + geocode  (create-tour.ts — Phase 4)
@@ -328,6 +329,92 @@ app.get('/admin/evals', async (c) => {
 app.get('/admin/jobs', async (c) => {
   const jobs = await db.select().from(genJobs).orderBy(desc(genJobs.createdAt)).limit(100)
   return c.json({ jobs })
+})
+
+// The Runs view — a unified timeline merging the operational gen_jobs with the historical
+// eval_runs (CLI-era generations that never minted a gen_job). A gen_job that produced an
+// eval_run (genJobs.evalRunId) SUPPRESSES that eval_run row, so each run appears exactly once:
+// admin-triggered runs carry status/cost; orphan eval_runs carry pass + the dimension scores.
+app.get('/admin/runs', async (c) => {
+  const [jobs, evals] = await Promise.all([
+    db
+      .select({
+        id: genJobs.id,
+        kind: genJobs.kind,
+        status: genJobs.status,
+        targetSlug: genJobs.targetSlug,
+        tourId: genJobs.tourId,
+        dryRun: genJobs.dryRun,
+        phase: genJobs.phase,
+        costUsd: genJobs.costUsd,
+        evalRunId: genJobs.evalRunId,
+        triggeredBy: genJobs.triggeredBy,
+        createdAt: genJobs.createdAt,
+      })
+      .from(genJobs)
+      .orderBy(desc(genJobs.createdAt))
+      .limit(100),
+    db
+      .select({
+        id: evalRuns.id,
+        kind: evalRuns.kind,
+        slug: evalRuns.slug,
+        tourId: evalRuns.tourId,
+        pass: evalRuns.pass,
+        dryRun: evalRuns.dryRun,
+        grounding: evalRuns.groundingScore,
+        narrationModel: evalRuns.narrationModel,
+        gitSha: evalRuns.gitSha,
+        createdAt: evalRuns.createdAt,
+      })
+      .from(evalRuns)
+      .orderBy(desc(evalRuns.createdAt))
+      .limit(100),
+  ])
+
+  const referenced = new Set(jobs.map((j) => j.evalRunId).filter(Boolean) as string[])
+  const runs = [
+    ...jobs.map((j) => ({
+      source: 'job' as const,
+      id: j.id,
+      kind: j.kind,
+      slug: j.targetSlug,
+      status: j.status,
+      pass: null,
+      dryRun: j.dryRun,
+      phase: j.phase,
+      costUsd: j.costUsd,
+      grounding: null,
+      narrationModel: null,
+      gitSha: null,
+      triggeredBy: j.triggeredBy,
+      tourId: j.tourId,
+      createdAt: j.createdAt,
+    })),
+    ...evals
+      .filter((e) => !referenced.has(e.id))
+      .map((e) => ({
+        source: 'eval' as const,
+        id: e.id,
+        kind: e.kind,
+        slug: e.slug,
+        status: null,
+        pass: e.pass,
+        dryRun: e.dryRun,
+        phase: null,
+        costUsd: null,
+        grounding: e.grounding,
+        narrationModel: e.narrationModel,
+        gitSha: e.gitSha,
+        triggeredBy: null,
+        tourId: e.tourId,
+        createdAt: e.createdAt,
+      })),
+  ]
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    .slice(0, 150)
+
+  return c.json({ runs })
 })
 
 const TERMINAL = ['succeeded', 'failed', 'canceled'] as const

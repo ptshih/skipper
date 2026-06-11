@@ -1,5 +1,6 @@
 import { useEffect, useState, type ChangeEvent, type ReactNode } from 'react'
-import { api, ApiError, type GenJob, type JobKind } from '@/lib/api'
+import { Link } from 'react-router-dom'
+import { api, ApiError, type JobKind, type JobStatus, type RunEvent } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Badge, type BadgeProps } from '@/components/ui/badge'
 import {
@@ -17,8 +18,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { PageHeader } from '@/components/PageHeader'
 import { fmtCost, fmtDate, timeAgo } from '@/lib/format'
 
-const statusVariant = (s: GenJob['status']): BadgeProps['variant'] =>
+const statusVariant = (s: JobStatus): BadgeProps['variant'] =>
   s === 'succeeded' ? 'success' : s === 'failed' ? 'destructive' : s === 'running' ? 'default' : s === 'canceled' ? 'secondary' : 'warning'
+
+const COLS = ['Source', 'Kind', 'Target', 'Result', 'Mode', 'Cost', 'Detail', 'When']
 
 const KINDS: { value: JobKind; label: string }[] = [
   { value: 'generate', label: 'Generate' },
@@ -28,13 +31,13 @@ const KINDS: { value: JobKind; label: string }[] = [
 ]
 
 export function RunsView() {
-  const [jobs, setJobs] = useState<GenJob[]>([])
+  const [runs, setRuns] = useState<RunEvent[]>([])
   const [err, setErr] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
 
   async function refresh() {
     try {
-      setJobs((await api.jobs()).jobs)
+      setRuns((await api.runs()).runs)
       setErr(null)
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e))
@@ -50,7 +53,7 @@ export function RunsView() {
     <div>
       <PageHeader
         title="Runs"
-        description="Generation, patch, resynth, and sweep jobs — each triggered as a Cloud Run job."
+        description="Every run — admin-triggered Cloud Run jobs and historical generations from the CLI."
         actions={<Button onClick={() => setOpen(true)}>New run</Button>}
       />
       {err && (
@@ -60,34 +63,60 @@ export function RunsView() {
         <Table>
           <TableHeader>
             <TableRow>
-              {['Kind', 'Target', 'Status', 'Mode', 'Cost', 'By', 'When'].map((h) => (
+              {COLS.map((h) => (
                 <TableHead key={h}>{h}</TableHead>
               ))}
             </TableRow>
           </TableHeader>
           <TableBody>
-            {jobs.map((j) => (
-              <TableRow key={j.id}>
-                <TableCell className="font-mono text-xs">{j.kind}</TableCell>
-                <TableCell>{j.targetSlug ?? j.targetId ?? '—'}</TableCell>
+            {runs.map((r) => (
+              <TableRow key={`${r.source}:${r.id}`}>
                 <TableCell>
-                  <Badge variant={statusVariant(j.status)}>
-                    {j.status === 'running' && j.phase ? `running · ${j.phase}` : j.status}
-                  </Badge>
+                  <Badge variant={r.source === 'job' ? 'default' : 'outline'}>{r.source}</Badge>
+                </TableCell>
+                <TableCell className="font-mono text-xs">{r.kind}</TableCell>
+                <TableCell>
+                  {r.slug ? (
+                    r.tourId ? (
+                      <Link to={`/tours/${r.tourId}`} className="hover:underline">{r.slug}</Link>
+                    ) : (
+                      r.slug
+                    )
+                  ) : (
+                    '—'
+                  )}
                 </TableCell>
                 <TableCell>
-                  {j.dryRun ? <Badge variant="secondary">dry-run</Badge> : <Badge variant="warning">spend</Badge>}
+                  {r.source === 'job' && r.status ? (
+                    <Badge variant={statusVariant(r.status)}>
+                      {r.status === 'running' && r.phase ? `running · ${r.phase}` : r.status}
+                    </Badge>
+                  ) : (
+                    <span className="flex items-center gap-2">
+                      <Badge variant={r.pass ? 'success' : 'destructive'}>{r.pass ? 'pass' : 'fail'}</Badge>
+                      {r.grounding != null && (
+                        <span className="font-mono text-xs tabular-nums text-muted-foreground">{r.grounding.toFixed(3)}</span>
+                      )}
+                    </span>
+                  )}
                 </TableCell>
-                <TableCell>{fmtCost(j.costUsd)}</TableCell>
-                <TableCell className="text-xs text-muted-foreground">{j.triggeredBy}</TableCell>
-                <TableCell className="text-xs text-muted-foreground" title={fmtDate(j.createdAt)}>
-                  {timeAgo(j.createdAt)}
+                <TableCell>
+                  {r.dryRun ? <Badge variant="secondary">dry-run</Badge> : <Badge variant="warning">spend</Badge>}
+                </TableCell>
+                <TableCell>{fmtCost(r.costUsd)}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                  {r.source === 'job'
+                    ? r.triggeredBy ?? '—'
+                    : [r.narrationModel, r.gitSha?.slice(0, 7)].filter(Boolean).join(' · ') || '—'}
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground" title={fmtDate(r.createdAt)}>
+                  {timeAgo(r.createdAt)}
                 </TableCell>
               </TableRow>
             ))}
-            {jobs.length === 0 && (
+            {runs.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">No runs yet.</TableCell>
+                <TableCell colSpan={COLS.length} className="py-10 text-center text-muted-foreground">No runs yet.</TableCell>
               </TableRow>
             )}
           </TableBody>

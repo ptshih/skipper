@@ -162,6 +162,25 @@ export interface EvalRunSummary {
   createdAt: string
 }
 
+// A unified Runs-timeline row: either an operational gen_job or a historical eval_run.
+export interface RunEvent {
+  source: 'job' | 'eval'
+  id: string
+  kind: string
+  slug: string | null
+  status: JobStatus | null
+  pass: boolean | null
+  dryRun: boolean
+  phase: string | null
+  costUsd: number | null
+  grounding: number | null
+  narrationModel: string | null
+  gitSha: string | null
+  triggeredBy: string | null
+  tourId: string | null
+  createdAt: string
+}
+
 export interface ProposedWaypoint {
   label: string
   rationale?: string
@@ -190,6 +209,7 @@ export const api = {
   sign: (id: string) => req<SignResult>(`/admin/tours/${id}/sign`),
   evals: (slug: string) => req<{ slug: string; runs: EvalRunSummary[] }>(`/admin/evals?slug=${encodeURIComponent(slug)}`),
   jobs: () => req<{ jobs: GenJob[] }>('/admin/jobs'),
+  runs: () => req<{ runs: RunEvent[] }>('/admin/runs'),
   job: (id: string) => req<{ job: GenJob }>(`/admin/jobs/${id}`),
   createJob: (body: Record<string, unknown>) =>
     req<{ job: GenJob }>('/admin/jobs', { method: 'POST', body: JSON.stringify(body) }),
