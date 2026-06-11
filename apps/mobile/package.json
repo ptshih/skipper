@@ -7,6 +7,8 @@
     "start": "expo start",
     "ios": "expo run:ios",
     "android": "expo run:android",
+    "prebuild:ios": "expo prebuild --clean -p ios",
+    "sim:erase": "xcrun simctl erase all",
     "testflight": "eas build --platform ios --profile production --auto-submit",
     "typecheck": "tsc --noEmit",
     "test": "bun test",

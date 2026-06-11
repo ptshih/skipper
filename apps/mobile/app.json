@@ -10,6 +10,10 @@
     "newArchEnabled": true,
     "ios": {
       "bundleIdentifier": "fm.skipper.app",
+      "icon": {
+        "light": "./assets/icon.png",
+        "dark": "./assets/icon-dark.png"
+      },
       "supportsTablet": true,
       "associatedDomains": ["applinks:skipper.fm"],
       "infoPlist": {
@@ -28,7 +32,7 @@
       "package": "fm.skipper.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#F2E7CC"
+        "backgroundColor": "#1E5B40"
       },
       "permissions": [
         "android.permission.RECORD_AUDIO",

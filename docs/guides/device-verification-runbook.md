@@ -106,16 +106,18 @@ share the build, so do them together.
 ## §1 — Splash & app icon (native; visible only after a fresh build, never on hot-reload)
 
 - [ ] **App icon on the home screen.** Do: after a fresh install, find the Skipper icon (home screen,
-  app switcher, Settings list). Expect: the enamel travel badge — pine-green disc, double cream
-  keyline ring, Tahoe range with snow caps, dotted tan trail, the amber car token, on a full-bleed
-  cream (`#F2E7CC`) field (opaque, no alpha). Watch-for: the stock black Expo void (build didn't
-  pick up `icon.png`, or you're on an old install); a transparent/black corner; clipping under the
-  rounded-rect mask. (`app.json:7`, `apps/mobile/assets/brand/icon.svg`)
+  app switcher, Settings list); also toggle Dark Mode to check the dusk variant. Expect: the M1
+  "compass porthole" — a play triangle that's a window onto the park (sun, ridgeline, snow-cap),
+  framed by a compass dial with an amber north, on a full-bleed pine (`#1E5B40`) field (opaque, no
+  alpha); in dark mode the dusk variant (`icon-dark.png`). Watch-for: the stock black Expo void
+  (build didn't pick up the icon, or you're on an old install — re-run `prebuild:ios`); a
+  transparent/black corner; clipping under the rounded-rect mask. (`app.json` `ios.icon` +
+  `android.adaptiveIcon`, `apps/mobile/assets/brand/icon.svg`)
 - [ ] **Splash on cold launch, light *and* dark.** Do: fully quit, cold-launch; then switch the
-  device to Dark Mode and cold-launch again. Expect: a centred badge mark (contain, ~240pt) on a
-  solid field — cream `#F2E7CC` in light, deep pine `#14201B` in dark (the dark override). Watch-for:
-  white/black default splash (asset not bundled / stale build); cream instead of pine in dark (dark
-  override not applied); stretched or off-centre badge. (`app.json:53`)
+  device to Dark Mode and cold-launch again. Expect: the centred M1 pine-disc mark (contain, ~240pt)
+  on a solid field — cream `#F2E7CC` in light, deep pine `#14201B` in dark (the dark override).
+  Watch-for: white/black default splash (asset not bundled / stale build); cream instead of pine in
+  dark (dark override not applied); stretched or off-centre mark. (`app.json` `expo-splash-screen`)
 
 ## §2 — Tour detail: trailhead placard, summary, place names, offline chip
 

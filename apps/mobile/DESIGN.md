@@ -224,8 +224,11 @@ The system reads as Trailhead 89 today on the **vector Ionicon** set (`stops.ts`
   per-stop ink is the remaining piece.
 - **Amber sunburst + postmark watermarks** behind hero headers / empty states
   (`expo-linear-gradient` or a static SVG — never animate color stops on Android).
-- **Splash/app icon.** ✅ Shipped: an enamel travel badge (pine disc + cream keyline ring +
-  the amber car token) — SVG sources + `build.sh` in `assets/brand/`, wired in `app.json`.
+- **Splash/app icon.** ✅ Shipped: the locked **M1 "compass porthole"** — a play triangle
+  that's a window onto the park (sun, ridgeline, snow-cap), framed by a compass dial with an
+  amber north; text-free, day & dusk (`icon-dark.png`). SVG sources + `build.sh` in
+  `assets/brand/`, wired in `app.json`. (The enamel travel badge is now reserved as the
+  separate in-app home-hero mark, not the launcher.)
 
 ## 10. How to extend
 
