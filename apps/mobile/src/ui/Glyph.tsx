@@ -1,6 +1,6 @@
-// Renders an icon/emoji glyph in the SYSTEM font. The custom faces (Bitter, Alfa
-// Slab, Space Mono) carry no emoji/symbol glyphs and a custom-font text run does
-// NOT fall back, so a glyph placed in a themed <Text> renders as tofu (□ / ?).
+// Renders an icon/emoji glyph in the SYSTEM font. The custom faces (Lora, Zilla
+// Slab, Overpass Mono) carry no emoji/symbol glyphs and a custom-font text run
+// does NOT fall back, so a glyph placed in a themed <Text> renders as tofu (□ / ?).
 // Glyph keeps glyphs on the system font, where emoji + geometric symbols resolve.
 // Decorative by default (hidden from the a11y tree — the parent carries the label).
 // Placeholder until the SVG enamel-badge set lands (DESIGN §9).

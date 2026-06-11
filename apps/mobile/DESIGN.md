@@ -109,27 +109,27 @@ light↔dark swap for free. **The contrast footguns are designed out:**
 Three families, loaded via `@expo-google-fonts` (held behind the splash by
 `useAppFonts()` in `_layout.tsx`):
 
-- **Alfa Slab One** — the WPA silkscreen display. Heavy strokes are _more_
-  glanceable at large sizes, so this doubles as a legibility win. **Large only.**
-- **Bitter** — a screen-tuned slab serif; carries the placard warmth down to UI
-  scale (400 / 600 / 700). All body, headings, labels.
-- **Space Mono** — the park-permit / odometer numerals (timers, coords, mileage).
-  Tabular feel = stamped, non-jumping clocks.
+- **Zilla Slab** — constructed, even-weight slab with park-sign energy (700 for all
+  display uses; the token bakes the weight in — never set display to 400). **Large only (~18pt+).**
+- **Lora** — calligraphic screen slab; road-notebook warmth carried to UI scale
+  (400 / 600 / 700). All body, headings, labels.
+- **Overpass Mono** — highway-sign / odometer numerals (timers, coords, mileage).
+  Designed with US federal highway-signage DNA; SemiBold 600 is the badge weight.
 
-| Variant             | Family / size         | Use                                |
-| ------------------- | --------------------- | ---------------------------------- |
-| `wordmark`          | Alfa Slab 26          | "SKIPPER" in the home header       |
-| `display`           | Alfa Slab 30          | screen hero titles                 |
-| `placardTitle`      | Alfa Slab 22          | NOW-playing stop name, card titles |
-| `titleXL`/`title`   | Bitter 700 24/20      | screen + section titles            |
-| `heading`           | Bitter 700 17         | card headings, button labels       |
-| `body`/`bodyStrong` | Bitter 400/600 16     | paragraphs, list names             |
-| `label`             | Bitter 600 12.5 UPPER | kickers, badges, section labels    |
-| `dim`               | Bitter 400 13.5       | sublabels, metadata                |
-| `mono`/`monoStrong` | Space Mono 14/15      | timers, coordinates, mileage       |
+| Variant             | Family / size           | Use                                |
+| ------------------- | ----------------------- | ---------------------------------- |
+| `wordmark`          | Zilla Slab 700 · 26     | "SKIPPER" in the home header       |
+| `display`           | Zilla Slab 700 · 30     | screen hero titles                 |
+| `placardTitle`      | Zilla Slab 700 · 22     | NOW-playing stop name, card titles |
+| `titleXL`/`title`   | Lora 700 · 24/20        | screen + section titles            |
+| `heading`           | Lora 700 · 17           | card headings, button labels       |
+| `body`/`bodyStrong` | Lora 400/600 · 16       | paragraphs, list names             |
+| `label`             | Lora 600 · 12.5 UPPER   | kickers, badges, section labels    |
+| `dim`               | Lora 400 · 13.5         | sublabels, metadata                |
+| `mono`/`monoStrong` | Overpass Mono 400/600 · 14/15 | timers, coordinates, mileage  |
 
-**Rule:** heavy display faces are reserved for large sizes; small in-car-critical
-text stays Bitter (never Alfa Slab below ~20pt — it muddies the glance).
+**Rule:** Zilla Slab is reserved for large sizes (~18pt+); small in-car-critical
+text stays Lora (never Zilla Slab below ~18pt — it muddies the glance).
 
 ## 6. Components (`src/ui/`)
 

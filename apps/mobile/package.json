@@ -17,9 +17,9 @@
   },
   "dependencies": {
     "@better-auth/expo": "^1.6.14",
-    "@expo-google-fonts/alfa-slab-one": "^0.4.1",
-    "@expo-google-fonts/bitter": "^0.4.1",
-    "@expo-google-fonts/space-mono": "^0.4.2",
+    "@expo-google-fonts/lora": "^0.4.2",
+    "@expo-google-fonts/overpass-mono": "^0.4.2",
+    "@expo-google-fonts/zilla-slab": "^0.4.1",
     "@expo/vector-icons": "^15.1.1",
     "@skipper/drive-core": "workspace:*",
     "@skipper/shared": "workspace:*",

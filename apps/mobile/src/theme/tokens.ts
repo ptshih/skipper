@@ -79,21 +79,24 @@ export const duration = {
 } as const
 
 // ── Type families (loaded in fonts.ts via @expo-google-fonts) ────────────────
-// Display = the WPA silkscreen headline (heavy = MORE glanceable at large sizes).
-// Body = a screen-tuned slab serif that keeps the placard warmth at UI scale.
-// Mono = the national-park permit / odometer — every number looks stamped.
+// Display = constructed park-sign slab; all display sizes MUST use 700 (Zilla Slab
+//           is multi-weight; the token bakes the weight in).
+// Body    = calligraphic screen slab; road-notebook warmth at UI scale (Lora).
+// Mono    = highway-sign / odometer numerals — every number looks stamped.
 export const fonts = {
-  display: 'AlfaSlabOne_400Regular',
-  body: 'Bitter_400Regular',
-  bodyMedium: 'Bitter_600SemiBold',
-  bodyBold: 'Bitter_700Bold',
-  mono: 'SpaceMono_400Regular',
-  monoBold: 'SpaceMono_700Bold',
+  display: 'ZillaSlab_700Bold',
+  displayMedium: 'ZillaSlab_600SemiBold',
+  body: 'Lora_400Regular',
+  bodyMedium: 'Lora_600SemiBold',
+  bodyBold: 'Lora_700Bold',
+  mono: 'OverpassMono_400Regular',
+  monoSemiBold: 'OverpassMono_600SemiBold',
+  monoBold: 'OverpassMono_700Bold',
 } as const
 
 // ── Type scale (semantic variants) ───────────────────────────────────────────
 // Color is applied by the <Text> component, not here. Heavy display faces are
-// reserved for LARGE sizes where slab strokes aid the glance; small UI stays Bitter.
+// reserved for LARGE sizes where slab strokes aid the glance; small UI stays Lora.
 export type TypeVariant =
   | 'wordmark'
   | 'display'
@@ -109,14 +112,14 @@ export type TypeVariant =
   | 'monoStrong'
 
 export const typeScale: Record<TypeVariant, TextStyle> = {
-  wordmark: { fontFamily: fonts.display, fontSize: 26, lineHeight: 30, letterSpacing: 0.5 },
+  wordmark: { fontFamily: fonts.display, fontSize: 26, lineHeight: 30, letterSpacing: 0.2 },
   display: { fontFamily: fonts.display, fontSize: 30, lineHeight: 36 },
-  placardTitle: { fontFamily: fonts.display, fontSize: 22, lineHeight: 27 },
+  placardTitle: { fontFamily: fonts.display, fontSize: 22, lineHeight: 27, letterSpacing: 0.1 },
   titleXL: { fontFamily: fonts.bodyBold, fontSize: 24, lineHeight: 30 },
   title: { fontFamily: fonts.bodyBold, fontSize: 20, lineHeight: 26 },
   heading: { fontFamily: fonts.bodyBold, fontSize: 17, lineHeight: 22 },
-  body: { fontFamily: fonts.body, fontSize: 16, lineHeight: 23 },
-  bodyStrong: { fontFamily: fonts.bodyMedium, fontSize: 16, lineHeight: 23 },
+  body: { fontFamily: fonts.body, fontSize: 16, lineHeight: 24 },
+  bodyStrong: { fontFamily: fonts.bodyMedium, fontSize: 16, lineHeight: 24 },
   label: {
     fontFamily: fonts.bodyMedium,
     fontSize: 12.5,
@@ -126,7 +129,7 @@ export const typeScale: Record<TypeVariant, TextStyle> = {
   },
   dim: { fontFamily: fonts.body, fontSize: 13.5, lineHeight: 19 },
   mono: { fontFamily: fonts.mono, fontSize: 14, lineHeight: 18 },
-  monoStrong: { fontFamily: fonts.monoBold, fontSize: 15, lineHeight: 19, letterSpacing: 0.3 },
+  monoStrong: { fontFamily: fonts.monoSemiBold, fontSize: 15, lineHeight: 18, letterSpacing: 0.2 },
 }
 
 // ── Hit targets ──────────────────────────────────────────────────────────────
