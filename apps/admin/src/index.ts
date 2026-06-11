@@ -20,7 +20,7 @@
 //   POST /admin/tours             -> Create Tour, phase 2: freeze + draft  (create-tour.ts — Phase 4)
 
 import { Hono } from 'hono'
-import { asc, count, desc, eq, inArray } from 'drizzle-orm'
+import { and, asc, count, desc, eq, inArray } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import {
   evalRuns,
@@ -34,6 +34,7 @@ import {
 } from '@skipper/db/schema'
 import { requireAdmin, type AdminEnv } from './auth'
 import { contentTypeForKey, presignGet } from './storage'
+import { buildJobArgs, executionState, HttpError, runJob, type BuildResult, type JobKind } from './jobs'
 
 const app = new Hono<AdminEnv>()
 
@@ -282,13 +283,107 @@ app.get('/admin/jobs', async (c) => {
   return c.json({ jobs })
 })
 
+const TERMINAL = ['succeeded', 'failed', 'canceled'] as const
+const RECONCILE_AFTER_MS = 30_000
+
 app.get('/admin/jobs/:id', async (c) => {
   const id = c.req.param('id')
   if (!UUID_RE.test(id)) return c.json({ error: 'not_found' }, 404)
-  const job = (await db.select().from(genJobs).where(eq(genJobs.id, id)).limit(1))[0]
+  let job = (await db.select().from(genJobs).where(eq(genJobs.id, id)).limit(1))[0]
   if (!job) return c.json({ error: 'not_found' }, 404)
-  // Phase 3 wires the Cloud Run execution reconcile here (settle a stale 'running' row).
+
+  // Reconcile backstop: if the in-process finishJob never ran (a hard crash), settle the row
+  // from the Cloud Run execution. Only for a stale non-terminal row with a known execution —
+  // so a normal poll doesn't hammer the Run API.
+  const nonTerminal = !TERMINAL.includes(job.status as (typeof TERMINAL)[number])
+  const stale = Date.now() - new Date(job.updatedAt).getTime() > RECONCILE_AFTER_MS
+  if (nonTerminal && stale && job.cloudRunExecution) {
+    const state = await executionState(job.cloudRunExecution)
+    if (state === 'succeeded' || state === 'failed') {
+      await db
+        .update(genJobs)
+        .set({ status: state, endedAt: new Date(), error: state === 'failed' ? 'reconciled: execution failed' : null })
+        .where(eq(genJobs.id, id))
+      job = (await db.select().from(genJobs).where(eq(genJobs.id, id)).limit(1))[0]!
+    }
+  }
   return c.json({ job })
+})
+
+// Trigger an op as a skipper-gen Cloud Run Job. Dry-run by default; a SPENDING run (generate
+// non-dry-run, or an op with apply) requires confirm:true (the SPA gates this behind a typed
+// confirm). Idempotent: refuses if a non-terminal run already exists for the same target.
+app.post('/admin/jobs', async (c) => {
+  let body: Record<string, unknown>
+  try {
+    body = (await c.req.json()) as Record<string, unknown>
+  } catch {
+    return c.json({ error: 'bad_request', message: 'a JSON body is required' }, 400)
+  }
+
+  let build: BuildResult
+  try {
+    build = buildJobArgs(body)
+  } catch (e) {
+    if (e instanceof HttpError) return c.json({ error: 'bad_request', message: e.message }, 400)
+    throw e
+  }
+
+  if (build.spends && body.confirm !== true) {
+    return c.json(
+      { error: 'confirmation_required', message: 'This run spends money or deletes bytes — pass confirm:true.' },
+      412,
+    )
+  }
+
+  const kind = body.kind as JobKind // buildJobArgs validated it against the same vocabulary
+
+  // Idempotency: one in-flight run per target (a lost-response retry / double-click can't double-spend).
+  const targetCond = build.targetSlug
+    ? eq(genJobs.targetSlug, build.targetSlug)
+    : build.targetId
+      ? eq(genJobs.targetId, build.targetId)
+      : undefined
+  const active = await db
+    .select({ id: genJobs.id })
+    .from(genJobs)
+    .where(and(eq(genJobs.kind, kind), inArray(genJobs.status, ['queued', 'running']), targetCond))
+    .limit(1)
+  if (active.length) {
+    return c.json({ error: 'conflict', message: 'A run for this target is already in progress.' }, 409)
+  }
+
+  const id = crypto.randomUUID()
+  const triggeredBy = c.get('adminEmail')
+  await db.insert(genJobs).values({
+    id,
+    kind,
+    status: 'queued',
+    dryRun: build.dryRun,
+    targetSlug: build.targetSlug ?? null,
+    tourId: build.tourId ?? null,
+    targetId: build.targetId ?? null,
+    args: build.args,
+    triggeredBy,
+  })
+
+  let execShortName = ''
+  try {
+    execShortName = await runJob(build.args, { GEN_JOB_ID: id, GEN_JOB_TRIGGERED_BY: triggeredBy })
+  } catch (e) {
+    // The trigger failed — settle the row so it isn't a phantom 'queued'.
+    await db
+      .update(genJobs)
+      .set({ status: 'failed', error: e instanceof Error ? e.message : String(e), endedAt: new Date() })
+      .where(eq(genJobs.id, id))
+    return c.json({ error: 'trigger_failed', message: e instanceof Error ? e.message : String(e) }, 502)
+  }
+  if (execShortName) {
+    await db.update(genJobs).set({ cloudRunExecution: execShortName }).where(eq(genJobs.id, id))
+  }
+
+  const row = (await db.select().from(genJobs).where(eq(genJobs.id, id)).limit(1))[0]
+  return c.json({ job: row }, 201)
 })
 
 const port = Number(process.env.PORT ?? 8788)
