@@ -178,6 +178,74 @@ export async function getDrivePermission(): Promise<{ granted: boolean; reduced:
  * is harmless to the engine + UI — but it still drains battery, so verify GPS actually stops on
  * unmount during the on-device test. (spec §5)
  */
+/**
+ * The FREE-ROAM live `GpsFixSource`: the same expo-location watch as `liveSource`, with
+ * NO polyline — roam has no route, so there is no along-route projection (`alongM` stays 0;
+ * the RoamEngine works from raw proximity + heading) and no end-of-route signal (a roam
+ * session ends only when the rider ends it). Same accuracy gate, -1 sanitization, and
+ * teardown-leak guard as the tour source.
+ */
+export function liveRoamSource(): GpsFixSource {
+  return (onFix, _onEnd, onError) => {
+    let sub: Location.LocationSubscription | null = null
+    let stopped = false
+    let paused = false
+    let startMs: number | null = null
+
+    const onLocation = (loc: Location.LocationObject) => {
+      if (stopped || paused) return // teardown-leak guard (#35925/#35926) + pause guard
+      const acc = loc.coords.accuracy
+      if (acc != null && (acc < 0 || acc > MAX_FIX_ACCURACY_M)) return
+      if (startMs === null) startMs = loc.timestamp
+      onFix({
+        lat: loc.coords.latitude,
+        lng: loc.coords.longitude,
+        speedMps: sane(loc.coords.speed),
+        headingDeg: sane(loc.coords.heading),
+        tSec: (loc.timestamp - startMs) / 1000,
+        alongM: 0, // no route to be along
+      })
+    }
+
+    const startWatch = () => {
+      void Location.watchPositionAsync(
+        { accuracy: Location.Accuracy.BestForNavigation, distanceInterval: 0, timeInterval: 500 },
+        onLocation,
+      )
+        .then((s) => {
+          if (stopped || paused) {
+            s.remove()
+            return
+          }
+          sub = s
+        })
+        .catch((err) => {
+          if (!stopped) onError?.(err)
+        })
+    }
+
+    startWatch()
+
+    return {
+      stop: () => {
+        stopped = true
+        sub?.remove()
+        sub = null
+      },
+      pause: () => {
+        paused = true
+        sub?.remove()
+        sub = null
+      },
+      resume: () => {
+        if (stopped || !paused) return
+        paused = false
+        startWatch()
+      },
+    }
+  }
+}
+
 export function liveSource(polyline: LngLat[]): GpsFixSource {
   const cumulative = cumulativeMeters(polyline)
   const routeEndM = cumulative[cumulative.length - 1] ?? 0

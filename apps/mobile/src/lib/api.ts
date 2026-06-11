@@ -5,8 +5,22 @@
 // A tour is the whole self-contained drive now (corridors merged in): GET /tours lists
 // the catalog (one card per drive) and GET /tours/:id returns the drive (route + region
 // + host + intro/outro + stops).
-import { signedAudio, sourcesResponse, tourDetail, tourList, versionResponse } from '@skipper/shared'
-import type { DataSource, SignedAudio, TourDetail, TourList, VersionPolicy } from '@skipper/shared'
+import {
+  roamManifest,
+  signedAudio,
+  sourcesResponse,
+  tourDetail,
+  tourList,
+  versionResponse,
+} from '@skipper/shared'
+import type {
+  DataSource,
+  RoamManifest,
+  SignedAudio,
+  TourDetail,
+  TourList,
+  VersionPolicy,
+} from '@skipper/shared'
 import { API_URL, authClient } from './auth'
 
 export class ApiError extends Error {
@@ -117,6 +131,15 @@ export const signTourAudio = async (
     await fetchJson(`/tours/${tourId}/assets/sign${previewQuery(opts)}`, { method: 'POST' }),
   )
 
+/** FREE-ROAM (alpha): every roam-narratable place near a point, with presigned clip URLs.
+ *  Open like the preview (no account) — the alpha is a founder TestFlight toy. */
+export const getRoamManifest = async (
+  lat: number,
+  lng: number,
+  radiusKm = 50,
+): Promise<RoamManifest> =>
+  parseDto(roamManifest, await fetchJson(`/roam?lat=${lat}&lng=${lng}&radiusKm=${radiusKm}`))
+
 /** The app-wide data-source/license catalog (authoritative; the app bundles only a fallback). */
 export const getSources = async (): Promise<DataSource[]> =>
   parseDto(sourcesResponse, await fetchJson('/sources')).sources
@@ -125,4 +148,4 @@ export const getSources = async (): Promise<DataSource[]> =>
 export const getVersion = async (): Promise<VersionPolicy[]> =>
   parseDto(versionResponse, await fetchJson('/version')).policies
 
-export type { DataSource, SignedAudio, TourDetail, TourList, VersionPolicy }
+export type { DataSource, RoamManifest, SignedAudio, TourDetail, TourList, VersionPolicy }

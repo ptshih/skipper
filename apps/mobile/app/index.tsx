@@ -9,7 +9,7 @@ import { useDrivesFilter } from '@/lib/drives-filter'
 import { deriveRegions, filterByRegion } from '@/lib/regions'
 import { useTheme } from '@/theme'
 import { space } from '@/theme/tokens'
-import { Badge, Button, Card, Divider, FilterChip, HeaderIconButton, RouteTrack, Screen, Text, voice } from '@/ui'
+import { Badge, Button, Card, Divider, FilterChip, HeaderIconButton, Icon, RouteTrack, Screen, Text, voice } from '@/ui'
 
 // Browse drives — anonymous-friendly. A tour is the whole self-contained drive now, so a
 // card opens straight into the drive (gated). The top is a framed travel-poster hero with
@@ -146,6 +146,28 @@ export default function DrivesScreen() {
   const listHeader = (
     <>
       {hero}
+      {/* FREE-ROAM (alpha) entry — not a drive (no route), so it sits between the hero and
+          THE DRIVES seam rather than in the catalog. Quiet by design; the alpha badge keeps
+          expectations honest. */}
+      <View style={styles.roamWrap}>
+        <Card onPress={() => router.push('/roam')}>
+          <View style={styles.roamRow}>
+            <Icon name="roam" size={20} color="accent" />
+            <View style={styles.flex}>
+              <View style={styles.roamTitleRow}>
+                <Text variant="heading" color="ink">
+                  {voice.roam.entry}
+                </Text>
+                <Badge tone="teal" label={voice.roam.entryAlpha} />
+              </View>
+              <Text variant="dim" color="inkDim">
+                {voice.roam.entryBlurb}
+              </Text>
+            </View>
+            <Icon name="upcoming" size={16} color="inkFaint" />
+          </View>
+        </Card>
+      </View>
       <View style={styles.seam}>
         <Divider dashed />
         <View style={styles.seamRow}>
@@ -302,6 +324,9 @@ const styles = StyleSheet.create({
   heroWrap: { paddingHorizontal: space.gutter, paddingTop: space.sm },
   heroHeadline: { marginTop: space.sm },
   heroTrail: { marginTop: space.md, marginBottom: space.md },
+  roamWrap: { paddingHorizontal: space.gutter, marginTop: space.md },
+  roamRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  roamTitleRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   seam: { paddingHorizontal: space.gutter, marginTop: space.lg },
   seamRow: {
     flexDirection: 'row',

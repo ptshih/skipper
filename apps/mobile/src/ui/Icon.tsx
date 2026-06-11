@@ -35,6 +35,7 @@ export type IconName =
   | 'downloaded'
   | 'update'
   | 'more'
+  | 'roam'
 
 const IONICON: Record<IconName, ComponentProps<typeof Ionicons>['name']> = {
   // stop types
@@ -67,6 +68,7 @@ const IONICON: Record<IconName, ComponentProps<typeof Ionicons>['name']> = {
   downloaded: 'cloud-done-outline', // a tour that's saved to disk + plays with no signal
   update: 'cloud-download-outline', // a saved tour whose clips were re-cut server-side — pull again
   more: 'ellipsis-horizontal', // header overflow menu (secondary/utility actions)
+  roam: 'compass-outline', // free-roam mode — no route, the skipper rides shotgun
 }
 
 export interface IconProps {

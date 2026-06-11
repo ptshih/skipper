@@ -75,6 +75,27 @@ export const voice = {
     restFallback: 'A good spot to stretch', // pit-stop card title when the break carries no name
     previewHint: 'Tap any stop to jump ahead', // above the preview itinerary
   },
+  // FREE-ROAM (alpha): no route, no plan — the skipper rides shotgun and pipes up when
+  // the road passes something he knows. Silence is the DEFAULT state, so the copy's whole
+  // job is making quiet feel companionable (the ambient contract, set up front).
+  roam: {
+    entry: 'Free roam', // home affordance label
+    entryAlpha: 'ALPHA', // tiny badge beside it
+    entryBlurb: 'No route — I pipe up when we pass something I know.',
+    kicker: 'RIDING SHOTGUN', // live-session placard kicker
+    simKicker: 'SHOTGUN, SIMULATED', // sim-session placard kicker (dev/couch)
+    start: 'Ride along',
+    end: 'Drop me off',
+    locating: 'Getting my bearings…',
+    loading: 'Checking which stories live out here…',
+    watching: 'Just enjoying the view', // idle (no clip) card title
+    watchingBody: 'I talk when there’s something worth saying. It’s not awkward unless you make it awkward.',
+    told: 'told', // "<n> stories in range · <m> told"
+    inRange: 'stories in range',
+    noCoverage: 'I don’t know these roads yet, folks. Get me near Lake Tahoe and I’ve got stories.',
+    confirmEndTitle: 'Drop the skipper off?',
+    keepRiding: 'Keep riding',
+  },
   greeting: 'Hop in. I’ll do the talking.',
   // The cold-open descriptor: a newcomer should know WHAT this is before any audio
   // plays. Clear first, persona second — the deadpan stays, just aimed.
