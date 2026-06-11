@@ -322,19 +322,22 @@ Foreground When-In-Use only. Mode resolves to `live` via "Start the drive" (`ind
   the route dot stays put while stationary and advances proportionally to real distance as you move.
   Watch-for: the 8× toggle appearing (fell back to sim); the dot advancing on a timer while still;
   header saying "simulated drive". (`apps/mobile/src/lib/useDrive.ts:523`, `play.tsx:325,404`)
-- [ ] **iOS −1 sentinel is sanitized.** Do: watch the first seconds before GPS settles (cold start
+- [ ] **iOS −1 sentinel is handled.** Do: watch the first seconds before GPS settles (cold start
   outdoors / stepping out from indoors); also crawl/stand near a stop. Expect: a "Looking for the
   satellites — hang tight." cue after ~8s of no usable fix, **not** a frozen screen or a spuriously
-  fired stop; invalid speed/heading (−1) coerced to 0, and a fix with accuracy `< 0` *or* `> 50m`
-  dropped. Watch-for: a stop firing the instant the drive starts while you're far away (a wild
-  low-accuracy first fix slipped the gate); the heading gate permanently blocking all stops (−1
-  treated as a real bearing). (`apps/mobile/src/lib/gps.ts:133,216,222`)
+  fired stop; invalid speed (−1) coerced to 0, invalid course (−1) passed RAW (= unknown → the
+  heading gate is skipped, proximity-only), and a fix with accuracy `< 0` *or* `> 50m` dropped.
+  Watch-for: a stop firing the instant the drive starts while you're far away (a wild low-accuracy
+  first fix slipped the gate); a long quiet stretch while driving right past stops (a heading-gate
+  regression). (`apps/mobile/src/lib/gps.ts:135,302`, `packages/drive-core/src/trigger.ts:116`)
   **⚠ CONFIRMED IN THE FIELD (2026-06-10, free-roam's first live drive):** the −1→0 coercion DID
   read as a real northbound heading and gated out everything non-north. Roam's fix: `liveRoamSource`
-  passes the RAW course and `RoamEngine` skips the gate when `headingDeg < 0` (unknown). The TOUR
-  path still coerces (`sane()` in `liveSource` + `TriggerEngine` gates unconditionally at speed) —
-  on this checklist item, either verify the tour gate behaves with course −1 or port the same
-  sentinel contract before the real drive.
+  passes the RAW course and `RoamEngine` skips the gate when `headingDeg < 0` (unknown). **The same
+  sentinel contract is now PORTED to the tour path** (2026-06-11: `liveSource` passes raw course;
+  `TriggerEngine` skips the gate on a negative heading — unit-tested, but the port itself is what
+  this checklist item now verifies on the road). Residual to weigh on-device: tour stops are
+  one-shot, so during a −1 stretch a behind/abeam stop within radius CAN fire wrong-direction and
+  is then consumed — judged better than the field-confirmed silence, same policy as crawling speed.
 - [ ] **★ Triggers fire at the right points while moving (the core bet).** Do: bike/drive the real
   route at a steady pace; note where narration starts relative to each stop; ideally test an
   out-and-back leg or a stop the road passes close to but doesn't reach. Expect: narration begins a

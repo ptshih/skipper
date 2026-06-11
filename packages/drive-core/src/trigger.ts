@@ -11,7 +11,9 @@
 //   2. HEADING GATE above ~5 mph. Only fire when the stop is AHEAD (its bearing is
 //      within a forward cone of travel) so a POI the road passes — or one behind
 //      you on a there-and-back — doesn't fire. Below ~5 mph heading is unreliable,
-//      so the gate is skipped.
+//      so the gate is skipped — and likewise when the heading is UNKNOWN (negative:
+//      the iOS course -1 sentinel). Both are the same policy: no trustworthy heading
+//      → proximity only.
 //   3. DEBOUNCE. Each stop fires at most once per drive.
 //
 // Stateful: feed it fixes in order via update(); it returns any stops that fired on
@@ -25,6 +27,7 @@ export interface GpsFix {
   lat: number
   lng: number
   speedMps: number
+  /** Compass heading of travel (0=N, clockwise). NEGATIVE means UNKNOWN (iOS course -1). */
   headingDeg: number
   /** Seconds since the drive started. */
   tSec: number
@@ -94,8 +97,8 @@ export class TriggerEngine {
     // Defense-in-depth: a malformed fix (non-finite coords/speed) must NEVER fire. Without this,
     // a NaN distance — or a NaN effective radius from a NaN speed — makes `d > radius` read FALSE,
     // so the stop fires; and since every unfired stop shares the one bad fix, the WHOLE tour would
-    // dump into the queue at once. The live source sanitizes the iOS -1 sentinel (gps.ts `sane()`),
-    // but this engine is the SHARED safety-critical choke point (sim, live drive, free-roam) and
+    // dump into the queue at once. The live source sanitizes the iOS -1 SPEED sentinel (gps.ts
+    // `sane()`), but this engine is the SHARED safety-critical choke point (sim, live drive) and
     // must not trust each source to do so. A malformed fix is useless for triggering anyway → drop it.
     if (!Number.isFinite(fix.lat) || !Number.isFinite(fix.lng) || !Number.isFinite(fix.speedMps)) {
       return []
@@ -106,8 +109,11 @@ export class TriggerEngine {
       if (this.fired.has(stop.seq)) continue
       const d = haversineMeters(here, [stop.lng, stop.lat])
       if (d > effectiveRadiusM(stop.triggerRadiusM, fix.speedMps, this.opts.leadSeconds)) continue
-      // Heading gate (only when moving fast enough for heading to be meaningful).
-      if (fix.speedMps >= this.opts.headingGateMps) {
+      // Heading gate — only at meaningful speed AND with a KNOWN heading. iOS reports
+      // course -1 when invalid; gating on the sentinel would read it as due-north and
+      // silence every other direction (roam's first-live-drive zero-fire, ported here).
+      // Unknown heading → proximity only, the same policy as crawling speed.
+      if (fix.speedMps >= this.opts.headingGateMps && fix.headingDeg >= 0) {
         const ahead = angularDiffDeg(fix.headingDeg, bearingDeg(here, [stop.lng, stop.lat]))
         if (ahead > this.opts.headingConeDeg) continue // stop is abeam/behind → not approaching
       }

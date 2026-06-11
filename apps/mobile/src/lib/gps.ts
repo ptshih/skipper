@@ -130,6 +130,8 @@ const PROJECT_WINDOW_VERTS = 400
 
 // iOS (CLLocation) returns -1, NOT null, for invalid speed/heading (expo/expo#5401, sim AND
 // device). The type says `number | null` but the runtime yields -1 — so `?? 0` is not enough.
+// SPEED ONLY: 0 is a sane "unknown speed", but 0 heading is due-north — heading passes RAW
+// (-1 = unknown) and the engines skip their heading gate on a negative (the sentinel contract).
 const sane = (v: number | null | undefined): number => (v != null && v >= 0 ? v : 0)
 
 // True when iOS granted location but only at REDUCED (approximate) accuracy — the Precise Location
@@ -204,8 +206,8 @@ export function liveRoamSource(): GpsFixSource {
         // RAW course, NOT sane(): iOS uses -1 for "unknown", and the RoamEngine treats a
         // negative heading as unknown → skips the heading gate (proximity-only). sane()'s
         // -1→0 would read as a REAL northbound heading and gate out every other direction
-        // — the first live drive's zero-fire bug. (The tour path keeps sane(): its engine
-        // predates the sentinel contract — flagged in the device runbook, not blind-fixed.)
+        // — the first live drive's zero-fire bug. (The tour path now shares this sentinel
+        // contract: liveSource passes raw course and TriggerEngine skips the gate on it.)
         headingDeg: loc.coords.heading ?? -1,
         tSec: (loc.timestamp - startMs) / 1000,
         alongM: 0, // no route to be along
@@ -293,7 +295,11 @@ export function liveSource(polyline: LngLat[]): GpsFixSource {
         lat: loc.coords.latitude,
         lng: loc.coords.longitude,
         speedMps: sane(loc.coords.speed),
-        headingDeg: sane(loc.coords.heading),
+        // RAW course (same sentinel contract as liveRoamSource above): -1 = unknown, and
+        // the TriggerEngine skips the heading gate on a negative heading. sane()'s -1→0
+        // would read as due-north and gate out every non-north stop — roam's field-confirmed
+        // zero-fire bug, ported here rather than re-learned on a tour drive.
+        headingDeg: loc.coords.heading ?? -1,
         tSec: (loc.timestamp - startMs) / 1000, // loc.timestamp = ms since epoch
         alongM, // projected onto the route so the dot follows the real position
       })

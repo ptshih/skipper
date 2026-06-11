@@ -54,6 +54,14 @@ describe('TriggerEngine', () => {
     expect(e.update(fix(0.0109, 0, 1, 0))).toHaveLength(1) // 1 m/s < gate → no heading check
   })
 
+  test('UNKNOWN heading (iOS course -1) skips the gate — proximity still fires', () => {
+    // Roam's first-live-drive zero-fire: -1 coerced to 0 read as a REAL northbound heading
+    // and gated out every non-north stop. A negative heading must mean "unknown".
+    // Vehicle north of the stop (stop geometrically behind), at speed, heading UNKNOWN.
+    const e = new TriggerEngine([NORTH])
+    expect(e.update(fix(0.0109, 0, MPH60, -1))).toHaveLength(1)
+  })
+
   test('speed-adaptive: 300 m ahead fires at 60 mph but not at 20 mph', () => {
     const ahead = fix(0.0073, 0, MPH60, 0) // ~300 m south of the stop, heading north
     expect(new TriggerEngine([NORTH]).update(ahead)).toHaveLength(1) // 300 < 322
