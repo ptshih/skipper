@@ -103,6 +103,12 @@ normalization (speech target, e.g. −16 LUFS; drive music is already matched at
 Needs a small encode-path spike: loudnorm requires decode→re-encode, so either accept a
 32k→32k MP3 re-encode or request LINEAR16 and encode MP3 ourselves post-normalize.
 
+REMAINING — **overall level vs Spotify:** all audio tracks (clips + music) are 20–25% too
+quiet relative to Spotify. Likely a target-level issue — the −16 LUFS speech target above
+and the −13 LUFS music target may both need to come up, or the normalization pass needs to
+raise the master gain before exporting. Measure against a Spotify reference track before
+deciding the target; fix in the same encode-path spike as the clip-to-clip spread.
+
 Refs: `packages/generator/src/pipeline/tts.ts`, `pipeline/tail.ts`, `pipeline/mp3.ts`,
 `docs/decisions/audio-compression-spike.md` (the encode-path options).
 
