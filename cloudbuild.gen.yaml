@@ -1,0 +1,51 @@
+# Cloud Build pipeline for the `skipper-gen` Cloud Run JOB (the tour-ops CLI runner).
+#
+# build (packages/generator/Dockerfile, context = repo root) -> push to Artifact Registry
+#   -> `gcloud run jobs deploy` (create-or-update the Job). Mirrors cloudbuild.yaml (the api
+#   service pipeline); the only real differences are the Dockerfile, the image name, and
+#   `run jobs deploy` instead of `run deploy`.
+#
+# Trigger: a 2nd Cloud Build trigger on the existing `skipper-gh` connection, path-filtered to
+#   packages/generator/** (+ db/drive-core/shared/storage). See docs/specs/admin-ops-console-spec.md §10.
+#
+# ONE-TIME setup (NOT done here — see the spec §10 + docs/guides/gcp-cloud-run-deploy.md):
+#   - create the runtime SA `skipper-gen@$PROJECT_ID.iam.gserviceaccount.com`
+#   - grant it secretmanager.secretAccessor on `dotenv-private-key-production`
+#   - enable texttospeech.googleapis.com (TTS authorizes via the SA's ADC token — no IAM role,
+#     no key file); GOOGLE_CLOUD_PROJECT + R2 vars come from the decrypted .env.production
+#   - the Job is NOT public and NOT behind IAP (it's triggered by the admin-api / gcloud, not HTTP)
+
+steps:
+  # 1. Build the Job image.
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-f', 'packages/generator/Dockerfile', '-t', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/skipper-gen:latest', '.']
+
+  # 2. Push to Artifact Registry — MUST precede the deploy (the deploy pulls this tag).
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/skipper-gen:latest']
+
+  # 3. Create-or-update the Cloud Run Job (idempotent on every run).
+  #    --max-retries=0: a half-run regen must never silently re-fire (it spends $ + writes prod).
+  #    --task-timeout=3600: the only hard wall on a runaway run (~13-min worst case today).
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:slim'
+    entrypoint: gcloud
+    args:
+      - run
+      - jobs
+      - deploy
+      - skipper-gen
+      - --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/skipper-gen:latest
+      - --region=${_REGION}
+      - --service-account=skipper-gen@$PROJECT_ID.iam.gserviceaccount.com
+      - --set-secrets=DOTENV_PRIVATE_KEY_PRODUCTION=dotenv-private-key-production:latest
+      - --max-retries=0
+      - --task-timeout=3600
+      - --memory=2Gi
+      - --cpu=1
+
+substitutions:
+  _REGION: us-east4
+  _REPO: skipper
+
+options:
+  logging: CLOUD_LOGGING_ONLY

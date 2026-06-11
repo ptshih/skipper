@@ -1,0 +1,100 @@
+// gen_jobs lifecycle hook — the OPERATIONAL record of a cloud tour-ops run.
+//
+// A NO-OP unless GEN_JOB_ID is set, so the laptop CLI is byte-identical (it never sets it).
+// In the cloud the Cloud Run Job receives GEN_JOB_ID: the admin-api mints the gen_jobs row
+// (status 'queued') before triggering in v1; a gcloud-triggered v0 run just passes a fresh
+// uuid and beginJob() inserts the row itself. Wired ONLY at the four CLI entrypoints'
+// top-level main() — never inside generate.ts (keeps the demo-sensitive pipeline untouched).
+//
+// Every write is BEST-EFFORT: a gen_jobs failure must NEVER fail the actual op — observability
+// must not break generation. All DB calls swallow errors with a warning.
+//
+// Cloud Run injects CLOUD_RUN_EXECUTION automatically, so the row captures the real execution
+// name for the admin-api's reconcile backstop without anyone passing it in.
+// Background: docs/specs/admin-ops-console-spec.md §9.
+
+import { eq } from 'drizzle-orm'
+import { db } from '@skipper/db'
+import { genJobs } from '@skipper/db/schema'
+import type { NewGenJob } from '@skipper/db/schema'
+import { llmSpentUsd } from './spend'
+
+type Kind = NewGenJob['kind']
+
+/** The identity of a tour-ops run, set at begin. */
+interface BeginFields {
+  dryRun: boolean
+  /** generate: the tour slug. */
+  targetSlug?: string
+  /** Known up front for ops; generate backfills via finishJob. */
+  tourId?: string
+  /** patch_clip: the stop/bracket id; resynth/sweep: the tour id. */
+  targetId?: string
+}
+
+/** How a run ended. costUsd defaults to the process LLM tally (exact LLM spend). */
+export interface FinishOutcome {
+  ok: boolean
+  error?: string
+  costUsd?: number
+  tourId?: string
+  evalRunId?: string
+}
+
+const jobId = (): string | undefined => process.env.GEN_JOB_ID || undefined
+
+const warn = (phase: string, e: unknown): void =>
+  console.warn(`[job-progress] ${phase} write failed (non-fatal):`, e instanceof Error ? e.message : e)
+
+/** Flip the gen_jobs row to `running`, creating it if a v0 gcloud run didn't pre-create one.
+ *  No-op without GEN_JOB_ID. Never throws. */
+export async function beginJob(kind: Kind, fields: BeginFields): Promise<void> {
+  const id = jobId()
+  if (!id) return
+  const row: NewGenJob = {
+    id,
+    kind,
+    status: 'running',
+    dryRun: fields.dryRun,
+    targetSlug: fields.targetSlug ?? null,
+    tourId: fields.tourId ?? null,
+    targetId: fields.targetId ?? null,
+    args: process.argv.slice(2),
+    triggeredBy: process.env.GEN_JOB_TRIGGERED_BY || 'cli',
+    cloudRunExecution: process.env.CLOUD_RUN_EXECUTION || null,
+    startedAt: new Date(),
+  }
+  try {
+    await db
+      .insert(genJobs)
+      .values(row)
+      // The admin-api may have pre-created the row ('queued') with richer fields; on conflict
+      // just flip it running + stamp startedAt, preserving everything it set.
+      .onConflictDoUpdate({
+        target: genJobs.id,
+        set: { status: 'running', startedAt: new Date(), updatedAt: new Date() },
+      })
+  } catch (e) {
+    warn('begin', e)
+  }
+}
+
+/** Settle the gen_jobs row terminal. No-op without GEN_JOB_ID. Never throws. */
+export async function finishJob(outcome: FinishOutcome): Promise<void> {
+  const id = jobId()
+  if (!id) return
+  const set: Partial<NewGenJob> = {
+    status: outcome.ok ? 'succeeded' : 'failed',
+    endedAt: new Date(),
+    costUsd: outcome.costUsd ?? llmSpentUsd(),
+    updatedAt: new Date(),
+  }
+  if (outcome.error !== undefined) set.error = outcome.error.slice(0, 4000)
+  if (outcome.tourId !== undefined) set.tourId = outcome.tourId
+  if (outcome.evalRunId !== undefined) set.evalRunId = outcome.evalRunId
+  try {
+    await db.update(genJobs).set(set).where(eq(genJobs.id, id))
+  } catch (e) {
+    warn('finish', e)
+  }
+}

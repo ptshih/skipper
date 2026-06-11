@@ -25,6 +25,7 @@ import { announce, assertReady, parseFlags, resolveTourId } from './pipeline/ops
 import { personaForRegion } from './persona'
 import { synthesize } from './pipeline/tts'
 import { clipKey, deleteAudio, uploadAudio } from './pipeline/storage'
+import { beginJob, finishJob } from './pipeline/job-progress'
 
 /** A clip to re-render — a stop or a bracket — normalized to its label/key/script/save. */
 interface Clip {
@@ -42,6 +43,7 @@ async function main() {
   const keepOld = flags.has('keep-old')
   announce({ tool: 'resynth-tour', blast: ['SPENDS $', 'MUTATES DB', 'DELETES BYTES'], apply })
   const tourId = await resolveTourId(flags.positionals[0])
+  await beginJob('resynth', { dryRun: !apply, tourId, targetId: tourId })
 
   // The persona (voice + delivery style) is resolved from the tour's region.
   const regionRow = (
@@ -155,7 +157,10 @@ async function main() {
   )
 }
 
-main().catch((e) => {
-  console.error('\nResynth failed:', e instanceof Error ? e.message : e)
-  process.exitCode = 1
-})
+main()
+  .then(() => finishJob({ ok: true }))
+  .catch(async (e) => {
+    await finishJob({ ok: false, error: e instanceof Error ? e.message : String(e) })
+    console.error('\nResynth failed:', e instanceof Error ? e.message : e)
+    process.exitCode = 1
+  })

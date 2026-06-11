@@ -15,6 +15,7 @@ import { db } from '@skipper/db'
 import { tourBrackets, tourStops, tours } from '@skipper/db/schema'
 import { announce, assertReady, guardFanout, parseFlags, resolveTourId } from './pipeline/ops'
 import { deleteAudio, listAudioKeys, orphanKeys } from './pipeline/storage'
+import { beginJob, finishJob } from './pipeline/job-progress'
 
 /** The R2 keys a tour's rows currently point at (stops + brackets, non-null). */
 async function referencedKeys(tourId: string): Promise<Set<string>> {
@@ -58,6 +59,11 @@ async function main() {
   const tourIds = all
     ? (await db.select({ id: tours.id }).from(tours)).map((t) => t.id)
     : [await resolveTourId(flags.positionals[0])]
+  await beginJob('sweep_orphans', {
+    dryRun: !apply,
+    tourId: all ? undefined : tourIds[0],
+    targetId: all ? 'all' : tourIds[0],
+  })
 
   let totalOrphans = 0
   let totalDeleted = 0
@@ -73,7 +79,10 @@ async function main() {
   )
 }
 
-main().catch((e) => {
-  console.error('\nSweep failed:', e instanceof Error ? e.message : e)
-  process.exitCode = 1
-})
+main()
+  .then(() => finishJob({ ok: true }))
+  .catch(async (e) => {
+    await finishJob({ ok: false, error: e instanceof Error ? e.message : String(e) })
+    console.error('\nSweep failed:', e instanceof Error ? e.message : e)
+    process.exitCode = 1
+  })

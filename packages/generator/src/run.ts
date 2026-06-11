@@ -29,6 +29,7 @@ import type { JokeLevel } from '@skipper/shared'
 import { formatMmss } from '@skipper/drive-core'
 import { generateTour } from './pipeline/generate'
 import type { BracketSummary, GenerateResult } from './pipeline/generate'
+import { beginJob, finishJob } from './pipeline/job-progress'
 
 const DURATIONS = ['short', 'standard', 'long'] as const
 type Duration = (typeof DURATIONS)[number]
@@ -159,6 +160,7 @@ function printResult(r: GenerateResult): void {
 async function main() {
   const { slug, dryRun, judgeClosers, durationBucket, jokeLevel, maxCostUsd, jsonPath } =
     parseArgs(process.argv)
+  await beginJob('generate', { dryRun, targetSlug: slug })
   const result = await generateTour({
     slug,
     dryRun,
@@ -172,9 +174,13 @@ async function main() {
     await Bun.write(jsonPath, JSON.stringify(result, null, 2))
     console.log(`Wrote result JSON → ${jsonPath}`)
   }
+  return { ok: true as const, tourId: result.tourId }
 }
 
-main().catch((e) => {
-  console.error('\nGeneration failed:', e instanceof Error ? e.message : e)
-  process.exitCode = 1
-})
+main()
+  .then((o) => finishJob(o))
+  .catch(async (e) => {
+    await finishJob({ ok: false, error: e instanceof Error ? e.message : String(e) })
+    console.error('\nGeneration failed:', e instanceof Error ? e.message : e)
+    process.exitCode = 1
+  })

@@ -525,6 +525,75 @@ export const evalScores = pgTable(
 )
 
 /* -------------------------------------------------------------------------- */
+/*  gen_jobs — the OPERATIONAL record of a cloud tour-ops run (admin console)    */
+/* -------------------------------------------------------------------------- */
+
+// eval_runs is the QUALITY record (scores + artifact); gen_jobs is the EXECUTION record
+// (who/what/when/status/cost) of a tour-ops CLI run as a Cloud Run Job — generate /
+// patch_clip / resynth / sweep_orphans. Closes the "no generation timing/logs" gap and
+// drives the admin Runs view. Written ONLY by pipeline/job-progress.ts when GEN_JOB_ID is
+// set, so the laptop CLI (no GEN_JOB_ID) never touches this table and stays byte-identical.
+// Like eval_runs, it is OBSERVABILITY — nothing in the player/API reads it.
+// Background: docs/specs/admin-ops-console-spec.md §4/§9.
+
+export const genJobKindEnum = pgEnum('gen_job_kind', [
+  'generate', // run.ts — discover/narrate/eval/synthesize a tour
+  'patch_clip', // patch-clip.ts — re-synth one stop/bracket clip
+  'resynth', // resynth-tour.ts — re-synth every clip of a tour
+  'sweep_orphans', // sweep-orphans.ts — delete unreferenced R2 clips
+])
+export const genJobStatusEnum = pgEnum('gen_job_status', [
+  'queued', // row created (admin-api in v1), Job not yet running
+  'running', // the Job flipped it on entry
+  'succeeded', // clean exit
+  'failed', // threw / terminal API error
+  'canceled', // operator-stopped (reserved; no cancel path in v0)
+])
+
+export const genJobs = pgTable(
+  'gen_jobs',
+  {
+    // The row id IS the GEN_JOB_ID the Job receives: the admin-api mints it in v1; the hook
+    // mints + inserts it for a gcloud-triggered v0 run.
+    id: uuid('id').defaultRandom().primaryKey(),
+    kind: genJobKindEnum('kind').notNull(),
+    status: genJobStatusEnum('status').notNull().default('queued'),
+    /** generate: the tour slug. */
+    targetSlug: text('target_slug'),
+    /** Set once known (generate backfills from the result; ops resolve it up front). */
+    tourId: uuid('tour_id').references(() => tours.id, { onDelete: 'set null' }),
+    /** patch_clip: the stop/bracket id; resynth/sweep: the tour id — an audit label. */
+    targetId: text('target_id'),
+    /** The exact CLI override args (process.argv.slice(2)) — audit + replay. */
+    args: jsonb('args').$type<string[]>().notNull(),
+    dryRun: boolean('dry_run').notNull().default(true),
+    /** Best-effort progress label (per-phase ticking is a deferred enhancement). */
+    phase: text('phase'),
+    /** Exact LLM spend (+ TTS estimate later); null if the run crashed before finish. NOT
+     *  GCP billing truth — see the spec §9 cost caveat. */
+    costUsd: doublePrecision('cost_usd'),
+    /** Link to the quality record this run produced (generate; null for ops + crashes). */
+    evalRunId: uuid('eval_run_id').references(() => evalRuns.id, { onDelete: 'set null' }),
+    /** The Cloud Run execution resource name — logs / cancel / the reconcile backstop. */
+    cloudRunExecution: text('cloud_run_execution'),
+    /** The IAP-asserted email in v1; 'cli' for a gcloud-triggered v0 run. */
+    triggeredBy: text('triggered_by').notNull(),
+    error: text('error'),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    endedAt: timestamp('ended_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index('gen_jobs_created_idx').on(t.createdAt),
+    index('gen_jobs_status_idx').on(t.status),
+  ],
+)
+
+/* -------------------------------------------------------------------------- */
 /*  Relations                                                                  */
 /* -------------------------------------------------------------------------- */
 
@@ -587,3 +656,5 @@ export type RoamClip = typeof roamClips.$inferSelect
 export type NewRoamClip = typeof roamClips.$inferInsert
 export type SavedTour = typeof savedTours.$inferSelect
 export type NewSavedTour = typeof savedTours.$inferInsert
+export type GenJob = typeof genJobs.$inferSelect
+export type NewGenJob = typeof genJobs.$inferInsert

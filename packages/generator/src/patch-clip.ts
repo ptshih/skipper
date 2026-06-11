@@ -26,6 +26,7 @@ import { announce, assertReady, parseFlags } from './pipeline/ops'
 import { personaForRegion } from './persona'
 import { synthesize } from './pipeline/tts'
 import { clipKey, uploadAudio } from './pipeline/storage'
+import { beginJob, finishJob } from './pipeline/job-progress'
 
 interface Args {
   id: string
@@ -137,6 +138,7 @@ async function resolveTarget(id: string): Promise<ClipTarget | null> {
 async function main() {
   const { id, find, replace, all, apply } = parseArgs(process.argv.slice(2))
   announce({ tool: 'patch-clip', blast: ['SPENDS $', 'MUTATES DB'], apply })
+  await beginJob('patch_clip', { dryRun: !apply, targetId: id })
 
   const target = await resolveTarget(id)
   if (!target) throw new Error(`No tour_stop or tour_bracket row with id "${id}".`)
@@ -187,7 +189,10 @@ async function main() {
   console.log(`Done. Re-synthesized ${(durationMs / 1000).toFixed(1)}s of audio → ${audioUrl}`)
 }
 
-main().catch((e) => {
-  console.error('\nPatch failed:', e instanceof Error ? e.message : e)
-  process.exitCode = 1
-})
+main()
+  .then(() => finishJob({ ok: true }))
+  .catch(async (e) => {
+    await finishJob({ ok: false, error: e instanceof Error ? e.message : String(e) })
+    console.error('\nPatch failed:', e instanceof Error ? e.message : e)
+    process.exitCode = 1
+  })
