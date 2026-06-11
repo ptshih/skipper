@@ -71,6 +71,10 @@ export interface NarrationRequest {
   targetSeconds?: number
   /** Re-narration notes from the diversity lint — concrete things THIS take must avoid. */
   avoid?: string[]
+  /** FREE-ROAM encounter framing (generate-roam.ts): the telling is a one-off roadside
+   *  encounter on an unplanned drive — fully self-contained, route-agnostic, no tour shape.
+   *  Adds the encounter block to the sheet; all grounding rules are unchanged. */
+  encounterFrame?: boolean
 }
 
 export interface NarrationResult {
@@ -258,6 +262,13 @@ export function buildFactSheet(req: NarrationRequest): string {
     )
     lines.push(
       'fuel, a bite), and stop there. Live details resolved fresh at tour-load. No side of the road.',
+    )
+  }
+
+  if (req.encounterFrame) {
+    lines.push('')
+    lines.push(
+      'FREE-ROAM ENCOUNTER — this is NOT a tour stop. The rider is out on their OWN drive (an errand, a wander — no planned route), and you are riding shotgun, piping up because you are passing a place you know. The telling must be fully SELF-CONTAINED: no welcome-aboard, no tour framing, no "next stop" or "later on this drive", no promising anything else, no callbacks to other stops. You do NOT know the direction of travel or which side of the road the place is on — never name a side, never say "behind us" or "up ahead on the left"; "coming up", "just out there", and "right about here" are fine. Open on the place or its best fact, land your best bit, and get out clean — a good minute, not a chapter.',
     )
   }
 

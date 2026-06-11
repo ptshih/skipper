@@ -344,6 +344,42 @@ function distToRoute(lat: number, lng: number, sampledVerts: LngLat[]): number {
  * later" is the whole recovery. (An EMPTY result is not an error here — it surfaces downstream
  * as generate.ts's "No narratable stops found" once selection yields nothing.)
  */
+/**
+ * Discover + tier Wikidata POIs in a raw BBOX — the FREE-ROAM sweep's discovery (no route,
+ * so no corridor filter; offRouteM is 0 by construction). Same spine, prose-join, tiering,
+ * and same-place dedup as the route path below. Callers sweeping a large area should split
+ * it into modest sub-boxes (WDQS result-size etiquette) and merge by qid before dedupe —
+ * see sweep-roam-pois.ts.
+ */
+export async function discoverWikidataBbox(sw: LngLat, ne: LngLat): Promise<WikidataCandidate[]> {
+  const raw = await fetchWikidataBox(sw, ne)
+  const storyCandidates = raw.filter(
+    (it) => it.articleTitle && !TRUE_NONPLACE.test([...it.types].join(' ; ')),
+  )
+  const extracts = storyCandidates.length
+    ? await fetchExtractsByTitle([...new Set(storyCandidates.map((it) => it.articleTitle!))])
+    : []
+  const extractByTitle = new Map(extracts.map((e) => [e.title.toLowerCase(), e]))
+  const candidates: WikidataCandidate[] = raw.map((it) => {
+    const ex = it.articleTitle ? extractByTitle.get(it.articleTitle.toLowerCase()) : undefined
+    const types = [...it.types]
+    const tier = tierOf(types, !!ex, ex?.extract.length ?? 0)
+    return {
+      qid: it.qid,
+      name: it.name,
+      lat: it.lat,
+      lng: it.lng,
+      types,
+      tier,
+      offRouteM: 0,
+      ...(tier === 'story' && ex
+        ? { article: { title: ex.title, url: ex.url, pageId: ex.pageId, extract: ex.extract } }
+        : {}),
+    }
+  })
+  return dedupeByName(candidates)
+}
+
 export async function discoverWikidataPois(polyline: LngLat[]): Promise<WikidataCandidate[]> {
   const { sw, ne } = boundingBox(polyline)
   const raw = await fetchWikidataBox(sw, ne)

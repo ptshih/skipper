@@ -33,6 +33,16 @@ export function bracketKey(tourId: string, kind: BracketKind, runId: string): st
   return `clips/${tourId}/${runId}-${kind}.${TTS_CLIP_EXTENSION}`
 }
 
+/**
+ * Free-roam clip key — per-CLIP unique: roam/<poiId>/<clipId>.<ext>. Same
+ * never-overwrite-live-bytes property as bracket keys: a roam regen mints a fresh
+ * clipId, the row points at the new key, and the superseded object orphans for
+ * sweep-orphans. (Roam narration is ROAM-owned — see roam_clips in @skipper/db.)
+ */
+export function roamClipKey(poiId: string, clipId: string): string {
+  return `roam/${poiId}/${clipId}.${TTS_CLIP_EXTENSION}`
+}
+
 /** Upload an MP3 (private) and return its R2 object KEY to store on the stop/bracket row. */
 export async function uploadAudio(key: string, bytes: Uint8Array): Promise<string> {
   // content-type goes in `type` (a BlobPropertyBag field), NOT `contentType`.
