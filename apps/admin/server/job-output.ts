@@ -70,8 +70,8 @@ export async function fetchExecutionLog(cloudRunExecution: string): Promise<stri
     } while (pageToken)
 
     return lines.join('\n')
-  } catch (e) {
-    console.error(`[job-output] fetchExecutionLog threw for ${cloudRunExecution}:`, e)
+  } catch {
+    // ADC not available locally, or transient token failure — skip silently.
     return ''
   }
 }
