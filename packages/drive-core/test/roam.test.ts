@@ -36,20 +36,38 @@ describe('RoamEngine — proximity + heading', () => {
 
   test('floor applies when crawling: 200 m pin fires at parking-lot speed', () => {
     const e = new RoamEngine([NORTH])
-    // ~200 m south of pin, 1 m/s (below heading gate, within the 250 m floor).
+    // ~200 m south of pin, 1 m/s (below heading gate, within the 600 m floor).
     expect(e.update(fix(0.0082, 0, 1, 180))).toHaveLength(1)
   })
 
-  test('heading-toward gate: a pin BEHIND does not fire at speed', () => {
+  test('heading-toward gate: a pin BEHIND does not fire at speed (heading KNOWN)', () => {
     const e = new RoamEngine([NORTH])
     // Vehicle north of the pin, heading further north (pin behind), well within radius.
     expect(e.update(fix(0.0112, 0, MPH60, 0))).toHaveLength(0)
   })
 
-  test('beyond the lead radius at low speed → no fire', () => {
+  test('UNKNOWN heading (iOS course -1) skips the gate — proximity still fires', () => {
+    // The first live drive's zero-fire bug: -1 sanitized to 0 read as "due north" and
+    // gated out every other direction. A negative heading must mean "unknown".
     const e = new RoamEngine([NORTH])
-    // ~300 m out at 20 mph: 8.94*12 ≈ 107 m < 250 floor < 300 → no fire.
-    expect(e.update(fix(0.0073, 0, MPH20, 0))).toHaveLength(0)
+    // Vehicle north of the pin (pin geometrically behind), at speed, heading UNKNOWN.
+    expect(e.update(fix(0.0112, 0, MPH60, -1))).toHaveLength(1)
+  })
+
+  test('beyond the floor at low speed → no fire', () => {
+    const e = new RoamEngine([NORTH])
+    // ~700 m out at 20 mph: 8.94*15 ≈ 134 m < 600 floor < 700 → no fire.
+    expect(e.update(fix(0.0037, 0, MPH20, 0))).toHaveLength(0)
+  })
+
+  test('per-pin radiusM (kind-aware areal hint) widens the floor for that pin only', () => {
+    const peak = { ...pin('peak', 0.01, 0), radiusM: 1500 }
+    const cabin = pin('cabin', 0.02, 0.012) // ~1.6 km away, default floor
+    const e = new RoamEngine([peak, cabin], { minGapSec: 0 })
+    // ~1.1 km from the peak: inside its 1500 m radius → fires; cabin stays silent.
+    const fired = e.update(fix(0, 0, MPH20, 0))
+    expect(fired).toHaveLength(1)
+    expect(fired[0]!.poiId).toBe('peak')
   })
 })
 

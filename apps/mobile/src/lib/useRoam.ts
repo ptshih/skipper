@@ -22,7 +22,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake'
 import * as Location from 'expo-location'
-import { RoamEngine } from '@skipper/drive-core'
+import { haversineMeters, RoamEngine } from '@skipper/drive-core'
 import type { LngLat } from '@skipper/drive-core'
 import { errorMessage, getRoamManifest, getTour, listTours } from './api'
 import type { RoamManifest } from './api'
@@ -77,6 +77,9 @@ export interface RoamState {
   clipDurationSec: number
   /** Encounters told this session (the stat pill + the sign-off tally). */
   toldCount: number
+  /** Alpha drive-test diagnostics: seconds since the last accepted fix + straight-line
+   *  distance to the nearest pin. The line that lets a real road test self-diagnose. */
+  diag: { fixAgeSec: number | null; nearestM: number | null }
   /** The session-start opener line (rotates per session). */
   openerLine: string
   chattiness: ChattinessLevel
@@ -101,6 +104,10 @@ export function useRoam(mode: RoamMode): RoamState {
   const [openerLine, setOpenerLine] = useState<string>(voice.roam.sessionStart[0]!)
   const [chattiness, setChattinessState] = useState<ChattinessLevel>('normal')
   const [gpsSearching, setGpsSearching] = useState(false)
+  const [diag, setDiag] = useState<{ fixAgeSec: number | null; nearestM: number | null }>({
+    fixAgeSec: null,
+    nearestM: null,
+  })
 
   const engineRef = useRef<RoamEngine | null>(null)
   const pinsRef = useRef<RoamManifest['pins']>([])
@@ -110,6 +117,7 @@ export function useRoam(mode: RoamMode): RoamState {
   const mountedRef = useRef(true)
   const startPending = useRef(false) // a start flow is in flight — blocks double-tap
   const lastFixAt = useRef(0)
+  const lastFixPos = useRef<{ lat: number; lng: number } | null>(null)
   const finishedPoi = useRef<string | null>(null) // didJustFinish double-fire guard
   const stallTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -206,11 +214,24 @@ export function useRoam(mode: RoamMode): RoamState {
     }
   }, [status.playing, status.didJustFinish, activePoiId, onClipDone])
 
-  // Live GPS quiet-watchdog (roaming only): surface "looking for satellites".
+  // Session tick (roaming only): the GPS quiet-watchdog (live) + the diagnostics line
+  // (fix age + nearest pin) that lets a real-road alpha test self-diagnose.
   useEffect(() => {
-    if (phase !== 'roaming' || mode !== 'live') return
+    if (phase !== 'roaming') return
     const t = setInterval(() => {
-      setGpsSearching(Date.now() - lastFixAt.current > GPS_QUIET_MS)
+      if (mode === 'live') setGpsSearching(Date.now() - lastFixAt.current > GPS_QUIET_MS)
+      const pos = lastFixPos.current
+      let nearestM: number | null = null
+      if (pos) {
+        for (const p of pinsRef.current) {
+          const d = haversineMeters([pos.lng, pos.lat], [p.lng, p.lat])
+          if (nearestM === null || d < nearestM) nearestM = d
+        }
+      }
+      setDiag({
+        fixAgeSec: lastFixAt.current ? Math.round((Date.now() - lastFixAt.current) / 1000) : null,
+        nearestM: nearestM === null ? null : Math.round(nearestM),
+      })
     }, 2_000)
     return () => clearInterval(t)
   }, [phase, mode])
@@ -277,6 +298,8 @@ export function useRoam(mode: RoamMode): RoamState {
             lat: p.lat,
             lng: p.lng,
             durationMs: p.durationMs,
+            // Kind-aware server radius (areal places get room); engine floor covers absence.
+            ...(p.radiusM != null ? { radiusM: p.radiusM } : {}),
             name: p.name,
           })),
           { minGapSec: CHATTINESS_GAP_SEC[chattiness] },
@@ -290,6 +313,7 @@ export function useRoam(mode: RoamMode): RoamState {
         subRef.current = source(
           (fix) => {
             lastFixAt.current = Date.now()
+            lastFixPos.current = { lat: fix.lat, lng: fix.lng }
             const events = engineRef.current?.update(fix) ?? []
             if (events.length > 0) {
               for (const e of events) queueRef.current.push(e.poiId)
@@ -361,6 +385,7 @@ export function useRoam(mode: RoamMode): RoamState {
     clipElapsedSec: status.currentTime ?? 0,
     clipDurationSec: activeDurationMs / 1000,
     toldCount,
+    diag,
     openerLine,
     chattiness,
     setChattiness,

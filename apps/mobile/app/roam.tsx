@@ -235,6 +235,11 @@ export default function RoamScreen() {
             </Text>
           )}
           <View style={styles.spacer} />
+          {/* Alpha drive-test diagnostics — quiet, mono, self-explanatory; lets a real
+              road test report itself (pins in range, fix freshness, nearest pin). */}
+          <Text variant="mono" color="inkFaint">
+            {`${r.pinCount} pins · GPS ${r.diag.fixAgeSec ?? '—'}s · nearest ${r.diag.nearestM != null ? `${r.diag.nearestM} m` : '—'}`}
+          </Text>
           <Chattiness value={r.chattiness} onChange={r.setChattiness} />
         </View>
 

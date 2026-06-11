@@ -32,6 +32,10 @@ export interface RoamPinRef {
   lng: number
   /** Clip length (ms) — lets the governor hold the NEXT encounter until this one ends. */
   durationMs: number
+  /** Per-pin proximity floor (m) — a KIND-aware server hint. Roam pins are raw POI
+   *  centroids, never road-snapped (no route to snap to), so areal places need room:
+   *  a peak's pin is its summit, a lake's is open water. Falls back to floorM. */
+  radiusM?: number
   name?: string
 }
 
@@ -65,10 +69,14 @@ export interface RoamTriggerOptions {
 }
 
 export const DEFAULT_ROAM_TRIGGER: RoamTriggerOptions = {
-  leadSeconds: 12,
-  floorM: 250,
+  leadSeconds: 15,
+  // 600, not a tour stop's 120/250: roam pins are UN-SNAPPED centroids (the first live
+  // drive measured only 8/77 pins within 250 m of the road — the floor was tuned for
+  // road-snapped tour stops and silenced the whole basin). "Near here" language in the
+  // encounter form tolerates the slack; per-pin radiusM widens areal places further.
+  floorM: 600,
   headingGateMps: 2.2,
-  headingConeDeg: 100, // slightly wider than a tour's 90° — no route to disambiguate approach
+  headingConeDeg: 120, // generous: a roam miss is invisible, a false pass is bounded by cooldown
   minGapSec: 75,
   cooldownSec: 60 * 60 * 4, // 4h: don't re-tell on the drive home (cross-session memory later)
   suppressRadiusM: 300,
@@ -100,7 +108,8 @@ export class RoamEngine {
       const fired = this.firedAt.get(pin.poiId)
       if (fired !== undefined && fix.tSec - fired < this.opts.cooldownSec) continue
       const d = haversineMeters(here, [pin.lng, pin.lat])
-      if (d > Math.max(this.opts.floorM, fix.speedMps * this.opts.leadSeconds)) continue
+      const floor = pin.radiusM ?? this.opts.floorM
+      if (d > Math.max(floor, fix.speedMps * this.opts.leadSeconds)) continue
       // Cluster suppression: too close to where the last encounter RECENTLY fired → quiet.
       if (
         this.lastFire &&
@@ -109,8 +118,11 @@ export class RoamEngine {
           this.opts.suppressRadiusM
       )
         continue
-      // Heading-toward gate (meaningful speed only): the pin must be roughly ahead.
-      if (fix.speedMps >= this.opts.headingGateMps) {
+      // Heading-toward gate — only at meaningful speed AND with a KNOWN heading. iOS
+      // reports course -1 when invalid; a negative heading means "unknown", and gating
+      // on it would treat the sentinel as due-north and silence every other direction
+      // (the first live drive's zero-fire failure). Unknown heading → proximity only.
+      if (fix.speedMps >= this.opts.headingGateMps && fix.headingDeg >= 0) {
         const off = angularDiffDeg(fix.headingDeg, bearingDeg(here, [pin.lng, pin.lat]))
         if (off > this.opts.headingConeDeg) continue
       }

@@ -201,7 +201,12 @@ export function liveRoamSource(): GpsFixSource {
         lat: loc.coords.latitude,
         lng: loc.coords.longitude,
         speedMps: sane(loc.coords.speed),
-        headingDeg: sane(loc.coords.heading),
+        // RAW course, NOT sane(): iOS uses -1 for "unknown", and the RoamEngine treats a
+        // negative heading as unknown → skips the heading gate (proximity-only). sane()'s
+        // -1→0 would read as a REAL northbound heading and gate out every other direction
+        // — the first live drive's zero-fire bug. (The tour path keeps sane(): its engine
+        // predates the sentinel contract — flagged in the device runbook, not blind-fixed.)
+        headingDeg: loc.coords.heading ?? -1,
         tSec: (loc.timestamp - startMs) / 1000,
         alongM: 0, // no route to be along
       })
