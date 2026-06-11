@@ -17,6 +17,7 @@ export interface ThemeColors {
   surface: string // app background
   surfaceRaised: string // cards / placards
   surfaceSunken: string // inset wells (timer chips, route track bed)
+  surfaceFade: string // `surface` at 0 alpha — the transparent end of scroll-edge fades
   keyline: string // bright inner rule that fakes a carved-sign edge
   // text
   ink: string // primary text
@@ -51,6 +52,14 @@ export interface Theme {
   statusBar: 'dark' | 'light'
 }
 
+// The same color at ZERO alpha — the fade-OUT stop for scroll-edge gradients (EdgeFade). A
+// CSS `transparent` stop would interpolate RGB toward black and tint the dissolve; matching
+// `surface`'s own 0-alpha keeps it clean. Derived from palette so it can't drift from surface.
+const fade = (hex: string): string => {
+  const h = hex.replace('#', '')
+  return `rgba(${parseInt(h.slice(0, 2), 16)},${parseInt(h.slice(2, 4), 16)},${parseInt(h.slice(4, 6), 16)},0)`
+}
+
 export const lightTheme: Theme = {
   name: 'light',
   isDark: false,
@@ -59,6 +68,7 @@ export const lightTheme: Theme = {
     surface: palette.paper,
     surfaceRaised: palette.paperRaised,
     surfaceSunken: palette.paperSunken,
+    surfaceFade: fade(palette.paper),
     keyline: palette.paperKeyline,
     ink: palette.inkBrown,
     inkDim: palette.inkFaded,
@@ -89,6 +99,7 @@ export const darkTheme: Theme = {
     surface: palette.night,
     surfaceRaised: palette.nightRaised,
     surfaceSunken: palette.nightSunken,
+    surfaceFade: fade(palette.night),
     keyline: palette.nightKeyline,
     ink: palette.parchment,
     inkDim: palette.parchFaded,

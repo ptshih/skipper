@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Animated, FlatList, RefreshControl, StyleSheet, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Stack, useFocusEffect, useRouter } from 'expo-router'
 import { errorMessage, listTours, type TourList } from '@/lib/api'
 import { useSession } from '@/lib/auth'
@@ -9,7 +10,7 @@ import { useDrivesFilter } from '@/lib/drives-filter'
 import { deriveRegions, filterByRegion } from '@/lib/regions'
 import { useTheme } from '@/theme'
 import { space } from '@/theme/tokens'
-import { Badge, Button, Card, Divider, FilterChip, HeaderIconButton, Icon, RouteTrack, Screen, Text, voice } from '@/ui'
+import { Badge, Button, Card, Divider, EdgeFade, FilterChip, HeaderIconButton, Icon, RouteTrack, Screen, Text, voice } from '@/ui'
 
 // Browse drives — anonymous-friendly. A tour is the whole self-contained drive now, so a
 // card opens straight into the drive (gated). The top is a framed travel-poster hero with
@@ -17,6 +18,7 @@ import { Badge, Button, Card, Divider, FilterChip, HeaderIconButton, Icon, Route
 // location filter ("Where to?") — a region chip, live whenever the catalog has a region.
 export default function DrivesScreen() {
   const theme = useTheme()
+  const insets = useSafeAreaInsets()
   const router = useRouter()
   const { data: session } = useSession()
   const { regions, setRegions, selectedRegion, setSelectedRegion } = useDrivesFilter()
@@ -205,8 +207,11 @@ export default function DrivesScreen() {
     </>
   )
 
+  // The FlatList scrolls, so it owns the bottom safe-area inset as content paddingBottom (drop
+  // 'bottom' from Screen's frame edges): the last card scrolls clear of the home indicator
+  // instead of clipping at an opaque inset band — same rationale as Screen's scroll path.
   return (
-    <Screen edges={['bottom']}>
+    <Screen edges={[]}>
       <Stack.Screen
         options={{
           headerTitle: () => (
@@ -258,11 +263,14 @@ export default function DrivesScreen() {
           </View>
         </>
       ) : (
+        // The scrolling drives list owns the soft top/bottom edge fades — content dissolves
+        // under the header and at the bottom edge, like every Screen-scroll surface.
+        <View style={styles.flex}>
         <FlatList
           data={visibleTours}
           keyExtractor={(t) => t.id}
           ListHeaderComponent={listHeader}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, { paddingBottom: space.gutter + insets.bottom }]}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -323,6 +331,8 @@ export default function DrivesScreen() {
             </View>
           )}
         />
+        <EdgeFade />
+        </View>
       )}
     </Screen>
   )
