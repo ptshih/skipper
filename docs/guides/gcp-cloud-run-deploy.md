@@ -231,9 +231,14 @@ gcloud beta run services update skipper-admin --region=us-east4 --iap --project 
 gcloud iap web add-iam-policy-binding --resource-type=cloud-run --service=skipper-admin \
   --region=us-east4 --member=user:ptshih@gmail.com --role=roles/iap.httpsResourceAccessor --project $PROJECT
 
-# 5) Verify.
+# 5) Verify. Direct IAP on Cloud Run walls the WHOLE service — NO per-path bypass — so an
+# external `curl $URL/health` returns "Invalid IAP credentials: empty token". That rejection
+# IS the success signal (IAP is enforcing); it does NOT mean /health is broken. Cloud Run's own
+# startup/liveness probes hit the container directly (not via IAP), so the revision stays healthy.
+# REAL check: open $URL in a browser → IAP sign-in with ADMIN_EMAIL → you reach the SPA (a 403
+# after sign-in = IAP ok but the email != ADMIN_EMAIL).
 URL=$(gcloud run services describe skipper-admin --region=us-east4 --format='value(status.url)')
-curl -s "$URL/health"   # {"ok":true}  (open; the rest is IAP-walled)
+# the gen job runs out-of-band (not behind IAP):
 gcloud run jobs execute skipper-gen --region=us-east4 \
   --args="packages/generator/src/run.ts,emerald-bay-run,--dry-run"
 ```
