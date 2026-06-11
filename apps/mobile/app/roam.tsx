@@ -271,6 +271,7 @@ export default function RoamScreen() {
                 },
               ]}
             >
+              <View style={[styles.handle, { backgroundColor: colors.trackInactive }]} />
               <View style={styles.sheetTop}>
                 <Badge tone="pine" label={voice.roam.storyBadge} />
                 <Duck label={voice.roam.musicDucked} active />
@@ -364,6 +365,12 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 6 },
     elevation: 8,
+  },
+  handle: {
+    alignSelf: 'center',
+    width: 36,
+    height: 4,
+    borderRadius: radius.pill,
   },
   sheetTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   progressRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
