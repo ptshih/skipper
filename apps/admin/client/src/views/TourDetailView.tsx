@@ -1,13 +1,15 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { api, type EvalScore, type SignResult, type TourDetail } from '@/lib/api'
+import { api, type EvalRunSummary, type EvalScore, type SignResult, type TourDetail } from '@/lib/api'
 import { Badge } from '@/components/ui/badge'
-import { fmtDuration, fmtMiles, fmtScore, fmtSec, timeAgo } from '@/lib/format'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { fmtDate, fmtDuration, fmtMiles, fmtScore, fmtSec, timeAgo } from '@/lib/format'
 
 export function TourDetailView() {
   const { id } = useParams<{ id: string }>()
   const [data, setData] = useState<TourDetail | null>(null)
   const [signed, setSigned] = useState<SignResult | null>(null)
+  const [runs, setRuns] = useState<EvalRunSummary[]>([])
   const [err, setErr] = useState<string | null>(null)
 
   useEffect(() => {
@@ -15,6 +17,13 @@ export function TourDetailView() {
     api.tour(id).then(setData).catch((e) => setErr(e instanceof Error ? e.message : String(e)))
     api.sign(id).then(setSigned).catch(() => setSigned(null)) // audio is best-effort
   }, [id])
+
+  // Eval history is keyed by slug, so it waits for the tour to resolve.
+  useEffect(() => {
+    const slug = data?.tour.slug
+    if (!slug) return
+    api.evals(slug).then((r) => setRuns(r.runs)).catch(() => setRuns([]))
+  }, [data?.tour.slug])
 
   if (err) return <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">{err}</div>
   if (!data) return <div className="text-muted-foreground">Loading…</div>
@@ -63,6 +72,8 @@ export function TourDetailView() {
         </section>
       )}
 
+      {runs.length > 0 && <RunHistory runs={runs} currentId={ev?.id} />}
+
       <section>
         <div className="mb-2 flex items-baseline justify-between">
           <h2 className="text-sm font-medium">Itinerary</h2>
@@ -91,6 +102,49 @@ export function TourDetailView() {
         </div>
       </section>
     </div>
+  )
+}
+
+function RunHistory({ runs, currentId }: { runs: EvalRunSummary[]; currentId?: string }) {
+  return (
+    <section>
+      <div className="mb-2 flex items-baseline justify-between">
+        <h2 className="text-sm font-medium">Run history</h2>
+        <span className="text-xs text-muted-foreground">{runs.length} eval{runs.length === 1 ? '' : 's'}</span>
+      </div>
+      <div className="overflow-hidden rounded-xl border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              {['When', 'Result', 'Grounding', 'Diversity', 'Charm', 'TTS', 'Veracity', 'Model', 'SHA'].map((h) => (
+                <TableHead key={h}>{h}</TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {runs.map((r) => (
+              <TableRow key={r.id} className={r.id === currentId ? 'bg-muted/40' : undefined}>
+                <TableCell className="whitespace-nowrap text-xs text-muted-foreground" title={fmtDate(r.createdAt)}>
+                  {r.id === currentId && <Badge variant="outline" className="mr-2">current</Badge>}
+                  {timeAgo(r.createdAt)}
+                </TableCell>
+                <TableCell>
+                  <Badge variant={r.pass ? 'success' : 'destructive'}>{r.pass ? 'pass' : 'fail'}</Badge>
+                  {r.dryRun && <Badge variant="secondary" className="ml-1">dry</Badge>}
+                </TableCell>
+                <TableCell className="font-mono text-xs tabular-nums">{fmtScore(r.grounding)}</TableCell>
+                <TableCell className="font-mono text-xs tabular-nums">{fmtScore(r.diversity)}</TableCell>
+                <TableCell className="font-mono text-xs tabular-nums">{fmtScore(r.charm)}</TableCell>
+                <TableCell className="font-mono text-xs tabular-nums">{fmtScore(r.tts)}</TableCell>
+                <TableCell className="font-mono text-xs tabular-nums">{fmtScore(r.veracity)}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">{r.narrationModel ?? '—'}</TableCell>
+                <TableCell className="font-mono text-xs text-muted-foreground">{r.gitSha ? r.gitSha.slice(0, 7) : '—'}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </section>
   )
 }
 
