@@ -28,11 +28,12 @@ import { announce, parseFlags } from './pipeline/ops'
 import { sleep } from './pipeline/http'
 import type { LngLat } from './pipeline/geo'
 
-/** The Lake Tahoe basin, generously: Meyers/South Lake Tahoe up to Incline/Kings Beach,
- *  Homewood/Sugar Pine Point across to Spooner/Zephyr Cove. [lng, lat] corners. */
-const TAHOE_BASIN: { sw: LngLat; ne: LngLat } = {
+/** Tahoe–Reno corridor: Meyers/South Lake Tahoe west to Homewood/Sugar Pine Point,
+ *  north to Kings Beach/Incline, east through Spooner/Zephyr Cove → Carson City →
+ *  Virginia City → Reno/Sparks. [lng, lat] corners. */
+const TAHOE_RENO_CORRIDOR: { sw: LngLat; ne: LngLat } = {
   sw: [-120.25, 38.86],
-  ne: [-119.86, 39.3],
+  ne: [-119.55, 39.65],
 }
 
 /** Split a bbox into a lngSteps × latSteps grid (WDQS etiquette: modest result sets per call). */
@@ -57,7 +58,7 @@ export function gridBoxes(
 }
 
 function parseBbox(raw: string | undefined): { sw: LngLat; ne: LngLat } {
-  if (!raw) return TAHOE_BASIN
+  if (!raw) return TAHOE_RENO_CORRIDOR
   const parts = raw.split(',').map(Number)
   if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n))) {
     throw new Error(`--bbox must be swLng,swLat,neLng,neLat (got "${raw}")`)
@@ -74,12 +75,12 @@ announce({ tool: 'sweep-roam-pois', blast: ['MUTATES DB'], apply })
 // Overrides ride every fetch (the fact-edit seam) — load them before any extract lands.
 await ensurePoiOverridesLoaded()
 
-// 3×4 grid over the basin (~10×11 km cells — WDQS chokes on wide-area boxes; the first
-// 2×3 attempt timed out on a mid-lake cell), merged by qid, then ONE same-place dedupe
-// across the whole merged set (a place straddling a cell boundary appears in two cells).
-// A cell that still fails after one local retry is SKIPPED and reported — the sweep is
-// idempotent, so a re-run fills the gap; one flaky WDQS window shouldn't kill the basin.
-const cells = gridBoxes(box.sw, box.ne, 3, 4)
+// 5×7 grid over the corridor (~11×11 km cells — WDQS chokes on wide-area boxes; the
+// original 2×3 attempt timed out on a mid-lake cell), merged by qid, then ONE same-place
+// dedupe across the whole merged set (a place straddling a cell boundary appears in two
+// cells). A cell that still fails after one local retry is SKIPPED and reported — the
+// sweep is idempotent, so a re-run fills the gap.
+const cells = gridBoxes(box.sw, box.ne, 5, 7)
 const byQid = new Map<string, WikidataCandidate>()
 const failedCells: number[] = []
 for (const [i, cell] of cells.entries()) {
@@ -121,7 +122,7 @@ const breaks = merged.filter((c) => c.tier === 'break')
 const drops = merged.filter((c) => c.tier === 'drop')
 
 console.log(
-  `\nBasin sweep: ${merged.length} places → ${stories.length} STORY, ${scenics.length} SCENIC, ` +
+  `\nCorridor sweep: ${merged.length} places → ${stories.length} STORY, ${scenics.length} SCENIC, ` +
     `${breaks.length} break (skipped), ${drops.length} drop (skipped)\n`,
 )
 console.log('STORY (roam-narratable — extract chars):')

@@ -41,6 +41,8 @@ const SCRIPTS = {
   patch_clip: 'packages/generator/src/patch-clip.ts',
   resynth: 'packages/generator/src/resynth-tour.ts',
   sweep_orphans: 'packages/generator/src/sweep-orphans.ts',
+  sweep_roam_pois: 'packages/generator/src/sweep-roam-pois.ts',
+  generate_roam: 'packages/generator/src/generate-roam.ts',
 } as const
 
 export type JobKind = keyof typeof SCRIPTS
@@ -99,6 +101,26 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     if (apply) args.push('--apply')
     if (body.keepOld) args.push('--keep-old')
     return { args, dryRun: !apply, spends: apply, tourId, targetId: tourId }
+  }
+
+  if (kind === 'sweep_roam_pois') {
+    const apply = body.apply === true
+    const args: string[] = [script]
+    if (body.bbox) args.push(`--bbox=${str(body.bbox)}`)
+    if (apply) args.push('--apply')
+    // sweep is free (WDQS + MediaWiki, no LLM/TTS); spends:false so no confirm gate.
+    return { args, dryRun: !apply, spends: false, targetId: 'roam-corpus' }
+  }
+
+  if (kind === 'generate_roam') {
+    const apply = body.apply === true
+    const args: string[] = [script]
+    if (body.bbox) args.push(`--bbox=${str(body.bbox)}`)
+    if (body.limit) args.push(`--limit=${Number(body.limit)}`)
+    if (body.force) args.push('--force')
+    if (body.minExtract) args.push(`--min-extract=${Number(body.minExtract)}`)
+    if (apply) args.push('--apply')
+    return { args, dryRun: !apply, spends: apply, targetId: 'roam-corpus' }
   }
 
   // sweep_orphans

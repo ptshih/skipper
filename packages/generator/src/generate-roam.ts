@@ -51,8 +51,15 @@ const ROAM_TARGET_SECONDS = 60
 const TASTE_DENYLIST = /kidnap|murder|killing of|death of|massacre|homicide|suicide|assault/i
 /** Roam grounds on real material: lead extracts below this stay out of v0 (no thin tellings). */
 const DEFAULT_MIN_EXTRACT = 400
-/** Default corpus bbox — the Tahoe basin (matches sweep-roam-pois.ts). */
-const DEFAULT_BBOX = { swLng: -120.25, swLat: 38.86, neLng: -119.86, neLat: 39.3 }
+/** Default corpus bbox — Tahoe–Reno corridor (matches sweep-roam-pois.ts). */
+const DEFAULT_BBOX = { swLng: -120.25, swLat: 38.86, neLng: -119.55, neLat: 39.65 }
+
+/** Rough sub-region label for the narrative context: tells the model where the driver IS. */
+function regionLabel(lat: number, lng: number): string {
+  if (lat > 39.35 && lng > -119.9) return 'Reno, Nevada'
+  if (lat > 39.0 && lng > -119.85) return 'Carson City, Nevada'
+  return 'Lake Tahoe'
+}
 
 const flags = parseFlags(process.argv.slice(2), { valueFlags: ['limit', 'min-extract', 'bbox'] })
 const apply = flags.has('apply')
@@ -204,7 +211,7 @@ const LATERALITY = /\b(?:on|to|off to) (?:your|the) (?:left|right)\b|\b(?:left|r
 
 async function narrateEncounter(c: Candidate): Promise<string> {
   const base = {
-    region: 'Lake Tahoe',
+    region: regionLabel(c.lat, c.lng),
     corridor: 'Free roam — an unplanned drive, no route',
     stopType: 'story' as const,
     jokeLevel: 'dadpocalypse' as const,
