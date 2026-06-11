@@ -2,5 +2,6 @@
 export * from './geo'
 export * from './format'
 export * from './trigger'
+export * from './roam'
 export * from './simulate'
 export * from './preview'
