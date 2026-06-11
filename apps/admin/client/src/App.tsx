@@ -5,6 +5,7 @@ import { ToursView } from './views/ToursView'
 import { TourDetailView } from './views/TourDetailView'
 import { CreateTourView } from './views/CreateTourView'
 import { ReferenceView } from './views/ReferenceView'
+import { PoisView } from './views/PoisView'
 
 export default function App() {
   return (
@@ -16,6 +17,7 @@ export default function App() {
         <Route path="/tours/:id" element={<TourDetailView />} />
         <Route path="/create" element={<CreateTourView />} />
         <Route path="/reference" element={<ReferenceView />} />
+        <Route path="/pois" element={<PoisView />} />
         <Route path="*" element={<Navigate to="/runs" replace />} />
       </Route>
     </Routes>

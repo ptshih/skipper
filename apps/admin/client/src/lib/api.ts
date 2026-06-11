@@ -188,6 +188,22 @@ export interface IntegrityReport {
   tours: IntegrityTour[]
 }
 
+export interface PoiRow {
+  id: string
+  source: string
+  sourceId: string
+  name: string
+  kind: string | null
+  factsHash: string | null
+  createdAt: string
+  tourCount: number
+  roamClipCount: number
+  staleFacts: boolean
+  attributed: boolean
+  regionSlug: string | null
+  regionName: string | null
+}
+
 // A unified Runs-timeline row: either an operational gen_job or a historical eval_run.
 export interface RunEvent {
   source: 'job' | 'eval'
@@ -239,6 +255,7 @@ export const api = {
   job: (id: string) => req<{ job: GenJob; logsUrl: string | null }>(`/admin/jobs/${id}`),
   cancelJob: (id: string) => req<{ job: GenJob }>(`/admin/jobs/${id}/cancel`, { method: 'POST' }),
   integrity: () => req<IntegrityReport>('/admin/integrity'),
+  pois: () => req<{ pois: PoiRow[] }>('/admin/pois'),
   createJob: (body: Record<string, unknown>) =>
     req<{ job: GenJob }>('/admin/jobs', { method: 'POST', body: JSON.stringify(body) }),
   propose: (body: Record<string, unknown>) =>

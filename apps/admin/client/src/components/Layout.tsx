@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { Activity, Anchor, BookOpen, Map, Moon, Search, Sun } from 'lucide-react'
+import { Activity, Anchor, BookOpen, Map, MapPin, Moon, Search, Sun } from 'lucide-react'
 
 const NAV = [
   { to: '/runs', label: 'Runs', icon: Activity },
   { to: '/tours', label: 'Tours', icon: Map },
+  { to: '/pois', label: 'POIs', icon: MapPin },
 ]
 
 export function Layout() {
@@ -125,6 +126,7 @@ function getCrumb(path: string): [string, string][] {
   if (path === '/runs') return [['Runs', '']]
   if (path === '/create') return [['Tours', '/tours'], ['Create', '']]
   if (path === '/reference') return [['Reference', '']]
+  if (path === '/pois') return [['POIs', '']]
   return []
 }
 
@@ -148,6 +150,7 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
   const all = [
     { group: 'Go to', label: 'Runs', icon: Activity, href: '/runs' },
     { group: 'Go to', label: 'Tours', icon: Map, href: '/tours' },
+    { group: 'Go to', label: 'POIs', icon: MapPin, href: '/pois' },
     { group: 'Go to', label: 'Reference', icon: BookOpen, href: '/reference' },
     { group: 'Actions', label: 'Create a tour', icon: Map, href: '/create' },
   ]

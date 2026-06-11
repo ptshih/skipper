@@ -19,6 +19,7 @@
 //   POST /admin/jobs              -> trigger an op as a skipper-gen Job  (jobs.ts — Phase 3)
 //   POST /admin/jobs/:id/cancel   -> stop a running execution (gen_job_status='canceled') (§14.8)
 //   GET  /admin/integrity         -> ready tours violating the audio/attribution invariant (§14.9)
+//   GET  /admin/pois              -> POI corpus: sources, tour + roam usage, attribution, region coverage
 //   POST /admin/tours/propose     -> Create Tour, phase 1: LLM + geocode  (create-tour.ts — Phase 4)
 //   POST /admin/tours             -> Create Tour, phase 2: freeze + draft  (create-tour.ts — Phase 4)
 
@@ -32,6 +33,7 @@ import {
   genJobs,
   pois,
   regions,
+  roamClips,
   tourBrackets,
   tourStops,
   tours,
@@ -618,6 +620,91 @@ app.post('/admin/jobs', async (c) => {
 
   const row = (await db.select().from(genJobs).where(eq(genJobs.id, id)).limit(1))[0]
   return c.json({ job: row }, 201)
+})
+
+// POI corpus — sources, tour + roam usage, attribution, and region coverage.
+app.get('/admin/pois', async (c) => {
+  const poisRows = await db
+    .select({
+      id: pois.id,
+      source: pois.source,
+      sourceId: pois.sourceId,
+      name: pois.name,
+      kind: pois.kind,
+      factsHash: pois.factsHash,
+      createdAt: pois.createdAt,
+    })
+    .from(pois)
+    .orderBy(asc(pois.name))
+
+  if (!poisRows.length) return c.json({ pois: [] })
+
+  const poiIds = poisRows.map((p) => p.id)
+
+  const [stopStats, clipStats, regionRows] = await Promise.all([
+    // Per-poi: tour count, stale-facts count, unattributed story count
+    db
+      .select({
+        poiId: tourStops.poiId,
+        tourCount: sql<string>`count(distinct ${tourStops.tourId})`,
+        staleCount: sql<string>`count(*) filter (where ${tourStops.factsHash} is distinct from ${pois.factsHash})`,
+        unattribCount: sql<string>`count(*) filter (where ${tourStops.attribution} is null and ${tourStops.stopType} = 'story')`,
+      })
+      .from(tourStops)
+      .innerJoin(pois, eq(tourStops.poiId, pois.id))
+      .where(inArray(tourStops.poiId, poiIds))
+      .groupBy(tourStops.poiId),
+    // Per-poi: roam clip count
+    db
+      .select({
+        poiId: roamClips.poiId,
+        clipCount: count(),
+      })
+      .from(roamClips)
+      .where(inArray(roamClips.poiId, poiIds))
+      .groupBy(roamClips.poiId),
+    // Per-poi: region slug + name (pick first per poi in JS)
+    db
+      .select({
+        poiId: tourStops.poiId,
+        regionSlug: regions.slug,
+        regionName: regions.displayName,
+      })
+      .from(tourStops)
+      .innerJoin(tours, eq(tourStops.tourId, tours.id))
+      .innerJoin(regions, eq(tours.regionId, regions.id))
+      .where(inArray(tourStops.poiId, poiIds)),
+  ])
+
+  const stopMap = new Map(stopStats.map((s) => [s.poiId, s]))
+  const clipMap = new Map(clipStats.map((s) => [s.poiId, Number(s.clipCount)]))
+  // Pick first region per poi
+  const regionMap = new Map<string, { regionSlug: string; regionName: string }>()
+  for (const r of regionRows) {
+    if (!regionMap.has(r.poiId)) regionMap.set(r.poiId, { regionSlug: r.regionSlug, regionName: r.regionName })
+  }
+
+  const result = poisRows.map((p) => {
+    const s = stopMap.get(p.id)
+    const region = regionMap.get(p.id)
+    return {
+      id: p.id,
+      source: p.source,
+      sourceId: p.sourceId,
+      name: p.name,
+      kind: p.kind,
+      factsHash: p.factsHash,
+      createdAt: p.createdAt,
+      tourCount: s ? Number(s.tourCount) : 0,
+      roamClipCount: clipMap.get(p.id) ?? 0,
+      staleFacts: s ? Number(s.staleCount) > 0 : false,
+      attributed: s ? Number(s.unattribCount) === 0 : true,
+      regionSlug: region?.regionSlug ?? null,
+      regionName: region?.regionName ?? null,
+    }
+  })
+
+  return c.json({ pois: result })
 })
 
 // Serve the built SPA. In prod the Hono service serves it (one Cloud Run service behind IAP);
