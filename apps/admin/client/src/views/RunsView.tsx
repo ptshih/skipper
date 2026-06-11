@@ -373,30 +373,28 @@ function RunDrawer({ run, onClose, onChanged }: { run: RunEvent; onClose: () => 
           )}
 
           {/* Output summary + raw log (succeeded jobs with captured output) */}
-          {job?.outputSummary && (
+          {isJob && (
             <>
               <div className="seclabel">Summary</div>
-              <div style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--ink)' }}>{job.outputSummary}</div>
-            </>
-          )}
-          {job?.outputData && Object.keys(job.outputData).length > 0 && (
-            <>
+              <div style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--ink)' }}>
+                {job?.outputSummary ?? <span className="muted">Available after the next succeeded run.</span>}
+              </div>
               <div className="seclabel" style={{ marginTop: 14 }}>Metrics</div>
               <div className="logblock" style={{ fontSize: 12 }}>
-                {JSON.stringify(job.outputData, null, 2)}
+                {job?.outputData && Object.keys(job.outputData).length > 0
+                  ? JSON.stringify(job.outputData, null, 2)
+                  : <span className="muted">—</span>}
               </div>
-            </>
-          )}
-          {job?.outputLog && (
-            <>
               <div className="seclabel" style={{ marginTop: 14 }}>
                 Raw log
-                <span className="muted" style={{ fontSize: 11, marginLeft: 6 }}>
-                  {job.outputLog.split('\n').length} lines
-                </span>
+                {job?.outputLog && (
+                  <span className="muted" style={{ fontSize: 11, marginLeft: 6 }}>
+                    {job.outputLog.split('\n').length} lines
+                  </span>
+                )}
               </div>
               <div className="logblock" style={{ fontSize: 11, maxHeight: 320, overflowY: 'auto', whiteSpace: 'pre' }}>
-                {job.outputLog}
+                {job?.outputLog ?? <span className="muted">—</span>}
               </div>
             </>
           )}
