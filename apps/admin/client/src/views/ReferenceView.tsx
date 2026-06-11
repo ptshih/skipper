@@ -136,6 +136,30 @@ export function ReferenceView() {
         </ol>
       </Section>
 
+      <Section title="Example: roam corpus for a new corridor" subtitle="Sweep first (free), then generate. Always dry-run before applying.">
+        <ol className="list-decimal space-y-1.5 pl-5 text-sm text-muted-foreground">
+          <li>
+            New run → <Step>Sweep roam POIs</Step> — leave bbox blank (defaults to Tahoe–Reno). Run dry → verify the POI list in the job log.
+          </li>
+          <li>
+            Run again with <Step>Apply</Step> — upserts story + scenic pois into the DB. Free; no confirm needed.
+          </li>
+          <li>
+            New run → <Step>Generate roam</Step> — set <Step>Limit = 3</Step> for a smoke test. Run dry to see the corpus size and cost estimate.
+          </li>
+          <li>
+            Run again with <Step>Apply</Step> (Limit = 3) — synthesizes 3 clips. Type <code>roam-corpus</code> to confirm.
+            Ear-test them before the full run.
+          </li>
+          <li>
+            Once clips sound good, run <Step>Generate roam</Step> with Apply and no Limit — narrates + synthesizes the full corpus.
+          </li>
+          <li>
+            Use <Step>Force</Step> only if you need to regenerate clips whose facts haven't changed — e.g. after a persona prompt tweak.
+          </li>
+        </ol>
+      </Section>
+
       <Section title="Heads-up">
         <ul className="list-disc space-y-1.5 pl-5 text-sm text-muted-foreground">
           <li>
@@ -175,6 +199,18 @@ const RUN_KINDS: { kind: string; does: string; cost: ReactNode; safe: string }[]
     does: 'Delete R2 audio clips that no tour_stop references anymore.',
     cost: 'Deletes bytes (when applied).',
     safe: 'Apply OFF — lists, deletes nothing.',
+  },
+  {
+    kind: 'Sweep roam POIs',
+    does: 'Discover Wikidata-pinned places in a bbox, join Wikipedia, tier them, and upsert story + scenic pois.',
+    cost: 'Free — WDQS + MediaWiki only, no LLM or TTS.',
+    safe: 'Apply OFF — previews the POI list, writes nothing.',
+  },
+  {
+    kind: 'Generate roam',
+    does: 'Narrate + synthesize free-roam encounter clips for every story-grade poi in the corpus bbox.',
+    cost: <span>LLM per clip (~$0.10); <span className="text-foreground">TTS</span> per clip (when applied).</span>,
+    safe: 'Apply OFF — shows corpus size + cost estimate.',
   },
 ]
 
