@@ -9,7 +9,7 @@
 > requirement 2026-06-10 — see §5b. Builder infra, not a charm feature. Substrate (**Cloud Run
 > Jobs**) + auth (**Google IAP, founder-only**) are GA and confirmed.
 > **Built:** v0 (`gen_jobs` + migration `0005` + the `job-progress` hook + the `skipper-gen` Job
-> image) and v1 (`apps/admin` API — IAP gate, monitor reads, job trigger/reconcile, Create Tour —
+> image) and v1 (`apps/admin-api` API — IAP gate, monitor reads, job trigger/reconcile, Create Tour —
 > + the `apps/admin-web` React/Vite/Tailwind/shadcn SPA with the Google-Maps Create-Tour flow + the
 > admin Dockerfile/cloudbuild). All packages typecheck/build, 238 generator tests pass.
 > **Pending (founder-gated):** apply migrations `0005`/`0006`; the GCP one-time setup + deploy
@@ -29,7 +29,7 @@ deployed, founder-only admin app that both **triggers** ops and **monitors** the
 - **v0 — cloud execution.** The `skipper-gen` Cloud Run **Job** wrapping the four existing CLIs
   (generate / patch-clip / resynth / sweep), triggered with `gcloud run jobs execute …` from the
   laptop or a phone. This alone moves execution off-machine — near-zero new surface, immediate value.
-- **v1 — the admin app.** `apps/admin` (Vite SPA + Hono) behind **IAP**, the `gen_jobs` run
+- **v1 — the admin app.** `apps/admin-api` (Vite SPA + Hono) behind **IAP**, the `gen_jobs` run
   record, the ear-pass/eval monitor, **and Create Tour** (§5b) — the UX + observability + authoring
   layer on top of v0.
 
@@ -204,7 +204,7 @@ a Cloud Run Job (only generation is Job-worthy).
 > may still need a `PersonaDef` in code for a bespoke host (an existing region like `lake-tahoe` is fully
 > runtime); and the propose-prompt should be seeded with the region/persona taste so picks aren't generic.
 
-## 6. The `apps/admin` service (v1)
+## 6. The `apps/admin-api` service (v1)
 
 One bun + Hono container (same stack as `apps/api`) that serves the built **Vite SPA** (React +
 TS) as static assets AND exposes the `/admin/*` JSON API:
@@ -224,7 +224,7 @@ The SPA: a **Runs** view (table + a "New run" form, dry-run default, live status
 ear-pass view (ordered stops/brackets, inline audio, grounding/diversity/charm verdicts), and an
 **Evals** view (per-slug trend + auto prior-vs-latest diff — the "0.818→0.909" done by hand today).
 
-`apps/admin` joins the bun workspace; declare its phantom deps explicitly (the mobile workspace's
+`apps/admin-api` joins the bun workspace; declare its phantom deps explicitly (the mobile workspace's
 isolated-linker lesson) — it's a server+SPA, so lower-risk than the RN app.
 
 ## 7. Auth — Google IAP, founder-only (v1)
@@ -281,12 +281,12 @@ A truly minimal first cut can defer step 2's per-phase tick — terminal status 
 
 ## 10. Deploy / CD (mirrors the existing api + site triggers)
 
-- `apps/admin/Dockerfile` (v1 admin service) + `packages/generator/Dockerfile` (v0 Job image), each
+- `apps/admin-api/Dockerfile` (v1 admin service) + `packages/generator/Dockerfile` (v0 Job image), each
   pushed to the `skipper` Artifact Registry repo.
 - **`cloudbuild.gen.yaml`** (v0) — build → push → `gcloud run jobs deploy skipper-gen` (create-or-update).
 - **`cloudbuild.admin.yaml`** (v1) — build → push → `gcloud run deploy skipper-admin` (IAP, not public).
 - Cloud Build triggers on the existing `skipper-gh` connection, path-filtered: `packages/generator/**`
-  (+ db/shared/storage) → the gen Job; `apps/admin/**` → admin.
+  (+ db/shared/storage) → the gen Job; `apps/admin-api/**` → admin.
 - **One-time IAM / setup:**
   - Create the two SAs. `skipper-gen@`: `secretmanager.secretAccessor` on the dotenv key. `skipper-admin@`:
     **`roles/run.developer` on the `skipper-gen` job** — *not* `run.invoker`: invoker carries
@@ -311,7 +311,7 @@ A truly minimal first cut can defer step 2's per-phase tick — terminal status 
    `--dry-run` generate via `gcloud run jobs execute`. **← v0 done: execution is in the cloud.**
 
 **v1 — the admin app (fast-follow):**
-4. `apps/admin`: Hono `/admin/jobs` (create + list/poll + reconcile) + a minimal Vite Runs view
+4. `apps/admin-api`: Hono `/admin/jobs` (create + list/poll + reconcile) + a minimal Vite Runs view
    (dry-run-default form). IAP (incl. the DRS step). **← the v1 MVP slice.**
 5. **Create Tour** (§5b): the `materializeRoute()` refactor + the `tours.routeProvenance` migration +
    `POST /admin/tours/propose` (LLM + region-biased geocode) + `POST /admin/tours` (freeze) +

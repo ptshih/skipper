@@ -10,8 +10,8 @@
         "typescript": "^6.0.3",
       },
     },
-    "apps/admin": {
-      "name": "@skipper/admin",
+    "apps/admin-api": {
+      "name": "@skipper/admin-api",
       "version": "0.0.0",
       "dependencies": {
         "@anthropic-ai/sdk": "^0.102.0",
@@ -794,7 +794,7 @@
 
     "@sinclair/typebox": ["@sinclair/typebox@0.27.10", "", {}, "sha512-MTBk/3jGLNB2tVxv6uLlFh1iu64iYOQ2PbdOSK3NW8JZsmlaOh2q6sdtKowBhfw8QFLmYNzTW4/oK4uATIi6ZA=="],
 
-    "@skipper/admin": ["@skipper/admin@workspace:apps/admin"],
+    "@skipper/admin-api": ["@skipper/admin-api@workspace:apps/admin-api"],
 
     "@skipper/admin-web": ["@skipper/admin-web@workspace:apps/admin-web"],
 

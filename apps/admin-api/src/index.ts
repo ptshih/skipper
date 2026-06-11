@@ -1,4 +1,4 @@
-// @skipper/admin — the founder-only ops console (Hono, served natively by bun).
+// @skipper/admin-api — the founder-only ops console (Hono, served natively by bun).
 //
 // v1 BACKEND. Behind Google IAP (requireAdmin asserts the founder's identity); a separate
 // Cloud Run service from the public api.skipper.fm so a routing bug can't leak ops onto the

@@ -1,6 +1,6 @@
 # Cloud Run SERVICE image for the admin console — the Hono admin-api + the built SPA, one
 # container behind Google IAP (spec §6/§7). Build from the REPO ROOT:
-#   docker build -f apps/admin/Dockerfile -t skipper-admin .
+#   docker build -f apps/admin-api/Dockerfile -t skipper-admin .
 #
 # Two stages: (1) build the Vite SPA, (2) the bun Hono server that serves /admin/* AND the
 # built dist (same-origin, so the IAP cookie/headers flow). Mirrors apps/api/Dockerfile's
@@ -31,14 +31,14 @@ RUN bun add -g @dotenvx/dotenvx
 # (NOT generator — the admin TRIGGERS the Job, it doesn't run generation. @anthropic-ai/sdk +
 # google-auth-library are admin's own deps and install with it.)
 COPY package.json ./
-COPY apps/admin/package.json apps/admin/
+COPY apps/admin-api/package.json apps/admin-api/
 COPY packages/db/package.json packages/db/
 COPY packages/shared/package.json packages/shared/
 COPY packages/storage/package.json packages/storage/
 RUN bun -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));p.workspaces=['apps/admin','packages/db','packages/shared','packages/storage'];fs.writeFileSync('package.json',JSON.stringify(p,null,2))" \
  && bun install --production
 
-COPY apps/admin/src apps/admin/src
+COPY apps/admin-api/src apps/admin-api/src
 COPY packages/db/src packages/db/src
 # seed/ carries materialize.ts + tour-specs.ts (Create Tour calls materializeRoute).
 COPY packages/db/seed packages/db/seed
@@ -55,4 +55,4 @@ EXPOSE 8788
 
 # dotenvx decrypts .env.production (needs DOTENV_PRIVATE_KEY_PRODUCTION); ADMIN_EMAIL,
 # GOOGLE_CLOUD_PROJECT, ANTHROPIC_API_KEY, GOOGLE_MAPS_API_KEY, R2_* ride in it.
-ENTRYPOINT ["dotenvx", "run", "-f", ".env.production", "--", "bun", "run", "apps/admin/src/index.ts"]
+ENTRYPOINT ["dotenvx", "run", "-f", ".env.production", "--", "bun", "run", "apps/admin-api/src/index.ts"]

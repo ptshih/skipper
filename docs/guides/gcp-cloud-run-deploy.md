@@ -161,7 +161,7 @@ from `apps/site` (a `.firebaserc` pins the project).
 
 ## The admin console + the skipper-gen job — Cloud Run (runbook; not yet deployed)
 
-`apps/admin` (the founder-only ops console: a bun Hono API + the built `apps/admin-web`
+`apps/admin-api` (the founder-only ops console: a bun Hono API + the built `apps/admin-web`
 Vite/React SPA, ONE container) → a Cloud Run **service** `skipper-admin` behind **Google
 IAP**. `packages/generator` → a Cloud Run **job** `skipper-gen` (the tour-ops CLI runner:
 generate / patch-clip / resynth / sweep, one image, per-execution `args`). Both reuse the
@@ -211,7 +211,7 @@ gcloud builds triggers create github --name=skipper-gen-deploy --region=us-east4
 gcloud builds triggers create github --name=skipper-admin-deploy --region=us-east4 \
   --repository=projects/$PROJECT/locations/us-east4/connections/skipper-gh/repositories/skipper \
   --branch-pattern='^main$' --build-config=cloudbuild.admin.yaml \
-  --included-files='apps/admin/**,apps/admin-web/**,packages/db/**,packages/shared/**,packages/storage/**,cloudbuild.admin.yaml' \
+  --included-files='apps/admin-api/**,apps/admin-web/**,packages/db/**,packages/shared/**,packages/storage/**,cloudbuild.admin.yaml' \
   --substitutions=_VITE_MAPS_KEY=<browser-maps-key> \
   --service-account=projects/$PROJECT/serviceAccounts/$COMPUTE
 
@@ -247,5 +247,5 @@ agent). Temporarily relax DRS (needs `roles/orgpolicy.policyAdmin`) to register 
 - `.gcloudignore` — trims the Cloud Build upload; re-excludes `.env.keys`.
 - `apps/api/Dockerfile` — the lean Bun image (header explains the workspace trim).
 - `packages/generator/Dockerfile` — the `skipper-gen` Job image (one image, all four CLIs).
-- `apps/admin/Dockerfile` — the admin service (stage 1 builds `apps/admin-web`, stage 2 serves it).
+- `apps/admin-api/Dockerfile` — the admin service (stage 1 builds `apps/admin-web`, stage 2 serves it).
 - `apps/site/` — the Astro apex site (`firebase.json`, `.firebaserc`, static AASA).
