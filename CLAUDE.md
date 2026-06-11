@@ -8,9 +8,9 @@ scale-for-a-market, pick polish.
 **No users yet — break things freely (a STORAGE rule).** The app has ZERO real users, so
 schema / storage changes need NO backward-compatibility and NO careful data migration:
 prefer CLEAN, DESTRUCTIVE migrations (drop + recreate) over preserving legacy rows or
-nullable-for-back-compat columns. The only things still worth a founder OK are COST and
-the demo — a live regen burns GCP credits, and the canonical preview IS the demo (don't
-silently break it). (Added 2026-06-08.) **Scope (2026-06-09):** this licenses breaking
+nullable-for-back-compat columns. The only thing still worth a founder OK is COST — a live
+regen burns GCP credits. (Added 2026-06-08; the canonical-preview "demo" exception was
+dropped 2026-06-11 — there is no special tour, every tour is treated the same.) **Scope (2026-06-09):** this licenses breaking
 STORAGE, not the wire contract — once v1 is in the App Store, installed clients lag, so
 the API/DTO surface (`@skipper/shared` + `apps/api` routes) stops being break-freely even
 while the DB stays destructive-OK. Posture now SET (`docs/decisions/api-versioning-posture.md`):

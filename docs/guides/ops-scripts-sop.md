@@ -12,7 +12,7 @@ The generator's **one-off ops CLIs** — `packages/generator/src/*.ts` you run b
 backfills). NOT the generation pipeline itself, and not app/API code.
 
 These touch live, irreversible things — the DB, R2 bytes, and metered TTS/LLM spend (a live regen
-burns GCP credits; the canonical preview IS the demo). So they share one safety contract.
+burns GCP credits). So they share one safety contract.
 
 ## The rules
 
