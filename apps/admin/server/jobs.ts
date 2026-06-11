@@ -13,7 +13,7 @@ const JOB = process.env.GEN_JOB_NAME ?? 'skipper-gen'
 const SCOPE = 'https://www.googleapis.com/auth/cloud-platform'
 
 let auth: GoogleAuth | undefined
-async function accessToken(): Promise<string> {
+export async function accessToken(): Promise<string> {
   auth ??= new GoogleAuth({ scopes: SCOPE })
   const t = await auth.getAccessToken()
   if (!t) throw new Error('Could not obtain a Google access token (ADC / runtime service account).')

@@ -611,6 +611,12 @@ export const genJobs = pgTable(
     /** The IAP-asserted email in v1; 'cli' for a gcloud-triggered v0 run. */
     triggeredBy: text('triggered_by').notNull(),
     error: text('error'),
+    /** Raw Cloud Run stdout captured after the execution settles. */
+    outputLog: text('output_log'),
+    /** LLM-generated one-paragraph summary of what the run did. */
+    outputSummary: text('output_summary'),
+    /** LLM-extracted structured metrics (kind-specific fields). */
+    outputData: jsonb('output_data').$type<Record<string, unknown>>(),
     startedAt: timestamp('started_at', { withTimezone: true }),
     endedAt: timestamp('ended_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

@@ -52,6 +52,7 @@ import {
   type JobKind,
 } from './jobs'
 import { freezeTour, proposeTour, type ProposePrompt } from './create-tour'
+import { captureJobOutput } from './job-output'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 
 const app = new Hono<AdminEnv>()
@@ -475,6 +476,9 @@ app.get('/admin/runs', async (c) => {
             })
             .where(eq(genJobs.id, j.id))
           j.status = state
+          if (state === 'succeeded') {
+            void captureJobOutput(j.id, j.cloudRunExecution!, j.kind)
+          }
         }
       }),
     )
@@ -551,6 +555,9 @@ app.get('/admin/jobs/:id', async (c) => {
         })
         .where(eq(genJobs.id, id))
       job = (await db.select().from(genJobs).where(eq(genJobs.id, id)).limit(1))[0]!
+      if (state === 'succeeded') {
+        void captureJobOutput(job.id, job.cloudRunExecution!, job.kind)
+      }
     }
   }
   const logsUrl = job.cloudRunExecution ? jobExecutionLogsUrl(job.cloudRunExecution) : null

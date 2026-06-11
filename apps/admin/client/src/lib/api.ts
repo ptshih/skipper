@@ -42,6 +42,9 @@ export interface GenJob {
   triggeredBy: string
   error: string | null
   cloudRunExecution: string | null
+  outputLog: string | null
+  outputSummary: string | null
+  outputData: Record<string, unknown> | null
   startedAt: string | null
   endedAt: string | null
   createdAt: string
