@@ -1,13 +1,20 @@
 # Admin ops console — build spec
 
-> **Status:** spec, build-ready, **unbuilt** — greenlit 2026-06-10 (promoted from the
-> `docs/ideas/admin-ops-console.md` brainstorm, which this supersedes). **Reviewed under a
-> microscope + hardened 2026-06-10:** GCP claims re-verified against current docs, internal
-> contracts spot-checked against the code, and the work **sequenced v0 (the Job = cloud
-> execution) → v1 (the admin app = UX/monitoring)** — see §1, §11. **Create Tour** (LLM-proposed,
-> human-approved runtime authoring) added to v1 per founder requirement 2026-06-10 — see §5b. Builder
-> infra, not a charm feature. Substrate (**Cloud Run Jobs**) + auth (**Google IAP, founder-only**) are GA and
-> confirmed. Contracts below (line numbers, SA emails, project id) are real as of writing — the
+> **Status:** spec, **BUILT (code-complete) 2026-06-10** on branch `feat/admin-ops-v0`, pending
+> deploy — greenlit 2026-06-10 (promoted from the `docs/ideas/admin-ops-console.md` brainstorm,
+> which this supersedes). **Reviewed under a microscope + hardened 2026-06-10:** GCP claims
+> re-verified against current docs, internal contracts spot-checked against the code, and the work
+> **sequenced v0 (the Job = cloud execution) → v1 (the admin app = UX/monitoring)** — see §1, §11.
+> **Create Tour** (LLM-proposed, human-approved runtime authoring) added to v1 per founder
+> requirement 2026-06-10 — see §5b. Builder infra, not a charm feature. Substrate (**Cloud Run
+> Jobs**) + auth (**Google IAP, founder-only**) are GA and confirmed.
+> **Built:** v0 (`gen_jobs` + migration `0005` + the `job-progress` hook + the `skipper-gen` Job
+> image) and v1 (`apps/admin` API — IAP gate, monitor reads, job trigger/reconcile, Create Tour —
+> + the `apps/admin-web` React/Vite/Tailwind/shadcn SPA with the Google-Maps Create-Tour flow + the
+> admin Dockerfile/cloudbuild). All packages typecheck/build, 238 generator tests pass.
+> **Pending (founder-gated):** apply migrations `0005`/`0006`; the GCP one-time setup + deploy
+> (§10); a local visual pass on the blind-built SPA; merge to main.
+> Contracts below (line numbers, SA emails, project id) are real as of writing — the
 > code wins if they drift. Pairs with [the Cloud Run deploy guide](../guides/gcp-cloud-run-deploy.md)
 > and [the ops-scripts SOP](../guides/ops-scripts-sop.md) (whose safe-by-default contract the
 > UI buttons MUST honor).
