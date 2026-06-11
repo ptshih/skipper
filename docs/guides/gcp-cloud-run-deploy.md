@@ -186,10 +186,9 @@ ADMIN=skipper-admin@$PROJECT.iam.gserviceaccount.com
 
 # gen job: read the dotenv secret. TTS authorizes via THIS SA's ADC token — no IAM role, no key.
 gcloud secrets add-iam-policy-binding dotenv-private-key-production --member=serviceAccount:$GEN --role=roles/secretmanager.secretAccessor --project $PROJECT
-# admin: read the secret + TRIGGER the gen job (run.developer carries run.jobs.runWithOverrides
-# + run.executions.get — run.invoker is NOT enough because we send an overrides body).
+# admin: read the secret. (The run.developer grant ON the gen job is DEFERRED to step 3 —
+# the job does not exist until its first build creates it, so binding here fails NOT_FOUND.)
 gcloud secrets add-iam-policy-binding dotenv-private-key-production --member=serviceAccount:$ADMIN --role=roles/secretmanager.secretAccessor --project $PROJECT
-gcloud run jobs add-iam-policy-binding skipper-gen --region=us-east4 --member=serviceAccount:$ADMIN --role=roles/run.developer --project $PROJECT
 # the Compute BUILD SA must act-as both runtime SAs to deploy them
 gcloud iam service-accounts add-iam-policy-binding $GEN   --member=serviceAccount:$COMPUTE --role=roles/iam.serviceAccountUser --project $PROJECT
 gcloud iam service-accounts add-iam-policy-binding $ADMIN --member=serviceAccount:$COMPUTE --role=roles/iam.serviceAccountUser --project $PROJECT
@@ -200,8 +199,9 @@ dotenvx set ADMIN_EMAIL "ptshih@gmail.com" -f .env.production
 # additive migrations to prod (gen_jobs + tours.route_provenance — 0005/0006).
 bun run db:migrate:prod
 
-# 2) CD triggers (reuse skipper-gh; path-filtered). _VITE_MAPS_KEY = a referrer-restricted
-#    browser Maps key (public, baked into the SPA bundle — not a secret).
+# 2) CD triggers (reuse skipper-gh; path-filtered). The browser Maps key is HARDCODED in
+#    cloudbuild.admin.yaml's --build-arg (public, referrer-restricted) — so NO _VITE_MAPS_KEY sub
+#    (a declared-but-unused substitution fails the default MUST_MATCH check).
 gcloud builds triggers create github --name=skipper-gen-deploy --region=us-east4 \
   --repository=projects/$PROJECT/locations/us-east4/connections/skipper-gh/repositories/skipper \
   --branch-pattern='^main$' --build-config=cloudbuild.gen.yaml \
@@ -212,11 +212,14 @@ gcloud builds triggers create github --name=skipper-admin-deploy --region=us-eas
   --repository=projects/$PROJECT/locations/us-east4/connections/skipper-gh/repositories/skipper \
   --branch-pattern='^main$' --build-config=cloudbuild.admin.yaml \
   --included-files='apps/admin/**,packages/db/**,packages/shared/**,packages/storage/**,cloudbuild.admin.yaml' \
-  --substitutions=_VITE_MAPS_KEY=<browser-maps-key> \
   --service-account=projects/$PROJECT/serviceAccounts/$COMPUTE
 
-# 3) First build (after merge) — or `gcloud builds submit --config cloudbuild.admin.yaml`.
-gcloud builds triggers run skipper-gen-deploy   --branch=main --region=us-east4
+# 3) First build (after merge) — or `gcloud builds submit --config cloudbuild.<gen|admin>.yaml`.
+# Build the gen JOB FIRST so `skipper-gen` exists, THEN grant admin run.developer on it (deferred
+# from step 1; run.developer carries run.jobs.runWithOverrides + run.executions.get — run.invoker
+# is NOT enough because we send an overrides body).
+gcloud builds triggers run skipper-gen-deploy --branch=main --region=us-east4
+gcloud run jobs add-iam-policy-binding skipper-gen --region=us-east4 --member=serviceAccount:$ADMIN --role=roles/run.developer --project $PROJECT
 gcloud builds triggers run skipper-admin-deploy --branch=main --region=us-east4
 
 # 4) Enable IAP on the admin service (AFTER its first deploy creates it), founder-only.
