@@ -16,7 +16,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { TOUR_SPECS, specBySlug, type TourSpec, type FrozenTour } from './tour-specs'
+import { TOUR_SPECS, specBySlug, type TourSpec, type Waypoint, type FrozenTour } from './tour-specs'
 
 const DATA_DIR = join(dirname(fileURLToPath(import.meta.url)), 'data')
 const ROUTES_URL = 'https://routes.googleapis.com/directions/v2:computeRoutes'
@@ -51,15 +51,15 @@ function decodePolyline(encoded: string): [number, number][] {
   return out
 }
 
-async function computeRoute(spec: TourSpec, apiKey: string) {
+async function computeRoute(waypoints: readonly Waypoint[], apiKey: string) {
   const toLoc = (w: { lat: number; lng: number }) => ({
     location: { latLng: { latitude: w.lat, longitude: w.lng } },
   })
-  const wp = spec.waypoints
+  const wp = waypoints
   const origin = wp[0]
   const destination = wp[wp.length - 1]
   if (!origin || !destination || wp.length < 2) {
-    throw new Error(`${spec.slug}: need at least an origin and a destination`)
+    throw new Error('need at least an origin and a destination (2+ waypoints)')
   }
   const body = {
     origin: toLoc(origin),
@@ -89,40 +89,46 @@ async function computeRoute(spec: TourSpec, apiKey: string) {
   }
   const route = json.routes?.[0]
   if (!route?.polyline?.encodedPolyline) {
-    throw new Error(`${spec.slug}: Routes API returned no polyline`)
+    throw new Error('Routes API returned no polyline')
   }
   return route
 }
 
-async function materialize(spec: TourSpec, apiKey: string): Promise<FrozenTour> {
-  const route = await computeRoute(spec, apiKey)
+/** The route + its provenance, frozen but NOT written to disk — the reusable core. */
+export interface MaterializedRoute {
+  polyline: [number, number][]
+  distanceMeters: number
+  durationSeconds: number
+  provenance: FrozenTour['provenance']
+}
+
+/** Freeze a road-snapped route from ordered waypoints via the Google Routes API. The seed
+ *  CLI wraps this to write seed/data/<slug>.json; the admin (Create Tour) calls it directly
+ *  to freeze a runtime-authored route into the DB. No file write, no disk. */
+export async function materializeRoute(
+  waypoints: readonly Waypoint[],
+  apiKey: string = requireApiKey(),
+): Promise<MaterializedRoute> {
+  const route = await computeRoute(waypoints, apiKey)
   const polyline = decodePolyline(route.polyline.encodedPolyline)
   // duration comes back like "786s".
   const durationSeconds = Number.parseInt(route.duration.replace(/s$/, ''), 10)
-  const frozen: FrozenTour = {
-    slug: spec.slug,
+  return {
     polyline,
+    distanceMeters: route.distanceMeters,
+    durationSeconds,
     provenance: {
       source: 'google-routes-v2',
-      waypoints: spec.waypoints,
+      waypoints: [...waypoints],
       distanceMeters: route.distanceMeters,
       durationSeconds,
       pointCount: polyline.length,
       materializedAt: new Date().toISOString(),
     },
   }
-  mkdirSync(DATA_DIR, { recursive: true })
-  const file = join(DATA_DIR, `${spec.slug}.json`)
-  writeFileSync(file, JSON.stringify(frozen, null, 2) + '\n')
-  const miles = (route.distanceMeters / 1609.344).toFixed(1)
-  const mins = Math.round(durationSeconds / 60)
-  console.log(
-    `✓ ${spec.slug}: ${polyline.length} points, ${miles} mi, ~${mins} min -> ${file}`,
-  )
-  return frozen
 }
 
-async function main() {
+function requireApiKey(): string {
   const apiKey = process.env.GOOGLE_MAPS_API_KEY
   if (!apiKey) {
     throw new Error(
@@ -130,6 +136,24 @@ async function main() {
         '  dotenvx run -f .env.development -- bun packages/db/seed/materialize.ts <slug>',
     )
   }
+  return apiKey
+}
+
+/** CLI helper: materialize a spec and write the frozen artifact to seed/data/<slug>.json. */
+async function materialize(spec: TourSpec, apiKey: string): Promise<FrozenTour> {
+  const { polyline, provenance } = await materializeRoute(spec.waypoints, apiKey)
+  const frozen: FrozenTour = { slug: spec.slug, polyline, provenance }
+  mkdirSync(DATA_DIR, { recursive: true })
+  const file = join(DATA_DIR, `${spec.slug}.json`)
+  writeFileSync(file, JSON.stringify(frozen, null, 2) + '\n')
+  const miles = (provenance.distanceMeters / 1609.344).toFixed(1)
+  const mins = Math.round(provenance.durationSeconds / 60)
+  console.log(`✓ ${spec.slug}: ${polyline.length} points, ${miles} mi, ~${mins} min -> ${file}`)
+  return frozen
+}
+
+async function main() {
+  const apiKey = requireApiKey()
   const arg = process.argv[2]
   if (!arg) {
     throw new Error('Usage: materialize.ts <slug> | --all')
@@ -141,4 +165,6 @@ async function main() {
   }
 }
 
-await main()
+if (import.meta.main) {
+  await main()
+}

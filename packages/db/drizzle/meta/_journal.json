@@ -43,6 +43,13 @@
       "when": 1781137065263,
       "tag": "0005_broken_northstar",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1781138574124,
+      "tag": "0006_previous_wendell_vaughn",
+      "breakpoints": true
     }
   ]
 }

@@ -9,7 +9,8 @@
     ".": "./src/client.ts",
     "./schema": "./src/schema.ts",
     "./auth-schema": "./src/auth-schema.ts",
-    "./seed/poi-overrides": "./seed/poi-overrides.ts"
+    "./seed/poi-overrides": "./seed/poi-overrides.ts",
+    "./seed/materialize": "./seed/materialize.ts"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate",

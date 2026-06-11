@@ -50,6 +50,32 @@ export type AttributionSnapshot = {
 /** Generic, non-volatile break-stop metadata (no baked live data). */
 export type StopMeta = Record<string, unknown>
 
+/**
+ * How a tour's frozen route was authored — the DB-resident form of the committed
+ * seed/data/<slug>.json provenance, set for admin (Create Tour) authored tours. Always
+ * records the final frozen waypoints + Routes totals; `authoring` is present when the route
+ * was LLM-proposed + human-approved in the admin console (the "why this route exists" trail).
+ */
+export type RouteProvenance = {
+  source: 'google-routes-v2'
+  waypoints: { label: string; lat: number; lng: number }[]
+  distanceMeters: number
+  durationSeconds: number
+  materializedAt: string // ISO-8601
+  authoring?: {
+    model: string
+    prompt: {
+      regionSlug: string
+      roughStart: string
+      roughEnd: string
+      loopOrDirection: string
+      vibe?: string
+    }
+    /** The LLM's named proposal BEFORE human edits (the approved set is `waypoints`). */
+    proposed: { label: string; lat: number; lng: number; rationale?: string }[]
+  }
+}
+
 /* -------------------------------------------------------------------------- */
 /*  Enums — keep these in lockstep with the Zod enums in @skipper/shared        */
 /* -------------------------------------------------------------------------- */
@@ -247,6 +273,9 @@ export const tours = pgTable(
     distanceMeters: integer('distance_meters'),
     durationSeconds: integer('duration_seconds'),
     summary: text('summary'),
+    // How the route was authored (admin Create Tour). Null for the original seed-authored
+    // tours, whose provenance lives in the committed seed/data/<slug>.json. See RouteProvenance.
+    routeProvenance: jsonb('route_provenance').$type<RouteProvenance>(),
     // End-anchors {name, lat, lng}: naming, intro/outro anchoring, the GPS-start pin,
     // and the proximity recommender.
     startAnchorName: text('start_anchor_name').notNull(),
