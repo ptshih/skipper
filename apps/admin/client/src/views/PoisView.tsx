@@ -175,6 +175,7 @@ function CorpusTab({ pois }: { pois: PoiRow[] }) {
   const [q, setQ] = useState('')
   const [region, setRegion] = useState('all')
   const [source, setSource] = useState('all')
+  const [flags, setFlags] = useState('all')
   const [expanded, setExpanded] = useState<string | null>(null)
 
   const regions = useMemo(() => {
@@ -187,18 +188,22 @@ function CorpusTab({ pois }: { pois: PoiRow[] }) {
   const filtered = useMemo(() => pois.filter((p) => {
     if (region !== 'all' && p.regionSlug !== region) return false
     if (source !== 'all' && p.source !== source) return false
+    if (flags === 'defect' && !p.suspiciousDuration) return false
+    if (flags === 'stale' && !p.staleFacts) return false
+    if (flags === 'unattrib' && (p.attributed || p.tourCount === 0)) return false
     if (q) {
       const s = `${p.name} ${p.sourceId}`.toLowerCase()
       if (!s.includes(q.toLowerCase())) return false
     }
     return true
-  }), [pois, region, source, q])
+  }), [pois, region, source, flags, q])
 
   const totals = {
     total: pois.length,
     withClips: pois.filter((p) => p.roamClipCount > 0).length,
     inTours: pois.filter((p) => p.tourCount > 0).length,
     unattrib: pois.filter((p) => !p.attributed && p.tourCount > 0).length,
+    defects: pois.filter((p) => p.suspiciousDuration).length,
   }
 
   return (
@@ -211,6 +216,12 @@ function CorpusTab({ pois }: { pois: PoiRow[] }) {
           <span className="badge badge--bad">
             <span className="badge__dot" />
             {totals.unattrib} unattributed
+          </span>
+        )}
+        {totals.defects > 0 && (
+          <span className="badge badge--bad" style={{ cursor: 'pointer' }} onClick={() => setFlags('defect')}>
+            <span className="badge__dot" />
+            {totals.defects} clip defect{totals.defects > 1 ? 's' : ''}
           </span>
         )}
       </div>
@@ -232,6 +243,14 @@ function CorpusTab({ pois }: { pois: PoiRow[] }) {
             <option value="wikidata">Wikidata</option>
             <option value="osm">OSM</option>
             <option value="manual">Manual</option>
+          </select>
+        </div>
+        <div className="selectbox">
+          <select value={flags} onChange={(e) => setFlags(e.target.value)}>
+            <option value="all">All flags</option>
+            <option value="defect">⚠ Clip defects</option>
+            <option value="stale">Stale facts</option>
+            <option value="unattrib">Unattributed</option>
           </select>
         </div>
         <span className="toolbar__spacer" />
