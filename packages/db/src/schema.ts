@@ -570,6 +570,8 @@ export const genJobKindEnum = pgEnum('gen_job_kind', [
   'patch_clip', // patch-clip.ts — re-synth one stop/bracket clip
   'resynth', // resynth-tour.ts — re-synth every clip of a tour
   'sweep_orphans', // sweep-orphans.ts — delete unreferenced R2 clips
+  'sweep_roam_pois', // sweep-roam-pois.ts — fetch + upsert roam POIs (added with the roam job triggers, 287a64a)
+  'generate_roam', // generate-roam.ts — narrate + synthesize roam clips
 ])
 export const genJobStatusEnum = pgEnum('gen_job_status', [
   'queued', // row created (admin-api in v1), Job not yet running
