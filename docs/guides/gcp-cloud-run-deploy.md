@@ -224,10 +224,12 @@ gcloud builds triggers run skipper-admin-deploy --branch=main --region=us-east4
 
 # 4) Enable IAP on the admin service (AFTER its first deploy creates it), founder-only.
 gcloud beta run services update skipper-admin --region=us-east4 --iap --project $PROJECT
-# grant the founder the IAP accessor — VERIFY the exact grant against the IAP-for-Cloud-Run
-# doc (the direct-on-Cloud-Run path is newer than the LB one); roughly:
-gcloud run services add-iam-policy-binding skipper-admin --region=us-east4 \
-  --member=user:ptshih@gmail.com --role=roles/iap.httpsResourceAccessor --project $PROJECT
+# Grant the founder the IAP accessor. Bind on the IAP RESOURCE via `iap web`
+# (--resource-type=cloud-run) — NOT `run services add-iam-policy-binding`, which rejects the
+# role with "roles/iap.httpsResourceAccessor is not supported for this resource". Verified vs
+# the IAP-for-Cloud-Run doc 2026-06-11. Use the email you actually SIGN IN with (== ADMIN_EMAIL).
+gcloud iap web add-iam-policy-binding --resource-type=cloud-run --service=skipper-admin \
+  --region=us-east4 --member=user:ptshih@gmail.com --role=roles/iap.httpsResourceAccessor --project $PROJECT
 
 # 5) Verify.
 URL=$(gcloud run services describe skipper-admin --region=us-east4 --format='value(status.url)')
