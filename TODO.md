@@ -173,12 +173,12 @@ a feature to copy. These three borrows are small and serve that moat. NOT borrow
 subscription-first pricing, celebrity narrator roster, national free-roam pin-map,
 over-broad trigger radius (all anti-charm or anti-doctrine).
 
-- [ ] **Duck the rider's MUSIC, not just nav prompts.** Autio's single most-cited audio
-      complaint is that it plays *over* your music (it only ducks turn-by-turn nav). Our
-      "duck, don't stop" rule must cover BOTH background media and nav. Pairs directly with
-      the pending Phase-0 duck flip — when flipping `doNotMix`→`duckOthers`, verify the
-      rider's own music ducks too, not only the nav voice. (Watch the lock-screen landmine:
-      `setActiveForLockScreen` wants `doNotMix` — see the device-verification runbook.)
+- [ ] **Pause+resume music during encounters (reconsider duck).** Founder feedback
+      2026-06-11: ducking (`duckOthers`) leaves music audible underneath clips and the two
+      streams compete — distracting. Explore full pause+resume instead. Note: switching
+      away from `duckOthers` may make the lock-screen landmine moot (`setActiveForLockScreen`
+      wants `doNotMix` — see the device-verification runbook) — check if iOS media-session
+      interruption allows clean resume from podcast/music apps before committing.
 - [ ] **Heard/unheard stop-progress affordance on the drive screen.** Autio grays out
       played map pins so you can glance at what's coming. Cheap, in-car-safe charm: a
       "stop N of M" / dimmed-completed-stops indicator on the drive screen. Costs almost
