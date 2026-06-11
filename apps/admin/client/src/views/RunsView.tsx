@@ -52,7 +52,7 @@ export function RunsView() {
 
   useEffect(() => {
     void refresh()
-    const t = setInterval(() => void refresh(), 5000)
+    const t = setInterval(() => void refresh(), 15000)
     return () => clearInterval(t)
   }, [])
 
@@ -117,7 +117,7 @@ export function RunsView() {
         </span>
         <span className="badge badge--warn"><DollarSign size={11} />{fmtCost(todaySpend)} today</span>
         <span style={{ flex: 1 }} />
-        <span className="muted" style={{ fontSize: 12 }}>auto-refresh · 5s</span>
+        <span className="muted" style={{ fontSize: 12 }}>auto-refresh · 15s</span>
       </div>
 
       <div className="toolbar">

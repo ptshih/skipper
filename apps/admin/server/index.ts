@@ -426,6 +426,8 @@ app.get('/admin/runs', async (c) => {
         evalRunId: genJobs.evalRunId,
         triggeredBy: genJobs.triggeredBy,
         createdAt: genJobs.createdAt,
+        cloudRunExecution: genJobs.cloudRunExecution,
+        updatedAt: genJobs.updatedAt,
       })
       .from(genJobs)
       .orderBy(desc(genJobs.createdAt))
@@ -447,6 +449,36 @@ app.get('/admin/runs', async (c) => {
       .orderBy(desc(evalRuns.createdAt))
       .limit(100),
   ])
+
+  // Reconcile stale non-terminal jobs so the list reflects reality without requiring a
+  // detail-drawer click. Limit to jobs updated within the last hour to avoid hammering
+  // the Cloud Run API on every poll for ancient rows.
+  const staleNonTerminal = jobs.filter(
+    (j) =>
+      !TERMINAL.includes(j.status as (typeof TERMINAL)[number]) &&
+      j.cloudRunExecution &&
+      j.updatedAt &&
+      Date.now() - new Date(j.updatedAt).getTime() > RECONCILE_AFTER_MS &&
+      Date.now() - new Date(j.createdAt).getTime() < 60 * 60 * 1000,
+  )
+  if (staleNonTerminal.length > 0) {
+    await Promise.all(
+      staleNonTerminal.map(async (j) => {
+        const state = await executionState(j.cloudRunExecution!)
+        if (state === 'running' || state === 'succeeded' || state === 'failed') {
+          await db
+            .update(genJobs)
+            .set({
+              status: state,
+              ...(state !== 'running' && { endedAt: new Date() }),
+              ...(state === 'failed' && { error: 'reconciled: execution failed' }),
+            })
+            .where(eq(genJobs.id, j.id))
+          j.status = state
+        }
+      }),
+    )
+  }
 
   const referenced = new Set(jobs.map((j) => j.evalRunId).filter(Boolean) as string[])
   const runs = [
@@ -509,10 +541,14 @@ app.get('/admin/jobs/:id', async (c) => {
   const stale = Date.now() - new Date(job.updatedAt).getTime() > RECONCILE_AFTER_MS
   if (nonTerminal && stale && job.cloudRunExecution) {
     const state = await executionState(job.cloudRunExecution)
-    if (state === 'succeeded' || state === 'failed') {
+    if (state === 'running' || state === 'succeeded' || state === 'failed') {
       await db
         .update(genJobs)
-        .set({ status: state, endedAt: new Date(), error: state === 'failed' ? 'reconciled: execution failed' : null })
+        .set({
+          status: state,
+          ...(state !== 'running' && { endedAt: new Date() }),
+          ...(state === 'failed' && { error: 'reconciled: execution failed' }),
+        })
         .where(eq(genJobs.id, id))
       job = (await db.select().from(genJobs).where(eq(genJobs.id, id)).limit(1))[0]!
     }

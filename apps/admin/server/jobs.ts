@@ -193,7 +193,7 @@ export async function cancelExecution(shortName: string): Promise<void> {
 export function jobExecutionLogsUrl(shortName: string): string | null {
   const project = process.env.GOOGLE_CLOUD_PROJECT
   if (!project) return null
-  return `https://console.cloud.google.com/run/jobs/executions/details/${REGION}/${shortName}/logs?project=${project}`
+  return `https://console.cloud.google.com/run/jobs/details/${REGION}/${JOB}/executions/${shortName}?project=${project}`
 }
 
 export type ExecState = 'running' | 'succeeded' | 'failed' | 'unknown'
