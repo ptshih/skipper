@@ -38,14 +38,26 @@ import {
 } from '@/ui'
 
 const CONTRACT_SEEN_KEY = 'skipper.roamContractSeen'
-/** The motif's car token takes this long to glide the trail once (a calm cruise). */
-const MOTIF_LOOP_MS = 9_000
+
+/** Map nearest-pin distance to a motif loop duration — three calm buckets with wide
+ *  dead-zones so routine GPS jitter never flips the speed between renders.
+ *  14 s  → idle, no pins near (the unhurried cruise)
+ *  11.5 s → a pin on the horizon (a pin has entered range)
+ *  9 s   → pulling alongside (pin is close; encounter imminent) */
+function toMotifLoopMs(nearestM: number | null): number {
+  if (nearestM === null || nearestM > 1500) return 14_000
+  if (nearestM > 300) return 11_500
+  return 9_000
+}
 
 /** The riding-along base's signature: the car token gliding a dashed atlas trail — the
  *  session's ONE moving thing ("alive, not a spinner"). Parked mid-trail under Reduce
- *  Motion; the amber token glow yields while the encounter sheet owns the screen's glow. */
-function RoamMotif({ glow }: { glow: boolean }) {
+ *  Motion; the amber token glow yields while the encounter sheet owns the screen's glow.
+ *  Loop speed breathes with the nearest pin: slower when the road is empty, quickening
+ *  as a pin approaches — the canvas responds to the drive without adding text or chrome. */
+function RoamMotif({ glow, nearestM }: { glow: boolean; nearestM: number | null }) {
   const reducedMotion = useReducedMotion()
+  const loopMs = toMotifLoopMs(nearestM)
   const progress = useRef(new Animated.Value(reducedMotion ? 0.45 : 0)).current
   useEffect(() => {
     if (reducedMotion) {
@@ -54,13 +66,14 @@ function RoamMotif({ glow }: { glow: boolean }) {
     }
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(progress, { toValue: 1, duration: MOTIF_LOOP_MS, useNativeDriver: false }),
+        Animated.timing(progress, { toValue: 1, duration: loopMs, useNativeDriver: false }),
         Animated.timing(progress, { toValue: 0, duration: 0, useNativeDriver: false }),
       ]),
     )
     loop.start()
-    return () => loop.stop()
-  }, [reducedMotion, progress])
+    // Reset to 0 on cleanup so the next loop always starts clean from the trail head.
+    return () => { loop.stop(); progress.setValue(0) }
+  }, [reducedMotion, progress, loopMs])
   // RouteTrack is the existing trail+token primitive — the motif IS that vocabulary. A bolder
   // bed (height 10 vs the default 6) lets the trail anchor the centered idle cluster as the
   // screen's one signature move; the token stays the single moving/glowing amber element (§8).
@@ -272,7 +285,7 @@ export default function RoamScreen() {
               {roamMode === 'sim' && <Badge tone="teal" label={voice.roam.simBadge} />}
             </View>
             <View style={styles.motif}>
-              <RoamMotif glow={!sheetVisible} />
+              <RoamMotif glow={!sheetVisible} nearestM={r.diag.nearestM} />
             </View>
             <Text variant="heading" color="ink">
               {voice.roam.idleTitle}
