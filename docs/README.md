@@ -79,7 +79,7 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
 - [scenic-stops-spec.md](specs/scenic-stops-spec.md) — deliberately adding scenic stops; unblocked
   but partially overtaken by the pacing rework — re-ground before building.
 - [admin-ops-console-spec.md](specs/admin-ops-console-spec.md) — **builder infra**: cloud-execute the
-  tour-ops CLIs (generate/patch/resynth/sweep) as **Cloud Run Jobs** (v0), then a deployed `apps/admin-api`
+  tour-ops CLIs (generate/patch/resynth/sweep) as **Cloud Run Jobs** (v0), then a deployed `apps/admin`
   (Vite + Hono) behind **Google IAP** with a `gen_jobs` record + ear-pass/eval monitor (v1);
   build-ready, unbuilt, greenlit + microscope-hardened 2026-06-10.
 - [free-roam-alpha-spec.md](specs/free-roam-alpha-spec.md) — what the free-roam ALPHA actually is

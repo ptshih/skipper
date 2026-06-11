@@ -1,12 +1,12 @@
-# Cloud Build pipeline for the `skipper-admin` Cloud Run SERVICE (admin-api + SPA, behind IAP).
+# Cloud Build pipeline for the `skipper-admin` Cloud Run SERVICE (apps/admin: Hono + SPA, behind IAP).
 #
-# build (apps/admin-api/Dockerfile, multi-stage: SPA + Hono server) -> push -> deploy. Mirrors
+# build (apps/admin/Dockerfile, multi-stage: client SPA + Hono server) -> push -> deploy. Mirrors
 # cloudbuild.yaml; differences: the multi-stage Dockerfile, a --build-arg for the public Maps
 # browser key, the image name, and NO --no-invoker-iam-check (IAP gates invocation, not allUsers).
 #
 # Trigger: a 3rd Cloud Build trigger on the existing `skipper-gh` connection, path-filtered to
-#   apps/admin-api/**, apps/admin-web/** (+ db/shared/storage). Set the _VITE_MAPS_KEY substitution
-#   on the trigger (a referrer-restricted browser key — public, not a secret).
+#   apps/admin/** (+ db/shared/storage). Set the _VITE_MAPS_KEY substitution on the trigger
+#   (a referrer-restricted browser key — public, not a secret).
 #
 # ONE-TIME setup (NOT here — see docs/specs/admin-ops-console-spec.md §7/§10):
 #   - SA `skipper-admin@$PROJECT_ID...`: roles/run.developer on the `skipper-gen` job
@@ -20,7 +20,7 @@ steps:
     args:
       - build
       - -f
-      - apps/admin-api/Dockerfile
+      - apps/admin/Dockerfile
       - --build-arg
       - VITE_GOOGLE_MAPS_BROWSER_KEY=${_VITE_MAPS_KEY}
       - -t

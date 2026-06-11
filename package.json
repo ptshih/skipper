@@ -8,8 +8,7 @@
   },
   "workspaces": [
     "apps/api",
-    "apps/admin-api",
-    "apps/admin-web",
+    "apps/admin",
     "apps/site",
     "apps/mobile",
     "packages/*"
