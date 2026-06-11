@@ -159,7 +159,7 @@ Custom domain: Hosting console → Add custom domain → `skipper.fm` → add it
 Cloudflare as **DNS-only (grey cloud)**. Manual deploy: `firebase deploy --only hosting`
 from `apps/site` (a `.firebaserc` pins the project).
 
-## The admin console + the skipper-gen job — Cloud Run (runbook; not yet deployed)
+## The admin console + the skipper-gen job — Cloud Run (admin DEPLOYED 2026-06-11)
 
 `apps/admin` (the founder-only ops console: a bun Hono API + the built `apps/admin/client`
 Vite/React SPA, ONE container) → a Cloud Run **service** `skipper-admin` behind **Google
@@ -171,6 +171,17 @@ branch `feat/admin-ops-v0`; the steps below are the first deploy.
 
 **Sequence:** merge to `main` → one-time setup → register triggers → first build → enable
 IAP (+ DRS relax) → smoke-test. (Triggers fire on `^main$`, so nothing auto-deploys until merge.)
+
+**Deployed 2026-06-11.** `skipper-admin` is live behind IAP. Real-world fixes (folded into the
+steps below): the run.developer grant on the gen job moves AFTER its first build (NOT_FOUND
+otherwise); the IAP accessor binds via `iap web … --resource-type=cloud-run`, NOT `run services
+add-iam-policy-binding` (which rejects the role); direct IAP walls the WHOLE service, so an
+external `curl /health` returns "Invalid IAP credentials: empty token" — that's success, not a
+broken route. **Admin identity = `peter@manoa.health`** (in-domain): a personal-gmail accessor
+needs DRS relaxed, so we switched to the Workspace account and re-enabled DRS. **Footgun:**
+`.env.production` lives at the repo ROOT, outside the admin trigger's `--included-files`
+(`apps/admin/**,…`), so an `ADMIN_EMAIL`/prod-env change does NOT auto-deploy — push, then
+`gcloud builds triggers run skipper-admin-deploy --branch=main --region=us-east4` by hand.
 
 ```bash
 PROJECT=lithe-window-491818-k8
