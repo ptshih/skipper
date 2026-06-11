@@ -20,6 +20,7 @@
 //   POST /admin/tours             -> Create Tour, phase 2: freeze + draft  (create-tour.ts — Phase 4)
 
 import { Hono } from 'hono'
+import { serveStatic } from 'hono/bun'
 import { and, asc, count, desc, eq, inArray } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import {
@@ -431,6 +432,15 @@ app.post('/admin/jobs', async (c) => {
   const row = (await db.select().from(genJobs).where(eq(genJobs.id, id)).limit(1))[0]
   return c.json({ job: row }, 201)
 })
+
+// Serve the built SPA. In prod the Hono service serves it (one Cloud Run service behind IAP);
+// in local dev vite serves the UI and proxies /admin + /health here, so this dir is absent and
+// these 404 harmlessly. IAP gates the whole service at ingress, so the static assets need no
+// in-app gate (only /health is intentionally open, for Cloud Run probes that bypass IAP).
+const WEB_ROOT = process.env.ADMIN_WEB_ROOT ?? './public'
+app.use('/*', serveStatic({ root: WEB_ROOT }))
+// SPA fallback — client-side routes (/runs, /tours/:id, /create) return index.html.
+app.get('*', serveStatic({ path: `${WEB_ROOT}/index.html` }))
 
 const port = Number(process.env.PORT ?? 8788)
 
