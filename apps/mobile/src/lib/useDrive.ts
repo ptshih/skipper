@@ -732,9 +732,9 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
       return
     }
     player.play()
-    // A clip that never starts (expired 403 / decode fail / dead zone) never fires
-    // didJustFinish. After a grace, re-sign ONCE (reloads the clip); if it STILL won't
-    // start on the second pass, skip the stop.
+    // A clip that never produces real audio (expired 403 / decode fail / dead zone /
+    // a stream buffering forever) never fires didJustFinish. After a grace, re-sign ONCE
+    // (reloads the clip); if it STILL won't start on the second pass, skip the stop.
     watchdog.current = setTimeout(() => {
       if (sawFresh.current) return
       if (!clipRetried.current.has(activeSeq)) {
@@ -763,9 +763,12 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
   }, [activeSeq, urls, data, paused, player, onClipDone, resign])
 
   // ---- clip end → ducked-quiet (NOT next-stop): wait for the next GPS trigger ----
+  // FRESH means audio actually ADVANCED — expo-audio flips `playing` true on the play()
+  // INTENT while a stream buffers forever, so trusting it lets a stalled clip evade the
+  // watchdog (roam's field hang: a sheet frozen at 0:00 on thin 5G; same player stack here).
   useEffect(() => {
     if (activeSeq === null) return
-    if (status.playing && !status.didJustFinish) {
+    if (status.playing && (status.currentTime ?? 0) > 0.25) {
       sawFresh.current = true
       if (watchdog.current) {
         clearTimeout(watchdog.current)
@@ -781,7 +784,7 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
       finishedSeq.current = activeSeq
       onClipDone(activeSeq)
     }
-  }, [status.playing, status.didJustFinish, activeSeq, onClipDone])
+  }, [status.playing, status.didJustFinish, status.currentTime, activeSeq, onClipDone])
 
   // A new active clip → drop any seek target carried from the last one.
   useEffect(() => {
