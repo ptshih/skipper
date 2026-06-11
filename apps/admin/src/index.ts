@@ -35,6 +35,8 @@ import {
 import { requireAdmin, type AdminEnv } from './auth'
 import { contentTypeForKey, presignGet } from './storage'
 import { buildJobArgs, executionState, HttpError, runJob, type BuildResult, type JobKind } from './jobs'
+import { freezeTour, proposeTour, type ProposePrompt } from './create-tour'
+import type { ContentfulStatusCode } from 'hono/utils/http-status'
 
 const app = new Hono<AdminEnv>()
 
@@ -248,6 +250,50 @@ app.get('/admin/tours/:id/sign', async (c) => {
   } catch (e) {
     console.error('[admin] presign failed', e)
     return c.json({ error: 'audio_unavailable', message: 'R2 not configured or presign failed.' }, 503)
+  }
+})
+
+// ── Create Tour (spec §5b): LLM-proposed → human-approved → frozen ──
+
+// Phase 1 — propose: prompt -> LLM named waypoints -> region-biased geocode. No DB write.
+app.post('/admin/tours/propose', async (c) => {
+  let body: Record<string, unknown>
+  try {
+    body = (await c.req.json()) as Record<string, unknown>
+  } catch {
+    return c.json({ error: 'bad_request', message: 'a JSON body is required' }, 400)
+  }
+  for (const k of ['regionSlug', 'roughStart', 'roughEnd', 'loopOrDirection'] as const) {
+    if (typeof body[k] !== 'string' || !(body[k] as string).trim())
+      return c.json({ error: 'bad_request', message: `${k} is required` }, 400)
+  }
+  try {
+    const proposal = await proposeTour(body as unknown as ProposePrompt)
+    return c.json({ proposal })
+  } catch (e) {
+    if (e instanceof HttpError)
+      return c.json({ error: 'propose_failed', message: e.message }, e.status as ContentfulStatusCode)
+    console.error('[admin] propose failed', e)
+    return c.json({ error: 'propose_failed', message: e instanceof Error ? e.message : String(e) }, 502)
+  }
+})
+
+// Phase 2 — freeze: the human-APPROVED waypoints -> materialize -> draft tour + provenance.
+app.post('/admin/tours', async (c) => {
+  let body: Record<string, unknown>
+  try {
+    body = (await c.req.json()) as Record<string, unknown>
+  } catch {
+    return c.json({ error: 'bad_request', message: 'a JSON body is required' }, 400)
+  }
+  try {
+    const tour = await freezeTour(body)
+    return c.json({ tour }, 201)
+  } catch (e) {
+    if (e instanceof HttpError)
+      return c.json({ error: 'create_failed', message: e.message }, e.status as ContentfulStatusCode)
+    console.error('[admin] create tour failed', e)
+    return c.json({ error: 'create_failed', message: e instanceof Error ? e.message : String(e) }, 502)
   }
 })
 
