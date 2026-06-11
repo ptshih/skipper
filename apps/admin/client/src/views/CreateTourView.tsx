@@ -1,14 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Check, Map, Wand2 } from 'lucide-react'
 import { api, ApiError, type Proposal, type Region } from '@/lib/api'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { Select } from '@/components/ui/select'
-import { Badge } from '@/components/ui/badge'
 import { WaypointMap, type MapWaypoint } from '@/components/WaypointMap'
-import { PageHeader } from '@/components/PageHeader'
 
 interface EditWaypoint {
   label: string
@@ -23,6 +17,7 @@ const slugify = (s: string) =>
 export function CreateTourView() {
   const nav = useNavigate()
   const [regions, setRegions] = useState<Region[]>([])
+  const [step, setStep] = useState<1 | 2 | 3>(1)
   const [prompt, setPrompt] = useState({
     regionSlug: '',
     regionName: '',
@@ -35,8 +30,8 @@ export function CreateTourView() {
   const [proposing, setProposing] = useState(false)
   const [creating, setCreating] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const [createdId, setCreatedId] = useState<string | null>(null)
 
-  // The editable, human-approved draft (seeded from the proposal).
   const [slug, setSlug] = useState('')
   const [headline, setHeadline] = useState('')
   const [summary, setSummary] = useState('')
@@ -64,6 +59,7 @@ export function CreateTourView() {
       setStartName(proposal.startAnchorName)
       setEndName(proposal.endAnchorName)
       setWaypoints(proposal.waypoints.map((w) => ({ label: w.label, rationale: w.rationale, lat: w.lat, lng: w.lng })))
+      setStep(2)
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : String(e))
     } finally {
@@ -78,6 +74,7 @@ export function CreateTourView() {
     setWaypoints((ws) => ws.map((w, j) => (j === i ? { ...w, label } : w)))
 
   const placed = waypoints.filter((w) => w.lat != null && w.lng != null)
+  const ungeocoded = waypoints.filter((w) => w.lat == null).length
   const canCreate =
     !!slug && !!headline && !!startName && !!endName && placed.length >= 2 && placed.length === waypoints.length
 
@@ -105,7 +102,8 @@ export function CreateTourView() {
           : undefined,
       }
       const { tour } = await api.createTour(body)
-      nav(`/tours/${tour.id}`)
+      setCreatedId(tour.id)
+      setStep(3)
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : String(e))
     } finally {
@@ -115,89 +113,197 @@ export function CreateTourView() {
 
   const mapWaypoints: MapWaypoint[] = waypoints
 
-  return (
-    <div className="space-y-5">
-      <PageHeader
-        title="Create a tour"
-        description="The skipper proposes the rails; you approve them on the map; then it freezes into a draft you can generate."
-      />
+  const STEPS: [number, string][] = [[1, 'Prompt'], [2, 'Review & approve'], [3, 'Draft']]
 
-      {/* Phase 1 — prompt */}
-      <div className="grid gap-3 rounded-lg border p-4 sm:grid-cols-2">
-        <Field label="Region">
-          <Select value={prompt.regionSlug} onChange={setP('regionSlug')}>
-            <option value="">Select a region…</option>
-            {regions.map((r) => (
-              <option key={r.slug} value={r.slug}>{r.displayName}</option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Shape">
-          <Select value={prompt.loopOrDirection} onChange={setP('loopOrDirection')}>
-            {['one-way (A → B)', 'loop (return to start)'].map((o) => <option key={o}>{o}</option>)}
-          </Select>
-        </Field>
-        <Field label="Start near"><Input value={prompt.roughStart} onChange={setP('roughStart')} placeholder="South Lake Tahoe" /></Field>
-        <Field label="End near"><Input value={prompt.roughEnd} onChange={setP('roughEnd')} placeholder="Tahoe City" /></Field>
-        <Field label="Vibe (optional)"><Input value={prompt.vibe} onChange={setP('vibe')} placeholder="scenic west shore, ~45 min" /></Field>
-        <div className="flex items-end">
-          <Button
-            onClick={() => void doPropose()}
-            disabled={proposing || !prompt.regionSlug || !prompt.roughStart || !prompt.roughEnd}
-          >
-            {proposing ? 'Proposing…' : proposal ? 'Re-propose' : 'Propose'}
-          </Button>
+  return (
+    <div>
+      <div className="pagehead">
+        <div>
+          <h1 className="pagehead__title">Create a tour</h1>
+          <p className="pagehead__desc">The skipper proposes the rails; you approve them on the map; then it freezes into a draft you can generate.</p>
         </div>
       </div>
 
-      {err && <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">{err}</div>}
-
-      {/* Phase 2 — review + approve */}
-      {proposal && (
-        <div className="grid gap-5 lg:grid-cols-2">
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-2">
-              <Field label="Slug"><Input value={slug} onChange={(e) => setSlug(e.target.value)} /></Field>
-              <Field label="Headline"><Input value={headline} onChange={(e) => setHeadline(e.target.value)} /></Field>
-              <Field label="Start anchor"><Input value={startName} onChange={(e) => setStartName(e.target.value)} /></Field>
-              <Field label="End anchor"><Input value={endName} onChange={(e) => setEndName(e.target.value)} /></Field>
+      <div className="stepper">
+        {STEPS.map(([n, label], i) => (
+          <div key={n} style={{ display: 'flex', alignItems: 'center' }}>
+            {i > 0 && <span className={`step__line${step > i ? ' is-done' : ''}`} />}
+            <div className={`step${step === n ? ' is-active' : step > n ? ' is-done' : ''}`}>
+              <span className="step__num">
+                {step > n ? <Check size={14} /> : n}
+              </span>
+              <span className="step__label">{label}</span>
             </div>
-            <Field label="Summary"><Textarea value={summary} onChange={(e) => setSummary(e.target.value)} /></Field>
-
-            <div>
-              <Label>Waypoints (drag pins on the map to adjust)</Label>
-              <ol className="mt-1 space-y-1">
-                {waypoints.map((w, i) => (
-                  <li key={i} className="flex items-center gap-2 text-sm">
-                    <span className="w-5 text-right font-mono text-xs text-muted-foreground">{i + 1}</span>
-                    <Input value={w.label} onChange={(e) => setWaypointLabel(i, e.target.value)} className="h-8" />
-                    {w.lat == null && <Badge variant="warning">no coords</Badge>}
-                    <Button variant="ghost" size="sm" onClick={() => removeWaypoint(i)}>✕</Button>
-                  </li>
-                ))}
-              </ol>
-              {waypoints.some((w) => w.lat == null) && (
-                <p className="mt-1 text-xs text-amber-500">Some waypoints didn’t geocode — drop them or place them on the map before creating.</p>
-              )}
-            </div>
-
-            <Button onClick={() => void doCreate()} disabled={creating || !canCreate}>
-              {creating ? 'Creating draft…' : 'Create draft'}
-            </Button>
           </div>
+        ))}
+      </div>
 
-          <WaypointMap waypoints={mapWaypoints} onMove={moveWaypoint} />
+      {err && (
+        <div className="badge badge--bad" style={{ display: 'block', marginBottom: 14, padding: '10px 14px', borderRadius: 'var(--radius)' }}>
+          {err}
         </div>
       )}
-    </div>
-  )
-}
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-1">
-      <Label>{label}</Label>
-      {children}
+      {step === 1 && (
+        <div className="card" style={{ padding: 20, maxWidth: 720 }}>
+          <div className="grid-2">
+            <div className="field">
+              <label className="field__label">Region</label>
+              <div className="selectbox">
+                <select value={prompt.regionSlug} onChange={setP('regionSlug')}>
+                  <option value="">Select a region…</option>
+                  {regions.map((r) => (
+                    <option key={r.slug} value={r.slug}>{r.displayName}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="field">
+              <label className="field__label">Shape</label>
+              <div className="selectbox">
+                <select value={prompt.loopOrDirection} onChange={setP('loopOrDirection')}>
+                  {['one-way (A → B)', 'loop (return to start)'].map((o) => (
+                    <option key={o}>{o}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="field">
+              <label className="field__label">Start near</label>
+              <input value={prompt.roughStart} onChange={setP('roughStart')} placeholder="South Lake Tahoe" />
+            </div>
+            <div className="field">
+              <label className="field__label">End near</label>
+              <input value={prompt.roughEnd} onChange={setP('roughEnd')} placeholder="Tahoe City" />
+            </div>
+          </div>
+          <div style={{ marginTop: 14 }}>
+            <div className="field">
+              <label className="field__label">Vibe (optional)</label>
+              <span className="field__hint">A nudge for tone, length, or what to feature.</span>
+              <input value={prompt.vibe} onChange={setP('vibe')} placeholder="scenic west shore, ~45 min" />
+            </div>
+          </div>
+          <hr className="rule" />
+          <button
+            className="btn btn--primary"
+            onClick={() => void doPropose()}
+            disabled={proposing || !prompt.regionSlug || !prompt.roughStart || !prompt.roughEnd}
+          >
+            <Wand2 size={15} />
+            {proposing ? 'Skipper is plotting…' : 'Propose route'}
+          </button>
+        </div>
+      )}
+
+      {step === 2 && proposal && (
+        <div className="grid-create">
+          <div>
+            <div className="seclabel">Draft details</div>
+            <div className="grid-2">
+              <div className="field">
+                <label className="field__label">Slug</label>
+                <input value={slug} onChange={(e) => setSlug(e.target.value)} className="mono" />
+              </div>
+              <div className="field">
+                <label className="field__label">Headline</label>
+                <input value={headline} onChange={(e) => setHeadline(e.target.value)} />
+              </div>
+              <div className="field">
+                <label className="field__label">Start anchor</label>
+                <input value={startName} onChange={(e) => setStartName(e.target.value)} />
+              </div>
+              <div className="field">
+                <label className="field__label">End anchor</label>
+                <input value={endName} onChange={(e) => setEndName(e.target.value)} />
+              </div>
+            </div>
+            <div style={{ marginTop: 12 }}>
+              <div className="field">
+                <label className="field__label">Summary</label>
+                <textarea value={summary} onChange={(e) => setSummary(e.target.value)} />
+              </div>
+            </div>
+
+            <div className="seclabel">
+              Waypoints{' '}
+              <span className="muted" style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>
+                · drag pins on the map to adjust
+              </span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {waypoints.map((w, i) => (
+                <div key={i} className="row-flex" style={{ gap: 9 }}>
+                  <span className="leader" style={{ width: 24, height: 24, borderRadius: 6, fontSize: 11 }}>{i + 1}</span>
+                  <input
+                    value={w.label}
+                    onChange={(e) => setWaypointLabel(i, e.target.value)}
+                    style={{ flex: 1, height: 32, padding: '0 10px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', font: 'inherit', fontSize: 13, background: 'var(--panel)', color: 'var(--ink)', outline: 'none' }}
+                  />
+                  {w.lat == null && <span className="badge badge--warn">no coords</span>}
+                  <button
+                    className="iconbtn"
+                    style={{ width: 30, height: 30 }}
+                    onClick={() => removeWaypoint(i)}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+            {ungeocoded > 0 && (
+              <p style={{ fontSize: 12, color: 'var(--warn)', marginTop: 8 }}>
+                {ungeocoded} waypoint didn't geocode — place it on the map or drop it before creating.
+              </p>
+            )}
+
+            <hr className="rule" />
+            <div className="row-flex" style={{ gap: 9 }}>
+              <button className="btn btn--ghost" onClick={() => setStep(1)}>Back</button>
+              <span style={{ flex: 1 }} />
+              <button className="btn btn--default" onClick={() => void doPropose()} disabled={proposing}>
+                <Wand2 size={13} />
+                Re-propose
+              </button>
+              <button className="btn btn--primary" onClick={() => void doCreate()} disabled={creating || !canCreate}>
+                <Check size={13} />
+                {creating ? 'Creating draft…' : 'Create draft'}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <div className="seclabel">Route preview</div>
+            <WaypointMap waypoints={mapWaypoints} onMove={moveWaypoint} />
+          </div>
+        </div>
+      )}
+
+      {step === 3 && (
+        <div className="card" style={{ padding: 40, maxWidth: 560, textAlign: 'center' }}>
+          <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'var(--ok-bg)', color: 'var(--ok)', display: 'grid', placeItems: 'center', margin: '0 auto 16px' }}>
+            <Check size={26} />
+          </div>
+          <h2 style={{ fontSize: 19, fontWeight: 600, margin: 0 }}>Draft created</h2>
+          <p className="muted" style={{ fontSize: 13.5, marginTop: 8, lineHeight: 1.5 }}>
+            <b style={{ color: 'var(--ink)' }}>{headline}</b> is frozen as a draft with {waypoints.length} waypoints. Generate it to script and synthesize the audio.
+          </p>
+          <div className="row-flex" style={{ justifyContent: 'center', marginTop: 20, gap: 9 }}>
+            <button
+              className="btn btn--default"
+              onClick={() => { setStep(1); setProposal(null); setSlug(''); setHeadline(''); setSummary(''); setStartName(''); setEndName(''); setWaypoints([]) }}
+            >
+              Create another
+            </button>
+            {createdId && (
+              <button className="btn btn--primary" onClick={() => nav(`/tours/${createdId}`)}>
+                <Map size={14} />
+                Open tour
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

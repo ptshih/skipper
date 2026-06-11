@@ -1,79 +1,225 @@
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { Plus } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { ArrowDown, ArrowUp, Check, Map, Plus, Search, TriangleAlert } from 'lucide-react'
 import { api, type TourCard } from '@/lib/api'
-import { Badge, type BadgeProps } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { PageHeader } from '@/components/PageHeader'
 import { fmtDuration, fmtMiles, timeAgo } from '@/lib/format'
 
-const statusVariant = (s: TourCard['status']): BadgeProps['variant'] =>
-  s === 'ready' ? 'success' : s === 'failed' ? 'destructive' : s === 'generating' ? 'default' : 'secondary'
+type SortKey = 'headline' | 'regionName' | 'status' | 'stops' | 'distanceMeters' | 'durationSeconds' | 'eval' | 'updatedAt'
 
-const COLS = ['Tour', 'Region', 'Status', 'Stops', 'Authored', 'Distance', 'Duration', 'Updated']
+type TourCardEx = TourCard & {
+  eval?: { pass: boolean; grounding: number } | null
+}
+
+const STATUS_FILTER = ['all', 'ready', 'draft', 'failed', 'generating'] as const
+type StatusFilter = (typeof STATUS_FILTER)[number]
+
+const STATUS_BADGE: Record<string, string> = {
+  ready: 'badge badge--ok',
+  draft: 'badge badge--neutral',
+  generating: 'badge badge--run',
+  failed: 'badge badge--bad',
+}
+
+function EvalCell({ ev }: { ev?: TourCardEx['eval'] }) {
+  if (!ev) return <span className="muted">—</span>
+  return (
+    <span className="row-flex" style={{ gap: 7 }}>
+      <span className={`badge ${ev.pass ? 'badge--ok' : 'badge--bad'}`}>
+        {ev.pass ? <Check size={11} /> : <TriangleAlert size={11} />}
+        {ev.pass ? 'pass' : 'fail'}
+      </span>
+      <span className="cell-mono" style={{ color: ev.pass ? 'var(--ink-3)' : 'var(--bad)', fontSize: 11.5 }}>
+        g {ev.grounding.toFixed(2)}
+      </span>
+    </span>
+  )
+}
+
+function Th({
+  sortKey,
+  current,
+  dir,
+  onSort,
+  right,
+  children,
+}: {
+  sortKey: SortKey
+  current: SortKey
+  dir: 'asc' | 'desc'
+  onSort: (k: SortKey) => void
+  right?: boolean
+  children: React.ReactNode
+}) {
+  const active = current === sortKey
+  return (
+    <th
+      className={`sortable${active ? ' is-sorted' : ''}`}
+      onClick={() => onSort(sortKey)}
+      style={right ? { textAlign: 'right' } : undefined}
+    >
+      <span className="th-sort" style={right ? { flexDirection: 'row-reverse' } : undefined}>
+        {children}
+        <span className="th-arrow">
+          {active && dir === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />}
+        </span>
+      </span>
+    </th>
+  )
+}
 
 export function ToursView() {
-  const [tours, setTours] = useState<TourCard[]>([])
+  const navigate = useNavigate()
+  const [tours, setTours] = useState<TourCardEx[]>([])
   const [err, setErr] = useState<string | null>(null)
+  const [q, setQ] = useState('')
+  const [status, setStatus] = useState<StatusFilter>('all')
+  const [region, setRegion] = useState('all')
+  const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'updatedAt', dir: 'desc' })
+
   useEffect(() => {
     api
       .tours()
-      .then((r) => setTours(r.tours))
+      .then((r) => setTours(r.tours as TourCardEx[]))
       .catch((e) => setErr(e instanceof Error ? e.message : String(e)))
   }, [])
 
+  const regions = useMemo(() => {
+    const seen = new Set<string>()
+    return tours.filter((t) => (seen.has(t.regionName) ? false : (seen.add(t.regionName), true)))
+  }, [tours])
+
+  const onSort = (key: SortKey) =>
+    setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }))
+
+  const view = useMemo(() => {
+    let rows = tours.filter((t) => {
+      if (region !== 'all' && t.regionName !== region) return false
+      if (status !== 'all' && t.status !== status) return false
+      if (q) {
+        const s = `${t.headline} ${t.slug} ${t.regionName}`.toLowerCase()
+        if (!s.includes(q.toLowerCase())) return false
+      }
+      return true
+    })
+    const dir = sort.dir === 'asc' ? 1 : -1
+    const val = (t: TourCardEx) => {
+      switch (sort.key) {
+        case 'headline': return t.headline.toLowerCase()
+        case 'regionName': return t.regionName.toLowerCase()
+        case 'status': return t.status
+        case 'stops': return t.stops
+        case 'distanceMeters': return t.distanceMeters ?? -1
+        case 'durationSeconds': return t.durationSeconds ?? -1
+        case 'eval': return t.eval ? (t.eval.pass ? 2 : 1) : 0
+        default: return t.updatedAt
+      }
+    }
+    return [...rows].sort((a, b) => (val(a) > val(b) ? dir : val(a) < val(b) ? -dir : 0))
+  }, [tours, region, status, q, sort])
+
+  const countFor = (s: StatusFilter) =>
+    s === 'all' ? tours.length : tours.filter((t) => t.status === s).length
+
   return (
     <div>
-      <PageHeader
-        title="Tours"
-        description="Every tour in the catalog — drafts included."
-        actions={
-          <Button asChild>
-            <Link to="/create">
-              <Plus className="h-4 w-4" />
-              Create tour
-            </Link>
-          </Button>
-        }
-      />
+      <div className="pagehead">
+        <div>
+          <h1 className="pagehead__title">Tours</h1>
+          <p className="pagehead__desc">The whole catalog — drafts included. Evals that fall below the bar are flagged in red.</p>
+        </div>
+        <div className="pagehead__actions">
+          <Link to="/create" className="btn btn--primary">
+            <Plus size={15} />
+            Create tour
+          </Link>
+        </div>
+      </div>
+
       {err && (
-        <div className="mb-4 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">{err}</div>
+        <div className="badge badge--bad" style={{ display: 'block', marginBottom: 14, padding: '10px 14px', borderRadius: 'var(--radius)' }}>
+          {err}
+        </div>
       )}
-      <div className="overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              {COLS.map((h) => (
-                <TableHead key={h}>{h}</TableHead>
-              ))}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {tours.map((t) => (
-              <TableRow key={t.id}>
-                <TableCell>
-                  <Link to={`/tours/${t.id}`} className="font-medium hover:underline">{t.headline}</Link>
-                  <div className="font-mono text-xs text-muted-foreground">{t.slug}</div>
-                </TableCell>
-                <TableCell>{t.regionName}</TableCell>
-                <TableCell><Badge variant={statusVariant(t.status)}>{t.status}</Badge></TableCell>
-                <TableCell>{t.stops} + {t.brackets}</TableCell>
-                <TableCell>
-                  <Badge variant={t.authored === 'admin' ? 'default' : 'outline'}>{t.authored}</Badge>
-                </TableCell>
-                <TableCell>{fmtMiles(t.distanceMeters)}</TableCell>
-                <TableCell>{fmtDuration(t.durationSeconds)}</TableCell>
-                <TableCell className="text-xs text-muted-foreground">{timeAgo(t.updatedAt)}</TableCell>
-              </TableRow>
+
+      <div className="toolbar">
+        <div className="search">
+          <Search size={15} />
+          <input
+            placeholder="Search tours, slugs, regions…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
+        </div>
+        <div className="segment">
+          {(['all', 'ready', 'draft', 'failed'] as StatusFilter[]).map((v) => (
+            <button key={v} className={status === v ? 'is-on' : ''} onClick={() => setStatus(v)}>
+              {v.charAt(0).toUpperCase() + v.slice(1)}
+              <span className="seg-count">{countFor(v)}</span>
+            </button>
+          ))}
+        </div>
+        <div className="selectbox">
+          <select value={region} onChange={(e) => setRegion(e.target.value)}>
+            <option value="all">All regions</option>
+            {regions.map((r) => (
+              <option key={r.regionSlug} value={r.regionName}>{r.regionName}</option>
             ))}
-            {tours.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">No tours yet.</TableCell>
-              </TableRow>
+          </select>
+        </div>
+        <span className="toolbar__spacer" />
+        <span className="toolbar__count">{view.length} of {tours.length}</span>
+      </div>
+
+      <div className="tablewrap">
+        <table className="table">
+          <thead>
+            <tr>
+              <Th sortKey="headline" current={sort.key} dir={sort.dir} onSort={onSort}>Tour</Th>
+              <Th sortKey="regionName" current={sort.key} dir={sort.dir} onSort={onSort}>Region</Th>
+              <Th sortKey="status" current={sort.key} dir={sort.dir} onSort={onSort}>Status</Th>
+              <Th sortKey="eval" current={sort.key} dir={sort.dir} onSort={onSort}>Eval</Th>
+              <Th sortKey="stops" current={sort.key} dir={sort.dir} onSort={onSort} right>Stops</Th>
+              <Th sortKey="distanceMeters" current={sort.key} dir={sort.dir} onSort={onSort} right>Distance</Th>
+              <Th sortKey="durationSeconds" current={sort.key} dir={sort.dir} onSort={onSort} right>Duration</Th>
+              <Th sortKey="updatedAt" current={sort.key} dir={sort.dir} onSort={onSort} right>Updated</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {view.map((t) => (
+              <tr key={t.id} className="clickable" onClick={() => navigate(`/tours/${t.id}`)}>
+                <td>
+                  <div className="cell-strong row-link">{t.headline}</div>
+                  <div className="cell-sub">
+                    {t.slug}
+                    {t.authored === 'seed' && <span style={{ marginLeft: 8, color: 'var(--ink-4)' }}>· seed</span>}
+                  </div>
+                </td>
+                <td className="cell-dim">{t.regionName}</td>
+                <td>
+                  <span className={STATUS_BADGE[t.status] ?? 'badge badge--neutral'}>{t.status}</span>
+                </td>
+                <td><EvalCell ev={t.eval} /></td>
+                <td style={{ textAlign: 'right' }} className="cell-mono">
+                  {t.stops}
+                  {t.brackets ? <span className="muted"> +{t.brackets}</span> : null}
+                </td>
+                <td style={{ textAlign: 'right' }} className="cell-mono cell-dim">{fmtMiles(t.distanceMeters)}</td>
+                <td style={{ textAlign: 'right' }} className="cell-mono cell-dim">{fmtDuration(t.durationSeconds)}</td>
+                <td style={{ textAlign: 'right' }} className="cell-dim" title={t.updatedAt}>{timeAgo(t.updatedAt)}</td>
+              </tr>
+            ))}
+            {view.length === 0 && (
+              <tr>
+                <td colSpan={8}>
+                  <div className="empty">
+                    <Map size={22} />
+                    <div>No tours match these filters.</div>
+                  </div>
+                </td>
+              </tr>
             )}
-          </TableBody>
-        </Table>
+          </tbody>
+        </table>
       </div>
     </div>
   )

@@ -7,17 +7,16 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Overpass:wght@400;500;600;700&family=Overpass+Mono:wght@400;600;700&display=swap"
       rel="stylesheet"
     />
     <script>
-      // Follow the OS theme automatically (toggles shadcn's `.dark` on <html>).
-      // Runs before paint to avoid a flash; live-updates if the system theme changes.
+      // Apply saved theme before paint to avoid flash.
       (function () {
-        var m = window.matchMedia('(prefers-color-scheme: dark)')
-        var apply = function () { document.documentElement.classList.toggle('dark', m.matches) }
-        apply()
-        m.addEventListener('change', apply)
+        var t = localStorage.getItem('sk_theme') || 'light'
+        document.documentElement.setAttribute('data-theme', t)
+        // Also keep the shadcn .dark class in sync for any legacy components.
+        if (t === 'dark') document.documentElement.classList.add('dark')
       })()
     </script>
   </head>

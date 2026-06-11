@@ -25,7 +25,7 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 
 /* ------------------------------- types ------------------------------- */
 
-export type JobKind = 'generate' | 'patch_clip' | 'resynth' | 'sweep_orphans'
+export type JobKind = 'generate' | 'patch_clip' | 'resynth' | 'sweep_orphans' | 'sweep_roam_pois' | 'generate_roam'
 export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled'
 
 export interface GenJob {
