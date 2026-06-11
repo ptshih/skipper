@@ -96,6 +96,9 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   region-gated by density; rung 1.5 of the journey-layer spectrum. Captured 2026-06-10; the ALPHA
   shipped same day (see [free-roam-alpha-spec.md](specs/free-roam-alpha-spec.md)) — this doc keeps
   the unbuilt vision layers.
+- [roam-first-region-expansion.md](ideas/roam-first-region-expansion.md) — the beachhead
+  inversion: roam (a bbox + ~$15) opens a region, the demand heatmap picks the tour to build;
+  probed Yosemite/Moab/Big Sur corpora for $0 on capture day (2026-06-11).
 
 The rest are post-MVP features, gated behind the proven phone player:
 - [drive-complete-moment.md](ideas/drive-complete-moment.md) — the payoff beat as motion + sound

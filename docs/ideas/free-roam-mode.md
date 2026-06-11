@@ -239,9 +239,11 @@ the build context). Everything else captured here, unscheduled.
 **Progression & strategy:**
 - **The corpus meter** — "23 of 77 stories" on the sign-off card; the logbook's first rung,
   working before any stamp art exists.
-- **Roam-first region expansion** — a roam region costs a sweep + ~$10–15 of generation, NO route
+- **Roam-first region expansion** — a roam region costs a sweep + ~$10–25 of generation, NO route
   curation; the beachhead inversion: roam opens a region, its heatmap picks the tour to build.
-  The density bar still gates.
+  The density bar still gates. **Promoted to its own idea doc 2026-06-11** (founder: intriguing,
+  proceed) with $0 corpus probes of Yosemite/Moab/Big Sur:
+  [roam-first-region-expansion.md](roam-first-region-expansion.md).
 
 **One-liners:** home quiet-zone (maybe redundant under history+mute); maneuver-hold (don't talk
 over the roundabout); the scenic-detour whisper (nav-adjacent, riskier, someday); time-of-day
