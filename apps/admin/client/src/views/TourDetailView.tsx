@@ -1,9 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { api, type SignResult, type TourDetail } from '@/lib/api'
+import { api, type EvalScore, type SignResult, type TourDetail } from '@/lib/api'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { fmtDuration, fmtMiles, fmtScore, fmtSec } from '@/lib/format'
+import { fmtDuration, fmtMiles, fmtScore, fmtSec, timeAgo } from '@/lib/format'
 
 export function TourDetailView() {
   const { id } = useParams<{ id: string }>()
@@ -28,7 +27,7 @@ export function TourDetailView() {
   const outro = brackets.find((b) => b.kind === 'outro')
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <div>
         <Link to="/tours" className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground">
           ← Tours
@@ -45,84 +44,153 @@ export function TourDetailView() {
       </div>
 
       {ev && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">
-              Latest eval{' '}
-              <Badge variant={ev.pass ? 'success' : 'destructive'}>{ev.pass ? 'pass' : 'fail'}</Badge>{' '}
-              {ev.dryRun && <Badge variant="secondary">dry-run</Badge>}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-wrap gap-4 text-sm">
-            <Metric label="grounding" v={ev.grounding} />
-            <Metric label="diversity" v={ev.diversity} />
-            <Metric label="charm" v={ev.charm} />
-            <Metric label="tts" v={ev.tts} />
-            <Metric label="veracity" v={ev.veracity} />
-            <div className="text-xs text-muted-foreground">{ev.narrationModel}</div>
-          </CardContent>
-        </Card>
+        <section className="rounded-xl border">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-3">
+            <span className="text-sm font-medium">Latest evaluation</span>
+            <Badge variant={ev.pass ? 'success' : 'destructive'}>{ev.pass ? 'pass' : 'fail'}</Badge>
+            {ev.dryRun && <Badge variant="secondary">dry-run</Badge>}
+            <span className="ml-auto text-xs text-muted-foreground">
+              {ev.narrationModel} · {timeAgo(ev.createdAt)}
+            </span>
+          </div>
+          <dl className="grid grid-cols-2 divide-x divide-y sm:grid-cols-5 sm:divide-y-0 [&>div]:px-4 [&>div]:py-3">
+            <Stat label="grounding" v={ev.grounding} />
+            <Stat label="diversity" v={ev.diversity} />
+            <Stat label="charm" v={ev.charm} />
+            <Stat label="tts" v={ev.tts} />
+            <Stat label="veracity" v={ev.veracity} />
+          </dl>
+        </section>
       )}
 
-      {intro && <Bracket kind="intro" b={intro} url={signed?.intro?.url} />}
-
-      <div className="space-y-3">
-        {stops.map((s) => {
-          const g = groundingFor(s.seq)
-          const url = urlForSeq.get(s.seq)
-          return (
-            <Card key={s.seq}>
-              <CardHeader className="pb-2">
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-xs text-muted-foreground">{String(s.seq).padStart(2, '0')}</span>
-                  <Badge variant="outline">{s.stopType}</Badge>
-                  <CardTitle className="text-base">{s.name}</CardTitle>
-                  <span className="ml-auto text-xs text-muted-foreground">{fmtSec(s.audioDurationMs)}</span>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {url ? <audio controls preload="none" src={url} className="w-full" /> : !s.hasAudio && <div className="text-xs text-muted-foreground">no audio</div>}
-                {s.script && <p className="whitespace-pre-wrap text-sm leading-relaxed">{s.script}</p>}
-                {g && (
-                  <div className="text-xs">
-                    <Badge variant={g.pass ? 'success' : 'warning'}>grounding {fmtScore(g.value)}</Badge>
-                    {g.findings.length > 0 && (
-                      <ul className="mt-1 list-disc pl-5 text-muted-foreground">
-                        {g.findings.map((f, i) => <li key={i}>{f}</li>)}
-                      </ul>
-                    )}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )
-        })}
-      </div>
-
-      {outro && <Bracket kind="outro" b={outro} url={signed?.outro?.url} />}
+      <section>
+        <div className="mb-2 flex items-baseline justify-between">
+          <h2 className="text-sm font-medium">Itinerary</h2>
+          <span className="text-xs text-muted-foreground">{stops.length} stops</span>
+        </div>
+        <div className="overflow-hidden rounded-xl border divide-y">
+          {intro && (
+            <BracketRow kind="intro" b={intro} url={signed?.intro?.url} />
+          )}
+          {stops.map((s) => (
+            <StopRow
+              key={s.seq}
+              seq={s.seq}
+              type={s.stopType}
+              name={s.name}
+              durationMs={s.audioDurationMs}
+              hasAudio={s.hasAudio}
+              url={urlForSeq.get(s.seq)}
+              script={s.script}
+              grounding={groundingFor(s.seq)}
+            />
+          ))}
+          {outro && (
+            <BracketRow kind="outro" b={outro} url={signed?.outro?.url} />
+          )}
+        </div>
+      </section>
     </div>
   )
 }
 
-function Metric({ label, v }: { label: string; v: number | null }) {
+function Stat({ label, v }: { label: string; v: number | null }) {
   return (
     <div>
-      <div className="text-xs uppercase text-muted-foreground">{label}</div>
-      <div className="font-mono">{fmtScore(v)}</div>
+      <dt className="text-xs uppercase tracking-wide text-muted-foreground">{label}</dt>
+      <dd className="mt-0.5 font-mono text-lg tabular-nums">{fmtScore(v)}</dd>
     </div>
   )
 }
 
-function Bracket({ kind, b, url }: { kind: string; b: TourDetail['brackets'][number]; url?: string }) {
+/** A leading square: a stop's sequence number, or a frame glyph for intro/outro. */
+function Leader({ children, muted }: { children: ReactNode; muted?: boolean }) {
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base uppercase tracking-wide text-muted-foreground">{kind}</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        {url && <audio controls preload="none" src={url} className="w-full" />}
-        {b.script && <p className="whitespace-pre-wrap text-sm leading-relaxed">{b.script}</p>}
-      </CardContent>
-    </Card>
+    <span
+      className={
+        'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md font-mono text-xs ' +
+        (muted ? 'bg-muted text-muted-foreground' : 'bg-muted text-foreground')
+      }
+    >
+      {children}
+    </span>
+  )
+}
+
+function StopRow({
+  seq,
+  type,
+  name,
+  durationMs,
+  hasAudio,
+  url,
+  script,
+  grounding,
+}: {
+  seq: number
+  type: string
+  name: string
+  durationMs: number | null
+  hasAudio: boolean
+  url?: string
+  script: string | null
+  grounding: EvalScore | null
+}) {
+  return (
+    <div className="px-4 py-3">
+      <div className="flex items-center gap-3">
+        <Leader>{String(seq).padStart(2, '0')}</Leader>
+        <Badge variant="outline">{type}</Badge>
+        <span className="truncate font-medium">{name}</span>
+        <div className="ml-auto flex items-center gap-2">
+          {grounding && (
+            <Badge variant={grounding.pass ? 'success' : 'warning'}>grounding {fmtScore(grounding.value)}</Badge>
+          )}
+          <span className="text-xs tabular-nums text-muted-foreground">{fmtSec(durationMs)}</span>
+        </div>
+      </div>
+      {url ? (
+        <audio controls preload="none" src={url} className="mt-3 h-9 w-full" />
+      ) : (
+        !hasAudio && <div className="mt-2 text-xs text-muted-foreground">no audio</div>
+      )}
+      {(script || (grounding && grounding.findings.length > 0)) && (
+        <details className="group mt-2">
+          <summary className="cursor-pointer select-none text-xs text-muted-foreground hover:text-foreground">
+            Script
+          </summary>
+          {script && <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{script}</p>}
+          {grounding && grounding.findings.length > 0 && (
+            <ul className="mt-2 list-disc pl-5 text-xs text-muted-foreground">
+              {grounding.findings.map((f, i) => <li key={i}>{f}</li>)}
+            </ul>
+          )}
+        </details>
+      )}
+    </div>
+  )
+}
+
+function BracketRow({ kind, b, url }: { kind: 'intro' | 'outro'; b: TourDetail['brackets'][number]; url?: string }) {
+  return (
+    <div className="bg-muted/30 px-4 py-3">
+      <div className="flex items-center gap-3">
+        <Leader muted>{kind === 'intro' ? '▸' : '◼'}</Leader>
+        <Badge variant="secondary">{kind}</Badge>
+        <span className="truncate font-medium text-muted-foreground">
+          {kind === 'intro' ? 'Welcome aboard' : 'Sign-off'}
+        </span>
+        <span className="ml-auto text-xs tabular-nums text-muted-foreground">{fmtSec(b.audioDurationMs)}</span>
+      </div>
+      {url && <audio controls preload="none" src={url} className="mt-3 h-9 w-full" />}
+      {b.script && (
+        <details className="group mt-2">
+          <summary className="cursor-pointer select-none text-xs text-muted-foreground hover:text-foreground">
+            Script
+          </summary>
+          <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{b.script}</p>
+        </details>
+      )}
+    </div>
   )
 }
