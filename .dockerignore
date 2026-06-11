@@ -1,7 +1,7 @@
-# Trim the Docker build context (the repo root) for the lean apps/api image
-# (apps/api/Dockerfile). The Dockerfile COPYs only the api closure; this keeps the
-# heavy + irrelevant stuff out of the context sent to the daemon — above all the
-# mobile React-Native tree and every node_modules.
+# Trims the Docker build context (the repo root). SHARED by the api, admin, and gen image
+# builds (apps/api, apps/admin, packages/generator Dockerfiles) — each COPYs only its own
+# closure, so this just keeps the heavy/irrelevant stuff (above all the mobile React-Native
+# tree + every node_modules) out of the context. Do NOT exclude a package ANY build COPYs.
 
 **/node_modules
 .git
@@ -11,11 +11,10 @@
 .env.development
 .env.example
 
-# not part of the api closure
+# not COPYed by any image build. generator + drive-core are DELIBERATELY NOT excluded:
+# the gen image (packages/generator/Dockerfile) COPYs them — excluding 404s its build context.
 apps/mobile
 packages/sim
-packages/generator
-packages/drive-core
 
 # dev/test/build cruft
 **/.expo
