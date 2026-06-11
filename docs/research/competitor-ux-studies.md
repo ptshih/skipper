@@ -37,8 +37,13 @@ This is the single most validated finding in the whole competitive set. **Skippe
 
 ## Autio — the anti-models (what NOT to copy)
 
+> **2026-06-11 update:** a verified deep dive ([autio-deep-dive.md](autio-deep-dive.md))
+> CORRECTS the triggering line below — Autio's model is bimodal: notification-gated session
+> START, but real foreground autoplay continuation (map-viewport-scoped, zoom = the only
+> density knob). The anti-model stands for the background case; flat "no autoplay" is wrong.
+
 - **IGNORE — the points-library model.** Standalone location-pinned "stories," not curated tours; the road sequences them. Coverage (20k+ points) is the moat — but it *creates* the "nothing for miles" dead-air failure. Skipper's curated rails are the opposite (and better) bet.
-- **IGNORE — notification-gated triggering.** *"nothing automated about the app"*; when notifications fail it's *"nearly worthless."* Direct validation of Skipper's continuous-foreground trigger over background notifications.
+- **IGNORE — notification-gated triggering.** *"nothing automated about the app"*; when notifications fail it's *"nearly worthless."* Direct validation of Skipper's continuous-foreground trigger over background notifications. (See the 2026-06-11 correction above for the precise mechanics.)
 - **IGNORE — rented celebrity voices** (a character you own beats a celebrity you rent) and **subscription** (churns for infrequent-use products) and **streaming-first** (buffering complaints "even with full bars" — Skipper is offline-first).
 - **CONSIDER:** the documentary-tone gap is your opening (the wished-for "conversational" is your charm lane); and the **5-free-stories trial** is the preview analog (yours is more generous).
 

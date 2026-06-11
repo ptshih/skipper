@@ -113,6 +113,9 @@ The rest are post-MVP features, gated behind the proven phone player:
 - [competitive-research.md](research/competitive-research.md) — multi-agent cited research across
   the category (2026-06-07).
 - [shaka-guide-ux-study.md](research/shaka-guide-ux-study.md) — teardown of THE reference comp.
+- [autio-deep-dive.md](research/autio-deep-dive.md) — the roam-shaped incumbent, verified deep
+  dive (2026-06-11): bimodal triggering, listen-later offline, plateaued business, the
+  structural-vs-execution failure partition; corrects the four-comp study's triggering line.
 - [competitor-ux-studies.md](research/competitor-ux-studies.md) — GuideAlong / Autio / VoiceMap +
   the 4-for-4 "dead air" cross-comp finding.
 
