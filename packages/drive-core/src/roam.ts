@@ -76,7 +76,7 @@ export const DEFAULT_ROAM_TRIGGER: RoamTriggerOptions = {
 }
 
 export class RoamEngine {
-  private readonly opts: RoamTriggerOptions
+  private opts: RoamTriggerOptions
   /** poiId → tSec it fired (cooldown clock). */
   private readonly firedAt = new Map<string, number>()
   /** When the governor next allows an encounter start (tSec). */
@@ -130,6 +130,15 @@ export class RoamEngine {
         speedMps: fix.speedMps,
       },
     ]
+  }
+
+  /**
+   * Retune the min-gap governor mid-session — the CHATTINESS knob (a SELECTION control:
+   * which/how-many encounters fire, never what a telling says). Fired-pin cooldowns and
+   * the open gate are preserved; only the spacing of future encounter starts changes.
+   */
+  setMinGap(minGapSec: number): void {
+    this.opts = { ...this.opts, minGapSec }
   }
 
   hasFired(poiId: string): boolean {
