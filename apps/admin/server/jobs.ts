@@ -163,6 +163,29 @@ export async function runJob(args: string[], env: Record<string, string>): Promi
   return json.metadata?.name?.split('/').pop() ?? ''
 }
 
+/** Cancel a running Cloud Run Job execution by its short name (the operator stop path the
+ *  schema reserved on gen_job_status='canceled'). 404 is treated as success — the execution
+ *  is already gone. Throws on any other API error so the route can surface it. */
+export async function cancelExecution(shortName: string): Promise<void> {
+  const res = await fetch(`${jobBase()}/executions/${shortName}:cancel`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${await accessToken()}`, 'Content-Type': 'application/json' },
+    body: '{}',
+  })
+  if (!res.ok && res.status !== 404) {
+    const txt = await res.text().catch(() => '')
+    throw new Error(`executions:cancel ${res.status}: ${txt}`)
+  }
+}
+
+/** A console deep-link to a Cloud Run Job execution's logs (spec §14.6). Best-effort — null
+ *  if the project isn't in env (so the caller renders no link rather than a broken one). */
+export function jobExecutionLogsUrl(shortName: string): string | null {
+  const project = process.env.GOOGLE_CLOUD_PROJECT
+  if (!project) return null
+  return `https://console.cloud.google.com/run/jobs/executions/details/${REGION}/${shortName}/logs?project=${project}`
+}
+
 export type ExecState = 'running' | 'succeeded' | 'failed' | 'unknown'
 
 /** Best-effort status of a Cloud Run Job execution by its short name (the reconcile backstop

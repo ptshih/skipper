@@ -72,7 +72,7 @@ The SPA calls `/admin/*` same-origin, so IAP's auth flows naturally.
 | # | Question | Decision | Why |
 |---|---|---|---|
 | 1 | Reuse API image or dedicated? | **Dedicated `skipper-gen` Job image** (own Dockerfile mirroring `apps/api/Dockerfile`, workspace trimmed to `generator+db+shared+storage`) | The generator's install closure (Anthropic SDK, google-auth, eval) differs from the API's |
-| 2 | DB target dev vs prod? | **Prod only.** ENTRYPOINT bakes `-f .env.production`; dev experiments stay on the laptop CLI | Cloud ops exist to operate the *live* catalog (the canonical demo is in prod) |
+| 2 | DB target dev vs prod? | **Prod only.** ENTRYPOINT bakes `-f .env.production`; dev experiments stay on the laptop CLI | Cloud ops exist to operate the *live* prod catalog |
 | 3 | Live phase/cost surfacing? | A no-op-unless-`GEN_JOB_ID` **`pipeline/job-progress.ts`**, wired ONLY at the 4 ops entrypoint boundaries — never inside `generate.ts`. NB: **cost is not persisted anywhere today** (§9), so the hook is the *only* source of `gen_jobs.costUsd` | Keeps the CLI byte-identical (laptop has no `GEN_JOB_ID`) and risky edits out of `generate.ts` |
 | 4 | Light ops same Job or inline? | **All four CLIs through the one `skipper-gen` Job**; override `args` pick the script | Uniform secrets/logging/guardrails + keeps generator deps out of the admin image |
 | 5 | IAM identities | **Dedicated SAs:** `skipper-gen@` (Job runtime) and `skipper-admin@` (admin service) | Scopes the spend + trigger surface |
@@ -255,10 +255,9 @@ isolated-linker lesson) — it's a server+SPA, so lower-risk than the RN app.
   `estimateTtsUsd` for audio) and always send `--max-cost` (a UI-set ceiling). NB the cap fires
   *pre-TTS only* (§12).
 - **Every prod spend requires a typed confirm.** `tours.isPreview` was dropped 2026-06-09 (a CLAUDE.md
-  invariant), so there is **no DB flag** for "the canonical demo" — rather than reintroduce one, treat
-  *all* prod generate/resynth/patch/sweep as demo-sensitive: a typed confirm gates every spending run.
-  (Optional extra friction: a `PROTECTED_SLUGS` config constant the UI double-flags.) `eval_runs.artifact`
-  already snapshots the prior telling for rollback reasoning.
+  invariant) and there is **no special tour** — every tour is treated the same: a typed confirm gates
+  *every* prod generate/resynth/patch/sweep spending run. `eval_runs.artifact` already snapshots the
+  prior telling for rollback reasoning.
 - **Idempotency:** create the `gen_jobs` row before `jobs:run`; only trigger when
   `status='queued' AND cloud_run_execution IS NULL`, and persist the execution name before any
   retry — so neither a UI double-click nor a lost-response retry can double-spend.
@@ -344,7 +343,7 @@ A truly minimal first cut can defer step 2's per-phase tick — terminal status 
   the §8 idempotency gate covers the common double-trigger, not two deliberately different ops at once.
 - **Crashed `running` rows** linger until someone opens the UI to trigger the reconcile (fine, single-user).
 - **Risk:** generation writes to **prod** — the typed-confirm guard + `--max-cost` + dry-run default
-  are the only things between a button and a burned demo; treat them as load-bearing, not polish.
+  are the only things between a button and a burned-credits/broken-tour mistake; treat them as load-bearing, not polish.
 
 ## 13. Refs
 
@@ -390,3 +389,106 @@ and the **route map** (frozen polyline + numbered trigger-point pins + radius ci
    script run-over-run to see exactly how a prompt change moved the narration.
 6. **Cloud Run log deep-link per run.** `gen_jobs.cloudRunExecution` is captured but unused
    in the UI; link to the execution's logs. Cheap, but only useful post-deploy.
+
+### Net-new (ideated 2026-06-11, 9-agent pass — dedup'd against 1–6, scope-corrected by an adversarial critic)
+
+The theme: 1–6 close *generate*; these mostly close *ear-pass → tune → inspect*, and
+almost every one rides on a column the schema already has but the UI throws away.
+**Build-first pass = 7–12** (nearly all free SELECT/render changes against data already loaded).
+
+> **Built in the working tree 2026-06-11 (uncommitted — founder to review/commit/deploy):**
+> **7** (all-dimension judge findings per stop + `eval_scores.detail` charm best/sag),
+> **8 + 6** (cancel a running execution via `executions:cancel` + the Cloud Run logs deep-link;
+> realizes the reserved `gen_job_status='canceled'` path), and **9** (the `/admin/integrity`
+> audit + fleet banner on Tours + per-tour card on detail).
+> Drive-by: `gen_job_kind` enum aligned to the 6 wired job kinds (drift from `287a64a` — the
+> source was 4-valued while `jobs.ts`/client/insert use `sweep_roam_pois`/`generate_roam`; run
+> `db:generate`+`db:migrate` to formalize on the shared DB if not already applied). Admin
+> typecheck + SPA build + 250 generator tests green. NOT yet done from this pass: **10**
+> (prompt-provenance badge), **11** (style-prompt A/B to scratch R2), **12** (inline play
+> primitive), and the roam corpus *listen* view (the roam job-triggers half already shipped in
+> `287a64a`). **Dropped 2026-06-11: the old #13 "demo-lock" — the canonical-preview "demo"
+> concept is retired; every tour is treated the same (no protected targets).**
+
+7. **Surface the judge's findings TEXT across ALL dimensions + crack `eval_scores.detail`
+   (cheapest unlock, S, free).** `index.ts` already SELECTs `eval_scores.findings` for
+   charm/tts/diversity/grounding and ships it to the client — but `TourDetailView` renders
+   only the *grounding* findings. And `eval_scores.detail` (the `ClaimVerdict[]/best/sag`
+   jsonb) is never opened anywhere in admin. So the operator tunes the prompt blind to the
+   judge's actual reasoning when it's already in the payload. Pure render+select change.
+   **Caveat:** `detail` is nullable — degrade gracefully on older runs.
+8. **Self-explaining Runs timeline + a cancel button (S, free).** `/admin/runs` SELECTs
+   `kind/status/phase/costUsd` and DROPS `error`, `args`, `startedAt`, `endedAt` — all present
+   on `gen_jobs`. Add them → inline "failed: max-cost exceeded ($5.02 > $5.00)" + a "stalled
+   22m" badge from `startedAt` vs now. **Extend with the kill switch every lens missed:** a
+   cancel action on a running job (`run.googleapis.com …/executions/{name}:cancel` via the
+   OAuth/ADC path already in `jobs.ts`). Seeing a runaway $5 generate without stopping it is
+   half a tool — the COST gate cuts both ways. (Absorbs/supersedes #6's stall-only framing.)
+9. **Ready-gate integrity check (S, free).** Nothing audits the live DB for the hardest
+   invariant: a `status='ready'` tour (or roam set) with a NULL `audioUrl` on any
+   story/scenic/break stop, or a story stop missing `attribution` (the CC BY-SA legal floor).
+   A half-failed resynth or manual DB poke could leave a tour silently broken. A read-only
+   per-tour flag + fleet rollup is the cheapest guard against a silently-broken ready tour —
+   pure SELECT.
+10. **Prompt-provenance staleness badge (S–M, free — the prompt-tuning analog of facts-staleness).**
+    The skipper system prompt is the repo's highest-leverage file, but nothing shows which
+    `gitSha`/prompt-version made a given clip. Map `eval_runs.gitSha` → short sha + a
+    "made on a pre-current prompt" badge by diffing against HEAD, so the operator knows which
+    clips are due a re-listen after a prompt edit.
+11. **Style-prompt A/B bench → a SCRATCH R2 key (M, cents).** Delivery complaints → tune
+    `SKIPPER_TTS_STYLE_PROMPT` FIRST (the most-iterated knob), but today the only way to HEAR
+    a change is `resynth-tour`, which OVERWRITES the live clips and forces a full founder
+    re-validation. Editable textarea (pre-filled with the live style prompt) + one frozen
+    `tour_stops.script` + a TTS-only resynth of N takes to a **scratch prefix** (never touches
+    the live clips), same typed-confirm, costs cents. Build after the free ones because it spends +
+    needs the scratch-key plumbing.
+12. **Universal inline "play this clip" primitive (S).** The most frequent micro-action is
+    "does THIS one stop sound right" — but presign+play is buried inside the full ear-pass
+    flows. A row-level presign + `<audio>` reused across tours, brackets, AND roam: the atomic
+    unit of the ear-pass loop, decoupled from #1's autoplay player.
+Bigger bets (past the free first pass):
+
+13. **Free-roam under the same roof (L).** `roam_clips` is the THIRD narration owner, already
+    shipping to TestFlight alpha, with ZERO admin presence — no list, no audio vetting, regen
+    is SSH-only, and `generate-roam` ships with FEWER guards than tours (no eval panel). A Roam
+    tab (roam_clips ⨝ pois name/kind + inline audio + a `pois LEFT JOIN roam_clips` coverage
+    gap) + promote `generate-roam.ts` (spends) and `sweep-roam-pois.ts` (free) to JobKinds 5 & 6,
+    inheriting dry-run-default + typed-confirm. One-third of the persona is currently un-vetted.
+14. **Trigger-point nudge + re-snap on the map (M, free, no content touch).** Make each numbered
+    pin draggable: nudge `triggerLat/Lng`, scrub `triggerRadiusM`, one-click "snap to road" that
+    reruns `backfill-trigger-points` logic (`nearestOnRoute` onto the frozen polyline) and
+    recomputes `approachHeadingDeg`. Fixes a stop firing 200 m early — pure rails-curation, never
+    touches the telling, sidesteps the cost gate entirely.
+15. **Corpus staleness WORKLIST (M).** Actually COMPUTE the `facts_hash IS DISTINCT FROM
+    pois.facts_hash` diff that #3 leaves as a read-only browser, across `tour_stops` AND
+    `roam_clips`, with `facts_fetched_at` age and a one-click pre-filled regen. (Builds on #3;
+    still read-only on the POI write-side per the Wikidata-spine hold.)
+16. **`poi_overrides` correction desk (M) — scoped to INSERT + retire only.** The ONLY mechanism
+    to repair a wrong upstream fact, currently a code-deploy (`seed/poi-overrides.ts`). A
+    veracity finding should be a typed correction. **Critic scope cut:** ship `fact_edit`/
+    `side_anchor` INSERT (keyed by `source/source_id`) + `active=false` retire; SKIP the
+    `upstreamStatus` WP:COI lifecycle UI until the Wikidata spine lands (don't build a workflow a
+    single operator doesn't need against a model that's moving).
+17. **Free, no-spend curation.** Reorder/bench a stop (rewrite `tour_stops.seq`, soft-exclude
+    from the assembled itinerary, clips intact + reversible — an instant pacing fix vs a $4
+    regen); a single-clip bracket (intro/outro) editor with a cost-previewed one-clip resynth;
+    **vista pull-off stops as a 4th `stopTypeEnum` anchor** (the standing founder ask — clean
+    destructive migration off story/scenic/break).
+18. **Cost truth (M).** A pre-spend forecast band in the New Run dialog (past `gen_jobs.costUsd`
+    for the kind + a DERIVED TTS line from `audioDurationMs` → Gemini-TTS rate — the cost the
+    schema structurally omits, shown BEFORE the spend); a true cost-per-clip ledger incl TTS +
+    roam; an R2 orphan-$ preview before `sweep_orphans`.
+
+**Deferred / doctrine cautions (the critic flagged these as off-doctrine if built now):**
+- **Distribution/funnel metrics — defer until the bet is live.** Saved-tours leaderboard, signup
+  sparkline, paid-cohort call-sheet (`user.tier`, `savedTours`). With zero real users they read
+  ~zero — instrumenting a funnel with no pulse. Wire them WHEN users arrive, never as a quick-win
+  now.
+- **Charm metrics = NAVIGATION, never a worklist.** A "flattest closers sorted by `detail.sag`"
+  list turns the judge's number into the target — optimizing to the judge instead of the founder's
+  ear (the delivery version of "rebuild Shaka Guide"). Keep `charmScore`/`sag` strictly as
+  deep-links that jump you to the stop to LISTEN; never a ranked list worked top-down. (A
+  zero-LLM kit-overuse heat strip from `persona.kit.beats[].match` regexes is fine — it's
+  deterministic tic-detection, not a score to chase.)
+- **Bulk region regen — one confirm for N spends fights the COST gate.** If ever built, it must
+  still confirm per-tour (no blanket batch-confirm) and show a TTS-inclusive total.

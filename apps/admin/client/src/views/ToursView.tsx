@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ArrowDown, ArrowUp, Check, Map, Plus, Search, TriangleAlert } from 'lucide-react'
-import { api, type TourCard } from '@/lib/api'
+import { api, type IntegrityReport, type TourCard } from '@/lib/api'
 import { fmtDuration, fmtMiles, timeAgo } from '@/lib/format'
 
 type SortKey = 'headline' | 'regionName' | 'status' | 'stops' | 'distanceMeters' | 'durationSeconds' | 'eval' | 'updatedAt'
@@ -75,13 +75,17 @@ export function ToursView() {
   const [status, setStatus] = useState<StatusFilter>('all')
   const [region, setRegion] = useState('all')
   const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'updatedAt', dir: 'desc' })
+  const [integrity, setIntegrity] = useState<IntegrityReport | null>(null)
 
   useEffect(() => {
     api
       .tours()
       .then((r) => setTours(r.tours as TourCardEx[]))
       .catch((e) => setErr(e instanceof Error ? e.message : String(e)))
+    api.integrity().then(setIntegrity).catch(() => {})
   }, [])
+
+  const brokenIds = useMemo(() => new Set(integrity?.tours.map((t) => t.id) ?? []), [integrity])
 
   const regions = useMemo(() => {
     const seen = new Set<string>()
@@ -141,6 +145,23 @@ export function ToursView() {
         </div>
       )}
 
+      {integrity && integrity.tours.length > 0 && (
+        <div className="dangerzone dangerzone--del" style={{ marginBottom: 14 }}>
+          <div className="dangerzone__title">
+            <TriangleAlert size={14} /> {integrity.tours.length} ready tour{integrity.tours.length === 1 ? '' : 's'} failing the integrity check
+          </div>
+          <div className="dangerzone__body">
+            A <b>ready</b> tour must have audio on every stop + bracket and CC BY-SA attribution on every story stop.{' '}
+            {integrity.tours.map((t, i) => (
+              <span key={t.id}>
+                {i > 0 && ', '}
+                <Link to={`/tours/${t.id}`} className="row-link">{t.slug}</Link>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="toolbar">
         <div className="search">
           <Search size={15} />
@@ -196,7 +217,14 @@ export function ToursView() {
                 </td>
                 <td className="cell-dim">{t.regionName}</td>
                 <td>
-                  <span className={STATUS_BADGE[t.status] ?? 'badge badge--neutral'}>{t.status}</span>
+                  <span className="row-flex" style={{ gap: 6 }}>
+                    <span className={STATUS_BADGE[t.status] ?? 'badge badge--neutral'}>{t.status}</span>
+                    {brokenIds.has(t.id) && (
+                      <span className="badge badge--bad" title="Fails the audio/attribution integrity check">
+                        <TriangleAlert size={11} /> integrity
+                      </span>
+                    )}
+                  </span>
                 </td>
                 <td><EvalCell ev={t.eval} /></td>
                 <td style={{ textAlign: 'right' }} className="cell-mono">

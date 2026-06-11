@@ -69,6 +69,13 @@ export interface TourCard {
   updatedAt: string
 }
 
+/** The charm judge's detail payload — the funniest line + the flattest bit (the tuning gold). */
+export interface CharmDetail {
+  best?: string
+  sag?: string
+  charm?: number
+}
+
 export interface EvalScore {
   seq: number
   stopType: string | null
@@ -77,6 +84,8 @@ export interface EvalScore {
   pass: boolean
   value: number
   findings: string[]
+  // Dimension-specific: charm = {best,sag}, grounding/veracity = claim verdicts, etc. Nullable.
+  detail?: unknown
 }
 
 export interface TourEval {
@@ -165,6 +174,20 @@ export interface EvalRunSummary {
   createdAt: string
 }
 
+// A ready tour violating the audio/attribution invariant (§14.9 integrity audit).
+export interface IntegrityTour {
+  id: string
+  slug: string
+  headline: string
+  silentStops: number[]
+  silentBrackets: string[]
+  unattributed: number[]
+}
+export interface IntegrityReport {
+  checked: number
+  tours: IntegrityTour[]
+}
+
 // A unified Runs-timeline row: either an operational gen_job or a historical eval_run.
 export interface RunEvent {
   source: 'job' | 'eval'
@@ -213,7 +236,9 @@ export const api = {
   evals: (slug: string) => req<{ slug: string; runs: EvalRunSummary[] }>(`/admin/evals?slug=${encodeURIComponent(slug)}`),
   jobs: () => req<{ jobs: GenJob[] }>('/admin/jobs'),
   runs: () => req<{ runs: RunEvent[] }>('/admin/runs'),
-  job: (id: string) => req<{ job: GenJob }>(`/admin/jobs/${id}`),
+  job: (id: string) => req<{ job: GenJob; logsUrl: string | null }>(`/admin/jobs/${id}`),
+  cancelJob: (id: string) => req<{ job: GenJob }>(`/admin/jobs/${id}/cancel`, { method: 'POST' }),
+  integrity: () => req<IntegrityReport>('/admin/integrity'),
   createJob: (body: Record<string, unknown>) =>
     req<{ job: GenJob }>('/admin/jobs', { method: 'POST', body: JSON.stringify(body) }),
   propose: (body: Record<string, unknown>) =>

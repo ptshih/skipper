@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ChevronRight, CircleCheck, CircleX, RefreshCw, TriangleAlert } from 'lucide-react'
-import { api, type EvalRunSummary, type EvalScore, type SignResult, type TourDetail } from '@/lib/api'
+import { api, type CharmDetail, type EvalRunSummary, type EvalScore, type SignResult, type TourDetail } from '@/lib/api'
 import { RouteMap, STOP_TYPE_COLOR, type RouteStopPin } from '@/components/RouteMap'
 import { fmtDate, fmtDuration, fmtMiles, fmtScore, fmtSec, timeAgo } from '@/lib/format'
 
@@ -19,6 +19,47 @@ const THRESHOLDS: Record<string, number> = {
   charm: 0.75,
   tts: 0.80,
   veracity: 0.80,
+}
+
+// The order findings read best in: accuracy first, delivery last.
+const DIM_LABEL: Record<string, string> = {
+  grounding: 'Grounding',
+  veracity: 'Veracity',
+  charm: 'Charm',
+  diversity: 'Diversity',
+  tts: 'TTS',
+}
+const DIM_ORDER = ['grounding', 'veracity', 'charm', 'diversity', 'tts']
+
+/** The charm judge stores {best, sag} on detail — the funniest line vs the flattest bit. */
+function asCharm(d: unknown): CharmDetail | null {
+  return d && typeof d === 'object' && ('best' in d || 'sag' in d) ? (d as CharmDetail) : null
+}
+
+/** One dimension's verdict for a stop: its score, its findings, and (for charm) best/sag. */
+function DimNote({ score }: { score: EvalScore }) {
+  const charm = asCharm(score.detail)
+  return (
+    <div className="dimnote">
+      <div className="dimnote__head">
+        <span>{DIM_LABEL[score.dimension] ?? score.dimension}</span>
+        <span className={`badge ${score.pass ? 'badge--ok' : 'badge--warn'}`} style={{ fontSize: 10 }}>
+          {fmtScore(score.value)}
+        </span>
+      </div>
+      {score.findings.length > 0 && (
+        <ul className="findings">
+          {score.findings.map((f, i) => <li key={i}>{f}</li>)}
+        </ul>
+      )}
+      {charm?.best && (
+        <div className="dimnote__best">★ best — <span className="dimnote__quote">“{charm.best}”</span></div>
+      )}
+      {charm?.sag && (
+        <div className="dimnote__sag">▽ sag — <span className="dimnote__quote">“{charm.sag}”</span></div>
+      )}
+    </div>
+  )
 }
 
 const STATUS_BADGE: Record<string, string> = {
@@ -94,7 +135,7 @@ function StopRow({
   hasAudio,
   url,
   script,
-  grounding,
+  scores,
 }: {
   seq: number
   type: string
@@ -103,9 +144,14 @@ function StopRow({
   hasAudio: boolean
   url?: string
   script: string | null
-  grounding: EvalScore | null
+  scores: EvalScore[]
 }) {
+  const grounding = scores.find((s) => s.dimension === 'grounding') ?? null
   const fail = grounding != null && !grounding.pass
+  // Every dimension worth a note: anything with findings, a failing dim, or a charm sag.
+  const notes = DIM_ORDER.map((dim) => scores.find((s) => s.dimension === dim)).filter(
+    (s): s is EvalScore => !!s && (s.findings.length > 0 || !s.pass || !!asCharm(s.detail)?.sag),
+  )
   return (
     <div className="stop" style={fail ? { background: 'var(--bad-bg)' } : undefined}>
       <div className="stop__row">
@@ -126,14 +172,10 @@ function StopRow({
       ) : (
         !hasAudio && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--ink-3)' }}>no audio</div>
       )}
-      {(script || (grounding && grounding.findings.length > 0)) && (
-        <Disclosure label="Script">
+      {(script || notes.length > 0) && (
+        <Disclosure label={notes.length > 0 ? `Script · ${notes.length} note${notes.length === 1 ? '' : 's'}` : 'Script'}>
           {script && <p className="script">{script}</p>}
-          {grounding && grounding.findings.length > 0 && (
-            <ul className="findings">
-              {grounding.findings.map((f, i) => <li key={i}>{f}</li>)}
-            </ul>
-          )}
+          {notes.map((s) => <DimNote key={s.dimension} score={s} />)}
         </Disclosure>
       )}
     </div>
@@ -217,9 +259,24 @@ export function TourDetailView() {
   const urlForSeq = new Map(signed?.stops.map((s) => [s.seq, s.url]) ?? [])
   const groundingFor = (seq: number) =>
     ev?.scores.find((s) => s.seq === seq && s.dimension === 'grounding') ?? null
+  const scoresForSeq = (seq: number) => ev?.scores.filter((s) => s.seq === seq) ?? []
   const intro = brackets.find((b) => b.kind === 'intro')
   const outro = brackets.find((b) => b.kind === 'outro')
   const failingStops = stops.filter((s) => { const g = groundingFor(s.seq); return g && !g.pass })
+
+  // Integrity (§14.9): a READY tour must have audio on every stop + bracket and attribution on
+  // every story stop. Computed from already-loaded data — the per-tour view of the fleet audit.
+  const isEmptyAttr = (a: unknown) => a == null || (Array.isArray(a) && a.length === 0)
+  const integrity = tour.status === 'ready'
+    ? {
+        silentStops: stops.filter((s) => !s.hasAudio).map((s) => s.seq),
+        silentBrackets: brackets.filter((b) => !b.hasAudio).map((b) => b.kind),
+        unattributed: stops.filter((s) => s.stopType === 'story' && isEmptyAttr(s.attribution)).map((s) => s.seq),
+      }
+    : null
+  const integrityBroken =
+    integrity != null &&
+    (integrity.silentStops.length > 0 || integrity.silentBrackets.length > 0 || integrity.unattributed.length > 0)
   const stopPins: RouteStopPin[] = stops
     .filter((s) => s.triggerLat != null && s.triggerLng != null)
     .map((s) => ({ seq: s.seq, name: s.name, stopType: s.stopType, lat: s.triggerLat!, lng: s.triggerLng!, radiusM: s.triggerRadiusM }))
@@ -252,6 +309,19 @@ export function TourDetailView() {
           </div>
         </div>
       </div>
+
+      {integrityBroken && integrity && (
+        <div className="dangerzone dangerzone--del" style={{ marginBottom: 'var(--gap)' }}>
+          <div className="dangerzone__title"><TriangleAlert size={14} /> Integrity — this ready tour is broken</div>
+          <div className="dangerzone__body">
+            A <b>ready</b> tour must have audio on every stop and bracket, and attribution on every story stop.
+            {integrity.silentStops.length > 0 && <> Stops with no audio: <b>{integrity.silentStops.join(', ')}</b>.</>}
+            {integrity.silentBrackets.length > 0 && <> Brackets with no audio: <b>{integrity.silentBrackets.join(', ')}</b>.</>}
+            {integrity.unattributed.length > 0 && <> Story stops missing CC BY-SA attribution: <b>{integrity.unattributed.join(', ')}</b>.</>}
+            {' '}Re-run generate or resynth, or flip the status off ready.
+          </div>
+        </div>
+      )}
 
       {tour.polyline.length > 1 && (
         <div className="card" style={{ marginBottom: 'var(--gap)', overflow: 'hidden' }}>
@@ -315,7 +385,7 @@ export function TourDetailView() {
             hasAudio={s.hasAudio}
             url={urlForSeq.get(s.seq)}
             script={s.script}
-            grounding={groundingFor(s.seq)}
+            scores={scoresForSeq(s.seq)}
           />
         ))}
         {outro && <BracketRow kind="outro" b={outro} url={signed?.outro?.url} />}

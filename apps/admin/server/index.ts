@@ -15,14 +15,16 @@
 //   GET  /admin/evals?slug=       -> eval_runs history for a slug (the trend)
 //   GET  /admin/jobs              -> recent gen_jobs (operational record; powers job polling)
 //   GET  /admin/runs              -> unified Runs timeline: gen_jobs + orphan eval_runs
-//   GET  /admin/jobs/:id          -> one run (reconciled against its Cloud Run execution)
+//   GET  /admin/jobs/:id          -> one run (reconciled against its Cloud Run execution) + logs URL
 //   POST /admin/jobs              -> trigger an op as a skipper-gen Job  (jobs.ts — Phase 3)
+//   POST /admin/jobs/:id/cancel   -> stop a running execution (gen_job_status='canceled') (§14.8)
+//   GET  /admin/integrity         -> ready tours violating the audio/attribution invariant (§14.9)
 //   POST /admin/tours/propose     -> Create Tour, phase 1: LLM + geocode  (create-tour.ts — Phase 4)
 //   POST /admin/tours             -> Create Tour, phase 2: freeze + draft  (create-tour.ts — Phase 4)
 
 import { Hono } from 'hono'
 import { serveStatic } from 'hono/bun'
-import { and, asc, count, desc, eq, inArray } from 'drizzle-orm'
+import { and, asc, count, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import {
   evalRuns,
@@ -36,7 +38,16 @@ import {
 } from '@skipper/db/schema'
 import { requireAdmin, type AdminEnv } from './auth'
 import { contentTypeForKey, presignGet } from './storage'
-import { buildJobArgs, executionState, HttpError, runJob, type BuildResult, type JobKind } from './jobs'
+import {
+  buildJobArgs,
+  cancelExecution,
+  executionState,
+  HttpError,
+  jobExecutionLogsUrl,
+  runJob,
+  type BuildResult,
+  type JobKind,
+} from './jobs'
 import { freezeTour, proposeTour, type ProposePrompt } from './create-tour'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 
@@ -179,6 +190,9 @@ app.get('/admin/tours/:id', async (c) => {
           pass: evalScores.pass,
           value: evalScores.value,
           findings: evalScores.findings,
+          // The dimension-specific payload (charm best/sag quotes, ClaimVerdict[], …) — the
+          // judge's actual reasoning, surfaced so prompt-tuning targets the real sag (§14.7).
+          detail: evalScores.detail,
         })
         .from(evalScores)
         .where(eq(evalScores.runId, run.id))
@@ -328,6 +342,62 @@ app.get('/admin/evals', async (c) => {
   return c.json({ slug, runs })
 })
 
+// Integrity audit (§14.9). The generator's ready-gate enforces "every stop + bracket has
+// audio, every story stop has CC BY-SA attribution" at WRITE time — but nothing audits the
+// LIVE db, so a half-failed resynth or a manual poke could leave a `ready` tour silently
+// broken (the exact way the canonical demo dies). Pure read; flags only violators.
+app.get('/admin/integrity', async (c) => {
+  const ready = await db
+    .select({ id: tours.id, slug: tours.slug, headline: tours.headline })
+    .from(tours)
+    .where(eq(tours.status, 'ready'))
+    .orderBy(asc(tours.slug))
+  const ids = ready.map((r) => r.id)
+  if (!ids.length) return c.json({ checked: 0, tours: [] })
+
+  const [silentStops, silentBrackets, unattributed] = await Promise.all([
+    db
+      .select({ tourId: tourStops.tourId, seq: tourStops.seq, stopType: tourStops.stopType })
+      .from(tourStops)
+      .where(and(inArray(tourStops.tourId, ids), isNull(tourStops.audioUrl)))
+      .orderBy(asc(tourStops.seq)),
+    db
+      .select({ tourId: tourBrackets.tourId, kind: tourBrackets.kind })
+      .from(tourBrackets)
+      .where(and(inArray(tourBrackets.tourId, ids), isNull(tourBrackets.audioUrl))),
+    // Story stops are the wikipedia-grounded ones — attribution is the legal (not optional)
+    // invariant. null OR an empty array both count as missing.
+    db
+      .select({ tourId: tourStops.tourId, seq: tourStops.seq })
+      .from(tourStops)
+      .where(
+        and(
+          inArray(tourStops.tourId, ids),
+          eq(tourStops.stopType, 'story'),
+          sql`(${tourStops.attribution} is null or jsonb_array_length(${tourStops.attribution}) = 0)`,
+        ),
+      )
+      .orderBy(asc(tourStops.seq)),
+  ])
+
+  type Violations = { silentStops: number[]; silentBrackets: string[]; unattributed: number[] }
+  const byTour = new Map<string, Violations>()
+  const ensure = (id: string): Violations => {
+    let v = byTour.get(id)
+    if (!v) {
+      v = { silentStops: [], silentBrackets: [], unattributed: [] }
+      byTour.set(id, v)
+    }
+    return v
+  }
+  for (const s of silentStops) ensure(s.tourId).silentStops.push(s.seq)
+  for (const b of silentBrackets) ensure(b.tourId).silentBrackets.push(b.kind)
+  for (const s of unattributed) ensure(s.tourId).unattributed.push(s.seq)
+
+  const flagged = ready.filter((t) => byTour.has(t.id)).map((t) => ({ ...t, ...byTour.get(t.id)! }))
+  return c.json({ checked: ready.length, tours: flagged })
+})
+
 // The Runs view — recent gen_jobs (operational record).
 app.get('/admin/jobs', async (c) => {
   const jobs = await db.select().from(genJobs).orderBy(desc(genJobs.createdAt)).limit(100)
@@ -444,7 +514,34 @@ app.get('/admin/jobs/:id', async (c) => {
       job = (await db.select().from(genJobs).where(eq(genJobs.id, id)).limit(1))[0]!
     }
   }
-  return c.json({ job })
+  const logsUrl = job.cloudRunExecution ? jobExecutionLogsUrl(job.cloudRunExecution) : null
+  return c.json({ job, logsUrl })
+})
+
+// Cancel a running/queued execution (§14.8) — the operator stop path the schema reserved on
+// gen_job_status='canceled'. Settles the row to 'canceled' after asking Cloud Run to cancel
+// the execution (404 there = already gone, still fine). A terminal row is a 409.
+app.post('/admin/jobs/:id/cancel', async (c) => {
+  const id = c.req.param('id')
+  if (!UUID_RE.test(id)) return c.json({ error: 'not_found' }, 404)
+  const job = (await db.select().from(genJobs).where(eq(genJobs.id, id)).limit(1))[0]
+  if (!job) return c.json({ error: 'not_found' }, 404)
+  if (TERMINAL.includes(job.status as (typeof TERMINAL)[number])) {
+    return c.json({ error: 'conflict', message: `Run already ${job.status}.` }, 409)
+  }
+  if (job.cloudRunExecution) {
+    try {
+      await cancelExecution(job.cloudRunExecution)
+    } catch (e) {
+      return c.json({ error: 'cancel_failed', message: e instanceof Error ? e.message : String(e) }, 502)
+    }
+  }
+  await db
+    .update(genJobs)
+    .set({ status: 'canceled', endedAt: new Date(), error: job.error ?? 'canceled by operator' })
+    .where(eq(genJobs.id, id))
+  const row = (await db.select().from(genJobs).where(eq(genJobs.id, id)).limit(1))[0]
+  return c.json({ job: row })
 })
 
 // Trigger an op as a skipper-gen Cloud Run Job. Dry-run by default; a SPENDING run (generate

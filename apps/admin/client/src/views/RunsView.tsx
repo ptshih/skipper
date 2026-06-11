@@ -226,7 +226,7 @@ export function RunsView() {
       </div>
 
       {drawerRun && (
-        <RunDrawer run={drawerRun} onClose={() => setDrawerRun(null)} />
+        <RunDrawer run={drawerRun} onClose={() => setDrawerRun(null)} onChanged={() => void refresh()} />
       )}
       {newRunOpen && (
         <NewRunModal onClose={() => setNewRunOpen(false)} onSubmitted={() => { setNewRunOpen(false); void refresh() }} />
@@ -265,8 +265,10 @@ function RunResultCell({ r }: { r: RunEvent }) {
 
 /* ─── Run detail drawer ─── */
 
-function RunDrawer({ run, onClose }: { run: RunEvent; onClose: () => void }) {
+function RunDrawer({ run, onClose, onChanged }: { run: RunEvent; onClose: () => void; onChanged?: () => void }) {
   const [job, setJob] = useState<GenJob | null>(null)
+  const [logsUrl, setLogsUrl] = useState<string | null>(null)
+  const [canceling, setCanceling] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -277,15 +279,32 @@ function RunDrawer({ run, onClose }: { run: RunEvent; onClose: () => void }) {
 
   useEffect(() => {
     if (run.source === 'job') {
-      api.job(run.id).then((r) => setJob(r.job)).catch(() => {})
+      api.job(run.id).then((r) => { setJob(r.job); setLogsUrl(r.logsUrl) }).catch(() => {})
     }
   }, [run.id, run.source])
 
   const km = KIND_META[run.kind]
   const Icon = km?.icon ?? Activity
   const isJob = run.source === 'job'
-  const error = job?.error
+  const status = (job?.status ?? run.status) as JobStatus | null
+  const cancelable = isJob && (status === 'running' || status === 'queued')
+  // 'canceled by operator' is the server's marker — not a failure, so don't paint it red.
+  const error = status === 'failed' ? job?.error : null
   const args = job?.args
+
+  async function cancel() {
+    setCanceling(true)
+    try {
+      const r = await api.cancelJob(run.id)
+      setJob(r.job)
+      onChanged?.()
+    } catch (e) {
+      // surface inline via the job error block on next poll; keep the drawer open
+      console.error('cancel failed', e)
+    } finally {
+      setCanceling(false)
+    }
+  }
 
   return (
     <>
@@ -295,10 +314,10 @@ function RunDrawer({ run, onClose }: { run: RunEvent; onClose: () => void }) {
           <div style={{ minWidth: 0 }}>
             <div className="row-flex">
               <span className="drawer__title">{km?.label ?? run.kind}</span>
-              {isJob && run.status && (
-                <span className={`badge ${JOB_STATUS_CLASS[run.status as JobStatus] ?? 'badge--neutral'}`}>
-                  {(run.status === 'running' || run.status === 'queued') && <span className="badge__dot" />}
-                  {run.status}
+              {isJob && status && (
+                <span className={`badge ${JOB_STATUS_CLASS[status] ?? 'badge--neutral'}`}>
+                  {(status === 'running' || status === 'queued') && <span className="badge__dot" />}
+                  {status}
                 </span>
               )}
               {!isJob && run.pass != null && (
@@ -373,13 +392,15 @@ function RunDrawer({ run, onClose }: { run: RunEvent; onClose: () => void }) {
               <Map size={14} /> Open tour
             </button>
           )}
-          {isJob && run.status === 'failed' && (
-            <button className="btn btn--primary"><RefreshCw size={14} /> Retry</button>
-          )}
-          {job?.cloudRunExecution && (
-            <button className="btn btn--ghost" style={{ marginLeft: 'auto' }}>
-              <ExternalLink size={14} /> Cloud Run
+          {cancelable && (
+            <button className="btn btn--danger" disabled={canceling} onClick={() => void cancel()}>
+              <X size={14} /> {canceling ? 'Canceling…' : 'Cancel run'}
             </button>
+          )}
+          {logsUrl && (
+            <a className="btn btn--ghost" style={{ marginLeft: 'auto' }} href={logsUrl} target="_blank" rel="noreferrer">
+              <ExternalLink size={14} /> Cloud Run logs
+            </a>
           )}
         </div>
       </aside>
