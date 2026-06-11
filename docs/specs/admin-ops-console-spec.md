@@ -348,3 +348,39 @@ A truly minimal first cut can defer step 2's per-phase tick — terminal status 
 - `packages/db/src/schema.ts` (`eval_runs`/`eval_scores` — note: no cost column; `gen_jobs` + `tours.routeProvenance` land here), `packages/db/drizzle/` (migrations)
 - `packages/db/seed/{tour-specs,materialize,seed}.ts` + `seed/data/*.json` (the today authoring chain Create Tour refactors: `materializeRoute()` extraction, Routes v2 + Geocoding/Places via `GOOGLE_MAPS_API_KEY`, the `draft` upsert, the Tahoe-bbox check to generalize)
 - **GCP docs verified 2026-06-10:** [`jobs:run` overrides](https://docs.cloud.google.com/run/docs/execute/jobs) · [IAP-for-Cloud-Run (GA, direct)](https://docs.cloud.google.com/run/docs/securing/identity-aware-proxy-cloud-run) · [IAP signed-header audience](https://docs.cloud.google.com/iap/docs/signed-headers-howto) · [run IAM roles](https://docs.cloud.google.com/iam/docs/roles-permissions/run) · `run.invoker` lacks `runWithOverrides`: [issuetracker 298810674](https://issuetracker.google.com/issues/298810674) · [TTS auth](https://docs.cloud.google.com/text-to-speech/docs/authentication) · [DRS](https://docs.cloud.google.com/organization-policy/domain-restricted-sharing)
+
+## 14. Post-MVP enhancements (backlog)
+
+Brainstormed 2026-06-10 against the operating loop (generate → ear-pass → tune → drive).
+The console nails *generate* + *inspect*; these close the *ear-pass* and *tune* gaps.
+Ranked by leverage. **Done so far:** unified Runs timeline (gen_jobs + orphan eval_runs),
+the tour-detail rework (eval stat strip + itinerary list), per-tour eval **run history**,
+and the **route map** (frozen polyline + numbered trigger-point pins + radius circles,
+`RouteMap.tsx`; reuses a shared maps loader with the Create-Tour `WaypointMap`).
+
+1. **Ear-pass player + verdict capture (highest leverage).** A continuous autoplay-next
+   player through the itinerary (intro→stops→outro, plays like a drive) + per-stop
+   approve / needs-work + note. The schema is already built for it: `tour_stops.reviewed`
+   (the M4 review placeholder) and `eval_scores.source = 'human'` + `.comment` (the
+   human-adjudication row). Admin writes those. This is the "human ear, not an automated
+   gate" doctrine made operational.
+2. **Spend strip on Runs.** A rollup from `gen_jobs.costUsd` (total / this-week /
+   dry-run vs real) at the top of Runs — serves the COST founder-gate. **Label it
+   "est. LLM spend":** `costUsd` is the pipeline's self-reported LLM spend, NOT GCP
+   billing truth (no TTS/infra; see §9 cost caveat).
+3. **POI / facts-staleness inspector (read-only first).** Surface the `pois` facts cache:
+   browse by `(source, source_id)` with `facts_fetched_at` (TTL) + a reference count
+   ("used by N stops across M tours"), inspect one POI's fact extract + CC BY-SA
+   attribution + coords, and a **staleness view** — stops whose `facts_hash` is DISTINCT
+   FROM their `pois.facts_hash` (the regenerate trigger from principle #1). **HOLD the
+   write side** (force re-fetch / prune): it's M4 machinery (earns its keep at multi-region
+   volume) AND the Wikidata discovery-spine rework is about to reshape POI discovery —
+   don't build CRUD against a model that's moving. The read-only inspector is safe regardless.
+4. **Single-stop re-narrate (the sleeper for *tune*).** There is no "re-narrate just stop N"
+   path today — `run.ts` regenerates the whole tour and `patch-clip` only swaps audio for a
+   text edit. A "regenerate this one stop" action (optionally at a different joke notch) makes
+   skipper-prompt iteration — the repo's highest-leverage activity — fast and cheap.
+5. **Script diff across runs.** `eval_runs.artifact` stores full scripts; diff a stop's
+   script run-over-run to see exactly how a prompt change moved the narration.
+6. **Cloud Run log deep-link per run.** `gen_jobs.cloudRunExecution` is captured but unused
+   in the UI; link to the execution's logs. Cheap, but only useful post-deploy.
