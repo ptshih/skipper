@@ -15,6 +15,7 @@
   ],
   "scripts": {
     "dev": "dotenvx run -f .env.development -- bun --filter @skipper/api dev",
+    "dev:admin": "concurrently -k -n server,client -c blue.bold,green.bold \"PORT=8788 ADMIN_DEV_BYPASS=1 dotenvx run -f .env.development -- bun --filter @skipper/admin dev:server\" \"bun --filter @skipper/admin dev:client\"",
     "sim": "dotenvx run -f .env.development -- bun packages/sim/src/run.ts",
     "typecheck": "bun --filter '*' typecheck",
     "test": "bun --filter '*' test",
@@ -32,6 +33,7 @@
   },
   "devDependencies": {
     "@dotenvx/dotenvx": "^1.71.0",
+    "concurrently": "^9.1.0",
     "prettier": "^3.8.3",
     "typescript": "^6.0.3"
   },
