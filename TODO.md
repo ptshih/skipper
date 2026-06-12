@@ -124,22 +124,27 @@ player-side gain) to the SAME target once −14 is locked by the ear-gate above.
 Refs: `packages/generator/src/pipeline/loudnorm.ts`, `pipeline/tts.ts`, `pipeline/tail.ts`,
 `models.ts` (the LOUDNORM_* constants), `docs/decisions/audio-compression-spike.md`.
 
-## In-app narration volume trim (founder feedback 2026-06-11)
+## In-app narration volume trim — DEFERRED pending the −14 ear-gate (founder feedback 2026-06-11)
 
-Founder ask: an in-app control to make NARRATION slightly louder/quieter, INDEPENDENT of the
-device volume and of other apps' output. Feasible + small: expo-audio's narration `AudioPlayer`
-exposes `.volume` (0..1) — a per-player gain that does NOT touch device volume or other apps.
-Wire a persisted user setting (a few notches or a slider) → set `player.volume` in `useDrive` +
-`useRoam` on load and on change.
+Founder ask: an in-app control to make NARRATION slightly louder/quieter, INDEPENDENT of device
+volume and other apps. **Decision 2026-06-11: don't build it yet** — nail the global −14 LUFS target
+at the ear-gate first and see whether a per-listener trim is even needed once levels are consistent.
 
-Caveat — the "louder" direction has a CEILING: `player.volume` clamps at 1.0 (the clip's own
-level); it attenuates but can't amplify past source. Two ways to give upward room: (a) set the
-DEFAULT trim below max (e.g. 0.85) so the slider has headroom up to 1.0, or (b) raise the loudnorm
-target in `models.ts` and let the trim pull DOWN from there. Decide alongside the −14 LUFS ear-gate
-(same audio chain — the global level is now consistent at −14 LUFS; this is the PERSONAL trim on
-top). True >source loudness would need a gain effect, not player volume — out of scope. Refs:
-`useDrive.ts` / `useRoam.ts` (the narration player), `src/lib/driveMusic.ts` (the bed's own ramps,
-a separate level).
+Design conclusions if/when it IS built (so this isn't re-litigated):
+- Mechanism is simple + standard: expo-audio's narration `AudioPlayer.volume` (0..1) is a per-player
+  gain that touches NOTHING else (device volume, the rider's music, the `driveMusic.ts` bed all
+  stay put). Persist a notch setting (sim-mode pattern) → set `player.volume` in `useDrive`+`useRoam`.
+- **Lean toward ATTENUATION-ONLY** (default = unity = the matched −14 level; notches only go softer,
+  e.g. a sleeping passenger). It has no encode coupling and doesn't fight loudness normalization —
+  streaming (Spotify/Apple/YouTube) deliberately normalizes-to-target and DROPPED user loudness
+  boosts, so a "push above −14" control works against the −14 work we just did. "Louder overall" is
+  then a global-target call at the ear-gate, not a per-listener boost.
+- The bidirectional version (Softer/Normal/Louder) is a WORKAROUND: `player.volume` clamps at 1.0
+  (attenuates, can't amplify past source), so "Louder" needs clips encoded ~1.5 dB hotter than the
+  playback default — which couples the notch values to the loudnorm target. Only worth it if a real
+  "skipper a touch louder than my quiet-music device volume" need shows up. True >unity boost would
+  need a real gain node (AVAudioEngine / Web Audio / react-native-audio-api) — overkill for v1.
+Refs: `useDrive.ts` / `useRoam.ts` (the narration player), `models.ts` (LOUDNORM_* target).
 
 ## Offline downloads: full re-pull only (no per-clip diff)
 
