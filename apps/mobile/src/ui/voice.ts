@@ -168,7 +168,9 @@ export const voice = {
   greeting: 'Hop in. I’ll do the talking.',
   // The cold-open descriptor: a newcomer should know WHAT this is before any audio
   // plays. Clear first, persona second — the deadpan stays, just aimed.
-  tagline: 'Narrated road-trip audio tours — one corny guide, all the good stops.',
+  // Names BOTH modes now that roam is co-equal with tours on home (founder 2026-06-11) —
+  // not a tours-only line. (Wording is a quick founder tweak if the voice wants nudging.)
+  tagline: 'Narrated road trips — take a guided drive, or just ride along. One corny guide either way.',
   // The home hero's enamel flourishes: a departures-board kicker ABOVE the headline
   // (deliberately NOT repeating the tagline) + the section seam that turns the corridor
   // list into "routes posted on the board". Warm, corny, glanceable, no facts.

@@ -34,8 +34,6 @@ export default function DrivesScreen() {
   // animated, so it satisfies both the one-thing-animating and the one-glowing-amber
   // rules. The home has no NOW card, so this halo is the screen's sole amber glow.
   const parkedAnim = useRef(new Animated.Value(0.12)).current
-  // The roam card's trail sits at progress 0 — the road not yet traveled (design handoff).
-  const roamParked = useRef(new Animated.Value(0)).current
 
   const load = useCallback(async () => {
     try {
@@ -112,10 +110,11 @@ export default function DrivesScreen() {
     />
   )
 
-  // The travel-poster hero, now a FRAMELESS MASTHEAD (not a card) so the Roam card is the
-  // only card on the home → cleaner hierarchy: a faint WPA sunburst watermark behind the
-  // enamel kicker → big Alfa-Slab headline (the persona's line) → the signature trail with
-  // the parked rig (the one amber glow) → the quiet "what is this" tagline.
+  // The travel-poster hero, a FRAMELESS MASTHEAD over the two CO-EQUAL mode sections below
+  // (Ride along / The drives — founder 2026-06-11: roam promoted from a guest card to a peer):
+  // a faint WPA sunburst watermark behind the enamel kicker → big Alfa-Slab headline (the
+  // persona's line) → the signature trail with the parked rig (the one amber glow) → the
+  // quiet "what is this" tagline (now naming BOTH modes).
   const hero = (
     <View style={styles.hero}>
       <View style={styles.heroSunburst} pointerEvents="none">
@@ -152,41 +151,36 @@ export default function DrivesScreen() {
   const listHeader = (
     <>
       {hero}
-      {/* FREE-ROAM (alpha) entry — a MODE beside THE DRIVES (never a tab), so it sits
-          between the hero and the seam, prominent per the design handoff: framed card,
-          kicker + alpha badge, display title, the untraveled trail (progress 0, NO glow —
-          the hero's parked rig owns the home screen's one amber glow), and the primary
-          "Ride along". The alpha badge keeps expectations honest. */}
-      <View style={styles.roamWrap}>
-        <Card framed onPress={() => router.push('/roam')}>
-          <View style={styles.roamKickerRow}>
-            <Text variant="label" color="accentWarm" style={styles.flex}>
-              {voice.roam.entryKicker}
-            </Text>
-            <Badge tone="teal" label={voice.roam.entryAlpha} />
-          </View>
-          <Text variant="display" color="ink">
-            {voice.roam.entry}
-          </Text>
-          <Text variant="body" color="inkDim">
-            {voice.roam.entryBlurb}
-          </Text>
-          <View style={styles.roamTrail}>
-            <RouteTrack progress={roamParked} glow={false} />
-          </View>
-          <Button
-            icon="car"
-            title={voice.roam.start}
-            onPress={() => router.push('/roam')}
-            glow={false}
-            fullWidth
-          />
-        </Card>
-      </View>
-      <View style={styles.seam}>
+      {/* RIDE ALONG — a CO-EQUAL mode SECTION, peer to THE DRIVES (never a tab). De-framed
+          from its old card to a flat section that MATCHES the drives header below, so the home
+          reads as "two modes" rather than a tours list with a roam card wedged in. NO glow —
+          the hero's parked rig owns the home screen's one amber glow. */}
+      <View style={styles.section}>
         <Divider dashed />
-        <View style={styles.seamRow}>
-          <Text variant="label" color="inkFaint" style={styles.flex}>
+        <View style={styles.sectionHead}>
+          <Text variant="label" color="accentWarm" style={styles.flex}>
+            {voice.roam.entryKicker}
+          </Text>
+          <Badge tone="teal" label={voice.roam.entryAlpha} />
+        </View>
+        <Text variant="body" color="inkDim" style={styles.sectionBlurb}>
+          {voice.roam.entryBlurb}
+        </Text>
+        <Button
+          icon="car"
+          title={voice.roam.start}
+          onPress={() => router.push('/roam')}
+          glow={false}
+          fullWidth
+        />
+      </View>
+      {/* THE DRIVES — the peer section; the tours list renders below as this section's content.
+          Same header treatment as RIDE ALONG (matching dashed seam + accentWarm kicker) so the
+          two sit at equal altitude. */}
+      <View style={styles.section}>
+        <Divider dashed />
+        <View style={styles.sectionHead}>
+          <Text variant="label" color="accentWarm" style={styles.flex}>
             {voice.home.section}
           </Text>
           {/* Show the region filter whenever there's a region to pick. (With one region
@@ -348,17 +342,17 @@ const styles = StyleSheet.create({
   heroSunburst: { position: 'absolute', top: -54, right: -38 },
   heroHeadline: { marginTop: space.sm },
   heroTrail: { marginTop: space.md, marginBottom: space.md },
-  roamWrap: { paddingHorizontal: space.gutter, marginTop: space.md },
-  roamKickerRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  roamTrail: { marginTop: space.sm, marginBottom: space.sm },
-  seam: { paddingHorizontal: space.gutter, marginTop: space.lg },
-  seamRow: {
+  // Two co-equal mode sections (Ride along / The drives) share this header treatment so they
+  // sit at equal altitude — a dashed seam, an accentWarm kicker, matching gutters.
+  section: { paddingHorizontal: space.gutter, marginTop: space.lg },
+  sectionHead: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.sm,
     marginTop: space.md,
     marginBottom: space.sm,
   },
+  sectionBlurb: { marginBottom: space.md },
   list: { paddingVertical: space.gutter, gap: space.md },
   row: { paddingHorizontal: space.gutter },
   metaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space.sm, marginTop: space.xs },
