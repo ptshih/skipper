@@ -51,12 +51,10 @@ export type Attribution = z.infer<typeof attribution>
 
 /**
  * A clip's frozen attribution: an ARRAY, one entry per source it drew on (Wikipedia +
- * Macrostrat, etc.). Tolerant of a legacy single-object row by normalizing it to a
- * one-element array on read.
+ * Macrostrat, etc.). Stored as a jsonb array on tour_stops/roam_clips — there is no
+ * legacy single-object shape to tolerate (zero-reuse, no users → clean array contract).
  */
-export const attributionList = z
-  .union([attribution, z.array(attribution)])
-  .transform((a) => (Array.isArray(a) ? a : [a]))
+export const attributionList = z.array(attribution)
 export type AttributionList = z.infer<typeof attributionList>
 
 /**
@@ -156,7 +154,6 @@ export const tour = z.object({
   // No jokeLevel: the notch is a generation INPUT, not stored tour state (see @skipper/shared
   // enums `jokeLevel`). `tourRequest` below carries it as the generation knob.
   status: tourStatus,
-  routeSig: z.string().nullish(),
 })
 export type Tour = z.infer<typeof tour>
 

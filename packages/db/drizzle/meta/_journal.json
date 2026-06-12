@@ -64,6 +64,13 @@
       "when": 1781211586387,
       "tag": "0008_low_hydra",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1781286663918,
+      "tag": "0009_little_the_captain",
+      "breakpoints": true
     }
   ]
 }
