@@ -12,11 +12,11 @@
 Everything the design-review follow-through shipped is verified statically — `bun run check`
 (token-lint + `tsc` + `bun test`, 45 tests) is green. What it **cannot** judge is the load-bearing
 runtime behaviour: animation timing and the one-amber glow budget, rounded-corner clipping of a
-scrolling child, the cream-on-cream "now" well's real contrast outdoors, cross-app music ducking,
-lock-screen Now Playing, the native splash/icon, and real GPS triggering *in motion*. This is the
-human pass those need. **One physical iPhone, one dev build, ~one sitting.** The same session that
-does the real-GPS test (Phase 4) is also where the audio duck-flip (Phase 0) gets verified — they
-share the build, so do them together.
+scrolling child, the cream-on-cream "now" well's real contrast outdoors, cross-app music
+pause+resume, lock-screen Now Playing, the native splash/icon, and real GPS triggering *in motion*.
+This is the human pass those need. **One physical iPhone, one dev build, ~one sitting.** The same
+session that does the real-GPS test (Phase 4) is also where the audio pause+resume (§6) gets
+verified — they share the build, so do them together.
 
 ## How to use this
 
@@ -24,8 +24,8 @@ share the build, so do them together.
   the static screens → the player → the climax → audio → outdoor GPS → offline.
 - Each check is a `- [ ]` with **Do / Expect / Watch-for** and a code anchor. Tick it or note the
   failure mode you saw.
-- **§0** (build) and **§6** (the duck flip) carry a *prerequisite* — do the prereq before the checks
-  it gates.
+- **§0** (build) carries a *prerequisite* — do the prereq before the checks it gates. (§6 no longer
+  needs a code change: the pause+resume behaviour is already in code.)
 - Report pass/fail against the per-phase **Accept** bar in `docs/specs/gps-player-spec.md` §7.
 
 ---
@@ -65,18 +65,20 @@ share the build, so do them together.
   Signing auto-resolves from the keychain dev cert. The EAS *cloud* path is in
   `docs/guides/eas-setup.md` (note its projectId is stale — see Known gaps).
 
-### The code change owed BEFORE §6 (audio)
-- [ ] **Flip the interruption mode.** Change `DRIVE_INTERRUPTION_MODE` from `'doNotMix'` to
-  `'duckOthers'` at `apps/mobile/src/lib/useDrive.ts:67`. JS-only, hot-reloadable, **no native
-  rebuild.** Do it *in this session* so you can immediately verify the risk below. Until flipped, the
-  rider's external music **pauses** under narration instead of ducking — that's expected current
-  behaviour, not a bug.
-- ⚠️ **This is not a guaranteed-safe one-liner.** expo-audio's own types warn that
-  `setActiveForLockScreen` "must be set to `doNotMix`"
-  (`apps/mobile/node_modules/expo-audio/build/Audio.types.d.ts:572`), and the player *does* call
-  `player.setActiveForLockScreen(true, …)` (`useDrive.ts:721`). So `'duckOthers'` and the skipper's
-  lock-screen Now Playing card may conflict. §6 tests exactly this. **If they don't coexist, report
-  it — don't force the flip.**
+### No code change owed before §6 — the duck-flip is CANCELLED (founder 2026-06-11)
+- The old plan flipped the tour to `'duckOthers'`; the founder **reversed it**: narration should
+  **pause+resume** other audio, never duck (ducking left the rider's music competing UNDER the
+  skipper — distracting). So:
+  - **Tour player STAYS `doNotMix`** (`DRIVE_INTERRUPTION_MODE`, `useDrive.ts:67`) — no flip. It
+    already pauses the rider's external audio for the drive and resumes it at the end; its own bundled
+    music bed fades to **silence** under narration (`driveMusic.ts` ramps), so nothing competes.
+  - **Roam player now does pause+resume** *in code already* (`useRoam.ts`): it opens `mixWithOthers`
+    (rider's audio untouched through the quiet), takes exclusive `doNotMix` only while a clip is
+    actually sounding, and hands focus back (`mixWithOthers`) the instant the clip ends/holds.
+- ⚠️ **The unverified part is the RESUME.** expo-audio has no explicit session-deactivate — we
+  relinquish by flipping the interruption mode back to `mixWithOthers`. Whether iOS actually
+  **resumes** Spotify/podcasts on that flip is device-only. §6 verifies it. (Lock-screen no longer
+  conflicts: both players keep `doNotMix` while sounding, the mode `setActiveForLockScreen` wants.)
 
 ### Two open native risks to decide before/at build
 - **No background-audio mode.** `app.json` declares no `ios.UIBackgroundModes:['audio']`
@@ -262,38 +264,43 @@ There is **no** dedicated drive-complete component — the moment is composed in
   just no flourishes. Watch-for: animations still playing; or the checks NOT appearing at all (end
   state not rendered, leaving passed rows uncheck'd). (`apps/mobile/app/tours/[id]/play.tsx:136,359`)
 
-## §6 — Audio duck-flip (do the §"code change owed" prereq first)
+## §6 — Audio pause+resume (no prereq flip — it's already in code)
 
-Only meaningful **after** flipping `useDrive.ts:67` to `'duckOthers'`. This concerns the **rider's
-external** music (Spotify/Apple Music). The app's *own* bundled road-trip music already ducks via a
-separate engine (`driveMusic.ts` / `useAudioPlaylist`) — don't conflate them. Use a real device with
-a real music app; the simulator can't run cross-app ducking.
+The founder's call (2026-06-11): narration pauses+resumes other audio, never ducks. Both players
+keep `doNotMix` while a clip sounds; the **roam** player additionally hands focus back between
+encounters. This concerns the **rider's external** music (Spotify/Apple Music) — the tour's *own*
+bundled bed is a separate engine (`driveMusic.ts`) that fades to silence under narration, don't
+conflate them. Use a real device with a real music app; the simulator can't run cross-app focus.
 
-- [ ] **Music ducks, not stops.** Do: start Spotify/Apple Music playing; return to Skipper, start a
-  sim/preview drive, let a clip begin. Expect: the background music audibly **drops to a low volume
-  but keeps playing** under the skipper, then **swells back** to full when the clip ends. Watch-for:
-  music fully **pausing** (the flip didn't take, or it's still `doNotMix`); ducked but never
-  returning (stuck ducked); no ducking at all (`mixWithOthers` got set instead); the skipper clip
-  itself going silent. (`apps/mobile/src/lib/useDrive.ts:67,276`)
-- [ ] **★ Lock-screen Now Playing SURVIVES the duck (the documented risk).** Do: with a clip playing
-  and music ducked, lock the phone / open Control Center; check the Now Playing widget and try
-  play/pause + scrub. Expect: the widget shows the **skipper** clip — title = stop name, artist =
-  host name, album = tour name — and the transport controls it. **This must still hold after the flip
-  to `'duckOthers'`.** Watch-for: the skipper Now Playing card disappearing or being replaced by the
-  music app (the exact `setActiveForLockScreen` "must be doNotMix" conflict); dead transport
-  controls; two sources flickering. **If they don't coexist, the flip needs another approach — report
-  it.** (`apps/mobile/src/lib/useDrive.ts:721`, `node_modules/expo-audio/build/Audio.types.d.ts:572`)
-- [ ] **Background playback while ducked.** Do: start a drive with music playing, lock the phone
-  mid-clip, keep listening, let it advance to the next stop while locked. Expect: the skipper clip
-  plays to completion through speaker/Bluetooth, music ducked under it and restored after, and the
-  next clip fires while backgrounded. Watch-for: skipper audio cutting out on lock (background focus
-  lost under `duckOthers`); the music *un*-ducking the instant the app backgrounds. (See §7's
-  background-audio caveat — no `UIBackgroundModes:['audio']` is declared.)
-  (`apps/mobile/src/lib/useDrive.ts:277-278`)
-- [ ] **Same behaviour in live mode.** Do: re-confirm ducking + lock-screen in a real `?mode=live`
-  drive (the audio session is mode-agnostic — same `setAudioModeAsync`). Expect: identical to
-  sim/preview. Watch-for: any divergence between `live` and `sim` (would be surprising — worth
-  reporting). (`apps/mobile/app/tours/[id]/play.tsx:45`)
+**Tour player** (`doNotMix`, unchanged):
+- [ ] **Rider's music pauses for the drive, resumes at the end.** Do: start Spotify; return to
+  Skipper, start a sim/preview drive. Expect: the music **pauses** when the drive's audio takes over
+  and **resumes** when you end the drive / leave the player. Watch-for: music ducking instead of
+  pausing (wrong mode); never resuming after the drive ends (the resume landmine — report it).
+  (`apps/mobile/src/lib/useDrive.ts:67`)
+- [ ] **★ Lock-screen Now Playing holds (now its happy path).** Do: with a clip playing, lock the
+  phone / open Control Center; check the Now Playing widget + try play/pause + scrub. Expect: the
+  **skipper** clip — title = stop name, artist = host, album = tour — and working transport. With
+  `doNotMix` retained there's no `setActiveForLockScreen` conflict, so this should *just work*.
+  Watch-for: card missing/replaced by the music app; dead transport. (`useDrive.ts:721`)
+
+**Roam player** (`mixWithOthers` ⇄ `doNotMix` per encounter — the new behaviour):
+- [ ] **★ Music plays through the quiet, PAUSES for an encounter, RESUMES after.** Do: start Spotify;
+  open Roam (sim is fine), let it idle, then let an encounter fire. Expect: the rider's music keeps
+  playing during the idle/quiet, **pauses** the moment the skipper starts talking, and **resumes**
+  the instant the encounter ends. Watch-for: music ducking-not-pausing (stale `duckOthers`); music
+  **staying paused** through the next quiet stretch (the resume flip didn't take — the core risk);
+  the skipper overlapping the music (focus not taken). (`apps/mobile/src/lib/useRoam.ts`)
+- [ ] **Re-pause on the NEXT encounter + hold-to-resume.** Do: let a second encounter fire; separately,
+  pause a playing encounter with the sheet's play/pause. Expect: music pauses again for the second
+  clip; pausing an encounter **un-pauses the rider's music while held**, re-pausing it on resume.
+  Watch-for: a resume/pause *flicker* between back-to-back encounters (rare given the min-gap).
+- [ ] **Dead-zone skip never interrupts.** Do: trigger an encounter on thin/no signal (or let one
+  stall). Expect: a clip that never sounds is skipped and the rider's music is **never touched**
+  (focus is taken only on real audio). Watch-for: music pausing for a clip that then never plays.
+- [ ] **Same behaviour in live mode.** Do: re-confirm tour + roam in a real `?mode=live` session (the
+  audio session is mode-agnostic). Watch-for: any `live`↔`sim` divergence (would be surprising —
+  report it). (`apps/mobile/app/tours/[id]/play.tsx:45`)
 
 ## §7 — Real GPS, outdoors & in motion (Phase 4 — the bike/drive test)
 

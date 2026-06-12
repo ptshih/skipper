@@ -5,10 +5,15 @@
 //   idle → sessionStart → roaming ⇄ (encounter sheet) ; roaming → signoff → idle
 //
 // Deliberate differences from useDrive (the tour player):
-//   - AUDIO SESSION = `duckOthers`, not `doNotMix`: roam's whole premise is piping up OVER
-//     the rider's podcast/music and getting out of the way. And NO lock-screen Now Playing
-//     claim — `setActiveForLockScreen` is documented to want doNotMix, and an ambient 60s
-//     encounter doesn't need transport controls (alpha cut; revisit with the duck-flip).
+//   - AUDIO SESSION = PAUSE+RESUME, not duck (founder 2026-06-11): roam takes EXCLUSIVE focus
+//     (`doNotMix` — pauses the rider's podcast/music) ONLY while a clip is actually sounding,
+//     and HANDS IT BACK (`mixWithOthers` — the rider's audio resumes) the instant the clip
+//     ends or is held. Ducking left the rider's music competing UNDER the skipper (distracting).
+//     The focus toggles on the sawFresh edge (real audio), so a silent pre-buffer / dead-zone
+//     skip never strands the rider's music paused. Still NO lock-screen Now Playing claim
+//     (alpha cut; the flip moots the old doNotMix-vs-lock-screen note). ⚠ Whether iOS RESUMES
+//     Spotify/podcasts when we relinquish to mixWithOthers is DEVICE-ONLY — verify on a real
+//     device (resume after a 60s encounter, re-pause on the next) before relying on it.
 //   - CHATTINESS (quiet/normal/talkative) retunes the engine's min-gap governor live — a
 //     SELECTION knob (which/how-many encounters fire), never a generation knob.
 //   - No offline pack (alpha streams presigned URLs), no re-sign-on-stall (a stalled clip
@@ -154,6 +159,19 @@ export function useRoam(mode: RoamMode): RoamState {
   const player = useAudioPlayer()
   const status = useAudioPlayerStatus(player)
 
+  // Pause+resume focus toggle (founder 2026-06-11): the rider's audio is interrupted ONLY
+  // while the skipper is actually talking. exclusive=true → `doNotMix` (pauses the rider's
+  // app); exclusive=false → `mixWithOthers` (hands focus back so it resumes). expo-audio has
+  // no explicit session-deactivate — flipping the interruption mode IS the release mechanism
+  // (SDK 56 docs). Fire-and-forget; a failed flip just leaves the prior focus, never throws.
+  const setExclusiveAudio = useCallback((exclusive: boolean) => {
+    setAudioModeAsync({
+      playsInSilentMode: true,
+      shouldPlayInBackground: true,
+      interruptionMode: exclusive ? 'doNotMix' : 'mixWithOthers',
+    }).catch(() => {})
+  }, [])
+
   const teardown = useCallback(() => {
     subRef.current?.stop()
     subRef.current = null
@@ -175,8 +193,9 @@ export function useRoam(mode: RoamMode): RoamState {
     try {
       player.pause()
     } catch {}
+    setExclusiveAudio(false) // never leave a session with the rider's audio interrupted
     deactivateKeepAwake(KEEP_AWAKE_TAG).catch(() => {})
-  }, [player])
+  }, [player, setExclusiveAudio])
 
   useEffect(() => {
     mountedRef.current = true
@@ -208,13 +227,14 @@ export function useRoam(mode: RoamMode): RoamState {
       // The tally counts encounters that made SOUND — a stall-skipped clip the rider
       // never heard isn't a story told.
       if (sawFresh.current) setToldCount((n) => n + 1)
+      setExclusiveAudio(false) // clip over → hand focus back so the rider's audio resumes
       setActivePoiId((cur) => (cur === poiId ? null : cur))
       setSheetPoiId((cur) => (cur === poiId ? null : cur)) // dismiss the sheet (or its skeleton)
       setClipReady(false)
       clipBusy.current = false
       pump()
     },
-    [pump],
+    [pump, setExclusiveAudio],
   )
 
   // Stall recovery: ONE re-fetch of the manifest (fresh presigned URLs — covers both a
@@ -294,9 +314,11 @@ export function useRoam(mode: RoamMode): RoamState {
   useEffect(() => {
     if (activePoiId === null) return
     if (status.playing && (status.currentTime ?? 0) > 0.25 && !sawFresh.current) {
-      // Real audio is advancing — present the sheet NOW (on a live clip, not a frozen 0:00),
-      // upgrading a skeleton that the buffer-grace may have shown first.
+      // Real audio is advancing — take EXCLUSIVE focus (pause the rider's audio) only NOW, not
+      // at clip-load, so a silent pre-buffer / dead-zone skip never interrupts it. Present the
+      // sheet on a live clip (not a frozen 0:00), upgrading any skeleton the grace showed first.
       sawFresh.current = true
+      setExclusiveAudio(true)
       setClipReady(true)
       setSheetPoiId(activePoiId)
       if (skeletonTimer.current) {
@@ -313,7 +335,7 @@ export function useRoam(mode: RoamMode): RoamState {
       finishedPoi.current = activePoiId
       onClipDone(activePoiId)
     }
-  }, [status.playing, status.didJustFinish, status.currentTime, activePoiId, onClipDone])
+  }, [status.playing, status.didJustFinish, status.currentTime, activePoiId, onClipDone, setExclusiveAudio])
 
   // Drop the pending seek target once the clock catches it, so a later ±15 tap re-bases on
   // the real position instead of a stale target (mirrors useDrive's seek bookkeeping).
@@ -371,11 +393,12 @@ export function useRoam(mode: RoamMode): RoamState {
           }
         }
         setPhase('loading')
-        // duckOthers: encounters pipe up over the rider's own audio and get out of the way.
+        // Open in the SHARED mode: the rider's audio plays untouched through the quiet idle —
+        // we only take exclusive focus (doNotMix) when a clip actually starts sounding.
         await setAudioModeAsync({
           playsInSilentMode: true,
           shouldPlayInBackground: true,
-          interruptionMode: 'duckOthers',
+          interruptionMode: 'mixWithOthers',
         }).catch(() => {})
 
         // Where are we? (sim: the demo polyline's start — same roads the corpus covers.)
@@ -529,13 +552,20 @@ export function useRoam(mode: RoamMode): RoamState {
       const next = !p
       pausedRef.current = next
       try {
-        // duckOthers: pausing un-ducks the rider's audio; resuming re-ducks under the skipper.
-        if (next) player.pause()
-        else player.play()
+        // Pausing hands focus back so the rider's audio resumes while held; resuming re-takes
+        // exclusive focus (re-pauses it) under the skipper. Release focus AFTER pausing our
+        // clip, re-take it BEFORE resuming, so the two streams never both sound.
+        if (next) {
+          player.pause()
+          setExclusiveAudio(false)
+        } else {
+          setExclusiveAudio(true)
+          player.play()
+        }
       } catch {}
       return next
     })
-  }, [activePoiId, player])
+  }, [activePoiId, player, setExclusiveAudio])
 
   const setClipScrubbing = useCallback((active: boolean) => {
     scrubbingRef.current = active

@@ -197,20 +197,17 @@ a feature to copy. These three borrows are small and serve that moat. NOT borrow
 subscription-first pricing, celebrity narrator roster, national free-roam pin-map,
 over-broad trigger radius (all anti-charm or anti-doctrine).
 
-- [ ] **Pause+resume music in roam (reconsider duck).** Founder feedback 2026-06-11, re-confirmed:
-      BOTH players should pause+resume the rider's audio, never duck. Finding (2026-06-11 audit):
-      the TOUR player is ALREADY `doNotMix` (`DRIVE_INTERRUPTION_MODE` in `useDrive.ts`) — it
-      interrupts the rider's external audio for the whole drive and its OWN music bed fades to
-      SILENCE under narration (`driveMusic.ts` volume ramps, not audible-underneath), so the tour
-      already satisfies "no competing audio + resume at drive end." So this is really a ROAM-only
-      change: `useRoam.ts` `interruptionMode: 'duckOthers'` → `doNotMix`. ⚠ THE LANDMINE: roam's
-      encounters are intermittent with long quiet stretches, so a naive flip risks leaving the
-      rider's music PAUSED through the silence (worse than ducking). Per-clip resume needs explicit
-      session management — on clip end, hand the session back so the rider's app resumes; re-take it
-      on the next encounter. MUST verify on a device (Spotify/podcast resume after a 60s encounter,
-      then re-pause on the next) before committing; the flip is JS-only / hot-reloadable, so it's a
-      quick device spike. Switching away from `duckOthers` also moots roam's lock-screen note
-      (`setActiveForLockScreen` wants `doNotMix`). Refs: `useRoam.ts`, `docs/guides/device-verification-runbook.md`.
+- [ ] **Pause+resume music in roam — DEVICE-VERIFY (built 2026-06-11).** Founder feedback: BOTH
+      players pause+resume the rider's audio, never duck. The TOUR player was already `doNotMix`
+      (its own bed fades to silence under narration), so this was a ROAM-only change, now IN CODE
+      (`useRoam.ts`): opens `mixWithOthers` (rider's audio untouched through the quiet), takes
+      exclusive `doNotMix` only on the sawFresh edge (real audio), hands focus back (`mixWithOthers`)
+      on clip-end / hold / teardown. Taking focus on sawFresh (not clip-load) means a silent
+      pre-buffer / dead-zone skip never strands the rider's music paused. ⚠ REMAINING: the RESUME is
+      device-only — expo-audio has no session-deactivate, so we rely on iOS resuming Spotify/podcasts
+      when we flip back to `mixWithOthers` (grounded in SDK 56 docs, but the actual resume is
+      unverified). Run runbook §6 (resume after a 60s encounter, re-pause on the next, dead-zone skip
+      never interrupts) before relying on it. Refs: `useRoam.ts`, `docs/guides/device-verification-runbook.md` §6.
 - [ ] **Heard/unheard stop-progress affordance on the drive screen.** Autio grays out
       played map pins so you can glance at what's coming. Cheap, in-car-safe charm: a
       "stop N of M" / dimmed-completed-stops indicator on the drive screen. Costs almost
