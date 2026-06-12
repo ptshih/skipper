@@ -34,6 +34,8 @@ interface Args {
   replace: string
   all: boolean
   apply: boolean
+  /** Re-voice the stored script unchanged (no text edit) — for a dud TTS take. */
+  resynth: boolean
 }
 
 function parseArgs(argv: string[]): Args {
@@ -41,17 +43,26 @@ function parseArgs(argv: string[]): Args {
   // that coincides with a find/replace string still resolves by position).
   const flags = parseFlags(argv, { valueFlags: ['find', 'replace'] })
   const id = flags.positionals[0]
+  if (!id) {
+    throw new Error(
+      'Usage: patch-clip.ts <trackId|tourFrameId> (--find "<text>" --replace "<text>" [--all] | --resynth) [--apply]',
+    )
+  }
+  // --resynth re-voices the stored script with no text change (no find/replace needed).
+  if (flags.has('resynth')) {
+    return { id, find: '', replace: '', all: false, apply: flags.has('apply'), resynth: true }
+  }
   const find = flags.value('find')
   const replace = flags.value('replace')
-  if (!id || find === undefined || replace === undefined) {
+  if (find === undefined || replace === undefined) {
     throw new Error(
-      'Usage: patch-clip.ts <trackId|tourFrameId> --find "<text>" --replace "<text>" [--all] [--apply]',
+      'Usage: patch-clip.ts <trackId|tourFrameId> --find "<text>" --replace "<text>" [--all] [--apply]  (or --resynth to re-voice unchanged)',
     )
   }
   // An empty --find would, with --all, interleave the replacement between every
   // character of the script (split('').join(x)) — garbage. Refuse it.
-  if (find === '') throw new Error('--find must be a non-empty string.')
-  return { id, find, replace, all: flags.has('all'), apply: flags.has('apply') }
+  if (find === '') throw new Error('--find must be a non-empty string (or pass --resynth to re-voice unchanged).')
+  return { id, find, replace, all: flags.has('all'), apply: flags.has('apply'), resynth: false }
 }
 
 /** A clip to patch — either a stop track or a frame — normalized to its key + script. */
@@ -147,24 +158,30 @@ async function resolveTarget(id: string): Promise<ClipTarget | null> {
 }
 
 async function main() {
-  const { id, find, replace, all, apply } = parseArgs(process.argv.slice(2))
+  const { id, find, replace, all, apply, resynth } = parseArgs(process.argv.slice(2))
   announce({ tool: 'patch-clip', blast: ['SPENDS $', 'MUTATES DB'], apply })
   await beginJob('patch_clip', { dryRun: !apply, targetId: id })
 
   const target = await resolveTarget(id)
   if (!target) throw new Error(`No track or tour_frame row with id "${id}".`)
 
-  const occurrences = target.script.split(find).length - 1
-  if (occurrences === 0) throw new Error(`"${find}" not found in the clip's script.`)
-  if (occurrences > 1 && !all) {
-    throw new Error(`"${find}" appears ${occurrences} times — pass --all to replace every occurrence.`)
+  // --resynth: re-voice the stored script verbatim. Otherwise apply the literal find/replace.
+  let newScript = target.script
+  if (resynth) {
+    console.log(`Clip: ${target.label}`)
+    console.log(`  re-voice (no text change)`)
+  } else {
+    const occurrences = target.script.split(find).length - 1
+    if (occurrences === 0) throw new Error(`"${find}" not found in the clip's script.`)
+    if (occurrences > 1 && !all) {
+      throw new Error(`"${find}" appears ${occurrences} times — pass --all to replace every occurrence.`)
+    }
+    newScript = target.script.split(find).join(replace)
+    console.log(`Clip: ${target.label}`)
+    console.log(`  - ${target.script}`)
+    console.log(`  + ${newScript}`)
+    console.log(`  ${occurrences} replacement(s): "${find}" → "${replace}"`)
   }
-  const newScript = target.script.split(find).join(replace)
-
-  console.log(`Clip: ${target.label}`)
-  console.log(`  - ${target.script}`)
-  console.log(`  + ${newScript}`)
-  console.log(`  ${occurrences} replacement(s): "${find}" → "${replace}"`)
 
   if (!apply) {
     console.log('\nPreview only — pass --apply to synthesize + write.')

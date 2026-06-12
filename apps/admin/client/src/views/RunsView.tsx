@@ -15,8 +15,8 @@ import { fmtCost, fmtDate, timeAgo } from '@/lib/format'
 const KIND_META: Record<string, { label: string; icon: React.ElementType; desc: string; spends: 'spend' | 'delete' | 'free' }> = {
   generate:        { label: 'Generate',        icon: Sparkles,   desc: 'Script + synthesize a tour from scratch.',           spends: 'spend'  },
   resynth:         { label: 'Resynth',          icon: RefreshCw,  desc: 'Re-voice every clip of an existing tour.',           spends: 'spend'  },
-  patch_clip:      { label: 'Patch clip',       icon: Scissors,   desc: "Find/replace in one stop's script + re-synth it.",   spends: 'spend'  },
-  sweep_orphans:   { label: 'Sweep orphans',    icon: Trash2,     desc: 'Delete R2 clips with no stop reference.',            spends: 'delete' },
+  patch_clip:      { label: 'Patch clip',       icon: Scissors,   desc: "Find/replace a stop or frame's script — or re-voice it — then re-synth that clip.", spends: 'spend'  },
+  sweep_orphans:   { label: 'Sweep orphans',    icon: Trash2,     desc: 'Delete R2 clips that no track or frame references.', spends: 'delete' },
   sweep_roam_pois: { label: 'Sweep roam POIs',  icon: Filter,     desc: 'Fetch + upsert roam POIs for a bbox (free).',        spends: 'free'   },
   generate_roam:   { label: 'Generate roam',    icon: Zap,        desc: 'Narrate + synthesize roam clips for the corpus.',    spends: 'spend'  },
 }

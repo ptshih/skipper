@@ -83,11 +83,18 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
 
   if (kind === 'patch_clip') {
     const id = str(body.targetId)
+    if (!id) throw new HttpError(400, 'patch_clip needs targetId')
+    const apply = body.apply === true
+    // revoice:true re-synthesizes the stored script unchanged (a dud TTS take) — no find/replace.
+    if (body.revoice === true) {
+      const args = [script, id, '--resynth']
+      if (apply) args.push('--apply')
+      return { args, dryRun: !apply, spends: apply, targetId: id }
+    }
     const find = body.find
     const replace = body.replace
-    if (!id || typeof find !== 'string' || typeof replace !== 'string' || find === '')
-      throw new HttpError(400, 'patch_clip needs targetId, a non-empty find, and replace')
-    const apply = body.apply === true
+    if (typeof find !== 'string' || typeof replace !== 'string' || find === '')
+      throw new HttpError(400, 'patch_clip needs a non-empty find and replace (or revoice:true)')
     const args = [script, id, `--find=${find}`, `--replace=${replace}`]
     if (body.all) args.push('--all')
     if (apply) args.push('--apply')

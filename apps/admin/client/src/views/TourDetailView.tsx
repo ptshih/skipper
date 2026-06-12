@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
-import { ChevronRight, CircleCheck, CircleX, RefreshCw, TriangleAlert } from 'lucide-react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { ChevronRight, CircleCheck, CircleX, RefreshCw, Scissors, TriangleAlert } from 'lucide-react'
 import { api, type CharmDetail, type EvalRunSummary, type EvalScore, type SignResult, type TourDetail } from '@/lib/api'
 import { RouteMap, STOP_TYPE_COLOR, type RouteStopPin } from '@/components/RouteMap'
 import { fmtDate, fmtDuration, fmtMiles, fmtScore, fmtSec, timeAgo } from '@/lib/format'
@@ -127,8 +127,65 @@ function BracketRow({ kind, b, url }: { kind: 'intro' | 'outro'; b: TourDetail['
   )
 }
 
+/** Per-stop tuning: a literal find/replace patch (preview or apply) and a plain re-voice — both
+ *  fire a `patch_clip` job at this stop's track. Async: a launched job is watched in Runs. */
+function StopActions({ trackId }: { trackId: string }) {
+  const [find, setFind] = useState('')
+  const [replace, setReplace] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
+  async function fire(body: Record<string, unknown>, confirmText?: string) {
+    if (confirmText && !window.confirm(confirmText)) return
+    setBusy(true)
+    setMsg(null)
+    try {
+      const { job } = await api.createJob({ kind: 'patch_clip', targetId: trackId, ...body })
+      setMsg({ ok: true, text: job.dryRun ? 'Preview queued.' : 'Queued — re-synthesizing.' })
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof Error ? e.message : String(e) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div className="row-flex" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+        <Scissors size={12} style={{ color: 'var(--ink-3)', flexShrink: 0 }} />
+        <input style={{ width: 140 }} placeholder="find…" value={find} onChange={(e) => setFind(e.target.value)} />
+        <input style={{ width: 140 }} placeholder="replace…" value={replace} onChange={(e) => setReplace(e.target.value)} />
+        <button className="btn btn--default btn--sm" disabled={busy || !find} onClick={() => fire({ find, replace })}>
+          Preview
+        </button>
+        <button
+          className="btn btn--default btn--sm"
+          disabled={busy || !find}
+          onClick={() => fire({ find, replace, apply: true, confirm: true }, `Apply “${find}” → “${replace}” and re-synth this clip? Spends TTS credits.`)}
+        >
+          Apply
+        </button>
+        <span className="stop__spacer" />
+        <button
+          className="btn btn--default btn--sm"
+          disabled={busy}
+          onClick={() => fire({ revoice: true, apply: true, confirm: true }, 'Re-voice this clip with no text change? Spends TTS credits.')}
+        >
+          <RefreshCw size={12} /> Re-voice
+        </button>
+      </div>
+      {msg && (
+        <div style={{ marginTop: 6, fontSize: 12, color: msg.ok ? 'var(--ink-3)' : 'var(--bad)' }}>
+          {msg.text} {msg.ok && <Link to="/runs" className="row-link">Runs →</Link>}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function StopRow({
   seq,
+  trackId,
   type,
   name,
   durationMs,
@@ -138,6 +195,7 @@ function StopRow({
   scores,
 }: {
   seq: number
+  trackId: string
   type: string
   name: string
   durationMs: number | null
@@ -176,6 +234,7 @@ function StopRow({
         <Disclosure label={notes.length > 0 ? `Script · ${notes.length} note${notes.length === 1 ? '' : 's'}` : 'Script'}>
           {script && <p className="script">{script}</p>}
           {notes.map((s) => <DimNote key={s.dimension} score={s} />)}
+          <StopActions trackId={trackId} />
         </Disclosure>
       )}
     </div>
@@ -379,6 +438,7 @@ export function TourDetailView() {
           <StopRow
             key={s.seq}
             seq={s.seq}
+            trackId={s.trackId}
             type={s.stopType}
             name={s.name}
             durationMs={s.audioDurationMs}

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowDown, ArrowUp, Check, Map, Plus, Search, TriangleAlert } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, Map, Plus, Search, Sparkles, TriangleAlert } from 'lucide-react'
 import { api, type IntegrityReport, type TourCard } from '@/lib/api'
 import { fmtDuration, fmtMiles, timeAgo } from '@/lib/format'
 
@@ -86,6 +86,20 @@ export function ToursView() {
   }, [])
 
   const brokenIds = useMemo(() => new Set(integrity?.tours.map((t) => t.id) ?? []), [integrity])
+  const draftSlugs = useMemo(() => tours.filter((t) => t.status === 'draft').map((t) => t.slug), [tours])
+
+  // Fire a real (spending) generate for one or all draft shells, then jump to Runs to watch.
+  // The cold-start path after a reset — turns reseeded draft shells into ready tours.
+  async function generate(slugs: string[]) {
+    if (slugs.length === 0) return
+    if (!window.confirm(`Generate ${slugs.length} tour${slugs.length > 1 ? 's' : ''}? This spends LLM + TTS credits.`)) return
+    try {
+      for (const slug of slugs) await api.createJob({ kind: 'generate', slug, dryRun: false, maxCostUsd: 5, confirm: true })
+      navigate('/runs')
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e))
+    }
+  }
 
   const regions = useMemo(() => {
     const seen = new Set<string>()
@@ -131,7 +145,13 @@ export function ToursView() {
           <h1 className="pagehead__title">Tours</h1>
           <p className="pagehead__desc">The whole catalog — drafts included. Evals that fall below the bar are flagged in red.</p>
         </div>
-        <div className="pagehead__actions">
+        <div className="pagehead__actions" style={{ gap: 8 }}>
+          {draftSlugs.length > 0 && (
+            <button className="btn btn--default" onClick={() => generate(draftSlugs)}>
+              <Sparkles size={15} />
+              Generate all drafts ({draftSlugs.length})
+            </button>
+          )}
           <Link to="/create" className="btn btn--primary">
             <Plus size={15} />
             Create tour
@@ -223,6 +243,15 @@ export function ToursView() {
                       <span className="badge badge--bad" title="Fails the audio/attribution integrity check">
                         <TriangleAlert size={11} /> integrity
                       </span>
+                    )}
+                    {t.status === 'draft' && (
+                      <button
+                        className="btn btn--default btn--sm"
+                        onClick={(e) => { e.stopPropagation(); generate([t.slug]) }}
+                        title="Generate this tour (spends credits)"
+                      >
+                        <Sparkles size={12} /> Generate
+                      </button>
                     )}
                   </span>
                 </td>

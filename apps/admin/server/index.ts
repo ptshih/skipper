@@ -152,6 +152,8 @@ app.get('/admin/tours/:id', async (c) => {
     db
       .select({
         seq: segments.seq,
+        // The variant-0 track's id — the patch/re-voice target for the per-stop tuning actions.
+        trackId: tracks.id,
         stopType: tracks.form,
         name: pois.name,
         poiSource: pois.source,

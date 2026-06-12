@@ -107,6 +107,8 @@ export interface TourEval {
 
 export interface TourStopDetail {
   seq: number
+  /** The variant-0 track id — the target for per-stop patch / re-voice ops. */
+  trackId: string
   stopType: 'story' | 'scenic' | 'break'
   name: string
   poiSource: string

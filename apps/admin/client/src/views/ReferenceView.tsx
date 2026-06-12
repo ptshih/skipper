@@ -184,7 +184,7 @@ const RUN_KINDS: { kind: string; does: string; cost: ReactNode; safe: string }[]
   },
   {
     kind: 'Patch clip',
-    does: 'Find/replace text in ONE stop or bracket, then re-synthesize just that clip.',
+    does: 'Find/replace text in ONE stop or frame — or re-voice it unchanged — then re-synthesize just that clip.',
     cost: 'TTS for one clip (when applied).',
     safe: 'Apply OFF — preview the change.',
   },
@@ -196,7 +196,7 @@ const RUN_KINDS: { kind: string; does: string; cost: ReactNode; safe: string }[]
   },
   {
     kind: 'Sweep orphans',
-    does: 'Delete R2 audio clips that no tour_stop references anymore.',
+    does: 'Delete R2 audio clips that no track or frame references anymore.',
     cost: 'Deletes bytes (when applied).',
     safe: 'Apply OFF — lists, deletes nothing.',
   },
