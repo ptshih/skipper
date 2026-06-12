@@ -6,6 +6,14 @@ via the frame-sum parser in `pipeline/mp3.ts`; `wav.ts` retained as the LINEAR16
 record — the "not yet implemented" framing below is the pre-decision text, and its tour ids /
 `isPreview` references are of-its-time (`isPreview` dropped 2026-06-09).
 
+**Follow-up 2026-06-11 — loudness normalization rides this encode path.** The chosen "accept a
+32k→32k MP3 re-encode" option (vs flipping to LINEAR16) is now also the vehicle for clip loudness
+normalization: `synthesizeWithTailRetake` runs an ffmpeg two-pass LINEAR loudnorm on the shipped
+take to −14 LUFS / −1.5 dBTP (`pipeline/loudnorm.ts`, `LOUDNORM_*` in `models.ts`), fixing the
+clip-to-clip level spread + quiet-vs-Spotify gap. ffmpeg stays OPTIONAL (graceful skip, as for the
+tail probe), so the LINEAR16 path here was deliberately NOT taken — it would have made ffmpeg a hard
+synthesis dependency. See `TODO.md` "TTS audio QA" for the founder ear-gate on the −14 target.
+
 ## 1. Why
 
 TTS clips are stored as **uncompressed LINEAR16 WAV** (24 kHz / 16-bit / mono =

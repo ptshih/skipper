@@ -113,6 +113,25 @@ export const TTS_AUDIO_CONTENT_TYPE = 'audio/mpeg' as const
 export const TTS_CLIP_EXTENSION = 'mp3' as const
 export const TTS_LANGUAGE_CODE = 'en-US' as const
 
+// LOUDNESS NORMALIZATION (TODO.md "TTS audio QA" #2 — clip-to-clip level spread + overall
+// level vs Spotify). Gemini-TTS takes are non-deterministic in LEVEL: measured body means
+// ranged −26.7 → −19.5 dB across 30 live clips (a 7.2 dB stop-to-stop jump), and the whole
+// mix read ~20–25% quiet vs a Spotify reference. Fix = an ffmpeg two-pass LINEAR loudnorm
+// on every shipped take (pipeline/loudnorm.ts), targeting these EBU R128 values:
+//   I  (integrated loudness) = −14 LUFS — Spotify's normalization target; brings the quiet
+//      clips up and lands every clip at the SAME integrated level, collapsing the spread.
+//   TP (true-peak ceiling)   = −1.5 dBTP — headroom so the gain-up can't clip (why we use
+//      loudnorm, not a flat `volume=+NdB`).
+// TUNABLE: these are the single knobs. The −14 start is verified by a founder on-device A/B
+// vs Spotify before the first paid full run — if the real playback level still reads low,
+// nudge TARGET up (−13/−12) here; no other code changes. (The 17 bundled drive-music tracks
+// are NOT in this pipeline — matching them is a separate one-time re-encode once −14 locks.)
+export const LOUDNORM_TARGET_LUFS = -14 as const
+export const LOUDNORM_TRUE_PEAK_DB = -1.5 as const
+// LRA (loudness range) is held at the loudnorm default — speech is already low-dynamic, so
+// this rarely binds; it stays a constant rather than a knob.
+export const LOUDNORM_RANGE_LU = 11 as const
+
 // Gemini-TTS prebuilt voices (each carries a one-word timbre descriptor). The
 // ACTIVE pick is `charon` ("Informative" — the tour-guide register), chosen by ear
 // 2026-06-10 over Algenib in a six-voice audition on the Chambers passage under the

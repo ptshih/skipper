@@ -107,20 +107,27 @@ stop's tts eval row (`pipeline/tail.ts` + `synthesizeWithTailRetake` in `pipelin
 graceful skip when ffmpeg is absent; the skipper-gen Dockerfile installs ffmpeg so cloud
 Job runs measure too).
 
-REMAINING — **clip-to-clip level spread:** body mean volume ranges −26.7 → −19.5 dB across
-the 30 clips (7.2 dB) — audible volume jumps stop-to-stop. Fix = per-clip loudness
-normalization (speech target, e.g. −16 LUFS; drive music is already matched at −13).
-Needs a small encode-path spike: loudnorm requires decode→re-encode, so either accept a
-32k→32k MP3 re-encode or request LINEAR16 and encode MP3 ourselves post-normalize.
+The second defect — **clip-to-clip level spread + overall quiet-vs-Spotify** — shipped its
+mechanism 2026-06-11: `synthesizeWithTailRetake` now loudness-normalizes the WINNING take via
+an ffmpeg two-pass LINEAR loudnorm (MP3→MP3 32k re-encode) to `LOUDNORM_TARGET_LUFS = −14` /
+`LOUDNORM_TRUE_PEAK_DB = −1.5` (`pipeline/loudnorm.ts` + the constants in `models.ts`). Linear
+gain lands every clip at the SAME integrated level (kills the 7.2 dB spread) without touching
+speech dynamics or reintroducing tail collapse; −14 LUFS = Spotify's target, so it also closes
+the quiet gap. ffmpeg-optional (graceful null → ships un-normalized, no regression); runs even
+on short break clips the tail probe skips. Verified locally: a −48 LUFS tone → −14.45 LUFS,
+TP −10.3 dBTP (no clip).
 
-REMAINING — **overall level vs Spotify:** all audio tracks (clips + music) are 20–25% too
-quiet relative to Spotify. Likely a target-level issue — the −16 LUFS speech target above
-and the −13 LUFS music target may both need to come up, or the normalization pass needs to
-raise the master gain before exporting. Measure against a Spotify reference track before
-deciding the target; fix in the same encode-path spike as the clip-to-clip spread.
+REMAINING — **founder ear-gate on the −14 target.** The number is a single tunable constant.
+Before the first paid full regen, A/B the smoke clips on-device against a Spotify reference; the
+old founder-ear measure ("music at −13 still reads 20% quiet") suggests real playback ≠ authored
+LUFS, so −14 may want to nudge to −13/−12. One-line change in `models.ts`, no other code.
 
-Refs: `packages/generator/src/pipeline/tts.ts`, `pipeline/tail.ts`, `pipeline/mp3.ts`,
-`docs/decisions/audio-compression-spike.md` (the encode-path options).
+REMAINING — **drive music level (separate task).** The 17 bundled tracks (`apps/mobile`
+`licenses.ts`) are NOT in this pipeline — match them with a one-time offline re-encode (or a
+player-side gain) to the SAME target once −14 is locked by the ear-gate above.
+
+Refs: `packages/generator/src/pipeline/loudnorm.ts`, `pipeline/tts.ts`, `pipeline/tail.ts`,
+`models.ts` (the LOUDNORM_* constants), `docs/decisions/audio-compression-spike.md`.
 
 ## Offline downloads: full re-pull only (no per-clip diff)
 

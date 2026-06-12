@@ -23,6 +23,7 @@ import {
 import { GEMINI_PCM, toWavWithDuration } from './wav'
 import { mp3DurationMs } from './mp3'
 import { keepFirstTake, measureTailCollapse, TAIL_COLLAPSE_DB } from './tail'
+import { normalizeLoudness } from './loudnorm'
 
 const SYNTHESIZE_URL = 'https://texttospeech.googleapis.com/v1/text:synthesize'
 const CLOUD_PLATFORM_SCOPE = 'https://www.googleapis.com/auth/cloud-platform'
@@ -138,7 +139,12 @@ export type SynthWithTailResult = SynthResult & { tail: TailOutcome | null }
  * non-deterministic in level and ~1 in 4 collapses over the closing sentence(s) — the
  * "mumble". Measure tail-vs-body after the synth; on a drop ≥ TAIL_COLLAPSE_DB re-synth
  * ONCE and keep the better take, so a Dam-class take can never ship silently again.
- * Every SHIP path (generate, generate-roam, resynth-tour, patch-clip) goes through this.
+ * Then loudness-normalize the WINNER (TODO.md audio-QA #2): a two-pass linear loudnorm to
+ * a fixed LUFS target, killing the clip-to-clip level spread + the quiet-vs-Spotify gap.
+ * Normalizing once, on the shipped take, AFTER the retake is safe — a linear gain scales
+ * tail and body equally, so it can't reintroduce collapse. ffmpeg-optional: a null normalize
+ * ships the un-normalized take (no regression). Both QA passes run on every SHIP path
+ * (generate, generate-roam, resynth-tour, patch-clip), which all go through this.
  */
 export async function synthesizeWithTailRetake(
   text: string,
@@ -148,27 +154,37 @@ export async function synthesizeWithTailRetake(
 ): Promise<SynthWithTailResult> {
   const first = await synthesize(text, voiceId, style)
   const m1 = await measureTailCollapse(first.audio, first.durationMs)
-  if (m1 === null) return { ...first, tail: null } // probe skipped — ship unmeasured
-  if (m1.dropDb < TAIL_COLLAPSE_DB) {
-    return {
-      ...first,
-      tail: { firstDropDb: m1.dropDb, keptDropDb: m1.dropDb, retook: false, shippedCollapsed: false },
-    }
+
+  // ── Pick the take (the tail-collapse retake) ──
+  let shipped: SynthResult = first
+  let tail: TailOutcome | null
+  if (m1 === null) {
+    tail = null // probe skipped (clip too short or ffmpeg absent) — ship unmeasured
+  } else if (m1.dropDb < TAIL_COLLAPSE_DB) {
+    tail = { firstDropDb: m1.dropDb, keptDropDb: m1.dropDb, retook: false, shippedCollapsed: false }
+  } else {
+    console.warn(
+      `  ⚠ tail collapse on ${label}: tail ${m1.tailDb.toFixed(1)} dB vs body ${m1.bodyDb.toFixed(1)} dB ` +
+        `(drop ${m1.dropDb.toFixed(1)} dB ≥ ${TAIL_COLLAPSE_DB}) — re-synthesizing once...`,
+    )
+    const second = await synthesize(text, voiceId, style)
+    const m2 = await measureTailCollapse(second.audio, second.durationMs)
+    const keepFirst = keepFirstTake(m1, m2)
+    shipped = keepFirst ? first : second
+    const keptDropDb = keepFirst ? m1.dropDb : (m2?.dropDb ?? null)
+    const shippedCollapsed = keptDropDb !== null && keptDropDb >= TAIL_COLLAPSE_DB
+    console.warn(
+      shippedCollapsed
+        ? `  ⚠ ${label}: BOTH takes collapsed — shipping the better one (drop ${keptDropDb!.toFixed(1)} dB), flagged for the human pass.`
+        : `  ✓ ${label}: retake ${keptDropDb === null ? 'unmeasured, shipped on the odds' : `clean (drop ${keptDropDb.toFixed(1)} dB)`}.`,
+    )
+    tail = { firstDropDb: m1.dropDb, keptDropDb, retook: true, shippedCollapsed }
   }
-  console.warn(
-    `  ⚠ tail collapse on ${label}: tail ${m1.tailDb.toFixed(1)} dB vs body ${m1.bodyDb.toFixed(1)} dB ` +
-      `(drop ${m1.dropDb.toFixed(1)} dB ≥ ${TAIL_COLLAPSE_DB}) — re-synthesizing once...`,
-  )
-  const second = await synthesize(text, voiceId, style)
-  const m2 = await measureTailCollapse(second.audio, second.durationMs)
-  const keepFirst = keepFirstTake(m1, m2)
-  const kept = keepFirst ? first : second
-  const keptDropDb = keepFirst ? m1.dropDb : (m2?.dropDb ?? null)
-  const shippedCollapsed = keptDropDb !== null && keptDropDb >= TAIL_COLLAPSE_DB
-  console.warn(
-    shippedCollapsed
-      ? `  ⚠ ${label}: BOTH takes collapsed — shipping the better one (drop ${keptDropDb!.toFixed(1)} dB), flagged for the human pass.`
-      : `  ✓ ${label}: retake ${keptDropDb === null ? 'unmeasured, shipped on the odds' : `clean (drop ${keptDropDb.toFixed(1)} dB)`}.`,
-  )
-  return { ...kept, tail: { firstDropDb: m1.dropDb, keptDropDb, retook: true, shippedCollapsed } }
+
+  // ── Loudness-normalize the shipped take (runs even when the tail probe skipped, so short
+  //    break clips still get leveled). null = ffmpeg absent/failed → ship un-normalized. ──
+  const normalized = await normalizeLoudness(shipped.audio)
+  if (normalized) shipped = normalized
+
+  return { ...shipped, tail }
 }
