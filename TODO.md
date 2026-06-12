@@ -25,11 +25,6 @@ Three items locked from the 2026-06-11 brainstorm (full capture: `docs/ideas/fre
       chattiness, story-over-wave priority on simultaneous candidates. Prompt work is the real
       cost — a wave must sound like HIM, not a gazetteer caption. ⚠ The --apply generation run is
       a PAID run (~$3–5 + TTS) — needs an explicit founder go, never inferred from this lock.
-- [ ] **Pre-buffer clip before showing encounter sheet.** Currently the sheet appears
-      immediately on trigger and sits at 0:00 while the audio downloads — a visible stall.
-      Fetch the presigned URL + buffer the clip first; present the sheet only when ready to
-      play. Move the `CLIP_STALL_MS` (12s) guard to the pre-buffer phase. Fallback: a
-      skeleton state on the sheet if buffering exceeds ~3s (dead zone). Ref: `useRoam.ts`.
 - [ ] **The sonic cue.** ~1s entry motif before every encounter (the duck gets a reason; the
       startle dies) + a soft exit/resolve note as the duck releases. Client-side bundled assets
       (`apps/mobile`), played around the clip in `useRoam`. Sound design taste-gate: founder ear

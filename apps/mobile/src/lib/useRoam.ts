@@ -52,6 +52,11 @@ const KEEP_AWAKE_TAG = 'skipper-roam'
 /** A clip that never starts (expired URL / dead zone) is SKIPPED after this grace — roam
  *  has no re-sign machinery (alpha); a missed encounter is invisible by design. */
 const CLIP_STALL_MS = 12_000
+/** Pre-buffer grace: the sheet normally waits for REAL audio before sliding up (so it never
+ *  sits frozen at 0:00). If the buffer drags past this (thin signal / dead zone), present the
+ *  sheet anyway in a loading skeleton — better a "pulling this up…" sheet than a silent void
+ *  while the stall watchdog (CLIP_STALL_MS) still runs underneath. */
+const CLIP_SKELETON_MS = 3_000
 /** Live roam watchdog: no accepted fix for this long → show the GPS-searching note. */
 const GPS_QUIET_MS = 8_000
 /** The session-start card settles into the quiet idle on its own. */
@@ -79,6 +84,9 @@ export interface RoamState {
   clipDurationMs: number
   clipPlaying: boolean
   clipCanSeek: boolean
+  /** The sheet is up but the clip hasn't started yet — a dead-zone skeleton (the sheet
+   *  now waits for real audio before presenting, so this only shows on a slow buffer). */
+  clipBuffering: boolean
   /** Pause/resume the encounter clip (music un-ducks while held). */
   toggleClipPlay: () => void
   /** Seek to an absolute position (scrubber release / a11y jog). */
@@ -111,7 +119,9 @@ export function useRoam(mode: RoamMode): RoamState {
   const [error, setError] = useState<string | null>(null)
   const [gate, setGate] = useState<RoamGateInfo | null>(null)
   const [pinCount, setPinCount] = useState(0)
-  const [activePoiId, setActivePoiId] = useState<string | null>(null)
+  const [activePoiId, setActivePoiId] = useState<string | null>(null) // the clip LOADING/playing
+  const [sheetPoiId, setSheetPoiId] = useState<string | null>(null) // what the sheet SHOWS (gated on ready/skeleton)
+  const [clipReady, setClipReady] = useState(false) // real audio has started for the sheet's clip
   const [toldCount, setToldCount] = useState(0)
   const [openerLine, setOpenerLine] = useState<string>(voice.roam.sessionStart[0]!)
   const [chattiness, setChattinessState] = useState<ChattinessLevel>('normal')
@@ -133,6 +143,7 @@ export function useRoam(mode: RoamMode): RoamState {
   const lastFixPos = useRef<{ lat: number; lng: number } | null>(null)
   const finishedPoi = useRef<string | null>(null) // didJustFinish double-fire guard
   const stallTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const skeletonTimer = useRef<ReturnType<typeof setTimeout> | null>(null) // present-the-sheet-anyway fallback
   const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const sawFresh = useRef(false)
   const clipRetried = useRef<Set<string>>(new Set()) // poiIds given the one stall recovery
@@ -152,6 +163,10 @@ export function useRoam(mode: RoamMode): RoamState {
     if (stallTimer.current) {
       clearTimeout(stallTimer.current)
       stallTimer.current = null
+    }
+    if (skeletonTimer.current) {
+      clearTimeout(skeletonTimer.current)
+      skeletonTimer.current = null
     }
     if (settleTimer.current) {
       clearTimeout(settleTimer.current)
@@ -186,10 +201,16 @@ export function useRoam(mode: RoamMode): RoamState {
         clearTimeout(stallTimer.current)
         stallTimer.current = null
       }
+      if (skeletonTimer.current) {
+        clearTimeout(skeletonTimer.current)
+        skeletonTimer.current = null
+      }
       // The tally counts encounters that made SOUND — a stall-skipped clip the rider
       // never heard isn't a story told.
       if (sawFresh.current) setToldCount((n) => n + 1)
       setActivePoiId((cur) => (cur === poiId ? null : cur))
+      setSheetPoiId((cur) => (cur === poiId ? null : cur)) // dismiss the sheet (or its skeleton)
+      setClipReady(false)
       clipBusy.current = false
       pump()
     },
@@ -228,6 +249,7 @@ export function useRoam(mode: RoamMode): RoamState {
       return
     }
     sawFresh.current = false
+    setClipReady(false)
     finishedPoi.current = null
     try {
       player.pause()
@@ -237,6 +259,13 @@ export function useRoam(mode: RoamMode): RoamState {
     setClipPaused(false) // a fresh encounter always opens playing
     pausedRef.current = false
     seekTarget.current = null
+    // Pre-buffer: hold the sheet until real audio starts (the status effect promotes it on
+    // sawFresh). If the buffer drags past the skeleton grace, present the sheet anyway in a
+    // loading state — never a silent void, while the stall watchdog below still runs.
+    skeletonTimer.current = setTimeout(() => {
+      if (sawFresh.current || !mountedRef.current) return
+      setSheetPoiId((cur) => (cur === null ? activePoiId : cur))
+    }, CLIP_SKELETON_MS)
     stallTimer.current = setTimeout(() => {
       if (sawFresh.current || pausedRef.current) return
       if (!clipRetried.current.has(activePoiId)) {
@@ -251,6 +280,10 @@ export function useRoam(mode: RoamMode): RoamState {
         clearTimeout(stallTimer.current)
         stallTimer.current = null
       }
+      if (skeletonTimer.current) {
+        clearTimeout(skeletonTimer.current)
+        skeletonTimer.current = null
+      }
     }
   }, [activePoiId, reloadKey, player, onClipDone, recoverStalledClip])
 
@@ -260,7 +293,17 @@ export function useRoam(mode: RoamMode): RoamState {
   // watchdog (the field hang: a sheet frozen at 0:00 on thin 5G).
   useEffect(() => {
     if (activePoiId === null) return
-    if (status.playing && (status.currentTime ?? 0) > 0.25) sawFresh.current = true
+    if (status.playing && (status.currentTime ?? 0) > 0.25 && !sawFresh.current) {
+      // Real audio is advancing — present the sheet NOW (on a live clip, not a frozen 0:00),
+      // upgrading a skeleton that the buffer-grace may have shown first.
+      sawFresh.current = true
+      setClipReady(true)
+      setSheetPoiId(activePoiId)
+      if (skeletonTimer.current) {
+        clearTimeout(skeletonTimer.current)
+        skeletonTimer.current = null
+      }
+    }
     if (
       status.didJustFinish &&
       sawFresh.current &&
@@ -429,6 +472,8 @@ export function useRoam(mode: RoamMode): RoamState {
   const end = useCallback(() => {
     teardown()
     setActivePoiId(null)
+    setSheetPoiId(null)
+    setClipReady(false)
     setGpsSearching(false)
     setPhase('signoff') // toldCount survives for the tally; finishSignoff resets
   }, [teardown])
@@ -437,14 +482,18 @@ export function useRoam(mode: RoamMode): RoamState {
     setPhase('idle')
   }, [])
 
+  // The sheet keys on sheetPoiId, NOT activePoiId: a clip is selected (activePoiId) and loads
+  // SILENTLY; the sheet only appears once it's ready to play (or the skeleton grace fires).
   const activeName =
-    activePoiId === null
+    sheetPoiId === null
       ? null
-      : (pinsRef.current.find((p) => p.poiId === activePoiId)?.name ?? null)
+      : (pinsRef.current.find((p) => p.poiId === sheetPoiId)?.name ?? null)
   const activeDurationMs =
-    activePoiId === null
+    sheetPoiId === null
       ? 0
-      : (pinsRef.current.find((p) => p.poiId === activePoiId)?.durationMs ?? 0)
+      : (pinsRef.current.find((p) => p.poiId === sheetPoiId)?.durationMs ?? 0)
+  // The sheet is up but audio hasn't started — a slow-buffer / dead-zone skeleton.
+  const clipBuffering = sheetPoiId !== null && !clipReady
 
   // ---- encounter transport (the standard story-player controls, reused 1:1) ----
   // Prefer the real decoded duration; the manifest's durationMs covers the pre-load gap.
@@ -503,6 +552,7 @@ export function useRoam(mode: RoamMode): RoamState {
     clipDurationMs: clipDurSec * 1000,
     clipPlaying: !clipPaused,
     clipCanSeek,
+    clipBuffering,
     toggleClipPlay,
     seekClipTo,
     seekClipBy,

@@ -150,6 +150,10 @@ export const voice = {
     },
     storyBadge: 'STORY', // encounter sheet badge (waves/B-sides arrive with their clips)
     skip: 'Skip',
+    // Pre-buffer skeleton: the sheet now waits for the clip to be ready before sliding up, so
+    // it opens on real audio (not a frozen 0:00). On a slow/dead-zone buffer (>~3s) it appears
+    // anyway in this loading state rather than leave the rider with nothing.
+    buffering: 'Pulling this one up…',
     // Sign-off — the only ending; hand-ended sessions deserve a warm out.
     signoff: 'That’s me out, friend. Holler when you want company.',
     signoffTally: 'stories this drive',

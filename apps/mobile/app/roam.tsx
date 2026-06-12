@@ -12,7 +12,7 @@
 // + B-sides ("Tell me more"), and the offline region pack + logbook wait on their backends —
 // honest UI shows none of them.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Animated, Linking, Pressable, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, Animated, Linking, Pressable, StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import * as SecureStore from 'expo-secure-store'
@@ -372,24 +372,37 @@ export default function RoamScreen() {
               <Text variant="placardTitle" color="ink" numberOfLines={2}>
                 {r.activeName}
               </Text>
-              {/* The SAME transport as the story player — interactive scrubber + center
-                  play/pause + ±15s jogs — so the two players feel identical. Skip rides the
-                  ghost secondary beneath the row. */}
-              <Scrubber
-                positionMs={r.clipPositionMs}
-                durationMs={r.clipDurationMs}
-                onSeek={r.seekClipTo}
-                onScrubbingChange={r.setClipScrubbing}
-                disabled={!r.clipCanSeek}
-              />
-              <TransportBar
-                playing={r.clipPlaying}
-                onPlayPause={r.toggleClipPlay}
-                canSeek={r.clipCanSeek}
-                onSeekBack={() => r.seekClipBy(-15)}
-                onSeekForward={() => r.seekClipBy(15)}
-                secondary={{ title: voice.roam.skip, onPress: r.skip }}
-              />
+              {r.clipBuffering ? (
+                // Dead-zone skeleton: the sheet appeared before audio could buffer. Show a
+                // loading row (not a frozen transport) — the scrim tap still skips.
+                <View style={styles.buffering}>
+                  <ActivityIndicator color={colors.accent} />
+                  <Text variant="dim" color="inkDim">
+                    {voice.roam.buffering}
+                  </Text>
+                </View>
+              ) : (
+                <>
+                  {/* The SAME transport as the story player — interactive scrubber + center
+                      play/pause + ±15s jogs — so the two players feel identical. Skip rides the
+                      ghost secondary beneath the row. */}
+                  <Scrubber
+                    positionMs={r.clipPositionMs}
+                    durationMs={r.clipDurationMs}
+                    onSeek={r.seekClipTo}
+                    onScrubbingChange={r.setClipScrubbing}
+                    disabled={!r.clipCanSeek}
+                  />
+                  <TransportBar
+                    playing={r.clipPlaying}
+                    onPlayPause={r.toggleClipPlay}
+                    canSeek={r.clipCanSeek}
+                    onSeekBack={() => r.seekClipBy(-15)}
+                    onSeekForward={() => r.seekClipBy(15)}
+                    secondary={{ title: voice.roam.skip, onPress: r.skip }}
+                  />
+                </>
+              )}
             </Animated.View>
           </>
         )}
@@ -449,4 +462,13 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
   },
   sheetTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  // Skeleton row — spinner + line, roughly the height of the transport it stands in for so
+  // the sheet doesn't jump when real audio arrives and the controls replace it.
+  buffering: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: space.sm,
+    paddingVertical: space.xl,
+  },
 })
