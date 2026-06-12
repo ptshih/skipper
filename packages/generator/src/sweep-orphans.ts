@@ -1,7 +1,7 @@
 // Sweep orphaned R2 clip objects for a tour: list clips/<tourId>/ and delete every key NOT
-// referenced by a current tour_stops.audioUrl / tour_brackets.audioUrl. Every successful
-// regen leaves the previous telling's clips behind (stop + bracket keys are per-run-unique
-// by design — storage.ts), so they accumulate as private, unreferenced bytes. Run this after
+// referenced by a current tracks.audioUrl / tour_frames.audioUrl. Every successful regen
+// leaves the previous telling's clips behind (track + frame keys are per-run-unique by
+// design — storage.ts), so they accumulate as private, unreferenced bytes. Run this after
 // a blessed regen to cap the cruft. Conforms to docs/guides/ops-scripts-sop.md.
 //
 // Blast radius: DELETES BYTES (R2). Reads the DB. DEFAULT DRY RUN — pass --apply to delete.
@@ -12,19 +12,25 @@
 
 import { eq } from 'drizzle-orm'
 import { db } from '@skipper/db'
-import { tourBrackets, tourStops, tours } from '@skipper/db/schema'
+import { segments, tourFrames, tours, tracks } from '@skipper/db/schema'
 import { announce, assertReady, guardFanout, parseFlags, resolveTourId } from './pipeline/ops'
 import { deleteAudio, listAudioKeys, orphanKeys } from './pipeline/storage'
 import { beginJob, finishJob } from './pipeline/job-progress'
 
-/** The R2 keys a tour's rows currently point at (stops + brackets, non-null). */
+/** The R2 keys a tour's rows currently point at — the stop TRACKS (joined via their
+ *  segments) ∪ the tour_frames, non-null. (Roam clips live under roam/<poiId>/ and are
+ *  out of this clips/<tourId>/ sweep's scope.) */
 async function referencedKeys(tourId: string): Promise<Set<string>> {
-  const [stopKeys, bracketKeys] = await Promise.all([
-    db.select({ k: tourStops.audioUrl }).from(tourStops).where(eq(tourStops.tourId, tourId)),
-    db.select({ k: tourBrackets.audioUrl }).from(tourBrackets).where(eq(tourBrackets.tourId, tourId)),
+  const [trackKeys, frameKeys] = await Promise.all([
+    db
+      .select({ k: tracks.audioUrl })
+      .from(tracks)
+      .innerJoin(segments, eq(tracks.segmentId, segments.id))
+      .where(eq(segments.tourId, tourId)),
+    db.select({ k: tourFrames.audioUrl }).from(tourFrames).where(eq(tourFrames.tourId, tourId)),
   ])
   const set = new Set<string>()
-  for (const r of [...stopKeys, ...bracketKeys]) if (r.k) set.add(r.k)
+  for (const r of [...trackKeys, ...frameKeys]) if (r.k) set.add(r.k)
   return set
 }
 

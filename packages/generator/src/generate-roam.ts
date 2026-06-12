@@ -2,11 +2,13 @@
 // SPENDS $ (Anthropic narration + Cloud TTS) and MUTATES DB + R2 on --apply.
 //
 // Free-roam (docs/ideas/free-roam-mode.md) is the THIRD narration owner: pois = shared
-// FACTS, tour_stops = a tour's telling, roam_clips = the ROAM telling — one per POI in
-// v0, regenerated when the place's facts_hash moves (the same staleness contract as
-// tour_stops). Encounters are a new FORM, not a new persona: the Skipper's stop prompt
-// rides unchanged; the sheet adds the FREE-ROAM ENCOUNTER frame (self-contained, route-
-// agnostic, no baked laterality — narrate.ts), targets ~60s, and threads no callbacks.
+// FACTS, a tour's segment+track = a tour's telling, a ROAM segment (tour_id null) + its
+// track = the ROAM telling — one per POI in v0, regenerated when the place's facts_hash
+// moves (the same staleness contract as a tour stop). Encounters are a new FORM, not a new
+// persona: the Skipper's stop prompt rides unchanged; the sheet adds the FREE-ROAM ENCOUNTER
+// frame (self-contained, route-agnostic, no baked laterality — narrate.ts), targets ~60s,
+// and threads no callbacks. A roam segment is placeless-of-route: tour_id null, seq null,
+// trigger* null (an un-snapped centroid); its single track is form='story', variant 0.
 //
 // ALPHA CUTS (deliberate, founder-eared instead): no eval panel / grounding audit pass,
 // no diversity lint across clips (encounters play minutes apart on different drives) —
@@ -24,9 +26,9 @@
 //   ... --min-extract 400     story-depth floor (lead-extract chars)
 //   ... --bbox swLng,swLat,neLng,neLat   constrain the corpus geographically
 
-import { and, eq, sql } from 'drizzle-orm'
+import { and, eq, isNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
-import { pois, roamClips } from '@skipper/db/schema'
+import { pois, segments, tracks } from '@skipper/db/schema'
 import type { AttributionSnapshot } from '@skipper/db/schema'
 import { announce, assertReady, parseFlags } from './pipeline/ops'
 import { ensurePoiOverridesLoaded } from './pipeline/poi-overrides'
@@ -35,7 +37,7 @@ import { narrateStop } from './pipeline/narrate'
 import { toFacts } from './pipeline/select'
 import { synthesizeWithTailRetake } from './pipeline/tts'
 import { roamClipKey, uploadAudio } from './pipeline/storage'
-import { hashFacts, upsertPoi } from './pipeline/persist'
+import { hashFacts, resolvePersonaId, upsertPoi } from './pipeline/persist'
 import { withRetry } from './pipeline/http'
 import { mapLimit } from './pipeline/concurrency'
 import { personaForRegion } from './persona'
@@ -81,6 +83,8 @@ if (apply) assertReady(['tts', 'r2'])
 await ensurePoiOverridesLoaded()
 
 // ── Candidate corpus: wikipedia-sourced pois with story-grade extracts, in the bbox ──
+// The ROAM telling for a poi is its segment(tour_id null) + that segment's story track —
+// left-joined so a poi with no roam clip yet still appears (and queues).
 const rows = await withRetry(
   () =>
     db
@@ -94,11 +98,16 @@ const rows = await withRetry(
         facts: pois.facts,
         factsHash: pois.factsHash,
         factsFetchedAt: pois.factsFetchedAt,
-        clipId: roamClips.id,
-        clipFactsHash: roamClips.factsHash,
+        segmentId: segments.id,
+        trackId: tracks.id,
+        clipFactsHash: tracks.factsHash,
       })
       .from(pois)
-      .leftJoin(roamClips, eq(roamClips.poiId, pois.id))
+      .leftJoin(segments, and(eq(segments.poiId, pois.id), isNull(segments.tourId)))
+      .leftJoin(
+        tracks,
+        and(eq(tracks.segmentId, segments.id), eq(tracks.form, 'story'), eq(tracks.variant, 0)),
+      )
       .where(
         and(
           eq(pois.source, 'wikipedia'),
@@ -120,6 +129,9 @@ interface Candidate {
   title: string
   url: string
   factsFetchedAt: Date | null
+  /** The poi's existing roam segment id (tour_id null), if any — reused so a regen keeps one
+   *  roam segment per poi (the track is upserted on (segment, form, variant)). */
+  segmentId: string | null
   hasFreshClip: boolean
 }
 
@@ -143,8 +155,9 @@ for (const r of rows) {
     title: f?.title ?? r.name,
     url: f?.url ?? `https://en.wikipedia.org/?curid=${r.sourceId}`,
     factsFetchedAt: r.factsFetchedAt,
-    // Fresh = a clip exists AND grounds on the poi's CURRENT facts → skip unless --force.
-    hasFreshClip: r.clipId !== null && r.clipFactsHash === r.factsHash && r.factsHash !== null,
+    segmentId: r.segmentId,
+    // Fresh = a track exists AND grounds on the poi's CURRENT facts → skip unless --force.
+    hasFreshClip: r.trackId !== null && r.clipFactsHash === r.factsHash && r.factsHash !== null,
   })
 }
 
@@ -180,6 +193,8 @@ if (!apply) {
 }
 
 const persona = personaForRegion('lake-tahoe')
+// The frozen host on every roam segment this run writes.
+const personaId = await resolvePersonaId(persona.personaKey)
 
 // ── Deepen facts (free): full-article extracts for the queue, then re-upsert pois ──
 console.log(`\nDeepening ${queue.length} fact sheets (full-article extracts)...`)
@@ -251,7 +266,9 @@ console.log(`\nSynthesizing ${queue.length} clips (concurrency ${TTS_CONCURRENCY
 let synthDone = 0
 const results = await mapLimit(queue, TTS_CONCURRENCY(), async (c, i) => {
   const script = scripts[i]!
-  const clipId = crypto.randomUUID()
+  // Reuse the poi's existing roam segment (one per poi); mint one on first generation.
+  const segmentId = c.segmentId ?? crypto.randomUUID()
+  const trackId = crypto.randomUUID()
   // Tail-collapse retake (pipeline/tts.ts): roam clips ship unheard, so a mumbled
   // closing sentence would reach riders' ears first — measure + retake here too.
   const { audio, durationMs } = await synthesizeWithTailRetake(
@@ -260,7 +277,7 @@ const results = await mapLimit(queue, TTS_CONCURRENCY(), async (c, i) => {
     persona.ttsStyle,
     `"${c.title}"`,
   )
-  const audioUrl = await uploadAudio(roamClipKey(c.poiId, clipId), audio)
+  const audioUrl = await uploadAudio(roamClipKey(c.poiId, trackId), audio)
   const attribution: AttributionSnapshot[] = [
     {
       source: 'wikipedia',
@@ -272,16 +289,36 @@ const results = await mapLimit(queue, TTS_CONCURRENCY(), async (c, i) => {
     },
   ]
   const factsHash = hashFacts({ extract: c.extract, title: c.title, url: c.url, pageId: c.pageId })
+  // A roam telling = a placeless-of-route segment (tour_id/seq/trigger* null) + ONE story
+  // track. Co-commit the segment + the track upsert: the segment is insert-or-keep (PK id;
+  // a reused segment already exists), the track upserts on its (segment, form, variant)
+  // unique so a regen replaces the same row's script/audio in place.
   await withRetry(
     () =>
-      db
-        .insert(roamClips)
-        .values({ id: clipId, poiId: c.poiId, script, audioUrl, audioDurationMs: durationMs, attribution, factsHash })
-        .onConflictDoUpdate({
-          target: roamClips.poiId,
-          set: { script, audioUrl, audioDurationMs: durationMs, attribution, factsHash, updatedAt: new Date() },
-        }),
-    { label: `upsert roam_clip(${c.name})` },
+      db.batch([
+        db
+          .insert(segments)
+          .values({ id: segmentId, poiId: c.poiId, personaId })
+          .onConflictDoNothing({ target: segments.id }),
+        db
+          .insert(tracks)
+          .values({
+            id: trackId,
+            segmentId,
+            form: 'story',
+            variant: 0,
+            script,
+            audioUrl,
+            audioDurationMs: durationMs,
+            attribution,
+            factsHash,
+          })
+          .onConflictDoUpdate({
+            target: [tracks.segmentId, tracks.form, tracks.variant],
+            set: { script, audioUrl, audioDurationMs: durationMs, attribution, factsHash, updatedAt: new Date() },
+          }),
+      ]),
+    { label: `upsert roam track(${c.name})` },
   )
   synthDone++
   console.log(`  [${synthDone}/${queue.length}] ${c.name} (${(durationMs / 1000).toFixed(0)}s)`)

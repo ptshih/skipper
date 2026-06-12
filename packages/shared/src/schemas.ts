@@ -51,8 +51,8 @@ export type Attribution = z.infer<typeof attribution>
 
 /**
  * A clip's frozen attribution: an ARRAY, one entry per source it drew on (Wikipedia +
- * Macrostrat, etc.). Stored as a jsonb array on tour_stops/roam_clips — there is no
- * legacy single-object shape to tolerate (zero-reuse, no users → clean array contract).
+ * Macrostrat, etc.). Stored as a jsonb array on `tracks` — there is no legacy
+ * single-object shape to tolerate (zero-reuse, no users → clean array contract).
  */
 export const attributionList = z.array(attribution)
 export type AttributionList = z.infer<typeof attributionList>
@@ -206,7 +206,7 @@ export const tourStopView = z.object({
   audioDurationMs: z.number().int().nullish(),
   /**
    * When this stop's narration/audio was last revised (ISO) — the OFFLINE-STALENESS token.
-   * A re-synth (patch-clip / resynth-tour) or a regen bumps `tour_stops.updated_at`, surfaced
+   * A re-synth (patch-clip / resynth-tour) or a regen bumps the track's `updated_at`, surfaced
    * here. The offline manifest embeds the detail, so a downloaded drive compares this against a
    * fresh fetch to detect its clips are behind the server (see mobile `isDownloadStale`). The
    * player ignores it; it's a content fingerprint, not playback state.

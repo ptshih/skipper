@@ -1,1 +1,0 @@
-ALTER TABLE "poi_overrides" ADD COLUMN "active" boolean DEFAULT true NOT NULL;

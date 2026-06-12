@@ -25,7 +25,7 @@
 import { angularDiffDeg, bearingDeg, haversineMeters } from './geo'
 import type { GpsFix } from './trigger'
 
-/** A roam-narratable place (a roam_clips row joined onto its poi). */
+/** A roam-narratable place (a roam segment — tour_id null — joined onto its track + poi). */
 export interface RoamPinRef {
   poiId: string
   lat: number

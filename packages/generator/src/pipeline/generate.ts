@@ -9,14 +9,14 @@
 //     -> eval panel + optimizer              (free dims per pass; grounding once;
 //                                             drives regen, RECORDS — never gates `ready`)
 //     -> TTS (Google Cloud, Gemini-TTS) -> R2 (audio + duration)
-//     -> tours + ordered tour_stops (Neon)   (atomic ready-gate)
+//     -> tours + ordered segments/tracks (Neon)  (atomic ready-gate; a stop = 1 segment + 1 track)
 //
 // Invariants honored here:
 //   - Persona lives in delivery, never in facts: story stops get a fact sheet;
 //     scenic stops carry none; break stops carry only the curated NAME + KIND
 //     (sayable), never volatile data (hours/rating/features — live at tour-load).
 //   - Story attribution (CC BY-SA) is snapshotted on every story clip.
-//   - EVERY stop — story, scenic, AND break — gets a tour_stops row with non-null
+//   - EVERY stop — story, scenic, AND break — gets a segment + track with non-null
 //     audio; a tour reaches `ready` only via the atomic batch, after every stop has it.
 // M1 scope: no cache reuse, no dedup beyond the (source,source_id) upsert, no
 // feedback. Break narration names the curated Places anchor; the volatile live data
@@ -89,12 +89,14 @@ import { judgeCloserDiversity } from './judge'
 import { synthesizeWithTailRetake } from './tts'
 import type { TailOutcome } from './tts'
 import { bracketKey, clipKey, uploadAudio } from './storage'
+import { speakableAnchorFor } from './speakable'
 import {
   finalizeTourReady,
   hashFacts,
   loadFreshPoiFacts,
   loadTour,
   markTourGenerating,
+  resolvePersonaId,
   restoreAfterFailedRun,
   upsertPoi,
 } from './persist'
@@ -1081,18 +1083,21 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   }
 
   // ---- Full run: narrate -> TTS -> R2 -> persist -> atomic ready-gate. -----
-  // The tour SHELL already exists (seeded draft); we FILL it. Stop clip ids are
-  // generated up front so the key (clips/<tourId>/<stopId>) is known before upload,
-  // and the fully-populated rows land in one atomic ready-gate batch.
+  // The tour SHELL already exists (seeded draft); we FILL it. Each stop becomes a segment +
+  // a track: the segment + track ids are generated up front so the clip key
+  // (clips/<tourId>/<trackId>) is known before upload, and the fully-populated rows land in
+  // one atomic ready-gate batch.
   const tourId = shell.id
+  // The frozen host of every segment this run writes — resolve the persona's id once.
+  const personaId = await resolvePersonaId(persona.personaKey)
   await markTourGenerating(tourId)
   try {
     const finalStops: FinalStop[] = []
     const finalBrackets: FinalBracket[] = []
     const summaries: StopSummary[] = []
 
-    // Per-stop identity first (facts hash, per-run clip id), then the poi upserts as a
-    // bounded fan-out — independent rows, kept OUT of the synth pool so a DB hiccup
+    // Per-stop identity first (facts hash, per-run segment + track ids), then the poi upserts
+    // as a bounded fan-out — independent rows, kept OUT of the synth pool so a DB hiccup
     // surfaces before any TTS spend.
     const prep = plan.map((s) => {
       // Every stop anchors to a POI (break stops included). Story stops carry facts;
@@ -1105,36 +1110,42 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
         s,
         facts,
         factsHash: hashFacts(facts),
-        // Every stop — break included — synthesizes to a TOUR-scoped per-run key.
+        // The stop's place-anchor (segment) + its narration (track). The track id is the
+        // clip key — every stop, break included, synthesizes to a TOUR-scoped per-run key.
         // (Break clips name the curated Places anchor; no Wikipedia text, no attribution.)
-        stopId: crypto.randomUUID(),
+        segmentId: crypto.randomUUID(),
+        trackId: crypto.randomUUID(),
         script: scriptBySeq.get(s.seq)!,
       }
     })
-    const poiIds = await mapLimit(prep, 6, (p) =>
-      upsertPoi({
+    const poiIds = await mapLimit(prep, 6, (p) => {
+      // Relocate the curated speakable anchor onto the poi row at the seam where its identity
+      // is known (select.ts already resolves the same anchor for the per-segment side).
+      const anchor = speakableAnchorFor(p.s.source, p.s.sourceId)
+      return upsertPoi({
         source: p.s.source,
         sourceId: p.s.sourceId,
         name: p.s.name,
         kind: p.s.kind,
         lat: p.s.lat,
         lng: p.s.lng,
+        ...(anchor ? { speakableLat: anchor.lat, speakableLng: anchor.lng } : {}),
         summary: p.s.stopType === 'story' ? firstSentence(p.s.facts) : null,
         facts: p.facts,
         factsHash: p.factsHash,
         // Cache-HIT stops carry their row's ORIGINAL fetch stamp; fetched stops carry the
         // run's overrides-snapshot instant. Never persist-time now() — see UpsertPoiInput.
         factsFetchedAt: p.factsHash ? (factsStampBySeq.get(p.s.seq) ?? factsSnapshotAt) : null,
-      }),
-    )
+      })
+    })
 
-    // ONE bounded synth+upload pool over every clip — all stops plus both brackets. The
+    // ONE bounded synth+upload pool over every clip — all stops plus both frames. The
     // clips are independent (scripts frozen above, ids per-run), so wall-clock is bounded
     // by the longest clip, not the sum (the serial loop measured ~10 min on a 27-min
     // tour). A failure rejects the pool and the catch below restores status; in-flight
     // siblings settle as orphaned R2 objects — the same accepted per-run-key trade as a
-    // failed serial run. Bracket keys are PER-RUN (see bracketKey) so this run can never
-    // overwrite the live telling's bracket bytes before its own ready-gate commits.
+    // failed serial run. Frame (intro/outro) keys are PER-RUN (see bracketKey) so this run
+    // can never overwrite the live telling's frame bytes before its own ready-gate commits.
     const bracketRunId = crypto.randomUUID()
     const synthOne = async (script: string, key: string, label: string) => {
       console.log(`Synthesizing ${label}...`)
@@ -1159,7 +1170,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
     }>)[] = [
       ...prep.map(
         (p) => () =>
-          synthOne(p.script, clipKey(tourId, p.stopId), `stop ${p.s.seq} (${p.s.stopType}) "${p.s.name}"`),
+          synthOne(p.script, clipKey(tourId, p.trackId), `stop ${p.s.seq} (${p.s.stopType}) "${p.s.name}"`),
       ),
       ...bracketPlan.map(
         (b) => () => synthOne(b.script, bracketKey(tourId, b.kind, bracketRunId), `${b.kind} bracket`),
@@ -1173,7 +1184,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       const s = p.s
       const poiId = poiIds[i]!
       const { audioUrl, durationMs } = clips[i]!
-      const { stopId, script, factsHash } = p
+      const { segmentId, trackId, script, factsHash } = p
 
       // Frozen attribution — an ARRAY, one entry per source this clip drew on. Story
       // clips reuse Wikipedia extract text (CC BY-SA, required). Any stop — story OR
@@ -1206,9 +1217,11 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       if (s.wikidataAttribution) attribution.push(s.wikidataAttribution)
 
       finalStops.push({
-        id: stopId,
+        segmentId,
+        trackId,
         seq: s.seq,
         poiId,
+        personaId,
         stopType: s.stopType,
         script,
         audioUrl,
@@ -1294,7 +1307,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
     await finalizeTourReady(tourId, finalStops, finalBrackets)
     lap('finalize')
     console.log(
-      `Tour ${tourId} is READY (${finalStops.length} stops, ${finalBrackets.length} brackets).`,
+      `Tour ${tourId} is READY (${finalStops.length} stops, ${finalBrackets.length} frames).`,
     )
     const liveResult: GenerateResult = {
       tourId,

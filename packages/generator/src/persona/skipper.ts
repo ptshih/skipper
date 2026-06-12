@@ -242,6 +242,8 @@ Write for the EAR (this is read aloud in a moving car). Short-to-medium sentence
  * tagline, backstory, portrait) is served by the API (apps/api/src/host.ts), never here.
  */
 export const SKIPPER: PersonaDef = {
+  // Bridges to the `personas` row seeded by packages/db/seed/personas.ts (persona_key 'skipper').
+  personaKey: 'skipper',
   hostName: 'Skipper',
   voice: SKIPPER_VOICE_ID,
   ttsStyle: SKIPPER_TTS_STYLE_PROMPT,

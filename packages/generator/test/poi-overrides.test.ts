@@ -14,6 +14,7 @@ import {
   setPoiOverridesForTest,
   type OverrideRowLike,
 } from '../src/pipeline/poi-overrides'
+import { speakableAnchorFor } from '../src/pipeline/speakable'
 import { POI_OVERRIDE_SEED } from '@skipper/db/seed/poi-overrides'
 
 afterEach(() => clearPoiOverridesForTest())
@@ -22,7 +23,6 @@ const EDIT_ROW: OverrideRowLike = {
   source: 'wikipedia',
   sourceId: '111',
   name: 'Test Place',
-  kind: 'fact_edit',
   find: 'Leonard Palme',
   replace: 'Lennart Palme',
   reason: 'test',
@@ -71,24 +71,14 @@ describe('apply mechanism (injected rows, no DB)', () => {
     expect(applyFactEdits('wikidata', '111', 'Leonard Palme')).toBe('Leonard Palme')
   })
 
-  test('aggregation folds multiple rows for one place', () => {
+  test('aggregation folds multiple fact-edit rows for one place', () => {
     const rows: OverrideRowLike[] = [
       EDIT_ROW,
       { ...EDIT_ROW, find: 'wrong year', replace: 'right year' },
-      {
-        source: 'wikipedia',
-        sourceId: '111',
-        name: 'Test Place',
-        kind: 'side_anchor',
-        sideAnchorLat: 39.0,
-        sideAnchorLng: -120.0,
-        reason: 'test',
-      },
     ]
     const agg = aggregateOverrideRows(rows)
     const place = agg.get('wikipedia:111')
     expect(place?.factEdits).toHaveLength(2)
-    expect(place?.sideAnchor).toEqual({ lat: 39.0, lng: -120.0 })
   })
 })
 
@@ -123,15 +113,14 @@ describe('bootstrap seed rows (2026-06-09 review findings)', () => {
   test('every fact_edit documents its reason and an authoritative source', () => {
     for (const r of POI_OVERRIDE_SEED) {
       expect(r.reason.length).toBeGreaterThan(20)
-      if (r.kind === 'fact_edit') {
-        expect(r.sourceUrl).toMatch(/^https?:\/\//)
-        expect(r.find).not.toBe(r.replace)
-      }
+      // poi_overrides is fact-corrections only now — every seed row is a find/replace edit.
+      expect(r.sourceUrl).toMatch(/^https?:\/\//)
+      expect(r.find).not.toBe(r.replace)
     }
   })
 
-  test('identities are unique per (source, sourceId, kind, find)', () => {
-    const keys = POI_OVERRIDE_SEED.map((r) => `${r.source}:${r.sourceId}:${r.kind}:${r.find ?? ''}`)
+  test('identities are unique per (source, sourceId, find)', () => {
+    const keys = POI_OVERRIDE_SEED.map((r) => `${r.source}:${r.sourceId}:${r.find ?? ''}`)
     expect(new Set(keys).size).toBe(keys.length)
   })
 
@@ -156,11 +145,22 @@ describe('bootstrap seed rows (2026-06-09 review findings)', () => {
     expect(out).not.toContain('1880s')
   })
 
-  test('Sugar Pine Point carries a lakeside side ANCHOR (a coordinate, never a left/right)', () => {
+  test('Sugar Pine Point no longer carries a fact-correction row (its speakable anchor moved)', () => {
     setPoiOverridesForTest(POI_OVERRIDE_SEED as OverrideRowLike[])
-    const o = poiOverrideFor('wikipedia', '41195091')
-    expect(o?.sideAnchor?.lat).toBeCloseTo(39.061266, 5)
-    expect(o?.sideAnchor?.lng).toBeCloseTo(-120.113971, 5)
-    expect(o?.factEdits).toEqual([])
+    // The side_anchor coordinate relocated off poi_overrides onto pipeline/speakable.ts; the
+    // place has no fact-edit, so it has no override row at all now.
+    expect(poiOverrideFor('wikipedia', '41195091')).toBeUndefined()
+  })
+})
+
+describe('speakable anchors (relocated off poi_overrides.side_anchor)', () => {
+  test('Sugar Pine Point carries a lakeside speakable ANCHOR (a coordinate, never a left/right)', () => {
+    const a = speakableAnchorFor('wikipedia', '41195091')
+    expect(a?.lat).toBeCloseTo(39.061266, 5)
+    expect(a?.lng).toBeCloseTo(-120.113971, 5)
+  })
+
+  test('a place with no curated anchor returns undefined', () => {
+    expect(speakableAnchorFor('wikipedia', '999999')).toBeUndefined()
   })
 })

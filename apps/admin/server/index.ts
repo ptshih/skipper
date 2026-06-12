@@ -26,7 +26,7 @@
 
 import { Hono } from 'hono'
 import { serveStatic } from 'hono/bun'
-import { and, asc, count, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import {
   evalRuns,
@@ -34,10 +34,10 @@ import {
   genJobs,
   pois,
   regions,
-  roamClips,
-  tourBrackets,
-  tourStops,
+  segments,
+  tourFrames,
   tours,
+  tracks,
 } from '@skipper/db/schema'
 import { requireAdmin, type AdminEnv } from './auth'
 import { contentTypeForKey, presignGet } from './storage'
@@ -104,18 +104,20 @@ app.get('/admin/tours', async (c) => {
   const bracketCount = new Map<string, number>()
   if (ids.length) {
     const [sc, bc] = await Promise.all([
+      // Stops = tour-bound segments (one segment per stop; its single variant-0 track is the
+      // telling). Count segments, not tracks, so the figure stays one-per-stop.
       db
-        .select({ tourId: tourStops.tourId, n: count() })
-        .from(tourStops)
-        .where(inArray(tourStops.tourId, ids))
-        .groupBy(tourStops.tourId),
+        .select({ tourId: segments.tourId, n: count() })
+        .from(segments)
+        .where(inArray(segments.tourId, ids))
+        .groupBy(segments.tourId),
       db
-        .select({ tourId: tourBrackets.tourId, n: count() })
-        .from(tourBrackets)
-        .where(inArray(tourBrackets.tourId, ids))
-        .groupBy(tourBrackets.tourId),
+        .select({ tourId: tourFrames.tourId, n: count() })
+        .from(tourFrames)
+        .where(inArray(tourFrames.tourId, ids))
+        .groupBy(tourFrames.tourId),
     ])
-    for (const r of sc) stopCount.set(r.tourId, Number(r.n))
+    for (const r of sc) if (r.tourId) stopCount.set(r.tourId, Number(r.n))
     for (const r of bc) bracketCount.set(r.tourId, Number(r.n))
   }
 
@@ -144,37 +146,41 @@ app.get('/admin/tours/:id', async (c) => {
       .from(regions)
       .where(eq(regions.id, tour.regionId))
       .limit(1),
+    // A tour's stops = its tour-bound segments joined to the variant-0 track (the telling) and
+    // the shared place. stopType ← tracks.form (always story|scenic|break for a tour stop);
+    // triggerRadiusM ← segments.radiusM; revision token ← the narration's updatedAt.
     db
       .select({
-        seq: tourStops.seq,
-        stopType: tourStops.stopType,
+        seq: segments.seq,
+        stopType: tracks.form,
         name: pois.name,
         poiSource: pois.source,
         poiSourceId: pois.sourceId,
-        script: tourStops.script,
-        audioUrl: tourStops.audioUrl,
-        audioDurationMs: tourStops.audioDurationMs,
-        attribution: tourStops.attribution,
-        factsHash: tourStops.factsHash,
-        triggerLat: tourStops.triggerLat,
-        triggerLng: tourStops.triggerLng,
-        triggerRadiusM: tourStops.triggerRadiusM,
-        revisedAt: tourStops.updatedAt,
+        script: tracks.script,
+        audioUrl: tracks.audioUrl,
+        audioDurationMs: tracks.audioDurationMs,
+        attribution: tracks.attribution,
+        factsHash: tracks.factsHash,
+        triggerLat: segments.triggerLat,
+        triggerLng: segments.triggerLng,
+        triggerRadiusM: segments.radiusM,
+        revisedAt: tracks.updatedAt,
       })
-      .from(tourStops)
-      .innerJoin(pois, eq(tourStops.poiId, pois.id))
-      .where(eq(tourStops.tourId, id))
-      .orderBy(asc(tourStops.seq)),
+      .from(segments)
+      .innerJoin(tracks, and(eq(tracks.segmentId, segments.id), eq(tracks.variant, 0)))
+      .innerJoin(pois, eq(segments.poiId, pois.id))
+      .where(eq(segments.tourId, id))
+      .orderBy(asc(segments.seq)),
     db
       .select({
-        kind: tourBrackets.kind,
-        script: tourBrackets.script,
-        audioUrl: tourBrackets.audioUrl,
-        audioDurationMs: tourBrackets.audioDurationMs,
-        revisedAt: tourBrackets.updatedAt,
+        kind: tourFrames.kind,
+        script: tourFrames.script,
+        audioUrl: tourFrames.audioUrl,
+        audioDurationMs: tourFrames.audioDurationMs,
+        revisedAt: tourFrames.updatedAt,
       })
-      .from(tourBrackets)
-      .where(eq(tourBrackets.tourId, id)),
+      .from(tourFrames)
+      .where(eq(tourFrames.tourId, id)),
     db
       .select()
       .from(evalRuns)
@@ -244,14 +250,15 @@ app.get('/admin/tours/:id/sign', async (c) => {
 
   const [stopClips, bracketClips] = await Promise.all([
     db
-      .select({ seq: tourStops.seq, key: tourStops.audioUrl, durationMs: tourStops.audioDurationMs })
-      .from(tourStops)
-      .where(eq(tourStops.tourId, id))
-      .orderBy(asc(tourStops.seq)),
+      .select({ seq: segments.seq, key: tracks.audioUrl, durationMs: tracks.audioDurationMs })
+      .from(segments)
+      .innerJoin(tracks, and(eq(tracks.segmentId, segments.id), eq(tracks.variant, 0)))
+      .where(eq(segments.tourId, id))
+      .orderBy(asc(segments.seq)),
     db
-      .select({ kind: tourBrackets.kind, key: tourBrackets.audioUrl, durationMs: tourBrackets.audioDurationMs })
-      .from(tourBrackets)
-      .where(eq(tourBrackets.tourId, id)),
+      .select({ kind: tourFrames.kind, key: tourFrames.audioUrl, durationMs: tourFrames.audioDurationMs })
+      .from(tourFrames)
+      .where(eq(tourFrames.tourId, id)),
   ])
 
   try {
@@ -361,27 +368,29 @@ app.get('/admin/integrity', async (c) => {
 
   const [silentStops, silentBrackets, unattributed] = await Promise.all([
     db
-      .select({ tourId: tourStops.tourId, seq: tourStops.seq, stopType: tourStops.stopType })
-      .from(tourStops)
-      .where(and(inArray(tourStops.tourId, ids), isNull(tourStops.audioUrl)))
-      .orderBy(asc(tourStops.seq)),
+      .select({ tourId: segments.tourId, seq: segments.seq, stopType: tracks.form })
+      .from(segments)
+      .innerJoin(tracks, and(eq(tracks.segmentId, segments.id), eq(tracks.variant, 0)))
+      .where(and(inArray(segments.tourId, ids), isNull(tracks.audioUrl)))
+      .orderBy(asc(segments.seq)),
     db
-      .select({ tourId: tourBrackets.tourId, kind: tourBrackets.kind })
-      .from(tourBrackets)
-      .where(and(inArray(tourBrackets.tourId, ids), isNull(tourBrackets.audioUrl))),
+      .select({ tourId: tourFrames.tourId, kind: tourFrames.kind })
+      .from(tourFrames)
+      .where(and(inArray(tourFrames.tourId, ids), isNull(tourFrames.audioUrl))),
     // Story stops are the wikipedia-grounded ones — attribution is the legal (not optional)
     // invariant. null OR an empty array both count as missing.
     db
-      .select({ tourId: tourStops.tourId, seq: tourStops.seq })
-      .from(tourStops)
+      .select({ tourId: segments.tourId, seq: segments.seq })
+      .from(segments)
+      .innerJoin(tracks, and(eq(tracks.segmentId, segments.id), eq(tracks.variant, 0)))
       .where(
         and(
-          inArray(tourStops.tourId, ids),
-          eq(tourStops.stopType, 'story'),
-          sql`(${tourStops.attribution} is null or jsonb_array_length(${tourStops.attribution}) = 0)`,
+          inArray(segments.tourId, ids),
+          eq(tracks.form, 'story'),
+          sql`(${tracks.attribution} is null or jsonb_array_length(${tracks.attribution}) = 0)`,
         ),
       )
-      .orderBy(asc(tourStops.seq)),
+      .orderBy(asc(segments.seq)),
   ])
 
   type Violations = { silentStops: number[]; silentBrackets: string[]; unattributed: number[] }
@@ -394,9 +403,11 @@ app.get('/admin/integrity', async (c) => {
     }
     return v
   }
-  for (const s of silentStops) ensure(s.tourId).silentStops.push(s.seq)
+  // tourId/seq are non-null for tour-bound segments (the CHECK keeps them in lockstep with
+  // tourId), but the columns are nullable for roam — guard to satisfy the types.
+  for (const s of silentStops) if (s.tourId && s.seq != null) ensure(s.tourId).silentStops.push(s.seq)
   for (const b of silentBrackets) ensure(b.tourId).silentBrackets.push(b.kind)
-  for (const s of unattributed) ensure(s.tourId).unattributed.push(s.seq)
+  for (const s of unattributed) if (s.tourId && s.seq != null) ensure(s.tourId).unattributed.push(s.seq)
 
   const flagged = ready.filter((t) => byTour.has(t.id)).map((t) => ({ ...t, ...byTour.get(t.id)! }))
   return c.json({ checked: ready.length, tours: flagged })
@@ -692,38 +703,43 @@ app.get('/admin/pois', async (c) => {
   const poiIds = poisRows.map((p) => p.id)
 
   const [stopStats, clipStats, regionRows] = await Promise.all([
-    // Per-poi: tour count, stale-facts count, unattributed story count
+    // Per-poi: tour count, stale-facts count, unattributed story count. Tour stops =
+    // tour-bound segments joined to their variant-0 track (the telling carries
+    // attribution/factsHash) + the shared place (for the live facts_hash to compare against).
     db
       .select({
-        poiId: tourStops.poiId,
-        tourCount: sql<string>`count(distinct ${tourStops.tourId})`,
-        staleCount: sql<string>`count(*) filter (where ${tourStops.factsHash} is distinct from ${pois.factsHash})`,
-        unattribCount: sql<string>`count(*) filter (where ${tourStops.attribution} is null and ${tourStops.stopType} = 'story')`,
+        poiId: segments.poiId,
+        tourCount: sql<string>`count(distinct ${segments.tourId})`,
+        staleCount: sql<string>`count(*) filter (where ${tracks.factsHash} is distinct from ${pois.factsHash})`,
+        unattribCount: sql<string>`count(*) filter (where ${tracks.attribution} is null and ${tracks.form} = 'story')`,
       })
-      .from(tourStops)
-      .innerJoin(pois, eq(tourStops.poiId, pois.id))
-      .where(inArray(tourStops.poiId, poiIds))
-      .groupBy(tourStops.poiId),
-    // Per-poi: roam clip metadata (unique per poi by DB constraint; duration + script for anomaly detection)
+      .from(segments)
+      .innerJoin(tracks, and(eq(tracks.segmentId, segments.id), eq(tracks.variant, 0)))
+      .innerJoin(pois, eq(segments.poiId, pois.id))
+      .where(and(inArray(segments.poiId, poiIds), isNotNull(segments.tourId)))
+      .groupBy(segments.poiId),
+    // Per-poi: roam clip metadata — a roam encounter is a tourId-null segment + its variant-0
+    // track (unique per poi; duration + script for anomaly detection).
     db
       .select({
-        poiId: roamClips.poiId,
-        audioDurationMs: roamClips.audioDurationMs,
-        script: roamClips.script,
+        poiId: segments.poiId,
+        audioDurationMs: tracks.audioDurationMs,
+        script: tracks.script,
       })
-      .from(roamClips)
-      .where(inArray(roamClips.poiId, poiIds)),
-    // Per-poi: region slug + name (pick first per poi in JS)
+      .from(segments)
+      .innerJoin(tracks, and(eq(tracks.segmentId, segments.id), eq(tracks.variant, 0)))
+      .where(and(isNull(segments.tourId), inArray(segments.poiId, poiIds))),
+    // Per-poi: region slug + name (pick first per poi in JS) — via the tour-bound segments.
     db
       .select({
-        poiId: tourStops.poiId,
+        poiId: segments.poiId,
         regionSlug: regions.slug,
         regionName: regions.displayName,
       })
-      .from(tourStops)
-      .innerJoin(tours, eq(tourStops.tourId, tours.id))
+      .from(segments)
+      .innerJoin(tours, eq(segments.tourId, tours.id))
       .innerJoin(regions, eq(tours.regionId, regions.id))
-      .where(inArray(tourStops.poiId, poiIds)),
+      .where(inArray(segments.poiId, poiIds)),
   ])
 
   const stopMap = new Map(stopStats.map((s) => [s.poiId, s]))
@@ -772,30 +788,34 @@ app.get('/admin/roam/sign/:poiId', async (c) => {
   const poiId = c.req.param('poiId')
   if (!UUID_RE.test(poiId)) return c.json({ error: 'not_found' }, 404)
 
+  // A roam clip = the tourId-null segment for this poi + its variant-0 track. The track id is
+  // the stable clip id (R2 key is per-track); the audio R2 key is tracks.audioUrl.
   const clip = (
     await db
       .select({
-        id: roamClips.id,
-        script: roamClips.script,
-        audioUrl: roamClips.audioUrl,
-        audioDurationMs: roamClips.audioDurationMs,
-        attribution: roamClips.attribution,
-        factsHash: roamClips.factsHash,
+        id: tracks.id,
+        script: tracks.script,
+        audioUrl: tracks.audioUrl,
+        audioDurationMs: tracks.audioDurationMs,
+        attribution: tracks.attribution,
+        factsHash: tracks.factsHash,
       })
-      .from(roamClips)
-      .where(eq(roamClips.poiId, poiId))
+      .from(segments)
+      .innerJoin(tracks, and(eq(tracks.segmentId, segments.id), eq(tracks.variant, 0)))
+      .where(and(isNull(segments.tourId), eq(segments.poiId, poiId)))
       .limit(1)
   )[0]
 
-  if (!clip) return c.json({ error: 'not_found' }, 404)
+  if (!clip || !clip.audioUrl) return c.json({ error: 'not_found' }, 404)
+  const audioKey = clip.audioUrl
 
   try {
     return c.json({
       clip: {
         id: clip.id,
         script: clip.script,
-        url: presignGet(clip.audioUrl),
-        contentType: contentTypeForKey(clip.audioUrl),
+        url: presignGet(audioKey),
+        contentType: contentTypeForKey(audioKey),
         audioDurationMs: clip.audioDurationMs,
         attribution: clip.attribution,
         factsHash: clip.factsHash,

@@ -1,6 +1,6 @@
-// Backfill tour_stops trigger points for tours generated before these columns were
-// populated. For every stop it snaps the POI onto its tour's frozen polyline
-// (the trigger point) and records the route heading of travel there — the SAME
+// Backfill segments trigger points for tours generated before these columns were
+// populated. For every tour stop (a segment) it snaps the POI onto its tour's frozen
+// polyline (the trigger point) and records the route heading of travel there — the SAME
 // computation the generator now does at generation time (pipeline/select.ts). The
 // in-car player reuses these so it triggers as the car passes the POI's point on
 // the ROAD (Tahoe POIs sit 400-650 m off the road) without re-snapping at load.
@@ -15,7 +15,7 @@
 
 import { and, asc, eq } from 'drizzle-orm'
 import { db } from '@skipper/db'
-import { pois, tours, tourStops } from '@skipper/db/schema'
+import { pois, segments, tours } from '@skipper/db/schema'
 import { cumulativeMeters, nearestOnRoute, routeBearingAt } from './pipeline/geo'
 import type { LngLat } from './pipeline/geo'
 
@@ -53,12 +53,13 @@ async function main() {
     const polyline = t.polyline as LngLat[]
     const cum = cumulativeMeters(polyline)
 
+    // A tour stop is a segment (the place-anchor that carries the trigger geometry).
     const stops = await db
-      .select({ stopId: tourStops.id, seq: tourStops.seq, name: pois.name, lat: pois.lat, lng: pois.lng })
-      .from(tourStops)
-      .innerJoin(pois, eq(tourStops.poiId, pois.id))
-      .where(eq(tourStops.tourId, t.tourId))
-      .orderBy(asc(tourStops.seq))
+      .select({ segmentId: segments.id, seq: segments.seq, name: pois.name, lat: pois.lat, lng: pois.lng })
+      .from(segments)
+      .innerJoin(pois, eq(segments.poiId, pois.id))
+      .where(eq(segments.tourId, t.tourId))
+      .orderBy(asc(segments.seq))
 
     console.log(`\n${t.tourName} · tour ${t.tourId} — ${stops.length} stops`)
     const updates = stops.map((s) => {
@@ -69,10 +70,10 @@ async function main() {
           `trigger (${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}), heading ${heading}°`,
       )
       return db
-        .update(tourStops)
+        .update(segments)
         .set({ triggerLat: pos.lat, triggerLng: pos.lng, approachHeadingDeg: heading })
-        .where(eq(tourStops.id, s.stopId))
-        .returning({ id: tourStops.id })
+        .where(eq(segments.id, s.segmentId))
+        .returning({ id: segments.id })
     })
     totalStops += stops.length
     const [first, ...rest] = updates

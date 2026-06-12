@@ -35,13 +35,12 @@ describe('isFactsFresh (the pois facts read-through predicate)', () => {
 describe('override freshness stamp (latestOverrideAt)', () => {
   afterEach(clearPoiOverridesForTest)
 
-  test('aggregation keeps the NEWEST row stamp per place, across row kinds', () => {
+  test('aggregation keeps the NEWEST row stamp per place, across multiple edits', () => {
     const out = aggregateOverrideRows([
       {
         source: 'wikipedia',
         sourceId: '1',
         name: 'A',
-        kind: 'fact_edit',
         find: 'x',
         replace: 'y',
         reason: 'r',
@@ -51,11 +50,10 @@ describe('override freshness stamp (latestOverrideAt)', () => {
         source: 'wikipedia',
         sourceId: '1',
         name: 'A',
-        kind: 'side_anchor',
-        sideAnchorLat: 1,
-        sideAnchorLng: 2,
+        find: 'p',
+        replace: 'q',
         reason: 'r',
-        updatedAt: hoursAgo(3), // newest — a side-anchor adjudication stamps too
+        updatedAt: hoursAgo(3), // newest — a later correction adjudication stamps too
       },
     ])
     expect(out.get('wikipedia:1')?.latestOverrideAt).toEqual(hoursAgo(3))
@@ -63,7 +61,7 @@ describe('override freshness stamp (latestOverrideAt)', () => {
 
   test('rows without updatedAt (seed fixtures) leave the stamp unset', () => {
     const out = aggregateOverrideRows([
-      { source: 'wikipedia', sourceId: '2', name: 'B', kind: 'fact_edit', find: 'x', replace: '', reason: 'r' },
+      { source: 'wikipedia', sourceId: '2', name: 'B', find: 'x', replace: '', reason: 'r' },
     ])
     expect(out.get('wikipedia:2')?.latestOverrideAt).toBeUndefined()
   })
@@ -74,7 +72,6 @@ describe('override freshness stamp (latestOverrideAt)', () => {
         source: 'wikipedia',
         sourceId: '3',
         name: 'C',
-        kind: 'fact_edit',
         find: 'x',
         replace: '',
         reason: 'r',
@@ -91,7 +88,7 @@ describe('cachedExtractSuspect (the "reworded, still wrong" guard on cache reads
 
   const load = (find: string, replace: string) =>
     setPoiOverridesForTest([
-      { source: 'wikipedia', sourceId: '9', name: 'D', kind: 'fact_edit', find, replace, reason: 'r' },
+      { source: 'wikipedia', sourceId: '9', name: 'D', find, replace, reason: 'r' },
     ])
 
   test('clean: the correction (replace) is visible, the falsehood (find) is not', () => {

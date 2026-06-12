@@ -290,7 +290,8 @@ export const MERGE_EXTRA_SEC = 40
  *  Breaks are flexible, so we just skip anchors this close to a chosen narrated stop. */
 export const BREAK_MIN_GAP_SEC = 90
 
-/** Default speed-adaptive trigger floor (m). Matches the tour_stops column default. */
+/** Default speed-adaptive trigger floor (m). The reader's fallback when segments.radius_m is
+ *  null (nullable now); the generator still writes it explicitly onto every segment. */
 export const TRIGGER_RADIUS_M = 120
 
 /** Fallback average drive speed (m/s ≈ 30 mph) if a corridor lacks a frozen durationSeconds. */

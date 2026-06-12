@@ -18,9 +18,10 @@
 // not ownership.
 
 import { Hono, type Context } from 'hono'
-import { asc, desc, eq, inArray } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm'
 import { db } from '@skipper/db'
-import { pois, regions, roamClips, tourBrackets, tourStops, tours } from '@skipper/db/schema'
+import { pois, regions, segments, tracks, tourFrames, tours } from '@skipper/db/schema'
+import type { StopType } from '@skipper/shared'
 import type { Tour as TourRow } from '@skipper/db/schema'
 import { auth } from './auth'
 import { FEATURES, meetsTier, withSession, type ApiEnv } from './entitlements'
@@ -123,20 +124,24 @@ app.get('/tours', async (c) => {
   // card has an identity ("Emerald Bay & Vikingsholm") without forcing a tap. We take
   // the first couple of STORY/SCENIC stops (the real named places); breaks are skipped
   // so a café never headlines, and no volatile data is involved (just the frozen name).
+  // A tour stop = a tour-bound segment + its canonical (variant 0) track; the stop's
+  // treatment is the track's `form` (always story|scenic|break for tour data).
   const teaserByTour = new Map<string, string>()
   const tourIds = rows.map((r) => r.id)
   if (tourIds.length) {
     const stopRows = await db
-      .select({ tourId: tourStops.tourId, stopType: tourStops.stopType, name: pois.name })
-      .from(tourStops)
-      .innerJoin(pois, eq(tourStops.poiId, pois.id))
-      .where(inArray(tourStops.tourId, tourIds))
-      .orderBy(asc(tourStops.seq))
+      .select({ tourId: segments.tourId, stopType: tracks.form, name: pois.name })
+      .from(segments)
+      .innerJoin(tracks, and(eq(tracks.segmentId, segments.id), eq(tracks.variant, 0)))
+      .innerJoin(pois, eq(segments.poiId, pois.id))
+      .where(inArray(segments.tourId, tourIds))
+      .orderBy(asc(segments.seq))
     const byTour = new Map<string, { stopType: string; name: string }[]>()
     for (const s of stopRows) {
-      const arr = byTour.get(s.tourId) ?? []
+      // tour segments are never roam (tourId set ⇒ in the inArray filter), so tourId is non-null.
+      const arr = byTour.get(s.tourId!) ?? []
       arr.push({ stopType: s.stopType, name: s.name })
-      byTour.set(s.tourId, arr)
+      byTour.set(s.tourId!, arr)
     }
     for (const [tid, stops] of byTour) {
       const named = stops.filter((s) => s.stopType === 'story' || s.stopType === 'scenic')
@@ -189,7 +194,10 @@ app.get('/tours/:tourId', withSession, async (c) => {
   // tour, none on another's result). neon-http is one HTTP round-trip per query, so serial
   // awaits would pay that latency three times back-to-back — fan them out and collapse to ~the
   // slowest single query. (A reject still surfaces as a 500 via onError, same as serial.)
-  const [regionRows, stops, brackets] = await Promise.all([
+  //
+  // A stop = a tour-bound `segment` (place-anchor + trigger geometry) + its canonical (variant 0)
+  // `track` (the narration); the stop's treatment is the track's `form`. Brackets = `tour_frames`.
+  const [regionRows, stopRows, brackets] = await Promise.all([
     db
       .select({ slug: regions.slug, displayName: regions.displayName })
       .from(regions)
@@ -197,33 +205,48 @@ app.get('/tours/:tourId', withSession, async (c) => {
       .limit(1),
     db
       .select({
-        seq: tourStops.seq,
-        stopType: tourStops.stopType,
+        seq: segments.seq,
+        form: tracks.form,
         name: pois.name,
         lat: pois.lat,
         lng: pois.lng,
-        triggerRadiusM: tourStops.triggerRadiusM,
-        approachHeadingDeg: tourStops.approachHeadingDeg,
-        audioDurationMs: tourStops.audioDurationMs,
-        // The offline-staleness token (Date → ISO via c.json). Bumps on any clip re-synth/regen,
-        // so a downloaded drive can detect it's behind the server. See shared `tourStopView.revisedAt`.
-        revisedAt: tourStops.updatedAt,
+        radiusM: segments.radiusM,
+        approachHeadingDeg: segments.approachHeadingDeg,
+        audioDurationMs: tracks.audioDurationMs,
+        // The offline-staleness token (Date → ISO via c.json). The narration's revision is the
+        // staleness token: a clip re-synth/regen bumps `tracks.updated_at`, so a downloaded drive
+        // can detect it's behind the server. See shared `tourStopView.revisedAt`.
+        revisedAt: tracks.updatedAt,
       })
-      .from(tourStops)
-      .innerJoin(pois, eq(tourStops.poiId, pois.id))
-      .where(eq(tourStops.tourId, tour.id))
-      .orderBy(asc(tourStops.seq)),
+      .from(segments)
+      .innerJoin(tracks, and(eq(tracks.segmentId, segments.id), eq(tracks.variant, 0)))
+      .innerJoin(pois, eq(segments.poiId, pois.id))
+      .where(eq(segments.tourId, tour.id))
+      .orderBy(asc(segments.seq)),
     db
       .select({
-        kind: tourBrackets.kind,
-        audioDurationMs: tourBrackets.audioDurationMs,
-        revisedAt: tourBrackets.updatedAt,
+        kind: tourFrames.kind,
+        audioDurationMs: tourFrames.audioDurationMs,
+        revisedAt: tourFrames.updatedAt,
       })
-      .from(tourBrackets)
-      .where(eq(tourBrackets.tourId, tour.id)),
+      .from(tourFrames)
+      .where(eq(tourFrames.tourId, tour.id)),
   ])
   // tours.regionId is a NOT NULL FK with onDelete: restrict, so the region always exists.
   const region = regionRows[0]!
+  // Project a tour track's `form` (the 5-value enum) onto the wire's 3-value stopType — tour
+  // tracks are always story|scenic|break (the old stop_type), and seq is non-null for a tour stop.
+  const stops = stopRows.map((s) => ({
+    seq: s.seq!,
+    stopType: s.form as StopType,
+    name: s.name,
+    lat: s.lat,
+    lng: s.lng,
+    triggerRadiusM: s.radiusM ?? 120,
+    approachHeadingDeg: s.approachHeadingDeg,
+    audioDurationMs: s.audioDurationMs,
+    revisedAt: s.revisedAt,
+  }))
   const intro = brackets.find((b) => b.kind === 'intro')
   const outro = brackets.find((b) => b.kind === 'outro')
 
@@ -268,31 +291,34 @@ app.post('/tours/:tourId/assets/sign', withSession, async (c) => {
   const { tour } = gated
 
   // Independent reads → fan out (see /tours/:tourId): two neon-http round-trips become one.
+  // Stop clips live on the canonical (variant 0) `track` of each tour-bound `segment`; bracket
+  // clips on `tour_frames`. Each stores its R2 object KEY in audioUrl (presigned below).
   const [stopClips, bracketClips] = await Promise.all([
     db
       .select({
-        seq: tourStops.seq,
-        key: tourStops.audioUrl,
-        durationMs: tourStops.audioDurationMs,
+        seq: segments.seq,
+        key: tracks.audioUrl,
+        durationMs: tracks.audioDurationMs,
       })
-      .from(tourStops)
-      .where(eq(tourStops.tourId, tour.id))
-      .orderBy(asc(tourStops.seq)),
+      .from(segments)
+      .innerJoin(tracks, and(eq(tracks.segmentId, segments.id), eq(tracks.variant, 0)))
+      .where(eq(segments.tourId, tour.id))
+      .orderBy(asc(segments.seq)),
     db
       .select({
-        kind: tourBrackets.kind,
-        key: tourBrackets.audioUrl,
-        durationMs: tourBrackets.audioDurationMs,
+        kind: tourFrames.kind,
+        key: tourFrames.audioUrl,
+        durationMs: tourFrames.audioDurationMs,
       })
-      .from(tourBrackets)
-      .where(eq(tourBrackets.tourId, tour.id)),
+      .from(tourFrames)
+      .where(eq(tourFrames.tourId, tour.id)),
   ])
 
   try {
     const stops = stopClips
       .filter((clip) => clip.key)
       .map((clip) => ({
-        seq: clip.seq,
+        seq: clip.seq!,
         url: presignGet(clip.key!),
         // Format derived from the actual key — so the client never hardcodes/guesses it.
         contentType: contentTypeForKey(clip.key!),
@@ -343,10 +369,11 @@ function haversineMeters(aLat: number, aLng: number, bLat: number, bLng: number)
 }
 
 // FREE-ROAM manifest: every roam-narratable place near a point, with presigned clip URLs
-// (shared schema: roamManifest). Roam narration is ROAM-owned (`roam_clips` — the third
-// owner beside pois/tour_stops; docs/ideas/free-roam-mode.md); a row exists only complete,
-// so everything returned is playable. Geo filter runs in JS — the corpus is a few hundred
-// rows per region at most, so a bbox prefilter + haversine beats dragging in PostGIS.
+// (shared schema: roamManifest). Roam narration is ROAM-owned: a roam encounter is a
+// placeless-of-tour `segment` (tour_id NULL) with its canonical (variant 0) `track`
+// (docs/ideas/free-roam-mode.md); a track only goes live complete, so everything returned is
+// playable. Geo filter runs in JS — the corpus is a few hundred rows per region at most, so a
+// bbox prefilter + haversine beats dragging in PostGIS.
 // ALPHA: OPEN, like ?preview=1 (founder TestFlight toy; no UI links it for anyone else).
 // When roam ships for real it takes the live-drive wall (free account), same as tours.
 app.get('/roam', async (c) => {
@@ -360,18 +387,27 @@ app.get('/roam', async (c) => {
 
   const rows = await db
     .select({
-      poiId: roamClips.poiId,
+      poiId: segments.poiId,
       name: pois.name,
       kind: pois.kind,
       lat: pois.lat,
       lng: pois.lng,
-      key: roamClips.audioUrl,
-      durationMs: roamClips.audioDurationMs,
+      key: tracks.audioUrl,
+      durationMs: tracks.audioDurationMs,
     })
-    .from(roamClips)
-    .innerJoin(pois, eq(roamClips.poiId, pois.id))
+    .from(segments)
+    .innerJoin(tracks, and(eq(tracks.segmentId, segments.id), eq(tracks.variant, 0)))
+    .innerJoin(pois, eq(pois.id, segments.poiId))
+    .where(isNull(segments.tourId))
 
-  const near = rows.filter((r) => haversineMeters(lat, lng, r.lat, r.lng) <= radiusKm * 1000)
+  // A track only goes live with script + audio filled, but audioUrl is nullable through
+  // generation — drop any keyless row so a half-baked roam track never surfaces a bad pin.
+  const near = rows.filter(
+    (r): r is typeof r & { key: string; durationMs: number } =>
+      r.key != null &&
+      r.durationMs != null &&
+      haversineMeters(lat, lng, r.lat, r.lng) <= radiusKm * 1000,
+  )
 
   try {
     return c.json({

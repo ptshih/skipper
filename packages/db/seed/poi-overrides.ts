@@ -18,12 +18,14 @@ import { sql } from 'drizzle-orm'
 import { db } from '../src/client'
 import { poiOverrides, type NewPoiOverride } from '../src/schema'
 
+// FACT corrections only now — the side-of-road coordinate moved onto `pois.speakable_lat/lng`
+// (a place's stored vantage, written by the generator). The Sugar Pine Point speakable anchor
+// lives as a curated map in packages/generator/src/pipeline/speakable.ts.
 export const POI_OVERRIDE_SEED: NewPoiOverride[] = [
   {
     source: 'wikipedia',
     sourceId: '1985884',
     name: 'Emerald Bay State Park',
-    kind: 'fact_edit',
     find: 'Leonard Palme',
     replace: 'Lennart Palme',
     reason:
@@ -34,7 +36,6 @@ export const POI_OVERRIDE_SEED: NewPoiOverride[] = [
     source: 'wikipedia',
     sourceId: '39007559',
     name: 'Pope Estate',
-    kind: 'fact_edit',
     find: 'built by Lloyd Tevis, former president of Wells Fargo Bank, in the 1880s',
     replace:
       'built in 1894 by George Tallant of Crocker Bank, and purchased by the Tevis family in 1899',
@@ -46,7 +47,6 @@ export const POI_OVERRIDE_SEED: NewPoiOverride[] = [
     source: 'wikipedia',
     sourceId: '22764866',
     name: 'Tahoe Keys, California',
-    kind: 'fact_edit',
     find: 'Constructed in the 1960s,',
     replace: 'Constructed beginning in the mid-1950s,',
     // RETIRED 2026-06-10: Wikipedia removed the construction-date sentence from the article
@@ -61,26 +61,11 @@ export const POI_OVERRIDE_SEED: NewPoiOverride[] = [
     source: 'wikipedia',
     sourceId: '32308786',
     name: 'Chambers Lodge, California',
-    kind: 'fact_edit',
     find: 'first established in 1854',
     replace: 'first established in 1863',
     reason:
       "The article says 1854; multiple consistent sources (Rubicon Trail Foundation, tahoecountry.com, L.W. Currey) say John McKinney established Hunter's Retreat at this site in 1863. Founder-adjudicated from a --veracity finding 2026-06-09.",
     sourceUrl: 'https://donsnotes.com/tahoe/chambers-landing.html',
-  },
-  {
-    source: 'wikipedia',
-    sourceId: '41195091',
-    name: "Ed Z'berg Sugar Pine Point State Park",
-    kind: 'side_anchor',
-    // The Sugar Pine Point Light — the speakable content the narration points at. A
-    // COORDINATE (not a stored left/right): side flips with travel direction and S→N / N→S
-    // are peer tours, so the heading-aware geometry resolves the side per drive.
-    sideAnchorLat: 39.061266,
-    sideAnchorLng: -120.113971,
-    reason:
-      "The park straddles CA-89 and its pin sits inland (west), so the pin-based geometry points riders away from the lake — but everything the narration points at (the shoreline, the Sugar Pine Point Light) is lakeside. Our delivery judgment, not a source error.",
-    upstreamStatus: 'not_applicable',
   },
 ]
 
@@ -91,12 +76,10 @@ export async function seedPoiOverrides(): Promise<void> {
       .insert(poiOverrides)
       .values(row)
       .onConflictDoUpdate({
-        target: [poiOverrides.source, poiOverrides.sourceId, poiOverrides.kind, poiOverrides.find],
+        target: [poiOverrides.source, poiOverrides.sourceId, poiOverrides.find],
         set: {
           name: row.name,
           replace: row.replace ?? null,
-          sideAnchorLat: row.sideAnchorLat ?? null,
-          sideAnchorLng: row.sideAnchorLng ?? null,
           reason: row.reason,
           sourceUrl: row.sourceUrl ?? null,
           updatedAt: sql`now()`,

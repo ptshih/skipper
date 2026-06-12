@@ -11,7 +11,7 @@
 
 import { and, asc, desc, eq } from 'drizzle-orm'
 import { db } from '@skipper/db'
-import { pois, regions, tours, tourStops } from '@skipper/db/schema'
+import { pois, regions, segments, tours, tracks } from '@skipper/db/schema'
 import { OFF_ROUTE_MAX_M, METERS_PER_MILE, formatMmss, runDrive } from '@skipper/drive-core'
 import type { LngLat, TourStopRef } from '@skipper/drive-core'
 
@@ -53,28 +53,33 @@ async function main() {
   )[0]
   if (!tour) throw new Error(`No ready tour found for "${slug}".`)
 
+  // A tour stop is now a `segments` row (place-anchor + trigger geometry) joined to its
+  // canonical `tracks` row (variant 0 — the one telling per tour stop), which carries the
+  // form/script/audio. seq is non-null for tour-bound segments (the schema CHECK keeps it in
+  // lockstep with tourId), and radiusM is nullable now → fall back to the engine's floor.
   const stopRows = await db
     .select({
-      seq: tourStops.seq,
-      stopType: tourStops.stopType,
+      seq: segments.seq,
+      stopType: tracks.form,
       lat: pois.lat,
       lng: pois.lng,
       name: pois.name,
-      triggerRadiusM: tourStops.triggerRadiusM,
-      durationMs: tourStops.audioDurationMs,
+      radiusM: segments.radiusM,
+      durationMs: tracks.audioDurationMs,
     })
-    .from(tourStops)
-    .innerJoin(pois, eq(tourStops.poiId, pois.id))
-    .where(eq(tourStops.tourId, tour.id))
-    .orderBy(asc(tourStops.seq))
+    .from(segments)
+    .innerJoin(tracks, and(eq(tracks.segmentId, segments.id), eq(tracks.variant, 0)))
+    .innerJoin(pois, eq(segments.poiId, pois.id))
+    .where(eq(segments.tourId, tour.id))
+    .orderBy(asc(segments.seq))
 
   const stops: TourStopRef[] = stopRows.map((s) => ({
-    seq: s.seq,
+    seq: s.seq!,
     lat: s.lat,
     lng: s.lng,
     name: s.name,
     stopType: s.stopType,
-    triggerRadiusM: s.triggerRadiusM,
+    triggerRadiusM: s.radiusM ?? 120,
     durationMs: s.durationMs,
   }))
 

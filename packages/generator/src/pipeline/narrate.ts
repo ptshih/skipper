@@ -394,7 +394,7 @@ function describe(req: NarrationRequest): string {
 /*  Persona-only, NO fact sheet — they assert no place-fact (they NAME + FRAME  */
 /*  the region/endpoints only). The personal KIT, banned from stops, lives in   */
 /*  the intro; the sentimental bow lives in the outro. Persistence is to         */
-/*  `tour_brackets` (Phase 3), never `tour_stops`.                              */
+/*  `tour_frames` (placeless), never a segment/track.                           */
 /* -------------------------------------------------------------------------- */
 
 export interface IntroRequest {

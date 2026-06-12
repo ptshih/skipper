@@ -5,7 +5,7 @@ import { z } from 'zod'
  * (baked into the narration audio at generation time), NOT stored tour STATE: there is
  * no `joke_level` column and the notch is absent from every read DTO and the API. M1 is
  * `dadpocalypse`-only, so a stored notch would carry no information. When the 1-N notch
- * ships (M3) the column lands on the NARRATION (tour_stops) — a notch describes a telling,
+ * ships (M3) the column lands on the NARRATION (tracks) — a notch describes a telling,
  * not a route. This enum stays because the generator's narration is parameterized by it
  * (the persona prompt's whole notch ladder) and `tourRequest` carries it as the run input.
  */
@@ -13,16 +13,29 @@ export const jokeLevel = z.enum(['off', 'mild', 'dad', 'dadpocalypse'])
 export type JokeLevel = z.infer<typeof jokeLevel>
 
 /**
- * story  = factual narration (a fact-grounded telling + audio).
- * scenic = delivery-only ambient audio, no facts — but STILL needs non-null audio to
- *          satisfy the ready gate.
- * break  = food/rest stop; names the curated anchor only; mandatory audio.
- * Narration + audio live on the tour_stops row (tour-owned), not a shared cache.
+ * A TRACK's treatment/depth — "what kind of telling". The full vocabulary now that narration
+ * is a 1:N `tracks` child of a place-anchor `segment` (a place can carry several forms):
+ *   story  = fact-grounded telling + audio.
+ *   scenic = delivery-only ambient audio, no facts (still needs audio for the ready gate).
+ *   break  = food/rest stop; names the curated anchor only; mandatory audio.
+ *   wave   = a free-roam passing call-out.
+ *   bside  = a "tell me more" alternate telling.
+ * Keep in lockstep with the pg `track_form` enum (@skipper/db/schema).
+ */
+export const trackForm = z.enum(['story', 'scenic', 'break', 'wave', 'bside'])
+export type TrackForm = z.infer<typeof trackForm>
+
+/**
+ * The WIRE projection of a TOUR stop's track form: a tour track is always one of these three,
+ * so `tourStopView.stopType` stays a 3-value field (the player's icon/treatment switch). This is
+ * a read-DTO vocabulary, no longer backed by its own pg enum — `tracks.form` (a superset) is the
+ * storage truth, projected down by the API.
  */
 export const stopType = z.enum(['story', 'scenic', 'break'])
 export type StopType = z.infer<typeof stopType>
 
-/** The drive's FRAME pieces — intro/outro brackets (tour_brackets), NOT stops. */
+/** The drive's FRAME pieces — intro/outro (the `tour_frames` table, pg `frame_kind`). The wire
+ *  DTO keeps the `bracketKind` name for client stability. */
 export const bracketKind = z.enum(['intro', 'outro'])
 export type BracketKind = z.infer<typeof bracketKind>
 

@@ -84,8 +84,8 @@ export const auth = betterAuth({
     expo(),
     anonymous({
       onLinkAccount: async () => {
-        // M2: nothing to migrate yet. When free-account favorites land, move any
-        // anonymous saved_tours from anonymousUser -> newUser here.
+        // Nothing to migrate on sign-up: tours are anonymous/shareable, so there is no
+        // per-user tour state to move from the anonymous user to the new account.
       },
     }),
   ],

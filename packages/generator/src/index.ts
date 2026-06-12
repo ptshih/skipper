@@ -10,7 +10,7 @@
 //     -> select stops to fit duration           (pace by drive TIME, not distance)
 //     -> skipper narration (Anthropic)          (facts-only prompt; never invent)
 //     -> TTS (Google Cloud, Gemini-TTS) -> Cloudflare R2
-//     -> write tours + ordered tour_stops (Neon/Drizzle)
+//     -> write tours + ordered segments/tracks (Neon/Drizzle; a stop = 1 segment + 1 track)
 //
 // Invariant: a tour may not be marked `ready` until every story/scenic stop has
 // non-null audio. NO cache variants, NO dedup, NO feedback in M1 — generate naively.

@@ -1,1 +1,0 @@
-ALTER TABLE "tours" DROP COLUMN "is_preview";

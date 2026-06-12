@@ -1,11 +1,14 @@
 # Segments / Tracks data-model refactor
 
-> **Status:** BUILD-READY SPEC, UNBUILT — model fully locked 2026-06-12 (a long design
-> session); migration `0010` drafted (data-preserving), cutover pending. This is the **handoff**:
-> a new session can execute from it top to bottom. **Zero-reuse SURVIVES** — this is a cleaner
-> expression of it, not a reversal (see §Decisions D1). Supersedes the "three narration owners"
-> framing in `docs/decisions/tour-data-model-zero-reuse.md` (which needs a dated addendum when this
-> ships). Do the cutover **in a worktree** — it breaks every caller at once.
+> **Status:** BUILT 2026-06-12 — cutover executed on `main` (no worktree). The data-preserving
+> `0010` below was DROPPED in favor of a clean NUKE (founder OK'd; no users): schema rewritten to
+> the locked model, single fresh `0000` baseline, DB + R2 wiped + reseeded, every caller repointed
+> (generator/api/admin/mobile/sim/drive-core/shared), `bun run check` green. Content REGEN (the 2
+> tour shells + the roam corpus) runs separately via Cloud Run — the shells are reseeded as `draft`.
+> **Zero-reuse SURVIVES** (D1); addendum recorded on `docs/decisions/tour-data-model-zero-reuse.md`.
+> The migration section below is kept as the DESIGN record, but the nuke replaced its data-moves.
+> DEFERRED to follow-ups: the `generateOneTrack` atom extraction; wiring client `hostIdentity` to
+> read the `personas` table (still served region-keyed from `apps/api/host.ts`).
 
 ## TL;DR
 

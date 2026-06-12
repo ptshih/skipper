@@ -3,15 +3,15 @@
 // narration is left otherwise untouched: this is a surgical text edit, not a re-run of
 // the model, so a human-approved clip stays approved except for the fix.
 //
-// The target is a tour_stop OR a tour_bracket row (narration is tour-owned now; there
-// is no poi_content). Patching writes to the row's EXISTING key (a stop's
-// clips/<tourId>/<stopId>; a bracket's stored audioUrl — bracket keys are per-RUN now),
+// The target is a stop TRACK OR a tour_frame row (narration is tour-owned now; there
+// is no poi_content). Patching writes to the row's EXISTING key (a track's
+// clips/<tourId>/<trackId>; a frame's stored audioUrl — frame keys are per-RUN now),
 // so re-uploading overwrites the SAME object and audioUrl never changes. The voice is
 // the persona's fixed voice (models.ts). NB: a patched clip does NOT reach tours already
 // DOWNLOADED offline (the device keeps its bytes until a re-download) — known gap.
 //
 //   dotenvx run -f .env.development -- bun packages/generator/src/patch-clip.ts \
-//     <tourStopId|tourBracketId> --find "fiftehundred" --replace "fifteen hundred" [--all] [--apply]
+//     <trackId|tourFrameId> --find "fiftehundred" --replace "fifteen hundred" [--all] [--apply]
 //
 // Blast radius: SPENDS $ (one TTS synth) + MUTATES DB (repoints the row's audioUrl in place).
 // DEFAULT DRY RUN — pass --apply to synthesize + write. --find/--replace does a literal
@@ -21,7 +21,7 @@
 
 import { eq } from 'drizzle-orm'
 import { db } from '@skipper/db'
-import { regions, tourBrackets, tourStops, tours } from '@skipper/db/schema'
+import { regions, segments, tourFrames, tours, tracks } from '@skipper/db/schema'
 import { announce, assertReady, parseFlags } from './pipeline/ops'
 import { personaForRegion } from './persona'
 import { synthesizeWithTailRetake } from './pipeline/tts'
@@ -45,7 +45,7 @@ function parseArgs(argv: string[]): Args {
   const replace = flags.value('replace')
   if (!id || find === undefined || replace === undefined) {
     throw new Error(
-      'Usage: patch-clip.ts <tourStopId|tourBracketId> --find "<text>" --replace "<text>" [--all] [--apply]',
+      'Usage: patch-clip.ts <trackId|tourFrameId> --find "<text>" --replace "<text>" [--all] [--apply]',
     )
   }
   // An empty --find would, with --all, interleave the replacement between every
@@ -54,7 +54,7 @@ function parseArgs(argv: string[]): Args {
   return { id, find, replace, all: flags.has('all'), apply: flags.has('apply') }
 }
 
-/** A clip to patch — either a stop or a bracket — normalized to its key + script. */
+/** A clip to patch — either a stop track or a frame — normalized to its key + script. */
 interface ClipTarget {
   label: string
   /** The owning tour — used to resolve the region's persona (voice + delivery style). */
@@ -66,69 +66,80 @@ interface ClipTarget {
   save: (script: string, audioUrl: string, durationMs: number) => Promise<void>
 }
 
-/** Resolve the id to a tour_stop first, then a tour_bracket. */
+/** Resolve the id to a stop TRACK first (via its segment), then a tour_frame. */
 async function resolveTarget(id: string): Promise<ClipTarget | null> {
-  const stop = (
+  const track = (
     await db
       .select({
-        id: tourStops.id,
-        tourId: tourStops.tourId,
-        seq: tourStops.seq,
-        stopType: tourStops.stopType,
-        script: tourStops.script,
-        audioUrl: tourStops.audioUrl,
+        id: tracks.id,
+        tourId: segments.tourId,
+        seq: segments.seq,
+        form: tracks.form,
+        script: tracks.script,
+        audioUrl: tracks.audioUrl,
       })
-      .from(tourStops)
-      .where(eq(tourStops.id, id))
+      .from(tracks)
+      .innerJoin(segments, eq(tracks.segmentId, segments.id))
+      .where(eq(tracks.id, id))
       .limit(1)
   )[0]
-  if (stop) {
-    if (stop.script === null) throw new Error(`Stop ${id} has no script to patch.`)
+  if (track) {
+    if (track.script === null) throw new Error(`Track ${id} has no script to patch.`)
+    // Tour stops carry tourId (the clip lives at clips/<tourId>/<trackId>); a roam track is
+    // placeless (tourId null) and patches in place at its stored key (roam/<poiId>/<trackId>).
+    if (track.tourId === null) {
+      if (track.audioUrl === null)
+        throw new Error(`Roam track ${id} has no audio yet — generate it before patching.`)
+      throw new Error(
+        `Track ${id} is a roam encounter (no tour) — use resynth-roam-clip.ts to re-render it.`,
+      )
+    }
+    const tourId = track.tourId
     return {
-      label: `stop #${stop.seq} (${stop.stopType}) of tour ${stop.tourId.slice(0, 8)}`,
-      tourId: stop.tourId,
-      key: clipKey(stop.tourId, stop.id),
-      script: stop.script,
-      storedAudioUrl: stop.audioUrl,
+      label: `stop #${track.seq} (${track.form}) of tour ${tourId.slice(0, 8)}`,
+      tourId,
+      key: clipKey(tourId, track.id),
+      script: track.script,
+      storedAudioUrl: track.audioUrl,
       save: (script, audioUrl, durationMs) =>
         db
-          .update(tourStops)
+          .update(tracks)
           .set({ script, audioUrl, audioDurationMs: durationMs, updatedAt: new Date() })
-          .where(eq(tourStops.id, stop.id))
+          .where(eq(tracks.id, track.id))
           .then(() => {}),
     }
   }
-  const bracket = (
+  const frame = (
     await db
       .select({
-        id: tourBrackets.id,
-        tourId: tourBrackets.tourId,
-        kind: tourBrackets.kind,
-        script: tourBrackets.script,
-        audioUrl: tourBrackets.audioUrl,
+        id: tourFrames.id,
+        tourId: tourFrames.tourId,
+        kind: tourFrames.kind,
+        script: tourFrames.script,
+        audioUrl: tourFrames.audioUrl,
       })
-      .from(tourBrackets)
-      .where(eq(tourBrackets.id, id))
+      .from(tourFrames)
+      .where(eq(tourFrames.id, id))
       .limit(1)
   )[0]
-  if (bracket) {
-    if (bracket.script === null) throw new Error(`Bracket ${id} has no script to patch.`)
-    if (bracket.audioUrl === null) {
-      throw new Error(`Bracket ${id} has no audio yet — generate the tour before patching.`)
+  if (frame) {
+    if (frame.script === null) throw new Error(`Frame ${id} has no script to patch.`)
+    if (frame.audioUrl === null) {
+      throw new Error(`Frame ${id} has no audio yet — generate the tour before patching.`)
     }
     return {
-      label: `${bracket.kind} bracket of tour ${bracket.tourId.slice(0, 8)}`,
-      tourId: bracket.tourId,
-      // Patch IN PLACE at the row's stored key — bracket keys are per-run now (bracketKey),
+      label: `${frame.kind} frame of tour ${frame.tourId.slice(0, 8)}`,
+      tourId: frame.tourId,
+      // Patch IN PLACE at the row's stored key — frame keys are per-run now (bracketKey),
       // so minting a fresh key here would strand the row's pointer.
-      key: bracket.audioUrl,
-      script: bracket.script,
-      storedAudioUrl: bracket.audioUrl,
+      key: frame.audioUrl,
+      script: frame.script,
+      storedAudioUrl: frame.audioUrl,
       save: (script, audioUrl, durationMs) =>
         db
-          .update(tourBrackets)
+          .update(tourFrames)
           .set({ script, audioUrl, audioDurationMs: durationMs, updatedAt: new Date() })
-          .where(eq(tourBrackets.id, bracket.id))
+          .where(eq(tourFrames.id, frame.id))
           .then(() => {}),
     }
   }
@@ -141,7 +152,7 @@ async function main() {
   await beginJob('patch_clip', { dryRun: !apply, targetId: id })
 
   const target = await resolveTarget(id)
-  if (!target) throw new Error(`No tour_stop or tour_bracket row with id "${id}".`)
+  if (!target) throw new Error(`No track or tour_frame row with id "${id}".`)
 
   const occurrences = target.script.split(find).length - 1
   if (occurrences === 0) throw new Error(`"${find}" not found in the clip's script.`)
@@ -181,8 +192,8 @@ async function main() {
     'edited clip',
   )
 
-  // The clip key is tour-scoped (clips/<tourId>/<stopId|kind>), so re-uploading
-  // overwrites the SAME object — audioUrl (the stored key) does not change.
+  // The clip key is tour-scoped (a stop track's clips/<tourId>/<trackId>; a frame's stored
+  // key), so re-uploading overwrites the SAME object — audioUrl (the stored key) never changes.
   if (target.storedAudioUrl && target.storedAudioUrl !== target.key) {
     console.warn(
       `  note: stored audioUrl "${target.storedAudioUrl}" != computed key "${target.key}" — writing to the computed key.`,

@@ -74,14 +74,15 @@ you found so the next agent can re-check it.
    tour.** `pois` is the cache — a place's facts/coords, deduped by
    `(source, source_id)` and re-fetched on a TTL (`facts_fetched_at`); facts are
    SHARED by every tour that visits the place. **Narration is NOT cached — it's
-   tour-owned:** a tour's `tour_stops` carry their own `script`/`audio`, so tour 1's
-   Camp Richardson is ALWAYS a different telling from tour 2's, even though both point
-   at the same `pois` row. Delivery belongs to the stop; facts belong to the place
-   (the "persona lives in DELIVERY, never in FACTS" invariant, mapped onto storage).
-   There is **no content cache and no cross-tour content reuse** — by design. When a
-   re-fetch MATERIALLY changes a poi's facts (detected via `pois.facts_hash`), every
-   `tour_stop` that grounded on them is stale and must regenerate. (Decided 2026-06-08,
-   superseding the old `poi_content` cache — see `docs/decisions/tour-data-model-zero-reuse.md`.)
+   tour-owned:** a place-anchor `segment` carries its narration `tracks`
+   (`script`/`audio`), so tour 1's Camp Richardson is ALWAYS a different telling from tour
+   2's, even though both point at the same `pois` row. Delivery belongs to the track; facts
+   belong to the place (the "persona lives in DELIVERY, never in FACTS" invariant, mapped
+   onto storage). There is **no content cache and no cross-tour content reuse** — by design.
+   When a re-fetch MATERIALLY changes a poi's facts (detected via `pois.facts_hash`), every
+   `track` that grounded on them is stale and must regenerate. (Zero-reuse 2026-06-08; the
+   three narration owners collapsed into `segments`+`tracks` 2026-06-12 — see
+   `docs/decisions/tour-data-model-zero-reuse.md`.)
 2. **The rails are the route; generation is everything inside the rails.** Routes
    are hand-curated + frozen, never derived. The failure mode to avoid is letting
    "curated" creep into the _contents_ — if the model just reads a fixed script,
@@ -91,8 +92,8 @@ you found so the next agent can re-check it.
 
 - **Tours stay anonymous/shareable — no `createdBy` on `tours`.** Auth now EXISTS
   (Better Auth, freemium: anonymous → free account → paid `user.tier`) but is
-  layered AROUND tours, not on them. Signed-in users save via the `saved_tours`
-  join, never ownership columns. **EVERY tour is previewable anonymously** (hard
+  layered AROUND tours, not on them (no ownership columns; the `saved_tours`
+  save-for-later join was dropped 2026-06-12). **EVERY tour is previewable anonymously** (hard
   product requirement): a `?preview=1` fetch/sign is OPEN for any ready tour — the
   couch preview is the funnel, so the audio is intentionally NOT a server wall
   (anyone can stream any tour's clips). The wall **moved to the LIVE DRIVE +
@@ -107,20 +108,21 @@ you found so the next agent can re-check it.
   TTL). (Changed 2026-06-09: "every tour previewable", wall → the drive, isPreview dropped.)
 - **`pois` deduped by `(source, source_id)`.** Store `source`/`source_id` for
   attribution — Wikipedia is **CC BY-SA**, keep credit (the attribution snapshot is
-  frozen on the `tour_stop` at narration time).
+  frozen on the `track` at narration time).
 - **The Dad-Joke-O-Meter notch (`off`/`mild`/`dad`/`dadpocalypse`), persona, and
   voice are GENERATION parameters, baked into the narration — never live playback
   toggles and never a content-cache key** (there is no content cache; narration is
   tour-owned — see principle #1). Changing any of them = a different telling. None of
-  them is a stored `tours` column: **persona** resolves from the region slug
-  (`PersonaDef`), **voice** derives from the persona, and the **notch** is a
+  them is a stored `tours` column: **persona** is a first-class `personas` row (decoupled
+  from region; the generation recipe still resolves from the region slug via `PersonaDef`)
+  FROZEN on `segments.persona_id`, **voice** derives from the persona, and the **notch** is a
   generation-time INPUT only (`GenerateOptions.jokeLevel` / `run.ts --joke-level`,
   default `dadpocalypse`) — it is NOT persisted, because M1 is dadpocalypse-only so a
   stored notch carries no information. When the 1-N notch ships (M3) the column lands on
-  the NARRATION (`tour_stops`), never on `tours`: a notch describes a telling, not a
+  the NARRATION (`tracks`), never on `tours`: a notch describes a telling, not a
   route. The `jokeLevel` Zod enum in `@skipper/shared` stays as the narration vocabulary.
 - **A tour may not be `ready` until every stop has non-null audio** (story, scenic,
-  AND break — audio lives on the `tour_stop`). Generator enforces; player also defends.
+  AND break — audio lives on the stop's `track`). Generator enforces; player also defends.
 - **Persona lives in DELIVERY, never in FACTS.** "Make it funny" never loosens
   accuracy. A POI with thin/no Wikipedia is downgraded to scenic/break — silence
   beats a hallucinated battle.
@@ -129,7 +131,7 @@ you found so the next agent can re-check it.
   come from the curated Places anchor (a minimal non-volatile field mask) and are
   spoken in the clip like the region is; everything volatile is fetched fresh at
   tour-load (and "ask the skipper" later). Break audio is **mandatory** — every
-  selected break gets narration + audio on its `tour_stop`; the tour can't be `ready`
+  selected break gets narration + audio on its `track`; the tour can't be `ready`
   without it. (NOTE: baking the Places name into a frozen R2 clip extends its lifetime
   past the DB anchor — mind Places ToS; `patch-clip` re-synths one stop's clip if a
   place renames.)
@@ -262,8 +264,8 @@ From an adversarial review of the scaffold. Verdict: sound foundation. Guardrail
 
 - **Type-name collisions (enforced: `bun run lint:types`).** `@skipper/shared` (Zod
   boundary types) and `@skipper/db/schema` (Drizzle `$inferSelect` row types) both export
-  `Poi`, `Tour`, `TourStop`, `TourBracket`, `Region` — DIFFERENT shapes (Zod = read DTOs:
-  nullish, omit internal cols like `facts`/`meta`). Use Zod types from `@skipper/shared` at
+  `Poi`, `Tour`, `Region` — DIFFERENT shapes (Zod = read DTOs: nullish, omit internal cols
+  like `facts`). Use Zod types from `@skipper/shared` at
   boundaries; import a DB ROW type only from the `@skipper/db/schema` subpath, ALIASED
   (`import type { Poi as PoiRow }`). NEVER `export * from` both in one barrel. (`Polyline`
   collides by name too but is the SAME shape, so the guard ignores it.) The guard derives the
@@ -277,17 +279,17 @@ From an adversarial review of the scaffold. Verdict: sound foundation. Guardrail
   `models.ts` is the source constant the def references). Not a request knob until M3
   (no `tours.voice` / `tourRequest.voice` yet). (Gemini-TTS voice names are stable
   identifiers — no ElevenLabs-style sunset to mind.)
-- **The generator MUST populate `tour_stops.attribution`** for every
+- **The generator MUST populate `tracks.attribution`** for every
   wikipedia-sourced clip (CC BY-SA is legal, not optional) — put it on the
   generation invariant checklist + the human-review gate.
 - **scenic ≠ break.** A scenic stop is delivery-only ambient audio (no facts); a
   break stop names the curated Places anchor (name + kind only). Both — and story —
-  carry non-null `audioUrl` on the `tour_stop`: **every** stop type carries audio and
+  carry non-null `audioUrl` on the stop's `track`: **every** stop type carries audio and
   the ready-gate requires it on all of them (no stop type is silent). Only fact-grounded
-  (story) stops carry a `facts_hash`; scenic/break carry none and are never fact-stale.
+  (story) tracks carry a `facts_hash`; scenic/break carry none and are never fact-stale.
 - **M1 ready-gate is atomic via `db.batch([...])`** — neon-http has no
   interactive transactions, but co-committing the `status='ready'` flip with the
-  final stop writes in one batch suffices (no neon-serverless Pool needed).
+  final segment/track/frame writes in one batch suffices (no neon-serverless Pool needed).
 - Three further scaffold guardrails about the old `poi_content` content cache
   (DB-enforced cache-key dimensions, M4 cache invalidation, the `stopType`-not-in-key
   precondition) were **SUPERSEDED by zero-reuse (2026-06-08)** — narration is tour-owned,

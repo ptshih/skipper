@@ -17,6 +17,9 @@ export interface KitBeat {
 }
 
 export interface PersonaDef {
+  /** Stable slug bridging this code recipe to its `personas` row (the FK target). Resolved to
+   *  `personas.id` at generation time (persist.resolvePersonaId) to fill `segments.persona_id`. */
+  personaKey: string
   /** Spoken/display host name. Founder rule: ALWAYS 'Skipper' (regions differ by voice/flavor, not name). */
   hostName: string
   /** Ear-judged Gemini-TTS voice for this host. */

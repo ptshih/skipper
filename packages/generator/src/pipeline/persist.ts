@@ -1,28 +1,31 @@
 // Persistence — Drizzle writes for the generator (zero-reuse model).
 //
 // The tour SHELL (route + endpoints + region) is created by the SEED as a `draft`
-// row; the generator FILLS it. Narration is TOUR-OWNED — it lives on tour_stops /
-// tour_brackets, never a shared poi_content cache. Order of operations (neon-http,
-// no interactive transactions):
+// row; the generator FILLS it. Narration is TOUR-OWNED — it lives on segments + tracks /
+// tour_frames, never a shared poi_content cache. A tour STOP = one `segments` row (the
+// place-anchor + trigger geometry + frozen persona) + one `tracks` row (the narration,
+// form = the stop type, variant 0). Order of operations (neon-http, no interactive
+// transactions):
 //   1. upsert pois (deduped on (source, source_id); stamp facts_hash/facts_fetched_at)
-//   2. synthesize each stop's clip to a TOUR-scoped R2 key (clips/<tourId>/<stopId>)
-//   3. synthesize the intro/outro bracket clips (clips/<tourId>/intro|outro)
-//   4. ATOMIC ready-gate: db.batch([ clear old stops+brackets, flip status->ready,
-//      insert all tour_stops, insert both tour_brackets ])
-// Step 4 co-commits the status flip with the stop AND bracket rows in ONE implicit
-// transaction, so a tour can never be `ready` with a missing stop or bracket. On any
+//   2. synthesize each stop track's clip to a TOUR-scoped R2 key (clips/<tourId>/<trackId>)
+//   3. synthesize the intro/outro frame clips (clips/<tourId>/intro|outro)
+//   4. ATOMIC ready-gate: db.batch([ clear old segments (tracks cascade) + frames, flip
+//      status->ready, insert all segments, insert all tracks, insert both tour_frames ])
+// Step 4 co-commits the status flip with the segment/track AND frame rows in ONE implicit
+// transaction, so a tour can never be `ready` with a missing stop or frame. On any
 // failure the caller marks the tour `failed`.
 
 import { createHash } from 'node:crypto'
 import { and, eq, or, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
-import { pois, regions, tourBrackets, tourStops, tours } from '@skipper/db/schema'
+import { personas, pois, regions, segments, tourFrames, tours, tracks } from '@skipper/db/schema'
 import { cachedExtractSuspect, latestOverrideAtFor } from './poi-overrides'
 import { withRetry } from './http'
 import type {
   AttributionSnapshot,
-  NewTourBracket,
-  NewTourStop,
+  NewSegment,
+  NewTourFrame,
+  NewTrack,
   PoiFacts,
   Polyline,
 } from '@skipper/db/schema'
@@ -99,6 +102,11 @@ export interface UpsertPoiInput {
   kind: string | null
   lat: number
   lng: number
+  /** Curated "where to look" anchor — a place's speakable vantage (off speakableAnchorFor),
+   *  SHARED and surviving a facts re-fetch. Omitted for places that speak from their own pin;
+   *  coalesced on conflict so a curated anchor is never blanked by a later factless write. */
+  speakableLat?: number | null
+  speakableLng?: number | null
   summary: string | null
   facts: PoiFacts | null
   /** Change-detector hash of `facts` (hashFacts). Null for break/scenic (no facts). */
@@ -181,7 +189,7 @@ export async function loadFreshPoiFacts(
 
 /** Upsert a POI deduped on (source, source_id); stamps facts freshness; returns its id. */
 export async function upsertPoi(input: UpsertPoiInput): Promise<string> {
-  const { factsHash, factsFetchedAt: providedStamp, ...rest } = input
+  const { factsHash, factsFetchedAt: providedStamp, speakableLat, speakableLng, ...rest } = input
   // Only a stop with real facts (a story stop) carries the freshness clock; the stamp
   // itself is caller-owned (see UpsertPoiInput.factsFetchedAt).
   const factsFetchedAt = factsHash ? providedStamp : null
@@ -191,7 +199,7 @@ export async function upsertPoi(input: UpsertPoiInput): Promise<string> {
     () =>
       db
         .insert(pois)
-        .values({ ...rest, factsHash, factsFetchedAt })
+        .values({ ...rest, speakableLat, speakableLng, factsHash, factsFetchedAt })
         .onConflictDoUpdate({
           target: [pois.source, pois.sourceId],
           set: {
@@ -200,6 +208,10 @@ export async function upsertPoi(input: UpsertPoiInput): Promise<string> {
             kind: sql`excluded.kind`,
             lat: sql`excluded.lat`,
             lng: sql`excluded.lng`,
+            // CURATED speakable anchor: COALESCE so a later write that carries none (most
+            // writes) never blanks an anchor a discovery run already set — keep the curated one.
+            speakableLat: sql`coalesce(excluded.speakable_lat, ${pois.speakableLat})`,
+            speakableLng: sql`coalesce(excluded.speakable_lng, ${pois.speakableLng})`,
             // FACTS are SHARED across tours: the SAME place can be a story stop on one tour and
             // a (factless) scenic/break stop on another. NEVER let a factless write blank a place
             // that already carries facts — COALESCE keeps the richest known facts/summary, while a
@@ -235,12 +247,47 @@ export async function markTourGenerating(tourId: string): Promise<void> {
   )
 }
 
-/** A fully-narrated, fully-synthesized stop, ready to write onto its tour. */
+/**
+ * The cached `personas.id` for a host's persona_key — filled onto every `segments.persona_id`.
+ * The personas table is tiny + stable within a run, so resolve once per key and memoize. A
+ * missing row is a real error (the seed must run first), thrown — never papered over.
+ */
+const personaIdCache = new Map<string, Promise<string>>()
+export function resolvePersonaId(personaKey: string): Promise<string> {
+  let p = personaIdCache.get(personaKey)
+  if (!p) {
+    p = (async () => {
+      const rows = await withRetry(
+        () =>
+          db
+            .select({ id: personas.id })
+            .from(personas)
+            .where(eq(personas.personaKey, personaKey))
+            .limit(1),
+        { label: `resolvePersonaId(${personaKey})` },
+      )
+      const id = rows[0]?.id
+      if (!id)
+        throw new Error(
+          `No personas row for persona_key "${personaKey}" — run the personas seed first.`,
+        )
+      return id
+    })()
+    personaIdCache.set(personaKey, p)
+  }
+  return p
+}
+
+/** A fully-narrated, fully-synthesized stop, ready to write as a segment + its track. */
 export interface FinalStop {
-  /** Client-generated stop id (also the clip key: clips/<tourId>/<id>). */
-  id: string
+  /** Client-generated segment id (the place-anchor row). */
+  segmentId: string
+  /** Client-generated track id (also the clip key: clips/<tourId>/<trackId>). */
+  trackId: string
   seq: number
   poiId: string
+  /** The frozen host of this telling — resolvePersonaId(persona.personaKey). */
+  personaId: string
   stopType: StopType
   script: string
   audioUrl: string
@@ -256,7 +303,7 @@ export interface FinalStop {
   approachHeadingDeg: number
 }
 
-/** A fully-narrated, fully-synthesized intro/outro bracket. */
+/** A fully-narrated, fully-synthesized intro/outro frame. */
 export interface FinalBracket {
   kind: BracketKind
   script: string
@@ -265,9 +312,11 @@ export interface FinalBracket {
 }
 
 /**
- * Atomic ready-gate: clear any prior stops/brackets, flip the tour to `ready`, and
- * write ALL tour_stops + both tour_brackets in one batch (one implicit transaction
- * over HTTP). All-or-nothing — never a `ready` tour with a missing stop or bracket.
+ * Atomic ready-gate: clear any prior segments (tracks cascade) + frames, flip the tour to
+ * `ready`, and write ALL segments + their tracks + both tour_frames in one batch (one
+ * implicit transaction over HTTP). All-or-nothing — never a `ready` tour with a missing
+ * stop or frame. Each stop is one `segments` row (place-anchor + trigger geometry + persona)
+ * paired with one `tracks` row (the narration, form = the stop type, variant 0).
  */
 export async function finalizeTourReady(
   tourId: string,
@@ -278,25 +327,34 @@ export async function finalizeTourReady(
   const haveIntro = brackets.some((b) => b.kind === 'intro')
   const haveOutro = brackets.some((b) => b.kind === 'outro')
   if (!haveIntro || !haveOutro) {
-    throw new Error(`Refusing to finalize tour ${tourId} without BOTH intro and outro brackets.`)
+    throw new Error(`Refusing to finalize tour ${tourId} without BOTH intro and outro frames.`)
   }
-  const stopRows: NewTourStop[] = stops.map((s) => ({
-    id: s.id,
+  // A stop splits into its place-anchor (segment) + its narration (track, form = the stop
+  // type, variant 0). The segment carries the trigger geometry + frozen persona; the track
+  // carries the script/audio/attribution/facts_hash.
+  const segmentRows: NewSegment[] = stops.map((s) => ({
+    id: s.segmentId,
     tourId,
-    seq: s.seq,
     poiId: s.poiId,
-    stopType: s.stopType,
+    personaId: s.personaId,
+    seq: s.seq,
+    triggerLat: s.triggerLat,
+    triggerLng: s.triggerLng,
+    approachHeadingDeg: s.approachHeadingDeg,
+    radiusM: s.triggerRadiusM,
+  }))
+  const trackRows: NewTrack[] = stops.map((s) => ({
+    id: s.trackId,
+    segmentId: s.segmentId,
+    form: s.stopType,
+    variant: 0,
     script: s.script,
     audioUrl: s.audioUrl,
     audioDurationMs: s.audioDurationMs,
     attribution: s.attribution,
     factsHash: s.factsHash,
-    triggerRadiusM: s.triggerRadiusM,
-    triggerLat: s.triggerLat,
-    triggerLng: s.triggerLng,
-    approachHeadingDeg: s.approachHeadingDeg,
   }))
-  const bracketRows: NewTourBracket[] = brackets.map((b) => ({
+  const frameRows: NewTourFrame[] = brackets.map((b) => ({
     tourId,
     kind: b.kind,
     script: b.script,
@@ -307,20 +365,22 @@ export async function finalizeTourReady(
   // a run, so a transient Neon blip here would discard the run's ENTIRE spend (all narration +
   // the whole TTS bill). The batch is one transaction AND idempotent by construction
   // (delete-all-by-tourId + insert fixed client-id rows), so a transient failure rolls the
-  // whole batch back and a retry re-runs to the identical end state. Validation throws (zero
-  // stops / missing brackets) stay above this — they are real errors, not transients.
+  // whole batch back and a retry re-runs to the identical end state. Deleting the segments
+  // cascades their tracks, so the track insert always lands on a clean slate. Validation
+  // throws (zero stops / missing frames) stay above this — they are real errors, not transients.
   await withRetry(
     () =>
       db.batch([
-        db.delete(tourStops).where(eq(tourStops.tourId, tourId)),
-        db.delete(tourBrackets).where(eq(tourBrackets.tourId, tourId)),
+        db.delete(segments).where(eq(segments.tourId, tourId)),
+        db.delete(tourFrames).where(eq(tourFrames.tourId, tourId)),
         db
           .update(tours)
           .set({ status: 'ready' })
           .where(eq(tours.id, tourId))
           .returning({ id: tours.id }),
-        db.insert(tourStops).values(stopRows).returning({ id: tourStops.id }),
-        db.insert(tourBrackets).values(bracketRows).returning({ id: tourBrackets.id }),
+        db.insert(segments).values(segmentRows).returning({ id: segments.id }),
+        db.insert(tracks).values(trackRows).returning({ id: tracks.id }),
+        db.insert(tourFrames).values(frameRows).returning({ id: tourFrames.id }),
       ]),
     { label: `finalizeTourReady(${tourId})` },
   )

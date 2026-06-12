@@ -36,7 +36,6 @@ beforeEach(() => {
       source: 'wikipedia',
       sourceId: '4242',
       name: 'Stub Place',
-      kind: 'fact_edit',
       find: 'built by the wrong person',
       replace: 'built by the right person',
       reason: 'seam test',

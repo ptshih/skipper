@@ -284,3 +284,17 @@ reads `tour_stops`), so this is NOT a `poi_content` resurrection. One telling pe
 (unique on `poiId`); staleness rides the same `facts_hash` contract as `tour_stops`; attribution
 snapshots freeze on the row identically. The "no content cache and no cross-tour content reuse"
 invariant is unchanged — roam is a different product surface with its own single owner.
+
+**Addendum 2026-06-12 — the three narration owners collapsed into `segments` + `tracks` (BUILT).**
+The "three owners" framing above (`tour_stops` / `tour_brackets` / `roam_clips`) was a cleaner
+SHAPE away from zero-reuse, not a reversal of it. They are now ONE model: a **`segment`** (a
+place-anchor — `poiId` + trigger geometry + a frozen `personaId`; tour stop when `tourId` is set,
+roam encounter when null) owns 1:N **`tracks`** (the narration unit, keyed by `form`/`variant`);
+intro/outro became placeless **`tour_frames`** (renamed `tour_brackets`). Persona is now a
+first-class `personas` row decoupled from region. Zero-reuse is UNCHANGED and in fact cleaner: a
+track is owned by its segment's context, and tours never read roam tracks (and vice-versa) — the
+`tourId`-presence discriminator makes the no-cross-feed rule structural. Staleness still rides
+`facts_hash` (now on the `track`, vs `pois.facts_hash`). Executed as a clean NUKE (no users):
+schema rewrite + fresh `0000` baseline + DB/R2 reset + reseed, NOT the data-preserving `0010` the
+spec drafted. Full design + cutover record: `docs/specs/segments-tracks-refactor.md` (BUILT). This
+supersedes the "three narration owners" wording everywhere above.

@@ -165,8 +165,8 @@ export function lintScripts(
   //    only home), so the per-stop budget INVERTS to zero: flag ANY stop that touches
   //    Ray / the mechanic / the truck / coffee. (Oblique refs — "before my first cup",
   //    "balance a checkbook" — slip this regex and are caught by ear, not here.) The
-  //    intro/outro brackets are never passed to this lint (Option B — they are not
-  //    tour_stops), so the kit is free there.
+  //    intro/outro frames are never passed to this lint (they are placeless tour_frames,
+  //    not stop tracks), so the kit is free there.
   for (const s of stops) {
     if (kit.beats.some((b) => b.match.test(s.script))) {
       flag(s.seq, 'mentions the personal kit (banned from stops — the kit lives in the intro now)', kit.dropNote)

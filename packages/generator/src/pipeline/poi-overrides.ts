@@ -11,9 +11,9 @@
 //
 // Scope honesty (review-confirmed): fact edits apply ONLY to Wikipedia-fetched prose —
 // geology (Macrostrat) and Wikidata enrichment lines enter the well through their own
-// fetchers and do NOT pass this seam. A side anchor is a corrected COORDINATE for the
-// place's speakable content (never a stored left/right — side flips with travel direction);
-// select.ts resolves it heading-aware per drive.
+// fetchers and do NOT pass this seam. (The place's speakable COORDINATE — a corrected
+// vantage for side-of-road content — moved off this table onto pois.speakable_lat/lng; the
+// curated map lives in pipeline/speakable.ts and select.ts resolves the side heading-aware.)
 //
 // Failure-mode honesty: an unmatched find-string is "source healed" OR "source reworded,
 // still wrong" — indistinguishable without a human look, so misses are WARNED (once per
@@ -43,8 +43,6 @@ export interface PlaceOverride {
   sourceId: string
   name: string
   factEdits: FactEdit[]
-  /** Where the place's SPEAKABLE content actually is (side-of-road computation only). */
-  sideAnchor?: { lat: number; lng: number }
   /** Newest row's updated_at for this place — the facts read-through's staleness stamp
    *  (pois facts fetched BEFORE this instant predate the correction and must re-fetch).
    *  ⚠ The stamp is max-over-EXISTING-rows, so it cannot see a DELETE — always retire by
@@ -61,11 +59,8 @@ export interface OverrideRowLike {
   source: string
   sourceId: string
   name: string
-  kind: 'fact_edit' | 'side_anchor'
   find?: string | null
   replace?: string | null
-  sideAnchorLat?: number | null
-  sideAnchorLng?: number | null
   reason: string
   sourceUrl?: string | null
   updatedAt?: Date | null
@@ -91,19 +86,16 @@ export function aggregateOverrideRows(rows: OverrideRowLike[]): Map<string, Plac
     // A retired (active === false) row contributes NOTHING to apply/warn/suspect — but it
     // STILL stamps freshness below, so the retirement itself busts caches that adopted the
     // now-withdrawn correction. (undefined/true both apply — back-compat for test rows.)
-    if (r.active !== false) {
-      if (r.kind === 'fact_edit' && r.find) {
-        entry.factEdits.push({
-          find: r.find,
-          replace: r.replace ?? '',
-          reason: r.reason,
-          sourceUrl: r.sourceUrl ?? null,
-        })
-      } else if (r.kind === 'side_anchor' && r.sideAnchorLat != null && r.sideAnchorLng != null) {
-        entry.sideAnchor = { lat: r.sideAnchorLat, lng: r.sideAnchorLng }
-      }
+    // poi_overrides is fact-corrections ONLY now — a row with a find-string is an edit.
+    if (r.active !== false && r.find) {
+      entry.factEdits.push({
+        find: r.find,
+        replace: r.replace ?? '',
+        reason: r.reason,
+        sourceUrl: r.sourceUrl ?? null,
+      })
     }
-    // EVERY row stamps freshness — active OR retired (a side-anchor adjudication and a
+    // EVERY row stamps freshness — active OR retired (a correction adjudication and a
     // retirement both invalidate cached facts; conservative, the cost of a false-stale is
     // one re-fetch).
     if (r.updatedAt && (!entry.latestOverrideAt || r.updatedAt > entry.latestOverrideAt)) {

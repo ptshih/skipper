@@ -14,7 +14,7 @@
 // Pure + testable (no I/O, no RN). The same trigger core the live player uses lives
 // in trigger.ts; this is its couch-bound sibling — the live player is this with the
 // segment clock swapped for expo-location. Each stop carries its trigger point
-// (persisted on tour_stops), so the route-progress positions match the real drive.
+// (persisted on its `segments` row), so the route-progress positions match the real drive.
 
 import { cumulativeMeters, nearestOnRoute } from './geo'
 import type { LngLat } from './geo'
@@ -33,7 +33,8 @@ export function bracketKindForSeq(seq: number): 'intro' | 'outro' | null {
   return seq === INTRO_SEQ ? 'intro' : seq === OUTRO_SEQ ? 'outro' : null
 }
 
-/** One tour stop, as the preview needs it (a subset of the tour_stops row joined to its pois anchor). */
+/** One tour stop, as the preview needs it (a subset of the segment + its variant-0 track,
+ *  joined to the segment's pois anchor). */
 export interface PreviewStop {
   seq: number
   stopType: 'story' | 'scenic' | 'break'

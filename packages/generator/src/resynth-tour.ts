@@ -1,14 +1,14 @@
-// Re-synthesize ALL of a tour's clips (stops + intro/outro brackets) from their STORED
+// Re-synthesize ALL of a tour's clips (stop tracks + intro/outro frames) from their STORED
 // scripts with the current TTS model + encoding (models.ts), then repoint
-// tour_stops.audioUrl / tour_brackets.audioUrl + audioDurationMs. For a voice/model/codec
+// tracks.audioUrl / tour_frames.audioUrl + audioDurationMs. For a voice/model/codec
 // migration where the narration is already blessed — this is a delivery re-render, NOT a
 // re-generation: scripts (and thus grounding) are untouched.
 //
-// A re-synth writes each clip at its row's EXISTING key (a stop's clips/<tourId>/<stopId>;
-// a bracket's stored audioUrl — bracket keys are per-RUN now), so it overwrites the same
-// object in place — the only time a stop key moves is an extension change (e.g. wav→mp3),
-// and then we sweep the orphan unless --keep-old. The tour stays `ready` (every clip keeps
-// a non-null audioUrl + duration).
+// A re-synth writes each clip at its row's EXISTING key (a track's clips/<tourId>/<trackId>;
+// a frame's stored audioUrl — frame keys are per-RUN now), so it overwrites the same object
+// in place — the only time a track key moves is an extension change (e.g. wav→mp3), and then
+// we sweep the orphan unless --keep-old. The tour stays `ready` (every clip keeps a non-null
+// audioUrl + duration).
 //
 //   dotenvx run -f .env.development -- bun packages/generator/src/resynth-tour.ts <tourId|prefix> [--apply] [--keep-old]
 //
@@ -19,7 +19,7 @@
 
 import { and, asc, eq } from 'drizzle-orm'
 import { db } from '@skipper/db'
-import { pois, regions, tourBrackets, tourStops, tours } from '@skipper/db/schema'
+import { pois, regions, segments, tourFrames, tours, tracks } from '@skipper/db/schema'
 import { TTS_CLIP_EXTENSION, TTS_MODEL } from './models'
 import { announce, assertReady, parseFlags, resolveTourId } from './pipeline/ops'
 import { personaForRegion } from './persona'
@@ -27,7 +27,7 @@ import { synthesizeWithTailRetake } from './pipeline/tts'
 import { clipKey, deleteAudio, uploadAudio } from './pipeline/storage'
 import { beginJob, finishJob } from './pipeline/job-progress'
 
-/** A clip to re-render — a stop or a bracket — normalized to its label/key/script/save. */
+/** A clip to re-render — a stop track or a frame — normalized to its label/key/script/save. */
 interface Clip {
   label: string
   key: string
@@ -56,38 +56,40 @@ async function main() {
   )[0]
   const persona = personaForRegion(regionRow?.slug ?? '')
 
+  // A tour stop = a segment + its variant-0 track; re-render the TRACK clip (its script + key).
   const stopRows = await db
     .select({
-      id: tourStops.id,
-      seq: tourStops.seq,
-      stopType: tourStops.stopType,
+      trackId: tracks.id,
+      seq: segments.seq,
+      form: tracks.form,
       name: pois.name,
-      script: tourStops.script,
-      audioUrl: tourStops.audioUrl,
-      audioDurationMs: tourStops.audioDurationMs,
+      script: tracks.script,
+      audioUrl: tracks.audioUrl,
+      audioDurationMs: tracks.audioDurationMs,
     })
-    .from(tourStops)
-    .innerJoin(pois, eq(tourStops.poiId, pois.id))
-    .where(eq(tourStops.tourId, tourId))
-    .orderBy(asc(tourStops.seq))
+    .from(segments)
+    .innerJoin(tracks, and(eq(tracks.segmentId, segments.id), eq(tracks.variant, 0)))
+    .innerJoin(pois, eq(segments.poiId, pois.id))
+    .where(eq(segments.tourId, tourId))
+    .orderBy(asc(segments.seq))
 
-  const bracketRows = await db
+  const frameRows = await db
     .select({
-      kind: tourBrackets.kind,
-      script: tourBrackets.script,
-      audioUrl: tourBrackets.audioUrl,
-      audioDurationMs: tourBrackets.audioDurationMs,
+      kind: tourFrames.kind,
+      script: tourFrames.script,
+      audioUrl: tourFrames.audioUrl,
+      audioDurationMs: tourFrames.audioDurationMs,
     })
-    .from(tourBrackets)
-    .where(eq(tourBrackets.tourId, tourId))
-    .orderBy(asc(tourBrackets.kind))
+    .from(tourFrames)
+    .where(eq(tourFrames.tourId, tourId))
+    .orderBy(asc(tourFrames.kind))
 
   const clips: Clip[] = [
-    ...bracketRows
+    ...frameRows
       .filter((b) => b.script !== null && b.audioUrl !== null)
       .map((b) => ({
-        label: `${b.kind} bracket`,
-        // Re-synth IN PLACE at the row's stored key — bracket keys are per-run now
+        label: `${b.kind} frame`,
+        // Re-synth IN PLACE at the row's stored key — frame keys are per-run now
         // (bracketKey), so recomputing one here would strand the row's pointer. A future
         // FORMAT migration (extension change) should mint new keys + update rows + sweep.
         key: b.audioUrl!,
@@ -96,24 +98,24 @@ async function main() {
         audioDurationMs: b.audioDurationMs,
         save: (audioUrl: string, durationMs: number) =>
           db
-            .update(tourBrackets)
+            .update(tourFrames)
             .set({ audioUrl, audioDurationMs: durationMs, updatedAt: new Date() })
-            .where(and(eq(tourBrackets.tourId, tourId), eq(tourBrackets.kind, b.kind)))
+            .where(and(eq(tourFrames.tourId, tourId), eq(tourFrames.kind, b.kind)))
             .then(() => {}),
       })),
     ...stopRows
       .filter((s) => s.script !== null)
       .map((s) => ({
-        label: `#${s.seq} ${s.stopType.padEnd(6)} ${s.name}`,
-        key: clipKey(tourId, s.id),
+        label: `#${s.seq} ${s.form.padEnd(6)} ${s.name}`,
+        key: clipKey(tourId, s.trackId),
         script: s.script!,
         storedAudioUrl: s.audioUrl,
         audioDurationMs: s.audioDurationMs,
         save: (audioUrl: string, durationMs: number) =>
           db
-            .update(tourStops)
+            .update(tracks)
             .set({ audioUrl, audioDurationMs: durationMs, updatedAt: new Date() })
-            .where(eq(tourStops.id, s.id))
+            .where(eq(tracks.id, s.trackId))
             .then(() => {}),
       })),
   ]
