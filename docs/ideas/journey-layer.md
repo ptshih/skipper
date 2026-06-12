@@ -140,7 +140,13 @@ A north-star earns its keep by tilting near-term decisions:
 - **Lean into the visual/windshield dimension sooner** (the reveal as a designed visual moment) — it's
   the AV-future surface.
 - **Invest in the character's depth/IP** (`docs/ideas/region-skippers.md`) — in this future the moat
-  is *him*, not the geofence.
+  is *him*, not the geofence. **Upgraded 2026-06-12 from nice-to-have to imperative:** Autio's
+  defensible asset is a comparison/SEO **funnel**, not its app
+  ([../research/autio-content-moat.md](../research/autio-content-moat.md)) — and against a rival *with*
+  distribution, the one continuous character is the only durable defense (a roster is rented; charm
+  doesn't fit a comparison table). Corollary there: out-SEO-ing the category caps at Autio's niche
+  plateau, so "refuse the category" isn't just doctrine-clean, it's the only move that aims past the
+  ceiling — but it solves defensibility/conversion, NOT acquisition, which stays open.
 - **Treat passenger mode as first-class** — it's the AV preview you can ship now.
 - **Don't over-fit to curated-only assumptions** in the data model — the route-as-user's-actual-path
   case is coming.

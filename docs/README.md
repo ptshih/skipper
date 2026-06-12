@@ -118,6 +118,10 @@ The rest are post-MVP features, gated behind the proven phone player:
   structural-vs-execution failure partition; corrects the four-comp study's triggering line.
 - [competitor-ux-studies.md](research/competitor-ux-studies.md) — GuideAlong / Autio / VoiceMap +
   the 4-for-4 "dead air" cross-comp finding.
+- [autio-content-moat.md](research/autio-content-moat.md) — Autio's real moat is the **funnel** (a
+  comparison/SEO factory), not the app; the comparison table is a trap + caps at niche; "refuse the
+  category, win post-install on character + region-depth"; the honest hole = acquisition still unsolved
+  (2026-06-12, from their marketing).
 
 ### guides/
 - [eas-setup.md](guides/eas-setup.md) — building + running the Expo app on EAS (dev build).
