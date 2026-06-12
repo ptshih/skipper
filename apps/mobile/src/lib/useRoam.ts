@@ -105,6 +105,10 @@ export interface RoamState {
   /** Alpha drive-test diagnostics: seconds since the last accepted fix + straight-line
    *  distance to the nearest pin. The line that lets a real road test self-diagnose. */
   diag: { fixAgeSec: number | null; nearestM: number | null }
+  /** Live position for the glanceable roam map — null until the first fix (updates ~2s). */
+  position: { lat: number; lng: number } | null
+  /** The manifest's story-pins, for the roam map (set once when the session loads). */
+  mapPins: { poiId: string; name: string; lat: number; lng: number }[]
   /** The session-start opener line (rotates per session). */
   openerLine: string
   chattiness: ChattinessLevel
@@ -132,6 +136,8 @@ export function useRoam(mode: RoamMode): RoamState {
   const [chattiness, setChattinessState] = useState<ChattinessLevel>('normal')
   const [gpsSearching, setGpsSearching] = useState(false)
   const [clipPaused, setClipPaused] = useState(false) // encounter held by hand (music un-ducks)
+  const [position, setPosition] = useState<{ lat: number; lng: number } | null>(null) // roam-map puck
+  const [mapPins, setMapPins] = useState<{ poiId: string; name: string; lat: number; lng: number }[]>([])
   const [diag, setDiag] = useState<{ fixAgeSec: number | null; nearestM: number | null }>({
     fixAgeSec: null,
     nearestM: null,
@@ -367,6 +373,9 @@ export function useRoam(mode: RoamMode): RoamState {
         fixAgeSec: lastFixAt.current ? Math.round((Date.now() - lastFixAt.current) / 1000) : null,
         nearestM: nearestM === null ? null : Math.round(nearestM),
       })
+      // Surface the position on the same bounded tick (the roam map's puck) — a glanceable
+      // 2s cadence, so the screen doesn't re-render on every raw fix.
+      setPosition(pos ? { lat: pos.lat, lng: pos.lng } : null)
     }, 2_000)
     return () => clearInterval(t)
   }, [phase, mode])
@@ -427,6 +436,9 @@ export function useRoam(mode: RoamMode): RoamState {
         }
         pinsRef.current = manifest.pins
         setPinCount(manifest.pins.length)
+        setMapPins(
+          manifest.pins.map((p) => ({ poiId: p.poiId, name: p.name, lat: p.lat, lng: p.lng })),
+        )
         setToldCount(0)
         clipRetried.current.clear() // a new session earns every clip a fresh recovery
         engineRef.current = new RoamEngine(
@@ -498,6 +510,7 @@ export function useRoam(mode: RoamMode): RoamState {
     setSheetPoiId(null)
     setClipReady(false)
     setGpsSearching(false)
+    setPosition(null) // drop the map puck; mapPins reset on the next start
     setPhase('signoff') // toldCount survives for the tally; finishSignoff resets
   }, [teardown])
 
@@ -589,6 +602,8 @@ export function useRoam(mode: RoamMode): RoamState {
     setClipScrubbing,
     toldCount,
     diag,
+    position,
+    mapPins,
     openerLine,
     chattiness,
     setChattiness,

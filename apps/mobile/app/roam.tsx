@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import * as SecureStore from 'expo-secure-store'
 import { useRoam } from '@/lib/useRoam'
+import { RoamMap } from '@/ui/RoamMap'
 import { useSimMode } from '@/lib/sim-mode'
 import { useReducedMotion, useTheme } from '@/theme'
 import { duration, radius, space } from '@/theme/tokens'
@@ -91,6 +92,9 @@ export default function RoamScreen() {
   const { simMode, showDiag } = useSimMode()
   const roamMode = simMode || mode === 'sim' ? 'sim' : 'live'
   const r = useRoam(roamMode)
+  // Glanceable map toggle — the motif is the eyes-on-road default; the map is an opt-in
+  // glance (a stop, a passenger). Resets to the motif each session (local, not persisted).
+  const [showMap, setShowMap] = useState(false)
 
   // First-run ambient contract — shown immediately on mount if not yet seen.
   // Returning users skip it and auto-start below.
@@ -273,6 +277,19 @@ export default function RoamScreen() {
           }}
         />
         <View style={styles.base}>
+          {showMap ? (
+            // Glanceable map: live position + nearby story-pins. The motif stays the default;
+            // this is an opt-in glance. Encounter sheet still slides over it.
+            <View style={styles.mapCard}>
+              <RoamMap
+                position={r.position}
+                pins={r.mapPins}
+                clipActive={sheetVisible}
+                recenterBottom={sheetVisible ? 360 : undefined}
+              />
+            </View>
+          ) : (
+            <>
           <View style={styles.flexSpace} />
           {/* The centered idle cluster — kicker → motif → title → wandering thought → one stat.
               Symmetric flex above/below frames it as a poster's intentional negative space,
@@ -326,6 +343,21 @@ export default function RoamScreen() {
             )}
             <Chattiness value={r.chattiness} onChange={r.setChattiness} />
           </View>
+            </>
+          )}
+
+          {/* Floating motif⇄map toggle — the motif is the eyes-on-road default; the map is opt-in. */}
+          <Pressable
+            onPress={() => setShowMap((v) => !v)}
+            accessibilityRole="button"
+            accessibilityLabel={showMap ? voice.roam.hideMap : voice.roam.showMap}
+            style={[
+              styles.mapToggle,
+              { backgroundColor: colors.surfaceRaised, borderColor: colors.rule, shadowColor: colors.shadowCast },
+            ]}
+          >
+            <Icon name={showMap ? 'eye' : 'map'} size={20} color="accent" />
+          </Pressable>
         </View>
 
         {/* The encounter sheet — slides up over the idle base; the base stays visible.
@@ -462,6 +494,23 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
   },
   sheetTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  // Map mode: a rounded full-bleed map card filling the padded base, + the floating toggle.
+  mapCard: { flex: 1, borderRadius: radius.lg, overflow: 'hidden' },
+  mapToggle: {
+    position: 'absolute',
+    top: space.sm,
+    right: space.sm,
+    width: 44,
+    height: 44,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
   // Skeleton row — spinner + line, roughly the height of the transport it stands in for so
   // the sheet doesn't jump when real audio arrives and the controls replace it.
   buffering: {

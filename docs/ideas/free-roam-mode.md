@@ -8,7 +8,15 @@
 > improvement backlog captured (§Alpha learnings); founder LOCKED waves + sonic cue +
 > history/mute as the next build pass (TODO.md carries the build context). 2026-06-11: idle-canvas
 > redesign brainstormed + founder picked "calmer & composed" — the cheap composition pass is being
-> BUILT now (§Idle-canvas redesign).
+> BUILT now (§Idle-canvas redesign). **2026-06-11: two founder decisions —** (1) **roam map v1
+> BUILT** as a GLANCEABLE companion (`RoamMap.tsx`): the motif stays the eyes-on-road default, a
+> toggle reveals an opt-in map of live position + nearby story-pins. Pins are hollow ("a story here,
+> not yet heard"); the heard/unheard fill-in (the logbook pin-map) is wired (`heardPoiIds`) but waits
+> on the persistent encounter history (pass-2). Chosen over a live driving-HUD map to dodge Autio's
+> points-as-PRIMARY trap. (2) **Roam promoted to CO-EQUAL with tours on home** — updating the
+> earlier "tours primary, roam secondary" stance: home becomes two peer entries (Ride along / The
+> drives), neither subordinate; still NOT a tab. Tours stay the curated/monetizable core, now a peer
+> not a parent.
 
 **The idea (founder, 2026-06-10):** the POI corpus we accumulate building tours becomes a product of
 its own — open the app anywhere in a covered region, just drive, and the skipper pipes up when you
