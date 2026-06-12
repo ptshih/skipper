@@ -124,6 +124,23 @@ player-side gain) to the SAME target once −14 is locked by the ear-gate above.
 Refs: `packages/generator/src/pipeline/loudnorm.ts`, `pipeline/tts.ts`, `pipeline/tail.ts`,
 `models.ts` (the LOUDNORM_* constants), `docs/decisions/audio-compression-spike.md`.
 
+## In-app narration volume trim (founder feedback 2026-06-11)
+
+Founder ask: an in-app control to make NARRATION slightly louder/quieter, INDEPENDENT of the
+device volume and of other apps' output. Feasible + small: expo-audio's narration `AudioPlayer`
+exposes `.volume` (0..1) — a per-player gain that does NOT touch device volume or other apps.
+Wire a persisted user setting (a few notches or a slider) → set `player.volume` in `useDrive` +
+`useRoam` on load and on change.
+
+Caveat — the "louder" direction has a CEILING: `player.volume` clamps at 1.0 (the clip's own
+level); it attenuates but can't amplify past source. Two ways to give upward room: (a) set the
+DEFAULT trim below max (e.g. 0.85) so the slider has headroom up to 1.0, or (b) raise the loudnorm
+target in `models.ts` and let the trim pull DOWN from there. Decide alongside the −14 LUFS ear-gate
+(same audio chain — the global level is now consistent at −14 LUFS; this is the PERSONAL trim on
+top). True >source loudness would need a gain effect, not player volume — out of scope. Refs:
+`useDrive.ts` / `useRoam.ts` (the narration player), `src/lib/driveMusic.ts` (the bed's own ramps,
+a separate level).
+
 ## Offline downloads: full re-pull only (no per-clip diff)
 
 DONE (2026-06-10): a re-cut clip (patch-clip / resynth-tour / a regen) is now DETECTABLE +
@@ -180,12 +197,20 @@ a feature to copy. These three borrows are small and serve that moat. NOT borrow
 subscription-first pricing, celebrity narrator roster, national free-roam pin-map,
 over-broad trigger radius (all anti-charm or anti-doctrine).
 
-- [ ] **Pause+resume music during encounters (reconsider duck).** Founder feedback
-      2026-06-11: ducking (`duckOthers`) leaves music audible underneath clips and the two
-      streams compete — distracting. Explore full pause+resume instead. Note: switching
-      away from `duckOthers` may make the lock-screen landmine moot (`setActiveForLockScreen`
-      wants `doNotMix` — see the device-verification runbook) — check if iOS media-session
-      interruption allows clean resume from podcast/music apps before committing.
+- [ ] **Pause+resume music in roam (reconsider duck).** Founder feedback 2026-06-11, re-confirmed:
+      BOTH players should pause+resume the rider's audio, never duck. Finding (2026-06-11 audit):
+      the TOUR player is ALREADY `doNotMix` (`DRIVE_INTERRUPTION_MODE` in `useDrive.ts`) — it
+      interrupts the rider's external audio for the whole drive and its OWN music bed fades to
+      SILENCE under narration (`driveMusic.ts` volume ramps, not audible-underneath), so the tour
+      already satisfies "no competing audio + resume at drive end." So this is really a ROAM-only
+      change: `useRoam.ts` `interruptionMode: 'duckOthers'` → `doNotMix`. ⚠ THE LANDMINE: roam's
+      encounters are intermittent with long quiet stretches, so a naive flip risks leaving the
+      rider's music PAUSED through the silence (worse than ducking). Per-clip resume needs explicit
+      session management — on clip end, hand the session back so the rider's app resumes; re-take it
+      on the next encounter. MUST verify on a device (Spotify/podcast resume after a 60s encounter,
+      then re-pause on the next) before committing; the flip is JS-only / hot-reloadable, so it's a
+      quick device spike. Switching away from `duckOthers` also moots roam's lock-screen note
+      (`setActiveForLockScreen` wants `doNotMix`). Refs: `useRoam.ts`, `docs/guides/device-verification-runbook.md`.
 - [ ] **Heard/unheard stop-progress affordance on the drive screen.** Autio grays out
       played map pins so you can glance at what's coming. Cheap, in-car-safe charm: a
       "stop N of M" / dimmed-completed-stops indicator on the drive screen. Costs almost
