@@ -13,7 +13,7 @@ import { and, eq, isNull } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { pois, segments, tracks } from '@skipper/db/schema'
 import { announce, assertReady, parseFlags } from './pipeline/ops'
-import { personaForRegion } from './persona'
+import { personaFromKey } from './persona'
 import { synthesizeWithTailRetake } from './pipeline/tts'
 import { uploadAudio } from './pipeline/storage'
 
@@ -64,7 +64,7 @@ if (!apply) {
   process.exit(0)
 }
 
-const persona = personaForRegion('lake-tahoe')
+const persona = personaFromKey('skipper')
 console.log('\nSynthesizing...')
 const { audio, durationMs, tail } = await synthesizeWithTailRetake(
   row.script!,

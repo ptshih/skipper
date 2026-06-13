@@ -21,9 +21,9 @@
 
 import { eq } from 'drizzle-orm'
 import { db } from '@skipper/db'
-import { regions, segments, tourFrames, tours, tracks } from '@skipper/db/schema'
+import { segments, tourFrames, tours, tracks } from '@skipper/db/schema'
 import { announce, assertReady, parseFlags } from './pipeline/ops'
-import { personaForRegion } from './persona'
+import { personaFromKey } from './persona'
 import { synthesizeWithTailRetake } from './pipeline/tts'
 import { clipKey, uploadAudio } from './pipeline/storage'
 import { beginJob, finishJob } from './pipeline/job-progress'
@@ -190,16 +190,15 @@ async function main() {
 
   assertReady(['tts', 'r2'])
 
-  // Resolve the persona (voice + delivery style) from the clip's tour's region.
-  const regionRow = (
+  // Resolve the persona (voice + delivery style) from the clip's tour persona key.
+  const tourRow = (
     await db
-      .select({ slug: regions.slug })
+      .select({ personaKey: tours.personaKey })
       .from(tours)
-      .innerJoin(regions, eq(tours.regionId, regions.id))
       .where(eq(tours.id, target.tourId))
       .limit(1)
   )[0]
-  const persona = personaForRegion(regionRow?.slug ?? '')
+  const persona = personaFromKey(tourRow?.personaKey ?? 'skipper')
 
   console.log('\nSynthesizing edited script...')
   const { audio, durationMs } = await synthesizeWithTailRetake(

@@ -18,7 +18,7 @@
 // To produce the input artifact first (this DOES cost narration tokens):
 //   dotenvx run -f .env.development -- bun packages/generator/src/run.ts <slug> --dry-run --json=<result.json>
 
-import { personaForRegion } from '../persona'
+import { personaFromKey } from '../persona'
 import type { LintInput } from '../pipeline/lint'
 import { buildGroundingWell, evaluateGrounding, type GroundingInput } from './grounding'
 import { evaluateTts } from './tts'
@@ -53,8 +53,8 @@ interface Artifact {
   slug: string
   tourName: string
   region: string
-  /** Region slug = the persona-registry key (single-sourced from the tour shell). Present on
-   *  artifacts from 2026-06-10 onward; older ones are tolerated via slugify(region) below. */
+  /** Region slug — retained as artifact metadata. Persona is no longer region-derived (the live
+   *  pipeline resolves it from tours.persona_key), so this no longer feeds persona resolution. */
   regionSlug?: string
   /** Present on artifacts from 2026-06-09 onward (tolerated absent on older ones). */
   tourId?: string
@@ -82,12 +82,6 @@ function parseArgs(argv: string[]): {
   const veracity = args.includes('--veracity') // opt-in: Opus + web searches per STORY stop
   return { path, jsonOut, charm, veracity }
 }
-
-/** Fallback ONLY for pre-2026-06-10 artifacts that lack `regionSlug`: best-effort slug from
- *  the display name ("Lake Tahoe" → "lake-tahoe"). Current artifacts carry regionSlug directly,
- *  so the offline auditor uses the SAME persona key the live pipeline did; an unknown slug still
- *  falls back to the Skipper persona (personaForRegion). */
-const slugify = (s: string): string => s.toLowerCase().trim().replace(/\s+/g, '-')
 
 function printScorecard(card: TourScorecard): void {
   console.log('\n' + '='.repeat(72))
@@ -170,11 +164,12 @@ async function main() {
   const tts: StopEval[] = narrated.map((s) => evaluateTts({ seq: s.seq, script: s.script! }))
 
   // ADVISORY: diversity (free, cross-stop lint over story+scenic — breaks aren't linted),
-  // keyed on the region's persona kit (resolved by slug; defaults to the Skipper).
+  // keyed on the persona kit. M1 is Skipper-only; when artifacts carry a persona key (M4) this
+  // reads it instead of defaulting.
   const lintInputs: LintInput[] = narrated
     .filter((s) => s.stopType !== 'break')
     .map((s) => ({ seq: s.seq, stopType: s.stopType, script: s.script! }))
-  const persona = personaForRegion(artifact.regionSlug ?? slugify(artifact.region))
+  const persona = personaFromKey('skipper')
   const diversity: StopEval[] = evaluateDiversity(lintInputs, persona.kit)
 
   // ADVISORY: charm (one Opus call) — opt-in.

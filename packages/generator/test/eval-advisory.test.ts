@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test'
 import { evaluateDiversity } from '../src/eval/diversity'
 import { charmEvaluator, charmToStopEvals, type CharmJudge, type CharmVerdict } from '../src/eval/charm'
-import { personaForRegion } from '../src/persona'
+import { personaFromKey } from '../src/persona'
 import type { LintInput } from '../src/pipeline/lint'
 
-const KIT = personaForRegion('lake-tahoe').kit
+const KIT = personaFromKey('skipper').kit
 
 describe('evaluateDiversity — deterministic cross-stop lint → advisory evals', () => {
   test('flags a stop with a banned reveal wind-up; passes a clean stop', () => {

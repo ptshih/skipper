@@ -1,14 +1,14 @@
 import { describe, expect, test } from 'bun:test'
-import { personaForRegion, SKIPPER } from '../src/persona'
+import { personaFromKey, SKIPPER } from '../src/persona'
 
-describe('personaForRegion', () => {
-  test('lake-tahoe resolves to the Skipper', () => {
-    expect(personaForRegion('lake-tahoe')).toBe(SKIPPER)
+describe('personaFromKey', () => {
+  test('the skipper key resolves to the Skipper', () => {
+    expect(personaFromKey('skipper')).toBe(SKIPPER)
   })
 
-  test('an unknown/empty region falls back to the Skipper (never persona-less)', () => {
-    expect(personaForRegion('atlantis')).toBe(SKIPPER)
-    expect(personaForRegion('')).toBe(SKIPPER)
+  test('an unknown/empty key falls back to the Skipper (never persona-less)', () => {
+    expect(personaFromKey('atlantis')).toBe(SKIPPER)
+    expect(personaFromKey('')).toBe(SKIPPER)
   })
 })
 

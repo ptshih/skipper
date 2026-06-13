@@ -116,10 +116,11 @@ you found so the next agent can re-check it.
 - **The Dad-Joke-O-Meter notch (`off`/`mild`/`dad`/`dadpocalypse`), persona, and
   voice are GENERATION parameters, baked into the narration — never live playback
   toggles and never a content-cache key** (there is no content cache; narration is
-  tour-owned — see principle #1). Changing any of them = a different telling. None of
-  them is a stored `tours` column: **persona** is a first-class `personas` row (decoupled
-  from region; the generation recipe still resolves from the region slug via `PersonaDef`)
-  FROZEN on `segments.persona_id`, **voice** derives from the persona, and the **notch** is a
+  tour-owned — see principle #1). Changing any of them = a different telling. Of
+  the three, only the **persona** is a stored `tours` column — an explicit `persona_key`
+  (decoupled from region, default `'skipper'`) the recipe resolves via `personaFromKey` →
+  `PersonaDef`, FROZEN on `segments.persona_id`; its DEFINITION still lives in the first-class
+  `personas` row, never copied onto the tour. **Voice** (no column) derives from the persona, and the **notch** is a
   generation-time INPUT only (`GenerateOptions.jokeLevel` / `run.ts --joke-level`,
   default `dadpocalypse`) — it is NOT persisted, because M1 is dadpocalypse-only so a
   stored notch carries no information. When the 1-N notch ships (M3) the column lands on
@@ -278,7 +279,7 @@ From an adversarial review of the scaffold. Verdict: sound foundation. Guardrail
   the `db` proxy build on first query) so importing it never forces
   `DATABASE_URL` to exist — env-free routes like `GET /health` keep booting.
 - **`voice` is a fixed function of persona in v1** (each `PersonaDef.voice` in
-  `packages/generator/src/persona/`, resolved per-tour by `personaForRegion(slug)`:
+  `packages/generator/src/persona/`, resolved per-tour by `personaFromKey(tours.persona_key)`:
   skipper → the Google Cloud Gemini-TTS voice name "Charon"; `SKIPPER_VOICE_ID` in
   `models.ts` is the source constant the def references). Not a request knob until M3
   (no `tours.voice` / `tourRequest.voice` yet). (Gemini-TTS voice names are stable

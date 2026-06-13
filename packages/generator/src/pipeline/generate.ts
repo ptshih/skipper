@@ -70,7 +70,7 @@ import type {
   StopEval,
   TourScorecard,
 } from '../eval'
-import { personaForRegion } from '../persona'
+import { personaFromKey } from '../persona'
 import { cumulativeMeters, encodePolyline, METERS_PER_MILE, totalMeters } from './geo'
 import type { LngLat } from './geo'
 import { fetchDeepExtracts } from './wikipedia'
@@ -266,10 +266,10 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
         `run crashed). Per-run clip/bracket keys keep R2 safe, but prefer one run at a time.`,
     )
   }
-  // The generation persona (prompts/voice/style/kit) is resolved from the tour's REGION.
-  // The notch (`jokeLevel`) is a generation input resolved above — not a tour column, not a
-  // persona trait.
-  const persona = personaForRegion(shell.regionSlug)
+  // The generation persona (prompts/voice/style/kit) is resolved from the tour's PERSONA KEY
+  // (tours.persona_key, frozen at create — decoupled from region). The notch (`jokeLevel`) is a
+  // generation input resolved above — not a tour column, not a persona trait.
+  const persona = personaFromKey(shell.personaKey)
   const polyline = shell.polyline as LngLat[]
   const cumulative = cumulativeMeters(polyline)
   const totalM = totalMeters(cumulative)
@@ -636,6 +636,36 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   )
   lap('narration')
 
+  // Intro + outro brackets — the drive's FRAME (persona-only, no fact sheet, ZERO cross-stop
+  // state). Kicked off HERE so the two Opus calls overlap the eval panel below (they run under the
+  // panel's wall-clock instead of after it) and are awaited just before TTS. Output-neutral: the
+  // scripts depend only on shell/persona/jokeLevel, so WHEN they run can't change them. The
+  // detached .catch keeps a panel throw from turning this still-pending promise into an
+  // unhandledRejection; the real bracket error still surfaces (and aborts — brackets are
+  // mandatory) at the `await bracketsPromise` below.
+  const bracketsPromise = Promise.all([
+    narrateIntro(
+      {
+        region: shell.regionName,
+        startAnchor: shell.startAnchorName,
+        endAnchor: shell.endAnchorName,
+        jokeLevel,
+        headline: shell.headline,
+        hostName: persona.hostName,
+      },
+      persona.bracketPrompt,
+    ).then((r) => r.script),
+    narrateOutro(
+      {
+        region: shell.regionName,
+        endAnchor: shell.endAnchorName,
+        jokeLevel,
+      },
+      persona.bracketPrompt,
+    ).then((r) => r.script),
+  ])
+  bracketsPromise.catch(() => {}) // guard only; the real error still throws at the await below
+
   // ---- The eval panel + evaluator-optimizer (the in-pipeline flywheel). ----------------
   // Findings feed regeneration through optimize() (accept-if-not-worse, gate-weighted, per-
   // round trace) — generalizing the old bespoke lint→regen loop. Cost shape (deliberate, see
@@ -971,32 +1001,13 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   lap('evalPanel')
   const scriptBySeq = new Map(narratedRecs.map((r) => [r.s.seq, r.script]))
 
-  // Intro + outro brackets — the drive's FRAME (persona-only, no fact sheet). The
-  // personal KIT, banned from stops, lives in the intro; the sentimental bow in the
-  // outro. Mandatory (the ready-gate requires both), so a narration failure aborts.
-  console.log('Narrating intro + outro brackets...')
-  // Two independent calls (the bracket prompt threads no cross-stop state) — run together.
-  const [introScript, outroScript] = await Promise.all([
-    narrateIntro(
-      {
-        region: shell.regionName,
-        startAnchor: shell.startAnchorName,
-        endAnchor: shell.endAnchorName,
-        jokeLevel,
-        headline: shell.headline,
-        hostName: persona.hostName,
-      },
-      persona.bracketPrompt,
-    ).then((r) => r.script),
-    narrateOutro(
-      {
-        region: shell.regionName,
-        endAnchor: shell.endAnchorName,
-        jokeLevel,
-      },
-      persona.bracketPrompt,
-    ).then((r) => r.script),
-  ])
+  // Intro + outro brackets — the drive's FRAME (persona-only, no fact sheet). The personal KIT,
+  // banned from stops, lives in the intro; the sentimental bow in the outro. Kicked off before the
+  // eval panel above (overlapping its wall-clock); awaited HERE, just before TTS. Mandatory (the
+  // ready-gate requires both), so a narration failure aborts. Usually already resolved by now (it
+  // ran under the panel) — this await is then ~free, which is why lap('bracketNarration') reads ~0.
+  console.log('Awaiting intro + outro brackets (overlapped with the eval panel)...')
+  const [introScript, outroScript] = await bracketsPromise
   const bracketPlan: { kind: BracketKind; script: string }[] = [
     { kind: 'intro', script: introScript },
     { kind: 'outro', script: outroScript },

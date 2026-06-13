@@ -97,6 +97,7 @@ export function CreateTourView() {
       const last = waypoints[waypoints.length - 1]!
       return api.createTour({
         slug,
+        personaKey: 'skipper', // explicit default; no picker UI until M4 named hosts
         regionSlug: prompt.regionSlug,
         regionName: region?.displayName ?? prompt.regionName,
         headline,

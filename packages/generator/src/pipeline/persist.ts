@@ -42,6 +42,8 @@ export interface TourShell {
   regionId: string
   regionSlug: string
   regionName: string
+  /** The host persona key (tours.persona_key) — the generator resolves the recipe via personaFromKey. */
+  personaKey: string
   polyline: Polyline
   distanceMeters: number | null
   durationSeconds: number | null
@@ -68,6 +70,7 @@ export async function loadTour(slug: string): Promise<TourShell> {
           regionId: tours.regionId,
           regionSlug: regions.slug,
           regionName: regions.displayName,
+          personaKey: tours.personaKey,
           polyline: tours.polyline,
           distanceMeters: tours.distanceMeters,
           durationSeconds: tours.durationSeconds,

@@ -19,10 +19,10 @@
 
 import { and, asc, eq } from 'drizzle-orm'
 import { db } from '@skipper/db'
-import { pois, regions, segments, tourFrames, tours, tracks } from '@skipper/db/schema'
+import { pois, segments, tourFrames, tours, tracks } from '@skipper/db/schema'
 import { TTS_CLIP_EXTENSION, TTS_MODEL } from './models'
 import { announce, assertReady, parseFlags, resolveTourId } from './pipeline/ops'
-import { personaForRegion } from './persona'
+import { personaFromKey } from './persona'
 import { synthesizeWithTailRetake } from './pipeline/tts'
 import { clipKey, deleteAudio, uploadAudio } from './pipeline/storage'
 import { beginJob, finishJob } from './pipeline/job-progress'
@@ -45,16 +45,11 @@ async function main() {
   const tourId = await resolveTourId(flags.positionals[0])
   await beginJob('resynth', { dryRun: !apply, tourId, targetId: tourId })
 
-  // The persona (voice + delivery style) is resolved from the tour's region.
-  const regionRow = (
-    await db
-      .select({ slug: regions.slug })
-      .from(tours)
-      .innerJoin(regions, eq(tours.regionId, regions.id))
-      .where(eq(tours.id, tourId))
-      .limit(1)
+  // The persona (voice + delivery style) is resolved from the tour's persona key.
+  const tourRow = (
+    await db.select({ personaKey: tours.personaKey }).from(tours).where(eq(tours.id, tourId)).limit(1)
   )[0]
-  const persona = personaForRegion(regionRow?.slug ?? '')
+  const persona = personaFromKey(tourRow?.personaKey ?? 'skipper')
 
   // A tour stop = a segment + its variant-0 track; re-render the TRACK clip (its script + key).
   const stopRows = await db

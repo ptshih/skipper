@@ -197,6 +197,9 @@ export async function freezeTour(raw: Record<string, unknown>): Promise<{ id: st
   const headline = typeof raw.headline === 'string' ? raw.headline.trim() : ''
   if (!headline) throw new HttpError(400, 'headline is required')
   const summary = typeof raw.summary === 'string' ? raw.summary : null
+  // Host persona — explicit + decoupled from region. Defaults to the Skipper (the only M1
+  // persona); an unknown key still resolves to the Skipper in the generator (personaFromKey).
+  const personaKey = typeof raw.personaKey === 'string' && raw.personaKey.trim() ? raw.personaKey.trim() : 'skipper'
 
   const start = (raw.startAnchor ?? {}) as Anchor
   const end = (raw.endAnchor ?? {}) as Anchor
@@ -246,6 +249,7 @@ export async function freezeTour(raw: Record<string, unknown>): Promise<{ id: st
     id,
     regionId: regionRow.id,
     slug,
+    personaKey,
     headline,
     summary,
     polyline: route.polyline,

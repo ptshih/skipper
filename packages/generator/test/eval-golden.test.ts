@@ -7,9 +7,9 @@ import { describe, expect, test } from 'bun:test'
 import { TTS_CASES, DIVERSITY_CASES } from '../src/eval/golden'
 import { evaluateTts } from '../src/eval/tts'
 import { evaluateDiversity } from '../src/eval/diversity'
-import { personaForRegion } from '../src/persona'
+import { personaFromKey } from '../src/persona'
 
-const KIT = personaForRegion('lake-tahoe').kit
+const KIT = personaFromKey('skipper').kit
 
 describe('golden / tts — deterministic regression', () => {
   for (const c of TTS_CASES) {

@@ -53,22 +53,27 @@ the atomic ready-gate), `pipeline/http.ts` (the retry that already covers most f
 
 ## Generation pipeline: overlap independent phases (perf, output-neutral)
 
-Three top-level phases in `generate.ts` run SERIALLY but are independent — overlapping them
-trims wall-clock with NO change to the scripts/audio produced. Modest (seconds–tens of seconds
-each); the big parallel wins (first-pass narration + the regen passes) already shipped (B +
-A-simple, commits `be83c7e` / `5283fe6`). Surfaced 2026-06-10 while hardening the pipeline;
-backlogged not built (the gain didn't justify reordering the orchestrator on the spot).
+The big parallel wins (first-pass narration + the regen passes) already shipped (B + A-simple,
+commits `be83c7e` / `5283fe6`). Of the three follow-on overlaps surfaced 2026-06-10, one shipped
+and two were evaluated-and-SKIPPED 2026-06-13 (verified against the post-corpus/segments-refactor
+code — the original framing had gone stale):
 
-- [ ] **bracket-narration ‖ eval-panel** (the clean one): intro/outro narration threads ZERO
-      cross-stop state, yet today runs AFTER the whole eval panel settles. Start the two bracket
-      calls before the panel and await them just before TTS — overlaps 2 Opus calls with the panel.
-- [ ] **geology ‖ scout**: operate on DISJOINT stop sets (scenic vs story) but run serially today.
-- [ ] **places ‖ discovery**: independent external fetches (break anchors vs the Wikidata spine).
-
-Watch when implementing: keep each phase's `lap()` timing honest if phases overlap (the per-phase
-ms in `timings` assumes serial), and don't let a bracket-narration failure (mandatory — it must
-abort the run) get swallowed by a panel running concurrently. Refs: `pipeline/generate.ts` (the
-phase sequence + `lap()`).
+- ✅ **bracket-narration ‖ eval-panel** — SHIPPED 2026-06-13. The intro/outro Opus calls are now
+      kicked off right after first-pass narration (`lap('narration')`) and awaited just before TTS,
+      so they run under the eval panel's wall-clock. Byte-identical output (brackets thread zero
+      cross-stop state); a detached `.catch` guard keeps a panel throw from orphaning the pending
+      promise, while the mandatory-abort still fires at the await. `lap('bracketNarration')` now
+      reads ~0 (honest — it overlapped). Refs: `pipeline/generate.ts` (the `bracketsPromise`).
+- ⛔ **geology ‖ scout** — SKIPPED (output-neutrality risk > tiny win). They touch DISJOINT stop
+      sets (scenic vs story) but BOTH hit Macrostrat (the scout's `geologyAt` tool + the scenic
+      geology phase). Overlapping STACKS that load; a throttle that exhausts the retry budget drops
+      a scenic stop's geology → DIFFERENT output, breaking the output-neutral contract. And geology
+      is the FAST phase (4 concurrent coord lookups) vs the slow Opus scouts, so the saved
+      wall-clock is small. Revisit only if Macrostrat headroom is confirmed (or geology is cached).
+- ⛔ **places ‖ discovery** — SKIPPED (premise stale). Post-corpus-refactor, "discovery" is a cheap
+      DB corpus SELECT (`loadCandidatePoisInBox`), not the live WDQS fetch this item assumed — so
+      there's little to overlap. Worse, the empty-corpus check throws "at $0 before any paid call",
+      and Places IS a paid Google API; firing it concurrently would forfeit that guard. Not worth it.
 
 ## MAYBE — API read-retry to mask Neon cold-start blips (judgment call, not committed)
 

@@ -40,7 +40,7 @@ import { roamClipKey, uploadAudio } from './pipeline/storage'
 import { hashFacts, resolvePersonaId, upsertPoi } from './pipeline/persist'
 import { withRetry } from './pipeline/http'
 import { mapLimit } from './pipeline/concurrency'
-import { personaForRegion } from './persona'
+import { personaFromKey } from './persona'
 import { NARRATION_CONCURRENCY, TTS_CONCURRENCY } from './config'
 import { estimateTtsUsd, llmSpendLines, llmSpentUsd } from './pipeline/spend'
 
@@ -180,7 +180,7 @@ if (queue.length === 0) {
 const estClipChars = 800 // ~150 spoken words
 const tts = estimateTtsUsd(
   queue.map(() => 'x'.repeat(estClipChars)),
-  personaForRegion('lake-tahoe').ttsStyle.length,
+  personaFromKey('skipper').ttsStyle.length,
 )
 console.log(
   `\nEstimated spend: narration ~$${(queue.length * 0.1).toFixed(2)} ± half ` +
@@ -192,7 +192,7 @@ if (!apply) {
   process.exit(0)
 }
 
-const persona = personaForRegion('lake-tahoe')
+const persona = personaFromKey('skipper')
 // The frozen host on every roam segment this run writes.
 const personaId = await resolvePersonaId(persona.personaKey)
 
