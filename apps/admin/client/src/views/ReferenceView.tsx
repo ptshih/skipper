@@ -132,7 +132,9 @@ export function ReferenceView() {
             <Step>Create draft</Step> — freezes the route (a Google Routes polyline) into a <code>draft</code> tour.
           </li>
           <li>
-            <Step>Generate</Step> — open the draft → New run → Generate to narrate + synthesize it.
+            <Step>Generate</Step> — open the draft → New run → Generate to narrate + synthesize it. The region’s
+            POIs must be discovered first (<Step>Discover POIs</Step> below) — Generate selects from that shared
+            corpus and aborts at $0 if it’s empty.
           </li>
         </ol>
       </Section>
@@ -185,7 +187,7 @@ const RUN_KINDS: { kind: string; does: string; cost: ReactNode; safe: string }[]
   },
   {
     kind: 'Generate',
-    does: 'Discover places → narrate in the skipper voice → eval → (real run) synthesize TTS audio, for one tour slug.',
+    does: 'Select places from the region corpus → narrate in the skipper voice → eval → (real run) synthesize TTS audio, for one tour slug. Needs the region discovered first — an empty corpus aborts at $0, before any spend.',
     cost: <span>LLM always (~$0.30+); <span className="text-foreground">TTS</span> only on a real (non-dry) run.</span>,
     safe: 'Dry-run ON — scripts + eval, no audio.',
   },
