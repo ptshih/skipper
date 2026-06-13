@@ -10,7 +10,7 @@ import { useDrivesFilter } from '@/lib/drives-filter'
 import { deriveRegions, filterByRegion } from '@/lib/regions'
 import { useTheme } from '@/theme'
 import { space } from '@/theme/tokens'
-import { Badge, Button, Card, Divider, EdgeFade, FilterChip, HeaderIconButton, Icon, RouteTrack, Screen, Sunburst, Text, voice } from '@/ui'
+import { Badge, Button, Card, Divider, EdgeFade, FilterChip, HeaderIconButton, RouteTrack, Screen, Sunburst, Text, voice } from '@/ui'
 
 // Browse drives — anonymous-friendly. A tour is the whole self-contained drive now, so a
 // card opens straight into the drive (gated). The top is a framed travel-poster hero with
@@ -29,6 +29,17 @@ export default function DrivesScreen() {
   // True when the catalog fetch failed but saved downloads carried us (dead-zone fallback).
   const [offline, setOffline] = useState(false)
 
+  // Navigation in-flight guard: expo-router does NOT de-dupe identical pushes, so a fast
+  // double-tap on a card would stack two identical /tours/[id] screens. The flag is set on
+  // the first push and cleared when the home screen regains focus (the user backed out, or
+  // the push never landed) — see the reset in the focus effect below.
+  const navigatingRef = useRef(false)
+  const navigateOnce = useCallback((go: () => void) => {
+    if (navigatingRef.current) return
+    navigatingRef.current = true
+    go()
+  }, [])
+
   // The signature car token, parked at the trailhead (~0.12 — clearly ON the road, not
   // flush at the gutter, the rig "ready to roll"). STATIC: created once and never
   // animated, so it satisfies both the one-thing-animating and the one-glowing-amber
@@ -39,8 +50,18 @@ export default function DrivesScreen() {
     try {
       setError(null)
       const r = await listTours()
-      setTours(r.tours)
-      setOffline(false)
+      // A reachable-but-EMPTY 200 catalog must still surface the rider's fully-downloaded
+      // drives (e.g. a freshly-wiped server, or a region with nothing live yet) — union the
+      // saved drives in, deduped by id, so disk content never reads as "no drives" just
+      // because the network returned an empty list.
+      if (r.tours.length === 0) {
+        const saved = listDownloadedTours()
+        setTours(saved)
+        setOffline(false)
+      } else {
+        setTours(r.tours)
+        setOffline(false)
+      }
     } catch (e) {
       // Offline-first: in a dead zone the catalog fetch fails — fall back to the drives the
       // rider has saved so they stay browsable (and reachable) rather than a blank error wall.
@@ -64,6 +85,9 @@ export default function DrivesScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      // Regaining focus means any in-flight navigation settled (or the rider backed out) —
+      // clear the guard so the next tap can push again.
+      navigatingRef.current = false
       load()
     }, [load]),
   )
@@ -169,7 +193,7 @@ export default function DrivesScreen() {
         <Button
           icon="car"
           title={voice.roam.start}
-          onPress={() => router.push('/roam')}
+          onPress={() => navigateOnce(() => router.push('/roam'))}
           glow={false}
           fullWidth
         />
@@ -297,9 +321,25 @@ export default function DrivesScreen() {
             )
           }
           renderItem={({ item }) => (
-            <View style={styles.row}>
+            // Group the card's children into ONE button for VoiceOver with a clean spoken
+            // label — otherwise the reader walks each Text + reads the "→" / meta as loose
+            // fragments. `accessible` collapses the subtree; the label names the drive +
+            // its endpoints (+ duration when present). Debounced push (navigateOnce) so a
+            // fast double-tap can't stack two identical /tours/[id] screens.
+            <View
+              style={styles.row}
+              accessible
+              accessibilityRole="button"
+              accessibilityLabel={`${item.headline}, from ${item.startAnchorName} to ${item.endAnchorName}${
+                item.durationSeconds ? `, ${Math.round(item.durationSeconds / 60)} minutes` : ''
+              }`}
+            >
               <Card
-                onPress={() => router.push({ pathname: '/tours/[id]', params: { id: item.id } })}
+                onPress={() =>
+                  navigateOnce(() =>
+                    router.push({ pathname: '/tours/[id]', params: { id: item.id } }),
+                  )
+                }
               >
                 <Text variant="title" color="ink">
                   {item.headline}

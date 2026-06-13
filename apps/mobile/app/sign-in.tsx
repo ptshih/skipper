@@ -37,7 +37,11 @@ export default function SignInScreen() {
         setError(res.error.message ?? 'Authentication failed')
         return
       }
-      router.back()
+      // Normally we came from a screen that pushed us here (back returns to it). But a
+      // DEEP LINK straight to /sign-in has nothing beneath it, so back is a no-op — fall
+      // back to home so success never strands the rider on the (now-irrelevant) form.
+      if (router.canGoBack()) router.back()
+      else router.replace('/')
     } catch {
       // A rejected call (no connectivity, DNS/TLS failure, an unexpected throw) must
       // not wedge the button in its loading state forever — `finally` always clears

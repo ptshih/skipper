@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Stack, useRouter } from 'expo-router'
+import { Stack, useRouter, type ErrorBoundaryProps } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import * as SplashScreen from 'expo-splash-screen'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
@@ -7,7 +7,34 @@ import { DrivesFilterProvider } from '@/lib/drives-filter'
 import { SimModeProvider, readStoredSimMode } from '@/lib/sim-mode'
 import { ThemeProvider, readStoredThemeMode, useAppFonts, useTheme, type ThemeMode } from '@/theme'
 import { fonts } from '@/theme/tokens'
-import { HeaderIconButton, VersionGate } from '@/ui'
+import { HeaderIconButton, StateView, VersionGate, voice } from '@/ui'
+
+// Anchor the stack at the home route so a COLD universal-link deep link
+// (skipper.fm/t/<id> → /tours/[id]) keeps `index` underneath it — otherwise the tour
+// screen is the bottom of the stack, the back chevron hides, and "Back to tours" no-ops,
+// stranding the recipient with no way home. (expo-router router-settings.)
+export const unstable_settings = { initialRouteName: 'index' }
+
+// App-authored error boundary — expo-router renders this when a screen (or the
+// provider/VersionGate layer) throws during render, instead of whiting out the app in
+// release with no recovery. `retry` re-mounts the subtree so a transient failure clears.
+// expo-router renders this OUTSIDE RootLayout's returned tree, so it has NEITHER our
+// ThemeProvider NOR the SafeAreaProvider — and StateView → Screen → useTheme() throws
+// without them. We re-establish both here (default 'system' mood) so the boundary renders
+// in our themed chrome with semantic tokens instead of cascading into a second crash.
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  return (
+    <SafeAreaProvider>
+      <ThemeProvider initialMode="system">
+        <StateView
+          tone="danger"
+          message={error.message || voice.error.generic}
+          action={{ label: voice.error.retry, onPress: retry }}
+        />
+      </ThemeProvider>
+    </SafeAreaProvider>
+  )
+}
 
 // Hold the splash until the Trailhead type system is loaded, so nothing renders
 // in a system font first.
@@ -28,6 +55,12 @@ export default function RootLayout() {
   }, [])
 
   const ready = (fontsLoaded || fontError) && initialMode !== null && initialSimMode !== null
+
+  // Font load FAILED — we still unblock (degrade to the system font beats holding the splash
+  // forever), but make the degrade OBSERVABLE rather than silent. (telemetry hook later.)
+  useEffect(() => {
+    if (fontError) console.warn('[fonts] Trailhead type failed to load — degrading to system font:', fontError)
+  }, [fontError])
 
   useEffect(() => {
     if (ready) SplashScreen.hideAsync().catch(() => {})

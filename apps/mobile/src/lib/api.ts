@@ -70,11 +70,29 @@ export const errorMessage = (e: unknown, fallback: string): string =>
 // skips — BOUNDED, vs the infinite hang today). A shorter per-call override is a future refinement.
 const REQUEST_TIMEOUT_MS = 15_000
 
-async function fetchJson(path: string, init?: RequestInit): Promise<unknown> {
-  const cookie = authClient.getCookie()
+// `anonymous: true` deliberately OMITS the session Cookie so an intentionally-anonymous call —
+// the ?preview=1 funnel and GET /roam (which carries the rider's live lat/lng) — never links a
+// signed-in identity to preview activity or live coordinates. Authenticated calls (drive/offline
+// sign without preview) leave it false so the cookie still rides.
+async function fetchJson(
+  path: string,
+  init?: RequestInit,
+  opts?: { anonymous?: boolean },
+): Promise<unknown> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
   try {
+    // Read the cookie INSIDE the try: a SecureStore/keychain read can throw, and we want that to
+    // degrade to an anonymous request handled by the normal error path — not escape raw past the
+    // abort timer and error envelope. Anonymous calls skip the read entirely.
+    let cookie = ''
+    if (!opts?.anonymous) {
+      try {
+        cookie = authClient.getCookie()
+      } catch {
+        cookie = ''
+      }
+    }
     const res = await fetch(`${API_URL}${path}`, {
       ...init,
       headers: {
@@ -96,8 +114,11 @@ async function fetchJson(path: string, init?: RequestInit): Promise<unknown> {
 }
 
 // Detect a Zod validation failure without importing `zod` into the app bundle (it isn't a
-// direct mobile dep — it rides in via @skipper/shared). ZodError sets `name === 'ZodError'`.
-const isZodError = (e: unknown): boolean => e instanceof Error && e.name === 'ZodError'
+// direct mobile dep — it rides in via @skipper/shared). Duck-type on `.issues` being an array
+// (ZodError's defining shape) rather than `name === 'ZodError'`, which a transform/minify/rename
+// could break.
+const isZodError = (e: unknown): boolean =>
+  typeof e === 'object' && e !== null && Array.isArray((e as { issues?: unknown }).issues)
 
 /** Validate a response against its DTO. A schema mismatch — additive-only contract drift an
  *  old client can't read — becomes a ContractError ("please update"), never a raw ZodError
@@ -120,7 +141,14 @@ export const listTours = async (): Promise<TourList> =>
 const previewQuery = (opts?: { preview?: boolean }) => (opts?.preview ? '?preview=1' : '')
 
 export const getTour = async (tourId: string, opts?: { preview?: boolean }): Promise<TourDetail> =>
-  parseDto(tourDetail, await fetchJson(`/tours/${tourId}${previewQuery(opts)}`))
+  parseDto(
+    tourDetail,
+    // Preview is the OPEN funnel — don't link a signed-in identity to it; send it anonymously.
+    // encodeURIComponent the id — it can arrive from an attacker-craftable skipper:// / universal link. (audit #879)
+    await fetchJson(`/tours/${encodeURIComponent(tourId)}${previewQuery(opts)}`, undefined, {
+      anonymous: opts?.preview,
+    }),
+  )
 
 export const signTourAudio = async (
   tourId: string,
@@ -128,17 +156,34 @@ export const signTourAudio = async (
 ): Promise<SignedAudio> =>
   parseDto(
     signedAudio,
-    await fetchJson(`/tours/${tourId}/assets/sign${previewQuery(opts)}`, { method: 'POST' }),
+    // Preview-sign rides the open funnel too (anonymous); the walled drive/offline sign keeps the cookie.
+    await fetchJson(`/tours/${encodeURIComponent(tourId)}/assets/sign${previewQuery(opts)}`, { method: 'POST' }, {
+      anonymous: opts?.preview,
+    }),
   )
 
+// Coarsen a coordinate to 3 decimals (~110 m) before it goes on the wire. The manifest is a
+// ~50 km region pull, so 110 m precision is irrelevant to selection — yet sending exact lat/lng as
+// GET query params would persist the rider's precise location in server/proxy access logs. The
+// client-side RoamEngine still triggers on the FULL returned pins; only the request key is blurred.
+const coarsen = (n: number): number => Math.round(n * 1000) / 1000
+
 /** FREE-ROAM (alpha): every roam-narratable place near a point, with presigned clip URLs.
- *  Open like the preview (no account) — the alpha is a founder TestFlight toy. */
+ *  Open like the preview (no account) — the alpha is a founder TestFlight toy. Sent anonymously so
+ *  the rider's live coordinates are never linked to a signed-in identity. */
 export const getRoamManifest = async (
   lat: number,
   lng: number,
   radiusKm = 50,
 ): Promise<RoamManifest> =>
-  parseDto(roamManifest, await fetchJson(`/roam?lat=${lat}&lng=${lng}&radiusKm=${radiusKm}`))
+  parseDto(
+    roamManifest,
+    await fetchJson(
+      `/roam?lat=${coarsen(lat)}&lng=${coarsen(lng)}&radiusKm=${radiusKm}`,
+      undefined,
+      { anonymous: true },
+    ),
+  )
 
 /** The app-wide data-source/license catalog (authoritative; the app bundles only a fallback). */
 export const getSources = async (): Promise<DataSource[]> =>

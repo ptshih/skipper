@@ -22,6 +22,7 @@ export default function SettingsScreen() {
   const [name, setName] = useState(savedName)
   const [savingName, setSavingName] = useState(false)
   const [nameError, setNameError] = useState<string | null>(null)
+  const [signingOut, setSigningOut] = useState(false)
   useEffect(() => {
     setName(session?.user?.name ?? '')
   }, [session?.user?.name])
@@ -38,6 +39,20 @@ export default function SettingsScreen() {
       setNameError(voice.error.generic)
     } finally {
       setSavingName(false)
+    }
+  }
+
+  const handleSignOut = async () => {
+    if (signingOut) return
+    setSigningOut(true)
+    try {
+      // signOut clears the local session first, so the UI flips to guest regardless — but a
+      // network failure during the server call must be caught, or it's an unhandled rejection.
+      await signOut()
+    } catch {
+      // Local session already cleared; nothing the rider needs to act on. Swallow quietly.
+    } finally {
+      setSigningOut(false)
     }
   }
 
@@ -77,7 +92,12 @@ export default function SettingsScreen() {
               disabled={!nameDirty}
               onPress={saveName}
             />
-            <Button variant="secondary" title="Sign out" onPress={() => signOut()} />
+            <Button
+              variant="secondary"
+              title="Sign out"
+              loading={signingOut}
+              onPress={handleSignOut}
+            />
           </>
         ) : (
           <>

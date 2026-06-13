@@ -47,15 +47,25 @@ export default function RegionsScreen() {
         onPress={() => choose(null)}
       />
       <Divider />
-      {regions.map((opt) => (
-        <RegionRow
-          key={opt.slug}
-          label={opt.name}
-          meta={`${opt.count} ${opt.count === 1 ? 'drive' : 'drives'}`}
-          selected={selectedRegion === opt.slug}
-          onPress={() => choose(opt.slug)}
-        />
-      ))}
+      {/* Regions are published into the filter context by the home screen's post-catalog
+          effect — so a COLD deep link to /regions (or a fast tap during the first catalog
+          fetch) finds the list empty and would read as broken. Soft-degrade in the
+          skipper's voice instead of a bare "All regions" row. */}
+      {regions.length === 0 ? (
+        <Text variant="body" color="inkDim" align="center" style={styles.empty}>
+          {voice.loading.drives}
+        </Text>
+      ) : (
+        regions.map((opt) => (
+          <RegionRow
+            key={opt.slug}
+            label={opt.name}
+            meta={`${opt.count} ${opt.count === 1 ? 'drive' : 'drives'}`}
+            selected={selectedRegion === opt.slug}
+            onPress={() => choose(opt.slug)}
+          />
+        ))
+      )}
     </Screen>
   )
 }
@@ -92,4 +102,5 @@ const styles = StyleSheet.create({
   body: { gap: space.md },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   flex: { flex: 1 },
+  empty: { paddingVertical: space.lg },
 })
