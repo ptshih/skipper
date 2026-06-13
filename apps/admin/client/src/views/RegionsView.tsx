@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, Layers, Loader2, Pencil, Plus, Search, TriangleAlert } from 'lucide-react'
-import { api, type BboxLookupResult, type Region } from '@/lib/api'
+import { api, type Region } from '@/lib/api'
 import { errMsg } from '@/lib/format'
 import { PageHeader } from '@/components/PageHeader'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -29,20 +30,9 @@ const CONFIDENCE_META = {
 }
 
 export function RegionsView() {
-  const [regions, setRegions] = useState<Region[]>([])
-  const [err, setErr] = useState<string | null>(null)
+  const qc = useQueryClient()
   const [dialog, setDialog] = useState<DialogMode | null>(null)
-
-  async function load() {
-    try {
-      setRegions((await api.regions()).regions)
-      setErr(null)
-    } catch (e) {
-      setErr(errMsg(e))
-    }
-  }
-
-  useEffect(() => { void load() }, [])
+  const { data: regions = [], error: err } = useQuery({ queryKey: ['regions'], queryFn: async () => (await api.regions()).regions })
 
   return (
     <div className="space-y-6">
@@ -58,7 +48,7 @@ export function RegionsView() {
 
       {err && (
         <Callout variant="error">
-          <span className="font-medium">Error loading regions:</span> {err}
+          <span className="font-medium">Error loading regions:</span> {errMsg(err)}
         </Callout>
       )}
 
@@ -117,7 +107,7 @@ export function RegionsView() {
         <RegionDialog
           mode={dialog}
           onClose={() => setDialog(null)}
-          onSaved={() => { setDialog(null); void load() }}
+          onSaved={() => { setDialog(null); qc.invalidateQueries({ queryKey: ['regions'] }) }}
         />
       )}
     </div>
@@ -140,25 +130,16 @@ function RegionDialog({
   const [slug, setSlug] = useState(existing?.slug ?? '')
   const [displayName, setDisplayName] = useState(existing?.displayName ?? '')
   const [bbox, setBbox] = useState(existing?.discoveryBbox ?? '')
-  const [busy, setBusy] = useState(false)
-  const [err, setErr] = useState<string | null>(null)
 
-  async function submit() {
-    setBusy(true)
-    setErr(null)
-    try {
-      if (mode.mode === 'create') {
-        await api.createRegion({ slug: slug.trim(), displayName: displayName.trim(), discoveryBbox: bbox.trim() || null })
-      } else {
-        await api.updateRegion(mode.region.slug, { displayName: displayName.trim(), discoveryBbox: bbox.trim() || null })
-      }
-      onSaved()
-    } catch (e) {
-      setErr(errMsg(e))
-    } finally {
-      setBusy(false)
-    }
-  }
+  const saveMut = useMutation({
+    mutationFn: () => {
+      const patch = { displayName: displayName.trim(), discoveryBbox: bbox.trim() || null }
+      return mode.mode === 'create'
+        ? api.createRegion({ slug: slug.trim(), ...patch })
+        : api.updateRegion(mode.region.slug, patch)
+    },
+    onSuccess: () => onSaved(),
+  })
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose() }}>
@@ -218,19 +199,19 @@ function RegionDialog({
           />
         </div>
 
-        {err && (
+        {saveMut.error && (
           <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {err}
+            {errMsg(saveMut.error)}
           </div>
         )}
 
         <DialogFooter>
-          <Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button variant="ghost" onClick={onClose} disabled={saveMut.isPending}>Cancel</Button>
           <Button
-            disabled={busy || !displayName.trim() || (mode.mode === 'create' && !slug.trim())}
-            onClick={submit}
+            disabled={saveMut.isPending || !displayName.trim() || (mode.mode === 'create' && !slug.trim())}
+            onClick={() => saveMut.mutate()}
           >
-            {busy ? 'Saving…' : mode.mode === 'create' ? 'Create region' : 'Save changes'}
+            {saveMut.isPending ? 'Saving…' : mode.mode === 'create' ? 'Create region' : 'Save changes'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -242,27 +223,18 @@ function RegionDialog({
 
 function BboxLookup({ defaultQuery, onUse }: { defaultQuery: string; onUse: (bbox: string) => void }) {
   const [q, setQ] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<BboxLookupResult | null>(null)
-  const [err, setErr] = useState<string | null>(null)
+  // An imperative read (triggered by the Search button / Enter), so a mutation fits better than a query.
+  const lookupMut = useMutation({ mutationFn: () => api.bboxLookup(q.trim()) })
+  const result = lookupMut.data ?? null
 
   // When the display name changes and we haven't searched yet, keep q in sync as a hint.
   useEffect(() => {
-    if (!result && !loading) setQ(defaultQuery)
+    if (!lookupMut.data && !lookupMut.isPending) setQ(defaultQuery)
   }, [defaultQuery]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function lookup() {
+  function lookup() {
     if (!q.trim()) return
-    setLoading(true)
-    setResult(null)
-    setErr(null)
-    try {
-      setResult(await api.bboxLookup(q.trim()))
-    } catch (e) {
-      setErr(errMsg(e))
-    } finally {
-      setLoading(false)
-    }
+    lookupMut.mutate()
   }
 
   return (
@@ -279,14 +251,14 @@ function BboxLookup({ defaultQuery, onUse }: { defaultQuery: string; onUse: (bbo
           placeholder="Yosemite National Park"
           className="text-sm"
         />
-        <Button variant="outline" size="sm" disabled={loading || !q.trim()} onClick={lookup} className="shrink-0">
-          {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
-          {loading ? 'Searching…' : 'Search'}
+        <Button variant="outline" size="sm" disabled={lookupMut.isPending || !q.trim()} onClick={lookup} className="shrink-0">
+          {lookupMut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+          {lookupMut.isPending ? 'Searching…' : 'Search'}
         </Button>
       </div>
 
-      {err && (
-        <div className="mt-2 text-xs text-destructive">{err}</div>
+      {lookupMut.error && (
+        <div className="mt-2 text-xs text-destructive">{errMsg(lookupMut.error)}</div>
       )}
 
       {result && (

@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight, Compass, MapPin, RefreshCw, Zap } from 'lucide-react'
-import { api, type PoiRow, type Region, type RoamClipDetail } from '@/lib/api'
+import { api, type PoiRow } from '@/lib/api'
 import { errMsg } from '@/lib/format'
 import { PageHeader } from '@/components/PageHeader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -47,18 +48,16 @@ const DENSITY_META: Record<RegionCoverage['density'], { variant: 'success' | 'wa
 
 export function RoamView() {
   const navigate = useNavigate()
-  const [pois, setPois] = useState<PoiRow[]>([])
-  const [regionMap, setRegionMap] = useState<Map<string, Region>>(new Map())
-  const [err, setErr] = useState<string | null>(null)
+  const qc = useQueryClient()
 
-  useEffect(() => {
-    Promise.all([api.pois(), api.regions()])
-      .then(([pr, rr]) => {
-        setPois(pr.pois)
-        setRegionMap(new Map(rr.regions.map((r) => [r.slug, r])))
-      })
-      .catch((e) => setErr(`Couldn't load roam data — ${errMsg(e)}`))
-  }, [])
+  // pois shares the ['pois'] key with PoisView; regions shares ['regions'] with Create/Regions.
+  const poisQuery = useQuery({ queryKey: ['pois'], queryFn: async () => (await api.pois()).pois })
+  const regionsQuery = useQuery({ queryKey: ['regions'], queryFn: async () => (await api.regions()).regions })
+  const pois = poisQuery.data ?? []
+  const regionMap = useMemo(
+    () => new Map((regionsQuery.data ?? []).map((r) => [r.slug, r] as const)),
+    [regionsQuery.data],
+  )
 
   const coverage = useMemo(() => buildCoverage(pois), [pois])
   const withClips = useMemo(
@@ -67,29 +66,35 @@ export function RoamView() {
   )
 
   // Fire the region-discovery sweep for one region card, then jump to Runs. Free — no confirm.
-  async function discover(regionSlug: string) {
-    setErr(null)
-    try {
-      const bbox = regionMap.get(regionSlug)?.discoveryBbox
-      await discoverPois(regionSlug, true, bbox)
-      navigate({ to: '/runs' })
-    } catch (e) {
-      setErr(`Discover failed — ${errMsg(e)}`)
-    }
+  const discoverMut = useMutation({
+    mutationFn: (regionSlug: string) => discoverPois(regionSlug, true, regionMap.get(regionSlug)?.discoveryBbox),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['runs'] }); navigate({ to: '/runs' }) },
+  })
+  function discover(regionSlug: string) {
+    discoverMut.mutate(regionSlug)
   }
 
   // Fire generate_roam for one region — this SPENDS (LLM + TTS per clip), so confirm first.
-  async function generateRoam(r: RegionCoverage) {
+  const generateMut = useMutation({
+    mutationFn: (r: RegionCoverage) => {
+      const bbox = regionMap.get(r.regionSlug)?.discoveryBbox
+      return api.createJob({ kind: 'generate_roam', ...(bbox ? { bbox } : {}), apply: true, confirm: true })
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['runs'] }); navigate({ to: '/runs' }) },
+  })
+  function generateRoam(r: RegionCoverage) {
     if (!window.confirm(`Generate roam clips for ${r.regionName}? This spends LLM + TTS credits per clip.`)) return
-    const bbox = regionMap.get(r.regionSlug)?.discoveryBbox
-    setErr(null)
-    try {
-      await api.createJob({ kind: 'generate_roam', ...(bbox ? { bbox } : {}), apply: true, confirm: true })
-      navigate({ to: '/runs' })
-    } catch (e) {
-      setErr(`Generate roam failed — ${errMsg(e)}`)
-    }
+    generateMut.mutate(r)
   }
+
+  const err =
+    poisQuery.error || regionsQuery.error
+      ? `Couldn't load roam data — ${errMsg(poisQuery.error ?? regionsQuery.error)}`
+      : discoverMut.error
+        ? `Discover failed — ${errMsg(discoverMut.error)}`
+        : generateMut.error
+          ? `Generate roam failed — ${errMsg(generateMut.error)}`
+          : null
 
   return (
     <div className="space-y-6">
@@ -249,22 +254,24 @@ function ClipRow({ poi }: { poi: PoiRow }) {
 
 function RoamPlayer({ poiId }: { poiId: string }) {
   const navigate = useNavigate()
-  const [clip, setClip] = useState<RoamClipDetail | null>(null)
-  const [err, setErr] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [resynthing, setResynthing] = useState(false)
-  const [actionErr, setActionErr] = useState<string | null>(null)
+  const qc = useQueryClient()
 
-  useEffect(() => {
-    setLoading(true)
-    api.roamSign(poiId)
-      .then((r) => setClip(r.clip))
-      .catch((e) => setErr(errMsg(e)))
-      .finally(() => setLoading(false))
-  }, [poiId])
+  const { data: clip, isLoading, error } = useQuery({
+    queryKey: ['roamSign', poiId],
+    queryFn: async () => (await api.roamSign(poiId)).clip,
+  })
 
-  if (loading) return <div className="py-2 text-xs text-muted-foreground">Loading…</div>
-  if (err) return <div className="py-2 text-xs text-destructive">{err}</div>
+  const resynthMut = useMutation({
+    mutationFn: () => api.createJob({ kind: 'resynth_roam_clip', poiId, apply: true, confirm: true }),
+    onSuccess: ({ job }) => { qc.invalidateQueries({ queryKey: ['runs'] }); navigate({ to: '/runs', hash: job.id }) },
+  })
+  function handleResynth() {
+    if (!window.confirm('Re-synthesize the roam clip for this POI? This spends ~$0.01 in TTS credits and replaces the current clip.')) return
+    resynthMut.mutate()
+  }
+
+  if (isLoading) return <div className="py-2 text-xs text-muted-foreground">Loading…</div>
+  if (error) return <div className="py-2 text-xs text-destructive">{errMsg(error)}</div>
   if (!clip) return null
 
   const durationSec = Math.round(clip.audioDurationMs / 1000)
@@ -275,20 +282,6 @@ function RoamPlayer({ poiId }: { poiId: string }) {
   const wordCount = clip.script?.trim().split(/\s+/).filter(Boolean).length ?? 0
   const wpm = wordCount > 0 ? Math.round(wordCount / (clip.audioDurationMs / 1000 / 60)) : 0
   const suspicious = wpm > 0 && wpm < 90
-
-  async function handleResynth() {
-    if (!window.confirm('Re-synthesize the roam clip for this POI? This spends ~$0.01 in TTS credits and replaces the current clip.')) return
-    setResynthing(true)
-    setActionErr(null)
-    try {
-      const { job } = await api.createJob({ kind: 'resynth_roam_clip', poiId, apply: true, confirm: true })
-      navigate({ to: '/runs', hash: job.id })
-    } catch (e) {
-      setActionErr(`Re-synth failed — ${errMsg(e)}`)
-    } finally {
-      setResynthing(false)
-    }
-  }
 
   return (
     <div className="flex flex-col gap-2 pt-3">
@@ -302,14 +295,14 @@ function RoamPlayer({ poiId }: { poiId: string }) {
         )}
         {clip.factsHash && <code className="font-mono">{clip.factsHash.slice(0, 7)}</code>}
         <span className="flex-1" />
-        <Button variant="outline" size="sm" onClick={handleResynth} disabled={resynthing}>
+        <Button variant="outline" size="sm" onClick={handleResynth} disabled={resynthMut.isPending}>
           <RefreshCw className="h-3 w-3" />
-          {resynthing ? 'Queuing…' : 'Re-synth clip'}
+          {resynthMut.isPending ? 'Queuing…' : 'Re-synth clip'}
         </Button>
       </div>
-      {actionErr && (
+      {resynthMut.error && (
         <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-          {actionErr}
+          Re-synth failed — {errMsg(resynthMut.error)}
         </div>
       )}
       {suspicious && (

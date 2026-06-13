@@ -1,8 +1,8 @@
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CircleCheck, Compass, Locate, Plus, RefreshCw, Search, Trash2, Wrench, X } from 'lucide-react'
-import { api, type CorrectionOverride, type PoiCorrections, type PoiDetail, type PoiRow, type Region } from '@/lib/api'
+import { api, type CorrectionOverride, type PoiDetail, type PoiRow } from '@/lib/api'
 import { errMsg, timeAgo } from '@/lib/format'
 import { PageHeader } from '@/components/PageHeader'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -106,35 +106,22 @@ function DiscoverDialog({
   onOpenChange: (open: boolean) => void
   onSubmitted: () => void
 }) {
-  const [regions, setRegions] = useState<Region[]>([])
   const [regionSlug, setRegionSlug] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [err, setErr] = useState<string | null>(null)
+  const { data: regions = [], error: loadErr } = useQuery({
+    queryKey: ['regions'],
+    queryFn: async () => (await api.regions()).regions,
+    enabled: open,
+  })
 
-  useEffect(() => {
-    if (!open) return
-    api.regions()
-      .then((r) => {
-        setRegions(r.regions)
-        if (r.regions.length > 0) setRegionSlug(r.regions[0].slug)
-      })
-      .catch((e) => setErr(errMsg(e)))
-  }, [open])
-
-  async function submit(apply: boolean) {
+  const submitMut = useMutation({
+    mutationFn: (apply: boolean) => discoverPois(regionSlug, apply, regions.find((r) => r.slug === regionSlug)?.discoveryBbox),
+    onSuccess: () => onSubmitted(),
+  })
+  function submit(apply: boolean) {
     if (!regionSlug) return
-    setBusy(true)
-    setErr(null)
-    try {
-      const bbox = regions.find((r) => r.slug === regionSlug)?.discoveryBbox
-      await discoverPois(regionSlug, apply, bbox)
-      onSubmitted()
-    } catch (e) {
-      setErr(errMsg(e))
-    } finally {
-      setBusy(false)
-    }
+    submitMut.mutate(apply)
   }
+  const err = loadErr ?? submitMut.error
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -170,19 +157,19 @@ function DiscoverDialog({
 
         {err && (
           <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {err}
+            {errMsg(err)}
           </div>
         )}
 
         <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
+          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={submitMut.isPending}>
             Cancel
           </Button>
-          <Button variant="outline" disabled={busy || !regionSlug} onClick={() => void submit(false)}>
-            {busy ? 'Triggering…' : 'Preview'}
+          <Button variant="outline" disabled={submitMut.isPending || !regionSlug} onClick={() => void submit(false)}>
+            {submitMut.isPending ? 'Triggering…' : 'Preview'}
           </Button>
-          <Button disabled={busy || !regionSlug} onClick={() => void submit(true)}>
-            <Compass className="h-4 w-4" /> {busy ? 'Triggering…' : 'Discover'}
+          <Button disabled={submitMut.isPending || !regionSlug} onClick={() => void submit(true)}>
+            <Compass className="h-4 w-4" /> {submitMut.isPending ? 'Triggering…' : 'Discover'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -195,10 +182,8 @@ function DiscoverDialog({
 // Operator surface for a POI's upstream-fact corrections + speakable anchor. Lazy-loads on
 // expand. Corrections take effect on the NEXT generate/regeneration — they don't rewrite audio.
 function Corrections({ poiId }: { poiId: string }) {
-  const [data, setData] = useState<PoiCorrections | null>(null)
-  const [err, setErr] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
+  const qc = useQueryClient()
+  const [validationErr, setValidationErr] = useState<string | null>(null)
 
   // Add-correction form
   const [find, setFind] = useState('')
@@ -209,58 +194,44 @@ function Corrections({ poiId }: { poiId: string }) {
   const [lat, setLat] = useState('')
   const [lng, setLng] = useState('')
 
-  function load() {
-    setLoading(true)
-    api.poiCorrections(poiId)
-      .then((r) => { setData(r); setErr(null) })
-      .catch((e) => setErr(errMsg(e)))
-      .finally(() => setLoading(false))
-  }
-  useEffect(load, [poiId])
+  const { data, isLoading: loading, error: loadErr } = useQuery({
+    queryKey: ['poiCorrections', poiId],
+    queryFn: () => api.poiCorrections(poiId),
+  })
+  // A save returns the updated corrections — write it straight into the cache.
+  const saveMut = useMutation({
+    mutationFn: (input: Parameters<typeof api.saveCorrection>[1]) => api.saveCorrection(poiId, input),
+    onSuccess: (updated) => { qc.setQueryData(['poiCorrections', poiId], updated); setValidationErr(null) },
+  })
+  const saving = saveMut.isPending
+  const err = validationErr ?? (loadErr ? errMsg(loadErr) : saveMut.error ? errMsg(saveMut.error) : null)
 
-  async function run(fn: () => Promise<PoiCorrections>) {
-    setSaving(true)
-    setErr(null)
-    try {
-      setData(await fn())
-    } catch (e) {
-      setErr(errMsg(e))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  async function addCorrection() {
+  function addCorrection() {
     if (!find.trim() || !reason.trim()) {
-      setErr('A find string and a reason are both required.')
+      setValidationErr('A find string and a reason are both required.')
       return
     }
-    await run(() => api.saveCorrection(poiId, {
-      kind: 'fact_edit',
-      find,
-      replace,
-      reason: reason.trim(),
-      ...(sourceUrl.trim() ? { sourceUrl: sourceUrl.trim() } : {}),
-    }))
-    setFind(''); setReplace(''); setReason(''); setSourceUrl('')
+    saveMut.mutate(
+      { kind: 'fact_edit', find, replace, reason: reason.trim(), ...(sourceUrl.trim() ? { sourceUrl: sourceUrl.trim() } : {}) },
+      { onSuccess: () => { setFind(''); setReplace(''); setReason(''); setSourceUrl('') } },
+    )
   }
 
-  async function retire(f: string) {
-    await run(() => api.saveCorrection(poiId, { kind: 'retire', find: f }))
+  function retire(f: string) {
+    saveMut.mutate({ kind: 'retire', find: f })
   }
 
-  async function setSpeakable() {
+  function setSpeakable() {
     const la = Number(lat), ln = Number(lng)
     if (!Number.isFinite(la) || !Number.isFinite(ln) || lat.trim() === '' || lng.trim() === '') {
-      setErr('Speakable anchor needs two numeric coordinates.')
+      setValidationErr('Speakable anchor needs two numeric coordinates.')
       return
     }
-    await run(() => api.saveCorrection(poiId, { kind: 'speakable', lat: la, lng: ln }))
-    setLat(''); setLng('')
+    saveMut.mutate({ kind: 'speakable', lat: la, lng: ln }, { onSuccess: () => { setLat(''); setLng('') } })
   }
 
-  async function clearSpeakable() {
-    await run(() => api.saveCorrection(poiId, { kind: 'speakable', lat: null }))
+  function clearSpeakable() {
+    saveMut.mutate({ kind: 'speakable', lat: null })
   }
 
   if (loading) return <div className="py-2 text-xs text-muted-foreground">Loading corrections…</div>
@@ -393,18 +364,12 @@ function PoiDetailSheet({ poiId, poiName, open, onOpenChange }: {
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
-  const [detail, setDetail] = useState<PoiDetail | null>(null)
   const [tab, setTab] = useState<'facts' | 'corrections'>('facts')
-  const [err, setErr] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!open) return
-    setDetail(null)
-    setErr(null)
-    api.poi(poiId)
-      .then((r) => setDetail(r.poi))
-      .catch((e) => setErr(errMsg(e)))
-  }, [open, poiId])
+  const { data: detail, error: err } = useQuery({
+    queryKey: ['poi', poiId],
+    queryFn: async () => (await api.poi(poiId)).poi,
+    enabled: open,
+  })
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -439,7 +404,7 @@ function PoiDetailSheet({ poiId, poiName, open, onOpenChange }: {
 
         <div className="flex-1 overflow-y-auto px-6 py-4">
           {err && (
-            <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{err}</div>
+            <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{errMsg(err)}</div>
           )}
 
           {tab === 'facts' && (
