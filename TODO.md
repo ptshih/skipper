@@ -230,11 +230,13 @@ tap-a-pin preview; the M3 notch/interests-as-setting = their interest-ordered qu
 
 ## Admin console — data + routing modernization
 
-- [ ] **Replace React Router with TanStack Router + TanStack Query** (`apps/admin/client`).
-      Move routing to TanStack Router (typed routes, search-param state, loaders) and the
-      ad-hoc `useEffect` + `fetch` + `useState({data,err})` data-fetching to TanStack Query
-      (caching, background refetch — the Runs 15s poll → `refetchInterval`, mutation
-      invalidation after generate/discover/resynth). Drops the hand-rolled loading/error/refresh
-      boilerplate across every view + the cross-view navigation hacks. Touches every view +
-      `App.tsx` + `lib/api.ts` (wrap as query/mutation fns). Do AFTER the React 19 + shadcn-v4
-      component pass settles. (Founder ask 2026-06-13.)
+- [x] **Routing → TanStack Router** — DONE (601ab76). Code-based route tree in `router.tsx`,
+      react-router-dom removed.
+- [ ] **Finish TanStack Query migration** (`apps/admin/client`). DONE so far (d8fcca3): page-level
+      reads + mutations on Runs/Tours/Create/Tour-detail + the POIs corpus list (shared `['pois']`
+      key; Runs poll → `refetchInterval`; mutations invalidate `['runs']`/`['tours']`). REMAINING:
+      **RoamView** + **RegionsView** (left on `useEffect`+`fetch` because they're entangled with the
+      in-progress Regions feature — `regionMap`, combined pois+regions load, shared error state), and
+      the leaf lazy-fetches — **Corrections** + **DiscoverDialog** (PoisView) and **RoamPlayer**
+      (RoamView clip-sign + resynth). Wrap those as queries/mutations too for a uniform data layer.
+      (Founder ask 2026-06-13.)
