@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from '@tanstack/react-router'
 import { ChevronDown, ChevronRight, Compass, MapPin, RefreshCw, Zap } from 'lucide-react'
 import { api, type PoiRow, type Region, type RoamClipDetail } from '@/lib/api'
 import { errMsg } from '@/lib/format'
@@ -72,7 +72,7 @@ export function RoamView() {
     try {
       const bbox = regionMap.get(regionSlug)?.discoveryBbox
       await discoverPois(regionSlug, true, bbox)
-      navigate('/runs')
+      navigate({ to: '/runs' })
     } catch (e) {
       setErr(`Discover failed — ${errMsg(e)}`)
     }
@@ -85,7 +85,7 @@ export function RoamView() {
     setErr(null)
     try {
       await api.createJob({ kind: 'generate_roam', ...(bbox ? { bbox } : {}), apply: true, confirm: true })
-      navigate('/runs')
+      navigate({ to: '/runs' })
     } catch (e) {
       setErr(`Generate roam failed — ${errMsg(e)}`)
     }
@@ -282,7 +282,7 @@ function RoamPlayer({ poiId }: { poiId: string }) {
     setActionErr(null)
     try {
       const { job } = await api.createJob({ kind: 'resynth_roam_clip', poiId, apply: true, confirm: true })
-      navigate(`/runs#${job.id}`)
+      navigate({ to: '/runs', hash: job.id })
     } catch (e) {
       setActionErr(`Re-synth failed — ${errMsg(e)}`)
     } finally {

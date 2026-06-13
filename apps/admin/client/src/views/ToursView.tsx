@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from '@tanstack/react-router'
 import { ArrowDown, ArrowUp, Check, Map, Plus, Sparkles, TriangleAlert } from 'lucide-react'
 import { api, type IntegrityReport, type TourCard } from '@/lib/api'
 import { errMsg, fmtDuration, fmtMiles, timeAgo } from '@/lib/format'
@@ -98,7 +98,7 @@ export function ToursView() {
     if (!window.confirm(`Generate ${slugs.length} tour${slugs.length > 1 ? 's' : ''}? This spends LLM + TTS credits.`)) return
     try {
       for (const slug of slugs) await api.createJob({ kind: 'generate', slug, dryRun: false, maxCostUsd: 5, confirm: true })
-      navigate('/runs')
+      navigate({ to: '/runs' })
     } catch (e) {
       setErr(errMsg(e))
     }
@@ -175,7 +175,7 @@ export function ToursView() {
             {integrity.tours.map((t, i) => (
               <span key={t.id}>
                 {i > 0 && ', '}
-                <Link to={`/tours/${t.id}`} className="font-medium text-foreground hover:underline">{t.slug}</Link>
+                <Link to="/tours/$id" params={{ id: t.id }} className="font-medium text-foreground hover:underline">{t.slug}</Link>
               </span>
             ))}
           </div>
@@ -227,7 +227,7 @@ export function ToursView() {
             </TableHeader>
             <TableBody>
               {view.map((t) => (
-                <TableRow key={t.id} className="cursor-pointer" onClick={() => navigate(`/tours/${t.id}`)}>
+                <TableRow key={t.id} className="cursor-pointer" onClick={() => navigate({ to: '/tours/$id', params: { id: t.id } })}>
                   <TableCell>
                     <div className="font-medium hover:underline">{t.headline}</div>
                     <div className="font-mono text-xs text-muted-foreground">

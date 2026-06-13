@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from '@tanstack/react-router'
 import {
   Activity, CircleX,
   ExternalLink, Filter, Map, RefreshCw, Scissors, Search, Sparkles, Trash2, X, Zap,
@@ -234,7 +234,7 @@ export function RunsView() {
                       {r.slug ? (
                         <button
                           className="font-medium hover:underline"
-                          onClick={(e) => { e.stopPropagation(); if (r.tourId) navigate(`/tours/${r.tourId}`) }}
+                          onClick={(e) => { e.stopPropagation(); if (r.tourId) navigate({ to: '/tours/$id', params: { id: r.tourId } }) }}
                         >
                           {r.slug}
                         </button>
@@ -480,7 +480,7 @@ function RunDrawer({ run, onClose, onChanged }: { run: RunEvent; onClose: () => 
 
         <SheetFooter>
           {run.tourId && (
-            <Button variant="outline" onClick={() => { onClose(); navigate(`/tours/${run.tourId}`) }}>
+            <Button variant="outline" onClick={() => { onClose(); navigate({ to: '/tours/$id', params: { id: run.tourId! } }) }}>
               <Map size={14} /> Open tour
             </Button>
           )}

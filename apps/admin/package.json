@@ -17,6 +17,8 @@
     "@skipper/db": "workspace:*",
     "@skipper/shared": "workspace:*",
     "@skipper/storage": "workspace:*",
+    "@tanstack/react-query": "^5.101.0",
+    "@tanstack/react-router": "^1.170.15",
     "drizzle-orm": "^0.45.2",
     "google-auth-library": "^10.7.0",
     "hono": "^4.12.23"
@@ -41,7 +43,6 @@
     "postcss": "^8.5.3",
     "react": "19.2.7",
     "react-dom": "19.2.7",
-    "react-router-dom": "^6.30.0",
     "tailwind-merge": "^3",
     "tailwindcss": "^4",
     "tailwindcss-animate": "^1.0.7",

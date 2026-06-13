@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { Link, Outlet, useNavigate } from '@tanstack/react-router'
 import { Activity, Anchor, BookOpen, Compass, Layers, Map, MapPin, Menu, Moon, Search, Sun } from 'lucide-react'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
 
-const NAV = [
+type AppPath = '/runs' | '/regions' | '/tours' | '/pois' | '/roam' | '/reference' | '/create'
+
+const NAV: { to: AppPath; label: string; icon: React.ElementType }[] = [
   { to: '/runs', label: 'Runs', icon: Activity },
   { to: '/regions', label: 'Regions', icon: Layers },
   { to: '/pois', label: 'POIs', icon: MapPin },
@@ -16,9 +18,15 @@ const itemBase =
   'relative flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-left text-sm font-medium transition-colors'
 const itemInactive = 'text-muted-foreground hover:bg-foreground/5 hover:text-foreground'
 
-function NavItem({ to, label, icon: Icon, onClick }: { to: string; label: string; icon: React.ElementType; onClick?: () => void }) {
+function NavItem({ to, label, icon: Icon, onClick }: { to: AppPath; label: string; icon: React.ElementType; onClick?: () => void }) {
   return (
-    <NavLink to={to} onClick={onClick} className={({ isActive }) => cn(itemBase, isActive ? 'text-foreground' : itemInactive)}>
+    <Link
+      to={to}
+      onClick={onClick}
+      className={itemBase}
+      activeProps={{ className: 'text-foreground' }}
+      inactiveProps={{ className: itemInactive }}
+    >
       {({ isActive }) => (
         <>
           {isActive && <span className="absolute -left-3 inset-y-1 w-0.5 rounded-r bg-foreground" />}
@@ -26,7 +34,7 @@ function NavItem({ to, label, icon: Icon, onClick }: { to: string; label: string
           {label}
         </>
       )}
-    </NavLink>
+    </Link>
   )
 }
 
@@ -198,7 +206,7 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
     return () => window.removeEventListener('keydown', onEsc)
   }, [onEsc])
 
-  const all = [
+  const all: { group: string; label: string; icon: React.ElementType; href: AppPath }[] = [
     { group: 'Go to', label: 'Runs', icon: Activity, href: '/runs' },
     { group: 'Go to', label: 'Regions', icon: Layers, href: '/regions' },
     { group: 'Go to', label: 'POIs', icon: MapPin, href: '/pois' },
@@ -211,7 +219,7 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
 
   useEffect(() => setActive(0), [q])
 
-  const run = (href: string) => { navigate(href); onClose() }
+  const run = (href: AppPath) => { navigate({ to: href }); onClose() }
 
   const onKey = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') { e.preventDefault(); setActive((a) => Math.min(a + 1, items.length - 1)) }

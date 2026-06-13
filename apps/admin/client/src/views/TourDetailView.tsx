@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from '@tanstack/react-router'
 import { ChevronRight, CircleCheck, CircleX, RefreshCw, Scissors, Sparkles, TriangleAlert } from 'lucide-react'
 import { api, type CharmDetail, type EvalRunSummary, type EvalScore, type SignResult, type TourDetail } from '@/lib/api'
 import { RouteMap, STOP_TYPE_COLOR, type RouteStopPin } from '@/components/RouteMap'
@@ -329,7 +329,7 @@ function RunHistory({ runs, currentId }: { runs: EvalRunSummary[]; currentId?: s
 }
 
 export function TourDetailView() {
-  const { id } = useParams<{ id: string }>()
+  const { id } = useParams({ strict: false })
   const navigate = useNavigate()
   const [data, setData] = useState<TourDetail | null>(null)
   const [signed, setSigned] = useState<SignResult | null>(null)
@@ -362,7 +362,7 @@ export function TourDetailView() {
     setBusy(true)
     try {
       await api.createJob(body)
-      navigate('/runs')
+      navigate({ to: '/runs' })
     } catch (e) {
       setErr(errMsg(e))
       setBusy(false)
@@ -408,7 +408,7 @@ export function TourDetailView() {
     <div>
       <button
         className="mb-3 inline-flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground"
-        onClick={() => navigate('/tours')}
+        onClick={() => navigate({ to: '/tours' })}
       >
         <ChevronRight size={13} className="rotate-180" />
         Tours

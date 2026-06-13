@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from '@tanstack/react-router'
 import { CircleCheck, Compass, Locate, Plus, RefreshCw, Search, Trash2, Wrench, X } from 'lucide-react'
 import { api, type CorrectionOverride, type PoiCorrections, type PoiDetail, type PoiRow, type Region } from '@/lib/api'
 import { errMsg, timeAgo } from '@/lib/format'
@@ -86,7 +86,7 @@ export function PoisView() {
       {tab === 'corpus' && <CorpusTab pois={live} />}
       {tab === 'retire' && <RetireTab flagged={flagged} />}
 
-      <DiscoverDialog open={discoverOpen} onOpenChange={setDiscoverOpen} onSubmitted={() => navigate('/runs')} />
+      <DiscoverDialog open={discoverOpen} onOpenChange={setDiscoverOpen} onSubmitted={() => navigate({ to: '/runs' })} />
     </div>
   )
 }

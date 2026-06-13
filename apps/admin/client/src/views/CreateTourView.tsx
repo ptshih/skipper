@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from '@tanstack/react-router'
 import { Check, Map, Wand2, X } from 'lucide-react'
 import { api, type Proposal, type Region } from '@/lib/api'
 import { errMsg } from '@/lib/format'
@@ -310,7 +310,7 @@ export function CreateTourView() {
               Create another
             </Button>
             {createdId && (
-              <Button onClick={() => nav(`/tours/${createdId}`)}>
+              <Button onClick={() => nav({ to: '/tours/$id', params: { id: createdId! } })}>
                 <Map size={14} /> Open tour
               </Button>
             )}
