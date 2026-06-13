@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronDown, ChevronRight, MapPin, RefreshCw, Search, Trash2 } from 'lucide-react'
-import { api, type PoiRow, type RoamClipDetail } from '@/lib/api'
+import { ChevronDown, ChevronRight, Locate, MapPin, Plus, RefreshCw, Search, Trash2, Wrench } from 'lucide-react'
+import { api, type CorrectionOverride, type PoiCorrections, type PoiRow, type RoamClipDetail } from '@/lib/api'
 import { timeAgo } from '@/lib/format'
 
 type Tab = 'corpus' | 'coverage' | 'retire'
@@ -169,6 +169,195 @@ function RoamPlayer({ poiId }: { poiId: string }) {
   )
 }
 
+/* ── CORRECTIONS ── */
+
+// Operator surface for a POI's upstream-fact corrections + speakable anchor. Lazy-loads on
+// expand. Corrections take effect on the NEXT generate/regeneration — they don't rewrite audio.
+function Corrections({ poiId }: { poiId: string }) {
+  const [data, setData] = useState<PoiCorrections | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+
+  // Add-correction form
+  const [find, setFind] = useState('')
+  const [replace, setReplace] = useState('')
+  const [reason, setReason] = useState('')
+  const [sourceUrl, setSourceUrl] = useState('')
+  // Speakable-anchor inputs
+  const [lat, setLat] = useState('')
+  const [lng, setLng] = useState('')
+
+  function load() {
+    setLoading(true)
+    api.poiCorrections(poiId)
+      .then((r) => { setData(r); setErr(null) })
+      .catch((e) => setErr(e instanceof Error ? e.message : String(e)))
+      .finally(() => setLoading(false))
+  }
+  useEffect(load, [poiId])
+
+  async function run(fn: () => Promise<PoiCorrections>) {
+    setSaving(true)
+    setErr(null)
+    try {
+      setData(await fn())
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function addCorrection() {
+    if (!find.trim() || !reason.trim()) {
+      setErr('A find string and a reason are both required.')
+      return
+    }
+    await run(() => api.saveCorrection(poiId, {
+      kind: 'fact_edit',
+      find,
+      replace,
+      reason: reason.trim(),
+      ...(sourceUrl.trim() ? { sourceUrl: sourceUrl.trim() } : {}),
+    }))
+    setFind(''); setReplace(''); setReason(''); setSourceUrl('')
+  }
+
+  async function retire(f: string) {
+    await run(() => api.saveCorrection(poiId, { kind: 'retire', find: f }))
+  }
+
+  async function setSpeakable() {
+    const la = Number(lat), ln = Number(lng)
+    if (!Number.isFinite(la) || !Number.isFinite(ln) || lat.trim() === '' || lng.trim() === '') {
+      setErr('Speakable anchor needs two numeric coordinates.')
+      return
+    }
+    await run(() => api.saveCorrection(poiId, { kind: 'speakable', lat: la, lng: ln }))
+    setLat(''); setLng('')
+  }
+
+  async function clearSpeakable() {
+    await run(() => api.saveCorrection(poiId, { kind: 'speakable', lat: null }))
+  }
+
+  if (loading) return <div className="muted" style={{ fontSize: 12, padding: '8px 0' }}>Loading corrections…</div>
+
+  const label = { display: 'block', fontSize: 11, color: 'var(--ink-3)', textTransform: 'uppercase' as const, letterSpacing: '0.05em', fontWeight: 600, marginBottom: 4 }
+  const input = { width: '100%', fontSize: 12, padding: '6px 8px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--ink-1)' }
+
+  return (
+    <div style={{ paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--ink-2)', fontWeight: 600 }}>
+        <Wrench size={13} /> Corrections
+      </div>
+      <div style={{ fontSize: 11.5, color: 'var(--ink-3)', lineHeight: 1.5, background: 'var(--surface)', padding: '6px 10px', borderRadius: 4 }}>
+        Corrections apply on the <strong>next generate / regeneration</strong> of a tour or roam (the generator loads
+        these overrides + reads the speakable anchor fresh per run). They do <strong>not</strong> rewrite existing audio.
+      </div>
+
+      {err && (
+        <div style={{ fontSize: 12, color: 'var(--bad)', background: 'var(--bad-bg)', padding: '6px 10px', borderRadius: 4 }}>{err}</div>
+      )}
+
+      {/* Existing fact-edits */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={label}>Fact edits</div>
+        {data && data.overrides.length === 0 && (
+          <div className="muted" style={{ fontSize: 12 }}>No corrections yet.</div>
+        )}
+        {data?.overrides.map((o: CorrectionOverride, i) => (
+          <div
+            key={`${o.find ?? '∅'}-${i}`}
+            style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 10px', borderRadius: 4, background: 'var(--surface)', opacity: o.active ? 1 : 0.6 }}
+          >
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 12.5, color: 'var(--ink-1)', wordBreak: 'break-word' }}>
+                <code className="mono" style={{ fontSize: 11.5 }}>{o.find ?? '∅'}</code>
+                <span style={{ color: 'var(--ink-4)', margin: '0 6px' }}>→</span>
+                <code className="mono" style={{ fontSize: 11.5 }}>{o.replace === '' ? '(deleted)' : o.replace ?? '∅'}</code>
+                {!o.active && <span className="tag" style={{ marginLeft: 8 }}>retired</span>}
+                {o.upstreamStatus !== 'not_filed' && <span className="tag" style={{ marginLeft: 6 }}>{o.upstreamStatus}</span>}
+              </div>
+              <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginTop: 3 }}>{o.reason}</div>
+              {o.sourceUrl && (
+                <a href={o.sourceUrl} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: 'var(--run)', wordBreak: 'break-all' }}>{o.sourceUrl}</a>
+              )}
+            </div>
+            {o.active && o.find && (
+              <button className="btn btn--ghost btn--sm" disabled={saving} onClick={() => retire(o.find!)} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                <Trash2 size={12} /> Retire
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Add correction */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 12px', borderRadius: 4, border: '1px dashed var(--border)' }}>
+        <div style={label}>Add correction</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div>
+            <label style={{ ...label, textTransform: 'none', letterSpacing: 0 }}>Find (exact substring)</label>
+            <input style={input} value={find} onChange={(e) => setFind(e.target.value)} placeholder="Leonard Palme" />
+          </div>
+          <div>
+            <label style={{ ...label, textTransform: 'none', letterSpacing: 0 }}>Replace (blank = delete)</label>
+            <input style={input} value={replace} onChange={(e) => setReplace(e.target.value)} placeholder="Lennart Palme" />
+          </div>
+        </div>
+        <div>
+          <label style={{ ...label, textTransform: 'none', letterSpacing: 0 }}>Reason *</label>
+          <input style={input} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why the source is wrong (required)" />
+        </div>
+        <div>
+          <label style={{ ...label, textTransform: 'none', letterSpacing: 0 }}>Source URL (optional)</label>
+          <input style={input} value={sourceUrl} onChange={(e) => setSourceUrl(e.target.value)} placeholder="https://… authoritative source for the fix" />
+        </div>
+        <div>
+          <button className="btn btn--default btn--sm" disabled={saving} onClick={addCorrection} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <Plus size={12} /> {saving ? 'Saving…' : 'Add correction'}
+          </button>
+        </div>
+      </div>
+
+      {/* Speakable anchor */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={label}>Speakable anchor</div>
+        <div style={{ fontSize: 11.5, color: 'var(--ink-3)', lineHeight: 1.5 }}>
+          The vantage point side-of-road content speaks from — only needed when the POI's own centroid is misleading.
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <Locate size={13} style={{ color: 'var(--ink-3)' }} />
+          {data?.speakable
+            ? <span className="cell-mono" style={{ fontSize: 12 }}>{data.speakable.lat.toFixed(5)}, {data.speakable.lng.toFixed(5)}</span>
+            : <span className="muted" style={{ fontSize: 12 }}>not set — speaks from the POI pin</span>
+          }
+          {data?.speakable && (
+            <button className="btn btn--ghost btn--sm" disabled={saving} onClick={clearSpeakable} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <Trash2 size={12} /> Clear
+            </button>
+          )}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, flexWrap: 'wrap' }}>
+          <div style={{ width: 130 }}>
+            <label style={{ ...label, textTransform: 'none', letterSpacing: 0 }}>Lat</label>
+            <input style={input} value={lat} onChange={(e) => setLat(e.target.value)} placeholder="38.9540" inputMode="decimal" />
+          </div>
+          <div style={{ width: 130 }}>
+            <label style={{ ...label, textTransform: 'none', letterSpacing: 0 }}>Lng</label>
+            <input style={input} value={lng} onChange={(e) => setLng(e.target.value)} placeholder="-120.0950" inputMode="decimal" />
+          </div>
+          <button className="btn btn--default btn--sm" disabled={saving} onClick={setSpeakable} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            {saving ? 'Saving…' : 'Set anchor'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /* ── CORPUS ── */
 
 function CorpusTab({ pois }: { pois: PoiRow[] }) {
@@ -261,6 +450,7 @@ function CorpusTab({ pois }: { pois: PoiRow[] }) {
         <table className="table">
           <thead>
             <tr>
+              <th style={{ width: 28 }} />
               <th>Name</th>
               <th>Source</th>
               <th>Region</th>
@@ -275,14 +465,21 @@ function CorpusTab({ pois }: { pois: PoiRow[] }) {
             {filtered.map((p) => {
               const sm = SOURCE_META[p.source]
               const isOpen = expanded === p.id
-              const toggleExpand = p.roamClipCount > 0
-                ? () => setExpanded(isOpen ? null : p.id)
-                : undefined
+              const toggleExpand = () => setExpanded(isOpen ? null : p.id)
               return (
                 <>
                   <tr key={p.id}>
+                    <td style={{ textAlign: 'center' }}>
+                      <button
+                        onClick={toggleExpand}
+                        aria-label={isOpen ? 'Collapse' : 'Expand'}
+                        style={{ display: 'inline-flex', alignItems: 'center', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-3)', padding: 0 }}
+                      >
+                        {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                      </button>
+                    </td>
                     <td>
-                      <div className="cell-strong">{p.name}</div>
+                      <div className="cell-strong" style={{ cursor: 'pointer' }} onClick={toggleExpand}>{p.name}</div>
                       {(p.staleFacts || p.suspiciousDuration) && (
                         <div style={{ marginTop: 2, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                           {p.staleFacts && <span className="badge badge--warn" style={{ fontSize: 10.5 }}>stale facts</span>}
@@ -303,15 +500,7 @@ function CorpusTab({ pois }: { pois: PoiRow[] }) {
                     </td>
                     <td style={{ textAlign: 'right' }} className="cell-mono">
                       {p.roamClipCount > 0
-                        ? (
-                          <button
-                            onClick={toggleExpand}
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--run)', fontFamily: 'var(--mono)', fontSize: 'inherit', padding: 0 }}
-                          >
-                            {isOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-                            {p.roamClipCount}
-                          </button>
-                        )
+                        ? <span style={{ color: 'var(--run)' }}>{p.roamClipCount}</span>
                         : <span className="muted">—</span>
                       }
                     </td>
@@ -327,9 +516,10 @@ function CorpusTab({ pois }: { pois: PoiRow[] }) {
                     <td style={{ textAlign: 'right' }} className="cell-dim">{timeAgo(p.createdAt)}</td>
                   </tr>
                   {isOpen && (
-                    <tr key={`${p.id}-player`}>
-                      <td colSpan={8} style={{ paddingTop: 0, paddingBottom: 12, background: 'var(--surface-2)' }}>
-                        <RoamPlayer poiId={p.id} />
+                    <tr key={`${p.id}-detail`}>
+                      <td colSpan={9} style={{ paddingTop: 0, paddingBottom: 12, background: 'var(--surface-2)' }}>
+                        {p.roamClipCount > 0 && <RoamPlayer poiId={p.id} />}
+                        <Corrections poiId={p.id} />
                       </td>
                     </tr>
                   )}
@@ -338,7 +528,7 @@ function CorpusTab({ pois }: { pois: PoiRow[] }) {
             })}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={8}>
+                <td colSpan={9}>
                   <div className="empty">
                     <Search size={22} />
                     <div>No POIs match these filters.</div>

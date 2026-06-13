@@ -62,6 +62,10 @@ export interface WikiPoi {
   qid?: string
   /** P31 feature type for a NAMED scenic pin (e.g. 'bay') — spoken as the KIND, sayable like a break's. */
   kind?: string
+  /** Curated/admin "where to look" anchor (pois.speakable) — overrides the pin for the
+   *  side-of-road computation when the pin misleads. Carried from the corpus, not a code map. */
+  speakableLat?: number
+  speakableLng?: number
 }
 
 /**

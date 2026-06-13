@@ -90,7 +90,6 @@ import { judgeCloserDiversity } from './judge'
 import { synthesizeWithTailRetake } from './tts'
 import type { TailOutcome } from './tts'
 import { bracketKey, clipKey, uploadAudio } from './storage'
-import { speakableAnchorFor } from './speakable'
 import {
   finalizeTourReady,
   hashFacts,
@@ -1126,9 +1125,8 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       }
     })
     const poiIds = await mapLimit(prep, 6, (p) => {
-      // Relocate the curated speakable anchor onto the poi row at the seam where its identity
-      // is known (select.ts already resolves the same anchor for the per-segment side).
-      const anchor = speakableAnchorFor(p.s.source, p.s.sourceId)
+      // Speakable anchor is NOT set here — it's seeded by the region sweep (pois.speakable) and
+      // owned by the admin; this persist must not clobber it (the upsert coalesce keeps existing).
       return upsertPoi({
         source: p.s.source,
         sourceId: p.s.sourceId,
@@ -1136,7 +1134,6 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
         kind: p.s.kind,
         lat: p.s.lat,
         lng: p.s.lng,
-        ...(anchor ? { speakableLat: anchor.lat, speakableLng: anchor.lng } : {}),
         summary: p.s.stopType === 'story' ? firstSentence(p.s.facts) : null,
         facts: p.facts,
         factsHash: p.factsHash,

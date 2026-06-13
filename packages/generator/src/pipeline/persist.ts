@@ -208,10 +208,11 @@ export async function upsertPoi(input: UpsertPoiInput): Promise<string> {
             kind: sql`excluded.kind`,
             lat: sql`excluded.lat`,
             lng: sql`excluded.lng`,
-            // CURATED speakable anchor: COALESCE so a later write that carries none (most
-            // writes) never blanks an anchor a discovery run already set — keep the curated one.
-            speakableLat: sql`coalesce(excluded.speakable_lat, ${pois.speakableLat})`,
-            speakableLng: sql`coalesce(excluded.speakable_lng, ${pois.speakableLng})`,
+            // Speakable anchor is SEED-or-admin-owned (not auto-refetched): keep the EXISTING
+            // value, filling from an incoming write only when the row has none. So an admin edit
+            // (or the sweep's seed) is never clobbered by a later generate/sweep pass.
+            speakableLat: sql`coalesce(${pois.speakableLat}, excluded.speakable_lat)`,
+            speakableLng: sql`coalesce(${pois.speakableLng}, excluded.speakable_lng)`,
             // FACTS are SHARED across tours: the SAME place can be a story stop on one tour and
             // a (factless) scenic/break stop on another. NEVER let a factless write blank a place
             // that already carries facts — COALESCE keeps the richest known facts/summary, while a

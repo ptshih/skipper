@@ -21,6 +21,8 @@
 //   GET  /admin/integrity         -> ready tours violating the audio/attribution invariant (§14.9)
 //   GET  /admin/pois              -> POI corpus: sources, tour + roam usage, attribution, region coverage
 //   GET  /admin/roam/sign/:poiId  -> presigned R2 URL + metadata for a POI's roam clip
+//   GET  /admin/pois/:id/corrections  -> a POI's fact-edit overrides + speakable anchor
+//   POST /admin/pois/:id/corrections  -> add/retire a fact-edit, or set/clear the speakable anchor
 //   POST /admin/tours/propose     -> Create Tour, phase 1: LLM + geocode  (create-tour.ts — Phase 4)
 //   POST /admin/tours             -> Create Tour, phase 2: freeze + draft  (create-tour.ts — Phase 4)
 
@@ -32,6 +34,7 @@ import {
   evalRuns,
   evalScores,
   genJobs,
+  poiOverrides,
   pois,
   regions,
   segments,
@@ -827,6 +830,197 @@ app.get('/admin/roam/sign/:poiId', async (c) => {
     console.error('[admin] roam presign failed', e)
     return c.json({ error: 'audio_unavailable', message: 'R2 not configured or presign failed.' }, 503)
   }
+})
+
+/* -------------------------------------------------------------------------- */
+/*  POI corrections — operator-editable upstream-fact corrections + speakable    */
+/*  anchor, replacing the seed-edit + reseed CLI loop. These MUTATE the curation  */
+/*  layer (poi_overrides + pois.speakable_lat/lng) but spend nothing — corrections */
+/*  take effect on the NEXT generate/regeneration (the generator loads overrides + */
+/*  reads pois.speakable fresh per run); they never rewrite existing audio.        */
+/* -------------------------------------------------------------------------- */
+
+interface CorrectionOverride {
+  find: string | null
+  replace: string | null
+  reason: string
+  sourceUrl: string | null
+  active: boolean
+  upstreamStatus: string
+  updatedAt: string
+}
+interface CorrectionsPayload {
+  overrides: CorrectionOverride[]
+  speakable: { lat: number; lng: number } | null
+}
+
+// Assemble the corrections payload for one poi: its (source, source_id)-keyed override rows
+// (newest first) + its speakable anchor.
+async function correctionsForPoi(poi: {
+  source: 'wikipedia' | 'google_places' | 'wikidata'
+  sourceId: string
+  speakableLat: number | null
+  speakableLng: number | null
+}): Promise<CorrectionsPayload> {
+  const rows = await db
+    .select({
+      find: poiOverrides.find,
+      replace: poiOverrides.replace,
+      reason: poiOverrides.reason,
+      sourceUrl: poiOverrides.sourceUrl,
+      active: poiOverrides.active,
+      upstreamStatus: poiOverrides.upstreamStatus,
+      updatedAt: poiOverrides.updatedAt,
+    })
+    .from(poiOverrides)
+    .where(and(eq(poiOverrides.source, poi.source), eq(poiOverrides.sourceId, poi.sourceId)))
+    .orderBy(desc(poiOverrides.updatedAt))
+
+  const speakable =
+    poi.speakableLat !== null && poi.speakableLng !== null
+      ? { lat: poi.speakableLat, lng: poi.speakableLng }
+      : null
+
+  return {
+    overrides: rows.map((r) => ({
+      find: r.find,
+      replace: r.replace,
+      reason: r.reason,
+      sourceUrl: r.sourceUrl,
+      active: r.active,
+      upstreamStatus: r.upstreamStatus,
+      updatedAt: r.updatedAt.toISOString(),
+    })),
+    speakable,
+  }
+}
+
+// The fact-corrections + speakable anchor for one poi (the operator's curation surface).
+app.get('/admin/pois/:id/corrections', async (c) => {
+  const id = c.req.param('id')
+  if (!UUID_RE.test(id)) return c.json({ error: 'not_found' }, 404)
+  const poi = (
+    await db
+      .select({
+        source: pois.source,
+        sourceId: pois.sourceId,
+        speakableLat: pois.speakableLat,
+        speakableLng: pois.speakableLng,
+      })
+      .from(pois)
+      .where(eq(pois.id, id))
+      .limit(1)
+  )[0]
+  if (!poi) return c.json({ error: 'not_found' }, 404)
+  return c.json(await correctionsForPoi(poi))
+})
+
+// Add/retire a fact-edit override, or set/clear the speakable anchor. Cheap + safe (no spend),
+// so no confirm gate. Returns the refreshed corrections payload (same shape as the GET).
+app.post('/admin/pois/:id/corrections', async (c) => {
+  const id = c.req.param('id')
+  if (!UUID_RE.test(id)) return c.json({ error: 'not_found' }, 404)
+
+  let body: Record<string, unknown>
+  try {
+    body = (await c.req.json()) as Record<string, unknown>
+  } catch {
+    return c.json({ error: 'bad_request', message: 'a JSON body is required' }, 400)
+  }
+
+  const poi = (
+    await db
+      .select({
+        name: pois.name,
+        source: pois.source,
+        sourceId: pois.sourceId,
+        speakableLat: pois.speakableLat,
+        speakableLng: pois.speakableLng,
+      })
+      .from(pois)
+      .where(eq(pois.id, id))
+      .limit(1)
+  )[0]
+  if (!poi) return c.json({ error: 'not_found' }, 404)
+
+  const kind = body.kind
+  const operator = c.get('adminEmail')
+
+  if (kind === 'fact_edit') {
+    const find = typeof body.find === 'string' ? body.find : ''
+    const replace = typeof body.replace === 'string' ? body.replace : null
+    const reason = typeof body.reason === 'string' ? body.reason.trim() : ''
+    const sourceUrl = typeof body.sourceUrl === 'string' && body.sourceUrl.trim() ? body.sourceUrl.trim() : null
+    // find non-empty; replace a string (may be ''); reason non-empty — a correction documents itself.
+    if (!find) return c.json({ error: 'bad_request', message: '`find` must be a non-empty string.' }, 400)
+    if (replace === null) return c.json({ error: 'bad_request', message: '`replace` must be a string (may be empty).' }, 400)
+    if (!reason) return c.json({ error: 'bad_request', message: '`reason` is required — a correction documents itself.' }, 400)
+
+    console.log(`[admin] ${operator} fact_edit override on ${poi.source}:${poi.sourceId} (${poi.name}) find=${JSON.stringify(find)}`)
+    await db
+      .insert(poiOverrides)
+      .values({
+        source: poi.source,
+        sourceId: poi.sourceId,
+        name: poi.name,
+        find,
+        replace,
+        reason,
+        sourceUrl,
+        active: true,
+      })
+      .onConflictDoUpdate({
+        target: [poiOverrides.source, poiOverrides.sourceId, poiOverrides.find],
+        set: { replace, reason, sourceUrl, active: true, updatedAt: new Date() },
+      })
+  } else if (kind === 'retire') {
+    const find = typeof body.find === 'string' ? body.find : ''
+    if (!find) return c.json({ error: 'bad_request', message: '`find` must be a non-empty string.' }, 400)
+    console.log(`[admin] ${operator} retired override on ${poi.source}:${poi.sourceId} find=${JSON.stringify(find)}`)
+    await db
+      .update(poiOverrides)
+      .set({ active: false, updatedAt: new Date() })
+      .where(
+        and(
+          eq(poiOverrides.source, poi.source),
+          eq(poiOverrides.sourceId, poi.sourceId),
+          eq(poiOverrides.find, find),
+        ),
+      )
+  } else if (kind === 'speakable') {
+    const clear = body.clear === true || body.lat === null
+    if (clear) {
+      console.log(`[admin] ${operator} cleared speakable anchor on ${poi.source}:${poi.sourceId}`)
+      await db.update(pois).set({ speakableLat: null, speakableLng: null }).where(eq(pois.id, id))
+    } else {
+      const lat = typeof body.lat === 'number' ? body.lat : NaN
+      const lng = typeof body.lng === 'number' ? body.lng : NaN
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        return c.json({ error: 'bad_request', message: '`lat`/`lng` must be finite numbers (or pass clear:true / lat:null).' }, 400)
+      }
+      console.log(`[admin] ${operator} set speakable anchor on ${poi.source}:${poi.sourceId} → ${lat},${lng}`)
+      await db.update(pois).set({ speakableLat: lat, speakableLng: lng }).where(eq(pois.id, id))
+    }
+  } else {
+    return c.json({ error: 'bad_request', message: 'unknown `kind` — expected fact_edit | retire | speakable.' }, 400)
+  }
+
+  // Re-read the speakable anchor (it may have just changed) and return the refreshed payload.
+  const fresh = (
+    await db
+      .select({ speakableLat: pois.speakableLat, speakableLng: pois.speakableLng })
+      .from(pois)
+      .where(eq(pois.id, id))
+      .limit(1)
+  )[0]
+  return c.json(
+    await correctionsForPoi({
+      source: poi.source,
+      sourceId: poi.sourceId,
+      speakableLat: fresh?.speakableLat ?? null,
+      speakableLng: fresh?.speakableLng ?? null,
+    }),
+  )
 })
 
 // Serve the built SPA. In prod the Hono service serves it (one Cloud Run service behind IAP);

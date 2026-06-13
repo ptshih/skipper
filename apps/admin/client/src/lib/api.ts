@@ -220,6 +220,28 @@ export interface PoiRow {
   regionName: string | null
 }
 
+// One fact-edit override row on a POI (a literal find→replace on the fetched extract).
+export interface CorrectionOverride {
+  find: string | null
+  replace: string | null
+  reason: string
+  sourceUrl: string | null
+  active: boolean
+  upstreamStatus: string
+  updatedAt: string
+}
+// A POI's curation surface: its fact-edit overrides + speakable anchor.
+export interface PoiCorrections {
+  overrides: CorrectionOverride[]
+  speakable: { lat: number; lng: number } | null
+}
+// The discriminated POST body for /admin/pois/:id/corrections.
+export type CorrectionBody =
+  | { kind: 'fact_edit'; find: string; replace: string; reason: string; sourceUrl?: string }
+  | { kind: 'retire'; find: string }
+  | { kind: 'speakable'; lat: number; lng: number }
+  | { kind: 'speakable'; lat: null }
+
 // A unified Runs-timeline row: either an operational gen_job or a historical eval_run.
 export interface RunEvent {
   source: 'job' | 'eval'
@@ -273,6 +295,9 @@ export const api = {
   integrity: () => req<IntegrityReport>('/admin/integrity'),
   pois: () => req<{ pois: PoiRow[] }>('/admin/pois'),
   roamSign: (poiId: string) => req<{ clip: RoamClipDetail }>(`/admin/roam/sign/${poiId}`),
+  poiCorrections: (id: string) => req<PoiCorrections>(`/admin/pois/${id}/corrections`),
+  saveCorrection: (id: string, body: CorrectionBody) =>
+    req<PoiCorrections>(`/admin/pois/${id}/corrections`, { method: 'POST', body: JSON.stringify(body) }),
   createJob: (body: Record<string, unknown>) =>
     req<{ job: GenJob }>('/admin/jobs', { method: 'POST', body: JSON.stringify(body) }),
   propose: (body: Record<string, unknown>) =>

@@ -24,6 +24,7 @@ import {
 } from './pipeline/wikidata-discovery'
 import { ensurePoiOverridesLoaded } from './pipeline/poi-overrides'
 import { hashFacts, upsertPoi } from './pipeline/persist'
+import { speakableAnchorFor } from './pipeline/speakable'
 import { announce, parseFlags } from './pipeline/ops'
 import { sleep } from './pipeline/http'
 import type { LngLat } from './pipeline/geo'
@@ -143,6 +144,9 @@ for (const s of stories) {
   // Store the FULL discovery payload (incl. the linked Wikidata qid) so a tour generate can
   // rebuild the spine candidate (WikiPoi) losslessly from the pool — see pipeline/region-corpus.ts.
   const facts = { extract: a.extract, title: a.title, url: a.url, pageId: a.pageId, qid: s.qid }
+  // Seed the curated "where to look" anchor onto the corpus row (coalesce-kept by upsertPoi, so
+  // an admin edit always wins on a re-sweep). select.ts reads it back off pois.speakable.
+  const sp = speakableAnchorFor('wikipedia', String(a.pageId))
   await upsertPoi({
     source: 'wikipedia',
     sourceId: String(a.pageId),
@@ -150,6 +154,7 @@ for (const s of stories) {
     kind: featureKind(s.types) ?? null,
     lat: s.lat,
     lng: s.lng,
+    ...(sp ? { speakableLat: sp.lat, speakableLng: sp.lng } : {}),
     summary: a.extract.split(/(?<=[.!?])\s+/)[0] ?? null,
     facts,
     factsHash: hashFacts(facts),
@@ -158,6 +163,7 @@ for (const s of stories) {
   wrote++
 }
 for (const s of scenics) {
+  const sp = speakableAnchorFor('wikidata', s.qid)
   await upsertPoi({
     source: 'wikidata',
     sourceId: s.qid,
@@ -165,6 +171,7 @@ for (const s of scenics) {
     kind: featureKind(s.types) ?? null,
     lat: s.lat,
     lng: s.lng,
+    ...(sp ? { speakableLat: sp.lat, speakableLng: sp.lng } : {}),
     summary: null,
     facts: null,
     factsHash: null,

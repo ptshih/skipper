@@ -42,7 +42,6 @@ import {
 import type { LngLat } from './geo'
 import type { WikiPoi } from './wikipedia'
 import type { BreakAnchor } from './places'
-import { speakableAnchorFor } from './speakable'
 
 export interface StopPlan {
   seq: number
@@ -367,12 +366,15 @@ export function selectStops(params: SelectParams): StopPlan[] {
       // content actually IS, through the same heading-aware geometry — so it stays correct
       // per travel direction (S→N and N→S are peer tours). Trigger geometry is untouched.
       ...((): { sideOfRoad?: 'left' | 'right' } => {
-        const anchor = speakableAnchorFor(n.poi.source, n.poi.sourceId)
-        const side = anchor
+        // The speakable anchor rides on the candidate from the corpus (pois.speakable, curated or
+        // admin-set). When present it wins over the pin — the side is recomputed from where the
+        // content actually IS, through the same heading-aware geometry.
+        const hasAnchor = n.poi.speakableLat != null && n.poi.speakableLng != null
+        const side = hasAnchor
           ? sideOfApproach(
               snap.approachHeadingDeg,
               [snap.triggerLng, snap.triggerLat],
-              [anchor.lng, anchor.lat],
+              [n.poi.speakableLng!, n.poi.speakableLat!],
             )
           : snap.sideOfRoad
         return side ? { sideOfRoad: side } : {}

@@ -43,6 +43,8 @@ export async function loadCandidatePoisInBox(sw: LngLat, ne: LngLat): Promise<Wi
           kind: pois.kind,
           lat: pois.lat,
           lng: pois.lng,
+          speakableLat: pois.speakableLat,
+          speakableLng: pois.speakableLng,
           facts: pois.facts,
         })
         .from(pois)
@@ -58,6 +60,12 @@ export async function loadCandidatePoisInBox(sw: LngLat, ne: LngLat): Promise<Wi
 
   const out: WikiPoi[] = []
   for (const r of rows) {
+    // The curated/admin "where to look" anchor (pois.speakable) — carried onto the candidate so
+    // select.ts can recompute the side-of-road from where the content IS, not the misleading pin.
+    const speakable =
+      r.speakableLat != null && r.speakableLng != null
+        ? { speakableLat: r.speakableLat, speakableLng: r.speakableLng }
+        : {}
     if (r.source === 'wikipedia') {
       const f = (r.facts ?? {}) as StoryFacts
       out.push({
@@ -71,6 +79,7 @@ export async function loadCandidatePoisInBox(sw: LngLat, ne: LngLat): Promise<Wi
         pageid: f.pageId ?? Number(r.sourceId),
         ...(f.qid ? { qid: f.qid } : {}),
         ...(r.kind ? { kind: r.kind } : {}),
+        ...speakable,
       })
     } else {
       // wikidata = a named SCENIC pin (no prose); sourceId IS the QID.
@@ -83,6 +92,7 @@ export async function loadCandidatePoisInBox(sw: LngLat, ne: LngLat): Promise<Wi
         extract: '',
         qid: r.sourceId,
         ...(r.kind ? { kind: r.kind } : {}),
+        ...speakable,
       })
     }
   }
