@@ -358,17 +358,25 @@ function Corrections({ poiId }: { poiId: string }) {
 
 /* ── POI DETAIL SHEET ── */
 
-function PoiDetailSheet({ poiId, poiName, open, onOpenChange }: {
+function PoiDetailSheet({ poiId, poiName, canDelete, open, onOpenChange }: {
   poiId: string
   poiName: string
+  /** Orphan (no tours/roam clips) → a hard delete is allowed. Referenced POIs are FK-protected. */
+  canDelete: boolean
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
+  const qc = useQueryClient()
   const [tab, setTab] = useState<'facts' | 'corrections'>('facts')
   const { data: detail, error: err } = useQuery({
     queryKey: ['poi', poiId],
     queryFn: async () => (await api.poi(poiId)).poi,
     enabled: open,
+  })
+  // Hard delete — only surfaced for orphans (canDelete). Closes the sheet + refreshes the corpus.
+  const deleteMut = useMutation({
+    mutationFn: () => api.deletePoi(poiId),
+    onSuccess: () => { onOpenChange(false); void qc.invalidateQueries({ queryKey: ['pois'] }) },
   })
 
   return (
@@ -413,6 +421,31 @@ function PoiDetailSheet({ poiId, poiName, open, onOpenChange }: {
 
           {tab === 'corrections' && <Corrections poiId={poiId} />}
         </div>
+
+        {canDelete && (
+          <div className="border-t px-6 py-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                disabled={deleteMut.isPending}
+                onClick={() => {
+                  if (!window.confirm(`Permanently delete "${poiName}"? This removes the POI record.`)) return
+                  deleteMut.mutate()
+                }}
+              >
+                <Trash2 className="h-4 w-4" /> {deleteMut.isPending ? 'Deleting…' : 'Delete POI'}
+              </Button>
+              <span className="text-xs text-muted-foreground">No tours or roam clips reference this POI.</span>
+            </div>
+            {deleteMut.error && (
+              <div className="mt-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                {errMsg(deleteMut.error)}
+              </div>
+            )}
+          </div>
+        )}
       </SheetContent>
     </Sheet>
   )
@@ -481,7 +514,7 @@ function CorpusTab({ pois }: { pois: PoiRow[] }) {
   const [region, setRegion] = useState('all')
   const [source, setSource] = useState('all')
   const [flags, setFlags] = useState('all')
-  const [sheetPoi, setSheetPoi] = useState<{ id: string; name: string } | null>(null)
+  const [sheetPoi, setSheetPoi] = useState<{ id: string; name: string; canDelete: boolean } | null>(null)
 
   const regions = useMemo(() => {
     const seen = new Set<string>()
@@ -581,7 +614,10 @@ function CorpusTab({ pois }: { pois: PoiRow[] }) {
               const sm = SOURCE_META[p.source]
               return (
                 <Fragment key={p.id}>
-                  <TableRow className="cursor-pointer" onClick={() => setSheetPoi({ id: p.id, name: p.name })}>
+                  <TableRow
+                    className="cursor-pointer"
+                    onClick={() => setSheetPoi({ id: p.id, name: p.name, canDelete: p.tourCount + p.roamClipCount === 0 })}
+                  >
                     <TableCell>
                       <span className="font-medium hover:underline">{p.name}</span>
                       {(p.staleFacts || p.suspiciousDuration) && (
@@ -640,6 +676,7 @@ function CorpusTab({ pois }: { pois: PoiRow[] }) {
         <PoiDetailSheet
           poiId={sheetPoi.id}
           poiName={sheetPoi.name}
+          canDelete={sheetPoi.canDelete}
           open={!!sheetPoi}
           onOpenChange={(o) => { if (!o) setSheetPoi(null) }}
         />
@@ -651,6 +688,23 @@ function CorpusTab({ pois }: { pois: PoiRow[] }) {
 /* ── RETIRE ── */
 
 function RetireTab({ flagged }: { flagged: PoiRow[] }) {
+  const navigate = useNavigate()
+  const qc = useQueryClient()
+  const [actionErr, setActionErr] = useState<string | null>(null)
+
+  // Re-fetch is a FREE cloud job (MediaWiki only, no LLM/TTS) — fire it, then jump to Runs to watch.
+  const refetchMut = useMutation({
+    mutationFn: (poiId: string) => api.createJob({ kind: 'refetch_facts', poiId, apply: true }),
+    onSuccess: () => navigate({ to: '/runs' }),
+    onError: (e) => setActionErr(errMsg(e)),
+  })
+  // Retire is a hard DELETE, allowed ONLY for orphaned POIs (no segments) — the server guards it too.
+  const deleteMut = useMutation({
+    mutationFn: (poiId: string) => api.deletePoi(poiId),
+    onSuccess: () => { setActionErr(null); void qc.invalidateQueries({ queryKey: ['pois'] }) },
+    onError: (e) => setActionErr(errMsg(e)),
+  })
+
   if (flagged.length === 0) {
     return (
       <EmptyState
@@ -666,14 +720,24 @@ function RetireTab({ flagged }: { flagged: PoiRow[] }) {
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
-        Flagged POIs — stale facts need a re-fetch or retire; unattributed story stops violate CC BY-SA. Retire
-        removes the DB record; run <code className="font-mono text-xs">Discover POIs</code> afterward to purge R2 clips.
+        Flagged POIs. <strong className="text-foreground">Re-fetch</strong> re-pulls facts from Wikipedia (free) — if
+        they change, regenerate the owning tour to clear the staleness. Unattributed story stops violate CC BY-SA and
+        need a regenerate. <strong className="text-foreground">Retire</strong> (hard delete) is allowed only for
+        orphaned POIs with no tours or roam clips, so it's disabled for everything referenced here.
       </p>
+      {actionErr && (
+        <Callout variant="error">
+          <span className="font-medium">Action failed:</span> {actionErr}
+        </Callout>
+      )}
       <div className="space-y-2">
         {flagged.map((p) => {
           const tone = p.staleFacts ? 'warning' : 'destructive'
           const label = p.staleFacts ? 'Stale facts' : 'Unattributed'
-          const desc = p.staleFacts ? 'factsHash changed — re-fetch or retire' : 'story stop missing CC BY-SA attribution'
+          const desc = p.staleFacts ? 'factsHash changed — re-fetch, then regenerate the tour' : 'story stop missing CC BY-SA attribution'
+          const isOrphan = p.tourCount + p.roamClipCount === 0
+          const refetching = refetchMut.isPending && refetchMut.variables === p.id
+          const deleting = deleteMut.isPending && deleteMut.variables === p.id
           return (
             <div
               key={p.id}
@@ -694,20 +758,36 @@ function RetireTab({ flagged }: { flagged: PoiRow[] }) {
                     <span>{desc}</span>
                     {p.roamClipCount > 0 && (
                       <span className="text-warning">
-                        {p.roamClipCount} roam clip{p.roamClipCount > 1 ? 's' : ''} to sweep
+                        {p.roamClipCount} roam clip{p.roamClipCount > 1 ? 's' : ''}
                       </span>
                     )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   {p.staleFacts && (
-                    <Button variant="outline" size="sm" onClick={() => alert(`Re-fetch facts for ${p.id}`)}>
-                      <RefreshCw className="h-3 w-3" /> Re-fetch
+                    <Button variant="outline" size="sm" disabled={refetching} onClick={() => refetchMut.mutate(p.id)}>
+                      <RefreshCw className="h-3 w-3" /> {refetching ? 'Re-fetching…' : 'Re-fetch'}
                     </Button>
                   )}
-                  <Button variant="ghost" size="sm" onClick={() => alert(`Retire ${p.id}`)}>
-                    <Trash2 className="h-3 w-3" /> Retire
-                  </Button>
+                  <span
+                    title={
+                      isOrphan
+                        ? undefined
+                        : 'Referenced by a tour or roam clip — regenerate or correct it instead of deleting.'
+                    }
+                  >
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={!isOrphan || deleting}
+                      onClick={() => {
+                        if (!window.confirm(`Permanently delete "${p.name}"? This removes the POI record.`)) return
+                        deleteMut.mutate(p.id)
+                      }}
+                    >
+                      <Trash2 className="h-3 w-3" /> {deleting ? 'Retiring…' : 'Retire'}
+                    </Button>
+                  </span>
                 </div>
               </div>
             </div>

@@ -1159,6 +1159,35 @@ app.post('/admin/pois/:id/corrections', async (c) => {
   )
 })
 
+// Hard-DELETE one POI — ONLY when it is ORPHANED (no segments reference it). segments.poiId is
+// onDelete:'restrict', so a referenced POI can't be deleted at the DB anyway; we check first and
+// return a clean 409 instead of a raw FK error. A flagged/stale POI living in a tour or roam is
+// referenced BY DEFINITION — the fix there is to regenerate or correct it, not delete it. POIs
+// with zero references carry no tracks, so there are no orphan R2 clips to sweep. poi_overrides
+// are keyed by (source, source_id), survive the row, and re-apply on re-discovery — left intact.
+app.delete('/admin/pois/:id', async (c) => {
+  const id = c.req.param('id')
+  if (!UUID_RE.test(id)) return c.json({ error: 'not_found' }, 404)
+
+  const [poi] = await db.select({ id: pois.id, name: pois.name }).from(pois).where(eq(pois.id, id)).limit(1)
+  if (!poi) return c.json({ error: 'not_found' }, 404)
+
+  const [refRow] = await db.select({ refs: count() }).from(segments).where(eq(segments.poiId, id))
+  const refs = Number(refRow?.refs ?? 0)
+  if (refs > 0) {
+    return c.json(
+      {
+        error: 'conflict',
+        message: `"${poi.name}" is referenced by ${refs} tour/roam segment(s) — regenerate or correct it instead of deleting.`,
+      },
+      409,
+    )
+  }
+
+  await db.delete(pois).where(eq(pois.id, id))
+  return c.json({ ok: true, id })
+})
+
 // Serve the built SPA. In prod the Hono service serves it (one Cloud Run service behind IAP);
 // in local dev vite serves the UI and proxies /admin + /health here, so this dir is absent and
 // these 404 harmlessly. IAP gates the whole service at ingress, so the static assets need no

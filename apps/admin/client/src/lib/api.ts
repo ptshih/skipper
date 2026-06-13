@@ -25,7 +25,7 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 
 /* ------------------------------- types ------------------------------- */
 
-export type JobKind = 'generate' | 'patch_clip' | 'resynth' | 'resynth_roam_clip' | 'sweep_orphans' | 'sweep_roam_pois' | 'generate_roam'
+export type JobKind = 'generate' | 'patch_clip' | 'resynth' | 'resynth_roam_clip' | 'sweep_orphans' | 'sweep_roam_pois' | 'generate_roam' | 'refetch_facts'
 export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled'
 
 export interface GenJob {
@@ -329,6 +329,7 @@ export const api = {
   integrity: () => req<IntegrityReport>('/admin/integrity'),
   pois: () => req<{ pois: PoiRow[] }>('/admin/pois'),
   poi: (id: string) => req<{ poi: PoiDetail }>(`/admin/pois/${id}`),
+  deletePoi: (id: string) => req<{ ok: true; id: string }>(`/admin/pois/${id}`, { method: 'DELETE' }),
   roamSign: (poiId: string) => req<{ clip: RoamClipDetail }>(`/admin/roam/sign/${poiId}`),
   poiCorrections: (id: string) => req<PoiCorrections>(`/admin/pois/${id}/corrections`),
   saveCorrection: (id: string, body: CorrectionBody) =>

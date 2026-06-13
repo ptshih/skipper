@@ -44,6 +44,7 @@ const SCRIPTS = {
   sweep_orphans: 'packages/generator/src/sweep-orphans.ts',
   sweep_roam_pois: 'packages/generator/src/sweep-roam-pois.ts',
   generate_roam: 'packages/generator/src/generate-roam.ts',
+  refetch_facts: 'packages/generator/src/refetch-poi.ts',
 } as const
 
 export type JobKind = keyof typeof SCRIPTS
@@ -108,6 +109,16 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     const args = [script, poiId]
     if (apply) args.push('--apply')
     return { args, dryRun: !apply, spends: apply, targetId: poiId }
+  }
+
+  if (kind === 'refetch_facts') {
+    const poiId = str(body.poiId)
+    if (!poiId) throw new HttpError(400, 'refetch_facts needs poiId')
+    const apply = body.apply === true
+    const args = [script, poiId]
+    if (apply) args.push('--apply')
+    // Re-fetch is free (MediaWiki only, no LLM/TTS); spends:false so no confirm gate.
+    return { args, dryRun: !apply, spends: false, targetId: poiId }
   }
 
   if (kind === 'resynth') {
