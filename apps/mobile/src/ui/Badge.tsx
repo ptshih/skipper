@@ -3,7 +3,7 @@
 // contrast-safe text color (note: amber text uses the burnt/lantern accent, never
 // the bright fill amber, so it survives on paper).
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
-import { radius, space } from '../theme/tokens'
+import { border, radius, space } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'
 import type { Theme } from '../theme/theme'
 import { Glyph } from './Glyph'
@@ -40,7 +40,7 @@ export function Badge({ label, glyph, tone = 'neutral', filled, style }: BadgePr
   const { fg, solid, onSolid } = toneColors(theme, tone)
   const container: ViewStyle = filled
     ? { backgroundColor: solid }
-    : { backgroundColor: 'transparent', borderWidth: 1, borderColor: fg }
+    : { backgroundColor: 'transparent', borderWidth: border.thin, borderColor: fg }
 
   return (
     <View style={[styles.pill, container, style]}>

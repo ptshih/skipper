@@ -35,7 +35,7 @@ export function ThemeModePicker() {
             key={opt.mode}
             onPress={() => setMode(opt.mode)}
             accessibilityRole="radio"
-            accessibilityState={{ selected }}
+            accessibilityState={{ checked: selected }}
             accessibilityLabel={`${opt.label} appearance`}
             style={({ pressed }) => [
               styles.segment,

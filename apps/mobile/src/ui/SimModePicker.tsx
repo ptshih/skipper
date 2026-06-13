@@ -35,7 +35,7 @@ export function SimModePicker({ value, onChange }: SimModePickerProps) {
             key={String(opt.on)}
             onPress={() => onChange(opt.on)}
             accessibilityRole="radio"
-            accessibilityState={{ selected }}
+            accessibilityState={{ checked: selected }}
             accessibilityLabel={opt.label}
             style={({ pressed }) => [
               styles.segment,

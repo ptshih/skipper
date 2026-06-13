@@ -41,7 +41,6 @@ export function NowCard({
   const { colors } = theme
   return (
     <View
-      accessibilityLiveRegion={liveRegion ? 'polite' : 'none'}
       style={[
         styles.card,
         {
@@ -54,29 +53,42 @@ export function NowCard({
         },
       ]}
     >
-      <View style={styles.head}>
-        <Text variant="label" color="accentWarm" style={styles.flex}>
-          {kicker}
-        </Text>
-        {right}
-      </View>
-      <View style={styles.titleRow}>
-        <Text
-          variant="placardTitle"
-          color="ink"
-          numberOfLines={2}
-          maxFontSizeMultiplier={IN_CAR_MAX_FONT_SCALE}
-          style={styles.flex}
-        >
-          {title}
-        </Text>
-        {timer ? (
-          <Text variant="mono" color="inkDim" maxFontSizeMultiplier={IN_CAR_MAX_FONT_SCALE}>
-            {timer}
+      {/* The polite live region is scoped to JUST the kicker+title block — the part that
+          changes ONCE per stop. Wrapping the whole card (incl. the Scrubber, whose time
+          label/value ticks every ~500ms) would flood TalkBack and bury the one-shot
+          stop-transition announce. */}
+      <View accessibilityLiveRegion={liveRegion ? 'polite' : 'none'} style={styles.titleBlock}>
+        <View style={styles.head}>
+          <Text variant="label" color="accentWarm" style={styles.flex}>
+            {kicker}
           </Text>
-        ) : null}
+          {right}
+        </View>
+        <View style={styles.titleRow}>
+          <Text
+            variant="placardTitle"
+            color="ink"
+            numberOfLines={2}
+            maxFontSizeMultiplier={IN_CAR_MAX_FONT_SCALE}
+            style={styles.flex}
+          >
+            {title}
+          </Text>
+          {timer ? (
+            <Text variant="mono" color="inkDim" maxFontSizeMultiplier={IN_CAR_MAX_FONT_SCALE}>
+              {timer}
+            </Text>
+          ) : null}
+        </View>
       </View>
-      {children}
+      {/* The middle slot (Scrubber/body/buffering) explicitly opts OUT of the live region:
+          the Scrubber already exposes an adjustable role carrying its own spoken value, so a
+          per-tick announce here is noise. */}
+      {children != null ? (
+        <View accessibilityLiveRegion="none" style={styles.middle}>
+          {children}
+        </View>
+      ) : null}
       {transport ? <View style={styles.transport}>{transport}</View> : null}
     </View>
   )
@@ -90,6 +102,12 @@ const styles = StyleSheet.create({
     paddingVertical: space.lg,
     gap: space.md,
   },
+  // The kicker+title block (the once-per-stop content). Keeps the original card gap
+  // between the header row and the placard title now that they share a wrapper.
+  titleBlock: { gap: space.md },
+  // The state-dependent middle slot (Scrubber/body/buffering). Its own gap keeps a body
+  // line + a buffering note stacked the way the flat card used to.
+  middle: { gap: space.md },
   head: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   // Title left, the optional mono timer hugged to the right and baseline-aligned-ish.
   titleRow: { flexDirection: 'row', alignItems: 'flex-end', gap: space.sm },

@@ -74,9 +74,11 @@ light↔dark swap for free. **The contrast footguns are designed out:**
   in daylight (a ranger sign), **lantern-amber + ink** at dusk (a campfire-lit
   button). Never restyle one without the other.
 - Every text role here clears **4.5:1 on `surface` AND `surfaceRaised`** in both
-  themes (verified, not aspirational). Caveat: `danger` / `water` / `accentWarm` as
-  _text_ are scoped to those two surfaces — they dip just under 4.5:1 on
-  `surfaceSunken`, so don't put colored text on an inset well.
+  themes (verified by `theme.test.ts`, not aspirational). Caveat: on the **light
+  `surfaceSunken`** token, `inkFaint` (4.30), `water` (4.12), `danger` (4.39), and
+  `accentWarm` (4.35) all dip under 4.5:1 — so as _text_ on an inset well use only
+  `ink`, `inkDim`, or `accent` (the set `theme.test.ts` now gate-enforces on
+  `surfaceSunken`). Dark-mode sunken clears all of them.
 - The amber **glow** (`glow` token) is applied via RN's cross-platform `boxShadow`,
   not iOS-only `shadow*` props, so the night-drive halo renders on Android too.
 

@@ -20,8 +20,7 @@ function contrast(a: string, b: string): number {
   return (hi + 0.05) / (lo + 0.05)
 }
 
-// Roles rendered as TEXT on a surface. (danger/water/accentWarm are scoped to
-// surface + surfaceRaised; they're documented NOT to be used as text on surfaceSunken.)
+// Roles rendered as TEXT on the app surface + raised cards.
 const TEXT_ROLES: (keyof ThemeColors)[] = [
   'ink',
   'inkDim',
@@ -32,11 +31,21 @@ const TEXT_ROLES: (keyof ThemeColors)[] = [
   'danger',
 ]
 const SURFACES: (keyof ThemeColors)[] = ['surface', 'surfaceRaised']
-// Paired fill + on-fill roles (always used together).
+// surfaceSunken (segmented-picker tracks, the active StopRow well) carries ONLY these text roles —
+// the active row's name (ink), its sublabel + the picker labels (inkDim), and the active glyph
+// (accent). The other roles dip below AA on the LIGHT sunken token (measured: inkFaint 4.30, water
+// 4.12, danger 4.39, accentWarm 4.35) and must NOT be used as text there. Gate-enforcing the safe set
+// stops a future paperSunken/inkDim tweak from silently breaking the pickers + active row. (audit #653, #644)
+const SUNKEN_TEXT_ROLES: (keyof ThemeColors)[] = ['ink', 'inkDim', 'accent']
+// Paired fill + on-fill roles (always used together) — every Badge `filled` tone is here so a tweak
+// to water/rule/accent can't push a filled badge under AA unnoticed. (audit #680)
 const ON_FILL: [keyof ThemeColors, keyof ThemeColors][] = [
   ['onPrimary', 'primaryFill'],
   ['onAmber', 'amberToken'],
   ['onDanger', 'danger'],
+  ['onPrimary', 'accent'], // Badge tone="pine" filled (accent ≠ primaryFill in dark)
+  ['onPrimary', 'water'], // Badge tone="teal" filled
+  ['ink', 'rule'], // Badge tone="neutral" filled
 ]
 const AA = 4.5
 
@@ -46,6 +55,10 @@ for (const theme of [lightTheme, darkTheme] as Theme[]) {
       test(`${theme.name}: ${role} text on ${surf} clears ${AA}:1`, () => {
         expect(contrast(theme.colors[role], theme.colors[surf])).toBeGreaterThanOrEqual(AA)
       })
+  for (const role of SUNKEN_TEXT_ROLES)
+    test(`${theme.name}: ${role} text on surfaceSunken clears ${AA}:1`, () => {
+      expect(contrast(theme.colors[role], theme.colors.surfaceSunken)).toBeGreaterThanOrEqual(AA)
+    })
   for (const [fg, bg] of ON_FILL)
     test(`${theme.name}: ${fg} on ${bg} clears ${AA}:1`, () => {
       expect(contrast(theme.colors[fg], theme.colors[bg])).toBeGreaterThanOrEqual(AA)

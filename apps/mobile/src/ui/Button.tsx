@@ -96,23 +96,25 @@ export function Button({
         style,
       ]}
     >
+      {/* Keep the label MOUNTED while loading (just hidden) so the button holds its exact
+          width — a `fullWidth={false}` button would otherwise collapse to the spinner's
+          width and jump. The spinner overlays the hidden label, absolutely positioned. */}
+      <View style={[styles.row, loading && styles.hiddenWhileLoading]}>
+        {icon ? <Icon name={icon} size={18} color={labelColor} style={styles.glyph} /> : null}
+        {title ? (
+          <Text
+            variant="heading"
+            color={labelColor}
+            numberOfLines={1}
+            maxFontSizeMultiplier={maxFontScale}
+          >
+            {title}
+          </Text>
+        ) : null}
+      </View>
       {loading ? (
-        <ActivityIndicator color={colors[labelColor]} />
-      ) : (
-        <View style={styles.row}>
-          {icon ? <Icon name={icon} size={18} color={labelColor} style={styles.glyph} /> : null}
-          {title ? (
-            <Text
-              variant="heading"
-              color={labelColor}
-              numberOfLines={1}
-              maxFontSizeMultiplier={maxFontScale}
-            >
-              {title}
-            </Text>
-          ) : null}
-        </View>
-      )}
+        <ActivityIndicator color={colors[labelColor]} style={styles.spinnerOverlay} />
+      ) : null}
     </Pressable>
   )
 }
@@ -127,6 +129,18 @@ const styles = StyleSheet.create({
   fullWidth: { alignSelf: 'stretch' },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   glyph: { marginTop: -1 },
+  // Label stays laid out (reserves the width) but invisible under the spinner.
+  hiddenWhileLoading: { opacity: 0 },
+  // Fills the button and centers the spinner over the hidden label.
+  spinnerOverlay: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   pressed: { opacity: 0.85 },
   disabled: { opacity: 0.45 },
 })

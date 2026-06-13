@@ -9,7 +9,7 @@
 //   • scroll  — the card is a FIXED shell (the caller gives it flex:1); only the rows scroll,
 //               inside it, clipped to the rounded corners. The in-drive player, so all four
 //               corners stay put while the itinerary scrolls.
-import { Fragment, type Ref } from 'react'
+import { Fragment, useRef, type Ref } from 'react'
 import {
   ScrollView,
   StyleSheet,
@@ -64,6 +64,21 @@ export function StopList({
   onMomentumScrollEnd,
   style,
 }: StopListProps) {
+  // Stable per-seq onPress so the memoized StopRow only re-renders rows whose props actually change
+  // (e.g. state), not every row on every parent render. The cached handler reads the latest
+  // onPressItem via a ref, so it stays referentially stable across renders. (audit #621)
+  const onPressRef = useRef(onPressItem)
+  onPressRef.current = onPressItem
+  const handlers = useRef(new Map<number, () => void>()).current
+  const handlerFor = (seq: number): (() => void) => {
+    let h = handlers.get(seq)
+    if (!h) {
+      h = () => onPressRef.current?.(seq)
+      handlers.set(seq, h)
+    }
+    return h
+  }
+
   const rows = items.map((it, i) => (
     <Fragment key={it.seq}>
       {i > 0 ? <Divider style={styles.rule} /> : null}
@@ -72,7 +87,7 @@ export function StopList({
         sublabel={it.sublabel}
         icon={it.icon}
         state={it.state}
-        onPress={onPressItem ? () => onPressItem(it.seq) : undefined}
+        onPress={onPressItem ? handlerFor(it.seq) : undefined}
         enterStamp={!!enterStamp && it.state === 'passed'}
         stampDelayMs={i * 80}
       />

@@ -3,9 +3,11 @@
 // the road-trip guide stays present inside the park aesthetic. Driven by an
 // Animated.Value in [0,1]; JS-driven (percentage layout can't use the native
 // driver) — keep it the only thing animating on a frame to stay smooth.
+import { useEffect, useState } from 'react'
 import { Animated, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
 import { border } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'
+import { useReducedMotion } from '../theme/useReducedMotion'
 import { Icon } from './Icon'
 
 export interface RouteTrackProps {
@@ -22,11 +24,27 @@ const TOKEN = 24
 
 export function RouteTrack({ progress, height = 6, glow = true, style }: RouteTrackProps) {
   const { colors } = useTheme()
-  const pct = progress.interpolate({
+  const reduced = useReducedMotion()
+
+  // Reduce Motion: the signature token must NOT glide. We track the progress value's
+  // current number and render a STATIC percentage that snaps to each new position instead
+  // of binding the layout to the Animated.Value (whose driver may still tween it). When
+  // motion is allowed we use the interpolation so the token rides smoothly.
+  const [snap, setSnap] = useState(() => (progress as unknown as { _value?: number })._value ?? 0)
+  useEffect(() => {
+    if (!reduced) return
+    const id = progress.addListener(({ value }) => setSnap(Math.min(1, Math.max(0, value))))
+    return () => progress.removeListener(id)
+  }, [reduced, progress])
+
+  const animatedPct = progress.interpolate({
     inputRange: [0, 1],
     outputRange: ['0%', '100%'],
     extrapolate: 'clamp',
   })
+  // A plain `%` string when snapping, the Animated interpolation otherwise. Both are valid
+  // values for `width` / `left`, so the same Animated.View renders either.
+  const pct = reduced ? (`${snap * 100}%` as const) : animatedPct
 
   return (
     <View

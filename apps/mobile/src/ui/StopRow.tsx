@@ -5,7 +5,7 @@
 //              (not raised) so it reads BOTH on the bare screen AND inside the raised route
 //              card. PINE accent, never amber — the player card owns the one amber glow.
 //   passed   — dimmed, with a quiet check
-import { useEffect, useRef } from 'react'
+import { memo, useEffect, useRef } from 'react'
 import { Animated, Pressable, StyleSheet, View } from 'react-native'
 import { radius, space } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'
@@ -29,7 +29,7 @@ export interface StopRowProps {
   stampDelayMs?: number
 }
 
-export function StopRow({
+function StopRowBase({
   name,
   sublabel,
   state = 'upcoming',
@@ -63,7 +63,9 @@ export function StopRow({
       // press tracking + pressed dimming. Only the preview (onPress set) reads as a button.
       disabled={!onPress}
       accessibilityRole={onPress ? 'button' : 'text'}
-      accessibilityState={{ selected: active }}
+      // Selection state only on the INTERACTIVE (button) row — a 'text' row announcing "selected" is
+      // semantically odd; the label suffix (", now playing") carries it for read-only rows. (audit #716)
+      accessibilityState={onPress ? { selected: active } : undefined}
       accessibilityLabel={`${name}${sublabel ? `, ${sublabel}` : ''}${active ? ', now playing' : passed ? ', played' : ''}`}
       style={({ pressed }) => [
         styles.row,
@@ -88,7 +90,9 @@ export function StopRow({
           {name}
         </Text>
         {sublabel ? (
-          <Text variant="dim" color="inkFaint" numberOfLines={1}>
+          // Active row paints surfaceSunken, where inkFaint is only 4.30:1 (below AA) — use inkDim
+          // (6.05:1) there; inkFaint is fine on the normal surface of upcoming/passed rows. (audit #644)
+          <Text variant="dim" color={active ? 'inkDim' : 'inkFaint'} numberOfLines={1}>
             {sublabel}
           </Text>
         ) : null}
@@ -114,6 +118,10 @@ export function StopRow({
     </Pressable>
   )
 }
+
+// memo: the active-stop index changes as the car advances, re-rendering the whole itinerary; with a
+// stable per-row onPress (see StopList) this re-renders only the rows whose props actually change. (audit #621)
+export const StopRow = memo(StopRowBase)
 
 const styles = StyleSheet.create({
   row: {
