@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronDown, ChevronRight, Compass, MapPin, RefreshCw, Zap } from 'lucide-react'
-import { api, type PoiRow, type RoamClipDetail } from '@/lib/api'
+import { api, type PoiRow, type Region, type RoamClipDetail } from '@/lib/api'
 import { errMsg } from '@/lib/format'
 import { PageHeader } from '@/components/PageHeader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Callout } from '@/components/ui/callout'
 import { EmptyState } from '@/components/ui/empty-state'
 import { cn } from '@/lib/utils'
-import { REGION_BBOX, discoverPois } from './PoisView'
+import { discoverPois } from './PoisView'
 
 /* Region coverage derived from the pois array */
 interface RegionCoverage {
@@ -48,11 +48,15 @@ const DENSITY_META: Record<RegionCoverage['density'], { variant: 'success' | 'wa
 export function RoamView() {
   const navigate = useNavigate()
   const [pois, setPois] = useState<PoiRow[]>([])
+  const [regionMap, setRegionMap] = useState<Map<string, Region>>(new Map())
   const [err, setErr] = useState<string | null>(null)
 
   useEffect(() => {
-    api.pois()
-      .then((r) => setPois(r.pois))
+    Promise.all([api.pois(), api.regions()])
+      .then(([pr, rr]) => {
+        setPois(pr.pois)
+        setRegionMap(new Map(rr.regions.map((r) => [r.slug, r])))
+      })
       .catch((e) => setErr(`Couldn't load roam data — ${errMsg(e)}`))
   }, [])
 
@@ -66,7 +70,8 @@ export function RoamView() {
   async function discover(regionSlug: string) {
     setErr(null)
     try {
-      await discoverPois(regionSlug, true)
+      const bbox = regionMap.get(regionSlug)?.discoveryBbox
+      await discoverPois(regionSlug, true, bbox)
       navigate('/runs')
     } catch (e) {
       setErr(`Discover failed — ${errMsg(e)}`)
@@ -76,7 +81,7 @@ export function RoamView() {
   // Fire generate_roam for one region — this SPENDS (LLM + TTS per clip), so confirm first.
   async function generateRoam(r: RegionCoverage) {
     if (!window.confirm(`Generate roam clips for ${r.regionName}? This spends LLM + TTS credits per clip.`)) return
-    const bbox = REGION_BBOX[r.regionSlug]
+    const bbox = regionMap.get(r.regionSlug)?.discoveryBbox
     setErr(null)
     try {
       await api.createJob({ kind: 'generate_roam', ...(bbox ? { bbox } : {}), apply: true, confirm: true })

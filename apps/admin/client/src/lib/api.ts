@@ -54,6 +54,23 @@ export interface GenJob {
 export interface Region {
   slug: string
   displayName: string
+  discoveryBbox: string | null
+}
+
+export interface PoiDetail {
+  id: string
+  source: string
+  sourceId: string
+  name: string
+  kind: string | null
+  lat: number
+  lng: number
+  summary: string | null
+  facts: Record<string, unknown> | null
+  factsHash: string | null
+  factsFetchedAt: string | null
+  createdAt: string
+  updatedAt: string
 }
 
 export interface TourCard {
@@ -294,10 +311,15 @@ export const api = {
   cancelJob: (id: string) => req<{ job: GenJob }>(`/admin/jobs/${id}/cancel`, { method: 'POST' }),
   integrity: () => req<IntegrityReport>('/admin/integrity'),
   pois: () => req<{ pois: PoiRow[] }>('/admin/pois'),
+  poi: (id: string) => req<{ poi: PoiDetail }>(`/admin/pois/${id}`),
   roamSign: (poiId: string) => req<{ clip: RoamClipDetail }>(`/admin/roam/sign/${poiId}`),
   poiCorrections: (id: string) => req<PoiCorrections>(`/admin/pois/${id}/corrections`),
   saveCorrection: (id: string, body: CorrectionBody) =>
     req<PoiCorrections>(`/admin/pois/${id}/corrections`, { method: 'POST', body: JSON.stringify(body) }),
+  createRegion: (body: { slug: string; displayName: string; discoveryBbox?: string | null }) =>
+    req<{ region: Region }>('/admin/regions', { method: 'POST', body: JSON.stringify(body) }),
+  updateRegion: (slug: string, body: { displayName?: string; discoveryBbox?: string | null }) =>
+    req<{ region: Region }>(`/admin/regions/${slug}`, { method: 'PATCH', body: JSON.stringify(body) }),
   createJob: (body: Record<string, unknown>) =>
     req<{ job: GenJob }>('/admin/jobs', { method: 'POST', body: JSON.stringify(body) }),
   propose: (body: Record<string, unknown>) =>

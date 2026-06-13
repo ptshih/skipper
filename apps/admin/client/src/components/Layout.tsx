@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { Activity, Anchor, BookOpen, Compass, Map, MapPin, Menu, Moon, Search, Sun } from 'lucide-react'
+import { Activity, Anchor, BookOpen, Compass, Layers, Map, MapPin, Menu, Moon, Search, Sun } from 'lucide-react'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
 
 const NAV = [
   { to: '/runs', label: 'Runs', icon: Activity },
-  { to: '/tours', label: 'Tours', icon: Map },
+  { to: '/regions', label: 'Regions', icon: Layers },
   { to: '/pois', label: 'POIs', icon: MapPin },
+  { to: '/tours', label: 'Tours', icon: Map },
   { to: '/roam', label: 'Roam', icon: Compass },
 ]
 
@@ -199,8 +200,9 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
 
   const all = [
     { group: 'Go to', label: 'Runs', icon: Activity, href: '/runs' },
-    { group: 'Go to', label: 'Tours', icon: Map, href: '/tours' },
+    { group: 'Go to', label: 'Regions', icon: Layers, href: '/regions' },
     { group: 'Go to', label: 'POIs', icon: MapPin, href: '/pois' },
+    { group: 'Go to', label: 'Tours', icon: Map, href: '/tours' },
     { group: 'Go to', label: 'Roam', icon: Compass, href: '/roam' },
     { group: 'Go to', label: 'Reference', icon: BookOpen, href: '/reference' },
     { group: 'Actions', label: 'Create a tour', icon: Map, href: '/create' },

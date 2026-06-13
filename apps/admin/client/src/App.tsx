@@ -7,6 +7,7 @@ import { CreateTourView } from './views/CreateTourView'
 import { ReferenceView } from './views/ReferenceView'
 import { PoisView } from './views/PoisView'
 import { RoamView } from './views/RoamView'
+import { RegionsView } from './views/RegionsView'
 
 export default function App() {
   return (
@@ -14,6 +15,7 @@ export default function App() {
       <Route element={<Layout />}>
         <Route index element={<Navigate to="/runs" replace />} />
         <Route path="/runs" element={<RunsView />} />
+        <Route path="/regions" element={<RegionsView />} />
         <Route path="/tours" element={<ToursView />} />
         <Route path="/tours/:id" element={<TourDetailView />} />
         <Route path="/create" element={<CreateTourView />} />

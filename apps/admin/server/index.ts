@@ -8,7 +8,9 @@
 //
 //   GET  /health                  -> liveness (OPEN — Cloud Run probes don't pass through IAP)
 //   --- everything below is behind requireAdmin (IAP founder-only) ---
-//   GET  /admin/regions           -> region list (for the Create-Tour form)
+//   GET  /admin/regions           -> region list with discoveryBbox
+//   POST /admin/regions           -> create a new region
+//   PATCH /admin/regions/:slug    -> update displayName / discoveryBbox
 //   GET  /admin/tours             -> catalog: every tour (incl. drafts) + status + counts
 //   GET  /admin/tours/:id         -> the ear-pass: stops/brackets + scripts + latest eval
 //   GET  /admin/tours/:id/sign    -> presigned R2 URLs for every clip (no tier gate)
@@ -20,6 +22,7 @@
 //   POST /admin/jobs/:id/cancel   -> stop a running execution (gen_job_status='canceled') (§14.8)
 //   GET  /admin/integrity         -> ready tours violating the audio/attribution invariant (§14.9)
 //   GET  /admin/pois              -> POI corpus: sources, tour + roam usage, attribution, region coverage
+//   GET  /admin/pois/:id          -> full POI detail: lat/lng, summary, facts JSON, freshness
 //   GET  /admin/roam/sign/:poiId  -> presigned R2 URL + metadata for a POI's roam clip
 //   GET  /admin/pois/:id/corrections  -> a POI's fact-edit overrides + speakable anchor
 //   POST /admin/pois/:id/corrections  -> add/retire a fact-edit, or set/clear the speakable anchor
@@ -75,10 +78,38 @@ app.use('/admin/*', requireAdmin)
 
 app.get('/admin/regions', async (c) => {
   const rows = await db
-    .select({ slug: regions.slug, displayName: regions.displayName })
+    .select({ slug: regions.slug, displayName: regions.displayName, discoveryBbox: regions.discoveryBbox })
     .from(regions)
     .orderBy(asc(regions.displayName))
   return c.json({ regions: rows })
+})
+
+app.post('/admin/regions', async (c) => {
+  const body = await c.req.json<{ slug: string; displayName: string; discoveryBbox?: string | null }>()
+  if (!body.slug?.trim() || !body.displayName?.trim()) {
+    return c.json({ error: 'slug and displayName are required' }, 400)
+  }
+  const [row] = await db.insert(regions).values({
+    slug: body.slug.trim(),
+    displayName: body.displayName.trim(),
+    discoveryBbox: body.discoveryBbox?.trim() || null,
+  }).returning({ slug: regions.slug, displayName: regions.displayName, discoveryBbox: regions.discoveryBbox })
+  return c.json({ region: row }, 201)
+})
+
+app.patch('/admin/regions/:slug', async (c) => {
+  const slug = c.req.param('slug')
+  const body = await c.req.json<{ displayName?: string; discoveryBbox?: string | null }>()
+  const update: Record<string, unknown> = {}
+  if (body.displayName !== undefined) update.displayName = body.displayName.trim()
+  if (body.discoveryBbox !== undefined) update.discoveryBbox = body.discoveryBbox?.trim() || null
+  if (!Object.keys(update).length) return c.json({ error: 'nothing to update' }, 400)
+  const [row] = await db.update(regions)
+    .set(update)
+    .where(eq(regions.slug, slug))
+    .returning({ slug: regions.slug, displayName: regions.displayName, discoveryBbox: regions.discoveryBbox })
+  if (!row) return c.json({ error: 'not_found' }, 404)
+  return c.json({ region: row })
 })
 
 // Catalog — EVERY tour (drafts included; the admin operates the whole catalog, unlike the
@@ -894,6 +925,32 @@ async function correctionsForPoi(poi: {
     speakable,
   }
 }
+
+// Full POI detail — lat/lng, summary, facts JSON, freshness. Used by the admin facts drawer.
+app.get('/admin/pois/:id', async (c) => {
+  const id = c.req.param('id')
+  if (!UUID_RE.test(id)) return c.json({ error: 'not_found' }, 404)
+  const [row] = await db
+    .select({
+      id: pois.id,
+      source: pois.source,
+      sourceId: pois.sourceId,
+      name: pois.name,
+      kind: pois.kind,
+      lat: pois.lat,
+      lng: pois.lng,
+      summary: pois.summary,
+      facts: pois.facts,
+      factsHash: pois.factsHash,
+      factsFetchedAt: pois.factsFetchedAt,
+      createdAt: pois.createdAt,
+      updatedAt: pois.updatedAt,
+    })
+    .from(pois)
+    .where(eq(pois.id, id))
+  if (!row) return c.json({ error: 'not_found' }, 404)
+  return c.json({ poi: row })
+})
 
 // The fact-corrections + speakable anchor for one poi (the operator's curation surface).
 app.get('/admin/pois/:id/corrections', async (c) => {

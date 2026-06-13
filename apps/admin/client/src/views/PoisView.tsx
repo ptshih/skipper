@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronDown, ChevronRight, CircleCheck, Compass, Locate, Plus, RefreshCw, Search, Trash2, Wrench } from 'lucide-react'
-import { api, type CorrectionOverride, type PoiCorrections, type PoiRow, type Region } from '@/lib/api'
+import { CircleCheck, Compass, Locate, Plus, RefreshCw, Search, Trash2, Wrench, X } from 'lucide-react'
+import { api, type CorrectionOverride, type PoiCorrections, type PoiDetail, type PoiRow, type Region } from '@/lib/api'
 import { errMsg, timeAgo } from '@/lib/format'
 import { PageHeader } from '@/components/PageHeader'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -15,6 +15,12 @@ import { SearchInput } from '@/components/ui/search-input'
 import { Segmented } from '@/components/ui/segmented'
 import { EmptyState } from '@/components/ui/empty-state'
 import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -25,15 +31,6 @@ import {
 import { cn } from '@/lib/utils'
 
 type Tab = 'corpus' | 'retire'
-
-// Region → discovery bbox for the sweep_roam_pois job. A new region adds ONE entry here.
-// `undefined` = omit --bbox (the generator sweep already defaults to the Tahoe basin).
-// The proper home for this is a generator-side `--region <slug>` lookup later; this map is the
-// admin-side stopgap so the operator never has to remember/paste raw coordinates. Shared with
-// RoamView's per-region Discover/Generate actions.
-export const REGION_BBOX: Record<string, string | undefined> = {
-  'lake-tahoe': undefined,
-}
 
 const SOURCE_META: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' }> = {
   wikidata: { label: 'Wikidata', variant: 'default' },
@@ -97,9 +94,8 @@ export function PoisView() {
 /* ── DISCOVER POIs ── */
 
 // Fire the region-discovery sweep (sweep_roam_pois) for a region. FREE — no LLM/TTS, no confirm.
-// Omits --bbox when REGION_BBOX has no entry (the sweep defaults to the Tahoe basin).
-export async function discoverPois(regionSlug: string, apply: boolean) {
-  const bbox = REGION_BBOX[regionSlug]
+// bbox comes from the region row's discoveryBbox column — null = use the generator's default.
+export async function discoverPois(_regionSlug: string, apply: boolean, bbox?: string | null) {
   await api.createJob({ kind: 'sweep_roam_pois', ...(bbox ? { bbox } : {}), apply })
 }
 
@@ -134,7 +130,8 @@ function DiscoverDialog({
     setBusy(true)
     setErr(null)
     try {
-      await discoverPois(regionSlug, apply)
+      const bbox = regions.find((r) => r.slug === regionSlug)?.discoveryBbox
+      await discoverPois(regionSlug, apply, bbox)
       onSubmitted()
     } catch (e) {
       setErr(errMsg(e))
@@ -388,6 +385,130 @@ function Corrections({ poiId }: { poiId: string }) {
   )
 }
 
+/* ── POI DETAIL SHEET ── */
+
+function PoiDetailSheet({ poiId, poiName, open, onOpenChange }: {
+  poiId: string
+  poiName: string
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  const [detail, setDetail] = useState<PoiDetail | null>(null)
+  const [tab, setTab] = useState<'facts' | 'corrections'>('facts')
+  const [err, setErr] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    setDetail(null)
+    setErr(null)
+    api.poi(poiId)
+      .then((r) => setDetail(r.poi))
+      .catch((e) => setErr(errMsg(e)))
+  }, [open, poiId])
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="flex w-[520px] max-w-full flex-col gap-0 p-0 sm:max-w-[520px]">
+        <SheetHeader className="justify-between px-6 py-4">
+          <SheetTitle className="leading-snug">{poiName}</SheetTitle>
+          <button
+            onClick={() => onOpenChange(false)}
+            className="mt-0.5 shrink-0 rounded-lg p-1 text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </SheetHeader>
+
+        {/* Tab strip */}
+        <div className="flex border-b">
+          {(['facts', 'corrections'] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={cn(
+                'px-5 py-2.5 text-sm font-medium transition-colors',
+                tab === t
+                  ? 'border-b-2 border-foreground text-foreground'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {t.charAt(0).toUpperCase() + t.slice(1)}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 py-4">
+          {err && (
+            <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{err}</div>
+          )}
+
+          {tab === 'facts' && (
+            detail ? <FactsTab poi={detail} /> : !err && <div className="text-sm text-muted-foreground">Loading…</div>
+          )}
+
+          {tab === 'corrections' && <Corrections poiId={poiId} />}
+        </div>
+      </SheetContent>
+    </Sheet>
+  )
+}
+
+function FactsTab({ poi }: { poi: PoiDetail }) {
+  return (
+    <div className="space-y-4">
+      {/* Metadata grid */}
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+        <div>
+          <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Source</dt>
+          <dd className="mt-0.5 font-mono text-xs">{poi.source} / {poi.sourceId}</dd>
+        </div>
+        <div>
+          <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Kind</dt>
+          <dd className="mt-0.5">{poi.kind ?? <span className="text-muted-foreground">—</span>}</dd>
+        </div>
+        <div>
+          <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Coordinates</dt>
+          <dd className="mt-0.5 font-mono text-xs">{poi.lat.toFixed(5)}, {poi.lng.toFixed(5)}</dd>
+        </div>
+        <div>
+          <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Facts hash</dt>
+          <dd className="mt-0.5 font-mono text-xs">{poi.factsHash ? poi.factsHash.slice(0, 12) : <span className="text-muted-foreground">—</span>}</dd>
+        </div>
+        <div>
+          <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Facts fetched</dt>
+          <dd className="mt-0.5 text-xs">{poi.factsFetchedAt ? timeAgo(poi.factsFetchedAt) : <span className="text-muted-foreground">never</span>}</dd>
+        </div>
+        <div>
+          <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Added</dt>
+          <dd className="mt-0.5 text-xs">{timeAgo(poi.createdAt)}</dd>
+        </div>
+      </dl>
+
+      {/* Summary */}
+      {poi.summary && (
+        <div>
+          <div className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Summary</div>
+          <p className="text-sm leading-relaxed text-muted-foreground">{poi.summary}</p>
+        </div>
+      )}
+
+      {/* Facts JSON */}
+      <div>
+        <div className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Facts JSON {poi.facts ? <span className="normal-case text-muted-foreground">({Object.keys(poi.facts).length} keys)</span> : null}
+        </div>
+        {poi.facts ? (
+          <pre className="overflow-x-auto rounded-lg border bg-muted/40 px-3 py-2.5 font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-all">
+            {JSON.stringify(poi.facts, null, 2)}
+          </pre>
+        ) : (
+          <div className="rounded-lg border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">No facts fetched yet.</div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 /* ── CORPUS ── */
 
 function CorpusTab({ pois }: { pois: PoiRow[] }) {
@@ -395,7 +516,7 @@ function CorpusTab({ pois }: { pois: PoiRow[] }) {
   const [region, setRegion] = useState('all')
   const [source, setSource] = useState('all')
   const [flags, setFlags] = useState('all')
-  const [expanded, setExpanded] = useState<string | null>(null)
+  const [sheetPoi, setSheetPoi] = useState<{ id: string; name: string } | null>(null)
 
   const regions = useMemo(() => {
     const seen = new Set<string>()
@@ -471,7 +592,6 @@ function CorpusTab({ pois }: { pois: PoiRow[] }) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-8" />
               <TableHead>Name</TableHead>
               <TableHead>Source</TableHead>
               <TableHead>Region</TableHead>
@@ -485,22 +605,11 @@ function CorpusTab({ pois }: { pois: PoiRow[] }) {
           <TableBody>
             {filtered.map((p) => {
               const sm = SOURCE_META[p.source]
-              const isOpen = expanded === p.id
-              const toggleExpand = () => setExpanded(isOpen ? null : p.id)
               return (
                 <Fragment key={p.id}>
-                  <TableRow>
-                    <TableCell className="text-center">
-                      <button
-                        onClick={toggleExpand}
-                        aria-label={isOpen ? 'Collapse' : 'Expand'}
-                        className="inline-flex text-muted-foreground hover:text-foreground"
-                      >
-                        {isOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-                      </button>
-                    </TableCell>
+                  <TableRow className="cursor-pointer" onClick={() => setSheetPoi({ id: p.id, name: p.name })}>
                     <TableCell>
-                      <button className="text-left font-medium hover:underline" onClick={toggleExpand}>{p.name}</button>
+                      <span className="font-medium hover:underline">{p.name}</span>
                       {(p.staleFacts || p.suspiciousDuration) && (
                         <div className="mt-1 flex flex-wrap gap-1">
                           {p.staleFacts && <Badge variant="warning">stale facts</Badge>}
@@ -539,19 +648,12 @@ function CorpusTab({ pois }: { pois: PoiRow[] }) {
                     </TableCell>
                     <TableCell className="text-right text-muted-foreground">{timeAgo(p.createdAt)}</TableCell>
                   </TableRow>
-                  {isOpen && (
-                    <TableRow key={`${p.id}-detail`} className="hover:bg-transparent">
-                      <TableCell colSpan={9} className="bg-muted/30 pt-0">
-                        <Corrections poiId={p.id} />
-                      </TableCell>
-                    </TableRow>
-                  )}
                 </Fragment>
               )
             })}
             {filtered.length === 0 && (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={9}>
+                <TableCell colSpan={8}>
                   <EmptyState icon={Search}>No POIs match these filters.</EmptyState>
                 </TableCell>
               </TableRow>
@@ -559,6 +661,15 @@ function CorpusTab({ pois }: { pois: PoiRow[] }) {
           </TableBody>
         </Table>
       </div>
+
+      {sheetPoi && (
+        <PoiDetailSheet
+          poiId={sheetPoi.id}
+          poiName={sheetPoi.name}
+          open={!!sheetPoi}
+          onOpenChange={(o) => { if (!o) setSheetPoi(null) }}
+        />
+      )}
     </div>
   )
 }

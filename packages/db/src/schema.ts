@@ -149,6 +149,9 @@ export const regions = pgTable(
     id: uuid('id').defaultRandom().primaryKey(),
     slug: text('slug').notNull(), // 'lake-tahoe' (the key)
     displayName: text('display_name').notNull(), // 'Lake Tahoe' (spoken + shown in the picker)
+    // Optional bbox for the sweep_roam_pois discovery job — "lng_min,lat_min,lng_max,lat_max".
+    // Null = use the generator's built-in default (currently the Tahoe basin).
+    discoveryBbox: text('discovery_bbox'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .defaultNow()
