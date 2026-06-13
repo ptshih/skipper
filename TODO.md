@@ -227,3 +227,14 @@ Refs: `apps/mobile/src/lib/useDrive.ts` (the duck flip), the drive screen
 (`apps/mobile/app/tours/[id]/play.tsx`), `docs/guides/device-verification-runbook.md` (duck +
 lock-screen landmines). Validated-already (no action): our anonymous couch preview = Autio's
 tap-a-pin preview; the M3 notch/interests-as-setting = their interest-ordered queue.
+
+## Admin console — data + routing modernization
+
+- [ ] **Replace React Router with TanStack Router + TanStack Query** (`apps/admin/client`).
+      Move routing to TanStack Router (typed routes, search-param state, loaders) and the
+      ad-hoc `useEffect` + `fetch` + `useState({data,err})` data-fetching to TanStack Query
+      (caching, background refetch — the Runs 15s poll → `refetchInterval`, mutation
+      invalidation after generate/discover/resynth). Drops the hand-rolled loading/error/refresh
+      boilerplate across every view + the cross-view navigation hacks. Touches every view +
+      `App.tsx` + `lib/api.ts` (wrap as query/mutation fns). Do AFTER the React 19 + shadcn-v4
+      component pass settles. (Founder ask 2026-06-13.)
