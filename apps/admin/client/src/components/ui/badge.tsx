@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { Slot } from '@radix-ui/react-slot'
 import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
 
@@ -23,10 +24,15 @@ const badgeVariants = cva(
 
 export interface BadgeProps
   extends React.HTMLAttributes<HTMLDivElement>,
-    VariantProps<typeof badgeVariants> {}
+    VariantProps<typeof badgeVariants> {
+  // Render as the single child element (e.g. a <button>) so a clickable chip IS the pill,
+  // instead of a <button> wrapping a <Badge> (which gives a taller, inconsistent box).
+  asChild?: boolean
+}
 
-function Badge({ className, variant, ...props }: BadgeProps) {
-  return <div className={cn(badgeVariants({ variant }), className)} {...props} />
+function Badge({ className, variant, asChild = false, ...props }: BadgeProps) {
+  const Comp = asChild ? Slot : 'div'
+  return <Comp className={cn(badgeVariants({ variant }), className)} {...props} />
 }
 
 export { Badge, badgeVariants }

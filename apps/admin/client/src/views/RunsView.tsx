@@ -137,16 +137,16 @@ export function RunsView() {
 
       {/* summary chips */}
       <div className="flex flex-wrap items-center gap-2.5">
-        <button onClick={() => { setSrc('all'); setStatusFilter('running') }}>
-          <Badge variant={runningN ? 'info' : 'secondary'} className="cursor-pointer">
+        <Badge asChild variant={runningN ? 'info' : 'secondary'} className="cursor-pointer">
+          <button onClick={() => { setSrc('all'); setStatusFilter('running') }}>
             {runningN > 0 && <PulseDot />}
             {runningN} running
-          </Badge>
-        </button>
-        <button onClick={() => { setSrc('all'); setStatusFilter('failed') }}>
-          <Badge variant="destructive" className="cursor-pointer">{failedN} failed</Badge>
-        </button>
-        <Badge variant="warning">{fmtCost(todaySpend)} today</Badge>
+          </button>
+        </Badge>
+        <Badge asChild variant={failedN ? 'destructive' : 'secondary'} className="cursor-pointer">
+          <button onClick={() => { setSrc('all'); setStatusFilter('failed') }}>{failedN} failed</button>
+        </Badge>
+        <Badge variant={todaySpend > 0 ? 'warning' : 'secondary'}>{fmtCost(todaySpend)} today</Badge>
         <span className="ml-auto text-xs text-muted-foreground">auto-refresh · 15s</span>
       </div>
 
