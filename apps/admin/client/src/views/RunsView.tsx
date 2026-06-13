@@ -14,7 +14,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Select } from '@/components/ui/select'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Callout } from '@/components/ui/callout'
 import { SearchInput } from '@/components/ui/search-input'
 import { Segmented } from '@/components/ui/segmented'
@@ -151,7 +151,7 @@ export function RunsView() {
             <span className="text-xs text-muted-foreground">Spent today</span>
             <span className={cn(
               'font-mono text-sm font-semibold tabular-nums',
-              todaySpend > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-foreground',
+              todaySpend > 0 ? 'text-warning' : 'text-foreground',
             )}>
               {fmtCost(todaySpend)}
             </span>
@@ -177,15 +177,21 @@ export function RunsView() {
               { value: 'eval', label: 'Eval', count: srcCounts.eval },
             ]}
           />
-          <Select value={kindFilter} onChange={(e) => setKindFilter(e.target.value)} className="w-auto">
-            <option value="all">All kinds</option>
-            {Object.entries(KIND_META).map(([v, m]) => <option key={v} value={v}>{m.label}</option>)}
+          <Select value={kindFilter} onValueChange={setKindFilter}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All kinds</SelectItem>
+              {Object.entries(KIND_META).map(([v, m]) => <SelectItem key={v} value={v}>{m.label}</SelectItem>)}
+            </SelectContent>
           </Select>
-          <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="w-auto">
-            <option value="all">Any result</option>
-            <option value="running">Running / queued</option>
-            <option value="ok">Succeeded / pass</option>
-            <option value="failed">Failed</option>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Any result</SelectItem>
+              <SelectItem value="running">Running / queued</SelectItem>
+              <SelectItem value="ok">Succeeded / pass</SelectItem>
+              <SelectItem value="failed">Failed</SelectItem>
+            </SelectContent>
           </Select>
           <span className="ml-auto text-sm text-muted-foreground">{filtered.length} of {runs.length}</span>
         </div>
@@ -211,7 +217,7 @@ export function RunsView() {
                   <TableRow
                     key={`${r.source}:${r.id}`}
                     onClick={() => setDrawerRun(r)}
-                    className={cn('cursor-pointer', r.status === 'running' && 'bg-blue-500/[0.04]')}
+                    className={cn('cursor-pointer', r.status === 'running' && 'bg-info/5')}
                   >
                     <TableCell>
                       <div className="flex items-center gap-2.5">

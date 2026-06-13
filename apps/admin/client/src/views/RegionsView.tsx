@@ -23,8 +23,8 @@ import { cn } from '@/lib/utils'
 type DialogMode = { mode: 'create' } | { mode: 'edit'; region: Region }
 
 const CONFIDENCE_META = {
-  high: { label: 'High confidence', className: 'text-emerald-600 dark:text-emerald-400' },
-  medium: { label: 'Medium confidence', className: 'text-amber-600 dark:text-amber-400' },
+  high: { label: 'High confidence', className: 'text-success' },
+  medium: { label: 'Medium confidence', className: 'text-warning' },
   low: { label: 'Low confidence', className: 'text-red-500 dark:text-red-400' },
 }
 
@@ -309,7 +309,7 @@ function BboxLookup({ defaultQuery, onUse }: { defaultQuery: string; onUse: (bbo
               />
             ) : (
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <TriangleAlert className="h-3.5 w-3.5 text-amber-500" />
+                <TriangleAlert className="h-3.5 w-3.5 text-warning" />
                 {result.llmError ?? 'No result'}
               </div>
             )}
@@ -334,7 +334,7 @@ function BboxLookup({ defaultQuery, onUse }: { defaultQuery: string; onUse: (bbo
               </div>
             ) : (
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <TriangleAlert className="h-3.5 w-3.5 text-amber-500" />
+                <TriangleAlert className="h-3.5 w-3.5 text-warning" />
                 {result.osmError ?? 'No results from Nominatim'}
               </div>
             )}

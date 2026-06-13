@@ -8,7 +8,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Select } from '@/components/ui/select'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Callout } from '@/components/ui/callout'
 import { SearchInput } from '@/components/ui/search-input'
 import { Segmented } from '@/components/ui/segmented'
@@ -199,11 +199,14 @@ export function ToursView() {
               count: countFor(v),
             }))}
           />
-          <Select value={region} onChange={(e) => setRegion(e.target.value)} className="w-auto">
-            <option value="all">All regions</option>
-            {regions.map((r) => (
-              <option key={r.regionSlug} value={r.regionName}>{r.regionName}</option>
-            ))}
+          <Select value={region} onValueChange={setRegion}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All regions</SelectItem>
+              {regions.map((r) => (
+                <SelectItem key={r.regionSlug} value={r.regionName}>{r.regionName}</SelectItem>
+              ))}
+            </SelectContent>
           </Select>
           <span className="ml-auto text-sm text-muted-foreground">{view.length} of {tours.length}</span>
         </div>

@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Select } from '@/components/ui/select'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
 import { Callout } from '@/components/ui/callout'
 import { SearchInput } from '@/components/ui/search-input'
@@ -155,11 +155,15 @@ function DiscoverDialog({
 
         <div className="space-y-2">
           <Label htmlFor="discover-region">Region</Label>
-          <Select id="discover-region" value={regionSlug} onChange={(e) => setRegionSlug(e.target.value)}>
-            {regions.length === 0 && <option value="">Loading…</option>}
-            {regions.map((r) => (
-              <option key={r.slug} value={r.slug}>{r.displayName}</option>
-            ))}
+          <Select value={regionSlug || undefined} onValueChange={setRegionSlug}>
+            <SelectTrigger id="discover-region" className="w-full">
+              <SelectValue placeholder={regions.length === 0 ? 'Loading…' : 'Select a region…'} />
+            </SelectTrigger>
+            <SelectContent>
+              {regions.map((r) => (
+                <SelectItem key={r.slug} value={r.slug}>{r.displayName}</SelectItem>
+              ))}
+            </SelectContent>
           </Select>
         </div>
 
@@ -569,21 +573,30 @@ function CorpusTab({ pois }: { pois: PoiRow[] }) {
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
-        <Select value={region} onChange={(e) => setRegion(e.target.value)} className="w-auto">
-          <option value="all">All regions</option>
-          {regions.map((r) => <option key={r.slug} value={r.slug}>{r.name}</option>)}
+        <Select value={region} onValueChange={setRegion}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All regions</SelectItem>
+            {regions.map((r) => <SelectItem key={r.slug} value={r.slug}>{r.name}</SelectItem>)}
+          </SelectContent>
         </Select>
-        <Select value={source} onChange={(e) => setSource(e.target.value)} className="w-auto">
-          <option value="all">All sources</option>
-          <option value="wikidata">Wikidata</option>
-          <option value="osm">OSM</option>
-          <option value="manual">Manual</option>
+        <Select value={source} onValueChange={setSource}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All sources</SelectItem>
+            <SelectItem value="wikidata">Wikidata</SelectItem>
+            <SelectItem value="osm">OSM</SelectItem>
+            <SelectItem value="manual">Manual</SelectItem>
+          </SelectContent>
         </Select>
-        <Select value={flags} onChange={(e) => setFlags(e.target.value)} className="w-auto">
-          <option value="all">All flags</option>
-          <option value="defect">Clip defects</option>
-          <option value="stale">Stale facts</option>
-          <option value="unattrib">Unattributed</option>
+        <Select value={flags} onValueChange={setFlags}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All flags</SelectItem>
+            <SelectItem value="defect">Clip defects</SelectItem>
+            <SelectItem value="stale">Stale facts</SelectItem>
+            <SelectItem value="unattrib">Unattributed</SelectItem>
+          </SelectContent>
         </Select>
         <span className="ml-auto text-sm text-muted-foreground">{filtered.length} of {pois.length}</span>
       </div>
@@ -681,7 +694,7 @@ function RetireTab({ flagged }: { flagged: PoiRow[] }) {
     return (
       <EmptyState
         icon={CircleCheck}
-        iconClassName="text-emerald-600 dark:text-emerald-400"
+        iconClassName="text-success"
         className="rounded-xl border bg-muted/30"
       >
         No flagged POIs — corpus is clean.
@@ -705,7 +718,7 @@ function RetireTab({ flagged }: { flagged: PoiRow[] }) {
               key={p.id}
               className={cn(
                 'rounded-xl border px-4 py-3',
-                p.staleFacts ? 'border-amber-500/30 bg-amber-500/5' : 'border-destructive/30 bg-destructive/5',
+                p.staleFacts ? 'border-warning/30 bg-warning/5' : 'border-destructive/30 bg-destructive/5',
               )}
             >
               <div className="flex items-start justify-between gap-3">
@@ -719,7 +732,7 @@ function RetireTab({ flagged }: { flagged: PoiRow[] }) {
                     {p.regionName && <span>{p.regionName}</span>}
                     <span>{desc}</span>
                     {p.roamClipCount > 0 && (
-                      <span className="text-amber-600 dark:text-amber-400">
+                      <span className="text-warning">
                         {p.roamClipCount} roam clip{p.roamClipCount > 1 ? 's' : ''} to sweep
                       </span>
                     )}

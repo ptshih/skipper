@@ -55,17 +55,17 @@ function DimNote({ score }: { score: EvalScore }) {
         <Badge variant={score.pass ? 'success' : 'warning'} className="text-[10px]">{fmtScore(score.value)}</Badge>
       </div>
       {score.findings.length > 0 && (
-        <ul className="mt-1 list-disc pl-4 text-xs text-amber-600 dark:text-amber-400">
+        <ul className="mt-1 list-disc pl-4 text-xs text-warning">
           {score.findings.map((f, i) => <li key={i}>{f}</li>)}
         </ul>
       )}
       {charm?.best && (
-        <div className="mt-1.5 text-xs text-emerald-600 dark:text-emerald-400">
+        <div className="mt-1.5 text-xs text-success">
           ★ best — <span className="italic text-muted-foreground">“{charm.best}”</span>
         </div>
       )}
       {charm?.sag && (
-        <div className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+        <div className="mt-1 text-xs text-warning">
           ▽ sag — <span className="italic text-muted-foreground">“{charm.sag}”</span>
         </div>
       )}

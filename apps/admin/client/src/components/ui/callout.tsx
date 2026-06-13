@@ -5,7 +5,7 @@ type CalloutVariant = 'error' | 'warning' | 'info'
 
 const VARIANT: Record<CalloutVariant, string> = {
   error: 'border-destructive/40 bg-destructive/10 text-destructive',
-  warning: 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400',
+  warning: 'border-warning/40 bg-warning/10 text-warning',
   info: 'border-border bg-muted/30 text-muted-foreground',
 }
 

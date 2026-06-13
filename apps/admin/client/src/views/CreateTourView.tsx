@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { Select } from '@/components/ui/select'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
 import { Callout } from '@/components/ui/callout'
 import { SectionLabel } from '@/components/ui/section-label'
@@ -175,18 +175,29 @@ export function CreateTourView() {
         <Card className="max-w-3xl p-5">
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Region">
-              <Select value={prompt.regionSlug} onChange={setP('regionSlug')}>
-                <option value="">Select a region…</option>
-                {regions.map((r) => (
-                  <option key={r.slug} value={r.slug}>{r.displayName}</option>
-                ))}
+              <Select
+                value={prompt.regionSlug || undefined}
+                onValueChange={(v) => setPrompt((p) => ({ ...p, regionSlug: v }))}
+              >
+                <SelectTrigger className="w-full"><SelectValue placeholder="Select a region…" /></SelectTrigger>
+                <SelectContent>
+                  {regions.map((r) => (
+                    <SelectItem key={r.slug} value={r.slug}>{r.displayName}</SelectItem>
+                  ))}
+                </SelectContent>
               </Select>
             </Field>
             <Field label="Shape">
-              <Select value={prompt.loopOrDirection} onChange={setP('loopOrDirection')}>
-                {['one-way (A → B)', 'loop (return to start)'].map((o) => (
-                  <option key={o}>{o}</option>
-                ))}
+              <Select
+                value={prompt.loopOrDirection}
+                onValueChange={(v) => setPrompt((p) => ({ ...p, loopOrDirection: v }))}
+              >
+                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {['one-way (A → B)', 'loop (return to start)'].map((o) => (
+                    <SelectItem key={o} value={o}>{o}</SelectItem>
+                  ))}
+                </SelectContent>
               </Select>
             </Field>
             <Field label="Start near">
@@ -257,7 +268,7 @@ export function CreateTourView() {
               ))}
             </div>
             {ungeocoded > 0 && (
-              <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+              <p className="mt-2 text-xs text-warning">
                 {ungeocoded} waypoint didn't geocode — place it on the map or drop it before creating.
               </p>
             )}
@@ -284,7 +295,7 @@ export function CreateTourView() {
 
       {step === 3 && (
         <Card className="mx-auto max-w-xl p-10 text-center">
-          <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+          <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full bg-success/15 text-success">
             <Check size={26} />
           </div>
           <h2 className="text-lg font-semibold">Draft created</h2>
