@@ -227,16 +227,3 @@ Refs: `apps/mobile/src/lib/useDrive.ts` (the duck flip), the drive screen
 (`apps/mobile/app/tours/[id]/play.tsx`), `docs/guides/device-verification-runbook.md` (duck +
 lock-screen landmines). Validated-already (no action): our anonymous couch preview = Autio's
 tap-a-pin preview; the M3 notch/interests-as-setting = their interest-ordered queue.
-
-## Admin console — data + routing modernization
-
-- [x] **Routing → TanStack Router** — DONE (601ab76). Code-based route tree in `router.tsx`,
-      react-router-dom removed.
-- [ ] **Finish TanStack Query migration** (`apps/admin/client`). DONE so far (d8fcca3): page-level
-      reads + mutations on Runs/Tours/Create/Tour-detail + the POIs corpus list (shared `['pois']`
-      key; Runs poll → `refetchInterval`; mutations invalidate `['runs']`/`['tours']`). REMAINING:
-      **RoamView** + **RegionsView** (left on `useEffect`+`fetch` because they're entangled with the
-      in-progress Regions feature — `regionMap`, combined pois+regions load, shared error state), and
-      the leaf lazy-fetches — **Corrections** + **DiscoverDialog** (PoisView) and **RoamPlayer**
-      (RoamView clip-sign + resynth). Wrap those as queries/mutations too for a uniform data layer.
-      (Founder ask 2026-06-13.)
