@@ -82,7 +82,11 @@ you found so the next agent can re-check it.
    When a re-fetch MATERIALLY changes a poi's facts (detected via `pois.facts_hash`), every
    `track` that grounded on them is stale and must regenerate. (Zero-reuse 2026-06-08; the
    three narration owners collapsed into `segments`+`tracks` 2026-06-12 — see
-   `docs/decisions/tour-data-model-zero-reuse.md`.)
+   `docs/decisions/tour-data-model-zero-reuse.md`.) **Discovery is a REGION step (2026-06-12):**
+   a sweep populates `pois` for a region's bbox ONCE (`sweep-roam-pois.ts`), and BOTH tours and
+   roam SELECT candidates from that one shared corpus — no per-tour live discovery. Tours are
+   AUTHORED at runtime (admin Create → `materializeRoute`), never seeded as draft shells; the seed
+   is just regions + personas + overrides. See `docs/decisions/region-corpus-discovery.md`.
 2. **The rails are the route; generation is everything inside the rails.** Routes
    are hand-curated + frozen, never derived. The failure mode to avoid is letting
    "curated" creep into the _contents_ — if the model just reads a fixed script,

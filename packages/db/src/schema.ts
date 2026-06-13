@@ -48,10 +48,10 @@ export type AttributionSnapshot = {
 }
 
 /**
- * How a tour's frozen route was authored — the DB-resident form of the committed
- * seed/data/<slug>.json provenance, set for admin (Create Tour) authored tours. Always
- * records the final frozen waypoints + Routes totals; `authoring` is present when the route
- * was LLM-proposed + human-approved in the admin console (the "why this route exists" trail).
+ * How a tour's frozen route was authored — set by the admin (Create Tour) flow, the only way
+ * tours are created now (seeded shells + committed route artifacts are gone). Always records the
+ * final frozen waypoints + Routes totals; `authoring` is present when the route was LLM-proposed
+ * + human-approved in the admin console (the "why this route exists" trail).
  */
 export type RouteProvenance = {
   source: 'google-routes-v2'
@@ -326,8 +326,8 @@ export const tours = pgTable(
     distanceMeters: integer('distance_meters'),
     durationSeconds: integer('duration_seconds'),
     summary: text('summary'),
-    // How the route was authored (admin Create Tour). Null for the original seed-authored tours,
-    // whose provenance lives in the committed seed/data/<slug>.json. See RouteProvenance.
+    // How the route was authored — set by the admin Create Tour flow (tours are authored at
+    // runtime now; seeded shells are gone). Null only for a pre-provenance row. See RouteProvenance.
     routeProvenance: jsonb('route_provenance').$type<RouteProvenance>(),
     // End-anchors {name, lat, lng}: naming, intro/outro anchoring, the GPS-start pin, and the
     // proximity recommender.

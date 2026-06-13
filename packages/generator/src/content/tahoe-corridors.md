@@ -1,30 +1,27 @@
 # Tahoe corridor slate (M0 — APPROVED 2026-06-06)
 
 Hand-curated driving corridors for the first region, Lake Tahoe. **Approved by the
-founder.** This is authoring output, not data: it is the source the follow-up
-polyline/seed step reads from. **Tours are now seeded and the canonical preview has shipped** (see Materialization + seeding status below).
+founder.** This is M0 authoring OUTPUT, not live data. **SUPERSEDED 2026-06-12:** the
+materialize→seed workflow below is dead — tours are now AUTHORED at runtime via the admin Create
+flow over the region POI corpus (`docs/decisions/region-corpus-discovery.md`); `tour-specs.ts` +
+`seed/data/*.json` were deleted. Kept as the historical curated-corridor record.
 
 > **The rails are the route.** Routes are hand-curated and frozen, never derived.
 > Groundability below = a Wikidata-spine coverage proxy (narratable POIs/articles
 > exist along the route); it is NOT a guarantee each one's prose extract is rich.
 > Per the invariant, any stop that turns out thin on prose downgrades to scenic.
 
-## Materialization + seeding status
+## Tour authoring (current flow — supersedes the old materialize→seed path)
 
-Seeding subsystem lives in `packages/db/seed/`:
-- `tour-specs.ts` — hand-curated specs (the rails: name + ordered waypoints).
-- `materialize.ts` — Routes API → decode → **frozen** `data/<slug>.json` (run once per tour; never recomputed at request time).
-- `seed.ts` — idempotent upsert of `data/*.json` into the `tours` table.
+The seed-time route path is GONE. `packages/db/seed/seed.ts` now seeds only regions + personas +
+overrides; `materialize.ts` keeps just `materializeRoute` (the admin Create flow calls it);
+`tour-specs.ts` + `data/*.json` were deleted. To create a tour:
 
-Run (keys injected via dotenvx; env lives in `.env.development`, not `.env`):
-```
-dotenvx run -f .env.development -- bun packages/db/seed/materialize.ts <slug>
-dotenvx run -f .env.development -- bun packages/db/seed/seed.ts <slug>
-```
+1. **Discover the region** → `sweep-roam-pois.ts --apply` (populates the shared `pois` corpus).
+2. **Author + freeze the route** → admin Create flow (LLM-propose → human-approve → `materializeRoute`).
+3. **Generate** the draft tour → it selects candidates from the corpus (`pipeline/region-corpus.ts`).
 
-- ✅ **Schema applied to Neon** (`bun run db:generate` + `db:migrate`; baseline migration `0000_unusual_angel`). NOTE: `db:push` can't be used non-interactively here — the drizzle config has `strict: true`, which forces a TTY confirm. Use generate+migrate.
-- ✅ **`emerald-bay-run` materialized + seeded** (M1 walking-skeleton tour): frozen polyline = 3,698 points, ~30 mi / ~59 min. Tour ids are destroyed/regenerated on every migration — never hardcode one.
-- ⬜ Tours 2–8: add specs to `tour-specs.ts`, then materialize + seed each.
+The corridor slate below is the historical M0 authoring record for Lake Tahoe.
 
 ---
 

@@ -140,7 +140,9 @@ const fetchedAt = new Date()
 let wrote = 0
 for (const s of stories) {
   const a = s.article!
-  const facts = { extract: a.extract, title: a.title, url: a.url, pageId: a.pageId }
+  // Store the FULL discovery payload (incl. the linked Wikidata qid) so a tour generate can
+  // rebuild the spine candidate (WikiPoi) losslessly from the pool — see pipeline/region-corpus.ts.
+  const facts = { extract: a.extract, title: a.title, url: a.url, pageId: a.pageId, qid: s.qid }
   await upsertPoi({
     source: 'wikipedia',
     sourceId: String(a.pageId),

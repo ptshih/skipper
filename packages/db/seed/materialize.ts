@@ -1,25 +1,32 @@
-// Materialize a tour's FROZEN polyline from the Google Routes API.
+// Materialize a tour's road-snapped polyline from the Google Routes API.
 //
-// Run ONCE per tour. It reads a hand-curated spec (./tour-specs.ts), asks the
-// Routes API to compute a road-snapped route through the waypoints, decodes the
-// polyline to GeoJSON [lng, lat] pairs, and writes the result to
-// ./data/<slug>.json. That JSON is the FROZEN artifact (committed, version
-// controlled) — the route is never recomputed at request time. ./seed.ts reads
-// these JSON files for geometry; it never calls Google.
-//
-// Usage (key injected via dotenvx; never hard-code it):
-//   dotenvx run -f .env.development -- bun packages/db/seed/materialize.ts <slug>
-//   dotenvx run -f .env.development -- bun packages/db/seed/materialize.ts --all
+// The reusable core (`materializeRoute`) freezes a route from ordered waypoints — no disk,
+// no file write. The admin Create-Tour flow (apps/admin/server/create-tour.ts) calls it to
+// freeze a runtime-authored route into the DB. The old seed-time CLI that wrote frozen
+// seed/data/<slug>.json artifacts was dropped 2026-06-12 with the curated-route seeds — under
+// the discovery-first reorder, tours are AUTHORED at runtime via the admin Create flow over
+// the region POI corpus, not seeded from committed specs.
 //
 // Needs GOOGLE_MAPS_API_KEY (a Routes-API-enabled key on a billed project).
 
-import { mkdirSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
-import { TOUR_SPECS, specBySlug, type TourSpec, type Waypoint, type FrozenTour } from './tour-specs'
-
-const DATA_DIR = join(dirname(fileURLToPath(import.meta.url)), 'data')
 const ROUTES_URL = 'https://routes.googleapis.com/directions/v2:computeRoutes'
+
+/** An ordered route waypoint. `label` is for provenance/readability; not sent to the router. */
+export interface Waypoint {
+  label: string
+  lat: number
+  lng: number
+}
+
+/** Provenance for a frozen route — the tours.routeProvenance core (the admin adds `authoring`). */
+export interface RouteProvenanceCore {
+  source: 'google-routes-v2'
+  waypoints: Waypoint[]
+  distanceMeters: number
+  durationSeconds: number
+  pointCount: number
+  materializedAt: string
+}
 
 /** Decode a Google encoded polyline (precision 5) to [lng, lat] pairs. */
 function decodePolyline(encoded: string): [number, number][] {
@@ -99,12 +106,11 @@ export interface MaterializedRoute {
   polyline: [number, number][]
   distanceMeters: number
   durationSeconds: number
-  provenance: FrozenTour['provenance']
+  provenance: RouteProvenanceCore
 }
 
-/** Freeze a road-snapped route from ordered waypoints via the Google Routes API. The seed
- *  CLI wraps this to write seed/data/<slug>.json; the admin (Create Tour) calls it directly
- *  to freeze a runtime-authored route into the DB. No file write, no disk. */
+/** Freeze a road-snapped route from ordered waypoints via the Google Routes API. The admin
+ *  (Create Tour) calls it to freeze a runtime-authored route into the DB. No file write. */
 export async function materializeRoute(
   waypoints: readonly Waypoint[],
   apiKey: string = requireApiKey(),
@@ -131,40 +137,7 @@ export async function materializeRoute(
 function requireApiKey(): string {
   const apiKey = process.env.GOOGLE_MAPS_API_KEY
   if (!apiKey) {
-    throw new Error(
-      'GOOGLE_MAPS_API_KEY is not set. Run via dotenvx, e.g.\n' +
-        '  dotenvx run -f .env.development -- bun packages/db/seed/materialize.ts <slug>',
-    )
+    throw new Error('GOOGLE_MAPS_API_KEY is not set (a Routes-API-enabled key on a billed project).')
   }
   return apiKey
-}
-
-/** CLI helper: materialize a spec and write the frozen artifact to seed/data/<slug>.json. */
-async function materialize(spec: TourSpec, apiKey: string): Promise<FrozenTour> {
-  const { polyline, provenance } = await materializeRoute(spec.waypoints, apiKey)
-  const frozen: FrozenTour = { slug: spec.slug, polyline, provenance }
-  mkdirSync(DATA_DIR, { recursive: true })
-  const file = join(DATA_DIR, `${spec.slug}.json`)
-  writeFileSync(file, JSON.stringify(frozen, null, 2) + '\n')
-  const miles = (provenance.distanceMeters / 1609.344).toFixed(1)
-  const mins = Math.round(provenance.durationSeconds / 60)
-  console.log(`✓ ${spec.slug}: ${polyline.length} points, ${miles} mi, ~${mins} min -> ${file}`)
-  return frozen
-}
-
-async function main() {
-  const apiKey = requireApiKey()
-  const arg = process.argv[2]
-  if (!arg) {
-    throw new Error('Usage: materialize.ts <slug> | --all')
-  }
-  const specs = arg === '--all' ? TOUR_SPECS : [specBySlug(arg)]
-  for (const spec of specs) {
-    if (!spec) throw new Error(`No tour spec for slug "${arg}"`)
-    await materialize(spec, apiKey)
-  }
-}
-
-if (import.meta.main) {
-  await main()
 }

@@ -75,7 +75,8 @@ import { cumulativeMeters, encodePolyline, METERS_PER_MILE, totalMeters } from '
 import type { LngLat } from './geo'
 import { fetchDeepExtracts } from './wikipedia'
 import { ensurePoiOverridesLoaded } from './poi-overrides'
-import { candidatesToWikiPois, discoverWikidataPois } from './wikidata-discovery'
+import { boundingBox } from './wikidata-discovery'
+import { loadCandidatePoisInBox } from './region-corpus'
 import { geologyFacts } from './macrostrat'
 import { wikidataFacts } from './wikidata'
 import { scoutStop } from './scout'
@@ -298,17 +299,23 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
     return timings
   }
 
-  // 2. Candidates from the Wikidata discovery spine: STORY = a Wikipedia article (prose),
-  //    SCENIC = a named Wikidata feature with no article (a bay/beach). Wikipedia is the
-  //    PROSE layer now, joined per story candidate by sitelink — not the discovery layer.
-  //    HARD dependency, no fallback (the spine replaced geosearch): a WDQS outage throws an
-  //    actionable "retry later" error here and aborts at $0 — before any paid LLM/TTS call.
-  console.log('Discovering POIs along the route (Wikidata spine)...')
-  const candidates = await discoverWikidataPois(polyline)
-  const wikiPois = candidatesToWikiPois(candidates)
+  // 2. Candidates from the REGION CORPUS (discovery-first reorder): the shared `pois` table,
+  //    pre-populated for the region by sweep-roam-pois.ts. STORY = a Wikipedia-sourced row with
+  //    prose; SCENIC = a named Wikidata pin. No live WDQS here — the corpus IS the discovery
+  //    layer, scoped to the route's bounding box (and shared with roam). An empty corpus is an
+  //    operator error (discover the region first), thrown at $0 before any paid LLM/TTS call.
+  console.log('Loading POI candidates from the region corpus...')
+  const routeBox = boundingBox(polyline)
+  const wikiPois = await loadCandidatePoisInBox(routeBox.sw, routeBox.ne)
+  if (wikiPois.length === 0) {
+    throw new Error(
+      'No POIs in the route corridor — the region corpus is empty here. Run region discovery ' +
+        '(sweep-roam-pois.ts --apply for the region bbox) before generating this tour.',
+    )
+  }
   const storyCount = wikiPois.filter((p) => p.source === 'wikipedia').length
   console.log(
-    `Found ${candidates.length} corridor entities → ${wikiPois.length} candidates ` +
+    `Loaded ${wikiPois.length} candidates from the corpus ` +
       `(${storyCount} story-grade, ${wikiPois.length - storyCount} named-scenic).`,
   )
   lap('discovery')
