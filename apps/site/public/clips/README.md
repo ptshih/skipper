@@ -25,9 +25,10 @@ public static asset — don't link a short-TTL presigned URL.
 If you change which stop the clip is from, update `HERO_STOP` / the caption in `Hero.astro`
 to match (honesty: the caption names the real place).
 
-## Related go-live switch — the launch list
+## Related go-live switch — the App Store link
 
-The closing CTA captures emails. It's wired in `src/components/sections/FinalCta.astro`:
-set `LAUNCH_ENDPOINT` to your provider's form-POST URL (Buttondown / ConvertKit /
-Formspree — all accept an `email` field). Until then it falls back to a `mailto:` compose
-to `CONTACT_EMAIL` (default `hello@skipper.fm`), so the button is never dead.
+The closing section shows a quiet **"Coming soon to the App Store"** badge until the app
+ships. It's wired in `src/components/sections/FinalCta.astro`: set `APP_STORE_URL` to the
+live App Store listing and the badge becomes a real **"Download on the App Store"** button.
+Per Apple's marketing guidelines, swap the placeholder glyph for the official Apple-provided
+badge artwork when you do.
