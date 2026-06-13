@@ -9,7 +9,7 @@
 //
 // Same provider/key handling as DriveMap: Google basemap with EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
 // (the tint applies), else Apple Maps (untinted) on iOS — never a crash for a missing key.
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { Platform, Pressable, StyleSheet, View } from 'react-native'
 import MapView, { Marker, PROVIDER_GOOGLE, type Region } from 'react-native-maps'
 import { border, radius, space } from '../theme/tokens'
@@ -44,7 +44,9 @@ export interface RoamMapProps {
 const HAS_GOOGLE_KEY = !!process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
 const PROVIDER = Platform.OS === 'android' || HAS_GOOGLE_KEY ? PROVIDER_GOOGLE : undefined
 
-export function RoamMap({ position, pins, heardPoiIds, clipActive, recenterBottom }: RoamMapProps) {
+// memo: RoamScreen re-renders on its 2s diagnostics tick; with a movement-guarded `position` + stable
+// pins, this skips re-rendering the map subtree when nothing the map shows changed. (audit #603)
+function RoamMapBase({ position, pins, heardPoiIds, clipActive, recenterBottom }: RoamMapProps) {
   const { colors, isDark } = useTheme()
   const reducedMotion = useReducedMotion()
   const mapRef = useRef<MapView | null>(null)
@@ -103,6 +105,10 @@ export function RoamMap({ position, pins, heardPoiIds, clipActive, recenterBotto
         provider={PROVIDER}
         style={styles.fill}
         customMapStyle={mapStyle(isDark)}
+        // customMapStyle is Google-only; on the keyless Apple-Maps fallback these keep the night
+        // basemap dark + muted instead of a bright untinted default. (audit #463)
+        userInterfaceStyle={isDark ? 'dark' : 'light'}
+        mapType={PROVIDER === undefined ? 'mutedStandard' : 'standard'}
         initialRegion={initialRegion}
         showsUserLocation={false} // we draw our OWN puck, brand-styled
         showsCompass={false}
@@ -119,7 +125,9 @@ export function RoamMap({ position, pins, heardPoiIds, clipActive, recenterBotto
           const heard = heardPoiIds?.has(p.poiId) ?? false
           return (
             <Marker
-              key={p.poiId}
+              // Key on poiId+heard: tracksViewChanges=false snapshots once, so the heard→solid flip
+              // (pass-2's encounter history) must REMOUNT to redraw. Benign in v1 (always unheard). (audit #242)
+              key={`${p.poiId}-${heard}`}
               coordinate={{ latitude: p.lat, longitude: p.lng }}
               anchor={{ x: 0.5, y: 0.5 }}
               title={p.name}
@@ -142,9 +150,13 @@ export function RoamMap({ position, pins, heardPoiIds, clipActive, recenterBotto
         {/* The rider — "you are here". A free puck (no route to snap to), amber like the token. */}
         {position ? (
           <Marker
+            // Static appearance except the clipActive color flip → snapshot once (tracksViewChanges
+            // false) and remount on the flip via the key, instead of re-rasterizing every move. (audit #567)
+            key={`puck-${clipActive ? 1 : 0}`}
             coordinate={{ latitude: position.lat, longitude: position.lng }}
             anchor={{ x: 0.5, y: 0.5 }}
             flat
+            tracksViewChanges={false}
           >
             <View style={styles.markerBox}>
               <View style={[styles.puckHalo, { backgroundColor: colors.glow }]} />
@@ -180,6 +192,8 @@ export function RoamMap({ position, pins, heardPoiIds, clipActive, recenterBotto
     </View>
   )
 }
+
+export const RoamMap = memo(RoamMapBase)
 
 const PUCK = 18
 const styles = StyleSheet.create({

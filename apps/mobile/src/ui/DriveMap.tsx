@@ -9,7 +9,7 @@
 // and floats a "recenter" chip (the standard nav pattern). The basemap tint is Google-
 // only — without a key (EXPO_PUBLIC_GOOGLE_MAPS_API_KEY) iOS falls back to Apple Maps
 // (untinted) and List mode stays the offline + accessibility-complete equivalent.
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Animated, Platform, Pressable, StyleSheet, View } from 'react-native'
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE, type LatLng, type Region } from 'react-native-maps'
 import { border, radius, space } from '../theme/tokens'
@@ -62,7 +62,9 @@ function bearingDeg(a: [number, number], b: [number, number]): number {
 const HAS_GOOGLE_KEY = !!process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
 const PROVIDER = Platform.OS === 'android' || HAS_GOOGLE_KEY ? PROVIDER_GOOGLE : undefined
 
-export function DriveMap({ polyline, stops, progress, clipActive, hideRecenter, recenterBottom }: DriveMapProps) {
+// memo: the player re-renders ~2×/sec from the audio status tick; with a memoized `stops` + stable
+// `progress`/`polyline`, this skips re-rendering the whole map subtree on those ticks. (audit #549)
+function DriveMapBase({ polyline, stops, progress, clipActive, hideRecenter, recenterBottom }: DriveMapProps) {
   const { colors, isDark } = useTheme()
   const reducedMotion = useReducedMotion()
   const mapRef = useRef<MapView | null>(null)
@@ -76,7 +78,10 @@ export function DriveMap({ polyline, stops, progress, clipActive, hideRecenter, 
     for (let i = 1; i < polyline.length; i++) {
       const a = polyline[i - 1]!
       const b = polyline[i]!
-      const dx = b[0] - a[0]
+      // Weight the E-W delta by cos(latitude) so a longitude degree isn't over-counted vs a latitude
+      // degree at Tahoe's ~39°N (else the puck mis-weights E-W vs N-S on diagonal roads). (audit #576)
+      const latMid = (((a[1] + b[1]) / 2) * Math.PI) / 180
+      const dx = (b[0] - a[0]) * Math.cos(latMid)
       const dy = b[1] - a[1]
       out.push(out[i - 1]! + Math.hypot(dx, dy))
     }
@@ -105,66 +110,72 @@ export function DriveMap({ polyline, stops, progress, clipActive, hideRecenter, 
     }
   }, [polyline])
 
-  // Project a 0..1 fraction onto the route: the puck point + the traveled/untraveled split.
-  const project = (frac: number) => {
-    if (polyline.length < 2 || total <= 0) {
-      const p = polyline[0]
+  // The full route as LatLng, computed ONCE per polyline — the static untraveled base layer. NOT
+  // rebuilt per tick (the old project() re-sliced + re-mapped both full arrays every fix and re-pushed
+  // them to native — the hour-long-drive CPU/GC + bridge regressor). (audit #7)
+  const latlngs = useMemo(() => polyline.map(toLatLng), [polyline])
+
+  // Project a 0..1 fraction to the puck point + the segment index it's in (NO array building).
+  const project = useCallback(
+    (frac: number): { puck: LatLng | null; heading: number; idx: number } => {
+      if (latlngs.length < 2 || total <= 0) return { puck: latlngs[0] ?? null, heading: 0, idx: 0 }
+      const target = Math.max(0, Math.min(1, frac)) * total
+      let i = 0
+      while (i < cum.length - 2 && (cum[i + 1] ?? 0) < target) i++
+      const a = polyline[i]!
+      const b = polyline[i + 1] ?? a
+      const segLen = (cum[i + 1] ?? cum[i]!) - cum[i]!
+      const segFrac = segLen > 0 ? (target - cum[i]!) / segLen : 0
       return {
-        puck: p ? toLatLng(p) : null,
-        heading: 0,
-        traveled: [] as LatLng[],
-        untraveled: polyline.map(toLatLng),
+        puck: { latitude: a[1] + (b[1] - a[1]) * segFrac, longitude: a[0] + (b[0] - a[0]) * segFrac },
+        heading: bearingDeg(a, b),
+        idx: i,
       }
-    }
-    const target = Math.max(0, Math.min(1, frac)) * total
-    let i = 0
-    while (i < cum.length - 2 && (cum[i + 1] ?? 0) < target) i++
-    const a = polyline[i]!
-    const b = polyline[i + 1] ?? a
-    const segLen = (cum[i + 1] ?? cum[i]!) - cum[i]!
-    const segFrac = segLen > 0 ? (target - cum[i]!) / segLen : 0
-    const puckLng = a[0] + (b[0] - a[0]) * segFrac
-    const puckLat = a[1] + (b[1] - a[1]) * segFrac
-    const puck: LatLng = { latitude: puckLat, longitude: puckLng }
-    return {
-      puck,
-      heading: bearingDeg(a, b),
-      traveled: [...polyline.slice(0, i + 1).map(toLatLng), puck],
-      untraveled: [puck, ...polyline.slice(i + 1).map(toLatLng)],
-    }
-  }
+    },
+    [polyline, latlngs, cum, total],
+  )
 
-  const [route, setRoute] = useState(() => project(0))
+  const initial = project(0)
+  // The puck rides every tick (a cheap single-Marker move); the traveled SPLIT only advances when the
+  // integer segment index changes (per ~13 m vertex, not per sub-segment tick). (audit #7)
+  const [puck, setPuck] = useState<LatLng | null>(initial.puck)
+  const [heading, setHeading] = useState(initial.heading)
+  const [segIdx, setSegIdx] = useState(initial.idx)
 
-  // Follow `progress` (driven by GPS/sim/preview). Recompute the puck + split, and glide
-  // the camera onto the puck while in follow mode. A small epsilon avoids re-rendering the
-  // overlay on sub-pixel ticks.
+  // Traveled overlay = route up to the last crossed vertex (the puck Marker covers the sub-vertex
+  // remainder over the static dashed base). Rebuilt only when segIdx changes. (audit #7)
+  const traveled = useMemo(() => latlngs.slice(0, segIdx + 1), [latlngs, segIdx])
+
+  // Follow `progress` (GPS/sim/preview): move the puck every tick, advance the split only on a vertex
+  // change, and glide the camera onto the puck while following — THROTTLED to ~1/sec so a 60fps
+  // preview tween doesn't re-issue animateCamera every frame. A small epsilon ignores sub-pixel
+  // ticks. (audit #7, #540)
   const lastFrac = useRef(-1)
+  const lastCamAt = useRef(0)
   useEffect(() => {
     const id = progress.addListener(({ value }) => {
       if (Math.abs(value - lastFrac.current) < 0.0005) return
       lastFrac.current = value
       const next = project(value)
-      setRoute(next)
+      setPuck(next.puck)
+      setHeading(next.heading)
+      setSegIdx((prev) => (prev === next.idx ? prev : next.idx))
       if (followingRef.current && next.puck) {
-        mapRef.current?.animateCamera(
-          { center: next.puck, zoom: 14 },
-          { duration: reducedMotion ? 0 : 500 },
-        )
+        const now = Date.now()
+        if (now - lastCamAt.current >= 1000) {
+          lastCamAt.current = now
+          mapRef.current?.animateCamera({ center: next.puck, zoom: 14 }, { duration: reducedMotion ? 0 : 500 })
+        }
       }
     })
     return () => progress.removeListener(id)
-    // project/colors are stable enough; re-subscribe only if the route geometry changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [progress, cum, total, reducedMotion])
+  }, [progress, project, reducedMotion])
 
   const recenter = () => {
     setFollowing(true)
-    if (route.puck) {
-      mapRef.current?.animateCamera(
-        { center: route.puck, zoom: 14 },
-        { duration: reducedMotion ? 0 : 400 },
-      )
+    lastCamAt.current = Date.now() // reset the follow throttle so the next tick doesn't immediately re-glide
+    if (puck) {
+      mapRef.current?.animateCamera({ center: puck, zoom: 14 }, { duration: reducedMotion ? 0 : 400 })
     }
   }
 
@@ -177,6 +188,10 @@ export function DriveMap({ polyline, stops, progress, clipActive, hideRecenter, 
         provider={PROVIDER}
         style={styles.fill}
         customMapStyle={mapStyle(isDark)}
+        // customMapStyle is Google-only; on the keyless Apple-Maps fallback these keep the night
+        // basemap dark + muted instead of a bright untinted default. (audit #463)
+        userInterfaceStyle={isDark ? 'dark' : 'light'}
+        mapType={PROVIDER === undefined ? 'mutedStandard' : 'standard'}
         initialRegion={routeRegion}
         showsUserLocation={false} // we draw our OWN puck (route-snapped) — not the raw blue dot
         showsCompass={false}
@@ -187,17 +202,20 @@ export function DriveMap({ polyline, stops, progress, clipActive, hideRecenter, 
         pitchEnabled={false}
         onPanDrag={() => following && setFollowing(false)}
       >
-        {/* Untraveled: dashed tan, drawn first so the traveled pine sits on top at the puck. */}
-        {route.untraveled.length > 1 ? (
+        {/* Untraveled base: the FULL route, dashed tan — static (identity stable), so it isn't
+            re-serialized to native each tick; the traveled pine grows over it. NOTE: lineDashPattern
+            is iOS-only on Polyline — on Android the untraveled line is solid tan (color/width carry
+            the distinction). (audit #7, #472) */}
+        {latlngs.length > 1 ? (
           <Polyline
-            coordinates={route.untraveled}
+            coordinates={latlngs}
             strokeColor={colors.trackInactive}
             strokeWidth={4}
             lineDashPattern={[2, 10]}
           />
         ) : null}
-        {route.traveled.length > 1 ? (
-          <Polyline coordinates={route.traveled} strokeColor={colors.trackActive} strokeWidth={5} />
+        {traveled.length > 1 ? (
+          <Polyline coordinates={traveled} strokeColor={colors.trackActive} strokeWidth={5} />
         ) : null}
 
         {/* Stop markers — passed (filled pine), upcoming (hollow), active (amber, larger). */}
@@ -206,7 +224,9 @@ export function DriveMap({ polyline, stops, progress, clipActive, hideRecenter, 
           const passed = s.state === 'passed'
           return (
             <Marker
-              key={s.seq}
+              // Key on seq+state: with tracksViewChanges=false the native bitmap is snapshotted ONCE,
+              // so a passed/active/upcoming change must REMOUNT the marker to redraw. (audit #242)
+              key={`${s.seq}-${s.state}`}
               coordinate={{ latitude: s.lat, longitude: s.lng }}
               anchor={{ x: 0.5, y: 0.5 }}
               title={s.name}
@@ -238,12 +258,14 @@ export function DriveMap({ polyline, stops, progress, clipActive, hideRecenter, 
           )
         })}
 
-        {/* The live-position puck — "you are here", riding the route at `progress`. */}
-        {route.puck ? (
-          <Marker coordinate={route.puck} anchor={{ x: 0.5, y: 0.5 }} flat>
+        {/* The live-position puck — "you are here", riding the route at `progress`. tracksViewChanges
+            stays at its default (true): the heading wedge transform changes per tick, so the bitmap
+            must re-snapshot — an inherent cost of the rotating wedge. (audit #567) */}
+        {puck ? (
+          <Marker coordinate={puck} anchor={{ x: 0.5, y: 0.5 }} flat>
             <View style={styles.markerBox}>
               <View style={[styles.puckHalo, { backgroundColor: colors.glow }]} />
-              <View style={[styles.puckWedge, { transform: [{ rotate: `${route.heading}deg` }] }]}>
+              <View style={[styles.puckWedge, { transform: [{ rotate: `${heading}deg` }] }]}>
                 <View style={[styles.wedgeTriangle, { borderBottomColor: amber }]} />
               </View>
               <View style={[styles.puckDot, { backgroundColor: amber, borderColor: colors.surface }]} />
@@ -274,6 +296,8 @@ export function DriveMap({ polyline, stops, progress, clipActive, hideRecenter, 
     </View>
   )
 }
+
+export const DriveMap = memo(DriveMapBase)
 
 const PUCK = 18
 const styles = StyleSheet.create({

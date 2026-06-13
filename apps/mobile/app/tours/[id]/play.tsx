@@ -6,7 +6,7 @@
 // compressed segment timeline (clip / drive / rest), tappable stops, no GPS or permission
 // gate. Reuses the @/ui player primitives; the clock + fire-queue + source swap live in
 // `useDrive`.
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Alert, Animated, PixelRatio, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { Stack, useLocalSearchParams, useNavigation, useRouter } from 'expo-router'
 import * as SecureStore from 'expo-secure-store'
@@ -145,6 +145,27 @@ export default function DriveScreen() {
   const focusSeq = d.activeSeq ?? d.nextSeq
   // Row index of the current segment's stop (preview's passed/active stop-list state).
   const focusRow = focusSeq != null ? d.stops.findIndex((s) => s.seq === focusSeq) : -1
+  // Per-stop state, shared by the itinerary List rows and the Map markers. Memoized (NOT rebuilt every
+  // ~500ms status tick) so the React.memo'd DriveMap doesn't re-render its marker tree on each tick.
+  // Hoisted above the phase early-returns so the hook order stays unconditional. (audit #549)
+  const stopViews = useMemo(
+    () =>
+      d.stops.map((s, i) => {
+        const state: 'passed' | 'active' | 'upcoming' = isPreview
+          ? d.phase === 'done' || (focusRow >= 0 && i < focusRow)
+            ? 'passed'
+            : s.seq === focusSeq && d.currentKind !== 'drive'
+              ? 'active'
+              : 'upcoming'
+          : d.phase === 'done' || (d.firedSeqs.has(s.seq) && s.seq !== d.activeSeq)
+            ? 'passed'
+            : s.seq === d.activeSeq
+              ? 'active'
+              : 'upcoming'
+        return { seq: s.seq, name: s.name, stopType: s.stopType, lat: s.lat, lng: s.lng, state }
+      }),
+    [d.stops, d.phase, d.firedSeqs, d.activeSeq, d.currentKind, focusRow, focusSeq, isPreview],
+  )
   // Don't yank the list back while the rider is browsing the itinerary: mark a drag live on
   // begin, and keep it "browsing" for a grace window after they let go so a stop transition
   // mid-browse doesn't snatch the list — auto-scroll resumes on the next transition at rest.
@@ -341,22 +362,6 @@ export default function DriveScreen() {
         secondary={isPreview ? undefined : { title: voice.cta.endDrive, onPress: confirmEnd }}
       />
     )
-
-  // Per-stop state, shared by the itinerary List rows and the Map markers.
-  const stopViews = d.stops.map((s, i) => {
-    const state: 'passed' | 'active' | 'upcoming' = isPreview
-      ? d.phase === 'done' || (focusRow >= 0 && i < focusRow)
-        ? 'passed'
-        : s.seq === focusSeq && d.currentKind !== 'drive'
-          ? 'active'
-          : 'upcoming'
-      : d.phase === 'done' || (d.firedSeqs.has(s.seq) && s.seq !== d.activeSeq)
-        ? 'passed'
-        : s.seq === d.activeSeq
-          ? 'active'
-          : 'upcoming'
-    return { seq: s.seq, name: s.name, stopType: s.stopType, lat: s.lat, lng: s.lng, state }
-  })
 
   // The Map ⇄ List header switch (real-map spec §4). Hidden in preview-on-a-zero-route
   // edge cases by simply having no polyline → the map shows an empty basemap, still valid.

@@ -17,7 +17,7 @@ type MapStyleElement = {
   stylers: Array<Record<string, string | number>>
 }
 
-export function mapStyle(isDark: boolean): MapStyleElement[] {
+function buildMapStyle(isDark: boolean): MapStyleElement[] {
   const land = isDark ? palette.night : palette.paper
   const water = isDark ? palette.lakeTealNight : palette.lakeTeal
   const roadMajor = isDark ? palette.nightKeyline : palette.paperSunken
@@ -50,7 +50,19 @@ export function mapStyle(isDark: boolean): MapStyleElement[] {
     { featureType: 'transit', stylers: [{ visibility: 'off' }] },
     // water in the lake teal — the East Shore reads at a glance
     { featureType: 'water', elementType: 'geometry', stylers: [{ color: water }] },
-    { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: labelText }] },
-    { featureType: 'water', elementType: 'labels.text.stroke', stylers: [{ color: labelHalo }] },
+    // Hide water LABELS: faded ink on teal water computes to ~1:1 (effectively invisible), failing the
+    // §4 contrast guarantee. The teal lake SHAPE is the recognizable landmark and the route + amber
+    // token are the glance targets — a name isn't needed (and low label density is the doctrine). (audit #662)
+    { featureType: 'water', elementType: 'labels.text', stylers: [{ visibility: 'off' }] },
   ]
+}
+
+// Precompute both variants ONCE at module load. mapStyle() returns a STABLE reference per theme so a
+// re-render doesn't allocate ~25 fresh style objects and make react-native-maps re-apply the basemap
+// on the hot path. (audit #558)
+const MAP_STYLE_LIGHT = buildMapStyle(false)
+const MAP_STYLE_DARK = buildMapStyle(true)
+
+export function mapStyle(isDark: boolean): MapStyleElement[] {
+  return isDark ? MAP_STYLE_DARK : MAP_STYLE_LIGHT
 }
