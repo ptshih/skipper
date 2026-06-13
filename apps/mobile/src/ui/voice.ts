@@ -15,6 +15,7 @@ export const voice = {
     generic: 'Well, that’s a kink in the hose. Give her another pull?',
     retry: 'Give her another pull',
     download: 'Couldn’t pull the clips down — signal’s thin out here. Give it another go?',
+    storage: 'No room left in the hold — clear some space and we’ll stow the drive.',
   },
   cta: {
     play: 'Let’s roll', // short: the center CTA is now flanked by the ±15s skip buttons
@@ -151,8 +152,10 @@ export const voice = {
     storiesNearby: 'nearby', // stat pill before first encounter: "<n> nearby"
     storiesTold: 'told', // stat pill once encounters fire: "<n> told"
     musicPlaying: 'Your music · playing',
-    musicDucked: 'Your music · ducked',
-    musicHeld: 'Held · music back up', // encounter PAUSED — the rider's audio un-ducks
+    // Roam PAUSES the rider's audio while the skipper talks (pause+resume, founder 2026-06-11) — NOT
+    // ducking; the label must say so honestly. (audit #251)
+    musicPaused: 'Your music · paused',
+    musicHeld: 'Held · music back up', // encounter PAUSED — the rider's audio resumes
     // Chattiness — a SELECTION knob (which/how-many encounters fire), never a generation one.
     chattiness: {
       quiet: 'Quiet',

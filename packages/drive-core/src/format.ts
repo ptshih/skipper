@@ -6,6 +6,9 @@
  * splitting (so 119.6s reads "2:00", never "1:60") and clamps negatives to "0:00".
  */
 export function formatMmss(seconds: number): string {
+  // Non-finite in (NaN before a clip loads its duration, Infinity for a live stream) must never
+  // render "NaN:NaN" to the rider — clamp to "0:00". (audit #314)
+  if (!Number.isFinite(seconds)) return '0:00'
   const total = Math.max(0, Math.round(seconds))
   const m = Math.floor(total / 60)
   const s = total % 60

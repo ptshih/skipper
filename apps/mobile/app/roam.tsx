@@ -118,10 +118,11 @@ export default function RoamScreen() {
   useEffect(() => { if (contractSeen === true) r.start() }, [contractSeen])
   const onContractAccept = useCallback(() => {
     setShowContract(false)
-    setContractSeen(true)
     SecureStore.setItemAsync(CONTRACT_SEEN_KEY, '1').catch(() => {})
-    r.start()
-  }, [r.start])
+    // The [contractSeen] effect is the SINGLE start trigger — don't ALSO r.start() here, or a
+    // first-timer fires start twice (saved only by the startPending guard). (audit #996)
+    setContractSeen(true)
+  }, [])
 
   // The encounter sheet slides up over the idle base while a clip plays.
   const sheetVisible = r.activeName !== null
@@ -328,7 +329,7 @@ export default function RoamScreen() {
                     : `${r.toldCount} ${voice.roam.storiesTold}`}
                 </Text>
               </View>
-              <Duck label={sheetVisible ? voice.roam.musicDucked : voice.roam.musicPlaying} active={sheetVisible} />
+              <Duck label={sheetVisible ? voice.roam.musicPaused : voice.roam.musicPlaying} active={sheetVisible} />
             </View>
             {r.gpsSearching && (
               <Text variant="dim" color="inkDim">
@@ -401,9 +402,9 @@ export default function RoamScreen() {
               <View style={[styles.handle, { backgroundColor: colors.trackInactive }]} />
               <View style={styles.sheetTop}>
                 <Badge tone="pine" label={voice.roam.storyBadge} />
-                {/* Ducked while he talks; un-ducks (music back up) when held. */}
+                {/* Paused while he talks; resumes (music back up) when held. */}
                 <Duck
-                  label={r.clipPlaying ? voice.roam.musicDucked : voice.roam.musicHeld}
+                  label={r.clipPlaying ? voice.roam.musicPaused : voice.roam.musicHeld}
                   active={r.clipPlaying}
                 />
               </View>

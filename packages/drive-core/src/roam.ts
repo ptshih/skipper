@@ -104,6 +104,10 @@ export class RoamEngine {
 
   /** Feed one fix; returns at most ONE encounter that fires on it. */
   update(fix: GpsFix): RoamTriggerEvent[] {
+    // Defense-in-depth, mirroring TriggerEngine's shared choke point: a malformed fix (non-finite
+    // coords/speed) must NEVER fire — a NaN distance or NaN effective-radius makes `d > radius` read
+    // FALSE and would spuriously fire the nearest pin. Useless for triggering anyway → drop it. (audit #323)
+    if (!Number.isFinite(fix.lat) || !Number.isFinite(fix.lng) || !Number.isFinite(fix.speedMps)) return []
     if (fix.tSec < this.gateOpenAtSec) return [] // governor: a clip is playing / gap not elapsed
     const here: [number, number] = [fix.lng, fix.lat]
     let best: { pin: RoamPinRef; d: number } | null = null

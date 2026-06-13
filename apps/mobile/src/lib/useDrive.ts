@@ -12,7 +12,7 @@
 // WAITS for the next GPS trigger — it never advances by a clip ending. See
 // docs/specs/gps-player-spec.md §3.5.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Animated, AppState, Linking } from 'react-native'
+import { Animated, AppState, Image, Linking } from 'react-native'
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake'
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
 import {
@@ -20,7 +20,6 @@ import {
   buildPreviewTimeline,
   cumulativeMeters,
   OFF_ROUTE_MAX_M,
-  DEFAULT_TRIGGER,
   INTRO_SEQ,
   OUTRO_SEQ,
   snapStopsToRoute,
@@ -73,6 +72,17 @@ const KEEP_AWAKE_TAG = 'skipper-drive'
 // No accepted live fix for this long → surface a "searching for GPS" note rather than a silently
 // frozen screen (covers slow acquisition + persistently poor accuracy). (review #6)
 const GPS_SEARCH_MS = 8_000
+
+// After a clip has STARTED playing (sawFresh) this long with NO playback progress ⇒ an audio
+// interruption (incoming call / Siri / Bluetooth or headphone handoff — all pause expo-audio and
+// never fire didJustFinish) or a mid-clip buffer death. Without recovery clipBusy latches and the
+// whole rest of the drive goes silent. (audit #1)
+const POST_START_STALL_MS = 6_000
+
+// Bundled lock-screen / Now Playing artwork so the in-car lock screen isn't a blank thumbnail (the
+// persona is the product — the lock screen is a brand surface). A bundled asset URI works offline. (audit)
+const LOCK_ARTWORK_URI: string | undefined =
+  Image.resolveAssetSource(require('../../assets/icon.png'))?.uri
 
 interface DriveStop {
   seq: number
@@ -278,6 +288,15 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
   const clipRetried = useRef<Set<number>>(new Set()) // seqs re-signed once after a stall
   const scrubbing = useRef(false) // a drag is live — hold the clip-finished handler
   const seekTarget = useRef<number | null>(null) // last commanded seek (sec), so ±15 taps add up
+  const finishedWhileScrubbing = useRef<number | null>(null) // didJustFinish fired DURING a drag — replay on release (audit #6)
+  const activeSeqRef = useRef<number | null>(null) // mirror of activeSeq for stable callbacks/intervals
+  const pausedRef = useRef(false) // mirror of `paused` so togglePause's setState updater stays pure
+  // Post-start playback-progress tracking for the interruption/stall recovery (audit #1).
+  const lastProgressAt = useRef(0) // ms of the last forward progress on the loaded clip
+  const lastProgressTime = useRef(0) // last observed currentTime (sec)
+  const durationRef = useRef(0) // last observed clip duration (sec)
+  const resumeTried = useRef(false) // already attempted a resume for the current stall
+  const dataRef = useRef<DriveData | null>(null) // current `data` for the source-captured handleFix (audit #377)
 
   const teardownSource = useCallback(() => {
     subRef.current?.stop()
@@ -438,10 +457,15 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
     (fix: GpsFix) => {
       lastFixAt.current = Date.now() // a usable fix arrived — feed the no-GPS watchdog (review #6)
       setGpsSearching(false) // no-op when already false (React bails on unchanged state)
-      const total = data?.totalM ?? 0
+      // Read `data` through a ref: the GPS source captures handleFix ONCE at beginDrive, so a
+      // closed-over `data` would go stale if it ever changed mid-drive. (audit #377)
+      const total = dataRef.current?.totalM ?? 0
       dot.setValue(total > 0 ? Math.min(1, Math.max(0, fix.alongM / total)) : 0)
       const events = engineRef.current?.update(fix) ?? []
       if (events.length === 0) return
+      // Multiple stops on ONE fix play back-to-back with no gap (relies on generator spacing). Not a
+      // crash, but surface it in dev so a too-tight cluster is visible rather than silent. (audit #296)
+      if (events.length > 1 && __DEV__) console.warn(`[drive] ${events.length} stops fired on one fix`)
       setFiredSeqs((prev) => {
         const n = new Set(prev)
         for (const e of events) n.add(e.seq)
@@ -450,7 +474,7 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
       for (const e of events) queue.current.push(e.seq)
       pump()
     },
-    [data, dot, pump],
+    [dot, pump],
   )
 
   const handleEnd = useCallback(() => {
@@ -487,6 +511,12 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
     clipRetried.current.clear()
     outroQueued.current = false
     seekTarget.current = null
+    finishedWhileScrubbing.current = null
+    pausedRef.current = false
+    lastProgressAt.current = 0
+    lastProgressTime.current = 0
+    durationRef.current = 0
+    resumeTried.current = false
     dot.setValue(0)
     setActiveSeq(null)
     setFiredSeqs(new Set())
@@ -532,7 +562,10 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
       })),
     )
     const triggerable = snapped.filter((s) => s.offRouteM <= OFF_ROUTE_MAX_M)
-    engineRef.current = new TriggerEngine(triggerable, { leadSeconds: DEFAULT_TRIGGER.leadSeconds })
+    // All trigger params (lead, heading gate, cone) come from DEFAULT_TRIGGER in drive-core — pass
+    // nothing so a future change there takes effect here instead of being silently pinned by a
+    // partial opts object that READS as if it were configured. (audit #933)
+    engineRef.current = new TriggerEngine(triggerable)
     setDriving(true)
     // Intro bracket — the welcome, played FIRST (before any geofence trigger fires).
     if (bracketsRef.current.intro) {
@@ -617,12 +650,12 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
   }, [requestAndProceed])
 
   const togglePause = useCallback(() => {
-    setPaused((p) => {
-      const next = !p
-      if (next) subRef.current?.pause()
-      else subRef.current?.resume()
-      return next
-    })
+    // Keep the setState updater PURE — drive the GPS side effect off a ref mirror instead. (audit nit)
+    const next = !pausedRef.current
+    pausedRef.current = next
+    setPaused(next)
+    if (next) subRef.current?.pause()
+    else subRef.current?.resume()
   }, [])
 
   const end = useCallback(() => {
@@ -776,6 +809,7 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
           title: stopName,
           artist: data.hostName,
           albumTitle: data.tourName,
+          artworkUrl: LOCK_ARTWORK_URI, // bundled badge so the lock screen isn't a blank thumbnail (audit)
         })
       } catch {}
     }
@@ -822,28 +856,77 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
   // watchdog (roam's field hang: a sheet frozen at 0:00 on thin 5G; same player stack here).
   useEffect(() => {
     if (activeSeq === null) return
-    if (status.playing && (status.currentTime ?? 0) > 0.25) {
+    const t = status.currentTime ?? 0
+    if (status.duration != null && status.duration > 0) durationRef.current = status.duration
+    if (status.playing && t > 0.25) {
       sawFresh.current = true
       if (watchdog.current) {
         clearTimeout(watchdog.current)
         watchdog.current = null
       }
     }
-    if (
-      status.didJustFinish &&
-      sawFresh.current &&
-      finishedSeq.current !== activeSeq &&
-      !scrubbing.current
-    ) {
-      finishedSeq.current = activeSeq
-      onClipDone(activeSeq)
+    // Track forward progress for the post-start interruption/stall recovery below: every advance
+    // resets the stall clock and clears a pending resume attempt. (audit #1)
+    if (t > lastProgressTime.current + 0.05) {
+      lastProgressTime.current = t
+      lastProgressAt.current = Date.now()
+      resumeTried.current = false
     }
-  }, [status.playing, status.didJustFinish, status.currentTime, activeSeq, onClipDone])
+    if (status.didJustFinish && sawFresh.current && finishedSeq.current !== activeSeq) {
+      if (scrubbing.current) {
+        // didJustFinish is a ONE-SHOT; if it lands mid-drag the finish path is suppressed and the clip
+        // would never advance. Latch it and replay on scrub release (see setScrubbing). (audit #6)
+        finishedWhileScrubbing.current = activeSeq
+      } else {
+        finishedSeq.current = activeSeq
+        onClipDone(activeSeq)
+      }
+    }
+  }, [status.playing, status.didJustFinish, status.currentTime, status.duration, activeSeq, onClipDone])
 
-  // A new active clip → drop any seek target carried from the last one.
+  // A new active clip → drop the carried seek target, mirror activeSeq into a ref for the stable
+  // callbacks/interval below, and reset the post-start progress trackers. (audit #1, #6)
   useEffect(() => {
     seekTarget.current = null
+    activeSeqRef.current = activeSeq
+    lastProgressAt.current = Date.now()
+    lastProgressTime.current = 0
+    resumeTried.current = false
+    finishedWhileScrubbing.current = null
   }, [activeSeq])
+
+  // ---- post-start interruption / stall recovery (audit #1) ----
+  // Once a clip has STARTED (sawFresh), expo-audio fires NO didJustFinish if the OS pauses it for an
+  // interruption (call / Siri / Bluetooth or headphone handoff) or it buffer-dies mid-clip — and the
+  // pre-start watchdog already disarmed. Without this, clipBusy latches and every later GPS-triggered
+  // stop only enqueues: the skipper goes silent for the rest of the drive. Poll for a frozen clock,
+  // try to resume once; if that doesn't take, complete the clip so the fire-queue keeps pumping.
+  useEffect(() => {
+    if (activeSeq === null || paused) return
+    const iv = setInterval(() => {
+      const seq = activeSeqRef.current
+      if (seq === null || !sawFresh.current || finishedSeq.current === seq) return
+      if (Date.now() - lastProgressAt.current < POST_START_STALL_MS) return
+      // Effectively at the end but didJustFinish never fired → treat as finished (don't replay).
+      if (durationRef.current > 0 && lastProgressTime.current >= durationRef.current - 0.6) {
+        finishedSeq.current = seq
+        onClipDone(seq)
+        return
+      }
+      if (!resumeTried.current) {
+        resumeTried.current = true
+        try {
+          player.play() // resume after the interruption (no-op if already playing)
+        } catch {}
+        lastProgressAt.current = Date.now() // grace window for the resume to take
+        return
+      }
+      // Resume didn't take — don't strand the drive on a dead clip.
+      setStallNote(voice.player.stall)
+      onClipDone(seq)
+    }, 2_000)
+    return () => clearInterval(iv)
+  }, [activeSeq, paused, player, onClipDone])
 
   // Drop the pending seek target once the clock catches up to it, so a LATER ±15 tap re-bases
   // on the real position instead of a stale committed target. (Pairs with seekBy above.)
@@ -893,7 +976,7 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
       .catch(() => {})
     return () => {
       active = false
-      void deactivateKeepAwake(KEEP_AWAKE_TAG)
+      void deactivateKeepAwake(KEEP_AWAKE_TAG).catch(() => {}) // symmetric with the guarded activate (audit)
     }
   }, [driving, paused])
 
@@ -904,6 +987,11 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
       mountedRef.current = false
     }
   }, [])
+
+  // ---- mirror `data` into a ref so the GPS-source-captured handleFix always reads the latest (audit #377) ----
+  useEffect(() => {
+    dataRef.current = data
+  }, [data])
 
   // ---- recover from a denial OR reduced accuracy: re-check permission when the rider returns from
   // Settings. The Settings-only branches (canAskAgain===false, and reduced accuracy) would otherwise
@@ -933,6 +1021,21 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
     }, 2_000)
     return () => clearInterval(iv)
   }, [mode, driving, paused])
+
+  // ---- backgrounding recovery (live drive): a manual screen-lock or app-switch suspends the
+  // foreground GPS watch (watchPositionAsync is foreground-only; keep-awake only blocks AUTO-sleep),
+  // so triggering silently stops and any stop passed while backgrounded is missed. On return to the
+  // foreground, restart the no-GPS grace window and show the "searching" cue until the next fix
+  // arrives, so the gap is at least visible rather than a silently dead drive. (audit #4)
+  useEffect(() => {
+    if (mode !== 'live' || !driving) return
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s !== 'active') return
+      lastFixAt.current = Date.now()
+      setGpsSearching(true) // honest "reconnecting" cue; handleFix clears it on the next usable fix
+    })
+    return () => sub.remove()
+  }, [mode, driving])
 
   // ---- unmount: stop the drive cleanly (back-swipe / nav away) ----
   useEffect(() => {
@@ -981,7 +1084,7 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
       const target = Math.min(dur, Math.max(0, ms / 1000))
       seekTarget.current = target
       try {
-        player.seekTo(target)
+        void player.seekTo(target).catch(() => {}) // async rejection (media reset / unloaded source) (audit)
       } catch {}
     },
     [canSeek, dur, player],
@@ -1000,9 +1103,22 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
     [canSeek, status.currentTime, seekToMs],
   )
 
-  const setScrubbing = useCallback((active: boolean) => {
-    scrubbing.current = active
-  }, [])
+  const setScrubbing = useCallback(
+    (active: boolean) => {
+      scrubbing.current = active
+      // A clip that finished DURING the drag had its one-shot didJustFinish latched — replay it on
+      // release so the drive advances instead of dead-ending on a finished clip. (audit #6)
+      if (!active && finishedWhileScrubbing.current !== null) {
+        const seq = finishedWhileScrubbing.current
+        finishedWhileScrubbing.current = null
+        if (seq === activeSeqRef.current && finishedSeq.current !== seq) {
+          finishedSeq.current = seq
+          onClipDone(seq)
+        }
+      }
+    },
+    [onClipDone],
+  )
 
   // Stable identity across renders — this rebuilt a fresh array every audio tick, which made
   // the player's auto-scroll effect (keyed on it) re-fire ~2×/sec and pin the stop list.

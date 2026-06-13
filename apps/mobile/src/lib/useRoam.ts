@@ -24,6 +24,7 @@
 // same fix data a real drive would produce, so triggers behave exactly as on the road.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { AppState } from 'react-native'
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake'
 import * as Location from 'expo-location'
@@ -58,6 +59,13 @@ const KEEP_AWAKE_TAG = 'skipper-roam'
 /** A clip that never starts (expired URL / dead zone) is SKIPPED after this grace — roam
  *  has no re-sign machinery (alpha); a missed encounter is invisible by design. */
 const CLIP_STALL_MS = 12_000
+/** After a clip has STARTED (sawFresh), this long with no playback progress ⇒ an audio interruption
+ *  (call / Siri / Bluetooth or headphone handoff — all pause expo-audio with no didJustFinish). Without
+ *  recovery clipBusy latches and the roam companion goes silent for the rest of the session. (audit #1) */
+const POST_START_STALL_MS = 6_000
+/** getCurrentPositionAsync has no built-in timeout; a cold/indoor/canyon fix can never resolve, wedging
+ *  the session in 'loading' forever (no watchdog runs there). Bound the locate step. (audit #156) */
+const LOCATE_TIMEOUT_MS = 12_000
 /** Pre-buffer grace: the sheet normally waits for REAL audio before sliding up (so it never
  *  sits frozen at 0:00). If the buffer drags past this (thin signal / dead zone), present the
  *  sheet anyway in a loading skeleton — better a "pulling this up…" sheet than a silent void
@@ -155,6 +163,7 @@ export function useRoam(mode: RoamMode): RoamState {
   const startPending = useRef(false) // a start flow is in flight — blocks double-tap
   const lastFixAt = useRef(0)
   const lastFixPos = useRef<{ lat: number; lng: number } | null>(null)
+  const lastPublishedPos = useRef<{ lat: number; lng: number } | null>(null) // last position pushed to the map puck (audit #603)
   const finishedPoi = useRef<string | null>(null) // didJustFinish double-fire guard
   const stallTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const skeletonTimer = useRef<ReturnType<typeof setTimeout> | null>(null) // present-the-sheet-anyway fallback
@@ -164,6 +173,11 @@ export function useRoam(mode: RoamMode): RoamState {
   const pausedRef = useRef(false) // mirrors clipPaused for the stall watchdog
   const scrubbingRef = useRef(false) // a scrub drag is live — hold the clip-finished handler
   const seekTarget = useRef<number | null>(null) // pending seek (sec), so ±15 taps accumulate
+  // Post-start interruption/stall recovery tracking (mirrors useDrive). (audit #1)
+  const lastProgressAt = useRef(0) // ms of the last forward progress on the loaded clip
+  const lastProgressTime = useRef(0) // last observed currentTime (sec)
+  const durationRef = useRef(0) // last observed clip duration (sec)
+  const resumeTried = useRef(false) // already attempted a resume for the current stall
 
   const player = useAudioPlayer()
   const status = useAudioPlayerStatus(player)
@@ -173,6 +187,12 @@ export function useRoam(mode: RoamMode): RoamState {
   // app); exclusive=false → `mixWithOthers` (hands focus back so it resumes). expo-audio has
   // no explicit session-deactivate — flipping the interruption mode IS the release mechanism
   // (SDK 56 docs). Fire-and-forget; a failed flip just leaves the prior focus, never throws.
+  // NOTE (audit #454): setAudioModeAsync is PROCESS-WIDE — the tour drive (useDrive) also mutates it
+  // (doNotMix + a lock-screen claim). Navigation can't co-mount the drive + roam screens, so they
+  // don't fight today; a structural assumption, not a guarded one.
+  // NOTE (audit #436): roam deliberately uses mixWithOthers and NEVER calls setActiveForLockScreen
+  // (which requires doNotMix) — so on ANDROID a backgrounded roam clip is cut by the OS after ~3 min.
+  // iOS is the only shipped platform; accepted iOS-first-alpha limitation.
   const setExclusiveAudio = useCallback((exclusive: boolean) => {
     setAudioModeAsync({
       playsInSilentMode: true,
@@ -238,7 +258,9 @@ export function useRoam(mode: RoamMode): RoamState {
       if (sawFresh.current) setToldCount((n) => n + 1)
       setExclusiveAudio(false) // clip over → hand focus back so the rider's audio resumes
       setActivePoiId((cur) => (cur === poiId ? null : cur))
-      setSheetPoiId((cur) => (cur === poiId ? null : cur)) // dismiss the sheet (or its skeleton)
+      // Keep the sheet UP if another encounter is queued (it cross-updates to the next on its sawFresh)
+      // instead of sliding down then back up between back-to-back encounters. (audit #1023)
+      if (queueRef.current.length === 0) setSheetPoiId((cur) => (cur === poiId ? null : cur))
       setClipReady(false)
       clipBusy.current = false
       pump()
@@ -256,7 +278,9 @@ export function useRoam(mode: RoamMode): RoamState {
         const pos = lastFixPos.current
         if (pos) {
           const fresh = await getRoamManifest(pos.lat, pos.lng)
-          if (fresh.pins.length > 0) pinsRef.current = fresh.pins
+          // Only adopt fresh pins if they still include the ACTIVE poi — else the clip-load reload
+          // below can't find it (silent drop) while the engine keeps the old pins. (audit #1004)
+          if (fresh.pins.some((p) => p.poiId === poiId)) pinsRef.current = fresh.pins
         }
       } catch {} // offline/dead zone: the reload below retries the old URL — then skips
       // Audio may have started playing during the async manifest fetch — if sawFresh flipped
@@ -280,6 +304,10 @@ export function useRoam(mode: RoamMode): RoamState {
     sawFresh.current = false
     setClipReady(false)
     finishedPoi.current = null
+    // Reset post-start progress trackers for the interruption/stall recovery below. (audit #1)
+    lastProgressAt.current = Date.now()
+    lastProgressTime.current = 0
+    resumeTried.current = false
     try {
       player.pause()
     } catch {}
@@ -322,6 +350,14 @@ export function useRoam(mode: RoamMode): RoamState {
   // watchdog (the field hang: a sheet frozen at 0:00 on thin 5G).
   useEffect(() => {
     if (activePoiId === null) return
+    const t = status.currentTime ?? 0
+    if (status.duration != null && status.duration > 0) durationRef.current = status.duration
+    // Track forward progress for the post-start interruption/stall recovery below. (audit #1)
+    if (t > lastProgressTime.current + 0.05) {
+      lastProgressTime.current = t
+      lastProgressAt.current = Date.now()
+      resumeTried.current = false
+    }
     if (status.playing && (status.currentTime ?? 0) > 0.25 && !sawFresh.current) {
       // Real audio is advancing — take EXCLUSIVE focus (pause the rider's audio) only NOW, not
       // at clip-load, so a silent pre-buffer / dead-zone skip never interrupts it. Present the
@@ -345,6 +381,36 @@ export function useRoam(mode: RoamMode): RoamState {
       onClipDone(activePoiId)
     }
   }, [status.playing, status.didJustFinish, status.currentTime, activePoiId, onClipDone, setExclusiveAudio])
+
+  // ---- post-start interruption / stall recovery (audit #1) ----
+  // Mirrors useDrive: once a clip has STARTED (sawFresh), expo-audio fires no didJustFinish if the OS
+  // pauses it for an interruption (call / Siri / Bluetooth or headphone handoff) or it buffer-dies
+  // mid-clip — and the pre-start stall watchdog already bailed. Without this, clipBusy latches and the
+  // roam companion goes silent for the session. Poll for a frozen clock; resume once, then complete.
+  useEffect(() => {
+    if (activePoiId === null) return
+    const iv = setInterval(() => {
+      if (pausedRef.current) return // user-paused — don't fight it
+      const poi = activePoiId
+      if (!sawFresh.current || finishedPoi.current === poi) return
+      if (Date.now() - lastProgressAt.current < POST_START_STALL_MS) return
+      if (durationRef.current > 0 && lastProgressTime.current >= durationRef.current - 0.6) {
+        finishedPoi.current = poi
+        onClipDone(poi)
+        return
+      }
+      if (!resumeTried.current) {
+        resumeTried.current = true
+        try {
+          player.play() // resume after the interruption (no-op if already playing)
+        } catch {}
+        lastProgressAt.current = Date.now() // grace window for the resume to take
+        return
+      }
+      onClipDone(poi) // resume didn't take — don't strand the session on a dead clip
+    }, 2_000)
+    return () => clearInterval(iv)
+  }, [activePoiId, player, onClipDone])
 
   // Drop the pending seek target once the clock catches it, so a later ±15 tap re-bases on
   // the real position instead of a stale target (mirrors useDrive's seek bookkeeping).
@@ -376,12 +442,27 @@ export function useRoam(mode: RoamMode): RoamState {
         fixAgeSec: lastFixAt.current ? Math.round((Date.now() - lastFixAt.current) / 1000) : null,
         nearestM: nearestM === null ? null : Math.round(nearestM),
       })
-      // Surface the position on the same bounded tick (the roam map's puck) — a glanceable
-      // 2s cadence, so the screen doesn't re-render on every raw fix.
-      setPosition(pos ? { lat: pos.lat, lng: pos.lng } : null)
+      // Surface the position on the same bounded tick (the roam map's puck) — a glanceable 2s
+      // cadence — but ONLY when it actually moved, so a stationary rider doesn't churn a fresh
+      // position object (and re-render the memoized RoamMap) every 2s. (audit #603)
+      const prev = lastPublishedPos.current
+      if ((pos?.lat ?? null) !== (prev?.lat ?? null) || (pos?.lng ?? null) !== (prev?.lng ?? null)) {
+        lastPublishedPos.current = pos ? { lat: pos.lat, lng: pos.lng } : null
+        setPosition(pos ? { lat: pos.lat, lng: pos.lng } : null)
+      }
     }, 2_000)
     return () => clearInterval(t)
   }, [phase, mode])
+
+  // Defensive: a dropped setExclusiveAudio(false) flip (fire-and-forget) could leave the rider's audio
+  // paused. On return to the foreground while NOT actively narrating, re-issue the release. (audit #210)
+  useEffect(() => {
+    if (phase !== 'roaming') return
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s === 'active' && !clipBusy.current) setExclusiveAudio(false)
+    })
+    return () => sub.remove()
+  }, [phase, setExclusiveAudio])
 
   const setChattiness = useCallback((level: ChattinessLevel) => {
     setChattinessState(level)
@@ -393,6 +474,11 @@ export function useRoam(mode: RoamMode): RoamState {
   const beginRoamSession = useCallback(async () => {
     try {
       setPhase('loading')
+      // A new session must not read the prior one's last fix (a stale puck / nearest-pin flash at the
+      // next start until the first fresh fix lands). (audit #1014)
+      lastFixPos.current = null
+      lastPublishedPos.current = null
+      lastFixAt.current = 0
       // Open in the SHARED mode: the rider's audio plays untouched through the quiet idle —
       // we only take exclusive focus (doNotMix) when a clip actually starts sounding.
       await setAudioModeAsync({
@@ -413,9 +499,14 @@ export function useRoam(mode: RoamMode): RoamState {
         const [lng, lat] = simPolyline[0]!
         here = { lat, lng }
       } else {
-        const loc = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
-        })
+        // Time-box the cold-fix locate — getCurrentPositionAsync has no built-in timeout, and the
+        // 'loading' phase has no watchdog, so an indoor/canyon start would wedge here forever. (audit #156)
+        const loc = await Promise.race([
+          Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Location timed out.')), LOCATE_TIMEOUT_MS),
+          ),
+        ])
         here = { lat: loc.coords.latitude, lng: loc.coords.longitude }
       }
 

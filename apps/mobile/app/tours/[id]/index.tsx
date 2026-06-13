@@ -1,10 +1,11 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ActionSheetIOS, Alert, Animated, Linking, Platform, Share, StyleSheet, View } from 'react-native'
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
 import { ApiError, errorMessage, getTour, type TourDetail } from '@/lib/api'
 import {
   deleteTourDownload,
   downloadTour,
+  InsufficientStorageError,
   isDownloadStale,
   isTourDownloaded,
   loadManifest,
@@ -58,31 +59,55 @@ export default function TourScreen() {
   // The signature rig, parked at the trailhead (~0.06) on the placard's static trail. Created
   // once, never animated — a still motif (the Start CTA owns this screen's one amber glow).
   const parked = useRef(new Animated.Value(0.06)).current
+  // Mirror of `tour` so load() can skip the full-screen spinner on a refocus refetch. (audit #531)
+  const tourRef = useRef<TourDetail | null>(null)
+  // Cancels an in-flight download (Cancel tap / screen unmount). (audit #816)
+  const downloadAbort = useRef<AbortController | null>(null)
 
   const startDownload = useCallback(async () => {
     if (!id) return
     setDownloadError(null)
+    setNeedsAccount(false) // a prior gate latch must not outlive a fresh attempt (audit #278)
     setDownloading({ done: 0, total: 0 })
+    const ctrl = new AbortController()
+    downloadAbort.current = ctrl
     try {
-      await downloadTour(id, setDownloading)
+      await downloadTour(id, setDownloading, ctrl.signal)
       setDownloaded(true)
       setUpdatable(false) // a fresh pull writes the current tokens — no longer behind the server
     } catch (e) {
-      // A gated (non-preview) tour download 401s when the account lapsed — show the
-      // AccountGate. Everything else is a network/verify failure (no useful raw message for
-      // a rider), so speak the persona line instead of leaking e.message.
-      if (e instanceof ApiError && e.needsAccount) setNeedsAccount(true)
-      else setDownloadError(voice.error.download)
+      if (e instanceof Error && e.name === 'AbortError') {
+        // Canceled (navigated away / Cancel tap) — silent, no error toast.
+      } else if (e instanceof ApiError && e.needsAccount) {
+        // A gated (non-preview) download 401s when the account lapsed. Route to sign-in instead of
+        // swapping the whole detail for a full-screen gate — the loaded tour + open preview stay
+        // usable underneath. (audit #269)
+        router.push('/sign-in')
+      } else if (e instanceof InsufficientStorageError) {
+        setDownloadError(voice.error.storage)
+      } else {
+        // Network/verify failure — no useful raw message for a rider; speak the persona line.
+        setDownloadError(voice.error.download)
+      }
     } finally {
+      if (downloadAbort.current === ctrl) downloadAbort.current = null
       setDownloading(null)
     }
-  }, [id])
+  }, [id, router])
 
   const removeDownload = useCallback(() => {
     if (!id) return
     deleteTourDownload(id)
     setDownloaded(false)
   }, [id])
+
+  const cancelDownload = useCallback(() => {
+    downloadAbort.current?.abort()
+  }, [])
+
+  // Cancel an in-flight download if the screen is torn down (audit #816). NOT on blur — the screen
+  // stays mounted under the pushed player, so a download keeps running while the rider previews.
+  useEffect(() => () => downloadAbort.current?.abort(), [])
 
   // Share the drive's universal link (skipper.fm/t/<id>) via the OS share sheet.
   const shareTour = useCallback(() => {
@@ -108,13 +133,15 @@ export default function TourScreen() {
   const openMenu = useCallback(() => {
     const actions: { label: string; onPress: () => void; destructive?: boolean }[] = []
     actions.push({ label: 'Share this drive', onPress: shareTour })
-    if (downloaded) {
-      if (updatable && !downloading) {
+    if (downloading) {
+      actions.push({ label: 'Cancel download', onPress: cancelDownload, destructive: true })
+    } else if (downloaded) {
+      if (updatable) {
         // Re-pull overwrites the saved manifest + clips with the server's fresh cut.
         actions.push({ label: voice.offline.update, onPress: () => void startDownload() })
       }
       actions.push({ label: 'Remove download', onPress: removeDownload, destructive: true })
-    } else if (!downloading) {
+    } else {
       actions.push({ label: 'Download for offline', onPress: () => void startDownload() })
     }
     actions.push({ label: 'Report an issue', onPress: reportIssue })
@@ -142,7 +169,18 @@ export default function TourScreen() {
         { text: 'Cancel', style: 'cancel' as const },
       ])
     }
-  }, [downloaded, downloading, updatable, id, router, startDownload, removeDownload, shareTour, reportIssue])
+  }, [
+    downloaded,
+    downloading,
+    updatable,
+    id,
+    router,
+    startDownload,
+    removeDownload,
+    cancelDownload,
+    shareTour,
+    reportIssue,
+  ])
 
   // The ⋯ always has actions now — Share + Report are always offer-able (download/remove are
   // the state-aware extras).
@@ -150,13 +188,14 @@ export default function TourScreen() {
 
   const load = useCallback(async () => {
     if (!id) return
-    setLoading(true)
+    if (!tourRef.current) setLoading(true) // keep the loaded detail on a refocus refetch — no full-screen spinner flash (audit #531)
     setError(null)
     setNeedsAccount(false)
     try {
       // Open funnel: any tour's detail is viewable anonymously so the Preview CTA is reachable.
       const fresh = await getTour(id, { preview: true })
       setTour(fresh)
+      tourRef.current = fresh
       setOffline(false)
       // Online: flag a saved copy whose clips the server has re-cut since the download (free —
       // we already hold the fresh detail). Returns false when nothing's downloaded.
@@ -170,6 +209,7 @@ export default function TourScreen() {
         const m = loadManifest(id)
         if (m) {
           setTour(m.detail)
+          tourRef.current = m.detail
           setOffline(true)
           setUpdatable(false) // dead zone: no fresh detail to compare — never nag offline
         } else {

@@ -1,8 +1,8 @@
-// The duck indicator — a tiny "your music" status row for free-roam: three little
-// level bars + a dim label. Roam DUCKS the rider's own audio (never stops it), and this
-// row is the honest readout of that handoff: bars pulse while the skipper talks (the
-// rider's music is ducked under him), sit static otherwise. Under Reduce Motion the
-// bars never animate (the design's "static duck-bars" rule) — state reads from color.
+// The "your music" status row for free-roam: three little activity bars + a dim label. Roam now
+// PAUSES the rider's own audio while the skipper talks (pause+resume, founder 2026-06-11) — NOT
+// ducking — and the LABEL (passed in) says so. The bars are an activity cue: they pulse while the
+// skipper is talking (active) and sit static otherwise; under Reduce Motion they never animate (the
+// design's "static bars" rule) — state reads from color. (audit #251)
 import { useEffect, useRef } from 'react'
 import { Animated, StyleSheet, View } from 'react-native'
 import { space } from '../theme/tokens'

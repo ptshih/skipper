@@ -48,6 +48,10 @@ export interface OfflineManifest {
   }
 }
 
+// NOTE: clips live under Paths.document (survives restarts; NOT cache-evicted) but are INCLUDED in
+// iCloud/iTunes backups — SDK 56's File API exposes no isExcludedFromBackup setter from JS, so a
+// Tahoe tour's tens of MB of re-downloadable audio inflates backups until that lands (then exclude
+// via a native config plugin or a backup-excluded subpath). (audit #508)
 function tourDir(tourId: string): Directory {
   return new Directory(Paths.document, 'tours', tourId)
 }
@@ -105,18 +109,86 @@ function clipsToDownload(signed: SignedAudio): {
 
 const DOWNLOAD_CONCURRENCY = 4
 
+// Per-clip byte-transfer budget. The JSON paths (getTour/sign) are time-boxed in api.ts, but the
+// DOWNLOAD bytes were not — a half-open / slow-drip dead-zone connection would hang forever. Bound
+// each clip with an AbortController so a stuck transfer rejects instead of wedging downloadTour. (audit #2)
+const CLIP_DOWNLOAD_TIMEOUT_MS = 30_000
+
+// Rough bytes/sec for the 32 kbps MP3 clips (32 kbit/s ÷ 8), for the pre-flight free-space estimate.
+const APPROX_BYTES_PER_SEC = 4_000
+
+/** A download can't fit in free space — surfaced with a dedicated, actionable message. (audit #174) */
+export class InsufficientStorageError extends Error {
+  constructor(message = 'Not enough free space to download this drive.') {
+    super(message)
+    this.name = 'InsufficientStorageError'
+  }
+}
+
+/** An AbortError shaped so callers can detect a cancel/timeout uniformly. */
+function abortError(): Error {
+  return Object.assign(new Error('Download canceled.'), { name: 'AbortError' })
+}
+
+/** Download one clip, bounded by a per-clip timeout AND the caller's (optional) cancel signal. (audit #2, #816) */
+async function downloadClip(url: string, dest: File, outer?: AbortSignal): Promise<File> {
+  const ctrl = new AbortController()
+  const onAbort = () => ctrl.abort()
+  if (outer) {
+    if (outer.aborted) ctrl.abort()
+    else outer.addEventListener?.('abort', onAbort)
+  }
+  const timer = setTimeout(() => ctrl.abort(), CLIP_DOWNLOAD_TIMEOUT_MS)
+  try {
+    return await File.downloadFileAsync(url, dest, { signal: ctrl.signal })
+  } finally {
+    clearTimeout(timer)
+    outer?.removeEventListener?.('abort', onAbort)
+  }
+}
+
+// In-flight downloads by tourId — dedupes concurrent downloadTour calls for the same tour so two
+// taps (a fast double-select before React commits the busy state) can't race on the same files (one
+// run's failure-cleanup wiping the other's bytes). Cleared in finally. (audit #825)
+const inFlight = new Map<string, Promise<OfflineManifest>>()
+
 /**
- * Download a complete tour (detail + every clip's bytes) to persistent storage and write
- * the manifest. Throws if any clip fails to download/verify (a half-download must never
- * read as "ready"); on failure the partial dir is removed. Needs network + (for a
- * non-preview tour) a signed-in account — the /tours + /sign tier check enforces it.
+ * Download a complete tour (detail + every clip's bytes) to persistent storage and write the
+ * manifest. Throws if any clip fails to download/verify (a half-download must never read as "ready");
+ * on failure the partial dir is removed. Pass `signal` to cancel (navigation away / a Cancel tap).
+ * Concurrent calls for the same tour share one in-flight run. Needs network + (for a non-preview
+ * tour) a signed-in account — the /tours + /sign tier check enforces it.
  */
-export async function downloadTour(
+export function downloadTour(
   tourId: string,
   onProgress?: (p: DownloadProgress) => void,
+  signal?: AbortSignal,
 ): Promise<OfflineManifest> {
+  const existing = inFlight.get(tourId)
+  if (existing) return existing
+  const p = runDownload(tourId, onProgress, signal).finally(() => {
+    if (inFlight.get(tourId) === p) inFlight.delete(tourId)
+  })
+  inFlight.set(tourId, p)
+  return p
+}
+
+async function runDownload(
+  tourId: string,
+  onProgress?: (p: DownloadProgress) => void,
+  signal?: AbortSignal,
+): Promise<OfflineManifest> {
+  if (signal?.aborted) throw abortError()
+  // Fetch + sign FIRST (network). If offline (a dead-zone "Update" tap), this throws here — BEFORE
+  // we touch the existing download, so the saved copy survives a failed re-pull attempt.
   const detail = await getTour(tourId)
   const signed = await signTourAudio(tourId)
+
+  // Clean re-pull: drop any prior download now that the network is confirmed, so an "Update" can't
+  // fail on DestinationAlreadyExists (downloadFileAsync's exists-check runs AFTER the bytes transfer,
+  // burning bandwidth then throwing) and then have the catch wipe the good copy. No back-compat
+  // needed (clean destructive) — also drops stale clips from an old cut. (audit #3)
+  deleteTourDownload(tourId)
 
   const dir = tourDir(tourId)
   dir.create({ intermediates: true, idempotent: true })
@@ -124,6 +196,26 @@ export async function downloadTour(
   const items = clipsToDownload(signed)
   const total = items.length
   if (total === 0) throw new Error('This tour has no audio to download.')
+
+  // Pre-flight free-space check: estimate total bytes from clip durations and require comfortable
+  // headroom, so a doomed download fails fast with an actionable message instead of a misleading
+  // "network" error after filling the disk. Skipped if the OS can't report free space. (audit #174)
+  const estBytes = items.reduce(
+    (sum, it) => sum + Math.max(0, (it.durationMs ?? 0) / 1000) * APPROX_BYTES_PER_SEC,
+    0,
+  )
+  if (estBytes > 0) {
+    let free = 0
+    try {
+      free = Paths.availableDiskSpace
+    } catch {
+      free = 0
+    }
+    if (Number.isFinite(free) && free > 0 && free < estBytes * 1.5 + 5_000_000) {
+      throw new InsufficientStorageError()
+    }
+  }
+
   let done = 0
   onProgress?.({ done, total })
 
@@ -133,8 +225,11 @@ export async function downloadTour(
     while (next < items.length) {
       const item = items[next++]!
       const dest = new File(dir, item.name)
-      const out = await File.downloadFileAsync(item.url, dest)
-      // Verify on disk: a 0-byte or missing file is a failed download, not a clip.
+      const out = await downloadClip(item.url, dest, signal)
+      // Integrity is a PRESENCE/nonzero-size check only — no Content-Length/checksum (the sign DTO
+      // carries no size/hash). iOS URLSession enforces a declared Content-Length (R2 object GETs
+      // always send one), so a mid-body drop normally rejects in downloadClip; a server
+      // short-Content-Length is the only silent-truncation gap. (audit #834)
       if (!out.exists || !out.size || out.size <= 0) {
         throw new Error(`Download verify failed for ${item.name} (exists=${out.exists}, size=${out.size}).`)
       }
@@ -168,7 +263,7 @@ export async function downloadTour(
     manifestFile(tourId).write(JSON.stringify(manifest))
     return manifest
   } catch (e) {
-    // Partial download / manifest-write failure — sweep the dir so it can't read as ready
+    // Partial download / cancel / manifest-write failure — sweep the dir so it can't read as ready
     // (and no orphaned clips leak), then surface the error.
     try {
       dir.delete()
@@ -282,8 +377,14 @@ export function listDownloadedTours(): TourListItem[] {
   for (const entry of root.list()) {
     // tour dirs only; each dir name IS the tourId. A complete download = valid manifest + clips on disk.
     if (!(entry instanceof Directory)) continue
-    const m = loadManifest(entry.name)
-    if (m && clipsPresentOnDisk(entry.name, m)) out.push(listItemFromDetail(m.detail))
+    try {
+      const m = loadManifest(entry.name)
+      if (m && clipsPresentOnDisk(entry.name, m)) out.push(listItemFromDetail(m.detail))
+    } catch {
+      // A tour dir torn down mid-scan (deleteTourDownload / a failed re-pull's cleanup) can make a
+      // File.exists/size throw — skip that entry rather than aborting the whole offline catalog,
+      // which would error-wall the home screen out of its dead-zone fallback. (audit #843)
+    }
   }
   return out
 }

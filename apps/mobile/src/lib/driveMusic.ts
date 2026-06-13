@@ -53,7 +53,7 @@ const TRACKS = [
 ]
 
 const FULL = 0.95 // music is foreground between stops (not under voice) → near full
-const TICK_MS = 50
+const TICK_MS = 100 // volume-ramp tick; 100ms (12 steps over a 1.2s fade) halves native bridge writes vs 50 (audit #594)
 const FADE_MS = 1200 // duck/unduck at a stop boundary
 const FADE_END_MS = 600 // fade out a touch faster when the tour ends
 
@@ -95,12 +95,14 @@ export function useDriveMusic({
   const started = useRef(false)
   const prevKind = useRef<string | null>(null)
 
-  // Start the rotation muted + playing once, so fades are just volume ramps on an
-  // already-running playlist (no restart pops). Clean up on unmount.
+  // Prime the rotation muted, but do NOT play() here. Starting playback takes EXCLUSIVE doNotMix
+  // audio focus (the drive session), so playing on mount would pause the rider's own music the moment
+  // the drive screen opens — while they're still parked on the gate / "Press Play" card, before any
+  // drive has begun. Playback is deferred to the first AUDIBLE leg below (and paused again whenever
+  // the target falls to silence), so focus is held only while the soundtrack is actually playing. (audit #5)
   useEffect(() => {
     try {
       playlist.volume = 0
-      playlist.play()
     } catch {}
     return () => {
       try {
@@ -121,22 +123,25 @@ export function useDriveMusic({
       // First audible leg keeps shuffle[0] — don't advance (the timeline opens on a
       // clip, so this is what stops the first driving leg from skipping a track).
       started.current = true
-    } else if (
-      started.current &&
-      segmentKind != null &&
-      segmentKind !== 'clip' &&
-      prevKind.current === 'clip'
-    ) {
-      // Out of a narration clip into a fresh driving leg → next track, while still
-      // muted (it fades up below). iOS's native playlist next() omits the wasPlaying
-      // → play() restore that previous()/skipTo() perform, so re-assert play()
-      // (idempotent if already playing) to avoid fading up into silence.
+    } else if (started.current && segmentKind === 'drive' && prevKind.current !== 'drive') {
+      // Entering a fresh DRIVING leg → next track, while still muted (it fades up below). Keyed on
+      // entering 'drive' (not just "leaving a clip"), so a clip→rest→drive sequence rotates at the
+      // DRIVE, not on the silent 'rest' (rests keep the current song); pause/resume within a leg
+      // never rotates (segmentKind is unchanged). play() is re-asserted below. (audit #287)
       try {
         playlist.next()
-        playlist.play()
       } catch {}
     }
     prevKind.current = segmentKind
+
+    // Take focus + start playback only when actually audible (deferred from mount). play() is
+    // idempotent if already running, and re-asserts after next() (iOS's playlist next() omits the
+    // wasPlaying→play() restore). (audit #5)
+    if (audible) {
+      try {
+        playlist.play()
+      } catch {}
+    }
 
     const target = audible ? FULL : 0
     const fadeMs = ended ? FADE_END_MS : FADE_MS
@@ -151,6 +156,14 @@ export function useDriveMusic({
       if (vol.current === target && ramp.current) {
         clearInterval(ramp.current)
         ramp.current = null
+        // Fully faded to silence (parked / under narration / ended) → pause so we don't keep
+        // exclusive doNotMix focus and the rider's own audio can resume. Re-armed by play() above
+        // when the next leg becomes audible (pause/resume keeps position — no restart pop). (audit #5)
+        if (target === 0) {
+          try {
+            playlist.pause()
+          } catch {}
+        }
       }
     }, TICK_MS)
     return () => {

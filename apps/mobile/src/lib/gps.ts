@@ -9,6 +9,7 @@
 import * as Location from 'expo-location'
 import {
   cumulativeMeters,
+  DEFAULT_TRIGGER,
   generateDrive,
   haversineMeters,
   type GpsFix,
@@ -64,8 +65,16 @@ export interface SimSourceOptions {
  */
 export function simulatedSource(polyline: LngLat[], opts: SimSourceOptions = {}): GpsFixSource {
   const { mph = 60, tickHz = 4, timeScale = 1 } = opts
-  return (onFix, onEnd) => {
-    const fixes = generateDrive(polyline, { mph, tickHz })
+  return (onFix, onEnd, onError) => {
+    let fixes: GpsFix[]
+    try {
+      fixes = generateDrive(polyline, { mph, tickHz })
+    } catch (e) {
+      // generateDrive throws synchronously on a bad polyline — route it to the same 'error' phase the
+      // live source uses (onError) instead of an uncaught throw to beginDrive's caller. (audit #942)
+      onError?.(e)
+      return { stop: () => {}, pause: () => {}, resume: () => {} }
+    }
     // Real spacing between fixes is 1/tickHz seconds; compress by timeScale for testing.
     const dtMs = Math.max(1, 1000 / tickHz / Math.max(0.0001, timeScale))
     let i = 0
@@ -116,10 +125,24 @@ export function simulatedSource(polyline: LngLat[], opts: SimSourceOptions = {})
   }
 }
 
-// Drop a fix whose horizontal accuracy is worse than this (m). A just-acquired GPS fix can
-// carry 1000 m+ accuracy, and a wild fix landing near a stop would false-fire it. Driving fixes
-// are normally well under 10 m, so this only rejects the unsettled ones. (spec §3.3)
+// Drop a fix whose horizontal accuracy is worse than this (m) when stationary/slow. A just-acquired
+// GPS fix can carry 1000 m+ accuracy, and a wild fix landing near a stop would false-fire it. Driving
+// fixes are normally well under 10 m, so this only rejects the unsettled ones. (spec §3.3)
 const MAX_FIX_ACCURACY_M = 50
+
+// Speed-aware loosening of the accuracy gate: at speed the effective trigger radius is large
+// (~161 m at 30 mph, ~322 m at 60 mph via DEFAULT_TRIGGER.leadSeconds), so a usefully-noisy fix (a
+// granite canyon's ~120 m) should still DRIVE triggering rather than fail CLOSED and silently never
+// fire a stop — while an unsettled ~1000 m acquisition fix is still rejected. Ceiling = a fraction of
+// the effective radius (speed * leadSeconds), floored at MAX_FIX_ACCURACY_M. (audit #9 — field-test
+// against a real Tahoe canyon drive before GA.)
+const ACCURACY_LEAD_FRACTION = 0.5
+const accuracyOk = (acc: number | null | undefined, speedMps: number): boolean => {
+  if (acc == null) return true // unknown accuracy — don't reject (rare; iOS always reports it)
+  if (acc < 0) return false // iOS -1 = invalid accuracy → reject
+  const ceiling = Math.max(MAX_FIX_ACCURACY_M, speedMps * DEFAULT_TRIGGER.leadSeconds * ACCURACY_LEAD_FRACTION)
+  return acc <= ceiling
+}
 
 // Fire onEnd once the projected position is within this of the final route vertex (m). (review #1)
 const ROUTE_END_EPSILON_M = 25
@@ -139,6 +162,8 @@ const sane = (v: number | null | undefined): number => (v != null && v >= 0 ? v 
 // would reject EVERY fix → the drive silently never triggers a stop. SDK 56 has no
 // `requestTemporaryFullAccuracyAsync`, so there's no in-app upgrade — we must send the rider to
 // Settings. `res.ios?.accuracy` is undefined off iOS, so this is false there (never blocks sim/Android).
+// Verified against expo-location SDK 56 (Location.types `ios.accuracy: 'full' | 'reduced'`) — the
+// value set, not just the key; a value-set change would make this silently return false. (audit #499)
 const isReduced = (res: Location.LocationPermissionResponse): boolean => res.ios?.accuracy === 'reduced'
 
 /**
@@ -205,11 +230,11 @@ export function liveRoamSource(): GpsFixSource {
     let stopped = false
     let paused = false
     let startMs: number | null = null
+    let acquiring = false // a watch acquisition is in flight (re-entry guard) (audit #490)
 
     const onLocation = (loc: Location.LocationObject) => {
       if (stopped || paused) return // teardown-leak guard (#35925/#35926) + pause guard
-      const acc = loc.coords.accuracy
-      if (acc != null && (acc < 0 || acc > MAX_FIX_ACCURACY_M)) return
+      if (!accuracyOk(loc.coords.accuracy, sane(loc.coords.speed))) return // speed-aware gate (audit #9)
       if (startMs === null) startMs = loc.timestamp
       onFix({
         lat: loc.coords.latitude,
@@ -227,11 +252,15 @@ export function liveRoamSource(): GpsFixSource {
     }
 
     const startWatch = () => {
+      if (acquiring || sub) return // already watching/acquiring — don't stack a second native watch (audit #490)
+      acquiring = true
       void Location.watchPositionAsync(
+        // timeInterval is ANDROID-ONLY (iOS cadence is accuracy-driven, ~1 Hz); harmless floor there.
         { accuracy: Location.Accuracy.BestForNavigation, distanceInterval: 0, timeInterval: 500 },
         onLocation,
       )
         .then((s) => {
+          acquiring = false
           if (stopped || paused) {
             s.remove()
             return
@@ -239,6 +268,7 @@ export function liveRoamSource(): GpsFixSource {
           sub = s
         })
         .catch((err) => {
+          acquiring = false
           if (!stopped) onError?.(err)
         })
     }
@@ -274,6 +304,7 @@ export function liveSource(polyline: LngLat[]): GpsFixSource {
     let paused = false
     let startMs: number | null = null
     let ended = false
+    let acquiring = false // a watch acquisition is in flight (re-entry guard) (audit #490)
     // Monotonic projection cursor. A plain nearest-VERTEX scan (geo.nearestOnRoute) snaps return-leg
     // fixes to nearby OUTBOUND vertices on an out-and-back route — the dot jumps backward AND alongM
     // never reaches the end, so end-of-route detection below would never fire. Searching FORWARD from
@@ -297,10 +328,9 @@ export function liveSource(polyline: LngLat[]): GpsFixSource {
 
     const onLocation = (loc: Location.LocationObject) => {
       if (stopped || paused) return // teardown-leak guard (#35925/#35926) + pause guard
-      const acc = loc.coords.accuracy
-      // Drop unsettled fixes. iOS reports a NEGATIVE accuracy (-1) when invalid — the same sentinel
-      // as speed/heading — so reject acc < 0 too, else the worst fixes slip past the gate. (review #2)
-      if (acc != null && (acc < 0 || acc > MAX_FIX_ACCURACY_M)) return
+      // Speed-aware accuracy gate: reject the iOS -1 sentinel + unsettled ~1000 m acquisition fixes,
+      // but admit usefully-noisy fixes when the effective trigger radius is large at speed. (audit #9, review #2)
+      if (!accuracyOk(loc.coords.accuracy, sane(loc.coords.speed))) return
       if (startMs === null) startMs = loc.timestamp
       const alongM = projectAlongM(loc.coords.longitude, loc.coords.latitude)
       onFix({
@@ -312,24 +342,45 @@ export function liveSource(polyline: LngLat[]): GpsFixSource {
         // would read as due-north and gate out every non-north stop — roam's field-confirmed
         // zero-fire bug, ported here rather than re-learned on a tour drive.
         headingDeg: loc.coords.heading ?? -1,
-        tSec: (loc.timestamp - startMs) / 1000, // loc.timestamp = ms since epoch
+        tSec: (loc.timestamp - startMs) / 1000, // ms since epoch; wall-clock since the first fix (incl. pause time) — reporting-only, triggering doesn't use it (audit #951)
         alongM, // projected onto the route so the dot follows the real position
       })
       // Live GPS has no fix-stream end like the sim, so signal end-of-route ourselves once the
       // projected position reaches the final vertex — that's what queues the outro + finishes. (review #1)
-      if (!ended && routeEndM > 0 && alongM >= routeEndM - ROUTE_END_EPSILON_M) {
+      // Fallback (audit #332): if the windowed cursor lagged (a GPS gap / a run of rejected fixes in
+      // the final stretch left alongM short), also complete when the raw distance to the final vertex
+      // is within epsilon AND we've covered most of the route — the >50% guard avoids a false end at
+      // the start of an out-and-back where the final vertex ≈ the start. (A TOTAL fix dropout in the
+      // final stretch still can't auto-complete — no fix arrives to evaluate; documented limitation.)
+      const rawToEndM = haversineMeters(
+        [loc.coords.longitude, loc.coords.latitude],
+        polyline[polyline.length - 1]!,
+      )
+      const reachedEnd =
+        alongM >= routeEndM - ROUTE_END_EPSILON_M ||
+        cursor >= polyline.length - 2 ||
+        (rawToEndM <= ROUTE_END_EPSILON_M && alongM >= routeEndM * 0.5)
+      if (!ended && routeEndM > 0 && reachedEnd) {
         ended = true
         onEnd?.()
       }
     }
 
     const startWatch = () => {
+      if (acquiring || sub) return // already watching/acquiring — don't stack a second native watch (audit #490)
+      acquiring = true
       void Location.watchPositionAsync(
+        // NOTE: a FOREGROUND watch — watchPositionAsync can't set pausesUpdatesAutomatically (default
+        // true → iOS may pause GPS at a long stop/overlook, exactly when a stop should fire) or
+        // activityType; those live only on the background startLocationUpdatesAsync API. Verify on a
+        // real Tahoe drive; only escalate to background updates (wider scope, founder OK) if it pauses.
+        // timeInterval is ANDROID-ONLY (iOS cadence is accuracy-driven, ~1 Hz). (audit #8, nit)
         { accuracy: Location.Accuracy.BestForNavigation, distanceInterval: 0, timeInterval: 500 },
         onLocation,
       )
         .then((s) => {
           // If stop()/pause() landed while the watch was being acquired, don't keep it.
+          acquiring = false
           if (stopped || paused) {
             s.remove()
             return
@@ -339,6 +390,7 @@ export function liveSource(polyline: LngLat[]): GpsFixSource {
         // watchPositionAsync rejects if Location Services are off at the OS level, permission was
         // revoked, or on a native error — surface it instead of letting the drive hang silently. (review #3)
         .catch((err) => {
+          acquiring = false
           if (!stopped) onError?.(err)
         })
     }
