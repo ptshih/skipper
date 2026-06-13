@@ -31,7 +31,7 @@ import { haversineMeters, RoamEngine } from '@skipper/drive-core'
 import type { LngLat } from '@skipper/drive-core'
 import { errorMessage, getRoamManifest, getTour, listTours } from './api'
 import type { RoamManifest } from './api'
-import { ensureDrivePermission, liveRoamSource, simulatedSource } from './gps'
+import { ensureDrivePermission, getDrivePermission, liveRoamSource, simulatedSource } from './gps'
 import type { FixSubscription } from './gps'
 import type { ChattinessLevel } from '@/ui'
 import { voice } from '@/ui/voice'
@@ -40,6 +40,7 @@ export type RoamMode = 'live' | 'sim'
 
 export type RoamPhase =
   | 'idle' // pre-session (the entry/start surface)
+  | 'locationPrime' // live only, first time: the pre-permission explainer (before the OS prompt)
   | 'locationGate' // live only: permission denied / reduced
   | 'loading' // locating + fetching the manifest
   | 'error'
@@ -115,6 +116,8 @@ export interface RoamState {
   setChattiness: (level: ChattinessLevel) => void
   gpsSearching: boolean
   start: () => void
+  /** The pre-permission explainer's single CTA (live, first time): fire the OS location prompt. */
+  confirmLocationPrime: () => void
   /** Skip the playing encounter (the sheet's ghost action / scrim tap). */
   skip: () => void
   /** Hand-end the session → the sign-off state (teardown happens here). */
@@ -385,6 +388,125 @@ export function useRoam(mode: RoamMode): RoamState {
     engineRef.current?.setMinGap(CHATTINESS_GAP_SEC[level])
   }, [])
 
+  // The session body AFTER permission is settled (live) or for sim: locate → manifest → engine →
+  // subscribe the source → opener. Shared by start()'s already-granted path and the explainer CTA.
+  const beginRoamSession = useCallback(async () => {
+    try {
+      setPhase('loading')
+      // Open in the SHARED mode: the rider's audio plays untouched through the quiet idle —
+      // we only take exclusive focus (doNotMix) when a clip actually starts sounding.
+      await setAudioModeAsync({
+        playsInSilentMode: true,
+        shouldPlayInBackground: true,
+        interruptionMode: 'mixWithOthers',
+      }).catch(() => {})
+
+      // Where are we? (sim: the demo polyline's start — same roads the corpus covers.)
+      let here: { lat: number; lng: number }
+      let simPolyline: LngLat[] | null = null
+      if (mode === 'sim') {
+        const tours = await listTours()
+        const first = tours.tours[0]
+        if (!first) throw new Error('No ready tour to simulate along.')
+        const detail = await getTour(first.id, { preview: true })
+        simPolyline = detail.tour.polyline as LngLat[]
+        const [lng, lat] = simPolyline[0]!
+        here = { lat, lng }
+      } else {
+        const loc = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        })
+        here = { lat: loc.coords.latitude, lng: loc.coords.longitude }
+      }
+
+      const manifest = await getRoamManifest(here.lat, here.lng)
+      if (!mountedRef.current) return
+      if (manifest.pins.length === 0) {
+        setPhase('noCoverage')
+        return
+      }
+      pinsRef.current = manifest.pins
+      setPinCount(manifest.pins.length)
+      setMapPins(
+        manifest.pins.map((p) => ({ poiId: p.poiId, name: p.name, lat: p.lat, lng: p.lng })),
+      )
+      setToldCount(0)
+      clipRetried.current.clear() // a new session earns every clip a fresh recovery
+      engineRef.current = new RoamEngine(
+        manifest.pins.map((p) => ({
+          poiId: p.poiId,
+          lat: p.lat,
+          lng: p.lng,
+          durationMs: p.durationMs,
+          // Kind-aware server radius (areal places get room); engine floor covers absence.
+          ...(p.radiusM != null ? { radiusM: p.radiusM } : {}),
+          name: p.name,
+        })),
+        { minGapSec: CHATTINESS_GAP_SEC[chattiness] },
+      )
+
+      const source =
+        mode === 'sim'
+          ? simulatedSource(simPolyline!, { mph: 45, timeScale: 6 })
+          : liveRoamSource()
+      lastFixAt.current = Date.now()
+      subRef.current = source(
+        (fix) => {
+          lastFixAt.current = Date.now()
+          lastFixPos.current = { lat: fix.lat, lng: fix.lng }
+          const events = engineRef.current?.update(fix) ?? []
+          if (events.length > 0) {
+            for (const e of events) queueRef.current.push(e.poiId)
+            pump()
+          }
+        },
+        undefined, // a roam session has no end-of-route
+        (err) => {
+          if (!mountedRef.current) return
+          setError(errorMessage(err, voice.player.gpsError))
+          setPhase('error')
+          teardown()
+        },
+      )
+      activateKeepAwakeAsync(KEEP_AWAKE_TAG).catch(() => {})
+      // Session start: one line from the placeless rotating pool, then settle into idle.
+      const pool = voice.roam.sessionStart
+      setOpenerLine(pool[Math.floor(Math.random() * pool.length)]!)
+      setPhase('sessionStart')
+      settleTimer.current = setTimeout(() => {
+        if (mountedRef.current) setPhase((p) => (p === 'sessionStart' ? 'roaming' : p))
+      }, SESSION_START_MS)
+    } catch (e) {
+      if (!mountedRef.current) return
+      setError(errorMessage(e, voice.error.generic))
+      setPhase('error')
+    }
+  }, [mode, chattiness, pump, teardown])
+
+  // Request the OS prompt + route the result (shared by start()'s already-decided path and the
+  // explainer CTA). `ensureDrivePermission` shows NO UI when already decided, so it's safe there.
+  const requestAndBegin = useCallback(async () => {
+    let perm
+    try {
+      perm = await ensureDrivePermission()
+    } catch {
+      // The request threw (misconfig / concurrent ask) — show the re-askable gate instead of
+      // letting the tap silently do nothing (mirrors useDrive's defensive handling).
+      if (mountedRef.current) {
+        setGate({ canAskAgain: true, reduced: false })
+        setPhase('locationGate')
+      }
+      return
+    }
+    if (!mountedRef.current) return
+    if (!perm.granted || perm.reduced) {
+      setGate({ canAskAgain: perm.canAskAgain, reduced: perm.reduced })
+      setPhase('locationGate')
+      return
+    }
+    await beginRoamSession()
+  }, [beginRoamSession])
+
   const start = useCallback(() => {
     if (startPending.current) return
     startPending.current = true
@@ -393,107 +515,42 @@ export function useRoam(mode: RoamMode): RoamState {
         setError(null)
         setGate(null)
         if (mode === 'live') {
-          const perm = await ensureDrivePermission()
+          // First time (undetermined) → explain before iOS's one-shot prompt; the explainer CTA
+          // (confirmLocationPrime) fires the real request. Already decided → request straight
+          // through (no OS UI) so a grant rolls and a denial/reduced lands on the Settings gate.
+          let cur
+          try {
+            cur = await getDrivePermission()
+          } catch {
+            cur = null // status read failed — fall through to requesting directly rather than hang
+          }
           if (!mountedRef.current) return
-          if (!perm.granted || perm.reduced) {
-            setGate({ canAskAgain: perm.canAskAgain, reduced: perm.reduced })
-            setPhase('locationGate')
+          if (cur?.undetermined) {
+            setPhase('locationPrime')
             return
           }
-        }
-        setPhase('loading')
-        // Open in the SHARED mode: the rider's audio plays untouched through the quiet idle —
-        // we only take exclusive focus (doNotMix) when a clip actually starts sounding.
-        await setAudioModeAsync({
-          playsInSilentMode: true,
-          shouldPlayInBackground: true,
-          interruptionMode: 'mixWithOthers',
-        }).catch(() => {})
-
-        // Where are we? (sim: the demo polyline's start — same roads the corpus covers.)
-        let here: { lat: number; lng: number }
-        let simPolyline: LngLat[] | null = null
-        if (mode === 'sim') {
-          const tours = await listTours()
-          const first = tours.tours[0]
-          if (!first) throw new Error('No ready tour to simulate along.')
-          const detail = await getTour(first.id, { preview: true })
-          simPolyline = detail.tour.polyline as LngLat[]
-          const [lng, lat] = simPolyline[0]!
-          here = { lat, lng }
-        } else {
-          const loc = await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.Balanced,
-          })
-          here = { lat: loc.coords.latitude, lng: loc.coords.longitude }
-        }
-
-        const manifest = await getRoamManifest(here.lat, here.lng)
-        if (!mountedRef.current) return
-        if (manifest.pins.length === 0) {
-          setPhase('noCoverage')
+          await requestAndBegin()
           return
         }
-        pinsRef.current = manifest.pins
-        setPinCount(manifest.pins.length)
-        setMapPins(
-          manifest.pins.map((p) => ({ poiId: p.poiId, name: p.name, lat: p.lat, lng: p.lng })),
-        )
-        setToldCount(0)
-        clipRetried.current.clear() // a new session earns every clip a fresh recovery
-        engineRef.current = new RoamEngine(
-          manifest.pins.map((p) => ({
-            poiId: p.poiId,
-            lat: p.lat,
-            lng: p.lng,
-            durationMs: p.durationMs,
-            // Kind-aware server radius (areal places get room); engine floor covers absence.
-            ...(p.radiusM != null ? { radiusM: p.radiusM } : {}),
-            name: p.name,
-          })),
-          { minGapSec: CHATTINESS_GAP_SEC[chattiness] },
-        )
-
-        const source =
-          mode === 'sim'
-            ? simulatedSource(simPolyline!, { mph: 45, timeScale: 6 })
-            : liveRoamSource()
-        lastFixAt.current = Date.now()
-        subRef.current = source(
-          (fix) => {
-            lastFixAt.current = Date.now()
-            lastFixPos.current = { lat: fix.lat, lng: fix.lng }
-            const events = engineRef.current?.update(fix) ?? []
-            if (events.length > 0) {
-              for (const e of events) queueRef.current.push(e.poiId)
-              pump()
-            }
-          },
-          undefined, // a roam session has no end-of-route
-          (err) => {
-            if (!mountedRef.current) return
-            setError(errorMessage(err, voice.player.gpsError))
-            setPhase('error')
-            teardown()
-          },
-        )
-        activateKeepAwakeAsync(KEEP_AWAKE_TAG).catch(() => {})
-        // Session start: one line from the placeless rotating pool, then settle into idle.
-        const pool = voice.roam.sessionStart
-        setOpenerLine(pool[Math.floor(Math.random() * pool.length)]!)
-        setPhase('sessionStart')
-        settleTimer.current = setTimeout(() => {
-          if (mountedRef.current) setPhase((p) => (p === 'sessionStart' ? 'roaming' : p))
-        }, SESSION_START_MS)
-      } catch (e) {
-        if (!mountedRef.current) return
-        setError(errorMessage(e, voice.error.generic))
-        setPhase('error')
+        await beginRoamSession()
       } finally {
         startPending.current = false
       }
     })()
-  }, [mode, chattiness, pump, teardown])
+  }, [mode, beginRoamSession, requestAndBegin])
+
+  // The explainer's single CTA: fire the OS prompt, then begin (or land on the gate).
+  const confirmLocationPrime = useCallback(() => {
+    if (startPending.current) return
+    startPending.current = true
+    ;(async () => {
+      try {
+        await requestAndBegin()
+      } finally {
+        startPending.current = false
+      }
+    })()
+  }, [requestAndBegin])
 
   const skip = useCallback(() => {
     if (activePoiId !== null) {
@@ -609,6 +666,7 @@ export function useRoam(mode: RoamMode): RoamState {
     setChattiness,
     gpsSearching,
     start,
+    confirmLocationPrime,
     skip,
     end,
     finishSignoff,

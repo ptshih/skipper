@@ -160,9 +160,21 @@ export async function ensureDrivePermission(): Promise<{
  * Read the current foreground-permission status WITHOUT prompting — used to re-check after the rider
  * returns from system Settings (the `canAskAgain === false` AND the reduced-accuracy recovery paths). (review #5)
  */
-export async function getDrivePermission(): Promise<{ granted: boolean; reduced: boolean }> {
+export async function getDrivePermission(): Promise<{
+  granted: boolean
+  canAskAgain: boolean
+  reduced: boolean
+  /** True when the OS has never been asked → the next request shows the (one-shot) prompt. Lets the
+   *  caller put a priming explainer in front of that first prompt and skip it once it's decided. */
+  undetermined: boolean
+}> {
   const res = await Location.getForegroundPermissionsAsync()
-  return { granted: res.granted, reduced: isReduced(res) }
+  return {
+    granted: res.granted,
+    canAskAgain: res.canAskAgain,
+    reduced: isReduced(res),
+    undetermined: res.status === Location.PermissionStatus.UNDETERMINED,
+  }
 }
 
 /**

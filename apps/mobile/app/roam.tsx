@@ -29,6 +29,7 @@ import {
   Divider,
   Duck,
   Icon,
+  LocationPrime,
   RouteTrack,
   Screen,
   Scrubber,
@@ -195,6 +196,11 @@ export default function RoamScreen() {
         </View>
       </Screen>
     )
+
+  if (r.phase === 'locationPrime')
+    // Pre-permission explainer before iOS's one-shot prompt (live roam, first time). Single CTA
+    // into the OS prompt — no dismiss (App Store 5.1.1(iv)); back out via the header affordance.
+    return <LocationPrime title={title} onContinue={r.confirmLocationPrime} />
 
   if (r.phase === 'locationGate')
     return (

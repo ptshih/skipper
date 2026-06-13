@@ -5,6 +5,31 @@ Carry-forward **engineering** items (the near-term layer of the truth system —
 Each item has enough context to action without re-deriving the reasoning. **Delete items
 when done** — git history is the archive.
 
+## Location: When-In-Use → Always/background (deferred half of permission priming)
+
+The pre-permission **explainer** shipped 2026-06-13 in front of the existing *When-In-Use*
+prompt (drive + roam; `LocationPrime` + the `'locationPrime'` phase; decision:
+`docs/decisions/location-permission-priming.md`). The founder chose to **phase** the tier change:
+the Always/background escalation is this deferred item. WHY it matters — foreground location dies
+on screen-lock, so the drive keeps the screen awake (`expo-keep-awake`); if the screen ever locks,
+audio keeps playing but GPS triggering silently stops (the skipper goes quiet at the next stop).
+Always fixes that (screen-off / phone-in-pocket triggering). Native + App Store review work, so
+its own pass.
+
+- [ ] Config plugin (`apps/mobile/app.json`): `expo-location` → `isIosBackgroundLocationEnabled: true`
+      + `locationAlwaysAndWhenInUsePermission` (skipper-voiced string); add `location` to iOS
+      `UIBackgroundModes` (today: `audio` only).
+- [ ] `gps.ts liveSource`: `allowsBackgroundLocationUpdates: true` on the watch; reconsider whether
+      `expo-keep-awake` can drop once background triggering is reliable.
+- [ ] Request **sequence**: foreground first, THEN `requestBackgroundPermissionsAsync()` (you cannot
+      ask for Always cold). Extend the `LocationPrime` copy to prime the Always reason (it's already
+      worded to survive this). Reuse the `'locationPrime'` phase.
+- [ ] Handle the **"Allow Once" silent-fail**: a same-session background request returns denied with
+      NO prompt → route to Settings (the existing reduced/denied gate pattern).
+- [ ] Needs a native rebuild (dev build / EAS) + **App Store Review notes** stating background
+      location is used solely to trigger GPS-anchored audio during an active drive. Gated behind the
+      phone-player bet being proven. Sources cited in the decision doc.
+
 ## Roam build pass 2 — LOCKED by the founder 2026-06-11 (the "companion grows up" pass)
 
 > ⚠ **Chattiness toggles (quiet/normal/talkative) are not very useful** (founder feedback

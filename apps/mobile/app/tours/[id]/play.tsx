@@ -22,6 +22,7 @@ import {
   Button,
   Divider,
   Icon,
+  LocationPrime,
   NowCard,
   RouteTrack,
   Screen,
@@ -204,6 +205,11 @@ export default function DriveScreen() {
         }}
       />
     )
+
+  if (d.phase === 'locationPrime')
+    // Pre-permission explainer, shown ONCE before iOS's one-shot prompt (live drive, first time).
+    // Single CTA into the OS prompt — no dismiss button (App Store 5.1.1(iv)); back out via the header.
+    return <LocationPrime title="Drive" onContinue={d.confirmLocationPrime} />
 
   if (d.phase === 'locationGate')
     // Three states: precise-location-off (reduced) and hard-denied-no-reprompt both route to Settings;

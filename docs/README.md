@@ -54,6 +54,9 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   shipped 2026-06-08.
 - [enrichment-scout.md](decisions/enrichment-scout.md) — story-stop enrichment decided by a
   bounded tool-using scout (judgment) instead of char-count sparse-gates; built 2026-06-09.
+- [location-permission-priming.md](decisions/location-permission-priming.md) — a pre-permission
+  explainer before iOS's one-shot location prompt (drive + roam); When-In-Use priming built
+  2026-06-13, Always/background escalation deferred (App Store 5.1.1(iv): no "Not Now").
 - [fact-overrides-and-veracity.md](decisions/fact-overrides-and-veracity.md) — the
   upstream-source-error loop (`poi_overrides` corrections + the web-checking `--veracity`
   eval) and the durable eval record (`eval_runs`/`eval_scores`); built 2026-06-09.

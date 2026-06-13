@@ -1,0 +1,55 @@
+# Location permission priming (explainer before the OS prompt)
+
+**Status:** ✅ **BUILT 2026-06-13** (When-In-Use priming). A pre-permission explainer now
+precedes iOS's one-shot location prompt on the live drive AND free-roam. **Phased decision
+(founder, 2026-06-13):** ship the explainer in front of the *existing When-In-Use* prompt now
+(pure JS/UI, no native rebuild); the **Always/background** escalation is DEFERRED to its own
+pass (see §Deferred + `TODO.md`). The explainer copy/architecture is written to survive that
+escalation without a rewrite.
+
+## Why
+
+The live drive (and roam) used to fire the iOS location prompt **cold** — no in-app rationale
+first. iOS gives exactly **one shot** at that prompt, and a denial is sticky (recovery only via
+Settings). A cold ask the rider doesn't understand gets denied, and then the in-car product is
+dead until they hunt through Settings. The fix is the standard **pre-permission priming**
+pattern: a short, in-character screen explaining *why* the skipper needs location, shown the
+moment the rider commits to a drive, whose only action leads straight into the OS prompt.
+
+## Hard constraint — App Store Guideline 5.1.1(iv)
+
+A pre-permission screen **must not** carry a "Not Now"/"Maybe later"/dismiss button. Apple has
+rejected apps for exactly this; their verbatim objection: *"The user should always proceed to
+the permission request after the message."* (Apple Developer Forums thread 817672, 2025.) So
+the priming card has a **single CTA** that invokes the OS prompt. The rider can still abandon
+*before* the prompt by navigating back via the nav-bar chevron (a nav-level back, not an
+in-content dismiss) — that's pre-prompt abandonment and is allowed.
+
+## How it works (built)
+
+Shown **only when the foreground permission status is `undetermined`** — i.e. exactly when iOS
+is actually about to prompt. Already `granted` → drive immediately; already `denied`/`reduced`
+→ the existing Settings gate. Net: the explainer appears once, the first time, for whichever
+mode (tour drive or roam) the rider hits first; never again.
+
+- `getDrivePermission()` (`apps/mobile/src/lib/gps.ts`) now also returns `undetermined` (a
+  no-prompt status read via `getForegroundPermissionsAsync`).
+- `useDrive`/`useRoam` `start()`: live mode reads status without prompting → `undetermined`
+  sets the new `'locationPrime'` phase; otherwise it requests straight through (no OS UI when
+  already decided) and routes to drive or the Settings gate. A `confirmLocationPrime()` CTA
+  fires the real `requestForegroundPermissionsAsync()` and re-uses the same post-prompt routing.
+- UI: `apps/mobile/src/ui/LocationPrime.tsx` (a "smart" composite like `AccountGate`) — Screen +
+  framed Card + a single primary Button, **no dismiss**. Copy: `voice.drive.locationPrime*`.
+
+## Deferred — When-In-Use → Always/background escalation
+
+Not built. Enables screen-off / phone-in-pocket triggering (today foreground location dies on
+lock, so the drive keeps the screen awake via `expo-keep-awake`; if the screen ever locks, audio
+keeps playing but GPS triggering silently stops — the failure Always fixes). Native + review
+work, hence its own pass. Checklist (from the 2025–2026 research pass): `expo-location` plugin
+`isIosBackgroundLocationEnabled: true` + `locationAlwaysAndWhenInUsePermission` (`app.json`),
+`UIBackgroundModes += location`, `allowsBackgroundLocationUpdates` on the watch
+(`gps.ts liveSource`), the **foreground→background** request sequence (you cannot ask for Always
+cold), handle the **"Allow Once" silent-fail** (a same-session background request returns denied
+with no prompt → route to Settings), and **App Store Review notes** stating background location
+is used solely to trigger GPS-anchored audio during an active drive (2025 reviewers expect this).

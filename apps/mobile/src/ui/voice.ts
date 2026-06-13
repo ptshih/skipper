@@ -55,6 +55,18 @@ export const voice = {
       'You’ve handed me approximate location — at that blur I’d sail right past the stops. Switch on “Precise Location” in Settings and I’ll call them on the nose.',
     locationAllow: 'Switch on location',
     locationSettings: 'Open Settings',
+    // Pre-permission PRIMING (live drive + roam, first time only — shown right before iOS's
+    // one-shot location prompt). A short in-character "why I need your location" so a cold ask
+    // doesn't get denied. HARD RULE (App Store 5.1.1(iv)): a pre-prompt must NOT carry a
+    // "Not Now"/dismiss — its only action leads straight into the system prompt (the rider backs
+    // out, if at all, via the nav-bar BEFORE it). Worded to survive the future When-In-Use→Always
+    // escalation without a rewrite.
+    locationPrimeKicker: 'BEFORE WE ROLL',
+    locationPrimeTitle: 'I steer by your GPS',
+    locationPrimeBody:
+      'I call out each stop the moment we roll up to it — so I need your location while we’re on the drive. Your phone will ask next; let me know it’s a yes.',
+    locationPrimeReassure: 'Only while you’re driving a tour. Parked, I’m off the clock — no tracking.',
+    locationPrimeCta: 'Switch on location',
   },
   player: {
     buffering: 'Warming up the skipper…',

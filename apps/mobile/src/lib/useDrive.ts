@@ -103,6 +103,7 @@ export type DrivePhase =
   | 'loading'
   | 'error'
   | 'gate'
+  | 'locationPrime'
   | 'locationGate'
   | 'ready'
   | 'driving'
@@ -180,6 +181,10 @@ export interface UseDrive {
   setFast: (fast: boolean) => void
 
   // Location permission (live mode only; null/true in sim mode).
+  /** True while the pre-permission explainer is up (live, first time only) — render the prime. */
+  locationPriming: boolean
+  /** The explainer's single CTA: fire the OS location prompt. */
+  confirmLocationPrime: () => void
   /** When a live drive is blocked on a denied permission: can the OS still prompt? (false → Settings). */
   locationCanAskAgain: boolean
   /** Blocked because location is granted but only APPROXIMATE (iOS Precise Location off) → Settings-only. */
@@ -230,6 +235,10 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
   // since SDK 56 can't upgrade accuracy in-app). null = no block (always so in sim mode). Both kinds
   // drive the 'locationGate' phase and recover via the same on-return-from-Settings re-check.
   const [locationBlock, setLocationBlock] = useState<LocationBlock | null>(null)
+  // True while the pre-permission explainer is up: a live drive whose foreground status is still
+  // UNDETERMINED, so we explain why before iOS shows its one-shot prompt. Mutually exclusive with
+  // locationBlock (priming precedes the prompt; the block follows a denial). Always false in sim.
+  const [locationPriming, setLocationPriming] = useState(false)
   // True while a live drive is getting no usable GPS fixes (acquiring / poor accuracy) — so the
   // rider sees "searching" instead of a silently frozen screen. (review #6)
   const [gpsSearching, setGpsSearching] = useState(false)
@@ -537,40 +546,75 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
     subRef.current = source(handleFix, handleEnd, handleSourceError)
   }, [data, mode, fast, resetForReady, handleFix, handleEnd, handleSourceError, pump])
 
-  // ---- start: in live mode, gate on location permission first; sim starts immediately ----
+  // ---- request the OS prompt + route the result (shared by start() and the explainer CTA) ----
+  // `requestForegroundPermissionsAsync` shows NO UI when the status is already decided, so this is
+  // safe on the already-determined path too: granted+precise → drive; reduced/denied → the gate.
+  const requestAndProceed = useCallback(async () => {
+    try {
+      setLocationBlock(null)
+      const perm = await ensureDrivePermission()
+      if (!mountedRef.current) return // navigated away during the dialog — don't setState/subscribe
+      if (!perm.granted) {
+        setLocationBlock({ kind: 'denied', canAskAgain: perm.canAskAgain })
+        return
+      }
+      if (perm.reduced) {
+        // Granted, but iOS approximate location — fixes too coarse to trigger stops. Gate to
+        // Settings (Precise Location) rather than starting a drive that would silently never fire.
+        setLocationBlock({ kind: 'reduced' })
+        return
+      }
+      beginDrive()
+    } catch {
+      // requestForegroundPermissionsAsync threw (misconfig / concurrent request) — show the gate
+      // with a retry instead of letting the tap silently do nothing.
+      if (mountedRef.current) setLocationBlock({ kind: 'denied', canAskAgain: true })
+    }
+  }, [beginDrive])
+
+  // ---- start: live mode primes BEFORE the first (one-shot) OS prompt; sim starts immediately ----
   const start = useCallback(() => {
     if (!data) return
     if (mode !== 'live') {
       beginDrive()
       return
     }
-    if (permPending.current) return // ignore a double-tap while the OS prompt is up (review #4)
+    if (permPending.current) return // ignore a double-tap while the status read / OS prompt is up (review #4)
     permPending.current = true
     void (async () => {
       try {
-        setLocationBlock(null)
-        const perm = await ensureDrivePermission()
-        if (!mountedRef.current) return // navigated away during the dialog — don't setState/subscribe
-        if (!perm.granted) {
-          setLocationBlock({ kind: 'denied', canAskAgain: perm.canAskAgain })
+        // Read the status WITHOUT prompting. First time (undetermined) → show the explainer; its CTA
+        // (confirmLocationPrime) fires the real prompt. Already decided → request straight through
+        // (no OS UI) so granted rolls and denied/reduced lands on the existing Settings gate.
+        const cur = await getDrivePermission()
+        if (!mountedRef.current) return
+        if (cur.undetermined) {
+          setLocationPriming(true)
           return
         }
-        if (perm.reduced) {
-          // Granted, but iOS approximate location — fixes too coarse to trigger stops. Gate to
-          // Settings (Precise Location) rather than starting a drive that would silently never fire.
-          setLocationBlock({ kind: 'reduced' })
-          return
-        }
-        beginDrive()
+        await requestAndProceed()
       } catch {
-        // requestForegroundPermissionsAsync threw (misconfig / concurrent request) — show the gate
-        // with a retry instead of letting the tap silently do nothing.
-        if (mountedRef.current) setLocationBlock({ kind: 'denied', canAskAgain: true })
+        // The no-prompt status read failed — fall back to requesting directly rather than hanging.
+        await requestAndProceed()
       } finally {
         permPending.current = false
       }
     })()
-  }, [data, mode, beginDrive])
+  }, [data, mode, beginDrive, requestAndProceed])
+
+  // ---- the explainer's single CTA: dismiss the prime and fire the OS prompt ----
+  const confirmLocationPrime = useCallback(() => {
+    setLocationPriming(false)
+    if (permPending.current) return
+    permPending.current = true
+    void (async () => {
+      try {
+        await requestAndProceed()
+      } finally {
+        permPending.current = false
+      }
+    })()
+  }, [requestAndProceed])
 
   const togglePause = useCallback(() => {
     setPaused((p) => {
@@ -914,11 +958,13 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
         ? 'loading'
         : locationBlock
           ? 'locationGate'
-          : done
-            ? 'done'
-            : driving
-              ? 'driving'
-              : 'ready'
+          : locationPriming
+            ? 'locationPrime'
+            : done
+              ? 'done'
+              : driving
+                ? 'driving'
+                : 'ready'
 
   const clipLoaded = activeSeq !== null
   const buffering = clipLoaded && !paused && (!status.isLoaded || !!status.isBuffering)
@@ -1020,6 +1066,8 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
     setScrubbing,
     fast,
     setFast,
+    locationPriming,
+    confirmLocationPrime,
     locationCanAskAgain: locationBlock?.kind === 'denied' ? locationBlock.canAskAgain : true,
     locationReduced: locationBlock?.kind === 'reduced',
     openLocationSettings,
