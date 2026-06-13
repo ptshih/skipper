@@ -174,6 +174,11 @@ dev` and `bun run db:*` get decrypted vars; don't add a plaintext `.env`. Edit
   a value with `dotenvx set KEY "v" -f .env.development`; `.env.example` is the
   plaintext catalog of what exists. Deploy: set `DOTENV_PRIVATE_KEY_PRODUCTION`
   in the host env. Onboarding = get `.env.keys` from a teammate.
+- **Local dev servers stay UP — don't boot/restart them.** The human keeps the dev
+  processes running continuously; assume they're already listening and just use them
+  (check with `lsof -nP -iTCP:<port> -sTCP:LISTEN`). Ports: API `bun run dev`; admin
+  `bun run dev:admin` = vite client on **:5173** proxying `/admin`+`/health` → Hono
+  admin-api on **:8788** (`ADMIN_DEV_BYPASS=1` skips IAP locally); site `bun run dev:site`.
 - The **highest-leverage file** in the repo (once written) is the skipper
   narration system prompt. Iterate on it more than anything.
 
