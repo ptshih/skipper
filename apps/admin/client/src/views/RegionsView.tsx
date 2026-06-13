@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Layers, Pencil, Plus } from 'lucide-react'
-import { api, type Region } from '@/lib/api'
+import { CheckCircle2, Layers, Loader2, Pencil, Plus, Search, TriangleAlert } from 'lucide-react'
+import { api, type BboxLookupResult, type Region } from '@/lib/api'
 import { errMsg } from '@/lib/format'
 import { PageHeader } from '@/components/PageHeader'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -18,8 +18,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { cn } from '@/lib/utils'
 
 type DialogMode = { mode: 'create' } | { mode: 'edit'; region: Region }
+
+const CONFIDENCE_META = {
+  high: { label: 'High confidence', className: 'text-emerald-600 dark:text-emerald-400' },
+  medium: { label: 'Medium confidence', className: 'text-amber-600 dark:text-amber-400' },
+  low: { label: 'Low confidence', className: 'text-red-500 dark:text-red-400' },
+}
 
 export function RegionsView() {
   const [regions, setRegions] = useState<Region[]>([])
@@ -117,6 +124,8 @@ export function RegionsView() {
   )
 }
 
+/* ── REGION DIALOG ── */
+
 function RegionDialog({
   mode,
   onClose,
@@ -153,7 +162,7 @@ function RegionDialog({
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose() }}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>{mode.mode === 'create' ? 'Add region' : `Edit ${existing?.displayName}`}</DialogTitle>
           <DialogDescription>
@@ -188,18 +197,25 @@ function RegionDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="region-bbox">Discovery bbox (optional)</Label>
+            <Label htmlFor="region-bbox">Discovery bbox</Label>
             <Input
               id="region-bbox"
               value={bbox}
               onChange={(e) => setBbox(e.target.value)}
               placeholder="-119.6,37.6,-119.4,37.8"
+              className="font-mono text-sm"
             />
             <p className="text-xs text-muted-foreground">
-              Format: <code className="font-mono">lng_min,lat_min,lng_max,lat_max</code>. Leave blank to use the
-              generator default (Tahoe basin).
+              <code className="font-mono">lng_min,lat_min,lng_max,lat_max</code>. Leave blank to use the generator
+              default (Tahoe basin). Use the lookup below to find a bbox.
             </p>
           </div>
+
+          {/* ── Bbox lookup ── */}
+          <BboxLookup
+            defaultQuery={displayName}
+            onUse={(b) => setBbox(b)}
+          />
         </div>
 
         {err && (
@@ -219,5 +235,151 @@ function RegionDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/* ── BBOX LOOKUP ── */
+
+function BboxLookup({ defaultQuery, onUse }: { defaultQuery: string; onUse: (bbox: string) => void }) {
+  const [q, setQ] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [result, setResult] = useState<BboxLookupResult | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+
+  // When the display name changes and we haven't searched yet, keep q in sync as a hint.
+  useEffect(() => {
+    if (!result && !loading) setQ(defaultQuery)
+  }, [defaultQuery]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function lookup() {
+    if (!q.trim()) return
+    setLoading(true)
+    setResult(null)
+    setErr(null)
+    try {
+      setResult(await api.bboxLookup(q.trim()))
+    } catch (e) {
+      setErr(errMsg(e))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="rounded-lg border bg-muted/30 p-3">
+      <div className="mb-2.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        Bbox lookup
+      </div>
+
+      <div className="flex gap-2">
+        <Input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') void lookup() }}
+          placeholder="Yosemite National Park"
+          className="text-sm"
+        />
+        <Button variant="outline" size="sm" disabled={loading || !q.trim()} onClick={lookup} className="shrink-0">
+          {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+          {loading ? 'Searching…' : 'Search'}
+        </Button>
+      </div>
+
+      {err && (
+        <div className="mt-2 text-xs text-destructive">{err}</div>
+      )}
+
+      {result && (
+        <div className="mt-3 space-y-3">
+          {/* LLM result */}
+          <div>
+            <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <span>Claude estimate</span>
+              {result.llm && (
+                <span className={cn('normal-case font-normal', CONFIDENCE_META[result.llm.confidence].className)}>
+                  · {CONFIDENCE_META[result.llm.confidence].label}
+                </span>
+              )}
+            </div>
+            {result.llm ? (
+              <BboxCard
+                bbox={result.llm.bbox}
+                label={result.llm.reasoning}
+                onUse={onUse}
+              />
+            ) : (
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <TriangleAlert className="h-3.5 w-3.5 text-amber-500" />
+                {result.llmError ?? 'No result'}
+              </div>
+            )}
+          </div>
+
+          {/* OSM results */}
+          <div>
+            <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              OpenStreetMap
+            </div>
+            {result.osm && result.osm.length > 0 ? (
+              <div className="space-y-1.5">
+                {result.osm.map((r, i) => (
+                  <BboxCard
+                    key={i}
+                    bbox={r.bbox}
+                    label={r.name}
+                    sublabel={r.type}
+                    onUse={onUse}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <TriangleAlert className="h-3.5 w-3.5 text-amber-500" />
+                {result.osmError ?? 'No results from Nominatim'}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function BboxCard({
+  bbox,
+  label,
+  sublabel,
+  onUse,
+}: {
+  bbox: string
+  label: string
+  sublabel?: string
+  onUse: (bbox: string) => void
+}) {
+  const [used, setUsed] = useState(false)
+
+  function use() {
+    onUse(bbox)
+    setUsed(true)
+    setTimeout(() => setUsed(false), 1500)
+  }
+
+  return (
+    <div className="flex items-start gap-2 rounded-md border bg-background px-3 py-2">
+      <div className="min-w-0 flex-1">
+        <code className="block font-mono text-xs">{bbox}</code>
+        <p className="mt-0.5 truncate text-xs text-muted-foreground" title={label}>{label}</p>
+        {sublabel && <p className="text-[11px] text-muted-foreground/70">{sublabel}</p>}
+      </div>
+      <Button
+        variant={used ? 'default' : 'outline'}
+        size="sm"
+        onClick={use}
+        className="shrink-0"
+      >
+        {used ? <CheckCircle2 className="h-3.5 w-3.5" /> : null}
+        {used ? 'Applied' : 'Use'}
+      </Button>
+    </div>
   )
 }

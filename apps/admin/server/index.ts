@@ -11,6 +11,7 @@
 //   GET  /admin/regions           -> region list with discoveryBbox
 //   POST /admin/regions           -> create a new region
 //   PATCH /admin/regions/:slug    -> update displayName / discoveryBbox
+//   POST /admin/regions/bbox-lookup -> LLM + Nominatim parallel bbox lookup by place name
 //   GET  /admin/tours             -> catalog: every tour (incl. drafts) + status + counts
 //   GET  /admin/tours/:id         -> the ear-pass: stops/brackets + scripts + latest eval
 //   GET  /admin/tours/:id/sign    -> presigned R2 URLs for every clip (no tier gate)
@@ -110,6 +111,84 @@ app.patch('/admin/regions/:slug', async (c) => {
     .returning({ slug: regions.slug, displayName: regions.displayName, discoveryBbox: regions.discoveryBbox })
   if (!row) return c.json({ error: 'not_found' }, 404)
   return c.json({ region: row })
+})
+
+// Bbox lookup — LLM estimate + Nominatim OSM cross-check, run in parallel.
+// Used by the admin Regions dialog so the operator never has to hand-key coordinates.
+app.post('/admin/regions/bbox-lookup', async (c) => {
+  const { query } = await c.req.json<{ query: string }>()
+  if (!query?.trim()) return c.json({ error: 'query is required' }, 400)
+
+  const BBOX_TOOL: import('@anthropic-ai/sdk').Anthropic.Tool = {
+    name: 'bbox',
+    description: 'Return the bounding box for the named geographic area.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        bbox: {
+          type: 'string',
+          description: 'Bounding box as "lng_min,lat_min,lng_max,lat_max". Use decimal degrees, ~4 decimal places.',
+        },
+        reasoning: {
+          type: 'string',
+          description: 'One sentence on how you derived the bbox (the landmarks or references you used).',
+        },
+        confidence: {
+          type: 'string',
+          enum: ['high', 'medium', 'low'],
+          description: 'high = well-known place with stable boundaries; low = approximation.',
+        },
+      },
+      required: ['bbox', 'reasoning', 'confidence'],
+    },
+  }
+
+  const [llmResult, osmResult] = await Promise.allSettled([
+    // LLM: forced tool call → structured bbox + reasoning
+    (async () => {
+      const client = new (await import('@anthropic-ai/sdk')).default()
+      const msg = await client.messages.create({
+        model: process.env.ADMIN_PROPOSE_MODEL ?? 'claude-opus-4-8',
+        max_tokens: 512,
+        tools: [BBOX_TOOL],
+        tool_choice: { type: 'any' },
+        messages: [{
+          role: 'user',
+          content: `What is the bounding box for "${query.trim()}"? Return as lng_min,lat_min,lng_max,lat_max. Prefer the tight boundary of the named feature (e.g. a national park boundary, not the broader county). For a drive corridor or road trip region, add ~20 km of buffer on each side.`,
+        }],
+      })
+      const tool = msg.content.find((b) => b.type === 'tool_use')
+      if (!tool || tool.type !== 'tool_use') throw new Error('no tool call')
+      const inp = tool.input as { bbox: string; reasoning: string; confidence: string }
+      return { bbox: inp.bbox.trim(), reasoning: inp.reasoning, confidence: inp.confidence as 'high' | 'medium' | 'low' }
+    })(),
+
+    // OSM Nominatim: top 3 results for the query
+    (async () => {
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query.trim())}&format=json&limit=3&featuretype=settlement,natural,boundary`
+      const res = await fetch(url, { headers: { 'User-Agent': 'skipper-admin/1.0 (admin ops tool)' } })
+      if (!res.ok) throw new Error(`Nominatim ${res.status}`)
+      const data = await res.json() as Array<{
+        display_name: string
+        type: string
+        class: string
+        boundingbox: [string, string, string, string] // lat_min, lat_max, lng_min, lng_max
+      }>
+      // Reorder Nominatim's [lat_min,lat_max,lng_min,lng_max] → lng_min,lat_min,lng_max,lat_max
+      return data.map((r) => ({
+        name: r.display_name,
+        type: `${r.class}/${r.type}`,
+        bbox: `${r.boundingbox[2]},${r.boundingbox[0]},${r.boundingbox[3]},${r.boundingbox[1]}`,
+      }))
+    })(),
+  ])
+
+  return c.json({
+    llm: llmResult.status === 'fulfilled' ? llmResult.value : null,
+    llmError: llmResult.status === 'rejected' ? String(llmResult.reason) : null,
+    osm: osmResult.status === 'fulfilled' ? osmResult.value : null,
+    osmError: osmResult.status === 'rejected' ? String(osmResult.reason) : null,
+  })
 })
 
 // Catalog — EVERY tour (drafts included; the admin operates the whole catalog, unlike the

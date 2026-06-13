@@ -57,6 +57,23 @@ export interface Region {
   discoveryBbox: string | null
 }
 
+export interface BboxLlmResult {
+  bbox: string
+  reasoning: string
+  confidence: 'high' | 'medium' | 'low'
+}
+export interface BboxOsmResult {
+  name: string
+  type: string
+  bbox: string
+}
+export interface BboxLookupResult {
+  llm: BboxLlmResult | null
+  llmError: string | null
+  osm: BboxOsmResult[] | null
+  osmError: string | null
+}
+
 export interface PoiDetail {
   id: string
   source: string
@@ -320,6 +337,8 @@ export const api = {
     req<{ region: Region }>('/admin/regions', { method: 'POST', body: JSON.stringify(body) }),
   updateRegion: (slug: string, body: { displayName?: string; discoveryBbox?: string | null }) =>
     req<{ region: Region }>(`/admin/regions/${slug}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  bboxLookup: (query: string) =>
+    req<BboxLookupResult>('/admin/regions/bbox-lookup', { method: 'POST', body: JSON.stringify({ query }) }),
   createJob: (body: Record<string, unknown>) =>
     req<{ job: GenJob }>('/admin/jobs', { method: 'POST', body: JSON.stringify(body) }),
   propose: (body: Record<string, unknown>) =>
