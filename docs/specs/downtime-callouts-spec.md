@@ -1,5 +1,7 @@
 # Downtime callouts — build spec / handoff
 
+> **Schema-names note (2026-06-13):** identifiers below predate the 2026-06-12 segments/tracks refactor — read `tour_stops`→`segments`+`tracks` and `tour_brackets`→`tour_frames`.
+
 **Small persona-only audio beats the skipper drops into the quiet stretches so he feels
 *present on this drive*, not like a jukebox that only fires at the curated stops.** A third
 audio content type alongside route-anchored `tour_stops` and lifecycle `tour_brackets`.

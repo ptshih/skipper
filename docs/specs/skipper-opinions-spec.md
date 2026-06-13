@@ -1,5 +1,7 @@
 # The skipper's opinions ("the world off the rails") — build spec / handoff
 
+> **Schema-names note (2026-06-13):** identifiers below predate later refactors — read `personaForRegion`→`personaFromKey` (persona is `tours.persona_key`, decoupled from region) and `corridors`→`tours` (merged).
+
 **The skipper has a point of view about the world the drive passes through — the road, the
 landscape, the stuff off the frozen route — surfaced as opinionated asides that make him a
 *character*, not an audioguide.** Feature #4 of the future-features brainstorm.

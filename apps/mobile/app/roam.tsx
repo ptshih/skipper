@@ -8,7 +8,7 @@
 // `?mode=sim` replays a ready tour's polyline through the same engine for couch testing.
 // The encounter sheet reuses the EXACT story-player transport (Scrubber + play/pause + ±15s)
 // so both players feel identical (founder call, superseding the alpha's read-only bar).
-// Alpha cuts vs the full design: the encounter PATTER line (grounded, from roam_clips), waves
+// Alpha cuts vs the full design: the encounter PATTER line (grounded, from the roam track), waves
 // + B-sides ("Tell me more"), and the offline region pack + logbook wait on their backends —
 // honest UI shows none of them.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'

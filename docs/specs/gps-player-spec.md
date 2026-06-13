@@ -1,5 +1,7 @@
 # M1 GPS Phone Player — Build Spec / Handoff
 
+> **Schema-names note (2026-06-13):** identifiers below predate later refactors — read `corridors`→`tours` (merged; `corridor.polyline`→`tour.polyline`) and `poiContentId`→dropped (`poi_content` is gone; narration lives on a `tracks` row).
+
 > **Status (2026-06-09):** mostly built — Phase 2 (GPS player on the simulated source) and Phase 3
 > (offline download) ✅ shipped; Phase 4 (real `expo-location` source) code-built + reviewed, NOT
 > device-verified. Remaining: the Phase-0 duck flip (audio session still `doNotMix`) + Phase 5 (the

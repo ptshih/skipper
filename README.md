@@ -11,10 +11,11 @@ over hand-curated driving routes, as phone audio (CarPlay later). First region:
 
 ## The two principles
 
-1. **Assemble tours per request. Generate content once per place.**
-   `pois` + `poi_content` are a cache (grounded facts → in-character script →
-   audio). `tours` + `tour_stops` are the assembly (a curated route + ordered
-   stops pointing at cached content).
+1. **Assemble per request; fetch FACTS once per place, generate NARRATION per tour.**
+   `pois` is the cache — a place's grounded facts (TTL + hash), SHARED by every
+   tour. Narration is NOT cached — it's tour-owned: `tours` + ordered
+   `segments`/`tracks` are the assembly (a curated route whose stops each carry
+   their own telling). No content cache, no cross-tour reuse — by design.
 2. **The rails are the route; the generation is everything inside the rails.**
    Routes are hand-curated and frozen. Inside the rails the model does
    everything: which stops, what story, pacing, interest filtering, voice.
@@ -24,7 +25,7 @@ over hand-curated driving routes, as phone audio (CarPlay later). First region:
 
 - **TypeScript 6** everywhere · **bun** (package manager + runtime + workspaces)
 - **Backend:** Hono (served natively by bun) · **DB:** Neon + Drizzle · **Auth:** Better Auth (freemium) · **Audio:** Cloudflare R2 (private; presigned URLs)
-- **AI:** Anthropic `claude-opus-4-8` (narration) · Google Cloud Text-to-Speech — Gemini-TTS voice "Algenib" (OAuth/ADC, no API key; LINEAR16 → WAV)
+- **AI:** Anthropic `claude-fable-5` (narration) · Google Cloud Text-to-Speech — Gemini-TTS voice "Charon" (OAuth/ADC, no API key; MP3 32 kbps)
 - **Mobile (MVP = phone player):** Expo SDK 56, `expo-audio` + `expo-location`; CarPlay (`@g4rb4g3/react-native-carplay`) deferred past the MVP
 
 ## Layout

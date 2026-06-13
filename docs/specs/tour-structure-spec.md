@@ -1,5 +1,7 @@
 # Tour structure spec — intro/outro brackets + quality-gated narration
 
+> **Schema-names note (2026-06-13):** the `tour_brackets` table referenced below was renamed `tour_frames` in the 2026-06-12 segments/tracks refactor — read `tour_brackets`→`tour_frames` throughout.
+
 **Status:** design, 2026-06-08. Most of this is SUPERSEDED (see the banner). The live parts (§3, §4) are
 now ✅ **BUILT**: the quality-gated prompt + intro/outro narration modes (67e9313/7860b3f), the
 `tour_brackets` table + the atomic ready-gate co-committing both brackets (d0f2ba6), and intro/outro

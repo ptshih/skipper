@@ -1,5 +1,7 @@
 # Scenic stops spec — deliberately adding scenic stops
 
+> **Schema-names note (2026-06-13):** the `tour_brackets` table referenced below was renamed `tour_frames` in the 2026-06-12 segments/tracks refactor.
+
 **Status:** design, agreed in a PM session (2026-06-08). NOT built. The original blocker (the
 tour-structure / directionality work) has since LANDED (the Phase-2 migration), so this is
 UNBLOCKED — but it was partially overtaken by the **gap-fill + cluster-merge pacing rework**

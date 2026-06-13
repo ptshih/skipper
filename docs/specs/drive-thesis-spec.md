@@ -1,5 +1,7 @@
 # The drive's thesis — build spec
 
+> **Schema-names note (2026-06-13):** the `tour_brackets` table referenced below was renamed `tour_frames` in the 2026-06-12 segments/tracks refactor.
+
 > **Status:** SPEC ONLY — unbuilt. Generation-only feature; post-MVP, gated behind the proven phone
 > player. Decided 2026-06-09. **The keystone** of the charm layer: it organizes the through-line
 > (`docs/specs/downtime-callouts-spec.md` is the push side; the through-line is its pull cousin) and

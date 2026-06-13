@@ -1,5 +1,7 @@
 # Ask the Skipper — Build Spec
 
+> **Schema-names note (2026-06-13):** identifiers below predate the 2026-06-12 segments/tracks refactor — read `corridors`→`tours`, `tour_stops`/`roam_clips`→`segments`+`tracks`, `poi_content`→dropped (narration lives on `tracks`, attribution on `tracks.attribution`), `saved_tours`→dropped, `personaForRegion`→`personaFromKey` (persona is `tours.persona_key`). The narration model is `claude-fable-5` and the voice is "Charon" (NOT the "Algenib"/Opus-4.8 mentioned in older notes below; the live Q&A model is still Sonnet 4.6).
+
 > **Status:** build-ready spec, UNBUILT — post-MVP (v2), gated behind the proven phone player (M1).
 > §4.6 (on-device fallback) is exploratory, not decided. Canonical-preview tour ids in this doc drift
 > as the preview is regenerated — resolve "the canonical preview" fresh, don't trust a hardcoded id.

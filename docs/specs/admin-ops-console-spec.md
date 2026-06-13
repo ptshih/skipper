@@ -1,5 +1,7 @@
 # Admin ops console — build spec
 
+> **Schema-names note (2026-06-13):** this BUILT spec predates the 2026-06-12 segments/tracks refactor — read `roam_clips`→`segments`+`tracks`, `personaForRegion`→`personaFromKey`, `saved_tours`→dropped. The shipped admin already uses the current names; this is a historical build record.
+
 > **Status:** spec, **BUILT + DEPLOYED 2026-06-11** — the `skipper-admin` service is live on Cloud
 > Run behind Google IAP; greenlit 2026-06-10 (promoted from the `docs/ideas/admin-ops-console.md` brainstorm,
 > which this supersedes). **Reviewed under a microscope + hardened 2026-06-10:** GCP claims

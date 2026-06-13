@@ -20,7 +20,7 @@
 //
 // Usage:
 //   dotenvx run -f .env.development -- bun packages/generator/src/generate-roam.ts
-//   ... --apply                 run it (spends; writes pois facts, R2 clips, roam_clips)
+//   ... --apply                 run it (spends; writes pois facts, R2 clips, segments/tracks)
 //   ... --apply --limit 3      smoke run (the cheapest real ear-test)
 //   ... --force                regenerate even clips whose facts_hash is still fresh
 //   ... --min-extract 400     story-depth floor (lead-extract chars)

@@ -1,11 +1,13 @@
-// The M1 generator pipeline — assemble ONE tour from its seeded shell.
+// The M1 generator pipeline — assemble ONE tour from its draft shell (authored at
+// runtime via admin Create / materializeRoute — NOT seeded).
 //
 //   tour shell (DB, loaded by slug)          (frozen route + endpoints + region)
-//     -> Wikidata SPARQL spine               (discover candidate POIs in the route box)
+//     -> region POI corpus (pre-swept)       (SELECT candidates from the shared `pois`
+//                                             corpus; no live discovery — aborts at $0 if empty)
 //     -> Wikipedia prose + Places            (per-candidate fact enrichment + BREAK anchors)
 //     -> select stops by drive TIME          (pace, not distance)
-//     -> Skipper narration (Anthropic)       (persona resolved from the region slug;
-//                                             story + scenic + break)
+//     -> Skipper narration (Anthropic)       (persona from `tours.persona_key` via
+//                                             personaFromKey; story + scenic + break)
 //     -> eval panel + optimizer              (free dims per pass; grounding once;
 //                                             drives regen, RECORDS — never gates `ready`)
 //     -> TTS (Google Cloud, Gemini-TTS) -> R2 (audio + duration)

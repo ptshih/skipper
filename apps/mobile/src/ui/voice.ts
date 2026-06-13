@@ -92,7 +92,7 @@ export const voice = {
   // the road passes something he knows. Silence is the DEFAULT state, so the copy's whole
   // job is making quiet feel companionable (the ambient contract, set IN COPY up front).
   // Strings follow the design handoff (design_handoff_roam); encounter NAMES + tellings
-  // come from roam_clips (grounded) — never from here.
+  // come from the roam track (grounded) — never from here.
   roam: {
     entry: 'Roam', // the mode's display title (home card + screen header)
     entryKicker: 'NEW · RIDE ALONG', // home card kicker (label face uppercases anyway)
