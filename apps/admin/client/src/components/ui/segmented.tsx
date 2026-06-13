@@ -21,7 +21,7 @@ export function Segmented<T extends string>({
   className?: string
 }) {
   return (
-    <div className={cn('inline-flex items-center gap-1 rounded-lg border bg-muted/30 p-1', className)}>
+    <div className={cn('inline-flex h-9 items-center gap-1 rounded-lg border bg-muted/30 p-1', className)}>
       {options.map((o) => {
         const on = value === o.value
         return (
@@ -30,7 +30,7 @@ export function Segmented<T extends string>({
             variant={on ? 'secondary' : 'ghost'}
             size="sm"
             onClick={() => onChange(o.value)}
-            className={cn('gap-1.5', on && 'shadow-sm')}
+            className={cn('h-7 gap-1.5', on && 'shadow-sm')}
           >
             {o.label}
             {o.count != null && (

@@ -135,7 +135,7 @@ export function RunsView() {
         </Callout>
       )}
 
-      {/* summary chips */}
+      {/* Clickable status filters (left) + readouts (right). Filters are pills; spend is a KPI. */}
       <div className="flex flex-wrap items-center gap-2.5">
         <Badge asChild variant={runningN ? 'info' : 'secondary'} className="cursor-pointer">
           <button onClick={() => { setSrc('all'); setStatusFilter('running') }}>
@@ -146,8 +146,18 @@ export function RunsView() {
         <Badge asChild variant={failedN ? 'destructive' : 'secondary'} className="cursor-pointer">
           <button onClick={() => { setSrc('all'); setStatusFilter('failed') }}>{failedN} failed</button>
         </Badge>
-        <Badge variant={todaySpend > 0 ? 'warning' : 'secondary'}>{fmtCost(todaySpend)} today</Badge>
-        <span className="ml-auto text-xs text-muted-foreground">auto-refresh · 15s</span>
+        <div className="ml-auto flex items-center gap-4">
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-xs text-muted-foreground">Spent today</span>
+            <span className={cn(
+              'font-mono text-sm font-semibold tabular-nums',
+              todaySpend > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-foreground',
+            )}>
+              {fmtCost(todaySpend)}
+            </span>
+          </div>
+          <span className="text-xs text-muted-foreground">auto-refresh · 15s</span>
+        </div>
       </div>
 
       <div className="space-y-3">
