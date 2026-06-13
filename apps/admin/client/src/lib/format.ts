@@ -5,6 +5,9 @@ export const fmtScore = (v?: number | null): string => (v == null ? '—' : v.to
 export const fmtCost = (v?: number | null): string => (v == null ? '—' : `$${v.toFixed(2)}`)
 export const fmtSec = (ms?: number | null): string => (ms == null ? '—' : `${(ms / 1000).toFixed(1)}s`)
 
+// Normalize a thrown value to a display string. ApiError extends Error, so this covers both.
+export const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e))
+
 export function timeAgo(iso?: string | null): string {
   if (!iso) return '—'
   const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)

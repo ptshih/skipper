@@ -20,6 +20,10 @@ export default {
         popover: { DEFAULT: 'hsl(var(--popover))', foreground: 'hsl(var(--popover-foreground))' },
         card: { DEFAULT: 'hsl(var(--card))', foreground: 'hsl(var(--card-foreground))' },
       },
+      fontFamily: {
+        sans: ['Overpass', 'ui-sans-serif', 'system-ui', '-apple-system', 'sans-serif'],
+        mono: ['Overpass Mono', 'SFMono-Regular', 'ui-monospace', 'monospace'],
+      },
       borderRadius: {
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',

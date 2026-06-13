@@ -1,8 +1,19 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowDown, ArrowUp, Check, Map, Plus, Search, Sparkles, TriangleAlert } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, Map, Plus, Sparkles, TriangleAlert } from 'lucide-react'
 import { api, type IntegrityReport, type TourCard } from '@/lib/api'
-import { fmtDuration, fmtMiles, timeAgo } from '@/lib/format'
+import { errMsg, fmtDuration, fmtMiles, timeAgo } from '@/lib/format'
+import { TOUR_STATUS_VARIANT } from '@/lib/status'
+import { PageHeader } from '@/components/PageHeader'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Select } from '@/components/ui/select'
+import { Callout } from '@/components/ui/callout'
+import { SearchInput } from '@/components/ui/search-input'
+import { Segmented } from '@/components/ui/segmented'
+import { EmptyState } from '@/components/ui/empty-state'
+import { cn } from '@/lib/utils'
 
 type SortKey = 'headline' | 'regionName' | 'status' | 'stops' | 'distanceMeters' | 'durationSeconds' | 'eval' | 'updatedAt'
 
@@ -13,29 +24,22 @@ type TourCardEx = TourCard & {
 const STATUS_FILTER = ['all', 'ready', 'draft', 'failed', 'generating'] as const
 type StatusFilter = (typeof STATUS_FILTER)[number]
 
-const STATUS_BADGE: Record<string, string> = {
-  ready: 'badge badge--ok',
-  draft: 'badge badge--neutral',
-  generating: 'badge badge--run',
-  failed: 'badge badge--bad',
-}
-
 function EvalCell({ ev }: { ev?: TourCardEx['eval'] }) {
-  if (!ev) return <span className="muted">—</span>
+  if (!ev) return <span className="text-muted-foreground">—</span>
   return (
-    <span className="row-flex" style={{ gap: 7 }}>
-      <span className={`badge ${ev.pass ? 'badge--ok' : 'badge--bad'}`}>
-        {ev.pass ? <Check size={11} /> : <TriangleAlert size={11} />}
+    <span className="flex items-center gap-2">
+      <Badge variant={ev.pass ? 'success' : 'destructive'}>
+        {ev.pass ? <Check className="h-3 w-3" /> : <TriangleAlert className="h-3 w-3" />}
         {ev.pass ? 'pass' : 'fail'}
-      </span>
-      <span className="cell-mono" style={{ color: ev.pass ? 'var(--ink-3)' : 'var(--bad)', fontSize: 11.5 }}>
+      </Badge>
+      <span className={cn('font-mono text-xs', ev.pass ? 'text-muted-foreground' : 'text-destructive')}>
         g {ev.grounding.toFixed(2)}
       </span>
     </span>
   )
 }
 
-function Th({
+function SortHead({
   sortKey,
   current,
   dir,
@@ -52,18 +56,17 @@ function Th({
 }) {
   const active = current === sortKey
   return (
-    <th
-      className={`sortable${active ? ' is-sorted' : ''}`}
+    <TableHead
+      className={cn('cursor-pointer select-none whitespace-nowrap hover:text-foreground', right && 'text-right')}
       onClick={() => onSort(sortKey)}
-      style={right ? { textAlign: 'right' } : undefined}
     >
-      <span className="th-sort" style={right ? { flexDirection: 'row-reverse' } : undefined}>
+      <span className={cn('inline-flex items-center gap-1', right && 'flex-row-reverse')}>
         {children}
-        <span className="th-arrow">
+        <span className={cn('transition-opacity', active ? 'text-foreground opacity-100' : 'opacity-0')}>
           {active && dir === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />}
         </span>
       </span>
-    </th>
+    </TableHead>
   )
 }
 
@@ -81,7 +84,7 @@ export function ToursView() {
     api
       .tours()
       .then((r) => setTours(r.tours as TourCardEx[]))
-      .catch((e) => setErr(e instanceof Error ? e.message : String(e)))
+      .catch((e) => setErr(errMsg(e)))
     api.integrity().then(setIntegrity).catch(() => {})
   }, [])
 
@@ -97,7 +100,7 @@ export function ToursView() {
       for (const slug of slugs) await api.createJob({ kind: 'generate', slug, dryRun: false, maxCostUsd: 5, confirm: true })
       navigate('/runs')
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e))
+      setErr(errMsg(e))
     }
   }
 
@@ -139,144 +142,137 @@ export function ToursView() {
     s === 'all' ? tours.length : tours.filter((t) => t.status === s).length
 
   return (
-    <div>
-      <div className="pagehead">
-        <div>
-          <h1 className="pagehead__title">Tours</h1>
-          <p className="pagehead__desc">The whole catalog — drafts included. Evals that fall below the bar are flagged in red.</p>
-        </div>
-        <div className="pagehead__actions" style={{ gap: 8 }}>
-          {draftSlugs.length > 0 && (
-            <button className="btn btn--default" onClick={() => generate(draftSlugs)}>
-              <Sparkles size={15} />
-              Generate all drafts ({draftSlugs.length})
-            </button>
-          )}
-          <Link to="/create" className="btn btn--primary">
-            <Plus size={15} />
-            Create tour
-          </Link>
-        </div>
-      </div>
+    <div className="space-y-4">
+      <PageHeader
+        title="Tours"
+        description="The whole catalog — drafts included. Evals that fall below the bar are flagged in red."
+        actions={
+          <>
+            {draftSlugs.length > 0 && (
+              <Button variant="outline" onClick={() => generate(draftSlugs)}>
+                <Sparkles className="h-4 w-4" /> Generate all drafts ({draftSlugs.length})
+              </Button>
+            )}
+            <Button asChild>
+              <Link to="/create">
+                <Plus className="h-4 w-4" /> Create tour
+              </Link>
+            </Button>
+          </>
+        }
+      />
 
-      {err && (
-        <div className="badge badge--bad" style={{ display: 'block', marginBottom: 14, padding: '10px 14px', borderRadius: 'var(--radius)' }}>
-          {err}
-        </div>
-      )}
+      {err && <Callout variant="error">{err}</Callout>}
 
       {integrity && integrity.tours.length > 0 && (
-        <div className="dangerzone dangerzone--del" style={{ marginBottom: 14 }}>
-          <div className="dangerzone__title">
-            <TriangleAlert size={14} /> {integrity.tours.length} ready tour{integrity.tours.length === 1 ? '' : 's'} failing the integrity check
+        <Callout variant="error" className="border-destructive/30 bg-destructive/5">
+          <div className="flex items-center gap-1.5 font-medium text-destructive">
+            <TriangleAlert className="h-3.5 w-3.5" />
+            {integrity.tours.length} ready tour{integrity.tours.length === 1 ? '' : 's'} failing the integrity check
           </div>
-          <div className="dangerzone__body">
-            A <b>ready</b> tour must have audio on every stop + bracket and CC BY-SA attribution on every story stop.{' '}
+          <div className="mt-1 leading-relaxed text-muted-foreground">
+            A <span className="font-medium text-foreground">ready</span> tour must have audio on every stop + bracket and CC BY-SA attribution on every story stop.{' '}
             {integrity.tours.map((t, i) => (
               <span key={t.id}>
                 {i > 0 && ', '}
-                <Link to={`/tours/${t.id}`} className="row-link">{t.slug}</Link>
+                <Link to={`/tours/${t.id}`} className="font-medium text-foreground hover:underline">{t.slug}</Link>
               </span>
             ))}
           </div>
-        </div>
+        </Callout>
       )}
 
-      <div className="toolbar">
-        <div className="search">
-          <Search size={15} />
-          <input
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <SearchInput
+            wrapperClassName="min-w-[16rem] max-w-sm flex-1"
             placeholder="Search tours, slugs, regions…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
-        </div>
-        <div className="segment">
-          {(['all', 'ready', 'draft', 'failed'] as StatusFilter[]).map((v) => (
-            <button key={v} className={status === v ? 'is-on' : ''} onClick={() => setStatus(v)}>
-              {v.charAt(0).toUpperCase() + v.slice(1)}
-              <span className="seg-count">{countFor(v)}</span>
-            </button>
-          ))}
-        </div>
-        <div className="selectbox">
-          <select value={region} onChange={(e) => setRegion(e.target.value)}>
+          <Segmented
+            value={status}
+            onChange={setStatus}
+            options={(['all', 'ready', 'draft', 'failed'] as StatusFilter[]).map((v) => ({
+              value: v,
+              label: v.charAt(0).toUpperCase() + v.slice(1),
+              count: countFor(v),
+            }))}
+          />
+          <Select value={region} onChange={(e) => setRegion(e.target.value)} className="w-auto">
             <option value="all">All regions</option>
             {regions.map((r) => (
               <option key={r.regionSlug} value={r.regionName}>{r.regionName}</option>
             ))}
-          </select>
+          </Select>
+          <span className="ml-auto text-sm text-muted-foreground">{view.length} of {tours.length}</span>
         </div>
-        <span className="toolbar__spacer" />
-        <span className="toolbar__count">{view.length} of {tours.length}</span>
-      </div>
 
-      <div className="tablewrap">
-        <table className="table">
-          <thead>
-            <tr>
-              <Th sortKey="headline" current={sort.key} dir={sort.dir} onSort={onSort}>Tour</Th>
-              <Th sortKey="regionName" current={sort.key} dir={sort.dir} onSort={onSort}>Region</Th>
-              <Th sortKey="status" current={sort.key} dir={sort.dir} onSort={onSort}>Status</Th>
-              <Th sortKey="eval" current={sort.key} dir={sort.dir} onSort={onSort}>Eval</Th>
-              <Th sortKey="stops" current={sort.key} dir={sort.dir} onSort={onSort} right>Stops</Th>
-              <Th sortKey="distanceMeters" current={sort.key} dir={sort.dir} onSort={onSort} right>Distance</Th>
-              <Th sortKey="durationSeconds" current={sort.key} dir={sort.dir} onSort={onSort} right>Duration</Th>
-              <Th sortKey="updatedAt" current={sort.key} dir={sort.dir} onSort={onSort} right>Updated</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {view.map((t) => (
-              <tr key={t.id} className="clickable" onClick={() => navigate(`/tours/${t.id}`)}>
-                <td>
-                  <div className="cell-strong row-link">{t.headline}</div>
-                  <div className="cell-sub">
-                    {t.slug}
-                    {t.authored === 'seed' && <span style={{ marginLeft: 8, color: 'var(--ink-4)' }}>· seed</span>}
-                  </div>
-                </td>
-                <td className="cell-dim">{t.regionName}</td>
-                <td>
-                  <span className="row-flex" style={{ gap: 6 }}>
-                    <span className={STATUS_BADGE[t.status] ?? 'badge badge--neutral'}>{t.status}</span>
-                    {brokenIds.has(t.id) && (
-                      <span className="badge badge--bad" title="Fails the audio/attribution integrity check">
-                        <TriangleAlert size={11} /> integrity
-                      </span>
-                    )}
-                    {t.status === 'draft' && (
-                      <button
-                        className="btn btn--default btn--sm"
-                        onClick={(e) => { e.stopPropagation(); generate([t.slug]) }}
-                        title="Generate this tour (spends credits)"
-                      >
-                        <Sparkles size={12} /> Generate
-                      </button>
-                    )}
-                  </span>
-                </td>
-                <td><EvalCell ev={t.eval} /></td>
-                <td style={{ textAlign: 'right' }} className="cell-mono">
-                  {t.stops}
-                  {t.brackets ? <span className="muted"> +{t.brackets}</span> : null}
-                </td>
-                <td style={{ textAlign: 'right' }} className="cell-mono cell-dim">{fmtMiles(t.distanceMeters)}</td>
-                <td style={{ textAlign: 'right' }} className="cell-mono cell-dim">{fmtDuration(t.durationSeconds)}</td>
-                <td style={{ textAlign: 'right' }} className="cell-dim" title={t.updatedAt}>{timeAgo(t.updatedAt)}</td>
-              </tr>
-            ))}
-            {view.length === 0 && (
-              <tr>
-                <td colSpan={8}>
-                  <div className="empty">
-                    <Map size={22} />
-                    <div>No tours match these filters.</div>
-                  </div>
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+        <div className="overflow-hidden rounded-xl border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <SortHead sortKey="headline" current={sort.key} dir={sort.dir} onSort={onSort}>Tour</SortHead>
+                <SortHead sortKey="regionName" current={sort.key} dir={sort.dir} onSort={onSort}>Region</SortHead>
+                <SortHead sortKey="status" current={sort.key} dir={sort.dir} onSort={onSort}>Status</SortHead>
+                <SortHead sortKey="eval" current={sort.key} dir={sort.dir} onSort={onSort}>Eval</SortHead>
+                <SortHead sortKey="stops" current={sort.key} dir={sort.dir} onSort={onSort} right>Stops</SortHead>
+                <SortHead sortKey="distanceMeters" current={sort.key} dir={sort.dir} onSort={onSort} right>Distance</SortHead>
+                <SortHead sortKey="durationSeconds" current={sort.key} dir={sort.dir} onSort={onSort} right>Duration</SortHead>
+                <SortHead sortKey="updatedAt" current={sort.key} dir={sort.dir} onSort={onSort} right>Updated</SortHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {view.map((t) => (
+                <TableRow key={t.id} className="cursor-pointer" onClick={() => navigate(`/tours/${t.id}`)}>
+                  <TableCell>
+                    <div className="font-medium hover:underline">{t.headline}</div>
+                    <div className="font-mono text-xs text-muted-foreground">
+                      {t.slug}
+                      {t.authored === 'seed' && <span className="ml-2 text-muted-foreground/70">· seed</span>}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{t.regionName}</TableCell>
+                  <TableCell>
+                    <span className="flex items-center gap-1.5">
+                      <Badge variant={TOUR_STATUS_VARIANT[t.status] ?? 'secondary'}>{t.status}</Badge>
+                      {brokenIds.has(t.id) && (
+                        <Badge variant="destructive" title="Fails the audio/attribution integrity check">
+                          <TriangleAlert className="h-3 w-3" /> integrity
+                        </Badge>
+                      )}
+                      {t.status === 'draft' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => { e.stopPropagation(); generate([t.slug]) }}
+                          title="Generate this tour (spends credits)"
+                        >
+                          <Sparkles className="h-3 w-3" /> Generate
+                        </Button>
+                      )}
+                    </span>
+                  </TableCell>
+                  <TableCell><EvalCell ev={t.eval} /></TableCell>
+                  <TableCell className="text-right font-mono">
+                    {t.stops}
+                    {t.brackets ? <span className="text-muted-foreground"> +{t.brackets}</span> : null}
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-muted-foreground">{fmtMiles(t.distanceMeters)}</TableCell>
+                  <TableCell className="text-right font-mono text-muted-foreground">{fmtDuration(t.durationSeconds)}</TableCell>
+                  <TableCell className="text-right text-muted-foreground" title={t.updatedAt}>{timeAgo(t.updatedAt)}</TableCell>
+                </TableRow>
+              ))}
+              {view.length === 0 && (
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={8}>
+                    <EmptyState icon={Map}>No tours match these filters.</EmptyState>
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
       </div>
     </div>
   )

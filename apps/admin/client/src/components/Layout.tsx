@@ -1,20 +1,38 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { Activity, Anchor, BookOpen, Map, MapPin, Moon, Search, Sun } from 'lucide-react'
+import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { Activity, Anchor, BookOpen, Compass, Map, MapPin, Moon, Search, Sun } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 const NAV = [
   { to: '/runs', label: 'Runs', icon: Activity },
   { to: '/tours', label: 'Tours', icon: Map },
   { to: '/pois', label: 'POIs', icon: MapPin },
+  { to: '/roam', label: 'Roam', icon: Compass },
 ]
+
+const itemBase =
+  'relative flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-left text-sm font-medium transition-colors'
+const itemInactive = 'text-muted-foreground hover:bg-foreground/5 hover:text-foreground'
+
+function NavItem({ to, label, icon: Icon }: { to: string; label: string; icon: React.ElementType }) {
+  return (
+    <NavLink to={to} className={({ isActive }) => cn(itemBase, isActive ? 'text-foreground' : itemInactive)}>
+      {({ isActive }) => (
+        <>
+          {isActive && <span className="absolute -left-3 inset-y-1 w-0.5 rounded-r bg-foreground" />}
+          <Icon size={18} className={cn('shrink-0', isActive ? 'text-foreground' : 'text-muted-foreground')} />
+          {label}
+        </>
+      )}
+    </NavLink>
+  )
+}
 
 export function Layout() {
   const [theme, setTheme] = useState(() => localStorage.getItem('sk_theme') || 'light')
   const [palette, setPalette] = useState(false)
-  const location = useLocation()
 
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme)
     document.documentElement.classList.toggle('dark', theme === 'dark')
     localStorage.setItem('sk_theme', theme)
   }, [theme])
@@ -30,104 +48,79 @@ export function Layout() {
     return () => window.removeEventListener('keydown', h)
   }, [])
 
-  const crumb = getCrumb(location.pathname)
-
   return (
-    <div className="app">
-      <aside className="sidebar">
-        <div className="brand">
-          <span className="brand__mark"><Anchor size={16} /></span>
-          <span className="brand__name">Skipper</span>
-          <span className="brand__env">admin</span>
+    <div className="relative isolate flex min-h-svh w-full flex-col bg-zinc-100 lg:flex-row dark:bg-zinc-950">
+      {/* Sidebar — sits on the page (no right border); main content floats as a panel beside it. */}
+      <aside className="fixed inset-y-0 left-0 z-10 flex w-64 flex-col max-lg:hidden">
+        <div className="border-b border-border px-3 py-3.5">
+          <div className="flex items-center gap-3 px-2">
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground">
+              <Anchor size={16} />
+            </span>
+            <span className="text-sm font-semibold text-foreground">Skipper</span>
+            <span className="ml-auto rounded-full border px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
+              admin
+            </span>
+          </div>
         </div>
 
-        <nav className="nav">
+        <div className="px-3 py-3">
+          <button onClick={() => setPalette(true)} className={cn(itemBase, itemInactive)}>
+            <Search size={18} className="shrink-0 text-muted-foreground" />
+            Search
+            <kbd className="ml-auto rounded border bg-background px-1.5 font-mono text-[10px] leading-relaxed text-muted-foreground">
+              ⌘K
+            </kbd>
+          </button>
+        </div>
+
+        <nav className="flex flex-col gap-0.5 border-t border-border px-3 py-3">
           {NAV.map((n) => (
-            <NavLink
-              key={n.to}
-              to={n.to}
-              className={({ isActive }) => `nav__item${isActive ? ' is-active' : ''}`}
-            >
-              <n.icon size={17} />
-              {n.label}
-            </NavLink>
+            <NavItem key={n.to} to={n.to} label={n.label} icon={n.icon} />
           ))}
         </nav>
 
-        <div className="sidebar__spacer" />
+        <div className="flex-1" />
 
-        <nav className="nav" style={{ marginTop: 0 }}>
-          <NavLink
-            to="/reference"
-            className={({ isActive }) => `nav__item${isActive ? ' is-active' : ''}`}
-          >
-            <BookOpen size={17} />
-            Reference
-          </NavLink>
+        <nav className="flex flex-col gap-0.5 px-3 py-3">
+          <NavItem to="/reference" label="Reference" icon={BookOpen} />
         </nav>
 
-        <div className="account">
-          <span className="account__avatar">F</span>
-          <div style={{ minWidth: 0 }}>
-            <div className="account__name">Founder</div>
-            <div className="account__sub">
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--ok)', flexShrink: 0 }} />
-              IAP-gated
+        <div className="border-t border-border px-3 py-3.5">
+          <div className="flex items-center gap-3 px-2">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
+              F
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-medium leading-tight text-foreground">Founder</div>
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+                IAP-gated
+              </div>
             </div>
+            <button
+              onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+              title="Toggle theme"
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
+            >
+              {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+            </button>
           </div>
         </div>
       </aside>
 
-      <div className="main">
-        <header className="topbar">
-          <div className="crumb">
-            <span>Skipper Admin</span>
-            {crumb.map(([label], i) => (
-              <span key={i}>
-                <span className="crumb__sep">/</span>
-                <b>{label}</b>
-              </span>
-            ))}
-          </div>
-          <span className="topbar__spacer" />
-          <button className="searchbtn" onClick={() => setPalette(true)}>
-            <Search size={15} />
-            <span>Search or jump to…</span>
-            <span className="kbd">⌘K</span>
-          </button>
-          <div className="live is-on" title="Auto-refresh on">
-            <span className="live__dot" />
-            <span>live</span>
-          </div>
-          <button
-            className="iconbtn"
-            onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
-            title="Toggle theme"
-          >
-            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-          </button>
-        </header>
-
-        <div className="content">
-          <div className="content__inner">
+      {/* Main — the floating content panel (rounded, ringed, on the gray page). */}
+      <main className="flex flex-1 flex-col pb-2 max-lg:pt-2 lg:min-w-0 lg:py-2 lg:pr-2 lg:pl-64">
+        <div className="grow px-4 py-6 max-lg:mx-2 max-lg:rounded-xl max-lg:border max-lg:bg-card lg:ml-2 lg:rounded-xl lg:bg-card lg:p-10 lg:shadow-sm lg:ring-1 lg:ring-border dark:lg:ring-white/10">
+          <div className="mx-auto max-w-[1200px]">
             <Outlet />
           </div>
         </div>
-      </div>
+      </main>
 
       {palette && <CommandPalette onClose={() => setPalette(false)} />}
     </div>
   )
-}
-
-function getCrumb(path: string): [string, string][] {
-  if (path.startsWith('/tours/') && path.length > 7) return [['Tours', '/tours'], ['Detail', '']]
-  if (path === '/tours') return [['Tours', '']]
-  if (path === '/runs') return [['Runs', '']]
-  if (path === '/create') return [['Tours', '/tours'], ['Create', '']]
-  if (path === '/reference') return [['Reference', '']]
-  if (path === '/pois') return [['POIs', '']]
-  return []
 }
 
 function CommandPalette({ onClose }: { onClose: () => void }) {
@@ -151,6 +144,7 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
     { group: 'Go to', label: 'Runs', icon: Activity, href: '/runs' },
     { group: 'Go to', label: 'Tours', icon: Map, href: '/tours' },
     { group: 'Go to', label: 'POIs', icon: MapPin, href: '/pois' },
+    { group: 'Go to', label: 'Roam', icon: Compass, href: '/roam' },
     { group: 'Go to', label: 'Reference', icon: BookOpen, href: '/reference' },
     { group: 'Actions', label: 'Create a tour', icon: Map, href: '/create' },
   ]
@@ -169,9 +163,9 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
   let lastGroup = ''
   return (
     <>
-      <div className="scrim" style={{ background: 'rgba(18,18,20,0.3)', zIndex: 60 }} onClick={onClose} />
-      <div className="palette">
-        <div className="palette__input">
+      <div className="fixed inset-0 z-[60] bg-black/30" onClick={onClose} />
+      <div className="fixed left-1/2 top-[84px] z-[61] w-[600px] max-w-[92vw] -translate-x-1/2 overflow-hidden rounded-xl border bg-popover shadow-lg">
+        <div className="flex items-center gap-3 border-b px-4 py-3.5 text-muted-foreground">
           <Search size={18} />
           <input
             ref={inputRef}
@@ -179,24 +173,32 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={onKey}
             placeholder="Search or jump to…"
+            className="w-full bg-transparent text-[15px] text-foreground outline-none placeholder:text-muted-foreground"
           />
-          <span className="kbd">esc</span>
+          <kbd className="rounded border bg-background px-1.5 font-mono text-[10px] leading-relaxed">esc</kbd>
         </div>
-        <div className="palette__list">
-          {items.length === 0 && <div className="empty" style={{ padding: 28 }}>No matches.</div>}
+        <div className="max-h-[360px] overflow-y-auto p-2">
+          {items.length === 0 && <div className="px-3 py-7 text-center text-sm text-muted-foreground">No matches.</div>}
           {items.map((it, i) => {
             const showGroup = it.group !== lastGroup ? ((lastGroup = it.group), true) : false
             return (
               <div key={i}>
-                {showGroup && <div className="palette__group">{it.group}</div>}
+                {showGroup && (
+                  <div className="px-3 pb-1 pt-2.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    {it.group}
+                  </div>
+                )}
                 <div
-                  className={`palette__item${i === active ? ' is-active' : ''}`}
+                  className={cn(
+                    'flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm',
+                    i === active && 'bg-accent',
+                  )}
                   onMouseEnter={() => setActive(i)}
                   onClick={() => run(it.href)}
                 >
-                  <it.icon size={16} />
+                  <it.icon size={16} className="text-muted-foreground" />
                   <span>{it.label}</span>
-                  <span className="pi-sub">{it.group}</span>
+                  <span className="ml-auto font-mono text-xs text-muted-foreground">{it.group}</span>
                 </div>
               </div>
             )

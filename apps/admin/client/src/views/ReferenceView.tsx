@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
+import { Callout } from '@/components/ui/callout'
 import { PageHeader } from '@/components/PageHeader'
 import { STOP_TYPE_COLOR } from '@/components/RouteMap'
 import { cn } from '@/lib/utils'
@@ -15,11 +16,11 @@ export function ReferenceView() {
         description="What each part of the console does — and which actions spend money or delete data."
       />
 
-      <div className="rounded-xl border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+      <Callout variant="info">
         <span className="font-medium text-foreground">The loop:</span> generate a tour → ear-pass it on
         its detail page (listen, read scripts, eyeball the route) → tune (patch a clip / resynth) → repeat.
         The console defaults to safe — spending and deleting are always opt-in.
-      </div>
+      </Callout>
 
       <Section title="Pages">
         <Dl
@@ -136,13 +137,13 @@ export function ReferenceView() {
         </ol>
       </Section>
 
-      <Section title="Example: roam corpus for a new corridor" subtitle="Sweep first (free), then generate. Always dry-run before applying.">
+      <Section title="Example: roam corpus for a new region" subtitle="Discover first (free), then generate. Always preview before applying.">
         <ol className="list-decimal space-y-1.5 pl-5 text-sm text-muted-foreground">
           <li>
-            New run → <Step>Sweep roam POIs</Step> — leave bbox blank (defaults to Tahoe–Reno). Run dry → verify the POI list in the job log.
+            POIs page → <Step>Discover POIs</Step> — pick the region, hit <Step>Preview</Step> to dry-run → verify the POI list in the job log.
           </li>
           <li>
-            Run again with <Step>Apply</Step> — upserts story + scenic pois into the DB. Free; no confirm needed.
+            Hit <Step>Discover</Step> — upserts the shared POI corpus that tours + roam both select from. Free; no confirm needed.
           </li>
           <li>
             New run → <Step>Generate roam</Step> — set <Step>Limit = 3</Step> for a smoke test. Run dry to see the corpus size and cost estimate.
@@ -177,6 +178,12 @@ export function ReferenceView() {
 
 const RUN_KINDS: { kind: string; does: string; cost: ReactNode; safe: string }[] = [
   {
+    kind: 'Discover POIs',
+    does: 'Discover Wikidata-pinned places in a region, join Wikipedia, tier them, and upsert the shared POI corpus — the foundational first step that BOTH tours and roam select from.',
+    cost: 'Free — WDQS + MediaWiki only, no LLM or TTS.',
+    safe: 'Apply OFF — previews the POI list, writes nothing.',
+  },
+  {
     kind: 'Generate',
     does: 'Discover places → narrate in the skipper voice → eval → (real run) synthesize TTS audio, for one tour slug.',
     cost: <span>LLM always (~$0.30+); <span className="text-foreground">TTS</span> only on a real (non-dry) run.</span>,
@@ -199,12 +206,6 @@ const RUN_KINDS: { kind: string; does: string; cost: ReactNode; safe: string }[]
     does: 'Delete R2 audio clips that no track or frame references anymore.',
     cost: 'Deletes bytes (when applied).',
     safe: 'Apply OFF — lists, deletes nothing.',
-  },
-  {
-    kind: 'Sweep roam POIs',
-    does: 'Discover Wikidata-pinned places in a bbox, join Wikipedia, tier them, and upsert story + scenic pois.',
-    cost: 'Free — WDQS + MediaWiki only, no LLM or TTS.',
-    safe: 'Apply OFF — previews the POI list, writes nothing.',
   },
   {
     kind: 'Generate roam',

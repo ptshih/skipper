@@ -1,9 +1,18 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ChevronRight, CircleCheck, CircleX, RefreshCw, Scissors, TriangleAlert } from 'lucide-react'
+import { ChevronRight, CircleCheck, CircleX, RefreshCw, Scissors, Sparkles, TriangleAlert } from 'lucide-react'
 import { api, type CharmDetail, type EvalRunSummary, type EvalScore, type SignResult, type TourDetail } from '@/lib/api'
 import { RouteMap, STOP_TYPE_COLOR, type RouteStopPin } from '@/components/RouteMap'
-import { fmtDate, fmtDuration, fmtMiles, fmtScore, fmtSec, timeAgo } from '@/lib/format'
+import { errMsg, fmtDate, fmtDuration, fmtMiles, fmtScore, fmtSec, timeAgo } from '@/lib/format'
+import { TOUR_STATUS_VARIANT } from '@/lib/status'
+import { Card } from '@/components/ui/card'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Callout } from '@/components/ui/callout'
+import { SectionLabel } from '@/components/ui/section-label'
+import { cn } from '@/lib/utils'
 
 const DIMS: [string, string][] = [
   ['grounding', 'Grounding'],
@@ -40,33 +49,28 @@ function asCharm(d: unknown): CharmDetail | null {
 function DimNote({ score }: { score: EvalScore }) {
   const charm = asCharm(score.detail)
   return (
-    <div className="dimnote">
-      <div className="dimnote__head">
+    <div className="mt-3 border-t pt-2.5 first:mt-0 first:border-t-0 first:pt-0">
+      <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
         <span>{DIM_LABEL[score.dimension] ?? score.dimension}</span>
-        <span className={`badge ${score.pass ? 'badge--ok' : 'badge--warn'}`} style={{ fontSize: 10 }}>
-          {fmtScore(score.value)}
-        </span>
+        <Badge variant={score.pass ? 'success' : 'warning'} className="text-[10px]">{fmtScore(score.value)}</Badge>
       </div>
       {score.findings.length > 0 && (
-        <ul className="findings">
+        <ul className="mt-1 list-disc pl-4 text-xs text-amber-600 dark:text-amber-400">
           {score.findings.map((f, i) => <li key={i}>{f}</li>)}
         </ul>
       )}
       {charm?.best && (
-        <div className="dimnote__best">★ best — <span className="dimnote__quote">“{charm.best}”</span></div>
+        <div className="mt-1.5 text-xs text-emerald-600 dark:text-emerald-400">
+          ★ best — <span className="italic text-muted-foreground">“{charm.best}”</span>
+        </div>
       )}
       {charm?.sag && (
-        <div className="dimnote__sag">▽ sag — <span className="dimnote__quote">“{charm.sag}”</span></div>
+        <div className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+          ▽ sag — <span className="italic text-muted-foreground">“{charm.sag}”</span>
+        </div>
       )}
     </div>
   )
-}
-
-const STATUS_BADGE: Record<string, string> = {
-  ready: 'badge badge--ok',
-  draft: 'badge badge--neutral',
-  generating: 'badge badge--run',
-  failed: 'badge badge--bad',
 }
 
 function ScoreCell({ label, value, threshold }: { label: string; value: number | null; threshold: number }) {
@@ -74,12 +78,17 @@ function ScoreCell({ label, value, threshold }: { label: string; value: number |
   const pct = value != null ? Math.min(100, Math.round(value * 100)) : 0
   const threshPct = Math.round(threshold * 100)
   return (
-    <div className={`score ${value == null ? '' : pass ? 'is-pass' : 'is-fail'}`}>
-      <div className="score__label">{label}</div>
-      <div className="score__val">{fmtScore(value)}</div>
-      <div className="score__bar">
-        <i style={{ width: `${pct}%` }} />
-        <span className="thresh" style={{ left: `${threshPct}%` }} />
+    <div className="space-y-2 p-4">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className={cn('font-mono text-2xl font-semibold tracking-tight', value != null && !pass && 'text-destructive')}>
+        {fmtScore(value)}
+      </div>
+      <div className="relative h-1.5 overflow-hidden rounded-full bg-muted">
+        <div
+          className={cn('h-full rounded-full', value == null ? '' : pass ? 'bg-emerald-500' : 'bg-destructive')}
+          style={{ width: `${pct}%` }}
+        />
+        <span className="absolute -inset-y-0.5 w-px bg-muted-foreground" style={{ left: `${threshPct}%` }} />
       </div>
     </div>
   )
@@ -89,8 +98,11 @@ function Disclosure({ label, children }: { label: string; children: ReactNode })
   const [open, setOpen] = useState(false)
   return (
     <div>
-      <button className="disclose" onClick={() => setOpen((o) => !o)}>
-        <ChevronRight size={13} style={{ transform: open ? 'rotate(90deg)' : undefined, transition: 'transform .15s' }} />
+      <button
+        className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
+        onClick={() => setOpen((o) => !o)}
+      >
+        <ChevronRight size={13} className={cn('transition-transform', open && 'rotate-90')} />
         {label}
       </button>
       {open && <div>{children}</div>}
@@ -100,28 +112,51 @@ function Disclosure({ label, children }: { label: string; children: ReactNode })
 
 function LegendDot({ color, label }: { color: string; label: string }) {
   return (
-    <span className="row-flex" style={{ gap: 6, fontSize: 12 }}>
-      <span style={{ width: 9, height: 9, borderRadius: '50%', background: color, flexShrink: 0 }} />
+    <span className="inline-flex items-center gap-1.5 text-xs">
+      <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} />
       {label}
     </span>
   )
 }
 
+function Leader({ children, muted }: { children: ReactNode; muted?: boolean }) {
+  return (
+    <span
+      className={cn(
+        'grid h-7 w-7 shrink-0 place-items-center rounded-md border bg-muted font-mono text-xs font-semibold',
+        muted ? 'text-muted-foreground' : 'text-foreground',
+      )}
+    >
+      {children}
+    </span>
+  )
+}
+
+function ScriptText({ children }: { children: ReactNode }) {
+  return (
+    <p className="mt-2.5 rounded-md border bg-muted/50 px-3 py-2.5 text-sm leading-relaxed text-muted-foreground">
+      {children}
+    </p>
+  )
+}
+
 function BracketRow({ kind, b, url }: { kind: 'intro' | 'outro'; b: TourDetail['brackets'][number]; url?: string }) {
   return (
-    <div className="stop stop--bracket">
-      <div className="stop__row">
-        <span className="leader leader--muted">{kind === 'intro' ? '▸' : '◼'}</span>
-        <span className="badge badge--neutral">{kind}</span>
-        <span className="stop__name muted">{kind === 'intro' ? 'Welcome aboard' : 'Sign-off'}</span>
-        <span className="stop__spacer" />
-        <span className="stop__dur">{fmtSec(b.audioDurationMs)}</span>
+    <div className="border-b bg-muted/30 px-4 py-3 last:border-b-0">
+      <div className="flex items-center gap-2.5">
+        <Leader muted>{kind === 'intro' ? '▸' : '◼'}</Leader>
+        <Badge variant="secondary">{kind}</Badge>
+        <span className="font-medium text-muted-foreground">{kind === 'intro' ? 'Welcome aboard' : 'Sign-off'}</span>
+        <span className="flex-1" />
+        <span className="font-mono text-xs text-muted-foreground">{fmtSec(b.audioDurationMs)}</span>
       </div>
-      {url && <audio controls preload="none" src={url} style={{ marginTop: 11, width: '100%', height: 36 }} />}
+      {url && <audio controls preload="none" src={url} className="mt-2.5 h-9 w-full" />}
       {b.script && (
-        <Disclosure label="Script">
-          <p className="script">{b.script}</p>
-        </Disclosure>
+        <div className="mt-2.5">
+          <Disclosure label="Script">
+            <ScriptText>{b.script}</ScriptText>
+          </Disclosure>
+        </div>
       )}
     </div>
   )
@@ -143,40 +178,42 @@ function StopActions({ trackId }: { trackId: string }) {
       const { job } = await api.createJob({ kind: 'patch_clip', targetId: trackId, ...body })
       setMsg({ ok: true, text: job.dryRun ? 'Preview queued.' : 'Queued — re-synthesizing.' })
     } catch (e) {
-      setMsg({ ok: false, text: e instanceof Error ? e.message : String(e) })
+      setMsg({ ok: false, text: errMsg(e) })
     } finally {
       setBusy(false)
     }
   }
 
   return (
-    <div style={{ marginTop: 10 }}>
-      <div className="row-flex" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-        <Scissors size={12} style={{ color: 'var(--ink-3)', flexShrink: 0 }} />
-        <input style={{ width: 140 }} placeholder="find…" value={find} onChange={(e) => setFind(e.target.value)} />
-        <input style={{ width: 140 }} placeholder="replace…" value={replace} onChange={(e) => setReplace(e.target.value)} />
-        <button className="btn btn--default btn--sm" disabled={busy || !find} onClick={() => fire({ find, replace })}>
+    <div className="mt-2.5">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Scissors size={12} className="shrink-0 text-muted-foreground" />
+        <Input className="h-8 w-36" placeholder="find…" value={find} onChange={(e) => setFind(e.target.value)} />
+        <Input className="h-8 w-36" placeholder="replace…" value={replace} onChange={(e) => setReplace(e.target.value)} />
+        <Button variant="outline" size="sm" disabled={busy || !find} onClick={() => fire({ find, replace })}>
           Preview
-        </button>
-        <button
-          className="btn btn--default btn--sm"
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
           disabled={busy || !find}
           onClick={() => fire({ find, replace, apply: true, confirm: true }, `Apply “${find}” → “${replace}” and re-synth this clip? Spends TTS credits.`)}
         >
           Apply
-        </button>
-        <span className="stop__spacer" />
-        <button
-          className="btn btn--default btn--sm"
+        </Button>
+        <span className="flex-1" />
+        <Button
+          variant="outline"
+          size="sm"
           disabled={busy}
           onClick={() => fire({ revoice: true, apply: true, confirm: true }, 'Re-voice this clip with no text change? Spends TTS credits.')}
         >
           <RefreshCw size={12} /> Re-voice
-        </button>
+        </Button>
       </div>
       {msg && (
-        <div style={{ marginTop: 6, fontSize: 12, color: msg.ok ? 'var(--ink-3)' : 'var(--bad)' }}>
-          {msg.text} {msg.ok && <Link to="/runs" className="row-link">Runs →</Link>}
+        <div className={cn('mt-1.5 text-xs', msg.ok ? 'text-muted-foreground' : 'text-destructive')}>
+          {msg.text} {msg.ok && <Link to="/runs" className="font-medium text-foreground hover:underline">Runs →</Link>}
         </div>
       )}
     </div>
@@ -211,31 +248,33 @@ function StopRow({
     (s): s is EvalScore => !!s && (s.findings.length > 0 || !s.pass || !!asCharm(s.detail)?.sag),
   )
   return (
-    <div className="stop" style={fail ? { background: 'var(--bad-bg)' } : undefined}>
-      <div className="stop__row">
-        <span className="leader">{String(seq).padStart(2, '0')}</span>
-        <span className="badge badge--outline">{type}</span>
-        <span className="stop__name">{name}</span>
-        <span className="stop__spacer" />
+    <div className={cn('border-b px-4 py-3 last:border-b-0', fail && 'bg-destructive/5')}>
+      <div className="flex items-center gap-2.5">
+        <Leader>{String(seq).padStart(2, '0')}</Leader>
+        <Badge variant="outline">{type}</Badge>
+        <span className="font-medium">{name}</span>
+        <span className="flex-1" />
         {grounding && (
-          <span className={`badge ${grounding.pass ? 'badge--ok' : 'badge--warn'}`}>
-            {!grounding.pass && <TriangleAlert size={11} />}
+          <Badge variant={grounding.pass ? 'success' : 'warning'}>
+            {!grounding.pass && <TriangleAlert className="h-3 w-3" />}
             grounding {fmtScore(grounding.value)}
-          </span>
+          </Badge>
         )}
-        <span className="stop__dur">{fmtSec(durationMs)}</span>
+        <span className="font-mono text-xs text-muted-foreground">{fmtSec(durationMs)}</span>
       </div>
       {url ? (
-        <audio controls preload="none" src={url} style={{ marginTop: 11, width: '100%', height: 36 }} />
+        <audio controls preload="none" src={url} className="mt-2.5 h-9 w-full" />
       ) : (
-        !hasAudio && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--ink-3)' }}>no audio</div>
+        !hasAudio && <div className="mt-2 text-xs text-muted-foreground">no audio</div>
       )}
       {(script || notes.length > 0) && (
-        <Disclosure label={notes.length > 0 ? `Script · ${notes.length} note${notes.length === 1 ? '' : 's'}` : 'Script'}>
-          {script && <p className="script">{script}</p>}
-          {notes.map((s) => <DimNote key={s.dimension} score={s} />)}
-          <StopActions trackId={trackId} />
-        </Disclosure>
+        <div className="mt-2.5">
+          <Disclosure label={notes.length > 0 ? `Script · ${notes.length} note${notes.length === 1 ? '' : 's'}` : 'Script'}>
+            {script && <ScriptText>{script}</ScriptText>}
+            {notes.map((s) => <DimNote key={s.dimension} score={s} />)}
+            <StopActions trackId={trackId} />
+          </Disclosure>
+        </div>
       )}
     </div>
   )
@@ -244,48 +283,46 @@ function StopRow({
 function RunHistory({ runs, currentId }: { runs: EvalRunSummary[]; currentId?: string }) {
   return (
     <Disclosure label={`Run history · ${runs.length} eval${runs.length === 1 ? '' : 's'}`}>
-      <div className="tablewrap" style={{ marginTop: 10 }}>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>When</th>
-              <th>Result</th>
+      <div className="mt-2.5 overflow-hidden rounded-xl border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>When</TableHead>
+              <TableHead>Result</TableHead>
               {['Grounding', 'Diversity', 'Charm', 'Veracity'].map((h) => (
-                <th key={h} style={{ textAlign: 'right' }}>{h}</th>
+                <TableHead key={h} className="text-right">{h}</TableHead>
               ))}
-              <th>Model</th>
-              <th>SHA</th>
-            </tr>
-          </thead>
-          <tbody>
+              <TableHead>Model</TableHead>
+              <TableHead>SHA</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {runs.map((r, i) => (
-              <tr key={r.id} className={r.id === currentId ? 'is-active' : ''}>
-                <td className="cell-dim" title={fmtDate(r.createdAt)}>
-                  {i === 0 && <span className="badge badge--outline" style={{ marginRight: 6 }}>current</span>}
+              <TableRow key={r.id} className={cn(r.id === currentId && 'bg-muted/50')}>
+                <TableCell className="text-muted-foreground" title={fmtDate(r.createdAt)}>
+                  {i === 0 && <Badge variant="outline" className="mr-1.5">current</Badge>}
                   {timeAgo(r.createdAt)}
-                </td>
-                <td>
-                  <span className="row-flex" style={{ gap: 6 }}>
-                    <span className={`badge ${r.pass ? 'badge--ok' : 'badge--bad'}`}>
-                      {r.pass ? <CircleCheck size={11} /> : <CircleX size={11} />}
+                </TableCell>
+                <TableCell>
+                  <span className="flex items-center gap-1.5">
+                    <Badge variant={r.pass ? 'success' : 'destructive'}>
+                      {r.pass ? <CircleCheck className="h-3 w-3" /> : <CircleX className="h-3 w-3" />}
                       {r.pass ? 'pass' : 'fail'}
-                    </span>
-                    {r.dryRun && <span className="badge badge--neutral">dry</span>}
+                    </Badge>
+                    {r.dryRun && <Badge variant="secondary">dry</Badge>}
                   </span>
-                </td>
+                </TableCell>
                 {(['grounding', 'diversity', 'charm', 'veracity'] as const).map((k) => (
-                  <td key={k} style={{ textAlign: 'right' }} className="cell-mono">
-                    <span style={{ color: (r[k] ?? 0) < THRESHOLDS[k] ? 'var(--bad)' : undefined }}>
-                      {fmtScore(r[k])}
-                    </span>
-                  </td>
+                  <TableCell key={k} className="text-right font-mono">
+                    <span className={cn((r[k] ?? 0) < THRESHOLDS[k] && 'text-destructive')}>{fmtScore(r[k])}</span>
+                  </TableCell>
                 ))}
-                <td className="cell-dim" style={{ fontSize: 12 }}>{r.narrationModel ?? '—'}</td>
-                <td className="cell-mono cell-dim">{r.gitSha ? r.gitSha.slice(0, 7) : '—'}</td>
-              </tr>
+                <TableCell className="text-muted-foreground">{r.narrationModel ?? '—'}</TableCell>
+                <TableCell className="font-mono text-muted-foreground">{r.gitSha ? r.gitSha.slice(0, 7) : '—'}</TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
     </Disclosure>
   )
@@ -298,10 +335,11 @@ export function TourDetailView() {
   const [signed, setSigned] = useState<SignResult | null>(null)
   const [runs, setRuns] = useState<EvalRunSummary[]>([])
   const [err, setErr] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     if (!id) return
-    api.tour(id).then(setData).catch((e) => setErr(e instanceof Error ? e.message : String(e)))
+    api.tour(id).then(setData).catch((e) => setErr(errMsg(e)))
     api.sign(id).then(setSigned).catch(() => setSigned(null))
   }, [id])
 
@@ -311,10 +349,36 @@ export function TourDetailView() {
     api.evals(slug).then((r) => setRuns(r.runs)).catch(() => setRuns([]))
   }, [data?.tour.slug])
 
-  if (err) return <div className="badge badge--bad" style={{ display: 'block', padding: '10px 14px', borderRadius: 'var(--radius)' }}>{err}</div>
-  if (!data) return <div className="muted">Loading…</div>
+  if (err) {
+    return <Callout variant="error">{err}</Callout>
+  }
+  if (!data) return <div className="text-sm text-muted-foreground">Loading…</div>
 
   const { tour, region, stops, brackets, eval: ev } = data
+
+  // Contextual ops — both SPEND, so confirm first, fire directly, then jump to Runs to watch.
+  async function fireJob(body: Record<string, unknown>, confirmText: string) {
+    if (busy || !window.confirm(confirmText)) return
+    setBusy(true)
+    try {
+      await api.createJob(body)
+      navigate('/runs')
+    } catch (e) {
+      setErr(errMsg(e))
+      setBusy(false)
+    }
+  }
+  const regenerate = () =>
+    fireJob(
+      { kind: 'generate', slug: tour.slug, dryRun: false, maxCostUsd: 5, confirm: true },
+      `Regenerate “${tour.slug}” from scratch? This spends up to ~$5 of TTS credits.`,
+    )
+  const resynth = () =>
+    fireJob(
+      { kind: 'resynth', tourId: tour.id, apply: true, confirm: true },
+      `Re-voice every clip of “${tour.slug}”? This spends TTS credits.`,
+    )
+
   const urlForSeq = new Map(signed?.stops.map((s) => [s.seq, s.url]) ?? [])
   const groundingFor = (seq: number) =>
     ev?.scores.find((s) => s.seq === seq && s.dimension === 'grounding') ?? null
@@ -342,79 +406,80 @@ export function TourDetailView() {
 
   return (
     <div>
-      <button className="pill-link" onClick={() => navigate('/tours')} style={{ marginBottom: 14 }}>
-        <ChevronRight size={13} style={{ transform: 'rotate(180deg)' }} />
+      <button
+        className="mb-3 inline-flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground"
+        onClick={() => navigate('/tours')}
+      >
+        <ChevronRight size={13} className="rotate-180" />
         Tours
       </button>
 
-      <div className="pagehead">
-        <div>
-          <div className="wrap-flex" style={{ gap: 11 }}>
-            <h1 className="pagehead__title">{tour.headline}</h1>
-            <span className={STATUS_BADGE[tour.status] ?? 'badge badge--neutral'}>{tour.status}</span>
-            <span className="tag">{tour.slug}</span>
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4 border-b border-border pb-5">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h1 className="text-2xl font-semibold tracking-tight">{tour.headline}</h1>
+            <Badge variant={TOUR_STATUS_VARIANT[tour.status] ?? 'secondary'}>{tour.status}</Badge>
+            <span className="rounded border bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground">{tour.slug}</span>
           </div>
-          {tour.summary && <p className="pagehead__desc">{tour.summary}</p>}
-          <p className="muted" style={{ fontSize: 12.5, marginTop: 8 }}>
+          {tour.summary && <p className="mt-1 text-sm text-muted-foreground">{tour.summary}</p>}
+          <p className="mt-2 text-xs text-muted-foreground">
             {region?.displayName} · {tour.startAnchor.name} → {tour.endAnchor.name} · {fmtMiles(tour.distanceMeters)} · {fmtDuration(tour.durationSeconds)}
           </p>
         </div>
-        <div className="pagehead__actions" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
-          <div className="row-flex" style={{ gap: 8 }}>
-            <button className="btn btn--default btn--sm" onClick={() => navigate('/runs')}>
-              <RefreshCw size={13} />
-              Resynth
-            </button>
-          </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" disabled={busy} onClick={() => void regenerate()}>
+            <Sparkles size={13} /> Generate
+          </Button>
+          <Button variant="outline" size="sm" disabled={busy} onClick={() => void resynth()}>
+            <RefreshCw size={13} /> Resynth
+          </Button>
         </div>
       </div>
 
       {integrityBroken && integrity && (
-        <div className="dangerzone dangerzone--del" style={{ marginBottom: 'var(--gap)' }}>
-          <div className="dangerzone__title"><TriangleAlert size={14} /> Integrity — this ready tour is broken</div>
-          <div className="dangerzone__body">
-            A <b>ready</b> tour must have audio on every stop and bracket, and attribution on every story stop.
-            {integrity.silentStops.length > 0 && <> Stops with no audio: <b>{integrity.silentStops.join(', ')}</b>.</>}
-            {integrity.silentBrackets.length > 0 && <> Brackets with no audio: <b>{integrity.silentBrackets.join(', ')}</b>.</>}
-            {integrity.unattributed.length > 0 && <> Story stops missing CC BY-SA attribution: <b>{integrity.unattributed.join(', ')}</b>.</>}
+        <Callout variant="error" className="mb-6 border-destructive/30 bg-destructive/5">
+          <div className="flex items-center gap-1.5 font-medium text-destructive">
+            <TriangleAlert className="h-3.5 w-3.5" /> Integrity — this ready tour is broken
+          </div>
+          <div className="mt-1 leading-relaxed text-muted-foreground">
+            A <span className="font-medium text-foreground">ready</span> tour must have audio on every stop and bracket, and attribution on every story stop.
+            {integrity.silentStops.length > 0 && <> Stops with no audio: <span className="font-medium text-foreground">{integrity.silentStops.join(', ')}</span>.</>}
+            {integrity.silentBrackets.length > 0 && <> Brackets with no audio: <span className="font-medium text-foreground">{integrity.silentBrackets.join(', ')}</span>.</>}
+            {integrity.unattributed.length > 0 && <> Story stops missing CC BY-SA attribution: <span className="font-medium text-foreground">{integrity.unattributed.join(', ')}</span>.</>}
             {' '}Re-run generate or resynth, or flip the status off ready.
           </div>
-        </div>
+        </Callout>
       )}
 
       {tour.polyline.length > 1 && (
-        <div className="card" style={{ marginBottom: 'var(--gap)', overflow: 'hidden' }}>
-          <div className="card__head">
-            <span className="card__title">Route</span>
-            <span className="muted card__more" style={{ fontSize: 12 }}>{stopPins.length} of {stops.length} stops placed</span>
+        <Card className="mb-6 overflow-hidden">
+          <div className="flex items-center gap-2.5 border-b px-4 py-3">
+            <span className="text-sm font-semibold">Route</span>
+            <span className="ml-auto text-xs text-muted-foreground">{stopPins.length} of {stops.length} stops placed</span>
           </div>
           <RouteMap polyline={tour.polyline} start={tour.startAnchor} end={tour.endAnchor} stops={stopPins} />
-          <div className="row-flex" style={{ padding: '10px 16px', gap: 14 }}>
+          <div className="flex items-center gap-3.5 px-4 py-2.5">
             <LegendDot color="#10b981" label="Start" />
             <LegendDot color="#ef4444" label="End" />
             <LegendDot color={STOP_TYPE_COLOR.story} label="story" />
             <LegendDot color={STOP_TYPE_COLOR.scenic} label="scenic" />
             <LegendDot color={STOP_TYPE_COLOR.break} label="break" />
           </div>
-        </div>
+        </Card>
       )}
 
       {ev && (
-        <div className="card" style={{ marginBottom: 'var(--gap)' }}>
-          <div className="card__head">
-            <span className="card__title">Latest evaluation</span>
-            <span className={`badge ${ev.pass ? 'badge--ok' : 'badge--bad'}`}>
-              {ev.pass ? <CircleCheck size={11} /> : <CircleX size={11} />}
+        <Card className="mb-6 overflow-hidden">
+          <div className="flex flex-wrap items-center gap-2.5 border-b px-4 py-3">
+            <span className="text-sm font-semibold">Latest evaluation</span>
+            <Badge variant={ev.pass ? 'success' : 'destructive'}>
+              {ev.pass ? <CircleCheck className="h-3 w-3" /> : <CircleX className="h-3 w-3" />}
               {ev.pass ? 'pass' : 'fail'}
-            </span>
-            {failingStops.length > 0 && (
-              <span className="badge badge--warn">{failingStops.length} stop below bar</span>
-            )}
-            <span className="card__more muted" style={{ fontSize: 12 }}>
-              {ev.narrationModel} · {timeAgo(ev.createdAt)}
-            </span>
+            </Badge>
+            {failingStops.length > 0 && <Badge variant="warning">{failingStops.length} stop below bar</Badge>}
+            <span className="ml-auto text-xs text-muted-foreground">{ev.narrationModel} · {timeAgo(ev.createdAt)}</span>
           </div>
-          <div className="scoregrid">
+          <div className="grid grid-cols-2 divide-x divide-y sm:grid-cols-5 sm:divide-y-0">
             {DIMS.map(([k, label]) => (
               <ScoreCell
                 key={k}
@@ -424,15 +489,13 @@ export function TourDetailView() {
               />
             ))}
           </div>
-        </div>
+        </Card>
       )}
 
       {runs.length > 0 && <RunHistory runs={runs} currentId={ev?.id} />}
 
-      <div className="seclabel" style={{ marginTop: 26, display: 'flex', justifyContent: 'space-between' }}>
-        <span>Itinerary · {stops.length} stops</span>
-      </div>
-      <div className="itin">
+      <SectionLabel className="mb-2.5 mt-6">Itinerary · {stops.length} stops</SectionLabel>
+      <div className="overflow-hidden rounded-xl border">
         {intro && <BracketRow kind="intro" b={intro} url={signed?.intro?.url} />}
         {stops.map((s) => (
           <StopRow

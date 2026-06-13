@@ -2,7 +2,8 @@
 @tailwind components;
 @tailwind utilities;
 
-/* shadcn/ui default ("zinc") theme — matches ui.shadcn.com. Dark-first (the SPA sets .dark). */
+/* shadcn/ui theme — single source of truth for the admin console. zinc neutrals with a
+   Skipper-pine primary. The SPA toggles `.dark` on <html>; light is the default. */
 @layer base {
   :root {
     --background: 0 0% 100%;
@@ -54,6 +55,13 @@
 @layer base {
   * {
     @apply border-border;
+  }
+  /* The app shell is a full-height grid (`grid h-full`); without these the layout collapses
+     to content height and the sidebar / sticky topbar / scroll area all break. */
+  html,
+  body,
+  #root {
+    height: 100%;
   }
   body {
     @apply bg-background text-foreground;
