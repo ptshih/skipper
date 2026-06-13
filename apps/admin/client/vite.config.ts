@@ -25,5 +25,23 @@ export default defineConfig({
       '/health': 'http://localhost:8788',
     },
   },
-  build: { outDir: 'dist', emptyOutDir: true },
+  build: {
+    outDir: 'dist',
+    emptyOutDir: true,
+    // Split heavy deps out of the app chunk (vite 8 / rolldown codeSplitting groups; groups match
+    // in order, first wins). This is an internal IAP-gated tool that loads once, so the win is
+    // modest — stable vendor caching across deploys + clearing the >500 kB advisory.
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            { name: 'maps', test: /@googlemaps/ },
+            { name: 'tanstack', test: /@tanstack/ },
+            { name: 'react-vendor', test: /[\\/]react(-dom)?[@\\/]/ },
+            { name: 'vendor', test: /node_modules/ },
+          ],
+        },
+      },
+    },
+  },
 })
