@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { Activity, Anchor, BookOpen, Compass, Map, MapPin, Moon, Search, Sun } from 'lucide-react'
+import { Activity, Anchor, BookOpen, Compass, Map, MapPin, Menu, Moon, Search, Sun } from 'lucide-react'
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
 
 const NAV = [
@@ -14,9 +15,9 @@ const itemBase =
   'relative flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-left text-sm font-medium transition-colors'
 const itemInactive = 'text-muted-foreground hover:bg-foreground/5 hover:text-foreground'
 
-function NavItem({ to, label, icon: Icon }: { to: string; label: string; icon: React.ElementType }) {
+function NavItem({ to, label, icon: Icon, onClick }: { to: string; label: string; icon: React.ElementType; onClick?: () => void }) {
   return (
-    <NavLink to={to} className={({ isActive }) => cn(itemBase, isActive ? 'text-foreground' : itemInactive)}>
+    <NavLink to={to} onClick={onClick} className={({ isActive }) => cn(itemBase, isActive ? 'text-foreground' : itemInactive)}>
       {({ isActive }) => (
         <>
           {isActive && <span className="absolute -left-3 inset-y-1 w-0.5 rounded-r bg-foreground" />}
@@ -28,9 +29,85 @@ function NavItem({ to, label, icon: Icon }: { to: string; label: string; icon: R
   )
 }
 
+function BrandMark() {
+  return (
+    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground">
+      <Anchor size={16} />
+    </span>
+  )
+}
+
+// The sidebar's inner content — shared by the fixed desktop rail and the mobile slide-over.
+function SidebarBody({
+  theme,
+  onToggleTheme,
+  onSearch,
+  onNavigate,
+}: {
+  theme: string
+  onToggleTheme: () => void
+  onSearch: () => void
+  onNavigate?: () => void
+}) {
+  return (
+    <>
+      <div className="border-b border-border px-3 py-3.5">
+        <div className="flex items-center gap-3 px-2">
+          <BrandMark />
+          <span className="text-sm font-semibold text-foreground">Skipper</span>
+          <span className="ml-auto rounded-full border px-2 py-0.5 font-mono text-[10px] text-muted-foreground">admin</span>
+        </div>
+      </div>
+
+      <div className="px-3 py-3">
+        <button onClick={() => { onNavigate?.(); onSearch() }} className={cn(itemBase, itemInactive)}>
+          <Search size={18} className="shrink-0 text-muted-foreground" />
+          Search
+          <kbd className="ml-auto rounded border bg-background px-1.5 font-mono text-[10px] leading-relaxed text-muted-foreground">⌘K</kbd>
+        </button>
+      </div>
+
+      <nav className="flex flex-col gap-0.5 border-t border-border px-3 py-3">
+        {NAV.map((n) => (
+          <NavItem key={n.to} to={n.to} label={n.label} icon={n.icon} onClick={onNavigate} />
+        ))}
+      </nav>
+
+      <div className="flex-1" />
+
+      <nav className="flex flex-col gap-0.5 px-3 py-3">
+        <NavItem to="/reference" label="Reference" icon={BookOpen} onClick={onNavigate} />
+      </nav>
+
+      <div className="border-t border-border px-3 py-3.5">
+        <div className="flex items-center gap-3 px-2">
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">F</span>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-medium leading-tight text-foreground">Founder</div>
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+              IAP-gated
+            </div>
+          </div>
+          <button
+            onClick={onToggleTheme}
+            title="Toggle theme"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
+          >
+            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
+        </div>
+      </div>
+    </>
+  )
+}
+
 export function Layout() {
   const [theme, setTheme] = useState(() => localStorage.getItem('sk_theme') || 'light')
   const [palette, setPalette] = useState(false)
+  const [mobileNav, setMobileNav] = useState(false)
+
+  const toggleTheme = () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark')
@@ -50,64 +127,44 @@ export function Layout() {
 
   return (
     <div className="relative isolate flex min-h-svh w-full flex-col bg-zinc-100 lg:flex-row dark:bg-zinc-950">
-      {/* Sidebar — sits on the page (no right border); main content floats as a panel beside it. */}
+      {/* Sidebar (desktop) — sits on the page; main content floats as a panel beside it. */}
       <aside className="fixed inset-y-0 left-0 z-10 flex w-64 flex-col max-lg:hidden">
-        <div className="border-b border-border px-3 py-3.5">
-          <div className="flex items-center gap-3 px-2">
-            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground">
-              <Anchor size={16} />
-            </span>
-            <span className="text-sm font-semibold text-foreground">Skipper</span>
-            <span className="ml-auto rounded-full border px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
-              admin
-            </span>
-          </div>
-        </div>
-
-        <div className="px-3 py-3">
-          <button onClick={() => setPalette(true)} className={cn(itemBase, itemInactive)}>
-            <Search size={18} className="shrink-0 text-muted-foreground" />
-            Search
-            <kbd className="ml-auto rounded border bg-background px-1.5 font-mono text-[10px] leading-relaxed text-muted-foreground">
-              ⌘K
-            </kbd>
-          </button>
-        </div>
-
-        <nav className="flex flex-col gap-0.5 border-t border-border px-3 py-3">
-          {NAV.map((n) => (
-            <NavItem key={n.to} to={n.to} label={n.label} icon={n.icon} />
-          ))}
-        </nav>
-
-        <div className="flex-1" />
-
-        <nav className="flex flex-col gap-0.5 px-3 py-3">
-          <NavItem to="/reference" label="Reference" icon={BookOpen} />
-        </nav>
-
-        <div className="border-t border-border px-3 py-3.5">
-          <div className="flex items-center gap-3 px-2">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
-              F
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium leading-tight text-foreground">Founder</div>
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
-                IAP-gated
-              </div>
-            </div>
-            <button
-              onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
-              title="Toggle theme"
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
-            >
-              {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-            </button>
-          </div>
-        </div>
+        <SidebarBody theme={theme} onToggleTheme={toggleTheme} onSearch={() => setPalette(true)} />
       </aside>
+
+      {/* Top bar (mobile) — hamburger opens the sidebar as a slide-over. */}
+      <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border bg-zinc-100/90 px-4 backdrop-blur lg:hidden dark:bg-zinc-950/90">
+        <button
+          onClick={() => setMobileNav(true)}
+          aria-label="Open navigation"
+          className="grid h-9 w-9 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
+        >
+          <Menu size={18} />
+        </button>
+        <BrandMark />
+        <span className="text-sm font-semibold text-foreground">Skipper</span>
+        <span className="flex-1" />
+        <button
+          onClick={toggleTheme}
+          title="Toggle theme"
+          className="grid h-9 w-9 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
+        >
+          {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+        </button>
+      </header>
+
+      {/* Mobile slide-over nav */}
+      <Sheet open={mobileNav} onOpenChange={setMobileNav}>
+        <SheetContent side="left" className="p-0">
+          <SheetTitle className="sr-only">Navigation</SheetTitle>
+          <SidebarBody
+            theme={theme}
+            onToggleTheme={toggleTheme}
+            onSearch={() => setPalette(true)}
+            onNavigate={() => setMobileNav(false)}
+          />
+        </SheetContent>
+      </Sheet>
 
       {/* Main — the floating content panel (rounded, ringed, on the gray page). */}
       <main className="flex flex-1 flex-col pb-2 max-lg:pt-2 lg:min-w-0 lg:py-2 lg:pr-2 lg:pl-64">

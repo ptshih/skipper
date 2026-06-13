@@ -53,7 +53,7 @@ export function RoamView() {
   useEffect(() => {
     api.pois()
       .then((r) => setPois(r.pois))
-      .catch((e) => setErr(errMsg(e)))
+      .catch((e) => setErr(`Couldn't load roam data — ${errMsg(e)}`))
   }, [])
 
   const coverage = useMemo(() => buildCoverage(pois), [pois])
@@ -64,11 +64,12 @@ export function RoamView() {
 
   // Fire the region-discovery sweep for one region card, then jump to Runs. Free — no confirm.
   async function discover(regionSlug: string) {
+    setErr(null)
     try {
       await discoverPois(regionSlug, true)
       navigate('/runs')
     } catch (e) {
-      alert(`Discover failed: ${errMsg(e)}`)
+      setErr(`Discover failed — ${errMsg(e)}`)
     }
   }
 
@@ -76,11 +77,12 @@ export function RoamView() {
   async function generateRoam(r: RegionCoverage) {
     if (!window.confirm(`Generate roam clips for ${r.regionName}? This spends LLM + TTS credits per clip.`)) return
     const bbox = REGION_BBOX[r.regionSlug]
+    setErr(null)
     try {
       await api.createJob({ kind: 'generate_roam', ...(bbox ? { bbox } : {}), apply: true, confirm: true })
       navigate('/runs')
     } catch (e) {
-      alert(`Generate roam failed: ${errMsg(e)}`)
+      setErr(`Generate roam failed — ${errMsg(e)}`)
     }
   }
 
@@ -91,11 +93,7 @@ export function RoamView() {
         description="Free-roam coverage by region + the encounter clips already synthesized. Discover (free) to grow the corpus, then Generate roam (spends) to narrate it."
       />
 
-      {err && (
-        <Callout variant="error">
-          <span className="font-medium">Error loading roam data:</span> {err}
-        </Callout>
-      )}
+      {err && <Callout variant="error">{err}</Callout>}
 
       {/* ── COVERAGE ── */}
       <section className="space-y-3">
@@ -250,6 +248,7 @@ function RoamPlayer({ poiId }: { poiId: string }) {
   const [err, setErr] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [resynthing, setResynthing] = useState(false)
+  const [actionErr, setActionErr] = useState<string | null>(null)
 
   useEffect(() => {
     setLoading(true)
@@ -275,11 +274,12 @@ function RoamPlayer({ poiId }: { poiId: string }) {
   async function handleResynth() {
     if (!window.confirm('Re-synthesize the roam clip for this POI? This spends ~$0.01 in TTS credits and replaces the current clip.')) return
     setResynthing(true)
+    setActionErr(null)
     try {
       const { job } = await api.createJob({ kind: 'resynth_roam_clip', poiId, apply: true, confirm: true })
       navigate(`/runs#${job.id}`)
     } catch (e) {
-      alert(`Re-synth failed: ${errMsg(e)}`)
+      setActionErr(`Re-synth failed — ${errMsg(e)}`)
     } finally {
       setResynthing(false)
     }
@@ -302,6 +302,11 @@ function RoamPlayer({ poiId }: { poiId: string }) {
           {resynthing ? 'Queuing…' : 'Re-synth clip'}
         </Button>
       </div>
+      {actionErr && (
+        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          {actionErr}
+        </div>
+      )}
       {suspicious && (
         <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
           Clip duration ({durLabel} for {wordCount} words) looks like a TTS duplicate-audio defect. Re-synth to fix.
