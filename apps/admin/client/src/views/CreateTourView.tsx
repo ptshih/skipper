@@ -1,7 +1,8 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useNavigate } from '@tanstack/react-router'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Map, Wand2, X } from 'lucide-react'
-import { api, type Proposal, type Region } from '@/lib/api'
+import { api, type Proposal } from '@/lib/api'
 import { errMsg } from '@/lib/format'
 import { WaypointMap, type MapWaypoint } from '@/components/WaypointMap'
 import { PageHeader } from '@/components/PageHeader'
@@ -38,7 +39,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 
 export function CreateTourView() {
   const nav = useNavigate()
-  const [regions, setRegions] = useState<Region[]>([])
+  const qc = useQueryClient()
   const [step, setStep] = useState<1 | 2 | 3>(1)
   const [prompt, setPrompt] = useState({
     regionSlug: '',
@@ -49,9 +50,6 @@ export function CreateTourView() {
     vibe: '',
   })
   const [proposal, setProposal] = useState<Proposal | null>(null)
-  const [proposing, setProposing] = useState(false)
-  const [creating, setCreating] = useState(false)
-  const [err, setErr] = useState<string | null>(null)
   const [createdId, setCreatedId] = useState<string | null>(null)
 
   const [slug, setSlug] = useState('')
@@ -61,19 +59,16 @@ export function CreateTourView() {
   const [endName, setEndName] = useState('')
   const [waypoints, setWaypoints] = useState<EditWaypoint[]>([])
 
-  useEffect(() => {
-    api.regions().then((r) => setRegions(r.regions)).catch(() => {})
-  }, [])
+  const { data: regions = [] } = useQuery({ queryKey: ['regions'], queryFn: async () => (await api.regions()).regions })
 
   const region = regions.find((r) => r.slug === prompt.regionSlug)
   const setP = (k: keyof typeof prompt) => (e: { target: { value: string } }) =>
     setPrompt((p) => ({ ...p, [k]: e.target.value }))
 
-  async function doPropose() {
-    setProposing(true)
-    setErr(null)
-    try {
-      const { proposal } = await api.propose({ ...prompt, regionName: region?.displayName ?? prompt.regionName })
+  // The skipper proposes a route; on success we seed the editable draft fields + advance the stepper.
+  const proposeMut = useMutation({
+    mutationFn: () => api.propose({ ...prompt, regionName: region?.displayName ?? prompt.regionName }),
+    onSuccess: ({ proposal }) => {
       setProposal(proposal)
       setHeadline(proposal.headline)
       setSummary(proposal.summary)
@@ -82,12 +77,8 @@ export function CreateTourView() {
       setEndName(proposal.endAnchorName)
       setWaypoints(proposal.waypoints.map((w) => ({ label: w.label, rationale: w.rationale, lat: w.lat, lng: w.lng })))
       setStep(2)
-    } catch (e) {
-      setErr(errMsg(e))
-    } finally {
-      setProposing(false)
-    }
-  }
+    },
+  })
 
   const moveWaypoint = (i: number, lat: number, lng: number) =>
     setWaypoints((ws) => ws.map((w, j) => (j === i ? { ...w, lat, lng } : w)))
@@ -100,13 +91,11 @@ export function CreateTourView() {
   const canCreate =
     !!slug && !!headline && !!startName && !!endName && placed.length >= 2 && placed.length === waypoints.length
 
-  async function doCreate() {
-    setCreating(true)
-    setErr(null)
-    try {
+  const createMut = useMutation({
+    mutationFn: () => {
       const first = waypoints[0]!
       const last = waypoints[waypoints.length - 1]!
-      const body = {
+      return api.createTour({
         slug,
         regionSlug: prompt.regionSlug,
         regionName: region?.displayName ?? prompt.regionName,
@@ -122,16 +111,16 @@ export function CreateTourView() {
               proposed: proposal.waypoints.map((w) => ({ label: w.label, lat: w.lat, lng: w.lng, rationale: w.rationale })),
             }
           : undefined,
-      }
-      const { tour } = await api.createTour(body)
+      })
+    },
+    onSuccess: ({ tour }) => {
       setCreatedId(tour.id)
       setStep(3)
-    } catch (e) {
-      setErr(errMsg(e))
-    } finally {
-      setCreating(false)
-    }
-  }
+      qc.invalidateQueries({ queryKey: ['tours'] })
+    },
+  })
+
+  const err = proposeMut.error ?? createMut.error
 
   const mapWaypoints: MapWaypoint[] = waypoints
 
@@ -169,7 +158,7 @@ export function CreateTourView() {
         ))}
       </div>
 
-      {err && <Callout variant="error" className="mb-6">{err}</Callout>}
+      {err && <Callout variant="error" className="mb-6">{errMsg(err)}</Callout>}
 
       {step === 1 && (
         <Card className="max-w-3xl p-5">
@@ -214,11 +203,11 @@ export function CreateTourView() {
           </div>
           <hr className="my-5 border-border" />
           <Button
-            onClick={() => void doPropose()}
-            disabled={proposing || !prompt.regionSlug || !prompt.roughStart || !prompt.roughEnd}
+            onClick={() => proposeMut.mutate()}
+            disabled={proposeMut.isPending || !prompt.regionSlug || !prompt.roughStart || !prompt.roughEnd}
           >
             <Wand2 size={15} />
-            {proposing ? 'Skipper is plotting…' : 'Propose route'}
+            {proposeMut.isPending ? 'Skipper is plotting…' : 'Propose route'}
           </Button>
         </Card>
       )}
@@ -277,11 +266,11 @@ export function CreateTourView() {
             <div className="flex items-center gap-2.5">
               <Button variant="ghost" onClick={() => setStep(1)}>Back</Button>
               <span className="flex-1" />
-              <Button variant="outline" onClick={() => void doPropose()} disabled={proposing}>
+              <Button variant="outline" onClick={() => proposeMut.mutate()} disabled={proposeMut.isPending}>
                 <Wand2 size={13} /> Re-propose
               </Button>
-              <Button onClick={() => void doCreate()} disabled={creating || !canCreate}>
-                <Check size={13} /> {creating ? 'Creating draft…' : 'Create draft'}
+              <Button onClick={() => createMut.mutate()} disabled={createMut.isPending || !canCreate}>
+                <Check size={13} /> {createMut.isPending ? 'Creating draft…' : 'Create draft'}
               </Button>
             </div>
           </div>

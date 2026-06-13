@@ -1,7 +1,8 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from '@tanstack/react-router'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronRight, CircleCheck, CircleX, RefreshCw, Scissors, Sparkles, TriangleAlert } from 'lucide-react'
-import { api, type CharmDetail, type EvalRunSummary, type EvalScore, type SignResult, type TourDetail } from '@/lib/api'
+import { api, type CharmDetail, type EvalRunSummary, type EvalScore, type TourDetail } from '@/lib/api'
 import { RouteMap, STOP_TYPE_COLOR, type RouteStopPin } from '@/components/RouteMap'
 import { errMsg, fmtDate, fmtDuration, fmtMiles, fmtScore, fmtSec, timeAgo } from '@/lib/format'
 import { TOUR_STATUS_VARIANT } from '@/lib/status'
@@ -165,23 +166,24 @@ function BracketRow({ kind, b, url }: { kind: 'intro' | 'outro'; b: TourDetail['
 /** Per-stop tuning: a literal find/replace patch (preview or apply) and a plain re-voice — both
  *  fire a `patch_clip` job at this stop's track. Async: a launched job is watched in Runs. */
 function StopActions({ trackId }: { trackId: string }) {
+  const qc = useQueryClient()
   const [find, setFind] = useState('')
   const [replace, setReplace] = useState('')
-  const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
-  async function fire(body: Record<string, unknown>, confirmText?: string) {
-    if (confirmText && !window.confirm(confirmText)) return
-    setBusy(true)
-    setMsg(null)
-    try {
-      const { job } = await api.createJob({ kind: 'patch_clip', targetId: trackId, ...body })
+  const patchMut = useMutation({
+    mutationFn: (body: Record<string, unknown>) => api.createJob({ kind: 'patch_clip', targetId: trackId, ...body }),
+    onSuccess: ({ job }) => {
       setMsg({ ok: true, text: job.dryRun ? 'Preview queued.' : 'Queued — re-synthesizing.' })
-    } catch (e) {
-      setMsg({ ok: false, text: errMsg(e) })
-    } finally {
-      setBusy(false)
-    }
+      qc.invalidateQueries({ queryKey: ['runs'] })
+    },
+    onError: (e) => setMsg({ ok: false, text: errMsg(e) }),
+  })
+
+  function fire(body: Record<string, unknown>, confirmText?: string) {
+    if (confirmText && !window.confirm(confirmText)) return
+    setMsg(null)
+    patchMut.mutate(body)
   }
 
   return (
@@ -190,13 +192,13 @@ function StopActions({ trackId }: { trackId: string }) {
         <Scissors size={12} className="shrink-0 text-muted-foreground" />
         <Input className="h-8 w-36" placeholder="find…" value={find} onChange={(e) => setFind(e.target.value)} />
         <Input className="h-8 w-36" placeholder="replace…" value={replace} onChange={(e) => setReplace(e.target.value)} />
-        <Button variant="outline" size="sm" disabled={busy || !find} onClick={() => fire({ find, replace })}>
+        <Button variant="outline" size="sm" disabled={patchMut.isPending || !find} onClick={() => fire({ find, replace })}>
           Preview
         </Button>
         <Button
           variant="outline"
           size="sm"
-          disabled={busy || !find}
+          disabled={patchMut.isPending || !find}
           onClick={() => fire({ find, replace, apply: true, confirm: true }, `Apply “${find}” → “${replace}” and re-synth this clip? Spends TTS credits.`)}
         >
           Apply
@@ -205,7 +207,7 @@ function StopActions({ trackId }: { trackId: string }) {
         <Button
           variant="outline"
           size="sm"
-          disabled={busy}
+          disabled={patchMut.isPending}
           onClick={() => fire({ revoice: true, apply: true, confirm: true }, 'Re-voice this clip with no text change? Spends TTS credits.')}
         >
           <RefreshCw size={12} /> Re-voice
@@ -331,43 +333,35 @@ function RunHistory({ runs, currentId }: { runs: EvalRunSummary[]; currentId?: s
 export function TourDetailView() {
   const { id } = useParams({ strict: false })
   const navigate = useNavigate()
-  const [data, setData] = useState<TourDetail | null>(null)
-  const [signed, setSigned] = useState<SignResult | null>(null)
-  const [runs, setRuns] = useState<EvalRunSummary[]>([])
-  const [err, setErr] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
+  const qc = useQueryClient()
 
-  useEffect(() => {
-    if (!id) return
-    api.tour(id).then(setData).catch((e) => setErr(errMsg(e)))
-    api.sign(id).then(setSigned).catch(() => setSigned(null))
-  }, [id])
+  const { data, error } = useQuery({ queryKey: ['tour', id], queryFn: () => api.tour(id!), enabled: !!id })
+  // Signed audio URLs — a failure here is non-fatal (the page renders without playable audio).
+  const { data: signed } = useQuery({ queryKey: ['sign', id], queryFn: () => api.sign(id!), enabled: !!id })
+  const { data: evalsData } = useQuery({
+    queryKey: ['evals', data?.tour.slug],
+    queryFn: () => api.evals(data!.tour.slug),
+    enabled: !!data?.tour.slug,
+  })
+  const runs = evalsData?.runs ?? []
 
-  useEffect(() => {
-    const slug = data?.tour.slug
-    if (!slug) return
-    api.evals(slug).then((r) => setRuns(r.runs)).catch(() => setRuns([]))
-  }, [data?.tour.slug])
-
-  if (err) {
-    return <Callout variant="error">{err}</Callout>
+  // Contextual ops — both SPEND, so confirm first, fire, then jump to Runs to watch.
+  const jobMut = useMutation({
+    mutationFn: (body: Record<string, unknown>) => api.createJob(body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['runs'] })
+      navigate({ to: '/runs' })
+    },
+  })
+  function fireJob(body: Record<string, unknown>, confirmText: string) {
+    if (jobMut.isPending || !window.confirm(confirmText)) return
+    jobMut.mutate(body)
   }
+
+  if (error) return <Callout variant="error">{errMsg(error)}</Callout>
   if (!data) return <div className="text-sm text-muted-foreground">Loading…</div>
 
   const { tour, region, stops, brackets, eval: ev } = data
-
-  // Contextual ops — both SPEND, so confirm first, fire directly, then jump to Runs to watch.
-  async function fireJob(body: Record<string, unknown>, confirmText: string) {
-    if (busy || !window.confirm(confirmText)) return
-    setBusy(true)
-    try {
-      await api.createJob(body)
-      navigate({ to: '/runs' })
-    } catch (e) {
-      setErr(errMsg(e))
-      setBusy(false)
-    }
-  }
   const regenerate = () =>
     fireJob(
       { kind: 'generate', slug: tour.slug, dryRun: false, maxCostUsd: 5, confirm: true },
@@ -427,10 +421,10 @@ export function TourDetailView() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" disabled={busy} onClick={() => void regenerate()}>
+          <Button variant="outline" size="sm" disabled={jobMut.isPending} onClick={() => void regenerate()}>
             <Sparkles size={13} /> Generate
           </Button>
-          <Button variant="outline" size="sm" disabled={busy} onClick={() => void resynth()}>
+          <Button variant="outline" size="sm" disabled={jobMut.isPending} onClick={() => void resynth()}>
             <RefreshCw size={13} /> Resynth
           </Button>
         </div>

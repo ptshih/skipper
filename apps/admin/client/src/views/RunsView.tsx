@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Activity, CircleX,
   ExternalLink, Filter, Map, RefreshCw, Scissors, Search, Sparkles, Trash2, X, Zap,
 } from 'lucide-react'
 import {
   api,
-  type GenJob, type JobStatus, type RunEvent,
+  type JobStatus, type RunEvent,
 } from '@/lib/api'
 import { errMsg, fmtCost, fmtDate, timeAgo } from '@/lib/format'
 import { JOB_STATUS_VARIANT } from '@/lib/status'
@@ -46,44 +47,32 @@ function PulseDot() {
 
 export function RunsView() {
   const navigate = useNavigate()
-  const [runs, setRuns] = useState<RunEvent[]>([])
-  const [err, setErr] = useState<string | null>(null)
+  const qc = useQueryClient()
   const [src, setSrc] = useState<'all' | 'job' | 'eval'>('all')
   const [kindFilter, setKindFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [q, setQ] = useState('')
   const [drawerRun, setDrawerRun] = useState<RunEvent | null>(null)
-  const [sweeping, setSweeping] = useState(false)
 
-  const refresh = async () => {
-    try {
-      setRuns((await api.runs()).runs)
-      setErr(null)
-    } catch (e) {
-      setErr(errMsg(e))
-    }
-  }
+  // Auto-refreshing list — the setInterval poll is now a TanStack Query refetchInterval.
+  const { data: runs = [], error } = useQuery({
+    queryKey: ['runs'],
+    queryFn: async () => (await api.runs()).runs,
+    refetchInterval: 15000,
+  })
 
   // The one homeless global op: delete R2 clips no track/frame references. Spends nothing
   // but DELETES bytes, so gate behind a confirm; the launched job is watched on the timeline.
-  async function sweepOrphans() {
+  const sweepMut = useMutation({
+    mutationFn: () => api.createJob({ kind: 'sweep_orphans', allTours: true, apply: true, confirm: true }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['runs'] }),
+  })
+  function sweepOrphans() {
     if (!window.confirm('Sweep orphaned clips across ALL tours? This permanently DELETES R2 bytes that no track or frame references.')) return
-    setSweeping(true)
-    try {
-      await api.createJob({ kind: 'sweep_orphans', allTours: true, apply: true, confirm: true })
-      await refresh()
-    } catch (e) {
-      setErr(errMsg(e))
-    } finally {
-      setSweeping(false)
-    }
+    sweepMut.mutate()
   }
 
-  useEffect(() => {
-    void refresh()
-    const t = setInterval(() => void refresh(), 15000)
-    return () => clearInterval(t)
-  }, [])
+  const err = error ?? sweepMut.error
 
   const filtered = useMemo(() => runs.filter((r) => {
     if (src !== 'all' && r.source !== src) return false
@@ -120,18 +109,18 @@ export function RunsView() {
         actions={
           <Button
             variant="outline"
-            disabled={sweeping}
-            onClick={() => void sweepOrphans()}
+            disabled={sweepMut.isPending}
+            onClick={() => sweepOrphans()}
             title="Maintenance — delete R2 clips no track or frame references"
           >
-            <Trash2 className="h-4 w-4" /> {sweeping ? 'Sweeping…' : 'Sweep orphans'}
+            <Trash2 className="h-4 w-4" /> {sweepMut.isPending ? 'Sweeping…' : 'Sweep orphans'}
           </Button>
         }
       />
 
       {err && (
         <Callout variant="error">
-          <span className="font-medium">Error loading runs:</span> {err}
+          <span className="font-medium">Error loading runs:</span> {errMsg(err)}
         </Callout>
       )}
 
@@ -281,9 +270,7 @@ export function RunsView() {
         </div>
       </div>
 
-      {drawerRun && (
-        <RunDrawer run={drawerRun} onClose={() => setDrawerRun(null)} onChanged={() => void refresh()} />
-      )}
+      {drawerRun && <RunDrawer run={drawerRun} onClose={() => setDrawerRun(null)} />}
     </div>
   )
 }
@@ -333,40 +320,35 @@ function LogBlock({ children, className }: { children: React.ReactNode; classNam
   )
 }
 
-function RunDrawer({ run, onClose, onChanged }: { run: RunEvent; onClose: () => void; onChanged?: () => void }) {
-  const [job, setJob] = useState<GenJob | null>(null)
-  const [logsUrl, setLogsUrl] = useState<string | null>(null)
-  const [canceling, setCanceling] = useState(false)
+function RunDrawer({ run, onClose }: { run: RunEvent; onClose: () => void }) {
+  const qc = useQueryClient()
   const navigate = useNavigate()
+  const isJob = run.source === 'job'
 
-  useEffect(() => {
-    if (run.source === 'job') {
-      api.job(run.id).then((r) => { setJob(r.job); setLogsUrl(r.logsUrl) }).catch(() => {})
-    }
-  }, [run.id, run.source])
+  const { data: jobData } = useQuery({
+    queryKey: ['job', run.id],
+    queryFn: () => api.job(run.id),
+    enabled: isJob,
+  })
+  const job = jobData?.job ?? null
+  const logsUrl = jobData?.logsUrl ?? null
+
+  // Cancel is a mutation; on success refetch this job + the runs list so the row updates.
+  const cancelMut = useMutation({
+    mutationFn: () => api.cancelJob(run.id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['job', run.id] })
+      qc.invalidateQueries({ queryKey: ['runs'] })
+    },
+  })
 
   const km = KIND_META[run.kind]
   const Icon = km?.icon ?? Activity
-  const isJob = run.source === 'job'
   const status = (job?.status ?? run.status) as JobStatus | null
   const cancelable = isJob && (status === 'running' || status === 'queued')
   // 'canceled by operator' is the server's marker — not a failure, so don't paint it red.
   const error = status === 'failed' ? job?.error : null
   const args = job?.args
-
-  async function cancel() {
-    setCanceling(true)
-    try {
-      const r = await api.cancelJob(run.id)
-      setJob(r.job)
-      onChanged?.()
-    } catch (e) {
-      // surface inline via the job error block on next poll; keep the drawer open
-      console.error('cancel failed', e)
-    } finally {
-      setCanceling(false)
-    }
-  }
 
   return (
     <Sheet open onOpenChange={(o) => { if (!o) onClose() }}>
@@ -485,8 +467,8 @@ function RunDrawer({ run, onClose, onChanged }: { run: RunEvent; onClose: () => 
             </Button>
           )}
           {cancelable && (
-            <Button variant="destructive" disabled={canceling} onClick={() => void cancel()}>
-              <X size={14} /> {canceling ? 'Canceling…' : 'Cancel run'}
+            <Button variant="destructive" disabled={cancelMut.isPending} onClick={() => cancelMut.mutate()}>
+              <X size={14} /> {cancelMut.isPending ? 'Canceling…' : 'Cancel run'}
             </Button>
           )}
           {logsUrl && (

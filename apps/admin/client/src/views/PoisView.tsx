@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
+import { useQuery } from '@tanstack/react-query'
 import { CircleCheck, Compass, Locate, Plus, RefreshCw, Search, Trash2, Wrench, X } from 'lucide-react'
 import { api, type CorrectionOverride, type PoiCorrections, type PoiDetail, type PoiRow, type Region } from '@/lib/api'
 import { errMsg, timeAgo } from '@/lib/format'
@@ -40,16 +41,11 @@ const SOURCE_META: Record<string, { label: string; variant: 'default' | 'seconda
 
 export function PoisView() {
   const navigate = useNavigate()
-  const [pois, setPois] = useState<PoiRow[]>([])
-  const [err, setErr] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>('corpus')
   const [discoverOpen, setDiscoverOpen] = useState(false)
 
-  useEffect(() => {
-    api.pois()
-      .then((r) => setPois(r.pois))
-      .catch((e) => setErr(errMsg(e)))
-  }, [])
+  // Shared with RoamView via the ['pois'] key — both read the same corpus, fetched once + cached.
+  const { data: pois = [], error: err } = useQuery({ queryKey: ['pois'], queryFn: async () => (await api.pois()).pois })
 
   const live = pois // no retired field; all pois are live for now
   const flagged = pois.filter((p) => p.staleFacts || p.suspiciousDuration || (!p.attributed && p.tourCount > 0))
@@ -73,7 +69,7 @@ export function PoisView() {
 
       {err && (
         <Callout variant="error">
-          <span className="font-medium">Error loading POIs:</span> {err}
+          <span className="font-medium">Error loading POIs:</span> {errMsg(err)}
         </Callout>
       )}
 

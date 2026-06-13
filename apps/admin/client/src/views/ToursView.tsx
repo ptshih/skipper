@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useNavigate } from '@tanstack/react-router'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowDown, ArrowUp, Check, Map, Plus, Sparkles, TriangleAlert } from 'lucide-react'
-import { api, type IntegrityReport, type TourCard } from '@/lib/api'
+import { api, type TourCard } from '@/lib/api'
 import { errMsg, fmtDuration, fmtMiles, timeAgo } from '@/lib/format'
 import { TOUR_STATUS_VARIANT } from '@/lib/status'
 import { PageHeader } from '@/components/PageHeader'
@@ -72,37 +73,39 @@ function SortHead({
 
 export function ToursView() {
   const navigate = useNavigate()
-  const [tours, setTours] = useState<TourCardEx[]>([])
-  const [err, setErr] = useState<string | null>(null)
+  const qc = useQueryClient()
   const [q, setQ] = useState('')
   const [status, setStatus] = useState<StatusFilter>('all')
   const [region, setRegion] = useState('all')
   const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'updatedAt', dir: 'desc' })
-  const [integrity, setIntegrity] = useState<IntegrityReport | null>(null)
 
-  useEffect(() => {
-    api
-      .tours()
-      .then((r) => setTours(r.tours as TourCardEx[]))
-      .catch((e) => setErr(errMsg(e)))
-    api.integrity().then(setIntegrity).catch(() => {})
-  }, [])
+  const { data: tours = [], error } = useQuery({
+    queryKey: ['tours'],
+    queryFn: async () => (await api.tours()).tours as TourCardEx[],
+  })
+  const { data: integrity } = useQuery({ queryKey: ['integrity'], queryFn: () => api.integrity() })
 
   const brokenIds = useMemo(() => new Set(integrity?.tours.map((t) => t.id) ?? []), [integrity])
   const draftSlugs = useMemo(() => tours.filter((t) => t.status === 'draft').map((t) => t.slug), [tours])
 
   // Fire a real (spending) generate for one or all draft shells, then jump to Runs to watch.
   // The cold-start path after a reset — turns reseeded draft shells into ready tours.
-  async function generate(slugs: string[]) {
+  const generateMut = useMutation({
+    mutationFn: async (slugs: string[]) => {
+      for (const slug of slugs) await api.createJob({ kind: 'generate', slug, dryRun: false, maxCostUsd: 5, confirm: true })
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['runs'] })
+      navigate({ to: '/runs' })
+    },
+  })
+  function generate(slugs: string[]) {
     if (slugs.length === 0) return
     if (!window.confirm(`Generate ${slugs.length} tour${slugs.length > 1 ? 's' : ''}? This spends LLM + TTS credits.`)) return
-    try {
-      for (const slug of slugs) await api.createJob({ kind: 'generate', slug, dryRun: false, maxCostUsd: 5, confirm: true })
-      navigate({ to: '/runs' })
-    } catch (e) {
-      setErr(errMsg(e))
-    }
+    generateMut.mutate(slugs)
   }
+
+  const err = error ?? generateMut.error
 
   const regions = useMemo(() => {
     const seen = new Set<string>()
@@ -162,7 +165,7 @@ export function ToursView() {
         }
       />
 
-      {err && <Callout variant="error">{err}</Callout>}
+      {err && <Callout variant="error">{errMsg(err)}</Callout>}
 
       {integrity && integrity.tours.length > 0 && (
         <Callout variant="error" className="border-destructive/30 bg-destructive/5">
