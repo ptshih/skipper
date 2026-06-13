@@ -39,7 +39,8 @@ const year = 2026
     position: relative;
     background: var(--surface-sunken);
     border-top: var(--border-keyline) solid var(--keyline);
-    padding-block: var(--space-4xl) var(--space-3xl);
+    /* keep the legal line clear of the home indicator on iOS */
+    padding-block: var(--space-4xl) calc(var(--space-3xl) + env(safe-area-inset-bottom));
     /* corner screw-dots at the page's bottom edge — closing the placard frame */
     background-image:
       radial-gradient(circle at 16px 16px, var(--keyline) 1.7px, transparent 2.4px),

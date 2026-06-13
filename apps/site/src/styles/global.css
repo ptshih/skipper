@@ -17,8 +17,18 @@
   margin: 0;
 }
 html {
-  -webkit-text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%; /* iOS Safari: don't inflate text in landscape */
+  -webkit-tap-highlight-color: transparent; /* iOS Safari: no grey flash on tap (we use :active) */
   scroll-behavior: smooth;
+}
+
+/* iOS Safari strips its own control chrome (the inner shadow on inputs, the
+   default pill on buttons) so our styles render identically in WebKit. */
+button,
+input {
+  -webkit-appearance: none;
+  appearance: none;
+  font: inherit;
 }
 @media (prefers-reduced-motion: reduce) {
   html {
@@ -47,7 +57,10 @@ body {
   font-weight: 400;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  overflow-x: hidden;
+  overflow-x: hidden; /* fallback for iOS < 16 */
+  /* clip (not hidden) so we don't spawn a scroll container that breaks
+     position:sticky (the nav + the drive map) in iOS Safari */
+  overflow-x: clip;
 }
 
 img,
@@ -130,7 +143,9 @@ a:hover {
   width: 100%;
   max-width: var(--maxw);
   margin-inline: auto;
-  padding-inline: var(--gutter);
+  /* clear the notch in landscape on iOS; insets are 0 everywhere else */
+  padding-left: max(var(--gutter), env(safe-area-inset-left));
+  padding-right: max(var(--gutter), env(safe-area-inset-right));
 }
 @media (min-width: 48rem) {
   :root {

@@ -30,6 +30,8 @@ import Icon from '../Icon.astro'
     position: sticky;
     top: 0;
     z-index: 50;
+    /* sit below the status bar / notch when launched standalone (0 in a tab) */
+    padding-top: env(safe-area-inset-top);
     background: color-mix(in srgb, var(--surface) 86%, transparent);
     -webkit-backdrop-filter: blur(10px);
     backdrop-filter: blur(10px);
