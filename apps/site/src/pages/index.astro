@@ -1,66 +1,37 @@
 ---
-// The skipper.fm landing page — placeholder for the real marketing site.
+// skipper.fm — the apex landing page. A charm-first brand front-door for a
+// PRE-LAUNCH app (App Store coming soon): the primary action is hearing the
+// Skipper, the one real ask is the launch list. Section architecture + copy
+// synthesized from a research pass on autio.com / shakaguide.com against our own
+// positioning (regional depth over catalog scale; the anti-"reads a fixed
+// script"; honest, no fake metrics). Dusk-mode "Trailhead 89" throughout.
+//
 // This apex also serves the iOS universal-links AASA statically from
 // public/.well-known/apple-app-site-association (the API no longer serves it).
-const title = 'Skipper — AI-narrated driving tours'
-const description =
-  'An AI skipper narrates the drive — GPS-triggered audio tours with a Jungle-Cruise heart.'
-
-// Absolute URLs for canonical + social cards (Astro.site = https://skipper.fm).
-const canonical = new URL(Astro.url.pathname, Astro.site)
-const ogImage = new URL('/og.png', Astro.site)
+import Base from '../layouts/Base.astro'
+import Nav from '../components/sections/Nav.astro'
+import Hero from '../components/sections/Hero.astro'
+import HowItWorks from '../components/sections/HowItWorks.astro'
+import Modes from '../components/sections/Modes.astro'
+import WhySkipper from '../components/sections/WhySkipper.astro'
+import TheDrive from '../components/sections/TheDrive.astro'
+import Objections from '../components/sections/Objections.astro'
+import FounderNote from '../components/sections/FounderNote.astro'
+import FinalCta from '../components/sections/FinalCta.astro'
+import SiteFooter from '../components/sections/SiteFooter.astro'
 ---
 
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <title>{title}</title>
-    <meta name="description" content={description} />
-    <link rel="canonical" href={canonical} />
-    <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="Skipper" />
-    <meta property="og:url" content={canonical} />
-    <meta property="og:title" content={title} />
-    <meta property="og:description" content={description} />
-    <meta property="og:image" content={ogImage} />
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content={title} />
-    <meta name="twitter:description" content={description} />
-    <meta name="twitter:image" content={ogImage} />
-    <style>
-      :root {
-        color-scheme: dark;
-      }
-      body {
-        margin: 0;
-        min-height: 100dvh;
-        display: grid;
-        place-items: center;
-        background: #14201b;
-        color: #f2e7cc;
-        font-family: ui-serif, Georgia, 'Times New Roman', serif;
-        text-align: center;
-        padding: 2rem;
-      }
-      h1 {
-        font-size: clamp(2.5rem, 8vw, 4rem);
-        margin: 0 0 0.5rem;
-        letter-spacing: -0.02em;
-      }
-      p {
-        margin: 0;
-        opacity: 0.7;
-        font-size: 1.125rem;
-      }
-    </style>
-  </head>
-  <body>
-    <main>
-      <h1>Skipper</h1>
-      <p>AI-narrated driving tours. Coming soon.</p>
-    </main>
-  </body>
-</html>
+<Base>
+  <Nav />
+  <main>
+    <Hero />
+    <HowItWorks />
+    <Modes />
+    <WhySkipper />
+    <TheDrive />
+    <Objections />
+    <FounderNote />
+    <FinalCta />
+  </main>
+  <SiteFooter />
+</Base>

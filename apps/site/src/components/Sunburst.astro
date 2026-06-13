@@ -1,0 +1,40 @@
+---
+// The WPA radiating-ray watermark — a faint amber sunburst behind hero / final
+// CTA. Pure CSS (repeating conic gradient + radial fade mask), so it's crisp at
+// any size and weightless. Decorative only; aria-hidden, pointer-events off.
+interface Props {
+  /** vertical anchor of the ray origin, e.g. '38%' */
+  originY?: string
+  class?: string
+}
+const { originY = '34%', class: klass = '' } = Astro.props
+---
+
+<div class={`sunburst ${klass}`} style={`--origin-y:${originY}`} aria-hidden="true"></div>
+
+<style>
+  .sunburst {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background: repeating-conic-gradient(
+      from 0deg at 50% var(--origin-y),
+      var(--glow-soft) 0deg 2.2deg,
+      transparent 2.2deg 9deg
+    );
+    -webkit-mask: radial-gradient(
+      60% 55% at 50% var(--origin-y),
+      #000 0%,
+      rgba(0, 0, 0, 0.5) 38%,
+      transparent 72%
+    );
+    mask: radial-gradient(
+      60% 55% at 50% var(--origin-y),
+      #000 0%,
+      rgba(0, 0, 0, 0.5) 38%,
+      transparent 72%
+    );
+    opacity: 0.9;
+  }
+</style>

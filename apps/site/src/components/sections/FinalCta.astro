@@ -1,0 +1,211 @@
+---
+// Closing — lead with the charm line UP FRONT (not buried like Autio's tagline)
+// and ONE honest pre-launch action. There's no App Store link yet, so the real
+// CTA is the launch list, with "hear him again" as the warm secondary.
+//
+// GO-LIVE: set LAUNCH_ENDPOINT below to your email provider's form-POST URL
+// (Buttondown / ConvertKit / Formspree — all accept an `email` field). Until
+// then the form gracefully falls back to a mailto: compose to CONTACT_EMAIL, so
+// the button is never dead. See public/clips/README.md + the repo notes.
+import Sunburst from '../Sunburst.astro'
+import Trail from '../Trail.astro'
+import Icon from '../Icon.astro'
+---
+
+<section class="section final" id="launch">
+  <Sunburst originY="42%" />
+  <div class="container final__inner">
+    <span class="kicker">End of the road (for now)</span>
+    <h2 class="display final__headline">
+      Every road’s got a story. This one’s got a guy who won’t let it go untold.
+    </h2>
+    <p class="lede prose final__sub">
+      Skipper hits the App Store soon, starting with Tahoe. Leave your email and we’ll send one
+      postcard the day he’s cleared to pick you up. No spam — he’s not that kind of guy.
+    </p>
+
+    <form class="final__form" data-launch-form novalidate>
+      <label class="sr-only" for="launch-email">Your email</label>
+      <input
+        class="final__input"
+        id="launch-email"
+        type="email"
+        name="email"
+        inputmode="email"
+        autocomplete="email"
+        placeholder="you@email.com"
+        required
+      />
+      <button class="btn btn--primary final__submit" type="submit">
+        <Icon name="stamp" size={20} /> Get the launch postcard
+      </button>
+    </form>
+    <p class="final__msg" data-form-msg role="status" aria-live="polite" hidden></p>
+
+    <p class="final__micro">
+      Coming soon to the App Store · iPhone · starting in Lake Tahoe. No app to download today —
+      just the list.
+    </p>
+
+    <a class="btn btn--ghost final__secondary" href="#top">
+      <Icon name="play" size={16} /> One more from the Skipper
+    </a>
+
+    <div class="final__trailwrap">
+      <Trail progress={1} class="final__trail" />
+      <span class="final__wordmark">SKIPPER</span>
+    </div>
+  </div>
+</section>
+
+<style>
+  .final {
+    overflow: hidden;
+    text-align: center;
+  }
+  .final__inner {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .final .kicker {
+    margin-bottom: var(--space-lg);
+  }
+  .final__headline {
+    max-width: 22ch;
+  }
+  .final__sub {
+    margin-top: var(--space-xl);
+    margin-inline: auto;
+  }
+  .final__form {
+    margin-top: var(--space-3xl);
+    display: flex;
+    gap: var(--space-md);
+    width: 100%;
+    max-width: 30rem;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .final__input {
+    flex: 1 1 14rem;
+    min-height: 3.5rem;
+    padding: 0 1.1rem;
+    font-family: var(--font-body);
+    font-size: var(--fs-body-lg);
+    color: var(--ink);
+    background: var(--surface-raised);
+    border: var(--border-thin) solid var(--keyline);
+    border-radius: var(--radius-pill);
+    transition: border-color var(--dur-base) var(--ease), box-shadow var(--dur-base) var(--ease);
+  }
+  .final__input::placeholder {
+    color: var(--ink-faint);
+  }
+  .final__input:focus-visible {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
+  }
+  .final__input.is-invalid {
+    border-color: var(--danger);
+  }
+  .final__submit {
+    flex: 0 0 auto;
+  }
+  .final__msg {
+    margin-top: var(--space-lg);
+    font-weight: 600;
+    color: var(--accent);
+  }
+  .final__msg.is-error {
+    color: var(--danger);
+  }
+  .final__micro {
+    margin-top: var(--space-xl);
+    font-size: var(--fs-meta);
+    color: var(--ink-faint);
+    max-width: 34rem;
+  }
+  .final__secondary {
+    margin-top: var(--space-md);
+  }
+  .final__trailwrap {
+    margin-top: var(--space-4xl);
+    width: 100%;
+    max-width: 40rem;
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+  }
+  .final__trail {
+    flex: 1 1 auto;
+  }
+  .final__wordmark {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: var(--fs-subhead);
+    letter-spacing: 0.06em;
+    color: var(--ink-faint);
+    flex: none;
+  }
+</style>
+
+<script>
+  // ── Launch-list signup ──────────────────────────────────────────────────
+  // Set LAUNCH_ENDPOINT to a provider form-POST URL (Buttondown/ConvertKit/
+  // Formspree) to capture for real. Empty → graceful mailto fallback so the
+  // CTA is never a dead button.
+  const LAUNCH_ENDPOINT = '' // e.g. 'https://buttondown.email/api/emails/embed-subscribe/skipper'
+  const CONTACT_EMAIL = 'hello@skipper.fm'
+
+  const form = document.querySelector<HTMLFormElement>('[data-launch-form]')
+  const msg = document.querySelector<HTMLElement>('[data-form-msg]')
+  const input = form?.querySelector<HTMLInputElement>('input[name="email"]')
+
+  function show(text: string, isError = false) {
+    if (!msg) return
+    msg.textContent = text
+    msg.classList.toggle('is-error', isError)
+    msg.hidden = false
+  }
+
+  form?.addEventListener('submit', async (e) => {
+    e.preventDefault()
+    const email = input?.value.trim() ?? ''
+    const valid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)
+    if (!valid) {
+      input?.classList.add('is-invalid')
+      show('That doesn’t look like an email, friend. Give it another go.', true)
+      input?.focus()
+      return
+    }
+    input?.classList.remove('is-invalid')
+
+    if (LAUNCH_ENDPOINT) {
+      try {
+        show('Pulling up the manifest…')
+        await fetch(LAUNCH_ENDPOINT, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ email }).toString(),
+        })
+        form.reset()
+        show('You’re on the manifest. I’ll holler when we’re rolling.')
+      } catch {
+        show('That’s a kink in the hose — try again in a sec?', true)
+      }
+    } else {
+      // No provider wired yet: open a pre-filled mail to the founder.
+      const subject = encodeURIComponent('Put me on the Skipper launch list')
+      const body = encodeURIComponent(`Hop me on the launch list: ${email}`)
+      window.location.href = `mailto:${CONTACT_EMAIL}?subject=${subject}&body=${body}`
+      show('Your mail app’s loaded up — hit send and you’re on the manifest.')
+    }
+  })
+
+  input?.addEventListener('input', () => input.classList.remove('is-invalid'))
+</script>

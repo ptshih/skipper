@@ -1,0 +1,115 @@
+---
+// The honest pre-launch trust slot. Autio borrows Costner; Shaka borrows 77k
+// ratings; pre-launch, we borrow CANDOR — a short maker's note — and design the
+// empty review rail in plain sight for post-launch.
+import Icon from '../Icon.astro'
+---
+
+<section class="section founder" id="founder">
+  <div class="container">
+    <article class="founder__card framed">
+      <span class="kicker">No reviews yet — here’s the truth instead</span>
+      <h2 class="title">Nobody’s rated this yet. It’s not in the store yet.</h2>
+      <p class="founder__body">
+        So here’s the honest version: Skipper is a small, stubborn labor of love — one drive, one
+        voice, built by someone who got tired of audio tours that read facts at you like a museum
+        placard. When real riders have opinions, their words go here. Until then, the only review
+        that counts is your own ears, a few scrolls up.
+      </p>
+      <p class="founder__signoff">— see you at the trailhead. Bring snacks.</p>
+      <a class="btn btn--secondary founder__cta" href="#top">
+        <Icon name="play" size={18} /> Go back and hear him
+      </a>
+
+      <!-- the future review rail, empty on purpose -->
+      <div class="founder__rail" aria-hidden="true">
+        <div class="founder__slot"><span class="founder__stars">★ ★ ★ ★ ★</span><span>first riders, this slot is yours</span></div>
+        <div class="founder__slot"><span class="founder__stars">★ ★ ★ ★ ★</span><span>your words go here</span></div>
+        <div class="founder__slot"><span class="founder__stars">★ ★ ★ ★ ★</span><span>and here</span></div>
+      </div>
+    </article>
+  </div>
+</section>
+
+<style>
+  .founder__card {
+    background: var(--surface-raised);
+    padding: var(--space-4xl) var(--space-3xl);
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  /* large postmark-stamp watermark */
+  .founder__card::before,
+  .founder__card::after {
+    content: '';
+    position: absolute;
+    right: -70px;
+    top: -70px;
+    width: 280px;
+    height: 280px;
+    border-radius: 999px;
+    border: 2.5px dashed var(--keyline);
+    opacity: 0.45;
+    pointer-events: none;
+  }
+  .founder__card::after {
+    width: 226px;
+    height: 226px;
+    right: -43px;
+    top: -43px;
+    border-style: solid;
+    opacity: 0.3;
+  }
+  .founder__card > * {
+    position: relative;
+    z-index: 1;
+  }
+  .founder__card .kicker {
+    margin-bottom: var(--space-md);
+  }
+  .founder__body {
+    max-width: 46rem;
+    margin: var(--space-xl) auto 0;
+    color: var(--ink-dim);
+    font-size: var(--fs-body-lg);
+  }
+  .founder__signoff {
+    margin-top: var(--space-xl);
+    font-weight: 600;
+    color: var(--accent-warm);
+    font-size: var(--fs-body-lg);
+  }
+  .founder__cta {
+    margin-top: var(--space-2xl);
+  }
+  .founder__rail {
+    margin-top: var(--space-4xl);
+    display: grid;
+    gap: var(--space-lg);
+    grid-template-columns: 1fr;
+  }
+  @media (min-width: 46rem) {
+    .founder__rail {
+      grid-template-columns: repeat(3, 1fr);
+    }
+  }
+  .founder__slot {
+    border: 1.5px dashed var(--track-inactive);
+    border-radius: var(--radius-md);
+    padding: var(--space-xl);
+    min-height: 6.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    align-items: center;
+    justify-content: center;
+    color: var(--ink-faint);
+    font-size: var(--fs-meta);
+  }
+  .founder__stars {
+    color: var(--track-inactive);
+    letter-spacing: 0.15em;
+    font-size: var(--fs-meta);
+  }
+</style>

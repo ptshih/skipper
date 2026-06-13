@@ -1,0 +1,136 @@
+---
+// How it works — three numbered steps. Kills the central category fear ("will
+// this work in MY car, with no signal?") cheaply. A trimmed, Skipper-voiced
+// steal of Shaka's whole /how-it-works page.
+import Icon from '../Icon.astro'
+import Trail from '../Trail.astro'
+
+const steps = [
+  {
+    n: '01',
+    icon: 'cloud',
+    title: 'Download the drive before you go.',
+    body: 'The whole tour lives on your phone. Tahoe loses signal in the prettiest places; the Skipper doesn’t care.',
+  },
+  {
+    n: '02',
+    icon: 'mount',
+    title: 'Drop it in the mount and roll.',
+    body: 'Start at the trailhead or hop on anywhere. Play it over Bluetooth like a podcast — your music ducks when he’s got something to say.',
+  },
+  {
+    n: '03',
+    icon: 'play',
+    title: 'He talks when you get there.',
+    body: "Each story fires automatically as you reach the stop. You never touch the screen — eyes on the road, where they belong.",
+  },
+]
+---
+
+<section class="section how" id="how">
+  <div class="container">
+    <header class="how__head">
+      <span class="kicker">How the drive works</span>
+      <h2 class="title">Three steps. Then just drive.</h2>
+    </header>
+
+    <Trail progress={0.82} class="how__track" />
+
+    <div class="how__cards">
+      {
+        steps.map((s) => (
+          <article class="step">
+            <div class="step__top">
+              <span class="step__num mono">{s.n}</span>
+              <span class="step__icon">
+                <Icon name={s.icon} size={22} />
+              </span>
+            </div>
+            <h3 class="step__title">{s.title}</h3>
+            <p class="step__body body-dim">{s.body}</p>
+          </article>
+        ))
+      }
+    </div>
+
+    <p class="how__foot mono">Works completely offline · Plays automatically · Nothing to read while moving</p>
+  </div>
+</section>
+
+<style>
+  .how__head {
+    text-align: center;
+    margin-bottom: var(--space-3xl);
+  }
+  .how__head .kicker {
+    margin-bottom: var(--space-md);
+  }
+  .how__track {
+    display: none;
+    margin-bottom: var(--space-md);
+  }
+  @media (min-width: 52rem) {
+    .how__track {
+      display: block;
+    }
+  }
+  .how__cards {
+    display: grid;
+    gap: var(--space-xl);
+    grid-template-columns: 1fr;
+  }
+  @media (min-width: 52rem) {
+    .how__cards {
+      grid-template-columns: repeat(3, 1fr);
+      gap: var(--space-2xl);
+    }
+  }
+  .step {
+    background: var(--surface-raised);
+    border: var(--border-thin) solid var(--rule);
+    border-radius: var(--radius-lg);
+    padding: var(--space-2xl);
+  }
+  .step__top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-lg);
+  }
+  .step__num {
+    display: grid;
+    place-items: center;
+    width: 2.6rem;
+    height: 2.6rem;
+    border-radius: var(--radius-pill);
+    background: var(--amber);
+    color: var(--on-amber);
+    font-weight: 600;
+    font-size: var(--fs-body-lg);
+    /* neutral lift, NOT an amber glow: three numbered discs share this viewport,
+       and the "one glowing amber element per viewport" rule reserves the glow for
+       the hero player / final-CTA stamp (see tokens.css). */
+    box-shadow: 0 4px 12px -6px var(--shadow-cast);
+  }
+  .step__icon {
+    color: var(--accent);
+  }
+  .step__title {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: var(--fs-heading);
+    line-height: 1.2;
+    margin-bottom: var(--space-sm);
+  }
+  .step__body {
+    font-size: var(--fs-body);
+  }
+  .how__foot {
+    margin-top: var(--space-2xl);
+    text-align: center;
+    font-size: var(--fs-label);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+</style>

@@ -1,0 +1,104 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   Skipper landing page — design tokens ("Trailhead 89", DUSK only)
+
+   The marketing front-door is night-drive-first: deep dusk-pine sky, warm
+   parchment text, one campfire-amber glow. This is the WEB PORT of the mobile
+   design system — values mirror packages/.../theme/tokens.ts + theme.ts (DUSK
+   roles) and design-system/tokens/colors.css. Unlike the app there is no
+   light/dusk swap here: the landing leans all the way into dusk for mood, the
+   same hex the existing /t/<id> share page and the app splash use (#14201B).
+
+   Legibility footguns are designed out, same as the app:
+   - --amber is a FILL / shape color only (the play disc, the car token, the
+     glow). NEVER small text — it fails contrast on pine. Warm TEXT uses
+     --accent-warm (lantern amber, clears 4.5:1 on surface + surface-raised).
+   - At most one glowing amber element per viewport (the hero player, then the
+     final-CTA stamp a screen later — never both at once).
+   ───────────────────────────────────────────────────────────────────────── */
+
+:root {
+  color-scheme: dark;
+
+  /* ── Color · semantic roles (DUSK) ──────────────────────────────────── */
+  --surface: #14201b; /* page background — deep dusk-pine, calmer than black */
+  --surface-raised: #1e2b24; /* cards / placards lift off the night */
+  --surface-sunken: #101a15; /* inset wells: the scrubber bed, code-ish chips */
+  --keyline: #2a3a30; /* the carved double-rule + screw-dots */
+
+  --ink: #ece0c4; /* primary text — warm parchment, never pure white */
+  --ink-dim: #a99d80; /* secondary text */
+  --ink-faint: #9a9075; /* tertiary hints (still clears 4.5:1 on surface) */
+
+  --accent: #5fa877; /* pine, lifted for night: links, active glyphs, success */
+  --accent-warm: #eba351; /* warm accent TEXT: kickers, the candor flag */
+  --amber: #eba351; /* bright amber — FILL / shape ONLY (disc, token, glow) */
+  --on-amber: #2a2014; /* ink-brown on a filled amber disc/button */
+  --water: #5fa7b8; /* cool scenic / roam accent */
+  --danger: #e97559; /* glowing-ember error */
+
+  --track-inactive: #3a4a3e; /* dashed untraveled trail + hairlines */
+  --track-active: #5fa877; /* traveled portion of the trail */
+  --rule: #3a4a3e; /* dividers, card keylines on dark */
+
+  /* ── Effects (rgba overlays) ────────────────────────────────────────── */
+  --glow: rgba(235, 163, 81, 0.42); /* campfire-amber halo (the ONE glow) */
+  --glow-soft: rgba(235, 163, 81, 0.14); /* sunburst / ambient wash */
+  --shadow-cast: rgba(0, 0, 0, 0.5); /* neutral night cast shadow */
+  --scrim: rgba(0, 0, 0, 0.55); /* behind sticky chrome on scroll */
+
+  /* ── Type families (loaded in Base.astro) ───────────────────────────── */
+  --font-display: 'Zilla Slab', ui-serif, Georgia, serif; /* park-sign slab, ≥18px only */
+  --font-body: 'Lora', ui-serif, Georgia, 'Times New Roman', serif; /* all body/UI */
+  --font-mono: 'Overpass Mono', ui-monospace, 'SF Mono', Menlo, monospace; /* odometer numerals */
+
+  /* ── Type scale ─────────────────────────────────────────────────────────
+     ONE deliberate ladder — every font-size on the site resolves to a token
+     here (no per-component one-offs). Four fluid display steps + a nine-rung
+     fixed ladder, base 17px. Mirrors the app's typeScale philosophy. */
+  --fs-display: clamp(2.4rem, 6.2vw, 4.5rem); /* hero headline */
+  --fs-title: clamp(1.9rem, 3.8vw, 2.9rem); /* section titles */
+  --fs-quote: clamp(1.15rem, 2vw, 1.5rem); /* pull-quote */
+  --fs-lede: clamp(1.0625rem, 1.6vw, 1.3rem); /* section intro lede */
+  --fs-wordmark: 1.375rem; /* 22 — nav / footer wordmark */
+  --fs-heading: 1.25rem; /* 20 — card & placard titles */
+  --fs-subhead: 1.125rem; /* 18 — secondary headings */
+  --fs-body-lg: 1.0625rem; /* 17 — body base, inputs, list names */
+  --fs-body: 1rem; /* 16 — card body copy */
+  --fs-sm: 0.9375rem; /* 15 — nav / footer links, taglines */
+  --fs-meta: 0.875rem; /* 14 — captions, sublabels, mono times */
+  --fs-label: 0.78rem; /* 12.5 — kickers, badges, section labels (caps) */
+  --fs-label-sm: 0.7rem; /* 11.2 — micro caps (chips, map label, state) */
+
+  /* ── Spacing · 4-pt grid ────────────────────────────────────────────── */
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 0.75rem;
+  --space-lg: 1rem;
+  --space-xl: 1.25rem;
+  --space-2xl: 1.5rem;
+  --space-3xl: 2rem;
+  --space-4xl: 3rem;
+  --space-5xl: 4.5rem;
+  --space-6xl: 6.5rem; /* between-section rhythm */
+  --gutter: 1.25rem; /* page edge padding (mobile) */
+  --maxw: 68rem; /* content max width */
+  --maxw-prose: 40rem; /* readable measure for body copy */
+
+  /* ── Radii ──────────────────────────────────────────────────────────── */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-pill: 999px;
+
+  /* ── Borders ────────────────────────────────────────────────────────── */
+  --border-hair: 0.5px;
+  --border-thin: 1px;
+  --border-keyline: 1.5px; /* the carved double-rule weight */
+
+  /* ── Motion ─────────────────────────────────────────────────────────── */
+  --dur-fast: 120ms;
+  --dur-base: 220ms;
+  --dur-slow: 420ms;
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+}

@@ -1,0 +1,307 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   Skipper landing — base + shared primitives.
+   Tokens live in tokens.css; this file is resets, base type, and the handful
+   of reusable "Trailhead 89" devices (kicker label, enamel badge, carved
+   keyline + screw-dots, framed placard, buttons, dashed divider).
+   Section layout lives in each component's scoped <style>.
+   ───────────────────────────────────────────────────────────────────────── */
+@import './tokens.css';
+
+/* ── Reset ──────────────────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+* {
+  margin: 0;
+}
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  /* Honor the OS "reduce motion" setting everywhere: collapse animations +
+     transitions (the disc scale, the trail car gliding, the nav fade, the
+     scrubber tween). Static end-states still apply — this kills MOTION, not
+     hover feedback. The widely-used a11y reduced-motion reset. */
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+body {
+  min-height: 100dvh;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--fs-body-lg); /* 17px base — Lora reads small, give it room */
+  line-height: 1.6;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+a:hover {
+  color: var(--accent-warm);
+}
+
+::selection {
+  background: var(--accent-warm);
+  color: var(--on-amber);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* ── Type scale ─────────────────────────────────────────────────────────── */
+.display {
+  font-family: var(--font-display);
+  font-weight: 700;
+  line-height: 1.04;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+  /* fluid hero — clamps so the corn lands on a phone and a desktop alike */
+  font-size: var(--fs-display);
+  text-wrap: balance;
+}
+.title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  line-height: 1.08;
+  letter-spacing: -0.01em;
+  font-size: var(--fs-title);
+  text-wrap: balance;
+}
+.heading {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-heading);
+  line-height: 1.2;
+}
+.lede {
+  font-size: var(--fs-lede);
+  line-height: 1.55;
+  color: var(--ink-dim);
+}
+.body-dim {
+  color: var(--ink-dim);
+}
+.mono {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+
+/* The kicker / section label — uppercase, tracked, lantern-amber TEXT (safe). */
+.kicker {
+  display: inline-block;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: var(--fs-label);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent-warm);
+}
+
+/* ── Layout helpers ─────────────────────────────────────────────────────── */
+.container {
+  width: 100%;
+  max-width: var(--maxw);
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+@media (min-width: 48rem) {
+  :root {
+    --gutter: 2rem;
+  }
+}
+.section {
+  padding-block: var(--space-5xl);
+  position: relative;
+}
+@media (min-width: 48rem) {
+  .section {
+    padding-block: var(--space-6xl);
+  }
+}
+.prose {
+  max-width: var(--maxw-prose);
+}
+.center {
+  text-align: center;
+  margin-inline: auto;
+}
+
+/* ── Carved double-keyline + corner screw-dots (the ranger-sign edge) ────── */
+/* The double rule = a border plus an inset outline; the screws = 4 radial
+   dots painted into the corners. Reserved for NON-driving / large surfaces. */
+.framed {
+  position: relative;
+  border: var(--border-keyline) solid var(--keyline);
+  border-radius: var(--radius-lg);
+  outline: var(--border-thin) solid color-mix(in srgb, var(--keyline) 70%, transparent);
+  outline-offset: -6px;
+  background-image:
+    radial-gradient(circle at 13px 13px, var(--keyline) 1.7px, transparent 2.4px),
+    radial-gradient(circle at calc(100% - 13px) 13px, var(--keyline) 1.7px, transparent 2.4px),
+    radial-gradient(circle at 13px calc(100% - 13px), var(--keyline) 1.7px, transparent 2.4px),
+    radial-gradient(circle at calc(100% - 13px) calc(100% - 13px), var(--keyline) 1.7px, transparent 2.4px);
+  background-repeat: no-repeat;
+}
+
+/* A plain card — glanceable, no ornament. */
+.card {
+  background: var(--surface-raised);
+  border: var(--border-thin) solid var(--rule);
+  border-radius: var(--radius-lg);
+}
+
+/* ── Enamel badge (pill) ────────────────────────────────────────────────── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: var(--fs-label);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1;
+  padding: 0.46em 0.85em;
+  border-radius: var(--radius-pill);
+  border: var(--border-thin) solid var(--rule);
+  color: var(--ink-dim);
+  white-space: nowrap;
+}
+.badge--pine {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.badge--amber {
+  color: var(--accent-warm);
+  border-color: color-mix(in srgb, var(--accent-warm) 55%, transparent);
+}
+.badge--teal {
+  color: var(--water);
+  border-color: color-mix(in srgb, var(--water) 55%, transparent);
+}
+.badge--dot::before {
+  content: '';
+  width: 0.5em;
+  height: 0.5em;
+  border-radius: var(--radius-pill);
+  background: currentColor;
+}
+/* A filled amber disc badge uses ink-on-amber, never cream. */
+.badge--filled {
+  background: var(--amber);
+  color: var(--on-amber);
+  border-color: transparent;
+}
+
+/* ── Buttons ────────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55em;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: var(--fs-body-lg);
+  line-height: 1;
+  min-height: 3.5rem; /* ≥56px; primary CTAs read ≥60px with padding */
+  padding: 0 1.5rem;
+  border-radius: var(--radius-pill);
+  border: var(--border-keyline) solid transparent;
+  cursor: pointer;
+  transition: transform var(--dur-fast) var(--ease), box-shadow var(--dur-base) var(--ease),
+    background var(--dur-base) var(--ease);
+  text-align: center;
+}
+.btn:active {
+  transform: translateY(1px);
+}
+.btn--primary {
+  background: var(--amber);
+  color: var(--on-amber);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--amber) 40%, transparent),
+    0 8px 34px -6px var(--glow), 0 2px 10px -2px var(--shadow-cast);
+}
+.btn--primary:hover {
+  color: var(--on-amber);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--amber) 55%, transparent),
+    0 10px 44px -4px var(--glow), 0 3px 12px -2px var(--shadow-cast);
+}
+.btn--secondary {
+  background: transparent;
+  color: var(--ink);
+  border-color: var(--keyline);
+}
+.btn--secondary:hover {
+  color: var(--ink);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+.btn--ghost {
+  min-height: auto;
+  padding: 0.5rem 0;
+  background: none;
+  color: var(--accent);
+  border: none;
+  border-radius: 0;
+  font-weight: 600;
+}
+.btn--ghost:hover {
+  color: var(--accent-warm);
+}
+
+/* ── Dashed divider (the atlas-trail rule) ──────────────────────────────── */
+.divider-dashed {
+  border: none;
+  border-top: var(--border-thin) dashed var(--track-inactive);
+  width: 100%;
+}
+
+/* ── Utility ────────────────────────────────────────────────────────────── */
+/* `hidden` must win over any `display` we set on a class (the icon-swap bug). */
+[hidden] {
+  display: none !important;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.eyebrow-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}

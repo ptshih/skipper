@@ -1,0 +1,204 @@
+---
+// The first drive — Lake Tahoe, gorgeously. The "optimize for charm, not scale"
+// answer to Autio's 25,000-story flex: show ONE real route beautifully instead
+// of faking a catalog. Honest framing — this is the LAUNCH drive (no production
+// tours are published yet), so it's a roadmap promise, not a present-tense claim.
+const stops = [
+  { n: 1, name: 'Emerald Bay Overlook', sub: 'the postcard everyone stops for', kind: 'Scenic', tone: 'teal' },
+  { n: 2, name: 'Vikingsholm & the lake’s only island', sub: 'a castle, a teahouse, and a very tall tale', kind: 'Story', tone: 'pine' },
+  { n: 3, name: 'Inspiration Point', sub: 'named by a committee, earned by the view', kind: 'Scenic', tone: 'teal' },
+  { n: 4, name: 'D.L. Bliss & water so clear it’s rude', sub: 'facts about clarity, jokes about your windshield', kind: 'Story', tone: 'pine' },
+  { n: 5, name: 'A coffee stop the Skipper picked himself', sub: 'he has opinions about pie', kind: 'Pit stop', tone: 'amber' },
+]
+const toneVar: Record<string, string> = { pine: 'var(--accent)', teal: 'var(--water)', amber: 'var(--amber)' }
+// pin coordinates down the west shore (matches the list order)
+const pins = [
+  { x: 104, y: 78, tone: 'teal' },
+  { x: 92, y: 138, tone: 'pine', glow: true },
+  { x: 88, y: 188, tone: 'teal' },
+  { x: 96, y: 240, tone: 'pine' },
+  { x: 116, y: 286, tone: 'amber' },
+]
+---
+
+<section class="section drive" id="the-drive">
+  <div class="container">
+    <header class="drive__head">
+      <span class="kicker">The first drive</span>
+      <h2 class="title">We’re starting with one lake. We’re starting with it right.</h2>
+      <p class="lede prose">
+        Skipper launches with Lake Tahoe — a hand-curated loop, stop by stop. No endless menu of
+        half-baked tours. One drive, narrated like someone actually cared.
+      </p>
+    </header>
+
+    <div class="drive__grid">
+      <!-- poster-grade route map (illustration, not a live map) -->
+      <div class="drive__map card">
+        <svg viewBox="0 0 260 330" class="drive__svg" role="img" aria-label="Illustrated route map down the west shore of Lake Tahoe">
+          <!-- compass -->
+          <g transform="translate(214 36)" opacity="0.8">
+            <path d="M0 -14 L4 0 L0 14 L-4 0 Z" fill="var(--accent-warm)"></path>
+            <path d="M-14 0 L0 4 L14 0 L0 -4 Z" fill="var(--ink-faint)"></path>
+            <text x="0" y="-18" text-anchor="middle" fill="var(--ink-dim)" font-family="'Overpass Mono', monospace" font-size="8">N</text>
+          </g>
+          <!-- lake -->
+          <path
+            d="M150 18 C198 28 218 86 214 150 C210 214 196 296 150 308 C126 314 104 292 102 262 C101 246 84 246 90 222 C95 204 108 208 110 190 C114 156 86 128 98 88 C107 54 122 14 150 18 Z"
+            fill="color-mix(in srgb, var(--water) 22%, transparent)" stroke="var(--water)" stroke-width="1.6"></path>
+          <text x="156" y="166" fill="var(--water)" font-family="'Overpass Mono', monospace" font-size="11" letter-spacing="1.5" opacity="0.85">LAKE</text>
+          <text x="150" y="182" fill="var(--water)" font-family="'Overpass Mono', monospace" font-size="11" letter-spacing="1.5" opacity="0.85">TAHOE</text>
+          <!-- road: untraveled dashed + traveled pine -->
+          <path id="drive-road" d="M118 44 C92 84 100 120 88 168 C80 206 92 250 120 300"
+            fill="none" stroke="var(--track-inactive)" stroke-width="2" stroke-dasharray="4 4"></path>
+          <path d="M118 44 C100 72 100 104 92 138" fill="none" stroke="var(--track-active)" stroke-width="2.4"></path>
+          <!-- pins -->
+          {
+            pins.map((p, i) => (
+              <g class={p.glow ? 'pin pin--glow' : 'pin'} style={`--tone:${toneVar[p.tone]}`}>
+                <circle cx={p.x} cy={p.y} r="8.5" fill="var(--surface-raised)" stroke="var(--tone)" stroke-width="2" />
+                <text x={p.x} y={p.y + 3} text-anchor="middle" fill="var(--tone)" font-family="'Overpass Mono', monospace" font-size="8.5" font-weight="600">{i + 1}</text>
+              </g>
+            ))
+          }
+        </svg>
+        <p class="drive__maplabel mono">Illustrated route · not to scale</p>
+      </div>
+
+      <!-- itinerary -->
+      <ol class="drive__list">
+        {
+          stops.map((s) => (
+            <li class={`drive__stop ${s.tone === 'pine' && s.n === 2 ? 'is-now' : ''}`}>
+              <span class="drive__pip" style={`--tone:${toneVar[s.tone]}`}>{s.n}</span>
+              <span class="drive__stoptext">
+                <span class="drive__stopname">{s.name}</span>
+                <span class="drive__stopsub body-dim">{s.sub}</span>
+              </span>
+              <span class={`badge badge--${s.tone}`}>{s.kind}</span>
+            </li>
+          ))
+        }
+      </ol>
+    </div>
+
+    <p class="drive__foot body-dim">
+      More regions come after this one earns its keep. Yosemite’s in the glovebox — but one perfect
+      drive beats ten rushed ones.
+    </p>
+  </div>
+</section>
+
+<style>
+  .drive__head {
+    text-align: center;
+    margin-bottom: var(--space-3xl);
+  }
+  .drive__head .kicker {
+    margin-bottom: var(--space-md);
+  }
+  .drive__head .lede {
+    margin-top: var(--space-lg);
+    margin-inline: auto;
+  }
+  .drive__grid {
+    display: grid;
+    gap: var(--space-2xl);
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+  @media (min-width: 54rem) {
+    .drive__grid {
+      grid-template-columns: 0.85fr 1.15fr;
+      gap: var(--space-4xl);
+    }
+  }
+  .drive__map {
+    padding: var(--space-lg);
+    position: sticky;
+    top: 5rem;
+  }
+  .drive__svg {
+    width: 100%;
+    height: auto;
+  }
+  .pin--glow circle {
+    filter: drop-shadow(0 0 7px var(--glow));
+  }
+  .drive__maplabel {
+    text-align: center;
+    margin-top: var(--space-sm);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-faint);
+    font-size: var(--fs-label-sm);
+  }
+  .drive__list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    border: var(--border-thin) solid var(--rule);
+    border-radius: var(--radius-lg);
+    background: var(--surface-raised);
+    overflow: hidden;
+  }
+  .drive__stop {
+    display: flex;
+    align-items: center;
+    gap: var(--space-lg);
+    padding: var(--space-xl) var(--space-2xl);
+  }
+  .drive__stop + .drive__stop {
+    border-top: var(--border-thin) solid var(--rule);
+  }
+  .drive__stop.is-now {
+    background: color-mix(in srgb, var(--amber) 7%, transparent);
+    box-shadow: inset 3px 0 0 var(--amber);
+  }
+  .drive__pip {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: var(--radius-pill);
+    border: 1.6px solid var(--tone);
+    color: var(--tone);
+    font-family: var(--font-mono);
+    font-size: var(--fs-meta);
+    font-weight: 600;
+  }
+  .drive__stoptext {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .drive__stopname {
+    font-family: var(--font-body);
+    font-weight: 700;
+    color: var(--ink);
+    font-size: var(--fs-body-lg);
+    line-height: 1.25;
+  }
+  .drive__stopsub {
+    font-size: var(--fs-meta);
+  }
+  .drive__stop .badge {
+    flex: none;
+  }
+  @media (max-width: 32rem) {
+    .drive__stop .badge {
+      display: none;
+    }
+    .drive__stop {
+      padding-inline: var(--space-lg);
+    }
+  }
+  .drive__foot {
+    margin-top: var(--space-2xl);
+    text-align: center;
+    max-width: 42rem;
+    margin-inline: auto;
+  }
+</style>

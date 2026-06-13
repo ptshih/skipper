@@ -1,0 +1,337 @@
+---
+// Hero — name the category, SHOW the mechanic, let them HEAR him. The primary
+// action is a real ~20s Skipper clip, ungated (no app, no account): the whole
+// "persona is the product" bet leads with his voice. Audio degrades gracefully
+// to a charming "warming up" state until a blessed MP3 lands in public/clips/.
+import Sunburst from '../Sunburst.astro'
+import Trail from '../Trail.astro'
+import Icon from '../Icon.astro'
+
+// Swap-in point for the hero clip. Drop a founder-blessed ~20s MP3 at this path
+// (see public/clips/README.md). If it 404s, the player shows the warming state.
+const HERO_CLIP = '/clips/skipper-hero.mp3'
+const HERO_STOP = 'Emerald Bay overlook'
+---
+
+<section class="hero section" id="top">
+  <Sunburst originY="30%" />
+  <div class="container hero__grid">
+    <div class="hero__copy">
+      <span class="kicker">GPS-triggered audio driving tours · Lake Tahoe · iOS soon</span>
+      <h1 class="display">
+        Your road trip just hired a tour guide with a terrible sense of humor.
+      </h1>
+      <p class="lede">
+        A narrated driving tour for your phone. Mount it, start driving, and a corny old guide
+        tells the story of every lake, lookout, and one-stoplight town right as you reach it. No
+        reading, no tapping — press play and he’s already talking.
+      </p>
+      <div class="hero__cta">
+        <a class="btn btn--secondary" href="#launch">
+          <Icon name="envelope" size={20} /> Get the launch postcard
+        </a>
+        <span class="hero__micro">
+          His real voice, from a real Tahoe drive. Plays right here — no app, no account.
+        </span>
+      </div>
+    </div>
+
+    <!-- The one glowing object on the page: the NOW-playing placard. -->
+    <div class="hero__player">
+      <figure class="player framed" data-hero-player aria-label="Listen to a sample from the Skipper">
+        <figcaption class="player__head">
+          <span class="player__state" data-state>20-sec sample</span>
+          <span class="player__stop">{HERO_STOP}</span>
+        </figcaption>
+
+        <div class="player__body">
+          <button class="disc" data-play type="button" aria-label="Play a 20-second sample from the Skipper">
+            <span class="disc__icon" data-icon-play><Icon name="play" size={34} /></span>
+            <span class="disc__icon disc__icon--pause" data-icon-pause hidden><Icon name="pause" size={32} /></span>
+          </button>
+
+          <div class="player__meter">
+            <p class="player__label">Hear the Skipper</p>
+            <div class="scrub" data-scrub>
+              <span class="scrub__fill" data-scrub-fill></span>
+              <span class="scrub__thumb" data-scrub-thumb></span>
+            </div>
+            <div class="player__times mono">
+              <span data-time-cur>0:00</span>
+              <span data-time-dur>0:20</span>
+            </div>
+          </div>
+        </div>
+
+        <p class="player__caption mono" data-caption>EMERALD BAY OVERLOOK · 20 sec · his real voice, his real corn</p>
+        <audio data-audio src={HERO_CLIP} preload="metadata"></audio>
+      </figure>
+
+      <!-- the atlas trail: car parked at the trailhead, glides as he talks -->
+      <Trail trailId="hero-trail" progress={0} class="hero__trail" />
+    </div>
+  </div>
+</section>
+
+<style>
+  .hero {
+    padding-top: var(--space-4xl);
+    overflow: hidden;
+  }
+  .hero__grid {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    gap: var(--space-4xl);
+    align-items: center;
+  }
+  @media (min-width: 62rem) {
+    .hero__grid {
+      grid-template-columns: 1.05fr 0.95fr;
+      gap: var(--space-5xl);
+    }
+  }
+  .hero__copy .kicker {
+    margin-bottom: var(--space-lg);
+  }
+  .hero .display {
+    margin-bottom: var(--space-xl);
+  }
+  .hero__cta {
+    margin-top: var(--space-2xl);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    align-items: flex-start;
+  }
+  .hero__micro {
+    font-size: var(--fs-meta);
+    color: var(--ink-faint);
+    max-width: 34rem;
+  }
+
+  /* ── Player placard ── */
+  .player {
+    background: var(--surface-raised);
+    padding: var(--space-2xl);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--amber) 14%, transparent),
+      0 22px 70px -28px var(--glow), 0 10px 30px -18px var(--shadow-cast);
+  }
+  .player__head {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+    margin-bottom: var(--space-xl);
+  }
+  .player__state {
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: var(--fs-label-sm);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent-warm);
+  }
+  .player__stop {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: var(--fs-heading);
+    color: var(--ink);
+  }
+  .player__body {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xl);
+  }
+  .disc {
+    flex: none;
+    width: 4.5rem;
+    height: 4.5rem;
+    border-radius: var(--radius-pill);
+    border: none;
+    background: var(--amber);
+    color: var(--on-amber);
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--amber) 10%, transparent),
+      0 10px 34px -8px var(--glow);
+    transition: transform var(--dur-fast) var(--ease), box-shadow var(--dur-base) var(--ease);
+  }
+  .disc:hover {
+    transform: scale(1.04);
+  }
+  .disc:active {
+    transform: scale(0.97);
+  }
+  .disc__icon {
+    display: grid;
+    place-items: center;
+    margin-left: 3px; /* optical-center the play triangle */
+  }
+  .disc__icon--pause {
+    margin-left: 0;
+  }
+  .player__meter {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .player__label {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: var(--fs-subhead);
+    margin-bottom: var(--space-md);
+  }
+  .scrub {
+    position: relative;
+    height: 8px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-sunken);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
+  }
+  .scrub__fill {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: calc(var(--p, 0) * 100%);
+    background: var(--track-active);
+    border-radius: var(--radius-pill);
+  }
+  .scrub__thumb {
+    position: absolute;
+    top: 50%;
+    left: calc(var(--p, 0) * 100%);
+    width: 14px;
+    height: 14px;
+    border-radius: var(--radius-pill);
+    background: var(--amber);
+    border: 2px solid var(--surface-raised);
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 10px -1px var(--glow);
+  }
+  .player__times {
+    display: flex;
+    justify-content: space-between;
+    margin-top: var(--space-md);
+    font-size: var(--fs-meta);
+    color: var(--ink-dim);
+  }
+  .player__caption {
+    margin-top: var(--space-xl);
+    padding-top: var(--space-lg);
+    border-top: var(--border-thin) dashed var(--track-inactive);
+    font-size: var(--fs-label-sm);
+    letter-spacing: 0.05em;
+    color: var(--ink-faint);
+    text-transform: uppercase;
+  }
+  .hero__trail {
+    margin-top: var(--space-xl);
+    padding-inline: var(--space-sm);
+  }
+
+  /* graceful "no clip yet" state */
+  .player.is-warming .disc {
+    background: var(--surface-sunken);
+    color: var(--ink-dim);
+    box-shadow: inset 0 0 0 1.5px var(--keyline);
+    cursor: default;
+  }
+  .player.is-warming .disc:hover {
+    transform: none;
+  }
+  .player.is-warming {
+    box-shadow: 0 10px 30px -18px var(--shadow-cast);
+  }
+</style>
+
+<script>
+  // Inline hero audio: ungated, no framework. Toggles play/pause, drives the
+  // scrubber + timer + the under-card car token, and degrades to a charming
+  // "warming up" state if the clip isn't there yet.
+  function fmt(t: number) {
+    if (!isFinite(t) || t < 0) t = 0
+    const m = Math.floor(t / 60)
+    const s = Math.floor(t % 60)
+    return `${m}:${s.toString().padStart(2, '0')}`
+  }
+
+  const root = document.querySelector<HTMLElement>('[data-hero-player]')
+  if (root) {
+    const audio = root.querySelector<HTMLAudioElement>('[data-audio]')!
+    const playBtn = root.querySelector<HTMLButtonElement>('[data-play]')!
+    const iconPlay = root.querySelector<HTMLElement>('[data-icon-play]')!
+    const iconPause = root.querySelector<HTMLElement>('[data-icon-pause]')!
+    const stateEl = root.querySelector<HTMLElement>('[data-state]')!
+    const capEl = root.querySelector<HTMLElement>('[data-caption]')!
+    const fill = root.querySelector<HTMLElement>('[data-scrub-fill]')!
+    const thumb = root.querySelector<HTMLElement>('[data-scrub-thumb]')!
+    const curEl = root.querySelector<HTMLElement>('[data-time-cur]')!
+    const durEl = root.querySelector<HTMLElement>('[data-time-dur]')!
+    const scrub = root.querySelector<HTMLElement>('[data-scrub]')!
+    const trail = document.getElementById('hero-trail')
+
+    let available = true
+    const setProgress = (p: number) => {
+      p = Math.max(0, Math.min(1, p))
+      scrub.style.setProperty('--p', String(p))
+      trail?.style.setProperty('--progress', String(p))
+    }
+
+    const warmUp = () => {
+      available = false
+      root.classList.add('is-warming')
+      stateEl.textContent = 'WARMING UP'
+      capEl.textContent = 'ENGINE’S STILL WARMING UP · the sample clip lands at launch'
+      playBtn.setAttribute('aria-disabled', 'true')
+      playBtn.setAttribute('aria-label', 'Sample clip coming at launch')
+    }
+
+    audio.addEventListener('error', warmUp)
+    // metadata never loads if the file is missing on a static host
+    audio.addEventListener('loadedmetadata', () => {
+      if (audio.duration && isFinite(audio.duration)) durEl.textContent = fmt(audio.duration)
+    })
+    audio.addEventListener('timeupdate', () => {
+      curEl.textContent = fmt(audio.currentTime)
+      if (audio.duration) setProgress(audio.currentTime / audio.duration)
+    })
+    audio.addEventListener('play', () => {
+      iconPlay.hidden = true
+      iconPause.hidden = false
+      stateEl.textContent = 'NOW PLAYING'
+    })
+    audio.addEventListener('pause', () => {
+      iconPlay.hidden = false
+      iconPause.hidden = true
+      if (!audio.ended) stateEl.textContent = 'PAUSED'
+    })
+    audio.addEventListener('ended', () => {
+      stateEl.textContent = 'THAT’S THE SAMPLE'
+      setProgress(0)
+      curEl.textContent = '0:00'
+    })
+
+    playBtn.addEventListener('click', () => {
+      if (!available) return
+      if (audio.paused) {
+        const p = audio.play()
+        if (p) p.catch(warmUp)
+      } else {
+        audio.pause()
+      }
+    })
+
+    // scrub-to-seek
+    scrub.addEventListener('click', (e) => {
+      if (!available || !audio.duration) return
+      const r = scrub.getBoundingClientRect()
+      audio.currentTime = ((e.clientX - r.left) / r.width) * audio.duration
+    })
+
+    // The initial 404 (no clip dropped in yet) can fire its `error` before this
+    // deferred module attaches the listener. Re-run source selection now that we
+    // ARE listening, so the honest "warming up" state surfaces reliably.
+    if (audio.error || audio.networkState === audio.NETWORK_NO_SOURCE) warmUp()
+    else audio.load()
+  }
+</script>

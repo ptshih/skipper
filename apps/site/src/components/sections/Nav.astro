@@ -1,0 +1,114 @@
+---
+// Slim, deliberately near-empty top bar: one brand, one app, one thing. No
+// storefront, no gift banner, no 5-item marketing nav — clarity through
+// restraint (the anti-Autio/Shaka move). The "coming soon" chip is a STATUS,
+// never a link.
+import Icon from '../Icon.astro'
+---
+
+<header class="nav" id="site-nav">
+  <div class="container nav__inner">
+    <a class="nav__brand" href="#top" aria-label="Skipper — home">
+      <span class="nav__wordmark">SKIPPER</span>
+    </a>
+
+    <nav class="nav__links" aria-label="Sections">
+      <a href="#how">How it works</a>
+      <a href="#the-drive">The drive</a>
+      <a href="#modes">Free roam</a>
+      <a href="#founder">The honest bit</a>
+    </nav>
+
+    <span class="nav__chip" title="Not in the App Store yet">
+      <Icon name="signpost" size={14} /> Tahoe first · iOS · soon
+    </span>
+  </div>
+</header>
+
+<style>
+  .nav {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: color-mix(in srgb, var(--surface) 86%, transparent);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    border-bottom: var(--border-keyline) solid transparent;
+    transition: border-color var(--dur-base) var(--ease), background var(--dur-base) var(--ease);
+  }
+  .nav.is-scrolled {
+    border-bottom-color: var(--keyline);
+    box-shadow: 0 6px 22px -16px var(--shadow-cast);
+  }
+  .nav__inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-lg);
+    height: 4rem;
+  }
+  .nav__brand {
+    color: var(--ink);
+    display: inline-flex;
+    align-items: center;
+  }
+  .nav__wordmark {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: var(--fs-wordmark);
+    letter-spacing: 0.04em;
+  }
+  .nav__links {
+    display: none;
+    gap: var(--space-2xl);
+    font-size: var(--fs-sm);
+  }
+  .nav__links a {
+    color: var(--ink-dim);
+    font-weight: 600;
+  }
+  .nav__links a:hover {
+    color: var(--ink);
+  }
+  .nav__chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4em;
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: var(--fs-label-sm);
+    letter-spacing: 0.04em;
+    color: var(--ink-dim);
+    border: var(--border-thin) solid var(--keyline);
+    border-radius: var(--radius-pill);
+    padding: 0.4em 0.7em;
+    white-space: nowrap;
+  }
+  .nav__chip :global(svg) {
+    color: var(--accent-warm);
+  }
+  @media (min-width: 60rem) {
+    .nav__links {
+      display: flex;
+    }
+  }
+  @media (max-width: 30rem) {
+    .nav__chip {
+      font-size: 0; /* hide label */
+      gap: 0;
+      padding: 0.5em;
+    }
+    .nav__chip :global(svg) {
+      width: 16px;
+      height: 16px;
+    }
+  }
+</style>
+
+<script>
+  // Quiet until scroll: lift the keyline + shadow once the page moves.
+  const nav = document.getElementById('site-nav')
+  const onScroll = () => nav?.classList.toggle('is-scrolled', window.scrollY > 8)
+  onScroll()
+  window.addEventListener('scroll', onScroll, { passive: true })
+</script>

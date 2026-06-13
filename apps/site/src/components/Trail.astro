@@ -1,0 +1,73 @@
+---
+// A horizontal dashed atlas-trail with the car token riding it. `progress`
+// (0–1) places the token + the pine "traveled" overlay; callers can animate it
+// by setting the `--progress` CSS var on the element with id `trailId`.
+import CarToken from './CarToken.astro'
+interface Props {
+  progress?: number
+  trailId?: string
+  /** optional small stop pips: array of {at:0-1, tone:'pine'|'teal'|'amber'} */
+  stops?: { at: number; tone?: string }[]
+  class?: string
+}
+const { progress = 0, trailId, stops = [], class: klass = '' } = Astro.props
+const toneColor: Record<string, string> = {
+  pine: 'var(--accent)',
+  teal: 'var(--water)',
+  amber: 'var(--amber)',
+}
+---
+
+<div class={`trail ${klass}`} id={trailId} style={`--progress:${progress}`}>
+  <span class="trail__line"></span>
+  <span class="trail__done"></span>
+  {
+    stops.map((s) => (
+      <span
+        class="trail__pip"
+        style={`left:${s.at * 100}%;--pip:${toneColor[s.tone ?? 'pine']}`}
+      />
+    ))
+  }
+  <span class="trail__car"><CarToken size={36} /></span>
+</div>
+
+<style>
+  .trail {
+    position: relative;
+    width: 100%;
+    height: 28px;
+  }
+  .trail__line {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    border-top: 1.5px dashed var(--track-inactive);
+  }
+  .trail__done {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    width: calc(var(--progress, 0) * 100%);
+    border-top: 1.5px solid var(--track-active);
+    transition: width 120ms linear;
+  }
+  .trail__pip {
+    position: absolute;
+    top: 50%;
+    width: 9px;
+    height: 9px;
+    border-radius: 999px;
+    background: var(--surface);
+    border: 1.5px solid var(--pip, var(--accent));
+    transform: translate(-50%, -50%);
+  }
+  .trail__car {
+    position: absolute;
+    top: 50%;
+    left: calc(var(--progress, 0) * 100%);
+    transform: translate(-50%, -50%);
+    transition: left 120ms linear;
+  }
+</style>

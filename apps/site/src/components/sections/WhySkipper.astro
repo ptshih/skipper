@@ -1,0 +1,127 @@
+---
+// Why Skipper — the singular differentiator, made explicit: not a roster of
+// celebrity readers (Autio) or a 100-tour catalog (Shaka), but ONE persistent
+// in-character guide whose delivery IS the point. Bakes in the "persona lives in
+// delivery, never in facts" invariant as a trust signal: corny, never wrong.
+import Medallion from '../Medallion.astro'
+import Icon from '../Icon.astro'
+---
+
+<section class="section why" id="why">
+  <div class="container">
+    <article class="why__card framed">
+      <div class="why__medallion">
+        <Medallion size={208} />
+      </div>
+
+      <div class="why__text">
+        <span class="kicker">Why Skipper</span>
+        <h2 class="title">One guide. A real one. Gloriously corny.</h2>
+        <p class="why__body body-dim">
+          Most audio tours hand you a stranger reading facts. Skipper gives you a character — a
+          road-trip guide with the soul of a cranky old ride-along skipper, glad you came along.
+          Same fella every drive. You’ll start finishing his jokes.
+        </p>
+
+        <blockquote class="why__quote">
+          <span class="why__mark" aria-hidden="true"><Icon name="quote" size={40} /></span>
+          The corn is in the delivery, never the facts. When a place has a thin story, he’d rather
+          point at the view than make something up.
+        </blockquote>
+
+        <ul class="why__chips mono">
+          <li><Icon name="offline" size={15} /> Offline-ready</li>
+          <li><Icon name="car" size={15} /> Eyes-on-road</li>
+          <li><Icon name="headphones" size={15} /> No account to listen</li>
+        </ul>
+      </div>
+    </article>
+  </div>
+</section>
+
+<style>
+  .why__card {
+    background: var(--surface-raised);
+    padding: var(--space-3xl);
+    display: grid;
+    gap: var(--space-3xl);
+    align-items: center;
+    position: relative;
+    overflow: hidden;
+  }
+  /* faint postmark watermark behind the medallion */
+  .why__card::before {
+    content: '';
+    position: absolute;
+    left: -60px;
+    top: -40px;
+    width: 320px;
+    height: 320px;
+    border-radius: 999px;
+    border: 2px dashed var(--keyline);
+    opacity: 0.5;
+    pointer-events: none;
+  }
+  @media (min-width: 54rem) {
+    .why__card {
+      grid-template-columns: auto 1fr;
+      gap: var(--space-5xl);
+      padding: var(--space-4xl);
+    }
+  }
+  .why__medallion {
+    position: relative;
+    z-index: 1;
+    justify-self: center;
+  }
+  .why__text {
+    position: relative;
+    z-index: 1;
+  }
+  .why__text .kicker {
+    margin-bottom: var(--space-md);
+  }
+  .why__body {
+    margin-top: var(--space-lg);
+  }
+  .why__quote {
+    margin-top: var(--space-2xl);
+    padding-left: var(--space-2xl);
+    border-left: 3px solid var(--track-inactive);
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: var(--fs-quote);
+    line-height: 1.4;
+    color: var(--ink);
+    position: relative;
+  }
+  .why__mark {
+    position: absolute;
+    left: var(--space-md);
+    top: -8px;
+    color: var(--track-inactive);
+  }
+  .why__chips {
+    list-style: none;
+    padding: 0;
+    margin-top: var(--space-2xl);
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm) var(--space-lg);
+    font-size: var(--fs-label);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-dim);
+  }
+  .why__chips li {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5em;
+    border: var(--border-thin) solid var(--keyline);
+    border-radius: var(--radius-pill);
+    padding: 0.45em 0.85em;
+  }
+  .why__chips :global(svg) {
+    color: var(--accent);
+  }
+</style>

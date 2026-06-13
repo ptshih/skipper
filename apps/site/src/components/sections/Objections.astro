@@ -1,0 +1,112 @@
+---
+// The honest road-trip questions — offline / eyes-on-road / is-this-AI-slop —
+// the worries the category lives or dies on, mapped onto our real offline-first
+// + auto-trigger + grounded-narration story. Candid about being AI. A calm
+// reassurance surface: no glow.
+import Icon from '../Icon.astro'
+
+const cards = [
+  {
+    icon: 'cloud',
+    tone: 'teal',
+    title: 'Works with zero bars',
+    body: 'Download on wifi, then go off the grid. Tahoe loses signal in the prettiest places; the Skipper doesn’t.',
+  },
+  {
+    icon: 'car',
+    tone: 'pine',
+    title: 'It’s audio — keep your eyes up',
+    body: 'Nothing to tap while you drive. He starts himself, paces himself, and ducks under your music. You watch the road — that’s the only job.',
+  },
+  {
+    icon: 'book',
+    tone: 'amber',
+    lead: 'Yes, it’s AI. No, he doesn’t make stuff up.',
+    body: 'Every story is grounded in real, credited sources — a lot of it Wikipedia (CC BY-SA). The jokes are AI; the facts aren’t allowed to be. A thin story gets a quiet scenic moment, not a confident lie.',
+  },
+]
+---
+
+<section class="section obj" id="objections">
+  <div class="container">
+    <header class="obj__head">
+      <span class="kicker">The fine print, in plain English</span>
+      <h2 class="title">The stuff you’re actually wondering.</h2>
+    </header>
+
+    <div class="obj__grid">
+      {
+        cards.map((c) => (
+          <article class="obj__card">
+            <span class={`obj__icon obj__icon--${c.tone}`}>
+              <Icon name={c.icon} size={22} />
+            </span>
+            {c.lead ? (
+              <h3 class="obj__title">
+                <span class="obj__lead">{c.lead}</span>
+              </h3>
+            ) : (
+              <h3 class="obj__title">{c.title}</h3>
+            )}
+            <p class="obj__body body-dim">{c.body}</p>
+          </article>
+        ))
+      }
+    </div>
+  </div>
+</section>
+
+<style>
+  .obj__head {
+    text-align: center;
+    margin-bottom: var(--space-3xl);
+  }
+  .obj__head .kicker {
+    margin-bottom: var(--space-md);
+  }
+  .obj__grid {
+    display: grid;
+    gap: var(--space-xl);
+    grid-template-columns: 1fr;
+  }
+  @media (min-width: 52rem) {
+    .obj__grid {
+      grid-template-columns: repeat(3, 1fr);
+      gap: var(--space-2xl);
+    }
+  }
+  .obj__card {
+    padding: var(--space-lg) var(--space-md);
+  }
+  .obj__icon {
+    display: inline-grid;
+    place-items: center;
+    width: 2.8rem;
+    height: 2.8rem;
+    border-radius: var(--radius-md);
+    border: var(--border-thin) solid var(--keyline);
+    margin-bottom: var(--space-lg);
+  }
+  .obj__icon--teal {
+    color: var(--water);
+  }
+  .obj__icon--pine {
+    color: var(--accent);
+  }
+  .obj__icon--amber {
+    color: var(--accent-warm);
+  }
+  .obj__title {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: var(--fs-heading);
+    line-height: 1.2;
+    margin-bottom: var(--space-sm);
+  }
+  .obj__lead {
+    color: var(--accent-warm);
+  }
+  .obj__body {
+    font-size: var(--fs-body);
+  }
+</style>
