@@ -1,0 +1,1 @@
+ALTER TYPE "public"."gen_job_kind" ADD VALUE 'refetch_facts';

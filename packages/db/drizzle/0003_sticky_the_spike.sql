@@ -1,0 +1,1 @@
+ALTER TABLE "tours" ADD COLUMN "persona_key" text DEFAULT 'skipper' NOT NULL;

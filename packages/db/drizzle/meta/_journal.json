@@ -15,6 +15,20 @@
       "when": 1781332299012,
       "tag": "0001_absurd_wonder_man",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1781372159523,
+      "tag": "0002_sad_cargill",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1781373026700,
+      "tag": "0003_sticky_the_spike",
+      "breakpoints": true
     }
   ]
 }

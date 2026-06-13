@@ -321,6 +321,10 @@ export const tours = pgTable(
       .notNull()
       .references(() => regions.id, { onDelete: 'restrict' }),
     slug: text('slug').notNull(),
+    // The host persona, EXPLICIT + decoupled from region (the generator resolves the recipe via
+    // personaFromKey, not the region slug). Set at create time; frozen onto segments.persona_id at
+    // generation. Defaults to the Skipper — the only persona in M1.
+    personaKey: text('persona_key').notNull().default('skipper'),
     // Marquee POI ("Emerald Bay"); display name = "[headline], [start] to [end]".
     headline: text('headline').notNull(),
     // Route — absorbed from the old `corridors` table; a frozen rail, authored once via the
@@ -566,6 +570,7 @@ export const genJobKindEnum = pgEnum('gen_job_kind', [
   'sweep_orphans', // sweep-orphans.ts — delete unreferenced R2 clips
   'sweep_roam_pois', // sweep-roam-pois.ts — fetch + upsert roam POIs
   'generate_roam', // generate-roam.ts — narrate + synthesize roam tracks
+  'refetch_facts', // refetch-poi.ts — re-pull ONE poi's Wikipedia facts (free; recomputes facts_hash)
 ])
 export const genJobStatusEnum = pgEnum('gen_job_status', [
   'queued', // row created (admin-api in v1), Job not yet running
