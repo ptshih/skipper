@@ -148,8 +148,8 @@ you found so the next agent can re-check it.
   `@hono/node-server`.
 - Verified pins: TS 6.0.3, zod 4.4.3 (`z.enum`, top-level
   `z.uuid()`/`z.url()`), drizzle-orm 0.45.2 + drizzle-kit 0.31.10 (neon-http,
-  stateless — no interactive transactions; use `db.batch`), hono 4.12.23,
-  @anthropic-ai/sdk 0.102.0.
+  stateless — no interactive transactions; use `db.batch`), hono 4.12.25,
+  @anthropic-ai/sdk 0.104.1.
 - **TTS = Google Cloud Text-to-Speech via REST** (no SDK — raw `fetch` to
   `texttospeech.googleapis.com/v1/text:synthesize`), model `gemini-3.1-flash-tts-preview`
   with Gemini-TTS voice "Charon" (`TTS_MODEL` / `SKIPPER_VOICE_ID` in `models.ts`);
