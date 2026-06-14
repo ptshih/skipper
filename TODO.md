@@ -5,6 +5,27 @@ Carry-forward **engineering** items (the near-term layer of the truth system —
 Each item has enough context to action without re-deriving the reasoning. **Delete items
 when done** — git history is the archive.
 
+## Admin local-dev resilience — guard against "just errors out"
+
+The admin in local dev (vite `:5173` client + Hono admin-api `:8788`, `bun run dev:admin`)
+sometimes just errors out; add guards so a transient/dev-only failure degrades VISIBLY instead of
+a blank or cryptic crash. **Capture the actual error next time it happens to scope this** (the
+browser console + the failing request). Known/likely modes to guard:
+
+- [ ] **Dual-React white-screen** (`ReactCurrentDispatcher` undefined) after any `bun install`
+      re-link — bun's isolated linker can resolve a second React copy. The `vite.config.ts`
+      `resolve.dedupe(['react','react-dom'])` is the current fix; if it recurs, clear
+      `apps/admin/client/node_modules/.vite` and confirm a single `react`. Consider a boot-time
+      assertion (one React instance) that fails loud with the fix steps.
+- [ ] **Client error boundary** — a render error blanks the whole SPA today. Add a top-level React
+      error boundary (error + reload) so one bad view doesn't take down the shell.
+- [ ] **API-down / env-missing** — if the admin-api (`:8788`) is down or `DATABASE_URL` is unset,
+      surface a clear "admin-api unreachable" state instead of silent failed fetches / 500s (a
+      `/health` probe on boot + a banner).
+- [ ] **dev:server crash visibility** — `bun --watch server/index.ts` can exit on a bad import/env
+      and leave the vite proxy 502-ing with no signal; a supervisor/auto-restart, or at least a
+      client message distinguishing "api crashed" from "api booting".
+
 ## Location: When-In-Use → Always/background (deferred half of permission priming)
 
 The pre-permission **explainer** shipped 2026-06-13 in front of the existing *When-In-Use*
