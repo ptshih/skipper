@@ -24,6 +24,7 @@ import { TTS_CLIP_EXTENSION, TTS_MODEL } from './models'
 import { announce, assertReady, parseFlags, resolveTourId } from './pipeline/ops'
 import { personaFromKey } from './persona'
 import { synthesizeWithTailRetake } from './pipeline/tts'
+import { estimateTtsUsd } from './pipeline/spend'
 import { clipKey, deleteAudio, uploadAudio } from './pipeline/storage'
 import { beginJob, finishJob } from './pipeline/job-progress'
 
@@ -38,9 +39,13 @@ interface Clip {
 }
 
 async function main() {
-  const flags = parseFlags(process.argv.slice(2))
+  const flags = parseFlags(process.argv.slice(2), { valueFlags: ['max-cost'] })
   const apply = flags.has('apply')
   const keepOld = flags.has('keep-old')
+  const maxCostUsd = (() => {
+    const v = Number(flags.value('max-cost'))
+    return Number.isFinite(v) && v > 0 ? v : Infinity // unset/invalid → no cap
+  })()
   announce({ tool: 'resynth-tour', blast: ['SPENDS $', 'MUTATES DB', 'DELETES BYTES'], apply })
   const tourId = await resolveTourId(flags.positionals[0])
   await beginJob('resynth', { dryRun: !apply, tourId, targetId: tourId })
@@ -126,6 +131,18 @@ async function main() {
   }
 
   assertReady(['tts', 'r2'])
+
+  // Cost ceiling: abort before synthesizing if the estimated TTS exceeds --max-cost.
+  const estSpendUsd = estimateTtsUsd(
+    clips.map((c) => c.script),
+    persona.ttsStyle.length,
+  ).usd
+  if (estSpendUsd > maxCostUsd) {
+    console.error(
+      `⛔ Estimated TTS ~$${estSpendUsd.toFixed(2)} exceeds --max-cost=$${maxCostUsd.toFixed(2)} — aborting before any synth. Raise --max-cost to proceed.`,
+    )
+    return
+  }
 
   let swept = 0
   let totalSec = 0

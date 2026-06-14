@@ -75,8 +75,12 @@ function regionLabel(lat: number, lng: number): string {
   return 'Lake Tahoe'
 }
 
-const flags = parseFlags(process.argv.slice(2), { valueFlags: ['limit', 'min-extract', 'bbox'] })
+const flags = parseFlags(process.argv.slice(2), { valueFlags: ['limit', 'min-extract', 'bbox', 'max-cost'] })
 const apply = flags.has('apply')
+const maxCostUsd = (() => {
+  const v = Number(flags.value('max-cost'))
+  return Number.isFinite(v) && v > 0 ? v : Infinity // unset/invalid → no cap
+})()
 // Narrate + PRINT the scripts, then stop — NO TTS, NO R2, NO DB writes. The cheapest way to ear-read
 // the writing (e.g. a new length band) before committing to a paid synth + regen. Spends narration $.
 const scriptsOnly = flags.has('scripts-only')
@@ -210,6 +214,16 @@ async function main(): Promise<void> {
   if (!apply && !scriptsOnly) {
     console.log(
       '\nDRY RUN — nothing narrated, synthesized, or written. Re-run with --apply (or --scripts-only to narrate + print, no TTS/DB).',
+    )
+    return
+  }
+
+  // Cost ceiling: abort BEFORE any narration/TTS if the estimate exceeds --max-cost. A roam run
+  // covers a whole corpus, so an unbounded run (no --limit) can balloon — this is the hard stop.
+  const estSpendUsd = (scriptsOnly ? 0 : tts.usd) + queue.length * 0.1
+  if (estSpendUsd > maxCostUsd) {
+    console.error(
+      `⛔ Estimated spend ~$${estSpendUsd.toFixed(2)} exceeds --max-cost=$${maxCostUsd.toFixed(2)} — aborting before any spend. Narrow with --limit or raise --max-cost.`,
     )
     return
   }

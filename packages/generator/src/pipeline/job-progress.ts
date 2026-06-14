@@ -20,7 +20,7 @@
 // name for the admin-api's reconcile backstop without anyone passing it in.
 // Background: docs/specs/admin-ops-console-spec.md §9.
 
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { genJobs } from '@skipper/db/schema'
 import type { NewGenJob } from '@skipper/db/schema'
@@ -82,10 +82,17 @@ export async function beginJob(kind: Kind, fields: BeginFields): Promise<void> {
       .insert(genJobs)
       .values(row)
       // The admin-api may have pre-created the row ('queued') with richer fields; on conflict
-      // just flip it running + stamp startedAt, preserving everything it set.
+      // flip it running + stamp startedAt, preserving everything it set. Also BACKFILL the
+      // execution name from THIS job's own env if the admin couldn't capture it at trigger time
+      // (CLOUD_RUN_EXECUTION) — keeps every running row reconcilable. COALESCE keeps the admin's.
       .onConflictDoUpdate({
         target: genJobs.id,
-        set: { status: 'running', startedAt: new Date(), updatedAt: new Date() },
+        set: {
+          status: 'running',
+          startedAt: new Date(),
+          updatedAt: new Date(),
+          cloudRunExecution: sql`coalesce(${genJobs.cloudRunExecution}, ${row.cloudRunExecution})`,
+        },
       })
   } catch (e) {
     warn('begin', e)

@@ -606,6 +606,11 @@ app.get('/admin/runs', async (c) => {
     )
   }
 
+  // No-API backstop: force-fail any row that outlived the task-timeout. The reconcile above skips
+  // rows >1h old to spare the Cloud Run API, so this is what finally settles an ancient stuck row
+  // (and frees its target for re-runs).
+  await Promise.all(jobs.map(async (j) => { if (await expireStuckJob(j)) j.status = 'failed' }))
+
   const referenced = new Set(jobs.map((j) => j.evalRunId).filter(Boolean) as string[])
   const runs = [
     ...jobs.map((j) => ({
@@ -653,6 +658,25 @@ app.get('/admin/runs', async (c) => {
 
 const TERMINAL = ['succeeded', 'failed', 'canceled'] as const
 const RECONCILE_AFTER_MS = 30_000
+// Past the Cloud Run task-timeout (cloudbuild.gen.yaml = 3600s) + slack, a non-terminal row can
+// NOT still be running — the job was killed. Force-fail it with NO API round-trip; this is the
+// backstop for a row the executionState reconcile can't settle (no/expired execution name, or a
+// row already >1h old which the list reconcile skips), so a stuck row stops blocking re-runs.
+const JOB_MAX_AGE_MS = 3_600_000 + 300_000
+
+/** Force-fail a non-terminal gen_jobs row that has outlived the task-timeout. Pure age check (no
+ *  Cloud Run API call), guarded so it never clobbers a concurrently-settled row. Returns true if
+ *  it settled the row. */
+async function expireStuckJob(job: { id: string; status: string; updatedAt: Date | string | null }): Promise<boolean> {
+  if (TERMINAL.includes(job.status as (typeof TERMINAL)[number])) return false
+  const updatedMs = job.updatedAt ? new Date(job.updatedAt).getTime() : 0
+  if (Date.now() - updatedMs <= JOB_MAX_AGE_MS) return false
+  await db
+    .update(genJobs)
+    .set({ status: 'failed', endedAt: new Date(), error: 'reconciled: timed out (no live execution past the task-timeout)' })
+    .where(and(eq(genJobs.id, job.id), inArray(genJobs.status, ['queued', 'running'])))
+  return true
+}
 
 app.get('/admin/jobs/:id', async (c) => {
   const id = c.req.param('id')
@@ -678,6 +702,10 @@ app.get('/admin/jobs/:id', async (c) => {
         .where(eq(genJobs.id, id))
       job = (await db.select().from(genJobs).where(eq(genJobs.id, id)).limit(1))[0]!
     }
+  }
+  // No-API backstop: a non-terminal row past the task-timeout can't still be running — settle it.
+  if (await expireStuckJob(job)) {
+    job = (await db.select().from(genJobs).where(eq(genJobs.id, id)).limit(1))[0]!
   }
   // Job output (log/summary/metrics) is written by the JOB itself at finishJob, atomically with
   // the status flip — the admin no longer reconstructs it from Cloud Logging. logsUrl deep-links

@@ -133,6 +133,7 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     const args = [script, tourId]
     if (apply) args.push('--apply')
     if (body.keepOld) args.push('--keep-old')
+    if (body.maxCostUsd) args.push(`--max-cost=${Number(body.maxCostUsd)}`)
     return { args, dryRun: !apply, spends: apply, tourId, targetId: tourId }
   }
 
@@ -152,6 +153,7 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     if (body.limit) args.push(`--limit=${Number(body.limit)}`)
     if (body.force) args.push('--force')
     if (body.minExtract) args.push(`--min-extract=${Number(body.minExtract)}`)
+    if (body.maxCostUsd) args.push(`--max-cost=${Number(body.maxCostUsd)}`)
     if (apply) args.push('--apply')
     return { args, dryRun: !apply, spends: apply, targetId: 'roam-corpus' }
   }
