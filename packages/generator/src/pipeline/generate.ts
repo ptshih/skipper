@@ -1310,17 +1310,9 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
     }
     lap('tts')
 
-    // Ready-gate guard: EVERY stop must have audio before we flip — breaks included
-    // (break audio is mandatory; a tour never goes ready with a silent stop). The
-    // intro/outro bracket audio is enforced inside finalizeTourReady.
-    for (const fs of finalStops) {
-      if (!fs.audioUrl) {
-        throw new Error(
-          `Stop ${fs.seq} (${fs.stopType}) has no audio — refusing to mark tour ready.`,
-        )
-      }
-    }
-
+    // The ready-gate guard — EVERY stop AND frame must have audio before the flip (break
+    // audio included; a tour never goes ready with a silent stop or intro/outro) — lives
+    // inside finalizeTourReady, the single authority, which throws before any DB write.
     await finalizeTourReady(tourId, finalStops, finalBrackets)
     lap('finalize')
     console.log(

@@ -126,9 +126,11 @@ const trackColumns = {
   // The narration text. Nullable through generation; a row only goes live once filled.
   script: text('script'),
   // R2 object KEY (private). Stops/roam: clips are keyed per-track; the API presigns it
-  // after the freemium tier check.
-  audioUrl: text('audio_url'),
-  audioDurationMs: integer('audio_duration_ms'),
+  // after the freemium tier check. NOT NULL — a track/frame row is only ever inserted
+  // post-synthesis (finalizeTourReady's atomic batch; the roam upsert), so the DB enforces
+  // the "every stop/frame has audio" invariant at the boundary, not just in app code.
+  audioUrl: text('audio_url').notNull(),
+  audioDurationMs: integer('audio_duration_ms').notNull(),
   // Frozen attribution — an ARRAY, one entry per source this clip drew on (Wikipedia
   // CC BY-SA + Macrostrat CC BY + Wikidata CC0, etc.). The generator MUST populate it for
   // every wikipedia-grounded clip (CC BY-SA is legal, not optional).

@@ -333,6 +333,21 @@ export async function finalizeTourReady(
   if (!haveIntro || !haveOutro) {
     throw new Error(`Refusing to finalize tour ${tourId} without BOTH intro and outro frames.`)
   }
+  // The audio invariant, enforced HERE so this gate is the single authority — every stop AND
+  // every frame must carry real audio (a non-empty R2 key + a positive duration). The TS types
+  // and the DB's NOT NULL columns both back this; the runtime check also catches an empty-string
+  // key, which NOT NULL would let through. (Break audio is mandatory; a tour never goes ready
+  // with a silent stop or a silent intro/outro.)
+  for (const s of stops) {
+    if (!s.audioUrl || !(s.audioDurationMs > 0)) {
+      throw new Error(`Refusing to finalize tour ${tourId}: stop ${s.seq} (${s.stopType}) has no audio.`)
+    }
+  }
+  for (const b of brackets) {
+    if (!b.audioUrl || !(b.audioDurationMs > 0)) {
+      throw new Error(`Refusing to finalize tour ${tourId}: ${b.kind} frame has no audio.`)
+    }
+  }
   // A stop splits into its place-anchor (segment) + its narration (track, form = the stop
   // type, variant 0). The segment carries the trigger geometry + frozen persona; the track
   // carries the script/audio/attribution/facts_hash.
