@@ -11,7 +11,16 @@
 //   { stars: 5, quote: 'I cackled at the windshield bit.', who: 'TestFlight rider · June' }
 import Icon from '../Icon.astro'
 
-const quotes: { stars: number; quote: string; who: string }[] = []
+// Deliberately, TRANSPARENTLY fake — over-the-top gag "reviews" nobody could
+// mistake for real. This stays honest because it's an obvious joke (and the body
+// copy openly admits nobody's reviewed Skipper yet), NOT pretend social proof.
+// Swap in real, attributed quotes the day they exist (and revert the heading/
+// body to the straight version, or keep the bit — your call).
+const quotes: { stars: number; quote: string; who: string }[] = [
+  { stars: 5, quote: 'Best app I’ve ever made. Am I allowed to review my own app? Five stars regardless.', who: 'The Skipper · a deeply impartial judge' },
+  { stars: 5, quote: 'My boy built this. Haven’t heard a single second of it. Couldn’t be prouder.', who: 'the developer’s mom · verified relative' },
+  { stars: 5, quote: 'Was promised pie for this review. The pie never came. Five stars, out of pure fear.', who: 'Greg · a man at the overlook' },
+]
 ---
 
 <section class="section founder" id="founder">
@@ -20,8 +29,8 @@ const quotes: { stars: number; quote: string; who: string }[] = []
       {
         quotes.length ? (
           <>
-            <span class="kicker">First riders, unfiltered</span>
-            <h2 class="title">A few early reactions. The rest is up to your ears.</h2>
+            <span class="kicker">Rave reviews · definitely real · do not investigate</span>
+            <h2 class="title">Five glowing stars. From wildly impartial sources.</h2>
           </>
         ) : (
           <>
@@ -30,12 +39,23 @@ const quotes: { stars: number; quote: string; who: string }[] = []
           </>
         )
       }
-      <p class="founder__body">
-        So here’s the honest version: Skipper is a small, stubborn labor of love — one drive, one
-        voice, built by someone who got tired of audio tours that read facts at you like a museum
-        placard. When real riders have opinions, their words go here. Until then, the only review
-        that counts is your own ears, a few scrolls up.
-      </p>
+      {
+        quotes.length ? (
+          <p class="founder__body">
+            Full disclosure: nobody’s actually reviewed Skipper yet — it isn’t even in the store. So
+            the Skipper rounded up a few “riders” of, ah, questionable independence. The real ones
+            land right here the day they exist. Until then, the only review that counts is your own
+            ears, a few scrolls up.
+          </p>
+        ) : (
+          <p class="founder__body">
+            So here’s the honest version: Skipper is a small, stubborn labor of love — one drive, one
+            voice, built by someone who got tired of audio tours that read facts at you like a museum
+            placard. When real riders have opinions, their words go here. Until then, the only review
+            that counts is your own ears, a few scrolls up.
+          </p>
+        )
+      }
       <p class="founder__signoff">— see you at the trailhead. Bring snacks.</p>
       <a class="btn btn--secondary founder__cta" href="#top">
         <Icon name="play" size={18} /> Go back and hear him
