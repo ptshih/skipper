@@ -40,12 +40,12 @@ const HERO_STOP = 'Emerald Bay overlook'
     <div class="hero__player">
       <figure class="player framed" data-hero-player aria-label="Listen to a sample from the Skipper">
         <figcaption class="player__head">
-          <span class="player__state" data-state>20-sec sample</span>
+          <span class="player__state" data-state>Sample clip</span>
           <span class="player__stop">{HERO_STOP}</span>
         </figcaption>
 
         <div class="player__body">
-          <button class="disc" data-play type="button" aria-label="Play a 20-second sample from the Skipper">
+          <button class="disc" data-play type="button" aria-label="Play the Emerald Bay sample from the Skipper">
             <span class="disc__icon" data-icon-play><Icon name="play" size={34} /></span>
             <span class="disc__icon disc__icon--pause" data-icon-pause hidden><Icon name="pause" size={32} /></span>
           </button>
@@ -58,12 +58,12 @@ const HERO_STOP = 'Emerald Bay overlook'
             </div>
             <div class="player__times mono">
               <span data-time-cur>0:00</span>
-              <span data-time-dur>0:20</span>
+              <span data-time-dur>0:23</span>
             </div>
           </div>
         </div>
 
-        <p class="player__caption mono" data-caption>EMERALD BAY OVERLOOK · 20 sec · his real voice, his real corn</p>
+        <p class="player__caption mono" data-caption>EMERALD BAY OVERLOOK · his real voice, his real corn</p>
         <audio data-audio src={HERO_CLIP} preload="metadata"></audio>
       </figure>
 
