@@ -106,6 +106,13 @@ export const TTS_TOKEN_PRICING = { textPerMTok: 1, audioPerMTok: 20, audioTokens
 const TTS_WORDS_PER_SECOND = 2.5
 const TTS_CHARS_PER_TEXT_TOKEN = 4
 
+/** The estimate above UNDER-counts ~5–15% (TTS_WORDS_PER_SECOND runs a touch fast vs
+ *  3.1-flash's real pace, so actual audio seconds — and the audio-token bill — come in
+ *  higher). The --max-cost gate multiplies the estimate by this margin before comparing to
+ *  the cap, so a tight cap is honored against the upper bound, not the optimistic point
+ *  estimate (a $4.80 estimate on a $5 cap would otherwise sail through and bill ~$5.20). */
+export const TTS_ESTIMATE_SAFETY = 1.2
+
 export interface TtsEstimate {
   usd: number
   estSeconds: number

@@ -313,7 +313,11 @@ export default function TourScreen() {
           {/* Offline state rides here as a compact chip — the ACTION lives in the ⋯ menu. */}
           {downloading ? (
             <Text variant="label" color="inkFaint">
-              Saving {downloading.done}/{downloading.total || '…'}
+              {/* Until the file count is known (total still 0), show a bare "Saving…" rather
+                  than a "0/…" fraction that flickers as the manifest resolves. */}
+              {downloading.total
+                ? `Saving ${downloading.done}/${downloading.total}`
+                : 'Saving…'}
             </Text>
           ) : downloaded && updatable ? (
             // A re-cut waits on the server — amber to read as "there's something new" (the ACTION

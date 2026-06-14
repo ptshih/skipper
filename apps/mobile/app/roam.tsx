@@ -217,7 +217,10 @@ export default function RoamScreen() {
         tone="danger"
         action={
           r.gate?.reduced || !r.gate?.canAskAgain
-            ? { label: voice.drive.locationSettings, onPress: () => void Linking.openSettings() }
+            ? {
+                label: voice.drive.locationSettings,
+                onPress: () => void Linking.openSettings().catch(() => {}),
+              }
             : { label: voice.drive.locationAllow, onPress: r.start }
         }
       />

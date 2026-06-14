@@ -51,7 +51,13 @@ import {
   requireEnv,
 } from '../config'
 import { mapLimit } from './concurrency'
-import { estimateTtsUsd, llmSpendLines, llmSpentUsd, unpricedModels } from './spend'
+import {
+  estimateTtsUsd,
+  llmSpendLines,
+  llmSpentUsd,
+  TTS_ESTIMATE_SAFETY,
+  unpricedModels,
+} from './spend'
 import {
   applyTailOutcomes,
   buildGroundingWell,
@@ -1038,13 +1044,17 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
         `MODEL_PRICING (pipeline/spend.ts). Failing safe: treating the cap as exceeded.`,
     )
   }
+  // Compare the cap against a CONSERVATIVE estimate (the TTS figure carries a safety margin —
+  // see TTS_ESTIMATE_SAFETY) so a tight --max-cost is respected against the upper bound, not the
+  // optimistic point estimate that bills ~5–15% light.
+  const projectedUsd = llmUsd + ttsEstimate.usd * TTS_ESTIMATE_SAFETY
   const costCapped =
     !dryRun &&
     opts.maxCostUsd !== undefined &&
-    (unpriced.length > 0 || llmUsd + ttsEstimate.usd > opts.maxCostUsd)
+    (unpriced.length > 0 || projectedUsd > opts.maxCostUsd)
   if (costCapped) {
     console.warn(
-      `⛔ --max-cost $${opts.maxCostUsd!.toFixed(2)} would be exceeded (≈$${(llmUsd + ttsEstimate.usd).toFixed(2)})` +
+      `⛔ --max-cost $${opts.maxCostUsd!.toFixed(2)} would be exceeded (≈$${projectedUsd.toFixed(2)} incl. TTS safety margin)` +
         ` — skipping TTS/R2/tour-state writes. Scripts + the eval record still land below.`,
     )
   }

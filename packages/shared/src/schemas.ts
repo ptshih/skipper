@@ -104,37 +104,6 @@ export type VersionPolicy = z.infer<typeof versionPolicy>
 export const versionResponse = z.object({ policies: z.array(versionPolicy) })
 export type VersionResponse = z.infer<typeof versionResponse>
 
-/**
- * An ordered stop that OWNS its narration (per tour). The R2 audio KEY is internal and
- * never exposed; the player learns audio availability from `audioDurationMs` and gets a
- * playable URL from the /sign endpoint.
- */
-export const tourStop = z.object({
-  id: z.uuid(),
-  tourId: z.uuid(),
-  seq: z.number().int(),
-  poiId: z.uuid(),
-  stopType,
-  script: z.string().nullish(),
-  audioDurationMs: z.number().int().nullish(),
-  attribution: attributionList.nullish(),
-  /** Floor, not the rule — the player uses speed-adaptive lead time. */
-  triggerRadiusM: z.number().int(),
-  /** Heading gate only applies above ~5 mph; null = ignore heading. */
-  approachHeadingDeg: z.number().int().nullish(),
-})
-export type TourStop = z.infer<typeof tourStop>
-
-/** A drive's FRAME piece (intro/outro). Placeless; fired by drive lifecycle, not geofence. */
-export const tourBracket = z.object({
-  id: z.uuid(),
-  tourId: z.uuid(),
-  kind: bracketKind,
-  script: z.string().nullish(),
-  audioDurationMs: z.number().int().nullish(),
-})
-export type TourBracket = z.infer<typeof tourBracket>
-
 /** A tour: the whole self-contained drive (route + endpoints + ordered stops + brackets). */
 export const tour = z.object({
   id: z.uuid(),
