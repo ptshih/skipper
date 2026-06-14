@@ -26,6 +26,7 @@ import { ensurePoiOverridesLoaded } from './pipeline/poi-overrides'
 import { hashFacts, upsertPoi } from './pipeline/persist'
 import { speakableAnchorFor } from './pipeline/speakable'
 import { announce, parseFlags } from './pipeline/ops'
+import { beginJob, finishJob } from './pipeline/job-progress'
 import { sleep } from './pipeline/http'
 import type { LngLat } from './pipeline/geo'
 
@@ -73,110 +74,122 @@ const box = parseBbox(flags.value('bbox'))
 
 announce({ tool: 'sweep-roam-pois', blast: ['MUTATES DB'], apply })
 
-// Overrides ride every fetch (the fact-edit seam) — load them before any extract lands.
-await ensurePoiOverridesLoaded()
+async function main(): Promise<void> {
+  // Overrides ride every fetch (the fact-edit seam) — load them before any extract lands.
+  await ensurePoiOverridesLoaded()
 
-// 5×7 grid over the corridor (~11×11 km cells — WDQS chokes on wide-area boxes; the
-// original 2×3 attempt timed out on a mid-lake cell), merged by qid, then ONE same-place
-// dedupe across the whole merged set (a place straddling a cell boundary appears in two
-// cells). A cell that still fails after one local retry is SKIPPED and reported — the
-// sweep is idempotent, so a re-run fills the gap.
-const cells = gridBoxes(box.sw, box.ne, 5, 7)
-const byQid = new Map<string, WikidataCandidate>()
-const failedCells: number[] = []
-for (const [i, cell] of cells.entries()) {
-  console.log(
-    `Cell ${i + 1}/${cells.length} [${cell.sw.map((n) => n.toFixed(3))} → ${cell.ne.map((n) => n.toFixed(3))}]...`,
-  )
-  let cands: WikidataCandidate[] | null = null
-  for (let attempt = 1; attempt <= 2 && !cands; attempt++) {
-    try {
-      cands = await discoverWikidataBbox(cell.sw, cell.ne)
-    } catch (e) {
-      console.warn(`  attempt ${attempt} failed: ${(e as Error).message}`)
-      if (attempt === 1) await sleep(8_000) // give WDQS a breath before the local retry
+  // 5×7 grid over the corridor (~11×11 km cells — WDQS chokes on wide-area boxes; the
+  // original 2×3 attempt timed out on a mid-lake cell), merged by qid, then ONE same-place
+  // dedupe across the whole merged set (a place straddling a cell boundary appears in two
+  // cells). A cell that still fails after one local retry is SKIPPED and reported — the
+  // sweep is idempotent, so a re-run fills the gap.
+  const cells = gridBoxes(box.sw, box.ne, 5, 7)
+  const byQid = new Map<string, WikidataCandidate>()
+  const failedCells: number[] = []
+  for (const [i, cell] of cells.entries()) {
+    console.log(
+      `Cell ${i + 1}/${cells.length} [${cell.sw.map((n) => n.toFixed(3))} → ${cell.ne.map((n) => n.toFixed(3))}]...`,
+    )
+    let cands: WikidataCandidate[] | null = null
+    for (let attempt = 1; attempt <= 2 && !cands; attempt++) {
+      try {
+        cands = await discoverWikidataBbox(cell.sw, cell.ne)
+      } catch (e) {
+        console.warn(`  attempt ${attempt} failed: ${(e as Error).message}`)
+        if (attempt === 1) await sleep(8_000) // give WDQS a breath before the local retry
+      }
     }
+    if (!cands) {
+      failedCells.push(i + 1)
+      continue
+    }
+    for (const c of cands) {
+      const prev = byQid.get(c.qid)
+      // Prefer the richer record (a story over its scenic twin from a boundary overlap).
+      if (!prev || (c.tier === 'story' && prev.tier !== 'story')) byQid.set(c.qid, c)
+    }
+    console.log(`  ${cands.length} candidates (running total ${byQid.size})`)
+    await sleep(1_000) // gentle pacing between WDQS calls
   }
-  if (!cands) {
-    failedCells.push(i + 1)
-    continue
+  if (failedCells.length > 0) {
+    console.warn(
+      `\n⚠ ${failedCells.length}/${cells.length} cells failed and were SKIPPED (cells ${failedCells.join(', ')}). ` +
+        `The sweep is idempotent — re-run to fill the gaps.`,
+    )
   }
-  for (const c of cands) {
-    const prev = byQid.get(c.qid)
-    // Prefer the richer record (a story over its scenic twin from a boundary overlap).
-    if (!prev || (c.tier === 'story' && prev.tier !== 'story')) byQid.set(c.qid, c)
-  }
-  console.log(`  ${cands.length} candidates (running total ${byQid.size})`)
-  await sleep(1_000) // gentle pacing between WDQS calls
-}
-if (failedCells.length > 0) {
-  console.warn(
-    `\n⚠ ${failedCells.length}/${cells.length} cells failed and were SKIPPED (cells ${failedCells.join(', ')}). ` +
-      `The sweep is idempotent — re-run to fill the gaps.`,
+  const merged = dedupeByName([...byQid.values()])
+
+  const stories = merged.filter((c) => c.tier === 'story' && c.article)
+  const scenics = merged.filter((c) => c.tier === 'scenic')
+  const breaks = merged.filter((c) => c.tier === 'break')
+  const drops = merged.filter((c) => c.tier === 'drop')
+
+  console.log(
+    `\nCorridor sweep: ${merged.length} places → ${stories.length} STORY, ${scenics.length} SCENIC, ` +
+      `${breaks.length} break (skipped), ${drops.length} drop (skipped)\n`,
   )
-}
-const merged = dedupeByName([...byQid.values()])
+  console.log('STORY (roam-narratable — extract chars):')
+  for (const s of [...stories].sort((a, b) => (b.article!.extract.length || 0) - (a.article!.extract.length || 0))) {
+    console.log(`  ${String(s.article!.extract.length).padStart(5)}  ${s.name}`)
+  }
+  console.log(`\nSCENIC pins persisted for the future wave layer: ${scenics.length}`)
 
-const stories = merged.filter((c) => c.tier === 'story' && c.article)
-const scenics = merged.filter((c) => c.tier === 'scenic')
-const breaks = merged.filter((c) => c.tier === 'break')
-const drops = merged.filter((c) => c.tier === 'drop')
+  if (!apply) {
+    console.log('\nDRY RUN — nothing written. Re-run with --apply to upsert pois.')
+    return
+  }
 
-console.log(
-  `\nCorridor sweep: ${merged.length} places → ${stories.length} STORY, ${scenics.length} SCENIC, ` +
-    `${breaks.length} break (skipped), ${drops.length} drop (skipped)\n`,
-)
-console.log('STORY (roam-narratable — extract chars):')
-for (const s of [...stories].sort((a, b) => (b.article!.extract.length || 0) - (a.article!.extract.length || 0))) {
-  console.log(`  ${String(s.article!.extract.length).padStart(5)}  ${s.name}`)
+  const fetchedAt = new Date()
+  let wrote = 0
+  for (const s of stories) {
+    const a = s.article!
+    // Store the FULL discovery payload (incl. the linked Wikidata qid) so a tour generate can
+    // rebuild the spine candidate (WikiPoi) losslessly from the pool — see pipeline/region-corpus.ts.
+    const facts = { extract: a.extract, title: a.title, url: a.url, pageId: a.pageId, qid: s.qid }
+    // Seed the curated "where to look" anchor onto the corpus row (coalesce-kept by upsertPoi, so
+    // an admin edit always wins on a re-sweep). select.ts reads it back off pois.speakable.
+    const sp = speakableAnchorFor('wikipedia', String(a.pageId))
+    await upsertPoi({
+      source: 'wikipedia',
+      sourceId: String(a.pageId),
+      name: a.title,
+      kind: featureKind(s.types) ?? null,
+      lat: s.lat,
+      lng: s.lng,
+      ...(sp ? { speakableLat: sp.lat, speakableLng: sp.lng } : {}),
+      summary: a.extract.split(/(?<=[.!?])\s+/)[0] ?? null,
+      facts,
+      factsHash: hashFacts(facts),
+      factsFetchedAt: fetchedAt,
+    })
+    wrote++
+  }
+  for (const s of scenics) {
+    const sp = speakableAnchorFor('wikidata', s.qid)
+    await upsertPoi({
+      source: 'wikidata',
+      sourceId: s.qid,
+      name: s.name,
+      kind: featureKind(s.types) ?? null,
+      lat: s.lat,
+      lng: s.lng,
+      ...(sp ? { speakableLat: sp.lat, speakableLng: sp.lng } : {}),
+      summary: null,
+      facts: null,
+      factsHash: null,
+      factsFetchedAt: null,
+    })
+    wrote++
+  }
+  console.log(`\nUpserted ${wrote} pois (${stories.length} story + ${scenics.length} scenic).`)
 }
-console.log(`\nSCENIC pins persisted for the future wave layer: ${scenics.length}`)
 
-if (!apply) {
-  console.log('\nDRY RUN — nothing written. Re-run with --apply to upsert pois.')
-  process.exit(0)
+await beginJob('sweep_roam_pois', { dryRun: !apply, targetId: 'roam-corpus' })
+try {
+  await main()
+  await finishJob({ ok: true })
+} catch (e) {
+  await finishJob({ ok: false, error: e instanceof Error ? e.message : String(e) })
+  console.error(e instanceof Error ? e.message : e)
+  process.exit(1)
 }
-
-const fetchedAt = new Date()
-let wrote = 0
-for (const s of stories) {
-  const a = s.article!
-  // Store the FULL discovery payload (incl. the linked Wikidata qid) so a tour generate can
-  // rebuild the spine candidate (WikiPoi) losslessly from the pool — see pipeline/region-corpus.ts.
-  const facts = { extract: a.extract, title: a.title, url: a.url, pageId: a.pageId, qid: s.qid }
-  // Seed the curated "where to look" anchor onto the corpus row (coalesce-kept by upsertPoi, so
-  // an admin edit always wins on a re-sweep). select.ts reads it back off pois.speakable.
-  const sp = speakableAnchorFor('wikipedia', String(a.pageId))
-  await upsertPoi({
-    source: 'wikipedia',
-    sourceId: String(a.pageId),
-    name: a.title,
-    kind: featureKind(s.types) ?? null,
-    lat: s.lat,
-    lng: s.lng,
-    ...(sp ? { speakableLat: sp.lat, speakableLng: sp.lng } : {}),
-    summary: a.extract.split(/(?<=[.!?])\s+/)[0] ?? null,
-    facts,
-    factsHash: hashFacts(facts),
-    factsFetchedAt: fetchedAt,
-  })
-  wrote++
-}
-for (const s of scenics) {
-  const sp = speakableAnchorFor('wikidata', s.qid)
-  await upsertPoi({
-    source: 'wikidata',
-    sourceId: s.qid,
-    name: s.name,
-    kind: featureKind(s.types) ?? null,
-    lat: s.lat,
-    lng: s.lng,
-    ...(sp ? { speakableLat: sp.lat, speakableLng: sp.lng } : {}),
-    summary: null,
-    facts: null,
-    factsHash: null,
-    factsFetchedAt: null,
-  })
-  wrote++
-}
-console.log(`\nUpserted ${wrote} pois (${stories.length} story + ${scenics.length} scenic).`)
