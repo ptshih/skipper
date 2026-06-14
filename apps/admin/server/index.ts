@@ -59,7 +59,6 @@ import {
   type JobKind,
 } from './jobs'
 import { freezeTour, proposeTour, type ProposePrompt } from './create-tour'
-import { captureJobOutput } from './job-output'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 
 const app = new Hono<AdminEnv>()
@@ -602,9 +601,6 @@ app.get('/admin/runs', async (c) => {
             })
             .where(eq(genJobs.id, j.id))
           j.status = state
-          if (state === 'succeeded') {
-            void captureJobOutput(j.id, j.cloudRunExecution!, j.kind)
-          }
         }
       }),
     )
@@ -681,17 +677,11 @@ app.get('/admin/jobs/:id', async (c) => {
         })
         .where(eq(genJobs.id, id))
       job = (await db.select().from(genJobs).where(eq(genJobs.id, id)).limit(1))[0]!
-      if (state === 'succeeded') {
-        void captureJobOutput(job.id, job.cloudRunExecution!, job.kind)
-      }
     }
   }
-  // Retry log capture: Cloud Logging has a propagation delay (30s–2min). If the initial
-  // fire-and-forget capture ran before logs were indexed, outputLog is null even though the
-  // job succeeded. Re-trigger (idempotent — skips instantly if outputLog is already set).
-  if (job.status === 'succeeded' && job.cloudRunExecution && job.outputLog == null) {
-    void captureJobOutput(job.id, job.cloudRunExecution, job.kind)
-  }
+  // Job output (log/summary/metrics) is written by the JOB itself at finishJob, atomically with
+  // the status flip — the admin no longer reconstructs it from Cloud Logging. logsUrl deep-links
+  // to Logs Explorer for the rare hard-crash that never reached finishJob.
   const logsUrl = job.cloudRunExecution ? jobExecutionLogsUrl(job.cloudRunExecution) : null
   return c.json({ job, logsUrl })
 })

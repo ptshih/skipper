@@ -31,6 +31,7 @@ import { db } from '@skipper/db'
 import { pois, segments, tracks } from '@skipper/db/schema'
 import type { AttributionSnapshot } from '@skipper/db/schema'
 import { announce, assertReady, parseFlags } from './pipeline/ops'
+import { beginJob, finishJob } from './pipeline/job-progress'
 import { ensurePoiOverridesLoaded } from './pipeline/poi-overrides'
 import { fetchDeepExtracts } from './pipeline/wikipedia'
 import { narrateStop } from './pipeline/narrate'
@@ -98,277 +99,308 @@ announce({
 })
 if (apply) assertReady(['tts', 'r2']) // scripts-only needs neither TTS nor R2
 
-await ensurePoiOverridesLoaded()
+async function main(): Promise<void> {
+  await ensurePoiOverridesLoaded()
 
-// ── Candidate corpus: wikipedia-sourced pois with story-grade extracts, in the bbox ──
-// The ROAM telling for a poi is its segment(tour_id null) + that segment's story track —
-// left-joined so a poi with no roam clip yet still appears (and queues).
-const rows = await withRetry(
-  () =>
-    db
-      .select({
-        id: pois.id,
-        sourceId: pois.sourceId,
-        name: pois.name,
-        kind: pois.kind,
-        lat: pois.lat,
-        lng: pois.lng,
-        facts: pois.facts,
-        factsHash: pois.factsHash,
-        factsFetchedAt: pois.factsFetchedAt,
-        segmentId: segments.id,
-        trackId: tracks.id,
-        clipFactsHash: tracks.factsHash,
-      })
-      .from(pois)
-      .leftJoin(segments, and(eq(segments.poiId, pois.id), isNull(segments.tourId)))
-      .leftJoin(
-        tracks,
-        and(eq(tracks.segmentId, segments.id), eq(tracks.form, 'story'), eq(tracks.variant, 0)),
-      )
-      .where(
-        and(
-          eq(pois.source, 'wikipedia'),
-          sql`${pois.lat} between ${bbox.swLat} and ${bbox.neLat}`,
-          sql`${pois.lng} between ${bbox.swLng} and ${bbox.neLng}`,
+  // ── Candidate corpus: wikipedia-sourced pois with story-grade extracts, in the bbox ──
+  // The ROAM telling for a poi is its segment(tour_id null) + that segment's story track —
+  // left-joined so a poi with no roam clip yet still appears (and queues).
+  const rows = await withRetry(
+    () =>
+      db
+        .select({
+          id: pois.id,
+          sourceId: pois.sourceId,
+          name: pois.name,
+          kind: pois.kind,
+          lat: pois.lat,
+          lng: pois.lng,
+          facts: pois.facts,
+          factsHash: pois.factsHash,
+          factsFetchedAt: pois.factsFetchedAt,
+          segmentId: segments.id,
+          trackId: tracks.id,
+          clipFactsHash: tracks.factsHash,
+        })
+        .from(pois)
+        .leftJoin(segments, and(eq(segments.poiId, pois.id), isNull(segments.tourId)))
+        .leftJoin(
+          tracks,
+          and(eq(tracks.segmentId, segments.id), eq(tracks.form, 'story'), eq(tracks.variant, 0)),
+        )
+        .where(
+          and(
+            eq(pois.source, 'wikipedia'),
+            sql`${pois.lat} between ${bbox.swLat} and ${bbox.neLat}`,
+            sql`${pois.lng} between ${bbox.swLng} and ${bbox.neLng}`,
+          ),
         ),
-      ),
-  { label: 'load roam corpus' },
-)
-
-interface Candidate {
-  poiId: string
-  pageId: number
-  name: string
-  kind: string | null
-  lat: number
-  lng: number
-  extract: string
-  title: string
-  url: string
-  factsFetchedAt: Date | null
-  /** The poi's existing roam segment id (tour_id null), if any — reused so a regen keeps one
-   *  roam segment per poi (the track is upserted on (segment, form, variant)). */
-  segmentId: string | null
-  hasFreshClip: boolean
-}
-
-const candidates: Candidate[] = []
-for (const r of rows) {
-  const extract = typeof r.facts?.extract === 'string' ? (r.facts.extract as string) : ''
-  if (extract.length < minExtract) continue
-  if (TASTE_DENYLIST.test(r.name)) {
-    console.log(`  taste-gate: skipping "${r.name}"`)
-    continue
-  }
-  const f = r.facts as { title?: string; url?: string; pageId?: number } | null
-  candidates.push({
-    poiId: r.id,
-    pageId: f?.pageId ?? Number(r.sourceId),
-    name: r.name,
-    kind: r.kind,
-    lat: r.lat,
-    lng: r.lng,
-    extract,
-    title: f?.title ?? r.name,
-    url: f?.url ?? `https://en.wikipedia.org/?curid=${r.sourceId}`,
-    factsFetchedAt: r.factsFetchedAt,
-    segmentId: r.segmentId,
-    // Fresh = a track exists AND grounds on the poi's CURRENT facts → skip unless --force.
-    hasFreshClip: r.trackId !== null && r.clipFactsHash === r.factsHash && r.factsHash !== null,
-  })
-}
-
-const skipped = candidates.filter((c) => c.hasFreshClip && !force)
-const queue = candidates.filter((c) => !c.hasFreshClip || force).slice(0, limit)
-
-console.log(
-  `Corpus: ${candidates.length} story-grade pois in bbox (≥${minExtract} chars) — ` +
-    `${skipped.length} already have fresh roam clips (skipped), ${queue.length} to generate.\n`,
-)
-for (const c of queue) console.log(`  ${String(c.extract.length).padStart(5)}  ${c.name}`)
-
-if (queue.length === 0) {
-  console.log('Nothing to generate.')
-  process.exit(0)
-}
-
-// Cost preview: narration ≈ system+sheet in / ~1k thinking+output out per clip (Opus 4.8
-// $5/$25 per MTok → very roughly $0.03–0.08 per clip), TTS estimated exactly by chars.
-const estClipChars = 800 // ~150 spoken words
-const tts = estimateTtsUsd(
-  queue.map(() => 'x'.repeat(estClipChars)),
-  personaFromKey('skipper').ttsStyle.length,
-)
-console.log(
-  `\nEstimated spend: narration ~$${(queue.length * 0.1).toFixed(2)} ± half ` +
-    `+ TTS ~$${tts.usd.toFixed(2)} (${queue.length} clips ≈ ${Math.round((queue.length * ROAM_LENGTH.storyTargetSeconds) / 60)} min of audio)`,
-)
-
-if (!apply && !scriptsOnly) {
-  console.log(
-    '\nDRY RUN — nothing narrated, synthesized, or written. Re-run with --apply (or --scripts-only to narrate + print, no TTS/DB).',
+    { label: 'load roam corpus' },
   )
-  process.exit(0)
-}
 
-const persona = personaFromKey('skipper')
-// The frozen host on every roam segment this run writes.
-const personaId = await resolvePersonaId(persona.personaKey)
+  interface Candidate {
+    poiId: string
+    pageId: number
+    name: string
+    kind: string | null
+    lat: number
+    lng: number
+    extract: string
+    title: string
+    url: string
+    factsFetchedAt: Date | null
+    /** The poi's existing roam segment id (tour_id null), if any — reused so a regen keeps one
+     *  roam segment per poi (the track is upserted on (segment, form, variant)). */
+    segmentId: string | null
+    hasFreshClip: boolean
+  }
 
-// ── Deepen facts (free): full-article extracts for the queue, then re-upsert pois ──
-console.log(`\nDeepening ${queue.length} fact sheets (full-article extracts)...`)
-const deep = await fetchDeepExtracts(queue.map((c) => c.pageId))
-const fetchedAt = new Date()
-for (const c of queue) {
-  const deepText = deep.get(c.pageId)
-  if (deepText && deepText.length > c.extract.length) {
-    c.extract = deepText // in-memory, so narration grounds on the full article (needed by scripts-only too)
-    c.factsFetchedAt = fetchedAt
-    if (!scriptsOnly) {
-      // scripts-only is a read-only sample — don't persist the deepened facts.
-      const facts = { extract: deepText, title: c.title, url: c.url, pageId: c.pageId }
-      await upsertPoi({
-        source: 'wikipedia',
-        sourceId: String(c.pageId),
-        name: c.name,
-        kind: c.kind,
-        lat: c.lat,
-        lng: c.lng,
-        summary: deepText.split(/(?<=[.!?])\s+/)[0] ?? null,
-        facts,
-        factsHash: hashFacts(facts),
-        factsFetchedAt: fetchedAt,
-      })
+  const candidates: Candidate[] = []
+  for (const r of rows) {
+    const extract = typeof r.facts?.extract === 'string' ? (r.facts.extract as string) : ''
+    if (extract.length < minExtract) continue
+    if (TASTE_DENYLIST.test(r.name)) {
+      console.log(`  taste-gate: skipping "${r.name}"`)
+      continue
+    }
+    const f = r.facts as { title?: string; url?: string; pageId?: number } | null
+    candidates.push({
+      poiId: r.id,
+      pageId: f?.pageId ?? Number(r.sourceId),
+      name: r.name,
+      kind: r.kind,
+      lat: r.lat,
+      lng: r.lng,
+      extract,
+      title: f?.title ?? r.name,
+      url: f?.url ?? `https://en.wikipedia.org/?curid=${r.sourceId}`,
+      factsFetchedAt: r.factsFetchedAt,
+      segmentId: r.segmentId,
+      // Fresh = a track exists AND grounds on the poi's CURRENT facts → skip unless --force.
+      hasFreshClip: r.trackId !== null && r.clipFactsHash === r.factsHash && r.factsHash !== null,
+    })
+  }
+
+  const skipped = candidates.filter((c) => c.hasFreshClip && !force)
+  const queue = candidates.filter((c) => !c.hasFreshClip || force).slice(0, limit)
+
+  console.log(
+    `Corpus: ${candidates.length} story-grade pois in bbox (≥${minExtract} chars) — ` +
+      `${skipped.length} already have fresh roam clips (skipped), ${queue.length} to generate.\n`,
+  )
+  for (const c of queue) console.log(`  ${String(c.extract.length).padStart(5)}  ${c.name}`)
+
+  if (queue.length === 0) {
+    console.log('Nothing to generate.')
+    return
+  }
+
+  // Cost preview: narration ≈ system+sheet in / ~1k thinking+output out per clip (Opus 4.8
+  // $5/$25 per MTok → very roughly $0.03–0.08 per clip), TTS estimated exactly by chars.
+  const estClipChars = 800 // ~150 spoken words
+  const tts = estimateTtsUsd(
+    queue.map(() => 'x'.repeat(estClipChars)),
+    personaFromKey('skipper').ttsStyle.length,
+  )
+  console.log(
+    `\nEstimated spend: narration ~$${(queue.length * 0.1).toFixed(2)} ± half ` +
+      `+ TTS ~$${tts.usd.toFixed(2)} (${queue.length} clips ≈ ${Math.round((queue.length * ROAM_LENGTH.storyTargetSeconds) / 60)} min of audio)`,
+  )
+
+  if (!apply && !scriptsOnly) {
+    console.log(
+      '\nDRY RUN — nothing narrated, synthesized, or written. Re-run with --apply (or --scripts-only to narrate + print, no TTS/DB).',
+    )
+    return
+  }
+
+  const persona = personaFromKey('skipper')
+  // The frozen host on every roam segment this run writes.
+  const personaId = await resolvePersonaId(persona.personaKey)
+
+  // ── Deepen facts (free): full-article extracts for the queue, then re-upsert pois ──
+  console.log(`\nDeepening ${queue.length} fact sheets (full-article extracts)...`)
+  const deep = await fetchDeepExtracts(queue.map((c) => c.pageId))
+  const fetchedAt = new Date()
+  for (const c of queue) {
+    const deepText = deep.get(c.pageId)
+    if (deepText && deepText.length > c.extract.length) {
+      c.extract = deepText // in-memory, so narration grounds on the full article (needed by scripts-only too)
+      c.factsFetchedAt = fetchedAt
+      if (!scriptsOnly) {
+        // scripts-only is a read-only sample — don't persist the deepened facts.
+        const facts = { extract: deepText, title: c.title, url: c.url, pageId: c.pageId }
+        await upsertPoi({
+          source: 'wikipedia',
+          sourceId: String(c.pageId),
+          name: c.name,
+          kind: c.kind,
+          lat: c.lat,
+          lng: c.lng,
+          summary: deepText.split(/(?<=[.!?])\s+/)[0] ?? null,
+          facts,
+          factsHash: hashFacts(facts),
+          factsFetchedAt: fetchedAt,
+        })
+      }
     }
   }
-}
 
-// ── Narrate (parallel, blind drafts) with the two cheap guards ──
-const LATERALITY = /\b(?:on|to|off to) (?:your|the) (?:left|right)\b|\b(?:left|right)(?:-hand)? side\b/i
+  // ── Narrate (parallel, blind drafts) with the two cheap guards ──
+  const LATERALITY =
+    /\b(?:on|to|off to) (?:your|the) (?:left|right)\b|\b(?:left|right)(?:-hand)? side\b/i
 
-async function narrateEncounter(c: Candidate): Promise<string> {
-  const base = {
-    region: regionLabel(c.lat, c.lng),
-    corridor: 'Free roam — an unplanned drive, no route',
-    stopType: 'story' as const,
-    jokeLevel: 'dadpocalypse' as const,
-    place: { name: c.name, ...(c.kind ? { kind: c.kind } : {}) },
-    facts: toFacts(c.extract),
-    targetSeconds: ROAM_LENGTH.storyTargetSeconds,
-    maxSeconds: ROAM_LENGTH.storyMaxSeconds,
-    encounterFrame: true,
+  async function narrateEncounter(c: Candidate): Promise<string> {
+    const base = {
+      region: regionLabel(c.lat, c.lng),
+      corridor: 'Free roam — an unplanned drive, no route',
+      stopType: 'story' as const,
+      jokeLevel: 'dadpocalypse' as const,
+      place: { name: c.name, ...(c.kind ? { kind: c.kind } : {}) },
+      facts: toFacts(c.extract),
+      targetSeconds: ROAM_LENGTH.storyTargetSeconds,
+      maxSeconds: ROAM_LENGTH.storyMaxSeconds,
+      encounterFrame: true,
+    }
+    let { script } = await narrateStop(base, persona.systemPrompt)
+    const avoid: string[] = []
+    if (LATERALITY.test(script))
+      avoid.push(
+        'Do NOT name a side of the road (no "on your left/right") — the direction of travel is unknown on a free-roam drive; say "just out there" or "right about here" instead.',
+      )
+    const kitHits = persona.kit.beats.filter((b) => b.match.test(script))
+    if (kitHits.length > 0) avoid.push(persona.kit.dropNote)
+    if (avoid.length > 0) {
+      console.log(
+        `  retake (${c.name}): ${kitHits.length > 0 ? 'kit ' : ''}${LATERALITY.test(script) ? 'laterality' : ''}`,
+      )
+      ;({ script } = await narrateStop({ ...base, avoid }, persona.systemPrompt))
+      if (LATERALITY.test(script) || persona.kit.beats.some((b) => b.match.test(script)))
+        console.warn(
+          `  ⚠ ${c.name}: guard still dirty after one retake — ships for the founder ear.`,
+        )
+    }
+    return script
   }
-  let { script } = await narrateStop(base, persona.systemPrompt)
-  const avoid: string[] = []
-  if (LATERALITY.test(script))
-    avoid.push(
-      'Do NOT name a side of the road (no "on your left/right") — the direction of travel is unknown on a free-roam drive; say "just out there" or "right about here" instead.',
-    )
-  const kitHits = persona.kit.beats.filter((b) => b.match.test(script))
-  if (kitHits.length > 0) avoid.push(persona.kit.dropNote)
-  if (avoid.length > 0) {
-    console.log(`  retake (${c.name}): ${kitHits.length > 0 ? 'kit ' : ''}${LATERALITY.test(script) ? 'laterality' : ''}`)
-    ;({ script } = await narrateStop({ ...base, avoid }, persona.systemPrompt))
-    if (LATERALITY.test(script) || persona.kit.beats.some((b) => b.match.test(script)))
-      console.warn(`  ⚠ ${c.name}: guard still dirty after one retake — ships for the founder ear.`)
-  }
-  return script
-}
 
-console.log(`\nNarrating ${queue.length} encounters (concurrency ${NARRATION_CONCURRENCY()})...`)
-let done = 0
-const scripts = await mapLimit(queue, NARRATION_CONCURRENCY(), async (c) => {
-  const script = await narrateEncounter(c)
-  done++
-  console.log(`  [${done}/${queue.length}] ${c.name} (${script.split(/\s+/).length} words)`)
-  return script
-})
-
-if (scriptsOnly) {
-  const WORDS_PER_SECOND = 2.5 // display estimate; mirrors narrate.ts (the target the model wrote to)
-  console.log('\n════════ SCRIPTS — scripts-only: no TTS, no R2, no DB writes ════════')
-  queue.forEach((c, i) => {
-    const script = scripts[i]!
-    const words = script.trim().split(/\s+/).filter(Boolean).length
-    console.log(
-      `\n──── ${c.name} · ${words} words ≈ ${Math.round(words / WORDS_PER_SECOND)}s · ${c.extract.length} chars source ────\n${script}`,
-    )
+  console.log(`\nNarrating ${queue.length} encounters (concurrency ${NARRATION_CONCURRENCY()})...`)
+  let done = 0
+  const scripts = await mapLimit(queue, NARRATION_CONCURRENCY(), async (c) => {
+    const script = await narrateEncounter(c)
+    done++
+    console.log(`  [${done}/${queue.length}] ${c.name} (${script.split(/\s+/).length} words)`)
+    return script
   })
-  console.log(`\n(band: aim ${ROAM_LENGTH.storyTargetSeconds}s, cap ${ROAM_LENGTH.storyMaxSeconds}s)`)
-  process.exit(0)
-}
 
-// ── Synthesize + upload + upsert rows (a row only lands COMPLETE) ──
-console.log(`\nSynthesizing ${queue.length} clips (concurrency ${TTS_CONCURRENCY()})...`)
-let synthDone = 0
-const results = await mapLimit(queue, TTS_CONCURRENCY(), async (c, i) => {
-  const script = scripts[i]!
-  // Reuse the poi's existing roam segment (one per poi); mint one on first generation.
-  const segmentId = c.segmentId ?? crypto.randomUUID()
-  const trackId = crypto.randomUUID()
-  // Tail-collapse retake (pipeline/tts.ts): roam clips ship unheard, so a mumbled
-  // closing sentence would reach riders' ears first — measure + retake here too.
-  const { audio, durationMs } = await synthesizeWithTailRetake(
-    script,
-    persona.voice,
-    persona.ttsStyle,
-    `"${c.title}"`,
-  )
-  const audioUrl = await uploadAudio(roamClipKey(c.poiId, trackId), audio)
-  const attribution: AttributionSnapshot[] = [
-    {
-      source: 'wikipedia',
-      sourceId: String(c.pageId),
+  if (scriptsOnly) {
+    const WORDS_PER_SECOND = 2.5 // display estimate; mirrors narrate.ts (the target the model wrote to)
+    console.log('\n════════ SCRIPTS — scripts-only: no TTS, no R2, no DB writes ════════')
+    queue.forEach((c, i) => {
+      const script = scripts[i]!
+      const words = script.trim().split(/\s+/).filter(Boolean).length
+      console.log(
+        `\n──── ${c.name} · ${words} words ≈ ${Math.round(words / WORDS_PER_SECOND)}s · ${c.extract.length} chars source ────\n${script}`,
+      )
+    })
+    console.log(
+      `\n(band: aim ${ROAM_LENGTH.storyTargetSeconds}s, cap ${ROAM_LENGTH.storyMaxSeconds}s)`,
+    )
+    return
+  }
+
+  // ── Synthesize + upload + upsert rows (a row only lands COMPLETE) ──
+  console.log(`\nSynthesizing ${queue.length} clips (concurrency ${TTS_CONCURRENCY()})...`)
+  let synthDone = 0
+  const results = await mapLimit(queue, TTS_CONCURRENCY(), async (c, i) => {
+    const script = scripts[i]!
+    // Reuse the poi's existing roam segment (one per poi); mint one on first generation.
+    const segmentId = c.segmentId ?? crypto.randomUUID()
+    const trackId = crypto.randomUUID()
+    // Tail-collapse retake (pipeline/tts.ts): roam clips ship unheard, so a mumbled
+    // closing sentence would reach riders' ears first — measure + retake here too.
+    const { audio, durationMs } = await synthesizeWithTailRetake(
+      script,
+      persona.voice,
+      persona.ttsStyle,
+      `"${c.title}"`,
+    )
+    const audioUrl = await uploadAudio(roamClipKey(c.poiId, trackId), audio)
+    const attribution: AttributionSnapshot[] = [
+      {
+        source: 'wikipedia',
+        sourceId: String(c.pageId),
+        title: c.title,
+        url: c.url,
+        license: 'CC BY-SA 4.0',
+        retrievedAt: (c.factsFetchedAt ?? new Date()).toISOString(),
+      },
+    ]
+    const factsHash = hashFacts({
+      extract: c.extract,
       title: c.title,
       url: c.url,
-      license: 'CC BY-SA 4.0',
-      retrievedAt: (c.factsFetchedAt ?? new Date()).toISOString(),
-    },
-  ]
-  const factsHash = hashFacts({ extract: c.extract, title: c.title, url: c.url, pageId: c.pageId })
-  // A roam telling = a placeless-of-route segment (tour_id/seq/trigger* null) + ONE story
-  // track. Co-commit the segment + the track upsert: the segment is insert-or-keep (PK id;
-  // a reused segment already exists), the track upserts on its (segment, form, variant)
-  // unique so a regen replaces the same row's script/audio in place.
-  await withRetry(
-    () =>
-      db.batch([
-        db
-          .insert(segments)
-          .values({ id: segmentId, poiId: c.poiId, personaId })
-          .onConflictDoNothing({ target: segments.id }),
-        db
-          .insert(tracks)
-          .values({
-            id: trackId,
-            segmentId,
-            form: 'story',
-            variant: 0,
-            script,
-            audioUrl,
-            audioDurationMs: durationMs,
-            attribution,
-            factsHash,
-          })
-          .onConflictDoUpdate({
-            target: [tracks.segmentId, tracks.form, tracks.variant],
-            set: { script, audioUrl, audioDurationMs: durationMs, attribution, factsHash, updatedAt: new Date() },
-          }),
-      ]),
-    { label: `upsert roam track(${c.name})` },
-  )
-  synthDone++
-  console.log(`  [${synthDone}/${queue.length}] ${c.name} (${(durationMs / 1000).toFixed(0)}s)`)
-  return { name: c.name, durationMs }
-})
+      pageId: c.pageId,
+    })
+    // A roam telling = a placeless-of-route segment (tour_id/seq/trigger* null) + ONE story
+    // track. Co-commit the segment + the track upsert: the segment is insert-or-keep (PK id;
+    // a reused segment already exists), the track upserts on its (segment, form, variant)
+    // unique so a regen replaces the same row's script/audio in place.
+    await withRetry(
+      () =>
+        db.batch([
+          db
+            .insert(segments)
+            .values({ id: segmentId, poiId: c.poiId, personaId })
+            .onConflictDoNothing({ target: segments.id }),
+          db
+            .insert(tracks)
+            .values({
+              id: trackId,
+              segmentId,
+              form: 'story',
+              variant: 0,
+              script,
+              audioUrl,
+              audioDurationMs: durationMs,
+              attribution,
+              factsHash,
+            })
+            .onConflictDoUpdate({
+              target: [tracks.segmentId, tracks.form, tracks.variant],
+              set: {
+                script,
+                audioUrl,
+                audioDurationMs: durationMs,
+                attribution,
+                factsHash,
+                updatedAt: new Date(),
+              },
+            }),
+        ]),
+      { label: `upsert roam track(${c.name})` },
+    )
+    synthDone++
+    console.log(`  [${synthDone}/${queue.length}] ${c.name} (${(durationMs / 1000).toFixed(0)}s)`)
+    return { name: c.name, durationMs }
+  })
 
-const totalSec = results.reduce((a, r) => a + r.durationMs, 0) / 1000
-console.log(
-  `\nDone: ${results.length} roam clips, ${(totalSec / 60).toFixed(1)} min of audio total ` +
-    `(avg ${(totalSec / results.length).toFixed(0)}s).`,
-)
-for (const line of llmSpendLines()) console.log(line)
-console.log(`LLM spend this run: ~$${llmSpentUsd().toFixed(2)}`)
-const ttsActual = estimateTtsUsd(scripts, persona.ttsStyle.length)
-console.log(`TTS spend (estimated from chars): ~$${ttsActual.usd.toFixed(2)}`)
+  const totalSec = results.reduce((a, r) => a + r.durationMs, 0) / 1000
+  console.log(
+    `\nDone: ${results.length} roam clips, ${(totalSec / 60).toFixed(1)} min of audio total ` +
+      `(avg ${(totalSec / results.length).toFixed(0)}s).`,
+  )
+  for (const line of llmSpendLines()) console.log(line)
+  console.log(`LLM spend this run: ~$${llmSpentUsd().toFixed(2)}`)
+  const ttsActual = estimateTtsUsd(scripts, persona.ttsStyle.length)
+  console.log(`TTS spend (estimated from chars): ~$${ttsActual.usd.toFixed(2)}`)
+}
+
+await beginJob('generate_roam', { dryRun: !apply && !scriptsOnly, targetId: 'roam-corpus' })
+try {
+  await main()
+  await finishJob({ ok: true })
+} catch (e) {
+  await finishJob({ ok: false, error: e instanceof Error ? e.message : String(e) })
+  console.error(e instanceof Error ? e.message : e)
+  process.exit(1)
+}
