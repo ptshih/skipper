@@ -18,8 +18,12 @@ import { db } from '@skipper/db'
 import { genJobs } from '@skipper/db/schema'
 import type { NewGenJob } from '@skipper/db/schema'
 import { llmSpentUsd } from './spend'
+import { installLogCapture, capturedLog, synthesizeJobOutput } from './job-output'
 
 type Kind = NewGenJob['kind']
+
+// The kind of the run in progress — set at begin, used to flavor the finish-time log summary.
+let currentKind: Kind | undefined
 
 /** The identity of a tour-ops run, set at begin. */
 interface BeginFields {
@@ -51,6 +55,8 @@ const warn = (phase: string, e: unknown): void =>
 export async function beginJob(kind: Kind, fields: BeginFields): Promise<void> {
   const id = jobId()
   if (!id) return
+  currentKind = kind
+  installLogCapture() // tee this run's stdout/stderr so finishJob can persist it on the row
   const row: NewGenJob = {
     id,
     kind,
@@ -92,6 +98,22 @@ export async function finishJob(outcome: FinishOutcome): Promise<void> {
   if (outcome.error !== undefined) set.error = outcome.error.slice(0, 4000)
   if (outcome.tourId !== undefined) set.tourId = outcome.tourId
   if (outcome.evalRunId !== undefined) set.evalRunId = outcome.evalRunId
+  // Persist THIS run's own captured output + an LLM summary in the same update that settles
+  // status, so the operational record is complete the instant the row goes terminal — no
+  // Cloud Logging round-trip. Runs on success AND failure (a failed run's log is the most
+  // useful). Best-effort: a synth failure still writes the raw log and settles status.
+  const log = capturedLog()
+  if (log) {
+    set.outputLog = log
+    try {
+      const { summary, data } = await synthesizeJobOutput(currentKind ?? 'generate', log)
+      set.outputSummary = summary
+      set.outputData = data
+    } catch (e) {
+      warn('synthesize', e)
+      set.outputSummary = 'Summary unavailable.' // keep "log set ⟹ summary set" so the UI never hangs
+    }
+  }
   try {
     await db.update(genJobs).set(set).where(eq(genJobs.id, id))
   } catch (e) {
