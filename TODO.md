@@ -10,15 +10,14 @@ when done** — git history is the archive.
 The admin in local dev (vite `:5173` client + Hono admin-api `:8788`, `bun run dev:admin`)
 sometimes just errors out; add guards so a transient/dev-only failure degrades VISIBLY instead of
 a blank or cryptic crash. **Capture the actual error next time it happens to scope this** (the
-browser console + the failing request). Known/likely modes to guard:
+browser console + the failing request).
 
-- [ ] **Dual-React white-screen** (`ReactCurrentDispatcher` undefined) after any `bun install`
-      re-link — bun's isolated linker can resolve a second React copy. The `vite.config.ts`
-      `resolve.dedupe(['react','react-dom'])` is the current fix; if it recurs, clear
-      `apps/admin/client/node_modules/.vite` and confirm a single `react`. Consider a boot-time
-      assertion (one React instance) that fails loud with the fix steps.
-- [ ] **Client error boundary** — a render error blanks the whole SPA today. Add a top-level React
-      error boundary (error + reload) so one bad view doesn't take down the shell.
+**Shipped:** a top-level React `ErrorBoundary` (catches post-mount render crashes) + a plain-DOM
+boot-error fallback — `src/components/ErrorBoundary.tsx`, wired in `main.tsx` — that catches a
+PRE-mount fatal too (incl. the dual-React `ReactCurrentDispatcher` crash an error boundary can't
+catch) via a `window` error guard, and shows the error + the exact dual-React fix + Reload instead
+of a blank screen. Remaining:
+
 - [ ] **API-down / env-missing** — if the admin-api (`:8788`) is down or `DATABASE_URL` is unset,
       surface a clear "admin-api unreachable" state instead of silent failed fetches / 500s (a
       `/health` probe on boot + a banner).
