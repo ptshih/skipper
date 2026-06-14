@@ -7,14 +7,27 @@
 // the metadata server (ADC, cloud-platform scope), the same mechanism TTS uses.
 
 import { GoogleAuth } from 'google-auth-library'
+import { isAbsolute, resolve } from 'node:path'
 
 const REGION = process.env.GEN_JOB_REGION ?? 'us-east4'
 const JOB = process.env.GEN_JOB_NAME ?? 'skipper-gen'
 const SCOPE = 'https://www.googleapis.com/auth/cloud-platform'
 
+// GOOGLE_APPLICATION_CREDENTIALS in .env.development is a key path RELATIVE to the repo root
+// (`./keys/…`). The admin dev:server runs from apps/admin (bun `--filter` sets CWD to the
+// package dir), so a relative path resolves to apps/admin/keys/… → ENOENT → no creds → the admin
+// "can't dispatch Cloud Run jobs" locally. Pin it to an absolute path off the repo root (this
+// file is apps/admin/server/jobs.ts → ../../.. is the root). Unset in prod (Cloud Run uses the
+// metadata-server runtime SA) → undefined → GoogleAuth's default ADC.
+function keyFilename(): string | undefined {
+  const gac = process.env.GOOGLE_APPLICATION_CREDENTIALS
+  if (!gac) return undefined
+  return isAbsolute(gac) ? gac : resolve(import.meta.dir, '..', '..', '..', gac)
+}
+
 let auth: GoogleAuth | undefined
 export async function accessToken(): Promise<string> {
-  auth ??= new GoogleAuth({ scopes: SCOPE })
+  auth ??= new GoogleAuth({ scopes: SCOPE, keyFilename: keyFilename() })
   const t = await auth.getAccessToken()
   if (!t) throw new Error('Could not obtain a Google access token (ADC / runtime service account).')
   return t
