@@ -26,40 +26,37 @@ export function getAnthropic(label = 'a model call needs it'): Anthropic {
 // ---------------------------------------------------------------------------
 // Narration — Anthropic Messages API
 // ---------------------------------------------------------------------------
-// The spec wants the MOST CAPABLE model for narration quality. Per the current
-// Anthropic model catalog, Claude Fable 5 is the most capable model — a new tier
-// ABOVE Opus — and its API id is the bare string "claude-fable-5".
+// The spec wants the MOST CAPABLE model for narration quality. Claude Fable 5 was
+// the pick (a tier above Opus; switched 2026-06-09 at founder request), but on
+// 2026-06-14 it began returning 404 "Claude Fable 5 is not available. Please use
+// Opus 4.8." account-wide (req_011Cc2MhTY66A8XhQ1A29VBd) — so narration is back on
+// Opus 4.8, the most capable model available to this account. (Re-point here if
+// Fable access returns; this constant is the single switch.)
 //
-// IMPORTANT: use the bare id exactly as written — do NOT append a date suffix.
-// Fable 5 shares Opus 4.8's request surface — adaptive thinking only, NO
-// `budget_tokens` / `temperature` / `top_p` / `top_k` (all 400) — with TWO extra
-// Fable-only constraints: an explicit `thinking: {type:"disabled"}` ALSO 400s
-// (it's accepted on Opus 4.8), and a FORCED tool_choice ({type:"tool"}) 400s with
-// "tool_choice forces tool use is not compatible with this model" (observed live
-// 2026-06-09, req_011CbtU9f7zsE1V8HegixKaw). narrate.ts ({type:"adaptive"}, no
-// tools) rides the switch; the forced-tool judges (charm.ts)
-// can NOT — they pin JUDGMENT_MODEL below instead of NARRATION_MODEL.
+// Opus 4.8 request surface: adaptive thinking only, NO `budget_tokens` /
+// `temperature` / `top_p` / `top_k` (all 400). narrate.ts passes
+// thinking:{type:"adaptive"} with no tools, so it rides Opus cleanly. (Unlike Fable,
+// Opus 4.8 ACCEPTS a forced tool_choice, so the Fable-era reason the judges needed a
+// separate model no longer bites — but JUDGMENT_MODEL stays Opus for calibration; see below.)
 //
-// COST (a founder-relevant axis, per CLAUDE.md): Fable 5 is ~2× Opus 4.8 —
-// $10/$50 vs $5/$25 per MTok — so a live regen bills more. Switched 2026-06-09
-// at founder request.
+// COST (a founder-relevant axis, per CLAUDE.md): Opus 4.8 is $5/$25 per MTok — HALF
+// of Fable's $10/$50, so a regen now bills less than the Fable interim did.
 //
-// Source: Anthropic model catalog (claude-api skill — "Current Models" table,
-// cross-checked against platform.claude.com models overview).
-export const NARRATION_MODEL = 'claude-fable-5' as const
+// Source: Anthropic model catalog (claude-api skill — "Current Models" table).
+export const NARRATION_MODEL = 'claude-opus-4-8' as const
 
 // JUDGMENT tier — every NON-narration model call: the enrichment scout (pipeline/scout.ts)
-// and the structured-report / spot-check judges (eval/charm.ts,
-// pipeline/judge.ts, eval/grounding.ts, eval/veracity.ts). Opus 4.8, deliberately NOT
-// NARRATION_MODEL. Two reasons it can't ride the narration model:
-//   (a) Four of the five FORCE tool use (tool_choice {type:'tool'} or {type:'any'}), which
-//       Claude Fable 5 rejects outright (400 "tool_choice forces tool use is not compatible
-//       with this model" — observed live 2026-06-09, req_011CbtU9f7zsE1V8HegixKaw); only
-//       veracity (auto tool_choice + web_search) is exempt.
-//   (b) The judge rubrics/score thresholds were calibrated against Opus-tier judging — a
-//       model swap would silently shift every score (re-run eval/calibrate.ts after a bump).
-// Upgraded Sonnet→Opus 2026-06-09 at founder request (these were the judgment-tier
-// "Sonnet is plenty" calls; the old NARRATION_MODEL_ALTERNATES catalog is gone with them).
+// and the structured-report / spot-check judges (eval/charm.ts, pipeline/judge.ts,
+// eval/grounding.ts, eval/veracity.ts). Opus 4.8. With narration ALSO on Opus 4.8 now
+// (Fable 5 unavailable, above), this tier currently COINCIDES with NARRATION_MODEL — but it
+// stays a SEPARATE constant on purpose, for two reasons that outlive the coincidence:
+//   (a) Four of the five FORCE tool use (tool_choice {type:'tool'} or {type:'any'}); Opus 4.8
+//       accepts that, but it's a hard requirement the narration model must also meet if the
+//       two ever diverge again (Fable, e.g., rejected it).
+//   (b) The judge rubrics/score thresholds were calibrated against Opus-tier judging — moving
+//       this would silently shift every score (re-run eval/calibrate.ts after any bump).
+// Upgraded Sonnet→Opus 2026-06-09 at founder request (the old NARRATION_MODEL_ALTERNATES
+// catalog is gone with them).
 export const JUDGMENT_MODEL = 'claude-opus-4-8' as const
 
 // ---------------------------------------------------------------------------

@@ -19,7 +19,7 @@ import { recordModelUsage } from './spend'
 import type { LintFinding } from './lint'
 
 // A light classification task on the shared JUDGMENT_MODEL (Opus) — one forced-tool
-// ({type:'tool'}) call per tour, which is why it can't ride NARRATION_MODEL/Fable.
+// ({type:'tool'}) call per tour, so it pins JUDGMENT_MODEL (Opus 4.8).
 const JUDGE_MODEL = JUDGMENT_MODEL
 const JUDGE_MAX_TOKENS = 2_000
 

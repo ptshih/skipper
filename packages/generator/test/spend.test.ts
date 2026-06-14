@@ -16,9 +16,9 @@ afterEach(resetSpendTally)
 
 describe('LLM spend tally', () => {
   test('prices plain input/output at the model rate', () => {
-    // 1M in @ $10 + 100k out @ $50 ⇒ $10 + $5
-    recordModelUsage('claude-fable-5', { input_tokens: 1_000_000, output_tokens: 100_000 })
-    expect(llmSpentUsd()).toBeCloseTo(15, 6)
+    // Opus 4.8: 1M in @ $5 + 100k out @ $25 ⇒ $5 + $2.50
+    recordModelUsage('claude-opus-4-8', { input_tokens: 1_000_000, output_tokens: 100_000 })
+    expect(llmSpentUsd()).toBeCloseTo(7.5, 6)
   })
 
   test('cache reads bill 0.1× and cache writes 1.25× the input rate', () => {
@@ -33,12 +33,14 @@ describe('LLM spend tally', () => {
   })
 
   test('accumulates across calls and models', () => {
-    recordModelUsage('claude-fable-5', { input_tokens: 500_000, output_tokens: 0 }) // $5
-    recordModelUsage('claude-fable-5', { input_tokens: 500_000, output_tokens: 0 }) // $5
-    recordModelUsage('claude-opus-4-8', { input_tokens: 0, output_tokens: 1_000_000 }) // $25
-    expect(llmSpentUsd()).toBeCloseTo(35, 6)
+    // Opus is the only priced model now, so the second model is an unpriced one — this
+    // still exercises the cross-call tally (2 Opus calls) AND the cross-model lines.
+    recordModelUsage('claude-opus-4-8', { input_tokens: 500_000, output_tokens: 0 }) // $2.50
+    recordModelUsage('claude-opus-4-8', { input_tokens: 500_000, output_tokens: 0 }) // $2.50
+    recordModelUsage('mystery-model', { input_tokens: 0, output_tokens: 1_000_000 }) // unpriced ⇒ $0
+    expect(llmSpentUsd()).toBeCloseTo(5, 6)
     expect(llmSpendLines()).toHaveLength(2)
-    expect(llmSpendLines()[0]).toContain('2 calls')
+    expect(llmSpendLines()[0]).toContain('2 calls') // Opus inserted first
   })
 
   test('an unknown model tallies tokens but prices as unpriced/zero dollars', () => {

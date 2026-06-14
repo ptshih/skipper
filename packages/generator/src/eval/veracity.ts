@@ -25,7 +25,7 @@ import type { StopEval } from './types'
 
 // The shared JUDGMENT_MODEL (Opus), matching grounding.ts. The task is retrieval +
 // comparison, not narration-grade prose. Unlike the other judges this uses auto tool_choice
-// + web_search (NOT a forced tool), so it isn't Fable-blocked — it's on Opus for judgment
+// + web_search (NOT a forced tool); it's on Opus 4.8 (JUDGMENT_MODEL) for judgment
 // quality + calibration consistency with the rest of the tier.
 const VERACITY_MODEL = JUDGMENT_MODEL
 const VERACITY_MAX_TOKENS = 6_000

@@ -30,7 +30,7 @@ import { recordModelUsage } from './spend'
 
 // Judgment-tier, not narration-tier: the scout reads a sheet and picks fetches — the shared
 // JUDGMENT_MODEL (Opus) at a few short turns per stop. It forces tool_choice {type:'any'}
-// every turn (below), which is exactly why it can't ride NARRATION_MODEL/Fable.
+// every turn (below), so it pins JUDGMENT_MODEL (Opus 4.8).
 const SCOUT_MODEL = JUDGMENT_MODEL
 
 /** A sourced fact bundle exactly as a fetcher returned it (facts verbatim + provenance). */

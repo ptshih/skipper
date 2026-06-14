@@ -175,8 +175,8 @@ if (queue.length === 0) {
   process.exit(0)
 }
 
-// Cost preview: narration ≈ system+sheet in / ~1k thinking+output out per clip (Fable 5
-// $10/$50 per MTok → very roughly $0.06–0.15 per clip), TTS estimated exactly by chars.
+// Cost preview: narration ≈ system+sheet in / ~1k thinking+output out per clip (Opus 4.8
+// $5/$25 per MTok → very roughly $0.03–0.08 per clip), TTS estimated exactly by chars.
 const estClipChars = 800 // ~150 spoken words
 const tts = estimateTtsUsd(
   queue.map(() => 'x'.repeat(estClipChars)),

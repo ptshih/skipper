@@ -25,7 +25,7 @@ import type { ClaimStatus, ClaimVerdict, StopEval } from './types'
 // A well-scoped, once-per-stop entailment task on the shared JUDGMENT_MODEL (Opus).
 // Grounding is the crown-jewel gate — a false negative lets a hallucination ship — so it
 // rides the strongest forced-tool-capable model. It's a forced-tool ({type:'tool'}) call,
-// so it can't use NARRATION_MODEL/Fable. Re-run eval/calibrate.ts after any model change.
+// so it pins JUDGMENT_MODEL (Opus 4.8). Re-run eval/calibrate.ts after any model change.
 const GROUNDING_MODEL = JUDGMENT_MODEL
 const GROUNDING_MAX_TOKENS = 4_000
 

@@ -16,7 +16,6 @@ export interface ModelPricing {
 /** $/MTok — Anthropic catalog (claude-api skill, verified 2026-06-09). Cache READS bill
  *  0.1× the input rate; 5-minute-TTL cache WRITES 1.25× (the only TTL this repo uses). */
 export const MODEL_PRICING: Record<string, ModelPricing> = {
-  'claude-fable-5': { inputPerMTok: 10, outputPerMTok: 50 },
   'claude-opus-4-8': { inputPerMTok: 5, outputPerMTok: 25 },
 }
 const CACHE_READ_MULT = 0.1

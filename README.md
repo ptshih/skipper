@@ -25,7 +25,7 @@ over hand-curated driving routes, as phone audio (CarPlay later). First region:
 
 - **TypeScript 6** everywhere · **bun** (package manager + runtime + workspaces)
 - **Backend:** Hono (served natively by bun) · **DB:** Neon + Drizzle · **Auth:** Better Auth (freemium) · **Audio:** Cloudflare R2 (private; presigned URLs)
-- **AI:** Anthropic `claude-fable-5` (narration) · Google Cloud Text-to-Speech — Gemini-TTS voice "Charon" (OAuth/ADC, no API key; MP3 32 kbps)
+- **AI:** Anthropic `claude-opus-4-8` (narration) · Google Cloud Text-to-Speech — Gemini-TTS voice "Charon" (OAuth/ADC, no API key; MP3 32 kbps)
 - **Mobile (MVP = phone player):** Expo SDK 56, `expo-audio` + `expo-location`; CarPlay (`@g4rb4g3/react-native-carplay`) deferred past the MVP
 
 ## Layout
