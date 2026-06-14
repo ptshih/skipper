@@ -55,7 +55,7 @@
      ONE deliberate ladder — every font-size on the site resolves to a token
      here (no per-component one-offs). Four fluid display steps + a nine-rung
      fixed ladder, base 17px. Mirrors the app's typeScale philosophy. */
-  --fs-display: clamp(2.4rem, 6.2vw, 4.5rem); /* hero headline */
+  --fs-display: clamp(2.2rem, 5vw, 3.4rem); /* hero headline */
   --fs-title: clamp(1.9rem, 3.8vw, 2.9rem); /* section titles */
   --fs-quote: clamp(1.15rem, 2vw, 1.5rem); /* pull-quote */
   --fs-lede: clamp(1.0625rem, 1.6vw, 1.3rem); /* section intro lede */

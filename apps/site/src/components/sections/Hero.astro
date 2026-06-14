@@ -15,6 +15,10 @@ const HERO_STOP = 'Emerald Bay overlook'
 
 <section class="hero section" id="top">
   <Sunburst originY="30%" />
+  <!-- Centered two-column: the headline/lede/CTA stack on the left, the player +
+       its car-trail as ONE centered unit on the right. With the headline at its
+       trimmed size the columns are close enough in height that centering leaves
+       only modest, symmetric breathing room — no corner void, no clipped player. -->
   <div class="container hero__grid">
     <div class="hero__copy">
       <span class="kicker">GPS-triggered audio driving tours · Lake Tahoe · iOS soon</span>
@@ -47,7 +51,7 @@ const HERO_STOP = 'Emerald Bay overlook'
       </div>
     </div>
 
-    <!-- The one glowing object on the page: the NOW-playing placard. -->
+    <!-- The one glowing object on the page: the NOW-playing placard + its trail. -->
     <div class="hero__player">
       <figure class="player framed" id="hero-player" data-hero-player aria-label="Listen to a sample from the Skipper">
         <figcaption class="player__head">
@@ -93,17 +97,14 @@ const HERO_STOP = 'Emerald Bay overlook'
     position: relative;
     z-index: 1;
     display: grid;
-    gap: var(--space-4xl);
+    gap: var(--space-3xl);
     align-items: center;
   }
   @media (min-width: 62rem) {
     .hero__grid {
       grid-template-columns: 1.05fr 0.95fr;
-      gap: var(--space-5xl);
-      /* The copy column is the taller one; bottom-aligning the player drops its
-         trail/car to the CTA baseline so the bottom-right isn't a void, and the
-         remaining airiness rises into the sunburst behind the headline. */
-      align-items: end;
+      column-gap: var(--space-4xl);
+      align-items: center;
     }
   }
   .hero__copy .kicker {
@@ -145,7 +146,7 @@ const HERO_STOP = 'Emerald Bay overlook'
   /* ── Player placard ── */
   .player {
     background: var(--surface-raised);
-    padding: var(--space-2xl);
+    padding: var(--space-3xl);
     box-shadow: 0 0 0 1px color-mix(in srgb, var(--amber) 14%, transparent),
       0 22px 70px -28px var(--glow), 0 10px 30px -18px var(--shadow-cast);
   }
@@ -154,7 +155,7 @@ const HERO_STOP = 'Emerald Bay overlook'
     align-items: baseline;
     gap: var(--space-md);
     flex-wrap: wrap;
-    margin-bottom: var(--space-xl);
+    margin-bottom: var(--space-2xl);
   }
   .player__state {
     font-family: var(--font-body);
@@ -173,12 +174,12 @@ const HERO_STOP = 'Emerald Bay overlook'
   .player__body {
     display: flex;
     align-items: center;
-    gap: var(--space-xl);
+    gap: var(--space-2xl);
   }
   .disc {
     flex: none;
-    width: 4.5rem;
-    height: 4.5rem;
+    width: 5rem;
+    height: 5rem;
     border-radius: var(--radius-pill);
     border: none;
     background: var(--amber);
@@ -248,7 +249,7 @@ const HERO_STOP = 'Emerald Bay overlook'
     color: var(--ink-dim);
   }
   .player__caption {
-    margin-top: var(--space-xl);
+    margin-top: var(--space-2xl);
     padding-top: var(--space-lg);
     border-top: var(--border-thin) dashed var(--track-inactive);
     font-size: var(--fs-label-sm);
