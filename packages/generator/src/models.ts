@@ -20,7 +20,10 @@ export function getAnthropic(label = 'a model call needs it'): Anthropic {
   if (!process.env.ANTHROPIC_API_KEY) {
     throw new Error(`ANTHROPIC_API_KEY is not set (${label}).`)
   }
-  return (_anthropic ??= new Anthropic())
+  // maxRetries 5 (SDK default is 2): narration is the most expensive call, so survive a
+  // SUSTAINED Anthropic overload (429/529) rather than fail a run that already spent on earlier
+  // stops. The SDK backs off exponentially + honors Retry-After.
+  return (_anthropic ??= new Anthropic({ maxRetries: 5 }))
 }
 
 // ---------------------------------------------------------------------------
