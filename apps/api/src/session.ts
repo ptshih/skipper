@@ -9,6 +9,8 @@
 // Auth-free + generic on purpose: the fail-open path is unit-tested without constructing the
 // Better Auth instance (which needs BETTER_AUTH_SECRET at module load) — mirrors tiers.ts.
 
+import { withRetry } from './retry'
+
 /**
  * Resolve a session via `getSession`, retrying a TRANSIENT throw a few times, then FAILING OPEN
  * to `null` (anonymous) if it still throws. A null RESULT is the normal anonymous case and is
@@ -23,18 +25,15 @@ export async function resolveSessionSafely<T>(
   getSession: () => Promise<T>,
   opts: { attempts?: number; baseMs?: number } = {},
 ): Promise<T | null> {
-  const attempts = opts.attempts ?? 3
-  const baseMs = opts.baseMs ?? 150
-  let lastError: unknown
-  for (let i = 0; i < attempts; i++) {
-    try {
-      return await getSession()
-    } catch (e) {
-      lastError = e
-      if (i === attempts - 1) break
-      await new Promise((r) => setTimeout(r, baseMs * 2 ** i))
-    }
+  try {
+    // Shares ./retry withRetry, but with NO label — this path is the auth read, not the
+    // cold-start signal, so it stays quiet per-attempt; only the final degradation logs below.
+    return await withRetry(getSession, { attempts: opts.attempts ?? 3, baseMs: opts.baseMs ?? 150 })
+  } catch (lastError) {
+    console.error(
+      '[api] session resolution failed after retries — degrading to anonymous',
+      lastError,
+    )
+    return null
   }
-  console.error('[api] session resolution failed after retries — degrading to anonymous', lastError)
-  return null
 }

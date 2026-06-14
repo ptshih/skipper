@@ -120,27 +120,6 @@ code — the original framing had gone stale):
       there's little to overlap. Worse, the empty-corpus check throws "at $0 before any paid call",
       and Places IS a paid Google API; firing it concurrently would forfeit that guard. Not worth it.
 
-## MAYBE — API read-retry to mask Neon cold-start blips (judgment call, not committed)
-
-Logged as a MAYBE, not a decision. The API's neon-http reads (`loadTourGated`, `GET /tours`,
-the queries inside the `/tours/:id` + `/sign` `Promise.all`s) are bare `db.select` — a transient
-blip (Neon serverless wakes a compute on the first query after idle) throws → `onError` → a 500
-for a real user. The generator already retries its reads (`8189bd5`); the API doesn't.
-
-Shape if built: a small `withRetry<T>(fn)` that retries a transient throw then RE-THROWS (a read
-can't fail open — empty rows would silently 404 a real tour / blank the catalog; after a bounded
-effort a 500 is the honest answer). Distinct from `session.ts`'s `resolveSessionSafely`, which
-retries-then-fails-OPEN-to-null (a missing session legitimately means anonymous) — `retry.ts`
-could host the shared core. Budget must be SHORTER/FEWER than the generator's (this is on the
-USER's latency path): ~2–3 attempts, ~100–150 ms base. Composes with the `Promise.all` fan-out
-(`a94cf8c`) — wrap each arm's thunk, concurrency preserved.
-
-Why only a MAYBE: it adds latency to the FAILURE path (a genuinely-down Neon now waits ~300–450 ms
-before 500-ing instead of failing instantly). Favorable for THIS traffic profile (idle, cold-start
-prone) — the common case is a single blip masked into a slightly-slower success — but a smaller,
-less clear-cut win than the fail-open session fix (`aa0f113`, product-critical) or the read fan-out
-(`a94cf8c`, pure latency). Revisit if request logs ever show cold-start 500s actually happening.
-
 ## TTS audio QA: clip loudness normalization
 
 Measured 2026-06-10 (ffmpeg volumedetect over all 30 live clips, founder-ear-confirmed):

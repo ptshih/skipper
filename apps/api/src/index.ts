@@ -26,6 +26,7 @@ import type { Tour as TourRow } from '@skipper/db/schema'
 import { auth } from './auth'
 import { FEATURES, meetsTier, withSession, type ApiEnv } from './entitlements'
 import { hostForRegion } from './host'
+import { withRetry } from './retry'
 import { shareLandingHtml } from './share'
 import { DATA_SOURCES } from './sources'
 import { contentTypeForKey, presignGet } from './storage'
@@ -102,23 +103,27 @@ app.on(['POST', 'GET'], '/api/auth/*', (c) => auth.handler(c.req.raw))
 // carries its own route + region now, so this replaces the old /corridors + per-corridor
 // tour list. Anonymous browsing is free; playing a tour is gated via /tours/:id.
 app.get('/tours', async (c) => {
-  const rows = await db
-    .select({
-      id: tours.id,
-      slug: tours.slug,
-      headline: tours.headline,
-      regionSlug: regions.slug,
-      regionName: regions.displayName,
-      startAnchorName: tours.startAnchorName,
-      endAnchorName: tours.endAnchorName,
-      summary: tours.summary,
-      distanceMeters: tours.distanceMeters,
-      durationSeconds: tours.durationSeconds,
-    })
-    .from(tours)
-    .innerJoin(regions, eq(tours.regionId, regions.id))
-    .where(eq(tours.status, 'ready'))
-    .orderBy(asc(regions.displayName), desc(tours.createdAt))
+  const rows = await withRetry(
+    () =>
+      db
+        .select({
+          id: tours.id,
+          slug: tours.slug,
+          headline: tours.headline,
+          regionSlug: regions.slug,
+          regionName: regions.displayName,
+          startAnchorName: tours.startAnchorName,
+          endAnchorName: tours.endAnchorName,
+          summary: tours.summary,
+          distanceMeters: tours.distanceMeters,
+          durationSeconds: tours.durationSeconds,
+        })
+        .from(tours)
+        .innerJoin(regions, eq(tours.regionId, regions.id))
+        .where(eq(tours.status, 'ready'))
+        .orderBy(asc(regions.displayName), desc(tours.createdAt)),
+    { label: 'tours.list' },
+  )
 
   // Build a glanceable place teaser per tour from its marquee anchors, so the catalog
   // card has an identity ("Emerald Bay & Vikingsholm") without forcing a tap. We take
@@ -129,13 +134,17 @@ app.get('/tours', async (c) => {
   const teaserByTour = new Map<string, string>()
   const tourIds = rows.map((r) => r.id)
   if (tourIds.length) {
-    const stopRows = await db
-      .select({ tourId: segments.tourId, stopType: tracks.form, name: pois.name })
-      .from(segments)
-      .innerJoin(tracks, and(eq(tracks.segmentId, segments.id), eq(tracks.variant, 0)))
-      .innerJoin(pois, eq(segments.poiId, pois.id))
-      .where(inArray(segments.tourId, tourIds))
-      .orderBy(asc(segments.seq))
+    const stopRows = await withRetry(
+      () =>
+        db
+          .select({ tourId: segments.tourId, stopType: tracks.form, name: pois.name })
+          .from(segments)
+          .innerJoin(tracks, and(eq(tracks.segmentId, segments.id), eq(tracks.variant, 0)))
+          .innerJoin(pois, eq(segments.poiId, pois.id))
+          .where(inArray(segments.tourId, tourIds))
+          .orderBy(asc(segments.seq)),
+      { label: 'tours.teaser' },
+    )
     const byTour = new Map<string, { stopType: string; name: string }[]>()
     for (const s of stopRows) {
       // tour segments are never roam (tourId set ⇒ in the inArray filter), so tourId is non-null.
@@ -166,7 +175,9 @@ app.get('/tours', async (c) => {
 async function loadTourGated(c: Context<ApiEnv>): Promise<{ tour: TourRow } | { res: Response }> {
   const tourId = c.req.param('tourId')
   if (!tourId || !UUID_RE.test(tourId)) return { res: c.json({ error: 'not_found' }, 404) }
-  const rows = await db.select().from(tours).where(eq(tours.id, tourId)).limit(1)
+  const rows = await withRetry(() => db.select().from(tours).where(eq(tours.id, tourId)).limit(1), {
+    label: 'tour.load',
+  })
   const tour = rows[0]
   if (!tour) return { res: c.json({ error: 'not_found' }, 404) }
   if (tour.status !== 'ready')
@@ -198,39 +209,51 @@ app.get('/tours/:tourId', withSession, async (c) => {
   // A stop = a tour-bound `segment` (place-anchor + trigger geometry) + its canonical (variant 0)
   // `track` (the narration); the stop's treatment is the track's `form`. Brackets = `tour_frames`.
   const [regionRows, stopRows, brackets] = await Promise.all([
-    db
-      .select({ slug: regions.slug, displayName: regions.displayName })
-      .from(regions)
-      .where(eq(regions.id, tour.regionId))
-      .limit(1),
-    db
-      .select({
-        seq: segments.seq,
-        form: tracks.form,
-        name: pois.name,
-        lat: pois.lat,
-        lng: pois.lng,
-        radiusM: segments.radiusM,
-        approachHeadingDeg: segments.approachHeadingDeg,
-        audioDurationMs: tracks.audioDurationMs,
-        // The offline-staleness token (Date → ISO via c.json). The narration's revision is the
-        // staleness token: a clip re-synth/regen bumps `tracks.updated_at`, so a downloaded drive
-        // can detect it's behind the server. See shared `tourStopView.revisedAt`.
-        revisedAt: tracks.updatedAt,
-      })
-      .from(segments)
-      .innerJoin(tracks, and(eq(tracks.segmentId, segments.id), eq(tracks.variant, 0)))
-      .innerJoin(pois, eq(segments.poiId, pois.id))
-      .where(eq(segments.tourId, tour.id))
-      .orderBy(asc(segments.seq)),
-    db
-      .select({
-        kind: tourFrames.kind,
-        audioDurationMs: tourFrames.audioDurationMs,
-        revisedAt: tourFrames.updatedAt,
-      })
-      .from(tourFrames)
-      .where(eq(tourFrames.tourId, tour.id)),
+    withRetry(
+      () =>
+        db
+          .select({ slug: regions.slug, displayName: regions.displayName })
+          .from(regions)
+          .where(eq(regions.id, tour.regionId))
+          .limit(1),
+      { label: 'tour.region' },
+    ),
+    withRetry(
+      () =>
+        db
+          .select({
+            seq: segments.seq,
+            form: tracks.form,
+            name: pois.name,
+            lat: pois.lat,
+            lng: pois.lng,
+            radiusM: segments.radiusM,
+            approachHeadingDeg: segments.approachHeadingDeg,
+            audioDurationMs: tracks.audioDurationMs,
+            // The offline-staleness token (Date → ISO via c.json). The narration's revision is the
+            // staleness token: a clip re-synth/regen bumps `tracks.updated_at`, so a downloaded drive
+            // can detect it's behind the server. See shared `tourStopView.revisedAt`.
+            revisedAt: tracks.updatedAt,
+          })
+          .from(segments)
+          .innerJoin(tracks, and(eq(tracks.segmentId, segments.id), eq(tracks.variant, 0)))
+          .innerJoin(pois, eq(segments.poiId, pois.id))
+          .where(eq(segments.tourId, tour.id))
+          .orderBy(asc(segments.seq)),
+      { label: 'tour.stops' },
+    ),
+    withRetry(
+      () =>
+        db
+          .select({
+            kind: tourFrames.kind,
+            audioDurationMs: tourFrames.audioDurationMs,
+            revisedAt: tourFrames.updatedAt,
+          })
+          .from(tourFrames)
+          .where(eq(tourFrames.tourId, tour.id)),
+      { label: 'tour.brackets' },
+    ),
   ])
   // tours.regionId is a NOT NULL FK with onDelete: restrict, so the region always exists.
   const region = regionRows[0]!
@@ -294,24 +317,32 @@ app.post('/tours/:tourId/assets/sign', withSession, async (c) => {
   // Stop clips live on the canonical (variant 0) `track` of each tour-bound `segment`; bracket
   // clips on `tour_frames`. Each stores its R2 object KEY in audioUrl (presigned below).
   const [stopClips, bracketClips] = await Promise.all([
-    db
-      .select({
-        seq: segments.seq,
-        key: tracks.audioUrl,
-        durationMs: tracks.audioDurationMs,
-      })
-      .from(segments)
-      .innerJoin(tracks, and(eq(tracks.segmentId, segments.id), eq(tracks.variant, 0)))
-      .where(eq(segments.tourId, tour.id))
-      .orderBy(asc(segments.seq)),
-    db
-      .select({
-        kind: tourFrames.kind,
-        key: tourFrames.audioUrl,
-        durationMs: tourFrames.audioDurationMs,
-      })
-      .from(tourFrames)
-      .where(eq(tourFrames.tourId, tour.id)),
+    withRetry(
+      () =>
+        db
+          .select({
+            seq: segments.seq,
+            key: tracks.audioUrl,
+            durationMs: tracks.audioDurationMs,
+          })
+          .from(segments)
+          .innerJoin(tracks, and(eq(tracks.segmentId, segments.id), eq(tracks.variant, 0)))
+          .where(eq(segments.tourId, tour.id))
+          .orderBy(asc(segments.seq)),
+      { label: 'sign.stops' },
+    ),
+    withRetry(
+      () =>
+        db
+          .select({
+            kind: tourFrames.kind,
+            key: tourFrames.audioUrl,
+            durationMs: tourFrames.audioDurationMs,
+          })
+          .from(tourFrames)
+          .where(eq(tourFrames.tourId, tour.id)),
+      { label: 'sign.brackets' },
+    ),
   ])
 
   try {
@@ -327,7 +358,11 @@ app.post('/tours/:tourId/assets/sign', withSession, async (c) => {
     const signBracket = (kind: 'intro' | 'outro') => {
       const b = bracketClips.find((x) => x.kind === kind && x.key)
       return b
-        ? { url: presignGet(b.key!), contentType: contentTypeForKey(b.key!), durationMs: b.durationMs }
+        ? {
+            url: presignGet(b.key!),
+            contentType: contentTypeForKey(b.key!),
+            durationMs: b.durationMs,
+          }
         : null
     }
     return c.json({ stops, intro: signBracket('intro'), outro: signBracket('outro') })
@@ -337,7 +372,10 @@ app.post('/tours/:tourId/assets/sign', withSession, async (c) => {
     // (not a raw "Request failed (503)").
     console.error('[api] presign failed', e)
     return c.json(
-      { error: 'audio_unavailable', message: 'Audio is warming up. Give it a moment and try again.' },
+      {
+        error: 'audio_unavailable',
+        message: 'Audio is warming up. Give it a moment and try again.',
+      },
       503,
     )
   }
@@ -385,20 +423,24 @@ app.get('/roam', async (c) => {
     return c.json({ error: 'bad_request', message: 'lat and lng are required numbers.' }, 400)
   }
 
-  const rows = await db
-    .select({
-      poiId: segments.poiId,
-      name: pois.name,
-      kind: pois.kind,
-      lat: pois.lat,
-      lng: pois.lng,
-      key: tracks.audioUrl,
-      durationMs: tracks.audioDurationMs,
-    })
-    .from(segments)
-    .innerJoin(tracks, and(eq(tracks.segmentId, segments.id), eq(tracks.variant, 0)))
-    .innerJoin(pois, eq(pois.id, segments.poiId))
-    .where(isNull(segments.tourId))
+  const rows = await withRetry(
+    () =>
+      db
+        .select({
+          poiId: segments.poiId,
+          name: pois.name,
+          kind: pois.kind,
+          lat: pois.lat,
+          lng: pois.lng,
+          key: tracks.audioUrl,
+          durationMs: tracks.audioDurationMs,
+        })
+        .from(segments)
+        .innerJoin(tracks, and(eq(tracks.segmentId, segments.id), eq(tracks.variant, 0)))
+        .innerJoin(pois, eq(pois.id, segments.poiId))
+        .where(isNull(segments.tourId)),
+    { label: 'roam.pins' },
+  )
 
   // A track only goes live with script + audio filled, but audioUrl is nullable through
   // generation — drop any keyless row so a half-baked roam track never surfaces a bad pin.
@@ -425,7 +467,10 @@ app.get('/roam', async (c) => {
   } catch (e) {
     console.error('[api] roam presign failed', e)
     return c.json(
-      { error: 'audio_unavailable', message: 'Audio is warming up. Give it a moment and try again.' },
+      {
+        error: 'audio_unavailable',
+        message: 'Audio is warming up. Give it a moment and try again.',
+      },
       503,
     )
   }
