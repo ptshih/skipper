@@ -3,7 +3,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Activity, CircleX,
-  ExternalLink, Filter, Map, RefreshCw, Scissors, Search, Sparkles, Trash2, X, Zap,
+  ExternalLink, Filter, Loader2, Map, RefreshCw, Scissors, Search, Sparkles, Trash2, X, Zap,
 } from 'lucide-react'
 import {
   api,
@@ -329,6 +329,17 @@ function RunDrawer({ run, onClose }: { run: RunEvent; onClose: () => void }) {
     queryKey: ['job', run.id],
     queryFn: () => api.job(run.id),
     enabled: isJob,
+    // Poll fast (5s) WHILE it matters: a live run, or a succeeded run whose Cloud Run log
+    // capture is still in flight (Cloud Logging lags ~30s–2min, so outputSummary lands a
+    // few polls after the row flips to 'succeeded'). Stops once the run is terminal AND its
+    // output is captured — so a settled, captured job doesn't poll at all.
+    refetchInterval: (query) => {
+      const j = query.state.data?.job
+      if (!j) return isJob ? 5000 : false
+      const settled = j.status === 'succeeded' || j.status === 'failed' || j.status === 'canceled'
+      const capturePending = j.status === 'succeeded' && j.outputSummary == null
+      return !settled || capturePending ? 5000 : false
+    },
   })
   const job = jobData?.job ?? null
   const logsUrl = jobData?.logsUrl ?? null
@@ -349,6 +360,8 @@ function RunDrawer({ run, onClose }: { run: RunEvent; onClose: () => void }) {
   // 'canceled by operator' is the server's marker — not a failure, so don't paint it red.
   const error = status === 'failed' ? job?.error : null
   const args = job?.args
+  // Succeeded, but the Cloud Run log capture hasn't landed yet (outputSummary still null).
+  const capturePending = isJob && job != null && job.status === 'succeeded' && job.outputSummary == null
 
   return (
     <Sheet open onOpenChange={(o) => { if (!o) onClose() }}>
@@ -419,7 +432,13 @@ function RunDrawer({ run, onClose }: { run: RunEvent; onClose: () => void }) {
               <div className="space-y-2">
                 <SectionLabel>Summary</SectionLabel>
                 <div className="text-sm leading-relaxed">
-                  {job?.outputSummary ?? <span className="text-muted-foreground">Available after the next succeeded run.</span>}
+                  {capturePending ? (
+                    <span className="flex items-center gap-2 text-muted-foreground">
+                      <Loader2 size={14} className="animate-spin" /> Capturing logs… Cloud Logging can lag ~30s–2min.
+                    </span>
+                  ) : (
+                    job?.outputSummary ?? <span className="text-muted-foreground">Available after the next succeeded run.</span>
+                  )}
                 </div>
               </div>
               <div className="space-y-2">
@@ -427,7 +446,7 @@ function RunDrawer({ run, onClose }: { run: RunEvent; onClose: () => void }) {
                 <LogBlock>
                   {job?.outputData && Object.keys(job.outputData).length > 0
                     ? JSON.stringify(job.outputData, null, 2)
-                    : <span className="text-muted-foreground">—</span>}
+                    : <span className="text-muted-foreground">{capturePending ? 'Capturing…' : '—'}</span>}
                 </LogBlock>
               </div>
               <div className="space-y-2">
@@ -440,7 +459,7 @@ function RunDrawer({ run, onClose }: { run: RunEvent; onClose: () => void }) {
                   )}
                 </SectionLabel>
                 <LogBlock className="max-h-80 overflow-y-auto whitespace-pre">
-                  {job?.outputLog ?? <span className="text-muted-foreground">—</span>}
+                  {job?.outputLog ?? <span className="text-muted-foreground">{capturePending ? 'Capturing…' : '—'}</span>}
                 </LogBlock>
               </div>
             </>

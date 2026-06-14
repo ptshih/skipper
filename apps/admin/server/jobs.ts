@@ -207,11 +207,21 @@ export async function cancelExecution(shortName: string): Promise<void> {
 }
 
 /** A console deep-link to a Cloud Run Job execution's logs (spec §14.6). Best-effort — null
- *  if the project isn't in env (so the caller renders no link rather than a broken one). */
+ *  if the project isn't in env (so the caller renders no link rather than a broken one).
+ *  Targets Logs Explorer (/logs/query) filtered to this execution — the same filter the
+ *  inline capture uses. The old /run/jobs/details/<region>/<job>/executions/<name> path
+ *  404s in the current console; the Logs Explorer URL format is verified (2026-06-13)
+ *  against a real console share-URL. */
 export function jobExecutionLogsUrl(shortName: string): string | null {
   const project = process.env.GOOGLE_CLOUD_PROJECT
   if (!project) return null
-  return `https://console.cloud.google.com/run/jobs/details/${REGION}/${JOB}/executions/${shortName}?project=${project}`
+  const query = [
+    'resource.type="cloud_run_job"',
+    `resource.labels.job_name="${JOB}"`,
+    `resource.labels.location="${REGION}"`,
+    `labels."run.googleapis.com/execution_name"="${shortName}"`,
+  ].join(' ')
+  return `https://console.cloud.google.com/logs/query;query=${encodeURIComponent(query)};storageScope=project?project=${project}`
 }
 
 export type ExecState = 'running' | 'succeeded' | 'failed' | 'unknown'
