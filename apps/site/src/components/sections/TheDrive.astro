@@ -23,11 +23,11 @@ const stops = [
 const toneVar: Record<string, string> = { pine: 'var(--accent)', teal: 'var(--water)', amber: 'var(--amber)' }
 // pin coordinates down the west shore (matches the list order)
 const pins = [
-  { x: 104, y: 78, tone: 'teal' },
-  { x: 92, y: 138, tone: 'pine', glow: true },
-  { x: 88, y: 188, tone: 'teal' },
-  { x: 96, y: 240, tone: 'pine' },
-  { x: 116, y: 286, tone: 'amber' },
+  { x: 104, y: 92, tone: 'teal' },
+  { x: 94, y: 138, tone: 'pine', glow: true },
+  { x: 97, y: 190, tone: 'teal' },
+  { x: 114, y: 240, tone: 'pine' },
+  { x: 134, y: 284, tone: 'amber' },
 ]
 ---
 
@@ -52,16 +52,18 @@ const pins = [
             <path d="M-14 0 L0 4 L14 0 L0 -4 Z" fill="var(--ink-faint)"></path>
             <text x="0" y="-18" text-anchor="middle" fill="var(--ink-dim)" font-family="'Overpass Mono', monospace" font-size="8">N</text>
           </g>
-          <!-- lake -->
+          <!-- lake — traced from the real Lake Tahoe outline: notched north end,
+               the concave "pinch" on the east shore (Cave Rock), bumpy west coast -->
           <path
-            d="M150 18 C198 28 218 86 214 150 C210 214 196 296 150 308 C126 314 104 292 102 262 C101 246 84 246 90 222 C95 204 108 208 110 190 C114 156 86 128 98 88 C107 54 122 14 150 18 Z"
+            d="M185 28 C200 36 211 60 216 84 C221 104 224 120 224 138 C224 154 215 162 210 170 C206 182 221 192 221 205 C221 222 220 232 216 245 C211 261 207 270 198 276 C188 292 168 306 150 306 C144 306 139 292 134 284 C128 270 120 258 114 240 C110 226 99 212 97 190 C96 174 95 158 94 138 C93 122 100 108 104 92 C108 72 124 52 140 46 C150 42 152 50 165 40 C173 35 178 32 185 28 Z"
             fill="color-mix(in srgb, var(--water) 22%, transparent)" stroke="var(--water)" stroke-width="1.6"></path>
           <text x="156" y="166" fill="var(--water)" font-family="'Overpass Mono', monospace" font-size="11" letter-spacing="1.5" opacity="0.85">LAKE</text>
           <text x="150" y="182" fill="var(--water)" font-family="'Overpass Mono', monospace" font-size="11" letter-spacing="1.5" opacity="0.85">TAHOE</text>
-          <!-- road: untraveled dashed + traveled pine -->
-          <path id="drive-road" d="M118 44 C92 84 100 120 88 168 C80 206 92 250 120 300"
+          <!-- road: untraveled dashed + traveled pine — hugs the west shore,
+               threading the five stops down toward the south end -->
+          <path id="drive-road" d="M104 92 C100 108 93 122 94 138 C95 158 96 174 97 190 C99 212 110 226 114 240 C120 258 128 270 134 284 C139 292 144 298 148 303"
             fill="none" stroke="var(--track-inactive)" stroke-width="2" stroke-dasharray="4 4"></path>
-          <path d="M118 44 C100 72 100 104 92 138" fill="none" stroke="var(--track-active)" stroke-width="2.4"></path>
+          <path d="M104 92 C100 108 93 122 94 138" fill="none" stroke="var(--track-active)" stroke-width="2.4"></path>
           <!-- pins -->
           {
             pins.map((p, i) => (

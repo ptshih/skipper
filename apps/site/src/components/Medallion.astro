@@ -50,11 +50,12 @@ const { size = 200, class: klass = '' } = Astro.props
       <circle cx="10.5" cy="14.4" r="3" fill="var(--surface-sunken)"></circle>
       <circle cx="25" cy="14.4" r="3" fill="var(--surface-sunken)"></circle>
     </g>
-    <!-- banner -->
+    <!-- banner — kept high enough (and narrow enough) that the round field clip
+         (r=78) doesn't slice the ribbon ends or the "LAKE TAHOE" text -->
     <g>
-      <path d="M44 158 H156 L150 168 L156 178 H44 L50 168 Z" fill="var(--surface-raised)" stroke="var(--keyline)" stroke-width="1"></path>
-      <text x="100" y="171.5" text-anchor="middle" fill="var(--ink)"
-        font-family="'Overpass Mono', monospace" font-size="10.5" font-weight="600" letter-spacing="1.5">LAKE TAHOE</text>
+      <path d="M56 146 H144 L138 156 L144 166 H56 L62 156 Z" fill="var(--surface-raised)" stroke="var(--keyline)" stroke-width="1"></path>
+      <text x="100" y="159.5" text-anchor="middle" fill="var(--ink)"
+        font-family="'Overpass Mono', monospace" font-size="9" font-weight="600" letter-spacing="1.2">LAKE TAHOE</text>
     </g>
   </g>
 
