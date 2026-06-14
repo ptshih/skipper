@@ -32,12 +32,14 @@ export async function fetchExecutionLog(cloudRunExecution: string): Promise<stri
   }
   try {
     const token = await accessToken()
-    // Cloud Run Jobs: resource.type="cloud_run_job" has only project_id/location/job_name as
-    // resource labels. The execution name is a log-entry label (labels.execution_name),
-    // not a resource label — see cloud.google.com/monitoring/api/resources#tag_cloud_run_job
+    // Cloud Run Jobs: resource.type="cloud_run_job" carries project_id/location/job_name as
+    // resource labels; the execution name is a LOG-ENTRY label and it DOES carry the
+    // `run.googleapis.com/` prefix — `labels."run.googleapis.com/execution_name"` (verified
+    // 2026-06-13 against a real Logs Explorer query). A prior fix (61bbab6) dropped the prefix
+    // to bare `labels.execution_name` on a docs misread; that matches nothing → empty logs.
     const filter = [
       'resource.type="cloud_run_job"',
-      `labels.execution_name="${cloudRunExecution}"`,
+      `labels."run.googleapis.com/execution_name"="${cloudRunExecution}"`,
     ].join('\n')
 
     let lines: string[] = []
