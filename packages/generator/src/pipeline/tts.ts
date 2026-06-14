@@ -21,9 +21,8 @@ import {
   TTS_SAMPLE_RATE_HZ,
 } from '../models'
 import { GEMINI_PCM, toWavWithDuration } from './wav'
-import { mp3DurationMs } from './mp3'
 import { keepFirstTake, measureTailCollapse, TAIL_COLLAPSE_DB } from './tail'
-import { normalizeLoudness } from './loudnorm'
+import { normalizeAndEncode } from './loudnorm'
 
 const SYNTHESIZE_URL = 'https://texttospeech.googleapis.com/v1/text:synthesize'
 const CLOUD_PLATFORM_SCOPE = 'https://www.googleapis.com/auth/cloud-platform'
@@ -35,7 +34,8 @@ const CLOUD_PLATFORM_SCOPE = 'https://www.googleapis.com/auth/cloud-platform'
 const TTS_REQUEST_TIMEOUT_MS = 90_000
 
 export interface SynthResult {
-  /** The playable clip bytes — an MP3 by default; a WAV when TTS_AUDIO_ENCODING is LINEAR16. */
+  /** The clip bytes. `synthesize()` yields the raw lossless WAV take; `synthesizeWithTailRetake()`
+   *  yields the encoded AAC `.m4a` (the shipped clip). */
   audio: Uint8Array
   durationMs: number
 }
@@ -101,19 +101,10 @@ export async function synthesize(
   if (!data.audioContent) throw new Error('Cloud TTS returned no audioContent.')
 
   const raw = new Uint8Array(Buffer.from(data.audioContent, 'base64'))
-  // Cloud TTS returns no duration field, so each encoding derives it from the bytes:
-  //  - MP3: the bytes ARE the .mp3 clip; duration = sum of MPEG frame times (mp3.ts).
-  //  - LINEAR16: wrap headerless PCM as a playable WAV; duration is byte-linear (wav.ts).
-  let audio: Uint8Array
-  let durationMs: number
-  if (TTS_AUDIO_ENCODING === 'MP3') {
-    audio = raw
-    durationMs = mp3DurationMs(raw)
-  } else {
-    const wrapped = toWavWithDuration(raw, GEMINI_PCM)
-    audio = wrapped.wav
-    durationMs = wrapped.durationMs
-  }
+  // Cloud TTS returns no duration field. LINEAR16 is byte-linear, so wrap the headerless PCM
+  // as a playable WAV and derive the EXACT duration from the byte length (wav.ts). This is the
+  // raw lossless take; synthesizeWithTailRetake encodes it to AAC after the QA passes.
+  const { wav: audio, durationMs } = toWavWithDuration(raw, GEMINI_PCM)
   if (!audio.length || durationMs <= 0) {
     throw new Error('Cloud TTS returned empty audio or a zero-length duration.')
   }
@@ -139,12 +130,13 @@ export type SynthWithTailResult = SynthResult & { tail: TailOutcome | null }
  * non-deterministic in level and ~1 in 4 collapses over the closing sentence(s) — the
  * "mumble". Measure tail-vs-body after the synth; on a drop ≥ TAIL_COLLAPSE_DB re-synth
  * ONCE and keep the better take, so a Dam-class take can never ship silently again.
- * Then loudness-normalize the WINNER (TODO.md audio-QA #2): a two-pass linear loudnorm to
- * a fixed LUFS target, killing the clip-to-clip level spread + the quiet-vs-Spotify gap.
- * Normalizing once, on the shipped take, AFTER the retake is safe — a linear gain scales
- * tail and body equally, so it can't reintroduce collapse. ffmpeg-optional: a null normalize
- * ships the un-normalized take (no regression). Both QA passes run on every SHIP path
- * (generate, generate-roam, resynth-tour, patch-clip), which all go through this.
+ * Then master the WINNER (TODO.md audio-QA #2): a two-pass linear loudnorm to a fixed LUFS
+ * target (killing the clip-to-clip level spread + the quiet-vs-Spotify gap) fused with the
+ * single AAC encode. Normalizing once, on the shipped take, AFTER the retake is safe — a
+ * linear gain scales tail and body equally, so it can't reintroduce collapse. ffmpeg is
+ * REQUIRED here (it's the encoder, not just a QA tool) — normalizeAndEncode throws if it's
+ * absent. Both passes run on every SHIP path (generate, generate-roam, resynth-tour,
+ * resynth-roam-clip, patch-clip), which all go through this.
  */
 export async function synthesizeWithTailRetake(
   text: string,
@@ -181,10 +173,11 @@ export async function synthesizeWithTailRetake(
     tail = { firstDropDb: m1.dropDb, keptDropDb, retook: true, shippedCollapsed }
   }
 
-  // ── Loudness-normalize the shipped take (runs even when the tail probe skipped, so short
-  //    break clips still get leveled). null = ffmpeg absent/failed → ship un-normalized. ──
-  const normalized = await normalizeLoudness(shipped.audio)
-  if (normalized) shipped = normalized
+  // ── Master the shipped take: linear loudnorm + the single AAC encode (loudnorm.ts). This is
+  //    the ONLY lossy pass (the take above is lossless WAV), and ffmpeg is REQUIRED here — it
+  //    IS the encoder, so it throws loudly if absent rather than ship a mislabeled clip. The
+  //    PCM duration is exact and content-preserving, so it carries through the encode. ──
+  const audio = await normalizeAndEncode(shipped.audio)
 
-  return { ...shipped, tail }
+  return { audio, durationMs: shipped.durationMs, tail }
 }

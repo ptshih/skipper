@@ -153,11 +153,14 @@ you found so the next agent can re-check it.
 - **TTS = Google Cloud Text-to-Speech via REST** (no SDK — raw `fetch` to
   `texttospeech.googleapis.com/v1/text:synthesize`), model `gemini-3.1-flash-tts-preview`
   with Gemini-TTS voice "Charon" (`TTS_MODEL` / `SKIPPER_VOICE_ID` in `models.ts`);
-  OAuth/ADC via `google-auth-library`, NO API key. Output is **MP3 32 kbps**
-  (`TTS_AUDIO_ENCODING = 'MP3'`; exact duration via the frame-sum parser in
-  `pipeline/mp3.ts`; `wav.ts` is the retained LINEAR16 fallback — see
-  `docs/decisions/audio-compression-spike.md`). Switched off ElevenLabs (commit
-  `6af019e`) to bill GCP credits and dodge its quota + 2026-12-31 voice sunset.
+  OAuth/ADC via `google-auth-library`, NO API key. Output is **AAC-LC 48 kbps `.m4a`**:
+  TTS returns LINEAR16 (lossless), then ONE ffmpeg pass in `pipeline/loudnorm.ts`
+  (`normalizeAndEncode`) does loudnorm + the single AAC encode; exact duration from the
+  PCM byte length (`pipeline/wav.ts`). **ffmpeg is REQUIRED on ship paths** (it's the
+  encoder, not just QA — throws if absent; Cloud Run carries it). The 2026-06-14 switch
+  off MP3-direct dropped a double-encode — see `docs/decisions/audio-compression-spike.md`.
+  Switched off ElevenLabs (commit `6af019e`) to bill GCP credits and dodge its quota +
+  2026-12-31 voice sunset.
 - **R2 = Bun's native `S3Client`** (no `@aws-sdk`; `region: "auto"`); the generator
   tsconfig needs `types: ["node","bun"]` for it.
 - **Auth = Better Auth** (`apps/api/auth.ts`). It needs interactive transactions,

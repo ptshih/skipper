@@ -5,13 +5,14 @@
 // (Lake Tahoe Dam) ended its closing words near-silent, −22.5 dB below the body. Fresh
 // takes of the same scripts come out clean → TAKE variance, not the voice and not the
 // style prompt. So the TTS phase measures every take's tail (last 12 s) against its
-// body (everything before) with a read-only ffmpeg `volumedetect` pass — no re-encode,
-// the synthesized MP3 bytes ship untouched — and a drop ≥ 3 dB earns ONE re-synth,
-// keeping the better take (the retake loop lives in pipeline/tts.ts).
+// body (everything before) with a read-only ffmpeg `volumedetect` pass — no re-encode here,
+// the take's lossless WAV bytes pass through to the master/encode step untouched — and a
+// drop ≥ 3 dB earns ONE re-synth, keeping the better take (the retake loop lives in tts.ts).
 //
-// ffmpeg is OPTIONAL tooling: when it's absent, errors, or the clip is too short to
-// have a meaningful body, the probe returns null and the take ships unmeasured —
-// synthesis must never fail because a QA probe couldn't run.
+// ffmpeg is OPTIONAL for THIS probe: when it's absent, errors, or the clip is too short to
+// have a meaningful body, the probe returns null and the take ships unmeasured — a QA probe
+// must never fail synthesis. (The downstream AAC encode in loudnorm.ts DOES require ffmpeg,
+// so on a real ship path ffmpeg is present and this probe runs anyway.)
 
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -80,7 +81,7 @@ export async function measureTailCollapse(
   if (durationSec < MIN_MEASURABLE_SEC) return null
   // volumedetect can't read a pipe slice-by-slice, so the bytes land in a temp file for
   // the two passes (body via -t, tail via -sseof) and are removed in finally.
-  const file = join(tmpdir(), `skipper-tail-${crypto.randomUUID()}.mp3`)
+  const file = join(tmpdir(), `skipper-tail-${crypto.randomUUID()}.wav`)
   try {
     await writeFile(file, audio)
     const bodySec = durationSec - TAIL_WINDOW_SEC

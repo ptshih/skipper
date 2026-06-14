@@ -1,18 +1,27 @@
 # Audio compression spike — get clips off uncompressed WAV
 
-**Status:** spike → **SHIPPED 2026-06-08** (impl `b38edb3`, canonical preview re-synthed + verified
-live `bcdbda4`): TTS output is **MP3 32 kbps** (`TTS_AUDIO_ENCODING` in `models.ts`), exact duration
-via the frame-sum parser in `pipeline/mp3.ts`; `wav.ts` retained as the LINEAR16 fallback. Historical
-record — the "not yet implemented" framing below is the pre-decision text, and its tour ids /
-`isPreview` references are of-its-time (`isPreview` dropped 2026-06-09).
+**Status:** spike → MP3 32k SHIPPED 2026-06-08 → **switched to option B (LINEAR16 → AAC-LC 48k)
+2026-06-14.** Current state: TTS requests **LINEAR16** (lossless), and the loudnorm step does the
+ONLY lossy encode — one ffmpeg pass that linear-normalizes AND encodes to **AAC-LC 48 kbps `.m4a`**
+(`TTS_AUDIO_ENCODING='LINEAR16'`, `TTS_CLIP_EXTENSION='m4a'` in `models.ts`; `pipeline/loudnorm.ts`
+`normalizeAndEncode`). Exact duration from the PCM byte length (`pipeline/wav.ts`), measured before
+the encode and preserved through it — the MP3 frame-sum parser (`pipeline/mp3.ts`) is RETIRED.
+Historical record — the "not yet implemented" framing below is the pre-decision text, and its tour
+ids / `isPreview` references are of-its-time (`isPreview` dropped 2026-06-09).
 
-**Follow-up 2026-06-11 — loudness normalization rides this encode path.** The chosen "accept a
-32k→32k MP3 re-encode" option (vs flipping to LINEAR16) is now also the vehicle for clip loudness
-normalization: `synthesizeWithTailRetake` runs an ffmpeg two-pass LINEAR loudnorm on the shipped
-take to −14 LUFS / −1.5 dBTP (`pipeline/loudnorm.ts`, `LOUDNORM_*` in `models.ts`), fixing the
-clip-to-clip level spread + quiet-vs-Spotify gap. ffmpeg stays OPTIONAL (graceful skip, as for the
-tail probe), so the LINEAR16 path here was deliberately NOT taken — it would have made ffmpeg a hard
-synthesis dependency. See `TODO.md` "TTS audio QA" for the founder ear-gate on the −14 target.
+**Why the switch (2026-06-14).** The shipped MP3-direct path was a DOUBLE lossy encode: Gemini
+emits 32k MP3 (lossy #1), then the 2026-06-11 loudness step decoded + re-encoded it to 32k MP3
+(lossy #2). Option B (request LINEAR16, normalize the lossless PCM, encode ONCE to AAC@48k) drops
+one generation and lets us pick the codec/bitrate — AAC@48k is clearly better than MP3@32k for a
+modest size bump (~1.6× the 32k MP3; still ~7–8× under the LINEAR16 WAV). iOS AVPlayer plays AAC
+(OGG_OPUS would be smaller but iOS can't decode it — still disqualified). **Trade accepted:** ffmpeg
+is now REQUIRED on every ship path (it IS the encoder) — `normalizeAndEncode` throws if it's absent
+rather than ship a mislabeled clip; only the LEVELING sub-step degrades (encode un-leveled if pass-1
+stats won't parse). Cloud Run carries ffmpeg (`packages/generator/Dockerfile`). Verified by an
+end-to-end synth: ffprobe confirms aac / 24 kHz / mono / ~48.8k / m4a, duration exact. No clips to
+migrate — `pois` was freshly swept with no tour/roam audio generated, so this only affects NEW
+generation. Loudnorm target unchanged (−14 LUFS / −1.5 dBTP, `LOUDNORM_*` in `models.ts`); see
+`TODO.md` "TTS audio QA" for the founder ear-gate on the −14 target.
 
 ## 1. Why
 

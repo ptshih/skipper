@@ -71,9 +71,9 @@ export const JUDGMENT_MODEL = 'claude-opus-4-8' as const
 // credits are NOT usable on the Gemini Developer API key; only Cloud TTS / Vertex
 // draw GCP credits. Cloud TTS uniquely gives the persona three things: a natural,
 // steerable Gemini voice (the active pick is "Charon" — see below), a first-class natural-language STYLE prompt
-// (input.prompt) to steer delivery, and flexible output encodings (we now use MP3 —
-// see the AUDIO FORMAT note below; duration, which the API never returns, is summed
-// from the frames in pipeline/mp3.ts). Auth is OAuth/ADC
+// (input.prompt) to steer delivery, and flexible output encodings (we request LINEAR16 and
+// encode to AAC — see the AUDIO FORMAT note below; duration, which the API never returns, is
+// exact from the PCM byte length in pipeline/wav.ts). Auth is OAuth/ADC
 // (text:synthesize takes no API key) — handled in pipeline/tts.ts. No ElevenLabs
 // quota or 2026-12-31 voice sunset to worry about on this provider.
 //
@@ -85,32 +85,28 @@ export const JUDGMENT_MODEL = 'claude-opus-4-8' as const
 // 3.1-flash (the newest tier) reads the deadpan a touch more unhurried, which suits the
 // low-and-slow skipper. ⚠ PREVIEW MODEL — it may change or sunset; re-verify by ear if
 // Google revises it, and keep GA 'gemini-2.5-pro-tts' as the fallback. All Gemini-TTS
-// models share the same voices + encoding set, so this does NOT affect the 32k-MP3 output.
+// models share the same voices + encoding set, so this does NOT affect the AAC output.
 export const TTS_MODEL = 'gemini-3.1-flash-tts-preview' as const
 
-// AUDIO FORMAT. We request MP3 directly from Gemini-TTS (unary text:synthesize supports
-// LINEAR16/MP3/OGG_OPUS/ALAW/MULAW/PCM; MP3 is fixed "32kbps"). MP3 is ~12× smaller than
-// the LINEAR16 WAV used through M1 — fixing the slow-buffer clip skips on weak signal and
-// shrinking the future offline tour download (see docs/decisions/audio-compression-spike.md).
-// OGG_OPUS is smaller still but iOS AVPlayer (expo-audio) CANNOT decode Ogg/Opus, so it's
-// disqualified for the phone player. Cloud TTS returns no duration field and MP3 isn't
-// byte-linear, so duration is summed from the MPEG frames (pipeline/mp3.ts) — validated
-// exact against ffprobe.
+// AUDIO FORMAT — LINEAR16 → AAC@48k .m4a (spike option B; chosen 2026-06-14, see
+// docs/decisions/audio-compression-spike.md). We request LOSSLESS LINEAR16 from Gemini-TTS,
+// then the loudnorm step (pipeline/loudnorm.ts) does the ONLY lossy encode: a single
+// ffmpeg pass that linear-normalizes AND encodes to AAC-LC 48 kbps in an .m4a. This beats
+// requesting Cloud TTS's fixed 32k MP3 directly because that path then RE-ENCODES (32k MP3 →
+// loudnorm → 32k MP3) — two lossy generations; LINEAR16-first collapses it to one and lets
+// us pick the codec/bitrate. AAC@48k is ~8× smaller than the LINEAR16 WAV, clearly better
+// than MP3@32k at ~the same size, and iOS AVPlayer (expo-audio) plays it (OGG_OPUS is smaller
+// but iOS can't decode Ogg/Opus — disqualified). Duration is EXACT from the PCM byte length
+// (pipeline/wav.ts), measured before the encode and preserved through it — no MP3 frame parse.
 //
-// Typed as the union (NOT `as const`) so flipping back to 'LINEAR16' stays a ONE-LINE
-// change — the spike's option B (request PCM, transcode to AAC@48k if 32kbps MP3 dulls
-// the voice by ear) — and the LINEAR16 branch in tts.ts keeps type-checking.
-//
-// ⚠ Re-synth + EAR-TEST gate before relying on this: existing R2 clips are still WAV;
-// flipping only affects NEW generation. Run ONE live synth (needs GCP creds) to confirm
-// Gemini's MP3 parses, ear-test 32kbps MP3 vs AAC@48k on the founder-blessed Algenib
-// read, then re-synth the CURRENT canonical preview (its id is destroyed/regenerated on
-// each migration — look it up): resynth-tour.ts <canonical> --apply, then
-// sweep-orphans.ts <canonical> --apply for any stray .wav left behind.
-export const TTS_AUDIO_ENCODING: 'LINEAR16' | 'MP3' = 'MP3'
-export const TTS_SAMPLE_RATE_HZ = 24_000 as const // honored for LINEAR16; MP3 is fixed 32kbps (rate may be ignored)
-export const TTS_AUDIO_CONTENT_TYPE = 'audio/mpeg' as const
-export const TTS_CLIP_EXTENSION = 'mp3' as const
+// ⚠ ffmpeg is now REQUIRED on every SHIP path (it IS the encoder, not just QA) — Cloud Run
+// carries it (packages/generator/Dockerfile); a bare box without it fails loudly. The
+// player/API are codec-agnostic (they take a presigned URL + a duration; MIME derives from
+// the .m4a key extension), so this was a generator-only flip.
+export const TTS_AUDIO_ENCODING = 'LINEAR16' as const
+export const TTS_SAMPLE_RATE_HZ = 24_000 as const // Gemini-TTS LINEAR16 native rate
+export const TTS_AUDIO_CONTENT_TYPE = 'audio/mp4' as const
+export const TTS_CLIP_EXTENSION = 'm4a' as const
 export const TTS_LANGUAGE_CODE = 'en-US' as const
 
 // LOUDNESS NORMALIZATION (TODO.md "TTS audio QA" #2 — clip-to-clip level spread + overall

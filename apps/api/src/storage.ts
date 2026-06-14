@@ -9,7 +9,8 @@
 export { presignGet } from '@skipper/storage'
 
 const AUDIO_CONTENT_TYPES: Record<string, string> = {
-  mp3: 'audio/mpeg', // current canonical (gemini-tts 32k MP3)
+  m4a: 'audio/mp4', // current canonical (LINEAR16 → AAC-LC 48k, see audio-compression-spike.md)
+  mp3: 'audio/mpeg', // legacy gemini-tts 32k MP3 clips, if any survive
   wav: 'audio/wav', // legacy LINEAR16 clips, if any survive
 }
 

@@ -1,40 +1,39 @@
-// Loudness normalization — the guard against Gemini-TTS's take-variance in LEVEL.
+// Mastering — loudness-normalize + AAC-encode the shipped TTS take in ONE ffmpeg pass.
 //
-// Measured 2026-06-10 over all 30 live clips (founder-ear-confirmed): takes are
-// non-deterministic in LOUDNESS — body means ranged −26.7 → −19.5 dB (a 7.2 dB
-// stop-to-stop jump), and the whole mix read ~20–25% quiet vs a Spotify reference.
-// So every SHIPPED take runs through an ffmpeg two-pass LINEAR loudnorm to the
-// EBU R128 target in models.ts (−14 LUFS integrated, −1.5 dBTP ceiling):
+// This is the ONLY lossy encode on the audio path: synthesize() returns a LOSSLESS LINEAR16
+// WAV take, and this step (a) levels it and (b) encodes it to AAC-LC 48 kbps in an .m4a.
+// Encoding here (rather than requesting Cloud TTS's fixed 32k MP3) avoids a SECOND lossy
+// generation and lets us choose codec/bitrate — see docs/decisions/audio-compression-spike.md.
+//
+// LEVELING: Gemini-TTS takes are non-deterministic in LOUDNESS — measured 2026-06-10 over all
+// 30 live clips (founder-ear-confirmed): body means ranged −26.7 → −19.5 dB (a 7.2 dB
+// stop-to-stop jump), and the whole mix read ~20–25% quiet vs a Spotify reference. So every
+// shipped take runs an ffmpeg two-pass LINEAR loudnorm to the EBU R128 target in models.ts
+// (−14 LUFS integrated, −1.5 dBTP ceiling):
 //   pass 1 MEASURES the take's integrated loudness / true-peak / range,
-//   pass 2 applies a single LINEAR gain (linear=true) to hit the target exactly.
-// Linear (not dynamic) is the point: it scales the whole clip uniformly, so every clip
-// lands at the same integrated level (killing the spread) WITHOUT touching the speech
-// dynamics — and because it scales tail and body equally, it can never reintroduce the
-// tail-collapse the retake just fixed. The −1.5 dBTP ceiling is why this isn't a flat
-// `volume=+NdB`: bringing a −26 dB clip up to −14 could clip without true-peak limiting.
+//   pass 2 applies a single LINEAR gain (linear=true) to hit the target exactly, fused with
+//          the AAC encode.
+// Linear (not dynamic) is the point: it scales the whole clip uniformly, so every clip lands at
+// the same integrated level (killing the spread) WITHOUT touching speech dynamics — and because
+// it scales tail and body equally, it can never reintroduce the tail-collapse the retake just
+// fixed. The −1.5 dBTP ceiling is why this isn't a flat `volume=+NdB`: bringing a −26 dB clip up
+// to −14 could clip without true-peak limiting.
 //
-// ffmpeg is OPTIONAL tooling (same contract as pipeline/tail.ts): when it's absent,
-// errors, or its JSON can't be parsed, this returns null and the caller ships the
-// UN-normalized take — synthesis must never fail because a QA tool couldn't run. (The
-// Cloud Run image DOES carry ffmpeg — packages/generator/Dockerfile — so unattended
-// admin-triggered generations normalize; a bare local box without it degrades to today.)
+// ffmpeg is REQUIRED (it IS the encoder, not just QA): a missing/failed encode THROWS rather
+// than ship a mislabeled clip. The Cloud Run image carries ffmpeg (packages/generator/Dockerfile);
+// a bare local box without it must install it. Only the LEVELING sub-step degrades gracefully —
+// if pass-1 analysis can't be parsed, we still encode to AAC, just without the linear gain.
 
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { readFile, unlink, writeFile } from 'node:fs/promises'
 import { LOUDNORM_RANGE_LU, LOUDNORM_TARGET_LUFS, LOUDNORM_TRUE_PEAK_DB } from '../models'
-import { mp3DurationMs } from './mp3'
 
-/** The shipped clip after normalization — same shape as tts.ts's SynthResult. */
-export interface NormalizedClip {
-  audio: Uint8Array
-  durationMs: number
-}
-
-/** Output MP3 bitrate (kbps) — matches Gemini-TTS's fixed 32k so the re-encode is level-only. */
-const MP3_BITRATE = '32k'
+/** Output AAC bitrate — AAC-LC@48k: ~8× smaller than the LINEAR16 WAV, clearly better than
+ *  MP3@32k at ~the same size, and iOS AVPlayer (expo-audio) plays it. */
+const AAC_BITRATE = '48k'
 /** Output sample rate — pinned to the TTS native 24 kHz (loudnorm runs at 192 kHz internally,
- *  so without this the muxed MP3 would inherit 192 kHz). */
+ *  so without this the muxed file would inherit 192 kHz). */
 const OUT_SAMPLE_RATE = '24000'
 
 /** The first-pass measurements loudnorm prints as JSON (the fields pass 2 feeds back). */
@@ -78,74 +77,78 @@ export function parseLoudnormStats(ffmpegStderr: string): LoudnormStats | null {
   }
 }
 
-// Warn ONCE per process when ffmpeg is unavailable — a full run normalizes dozens of clips
-// and a per-clip warning would drown the log for a known, accepted degradation.
-let warnedUnavailable = false
-const warnUnavailableOnce = (reason: string): void => {
-  if (warnedUnavailable) return
-  warnedUnavailable = true
-  console.warn(`  loudness normalize skipped (${reason}) — takes ship un-normalized this run.`)
+// Warn ONCE per process when the loudnorm ANALYSIS can't be parsed (clips still encode, just
+// un-leveled) — a full run masters dozens of clips and a per-clip warning would drown the log.
+let warnedNoStats = false
+const warnNoStatsOnce = (reason: string): void => {
+  if (warnedNoStats) return
+  warnedNoStats = true
+  console.warn(`  loudnorm analysis skipped (${reason}) — clips encode to AAC un-leveled this run.`)
 }
 
-/** Pass 1: measure. Reads the clip, runs loudnorm in analysis mode, returns the stats JSON. */
+/** Pass 1: measure. Reads the clip, runs loudnorm in analysis mode, returns the stats JSON
+ *  (null when ffmpeg is absent, a pass fails, or the JSON can't be parsed). */
 async function measure(file: string): Promise<LoudnormStats | null> {
-  const proc = Bun.spawn(
-    ['ffmpeg', '-hide_banner', '-nostats', '-i', file, '-af', loudnormFilter(), '-f', 'null', '-'],
-    { stdout: 'ignore', stderr: 'pipe' },
-  )
-  const stderr = await new Response(proc.stderr).text()
-  if ((await proc.exited) !== 0) return null
-  return parseLoudnormStats(stderr)
+  try {
+    const proc = Bun.spawn(
+      ['ffmpeg', '-hide_banner', '-nostats', '-i', file, '-af', loudnormFilter(), '-f', 'null', '-'],
+      { stdout: 'ignore', stderr: 'pipe' },
+    )
+    const stderr = await new Response(proc.stderr).text()
+    if ((await proc.exited) !== 0) return null
+    return parseLoudnormStats(stderr)
+  } catch {
+    return null // ffmpeg absent — the mandatory encode below will throw the clear error
+  }
 }
 
-/** Pass 2: apply the measured linear gain and re-encode to a 32k MP3 at `out`. */
-async function apply(file: string, out: string, stats: LoudnormStats): Promise<boolean> {
-  const proc = Bun.spawn(
-    [
-      'ffmpeg', '-hide_banner', '-nostats', '-y', '-i', file,
-      '-af', loudnormFilter(stats),
-      '-ar', OUT_SAMPLE_RATE, '-ac', '1', '-c:a', 'libmp3lame', '-b:a', MP3_BITRATE,
-      out,
-    ],
-    { stdout: 'ignore', stderr: 'pipe' },
-  )
-  await new Response(proc.stderr).text()
-  return (await proc.exited) === 0
+/** Pass 2: encode to AAC@48k .m4a, applying the measured linear loudnorm gain when available
+ *  (un-leveled encode when `stats` is null). Returns false on any ffmpeg failure/absence. */
+async function encode(file: string, out: string, stats: LoudnormStats | null): Promise<boolean> {
+  try {
+    const proc = Bun.spawn(
+      [
+        'ffmpeg', '-hide_banner', '-nostats', '-y', '-i', file,
+        ...(stats ? ['-af', loudnormFilter(stats)] : []),
+        '-ar', OUT_SAMPLE_RATE, '-ac', '1', '-c:a', 'aac', '-b:a', AAC_BITRATE,
+        '-movflags', '+faststart', out,
+      ],
+      { stdout: 'ignore', stderr: 'pipe' },
+    )
+    await new Response(proc.stderr).text()
+    return (await proc.exited) === 0
+  } catch {
+    return false
+  }
 }
 
 /**
- * Normalize one shipped clip to LOUDNORM_TARGET_LUFS via a two-pass linear loudnorm.
- * Returns the normalized MP3 + its recomputed exact duration, or null (probe skipped,
- * never a throw) when ffmpeg is absent, a pass fails, or the stats can't be parsed —
- * in which case the caller ships the un-normalized take.
+ * Master one shipped take (lossless WAV) to the final AAC `.m4a` clip: a two-pass linear
+ * loudnorm to LOUDNORM_TARGET_LUFS fused with the single AAC encode. Returns the .m4a bytes;
+ * the caller keeps the take's EXACT PCM duration (a linear gain + AAC encode preserve content
+ * length, and the .m4a edit list skips encoder priming, so perceived duration matches).
+ *
+ * THROWS if ffmpeg can't produce the clip (absent or failed encode) — ffmpeg is the encoder on
+ * this path, not optional QA. Only the LEVELING degrades: if pass-1 stats can't be parsed we
+ * still encode, just un-leveled (warned once).
  */
-export async function normalizeLoudness(audio: Uint8Array): Promise<NormalizedClip | null> {
+export async function normalizeAndEncode(audio: Uint8Array): Promise<Uint8Array> {
   const id = crypto.randomUUID()
-  const inFile = join(tmpdir(), `skipper-ln-in-${id}.mp3`)
-  const outFile = join(tmpdir(), `skipper-ln-out-${id}.mp3`)
+  const inFile = join(tmpdir(), `skipper-master-in-${id}.wav`)
+  const outFile = join(tmpdir(), `skipper-master-out-${id}.m4a`)
   try {
     await writeFile(inFile, audio)
     const stats = await measure(inFile)
-    if (!stats) {
-      warnUnavailableOnce('ffmpeg analysis failed or produced no loudnorm JSON')
-      return null
-    }
-    if (!(await apply(inFile, outFile, stats))) {
-      warnUnavailableOnce('ffmpeg normalize/encode pass failed')
-      return null
+    if (!stats) warnNoStatsOnce('ffmpeg analysis failed or produced no loudnorm JSON')
+    if (!(await encode(inFile, outFile, stats))) {
+      throw new Error(
+        'ffmpeg AAC encode failed — ffmpeg is REQUIRED for the LINEAR16→AAC clip path. ' +
+          'Install ffmpeg (the Cloud Run image already carries it).',
+      )
     }
     const out = new Uint8Array(await readFile(outFile))
-    const durationMs = mp3DurationMs(out)
-    // A re-encode that lost the frames (0 duration) is worse than the original — ship the
-    // original rather than a broken clip.
-    if (!out.length || durationMs <= 0) {
-      warnUnavailableOnce('normalized output was empty or unparseable')
-      return null
-    }
-    return { audio: out, durationMs }
-  } catch (e) {
-    warnUnavailableOnce(`ffmpeg unavailable: ${(e as Error).message}`)
-    return null
+    if (!out.length) throw new Error('ffmpeg produced an empty .m4a clip.')
+    return out
   } finally {
     await unlink(inFile).catch(() => {})
     await unlink(outFile).catch(() => {})
