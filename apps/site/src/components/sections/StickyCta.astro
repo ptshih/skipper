@@ -1,0 +1,136 @@
+---
+// Sticky bottom "Hear the Skipper" bar — a PHONE-ONLY persistent CTA, the proven
+// long-page mobile conversion lever. It appears only once the hero is scrolled
+// past (so it never covers the hero player itself) and hides again when the
+// closing CTA is on screen (so it doesn't stack on the footer stamp — which is
+// also where the page's *other* allowed amber glow lives). Because it's only
+// visible in that middle band, its glow is the single glow in the viewport, so
+// the bar may use the full glowing btn--primary. It drives the hero clip via the
+// `skipper:play-hero` custom event (see Hero.astro).
+import Icon from '../Icon.astro'
+---
+
+<div class="stickycta" data-sticky-cta aria-hidden="true">
+  <div class="stickycta__inner">
+    <span class="stickycta__copy">
+      <span class="stickycta__title">Hear the Skipper</span>
+      <span class="stickycta__sub">~20s · his real voice · no app</span>
+    </span>
+    <button class="btn btn--primary stickycta__btn" type="button" data-sticky-play>
+      <Icon name="play" size={18} /> Play
+    </button>
+  </div>
+</div>
+
+<style>
+  .stickycta {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 60; /* above the sticky nav (50) */
+    padding: var(--space-md) var(--gutter);
+    padding-bottom: calc(var(--space-md) + env(safe-area-inset-bottom));
+    background: color-mix(in srgb, var(--surface-raised) 94%, transparent);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    border-top: var(--border-keyline) solid var(--keyline);
+    box-shadow: 0 -10px 30px -20px var(--shadow-cast);
+    /* hidden by default: slid down + non-interactive until revealed */
+    transform: translateY(120%);
+    opacity: 0;
+    pointer-events: none;
+    transition: transform var(--dur-base) var(--ease), opacity var(--dur-base) var(--ease);
+  }
+  .stickycta.is-visible {
+    transform: translateY(0);
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .stickycta__inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-lg);
+    max-width: var(--maxw);
+    margin-inline: auto;
+  }
+  .stickycta__copy {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .stickycta__title {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: var(--fs-body-lg);
+    color: var(--ink);
+    line-height: 1.15;
+  }
+  .stickycta__sub {
+    font-size: var(--fs-label-sm);
+    letter-spacing: 0.04em;
+    color: var(--ink-faint);
+  }
+  .stickycta__btn {
+    flex: none;
+    min-height: 3rem; /* 48px — comfortable thumb target, trimmer than hero */
+    padding: 0 1.3rem;
+  }
+
+  /* Phones only — the recommendation is a mobile-first sticky bar. On tablet+
+     the hero player and the final stamp do the work. */
+  @media (min-width: 52rem) {
+    .stickycta {
+      display: none;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .stickycta {
+      transition: opacity var(--dur-base) var(--ease);
+      transform: none;
+    }
+  }
+</style>
+
+<script>
+  // Visibility = (scrolled past the hero) AND (the closing CTA is NOT on screen).
+  // Two IntersectionObservers feed two booleans; one updater toggles the class.
+  const bar = document.querySelector<HTMLElement>('[data-sticky-cta]')
+  const hero = document.getElementById('top')
+  const finalCta = document.getElementById('launch')
+
+  if (bar && hero) {
+    let pastHero = false
+    let atClosing = false
+    const update = () => bar.classList.toggle('is-visible', pastHero && !atClosing)
+
+    new IntersectionObserver(
+      ([e]) => {
+        // "past the hero" = the hero section has scrolled out of the top.
+        pastHero = !e.isIntersecting && e.boundingClientRect.top < 0
+        update()
+      },
+      { threshold: 0 }
+    ).observe(hero)
+
+    if (finalCta) {
+      new IntersectionObserver(
+        ([e]) => {
+          // "at the closing" = the final CTA is on screen OR already scrolled
+          // past (top < 0). The latter keeps the bar hidden through the footer
+          // below it, instead of popping back up over the legal/contact links.
+          atClosing = e.isIntersecting || e.boundingClientRect.top < 0
+          update()
+        },
+        { threshold: 0 }
+      ).observe(finalCta)
+    }
+
+    // Tapping the bar plays the hero clip (wherever you are) and scrolls it
+    // into view, via the same event the hero listens for.
+    bar.querySelector<HTMLButtonElement>('[data-sticky-play]')?.addEventListener('click', () => {
+      document.dispatchEvent(new CustomEvent('skipper:play-hero'))
+    })
+  }
+</script>

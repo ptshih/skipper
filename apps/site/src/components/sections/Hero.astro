@@ -27,18 +27,29 @@ const HERO_STOP = 'Emerald Bay overlook'
         reading, no tapping — press play and he’s already talking.
       </p>
       <div class="hero__cta">
-        <a class="btn btn--secondary" href="#the-drive">
-          <Icon name="mappin" size={20} /> See the drive
-        </a>
+        <div class="hero__buttons">
+          <!-- The PRIMARY action: hear him. Amber-FILLED but deliberately NOT
+               glowing — the one allowed amber glow in this viewport is reserved
+               for the player disc (tokens.css). So this button drops the
+               btn--primary halo for a neutral lift; it controls the same audio. -->
+          <button class="btn btn--primary hero__playcta" type="button" data-hero-play-cta aria-controls="hero-player">
+            <span class="hero__playcta-ic" data-cta-ic-play><Icon name="play" size={20} /></span>
+            <span class="hero__playcta-ic" data-cta-ic-pause hidden><Icon name="pause" size={20} /></span>
+            <span data-cta-label>Hear the Skipper</span>
+          </button>
+          <a class="btn btn--secondary" href="#the-drive">
+            <Icon name="mappin" size={20} /> See the drive
+          </a>
+        </div>
         <span class="hero__micro">
-          His real voice, from a real Tahoe drive. Plays right here — no app, no account.
+          His real voice, from a real Tahoe drive — about 20 seconds, right here. No app, no account.
         </span>
       </div>
     </div>
 
     <!-- The one glowing object on the page: the NOW-playing placard. -->
     <div class="hero__player">
-      <figure class="player framed" data-hero-player aria-label="Listen to a sample from the Skipper">
+      <figure class="player framed" id="hero-player" data-hero-player aria-label="Listen to a sample from the Skipper">
         <figcaption class="player__head">
           <span class="player__state" data-state>Sample clip</span>
           <span class="player__stop">{HERO_STOP}</span>
@@ -101,8 +112,25 @@ const HERO_STOP = 'Emerald Bay overlook'
     margin-top: var(--space-2xl);
     display: flex;
     flex-direction: column;
-    gap: var(--space-md);
+    gap: var(--space-lg);
     align-items: flex-start;
+  }
+  .hero__buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-md);
+  }
+  /* Amber fill, NO glow — the disc keeps the single per-viewport glow. */
+  .hero__playcta {
+    box-shadow: 0 6px 18px -8px var(--shadow-cast);
+  }
+  .hero__playcta:hover {
+    color: var(--on-amber);
+    box-shadow: 0 9px 24px -8px var(--shadow-cast);
+  }
+  .hero__playcta-ic {
+    display: inline-grid;
+    place-items: center;
   }
   .hero__micro {
     font-size: var(--fs-meta);
@@ -270,6 +298,20 @@ const HERO_STOP = 'Emerald Bay overlook'
     const scrub = root.querySelector<HTMLElement>('[data-scrub]')!
     const trail = document.getElementById('hero-trail')
 
+    // The primary hero CTA lives in the COPY column (outside the player card),
+    // so it's queried from the document, not from `root`. It controls the same
+    // audio and mirrors play/pause state.
+    const ctaBtn = document.querySelector<HTMLButtonElement>('[data-hero-play-cta]')
+    const ctaLabel = ctaBtn?.querySelector<HTMLElement>('[data-cta-label]') ?? null
+    const ctaIcPlay = ctaBtn?.querySelector<HTMLElement>('[data-cta-ic-play]') ?? null
+    const ctaIcPause = ctaBtn?.querySelector<HTMLElement>('[data-cta-ic-pause]') ?? null
+
+    const setCtaPlaying = (playing: boolean) => {
+      if (ctaIcPlay) ctaIcPlay.hidden = playing
+      if (ctaIcPause) ctaIcPause.hidden = !playing
+      if (ctaLabel) ctaLabel.textContent = playing ? 'Pause the Skipper' : 'Hear the Skipper'
+    }
+
     let available = true
     const setProgress = (p: number) => {
       p = Math.max(0, Math.min(1, p))
@@ -284,6 +326,21 @@ const HERO_STOP = 'Emerald Bay overlook'
       capEl.textContent = 'ENGINE’S STILL WARMING UP · the sample clip lands at launch'
       playBtn.setAttribute('aria-disabled', 'true')
       playBtn.setAttribute('aria-label', 'Sample clip coming at launch')
+      if (ctaBtn) {
+        ctaBtn.setAttribute('aria-disabled', 'true')
+        ctaBtn.disabled = true
+      }
+      if (ctaLabel) ctaLabel.textContent = 'Warming up…'
+    }
+
+    const togglePlay = () => {
+      if (!available) return
+      if (audio.paused) {
+        const p = audio.play()
+        if (p) p.catch(warmUp)
+      } else {
+        audio.pause()
+      }
     }
 
     audio.addEventListener('error', warmUp)
@@ -299,26 +356,38 @@ const HERO_STOP = 'Emerald Bay overlook'
       iconPlay.hidden = true
       iconPause.hidden = false
       stateEl.textContent = 'NOW PLAYING'
+      setCtaPlaying(true)
     })
     audio.addEventListener('pause', () => {
       iconPlay.hidden = false
       iconPause.hidden = true
       if (!audio.ended) stateEl.textContent = 'PAUSED'
+      setCtaPlaying(false)
     })
     audio.addEventListener('ended', () => {
       stateEl.textContent = 'THAT’S THE SAMPLE'
       setProgress(0)
       curEl.textContent = '0:00'
+      setCtaPlaying(false)
     })
 
-    playBtn.addEventListener('click', () => {
-      if (!available) return
-      if (audio.paused) {
-        const p = audio.play()
-        if (p) p.catch(warmUp)
-      } else {
-        audio.pause()
+    playBtn.addEventListener('click', togglePlay)
+
+    // The copy-column CTA toggles the same clip. On a phone the player sits below
+    // the fold of the copy, so starting playback also brings the placard into view.
+    ctaBtn?.addEventListener('click', () => {
+      const wasPaused = audio.paused
+      togglePlay()
+      if (wasPaused && window.innerWidth < 992) {
+        root.scrollIntoView({ behavior: 'smooth', block: 'center' })
       }
+    })
+
+    // Cross-component trigger (the sticky mobile bar dispatches this): always
+    // PLAY (never toggle to pause) and reveal the placard.
+    document.addEventListener('skipper:play-hero', () => {
+      if (available && audio.paused) togglePlay()
+      root.scrollIntoView({ behavior: 'smooth', block: 'center' })
     })
 
     // scrub-to-seek

@@ -2,14 +2,34 @@
 // The honest pre-launch trust slot. Autio borrows Costner; Shaka borrows 77k
 // ratings; pre-launch, we borrow CANDOR — a short maker's note — and design the
 // empty review rail in plain sight for post-launch.
+//
+// DROP-IN: real early-listener reactions go in `quotes` below — verbatim and
+// attributed, NEVER fabricated (the no-fake-metrics posture; research is blunt
+// that invented testimonials read as cringe, and 2–3 SPECIFIC real lines beat a
+// star count). The moment there's one, the rail flips from the honest empty
+// placeholders to real cards and the heading adjusts. Example shape:
+//   { stars: 5, quote: 'I cackled at the windshield bit.', who: 'TestFlight rider · June' }
 import Icon from '../Icon.astro'
+
+const quotes: { stars: number; quote: string; who: string }[] = []
 ---
 
 <section class="section founder" id="founder">
   <div class="container">
     <article class="founder__card framed">
-      <span class="kicker">No reviews yet — here’s the truth instead</span>
-      <h2 class="title">Nobody’s rated this yet. It’s not in the store yet.</h2>
+      {
+        quotes.length ? (
+          <>
+            <span class="kicker">First riders, unfiltered</span>
+            <h2 class="title">A few early reactions. The rest is up to your ears.</h2>
+          </>
+        ) : (
+          <>
+            <span class="kicker">No reviews yet — here’s the truth instead</span>
+            <h2 class="title">Nobody’s rated this yet. It’s not in the store yet.</h2>
+          </>
+        )
+      }
       <p class="founder__body">
         So here’s the honest version: Skipper is a small, stubborn labor of love — one drive, one
         voice, built by someone who got tired of audio tours that read facts at you like a museum
@@ -21,12 +41,28 @@ import Icon from '../Icon.astro'
         <Icon name="play" size={18} /> Go back and hear him
       </a>
 
-      <!-- the future review rail, empty on purpose -->
-      <div class="founder__rail" aria-hidden="true">
-        <div class="founder__slot"><span class="founder__stars">★ ★ ★ ★ ★</span><span>first riders, this slot is yours</span></div>
-        <div class="founder__slot"><span class="founder__stars">★ ★ ★ ★ ★</span><span>your words go here</span></div>
-        <div class="founder__slot"><span class="founder__stars">★ ★ ★ ★ ★</span><span>and here</span></div>
-      </div>
+      {
+        quotes.length ? (
+          <div class="founder__rail">
+            {quotes.map((q) => (
+              <figure class="founder__quote">
+                <span class="founder__stars founder__stars--lit" aria-hidden="true">
+                  {'★'.repeat(Math.max(0, Math.min(5, q.stars)))}
+                </span>
+                <blockquote class="founder__quotetext">{q.quote}</blockquote>
+                <figcaption class="founder__who">— {q.who}</figcaption>
+              </figure>
+            ))}
+          </div>
+        ) : (
+          /* the future review rail, empty on purpose */
+          <div class="founder__rail" aria-hidden="true">
+            <div class="founder__slot"><span class="founder__stars">★ ★ ★ ★ ★</span><span>first riders, this slot is yours</span></div>
+            <div class="founder__slot"><span class="founder__stars">★ ★ ★ ★ ★</span><span>your words go here</span></div>
+            <div class="founder__slot"><span class="founder__stars">★ ★ ★ ★ ★</span><span>and here</span></div>
+          </div>
+        )
+      }
     </article>
   </div>
 </section>
@@ -110,6 +146,31 @@ import Icon from '../Icon.astro'
   .founder__stars {
     color: var(--track-inactive);
     letter-spacing: 0.15em;
+    font-size: var(--fs-meta);
+  }
+  /* real-quote cards (rendered once `quotes` has entries) */
+  .founder__quote {
+    border: var(--border-thin) solid var(--rule);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    padding: var(--space-xl);
+    text-align: left;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+  }
+  .founder__stars--lit {
+    color: var(--accent-warm);
+  }
+  .founder__quotetext {
+    font-family: var(--font-body);
+    font-weight: 600;
+    color: var(--ink);
+    font-size: var(--fs-body);
+    line-height: 1.45;
+  }
+  .founder__who {
+    color: var(--ink-faint);
     font-size: var(--fs-meta);
   }
 </style>

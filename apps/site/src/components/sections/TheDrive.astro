@@ -3,12 +3,22 @@
 // answer to Autio's 25,000-story flex: show ONE real route beautifully instead
 // of faking a catalog. Honest framing — this is the LAUNCH drive (no production
 // tours are published yet), so it's a roadmap promise, not a present-tense claim.
+//
+// The itinerary doubles as a SAMPLER (Autio's strongest move): ready stops play
+// a few seconds inline, so visitors hear the persona's RANGE, not just one clip.
+import Icon from '../Icon.astro'
+// Each stop can carry a short sample `clip` (public path). A stop WITH a clip is
+// tappable and plays inline; one WITHOUT shows an honest "soon" chip — no dead
+// players. Stop 1's clip IS the hero clip (the Emerald Bay telling), so the
+// sampler has a real, working sample from day one. Drop a founder-blessed MP3 at
+// the path and the stop lights up — same drop-in pattern as the hero clip
+// (public/clips/README.md). Keep paths in west-shore order.
 const stops = [
-  { n: 1, name: 'Emerald Bay Overlook', sub: 'the postcard everyone stops for', kind: 'Scenic', tone: 'teal' },
-  { n: 2, name: 'Vikingsholm & the lake’s only island', sub: 'a castle, a teahouse, and a very tall tale', kind: 'Story', tone: 'pine' },
-  { n: 3, name: 'Inspiration Point', sub: 'named by a committee, earned by the view', kind: 'Scenic', tone: 'teal' },
-  { n: 4, name: 'D.L. Bliss & water so clear it’s rude', sub: 'facts about clarity, jokes about your windshield', kind: 'Story', tone: 'pine' },
-  { n: 5, name: 'A coffee stop the Skipper picked himself', sub: 'he has opinions about pie', kind: 'Pit stop', tone: 'amber' },
+  { n: 1, name: 'Emerald Bay Overlook', sub: 'the postcard everyone stops for', kind: 'Scenic', tone: 'teal', clip: '/clips/skipper-hero.mp3' },
+  { n: 2, name: 'Vikingsholm & the lake’s only island', sub: 'a castle, a teahouse, and a very tall tale', kind: 'Story', tone: 'pine', clip: null /* '/clips/skipper-vikingsholm.mp3' */ },
+  { n: 3, name: 'Inspiration Point', sub: 'named by a committee, earned by the view', kind: 'Scenic', tone: 'teal', clip: null /* '/clips/skipper-inspiration-point.mp3' */ },
+  { n: 4, name: 'D.L. Bliss & water so clear it’s rude', sub: 'facts about clarity, jokes about your windshield', kind: 'Story', tone: 'pine', clip: null /* '/clips/skipper-dl-bliss.mp3' */ },
+  { n: 5, name: 'A coffee stop the Skipper picked himself', sub: 'he has opinions about pie', kind: 'Pit stop', tone: 'amber', clip: null /* '/clips/skipper-coffee.mp3' */ },
 ]
 const toneVar: Record<string, string> = { pine: 'var(--accent)', teal: 'var(--water)', amber: 'var(--amber)' }
 // pin coordinates down the west shore (matches the list order)
@@ -65,21 +75,54 @@ const pins = [
         <p class="drive__maplabel mono">Illustrated route · not to scale</p>
       </div>
 
-      <!-- itinerary -->
-      <ol class="drive__list">
-        {
-          stops.map((s) => (
-            <li class={`drive__stop ${s.tone === 'pine' && s.n === 2 ? 'is-now' : ''}`}>
-              <span class="drive__pip" style={`--tone:${toneVar[s.tone]}`}>{s.n}</span>
-              <span class="drive__stoptext">
-                <span class="drive__stopname">{s.name}</span>
-                <span class="drive__stopsub body-dim">{s.sub}</span>
-              </span>
-              <span class={`badge badge--${s.tone}`}>{s.kind}</span>
-            </li>
-          ))
-        }
-      </ol>
+      <!-- itinerary — ready stops play a short sample inline -->
+      <div class="drive__itin">
+        <ol class="drive__list">
+          {
+            stops.map((s) =>
+              s.clip ? (
+                <li class="drive__stopitem">
+                  <button
+                    class="drive__stop drive__stop--play"
+                    type="button"
+                    data-clip={s.clip}
+                    aria-label={`Hear a few seconds of the Skipper at ${s.name}`}
+                  >
+                    <span class="drive__pip" style={`--tone:${toneVar[s.tone]}`}>{s.n}</span>
+                    <span class="drive__stoptext">
+                      <span class="drive__stopname">{s.name}</span>
+                      <span class="drive__stopsub body-dim">{s.sub}</span>
+                    </span>
+                    <span class={`badge badge--${s.tone}`}>{s.kind}</span>
+                    <span class="drive__play" aria-hidden="true">
+                      <span class="drive__play-ic" data-ic-play><Icon name="play" size={15} /></span>
+                      <span class="drive__play-ic" data-ic-pause hidden><Icon name="pause" size={15} /></span>
+                    </span>
+                  </button>
+                </li>
+              ) : (
+                <li class="drive__stopitem">
+                  <div class="drive__stop">
+                    <span class="drive__pip" style={`--tone:${toneVar[s.tone]}`}>{s.n}</span>
+                    <span class="drive__stoptext">
+                      <span class="drive__stopname">{s.name}</span>
+                      <span class="drive__stopsub body-dim">{s.sub}</span>
+                    </span>
+                    <span class={`badge badge--${s.tone}`}>{s.kind}</span>
+                    <span class="drive__soon mono" title="Sample clip coming soon">soon</span>
+                  </div>
+                </li>
+              )
+            )
+          }
+        </ol>
+        <p class="drive__hint mono">
+          <Icon name="play" size={13} /> Tap a stop with a play icon to hear a few seconds — more light up as we record them.
+        </p>
+        <!-- one reused element; only one stop plays at a time (and the page-wide
+             guard in index.astro pauses the hero clip if it's going). -->
+        <audio data-drive-audio preload="none"></audio>
+      </div>
     </div>
 
     <p class="drive__foot body-dim">
@@ -133,6 +176,9 @@ const pins = [
     color: var(--ink-faint);
     font-size: var(--fs-label-sm);
   }
+  .drive__itin {
+    min-width: 0;
+  }
   .drive__list {
     list-style: none;
     padding: 0;
@@ -148,12 +194,78 @@ const pins = [
     gap: var(--space-lg);
     padding: var(--space-xl) var(--space-2xl);
   }
-  .drive__stop + .drive__stop {
+  .drive__stopitem + .drive__stopitem {
     border-top: var(--border-thin) solid var(--rule);
   }
-  .drive__stop.is-now {
-    background: color-mix(in srgb, var(--amber) 7%, transparent);
+  /* a playable stop is a full-width button — reset chrome, keep the row look */
+  button.drive__stop {
+    width: 100%;
+    font: inherit;
+    color: inherit;
+    text-align: left;
+    background: none;
+    border: none;
+    cursor: pointer;
+    transition: background var(--dur-fast) var(--ease);
+  }
+  .drive__stop--play:hover {
+    background: color-mix(in srgb, var(--accent) 7%, transparent);
+  }
+  /* the now-playing row — an amber TINT + inset bar (a fill, not a glow) */
+  .drive__stop.is-playing {
+    background: color-mix(in srgb, var(--amber) 8%, transparent);
     box-shadow: inset 3px 0 0 var(--amber);
+  }
+  /* trailing play/pause affordance (the row is the click target) */
+  .drive__play {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: var(--radius-pill);
+    border: 1.5px solid var(--track-inactive);
+    color: var(--accent);
+    transition: border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+  }
+  .drive__play-ic {
+    display: grid;
+    place-items: center;
+  }
+  .drive__stop--play:hover .drive__play {
+    border-color: var(--accent);
+  }
+  .drive__stop.is-playing .drive__play {
+    /* amber FILL on the glyph (no halo) — keeps the one-glow rule intact */
+    border-color: var(--amber);
+    color: var(--amber);
+  }
+  /* honest placeholder for a stop whose clip isn't recorded yet */
+  .drive__soon {
+    flex: none;
+    font-size: var(--fs-label-sm);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    border: var(--border-thin) dashed var(--track-inactive);
+    border-radius: var(--radius-pill);
+    padding: 0.3em 0.7em;
+  }
+  .drive__hint {
+    margin-top: var(--space-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5em;
+    text-align: center;
+    font-size: var(--fs-label-sm);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  .drive__hint :global(svg) {
+    color: var(--accent);
+    flex: none;
   }
   .drive__pip {
     flex: none;
@@ -202,3 +314,54 @@ const pins = [
     margin-inline: auto;
   }
 </style>
+
+<script>
+  // Inline itinerary sampler. One reused <audio>; tapping a ready stop plays its
+  // clip, tapping the same stop again pauses, tapping another switches. The
+  // page-wide guard (index.astro) pauses the hero clip when this starts, and
+  // vice-versa — so its 'pause' event also clears our row highlight.
+  const section = document.getElementById('the-drive')
+  const audio = section?.querySelector<HTMLAudioElement>('[data-drive-audio]')
+  if (section && audio) {
+    const rows = Array.from(section.querySelectorAll<HTMLButtonElement>('.drive__stop--play'))
+    let activeBtn: HTMLButtonElement | null = null
+    let currentClip: string | null = null
+
+    const setRow = (btn: HTMLButtonElement | null, playing: boolean) => {
+      if (!btn) return
+      btn.classList.toggle('is-playing', playing)
+      const pi = btn.querySelector<HTMLElement>('[data-ic-play]')
+      const pa = btn.querySelector<HTMLElement>('[data-ic-pause]')
+      if (pi) pi.hidden = playing
+      if (pa) pa.hidden = !playing
+    }
+
+    rows.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const clip = btn.dataset.clip
+        if (!clip) return
+        // same stop, currently playing → pause it
+        if (activeBtn === btn && !audio.paused) {
+          audio.pause()
+          return
+        }
+        // switch away from a different row
+        if (activeBtn && activeBtn !== btn) setRow(activeBtn, false)
+        if (clip !== currentClip) {
+          audio.src = clip
+          currentClip = clip
+        }
+        activeBtn = btn
+        setRow(btn, true)
+        const p = audio.play()
+        if (p) p.catch(() => setRow(btn, false)) // clip missing/blocked → no dead highlight
+      })
+    })
+
+    // 'play' re-asserts (covers the transient pause a src-swap fires); 'pause'
+    // (user OR the page-wide guard) and 'ended' clear the highlight.
+    audio.addEventListener('play', () => setRow(activeBtn, true))
+    audio.addEventListener('pause', () => setRow(activeBtn, false))
+    audio.addEventListener('ended', () => setRow(activeBtn, false))
+  }
+</script>

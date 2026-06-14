@@ -19,6 +19,7 @@ import Objections from '../components/sections/Objections.astro'
 import FounderNote from '../components/sections/FounderNote.astro'
 import FinalCta from '../components/sections/FinalCta.astro'
 import SiteFooter from '../components/sections/SiteFooter.astro'
+import StickyCta from '../components/sections/StickyCta.astro'
 ---
 
 <Base>
@@ -34,4 +35,22 @@ import SiteFooter from '../components/sections/SiteFooter.astro'
     <FinalCta />
   </main>
   <SiteFooter />
+  <StickyCta />
 </Base>
+
+<script>
+  // One voice at a time. The hero clip, the itinerary sampler, and the sticky
+  // bar each own their own <audio>; this capture-phase guard pauses every OTHER
+  // audio element the moment one starts, so two Skippers never talk at once.
+  document.addEventListener(
+    'play',
+    (e) => {
+      const t = e.target
+      if (!(t instanceof HTMLAudioElement)) return
+      document.querySelectorAll('audio').forEach((a) => {
+        if (a !== t) a.pause()
+      })
+    },
+    true
+  )
+</script>
