@@ -6,7 +6,8 @@
 // (placeholders otherwise) so the server boots without them. The anonymous plugin
 // gives guests a session that links to a real account on sign-up.
 //
-// Secret/base URL come from env: BETTER_AUTH_SECRET, BETTER_AUTH_URL.
+// Secret comes from env (BETTER_AUTH_SECRET); the base URL is derived per-request from the
+// validated Host header (there is no BETTER_AUTH_URL) — see the `baseURL` config below.
 
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
