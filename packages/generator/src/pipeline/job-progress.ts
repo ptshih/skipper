@@ -3,8 +3,15 @@
 // A NO-OP unless GEN_JOB_ID is set, so the laptop CLI is byte-identical (it never sets it).
 // In the cloud the Cloud Run Job receives GEN_JOB_ID: the admin-api mints the gen_jobs row
 // (status 'queued') before triggering in v1; a gcloud-triggered v0 run just passes a fresh
-// uuid and beginJob() inserts the row itself. Wired ONLY at the four CLI entrypoints'
-// top-level main() — never inside generate.ts (keeps the demo-sensitive pipeline untouched).
+// uuid and beginJob() inserts the row itself. EVERY gen-job entrypoint wraps its body in a
+// main() guarded by beginJob/finishJob (the run.ts shape) — a NEW kind MUST do the same. Never
+// call this from inside generate.ts (keeps the pipeline untouched). Full registry +
+// enforcement: apps/admin/server/jobs.ts SCRIPTS + jobs.test.ts.
+//
+// LOG CAPTURE lives here too: beginJob() tees this run's console output; finishJob() persists it
+// + an LLM summary onto the row (outputLog/outputSummary/outputData), atomically with the status
+// flip. The admin READS that — it does NOT fetch Cloud Logging. So a kind that skips this hook
+// records neither status nor logs in the console.
 //
 // Every write is BEST-EFFORT: a gen_jobs failure must NEVER fail the actual op — observability
 // must not break generation. All DB calls swallow errors with a warning.

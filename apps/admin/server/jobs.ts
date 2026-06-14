@@ -36,7 +36,12 @@ export class HttpError extends Error {
   }
 }
 
-const SCRIPTS = {
+// The gen-job entrypoints, keyed by kind. ADDING A KIND? Its script MUST run its body through
+// beginJob()/finishJob() (packages/generator/src/pipeline/job-progress.ts) — that is HOW a run
+// records status AND captures its own stdout into outputLog/outputSummary/outputData on the row.
+// A script that skips the hook records no status and shows NO logs in the console (the admin no
+// longer reads Cloud Logging). Follow run.ts's main()+begin/finish shape. Enforced by jobs.test.ts.
+export const SCRIPTS = {
   generate: 'packages/generator/src/run.ts',
   patch_clip: 'packages/generator/src/patch-clip.ts',
   resynth: 'packages/generator/src/resynth-tour.ts',
