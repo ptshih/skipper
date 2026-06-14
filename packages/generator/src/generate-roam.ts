@@ -44,15 +44,26 @@ import { personaFromKey } from './persona'
 import { NARRATION_CONCURRENCY, TTS_CONCURRENCY } from './config'
 import { estimateTtsUsd, llmSpendLines, llmSpentUsd } from './pipeline/spend'
 
-const ROAM_TARGET_SECONDS = 60
+/** Roam encounter length band + eligibility (Autio-register long-form, founder 2026-06-13).
+ *  storyTargetSeconds = the AIM; storyMaxSeconds = a HARD cap so a fact-rich place doesn't sprawl
+ *  into a lecture. "Never pad past the facts" governs the ACTUAL length WITHIN the band, so a thin
+ *  pin lands honestly shorter (capped by its facts) rather than stretched. minExtractStory is the
+ *  eligibility floor for a long-form STORY — a pin below it is WAVE-eligible (the 10–20s locked
+ *  pass-2 form); until that form ships, the floor simply excludes thinner pins (the `--min-extract`
+ *  flag overrides). NOTE: the source today is the Wikipedia LEAD extract only (~400 chars ≈ 60–90s),
+ *  so reaching the UPPER band likely needs richer per-pin facts — validate with a script-only sample
+ *  before any paid regen. */
+const ROAM_LENGTH = {
+  storyTargetSeconds: 150,
+  storyMaxSeconds: 180,
+  minExtractStory: 400,
+} as const
 /** TASTE gate: articles about violent crime / personal tragedy are never roadside
  *  encounters — a joke-forward persona cannot carry them (the sweep is breadth-first, so
  *  these slip in; the Jaycee Dugard kidnapping article surfaced on the first basin run).
  *  Historical/civic tragedy (a wildfire, a shipwreck) stays — the prompt can play those
  *  straight — but gets the founder ear. Title-keyed; widen as the corpus widens. */
 const TASTE_DENYLIST = /kidnap|murder|killing of|death of|massacre|homicide|suicide|assault/i
-/** Roam grounds on real material: lead extracts below this stay out of v0 (no thin tellings). */
-const DEFAULT_MIN_EXTRACT = 400
 /** Default corpus bbox — Tahoe–Reno corridor (matches sweep-roam-pois.ts). */
 const DEFAULT_BBOX = { swLng: -120.25, swLat: 38.86, neLng: -119.55, neLat: 39.65 }
 
@@ -65,9 +76,12 @@ function regionLabel(lat: number, lng: number): string {
 
 const flags = parseFlags(process.argv.slice(2), { valueFlags: ['limit', 'min-extract', 'bbox'] })
 const apply = flags.has('apply')
+// Narrate + PRINT the scripts, then stop — NO TTS, NO R2, NO DB writes. The cheapest way to ear-read
+// the writing (e.g. a new length band) before committing to a paid synth + regen. Spends narration $.
+const scriptsOnly = flags.has('scripts-only')
 const force = flags.has('force')
 const limit = Number(flags.value('limit') ?? Infinity)
-const minExtract = Number(flags.value('min-extract') ?? DEFAULT_MIN_EXTRACT)
+const minExtract = Number(flags.value('min-extract') ?? ROAM_LENGTH.minExtractStory)
 const bboxRaw = flags.value('bbox')
 const bbox = (() => {
   if (!bboxRaw) return DEFAULT_BBOX
@@ -77,8 +91,12 @@ const bbox = (() => {
   return { swLng: p[0]!, swLat: p[1]!, neLng: p[2]!, neLat: p[3]! }
 })()
 
-announce({ tool: 'generate-roam', blast: ['SPENDS $', 'MUTATES DB'], apply })
-if (apply) assertReady(['tts', 'r2'])
+announce({
+  tool: 'generate-roam',
+  blast: scriptsOnly ? ['SPENDS $'] : ['SPENDS $', 'MUTATES DB'],
+  apply: apply || scriptsOnly, // scripts-only spends narration $, so it's not a free dry run
+})
+if (apply) assertReady(['tts', 'r2']) // scripts-only needs neither TTS nor R2
 
 await ensurePoiOverridesLoaded()
 
@@ -184,11 +202,13 @@ const tts = estimateTtsUsd(
 )
 console.log(
   `\nEstimated spend: narration ~$${(queue.length * 0.1).toFixed(2)} ± half ` +
-    `+ TTS ~$${tts.usd.toFixed(2)} (${queue.length} clips ≈ ${Math.round((queue.length * ROAM_TARGET_SECONDS) / 60)} min of audio)`,
+    `+ TTS ~$${tts.usd.toFixed(2)} (${queue.length} clips ≈ ${Math.round((queue.length * ROAM_LENGTH.storyTargetSeconds) / 60)} min of audio)`,
 )
 
-if (!apply) {
-  console.log('\nDRY RUN — nothing narrated, synthesized, or written. Re-run with --apply.')
+if (!apply && !scriptsOnly) {
+  console.log(
+    '\nDRY RUN — nothing narrated, synthesized, or written. Re-run with --apply (or --scripts-only to narrate + print, no TTS/DB).',
+  )
   process.exit(0)
 }
 
@@ -203,21 +223,24 @@ const fetchedAt = new Date()
 for (const c of queue) {
   const deepText = deep.get(c.pageId)
   if (deepText && deepText.length > c.extract.length) {
-    c.extract = deepText
+    c.extract = deepText // in-memory, so narration grounds on the full article (needed by scripts-only too)
     c.factsFetchedAt = fetchedAt
-    const facts = { extract: deepText, title: c.title, url: c.url, pageId: c.pageId }
-    await upsertPoi({
-      source: 'wikipedia',
-      sourceId: String(c.pageId),
-      name: c.name,
-      kind: c.kind,
-      lat: c.lat,
-      lng: c.lng,
-      summary: deepText.split(/(?<=[.!?])\s+/)[0] ?? null,
-      facts,
-      factsHash: hashFacts(facts),
-      factsFetchedAt: fetchedAt,
-    })
+    if (!scriptsOnly) {
+      // scripts-only is a read-only sample — don't persist the deepened facts.
+      const facts = { extract: deepText, title: c.title, url: c.url, pageId: c.pageId }
+      await upsertPoi({
+        source: 'wikipedia',
+        sourceId: String(c.pageId),
+        name: c.name,
+        kind: c.kind,
+        lat: c.lat,
+        lng: c.lng,
+        summary: deepText.split(/(?<=[.!?])\s+/)[0] ?? null,
+        facts,
+        factsHash: hashFacts(facts),
+        factsFetchedAt: fetchedAt,
+      })
+    }
   }
 }
 
@@ -232,7 +255,8 @@ async function narrateEncounter(c: Candidate): Promise<string> {
     jokeLevel: 'dadpocalypse' as const,
     place: { name: c.name, ...(c.kind ? { kind: c.kind } : {}) },
     facts: toFacts(c.extract),
-    targetSeconds: ROAM_TARGET_SECONDS,
+    targetSeconds: ROAM_LENGTH.storyTargetSeconds,
+    maxSeconds: ROAM_LENGTH.storyMaxSeconds,
     encounterFrame: true,
   }
   let { script } = await narrateStop(base, persona.systemPrompt)
@@ -260,6 +284,20 @@ const scripts = await mapLimit(queue, NARRATION_CONCURRENCY(), async (c) => {
   console.log(`  [${done}/${queue.length}] ${c.name} (${script.split(/\s+/).length} words)`)
   return script
 })
+
+if (scriptsOnly) {
+  const WORDS_PER_SECOND = 2.5 // display estimate; mirrors narrate.ts (the target the model wrote to)
+  console.log('\n════════ SCRIPTS — scripts-only: no TTS, no R2, no DB writes ════════')
+  queue.forEach((c, i) => {
+    const script = scripts[i]!
+    const words = script.trim().split(/\s+/).filter(Boolean).length
+    console.log(
+      `\n──── ${c.name} · ${words} words ≈ ${Math.round(words / WORDS_PER_SECOND)}s · ${c.extract.length} chars source ────\n${script}`,
+    )
+  })
+  console.log(`\n(band: aim ${ROAM_LENGTH.storyTargetSeconds}s, cap ${ROAM_LENGTH.storyMaxSeconds}s)`)
+  process.exit(0)
+}
 
 // ── Synthesize + upload + upsert rows (a row only lands COMPLETE) ──
 console.log(`\nSynthesizing ${queue.length} clips (concurrency ${TTS_CONCURRENCY()})...`)

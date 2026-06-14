@@ -68,6 +68,10 @@ export interface NarrationRequest {
   recentMotifs?: string[]
   /** Pacing target; honored but never padded past the facts. */
   targetSeconds?: number
+  /** Hard upper cap on spoken length (s). A fact-rich place must not sprawl into a lecture; this
+   *  only ever SHORTENS, so it composes with "never pad" (targetSeconds = the aim, this = the
+   *  ceiling). Omit for a single-point target. */
+  maxSeconds?: number
   /** Re-narration notes from the diversity lint — concrete things THIS take must avoid. */
   avoid?: string[]
   /** FREE-ROAM encounter framing (generate-roam.ts): the telling is a one-off roadside
@@ -312,9 +316,16 @@ export function buildFactSheet(req: NarrationRequest): string {
   if (req.targetSeconds && req.targetSeconds > 0) {
     const words = Math.round(req.targetSeconds * WORDS_PER_SECOND)
     lines.push('')
-    lines.push(
-      `TARGET LENGTH: about ${req.targetSeconds} seconds read aloud (~${words} words). Honor it, but never pad past the facts.`,
-    )
+    if (req.maxSeconds && req.maxSeconds > req.targetSeconds) {
+      const maxWords = Math.round(req.maxSeconds * WORDS_PER_SECOND)
+      lines.push(
+        `TARGET LENGTH: aim for about ${req.targetSeconds} seconds read aloud (~${words} words), and NEVER exceed ${req.maxSeconds} seconds (~${maxWords} words) — once the facts are spent, stop. A shorter, fully-grounded telling beats a stretched one; never pad past the facts to reach the aim.`,
+      )
+    } else {
+      lines.push(
+        `TARGET LENGTH: about ${req.targetSeconds} seconds read aloud (~${words} words). Honor it, but never pad past the facts.`,
+      )
+    }
   }
 
   if (req.avoid && req.avoid.length > 0) {
