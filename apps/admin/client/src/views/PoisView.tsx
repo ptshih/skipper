@@ -113,9 +113,12 @@ function DiscoverDialog({
     enabled: open,
   })
 
+  const qc = useQueryClient()
   const submitMut = useMutation({
     mutationFn: (apply: boolean) => discoverPois(regionSlug, apply, regions.find((r) => r.slug === regionSlug)?.discoveryBbox),
-    onSuccess: () => onSubmitted(),
+    // Refresh the Runs list so the just-created run shows immediately on navigate (not after the
+    // 15s poll / a manual refresh).
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['runs'] }); onSubmitted() },
   })
   function submit(apply: boolean) {
     if (!regionSlug) return
@@ -695,7 +698,7 @@ function RetireTab({ flagged }: { flagged: PoiRow[] }) {
   // Re-fetch is a FREE cloud job (MediaWiki only, no LLM/TTS) — fire it, then jump to Runs to watch.
   const refetchMut = useMutation({
     mutationFn: (poiId: string) => api.createJob({ kind: 'refetch_facts', poiId, apply: true }),
-    onSuccess: () => navigate({ to: '/runs' }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['runs'] }); navigate({ to: '/runs' }) },
     onError: (e) => setActionErr(errMsg(e)),
   })
   // Retire is a hard DELETE, allowed ONLY for orphaned POIs (no segments) — the server guards it too.
