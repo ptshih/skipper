@@ -331,8 +331,25 @@ export async function upsertPoi(input: UpsertPoiInput): Promise<string> {
             // genuine re-fetch (non-null incoming) still overwrites. (Upholds the "pois is the
             // shared facts cache" invariant + keeps the facts_hash staleness contract honest.)
             summary: sql`coalesce(excluded.summary, ${pois.summary})`,
-            facts: sql`coalesce(excluded.facts, ${pois.facts})`,
-            factsHash: sql`coalesce(excluded.facts_hash, ${pois.factsHash})`,
+            // PRESERVE a paid enrichment WELL across a re-sweep. The region sweep upserts well-LESS
+            // facts (it only knows the article), and a plain coalesce(excluded.facts, …) takes the
+            // incoming object WHOLE — destroying any `facts.well` a prior PAID `enrich --apply` wrote
+            // (coalesce only guards a NULL incoming, i.e. a factless scenic/break write). The sweep is
+            // free + idempotent + encouraged to re-run, so that silent money-loss is a real footgun.
+            // So when the EXISTING row is enriched, refresh extract/title/etc from the incoming write
+            // but GRAFT the existing well + enrichedAt back on, and KEEP the existing facts_hash — it
+            // is the well-hash (storyFactsHash hashes the well, which is unchanged here), so grounded
+            // tracks stay fresh. A deliberate well rebuild goes through `refetch_facts` / a re-`enrich`
+            // (both rewrite facts directly), never a routine re-discover.
+            facts: sql`case
+              when jsonb_exists(${pois.facts}, 'well')
+                then coalesce(excluded.facts, ${pois.facts}) || jsonb_build_object('well', ${pois.facts} -> 'well', 'enrichedAt', ${pois.facts} -> 'enrichedAt')
+              else coalesce(excluded.facts, ${pois.facts})
+            end`,
+            factsHash: sql`case
+              when jsonb_exists(${pois.facts}, 'well') then ${pois.factsHash}
+              else coalesce(excluded.facts_hash, ${pois.factsHash})
+            end`,
             factsFetchedAt: sql`coalesce(excluded.facts_fetched_at, ${pois.factsFetchedAt})`,
             updatedAt: new Date(),
           },

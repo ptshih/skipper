@@ -186,3 +186,33 @@ describe('selectStops co-located dedup', () => {
     expect(along('Start Rich')).toBeLessThan(60) // near the route start
   })
 })
+
+describe('selectStops — selection is INVARIANT to the extract storage cap (4k→12k)', () => {
+  // Two CO-LOCATED story candidates, BOTH already past the 4k narration head. A free re-discover
+  // re-stores the second one's extract from ~4k up to ~12k; that must NOT flip which one survives
+  // the merge, because selection ranks on the narration-visible head (rankLen), not raw length.
+  // (Regression guard for the review's high-severity selection-drift finding.)
+  const uRoute: LngLat[] = [
+    ...Array.from({ length: 21 }, (_, i) => [0, 38.0 + i * 0.001] as LngLat),
+    ...Array.from({ length: 21 }, (_, i) => [0.001, 38.02 - i * 0.001] as LngLat),
+  ]
+  const survivorWhenSecondExtractIs = (repeats: number): string => {
+    const plan = selectStops({
+      polyline: uRoute,
+      totalSec: 660,
+      pacing: { minGapSec: 30, maxNarratedStops: 5, breakStops: 0 },
+      breakAnchors: [],
+      wikiPois: [
+        wiki({ pageid: 1, lat: 38.0, lng: 0, title: 'A first', extract: RICH.repeat(31) }), // ~4.3k, > 4k head
+        wiki({ pageid: 2, lat: 38.0, lng: 0.001, title: 'B second', extract: RICH.repeat(repeats) }),
+      ],
+    })
+    return plan.find((s) => s.stopType !== 'break')!.name
+  }
+
+  test('growing the co-located neighbour from ~4k to ~12k does not change the survivor', () => {
+    // raw-length ranking would flip the survivor to B at ~12k; the rankLen cap keeps it A in both.
+    expect(survivorWhenSecondExtractIs(30)).toBe('A first') // B ~4.2k — both clamp to 4k → A (first) wins
+    expect(survivorWhenSecondExtractIs(90)).toBe('A first') // B ~12.6k — raw would flip to B; capped → still A
+  })
+})

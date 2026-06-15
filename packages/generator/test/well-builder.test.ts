@@ -91,6 +91,21 @@ describe('buildWell — verbatim span selection + bundle inclusion', () => {
     ])
   })
 
+  test('a fetched bundle with NO license falls back to the source default (geology→CC BY 4.0, wikidata→CC0)', async () => {
+    // A real Macrostrat tile / Wikidata entity can return a bundle whose attribution.license is absent
+    // (license is optional). buildWell must bake the source default, not undefined, into the frozen
+    // WellSpan.license (it flows straight into the CC credit array). (scout.ts: `?? 'CC BY 4.0'` / `?? 'CC0'`.)
+    const geoNoLicense: SourcedFacts = { facts: ['Granodiorite.'], attribution: { source: 'macrostrat', sourceId: 'map:9', retrievedAt: 't' } }
+    const wdNoLicense: SourcedFacts = { facts: ['Inception: 1924.'], attribution: { source: 'wikidata', sourceId: 'Q9', retrievedAt: 't' } }
+    const call = script(
+      msg([{ name: 'fetch_geology', input: {} }, { name: 'fetch_wikidata', input: {} }]),
+      msg([{ name: 'finalize_well', input: { keepSpanIds: [0], includeGeology: true, includeWikidata: true, reason: 'x' } }]),
+    )
+    const r = await buildWell(INPUT, tools({ geologyAt: async () => geoNoLicense, wikidataFacts: async () => wdNoLicense }), { call })
+    expect(r!.well.find((s) => s.source === 'macrostrat')!.license).toBe('CC BY 4.0')
+    expect(r!.well.find((s) => s.source === 'wikidata')!.license).toBe('CC0')
+  })
+
   test('includeGeology with no fetched bundle never invents a span', async () => {
     // Model claims include but never fetched (or the fetch returned null) → nothing added.
     const call = script(msg([{ name: 'finalize_well', input: { keepSpanIds: [0], includeGeology: true, includeWikidata: true, reason: 'x' } }]))

@@ -27,7 +27,7 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 
 // Mirrors the `jobKind` enum in @skipper/shared (the server validates against it; this is the UX-typing
 // view, like StoryEligibility). Keep in sync if a kind is added/renamed there.
-export type JobKind = 'generate' | 'patch_clip' | 'resynth' | 'resynth_roam_clip' | 'sweep_orphans' | 'sweep_region_pois' | 'generate_roam' | 'refetch_facts'
+export type JobKind = 'generate' | 'patch_clip' | 'resynth' | 'resynth_roam_clip' | 'sweep_orphans' | 'sweep_region_pois' | 'enrich_region' | 'generate_roam' | 'refetch_facts'
 export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled'
 
 export interface GenJob {

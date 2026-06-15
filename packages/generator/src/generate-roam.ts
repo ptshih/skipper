@@ -244,8 +244,9 @@ async function main(): Promise<void> {
     /\b(?:on|to|off to) (?:your|the) (?:left|right)\b|\b(?:left|right)(?:-hand)? side\b/i
 
   async function narrateEncounter(c: Candidate): Promise<string> {
-    // Ground on the curated WELL when the place is enriched, else the positional extract head
-    // (the un-enriched fallback — today's behavior, byte-for-byte). Same resolver tours use.
+    // Ground on the curated WELL when the place is enriched, else the positional extract head (the
+    // un-enriched fallback — byte-for-byte today's behavior for existing 4k rows, a strict verbatim
+    // superset once re-swept to 12k). Same resolver tours use.
     const grounding = resolveStoryGrounding(c.facts, {
       fallbackChars: NARRATION_FALLBACK_CHARS,
       retrievedAt: (c.factsFetchedAt ?? new Date()).toISOString(),

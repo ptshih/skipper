@@ -69,6 +69,43 @@ export interface ScoutTools {
   wikidataFacts: (() => Promise<SourcedFacts | null>) | null
 }
 
+/**
+ * The per-STOP scout tools, gated by whether the place is already ENRICHED (a corpus well). Pulled
+ * out of generate-tour so the PLACE/ROUTE split (corpus-enrichment-spec §6) is unit-testable: for an
+ * ENRICHED stop the well already carries the PLACE-level facts, so the scout is narrowed to the ROUTE
+ * "rock under the tires" only — landmark geology resolves to null and Wikidata is withheld (they'd
+ * duplicate the well). An UN-enriched stop keeps the full per-stop scout (today's behavior). The
+ * fetchers are INJECTED (the real Macrostrat/Wikidata fns in generate-tour; fakes in tests); a channel
+ * that's off (GEOLOGY/WIKIDATA disabled) or a stop with no QID yields a null tool (not offered).
+ */
+export function scoutToolsForStop(
+  stop: { enriched?: boolean; lat: number; lng: number; triggerLat: number; triggerLng: number; wikidataQid?: string },
+  deps: {
+    geologyEnabled: boolean
+    wikidataEnabled: boolean
+    geologyAt: (lat: number, lng: number) => Promise<SourcedFacts | null>
+    wikidataFacts: (qid: string) => Promise<SourcedFacts | null>
+  },
+): ScoutTools {
+  return {
+    // "road" = the trigger point under the tires; "landmark" = the POI itself. For an ENRICHED stop
+    // the landmark rock is already in the well, so landmark resolves to null (route only).
+    geologyAt: deps.geologyEnabled
+      ? (point) =>
+          point === 'landmark'
+            ? stop.enriched
+              ? Promise.resolve(null)
+              : deps.geologyAt(stop.lat, stop.lng)
+            : deps.geologyAt(stop.triggerLat, stop.triggerLng)
+      : null,
+    // Wikidata is a PLACE fact — withheld for enriched stops (already in the well).
+    wikidataFacts:
+      deps.wikidataEnabled && !stop.enriched && stop.wikidataQid
+        ? () => deps.wikidataFacts(stop.wikidataQid!)
+        : null,
+  }
+}
+
 export interface ScoutResult {
   geology?: SourcedFacts & {
     /** How the narration should cue it: 'headline' (the rock IS the story — the old

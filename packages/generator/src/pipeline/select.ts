@@ -24,6 +24,7 @@ import {
   MERGE_EXTRA_SEC,
   MERGE_MAX_MEMBERS,
   MIN_STOP_SEPARATION_M,
+  NARRATION_FALLBACK_CHARS,
   OFF_ROUTE_MAX_M,
   PACING,
   STORY_MIN_FACT_CHARS,
@@ -121,6 +122,16 @@ export interface SelectParams {
 const NON_NARRATABLE_TITLE =
   /^(List of |Lists of |National Register of Historic Places listings)|listings in|\(disambiguation\)/i
 
+/** The richness a stop is RANKED by during selection (richest-in-window winner + co-located merge
+ *  survivor) — the narration-VISIBLE head length, NOT the raw stored extract. The stored extract cap
+ *  moved 4k→12k (ENRICHER_INPUT_CHARS) for the enricher's benefit, but un-enriched narration only ever
+ *  consumes the first NARRATION_FALLBACK_CHARS; ranking on the raw length would let a FREE re-discover
+ *  (which re-stores at 12k) silently reorder which stops a tour picks / which landmark survives a merge.
+ *  Capping the rank here keeps SELECTION invariant to the storage cap — the drift the review flagged. */
+function rankLen(extract: string): number {
+  return Math.min(extract.length, NARRATION_FALLBACK_CHARS)
+}
+
 /** Split an extract into clean fact sentences for the fact sheet. */
 export function toFacts(extract: string): string[] {
   return extract
@@ -141,7 +152,8 @@ export function headOfExtract(extract: string, maxChars: number): string {
 
 /** The narration sheet + attribution for a STORY poi, resolving the curated narration sheet:
  *  the verbatim `facts.well` when the place has been ENRICHED, else the positional `extract` head
- *  (the un-enriched fallback — today's behavior, byte-for-byte, until a paid enrich run). The SINGLE
+ *  (the un-enriched fallback — byte-for-byte today's behavior for existing 4k corpus rows; a strict
+ *  VERBATIM superset, ~one extra trailing sentence, once a row is re-swept to 12k — until enrich). The SINGLE
  *  source for BOTH tours and roam so the well↔fallback switch (and its frozen credit) can never
  *  drift between consumers. The well's credit uses its `enrichedAt`; the fallback's Wikipedia credit
  *  uses the caller's `retrievedAt` (the poi's facts_fetched_at). See corpus-enrichment-spec §6/§7. */
@@ -202,7 +214,7 @@ interface Placed {
  * (MERGE_MAX_MEMBERS) so a survivor can't bloat. Greedy richest-first, so survivors win.
  */
 function dedupeColocated(placed: Placed[]): Placed[] {
-  const byRichness = [...placed].sort((a, b) => b.poi.extract.length - a.poi.extract.length)
+  const byRichness = [...placed].sort((a, b) => rankLen(b.poi.extract) - rankLen(a.poi.extract))
   const kept: Placed[] = []
   for (const cand of byRichness) {
     const host = kept.find(
@@ -261,16 +273,18 @@ function selectNarrated(params: SelectParams, snapOf: SnapFn) {
       i++
       continue
     }
-    // Within the next minGap window, prefer the richest extract (best story).
+    // Within the next minGap window, prefer the richest extract (best story) — ranked on the
+    // narration-visible head (rankLen), not the raw stored length, so the storage cap can't reorder.
     let bestIdx = i
-    let bestLen = here.poi.extract.length
+    let bestLen = rankLen(here.poi.extract)
     let j = i + 1
     while (
       j < candidates.length &&
       candidates[j]!.alongSec - here.alongSec <= params.pacing.minGapSec
     ) {
-      if (candidates[j]!.poi.extract.length > bestLen) {
-        bestLen = candidates[j]!.poi.extract.length
+      const cl = rankLen(candidates[j]!.poi.extract)
+      if (cl > bestLen) {
+        bestLen = cl
         bestIdx = j
       }
       j++

@@ -86,7 +86,7 @@ import { boundingBox } from './wikidata-discovery'
 import { loadCandidatePoisInBox } from './region-corpus'
 import { geologyFacts } from './macrostrat'
 import { wikidataFacts } from './wikidata'
-import { scoutStop } from './scout'
+import { scoutStop, scoutToolsForStop } from './scout'
 import { searchBreakStops, spokenKind } from './places'
 import type { BreakAnchor } from './places'
 import { projectQueueLag, resolveStoryGrounding, selectStops } from './select'
@@ -379,8 +379,9 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
 
   // Resolve each STORY stop's narration SHEET from the corpus facts: the curated WELL when the place
   // has been ENRICHED (enrich-region), else the positional extract head (capped to
-  // NARRATION_FALLBACK_CHARS — today's behavior, byte-for-byte; the stored extract is now uncapped
-  // for the enricher, so the read MUST cap the un-enriched fallback). NO per-run re-fetch — facts come
+  // NARRATION_FALLBACK_CHARS — byte-for-byte today's behavior for existing 4k rows, a strict verbatim
+  // superset once a row is re-swept to 12k; the stored extract is now uncapped for the enricher, so
+  // the read MUST cap the un-enriched fallback). NO per-run re-fetch — facts come
   // from the corpus (discover/enrich own them); the same resolver roam uses, so a place reads the same
   // whether a tour or a roam encounter tells it. `wellAttribution` + `enriched` ride to the assembly
   // + the scout gate below. (Scenic/break carry no facts — skipped.)
@@ -453,24 +454,13 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
               : {}),
             targetSeconds: s.targetSeconds,
           },
-          {
-            // Stop-keyed tools: the scout picks WHICH point ("road" = the trigger point under the
-            // tires; "landmark" = the POI itself) — never WHOSE facts. For an ENRICHED stop the
-            // landmark rock is already in the well, so landmark resolves to null (route only).
-            geologyAt: GEOLOGY_ENRICHMENT()
-              ? (point) =>
-                  point === 'landmark'
-                    ? s.enriched
-                      ? Promise.resolve(null)
-                      : geologyFacts(s.lat, s.lng)
-                    : geologyFacts(s.triggerLat, s.triggerLng)
-              : null,
-            // Wikidata is a PLACE fact — withheld for enriched stops (already in the well).
-            wikidataFacts:
-              WIKIDATA_ENRICHMENT() && !s.enriched && s.wikidataQid
-                ? () => wikidataFacts(s.wikidataQid!)
-                : null,
-          },
+          // Stop-keyed tools, gated by s.enriched (the PLACE/ROUTE split, spec §6) — see scoutToolsForStop.
+          scoutToolsForStop(s, {
+            geologyEnabled: GEOLOGY_ENRICHMENT(),
+            wikidataEnabled: WIKIDATA_ENRICHMENT(),
+            geologyAt: geologyFacts,
+            wikidataFacts,
+          }),
         )
         if (!decision) {
           console.log(`  stop ${s.seq} ("${s.name}"): scout passed (no enrichment).`)
@@ -1240,6 +1230,20 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       // branch above; an enriched stop's Wikidata rides in wellAttribution.)
       if (s.geologyAttribution) attribution.push(s.geologyAttribution)
 
+      // Dedup the ASSEMBLED credit array by (source, sourceId): an ENRICHED stop's well already
+      // carries centroid geology (in wellAttribution), and the route scout adds trigger-point geology
+      // (geologyAttribution). Macrostrat's sourceId is the map-unit id (map_id), and a POI's centroid +
+      // its route trigger point commonly fall in the SAME unit — so those two credits collapse to ONE
+      // identical entry, not two. wellToAttribution dedups WITHIN the well; this dedups ACROSS the well
+      // + the per-tour geology/wikidata layers, so a frozen credit array never repeats a (source,id).
+      const seenAttr = new Set<string>()
+      const dedupedAttribution = attribution.filter((a) => {
+        const k = `${a.source}:${a.sourceId}`
+        if (seenAttr.has(k)) return false
+        seenAttr.add(k)
+        return true
+      })
+
       finalStops.push({
         segmentId,
         trackId,
@@ -1250,7 +1254,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
         script,
         audioUrl,
         audioDurationMs: durationMs,
-        attribution: attribution.length > 0 ? attribution : null,
+        attribution: dedupedAttribution.length > 0 ? dedupedAttribution : null,
         // Only fact-grounded (story) stops carry a facts_hash → only they can go fact-stale.
         factsHash: s.stopType === 'story' ? factsHash : null,
         triggerRadiusM: s.triggerRadiusM,

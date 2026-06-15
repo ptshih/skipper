@@ -9,8 +9,9 @@
  *  say". `facts.extract` IS the full article now (the region sweep deepens at discovery time), so this
  *  measures real article richness, not a lead proxy. Below it a place is wave-eligible only (the
  *  10–20s form, not yet shipped), so today the floor simply excludes stub articles. STARTING value,
- *  ear-tunable (like the LUFS target): the deep fetch caps articles at ~1200 chars (`fetchDeepExtracts`
- *  exchars), so the meaningful floor lives in (stub, ~1200). `generate-roam --min-extract` overrides. */
+ *  ear-tunable (like the LUFS target): the sweep now stores the FULL article up to ENRICHER_INPUT_CHARS
+ *  (=12k; the old ~1200/4k exchars caps are gone), so the meaningful floor lives in (stub, ~12k) and 800
+ *  simply excludes stubs. `generate-roam --min-extract` overrides. */
 export const STORY_MIN_EXTRACT = 800
 
 /** TASTE gate: violent-crime / personal-tragedy articles are never a charming narration target — a

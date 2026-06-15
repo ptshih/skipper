@@ -6,7 +6,7 @@
 
 import { describe, expect, test } from 'bun:test'
 import type Anthropic from '@anthropic-ai/sdk'
-import { scoutStop, type ScoutModelCall, type ScoutStop, type SourcedFacts, type ScoutTools } from '../src/pipeline/scout'
+import { scoutStop, scoutToolsForStop, type ScoutModelCall, type ScoutStop, type SourcedFacts, type ScoutTools } from '../src/pipeline/scout'
 
 const STOP: ScoutStop = {
   name: 'Emerald Bay State Park',
@@ -212,5 +212,32 @@ describe('scoutStop — loop mechanics + the gather-never-assert invariant', () 
     )
     expect(r).not.toBeNull()
     expect(r!.wikidata).toBeUndefined()
+  })
+})
+
+describe('scoutToolsForStop — the enriched-stop PLACE/ROUTE split (spec §6)', () => {
+  const geo: SourcedFacts = { facts: ['rock'], attribution: { source: 'macrostrat', sourceId: 'm', license: 'CC BY 4.0', retrievedAt: 't' } }
+  const wd: SourcedFacts = { facts: ['fact'], attribution: { source: 'wikidata', sourceId: 'Q1', license: 'CC0', retrievedAt: 't' } }
+  const deps = { geologyEnabled: true, wikidataEnabled: true, geologyAt: async () => geo, wikidataFacts: async () => wd }
+  const stop = { lat: 1, lng: 2, triggerLat: 3, triggerLng: 4, wikidataQid: 'Q1' }
+
+  test('UN-enriched: full scout — landmark geology fetched, route geology fetched, Wikidata offered', async () => {
+    const t = scoutToolsForStop({ ...stop, enriched: false }, deps)
+    expect(await t.geologyAt!('landmark')).toEqual(geo) // landmark rock fetched
+    expect(await t.geologyAt!('road')).toEqual(geo) // route rock fetched
+    expect(t.wikidataFacts).not.toBeNull() // Wikidata offered
+  })
+
+  test('ENRICHED: route-only — landmark geology NULL, Wikidata withheld, route geology still fetched', async () => {
+    const t = scoutToolsForStop({ ...stop, enriched: true }, deps)
+    expect(await t.geologyAt!('landmark')).toBeNull() // the place rock is already in the well
+    expect(await t.geologyAt!('road')).toEqual(geo) // the route "rock under the tires" still scouted
+    expect(t.wikidataFacts).toBeNull() // a PLACE fact — already in the well
+  })
+
+  test('channels off / no QID → null tools', () => {
+    expect(scoutToolsForStop(stop, { ...deps, geologyEnabled: false }).geologyAt).toBeNull()
+    expect(scoutToolsForStop({ ...stop, wikidataQid: undefined }, deps).wikidataFacts).toBeNull()
+    expect(scoutToolsForStop(stop, { ...deps, wikidataEnabled: false }).wikidataFacts).toBeNull()
   })
 })

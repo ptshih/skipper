@@ -258,8 +258,10 @@ export const STORY_MIN_FACT_CHARS = 140
 export const ENRICHER_INPUT_CHARS = 12_000
 /**
  * The narration FALLBACK head (chars): when a story poi has NOT been enriched (no `facts.well`),
- * generation grounds on the positional head of `facts.extract` capped to this — today's behavior,
- * preserved byte-for-byte (the old DEEP_EXTRACT_CHARS value). An ENRICHED poi ignores this: it
+ * generation grounds on the positional head of `facts.extract` capped to this (the old
+ * DEEP_EXTRACT_CHARS value) — byte-for-byte today's behavior for existing 4k rows; once a row is
+ * re-swept under ENRICHER_INPUT_CHARS=12k the head is a strict VERBATIM superset (it packs a sentence
+ * or two more into the same 4k window), never a content change. An ENRICHED poi ignores this: it
  * grounds on the curated well (judgment is the bound, not a char cap). resolveStoryGrounding
  * (pipeline/select.ts) applies it; tours + roam pass it in.
  */
