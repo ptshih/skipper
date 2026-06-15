@@ -116,22 +116,28 @@ const END_SECTION =
 /** Full-article plain-text extract for ONE page (no exintro), capped + trimmed of trailing meta. */
 async function fetchArticleExtract(pageid: number): Promise<string> {
   await ensurePoiOverridesLoaded()
-  // exintro is OFF here (we want the body, not just the lead), and MediaWiki forces
-  // exlimit=1 in that mode — so this is one page per call. exchars caps the size.
+  // exintro is OFF (we want the body, not just the lead); exlimit=1 in that mode → one page/call.
+  // NO `exchars`: MediaWiki HARD-CLAMPS it to 1200, too thin for a 150s telling. Pull the full
+  // plain-text article and self-truncate to DEEP_EXTRACT_CHARS instead (below).
   const j = await wiki<{ query?: { pages?: ExtractPage[] } }>({
     action: 'query',
     prop: 'extracts',
     pageids: String(pageid),
     explaintext: '1',
     exsectionformat: 'plain',
-    exchars: String(DEEP_EXTRACT_CHARS),
   })
   const raw = (j.query?.pages?.[0]?.extract ?? '').trim()
-  // Curated upstream-error corrections ride EVERY fetch (pipeline/poi-overrides.ts), so the
-  // fixed text is what reaches the sheet, pois.facts, and facts_hash. NB: edits apply AFTER
-  // the server-side exchars cap — a find-string straddling the truncation boundary misses
-  // (and warns), it can never half-apply.
-  const cut = raw.split(END_SECTION)[0]!.trim()
+  // Drop trailing meta sections (References/See also/…), then cap to DEEP_EXTRACT_CHARS, trimming
+  // back to the last full sentence so narration never grounds on a half sentence.
+  let cut = raw.split(END_SECTION)[0]!.trim()
+  if (cut.length > DEEP_EXTRACT_CHARS) {
+    const head = cut.slice(0, DEEP_EXTRACT_CHARS)
+    const lastEnd = Math.max(head.lastIndexOf('. '), head.lastIndexOf('! '), head.lastIndexOf('? '))
+    cut = (lastEnd > 0 ? head.slice(0, lastEnd + 1) : head).trim()
+  }
+  // Curated upstream-error corrections ride EVERY fetch (pipeline/poi-overrides.ts), so the fixed
+  // text is what reaches the sheet, pois.facts, and facts_hash. Edits apply AFTER the truncation
+  // above — a find-string past the cap misses (and warns); it can never half-apply.
   const { text, missed } = applyFactEditsChecked('wikipedia', String(pageid), cut)
   reportMissedEdits('wikipedia', String(pageid), missed, 'deep-extract')
   return text

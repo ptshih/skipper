@@ -1,7 +1,7 @@
 // refetch-poi — re-pull ONE poi's Wikipedia facts and recompute its facts_hash.
 //
 // Facts are SHARED + cached on `pois` (principle #1); the corpus is normally refreshed in
-// BULK by the region sweep (sweep-roam-pois.ts). This is the single-POI version: re-fetch the
+// BULK by the region sweep (sweep-region-pois.ts). This is the single-POI version: re-fetch the
 // lead extract for ONE place by title (the SAME path discovery uses, so an unchanged article
 // hashes identically), apply the curated fact-edit overrides, and rewrite facts / facts_hash /
 // facts_fetched_at / summary. When the re-fetched facts MATERIALLY change (a new facts_hash),
@@ -20,9 +20,9 @@
 import { eq } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { pois } from '@skipper/db/schema'
-import type { PoiFacts } from '@skipper/db/schema'
-import { fetchExtractsByTitle } from './pipeline/wikipedia'
-import { hashFacts } from './pipeline/persist'
+import { fetchDeepExtracts } from './pipeline/wikipedia'
+import { toFacts } from './pipeline/select'
+import { buildStoryFacts, hashFacts } from './pipeline/persist'
 import { announce, parseFlags } from './pipeline/ops'
 import { beginJob, finishJob } from './pipeline/job-progress'
 
@@ -59,35 +59,36 @@ async function main() {
     )
   }
 
-  // Re-fetch the lead extract by the STORED title (discovery's join key) — falling back to the
-  // poi name. fetchExtractsByTitle applies the curated fact-edit overrides on the way out, so
-  // the corrected text is what reaches facts + facts_hash (same as the sweep).
-  const title = (typeof poi.facts?.title === 'string' && poi.facts.title) || poi.name
+  // Re-fetch the FULL article by pageId — same depth + normalization the region sweep stores.
+  // fetchDeepExtracts applies the curated fact-edit overrides on the way out, so this IS the
+  // override-application path: edit an override, then re-run refetch_facts (or re-sweep) to apply it
+  // (generation no longer re-fetches per run).
+  const pageId = Number(poi.sourceId)
   console.log(`\n"${poi.name}"  (wikipedia/${poi.sourceId})`)
-  console.log(`  Fetching lead extract by title: "${title}"...`)
-  const results = await fetchExtractsByTitle([title])
-  const te = results.find((r) => String(r.pageId) === poi.sourceId) ?? results[0]
-
-  if (!te || !te.extract) {
-    throw new Error(`Wikipedia returned no usable extract for "${title}" — leaving facts unchanged.`)
+  console.log(`  Fetching full article (pageId ${pageId})...`)
+  const deep = await fetchDeepExtracts([pageId])
+  const full = deep.get(pageId)
+  if (!full) {
+    throw new Error(`Wikipedia returned no usable extract for pageId ${pageId} — leaving facts unchanged.`)
   }
 
-  // Rebuild facts in the EXACT key order the sweep persists (hashFacts = sha256 of
-  // JSON.stringify, so order is hash-significant). Preserve the existing Wikidata qid linkage so
-  // an unchanged article hashes identically; fall back to the page's wikibase_item.
-  const newFacts: PoiFacts = {
-    extract: te.extract,
-    title: te.title,
-    url: te.url,
-    pageId: te.pageId,
-    qid: (typeof poi.facts?.qid === 'string' ? poi.facts.qid : undefined) ?? te.qid,
-  }
+  // Normalize to the sweep's stored shape (toFacts(...).join(' ')) so an unchanged article hashes
+  // identically; preserve the existing title/url/qid metadata (the deep fetch returns text only).
+  const f = (poi.facts ?? {}) as Record<string, unknown>
+  const extract = toFacts(full).join(' ')
+  const newFacts = buildStoryFacts({
+    extract,
+    title: (f.title as string) ?? poi.name,
+    url: (f.url as string) ?? `https://en.wikipedia.org/?curid=${poi.sourceId}`,
+    pageId,
+    qid: f.qid as string | undefined,
+  })
   const newHash = hashFacts(newFacts)
 
   const oldLen = typeof poi.facts?.extract === 'string' ? poi.facts.extract.length : 0
   const changed = newHash !== poi.factsHash
   console.log(`  Old hash: ${poi.factsHash?.slice(0, 12) ?? '∅'}  (${oldLen} extract chars)`)
-  console.log(`  New hash: ${newHash?.slice(0, 12) ?? '∅'}  (${te.extract.length} extract chars)`)
+  console.log(`  New hash: ${newHash?.slice(0, 12) ?? '∅'}  (${extract.length} extract chars)`)
   console.log(
     changed
       ? `  → CHANGED: any track grounded on the old facts is now STALE → regenerate the owning tour/roam.`
@@ -99,8 +100,8 @@ async function main() {
     return
   }
 
-  // First sentence of the lead extract is the corpus summary (matches the sweep).
-  const summary = te.extract.split(/(?<=[.!?])\s+/)[0] ?? null
+  // First sentence of the extract is the corpus summary (matches the sweep).
+  const summary = extract.split(/(?<=[.!?])\s+/)[0] ?? null
   await db
     .update(pois)
     .set({ facts: newFacts, factsHash: newHash, factsFetchedAt: new Date(), summary, updatedAt: new Date() })

@@ -33,7 +33,6 @@ import {
   GEOLOGY_ENRICHMENT,
   GOOGLE_TTS_READY,
   GROUNDING_EVAL,
-  FACTS_TTL_HOURS,
   GROUNDING_REGEN_BUDGET,
   GROUNDING_REGEN_CONCURRENCY,
   GROUNDING_REGEN_MAX_ROUNDS,
@@ -81,7 +80,6 @@ import type {
 import { personaFromKey } from '../persona'
 import { cumulativeMeters, encodePolyline, METERS_PER_MILE, totalMeters } from './geo'
 import type { LngLat } from './geo'
-import { fetchDeepExtracts } from './wikipedia'
 import { ensurePoiOverridesLoaded } from './poi-overrides'
 import { boundingBox } from './wikidata-discovery'
 import { loadCandidatePoisInBox } from './region-corpus'
@@ -90,7 +88,7 @@ import { wikidataFacts } from './wikidata'
 import { scoutStop } from './scout'
 import { searchBreakStops, spokenKind } from './places'
 import type { BreakAnchor } from './places'
-import { projectQueueLag, selectStops, toFacts } from './select'
+import { projectQueueLag, selectStops } from './select'
 import type { StopPlan } from './select'
 import { narrateIntro, narrateOutro, narrateStop } from './narrate'
 import type { NarrationRequest } from './narrate'
@@ -99,9 +97,9 @@ import { synthesizeWithTailRetake } from './tts'
 import type { TailOutcome } from './tts'
 import { bracketKey, clipKey, uploadAudio } from './storage'
 import {
+  buildStoryFacts,
   finalizeTourReady,
   hashFacts,
-  loadFreshPoiFacts,
   loadTour,
   markTourGenerating,
   resolvePersonaId,
@@ -307,7 +305,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   }
 
   // 2. Candidates from the REGION CORPUS (discovery-first reorder): the shared `pois` table,
-  //    pre-populated for the region by sweep-roam-pois.ts. STORY = a Wikipedia-sourced row with
+  //    pre-populated for the region by sweep-region-pois.ts. STORY = a Wikipedia-sourced row with
   //    prose; SCENIC = a named Wikidata pin. No live WDQS here — the corpus IS the discovery
   //    layer, scoped to the route's bounding box (and shared with roam). An empty corpus is an
   //    operator error (discover the region first), thrown at $0 before any paid LLM/TTS call.
@@ -317,7 +315,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   if (wikiPois.length === 0) {
     throw new Error(
       'No POIs in the route corridor — the region corpus is empty here. Run region discovery ' +
-        '(sweep-roam-pois.ts --apply for the region bbox) before generating this tour.',
+        '(sweep-region-pois.ts --apply for the region bbox) before generating this tour.',
     )
   }
   const storyCount = wikiPois.filter((p) => p.source === 'wikipedia').length
@@ -378,61 +376,11 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
     )
   }
 
-  // Deepen the fact sheets for the CHOSEN story stops. Selection ranked + classified
-  // candidates on the cheap batched LEAD extract; a fuller, longer telling needs more
-  // than the lead, so we pull the full article (capped, meta-trimmed) for each story
-  // stop the pois cache can't serve (the read-through below) and use it as the fact
-  // well. Grounding is unchanged — still only that POI's Wikipedia text — and any
-  // per-POI failure falls back to its lead facts.
-  // seq → the freshness stamp the persist phase must write for that stop's facts: a cache
-  // HIT carries its row's ORIGINAL stamp (set in the read-through below); every fetched
-  // stop falls back to this run's overrides-snapshot instant (factsSnapshotAt).
-  const factsStampBySeq = new Map<number, Date>()
-  const storyStops = plan.filter(
-    (s): s is StopPlan & { wikiPageId: number } =>
-      s.stopType === 'story' && s.wikiPageId !== undefined,
-  )
-  if (storyStops.length > 0) {
-    // READ-THROUGH (principle #1's TTL mechanism, read side): a place narrated before
-    // already carries its deepened, override-CORRECTED extract on pois — reuse it while
-    // fresh instead of re-fetching the full article. Fresh = within FACTS_TTL_HOURS and
-    // not predating the place's newest poi_override row (a correction adjudicated since
-    // the fetch makes the row stale, so the re-fetch applies it — see loadFreshPoiFacts).
-    const cached = await loadFreshPoiFacts(
-      storyStops.map((s) => ({ source: s.source, sourceId: s.sourceId })),
-      FACTS_TTL_HOURS(),
-    )
-    const toFetch: typeof storyStops = []
-    for (const s of storyStops) {
-      const hit = cached.get(`${s.source}:${s.sourceId}`)
-      // A hit counts ONLY when its extract would actually be adopted (outsizes the lead —
-      // the live fetch's adopt rule). A hit that doesn't outsize the lead is a MISS
-      // (review-caught): pois can't tell a deep extract from a lead-only row stored by a
-      // run whose deep fetch FAILED, so treating it as satisfied would pin that place to
-      // a thin sheet for the whole TTL. Re-fetching lets it heal — one polite wiki call.
-      if (hit && hit.extract.length > s.facts.join(' ').length) {
-        s.facts = toFacts(hit.extract)
-        // Reuse keeps the row's ORIGINAL fetch stamp (review-caught: re-stamping a cache
-        // hit would slide the TTL forever for frequently-regenerated places).
-        factsStampBySeq.set(s.seq, hit.factsFetchedAt)
-      } else {
-        toFetch.push(s)
-      }
-    }
-    console.log(
-      `Deepening fact sheets: ${storyStops.length - toFetch.length}/${storyStops.length} fresh ` +
-        `from pois (TTL ${FACTS_TTL_HOURS()}h)` +
-        (toFetch.length > 0 ? `; fetching ${toFetch.length} full-article extract(s)...` : '.'),
-    )
-    if (toFetch.length > 0) {
-      const deep = await fetchDeepExtracts(toFetch.map((s) => s.wikiPageId))
-      for (const s of toFetch) {
-        const text = deep.get(s.wikiPageId)
-        if (text && text.length > s.facts.join(' ').length) s.facts = toFacts(text)
-      }
-      console.log(`Deepened ${deep.size}/${toFetch.length} fetched story fact sheets.`)
-    }
-  }
+  // Fact sheets are ALREADY the full article — the region sweep deepens at discovery time and stores
+  // the (normalized) extract in pois.facts (the "real step 1", 2026-06-15). select.ts set each story
+  // stop's facts from that corpus extract, so generation grounds on it with NO per-run re-fetch and no
+  // fact mutation / hash churn. Override-freshness now lands via a re-sweep / refetch_facts (which both
+  // re-pull the full article + re-apply overrides), not a per-run fetch.
   lap('deepenFacts')
 
   // Geology enrichment for SCENIC stops (Macrostrat, CC BY 4.0): a coordinate-keyed fact
@@ -1131,9 +1079,18 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
     const prep = plan.map((s) => {
       // Every stop anchors to a POI (break stops included). Story stops carry facts;
       // the facts_hash is the narration's grounding fingerprint (staleness detector).
+      // buildStoryFacts preserves the Wikidata qid (region-corpus rebuilds candidates from it) and
+      // fixes key order across all writers. A story stop always carries its wiki fields (set together
+      // in select.ts), so the non-null assertions hold inside this `stopType === 'story'` branch.
       const facts =
         s.stopType === 'story'
-          ? { extract: s.facts.join(' '), title: s.wikiTitle, url: s.wikiUrl, pageId: s.wikiPageId }
+          ? buildStoryFacts({
+              extract: s.facts.join(' '),
+              title: s.wikiTitle!,
+              url: s.wikiUrl!,
+              pageId: s.wikiPageId!,
+              qid: s.wikidataQid,
+            })
           : null
       return {
         s,
@@ -1160,9 +1117,9 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
         summary: p.s.stopType === 'story' ? firstSentence(p.s.facts) : null,
         facts: p.facts,
         factsHash: p.factsHash,
-        // Cache-HIT stops carry their row's ORIGINAL fetch stamp; fetched stops carry the
-        // run's overrides-snapshot instant. Never persist-time now() — see UpsertPoiInput.
-        factsFetchedAt: p.factsHash ? (factsStampBySeq.get(p.s.seq) ?? factsSnapshotAt) : null,
+        // The facts come from the corpus (swept), so this re-upsert is idempotent on content; stamp
+        // with the run's overrides-snapshot instant. Never persist-time now() — see UpsertPoiInput.
+        factsFetchedAt: p.factsHash ? factsSnapshotAt : null,
       })
     })
 

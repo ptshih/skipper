@@ -21,7 +21,7 @@
 //   dotenvx run -f .env.development -- bun packages/generator/src/run.ts emerald-bay-run --json=/tmp/tour.json
 //   dotenvx run -f .env.development -- bun packages/generator/src/judge-voice.ts /tmp/tour.json --out=/tmp/voice.md
 
-import type { GenerateResult } from './pipeline/generate'
+import type { GenerateResult } from './pipeline/generate-tour'
 import { presignGet } from './pipeline/storage'
 import { judgeCharm, type CharmVerdict } from './eval/charm'
 

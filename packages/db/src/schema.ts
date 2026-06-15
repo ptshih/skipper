@@ -151,7 +151,7 @@ export const regions = pgTable(
     id: uuid('id').defaultRandom().primaryKey(),
     slug: text('slug').notNull(), // 'lake-tahoe' (the key)
     displayName: text('display_name').notNull(), // 'Lake Tahoe' (spoken + shown in the picker)
-    // Optional bbox for the sweep_roam_pois discovery job — "lng_min,lat_min,lng_max,lat_max".
+    // Optional bbox for the region POI-discovery sweep — "lng_min,lat_min,lng_max,lat_max".
     // Null = use the generator's built-in default (currently the Tahoe basin).
     discoveryBbox: text('discovery_bbox'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -564,16 +564,11 @@ export const evalScores = pgTable(
 // pipeline/job-progress.ts when GEN_JOB_ID is set, so the laptop CLI never touches it.
 // OBSERVABILITY — nothing in the player/API reads it.
 
-export const genJobKindEnum = pgEnum('gen_job_kind', [
-  'generate', // run.ts — discover/narrate/eval/synthesize a tour
-  'patch_clip', // patch-clip.ts — re-synth one track/frame clip
-  'resynth', // resynth-tour.ts — re-synth every clip of a tour
-  'resynth_roam_clip', // resynth-roam-clip.ts — re-synth one roam track
-  'sweep_orphans', // sweep-orphans.ts — delete unreferenced R2 clips
-  'sweep_roam_pois', // sweep-roam-pois.ts — fetch + upsert roam POIs
-  'generate_roam', // generate-roam.ts — narrate + synthesize roam tracks
-  'refetch_facts', // refetch-poi.ts — re-pull ONE poi's Wikipedia facts (free; recomputes facts_hash)
-])
+// NO `gen_job_kind` pgEnum: the job-kind vocabulary CHURNS (a new ops script = a new kind) and the
+// column is OBSERVABILITY-only (nothing reads it for logic), so it's a plain `text` column with the
+// closed set single-sourced as the Zod `jobKind` enum in @skipper/shared (validated at the admin-api
+// boundary). Adding/renaming a kind is then a code edit — no enum migration. (Was a pgEnum until
+// 2026-06-15; migration 0005 dropped the type + renamed sweep_roam_pois → sweep_region_pois.)
 export const genJobStatusEnum = pgEnum('gen_job_status', [
   'queued', // row created (admin-api in v1), Job not yet running
   'running', // the Job flipped it on entry
@@ -588,7 +583,8 @@ export const genJobs = pgTable(
     // The row id IS the GEN_JOB_ID the Job receives: the admin-api mints it in v1; the hook
     // mints + inserts it for a gcloud-triggered v0 run.
     id: uuid('id').defaultRandom().primaryKey(),
-    kind: genJobKindEnum('kind').notNull(),
+    // Plain text — the closed set is the Zod `jobKind` enum in @skipper/shared (see note above).
+    kind: text('kind').notNull(),
     status: genJobStatusEnum('status').notNull().default('queued'),
     /** generate: the tour slug. */
     targetSlug: text('target_slug'),

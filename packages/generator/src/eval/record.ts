@@ -121,7 +121,7 @@ export async function tourIdForSlug(slug: string): Promise<string | null> {
 }
 
 /** The minimal GenerateResult surface the generation-path recorder needs (structural —
- *  avoids a pipeline/generate ↔ eval import cycle). */
+ *  avoids a pipeline/generate-tour ↔ eval import cycle). */
 export interface GenerationArtifactLike {
   slug: string
   tourId?: string

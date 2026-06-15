@@ -58,6 +58,26 @@ export const tourStatus = z.enum(['draft', 'generating', 'ready', 'failed'])
 export type TourStatus = z.infer<typeof tourStatus>
 
 /**
+ * Admin gen-job KINDS — the closed vocabulary of cloud-ops scripts the admin can launch, and the
+ * SINGLE SOURCE OF TRUTH for it: the admin-api dispatch (`jobs.ts` SCRIPTS, typed `Record<JobKind>`),
+ * the generator's `beginJob`, and the admin client's `JobKind` all derive from this. Deliberately
+ * NOT a pg enum — `gen_jobs.kind` is an OBSERVABILITY label (nothing reads it for logic) and this
+ * set CHURNS as ops scripts are added, so the vocabulary lives in code over a plain `text` column,
+ * not a migration-bound DB type. Add a kind here + in `jobs.ts` SCRIPTS; no migration needed.
+ */
+export const jobKind = z.enum([
+  'generate',
+  'patch_clip',
+  'resynth',
+  'resynth_roam_clip',
+  'sweep_orphans',
+  'sweep_region_pois',
+  'generate_roam',
+  'refetch_facts',
+])
+export type JobKind = z.infer<typeof jobKind>
+
+/**
  * DEFERRED axis (no variant matrix in v1). Not a stored tour column — kept only as the
  * generator's internal pacing key (config PACING). When the duration=skip-stops feature
  * lands it becomes a player-side trim, never separate tours.

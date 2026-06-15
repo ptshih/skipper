@@ -27,8 +27,8 @@
 import { jokeLevel as JOKE_NOTCHES } from '@skipper/shared'
 import type { JokeLevel } from '@skipper/shared'
 import { formatMmss } from '@skipper/drive-core'
-import { generateTour } from './pipeline/generate'
-import type { BracketSummary, GenerateResult } from './pipeline/generate'
+import { generateTour } from './pipeline/generate-tour'
+import type { BracketSummary, GenerateResult } from './pipeline/generate-tour'
 import { beginJob, finishJob } from './pipeline/job-progress'
 
 const DURATIONS = ['short', 'standard', 'long'] as const

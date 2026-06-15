@@ -24,10 +24,12 @@ import { eq, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { genJobs } from '@skipper/db/schema'
 import type { NewGenJob } from '@skipper/db/schema'
+import type { JobKind } from '@skipper/shared'
 import { llmSpentUsd } from './spend'
 import { installLogCapture, capturedLog, synthesizeJobOutput } from './job-output'
 
-type Kind = NewGenJob['kind']
+// gen_jobs.kind is a plain text column now; the closed vocabulary is the Zod `jobKind` in @skipper/shared.
+type Kind = JobKind
 
 // The kind of the run in progress — set at begin, used to flavor the finish-time log summary.
 let currentKind: Kind | undefined

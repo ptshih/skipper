@@ -23,7 +23,7 @@
 //   ... --apply                 run it (spends; writes pois facts, R2 clips, segments/tracks)
 //   ... --apply --limit 3      smoke run (the cheapest real ear-test)
 //   ... --force                regenerate even clips whose facts_hash is still fresh
-//   ... --min-extract 400     story-depth floor (lead-extract chars)
+//   ... --min-extract 800     story-depth floor (full-article chars; default STORY_MIN_EXTRACT)
 //   ... --bbox swLng,swLat,neLng,neLat   constrain the corpus geographically
 
 import { and, eq, isNull, sql } from 'drizzle-orm'
@@ -33,39 +33,33 @@ import type { AttributionSnapshot } from '@skipper/db/schema'
 import { announce, assertReady, parseFlags } from './pipeline/ops'
 import { beginJob, finishJob } from './pipeline/job-progress'
 import { ensurePoiOverridesLoaded } from './pipeline/poi-overrides'
-import { fetchDeepExtracts } from './pipeline/wikipedia'
 import { narrateStop } from './pipeline/narrate'
 import { toFacts } from './pipeline/select'
 import { synthesizeWithTailRetake } from './pipeline/tts'
 import { roamClipKey, uploadAudio } from './pipeline/storage'
-import { hashFacts, resolvePersonaId, upsertPoi } from './pipeline/persist'
+import { buildStoryFacts, hashFacts, resolvePersonaId } from './pipeline/persist'
 import { withRetry } from './pipeline/http'
 import { mapLimit } from './pipeline/concurrency'
 import { personaFromKey } from './persona'
 import { NARRATION_CONCURRENCY, TTS_CONCURRENCY } from './config'
 import { estimateTtsUsd, llmSpendLines, llmSpentUsd } from './pipeline/spend'
+import { STORY_MIN_EXTRACT, STORY_TASTE_DENYLIST } from '@skipper/shared'
 
 /** Roam encounter length band + eligibility (Autio-register long-form, founder 2026-06-13).
  *  storyTargetSeconds = the AIM; storyMaxSeconds = a HARD cap so a fact-rich place doesn't sprawl
  *  into a lecture. "Never pad past the facts" governs the ACTUAL length WITHIN the band, so a thin
  *  pin lands honestly shorter (capped by its facts) rather than stretched. minExtractStory is the
  *  eligibility floor for a long-form STORY — a pin below it is WAVE-eligible (the 10–20s locked
- *  pass-2 form); until that form ships, the floor simply excludes thinner pins (the `--min-extract`
- *  flag overrides). NOTE: the source today is the Wikipedia LEAD extract only (~400 chars ≈ 60–90s),
- *  so reaching the UPPER band likely needs richer per-pin facts — validate with a script-only sample
- *  before any paid regen. */
+ *  pass-2 form); until that form ships, the floor simply excludes thin articles (the `--min-extract`
+ *  flag overrides). NOTE: the source is now the FULL Wikipedia article from the corpus (deepened at
+ *  sweep time), but `fetchDeepExtracts` caps it at ~1200 chars — so reaching the UPPER band may want a
+ *  higher exchars cap; validate with a script-only sample before any paid regen. */
 const ROAM_LENGTH = {
   storyTargetSeconds: 150,
   storyMaxSeconds: 180,
-  minExtractStory: 400,
+  minExtractStory: STORY_MIN_EXTRACT, // single-sourced in @skipper/shared (admin table reads it too)
 } as const
-/** TASTE gate: articles about violent crime / personal tragedy are never roadside
- *  encounters — a joke-forward persona cannot carry them (the sweep is breadth-first, so
- *  these slip in; the Jaycee Dugard kidnapping article surfaced on the first basin run).
- *  Historical/civic tragedy (a wildfire, a shipwreck) stays — the prompt can play those
- *  straight — but gets the founder ear. Title-keyed; widen as the corpus widens. */
-const TASTE_DENYLIST = /kidnap|murder|killing of|death of|massacre|homicide|suicide|assault/i
-/** Default corpus bbox — Tahoe–Reno corridor (matches sweep-roam-pois.ts). */
+/** Default corpus bbox — Tahoe–Reno corridor (matches sweep-region-pois.ts). */
 const DEFAULT_BBOX = { swLng: -120.25, swLat: 38.86, neLng: -119.55, neLat: 39.65 }
 
 /** Rough sub-region label for the narrative context: tells the model where the driver IS. */
@@ -152,6 +146,9 @@ async function main(): Promise<void> {
     extract: string
     title: string
     url: string
+    /** Wikidata qid from the sweep's facts — preserved through the deepen re-upsert so the
+     *  region-corpus contract (it rebuilds tour candidates from facts.qid) isn't broken. */
+    qid: string | null
     factsFetchedAt: Date | null
     /** The poi's existing roam segment id (tour_id null), if any — reused so a regen keeps one
      *  roam segment per poi (the track is upserted on (segment, form, variant)). */
@@ -163,11 +160,11 @@ async function main(): Promise<void> {
   for (const r of rows) {
     const extract = typeof r.facts?.extract === 'string' ? (r.facts.extract as string) : ''
     if (extract.length < minExtract) continue
-    if (TASTE_DENYLIST.test(r.name)) {
+    if (STORY_TASTE_DENYLIST.test(r.name)) {
       console.log(`  taste-gate: skipping "${r.name}"`)
       continue
     }
-    const f = r.facts as { title?: string; url?: string; pageId?: number } | null
+    const f = r.facts as { title?: string; url?: string; pageId?: number; qid?: string } | null
     candidates.push({
       poiId: r.id,
       pageId: f?.pageId ?? Number(r.sourceId),
@@ -178,6 +175,7 @@ async function main(): Promise<void> {
       extract,
       title: f?.title ?? r.name,
       url: f?.url ?? `https://en.wikipedia.org/?curid=${r.sourceId}`,
+      qid: f?.qid ?? null,
       factsFetchedAt: r.factsFetchedAt,
       segmentId: r.segmentId,
       // Fresh = a track exists AND grounds on the poi's CURRENT facts → skip unless --force.
@@ -232,33 +230,10 @@ async function main(): Promise<void> {
   // The frozen host on every roam segment this run writes.
   const personaId = await resolvePersonaId(persona.personaKey)
 
-  // ── Deepen facts (free): full-article extracts for the queue, then re-upsert pois ──
-  console.log(`\nDeepening ${queue.length} fact sheets (full-article extracts)...`)
-  const deep = await fetchDeepExtracts(queue.map((c) => c.pageId))
-  const fetchedAt = new Date()
-  for (const c of queue) {
-    const deepText = deep.get(c.pageId)
-    if (deepText && deepText.length > c.extract.length) {
-      c.extract = deepText // in-memory, so narration grounds on the full article (needed by scripts-only too)
-      c.factsFetchedAt = fetchedAt
-      if (!scriptsOnly) {
-        // scripts-only is a read-only sample — don't persist the deepened facts.
-        const facts = { extract: deepText, title: c.title, url: c.url, pageId: c.pageId }
-        await upsertPoi({
-          source: 'wikipedia',
-          sourceId: String(c.pageId),
-          name: c.name,
-          kind: c.kind,
-          lat: c.lat,
-          lng: c.lng,
-          summary: deepText.split(/(?<=[.!?])\s+/)[0] ?? null,
-          facts,
-          factsHash: hashFacts(facts),
-          factsFetchedAt: fetchedAt,
-        })
-      }
-    }
-  }
+  // Facts are ALREADY the full article — the region sweep deepens at discovery time (the corpus is
+  // the single fetch point, the "real step 1"), so roam narrates on the stored extract with NO
+  // per-run re-fetch and NO fact mutation. (Override-freshness now lands via a re-sweep / refetch_facts,
+  // not a per-run fetch.) `c.extract` carries the full article from the corpus query above.
 
   // ── Narrate (parallel, blind drafts) with the two cheap guards ──
   const LATERALITY =
@@ -349,12 +324,11 @@ async function main(): Promise<void> {
         retrievedAt: (c.factsFetchedAt ?? new Date()).toISOString(),
       },
     ]
-    const factsHash = hashFacts({
-      extract: c.extract,
-      title: c.title,
-      url: c.url,
-      pageId: c.pageId,
-    })
+    // Same builder as the poi facts → the clip hash can't diverge from pois.factsHash (else the
+    // freshness check would read every clip as stale).
+    const factsHash = hashFacts(
+      buildStoryFacts({ extract: c.extract, title: c.title, url: c.url, pageId: c.pageId, qid: c.qid }),
+    )
     // A roam telling = a placeless-of-route segment (tour_id/seq/trigger* null) + ONE story
     // track. Co-commit the segment + the track upsert: the segment is insert-or-keep (PK id;
     // a reused segment already exists), the track upserts on its (segment, form, variant)

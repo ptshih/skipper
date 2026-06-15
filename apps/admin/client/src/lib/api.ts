@@ -25,7 +25,9 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 
 /* ------------------------------- types ------------------------------- */
 
-export type JobKind = 'generate' | 'patch_clip' | 'resynth' | 'resynth_roam_clip' | 'sweep_orphans' | 'sweep_roam_pois' | 'generate_roam' | 'refetch_facts'
+// Mirrors the `jobKind` enum in @skipper/shared (the server validates against it; this is the UX-typing
+// view, like StoryEligibility). Keep in sync if a kind is added/renamed there.
+export type JobKind = 'generate' | 'patch_clip' | 'resynth' | 'resynth_roam_clip' | 'sweep_orphans' | 'sweep_region_pois' | 'generate_roam' | 'refetch_facts'
 export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled'
 
 export interface GenJob {
@@ -237,6 +239,13 @@ export interface RoamClipDetail {
   factsHash: string | null
 }
 
+/** Story-eligibility — whether a POI is story-grade narration material (a POI property; tours AND roam
+ *  both draw from it). Mirrors `StoryEligibility` in @skipper/shared (server computes it). */
+export type StoryEligibility = 'eligible' | 'filtered-source' | 'filtered-taste' | 'filtered-thin'
+
+/** Roam-specific axis: does a roam clip exist for this POI, and is it on the POI's current facts. */
+export type RoamClipStatus = 'none' | 'fresh' | 'stale'
+
 export interface PoiRow {
   id: string
   source: string
@@ -247,6 +256,8 @@ export interface PoiRow {
   createdAt: string
   tourCount: number
   roamClipCount: number
+  storyEligibility: StoryEligibility
+  roamClip: RoamClipStatus
   staleFacts: boolean
   attributed: boolean
   suspiciousDuration: boolean

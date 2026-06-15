@@ -1,6 +1,6 @@
 // Tour discovery from the REGION CORPUS (the discovery-first reorder, 2026-06-12).
 //
-// Discovery is a region-level step now: sweep-roam-pois.ts populates the shared `pois` table
+// Discovery is a region-level step now: sweep-region-pois.ts populates the shared `pois` table
 // for a region's bbox (STORY rows carrying Wikipedia prose, SCENIC named pins), and BOTH tours
 // and roam draw from that one corpus. A tour generate no longer calls WDQS live — it reads its
 // candidates from this pool, scoped to the route's bounding box, and rebuilds the SAME WikiPoi
@@ -12,6 +12,7 @@
 import { and, between, inArray } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { pois } from '@skipper/db/schema'
+import { STORY_TASTE_DENYLIST } from '@skipper/shared'
 import { withRetry } from './http'
 import type { LngLat } from './geo'
 import type { WikiPoi } from './wikipedia'
@@ -59,7 +60,17 @@ export async function loadCandidatePoisInBox(sw: LngLat, ne: LngLat): Promise<Wi
   )
 
   const out: WikiPoi[] = []
+  let tasteGated = 0
   for (const r of rows) {
+    // TASTE gate — the shared story-eligibility rule (@skipper/shared), applied to the tour candidate
+    // pool the same way roam's queue applies it: a violent-crime / personal-tragedy article is never a
+    // charming stop, so drop it ENTIRELY (story OR scenic) rather than let a tour narrate it. Apply the
+    // denylist directly (not classifyStoryEligibility, which would also drop the wikidata scenic pins we
+    // WANT to keep). Title-keyed; any source. Tours' thin→scenic downgrade stays in select.ts.
+    if (STORY_TASTE_DENYLIST.test(r.name)) {
+      tasteGated++
+      continue
+    }
     // The curated/admin "where to look" anchor (pois.speakable) — carried onto the candidate so
     // select.ts can recompute the side-of-road from where the content IS, not the misleading pin.
     const speakable =
@@ -96,5 +107,6 @@ export async function loadCandidatePoisInBox(sw: LngLat, ne: LngLat): Promise<Wi
       })
     }
   }
+  if (tasteGated > 0) console.log(`  taste-gate: dropped ${tasteGated} candidate(s) from the tour pool.`)
   return out
 }

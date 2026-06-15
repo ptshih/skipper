@@ -98,6 +98,30 @@ export function hashFacts(facts: PoiFacts | null): string | null {
   return createHash('sha256').update(JSON.stringify(facts)).digest('hex')
 }
 
+/** The canonical `pois.facts` object for a STORY place — the ONE builder every facts writer uses (the
+ *  region sweep, refetch-poi, and the tour + roam deepen) so the key ORDER is identical across all of
+ *  them. Order is hash-significant (hashFacts = sha256 of JSON.stringify), so an unchanged article
+ *  hashes the SAME no matter which writer last touched the row, and the Wikidata `qid` linkage
+ *  (region-corpus rebuilds tour candidates from it) is preserved BY CONSTRUCTION — it can't be
+ *  silently dropped again (the 2026-06-15 deepen bug). `qid` is OMITTED when absent (never stored as
+ *  null), matching the historical shape so existing hashes don't shift. (When the dual-extract
+ *  redesign lands, `extractFull` slots in here as the one place that knows the key order.) */
+export function buildStoryFacts(input: {
+  extract: string
+  title: string
+  url: string
+  pageId: number
+  qid?: string | null
+}): PoiFacts {
+  return {
+    extract: input.extract,
+    title: input.title,
+    url: input.url,
+    pageId: input.pageId,
+    ...(input.qid ? { qid: input.qid } : {}),
+  }
+}
+
 export interface UpsertPoiInput {
   source: PoiSource
   sourceId: string

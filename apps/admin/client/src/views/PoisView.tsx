@@ -2,7 +2,7 @@ import { Fragment, useMemo, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CircleCheck, Compass, Locate, Plus, RefreshCw, Search, Trash2, Wrench, X } from 'lucide-react'
-import { api, type CorrectionOverride, type PoiDetail, type PoiRow } from '@/lib/api'
+import { api, type CorrectionOverride, type PoiDetail, type PoiRow, type StoryEligibility } from '@/lib/api'
 import { errMsg, timeAgo } from '@/lib/format'
 import { PageHeader } from '@/components/PageHeader'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -15,6 +15,7 @@ import { Callout } from '@/components/ui/callout'
 import { SearchInput } from '@/components/ui/search-input'
 import { Segmented } from '@/components/ui/segmented'
 import { EmptyState } from '@/components/ui/empty-state'
+import { TableSkeletonRows } from '@/components/ui/skeleton'
 import {
   Sheet,
   SheetContent,
@@ -39,13 +40,30 @@ const SOURCE_META: Record<string, { label: string; variant: 'default' | 'seconda
   manual: { label: 'Manual', variant: 'outline' },
 }
 
+type BadgeVariant = 'default' | 'secondary' | 'success' | 'warning' | 'outline'
+
+/** Story-eligibility → badge. A POI property (tours AND roam draw story-grade POIs from the corpus).
+ *  `eligible` is the actionable one; the filtered-* states are intentional exclusions, muted. */
+const STORY_ELIGIBILITY_META: Record<StoryEligibility, { label: string; variant: BadgeVariant; hint: string }> = {
+  eligible: { label: 'eligible', variant: 'default', hint: 'Story-grade — a tour or roam telling can use it' },
+  'filtered-source': { label: 'scenic pin', variant: 'outline', hint: 'Wikidata pin — not a story source (wave layer later)' },
+  'filtered-taste': { label: 'taste-gate', variant: 'outline', hint: 'Title hits the taste denylist' },
+  'filtered-thin': { label: 'thin', variant: 'secondary', hint: 'Full article below the story floor (800 chars)' },
+}
+
+/** The SEPARATE roam-specific axis — shown as a secondary badge only when a roam clip exists. */
+const ROAM_CLIP_META: Record<'fresh' | 'stale', { label: string; variant: BadgeVariant; hint: string }> = {
+  fresh: { label: 'roam clip', variant: 'success', hint: 'Has a roam clip on current facts' },
+  stale: { label: 'roam clip · stale', variant: 'warning', hint: 'Facts moved — a run would regenerate it' },
+}
+
 export function PoisView() {
   const navigate = useNavigate()
   const [tab, setTab] = useState<Tab>('corpus')
   const [discoverOpen, setDiscoverOpen] = useState(false)
 
   // Shared with RoamView via the ['pois'] key — both read the same corpus, fetched once + cached.
-  const { data: pois = [], error: err } = useQuery({ queryKey: ['pois'], queryFn: async () => (await api.pois()).pois })
+  const { data: pois = [], error: err, isPending } = useQuery({ queryKey: ['pois'], queryFn: async () => (await api.pois()).pois })
 
   const live = pois // no retired field; all pois are live for now
   const flagged = pois.filter((p) => p.staleFacts || p.suspiciousDuration || (!p.attributed && p.tourCount > 0))
@@ -79,7 +97,7 @@ export function PoisView() {
         options={tabs.map((t) => ({ value: t.id, label: t.label, count: t.count, alert: t.alert }))}
       />
 
-      {tab === 'corpus' && <CorpusTab pois={live} />}
+      {tab === 'corpus' && <CorpusTab pois={live} loading={isPending} />}
       {tab === 'retire' && <RetireTab flagged={flagged} />}
 
       <DiscoverDialog open={discoverOpen} onOpenChange={setDiscoverOpen} onSubmitted={() => navigate({ to: '/runs' })} />
@@ -89,10 +107,10 @@ export function PoisView() {
 
 /* ── DISCOVER POIs ── */
 
-// Fire the region-discovery sweep (sweep_roam_pois) for a region. FREE — no LLM/TTS, no confirm.
+// Fire the region-discovery sweep (sweep_region_pois) for a region. FREE — no LLM/TTS, no confirm.
 // bbox comes from the region row's discoveryBbox column — null = use the generator's default.
 export async function discoverPois(_regionSlug: string, apply: boolean, bbox?: string | null) {
-  await api.createJob({ kind: 'sweep_roam_pois', ...(bbox ? { bbox } : {}), apply })
+  await api.createJob({ kind: 'sweep_region_pois', ...(bbox ? { bbox } : {}), apply })
 }
 
 // A small, focused shadcn Dialog — NOT the busy New-run form. Pick a region, then Preview (dry-run)
@@ -512,7 +530,7 @@ function FactsTab({ poi }: { poi: PoiDetail }) {
 
 /* ── CORPUS ── */
 
-function CorpusTab({ pois }: { pois: PoiRow[] }) {
+function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
   const [q, setQ] = useState('')
   const [region, setRegion] = useState('all')
   const [source, setSource] = useState('all')
@@ -532,6 +550,9 @@ function CorpusTab({ pois }: { pois: PoiRow[] }) {
     if (flags === 'defect' && !p.suspiciousDuration) return false
     if (flags === 'stale' && !p.staleFacts) return false
     if (flags === 'unattrib' && (p.attributed || p.tourCount === 0)) return false
+    if (flags === 'story-eligible' && p.storyEligibility !== 'eligible') return false
+    if (flags === 'story-filtered' && !p.storyEligibility.startsWith('filtered-')) return false
+    if (flags === 'roam-clip-stale' && p.roamClip !== 'stale') return false
     if (q) {
       const s = `${p.name} ${p.sourceId}`.toLowerCase()
       if (!s.includes(q.toLowerCase())) return false
@@ -542,6 +563,7 @@ function CorpusTab({ pois }: { pois: PoiRow[] }) {
   const totals = {
     total: pois.length,
     withClips: pois.filter((p) => p.roamClipCount > 0).length,
+    eligible: pois.filter((p) => p.storyEligibility === 'eligible').length,
     inTours: pois.filter((p) => p.tourCount > 0).length,
     unattrib: pois.filter((p) => !p.attributed && p.tourCount > 0).length,
     defects: pois.filter((p) => p.suspiciousDuration).length,
@@ -552,6 +574,11 @@ function CorpusTab({ pois }: { pois: PoiRow[] }) {
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant="secondary">{totals.total} total</Badge>
         <Badge>{totals.withClips} with roam clips</Badge>
+        {totals.eligible > 0 && (
+          <button onClick={() => setFlags('story-eligible')}>
+            <Badge variant="default" className="cursor-pointer">{totals.eligible} story-eligible</Badge>
+          </button>
+        )}
         <Badge variant="success">{totals.inTours} in tours</Badge>
         {totals.unattrib > 0 && <Badge variant="destructive">{totals.unattrib} unattributed</Badge>}
         {totals.defects > 0 && (
@@ -590,6 +617,9 @@ function CorpusTab({ pois }: { pois: PoiRow[] }) {
           <SelectTrigger><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All flags</SelectItem>
+            <SelectItem value="story-eligible">Story: eligible</SelectItem>
+            <SelectItem value="story-filtered">Story: filtered out</SelectItem>
+            <SelectItem value="roam-clip-stale">Roam clip: stale</SelectItem>
             <SelectItem value="defect">Clip defects</SelectItem>
             <SelectItem value="stale">Stale facts</SelectItem>
             <SelectItem value="unattrib">Unattributed</SelectItem>
@@ -606,15 +636,17 @@ function CorpusTab({ pois }: { pois: PoiRow[] }) {
               <TableHead>Source</TableHead>
               <TableHead>Region</TableHead>
               <TableHead className="text-right">Tours</TableHead>
-              <TableHead className="text-right">Roam clips</TableHead>
+              <TableHead>Story</TableHead>
               <TableHead>Attribution</TableHead>
               <TableHead>Facts hash</TableHead>
               <TableHead className="text-right">Added</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
+            {loading && <TableSkeletonRows rows={8} cols={8} />}
             {filtered.map((p) => {
               const sm = SOURCE_META[p.source]
+              const em = STORY_ELIGIBILITY_META[p.storyEligibility]
               return (
                 <Fragment key={p.id}>
                   <TableRow
@@ -642,12 +674,15 @@ function CorpusTab({ pois }: { pois: PoiRow[] }) {
                     <TableCell className="text-right font-mono">
                       {p.tourCount > 0 ? p.tourCount : <span className="text-muted-foreground">—</span>}
                     </TableCell>
-                    <TableCell className="text-right font-mono">
-                      {p.roamClipCount > 0 ? (
-                        <Badge>{p.roamClipCount}</Badge>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
+                    <TableCell>
+                      <div className="flex flex-wrap items-center gap-1">
+                        <Badge variant={em.variant} title={em.hint}>{em.label}</Badge>
+                        {p.roamClip !== 'none' && (
+                          <Badge variant={ROAM_CLIP_META[p.roamClip].variant} title={ROAM_CLIP_META[p.roamClip].hint}>
+                            {ROAM_CLIP_META[p.roamClip].label}
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       {p.tourCount > 0 ? (
@@ -664,7 +699,7 @@ function CorpusTab({ pois }: { pois: PoiRow[] }) {
                 </Fragment>
               )
             })}
-            {filtered.length === 0 && (
+            {!loading && filtered.length === 0 && (
               <TableRow className="hover:bg-transparent">
                 <TableCell colSpan={8}>
                   <EmptyState icon={Search}>No POIs match these filters.</EmptyState>

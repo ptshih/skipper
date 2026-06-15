@@ -5,6 +5,41 @@ Carry-forward **engineering** items (the near-term layer of the truth system —
 Each item has enough context to action without re-deriving the reasoning. **Delete items
 when done** — git history is the archive.
 
+## POIs / facts model — decouple from roam + the facts-depth redesign
+
+POIs are the SHARED corpus (tours AND roam select from it); roam is one consumer, not the owner.
+Naming decoupled 2026-06-15: `sweep-roam-pois.ts` → `sweep-region-pois.ts`, and the gen-job kind
+moved OFF a pg enum → a plain `text` column with the vocabulary single-sourced as the Zod `jobKind`
+in `@skipper/shared` (migration `0005_jobkind_to_text` renamed `sweep_roam_pois` → `sweep_region_pois`;
+a rigid pg enum was the wrong shape for a churning, observability-only label). `buildStoryFacts`
+shipped 2026-06-15 — all four facts writers (sweep, `refetch-poi`, tour + roam deepen) + the roam
+clip-hash now build `pois.facts` through one pure helper in `persist.ts`, so key order +
+qid-preservation are structural + unit-tested. Also shipped 2026-06-15: eligibility is now framed as
+a POI property — `@skipper/shared/story-eligibility.ts` (`classifyStoryEligibility` + `StoryEligibility`
++ `STORY_TASTE_DENYLIST`/`STORY_MIN_EXTRACT`), split from the roam-specific clip status; `/admin/pois`
+returns `storyEligibility` + `roamClip` and the POIs table shows a "Story" column (applies to tours +
+roam) with a separate roam-clip badge. The taste gate is now shared too (2026-06-15): the tour
+candidate loader (`region-corpus.ts::loadCandidatePoisInBox`) drops `STORY_TASTE_DENYLIST` titles from
+the pool, same as roam's queue — so a tour can't narrate a violent-crime POI either.
+
+**Facts-depth redesign — DONE 2026-06-15 (the "real step 1", one-field version).** Resolved simpler
+than "store both": `facts.extract` now IS the full article (no separate lead field) — the **sweep
+deepens at discovery time** (`fetchDeepExtracts`), stores the full extract, hashes ONCE. Generation
+reads it: roam's per-run deepen is removed (reads the corpus full, no re-fetch / no mutation / no
+hash churn). Eligibility (`STORY_MIN_EXTRACT`) now measures the FULL article — retuned 400→**800** (starting value,
+ear-tunable). The lead survives only transiently for discovery tiering (`tierOf`,
+`STORY_MIN_FACT_CHARS=140`); `select.ts` needs no change (full≫140 vs empty).
+
+Both follow-ups DONE 2026-06-15:
+- **Tour deepen retired.** `generate.ts` no longer re-fetches/deepens — it grounds on the corpus
+  extract; `loadFreshPoiFacts`/`fetchDeepExtracts`/`FACTS_TTL_HOURS` dropped from the tour path. The
+  sweep + `refetch-poi` now store the NORMALIZED extract (`toFacts(...).join(' ')`) so the sweep, tour,
+  and roam hash IDENTICALLY (no recompute drift / no spurious staleness). Override-freshness moved to
+  `refetch_facts` (now fetches the FULL article + re-applies overrides) / a re-sweep — not a per-run
+  fetch. (`loadFreshPoiFacts` left in `persist.ts` as a now-unused export; harmless to drop later.)
+- **Richer extracts.** `fetchDeepExtracts` drops the MediaWiki-clamped `exchars` (hard cap 1200),
+  pulls full plaintext, and self-truncates to `DEEP_EXTRACT_CHARS=4000` at a sentence boundary.
+
 ## Admin local-dev resilience — guard against "just errors out"
 
 The admin in local dev (vite `:5173` client + Hono admin-api `:8788`, `bun run dev:admin`)
@@ -61,7 +96,7 @@ Three items locked from the 2026-06-11 brainstorm (full capture: `docs/ideas/fre
 §Alpha learnings). Order within the pass is free; all three are founder-facing on his daily drive.
 
 - [ ] **Waves: narrate the scenic tier.** ~126 swept scenic pins sit unnarrated (`pois` story/scenic
-      tiers — `sweep-roam-pois.ts`). Schema first: `roam_clips` has NO `form` column and a
+      tiers — `sweep-region-pois.ts`). Schema first: `roam_clips` has NO `form` column and a
       `roam_clips_poi_uq` unique index on poiId (one telling per place) — the schema comment
       already names the move: a clean DESTRUCTIVE migration adding `form` ('story'|'wave';
       'bside' later) + uniqueness on (poiId, form). Then the 10–20s WAVE form in

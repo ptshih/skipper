@@ -16,10 +16,10 @@
 // non-null audio. NO cache variants, NO dedup, NO feedback in M1 — generate naively.
 // CLI entry point: ./run.ts.
 export * from './models'
-export { generateTour } from './pipeline/generate'
+export { generateTour } from './pipeline/generate-tour'
 export type {
   BracketSummary,
   GenerateOptions,
   GenerateResult,
   StopSummary,
-} from './pipeline/generate'
+} from './pipeline/generate-tour'

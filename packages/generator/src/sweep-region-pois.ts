@@ -1,19 +1,20 @@
-// sweep-roam-pois — basin-wide POI discovery for FREE-ROAM mode. MUTATES DB on --apply.
+// sweep-region-pois — region POI corpus discovery. MUTATES DB on --apply.
 //
-// Free-roam (docs/ideas/free-roam-mode.md) narrates the POI CORPUS, not a route — so this
-// sweep discovers every Wikidata-pinned place in a raw bbox (the whole Tahoe basin by
-// default), prose-joins Wikipedia, tiers them, and upserts the STORY + SCENIC tiers into
-// `pois` (facts for story, bare typed pins for scenic — roam v0 narrates story-grade only;
-// scenic pins seed the future wave layer). Dedup by (source, source_id) is the existing
-// upsertPoi seam, so re-running is idempotent and a place a tour already visits is the
-// SAME row (facts shared; principle #1).
+// This populates the SHARED `pois` corpus for a region's bbox — the one place both TOURS and ROAM
+// draw candidates from (POIs are not roam-owned; roam is just one consumer — see CLAUDE.md
+// principle #1 + docs/decisions/region-corpus-discovery.md). It discovers every Wikidata-pinned
+// place in a raw bbox (the whole Tahoe–Reno corridor by default), prose-joins Wikipedia, tiers
+// them, and upserts the STORY + SCENIC tiers into `pois` (facts for story, bare typed pins for
+// scenic — the story tier is what a long-form telling needs; scenic pins seed the future wave
+// layer). Dedup by (source, source_id) is the existing upsertPoi seam, so re-running is idempotent
+// and a place a tour already visits is the SAME row (facts shared; principle #1).
 //
 // SOP (docs/guides/ops-scripts-sop.md): PREVIEWS by default; writes only on --apply.
 // Discovery is free (WDQS + MediaWiki, no LLM/TTS spend).
 //
 // Usage:
-//   dotenvx run -f .env.development -- bun packages/generator/src/sweep-roam-pois.ts
-//   dotenvx run -f .env.development -- bun packages/generator/src/sweep-roam-pois.ts --apply
+//   dotenvx run -f .env.development -- bun packages/generator/src/sweep-region-pois.ts
+//   dotenvx run -f .env.development -- bun packages/generator/src/sweep-region-pois.ts --apply
 //   ... --bbox swLng,swLat,neLng,neLat   (override the basin default)
 
 import {
@@ -23,7 +24,9 @@ import {
   type WikidataCandidate,
 } from './pipeline/wikidata-discovery'
 import { ensurePoiOverridesLoaded } from './pipeline/poi-overrides'
-import { hashFacts, upsertPoi } from './pipeline/persist'
+import { fetchDeepExtracts } from './pipeline/wikipedia'
+import { toFacts } from './pipeline/select'
+import { buildStoryFacts, hashFacts, upsertPoi } from './pipeline/persist'
 import { speakableAnchorFor } from './pipeline/speakable'
 import { announce, parseFlags } from './pipeline/ops'
 import { beginJob, finishJob } from './pipeline/job-progress'
@@ -72,7 +75,7 @@ const flags = parseFlags(process.argv.slice(2), { valueFlags: ['bbox'] })
 const apply = flags.has('apply')
 const box = parseBbox(flags.value('bbox'))
 
-announce({ tool: 'sweep-roam-pois', blast: ['MUTATES DB'], apply })
+announce({ tool: 'sweep-region-pois', blast: ['MUTATES DB'], apply })
 
 async function main(): Promise<void> {
   // Overrides ride every fetch (the fact-edit seam) — load them before any extract lands.
@@ -139,13 +142,26 @@ async function main(): Promise<void> {
     return
   }
 
+  // Deepen to the FULL article HERE (the "real step 1", 2026-06-15): the corpus stores the full
+  // extract, so tours + roam read it WITHOUT a per-run re-fetch — no deepen-time fact mutation or
+  // factsHash churn, and eligibility measures real article richness (not a lead proxy). Free
+  // (MediaWiki, paced); a miss falls back to the discovery lead. There is NO separate lead field —
+  // `facts.extract` IS the full article; the lead is used only transiently for discovery tiering.
+  console.log(`Deepening ${stories.length} story extracts to full articles...`)
+  const deep = await fetchDeepExtracts(stories.map((s) => s.article!.pageId))
   const fetchedAt = new Date()
   let wrote = 0
+  let deepMiss = 0
   for (const s of stories) {
     const a = s.article!
-    // Store the FULL discovery payload (incl. the linked Wikidata qid) so a tour generate can
-    // rebuild the spine candidate (WikiPoi) losslessly from the pool — see pipeline/region-corpus.ts.
-    const facts = { extract: a.extract, title: a.title, url: a.url, pageId: a.pageId, qid: s.qid }
+    const full = deep.get(a.pageId)
+    if (!full) deepMiss++
+    // Normalize via toFacts(...).join(' ') so the stored extract (and its hash) MATCH what a tour or
+    // roam run recomputes from toFacts(extract) — one shared fingerprint across every writer/reader.
+    const extract = toFacts(full ?? a.extract).join(' ') // full article; lead fallback on a fetch miss
+    // FULL facts payload (incl. the linked Wikidata qid) so a tour generate can rebuild the spine
+    // candidate (WikiPoi) losslessly from the pool — see pipeline/region-corpus.ts.
+    const facts = buildStoryFacts({ extract, title: a.title, url: a.url, pageId: a.pageId, qid: s.qid })
     // Seed the curated "where to look" anchor onto the corpus row (coalesce-kept by upsertPoi, so
     // an admin edit always wins on a re-sweep). select.ts reads it back off pois.speakable.
     const sp = speakableAnchorFor('wikipedia', String(a.pageId))
@@ -157,13 +173,14 @@ async function main(): Promise<void> {
       lat: s.lat,
       lng: s.lng,
       ...(sp ? { speakableLat: sp.lat, speakableLng: sp.lng } : {}),
-      summary: a.extract.split(/(?<=[.!?])\s+/)[0] ?? null,
+      summary: extract.split(/(?<=[.!?])\s+/)[0] ?? null,
       facts,
       factsHash: hashFacts(facts),
       factsFetchedAt: fetchedAt,
     })
     wrote++
   }
+  if (deepMiss > 0) console.warn(`  ⚠ ${deepMiss} story extract(s) fell back to the lead (deep fetch miss).`)
   for (const s of scenics) {
     const sp = speakableAnchorFor('wikidata', s.qid)
     await upsertPoi({
@@ -184,7 +201,7 @@ async function main(): Promise<void> {
   console.log(`\nUpserted ${wrote} pois (${stories.length} story + ${scenics.length} scenic).`)
 }
 
-await beginJob('sweep_roam_pois', { dryRun: !apply, targetId: 'roam-corpus' })
+await beginJob('sweep_region_pois', { dryRun: !apply, targetId: 'region-corpus' })
 try {
   await main()
   await finishJob({ ok: true })

@@ -83,7 +83,7 @@ you found so the next agent can re-check it.
    `track` that grounded on them is stale and must regenerate. (Zero-reuse 2026-06-08; the
    three narration owners collapsed into `segments`+`tracks` 2026-06-12 — see
    `docs/decisions/tour-data-model-zero-reuse.md`.) **Discovery is a REGION step (2026-06-12):**
-   a sweep populates `pois` for a region's bbox ONCE (`sweep-roam-pois.ts`), and BOTH tours and
+   a sweep populates `pois` for a region's bbox ONCE (`sweep-region-pois.ts`), and BOTH tours and
    roam SELECT candidates from that one shared corpus — no per-tour live discovery. Tours are
    AUTHORED at runtime (admin Create → `materializeRoute`), never seeded as draft shells; the seed
    is just regions + personas + overrides. See `docs/decisions/region-corpus-discovery.md`.

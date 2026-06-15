@@ -8,6 +8,7 @@
 
 import { GoogleAuth } from 'google-auth-library'
 import { isAbsolute, resolve } from 'node:path'
+import type { JobKind } from '@skipper/shared'
 
 const REGION = process.env.GEN_JOB_REGION ?? 'us-east4'
 const JOB = process.env.GEN_JOB_NAME ?? 'skipper-gen'
@@ -54,18 +55,20 @@ export class HttpError extends Error {
 // records status AND captures its own stdout into outputLog/outputSummary/outputData on the row.
 // A script that skips the hook records no status and shows NO logs in the console (the admin no
 // longer reads Cloud Logging). Follow run.ts's main()+begin/finish shape. Enforced by jobs.test.ts.
-export const SCRIPTS = {
+// Typed Record<JobKind> so this map stays in lockstep with the single-source `jobKind` enum in
+// @skipper/shared — adding/removing a kind there forces a matching entry here (or a typecheck error).
+export const SCRIPTS: Record<JobKind, string> = {
   generate: 'packages/generator/src/run.ts',
   patch_clip: 'packages/generator/src/patch-clip.ts',
   resynth: 'packages/generator/src/resynth-tour.ts',
   resynth_roam_clip: 'packages/generator/src/resynth-roam-clip.ts',
   sweep_orphans: 'packages/generator/src/sweep-orphans.ts',
-  sweep_roam_pois: 'packages/generator/src/sweep-roam-pois.ts',
+  sweep_region_pois: 'packages/generator/src/sweep-region-pois.ts',
   generate_roam: 'packages/generator/src/generate-roam.ts',
   refetch_facts: 'packages/generator/src/refetch-poi.ts',
-} as const
+}
 
-export type JobKind = keyof typeof SCRIPTS
+export type { JobKind }
 
 export interface BuildResult {
   args: string[]
@@ -150,7 +153,7 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     return { args, dryRun: !apply, spends: apply, tourId, targetId: tourId }
   }
 
-  if (kind === 'sweep_roam_pois') {
+  if (kind === 'sweep_region_pois') {
     const apply = body.apply === true
     const args: string[] = [script]
     if (body.bbox) args.push(`--bbox=${str(body.bbox)}`)

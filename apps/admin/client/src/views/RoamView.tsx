@@ -65,12 +65,15 @@ export function RoamView() {
     [pois],
   )
 
-  // Fire the region-discovery sweep for one region card, then jump to Runs. Free — no confirm.
+  // Fire the region-discovery sweep for one region card, then jump to Runs. Free (no LLM/TTS spend)
+  // but it runs a WDQS/Wikipedia sweep and mutates the shared corpus — confirm before kicking it off.
   const discoverMut = useMutation({
     mutationFn: (regionSlug: string) => discoverPois(regionSlug, true, regionMap.get(regionSlug)?.discoveryBbox),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['runs'] }); navigate({ to: '/runs' }) },
   })
   function discover(regionSlug: string) {
+    const name = regionMap.get(regionSlug)?.displayName ?? regionSlug
+    if (!window.confirm(`Discover POIs for ${name}? This runs a free Wikidata/Wikipedia sweep over the region and updates the shared POI corpus (no LLM/TTS spend).`)) return
     discoverMut.mutate(regionSlug)
   }
 

@@ -34,7 +34,7 @@ const KIND_META: Record<string, { label: string; icon: React.ElementType; desc: 
   resynth:         { label: 'Resynth',          icon: RefreshCw,  desc: 'Re-voice every clip of an existing tour.',           spends: 'spend'  },
   patch_clip:      { label: 'Patch clip',       icon: Scissors,   desc: "Find/replace a stop or frame's script — or re-voice it — then re-synth that clip.", spends: 'spend'  },
   sweep_orphans:   { label: 'Sweep orphans',    icon: Trash2,     desc: 'Delete R2 clips that no track or frame references.', spends: 'delete' },
-  sweep_roam_pois: { label: 'Discover POIs',     icon: Filter,     desc: "Discover + upsert the region's POI corpus — tours and roam both draw from it.", spends: 'free'   },
+  sweep_region_pois: { label: 'Discover POIs',     icon: Filter,     desc: "Discover + upsert the region's POI corpus — tours and roam both draw from it.", spends: 'free'   },
   generate_roam:   { label: 'Generate roam',    icon: Zap,        desc: 'Narrate + synthesize roam clips for the corpus.',    spends: 'spend'  },
 }
 

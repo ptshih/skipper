@@ -46,6 +46,7 @@ import {
   tours,
   tracks,
 } from '@skipper/db/schema'
+import { classifyStoryEligibility } from '@skipper/shared'
 import { requireAdmin, type AdminEnv } from './auth'
 import { contentTypeForKey, presignGet } from './storage'
 import {
@@ -825,7 +826,12 @@ app.get('/admin/pois', async (c) => {
       sourceId: pois.sourceId,
       name: pois.name,
       kind: pois.kind,
+      lat: pois.lat,
+      lng: pois.lng,
       factsHash: pois.factsHash,
+      // Lead-extract length drives the roam story floor (a scenic pin has facts=null → 0). For an
+      // un-clipped poi this is the swept LEAD extract; clipped pois are classified by clip state.
+      extractChars: sql<number>`coalesce(length(${pois.facts} ->> 'extract'), 0)::int`,
       createdAt: pois.createdAt,
     })
     .from(pois)
@@ -858,21 +864,18 @@ app.get('/admin/pois', async (c) => {
         poiId: segments.poiId,
         audioDurationMs: tracks.audioDurationMs,
         script: tracks.script,
+        factsHash: tracks.factsHash, // the clip's grounding hash — vs pois.factsHash = fresh|stale
       })
       .from(segments)
       .innerJoin(tracks, and(eq(tracks.segmentId, segments.id), eq(tracks.variant, 0)))
       .where(and(isNull(segments.tourId), inArray(segments.poiId, poiIds))),
-    // Per-poi: region slug + name (pick first per poi in JS) — via the tour-bound segments.
+    // All regions + their discovery bbox. POI→region is GEOGRAPHIC (bbox containment), matching
+    // how roam actually selects candidates (region-corpus.ts / generate-roam.ts) — NOT via tours,
+    // which a freshly-swept corpus has none of yet. A region with no bbox can't claim any poi.
     db
-      .select({
-        poiId: segments.poiId,
-        regionSlug: regions.slug,
-        regionName: regions.displayName,
-      })
-      .from(segments)
-      .innerJoin(tours, eq(segments.tourId, tours.id))
-      .innerJoin(regions, eq(tours.regionId, regions.id))
-      .where(inArray(segments.poiId, poiIds)),
+      .select({ slug: regions.slug, displayName: regions.displayName, discoveryBbox: regions.discoveryBbox })
+      .from(regions)
+      .orderBy(asc(regions.displayName)),
   ])
 
   const stopMap = new Map(stopStats.map((s) => [s.poiId, s]))
@@ -884,17 +887,38 @@ app.get('/admin/pois', async (c) => {
     const wpm = wordCount > 0 && s.audioDurationMs
       ? wordCount / (s.audioDurationMs / 1000 / 60)
       : null
-    return [s.poiId, { hasClip: true, suspiciousDuration: wpm !== null && wpm < WPM_FLOOR }]
+    return [s.poiId, { hasClip: true, suspiciousDuration: wpm !== null && wpm < WPM_FLOOR, factsHash: s.factsHash }]
   }))
-  // Pick first region per poi
-  const regionMap = new Map<string, { regionSlug: string; regionName: string }>()
-  for (const r of regionRows) {
-    if (!regionMap.has(r.poiId)) regionMap.set(r.poiId, { regionSlug: r.regionSlug, regionName: r.regionName })
-  }
+  // Parse each region's "swLng,swLat,neLng,neLat" box once; a poi belongs to the FIRST region
+  // (deterministic by displayName) whose box contains its coords. A region with no/invalid bbox
+  // claims nothing — set one in the admin Regions view to light up coverage.
+  const regionBoxes = regionRows.flatMap((r) => {
+    if (!r.discoveryBbox) return []
+    const p = r.discoveryBbox.split(',').map(Number)
+    if (p.length !== 4 || p.some((n) => !Number.isFinite(n))) return []
+    return [{ slug: r.slug, name: r.displayName, swLng: p[0]!, swLat: p[1]!, neLng: p[2]!, neLat: p[3]! }]
+  })
+  const regionForPoi = (lat: number, lng: number) =>
+    regionBoxes.find((b) => lat >= b.swLat && lat <= b.neLat && lng >= b.swLng && lng <= b.neLng) ?? null
 
   const result = poisRows.map((p) => {
     const s = stopMap.get(p.id)
-    const region = regionMap.get(p.id)
+    const clip = clipMap.get(p.id)
+    const region = regionForPoi(p.lat, p.lng)
+    // Story-eligibility — a POI property (tours AND roam draw story-grade POIs from this corpus);
+    // single-sourced with the generator's gate constants (@skipper/shared).
+    const storyEligibility = classifyStoryEligibility({
+      source: p.source,
+      name: p.name,
+      leadExtractChars: Number(p.extractChars ?? 0),
+    })
+    // Roam-clip status — the SEPARATE roam-specific axis: does a roam clip exist, and is it grounded
+    // on the poi's CURRENT facts (else a run would regenerate it).
+    const roamClip: 'none' | 'fresh' | 'stale' = !clip
+      ? 'none'
+      : clip.factsHash != null && clip.factsHash === p.factsHash
+        ? 'fresh'
+        : 'stale'
     return {
       id: p.id,
       source: p.source,
@@ -904,12 +928,14 @@ app.get('/admin/pois', async (c) => {
       factsHash: p.factsHash,
       createdAt: p.createdAt,
       tourCount: s ? Number(s.tourCount) : 0,
-      roamClipCount: clipMap.get(p.id) ? 1 : 0,
-      suspiciousDuration: clipMap.get(p.id)?.suspiciousDuration ?? false,
+      roamClipCount: clip ? 1 : 0,
+      storyEligibility,
+      roamClip,
+      suspiciousDuration: clip?.suspiciousDuration ?? false,
       staleFacts: s ? Number(s.staleCount) > 0 : false,
       attributed: s ? Number(s.unattribCount) === 0 : true,
-      regionSlug: region?.regionSlug ?? null,
-      regionName: region?.regionName ?? null,
+      regionSlug: region?.slug ?? null,
+      regionName: region?.name ?? null,
     }
   })
 
