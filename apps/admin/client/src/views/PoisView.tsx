@@ -1,7 +1,7 @@
 import { Fragment, useMemo, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CircleCheck, Compass, Locate, Plus, RefreshCw, Search, Trash2, Wrench, X } from 'lucide-react'
+import { CircleCheck, Compass, Locate, Plus, RefreshCw, Search, Sparkles, Trash2, Wrench, X } from 'lucide-react'
 import { api, type CorrectionOverride, type PoiDetail, type PoiRow, type StoryEligibility } from '@/lib/api'
 import { errMsg, timeAgo } from '@/lib/format'
 import { PageHeader } from '@/components/PageHeader'
@@ -61,6 +61,7 @@ export function PoisView() {
   const navigate = useNavigate()
   const [tab, setTab] = useState<Tab>('corpus')
   const [discoverOpen, setDiscoverOpen] = useState(false)
+  const [enrichOpen, setEnrichOpen] = useState(false)
 
   // Shared with RoamView via the ['pois'] key — both read the same corpus, fetched once + cached.
   const { data: pois = [], error: err, isPending } = useQuery({ queryKey: ['pois'], queryFn: async () => (await api.pois()).pois })
@@ -79,9 +80,14 @@ export function PoisView() {
         title="POIs"
         description="The shared place corpus — sources, tour + roam usage, attribution, and fact corrections. Tours and roam both select from here."
         actions={
-          <Button onClick={() => setDiscoverOpen(true)}>
-            <Compass className="h-4 w-4" /> Discover POIs
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button onClick={() => setDiscoverOpen(true)}>
+              <Compass className="h-4 w-4" /> Discover POIs
+            </Button>
+            <Button variant="outline" onClick={() => setEnrichOpen(true)}>
+              <Sparkles className="h-4 w-4" /> Enrich
+            </Button>
+          </div>
         }
       />
 
@@ -101,6 +107,7 @@ export function PoisView() {
       {tab === 'retire' && <RetireTab flagged={flagged} />}
 
       <DiscoverDialog open={discoverOpen} onOpenChange={setDiscoverOpen} onSubmitted={() => navigate({ to: '/runs' })} />
+      <EnrichDialog open={enrichOpen} onOpenChange={setEnrichOpen} onSubmitted={() => navigate({ to: '/runs' })} />
     </div>
   )
 }
@@ -191,6 +198,123 @@ function DiscoverDialog({
           </Button>
           <Button disabled={submitMut.isPending || !regionSlug} onClick={() => void submit(true)}>
             <Compass className="h-4 w-4" /> {submitMut.isPending ? 'Triggering…' : 'Discover'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/* ── ENRICH (the corpus fact-well step) ── */
+
+type EnrichScope = 'thin' | 'full'
+
+// A focused shadcn Dialog for the corpus `enrich` step (enrich_region): pick a region + scope, then
+// Preview (free dry-run — NO model calls, prints the count + a cost estimate) or Enrich (apply,
+// SPENDS Anthropic; no TTS). The well it builds (pois.facts.well) is read by BOTH tours + roam, so
+// enrich ONCE between Discover and Generate. Thin-only is the cheapest, highest-ROI first pass.
+function EnrichDialog({
+  open,
+  onOpenChange,
+  onSubmitted,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onSubmitted: () => void
+}) {
+  const [regionSlug, setRegionSlug] = useState('')
+  const [scope, setScope] = useState<EnrichScope>('thin')
+  const { data: regions = [], error: loadErr } = useQuery({
+    queryKey: ['regions'],
+    queryFn: async () => (await api.regions()).regions,
+    enabled: open,
+  })
+
+  const qc = useQueryClient()
+  const submitMut = useMutation({
+    mutationFn: (apply: boolean) => {
+      const bbox = regions.find((r) => r.slug === regionSlug)?.discoveryBbox
+      return api.createJob({
+        kind: 'enrich_region',
+        ...(bbox ? { bbox } : {}),
+        thinOnly: scope === 'thin',
+        apply,
+        ...(apply ? { confirm: true } : {}), // apply SPENDS → the server's typed confirm gate
+      })
+    },
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['runs'] }); onSubmitted() },
+  })
+  function submit(apply: boolean) {
+    if (!regionSlug) return
+    submitMut.mutate(apply)
+  }
+  const err = loadErr ?? submitMut.error
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4" /> Enrich corpus
+          </DialogTitle>
+          <DialogDescription>
+            Scouts each story POI ONCE into a curated, verbatim <strong>fact well</strong> on the shared corpus —
+            tours and roam both narrate from it. Run after Discover, before generating. Spends Anthropic credits
+            (no TTS); a later re-discover invalidates wells, so re-enrich after one.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-2">
+          <Label htmlFor="enrich-region">Region</Label>
+          <Select value={regionSlug || undefined} onValueChange={setRegionSlug}>
+            <SelectTrigger id="enrich-region" className="w-full">
+              <SelectValue placeholder={regions.length === 0 ? 'Loading…' : 'Select a region…'} />
+            </SelectTrigger>
+            <SelectContent>
+              {regions.map((r) => (
+                <SelectItem key={r.slug} value={r.slug}>{r.displayName}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Scope</Label>
+          <Segmented
+            value={scope}
+            onChange={setScope}
+            options={[
+              { value: 'thin', label: 'Thin only' },
+              { value: 'full', label: 'Full corpus' },
+            ]}
+          />
+          <p className="text-xs text-muted-foreground">
+            {scope === 'thin'
+              ? 'Only thin articles — the cheapest slice, where enrichment helps most (the recommended first pass).'
+              : 'Every eligible story POI in the region — the full one-time spend.'}
+          </p>
+        </div>
+
+        <div className="rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+          <span className="font-medium text-foreground">Preview</span> dry-runs free (no model calls — prints the
+          count + a cost estimate to the run log); <span className="font-medium text-foreground">Enrich</span> spends.
+        </div>
+
+        {err && (
+          <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {errMsg(err)}
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={submitMut.isPending}>
+            Cancel
+          </Button>
+          <Button variant="outline" disabled={submitMut.isPending || !regionSlug} onClick={() => void submit(false)}>
+            {submitMut.isPending ? 'Triggering…' : 'Preview'}
+          </Button>
+          <Button disabled={submitMut.isPending || !regionSlug} onClick={() => void submit(true)}>
+            <Sparkles className="h-4 w-4" /> {submitMut.isPending ? 'Triggering…' : 'Enrich'}
           </Button>
         </DialogFooter>
       </DialogContent>
