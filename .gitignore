@@ -43,6 +43,8 @@ key/
 .scratch-audio/
 # Design-review agent output (local report artifacts, not committed)
 .design-review/
+# Playwright MCP output (screenshots / traces dumped during verification)
+.playwright-mcp/
 
 # Claude Code: local agent runtime state (locks, worktrees) stays ignored,
 # but the SHARED project settings (hooks — the docs lint) are committed.
