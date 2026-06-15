@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronDown, ChevronRight, Compass, MapPin, RefreshCw, Zap } from 'lucide-react'
+import { ChevronDown, ChevronRight, Compass, MapPin, RefreshCw, Sparkles, Zap } from 'lucide-react'
 import { api, type PoiRow } from '@/lib/api'
 import { errMsg } from '@/lib/format'
 import { PageHeader } from '@/components/PageHeader'
@@ -90,6 +90,21 @@ export function RoamView() {
     generateMut.mutate(r)
   }
 
+  // Fire enrich_region for one region — scouts story POIs into curated fact wells (Anthropic spend,
+  // no TTS). Runs the THIN-only slice (cheapest, highest ROI) from the admin; full-corpus is a CLI
+  // flag. The well is read by BOTH tours + roam, so enrich ONCE between discover and generate.
+  const enrichMut = useMutation({
+    mutationFn: (r: RegionCoverage) => {
+      const bbox = regionMap.get(r.regionSlug)?.discoveryBbox
+      return api.createJob({ kind: 'enrich_region', ...(bbox ? { bbox } : {}), thinOnly: true, apply: true, confirm: true })
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['runs'] }); navigate({ to: '/runs' }) },
+  })
+  function enrich(r: RegionCoverage) {
+    if (!window.confirm(`Enrich ${r.regionName}? Scouts THIN story articles into curated fact wells (Anthropic spend — no TTS; the cheapest slice first). Tours + roam then narrate from the well.`)) return
+    enrichMut.mutate(r)
+  }
+
   const err =
     poisQuery.error || regionsQuery.error
       ? `Couldn't load roam data — ${errMsg(poisQuery.error ?? regionsQuery.error)}`
@@ -97,7 +112,9 @@ export function RoamView() {
         ? `Discover failed — ${errMsg(discoverMut.error)}`
         : generateMut.error
           ? `Generate roam failed — ${errMsg(generateMut.error)}`
-          : null
+          : enrichMut.error
+            ? `Enrich failed — ${errMsg(enrichMut.error)}`
+            : null
 
   return (
     <div className="space-y-6">
@@ -121,7 +138,12 @@ export function RoamView() {
         {coverage.length === 0 ? (
           <EmptyState icon={MapPin} className="rounded-xl border bg-muted/30">No regions with POI data yet.</EmptyState>
         ) : (
-          <CoverageGrid coverage={coverage} onDiscover={(slug) => void discover(slug)} onGenerate={(r) => void generateRoam(r)} />
+          <CoverageGrid
+            coverage={coverage}
+            onDiscover={(slug) => void discover(slug)}
+            onEnrich={(r) => void enrich(r)}
+            onGenerate={(r) => void generateRoam(r)}
+          />
         )}
       </section>
 
@@ -154,10 +176,12 @@ export function RoamView() {
 function CoverageGrid({
   coverage,
   onDiscover,
+  onEnrich,
   onGenerate,
 }: {
   coverage: RegionCoverage[]
   onDiscover: (regionSlug: string) => void
+  onEnrich: (r: RegionCoverage) => void
   onGenerate: (r: RegionCoverage) => void
 }) {
   const maxTotal = Math.max(...coverage.map((r) => r.total), 1)
@@ -202,6 +226,9 @@ function CoverageGrid({
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="sm" onClick={() => onDiscover(r.regionSlug)}>
                   <Compass className="h-3.5 w-3.5" /> Discover POIs
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => onEnrich(r)}>
+                  <Sparkles className="h-3.5 w-3.5" /> Enrich
                 </Button>
                 <Button variant="secondary" size="sm" onClick={() => onGenerate(r)}>
                   <Zap className="h-3.5 w-3.5" /> Generate roam

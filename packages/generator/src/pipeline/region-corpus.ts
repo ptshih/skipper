@@ -12,6 +12,7 @@
 import { and, between, inArray } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { pois } from '@skipper/db/schema'
+import type { PoiFacts } from '@skipper/db/schema'
 import { STORY_TASTE_DENYLIST } from '@skipper/shared'
 import { withRetry } from './http'
 import type { LngLat } from './geo'
@@ -90,6 +91,10 @@ export async function loadCandidatePoisInBox(sw: LngLat, ne: LngLat): Promise<Wi
         pageid: f.pageId ?? Number(r.sourceId),
         ...(f.qid ? { qid: f.qid } : {}),
         ...(r.kind ? { kind: r.kind } : {}),
+        // Carry the FULL corpus facts (well + extract + provenance) for the well↔extract grounding
+        // switch + the staleness fingerprint downstream (select → generate-tour). r.facts is the
+        // jsonb; cast through StoryFacts↦PoiFacts (a story row always has facts here).
+        ...(r.facts ? { facts: r.facts as PoiFacts } : {}),
         ...speakable,
       })
     } else {

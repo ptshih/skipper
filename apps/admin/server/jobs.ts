@@ -64,6 +64,7 @@ export const SCRIPTS: Record<JobKind, string> = {
   resynth_roam_clip: 'packages/generator/src/resynth-roam-clip.ts',
   sweep_orphans: 'packages/generator/src/sweep-orphans.ts',
   sweep_region_pois: 'packages/generator/src/sweep-region-pois.ts',
+  enrich_region: 'packages/generator/src/enrich-region.ts',
   generate_roam: 'packages/generator/src/generate-roam.ts',
   refetch_facts: 'packages/generator/src/refetch-poi.ts',
 }
@@ -160,6 +161,21 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     if (apply) args.push('--apply')
     // sweep is free (WDQS + MediaWiki, no LLM/TTS); spends:false so no confirm gate.
     return { args, dryRun: !apply, spends: false, targetId: 'roam-corpus' }
+  }
+
+  if (kind === 'enrich_region') {
+    const apply = body.apply === true
+    const args: string[] = [script]
+    if (body.bbox) args.push(`--bbox=${str(body.bbox)}`)
+    if (body.thinOnly === true) args.push('--thin-only')
+    if (body.thinMax) args.push(`--thin-max=${Number(body.thinMax)}`)
+    if (body.limit) args.push(`--limit=${Number(body.limit)}`)
+    if (body.force) args.push('--force')
+    if (body.model) args.push(`--model=${str(body.model)}`)
+    if (body.maxCostUsd) args.push(`--max-cost=${Number(body.maxCostUsd)}`)
+    if (apply) args.push('--apply')
+    // enrich SPENDS (Anthropic) on --apply → confirm gate; the dry run makes no model calls (free).
+    return { args, dryRun: !apply, spends: apply, targetId: 'region-corpus' }
   }
 
   if (kind === 'generate_roam') {

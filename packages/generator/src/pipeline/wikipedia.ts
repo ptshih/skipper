@@ -10,7 +10,8 @@
 // requests in series. License for reuse is CC BY-SA 4.0 — attribution is snapshotted onto
 // the tour_stop at generation time (see generate.ts).
 
-import { DEEP_EXTRACT_CHARS, EXTRACT_CHARS, WIKIPEDIA_USER_AGENT } from '../config'
+import type { PoiFacts } from '@skipper/db/schema'
+import { ENRICHER_INPUT_CHARS, EXTRACT_CHARS, WIKIPEDIA_USER_AGENT } from '../config'
 import { fetchWithRetry, sleep } from './http'
 import {
   applyFactEditsChecked,
@@ -66,6 +67,10 @@ export interface WikiPoi {
    *  side-of-road computation when the pin misleads. Carried from the corpus, not a code map. */
   speakableLat?: number
   speakableLng?: number
+  /** The poi's full corpus facts object (story rows loaded from `pois` by region-corpus) — the
+   *  well↔extract grounding source threaded onto the StopPlan. Absent on a freshly-discovered
+   *  candidate (the live spine emits none); present when read back from the corpus. */
+  facts?: PoiFacts
 }
 
 /**
@@ -117,8 +122,8 @@ const END_SECTION =
 async function fetchArticleExtract(pageid: number): Promise<string> {
   await ensurePoiOverridesLoaded()
   // exintro is OFF (we want the body, not just the lead); exlimit=1 in that mode → one page/call.
-  // NO `exchars`: MediaWiki HARD-CLAMPS it to 1200, too thin for a 150s telling. Pull the full
-  // plain-text article and self-truncate to DEEP_EXTRACT_CHARS instead (below).
+  // NO `exchars`: MediaWiki HARD-CLAMPS it to 1200, too thin for the enricher to select from. Pull
+  // the full plain-text article and self-truncate to ENRICHER_INPUT_CHARS instead (below).
   const j = await wiki<{ query?: { pages?: ExtractPage[] } }>({
     action: 'query',
     prop: 'extracts',
@@ -127,11 +132,11 @@ async function fetchArticleExtract(pageid: number): Promise<string> {
     exsectionformat: 'plain',
   })
   const raw = (j.query?.pages?.[0]?.extract ?? '').trim()
-  // Drop trailing meta sections (References/See also/…), then cap to DEEP_EXTRACT_CHARS, trimming
-  // back to the last full sentence so narration never grounds on a half sentence.
+  // Drop trailing meta sections (References/See also/…), then cap to ENRICHER_INPUT_CHARS, trimming
+  // back to the last full sentence so the stored extract never ends on a half sentence.
   let cut = raw.split(END_SECTION)[0]!.trim()
-  if (cut.length > DEEP_EXTRACT_CHARS) {
-    const head = cut.slice(0, DEEP_EXTRACT_CHARS)
+  if (cut.length > ENRICHER_INPUT_CHARS) {
+    const head = cut.slice(0, ENRICHER_INPUT_CHARS)
     const lastEnd = Math.max(head.lastIndexOf('. '), head.lastIndexOf('! '), head.lastIndexOf('? '))
     cut = (lastEnd > 0 ? head.slice(0, lastEnd + 1) : head).trim()
   }

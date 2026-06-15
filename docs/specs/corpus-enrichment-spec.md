@@ -1,10 +1,11 @@
 # Corpus enrichment — Build Spec
 
-> **Status:** build-ready spec, UNBUILT — captured 2026-06-15. Promoted from
-> [docs/ideas/corpus-enrichment.md](../ideas/corpus-enrichment.md) on a "move toward greenlight" from
-> the founder; the BUILD itself is still gated on (a) an explicit greenlight and (b) the ear-test that
-> roam encounters on the richer 4000-char extract actually need enrichment. §9 lists the open
-> founder-calls. Pairs with `docs/decisions/enrichment-scout.md` (the scout this generalizes),
+> **Status:** ✅ **BUILT 2026-06-15** — the code shipped on a "skip the ear-test, build now" founder
+> call; a real `enrich --apply` run is PAID + founder-gated and not yet run, so the ear-test (§11)
+> is still the live acceptance gate. What shipped, the resolved §9 calls, and the deviations are
+> recorded in **`docs/decisions/corpus-enrichment.md`** (read that for current truth — this spec is
+> the as-designed record). Promoted from [docs/ideas/corpus-enrichment.md](../ideas/corpus-enrichment.md).
+> Pairs with `docs/decisions/enrichment-scout.md` (the scout this generalizes),
 > `docs/decisions/region-corpus-discovery.md` (the corpus + ops sequence), and principle #1.
 
 ## 1. Why

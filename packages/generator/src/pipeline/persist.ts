@@ -28,6 +28,7 @@ import type {
   NewTrack,
   PoiFacts,
   Polyline,
+  WellSpan,
 } from '@skipper/db/schema'
 import type { BracketKind, PoiSource, StopType } from '@skipper/shared'
 
@@ -98,6 +99,47 @@ export function hashFacts(facts: PoiFacts | null): string | null {
   return createHash('sha256').update(JSON.stringify(facts)).digest('hex')
 }
 
+/**
+ * The GROUNDING fingerprint for a story poi — the hash a track's `facts_hash` is compared against
+ * for staleness. THE SWITCH (corpus-enrichment-spec §3/§8):
+ *   - ENRICHED (a non-empty `facts.well`) → hash the WELL ONLY. Narration grounds on the well, so a
+ *     re-`discover` that rewrites `extract` but yields the SAME well must NOT mark tracks stale; and
+ *     the `enrichedAt` stamp must not churn the hash. Hashing the well is the true "did the narration
+ *     input change" detector.
+ *   - UN-ENRICHED (no well) → hash the whole facts object (today's basis, `hashFacts`), so existing
+ *     rows + the extract-head fallback keep their current hash exactly (behavior-preserving until a
+ *     paid enrich run). Both facts WRITERS (sweep/enrich) and READERS (tours/roam) call THIS, so a
+ *     clip's stamped hash can never diverge from `pois.facts_hash`.
+ */
+export function storyFactsHash(facts: PoiFacts | null): string | null {
+  if (!facts) return null
+  const well = facts.well as WellSpan[] | undefined
+  if (Array.isArray(well) && well.length > 0) {
+    return createHash('sha256').update(JSON.stringify(well)).digest('hex')
+  }
+  return hashFacts(facts)
+}
+
+/** The distinct sourced credits in a well → the frozen `tracks.attribution` array (one entry per
+ *  (source, sourceId), CC BY-SA / CC0 / CC BY preserved). `retrievedAt` is the well's enrich stamp. */
+export function wellToAttribution(well: WellSpan[], retrievedAt: string): AttributionSnapshot[] {
+  const seen = new Set<string>()
+  const out: AttributionSnapshot[] = []
+  for (const s of well) {
+    const key = `${s.source}:${s.sourceId}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push({
+      source: s.source,
+      sourceId: s.sourceId,
+      ...(s.url ? { url: s.url } : {}),
+      license: s.license,
+      retrievedAt,
+    })
+  }
+  return out
+}
+
 /** The canonical `pois.facts` object for a STORY place — the ONE builder every facts writer uses (the
  *  region sweep, refetch-poi, and the tour + roam deepen) so the key ORDER is identical across all of
  *  them. Order is hash-significant (hashFacts = sha256 of JSON.stringify), so an unchanged article
@@ -112,9 +154,17 @@ export function buildStoryFacts(input: {
   url: string
   pageId: number
   qid?: string | null
+  /** The curated narration sheet, set by the corpus `enrich` step. Omitted (with `enrichedAt`)
+   *  for an un-enriched row, so its object is byte-identical to the historical shape — its
+   *  `hashFacts` is unchanged. `well`/`enrichedAt` sit right after `extract` (the spec §3 shape);
+   *  ordering only matters for the un-enriched `hashFacts` path, and there they're both absent. */
+  well?: WellSpan[] | null
+  enrichedAt?: string | null
 }): PoiFacts {
+  const enriched = Array.isArray(input.well) && input.well.length > 0
   return {
     extract: input.extract,
+    ...(enriched ? { well: input.well, enrichedAt: input.enrichedAt ?? undefined } : {}),
     title: input.title,
     url: input.url,
     pageId: input.pageId,

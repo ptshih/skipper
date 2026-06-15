@@ -25,7 +25,7 @@
 // (open-now/rating) is still fetched fresh at tour-load (and "ask the skipper" later).
 
 import type { BracketKind, DurationBucket, JokeLevel } from '@skipper/shared'
-import type { AttributionSnapshot } from '@skipper/db/schema'
+import type { AttributionSnapshot, WellSpan } from '@skipper/db/schema'
 import {
   ANTHROPIC_READY,
   EVAL_MAX_PASSES,
@@ -37,6 +37,7 @@ import {
   GROUNDING_REGEN_CONCURRENCY,
   GROUNDING_REGEN_MAX_ROUNDS,
   NARRATION_CONCURRENCY,
+  NARRATION_FALLBACK_CHARS,
   PANEL_REGEN_CONCURRENCY,
   FALLBACK_SPEED_MPS,
   GOOGLE_READY,
@@ -88,7 +89,7 @@ import { wikidataFacts } from './wikidata'
 import { scoutStop } from './scout'
 import { searchBreakStops, spokenKind } from './places'
 import type { BreakAnchor } from './places'
-import { projectQueueLag, selectStops } from './select'
+import { projectQueueLag, resolveStoryGrounding, selectStops } from './select'
 import type { StopPlan } from './select'
 import { narrateIntro, narrateOutro, narrateStop } from './narrate'
 import type { NarrationRequest } from './narrate'
@@ -99,11 +100,11 @@ import { bracketKey, clipKey, uploadAudio } from './storage'
 import {
   buildStoryFacts,
   finalizeTourReady,
-  hashFacts,
   loadTour,
   markTourGenerating,
   resolvePersonaId,
   restoreAfterFailedRun,
+  storyFactsHash,
   upsertPoi,
 } from './persist'
 import type { FinalBracket, FinalStop } from './persist'
@@ -376,11 +377,23 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
     )
   }
 
-  // Fact sheets are ALREADY the full article — the region sweep deepens at discovery time and stores
-  // the (normalized) extract in pois.facts (the "real step 1", 2026-06-15). select.ts set each story
-  // stop's facts from that corpus extract, so generation grounds on it with NO per-run re-fetch and no
-  // fact mutation / hash churn. Override-freshness now lands via a re-sweep / refetch_facts (which both
-  // re-pull the full article + re-apply overrides), not a per-run fetch.
+  // Resolve each STORY stop's narration SHEET from the corpus facts: the curated WELL when the place
+  // has been ENRICHED (enrich-region), else the positional extract head (capped to
+  // NARRATION_FALLBACK_CHARS — today's behavior, byte-for-byte; the stored extract is now uncapped
+  // for the enricher, so the read MUST cap the un-enriched fallback). NO per-run re-fetch — facts come
+  // from the corpus (discover/enrich own them); the same resolver roam uses, so a place reads the same
+  // whether a tour or a roam encounter tells it. `wellAttribution` + `enriched` ride to the assembly
+  // + the scout gate below. (Scenic/break carry no facts — skipped.)
+  for (const s of plan) {
+    if (s.stopType !== 'story' || !s.poiFacts) continue
+    const g = resolveStoryGrounding(s.poiFacts, {
+      fallbackChars: NARRATION_FALLBACK_CHARS,
+      retrievedAt: factsSnapshotAt.toISOString(),
+    })
+    s.facts = g.facts
+    s.enriched = g.enriched
+    s.wellAttribution = g.attribution
+  }
   lap('deepenFacts')
 
   // Geology enrichment for SCENIC stops (Macrostrat, CC BY 4.0): a coordinate-keyed fact
@@ -408,17 +421,24 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   lap('geology')
 
   // STORY-stop enrichment is the SCOUT's call (pipeline/scout.ts): a bounded tool-using
-  // agent reads each stop's deepened sheet, judges what the telling is missing, fetches
-  // grounded enrichment (geology at the road or the landmark point; Wikidata key facts),
-  // and decides how it should land — replacing the old char-count sparse-gates + the
-  // hand-curated iconic allowlist (docs/decisions/enrichment-scout.md). Its tools are
+  // agent reads each stop's sheet, judges what the telling is missing, fetches grounded
+  // enrichment, and decides how it should land — replacing the old char-count sparse-gates +
+  // the hand-curated iconic allowlist (docs/decisions/enrichment-scout.md). Its tools are
   // keyed to the stop's OWN coords/QID, so it can only gather, never assert: every fact
   // still arrives verbatim from a sourced fetcher, with attribution for the freeze.
-  // Per-stop failures are non-fatal (the stop just gets no enrichment, same as a fetcher
-  // failure under the old gates). Set SKIPPER_SCOUT=off to skip.
+  //
+  // PLACE / ROUTE split (corpus-enrichment-spec §6): for an ENRICHED stop the corpus well already
+  // carries the PLACE-level facts (landmark/centroid geology + Wikidata), so the scout here is
+  // narrowed to the ROUTE-level "rock under the tires" only (the snapped trigger point on THIS
+  // road) — landmark geology and Wikidata are withheld (they'd duplicate the well). An UN-enriched
+  // stop keeps the full per-stop scout (today's behavior). Per-stop failures are non-fatal (the
+  // stop just gets no enrichment). Set SKIPPER_SCOUT=off to skip.
   if (SCOUT_ENRICHMENT()) {
     const scoutStops = plan.filter((s) => s.stopType === 'story')
-    console.log(`Scouting enrichment for ${scoutStops.length} story stops (judgment, not char-gates)...`)
+    const enrichedCount = scoutStops.filter((s) => s.enriched).length
+    console.log(
+      `Scouting ${scoutStops.length} story stops (${enrichedCount} enriched → route geology only, ${scoutStops.length - enrichedCount} full scout)...`,
+    )
     const runScout = async (s: StopPlan): Promise<void> => {
       try {
         const decision = await scoutStop(
@@ -434,17 +454,20 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
             targetSeconds: s.targetSeconds,
           },
           {
-            // Stop-keyed tools: the scout picks WHICH point ("road" = the trigger point
-            // under the tires; "landmark" = the POI itself, for rock-IS-the-place stops
-            // where the road below snaps onto valley alluvium) — never WHOSE facts.
+            // Stop-keyed tools: the scout picks WHICH point ("road" = the trigger point under the
+            // tires; "landmark" = the POI itself) — never WHOSE facts. For an ENRICHED stop the
+            // landmark rock is already in the well, so landmark resolves to null (route only).
             geologyAt: GEOLOGY_ENRICHMENT()
               ? (point) =>
                   point === 'landmark'
-                    ? geologyFacts(s.lat, s.lng)
+                    ? s.enriched
+                      ? Promise.resolve(null)
+                      : geologyFacts(s.lat, s.lng)
                     : geologyFacts(s.triggerLat, s.triggerLng)
               : null,
+            // Wikidata is a PLACE fact — withheld for enriched stops (already in the well).
             wikidataFacts:
-              WIKIDATA_ENRICHMENT() && s.wikidataQid
+              WIKIDATA_ENRICHMENT() && !s.enriched && s.wikidataQid
                 ? () => wikidataFacts(s.wikidataQid!)
                 : null,
           },
@@ -1077,25 +1100,32 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
     // as a bounded fan-out — independent rows, kept OUT of the synth pool so a DB hiccup
     // surfaces before any TTS spend.
     const prep = plan.map((s) => {
-      // Every stop anchors to a POI (break stops included). Story stops carry facts;
-      // the facts_hash is the narration's grounding fingerprint (staleness detector).
-      // buildStoryFacts preserves the Wikidata qid (region-corpus rebuilds candidates from it) and
-      // fixes key order across all writers. A story stop always carries its wiki fields (set together
-      // in select.ts), so the non-null assertions hold inside this `stopType === 'story'` branch.
+      // Every stop anchors to a POI (break stops included). Story stops carry facts; the facts_hash
+      // is the narration's grounding fingerprint (staleness detector — keyed on the WELL when
+      // enriched, via storyFactsHash). Rebuild from the CORPUS facts (s.poiFacts) — the FULL,
+      // uncapped extract AND the curated well, PRESERVED — never from the narration sheet (s.facts,
+      // which is the capped extract head / the well's text only): a tour re-upsert must never clobber
+      // the corpus enrichment or shrink the stored extract. buildStoryFacts fixes key order across
+      // writers + preserves the Wikidata qid. Falls back to the narration sheet only if a story stop
+      // arrived without corpus facts (defensive — selection carries them). Wiki fields are set
+      // together in select.ts, so the non-null assertions hold in this `stopType === 'story'` branch.
+      const pf = s.poiFacts
       const facts =
         s.stopType === 'story'
           ? buildStoryFacts({
-              extract: s.facts.join(' '),
+              extract: typeof pf?.extract === 'string' ? pf.extract : s.facts.join(' '),
               title: s.wikiTitle!,
               url: s.wikiUrl!,
               pageId: s.wikiPageId!,
               qid: s.wikidataQid,
+              well: (pf?.well as WellSpan[] | undefined) ?? null,
+              enrichedAt: typeof pf?.enrichedAt === 'string' ? pf.enrichedAt : null,
             })
           : null
       return {
         s,
         facts,
-        factsHash: hashFacts(facts),
+        factsHash: storyFactsHash(facts),
         // The stop's place-anchor (segment) + its narration (track). The track id is the
         // clip key — every stop, break included, synthesizes to a TOUR-scoped per-run key.
         // (Break clips name the curated Places anchor; no Wikipedia text, no attribution.)
@@ -1170,21 +1200,28 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       const { audioUrl, durationMs } = clips[i]!
       const { segmentId, trackId, script, factsHash } = p
 
-      // Frozen attribution — an ARRAY, one entry per source this clip drew on. Story
-      // clips reuse Wikipedia extract text (CC BY-SA, required). Any stop — story OR
-      // scenic — that got Macrostrat geology carries a CC BY entry too; a sparse story
-      // enriched with Wikidata facts carries a CC0 entry. A scenic/break clip with no
-      // geology and no Wikidata draws on no external text, so its attribution stays null.
+      // Frozen attribution — an ARRAY, one entry per source this clip drew on. An ENRICHED story
+      // stop credits the WELL's distinct sources (wikipedia + any geology/wikidata the enricher
+      // kept) — already deduped by wellToAttribution. An UN-enriched story stop credits the single
+      // Wikipedia article (+ any Wikidata the per-stop scout added). The MERGED landmarks + the
+      // ROUTE geology layer on below for BOTH. A scenic/break clip with no geology and no Wikidata
+      // draws on no external text, so its attribution stays null. (Wikipedia CC BY-SA is required.)
       const attribution: AttributionSnapshot[] = []
       if (s.stopType === 'story') {
-        attribution.push({
-          source: 'wikipedia',
-          sourceId: String(s.wikiPageId),
-          title: s.wikiTitle,
-          url: s.wikiUrl,
-          license: 'CC BY-SA 4.0',
-          retrievedAt: new Date().toISOString(),
-        })
+        if (s.enriched && s.wellAttribution?.length) {
+          attribution.push(...s.wellAttribution)
+        } else {
+          attribution.push({
+            source: 'wikipedia',
+            sourceId: String(s.wikiPageId),
+            title: s.wikiTitle,
+            url: s.wikiUrl,
+            license: 'CC BY-SA 4.0',
+            retrievedAt: new Date().toISOString(),
+          })
+          // Wikidata is a PLACE fact in the well for enriched stops; only un-enriched stops add it here.
+          if (s.wikidataAttribution) attribution.push(s.wikidataAttribution)
+        }
       }
       // Each merged co-located landmark contributed its own Wikipedia text — credit every one.
       for (const m of s.mergedFeatures ?? []) {
@@ -1197,8 +1234,11 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
           retrievedAt: new Date().toISOString(),
         })
       }
+      // Geology is a per-tour layer for EVERY stop type: the ROUTE "rock under the tires" (story —
+      // both enriched + un-enriched, set by the scout above), the per-stop scout pick (un-enriched
+      // story), or the always-on scenic geology. (Un-enriched Wikidata is credited in the story
+      // branch above; an enriched stop's Wikidata rides in wellAttribution.)
       if (s.geologyAttribution) attribution.push(s.geologyAttribution)
-      if (s.wikidataAttribution) attribution.push(s.wikidataAttribution)
 
       finalStops.push({
         segmentId,

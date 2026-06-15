@@ -72,6 +72,7 @@ export const jobKind = z.enum([
   'resynth_roam_clip',
   'sweep_orphans',
   'sweep_region_pois',
+  'enrich_region',
   'generate_roam',
   'refetch_facts',
 ])

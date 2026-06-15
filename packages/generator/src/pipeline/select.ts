@@ -17,7 +17,8 @@
 // over thin/scenic neighbours.
 
 import type { PoiSource, StopType } from '@skipper/shared'
-import type { AttributionSnapshot } from '@skipper/db/schema'
+import type { AttributionSnapshot, PoiFacts, WellSpan } from '@skipper/db/schema'
+import { wellToAttribution } from './persist'
 import {
   BREAK_MIN_GAP_SEC,
   MERGE_EXTRA_SEC,
@@ -54,8 +55,19 @@ export interface StopPlan {
   lng: number
   /** Along-route time (seconds) — for ordering/pacing/debug. */
   alongSec: number
-  /** STORY only: grounded fact sentences (the entire well the narrator may use). */
+  /** STORY only: grounded fact sentences (the entire well the narrator may use). Set to the
+   *  positional extract head by selection; generate-tour OVERRIDES it with resolveStoryGrounding
+   *  (the curated well when enriched, the capped extract head otherwise). */
   facts: string[]
+  /** STORY only: the poi's full corpus facts object — the well↔extract grounding source +
+   *  the grounding fingerprint (resolveStoryGrounding / storyFactsHash). Carried from the corpus
+   *  (region-corpus), never re-fetched. Absent for scenic. */
+  poiFacts?: PoiFacts
+  /** STORY only: true once generate-tour grounds this stop on a curated WELL (vs the extract head). */
+  enriched?: boolean
+  /** STORY only: the frozen credit for an ENRICHED stop — the well's distinct sources (set in
+   *  generate-tour from resolveStoryGrounding). An un-enriched stop builds attribution the old way. */
+  wellAttribution?: AttributionSnapshot[]
   /** STORY + SCENIC: coordinate-keyed geology facts (Macrostrat), attached post-selection in generate.ts. */
   geology?: string[]
   /** Why a STORY stop got geology: 'sparse' (thin facts) or 'iconic' (allowlisted rich) — picks the narration cue. */
@@ -115,6 +127,62 @@ export function toFacts(extract: string): string[] {
     .split(/(?<=[.!?])\s+/)
     .map((s) => s.trim())
     .filter((s) => s.length > 0)
+}
+
+/** The positional HEAD of an extract — cap to `maxChars`, trimming back to the last full sentence
+ *  so narration never grounds on a half sentence (mirrors fetchArticleExtract's truncation). The
+ *  un-enriched fallback's narration bound; a no-op when the extract already fits. */
+export function headOfExtract(extract: string, maxChars: number): string {
+  if (extract.length <= maxChars) return extract
+  const head = extract.slice(0, maxChars)
+  const lastEnd = Math.max(head.lastIndexOf('. '), head.lastIndexOf('! '), head.lastIndexOf('? '))
+  return (lastEnd > 0 ? head.slice(0, lastEnd + 1) : head).trim()
+}
+
+/** The narration sheet + attribution for a STORY poi, resolving the curated narration sheet:
+ *  the verbatim `facts.well` when the place has been ENRICHED, else the positional `extract` head
+ *  (the un-enriched fallback — today's behavior, byte-for-byte, until a paid enrich run). The SINGLE
+ *  source for BOTH tours and roam so the well↔fallback switch (and its frozen credit) can never
+ *  drift between consumers. The well's credit uses its `enrichedAt`; the fallback's Wikipedia credit
+ *  uses the caller's `retrievedAt` (the poi's facts_fetched_at). See corpus-enrichment-spec §6/§7. */
+export interface StoryGrounding {
+  facts: string[]
+  attribution: AttributionSnapshot[]
+  /** True iff grounded on a curated well (vs the extract-head fallback). */
+  enriched: boolean
+}
+
+export function resolveStoryGrounding(
+  facts: PoiFacts,
+  opts: { fallbackChars: number; retrievedAt: string },
+): StoryGrounding {
+  const well = facts.well as WellSpan[] | undefined
+  if (Array.isArray(well) && well.length > 0) {
+    const enrichedAt = typeof facts.enrichedAt === 'string' ? facts.enrichedAt : opts.retrievedAt
+    return {
+      facts: well.map((s) => s.text),
+      attribution: wellToAttribution(well, enrichedAt),
+      enriched: true,
+    }
+  }
+  const extract = typeof facts.extract === 'string' ? facts.extract : ''
+  const title = typeof facts.title === 'string' ? facts.title : undefined
+  const url = typeof facts.url === 'string' ? facts.url : undefined
+  const sourceId = typeof facts.pageId === 'number' ? String(facts.pageId) : ''
+  return {
+    facts: toFacts(headOfExtract(extract, opts.fallbackChars)),
+    attribution: [
+      {
+        source: 'wikipedia',
+        sourceId,
+        ...(title ? { title } : {}),
+        ...(url ? { url } : {}),
+        license: 'CC BY-SA 4.0',
+        retrievedAt: opts.retrievedAt,
+      },
+    ],
+    enriched: false,
+  }
 }
 
 interface Placed {
@@ -382,6 +450,10 @@ export function selectStops(params: SelectParams): StopPlan[] {
       ...(isStory
         ? { wikiUrl: n.poi.url, wikiTitle: n.poi.title, wikiPageId: n.poi.pageid }
         : {}),
+      // Carry the full corpus facts for STORY stops — generate-tour resolves the narration sheet
+      // (well or capped extract head) + the grounding fingerprint from it, and preserves the well
+      // through the poi re-upsert. Absent when discovery surfaced no stored facts (defensive).
+      ...(isStory && n.poi.facts ? { poiFacts: n.poi.facts } : {}),
       // Carry the Wikidata join key for STORY stops; generate.ts enriches sparse ones.
       ...(isStory && n.poi.qid ? { wikidataQid: n.poi.qid } : {}),
     })

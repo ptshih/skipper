@@ -22,8 +22,30 @@ import { relations, sql } from 'drizzle-orm'
 /** Frozen, precomputed route geometry as [lng, lat] coordinate pairs. */
 export type Polyline = [number, number][]
 
-/** Free-form structured facts about a place. */
+/** Free-form structured facts about a place. For a STORY poi the canonical shape (built by
+ *  `buildStoryFacts`) is `{ extract, title, url, pageId, qid? }` PLUS, once the place has been
+ *  ENRICHED, `{ well, enrichedAt }` — the curated narration sheet (see `WellSpan`). The raw
+ *  `extract` is preserved as the enricher's input + audit source; narration grounds on `well`
+ *  when present, else the positional `extract` head (the fallback). Stays `Record<string,unknown>`
+ *  so writers/readers cast the fields they need (a typed DTO would over-constrain this jsonb). */
 export type PoiFacts = Record<string, unknown>
+
+/**
+ * One VERBATIM span of a story poi's curated "fact well" (`pois.facts.well`) — a sentence/section
+ * the corpus `enrich` step SELECTED from the article, or a discrete fact a sourced fetcher returned
+ * (Wikidata key fact, Macrostrat geology). The enricher chooses WHICH spans to keep, NEVER what they
+ * say — `text` is always verbatim from `source` (the "persona lives in DELIVERY, never FACTS"
+ * invariant mapped onto storage; see docs/specs/corpus-enrichment-spec.md §2). Narration grounds on
+ * the well; `tracks.attribution` is frozen from the distinct `(source, sourceId, license, url)` here.
+ * `source` is a subset of `AttributionSnapshot['source']` (the fact-bearing sources only).
+ */
+export type WellSpan = {
+  text: string
+  source: 'wikipedia' | 'wikidata' | 'macrostrat'
+  sourceId: string
+  license: string
+  url?: string
+}
 
 /**
  * Attribution snapshot frozen at narration time so credit stays correct even if

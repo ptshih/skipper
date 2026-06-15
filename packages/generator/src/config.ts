@@ -103,6 +103,23 @@ export const SCOUT_MAX_TOOL_TURNS = 5
 /** Max output tokens per scout turn (it emits tool calls + a sentence of reason, never prose). */
 export const SCOUT_MAX_TOKENS = 1_000
 
+// --- The corpus enrich step's well builder (pipeline/scout.ts buildWell) ------
+// Generalizes the per-stop scout to the CORPUS: it selects verbatim article spans (by id) +
+// includes/excludes grounded bundles (geology@centroid, Wikidata), ONCE per place — the shared
+// "fact well" tours + roam ground on (docs/specs/corpus-enrichment-spec.md). Same ReAct shape +
+// bounds as the scout; the only difference is the finalize emits a list of kept span ids, so it
+// gets a bit more output headroom.
+/** Max model turns per place — look (fetch geology/wikidata), then finalize. */
+export const ENRICH_MAX_TOOL_TURNS = 5
+/** Max output tokens per enrich turn — a finalize emits a kept-span-id LIST + a sentence of
+ *  reason (numbers, not prose), so more than the scout's 1k but still tight. */
+export const ENRICH_MAX_TOKENS = 2_000
+/** SOFT selection target: roughly how many verbatim spans the well should carry for a ~150s
+ *  telling. GUIDANCE to the model (restraint is a feature), NOT a hard cap — the well's true
+ *  bound is the enricher's judgment, never a char truncation (which would butcher a verbatim
+ *  span). See spec §9. */
+export const ENRICH_WELL_TARGET_SPANS = 16
+
 // --- Bounded fan-out (pipeline/concurrency.ts) --------------------------------
 
 /** Env-overridable positive-int knob (≥1); falls back to the default when unset/garbage. */
@@ -225,18 +242,28 @@ export const SPINE_AREAL_OFF_ROUTE_MAX_M = 1_500
 export const MIN_STOP_SEPARATION_M = 1_000
 /** Lead-section extract length to request (chars). ~3–5 sentences — used to RANK and
  * classify candidates at selection time (cheap, batched). The chosen story stops get
- * a deeper fact sheet (DEEP_EXTRACT_CHARS) before narration. */
+ * the full article (ENRICHER_INPUT_CHARS) stored at sweep time. */
 export const EXTRACT_CHARS = 600
 /** Below this extract length a STORY candidate is too thin → downgraded to scenic. */
 export const STORY_MIN_FACT_CHARS = 140
 /**
- * Full-article extract length (chars) fetched for the SELECTED story stops, so a stop
- * can be a fuller, longer story than the lead section alone supports (Shaka-Guide-length
- * storytelling is ~1–3 min, not ~30s — but ONLY when the facts are there to fill it; a
- * thin article stays short, never padded). Per-POI, one extra fetch each post-selection.
- * Trimmed of trailing meta sections (References/See also/…) in wikipedia.ts.
+ * Full-article plaintext length (chars) the region sweep STORES in `pois.facts.extract` — the
+ * raw, verbatim article, which is the corpus `enrich` step's INPUT (it selects the well from it)
+ * and the re-enrichment/audit source. Generous so a deep narratable fact isn't lost to a
+ * positional cap before the enricher can even see it (a city article runs long); the bound on the
+ * enricher's READ, not on narration. Trimmed of trailing meta sections (References/See also/…) in
+ * wikipedia.ts. (Was DEEP_EXTRACT_CHARS=4000 — the per-stop narration cap — until the corpus
+ * enrichment migration, 2026-06-15; see docs/specs/corpus-enrichment-spec.md §7.)
  */
-export const DEEP_EXTRACT_CHARS = 4_000
+export const ENRICHER_INPUT_CHARS = 12_000
+/**
+ * The narration FALLBACK head (chars): when a story poi has NOT been enriched (no `facts.well`),
+ * generation grounds on the positional head of `facts.extract` capped to this — today's behavior,
+ * preserved byte-for-byte (the old DEEP_EXTRACT_CHARS value). An ENRICHED poi ignores this: it
+ * grounds on the curated well (judgment is the bound, not a char cap). resolveStoryGrounding
+ * (pipeline/select.ts) applies it; tours + roam pass it in.
+ */
+export const NARRATION_FALLBACK_CHARS = 4_000
 
 // --- Pacing (by drive TIME, not distance) -----------------------------------
 

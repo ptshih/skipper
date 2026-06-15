@@ -29,19 +29,19 @@
 import { and, eq, isNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { pois, segments, tracks } from '@skipper/db/schema'
-import type { AttributionSnapshot } from '@skipper/db/schema'
+import type { PoiFacts } from '@skipper/db/schema'
 import { announce, assertReady, parseFlags } from './pipeline/ops'
 import { beginJob, finishJob } from './pipeline/job-progress'
 import { ensurePoiOverridesLoaded } from './pipeline/poi-overrides'
 import { narrateStop } from './pipeline/narrate'
-import { toFacts } from './pipeline/select'
+import { resolveStoryGrounding } from './pipeline/select'
 import { synthesizeWithTailRetake } from './pipeline/tts'
 import { roamClipKey, uploadAudio } from './pipeline/storage'
-import { buildStoryFacts, hashFacts, resolvePersonaId } from './pipeline/persist'
+import { resolvePersonaId, storyFactsHash } from './pipeline/persist'
 import { withRetry } from './pipeline/http'
 import { mapLimit } from './pipeline/concurrency'
 import { personaFromKey } from './persona'
-import { NARRATION_CONCURRENCY, TTS_CONCURRENCY } from './config'
+import { NARRATION_CONCURRENCY, NARRATION_FALLBACK_CHARS, TTS_CONCURRENCY } from './config'
 import { estimateTtsUsd, llmSpendLines, llmSpentUsd } from './pipeline/spend'
 import { STORY_MIN_EXTRACT, STORY_TASTE_DENYLIST } from '@skipper/shared'
 
@@ -51,9 +51,9 @@ import { STORY_MIN_EXTRACT, STORY_TASTE_DENYLIST } from '@skipper/shared'
  *  pin lands honestly shorter (capped by its facts) rather than stretched. minExtractStory is the
  *  eligibility floor for a long-form STORY — a pin below it is WAVE-eligible (the 10–20s locked
  *  pass-2 form); until that form ships, the floor simply excludes thin articles (the `--min-extract`
- *  flag overrides). NOTE: the source is now the FULL Wikipedia article from the corpus (deepened at
- *  sweep time), but `fetchDeepExtracts` caps it at ~1200 chars — so reaching the UPPER band may want a
- *  higher exchars cap; validate with a script-only sample before any paid regen. */
+ *  flag overrides). NOTE: an UN-enriched poi grounds on the FULL Wikipedia article from the corpus
+ *  (deepened at sweep time to ENRICHER_INPUT_CHARS, then capped at read time to NARRATION_FALLBACK_CHARS);
+ *  an ENRICHED poi grounds on its curated well instead (resolveStoryGrounding). */
 const ROAM_LENGTH = {
   storyTargetSeconds: 150,
   storyMaxSeconds: 180,
@@ -144,6 +144,9 @@ async function main(): Promise<void> {
     lat: number
     lng: number
     extract: string
+    /** The poi's full facts object — the source for the well↔extract-head grounding switch + the
+     *  grounding fingerprint (resolveStoryGrounding / storyFactsHash), shared with tours. */
+    facts: PoiFacts
     title: string
     url: string
     /** Wikidata qid from the sweep's facts — preserved through the deepen re-upsert so the
@@ -173,6 +176,7 @@ async function main(): Promise<void> {
       lat: r.lat,
       lng: r.lng,
       extract,
+      facts: (r.facts ?? {}) as PoiFacts,
       title: f?.title ?? r.name,
       url: f?.url ?? `https://en.wikipedia.org/?curid=${r.sourceId}`,
       qid: f?.qid ?? null,
@@ -240,13 +244,19 @@ async function main(): Promise<void> {
     /\b(?:on|to|off to) (?:your|the) (?:left|right)\b|\b(?:left|right)(?:-hand)? side\b/i
 
   async function narrateEncounter(c: Candidate): Promise<string> {
+    // Ground on the curated WELL when the place is enriched, else the positional extract head
+    // (the un-enriched fallback — today's behavior, byte-for-byte). Same resolver tours use.
+    const grounding = resolveStoryGrounding(c.facts, {
+      fallbackChars: NARRATION_FALLBACK_CHARS,
+      retrievedAt: (c.factsFetchedAt ?? new Date()).toISOString(),
+    })
     const base = {
       region: regionLabel(c.lat, c.lng),
       corridor: 'Free roam — an unplanned drive, no route',
       stopType: 'story' as const,
       jokeLevel: 'dadpocalypse' as const,
       place: { name: c.name, ...(c.kind ? { kind: c.kind } : {}) },
-      facts: toFacts(c.extract),
+      facts: grounding.facts,
       targetSeconds: ROAM_LENGTH.storyTargetSeconds,
       maxSeconds: ROAM_LENGTH.storyMaxSeconds,
       encounterFrame: true,
@@ -314,21 +324,16 @@ async function main(): Promise<void> {
       `"${c.title}"`,
     )
     const audioUrl = await uploadAudio(roamClipKey(c.poiId, trackId), audio)
-    const attribution: AttributionSnapshot[] = [
-      {
-        source: 'wikipedia',
-        sourceId: String(c.pageId),
-        title: c.title,
-        url: c.url,
-        license: 'CC BY-SA 4.0',
-        retrievedAt: (c.factsFetchedAt ?? new Date()).toISOString(),
-      },
-    ]
-    // Same builder as the poi facts → the clip hash can't diverge from pois.factsHash (else the
-    // freshness check would read every clip as stale).
-    const factsHash = hashFacts(
-      buildStoryFacts({ extract: c.extract, title: c.title, url: c.url, pageId: c.pageId, qid: c.qid }),
-    )
+    // Well-aware credit: an ENRICHED poi credits the well's distinct sources (wikipedia + any
+    // geology/wikidata kept); an un-enriched poi credits the single Wikipedia article (the
+    // extract-head fallback). Same resolver tours use, so attribution can't drift between them.
+    const { attribution } = resolveStoryGrounding(c.facts, {
+      fallbackChars: NARRATION_FALLBACK_CHARS,
+      retrievedAt: (c.factsFetchedAt ?? new Date()).toISOString(),
+    })
+    // The grounding fingerprint = pois.factsHash exactly (storyFactsHash on the SAME facts the
+    // freshness query read), so a freshly-generated clip never reads as stale.
+    const factsHash = storyFactsHash(c.facts)
     // A roam telling = a placeless-of-route segment (tour_id/seq/trigger* null) + ONE story
     // track. Co-commit the segment + the track upsert: the segment is insert-or-keep (PK id;
     // a reused segment already exists), the track upserts on its (segment, form, variant)
