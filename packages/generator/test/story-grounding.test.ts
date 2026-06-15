@@ -74,6 +74,34 @@ describe('storyFactsHash — the grounding fingerprint switch', () => {
   })
 })
 
+// `pois.facts` is jsonb — Postgres reorders object keys on read-back, so a hash stamped from a
+// writer's in-memory object (`pois.facts_hash`) must equal a hash recomputed from the DB read-back
+// (`tracks.facts_hash`) or every read-back-hashed clip reads as perpetually stale. The hash is
+// canonicalized to guarantee that. (These simulate the read-back by shuffling keys.)
+describe('hash is INVARIANT to object key order (the jsonb round-trip contract)', () => {
+  test('hashFacts: same facts, shuffled top-level keys → same hash', () => {
+    const inMemory = { extract: 'A.', title: 'T', url: 'u', pageId: 1, qid: 'Q1' }
+    const readBack = { qid: 'Q1', url: 'u', pageId: 1, title: 'T', extract: 'A.' } // jsonb order
+    expect(hashFacts(readBack)).toBe(hashFacts(inMemory))
+  })
+
+  test('storyFactsHash (enriched): each well span’s keys may reorder → same hash', () => {
+    const inMem: WellSpan = { text: 't', source: 'wikipedia', sourceId: '1', license: 'L', url: 'u' }
+    const readBack = { url: 'u', text: 't', source: 'wikipedia', sourceId: '1', license: 'L' } as WellSpan
+    const a = buildStoryFacts({ extract: 'A.', title: 'T', url: 'u', pageId: 1, well: [inMem], enrichedAt: 'e' })
+    const b = buildStoryFacts({ extract: 'A.', title: 'T', url: 'u', pageId: 1, well: [readBack], enrichedAt: 'e' })
+    expect(storyFactsHash(b)).toBe(storyFactsHash(a))
+  })
+
+  test('well SPAN order stays significant (reading order is not a key reorder)', () => {
+    const s1: WellSpan = { text: 'one', source: 'wikipedia', sourceId: '1', license: 'L' }
+    const s2: WellSpan = { text: 'two', source: 'wikipedia', sourceId: '1', license: 'L' }
+    const a = buildStoryFacts({ extract: 'A.', title: 'T', url: 'u', pageId: 1, well: [s1, s2], enrichedAt: 'e' })
+    const b = buildStoryFacts({ extract: 'A.', title: 'T', url: 'u', pageId: 1, well: [s2, s1], enrichedAt: 'e' })
+    expect(storyFactsHash(b)).not.toBe(storyFactsHash(a))
+  })
+})
+
 describe('wellToAttribution', () => {
   test('one distinct credit per (source, sourceId), license + url + retrievedAt preserved', () => {
     const attr = wellToAttribution(WELL, '2026-06-15T00:00:00Z')

@@ -93,10 +93,41 @@ export async function loadTour(slug: string): Promise<TourShell> {
   return row
 }
 
-/** Hash of a poi's facts — the change-detector for narration staleness. Null when no facts. */
+/**
+ * Deterministic JSON serialization with object keys sorted recursively — so a hash taken over a
+ * facts object is INVARIANT to key ORDER. This is load-bearing because `pois.facts` is `jsonb`:
+ * Postgres does NOT preserve object key order, so the SAME logical facts serialize one way
+ * in-memory (a writer's freshly-built object, stamped onto `pois.facts_hash`) and a DIFFERENT way
+ * read back from the DB (what tours/roam stamp onto `tracks.facts_hash` — e.g. `{text,source,…}`
+ * comes back as `{url,text,…}`). Plain `JSON.stringify` would make those two hashes diverge, so a
+ * read-back-hashed clip would read as perpetually stale against the staleness contract
+ * (`tracks.facts_hash IS DISTINCT FROM pois.facts_hash`). Sorting keys normalizes both sides to one
+ * canonical form. ARRAY order is PRESERVED (significant — the well's spans are in reading order);
+ * only object keys are reordered. Mirrors `JSON.stringify`'s treatment of `undefined` (object
+ * entries dropped, array holes → null) so an omitted-vs-undefined key never shifts the hash.
+ */
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null'
+  if (Array.isArray(value)) {
+    return `[${value.map((v) => (v === undefined ? 'null' : stableStringify(v))).join(',')}]`
+  }
+  const obj = value as Record<string, unknown>
+  const parts: string[] = []
+  for (const k of Object.keys(obj).sort()) {
+    const v = obj[k]
+    if (v === undefined) continue // JSON.stringify omits undefined-valued object entries
+    parts.push(`${JSON.stringify(k)}:${stableStringify(v)}`)
+  }
+  return `{${parts.join(',')}}`
+}
+
+/** Order-invariant hash of a poi's facts — the change-detector for narration staleness. Null when
+ *  no facts. Canonicalizes via `stableStringify` so the hash survives the `pois.facts` jsonb
+ *  round-trip: a writer's in-memory `pois.facts_hash` equals a reader's read-back `tracks.facts_hash`
+ *  for the same content (the staleness contract compares those two STORED columns by inequality). */
 export function hashFacts(facts: PoiFacts | null): string | null {
   if (!facts) return null
-  return createHash('sha256').update(JSON.stringify(facts)).digest('hex')
+  return createHash('sha256').update(stableStringify(facts)).digest('hex')
 }
 
 /**
@@ -108,14 +139,16 @@ export function hashFacts(facts: PoiFacts | null): string | null {
  *     input change" detector.
  *   - UN-ENRICHED (no well) → hash the whole facts object (today's basis, `hashFacts`), so existing
  *     rows + the extract-head fallback keep their current hash exactly (behavior-preserving until a
- *     paid enrich run). Both facts WRITERS (sweep/enrich) and READERS (tours/roam) call THIS, so a
- *     clip's stamped hash can never diverge from `pois.facts_hash`.
+ *     paid enrich run). Both facts WRITERS (sweep/enrich) and READERS (tours/roam) call THIS, and the
+ *     hash is canonicalized (`stableStringify`), so a clip's stamped hash can never diverge from
+ *     `pois.facts_hash` — even though one side hashes an in-memory object and the other a jsonb
+ *     read-back (the well's own span keys reorder on read-back too, so the well branch canonicalizes).
  */
 export function storyFactsHash(facts: PoiFacts | null): string | null {
   if (!facts) return null
   const well = facts.well as WellSpan[] | undefined
   if (Array.isArray(well) && well.length > 0) {
-    return createHash('sha256').update(JSON.stringify(well)).digest('hex')
+    return createHash('sha256').update(stableStringify(well)).digest('hex')
   }
   return hashFacts(facts)
 }
@@ -141,13 +174,14 @@ export function wellToAttribution(well: WellSpan[], retrievedAt: string): Attrib
 }
 
 /** The canonical `pois.facts` object for a STORY place — the ONE builder every facts writer uses (the
- *  region sweep, refetch-poi, and the tour + roam deepen) so the key ORDER is identical across all of
- *  them. Order is hash-significant (hashFacts = sha256 of JSON.stringify), so an unchanged article
- *  hashes the SAME no matter which writer last touched the row, and the Wikidata `qid` linkage
- *  (region-corpus rebuilds tour candidates from it) is preserved BY CONSTRUCTION — it can't be
- *  silently dropped again (the 2026-06-15 deepen bug). `qid` is OMITTED when absent (never stored as
- *  null), matching the historical shape so existing hashes don't shift. (When the dual-extract
- *  redesign lands, `extractFull` slots in here as the one place that knows the key order.) */
+ *  region sweep, refetch-poi, and the tour + roam deepen) so the stored shape is consistent. Key
+ *  ORDER no longer affects the hash (`hashFacts` canonicalizes via `stableStringify`, since
+ *  `pois.facts` is jsonb and reorders keys on read-back anyway), but key PRESENCE still does — so
+ *  `qid` is OMITTED when absent (never stored as null) and an empty well drops `well`/`enrichedAt`
+ *  entirely, matching the historical shape so an un-enriched row's hash is unchanged. The Wikidata
+ *  `qid` linkage (region-corpus rebuilds tour candidates from it) is preserved BY CONSTRUCTION — it
+ *  can't be silently dropped again (the 2026-06-15 deepen bug). (When the dual-extract redesign
+ *  lands, `extractFull` slots in here as the one place that knows the shape.) */
 export function buildStoryFacts(input: {
   extract: string
   title: string
@@ -155,9 +189,10 @@ export function buildStoryFacts(input: {
   pageId: number
   qid?: string | null
   /** The curated narration sheet, set by the corpus `enrich` step. Omitted (with `enrichedAt`)
-   *  for an un-enriched row, so its object is byte-identical to the historical shape — its
-   *  `hashFacts` is unchanged. `well`/`enrichedAt` sit right after `extract` (the spec §3 shape);
-   *  ordering only matters for the un-enriched `hashFacts` path, and there they're both absent. */
+   *  for an un-enriched row, so its object matches the historical shape — and since both keys are
+   *  ABSENT (not null), its `hashFacts` is unchanged. `well`/`enrichedAt` sit right after `extract`
+   *  cosmetically (the spec §3 shape); key order no longer affects the hash (`stableStringify`
+   *  canonicalizes), but their PRESENCE does. */
   well?: WellSpan[] | null
   enrichedAt?: string | null
 }): PoiFacts {
