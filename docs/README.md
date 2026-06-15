@@ -81,6 +81,9 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   plant in intro → evidence in stops → land at the payoff); unbuilt, generation-only.
 - [scenic-stops-spec.md](specs/scenic-stops-spec.md) — deliberately adding scenic stops; unblocked
   but partially overtaken by the pacing rework — re-ground before building.
+- [corpus-enrichment-spec.md](specs/corpus-enrichment-spec.md) — a paid `enrich` step that scouts the
+  POI facts ONCE at the corpus (verbatim selection → a curated "fact well" tours + roam share); the
+  well becomes the narration bound, letting the raw-extract cap drop. Unbuilt, gated on greenlight + ear-test.
 - [admin-ops-console-spec.md](specs/admin-ops-console-spec.md) — **builder infra**: cloud-execute the
   tour-ops CLIs (generate/patch/resynth/sweep) as **Cloud Run Jobs** (v0), then a deployed `apps/admin`
   (Vite + Hono) behind **Google IAP** with a `gen_jobs` record + ear-pass/eval monitor (v1);
@@ -107,6 +110,9 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
 - [roam-first-region-expansion.md](ideas/roam-first-region-expansion.md) — the beachhead
   inversion: roam (a bbox + ~$15) opens a region, the demand heatmap picks the tour to build;
   probed Yosemite/Moab/Big Sur corpora for $0 on capture day (2026-06-11).
+- [corpus-enrichment.md](ideas/corpus-enrichment.md) — enrich the POI facts ONCE at the corpus
+  (a paid `enrich` step) instead of per-tour-stop, so tours + roam share it; the curated "fact
+  well" becomes the narration bound, letting the raw-extract cap drop (2026-06-15, pre-spec).
 
 The rest are post-MVP features, gated behind the proven phone player:
 - [drive-complete-moment.md](ideas/drive-complete-moment.md) — the payoff beat as motion + sound
