@@ -5,7 +5,7 @@ import { ChevronDown, ChevronRight, MapPin, RefreshCw, Zap } from 'lucide-react'
 import { api, type PoiRow } from '@/lib/api'
 import { errMsg } from '@/lib/format'
 import { PageHeader } from '@/components/PageHeader'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Callout } from '@/components/ui/callout'
@@ -106,7 +106,7 @@ export function RoamView() {
         {coverage.length === 0 ? (
           <EmptyState icon={MapPin} className="rounded-xl border bg-muted/30">No regions with POI data yet.</EmptyState>
         ) : (
-          <CoverageGrid coverage={coverage} onGenerate={(r) => void generateRoam(r)} />
+          <CoverageTable coverage={coverage} onGenerate={(r) => void generateRoam(r)} />
         )}
       </section>
 
@@ -134,74 +134,76 @@ export function RoamView() {
   )
 }
 
-/* ── COVERAGE GRID ── */
+/* ── COVERAGE TABLE ── */
 
-function CoverageGrid({
+function CoverageTable({
   coverage,
   onGenerate,
 }: {
   coverage: RegionCoverage[]
   onGenerate: (r: RegionCoverage) => void
 }) {
-  const maxTotal = Math.max(...coverage.map((r) => r.total), 1)
-
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
-      {coverage.map((r) => {
-        const m = DENSITY_META[r.density]
-        const clipPct = r.total > 0 ? (r.withClips / r.total) * 100 : 0
-        const totalPct = (r.total / maxTotal) * 100
+    <div className="overflow-hidden rounded-xl border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Region</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead className="text-right">Total POIs</TableHead>
+            <TableHead className="text-right">Roam clips</TableHead>
+            <TableHead className="w-44">Coverage</TableHead>
+            <TableHead className="w-px" />
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {coverage.map((r) => {
+            const m = DENSITY_META[r.density]
+            const clipPct = r.total > 0 ? (r.withClips / r.total) * 100 : 0
 
-        return (
-          <Card key={r.regionSlug}>
-            <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
-              <CardTitle>{r.regionName}</CardTitle>
-              <div className="flex items-center gap-1.5">
-                <Badge variant={m.variant}>{m.label}</Badge>
-                {r.roamReady && <Badge variant="success">Roam enabled</Badge>}
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-3 gap-3">
-                <CoverageStat label="Total POIs" value={r.total} />
-                <CoverageStat label="With roam clips" value={r.withClips} dim={r.withClips === 0} />
-                <CoverageStat label="Coverage" value={r.withClips > 0 ? `${Math.round(clipPct)}%` : '—'} dim={r.withClips === 0} />
-              </div>
-
-              <div className="space-y-1">
-                <div className="relative h-1.5 overflow-hidden rounded-full bg-muted">
-                  <div className="absolute inset-y-0 left-0 rounded-full bg-border" style={{ width: `${totalPct}%` }} />
-                  <div
-                    className={cn(
-                      'absolute inset-y-0 left-0 rounded-full',
-                      r.roamReady ? 'bg-emerald-500' : r.density === 'thin' ? 'bg-amber-500' : 'bg-muted-foreground/40',
-                    )}
-                    style={{ width: `${clipPct}%` }}
-                  />
-                </div>
-                <div className="font-mono text-xs text-muted-foreground">{m.desc}</div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Button variant="secondary" size="sm" onClick={() => onGenerate(r)}>
-                  <Zap className="h-3.5 w-3.5" /> Generate roam
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )
-      })}
-    </div>
-  )
-}
-
-function CoverageStat({ label, value, dim }: { label: string; value: string | number; dim?: boolean }) {
-  return (
-    <div>
-      <div className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className={cn('font-mono text-lg tracking-tight', dim ? 'text-muted-foreground' : 'font-semibold')}>
-        {value}
-      </div>
+            return (
+              <TableRow key={r.regionSlug}>
+                <TableCell className="font-medium">{r.regionName}</TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-1.5">
+                    <Badge variant={m.variant} title={m.desc}>{m.label}</Badge>
+                    {r.roamReady && <Badge variant="success">Roam enabled</Badge>}
+                  </div>
+                </TableCell>
+                <TableCell className="text-right font-mono tabular-nums">{r.total}</TableCell>
+                <TableCell
+                  className={cn('text-right font-mono tabular-nums', r.withClips === 0 && 'text-muted-foreground')}
+                >
+                  {r.withClips}
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-2.5">
+                    <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className={cn(
+                          'absolute inset-y-0 left-0 rounded-full',
+                          r.roamReady ? 'bg-emerald-500' : r.density === 'thin' ? 'bg-amber-500' : 'bg-muted-foreground/40',
+                        )}
+                        style={{ width: `${clipPct}%` }}
+                      />
+                    </div>
+                    <span
+                      className={cn('w-9 shrink-0 text-right font-mono text-xs', r.withClips === 0 && 'text-muted-foreground')}
+                    >
+                      {r.withClips > 0 ? `${Math.round(clipPct)}%` : '—'}
+                    </span>
+                  </div>
+                </TableCell>
+                <TableCell className="py-2 text-right">
+                  <Button variant="secondary" size="sm" onClick={() => onGenerate(r)}>
+                    <Zap className="h-3.5 w-3.5" /> Generate roam
+                  </Button>
+                </TableCell>
+              </TableRow>
+            )
+          })}
+        </TableBody>
+      </Table>
     </div>
   )
 }
