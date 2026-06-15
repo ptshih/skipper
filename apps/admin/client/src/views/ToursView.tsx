@@ -14,6 +14,7 @@ import { Callout } from '@/components/ui/callout'
 import { SearchInput } from '@/components/ui/search-input'
 import { Segmented } from '@/components/ui/segmented'
 import { EmptyState } from '@/components/ui/empty-state'
+import { TableSkeletonRows } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 
 type SortKey = 'headline' | 'regionName' | 'status' | 'stops' | 'distanceMeters' | 'durationSeconds' | 'eval' | 'updatedAt'
@@ -79,7 +80,7 @@ export function ToursView() {
   const [region, setRegion] = useState('all')
   const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'updatedAt', dir: 'desc' })
 
-  const { data: tours = [], error } = useQuery({
+  const { data: tours = [], error, isPending } = useQuery({
     queryKey: ['tours'],
     queryFn: async () => (await api.tours()).tours as TourCardEx[],
   })
@@ -229,6 +230,7 @@ export function ToursView() {
               </TableRow>
             </TableHeader>
             <TableBody>
+              {isPending && <TableSkeletonRows rows={6} cols={8} />}
               {view.map((t) => (
                 <TableRow key={t.id} className="cursor-pointer" onClick={() => navigate({ to: '/tours/$id', params: { id: t.id } })}>
                   <TableCell>
@@ -269,7 +271,7 @@ export function ToursView() {
                   <TableCell className="text-right text-muted-foreground" title={t.updatedAt}>{timeAgo(t.updatedAt)}</TableCell>
                 </TableRow>
               ))}
-              {view.length === 0 && (
+              {!isPending && view.length === 0 && (
                 <TableRow className="hover:bg-transparent">
                   <TableCell colSpan={8}>
                     <EmptyState icon={Map}>No tours match these filters.</EmptyState>

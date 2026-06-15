@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Callout } from '@/components/ui/callout'
 import { SectionLabel } from '@/components/ui/section-label'
+import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 
 const DIMS: [string, string][] = [
@@ -330,6 +331,41 @@ function RunHistory({ runs, currentId }: { runs: EvalRunSummary[]; currentId?: s
   )
 }
 
+// The detail page's silhouette while the tour loads — a header block (title + badges + meta),
+// the route-map panel, and a few stop rows — so the page reveals in place instead of snapping
+// from a one-line "Loading…".
+function TourDetailSkeleton() {
+  return (
+    <div>
+      <Skeleton className="mb-3 h-5 w-16" />
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4 border-b border-border pb-5">
+        <div className="min-w-0 space-y-2">
+          <div className="flex items-center gap-2.5">
+            <Skeleton className="h-7 w-64" />
+            <Skeleton className="h-5 w-16 rounded-full" />
+          </div>
+          <Skeleton className="h-4 w-80 max-w-full" />
+          <Skeleton className="h-3 w-96 max-w-full" />
+        </div>
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-8 w-24" />
+          <Skeleton className="h-8 w-24" />
+        </div>
+      </div>
+      <Skeleton className="mb-6 h-56 w-full rounded-xl" />
+      <div className="space-y-3 rounded-xl border p-4">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-3">
+            <Skeleton className="h-8 w-8 rounded-full" />
+            <Skeleton className="h-4 flex-1 max-w-md" />
+            <Skeleton className="h-4 w-16" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function TourDetailView() {
   const { id } = useParams({ strict: false })
   const navigate = useNavigate()
@@ -359,7 +395,7 @@ export function TourDetailView() {
   }
 
   if (error) return <Callout variant="error">{errMsg(error)}</Callout>
-  if (!data) return <div className="text-sm text-muted-foreground">Loading…</div>
+  if (!data) return <TourDetailSkeleton />
 
   const { tour, region, stops, brackets, eval: ev } = data
   const regenerate = () =>

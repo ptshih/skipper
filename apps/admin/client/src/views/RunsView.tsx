@@ -20,6 +20,7 @@ import { Callout } from '@/components/ui/callout'
 import { SearchInput } from '@/components/ui/search-input'
 import { Segmented } from '@/components/ui/segmented'
 import { EmptyState } from '@/components/ui/empty-state'
+import { TableSkeletonRows } from '@/components/ui/skeleton'
 import { SectionLabel } from '@/components/ui/section-label'
 import {
   Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle,
@@ -55,7 +56,7 @@ export function RunsView() {
   const [drawerRun, setDrawerRun] = useState<RunEvent | null>(null)
 
   // Auto-refreshing list — the setInterval poll is now a TanStack Query refetchInterval.
-  const { data: runs = [], error } = useQuery({
+  const { data: runs = [], error, isPending } = useQuery({
     queryKey: ['runs'],
     queryFn: async () => (await api.runs()).runs,
     refetchInterval: 15000,
@@ -199,6 +200,7 @@ export function RunsView() {
               </TableRow>
             </TableHeader>
             <TableBody>
+              {isPending && <TableSkeletonRows rows={6} cols={7} />}
               {filtered.map((r) => {
                 const km = KIND_META[r.kind]
                 const Icon = km?.icon ?? Activity
@@ -258,7 +260,7 @@ export function RunsView() {
                   </TableRow>
                 )
               })}
-              {filtered.length === 0 && (
+              {!isPending && filtered.length === 0 && (
                 <TableRow className="hover:bg-transparent">
                   <TableCell colSpan={7}>
                     <EmptyState icon={Search}>No runs match these filters.</EmptyState>

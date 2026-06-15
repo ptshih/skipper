@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Callout } from '@/components/ui/callout'
 import { EmptyState } from '@/components/ui/empty-state'
+import { TableSkeletonRows } from '@/components/ui/skeleton'
 import {
   Dialog,
   DialogContent,
@@ -32,7 +33,7 @@ const CONFIDENCE_META = {
 export function RegionsView() {
   const qc = useQueryClient()
   const [dialog, setDialog] = useState<DialogMode | null>(null)
-  const { data: regions = [], error: err } = useQuery({ queryKey: ['regions'], queryFn: async () => (await api.regions()).regions })
+  const { data: regions = [], error: err, isPending } = useQuery({ queryKey: ['regions'], queryFn: async () => (await api.regions()).regions })
 
   return (
     <div className="space-y-6">
@@ -70,6 +71,7 @@ export function RegionsView() {
             </TableRow>
           </TableHeader>
           <TableBody>
+            {isPending && <TableSkeletonRows rows={4} cols={4} />}
             {regions.map((r) => (
               <TableRow key={r.slug}>
                 <TableCell className="font-mono text-sm">{r.slug}</TableCell>
@@ -92,7 +94,7 @@ export function RegionsView() {
                 </TableCell>
               </TableRow>
             ))}
-            {regions.length === 0 && !err && (
+            {!isPending && regions.length === 0 && !err && (
               <TableRow className="hover:bg-transparent">
                 <TableCell colSpan={4}>
                   <EmptyState icon={Layers}>No regions yet — add one to get started.</EmptyState>
