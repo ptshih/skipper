@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Animated, FlatList, RefreshControl, StyleSheet, View } from 'react-native'
+import { Animated, FlatList, RefreshControl, StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Stack, useFocusEffect, useRouter } from 'expo-router'
 import { errorMessage, listTours, type TourList } from '@/lib/api'
@@ -10,7 +10,7 @@ import { useDrivesFilter } from '@/lib/drives-filter'
 import { deriveRegions, filterByRegion } from '@/lib/regions'
 import { useTheme } from '@/theme'
 import { space } from '@/theme/tokens'
-import { Badge, Button, Card, Divider, EdgeFade, FilterChip, HeaderIconButton, RouteTrack, Screen, Sunburst, Text, voice } from '@/ui'
+import { Badge, Button, Card, Divider, EdgeFade, FilterChip, HeaderIconButton, RouteTrack, Screen, Skeleton, SkeletonGroup, Sunburst, Text, voice } from '@/ui'
 
 // Browse drives — anonymous-friendly. A tour is the whole self-contained drive now, so a
 // card opens straight into the drive (gated). The top is a framed travel-poster hero with
@@ -263,15 +263,17 @@ export default function DrivesScreen() {
       />
 
       {loading ? (
-        <>
-          {hero}
-          <View style={styles.loading}>
-            <ActivityIndicator color={theme.colors.accent} />
-            <Text variant="dim" color="inkFaint" align="center">
-              {voice.loading.drives}
-            </Text>
-          </View>
-        </>
+        // Mirror the real list: the static chrome (hero + both mode sections) renders for
+        // real — roam stays tappable while drives load — and only the data-dependent cards
+        // are skeletoned, so the screen reveals in place instead of snapping from a spinner.
+        <View style={styles.flex}>
+          {listHeader}
+          <SkeletonGroup accessibilityLabel={voice.loading.drives} style={styles.skeletonList}>
+            <DriveCardSkeleton />
+            <DriveCardSkeleton />
+            <DriveCardSkeleton />
+          </SkeletonGroup>
+        </View>
       ) : error ? (
         <>
           {hero}
@@ -374,6 +376,21 @@ export default function DrivesScreen() {
   )
 }
 
+// A drive card's silhouette — title bar, the start→end meta line, a teaser line. Inert; the
+// enclosing SkeletonGroup owns the pulse. Wrapped in `row` so it sits on the same gutter as a
+// real card.
+function DriveCardSkeleton() {
+  return (
+    <View style={styles.row}>
+      <Card>
+        <Skeleton width="72%" height={20} />
+        <Skeleton width="48%" height={12} style={styles.skLine} />
+        <Skeleton width="90%" height={14} style={styles.skLine} />
+      </Card>
+    </View>
+  )
+}
+
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   // Hero + seam each carry their own horizontal gutter so they line up whether rendered
@@ -395,6 +412,9 @@ const styles = StyleSheet.create({
   sectionBlurb: { marginBottom: space.md },
   list: { paddingVertical: space.gutter, gap: space.md },
   row: { paddingHorizontal: space.gutter },
+  // The skeleton drive cards under the (real) section header while the catalog loads.
+  skeletonList: { paddingTop: space.md, gap: space.md },
+  skLine: { marginTop: space.sm },
   metaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space.sm, marginTop: space.xs },
   summary: { marginTop: space.xs },
   offlineNote: { marginTop: space.sm },

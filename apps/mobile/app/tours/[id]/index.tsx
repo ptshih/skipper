@@ -22,6 +22,8 @@ import {
   Icon,
   RouteTrack,
   Screen,
+  Skeleton,
+  SkeletonGroup,
   StateView,
   StopList,
   Text,
@@ -228,7 +230,7 @@ export default function TourScreen() {
     }, [load, id]),
   )
 
-  if (loading) return <StateView title="Tour" loading message={voice.loading.tour} />
+  if (loading) return <TourDetailSkeleton />
   if (needsAccount)
     // A download 401 swaps the whole detail for the gate; "Keep browsing" dismisses BACK to the
     // tour (clears the gate) rather than the old back() that popped all the way to home.
@@ -390,6 +392,47 @@ export default function TourScreen() {
   )
 }
 
+// The trailhead-placard silhouette shown while the detail loads — mirrors the real layout
+// (placard → blurb → CTA → route list) so the screen reveals in place. Reuses the screen's own
+// layout styles so the skeleton lines sit exactly where the real text will. The enclosing
+// SkeletonGroup owns the single pulse; the persona line rides as the VoiceOver label.
+function TourDetailSkeleton() {
+  return (
+    <Screen scroll padded edges={['bottom']}>
+      <Stack.Screen options={{ title: 'Tour' }} />
+      <SkeletonGroup accessibilityLabel={voice.loading.tour} style={styles.body}>
+        <Card framed style={styles.placard}>
+          <Skeleton width="40%" height={12} />
+          <Skeleton width="80%" height={28} />
+          <Skeleton width="60%" height={12} />
+          <View style={styles.trail}>
+            <Skeleton width="100%" height={6} radius="pill" />
+          </View>
+          <Divider dashed />
+          <Skeleton width="46%" height={14} />
+        </Card>
+        <View style={styles.skLines}>
+          <Skeleton width="100%" height={14} />
+          <Skeleton width="92%" height={14} />
+        </View>
+        <View style={styles.ctaGroup}>
+          <Skeleton width="100%" height={48} radius="md" />
+          <Skeleton width="56%" height={12} style={styles.skCtaCaption} />
+        </View>
+        <Skeleton width="40%" height={12} />
+        <Card>
+          <View style={styles.skLines}>
+            <Skeleton width="70%" height={14} />
+            <Skeleton width="64%" height={14} />
+            <Skeleton width="72%" height={14} />
+            <Skeleton width="58%" height={14} />
+          </View>
+        </Card>
+      </SkeletonGroup>
+    </Screen>
+  )
+}
+
 const styles = StyleSheet.create({
   body: { gap: space.md },
   placard: { gap: space.sm },
@@ -403,4 +446,6 @@ const styles = StyleSheet.create({
   },
   savedChip: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   ctaGroup: { gap: space.xs }, // the bold Start CTA + its tucked caption read as one unit
+  skLines: { gap: space.sm }, // a cluster of skeleton lines (a blurb paragraph / route rows)
+  skCtaCaption: { alignSelf: 'center' },
 })
