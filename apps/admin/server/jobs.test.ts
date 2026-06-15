@@ -35,16 +35,14 @@ describe('buildJobArgs — enrich_region (the corpus enrich op)', () => {
     expect(r.args).toContain('--apply')
   })
 
-  test('threads thin-only / model / bbox / limit flags', () => {
+  test('threads model / bbox / limit flags', () => {
     const r = buildJobArgs({
       kind: 'enrich_region',
       apply: true,
-      thinOnly: true,
       model: 'opus',
       bbox: '-120,38,-119,39',
       limit: 5,
     })
-    expect(r.args).toContain('--thin-only')
     expect(r.args).toContain('--model=opus')
     expect(r.args).toContain('--bbox=-120,38,-119,39')
     expect(r.args).toContain('--limit=5')

@@ -167,8 +167,6 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     const apply = body.apply === true
     const args: string[] = [script]
     if (body.bbox) args.push(`--bbox=${str(body.bbox)}`)
-    if (body.thinOnly === true) args.push('--thin-only')
-    if (body.thinMax) args.push(`--thin-max=${Number(body.thinMax)}`)
     if (body.limit) args.push(`--limit=${Number(body.limit)}`)
     if (body.force) args.push('--force')
     if (body.model) args.push(`--model=${str(body.model)}`)

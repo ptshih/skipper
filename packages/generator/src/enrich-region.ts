@@ -19,8 +19,6 @@
 // Usage:
 //   dotenvx run -f .env.development -- bun packages/generator/src/enrich-region.ts
 //   ... --apply                  run it (spends Anthropic; writes pois.facts.well + facts_hash)
-//   ... --thin-only              only thin articles (< --thin-max chars) — the cheapest, highest-ROI slice
-//   ... --thin-max 2500          the thin/rich boundary (with --thin-only; default 2500)
 //   ... --limit 5                cap how many places to enrich (a smoke run)
 //   ... --force                  re-enrich places that already have a well
 //   ... --model opus             A/B the calibration tier vs the default (sonnet)
@@ -49,8 +47,6 @@ import { classifyStoryEligibility } from '@skipper/shared'
 /** Soft narration length the well is sized for — the LONG-FORM target (roam's band), since the well
  *  is shared and a tour can always read fewer spans. Passed to the builder as guidance, not a cap. */
 const ENRICH_TARGET_SECONDS = 150
-/** Default thin/rich boundary (chars of the full extract) for --thin-only. Ear-tunable. */
-const DEFAULT_THIN_MAX = 2_500
 /** Default corpus bbox — Tahoe–Reno corridor (matches sweep-region-pois.ts / generate-roam.ts). */
 const DEFAULT_BBOX = { swLng: -120.25, swLat: 38.86, neLng: -119.55, neLat: 39.65 }
 /** Rough USD per place, by model (for the pre-run estimate only; the real tally prints after). */
@@ -62,12 +58,10 @@ function regionLabel(lat: number, lng: number): string {
   return 'Lake Tahoe'
 }
 
-const flags = parseFlags(process.argv.slice(2), { valueFlags: ['bbox', 'limit', 'thin-max', 'model', 'max-cost'] })
+const flags = parseFlags(process.argv.slice(2), { valueFlags: ['bbox', 'limit', 'model', 'max-cost'] })
 const apply = flags.has('apply')
-const thinOnly = flags.has('thin-only')
 const force = flags.has('force')
 const limit = Number(flags.value('limit') ?? Infinity)
-const thinMax = Number(flags.value('thin-max') ?? DEFAULT_THIN_MAX)
 const maxCostUsd = (() => {
   const v = Number(flags.value('max-cost'))
   return Number.isFinite(v) && v > 0 ? v : Infinity
@@ -135,7 +129,6 @@ async function main(): Promise<void> {
     // wikipedia source + not taste-denied + extract ≥ the story floor. Measured on the FULL extract.
     if (classifyStoryEligibility({ source: r.source, name: r.name, leadExtractChars: extract.length }) !== 'eligible')
       continue
-    if (thinOnly && extract.length >= thinMax) continue
     const well = facts.well
     const hasWell = Array.isArray(well) && well.length > 0
     candidates.push({
@@ -158,8 +151,7 @@ async function main(): Promise<void> {
   const queue = candidates.filter((c) => !c.hasWell || force).slice(0, limit)
 
   console.log(
-    `Corpus: ${candidates.length} eligible story pois in bbox` +
-      `${thinOnly ? ` (thin-only, < ${thinMax} chars)` : ''} — ` +
+    `Corpus: ${candidates.length} eligible story pois in bbox — ` +
       `${skipped.length} already enriched (skipped), ${queue.length} to enrich.\n`,
   )
   for (const c of queue) console.log(`  ${String(c.extract.length).padStart(6)}  ${c.name}`)
@@ -182,7 +174,7 @@ async function main(): Promise<void> {
 
   if (estUsd > maxCostUsd) {
     console.error(
-      `⛔ Estimated spend ~$${estUsd.toFixed(2)} exceeds --max-cost=$${maxCostUsd.toFixed(2)} — aborting before any spend. Narrow with --limit/--thin-only or raise --max-cost.`,
+      `⛔ Estimated spend ~$${estUsd.toFixed(2)} exceeds --max-cost=$${maxCostUsd.toFixed(2)} — aborting before any spend. Narrow with --limit or raise --max-cost.`,
     )
     return
   }

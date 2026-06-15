@@ -8,7 +8,7 @@
 /** A story-grade place needs at least this many chars of its (FULL) Wikipedia article — "enough to
  *  say". `facts.extract` IS the full article now (the region sweep deepens at discovery time), so this
  *  measures real article richness, not a lead proxy. Below it a place is wave-eligible only (the
- *  10–20s form, not yet shipped), so today the floor simply excludes thin articles. STARTING value,
+ *  10–20s form, not yet shipped), so today the floor simply excludes stub articles. STARTING value,
  *  ear-tunable (like the LUFS target): the deep fetch caps articles at ~1200 chars (`fetchDeepExtracts`
  *  exchars), so the meaningful floor lives in (stub, ~1200). `generate-roam --min-extract` overrides. */
 export const STORY_MIN_EXTRACT = 800
@@ -31,7 +31,7 @@ export type StoryEligibility =
   | 'eligible' // passes every gate → a tour OR a roam encounter can tell it
   | 'filtered-source' // not a wikipedia story source (a wikidata scenic pin — wave layer later)
   | 'filtered-taste' // title hits the taste denylist
-  | 'filtered-thin' // wikipedia, but the lead extract is below the story floor
+  | 'filtered-stub' // wikipedia, but the article is below the story floor (a stub — too short to narrate)
 
 export function classifyStoryEligibility(p: {
   source: string
@@ -40,6 +40,6 @@ export function classifyStoryEligibility(p: {
 }): StoryEligibility {
   if (p.source !== 'wikipedia') return 'filtered-source'
   if (STORY_TASTE_DENYLIST.test(p.name)) return 'filtered-taste'
-  if (p.leadExtractChars < STORY_MIN_EXTRACT) return 'filtered-thin'
+  if (p.leadExtractChars < STORY_MIN_EXTRACT) return 'filtered-stub'
   return 'eligible'
 }

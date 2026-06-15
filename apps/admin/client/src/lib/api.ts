@@ -241,7 +241,7 @@ export interface RoamClipDetail {
 
 /** Story-eligibility — whether a POI is story-grade narration material (a POI property; tours AND roam
  *  both draw from it). Mirrors `StoryEligibility` in @skipper/shared (server computes it). */
-export type StoryEligibility = 'eligible' | 'filtered-source' | 'filtered-taste' | 'filtered-thin'
+export type StoryEligibility = 'eligible' | 'filtered-source' | 'filtered-taste' | 'filtered-stub'
 
 /** Roam-specific axis: does a roam clip exist for this POI, and is it on the POI's current facts. */
 export type RoamClipStatus = 'none' | 'fresh' | 'stale'

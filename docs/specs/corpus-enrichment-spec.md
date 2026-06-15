@@ -123,7 +123,9 @@ after an override carries the correction into the well.
 
 - **Scope — full corpus vs thin-only.** Enrich ALL eligible (~315, ~$15–40) or only THIN articles
   (full extract < N, where enrichment's marginal value is highest)? *Recommendation: thin-only first*
-  (cheapest, best ROI), expand if the ear wants it.
+  (cheapest, best ROI), expand if the ear wants it. **(Update 2026-06-15: built both, then thin-only was
+  REMOVED — length is a cost proxy, not a product axis; `--limit`/`--max-cost` are the cost knobs. See
+  `docs/decisions/corpus-enrichment.md`.)**
 - **Enricher-input cap.** Uncap `extract` entirely, or a generous cap (~12–20k chars) to bound the
   one-time enricher read on huge city articles? *Recommendation: generous cap (~12k).*
 - **Well "budget" — a SELECTION TARGET, not a hard cap.** The well's bound is the enricher's judgment
@@ -157,5 +159,5 @@ without a `well` fall back to the positional extract head until enriched.
 
 1. **Validate** (free/cheap): ear-test current richer-extract roam clips; confirm enrichment is
    wanted. If not → shelve, keep this spec.
-2. **Thin-only enrich** of roam's corpus (cheapest slice), roam reads the well. Ear-test.
+2. **Smoke enrich** of roam's corpus (`--limit` a few — cheapest slice), roam reads the well. Ear-test.
 3. Full corpus + tour integration (well + route-geology) + drop the raw cap.

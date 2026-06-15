@@ -48,7 +48,7 @@ const STORY_ELIGIBILITY_META: Record<StoryEligibility, { label: string; variant:
   eligible: { label: 'eligible', variant: 'default', hint: 'Story-grade — a tour or roam telling can use it' },
   'filtered-source': { label: 'scenic pin', variant: 'outline', hint: 'Wikidata pin — not a story source (wave layer later)' },
   'filtered-taste': { label: 'taste-gate', variant: 'outline', hint: 'Title hits the taste denylist' },
-  'filtered-thin': { label: 'thin', variant: 'secondary', hint: 'Full article below the story floor (800 chars)' },
+  'filtered-stub': { label: 'stub', variant: 'secondary', hint: 'Full article below the story floor (800 chars)' },
 }
 
 /** The SEPARATE roam-specific axis — shown as a secondary badge only when a roam clip exists. */
@@ -207,12 +207,10 @@ function DiscoverDialog({
 
 /* ── ENRICH (the corpus fact-well step) ── */
 
-type EnrichScope = 'thin' | 'full'
-
-// A focused shadcn Dialog for the corpus `enrich` step (enrich_region): pick a region + scope, then
+// A focused shadcn Dialog for the corpus `enrich` step (enrich_region): pick a region, then
 // Preview (free dry-run — NO model calls, prints the count + a cost estimate) or Enrich (apply,
 // SPENDS Anthropic; no TTS). The well it builds (pois.facts.well) is read by BOTH tours + roam, so
-// enrich ONCE between Discover and Generate. Thin-only is the cheapest, highest-ROI first pass.
+// enrich ONCE between Discover and Generate.
 function EnrichDialog({
   open,
   onOpenChange,
@@ -223,7 +221,6 @@ function EnrichDialog({
   onSubmitted: () => void
 }) {
   const [regionSlug, setRegionSlug] = useState('')
-  const [scope, setScope] = useState<EnrichScope>('thin')
   const { data: regions = [], error: loadErr } = useQuery({
     queryKey: ['regions'],
     queryFn: async () => (await api.regions()).regions,
@@ -237,7 +234,6 @@ function EnrichDialog({
       return api.createJob({
         kind: 'enrich_region',
         ...(bbox ? { bbox } : {}),
-        thinOnly: scope === 'thin',
         apply,
         ...(apply ? { confirm: true } : {}), // apply SPENDS → the server's typed confirm gate
       })
@@ -276,23 +272,6 @@ function EnrichDialog({
               ))}
             </SelectContent>
           </Select>
-        </div>
-
-        <div className="space-y-2">
-          <Label>Scope</Label>
-          <Segmented
-            value={scope}
-            onChange={setScope}
-            options={[
-              { value: 'thin', label: 'Thin only' },
-              { value: 'full', label: 'Full corpus' },
-            ]}
-          />
-          <p className="text-xs text-muted-foreground">
-            {scope === 'thin'
-              ? 'Only thin articles — the cheapest slice, where enrichment helps most (the recommended first pass).'
-              : 'Every eligible story POI in the region — the full one-time spend.'}
-          </p>
         </div>
 
         <div className="rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">

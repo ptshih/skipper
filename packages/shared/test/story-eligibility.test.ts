@@ -46,10 +46,10 @@ describe('classifyStoryEligibility', () => {
   test('filtered-source for a non-wikipedia (scenic) pin', () => {
     expect(classifyStoryEligibility({ ...base, source: 'wikidata' })).toBe('filtered-source')
   })
-  test('filtered-taste takes precedence over the thinness check', () => {
+  test('filtered-taste takes precedence over the stub check', () => {
     expect(classifyStoryEligibility({ ...base, name: 'IHOP shooting', leadExtractChars: 10 })).toBe('filtered-taste')
   })
-  test('filtered-thin when the article is below the floor', () => {
-    expect(classifyStoryEligibility({ ...base, leadExtractChars: 799 })).toBe('filtered-thin')
+  test('filtered-stub when the article is below the floor', () => {
+    expect(classifyStoryEligibility({ ...base, leadExtractChars: 799 })).toBe('filtered-stub')
   })
 })

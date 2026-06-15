@@ -8,6 +8,13 @@ and gives **roam** enrichment for the first time. Built from `docs/specs/corpus-
 (now BUILT). Pairs with `docs/decisions/region-corpus-discovery.md` (the corpus + ops sequence),
 `docs/decisions/enrichment-scout.md` (the scout this generalizes), and principle #1.
 
+**Update 2026-06-15:** the `--thin-only`/`--thin-max` cost-slice was **REMOVED** — filtering enrich
+candidates by article length is a cost proxy, not a product axis (`--limit`/`--max-cost` are the honest
+cost knobs), so the enrich dialog always runs the full eligible corpus now. The story-eligibility floor
+flag `filtered-thin` was renamed **`filtered-stub`** to end the name collision (the floor = a *stub*,
+< 800 chars, excluded; the removed enrich slice was *eligible-but-short*, < 2500 chars — a different
+threshold entirely, which made one word mean two things).
+
 ## What shipped
 
 - **Data model** (`@skipper/db/schema`, `pipeline/persist.ts`): `WellSpan` type; `pois.facts` for a
@@ -22,8 +29,7 @@ and gives **roam** enrichment for the first time. Built from `docs/specs/corpus-
   bundles — never text (the §2 verbatim invariant). Bounded like the scout; injectable model call.
 - **The CLI** (`enrich-region.ts`) + `jobKind` `enrich_region` (shared enum + `jobs.ts` SCRIPTS +
   `buildJobArgs` + admin RoamView **Enrich** button). SOP-safe: dry run makes NO model calls (free);
-  `--apply` spends Anthropic only (no TTS/R2). Flags: `--thin-only`/`--thin-max`/`--limit`/`--force`/
-  `--model`/`--bbox`/`--max-cost`.
+  `--apply` spends Anthropic only (no TTS/R2). Flags: `--limit`/`--force`/`--model`/`--bbox`/`--max-cost`.
 - **Generation reads the well.** Roam (`generate-roam.ts`) and tours (`generate-tour.ts`) ground on
   `resolveStoryGrounding(facts)` — the well when enriched, the **capped** extract head otherwise.
   Tours append ROUTE-level road geology (the scout, narrowed to road-only for enriched stops);
@@ -35,8 +41,10 @@ and gives **roam** enrichment for the first time. Built from `docs/specs/corpus-
 
 ## §9 founder-calls — resolved (all as configurable knobs, the real choice is at the PAID run)
 
-- **Scope:** built BOTH; `--thin-only` (default `--thin-max` 2500) is the cheapest-first slice the
-  admin button uses. Full corpus via the CLI.
+- **Scope:** built BOTH, then `--thin-only`/`--thin-max` were **REMOVED 2026-06-15** — length-filtering
+  the candidate set is a cost proxy, not a product axis. Enrich now always runs the full eligible corpus;
+  `--limit`/`--max-cost` are the cost knobs (cheapest-FIRST ordering under a budget would be the honest
+  way to recover the "stretch the spend" use, if ever wanted — see the §9 Update at the top).
 - **Enricher-input cap:** `ENRICHER_INPUT_CHARS = 12_000` (the generous-cap recommendation).
 - **Well budget:** a SOFT prompt target (`ENRICH_WELL_TARGET_SPANS = 16`), never a char truncation.
 - **Enricher model:** default **Sonnet 4.6** (`--model opus` for the A/B). $3/$15 per MTok added to
@@ -68,4 +76,4 @@ Existing un-enriched pois fall back to the extract head until enriched.
 
 The PAID `enrich --apply` run + the founder EAR-test (spec §11): roam/tour scripts on the well read
 at least as charming/grounded as on the richer extract, and rescue ≥1 deep fact the positional cap
-missed. Recommended first run: `enrich-region --thin-only --limit 3` (smoke), then ear-test.
+missed. Recommended first run: `enrich-region --limit 3` (smoke), then ear-test.
