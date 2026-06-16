@@ -257,6 +257,8 @@ export interface PoiRow {
   tourCount: number
   roamClipCount: number
   storyEligibility: StoryEligibility
+  /** A non-empty curated fact well exists (server checks `facts.well`) — tours & roam ground on it. */
+  enriched: boolean
   roamClip: RoamClipStatus
   staleFacts: boolean
   attributed: boolean

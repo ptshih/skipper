@@ -664,6 +664,9 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
     if (flags === 'unattrib' && (p.attributed || p.tourCount === 0)) return false
     if (flags === 'story-eligible' && p.storyEligibility !== 'eligible') return false
     if (flags === 'story-filtered' && !p.storyEligibility.startsWith('filtered-')) return false
+    if (flags === 'enriched' && !p.enriched) return false
+    // The actionable gap: story-grade but no fact well yet — exactly the rows an Enrich run will bill for.
+    if (flags === 'needs-enrich' && (p.storyEligibility !== 'eligible' || p.enriched)) return false
     if (flags === 'roam-clip-stale' && p.roamClip !== 'stale') return false
     if (q) {
       const s = `${p.name} ${p.sourceId}`.toLowerCase()
@@ -735,6 +738,7 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
     total: pois.length,
     withClips: pois.filter((p) => p.roamClipCount > 0).length,
     eligible: pois.filter((p) => p.storyEligibility === 'eligible').length,
+    enriched: pois.filter((p) => p.enriched).length,
     inTours: pois.filter((p) => p.tourCount > 0).length,
     unattrib: pois.filter((p) => !p.attributed && p.tourCount > 0).length,
     defects: pois.filter((p) => p.suspiciousDuration).length,
@@ -748,6 +752,13 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
         {totals.eligible > 0 && (
           <button onClick={() => setFlags('story-eligible')}>
             <Badge variant="default" className="cursor-pointer">{totals.eligible} story-eligible</Badge>
+          </button>
+        )}
+        {totals.eligible > 0 && (
+          <button onClick={() => setFlags(totals.enriched < totals.eligible ? 'needs-enrich' : 'enriched')}>
+            <Badge variant={totals.enriched > 0 ? 'success' : 'outline'} className="cursor-pointer">
+              {totals.enriched}/{totals.eligible} enriched
+            </Badge>
           </button>
         )}
         <Badge variant="success">{totals.inTours} in tours</Badge>
@@ -790,6 +801,8 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
             <SelectItem value="all">All flags</SelectItem>
             <SelectItem value="story-eligible">Story: eligible</SelectItem>
             <SelectItem value="story-filtered">Story: filtered out</SelectItem>
+            <SelectItem value="enriched">Enriched</SelectItem>
+            <SelectItem value="needs-enrich">Eligible · un-enriched</SelectItem>
             <SelectItem value="roam-clip-stale">Roam clip: stale</SelectItem>
             <SelectItem value="defect">Clip defects</SelectItem>
             <SelectItem value="stale">Stale facts</SelectItem>
@@ -875,6 +888,11 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
                     <TableCell>
                       <div className="flex flex-wrap items-center gap-1">
                         <Badge variant={em.variant} title={em.hint}>{em.label}</Badge>
+                        {p.enriched && (
+                          <Badge variant="success" title="Has a curated fact well — tours & roam ground on it">
+                            enriched
+                          </Badge>
+                        )}
                         {p.roamClip !== 'none' && (
                           <Badge variant={ROAM_CLIP_META[p.roamClip].variant} title={ROAM_CLIP_META[p.roamClip].hint}>
                             {ROAM_CLIP_META[p.roamClip].label}
