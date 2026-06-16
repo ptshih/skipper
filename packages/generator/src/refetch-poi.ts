@@ -8,6 +8,12 @@
 // every track that grounded on the old facts goes detectably stale (tracks.facts_hash IS
 // DISTINCT FROM pois.facts_hash) — the operator then regenerates the owning tour/roam.
 //
+// PRESERVES a paid enrichment WELL (2026-06-16): like the sweep, a refetch keeps an existing
+// `facts.well` + `enrichedAt` (the grounding hash is the WELL hash, so refreshing the extract
+// alone never marks tracks stale or destroys paid work). A deliberate well rebuild — e.g. to push
+// a fact-edit CORRECTION into a well span — is `enrich-region --include-ids <id> --force --apply`,
+// not a refetch; the refetch WARNS when it refreshes an enriched poi's extract so that's not missed.
+//
 // FREE — Wikipedia (MediaWiki) only, no LLM/TTS spend. Only WIKIPEDIA-sourced (story) POIs
 // carry re-fetchable facts; a wikidata/scenic pin has none and is rejected.
 //
@@ -20,9 +26,10 @@
 import { eq } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { pois } from '@skipper/db/schema'
+import type { WellSpan } from '@skipper/db/schema'
 import { fetchDeepExtracts } from './pipeline/wikipedia'
 import { toFacts } from './pipeline/select'
-import { buildStoryFacts, hashFacts } from './pipeline/persist'
+import { buildStoryFacts, storyFactsHash } from './pipeline/persist'
 import { announce, parseFlags } from './pipeline/ops'
 import { beginJob, finishJob } from './pipeline/job-progress'
 
@@ -76,24 +83,47 @@ async function main() {
   // identically; preserve the existing title/url/qid metadata (the deep fetch returns text only).
   const f = (poi.facts ?? {}) as Record<string, unknown>
   const extract = toFacts(full).join(' ')
+  // PRESERVE a paid enrichment WELL across a refetch (2026-06-16, Option A) — like the sweep
+  // (upsertPoi), a single-poi re-fetch refreshes the extract but keeps the curated `well` +
+  // `enrichedAt`, so it never destroys the PAID well. The grounding fingerprint is the WELL hash
+  // (storyFactsHash) when enriched, so refreshing the extract alone does NOT mark tracks stale. A
+  // deliberate well rebuild is `enrich-region --include-ids <id> --force --apply`, not a refetch.
+  const existingWell = Array.isArray(f.well) ? (f.well as WellSpan[]) : null
+  const enriched = existingWell !== null && existingWell.length > 0
   const newFacts = buildStoryFacts({
     extract,
     title: (f.title as string) ?? poi.name,
     url: (f.url as string) ?? `https://en.wikipedia.org/?curid=${poi.sourceId}`,
     pageId,
     qid: f.qid as string | undefined,
+    well: existingWell,
+    enrichedAt: typeof f.enrichedAt === 'string' ? f.enrichedAt : null,
   })
-  const newHash = hashFacts(newFacts)
+  const newHash = storyFactsHash(newFacts)
 
-  const oldLen = typeof poi.facts?.extract === 'string' ? poi.facts.extract.length : 0
-  const changed = newHash !== poi.factsHash
-  console.log(`  Old hash: ${poi.factsHash?.slice(0, 12) ?? '∅'}  (${oldLen} extract chars)`)
+  const oldExtract = typeof poi.facts?.extract === 'string' ? poi.facts.extract : ''
+  const extractChanged = extract !== oldExtract
+  const hashChanged = newHash !== poi.factsHash // the grounding fingerprint → track staleness
+  console.log(`  Old hash: ${poi.factsHash?.slice(0, 12) ?? '∅'}  (${oldExtract.length} extract chars)`)
   console.log(`  New hash: ${newHash?.slice(0, 12) ?? '∅'}  (${extract.length} extract chars)`)
-  console.log(
-    changed
-      ? `  → CHANGED: any track grounded on the old facts is now STALE → regenerate the owning tour/roam.`
-      : `  → unchanged: facts identical to what's stored (only facts_fetched_at would advance).`,
-  )
+  if (enriched) {
+    // Enriched: the grounding hash is the WELL hash, which the preserved well keeps stable — so the
+    // extract can refresh without churning the hash. Warn LOUDLY when the extract changed, because a
+    // fact-edit correction that lives in the WELL won't reach narration until the well is rebuilt.
+    console.log(
+      extractChanged
+        ? `  → extract refreshed; WELL preserved → grounding hash unchanged, tracks stay fresh.\n` +
+            `    ⚠ If this refetch corrected a fact that lives in the well, the well still has the OLD text —\n` +
+            `      run \`enrich-region --include-ids ${poi.id} --force --apply\` to rebuild the well from the corrected article.`
+        : `  → unchanged: article + well identical to what's stored (only facts_fetched_at advances).`,
+    )
+  } else {
+    console.log(
+      hashChanged
+        ? `  → CHANGED: any track grounded on the old facts is now STALE → regenerate the owning tour/roam.`
+        : `  → unchanged: facts identical to what's stored (only facts_fetched_at would advance).`,
+    )
+  }
 
   if (!apply) {
     console.log('\nDRY RUN — nothing written. Re-run with --apply to update the facts.')
@@ -107,7 +137,15 @@ async function main() {
     .set({ facts: newFacts, factsHash: newHash, factsFetchedAt: new Date(), summary, updatedAt: new Date() })
     .where(eq(pois.id, poiId))
 
-  console.log(`\nDone: re-fetched facts for "${poi.name}"${changed ? ' (facts CHANGED)' : ' (no change)'}.`)
+  console.log(
+    `\nDone: re-fetched facts for "${poi.name}"` +
+      (enriched
+        ? ` (well preserved${extractChanged ? '; extract refreshed — re-enrich to rebuild the well if a corrected fact lives in it' : ''})`
+        : hashChanged
+          ? ' (facts CHANGED — tracks now stale)'
+          : ' (no change)') +
+      '.',
+  )
 }
 
 main()
