@@ -53,6 +53,21 @@ export function parseFlags(argv: string[], opts: { valueFlags?: string[] } = {})
   return { positionals, has, value }
 }
 
+/** Parse a `--bbox swLng,swLat,neLng,neLat` value to a typed corner object. The shared
+ *  split + length + finite check + canonical error string; callers adapt the shape/default. */
+export function parseBboxFlag(raw: string): { swLng: number; swLat: number; neLng: number; neLat: number } {
+  const p = raw.split(',').map(Number)
+  if (p.length !== 4 || p.some((n) => !Number.isFinite(n)))
+    throw new Error(`--bbox must be swLng,swLat,neLng,neLat (got "${raw}")`)
+  return { swLng: p[0]!, swLat: p[1]!, neLng: p[2]!, neLat: p[3]! }
+}
+
+/** Resolve `--max-cost <usd>` to a positive cap, or Infinity when unset/invalid (no cap). */
+export function maxCostFlag(flags: Flags): number {
+  const v = Number(flags.value('max-cost'))
+  return Number.isFinite(v) && v > 0 ? v : Infinity
+}
+
 /** Resolve a tour by its full id OR a unique id prefix (convenience for the short ids we log). */
 export async function resolveTourId(arg: string | undefined): Promise<string> {
   if (!arg) throw new Error('Pass an explicit <tourId> (or a unique id prefix).')

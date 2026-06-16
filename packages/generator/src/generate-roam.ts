@@ -29,18 +29,26 @@ import { and, eq, isNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { pois, segments, tracks } from '@skipper/db/schema'
 import type { FactSheetEntry, PoiFacts } from '@skipper/db/schema'
-import { announce, assertReady, parseFlags } from './pipeline/ops'
+import { announce, assertReady, maxCostFlag, parseBboxFlag, parseFlags } from './pipeline/ops'
 import { beginJob, finishJob } from './pipeline/job-progress'
 import { ensurePoiOverridesLoaded } from './pipeline/poi-overrides'
+import { regionLabel } from './pipeline/geo'
 import { narrateStop } from './pipeline/narrate'
 import { resolveStoryGrounding } from './pipeline/select'
 import { synthesizeWithTailRetake } from './pipeline/tts'
 import { roamClipKey, uploadAudio } from './pipeline/storage'
 import { resolvePersonaId, storyFactsHash } from './pipeline/persist'
+import { wikiUrlForPageId } from './pipeline/wikipedia'
 import { withRetry } from './pipeline/http'
 import { mapLimit } from './pipeline/concurrency'
 import { personaFromKey } from './persona'
-import { NARRATION_CONCURRENCY, NARRATION_FALLBACK_CHARS, TTS_CONCURRENCY } from './config'
+import {
+  NARRATION_CONCURRENCY,
+  NARRATION_FALLBACK_CHARS,
+  TAHOE_RENO_BBOX,
+  TTS_CONCURRENCY,
+  WORDS_PER_SECOND,
+} from './config'
 import { estimateTtsUsd, llmSpendLines, llmSpentUsd } from './pipeline/spend'
 import { STORY_TASTE_DENYLIST } from '@skipper/shared'
 
@@ -55,35 +63,16 @@ const ROAM_LENGTH = {
   storyTargetSeconds: 150,
   storyMaxSeconds: 180,
 } as const
-/** Default corpus bbox — Tahoe–Reno corridor (matches sweep-region-pois.ts). */
-const DEFAULT_BBOX = { swLng: -120.25, swLat: 38.86, neLng: -119.55, neLat: 39.65 }
-
-/** Rough sub-region label for the narrative context: tells the model where the driver IS. */
-function regionLabel(lat: number, lng: number): string {
-  if (lat > 39.35 && lng > -119.9) return 'Reno, Nevada'
-  if (lat > 39.0 && lng > -119.85) return 'Carson City, Nevada'
-  return 'Lake Tahoe'
-}
-
 const flags = parseFlags(process.argv.slice(2), { valueFlags: ['limit', 'bbox', 'max-cost'] })
 const apply = flags.has('apply')
-const maxCostUsd = (() => {
-  const v = Number(flags.value('max-cost'))
-  return Number.isFinite(v) && v > 0 ? v : Infinity // unset/invalid → no cap
-})()
+const maxCostUsd = maxCostFlag(flags)
 // Narrate + PRINT the scripts, then stop — NO TTS, NO R2, NO DB writes. The cheapest way to ear-read
 // the writing (e.g. a new length band) before committing to a paid synth + regen. Spends narration $.
 const scriptsOnly = flags.has('scripts-only')
 const force = flags.has('force')
 const limit = Number(flags.value('limit') ?? Infinity)
 const bboxRaw = flags.value('bbox')
-const bbox = (() => {
-  if (!bboxRaw) return DEFAULT_BBOX
-  const p = bboxRaw.split(',').map(Number)
-  if (p.length !== 4 || p.some((n) => !Number.isFinite(n)))
-    throw new Error(`--bbox must be swLng,swLat,neLng,neLat (got "${bboxRaw}")`)
-  return { swLng: p[0]!, swLat: p[1]!, neLng: p[2]!, neLat: p[3]! }
-})()
+const bbox = bboxRaw ? parseBboxFlag(bboxRaw) : TAHOE_RENO_BBOX
 
 announce({
   tool: 'generate-roam',
@@ -181,7 +170,7 @@ async function main(): Promise<void> {
       extract: f.extract,
       facts: f,
       title: f.title ?? r.name,
-      url: f.url ?? `https://en.wikipedia.org/?curid=${r.sourceId}`,
+      url: f.url ?? wikiUrlForPageId(r.sourceId),
       qid: f?.qid ?? null,
       factsFetchedAt: r.factsFetchedAt,
       factSheet: r.factSheet,
@@ -298,7 +287,6 @@ async function main(): Promise<void> {
   })
 
   if (scriptsOnly) {
-    const WORDS_PER_SECOND = 2.5 // display estimate; mirrors narrate.ts (the target the model wrote to)
     console.log('\n════════ SCRIPTS — scripts-only: no TTS, no R2, no DB writes ════════')
     queue.forEach((c, i) => {
       const script = scripts[i]!

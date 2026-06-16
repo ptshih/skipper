@@ -1073,7 +1073,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   }
 
   // ---- Full run: narrate -> TTS -> R2 -> persist -> atomic ready-gate. -----
-  // The tour SHELL already exists (seeded draft); we FILL it. Each stop becomes a segment +
+  // The tour SHELL already exists (a draft shell from admin Create); we FILL it. Each stop becomes a segment +
   // a track: the segment + track ids are generated up front so the clip key
   // (clips/<tourId>/<trackId>) is known before upload, and the fully-populated rows land in
   // one atomic ready-gate batch.

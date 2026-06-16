@@ -8,6 +8,8 @@
 //
 // Process-global on purpose (one generation per process; the CLI exits after a run).
 
+import { WORDS_PER_SECOND } from '../config'
+
 export interface ModelPricing {
   inputPerMTok: number
   outputPerMTok: number
@@ -102,13 +104,13 @@ export function resetSpendTally(): void {
 /** Cloud TTS Gemini pricing: ~$1/MTok text-in, ~$20/MTok audio-out, audio ≈ 25 tokens/sec
  *  (pricing page fetched 2026-06-09; ≈ $1.80 per audio-hour). */
 export const TTS_TOKEN_PRICING = { textPerMTok: 1, audioPerMTok: 20, audioTokensPerSec: 25 } as const
-// Spoken pace mirrors narrate.ts's WORDS_PER_SECOND (the target the model wrote to).
+// Spoken pace = the shared WORDS_PER_SECOND base (the target the model wrote to).
 // 3.1-flash reads a touch slower than 2.5 words/sec, so this UNDER-estimates ~5–15% —
-// fine for a pre-spend gate; the print says "~".
-const TTS_WORDS_PER_SECOND = 2.5
+// fine for a pre-spend gate; the print says "~". The separate TTS_ESTIMATE_SAFETY margin
+// below corrects for it, so the shared base stays the single pace and the margin stays local.
 const TTS_CHARS_PER_TEXT_TOKEN = 4
 
-/** The estimate above UNDER-counts ~5–15% (TTS_WORDS_PER_SECOND runs a touch fast vs
+/** The estimate above UNDER-counts ~5–15% (WORDS_PER_SECOND runs a touch fast vs
  *  3.1-flash's real pace, so actual audio seconds — and the audio-token bill — come in
  *  higher). The --max-cost gate multiplies the estimate by this margin before comparing to
  *  the cap, so a tight cap is honored against the upper bound, not the optimistic point
@@ -127,7 +129,7 @@ export function estimateTtsUsd(scripts: readonly string[], stylePromptChars: num
   let textChars = 0
   for (const script of scripts) {
     const words = script.trim().split(/\s+/).filter(Boolean).length
-    estSeconds += words / TTS_WORDS_PER_SECOND
+    estSeconds += words / WORDS_PER_SECOND
     textChars += script.length + stylePromptChars
   }
   const textTok = textChars / TTS_CHARS_PER_TEXT_TOKEN

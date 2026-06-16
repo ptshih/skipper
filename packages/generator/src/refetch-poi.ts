@@ -27,9 +27,9 @@ import { eq } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { pois } from '@skipper/db/schema'
 import type { FactSheetEntry } from '@skipper/db/schema'
-import { fetchFullExtracts } from './pipeline/wikipedia'
+import { fetchFullExtracts, wikiUrlForPageId } from './pipeline/wikipedia'
 import { sheetDriftSpans, toFacts } from './pipeline/select'
-import { buildStoryFacts, storyFactsHash } from './pipeline/persist'
+import { buildStoryFacts, storyFactsHash, summaryFromExtract } from './pipeline/persist'
 import { announce, parseFlags } from './pipeline/ops'
 import { beginJob, finishJob } from './pipeline/job-progress'
 
@@ -94,7 +94,7 @@ async function main() {
   const newFacts = buildStoryFacts({
     extract,
     title: f?.title ?? poi.name,
-    url: f?.url ?? `https://en.wikipedia.org/?curid=${poi.sourceId}`,
+    url: f?.url ?? wikiUrlForPageId(poi.sourceId),
     pageId,
     qid: f?.qid,
   })
@@ -135,7 +135,7 @@ async function main() {
   }
 
   // First sentence of the extract is the corpus summary (matches the sweep).
-  const summary = extract.split(/(?<=[.!?])\s+/)[0] ?? null
+  const summary = summaryFromExtract(extract)
   await db
     .update(pois)
     .set({ facts: newFacts, factsHash: newHash, factsFetchedAt: new Date(), summary, updatedAt: new Date() })

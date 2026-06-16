@@ -21,6 +21,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import type { JokeLevel, StopType } from '@skipper/shared'
 import { getAnthropic, NARRATION_MODEL } from '../models'
 import { recordModelUsage } from './spend'
+import { WORDS_PER_SECOND } from '../config'
 
 /**
  * Generous ceiling. A long-form story script (~2 min ≈ ~300 words ≈ ~450 output
@@ -29,9 +30,6 @@ import { recordModelUsage } from './spend'
  * persist a half script), so we size well above the worst plausible thinking+output.
  */
 const NARRATION_MAX_TOKENS = 16000
-
-/** Spoken narration runs ~2.5 words/second; used only to translate a target duration into a word hint. */
-const WORDS_PER_SECOND = 2.5
 
 export interface NarrationRequest {
   /** e.g. "Lake Tahoe". Naming the region is allowed without the sheet. */

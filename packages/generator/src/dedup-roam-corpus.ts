@@ -38,7 +38,7 @@ const rows = await db
     sourceId: pois.sourceId,
     lat: pois.lat,
     lng: pois.lng,
-    extract: pois.facts,
+    facts: pois.facts,
     segmentId: segments.id,
     clipUrl: tracks.audioUrl,
     clipDurationMs: tracks.audioDurationMs,
@@ -73,21 +73,14 @@ const toDelete: { segmentId: string; clipUrl: string | null; poiId: string; name
 for (const group of dupeGroups) {
   // Sort: richest extract first (longest string); fall back to longest clip if no extract.
   group.sort((a, b) => {
-    const aLen = typeof (a.extract as { extract?: string } | null)?.extract === 'string'
-      ? (a.extract as { extract: string }).extract.length
-      : 0
-    const bLen = typeof (b.extract as { extract?: string } | null)?.extract === 'string'
-      ? (b.extract as { extract: string }).extract.length
-      : 0
+    const aLen = a.facts?.extract.length ?? 0
+    const bLen = b.facts?.extract.length ?? 0
     if (bLen !== aLen) return bLen - aLen
     return (b.clipDurationMs ?? 0) - (a.clipDurationMs ?? 0)
   })
 
   const [keep, ...drop] = group
-  const keepExtractLen =
-    typeof (keep!.extract as { extract?: string } | null)?.extract === 'string'
-      ? (keep!.extract as { extract: string }).extract.length
-      : 0
+  const keepExtractLen = keep!.facts?.extract.length ?? 0
 
   console.log(`  "${keep!.name}" (norm: "${normName(keep!.name)}")`)
   console.log(
@@ -95,10 +88,7 @@ for (const group of dupeGroups) {
       `extract=${keepExtractLen}ch  clip=${(keep!.clipDurationMs ?? 0) / 1000}s`,
   )
   for (const d of drop) {
-    const dropExtractLen =
-      typeof (d.extract as { extract?: string } | null)?.extract === 'string'
-        ? (d.extract as { extract: string }).extract.length
-        : 0
+    const dropExtractLen = d.facts?.extract.length ?? 0
     console.log(
       `  DROP  poiId=${d.poiId.slice(0, 8)} source=${d.source}:${d.sourceId} ` +
         `extract=${dropExtractLen}ch  clip=${(d.clipDurationMs ?? 0) / 1000}s  r2=${d.clipUrl}`,

@@ -23,6 +23,7 @@
 // Stateful, pure, no I/O — feed fixes via update(), exactly like TriggerEngine.
 
 import { angularDiffDeg, bearingDeg, haversineMeters } from './geo'
+import { effectiveRadiusM } from './trigger'
 import type { GpsFix } from './trigger'
 
 /** A roam-narratable place (a roam segment — tour_id null — joined onto its track + poi). */
@@ -120,7 +121,7 @@ export class RoamEngine {
       }
       const d = haversineMeters(here, [pin.lng, pin.lat])
       const floor = pin.radiusM ?? this.opts.floorM
-      if (d > Math.max(floor, fix.speedMps * this.opts.leadSeconds)) continue
+      if (d > effectiveRadiusM(floor, fix.speedMps, this.opts.leadSeconds)) continue
       // Cluster suppression: too close to where the last encounter RECENTLY fired → quiet.
       if (
         this.lastFire &&

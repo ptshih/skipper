@@ -1,10 +1,10 @@
 // Persistence — Drizzle writes for the generator (zero-reuse model).
 //
-// The tour SHELL (route + endpoints + region) is created by the SEED as a `draft`
-// row; the generator FILLS it. Narration is TOUR-OWNED — it lives on segments + tracks /
-// tour_frames, never a shared poi_content cache. A tour STOP = one `segments` row (the
-// place-anchor + trigger geometry + frozen persona) + one `tracks` row (the narration,
-// form = the stop type, variant 0). Order of operations (neon-http, no interactive
+// The tour SHELL (route + endpoints + region) is created at runtime by admin Create
+// (materializeRoute) as a `draft` row; the generator FILLS it. Narration is TOUR-OWNED — it
+// lives on segments + tracks / tour_frames, never a shared poi_content cache. A tour STOP =
+// one `segments` row (the place-anchor + trigger geometry + frozen persona) + one `tracks` row
+// (the narration, form = the stop type, variant 0). Order of operations (neon-http, no interactive
 // transactions):
 //   1. upsert pois (deduped on (source, source_id); stamp facts_hash/facts_fetched_at)
 //   2. synthesize each stop track's clip to a TOUR-scoped R2 key (clips/<tourId>/<trackId>)
@@ -31,7 +31,8 @@ import type {
 } from '@skipper/db/schema'
 import type { FrameKind, PoiSource, StopType } from '@skipper/shared'
 
-/** The seeded draft tour the generator fills — route geometry, endpoints, region. */
+/** The draft tour shell (created at runtime by admin Create) the generator fills —
+ *  route geometry, endpoints, region. */
 export interface TourShell {
   id: string
   slug: string
@@ -55,9 +56,10 @@ export interface TourShell {
   endAnchorLng: number
 }
 
-/** Load the seeded draft tour (geometry + endpoints + region) by slug. */
+/** Load the draft tour shell (geometry + endpoints + region) by slug — created at runtime
+ *  by admin Create (materializeRoute). */
 export async function loadTour(slug: string): Promise<TourShell> {
-  // Retry only the read (idempotent) — a "no tour seeded" miss is a real error, not a
+  // Retry only the read (idempotent) — a "no draft tour" miss is a real error, not a
   // transient, so the !row throw stays OUTSIDE the retry (fail fast, no confusing retries).
   const rows = await withRetry(
     () =>
@@ -88,7 +90,7 @@ export async function loadTour(slug: string): Promise<TourShell> {
     { label: `loadTour(${slug})` },
   )
   const row = rows[0]
-  if (!row) throw new Error(`No tour seeded for slug "${slug}" — run the seed step first.`)
+  if (!row) throw new Error(`No draft tour for slug "${slug}" — create it via admin Create first.`)
   return row
 }
 
@@ -192,6 +194,12 @@ export function buildStoryFacts(input: {
     pageId: input.pageId,
     ...(input.qid ? { qid: input.qid } : {}),
   }
+}
+
+/** The corpus `summary` for a story poi — the first sentence of the extract (null if empty).
+ *  The ONE place this is derived, so the sweep + refetch stay byte-identical. */
+export function summaryFromExtract(extract: string): string | null {
+  return extract.split(/(?<=[.!?])\s+/)[0] ?? null
 }
 
 export interface UpsertPoiInput {

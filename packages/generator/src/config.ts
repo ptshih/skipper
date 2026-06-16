@@ -283,6 +283,11 @@ export const PACING: Record<DurationBucket, BucketPacing> = {
   long: { minGapSec: 150, maxNarratedStops: 24, breakStops: 4 },
 }
 
+/** Spoken narration pace (~2.5 words/second) — the single base pace every length estimate reads:
+ *  narration's target-duration→word hint (narrate.ts), the dry-run length print (run.ts / generate-roam.ts),
+ *  and the TTS cost estimate's base (spend.ts, which layers TTS_ESTIMATE_SAFETY on top). */
+export const WORDS_PER_SECOND = 2.5
+
 /** Target spoken length per stop type (seconds) — honored by narration, never padded.
  * `story` targets a Shaka-Guide-length telling (~2 min) so a rich fact sheet gets room
  * to breathe; the model still stops when the FACTS run out, so thin sheets stay short.
@@ -314,3 +319,8 @@ export const TRIGGER_RADIUS_M = 120
 
 /** Fallback average drive speed (m/s ≈ 30 mph) if a corridor lacks a frozen durationSeconds. */
 export const FALLBACK_SPEED_MPS = 13.4
+
+/** The Tahoe–Reno corridor default bbox — the standalone CLI default when no --bbox is passed
+ *  (sweep-region-pois / generate-roam). Matches the `lake-tahoe` region seed's discoveryBbox
+ *  (packages/db/seed/seed.ts); the CLIs stay standalone and do NOT read the DB region row. */
+export const TAHOE_RENO_BBOX = { swLng: -120.25, swLat: 38.86, neLng: -119.55, neLat: 39.65 } as const

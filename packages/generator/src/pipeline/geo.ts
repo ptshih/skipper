@@ -38,6 +38,13 @@ export function sideOfApproach(headingDeg: number, from: LngLat, to: LngLat): 'l
   return rel > 0 ? 'right' : 'left'
 }
 
+/** Rough sub-region label for narration context — tells the model where the driver IS. */
+export function regionLabel(lat: number, lng: number): string {
+  if (lat > 39.35 && lng > -119.9) return 'Reno, Nevada'
+  if (lat > 39.0 && lng > -119.85) return 'Carson City, Nevada'
+  return 'Lake Tahoe'
+}
+
 /** Total polyline length in meters (0 for a degenerate <2-point line). */
 export function totalMeters(cumulative: number[]): number {
   return cumulative.length ? cumulative[cumulative.length - 1]! : 0

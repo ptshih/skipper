@@ -27,6 +27,12 @@ const MAX_MAXLAG_RETRIES = 5
  *  run. Payloads are small JSON; generous-but-finite. (Mirrors wikidata/macrostrat.) */
 const REQUEST_TIMEOUT_MS = 15_000
 
+/** The stable `?curid=` permalink for a Wikipedia page id — the URL fallback when an article's
+ *  `canonicalurl`/`fullurl` (or a stored `facts.url`) is absent. */
+export function wikiUrlForPageId(pageId: number | string): string {
+  return `https://en.wikipedia.org/?curid=${pageId}`
+}
+
 interface ExtractPage {
   pageid: number
   title: string
@@ -223,7 +229,7 @@ export async function fetchExtractsByTitle(titles: string[]): Promise<TitleExtra
         title: p.title,
         pageId: p.pageid,
         extract: text,
-        url: p.canonicalurl ?? p.fullurl ?? `https://en.wikipedia.org/?curid=${p.pageid}`,
+        url: p.canonicalurl ?? p.fullurl ?? wikiUrlForPageId(p.pageid),
         ...(p.pageprops?.wikibase_item ? { qid: p.pageprops.wikibase_item } : {}),
       })
     }

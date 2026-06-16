@@ -21,7 +21,7 @@ import { and, asc, eq } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { pois, segments, tourFrames, tours, tracks } from '@skipper/db/schema'
 import { TTS_CLIP_EXTENSION, TTS_MODEL } from './models'
-import { announce, assertReady, parseFlags, resolveTourId } from './pipeline/ops'
+import { announce, assertReady, maxCostFlag, parseFlags, resolveTourId } from './pipeline/ops'
 import { personaFromKey } from './persona'
 import { synthesizeWithTailRetake } from './pipeline/tts'
 import { estimateTtsUsd } from './pipeline/spend'
@@ -42,10 +42,7 @@ async function main() {
   const flags = parseFlags(process.argv.slice(2), { valueFlags: ['max-cost'] })
   const apply = flags.has('apply')
   const keepOld = flags.has('keep-old')
-  const maxCostUsd = (() => {
-    const v = Number(flags.value('max-cost'))
-    return Number.isFinite(v) && v > 0 ? v : Infinity // unset/invalid → no cap
-  })()
+  const maxCostUsd = maxCostFlag(flags)
   announce({ tool: 'resynth-tour', blast: ['SPENDS $', 'MUTATES DB', 'DELETES BYTES'], apply })
   const tourId = await resolveTourId(flags.positionals[0])
   await beginJob('resynth', { dryRun: !apply, tourId, targetId: tourId })

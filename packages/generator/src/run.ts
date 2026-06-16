@@ -30,6 +30,7 @@ import { formatMmss } from '@skipper/drive-core'
 import { generateTour } from './pipeline/generate-tour'
 import type { FrameSummary, GenerateResult } from './pipeline/generate-tour'
 import { beginJob, finishJob } from './pipeline/job-progress'
+import { WORDS_PER_SECOND } from './config'
 
 const DURATIONS = ['short', 'standard', 'long'] as const
 type Duration = (typeof DURATIONS)[number]
@@ -95,9 +96,8 @@ function parseArgs(argv: string[]): Args {
   }
 }
 
-// Spoken pace for the dry-run length ESTIMATE (no TTS yet) — mirrors narrate.ts's
-// WORDS_PER_SECOND so the printed "~Xs est" tracks the target the model was given.
-const WORDS_PER_SECOND = 2.5
+// Spoken pace for the dry-run length ESTIMATE (no TTS yet) — the shared WORDS_PER_SECOND
+// so the printed "~Xs est" tracks the target the model was given.
 const estSpokenSec = (script: string): number =>
   script.trim().split(/\s+/).filter(Boolean).length / WORDS_PER_SECOND
 

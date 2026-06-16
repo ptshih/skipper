@@ -26,19 +26,20 @@ import {
 import { ensurePoiOverridesLoaded } from './pipeline/poi-overrides'
 import { fetchFullExtracts } from './pipeline/wikipedia'
 import { toFacts } from './pipeline/select'
-import { buildStoryFacts, hashFacts, upsertPoi } from './pipeline/persist'
+import { buildStoryFacts, hashFacts, summaryFromExtract, upsertPoi } from './pipeline/persist'
 import { speakableAnchorFor } from './pipeline/speakable'
-import { announce, parseFlags } from './pipeline/ops'
+import { announce, parseBboxFlag, parseFlags } from './pipeline/ops'
 import { beginJob, finishJob } from './pipeline/job-progress'
 import { sleep } from './pipeline/http'
+import { TAHOE_RENO_BBOX } from './config'
 import type { LngLat } from './pipeline/geo'
 
 /** Tahoe–Reno corridor: Meyers/South Lake Tahoe west to Homewood/Sugar Pine Point,
  *  north to Kings Beach/Incline, east through Spooner/Zephyr Cove → Carson City →
- *  Virginia City → Reno/Sparks. [lng, lat] corners. */
+ *  Virginia City → Reno/Sparks. [lng, lat] corners — from the shared TAHOE_RENO_BBOX. */
 const TAHOE_RENO_CORRIDOR: { sw: LngLat; ne: LngLat } = {
-  sw: [-120.25, 38.86],
-  ne: [-119.55, 39.65],
+  sw: [TAHOE_RENO_BBOX.swLng, TAHOE_RENO_BBOX.swLat],
+  ne: [TAHOE_RENO_BBOX.neLng, TAHOE_RENO_BBOX.neLat],
 }
 
 /** Split a bbox into a lngSteps × latSteps grid (WDQS etiquette: modest result sets per call). */
@@ -64,11 +65,8 @@ export function gridBoxes(
 
 function parseBbox(raw: string | undefined): { sw: LngLat; ne: LngLat } {
   if (!raw) return TAHOE_RENO_CORRIDOR
-  const parts = raw.split(',').map(Number)
-  if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n))) {
-    throw new Error(`--bbox must be swLng,swLat,neLng,neLat (got "${raw}")`)
-  }
-  return { sw: [parts[0]!, parts[1]!], ne: [parts[2]!, parts[3]!] }
+  const b = parseBboxFlag(raw) // shared validation + canonical error string
+  return { sw: [b.swLng, b.swLat], ne: [b.neLng, b.neLat] }
 }
 
 const flags = parseFlags(process.argv.slice(2), { valueFlags: ['bbox'] })
@@ -178,7 +176,7 @@ async function main(): Promise<void> {
       lat: s.lat,
       lng: s.lng,
       ...(sp ? { speakableLat: sp.lat, speakableLng: sp.lng } : {}),
-      summary: extract.split(/(?<=[.!?])\s+/)[0] ?? null,
+      summary: summaryFromExtract(extract),
       facts,
       factsHash: hashFacts(facts),
       factsFetchedAt: fetchedAt,

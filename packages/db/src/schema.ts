@@ -47,7 +47,10 @@ export interface PoiFacts {
  */
 export type FactSheetEntry = {
   text: string
-  source: 'wikipedia' | 'wikidata' | 'macrostrat'
+  // The fact-BEARING attribution sources — `google_places` is excluded (it bears no fact text,
+  // only a break-stop name + kind). Kept as a subset of AttributionSnapshot['source'] so the two
+  // can't drift.
+  source: Exclude<AttributionSnapshot['source'], 'google_places'>
   sourceId: string
   license: string
   url?: string
@@ -148,8 +151,8 @@ export const frameKindEnum = pgEnum('frame_kind', ['intro', 'outro'])
 
 // The narration payload a player consumes: the script + its synthesized clip + frozen
 // provenance. A `track` (place-anchored, via its segment) and a `tour_frame` (placeless
-// intro/outro) carry the SAME deliverable shape, so they share this spread (enforced by
-// `bun run lint:track-columns`). Frames leave `attribution`/`factsHash` null (no place-facts).
+// intro/outro) carry the SAME deliverable shape — shared spread; both tables MUST keep using
+// `trackColumns`. Frames leave `attribution`/`factsHash` null (no place-facts).
 const trackColumns = {
   // The narration text. Nullable through generation; a row only goes live once filled.
   script: text('script'),

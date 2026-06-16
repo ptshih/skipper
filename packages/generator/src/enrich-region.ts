@@ -33,14 +33,16 @@ import { and, eq, inArray, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { pois } from '@skipper/db/schema'
 import type { PoiFacts } from '@skipper/db/schema'
-import { announce, parseFlags } from './pipeline/ops'
+import { announce, maxCostFlag, parseBboxFlag, parseFlags } from './pipeline/ops'
 import { beginJob, finishJob } from './pipeline/job-progress'
 import { ensurePoiOverridesLoaded } from './pipeline/poi-overrides'
+import { regionLabel } from './pipeline/geo'
 import { buildCorpusFactSheet } from './pipeline/scout'
 import { geologyFacts } from './pipeline/macrostrat'
 import { wikidataFacts } from './pipeline/wikidata'
 import { toFacts } from './pipeline/select'
 import { buildStoryFacts, storyFactsHash } from './pipeline/persist'
+import { wikiUrlForPageId } from './pipeline/wikipedia'
 import { withRetry } from './pipeline/http'
 import { mapLimit } from './pipeline/concurrency'
 import { ENRICH_MODELS, type EnrichModelChoice } from './models'
@@ -54,34 +56,19 @@ const ENRICH_TARGET_SECONDS = 150
 /** Rough USD per place, by model (for the pre-run estimate only; the real tally prints after). */
 const EST_USD_PER_POI: Record<EnrichModelChoice, number> = { sonnet: 0.04, opus: 0.09 }
 
-function regionLabel(lat: number, lng: number): string {
-  if (lat > 39.35 && lng > -119.9) return 'Reno, Nevada'
-  if (lat > 39.0 && lng > -119.85) return 'Carson City, Nevada'
-  return 'Lake Tahoe'
-}
-
 const flags = parseFlags(process.argv.slice(2), {
   valueFlags: ['bbox', 'limit', 'model', 'max-cost', 'source', 'query', 'include-ids', 'exclude-ids'],
 })
 const apply = flags.has('apply')
 const force = flags.has('force')
 const limit = Number(flags.value('limit') ?? Infinity)
-const maxCostUsd = (() => {
-  const v = Number(flags.value('max-cost'))
-  return Number.isFinite(v) && v > 0 ? v : Infinity
-})()
+const maxCostUsd = maxCostFlag(flags)
 const modelChoice: EnrichModelChoice = flags.value('model') === 'opus' ? 'opus' : 'sonnet'
 const model = ENRICH_MODELS[modelChoice]
 /** Optional geographic narrowing. No --bbox = the WHOLE corpus — enrich is a per-POI op, not
  *  region-bound; a region's bbox is just ONE way to choose the set. */
-const bbox = (() => {
-  const raw = flags.value('bbox')
-  if (!raw) return null
-  const p = raw.split(',').map(Number)
-  if (p.length !== 4 || p.some((n) => !Number.isFinite(n)))
-    throw new Error(`--bbox must be swLng,swLat,neLng,neLat (got "${raw}")`)
-  return { swLng: p[0]!, swLat: p[1]!, neLng: p[2]!, neLat: p[3]! }
-})()
+const bboxRaw = flags.value('bbox')
+const bbox = bboxRaw ? parseBboxFlag(bboxRaw) : null
 
 // Selection — the corpus subset to enrich, resolved server-side (this CLI IS the job runner). Admin sends
 // EITHER an explicit id list (hand-picked rows) XOR a filter (bbox/source/query) + exclude-ids ("select all
@@ -175,7 +162,7 @@ async function main(): Promise<void> {
       lng: r.lng,
       extract,
       title: facts?.title ?? r.name,
-      url: facts?.url ?? `https://en.wikipedia.org/?curid=${r.sourceId}`,
+      url: facts?.url ?? wikiUrlForPageId(r.sourceId),
       pageId: facts?.pageId ?? Number(r.sourceId),
       qid: facts?.qid ?? null,
       hasFactSheet,
