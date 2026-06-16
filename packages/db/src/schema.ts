@@ -265,6 +265,9 @@ export const pois = pgTable(
     // One row per (source, source_id) — primary dedup invariant.
     uniqueIndex('pois_source_source_id_uq').on(t.source, t.sourceId),
     index('pois_kind_idx').on(t.kind),
+    // Bounding-box prefilter for /roam (and any near-a-point query) — bounds the scan instead
+    // of loading every roam track globally before the haversine pass.
+    index('pois_lat_lng_idx').on(t.lat, t.lng),
   ],
 )
 

@@ -37,7 +37,7 @@ export function bracketKey(tourId: string, kind: BracketKind, runId: string): st
  * Free-roam clip key — per-TRACK unique: roam/<poiId>/<trackId>.<ext>. Same
  * never-overwrite-live-bytes property as frame keys: a roam regen mints a fresh
  * trackId, the row points at the new key, and the superseded object orphans for
- * sweep-orphans. (Roam narration is ROAM-owned — a segment(tourId null) + its track.)
+ * `sweep-orphans --roam`. (Roam narration is ROAM-owned — a segment(tourId null) + its track.)
  */
 export function roamClipKey(poiId: string, trackId: string): string {
   return `roam/${poiId}/${trackId}.${TTS_CLIP_EXTENSION}`

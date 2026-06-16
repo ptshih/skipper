@@ -16,10 +16,9 @@
 // failure the caller marks the tour `failed`.
 
 import { createHash } from 'node:crypto'
-import { and, eq, or, sql } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { personas, pois, regions, segments, tourFrames, tours, tracks } from '@skipper/db/schema'
-import { cachedExtractSuspect, latestOverrideAtFor } from './poi-overrides'
 import { withRetry } from './http'
 import type {
   AttributionSnapshot,
@@ -230,73 +229,6 @@ export interface UpsertPoiInput {
    *  adjudicated mid-run must read as NEWER than the fetch). Forced null when factsHash
    *  is null — a scenic/break write carries no facts clock. */
   factsFetchedAt: Date | null
-}
-
-/**
- * Pure freshness predicate for the pois facts read-through (exported for tests).
- * Fresh = fetched, within the TTL, and not predating the place's newest override row
- * (a correction adjudicated AFTER the fetch must reach the sheet — re-fetch applies it).
- */
-export function isFactsFresh(
-  factsFetchedAt: Date | null,
-  latestOverrideAt: Date | undefined,
-  ttlHours: number,
-  now: Date,
-): boolean {
-  if (ttlHours <= 0 || !factsFetchedAt) return false
-  if (now.getTime() - factsFetchedAt.getTime() > ttlHours * 3_600_000) return false
-  if (latestOverrideAt && latestOverrideAt.getTime() > factsFetchedAt.getTime()) return false
-  return true
-}
-
-export interface FreshFacts {
-  extract: string
-  /** The row's ORIGINAL fetch stamp — callers that re-persist a cache hit must pass this
-   *  back through upsertPoi so reuse never slides the TTL clock (review-caught: stamping
-   *  NOW on a cache-hit persist would make frequently-regenerated places never re-fetch). */
-  factsFetchedAt: Date
-}
-
-/**
- * READ side of principle #1's facts TTL (the mechanism the schema deferred): the stored,
- * already-corrected deep extract for each identity that is still FRESH (isFactsFresh) and
- * not SUSPECT (a fact-edit's find-string visible, or a non-deletion edit that matched
- * nothing — the "reworded, still wrong" case must keep re-fetching so the live warn
- * recurs). Misses are simply absent — the caller fetches those. Requires
- * ensurePoiOverridesLoaded() to have run (generateTour does, before discovery).
- */
-export async function loadFreshPoiFacts(
-  identities: { source: PoiSource; sourceId: string }[],
-  ttlHours: number,
-): Promise<Map<string, FreshFacts>> {
-  const out = new Map<string, FreshFacts>()
-  if (identities.length === 0 || ttlHours <= 0) return out
-  const rows = await withRetry(
-    () =>
-      db
-        .select({
-          source: pois.source,
-          sourceId: pois.sourceId,
-          facts: pois.facts,
-          factsFetchedAt: pois.factsFetchedAt,
-        })
-        .from(pois)
-        .where(
-          or(...identities.map((i) => and(eq(pois.source, i.source), eq(pois.sourceId, i.sourceId)))),
-        ),
-    { label: 'loadFreshPoiFacts' },
-  )
-  const now = new Date()
-  for (const r of rows) {
-    const extract = r.facts?.extract
-    if (typeof extract !== 'string' || extract.length === 0) continue
-    if (r.factsFetchedAt === null) continue
-    if (!isFactsFresh(r.factsFetchedAt, latestOverrideAtFor(r.source, r.sourceId), ttlHours, now))
-      continue
-    if (cachedExtractSuspect(r.source, r.sourceId, extract)) continue
-    out.set(`${r.source}:${r.sourceId}`, { extract, factsFetchedAt: r.factsFetchedAt })
-  }
-  return out
 }
 
 /** Upsert a POI deduped on (source, source_id); stamps facts freshness; returns its id. */

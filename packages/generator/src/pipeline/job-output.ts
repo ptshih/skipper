@@ -76,8 +76,9 @@ You will be given stdout logs from a Cloud Run gen job. Extract:
  *  call can't keep the job process alive past settling. */
 export async function synthesizeJobOutput(kind: string, log: string): Promise<JobOutputSynthesis> {
   if (!log.trim()) return { summary: 'No log output captured.', data: {} }
-  // Truncate to ~30k chars to stay well inside the context window (logs are rarely longer).
-  const truncated = log.length > 30_000 ? log.slice(0, 30_000) + '\n…[truncated]' : log
+  // Keep the TAIL (~30k chars) — the buffer is already tail-capped, and a failed run's terminal
+  // error lands at the END, so a HEAD slice would drop the very thing the summary needs to report.
+  const truncated = log.length > 30_000 ? '…[truncated]\n' + log.slice(-30_000) : log
 
   try {
     const msg = await client().messages.create(

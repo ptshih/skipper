@@ -72,7 +72,8 @@ you found so the next agent can re-check it.
 
 1. **Assemble per request; fetch FACTS once per place, generate NARRATION per
    tour.** `pois` is the cache — a place's facts/coords, deduped by
-   `(source, source_id)` and re-fetched on a TTL (`facts_fetched_at`); facts are
+   `(source, source_id)` and re-fetched on a TTL (`facts_fetched_at` is the staleness
+   clock; refresh is operator-run via `refetch_facts`/re-sweep, not an automated sweep); facts are
    SHARED by every tour that visits the place. **Narration is NOT cached — it's
    tour-owned:** a place-anchor `segment` carries its narration `tracks`
    (`script`/`audio`), so tour 1's Camp Richardson is ALWAYS a different telling from tour

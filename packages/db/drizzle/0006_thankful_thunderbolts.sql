@@ -1,0 +1,1 @@
+CREATE INDEX "pois_lat_lng_idx" ON "pois" USING btree ("lat","lng");

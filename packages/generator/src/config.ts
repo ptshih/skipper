@@ -159,17 +159,6 @@ export const GROUNDING_REGEN_CONCURRENCY = (): number =>
 export const PANEL_REGEN_CONCURRENCY = (): number =>
   intKnob(process.env.SKIPPER_PANEL_REGEN_CONCURRENCY, 4)
 
-// --- pois facts freshness (principle #1's TTL mechanism — READ side) ----------
-
-/** Re-use a place's stored deepened facts on regen when fetched within this many hours AND
- * no poi_override row for the place is NEWER than the fetch (a fresh adjudication must
- * reach the sheet immediately — the override-stamp check in persist.loadFreshPoiFacts).
- * 0 disables the read-through (always re-fetch). Override: SKIPPER_FACTS_TTL_HOURS. */
-export const FACTS_TTL_HOURS = (): number => {
-  const n = Number(process.env.SKIPPER_FACTS_TTL_HOURS)
-  return Number.isFinite(n) && n >= 0 ? n : 168
-}
-
 // --- Eval panel + evaluator-optimizer (the in-pipeline flywheel) -------------
 
 // generate.ts runs the eval panel (src/eval/) DURING generation and feeds findings back

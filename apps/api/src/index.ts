@@ -18,7 +18,7 @@
 // not ownership.
 
 import { Hono, type Context } from 'hono'
-import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm'
+import { and, asc, between, desc, eq, inArray, isNull } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { pois, regions, segments, tracks, tourFrames, tours } from '@skipper/db/schema'
 import type { StopType } from '@skipper/shared'
@@ -423,6 +423,12 @@ app.get('/roam', async (c) => {
     return c.json({ error: 'bad_request', message: 'lat and lng are required numbers.' }, 400)
   }
 
+  // Bound the query to a lat/lng box (a cheap pois_lat_lng_idx prefilter) so we don't scan
+  // every roam track globally; the exact haversine pass below still trims the box's corners.
+  const dLat = radiusKm / 111.32
+  const cosLat = Math.cos((lat * Math.PI) / 180)
+  const dLng = Math.abs(cosLat) > 1e-6 ? radiusKm / (111.32 * cosLat) : 180
+
   const rows = await withRetry(
     () =>
       db
@@ -438,7 +444,13 @@ app.get('/roam', async (c) => {
         .from(segments)
         .innerJoin(tracks, and(eq(tracks.segmentId, segments.id), eq(tracks.variant, 0)))
         .innerJoin(pois, eq(pois.id, segments.poiId))
-        .where(isNull(segments.tourId)),
+        .where(
+          and(
+            isNull(segments.tourId),
+            between(pois.lat, lat - dLat, lat + dLat),
+            between(pois.lng, lng - dLng, lng + dLng),
+          ),
+        ),
     { label: 'roam.pins' },
   )
 

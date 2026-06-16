@@ -106,13 +106,6 @@ export function aggregateOverrideRows(rows: OverrideRowLike[]): Map<string, Plac
   return out
 }
 
-/** Newest override row's updated_at for a place — undefined when the place has no rows
- *  (or the cache is unloaded). The facts read-through treats pois facts fetched BEFORE
- *  this instant as stale (they predate the correction). */
-export function latestOverrideAtFor(source: string, sourceId: string): Date | undefined {
-  return cache?.get(key(source, sourceId))?.latestOverrideAt
-}
-
 let cache: Map<string, PlaceOverride> | undefined
 let loadPromise: Promise<void> | undefined
 
@@ -195,26 +188,6 @@ export function applyFactEditsChecked(
 /** Convenience form for callers that don't report misses. */
 export function applyFactEdits(source: string, sourceId: string, extract: string): string {
   return applyFactEditsChecked(source, sourceId, extract).text
-}
-
-/**
- * Is a CACHED extract suspect under the place's current fact edits? Used by the pois facts
- * read-through (persist.loadFreshPoiFacts) — a suspect place re-fetches every run, so the
- * live missed-edit warning recurs instead of going dark for the TTL (review-caught).
- * Suspect when, for any edit: (a) the FIND string is visible (the known falsehood is
- * literally present), or (b) a non-deletion edit shows NEITHER find nor replace (it matched
- * nothing at fetch time — "source reworded, falsehood may survive in new clothes").
- * A deletion edit (replace='') that shows no find is indistinguishable applied-vs-missed —
- * accepted as applied (the original run's live warn already fired once).
- */
-export function cachedExtractSuspect(source: string, sourceId: string, extract: string): boolean {
-  const edits = poiOverrideFor(source, sourceId)?.factEdits
-  if (!edits || edits.length === 0) return false
-  for (const e of edits) {
-    if (extract.includes(e.find)) return true
-    if (e.replace.length > 0 && !extract.includes(e.replace)) return true
-  }
-  return false
 }
 
 const warned = new Set<string>()

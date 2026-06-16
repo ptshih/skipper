@@ -5,9 +5,9 @@
 // and roam draw from that one corpus. A tour generate no longer calls WDQS live — it reads its
 // candidates from this pool, scoped to the route's bounding box, and rebuilds the SAME WikiPoi
 // shape the Wikidata spine used to emit (candidatesToWikiPois). Lossless: the sweep stores
-// extract/title/url/pageId/qid in pois.facts for STORY rows, so nothing the selector or the
-// facts-deepen step needs is dropped. Selection (select.ts) + the deepen (loadFreshPoiFacts)
-// downstream are unchanged — they already read facts from `pois`.
+// extract/title/url/pageId/qid in pois.facts for STORY rows, so nothing the selector needs is
+// dropped. Selection (select.ts) reads facts straight from `pois` (the per-run facts-deepen
+// read-through was retired — facts refresh is a manual refetch_facts / re-sweep now).
 
 import { and, between, inArray } from 'drizzle-orm'
 import { db } from '@skipper/db'

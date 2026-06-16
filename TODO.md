@@ -36,7 +36,8 @@ Both follow-ups DONE 2026-06-15:
   sweep + `refetch-poi` now store the NORMALIZED extract (`toFacts(...).join(' ')`) so the sweep, tour,
   and roam hash IDENTICALLY (no recompute drift / no spurious staleness). Override-freshness moved to
   `refetch_facts` (now fetches the FULL article + re-applies overrides) / a re-sweep — not a per-run
-  fetch. (`loadFreshPoiFacts` left in `persist.ts` as a now-unused export; harmless to drop later.)
+  fetch. (`loadFreshPoiFacts` + its `isFactsFresh`/`FACTS_TTL_HOURS`/`cachedExtractSuspect` read-through
+  were DROPPED 2026-06-16 as dead code — the retired mechanism is gone; refresh is `refetch_facts`/re-sweep.)
 - **Richer extracts.** `fetchDeepExtracts` drops the MediaWiki-clamped `exchars` (hard cap 1200),
   pulls full plaintext, and self-truncates to `DEEP_EXTRACT_CHARS=4000` at a sentence boundary.
 
@@ -227,6 +228,33 @@ optimization — only matters once tours are large or strangers hold many offlin
 Refs: `apps/mobile/src/lib/offline.ts` (manifest + `isDownloadStale`),
 `apps/mobile/app/tours/[id]/index.tsx` (chip + ⋯ action), `packages/shared/src/schemas.ts`
 (`tourStopView`/`tourBracketView` `revisedAt`), `apps/api/src/index.ts` (detail route).
+
+## Offline downloads: expiration / forced freshness re-check (TTL)
+
+Founder ask 2026-06-16: an offline-downloaded tour should EXPIRE after a while (~**30 days**, a
+starting value — usage/ear-tunable like the facts TTL) and force a freshness re-check / re-download.
+WHY: offline clips never auto-refresh — the device keeps its cached bytes indefinitely. The existing
+content-diff (`isDownloadStale` + the "Fresh cut ready" chip — see the section above) only catches
+drift IF the rider re-opens the tour-detail screen AND a fresh fetch is reachable; a tour downloaded
+once and never re-opened (or held in a dead zone) can carry STALE facts / a superseded clip forever.
+This is the maintenance gap made concrete: a `facts_hash` move, a `patch-clip`, or a `resynth-tour`
+never reaches an already-downloaded device. A time-based TTL is the safety net INDEPENDENT of the
+content-diff — it fires even when the device never got to compare. Secondary benefit: it bounds how
+long a baked Places break-name persists offline (CLAUDE.md notes the frozen-clip-outlives-the-DB-anchor
+Places-ToS concern).
+
+- [ ] Stamp `downloadedAt` in the offline manifest (or reuse its existing timestamp); on tour-open,
+      if `now − downloadedAt > OFFLINE_TTL_DAYS` (30), surface an "expired — re-download to refresh"
+      state.
+- [ ] **Soft vs hard — DECIDE.** Lean SOFT (still playable offline, but a more insistent prompt than
+      the content-diff chip) to honor the never-strand-a-rider-in-a-dead-zone posture; go HARD (refuse
+      offline play past TTL) only if licensing / Places-ToS demands a guaranteed-fresh ceiling.
+- [ ] Bump the manifest version if the shape changes (a pre-TTL download lacks `downloadedAt` → treat
+      as expired / re-pull, same pattern as the v1→v2 `revisedAt`-token migration).
+
+Refs: `apps/mobile/src/lib/offline.ts` (manifest + `isDownloadStale`),
+`apps/mobile/app/tours/[id]/index.tsx` (the chip/⋯ action this rides alongside). Pairs with the
+"Offline downloads: full re-pull only" section above (the time-based complement to its content-diff).
 
 ## Upstream-contribution drafts for the active poi_overrides (agent drafts, human submits)
 
