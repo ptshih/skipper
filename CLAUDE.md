@@ -5,12 +5,16 @@ Jungle-Cruise-skipper persona, played as phone audio (CarPlay later). **Optimize
 The persona is the product.** When a choice trades polish-for-the-builder against
 scale-for-a-market, pick polish.
 
+**Correctness over cost — never let spend-anxiety pick a worse design.** Choose the right architecture and
+let the model/tooling do the judgment even when a cheap heuristic would save a few dollars (don't keep an
+arbitrary char-count pre-filter ahead of a paid `enrich` step — let the enricher decide). Triggering a paid run still needs a founder OK; that *spend* guardrail never licenses a cheaper-but-worse design.
+
 **No users yet — break things freely (a STORAGE rule).** The app has ZERO real users, so
 schema / storage changes need NO backward-compatibility and NO careful data migration:
 prefer CLEAN, DESTRUCTIVE migrations (drop + recreate) over preserving legacy rows or
-nullable-for-back-compat columns. The only thing still worth a founder OK is COST — a live
-regen burns GCP credits. (Added 2026-06-08; the canonical-preview "demo" exception was
-dropped 2026-06-11 — there is no special tour, every tour is treated the same.) **Scope (2026-06-09):** this licenses breaking
+nullable-for-back-compat columns. The one founder-OK gate that survives is COST (the *spend*
+guardrail above — a live regen burns GCP credits; the canonical-preview "demo" exception was
+dropped 2026-06-11, every tour treated the same). **Scope (2026-06-09):** this licenses breaking
 STORAGE, not the wire contract — once v1 is in the App Store, installed clients lag, so
 the API/DTO surface (`@skipper/shared` + `apps/api` routes) stops being break-freely even
 while the DB stays destructive-OK. Posture now SET (`docs/decisions/api-versioning-posture.md`):
