@@ -97,6 +97,13 @@
   * {
     @apply border-border;
   }
+  /* v4 dropped v3's `cursor: pointer` on buttons (Preflight now matches the native default cursor);
+     restore the v3 behavior — the official upgrade-guide fix. `:not(:disabled)` leaves a disabled
+     control on the default cursor. */
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
   /* The app shell is a full-height grid (`grid h-full`); without these the layout collapses
      to content height and the sidebar / sticky topbar / scroll area all break. */
   html,
