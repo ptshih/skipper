@@ -16,12 +16,22 @@ flag `filtered-thin` was renamed **`filtered-stub`** to end the name collision (
 threshold entirely, which made one word mean two things).
 
 **Update 2026-06-15 (selection-driven enrich):** the enrich CTA is no longer region-bound — it acts on a
-table **selection**. `enrich-region.ts` now resolves the candidate set from `(filter ∪ --include-ids) \
---exclude-ids` (then the eligibility gate): a hand-picked id list, OR a filter (`--bbox`/`--source`/
-`--query`, default = the whole corpus) minus deselected ids. The admin POIs table gained per-row +
-select-all checkboxes (Gmail two-tier: explicit ids vs "select all matching" → a server-resolved filter),
-so server-side pagination later is a UI-only change with no contract change. Region-enrich survives as
-`filter:{bbox}`; the old region-picker dialog is gone. (`--bbox` is now optional — no bbox = whole corpus.)
+table **selection**. `enrich-region.ts` resolves the candidate set as an explicit `--include-ids` list
+**XOR** a filter (`--bbox`/`--source`/`--query`, default = the whole corpus) `\ --exclude-ids`, then the
+eligibility gate. (It is XOR, NOT a union: `isExplicit` requires include-ids with no filter; include-ids
+sent alongside a filter falls to FILTER mode and the ids are ignored — the UI never sends both.) The admin
+POIs table gained per-row + select-all checkboxes (Gmail two-tier: explicit ids vs "select all matching" →
+a server-resolved filter), so server-side pagination later is a UI-only change with no contract change.
+Region-enrich survives as `filter:{bbox}`; the old region-picker dialog is gone. (`--bbox` is now optional
+— no bbox = whole corpus.)
+
+**Update 2026-06-16 (selection-feature review fixes):** a review of the above found + fixed: a missing
+**confirm gate** on the Enrich dialog (a one-click paid run with no "are you sure", unlike every sibling
+op — now a `window.confirm` naming the scope); the **source dropdown** offered `osm`/`manual` (not in the
+`poi_source` enum) and omitted `wikipedia` (the only enrichable source) — fixed to the real enum values,
+and the dynamic source compare now casts `::text` so an unknown value matches nothing instead of throwing
+(it threw before, crashing even a free preview); and the selection count now shows the **story-eligible**
+subset (what actually runs + bills), not the raw row count.
 
 **Update 2026-06-16 (adversarial review fixes, pre-paid-run):** a 6-dimension review before the first
 paid run found + fixed a set of issues (commits `82b2139`, `82f4001`, `33b91e7`). The load-bearing ones:

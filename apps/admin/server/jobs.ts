@@ -166,8 +166,8 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
   if (kind === 'enrich_region') {
     const apply = body.apply === true
     const args: string[] = [script]
-    // Selection: a FILTER (bbox/source/query) or an explicit/excluded id set — the CLI resolves
-    // (filter ∪ include-ids) \ exclude-ids server-side. See the enrich-region.ts selection block.
+    // Selection: a FILTER (bbox/source/query) + exclude-ids, XOR an explicit include-ids list — the CLI
+    // resolves it server-side (explicit XOR filter, NOT a union). See the enrich-region.ts selection block.
     const idCsv = (v: unknown): string => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string').join(',') : '')
     if (body.bbox) args.push(`--bbox=${str(body.bbox)}`)
     if (body.source) args.push(`--source=${str(body.source)}`)

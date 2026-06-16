@@ -35,10 +35,12 @@ import { cn } from '@/lib/utils'
 
 type Tab = 'corpus' | 'retire'
 
+// Keyed to the real poi_source pgEnum (wikipedia | google_places | wikidata) — NOT osm/manual,
+// which were never enum members (the corpus is wikipedia + wikidata pins today).
 const SOURCE_META: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' }> = {
-  wikidata: { label: 'Wikidata', variant: 'default' },
-  osm: { label: 'OSM', variant: 'secondary' },
-  manual: { label: 'Manual', variant: 'outline' },
+  wikipedia: { label: 'Wikipedia', variant: 'default' },
+  wikidata: { label: 'Wikidata', variant: 'secondary' },
+  google_places: { label: 'Google Places', variant: 'outline' },
 }
 
 type BadgeVariant = 'default' | 'secondary' | 'success' | 'warning' | 'outline'
@@ -254,7 +256,7 @@ function EnrichDialog({
           <DialogDescription>
             Scouts each story POI ONCE into a curated, verbatim <strong>fact well</strong> on the shared corpus —
             tours and roam both narrate from it. Run after Discover, before generating. Spends Anthropic credits
-            (no TTS); a later re-discover invalidates wells, so re-enrich after one.
+            (no TTS). A re-discover now PRESERVES wells; rebuild one with Enrich after a material article change.
           </DialogDescription>
         </DialogHeader>
 
@@ -281,7 +283,21 @@ function EnrichDialog({
           <Button variant="outline" disabled={submitMut.isPending} onClick={() => submitMut.mutate(false)}>
             {submitMut.isPending ? 'Triggering…' : 'Preview'}
           </Button>
-          <Button disabled={submitMut.isPending} onClick={() => submitMut.mutate(true)}>
+          <Button
+            disabled={submitMut.isPending}
+            onClick={() => {
+              // SPENDS Anthropic across the WHOLE selection — gate behind a confirm naming the scope, like
+              // every other paid admin op. The server's confirm:true is client-set, so this IS the human
+              // gate; Preview stays the free, authoritative count. (Closes the one-click-paid-run hole.)
+              if (
+                !window.confirm(
+                  `Enrich ${summary}?\n\nThis SPENDS Anthropic credits (no TTS) and isn't undoable. Run Preview first to see the exact eligible count + estimated cost.`,
+                )
+              )
+                return
+              submitMut.mutate(true)
+            }}
+          >
             <Sparkles className="h-4 w-4" /> {submitMut.isPending ? 'Triggering…' : 'Enrich'}
           </Button>
         </DialogFooter>
@@ -668,6 +684,16 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
     () => filtered.reduce((n, p) => n + ((selMode === 'all' ? !selIds.has(p.id) : selIds.has(p.id)) ? 1 : 0), 0),
     [filtered, selMode, selIds],
   )
+  // The ENRICH-relevant count: the server only enriches (+bills for) story-eligible rows, so the headline
+  // number must reflect that, not the raw selection (which can include scenic/wikidata pins the gate drops).
+  const numEligibleSelected = useMemo(
+    () =>
+      filtered.reduce(
+        (n, p) => n + ((selMode === 'all' ? !selIds.has(p.id) : selIds.has(p.id)) && p.storyEligibility === 'eligible' ? 1 : 0),
+        0,
+      ),
+    [filtered, selMode, selIds],
+  )
   const headerChecked = filtered.length > 0 && numSelected === filtered.length
   const headerIndeterminate = numSelected > 0 && numSelected < filtered.length
 
@@ -707,9 +733,10 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
     return { kind: 'explicit', ids: filtered.filter((p) => isSelected(p.id)).map((p) => p.id) }
   }
   const selectionSummary =
-    selMode === 'explicit'
+    (selMode === 'explicit'
       ? `${selIds.size} hand-picked POI${selIds.size === 1 ? '' : 's'}`
-      : `all ${numSelected} POIs matching this filter${selIds.size ? ` (minus ${selIds.size} deselected)` : ''}`
+      : `all ${numSelected} POIs matching this filter${selIds.size ? ` (minus ${selIds.size} deselected)` : ''}`) +
+    ` — ${numEligibleSelected} story-eligible`
 
   const totals = {
     total: pois.length,
@@ -759,9 +786,9 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
           <SelectTrigger><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All sources</SelectItem>
+            <SelectItem value="wikipedia">Wikipedia</SelectItem>
             <SelectItem value="wikidata">Wikidata</SelectItem>
-            <SelectItem value="osm">OSM</SelectItem>
-            <SelectItem value="manual">Manual</SelectItem>
+            <SelectItem value="google_places">Google Places</SelectItem>
           </SelectContent>
         </Select>
         <Select value={flags} onValueChange={setFlags}>
@@ -783,7 +810,7 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
         <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/40 px-3 py-2 text-sm">
           <span className="font-medium">{selectionSummary}</span>
           <Button size="sm" onClick={() => setEnrichOpen(true)}>
-            <Sparkles className="h-4 w-4" /> Enrich {numSelected}
+            <Sparkles className="h-4 w-4" /> Enrich {numEligibleSelected}
           </Button>
           <button className="text-xs text-muted-foreground hover:text-foreground" onClick={clearSel}>
             Clear

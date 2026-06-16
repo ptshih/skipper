@@ -83,10 +83,11 @@ const bbox = (() => {
   return { swLng: p[0]!, swLat: p[1]!, neLng: p[2]!, neLat: p[3]! }
 })()
 
-// Selection — the corpus subset to enrich, resolved server-side (this CLI IS the job runner). The set is
-// (filter-matched ∪ include-ids) \ exclude-ids, then the eligibility gate. Admin sends EITHER an explicit
-// id list (hand-picked rows) OR a filter (bbox/source/query) + exclude-ids ("select all matching, minus a
-// few") — the Gmail two-tier model, so server-side pagination never has to enumerate every id client-side.
+// Selection — the corpus subset to enrich, resolved server-side (this CLI IS the job runner). Admin sends
+// EITHER an explicit id list (hand-picked rows) XOR a filter (bbox/source/query) + exclude-ids ("select all
+// matching, minus a few") — the Gmail two-tier model, so server-side pagination never has to enumerate every
+// id client-side. NOTE: it is XOR, not a union — `isExplicit` (below) requires include-ids with NO filter;
+// include-ids passed ALONGSIDE a filter falls to FILTER mode and the ids are ignored (the UI never sends both).
 const parseIds = (v: string | undefined): string[] => (v ? v.split(',').map((s) => s.trim()).filter(Boolean) : [])
 const sourceFilter = flags.value('source') || null
 const query = (flags.value('query') ?? '').trim().toLowerCase()
@@ -134,13 +135,15 @@ async function main(): Promise<void> {
             ? inArray(pois.id, includeIds)
             : bbox
               ? and(
-                  // sql`` not eq() — pois.source is a PgEnum, so a dynamic (user-supplied) string needs a
-                  // parameterized compare; a non-enum value simply matches nothing (honest 0, no throw).
-                  sql`${pois.source} = ${sourceFilter ?? 'wikipedia'}`,
+                  // CAST the enum to text before comparing a dynamic (user-supplied) source. `enum = text`
+                  // makes Postgres coerce the string TO the enum and THROW on a non-member value ("invalid
+                  // input value for enum") — which would crash even a free dry-run; `enum::text = text`
+                  // compares as text, so an unknown source simply matches nothing (honest 0, no crash).
+                  sql`${pois.source}::text = ${sourceFilter ?? 'wikipedia'}`,
                   sql`${pois.lat} between ${bbox.swLat} and ${bbox.neLat}`,
                   sql`${pois.lng} between ${bbox.swLng} and ${bbox.neLng}`,
                 )
-              : sql`${pois.source} = ${sourceFilter ?? 'wikipedia'}`,
+              : sql`${pois.source}::text = ${sourceFilter ?? 'wikipedia'}`,
         ),
     { label: 'load enrich corpus' },
   )
