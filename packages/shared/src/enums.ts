@@ -34,10 +34,12 @@ export type TrackForm = z.infer<typeof trackForm>
 export const stopType = z.enum(['story', 'scenic', 'break'])
 export type StopType = z.infer<typeof stopType>
 
-/** The drive's FRAME pieces — intro/outro (the `tour_frames` table, pg `frame_kind`). The wire
- *  DTO keeps the `bracketKind` name for client stability. */
-export const bracketKind = z.enum(['intro', 'outro'])
-export type BracketKind = z.infer<typeof bracketKind>
+/** The drive's FRAME pieces — intro/outro (the `tour_frames` table, pg `frame_kind`). The JSON
+ *  this enum validates is the VALUES ('intro'/'outro') + the parent's `intro`/`outro` keys — none
+ *  contain "frame"/"bracket", so the 2026-06-16 bracket→frame identifier rename changed NO wire
+ *  bytes (only TS names), and installed clients are unaffected. */
+export const frameKind = z.enum(['intro', 'outro'])
+export type FrameKind = z.infer<typeof frameKind>
 
 /** Where a POI came from (its DISCOVERY source). Stored for dedup + attribution (Wikipedia is
  *  CC BY-SA; a named scenic pin is discovered from Wikidata, CC0). */

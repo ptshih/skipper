@@ -18,7 +18,7 @@
 export * from './models'
 export { generateTour } from './pipeline/generate-tour'
 export type {
-  BracketSummary,
+  FrameSummary,
   GenerateOptions,
   GenerateResult,
   StopSummary,

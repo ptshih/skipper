@@ -28,7 +28,7 @@ import { jokeLevel as JOKE_NOTCHES } from '@skipper/shared'
 import type { JokeLevel } from '@skipper/shared'
 import { formatMmss } from '@skipper/drive-core'
 import { generateTour } from './pipeline/generate-tour'
-import type { BracketSummary, GenerateResult } from './pipeline/generate-tour'
+import type { FrameSummary, GenerateResult } from './pipeline/generate-tour'
 import { beginJob, finishJob } from './pipeline/job-progress'
 
 const DURATIONS = ['short', 'standard', 'long'] as const
@@ -111,9 +111,9 @@ function printResult(r: GenerateResult): void {
   console.log('='.repeat(72))
   let audioMs = 0
   let estSec = 0 // dry-run: summed spoken-length estimate across narrated stops
-  const intro = r.brackets.find((b) => b.kind === 'intro')
-  const outro = r.brackets.find((b) => b.kind === 'outro')
-  const printBracket = (b: BracketSummary | undefined, label: string): void => {
+  const intro = r.frames.find((b) => b.kind === 'intro')
+  const outro = r.frames.find((b) => b.kind === 'outro')
+  const printBracket = (b: FrameSummary | undefined, label: string): void => {
     if (!b) return
     const est = b.script ? estSpokenSec(b.script) : 0
     const lenTag = b.durationMs

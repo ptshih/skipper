@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { buildIntroSheet, buildOutroSheet } from '../src/pipeline/narrate'
 
-describe('bracket sheets (intro/outro)', () => {
+describe('frame sheets (intro/outro)', () => {
   test('intro frames destination + direction, position-agnostic, no place-fact, meet-your-host', () => {
     const sheet = buildIntroSheet({
       region: 'Lake Tahoe',
@@ -11,7 +11,7 @@ describe('bracket sheets (intro/outro)', () => {
       headline: 'Emerald Bay',
       hostName: 'Skipper',
     })
-    expect(sheet).toContain('BRACKET: INTRO')
+    expect(sheet).toContain('FRAME: INTRO')
     expect(sheet).toContain('THIS DRIVE: Emerald Bay')
     expect(sheet).toContain('FROM: Tahoe City')
     expect(sheet).toContain('TO: South Lake Tahoe')
@@ -28,7 +28,7 @@ describe('bracket sheets (intro/outro)', () => {
       endAnchor: 'South Lake Tahoe',
       jokeLevel: 'off',
     })
-    expect(sheet).toContain('BRACKET: OUTRO')
+    expect(sheet).toContain('FRAME: OUTRO')
     expect(sheet).toContain('ARRIVING AT: South Lake Tahoe')
     expect(sheet).toContain('JOKE NOTCH: OFF')
     expect(sheet).toMatch(/sign-off|bow/i)

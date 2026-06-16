@@ -141,7 +141,7 @@ async function resolveTarget(id: string): Promise<ClipTarget | null> {
     return {
       label: `${frame.kind} frame of tour ${frame.tourId.slice(0, 8)}`,
       tourId: frame.tourId,
-      // Patch IN PLACE at the row's stored key — frame keys are per-run now (bracketKey),
+      // Patch IN PLACE at the row's stored key — frame keys are per-run now (frameKey),
       // so minting a fresh key here would strand the row's pointer.
       key: frame.audioUrl,
       script: frame.script,

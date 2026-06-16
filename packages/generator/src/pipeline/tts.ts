@@ -27,7 +27,7 @@ import { normalizeAndEncode } from './loudnorm'
 const SYNTHESIZE_URL = 'https://texttospeech.googleapis.com/v1/text:synthesize'
 const CLOUD_PLATFORM_SCOPE = 'https://www.googleapis.com/auth/cloud-platform'
 /** Per-attempt timeout (ms) for one synth. TTS is the most-called external API on a full run
- *  (one clip per stop + brackets) and runs in a bounded pool — a single HUNG synth (no timeout)
+ *  (one clip per stop + frames) and runs in a bounded pool — a single HUNG synth (no timeout)
  *  would hold a worker slot forever and stall the whole synth phase AFTER all narration is paid
  *  for. Generous: a ~2-min clip synthesizes in ~45s (measured ~0.38× audio length), so 90s is
  *  ~2× headroom; a fired timeout is a transient and gets a fresh clock on retry (fetchWithRetry). */

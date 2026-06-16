@@ -22,7 +22,7 @@ import {
   poiSource,
   tourStatus,
   trackForm,
-  bracketKind,
+  frameKind,
   attributionSource,
 } from '../packages/shared/src/enums'
 
@@ -34,8 +34,7 @@ const PAIRS: { name: string; pg: readonly string[]; zod: readonly string[] }[] =
   { name: 'poi_source ⇄ poiSource', pg: poiSourceEnum.enumValues, zod: poiSource.options },
   { name: 'tour_status ⇄ tourStatus', pg: tourStatusEnum.enumValues, zod: tourStatus.options },
   { name: 'track_form ⇄ trackForm', pg: trackFormEnum.enumValues, zod: trackForm.options },
-  // The pg enum is `frame_kind`; the wire keeps the `bracketKind` name (same values).
-  { name: 'frame_kind ⇄ bracketKind', pg: frameKindEnum.enumValues, zod: bracketKind.options },
+  { name: 'frame_kind ⇄ frameKind', pg: frameKindEnum.enumValues, zod: frameKind.options },
 ]
 for (const { name, pg, zod } of PAIRS) {
   if (norm(pg) !== norm(zod)) {

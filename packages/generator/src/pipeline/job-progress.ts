@@ -41,7 +41,7 @@ interface BeginFields {
   targetSlug?: string
   /** Known up front for ops; generate backfills via finishJob. */
   tourId?: string
-  /** patch_clip: the stop/bracket id; resynth/sweep: the tour id. */
+  /** patch_clip: the stop/frame id; resynth/sweep: the tour id. */
   targetId?: string
 }
 

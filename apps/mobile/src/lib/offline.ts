@@ -1,7 +1,7 @@
 // Offline tour download (Phase 3) — persist a complete tour to disk so it plays with
 // ZERO network. Tahoe has dead zones, so offline-first is a hard product requirement.
 //
-// We download every clip's BYTES (stops + the intro/outro brackets) to the PERSISTENT
+// We download every clip's BYTES (stops + the intro/outro frames) to the PERSISTENT
 // document dir (Paths.document — NOT Paths.cache, which the OS can evict) and write a
 // manifest carrying the full drive detail, so a downloaded tour needs no network at all.
 // Presigned R2 URLs die in 1h, so we store the BYTES, not the URLs.
@@ -68,7 +68,7 @@ export interface DownloadProgress {
   total: number
 }
 
-/** Build the flat list of clips to download from a sign response (stops + brackets). */
+/** Build the flat list of clips to download from a sign response (stops + frames). */
 function clipsToDownload(signed: SignedAudio): {
   key: string
   url: string
@@ -301,7 +301,7 @@ function clipsPresentOnDisk(tourId: string, m: OfflineManifest): boolean {
   })
 }
 
-/** Build the seq → local `file://` url map (+ bracket sentinels) from a downloaded manifest. */
+/** Build the seq → local `file://` url map (+ frame sentinels) from a downloaded manifest. */
 function localUrlMap(tourId: string, m: OfflineManifest): Map<number, string> {
   const urls = new Map<number, string>()
   for (const [seqStr, c] of Object.entries(m.clips.stops)) {
@@ -320,9 +320,9 @@ export function isTourDownloaded(tourId: string): boolean {
 }
 
 /**
- * Fold a detail's per-clip content tokens (`revisedAt`) + stop set + bracket presence into one
+ * Fold a detail's per-clip content tokens (`revisedAt`) + stop set + frame presence into one
  * comparable string. Any drift changes it: a clip re-synth (token bumps), a regen (fresh stop ids
- * → fresh tokens), a stop added/removed (seq set changes), a bracket appearing/vanishing.
+ * → fresh tokens), a stop added/removed (seq set changes), a frame appearing/vanishing.
  */
 function contentSignature(d: TourDetail): string {
   const stops = d.stops

@@ -79,7 +79,7 @@ export const voice = {
     pitStop: 'PIT STOP', // a rest stop
     gpsSearching: 'Looking for the satellites — hang tight.', // live drive, no usable fix yet
     gpsError: 'Lost the GPS signal, folks. Pull over and give her another go.', // live watch failed
-    // The intro/outro bracket clips aren't stops — these title them on BOTH the NOW card and
+    // The intro/outro frame clips aren't stops — these title them on BOTH the NOW card and
     // the lock-screen Now Playing (single source, so the two can't silently diverge).
     bracketIntro: 'Welcome aboard',
     bracketOutro: 'One for the road',

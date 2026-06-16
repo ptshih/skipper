@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import {
   buildPreviewTimeline,
-  bracketKindForSeq,
+  frameKindForSeq,
   INTRO_SEQ,
   OUTRO_SEQ,
   type PreviewStop,
@@ -85,7 +85,7 @@ describe('buildPreviewTimeline', () => {
   })
 })
 
-describe('buildPreviewTimeline — intro/outro brackets', () => {
+describe('buildPreviewTimeline — intro/outro frames', () => {
   const tl = buildPreviewTimeline(stops, polyline, {
     totalDriveSec: 600,
     intro: { audioDurationMs: 12_000 },
@@ -104,13 +104,13 @@ describe('buildPreviewTimeline — intro/outro brackets', () => {
     ])
     const first = tl.segments[0]!
     const last = tl.segments[tl.segments.length - 1]!
-    expect(first.bracketKind).toBe('intro')
+    expect(first.frameKind).toBe('intro')
     expect(first.seq).toBe(INTRO_SEQ)
-    expect(last.bracketKind).toBe('outro')
+    expect(last.frameKind).toBe('outro')
     expect(last.seq).toBe(OUTRO_SEQ)
   })
 
-  test('brackets play FULL length (no compression) and sit at the route ends', () => {
+  test('frames play FULL length (no compression) and sit at the route ends', () => {
     const intro = tl.segments[0]!
     const outro = tl.segments[tl.segments.length - 1]!
     expect(intro.previewMs).toBe(12_000)
@@ -120,7 +120,7 @@ describe('buildPreviewTimeline — intro/outro brackets', () => {
     expect(outro.routeProgress).toBe(1)
   })
 
-  test('startMs stays contiguous with brackets in the timeline; clipCount includes them', () => {
+  test('startMs stays contiguous with frames in the timeline; clipCount includes them', () => {
     let acc = 0
     for (const s of tl.segments) {
       expect(s.startMs).toBe(acc)
@@ -130,14 +130,14 @@ describe('buildPreviewTimeline — intro/outro brackets', () => {
     expect(tl.clipCount).toBe(4) // 2 stop clips + intro + outro
   })
 
-  test('a real stop seq is never mistaken for a bracket; sentinels map to their kind', () => {
-    expect(bracketKindForSeq(0)).toBeNull()
-    expect(bracketKindForSeq(2)).toBeNull()
-    expect(bracketKindForSeq(INTRO_SEQ)).toBe('intro')
-    expect(bracketKindForSeq(OUTRO_SEQ)).toBe('outro')
+  test('a real stop seq is never mistaken for a frame; sentinels map to their kind', () => {
+    expect(frameKindForSeq(0)).toBeNull()
+    expect(frameKindForSeq(2)).toBeNull()
+    expect(frameKindForSeq(INTRO_SEQ)).toBe('intro')
+    expect(frameKindForSeq(OUTRO_SEQ)).toBe('outro')
   })
 
-  test('absent/null brackets leave the timeline exactly as before', () => {
+  test('absent/null frames leave the timeline exactly as before', () => {
     const none = buildPreviewTimeline(stops, polyline, { totalDriveSec: 600 })
     const withNulls = buildPreviewTimeline(stops, polyline, {
       totalDriveSec: 600,
@@ -145,6 +145,6 @@ describe('buildPreviewTimeline — intro/outro brackets', () => {
       outro: { audioDurationMs: null },
     })
     expect(none.segments.map((s) => s.kind)).toEqual(withNulls.segments.map((s) => s.kind))
-    expect(withNulls.segments.some((s) => s.bracketKind)).toBe(false)
+    expect(withNulls.segments.some((s) => s.frameKind)).toBe(false)
   })
 })

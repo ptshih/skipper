@@ -6,7 +6,7 @@
 // real). Keys are TOUR-scoped (narration is tour-owned, never reused across tours):
 // clips/<tourId>/<trackId> for stops, clips/<tourId>/<runId>-intro|outro for frames.
 
-import type { BracketKind } from '@skipper/shared'
+import type { FrameKind } from '@skipper/shared'
 import { getR2Client, presignGet } from '@skipper/storage'
 import { TTS_AUDIO_CONTENT_TYPE, TTS_CLIP_EXTENSION } from '../models'
 
@@ -19,7 +19,7 @@ export function clipKey(tourId: string, trackId: string): string {
 }
 
 /**
- * Bracket clip key — PER-RUN unique: clips/<tourId>/<runId>-intro|outro.<ext>.
+ * Frame clip key — PER-RUN unique: clips/<tourId>/<runId>-intro|outro.<ext>.
  *
  * The runId component is deliberate (audit-caught): with a fixed per-tour key, a regen (or
  * a stray concurrent run) overwrites the LIVE telling's frame bytes in place before its
@@ -29,7 +29,7 @@ export function clipKey(tourId: string, trackId: string): string {
  * the same accepted trade as stop clips. Tools that PATCH an existing frame in place
  * write to the row's stored audioUrl, never to a freshly minted key.
  */
-export function bracketKey(tourId: string, kind: BracketKind, runId: string): string {
+export function frameKey(tourId: string, kind: FrameKind, runId: string): string {
   return `clips/${tourId}/${runId}-${kind}.${TTS_CLIP_EXTENSION}`
 }
 

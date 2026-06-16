@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import {
   attributionSource,
-  bracketKind,
+  frameKind,
   jokeLevel,
   platform,
   stopType,
@@ -90,7 +90,7 @@ export type VersionPolicy = z.infer<typeof versionPolicy>
 export const versionResponse = z.object({ policies: z.array(versionPolicy) })
 export type VersionResponse = z.infer<typeof versionResponse>
 
-/** A tour: the whole self-contained drive (route + endpoints + ordered stops + brackets). */
+/** A tour: the whole self-contained drive (route + endpoints + ordered stops + frames). */
 export const tour = z.object({
   id: z.uuid(),
   regionId: z.uuid(),
@@ -170,15 +170,15 @@ export const tourStopView = z.object({
 })
 export type TourStopView = z.infer<typeof tourStopView>
 
-/** A bracket as the player needs it: which frame + how long. Audio comes from /sign. */
-export const tourBracketView = z.object({
-  kind: bracketKind,
+/** A frame as the player needs it: which frame + how long. Audio comes from /sign. */
+export const tourFrameView = z.object({
+  kind: frameKind,
   audioDurationMs: z.number().int().nullish(),
-  /** When this bracket's audio was last revised (ISO) — the offline-staleness token; see
+  /** When this frame's audio was last revised (ISO) — the offline-staleness token; see
    *  `tourStopView.revisedAt`. */
   revisedAt: z.iso.datetime().nullish(),
 })
-export type TourBracketView = z.infer<typeof tourBracketView>
+export type TourFrameView = z.infer<typeof tourFrameView>
 
 /**
  * The narrating host's display identity, resolved SERVER-SIDE from the tour's region.
@@ -218,8 +218,8 @@ export const tourDetail = z.object({
   }),
   region: z.object({ slug: z.string(), displayName: z.string() }),
   host: hostIdentity,
-  intro: tourBracketView.nullish(),
-  outro: tourBracketView.nullish(),
+  intro: tourFrameView.nullish(),
+  outro: tourFrameView.nullish(),
   stops: z.array(tourStopView),
 })
 export type TourDetail = z.infer<typeof tourDetail>
@@ -241,8 +241,8 @@ export type SignedStopClip = z.infer<typeof signedStopClip>
 
 /**
  * POST /tours/:id/assets/sign — presigned audio URLs for the drive. `stops` are keyed
- * by seq; `intro`/`outro` are the bracket clips (null until a tour has them — the player
- * may ignore them until bracket playback lands).
+ * by seq; `intro`/`outro` are the frame clips (null until a tour has them — the player
+ * may ignore them until frame playback lands).
  */
 export const signedAudio = z.object({
   stops: z.array(signedStopClip),

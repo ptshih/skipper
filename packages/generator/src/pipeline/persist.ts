@@ -29,7 +29,7 @@ import type {
   Polyline,
   FactSheetEntry,
 } from '@skipper/db/schema'
-import type { BracketKind, PoiSource, StopType } from '@skipper/shared'
+import type { FrameKind, PoiSource, StopType } from '@skipper/shared'
 
 /** The seeded draft tour the generator fills — route geometry, endpoints, region. */
 export interface TourShell {
@@ -287,7 +287,7 @@ export async function upsertPoi(input: UpsertPoiInput): Promise<string> {
  * stuck on 'generating', and this write is the self-heal that lets the next run proceed.
  * The caller WARNS when the loaded shell already said 'generating' (a concurrent run may be
  * in flight); the damage a true race could do is contained by per-run-unique clip AND
- * bracket keys (storage.ts) — two runs never write the same R2 object.
+ * frame keys (storage.ts) — two runs never write the same R2 object.
  */
 export async function markTourGenerating(tourId: string): Promise<void> {
   // Retry-safe: a blind status set is idempotent (re-applying writes the same value).
@@ -354,8 +354,8 @@ export interface FinalStop {
 }
 
 /** A fully-narrated, fully-synthesized intro/outro frame. */
-export interface FinalBracket {
-  kind: BracketKind
+export interface FinalFrame {
+  kind: FrameKind
   script: string
   audioUrl: string
   audioDurationMs: number
@@ -371,11 +371,11 @@ export interface FinalBracket {
 export async function finalizeTourReady(
   tourId: string,
   stops: FinalStop[],
-  brackets: FinalBracket[],
+  frames: FinalFrame[],
 ): Promise<void> {
   if (stops.length === 0) throw new Error(`Refusing to finalize tour ${tourId} with zero stops.`)
-  const haveIntro = brackets.some((b) => b.kind === 'intro')
-  const haveOutro = brackets.some((b) => b.kind === 'outro')
+  const haveIntro = frames.some((b) => b.kind === 'intro')
+  const haveOutro = frames.some((b) => b.kind === 'outro')
   if (!haveIntro || !haveOutro) {
     throw new Error(`Refusing to finalize tour ${tourId} without BOTH intro and outro frames.`)
   }
@@ -389,7 +389,7 @@ export async function finalizeTourReady(
       throw new Error(`Refusing to finalize tour ${tourId}: stop ${s.seq} (${s.stopType}) has no audio.`)
     }
   }
-  for (const b of brackets) {
+  for (const b of frames) {
     if (!b.audioUrl || !(b.audioDurationMs > 0)) {
       throw new Error(`Refusing to finalize tour ${tourId}: ${b.kind} frame has no audio.`)
     }
@@ -419,7 +419,7 @@ export async function finalizeTourReady(
     attribution: s.attribution,
     factsHash: s.factsHash,
   }))
-  const frameRows: NewTourFrame[] = brackets.map((b) => ({
+  const frameRows: NewTourFrame[] = frames.map((b) => ({
     tourId,
     kind: b.kind,
     script: b.script,

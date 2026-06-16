@@ -399,7 +399,7 @@ function describe(req: NarrationRequest): string {
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Intro / outro brackets (Option B: the drive's FRAME, not stops)            */
+/*  Intro / outro frames (Option B: the drive's FRAME, not stops)            */
 /*                                                                             */
 /*  Persona-only, NO fact sheet — they assert no place-fact (they NAME + FRAME  */
 /*  the region/endpoints only). The personal KIT, banned from stops, lives in   */
@@ -428,10 +428,10 @@ export interface OutroRequest {
   jokeLevel: JokeLevel
 }
 
-/** Build the INTRO bracket's user message (position-agnostic; destination + direction). */
+/** Build the INTRO frame's user message (position-agnostic; destination + direction). */
 export function buildIntroSheet(req: IntroRequest): string {
   const lines: string[] = []
-  lines.push('BRACKET: INTRO (the welcome — plays when the drive STARTS; position-agnostic)')
+  lines.push('FRAME: INTRO (the welcome — plays when the drive STARTS; position-agnostic)')
   lines.push(`REGION: ${req.region}`)
   if (req.headline) lines.push(`THIS DRIVE: ${req.headline}`)
   lines.push(`FROM: ${req.startAnchor}`)
@@ -445,10 +445,10 @@ export function buildIntroSheet(req: IntroRequest): string {
   return lines.join('\n')
 }
 
-/** Build the OUTRO bracket's user message (arrive + warm sign-off). */
+/** Build the OUTRO frame's user message (arrive + warm sign-off). */
 export function buildOutroSheet(req: OutroRequest): string {
   const lines: string[] = []
-  lines.push('BRACKET: OUTRO (the sign-off — plays on arrival / tour-end)')
+  lines.push('FRAME: OUTRO (the sign-off — plays on arrival / tour-end)')
   lines.push(`REGION: ${req.region}`)
   lines.push(`ARRIVING AT: ${req.endAnchor}`)
   lines.push(`JOKE NOTCH: ${req.jokeLevel.toUpperCase()}`)
@@ -459,7 +459,7 @@ export function buildOutroSheet(req: OutroRequest): string {
   return lines.join('\n')
 }
 
-/** Narrate the INTRO bracket with the persona's bracket prompt. Persona-only, no fact sheet. */
+/** Narrate the INTRO frame with the persona's frame prompt. Persona-only, no fact sheet. */
 export async function narrateIntro(
   req: IntroRequest,
   bracketPrompt: string,
@@ -467,7 +467,7 @@ export async function narrateIntro(
   return runNarration(bracketPrompt, buildIntroSheet(req), `INTRO (${req.region})`)
 }
 
-/** Narrate the OUTRO bracket with the persona's bracket prompt. Persona-only, no fact sheet. */
+/** Narrate the OUTRO frame with the persona's frame prompt. Persona-only, no fact sheet. */
 export async function narrateOutro(
   req: OutroRequest,
   bracketPrompt: string,

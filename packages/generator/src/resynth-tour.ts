@@ -90,7 +90,7 @@ async function main() {
       .map((b) => ({
         label: `${b.kind} frame`,
         // Re-synth IN PLACE at the row's stored key — frame keys are per-run now
-        // (bracketKey), so recomputing one here would strand the row's pointer. A future
+        // (frameKey), so recomputing one here would strand the row's pointer. A future
         // FORMAT migration (extension change) should mint new keys + update rows + sweep.
         key: b.audioUrl!,
         script: b.script!,

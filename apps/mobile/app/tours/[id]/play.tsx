@@ -265,9 +265,9 @@ export default function DriveScreen() {
   if (d.phase === 'loading') return <StateView title="Drive" loading message={voice.loading.tour} />
 
   const activeStop = d.activeSeq != null ? d.stops.find((s) => s.seq === d.activeSeq) : undefined
-  // The intro/outro brackets aren't stops; give them a frame title instead of a place name.
-  const nowTitle = d.activeBracket
-    ? d.activeBracket === 'intro'
+  // The intro/outro frames aren't stops; give them a frame title instead of a place name.
+  const nowTitle = d.activeFrame
+    ? d.activeFrame === 'intro'
       ? voice.player.bracketIntro
       : voice.player.bracketOutro
     : (activeStop?.name ?? d.hostName)

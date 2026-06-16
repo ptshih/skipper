@@ -22,7 +22,7 @@ describe('extForContentType', () => {
 describe('urlMapFromSigned', () => {
   const clip = (url: string) => ({ url, contentType: 'audio/mpeg', durationMs: 1000 })
 
-  test('keys stops by seq and brackets under the INTRO_SEQ/OUTRO_SEQ sentinels', () => {
+  test('keys stops by seq and frames under the INTRO_SEQ/OUTRO_SEQ sentinels', () => {
     const signed: SignedAudio = {
       stops: [
         { seq: 0, ...clip('https://r2/stop0') },
@@ -39,7 +39,7 @@ describe('urlMapFromSigned', () => {
     expect(m.size).toBe(4)
   })
 
-  test('omits absent brackets (a tour with no intro/outro)', () => {
+  test('omits absent frames (a tour with no intro/outro)', () => {
     const signed: SignedAudio = {
       stops: [{ seq: 0, ...clip('https://r2/stop0') }],
       intro: null,

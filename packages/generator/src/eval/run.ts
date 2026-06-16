@@ -109,7 +109,7 @@ async function main() {
   const { path, jsonOut, charm, veracity } = parseArgs(process.argv)
   const artifact = (await Bun.file(path).json()) as Artifact
 
-  // Audit every NARRATED stop. (Brackets are a separate grounding surface — a future
+  // Audit every NARRATED stop. (Frames are a separate grounding surface — a future
   // evaluator; they carry no fact well in the artifact.)
   const narrated = artifact.stops.filter((s) => s.script && s.script.trim().length > 0)
   const dims = [

@@ -228,7 +228,7 @@ optimization — only matters once tours are large or strangers hold many offlin
 
 Refs: `apps/mobile/src/lib/offline.ts` (manifest + `isDownloadStale`),
 `apps/mobile/app/tours/[id]/index.tsx` (chip + ⋯ action), `packages/shared/src/schemas.ts`
-(`tourStopView`/`tourBracketView` `revisedAt`), `apps/api/src/index.ts` (detail route).
+(`tourStopView`/`tourFrameView` `revisedAt`), `apps/api/src/index.ts` (detail route).
 
 ## Offline downloads: expiration / forced freshness re-check (TTL)
 

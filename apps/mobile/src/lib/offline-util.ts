@@ -19,7 +19,7 @@ export function extForContentType(contentType: string): string {
 }
 
 /**
- * The url map the players key on: stop seq → uri, plus the intro/outro bracket clips under
+ * The url map the players key on: stop seq → uri, plus the intro/outro frame clips under
  * the INTRO_SEQ/OUTRO_SEQ sentinels. ONLINE (presigned https) form; the offline form is built
  * the same way from local file:// uris in offline.ts.
  */

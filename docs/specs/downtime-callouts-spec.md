@@ -142,7 +142,7 @@ kit-from-stops ban). A callout that asserts a fact is a bug — that's a story s
 `apps/mobile/src/lib/useDrive.ts` is a **queue + pump + single audio player**: `queue.current`
 (FIFO of seqs), `pump()` (plays next if `!clipBusy`), the clip-load effect keyed on `activeSeq`,
 lock-screen, stall/re-sign. Brackets already flow through it under sentinel seqs
-(`INTRO_SEQ`/`OUTRO_SEQ`, `bracketKindForSeq`). **Callouts do the same:**
+(`INTRO_SEQ`/`OUTRO_SEQ`, `frameKindForSeq`). **Callouts do the same:**
 - A **sentinel seq range** for callouts (e.g. a `CALLOUT_SEQ_BASE` block in `drive-core`,
   parallel to the bracket sentinels) + a `calloutForSeq(seq)` lookup.
 - The `urls` map (from `loadPlayback`) carries callout clips under those seqs.
@@ -323,7 +323,7 @@ Designed 2026-06-09. Grounded against, and citing for re-check:
 - `packages/drive-core/src/trigger.ts` — `TriggerEngine`, `GpsFix`, `DEFAULT_TRIGGER`
   (`leadSeconds 12`, `headingGateMps 2.2`, `headingConeDeg 90`), `effectiveRadiusM`.
 - `apps/mobile/src/lib/useDrive.ts` — queue/pump/`clipBusy`, `handleFix`/`handleEnd`,
-  `INTRO_SEQ`/`OUTRO_SEQ`/`bracketKindForSeq`, `SIM_MPH=60`/`SIM_FAST_SCALE=8`,
+  `INTRO_SEQ`/`OUTRO_SEQ`/`frameKindForSeq`, `SIM_MPH=60`/`SIM_FAST_SCALE=8`,
   `DRIVE_INTERRUPTION_MODE` (`'doNotMix'` → `'duckOthers'` is Phase 0), `useDriveMusic`
   (`'clip'`/`'drive'` segments).
 - `apps/mobile/src/lib/gps.ts` — `simulatedSource`/`liveSource`/`FixSubscription`.

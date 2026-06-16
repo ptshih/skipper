@@ -16,7 +16,7 @@ import { Animated, AppState, Image, Linking } from 'react-native'
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake'
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
 import {
-  bracketKindForSeq,
+  frameKindForSeq,
   buildPreviewTimeline,
   cumulativeMeters,
   OFF_ROUTE_MAX_M,
@@ -45,7 +45,7 @@ import { voice } from '@/ui'
 // as the preview (32k MP3 clips, 1h presigned URLs → re-sign once on a stall).
 const CLIP_STALL_MS = 12_000
 
-// Lock-screen title for a bracket clip (intro/outro aren't in the stop list). Reads the SAME
+// Lock-screen title for a frame clip (intro/outro aren't in the stop list). Reads the SAME
 // voice constants as the NOW-card title in play.tsx — single source, so they can't diverge.
 const bracketTitle = (kind: 'intro' | 'outro'): string =>
   kind === 'intro' ? voice.player.bracketIntro : voice.player.bracketOutro
@@ -103,7 +103,7 @@ interface DriveData {
   /** Total route length (m) — for projecting a fix's alongM onto a 0..1 progress dot. */
   totalM: number
   stops: DriveStop[]
-  /** PREVIEW only: bracket clip lengths captured from the detail response so the preview
+  /** PREVIEW only: frame clip lengths captured from the detail response so the preview
    *  timeline can play intro/outro full-length (live/sim queue them by sentinel, no length needed). */
   introMs: number | null
   outroMs: number | null
@@ -150,10 +150,10 @@ export interface UseDrive {
   /** 0..1 route position for `RouteTrack`, driven imperatively by each GPS fix. */
   progress: Animated.Value
   /** The stop whose clip is currently loaded/playing, or null between stops (ducked-quiet).
-   *  A bracket carries its sentinel seq; use `activeBracket` to tell intro/outro apart. */
+   *  A frame carries its sentinel seq; use `activeFrame` to tell intro/outro apart. */
   activeSeq: number | null
-  /** Set while the intro/outro bracket clip is the active audio (vs a real stop or quiet). */
-  activeBracket: 'intro' | 'outro' | null
+  /** Set while the intro/outro frame clip is the active audio (vs a real stop or quiet). */
+  activeFrame: 'intro' | 'outro' | null
   /** Seqs whose trigger has fired (for the stop list's passed/active states). */
   firedSeqs: Set<number>
   /** First not-yet-fired stop, for the "ROLLING · next stop: X" strip. In preview, the
@@ -275,7 +275,7 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
   const mountedRef = useRef(true) // false after unmount — guards setState in the async permission flow (review #4)
   const permPending = useRef(false) // a permission request is in flight — blocks double-tap (review #4)
   const lastFixAt = useRef(0) // ms of the last accepted live fix — feeds the no-GPS watchdog (review #6)
-  // Which brackets this tour has (set on load); the intro is queued at start, the outro
+  // Which frames this tour has (set on load); the intro is queued at start, the outro
   // (once) at the end. Refs so the queueing reads current values without dep churn.
   const bracketsRef = useRef<{ intro: boolean; outro: boolean }>({ intro: false, outro: false })
   const outroQueued = useRef(false)
@@ -318,7 +318,7 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
         }).catch(() => {})
         // OFFLINE-FIRST: a downloaded tour loads detail + local file:// clips with zero
         // network; otherwise this fetches + signs and streams. The url map keys stops by
-        // seq and the brackets under INTRO_SEQ/OUTRO_SEQ, either way. PREVIEW is the OPEN
+        // seq and the frames under INTRO_SEQ/OUTRO_SEQ, either way. PREVIEW is the OPEN
         // funnel — every ready tour is previewable anonymously (`preview: true` → ?preview=1),
         // even ones whose gated live drive + offline download stay account-walled.
         const { detail: tour, urls } = await loadPlayback(
@@ -354,7 +354,7 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
         // PREVIEW: build the compressed segment timeline (the preview's clock). Stretch the
         // between-stop drive gaps to 12–20s (vs the engine's short default) so the drive music
         // has room to breathe — preview-only pacing (the real drive uses actual elapsed time).
-        // intro/outro brackets bookend the timeline (full length, not compressed).
+        // intro/outro frames bookend the timeline (full length, not compressed).
         if (mode === 'preview') {
           const tl = buildPreviewTimeline(
             tour.stops.map((s) => ({
@@ -479,7 +479,7 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
 
   const handleEnd = useCallback(() => {
     reachedEnd.current = true
-    // Outro bracket — queued LAST (after any pending stops), so the sign-off plays before
+    // Outro frame — queued LAST (after any pending stops), so the sign-off plays before
     // the drive actually ends. Queued at most once.
     if (bracketsRef.current.outro && !outroQueued.current) {
       outroQueued.current = true
@@ -567,7 +567,7 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
     // partial opts object that READS as if it were configured. (audit #933)
     engineRef.current = new TriggerEngine(triggerable)
     setDriving(true)
-    // Intro bracket — the welcome, played FIRST (before any geofence trigger fires).
+    // Intro frame — the welcome, played FIRST (before any geofence trigger fires).
     if (bracketsRef.current.intro) {
       queue.current.push(INTRO_SEQ)
       pump()
@@ -800,7 +800,7 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
         player.pause()
       } catch {}
       player.replace({ uri })
-      const bk = bracketKindForSeq(activeSeq)
+      const bk = frameKindForSeq(activeSeq)
       const stopName = bk
         ? bracketTitle(bk)
         : (data.stops.find((s) => s.seq === activeSeq)?.name ?? data.hostName)
@@ -1162,7 +1162,7 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
     polyline: data?.polyline ?? [],
     progress: dot,
     activeSeq,
-    activeBracket: activeSeq === null ? null : bracketKindForSeq(activeSeq),
+    activeFrame: activeSeq === null ? null : frameKindForSeq(activeSeq),
     firedSeqs,
     nextSeq,
     currentKind,

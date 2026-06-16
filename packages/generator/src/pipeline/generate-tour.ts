@@ -24,7 +24,7 @@
 // feedback. Break narration names the curated Places anchor; the volatile live data
 // (open-now/rating) is still fetched fresh at tour-load (and "ask the skipper" later).
 
-import type { BracketKind, DurationBucket, JokeLevel } from '@skipper/shared'
+import type { FrameKind, DurationBucket, JokeLevel } from '@skipper/shared'
 import type { AttributionSnapshot, FactSheetEntry } from '@skipper/db/schema'
 import {
   ANTHROPIC_READY,
@@ -96,7 +96,7 @@ import type { NarrationRequest } from './narrate'
 import { judgeCloserDiversity } from './judge'
 import { synthesizeWithTailRetake } from './tts'
 import type { TailOutcome } from './tts'
-import { bracketKey, clipKey, uploadAudio } from './storage'
+import { frameKey, clipKey, uploadAudio } from './storage'
 import {
   buildStoryFacts,
   finalizeTourReady,
@@ -107,7 +107,7 @@ import {
   storyFactsHash,
   upsertPoi,
 } from './persist'
-import type { FinalBracket, FinalStop } from './persist'
+import type { FinalFrame, FinalStop } from './persist'
 
 export interface GenerateOptions {
   slug: string
@@ -154,8 +154,8 @@ export interface StopSummary {
   audioUrl?: string
 }
 
-export interface BracketSummary {
-  kind: BracketKind
+export interface FrameSummary {
+  kind: FrameKind
   script?: string
   durationMs?: number
 }
@@ -208,7 +208,7 @@ export interface GenerateResult {
   totalSec: number
   dryRun: boolean
   stops: StopSummary[]
-  brackets: BracketSummary[]
+  frames: FrameSummary[]
   /** The eval panel's scorecard + optimizer trace for this run (persisted via --json). */
   eval: TourEvalReport
   /** Wall-clock per pipeline phase (ms) — rides the artifact into eval_runs so profiling
@@ -270,7 +270,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
     // the self-heal), but a CONCURRENT run would be double spend — say so loudly.
     console.warn(
       `Tour "${opts.slug}" is already 'generating' — another run may be in flight (or a prior ` +
-        `run crashed). Per-run clip/bracket keys keep R2 safe, but prefer one run at a time.`,
+        `run crashed). Per-run clip/frame keys keep R2 safe, but prefer one run at a time.`,
     )
   }
   // The generation persona (prompts/voice/style/kit) is resolved from the tour's PERSONA KEY
@@ -605,12 +605,12 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   )
   lap('narration')
 
-  // Intro + outro brackets — the drive's FRAME (persona-only, no fact sheet, ZERO cross-stop
+  // Intro + outro frames — the drive's FRAME (persona-only, no fact sheet, ZERO cross-stop
   // state). Kicked off HERE so the two Opus calls overlap the eval panel below (they run under the
   // panel's wall-clock instead of after it) and are awaited just before TTS. Output-neutral: the
   // scripts depend only on shell/persona/jokeLevel, so WHEN they run can't change them. The
   // detached .catch keeps a panel throw from turning this still-pending promise into an
-  // unhandledRejection; the real bracket error still surfaces (and aborts — brackets are
+  // unhandledRejection; the real frame error still surfaces (and aborts — frames are
   // mandatory) at the `await bracketsPromise` below.
   const bracketsPromise = Promise.all([
     narrateIntro(
@@ -970,14 +970,14 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   lap('evalPanel')
   const scriptBySeq = new Map(narratedRecs.map((r) => [r.s.seq, r.script]))
 
-  // Intro + outro brackets — the drive's FRAME (persona-only, no fact sheet). The personal KIT,
+  // Intro + outro frames — the drive's FRAME (persona-only, no fact sheet). The personal KIT,
   // banned from stops, lives in the intro; the sentimental bow in the outro. Kicked off before the
   // eval panel above (overlapping its wall-clock); awaited HERE, just before TTS. Mandatory (the
   // ready-gate requires both), so a narration failure aborts. Usually already resolved by now (it
   // ran under the panel) — this await is then ~free, which is why lap('bracketNarration') reads ~0.
-  console.log('Awaiting intro + outro brackets (overlapped with the eval panel)...')
+  console.log('Awaiting intro + outro frames (overlapped with the eval panel)...')
   const [introScript, outroScript] = await bracketsPromise
-  const bracketPlan: { kind: BracketKind; script: string }[] = [
+  const framePlan: { kind: FrameKind; script: string }[] = [
     { kind: 'intro', script: introScript },
     { kind: 'outro', script: outroScript },
   ]
@@ -987,7 +987,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   // This is the LAST moment a cap can save real money: narration/judging is already paid
   // (and recorded per call in pipeline/spend.ts); TTS + R2 are the one cost still ahead.
   const ttsEstimate = estimateTtsUsd(
-    [...plan.map((s) => scriptBySeq.get(s.seq)!), ...bracketPlan.map((b) => b.script)],
+    [...plan.map((s) => scriptBySeq.get(s.seq)!), ...framePlan.map((b) => b.script)],
     persona.ttsStyle.length,
   )
   for (const line of llmSpendLines()) console.log(line)
@@ -1059,7 +1059,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       // was written); `costCapped` is what distinguishes them in the artifact.
       dryRun: true,
       stops,
-      brackets: bracketPlan.map((b) => ({ kind: b.kind, script: b.script })),
+      frames: framePlan.map((b) => ({ kind: b.kind, script: b.script })),
       eval: evalReport,
       timings: finishTimings(),
       ...(costCapped ? { costCapped: true } : {}),
@@ -1083,7 +1083,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   await markTourGenerating(tourId)
   try {
     const finalStops: FinalStop[] = []
-    const finalBrackets: FinalBracket[] = []
+    const finalBrackets: FinalFrame[] = []
     const summaries: StopSummary[] = []
 
     // Per-stop identity first (facts hash, per-run segment + track ids), then the poi upserts
@@ -1148,9 +1148,9 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
     // by the longest clip, not the sum (the serial loop measured ~10 min on a 27-min
     // tour). A failure rejects the pool and the catch below restores status; in-flight
     // siblings settle as orphaned R2 objects — the same accepted per-run-key trade as a
-    // failed serial run. Frame (intro/outro) keys are PER-RUN (see bracketKey) so this run
+    // failed serial run. Frame (intro/outro) keys are PER-RUN (see frameKey) so this run
     // can never overwrite the live telling's frame bytes before its own ready-gate commits.
-    const bracketRunId = crypto.randomUUID()
+    const frameRunId = crypto.randomUUID()
     const synthOne = async (script: string, key: string, label: string) => {
       console.log(`Synthesizing ${label}...`)
       // The tail-collapse retake rides every synth: a take whose closing sentences
@@ -1165,7 +1165,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       return { audioUrl, durationMs, tail }
     }
     console.log(
-      `Synthesizing ${prep.length} stop clips + ${bracketPlan.length} brackets (concurrency ${TTS_CONCURRENCY()})...`,
+      `Synthesizing ${prep.length} stop clips + ${framePlan.length} frames (concurrency ${TTS_CONCURRENCY()})...`,
     )
     const clipTasks: (() => Promise<{
       audioUrl: string
@@ -1176,14 +1176,14 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
         (p) => () =>
           synthOne(p.script, clipKey(tourId, p.trackId), `stop ${p.s.seq} (${p.s.stopType}) "${p.s.name}"`),
       ),
-      ...bracketPlan.map(
-        (b) => () => synthOne(b.script, bracketKey(tourId, b.kind, bracketRunId), `${b.kind} bracket`),
+      ...framePlan.map(
+        (b) => () => synthOne(b.script, frameKey(tourId, b.kind, frameRunId), `${b.kind} frame`),
       ),
     ]
     const clips = await mapLimit(clipTasks, TTS_CONCURRENCY(), (task) => task())
 
     // Assemble the final rows in plan order (mapLimit preserves item order: first the
-    // stops, then the two brackets).
+    // stops, then the two frames).
     for (const [i, p] of prep.entries()) {
       const s = p.s
       const poiId = poiIds[i]!
@@ -1285,19 +1285,19 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       })
     }
 
-    // Bracket rows — their clips came through the same pool, after the stop entries.
-    const bracketSummaries: BracketSummary[] = []
-    for (const [j, b] of bracketPlan.entries()) {
+    // Frame rows — their clips came through the same pool, after the stop entries.
+    const frameSummaries: FrameSummary[] = []
+    for (const [j, b] of framePlan.entries()) {
       const { audioUrl, durationMs } = clips[prep.length + j]!
       finalBrackets.push({ kind: b.kind, script: b.script, audioUrl, audioDurationMs: durationMs })
-      bracketSummaries.push({ kind: b.kind, script: b.script, durationMs })
+      frameSummaries.push({ kind: b.kind, script: b.script, durationMs })
     }
 
     // Fold the tail-collapse verdicts into the recorded scorecard (the panel scored the
     // SCRIPTS pre-synthesis; eval_runs must also describe the shipped AUDIO). A fixed
     // retake rides as detail; a still-collapsed shipped take fails that stop's tts gate
     // row — recorded for the human pass, never blocking ready (the standing posture).
-    // Brackets get the same retake in the pool but have no per-seq eval rows; their
+    // Frames get the same retake in the pool but have no per-seq eval rows; their
     // outcomes surface in the retake log lines + the summary count here.
     const allTails = clips.map((c) => c.tail)
     const retakes = allTails.filter((t) => t?.retook).length
@@ -1341,7 +1341,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
       totalSec,
       dryRun: false,
       stops: summaries,
-      brackets: bracketSummaries,
+      frames: frameSummaries,
       eval: evalReport,
       timings: finishTimings(),
     }

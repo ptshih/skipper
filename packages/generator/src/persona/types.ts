@@ -28,7 +28,7 @@ export interface PersonaDef {
   ttsStyle: string
   /** System prompt for STOP narration (grounded; kit banned). */
   systemPrompt: string
-  /** System prompt for the intro/outro BRACKETS (persona-only; the kit's home). */
+  /** System prompt for the intro/outro FRAMES (persona-only; the kit's home). */
   bracketPrompt: string
   /** The host's personal kit — per-persona DATA. Banned from stops, housed in the intro. */
   kit: {

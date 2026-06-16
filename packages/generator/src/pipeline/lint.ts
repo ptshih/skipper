@@ -161,7 +161,7 @@ export function lintScripts(
     }
   }
 
-  // 1. Personal kit is BANNED from stops — it lives in the INTRO bracket now (the kit's
+  // 1. Personal kit is BANNED from stops — it lives in the INTRO frame now (the kit's
   //    only home), so the per-stop budget INVERTS to zero: flag ANY stop that touches
   //    Ray / the mechanic / the truck / coffee. (Oblique refs — "before my first cup",
   //    "balance a checkbook" — slip this regex and are caught by ear, not here.) The
