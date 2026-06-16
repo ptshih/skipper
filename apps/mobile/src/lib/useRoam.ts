@@ -32,8 +32,9 @@ import { haversineMeters, RoamEngine } from '@skipper/drive-core'
 import type { LngLat } from '@skipper/drive-core'
 import { errorMessage, getRoamManifest, getTour, listTours } from './api'
 import type { RoamManifest } from './api'
-import { ensureDrivePermission, getDrivePermission, liveRoamSource, simulatedSource } from './gps'
+import { liveRoamSource, simulatedSource } from './gps'
 import type { FixSubscription } from './gps'
+import { useLocationPriming } from './useLocationPriming'
 import type { ChattinessLevel } from '@/ui'
 import { voice } from '@/ui/voice'
 
@@ -160,7 +161,7 @@ export function useRoam(mode: RoamMode): RoamState {
   const clipBusy = useRef(false)
   const subRef = useRef<FixSubscription | null>(null)
   const mountedRef = useRef(true)
-  const startPending = useRef(false) // a start flow is in flight — blocks double-tap
+  const startPending = useRef(false) // a start flow is in flight — blocks double-tap (sim; live is guarded inside useLocationPriming)
   const lastFixAt = useRef(0)
   const lastFixPos = useRef<{ lat: number; lng: number } | null>(null)
   const lastPublishedPos = useRef<{ lat: number; lng: number } | null>(null) // last position pushed to the map puck (audit #603)
@@ -574,29 +575,35 @@ export function useRoam(mode: RoamMode): RoamState {
     }
   }, [mode, chattiness, pump, teardown])
 
-  // Request the OS prompt + route the result (shared by start()'s already-decided path and the
-  // explainer CTA). `ensureDrivePermission` shows NO UI when already decided, so it's safe there.
-  const requestAndBegin = useCallback(async () => {
-    let perm
-    try {
-      perm = await ensureDrivePermission()
-    } catch {
-      // The request threw (misconfig / concurrent ask) — show the re-askable gate instead of
-      // letting the tap silently do nothing (mirrors useDrive's defensive handling).
-      if (mountedRef.current) {
-        setGate({ canAskAgain: true, reduced: false })
-        setPhase('locationGate')
-      }
-      return
-    }
-    if (!mountedRef.current) return
-    if (!perm.granted || perm.reduced) {
-      setGate({ canAskAgain: perm.canAskAgain, reduced: perm.reduced })
+  // ---- location-permission priming (live mode) — the prime → prompt → result SHELL, shared with
+  // useDrive via useLocationPriming. The hook owns the double-tap guard, the no-prompt status read →
+  // undetermined-gate, the request-through, the defensive catch, and the finally; it hands the RESULT
+  // back so we route it into THIS session's `gate` object + phase setter + async beginRoamSession. ----
+  const { priming, start: startPrimedRoam, confirmLocationPrime } = useLocationPriming({
+    // Granted + precise → begin the session. beginRoamSession is async (locate → manifest → engine);
+    // useLocationPriming awaits it, so the request-through holds its pending guard until it settles.
+    onGranted: beginRoamSession,
+    // Roam FOLDS a hard denial and granted-but-reduced into ONE gate object (`granted` is unused):
+    // either way the recovery is the same Settings-or-reprompt gate carrying {canAskAgain, reduced}.
+    onDenied: ({ canAskAgain, reduced }) => {
+      setGate({ canAskAgain, reduced })
       setPhase('locationGate')
-      return
-    }
-    await beginRoamSession()
-  }, [beginRoamSession])
+    },
+    // The request threw (misconfig / concurrent ask) — show the re-askable gate instead of letting
+    // the tap silently do nothing (mirrors useDrive's defensive handling).
+    onError: () => {
+      setGate({ canAskAgain: true, reduced: false })
+      setPhase('locationGate')
+    },
+  })
+
+  // Reflect the explainer-up signal into the session phase. The pre-permission prime is just another
+  // phase for roam's explicit state machine (unlike useDrive, which derives its phase from `priming`):
+  // when the hook raises the explainer we enter 'locationPrime'; leaving it is the result-routing's job
+  // (beginRoamSession → 'loading', onDenied/onError → 'locationGate'), so we never flip it back here.
+  useEffect(() => {
+    if (priming) setPhase('locationPrime')
+  }, [priming])
 
   const start = useCallback(() => {
     if (startPending.current) return
@@ -606,21 +613,9 @@ export function useRoam(mode: RoamMode): RoamState {
         setError(null)
         setGate(null)
         if (mode === 'live') {
-          // First time (undetermined) → explain before iOS's one-shot prompt; the explainer CTA
-          // (confirmLocationPrime) fires the real request. Already decided → request straight
-          // through (no OS UI) so a grant rolls and a denial/reduced lands on the Settings gate.
-          let cur
-          try {
-            cur = await getDrivePermission()
-          } catch {
-            cur = null // status read failed — fall through to requesting directly rather than hang
-          }
-          if (!mountedRef.current) return
-          if (cur?.undetermined) {
-            setPhase('locationPrime')
-            return
-          }
-          await requestAndBegin()
+          // The shared shell: prime before iOS's one-shot prompt (first time), else request straight
+          // through. Its own double-tap guard + the result-routing callbacks above carry it the rest.
+          startPrimedRoam()
           return
         }
         await beginRoamSession()
@@ -628,20 +623,7 @@ export function useRoam(mode: RoamMode): RoamState {
         startPending.current = false
       }
     })()
-  }, [mode, beginRoamSession, requestAndBegin])
-
-  // The explainer's single CTA: fire the OS prompt, then begin (or land on the gate).
-  const confirmLocationPrime = useCallback(() => {
-    if (startPending.current) return
-    startPending.current = true
-    ;(async () => {
-      try {
-        await requestAndBegin()
-      } finally {
-        startPending.current = false
-      }
-    })()
-  }, [requestAndBegin])
+  }, [mode, beginRoamSession, startPrimedRoam])
 
   const skip = useCallback(() => {
     if (activePoiId !== null) {
