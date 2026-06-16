@@ -44,7 +44,7 @@ import { buildStoryFacts, storyFactsHash } from './pipeline/persist'
 import { withRetry } from './pipeline/http'
 import { mapLimit } from './pipeline/concurrency'
 import { ENRICH_MODELS, type EnrichModelChoice } from './models'
-import { GEOLOGY_ENRICHMENT, SCOUT_CONCURRENCY, WIKIDATA_ENRICHMENT } from './config'
+import { ANTHROPIC_READY, GEOLOGY_ENRICHMENT, SCOUT_CONCURRENCY, WIKIDATA_ENRICHMENT } from './config'
 import { llmSpendLines, llmSpentUsd } from './pipeline/spend'
 import { classifyStoryEligibility } from '@skipper/shared'
 
@@ -209,12 +209,20 @@ async function main(): Promise<void> {
   const estUsd = queue.length * EST_USD_PER_POI[modelChoice]
   console.log(
     `\nModel: ${model} (${modelChoice}). Estimated spend: ~$${estUsd.toFixed(2)} ` +
-      `(${queue.length} places × ~$${EST_USD_PER_POI[modelChoice].toFixed(2)}, ± half — restraint makes rich places finalize cheap).`,
+      `(${queue.length} places × ~$${EST_USD_PER_POI[modelChoice].toFixed(2)} TYPICAL; restraint makes rich places finalize cheap, ` +
+      `but a long article that dithers to the turn cap can run several× that — the running --max-cost guard caps ACTUAL spend).`,
   )
 
   if (!apply) {
     console.log('\nDRY RUN — no model calls, nothing written. Re-run with --apply to enrich.')
     return
+  }
+
+  // --apply spends Anthropic. Fail LOUD + EARLY on a missing key, rather than letting every per-POI
+  // buildWell throw (getAnthropic throws when ANTHROPIC_API_KEY is unset) and get swallowed as a silent
+  // per-place "deferred" — which would report a SUCCEEDED run that enriched NOTHING (review #6).
+  if (!ANTHROPIC_READY()) {
+    throw new Error('ANTHROPIC_API_KEY is not set — `enrich --apply` needs it. Run via dotenvx (see the usage header).')
   }
 
   if (estUsd > maxCostUsd) {
@@ -229,8 +237,21 @@ async function main(): Promise<void> {
   let done = 0
   let wrote = 0
   let deferred = 0
+  let errorDeferred = 0 // deferrals caused by a THROW (auth/outage), not a clean "no well found"
+  let costCapped = false // set once the running spend crosses --max-cost (review #5)
 
   await mapLimit(queue, SCOUT_CONCURRENCY(), async (c) => {
+    // RUNNING cost cap (review #5): the pre-spend estUsd gate above is only a point ESTIMATE; long
+    // multi-turn articles can each cost several× it, so also abort the fan-out once the ACTUAL tallied
+    // spend crosses --max-cost. Bounds the overrun to ~one in-flight call per worker, not the whole queue.
+    if (maxCostUsd !== Infinity && llmSpentUsd() >= maxCostUsd) {
+      if (!costCapped) {
+        costCapped = true
+        console.warn(`  ⛔ --max-cost=$${maxCostUsd.toFixed(2)} reached (~$${llmSpentUsd().toFixed(2)} spent) — skipping the rest of the queue.`)
+      }
+      deferred++
+      return
+    }
     // The model SELECTS from the verbatim article sentences (by index) — never free-form text.
     const spans = toFacts(c.extract)
     let result
@@ -256,6 +277,7 @@ async function main(): Promise<void> {
       console.warn(`  ⚠ ${c.name}: enrich failed (${(e as Error).message}) — left un-enriched (retry on re-run).`)
       done++
       deferred++
+      errorDeferred++
       return
     }
 
@@ -293,6 +315,17 @@ async function main(): Promise<void> {
       `  [${++done}/${queue.length}] ${c.name}: well = ${wiki} spans${enrich ? ` + ${enrich} enrichment` : ''} — ${result.reason}`,
     )
   })
+
+  // SYSTEMIC-failure guard (review #6): if EVERY place failed with a THROW (not a clean "no well
+  // found"), it's almost certainly systemic — a bad/expired key, a sustained 429/529, an outage —
+  // not per-place misses. Fail the run LOUD (the outer catch → finishJob ok:false, exit 1) so a
+  // misconfigured paid run can't report "succeeded" having enriched nothing. (A cost-cap stop is a
+  // `deferred` but not an `errorDeferred`, so it never trips this.)
+  if (errorDeferred === queue.length && queue.length > 0) {
+    throw new Error(
+      `enrich: all ${queue.length} place(s) failed with errors (not "no well found") — likely a systemic failure (auth / rate-limit / outage), not per-place misses.`,
+    )
+  }
 
   console.log(`\nDone: ${wrote} enriched, ${deferred} deferred (no well) of ${queue.length}.`)
   for (const line of llmSpendLines()) console.log(line)

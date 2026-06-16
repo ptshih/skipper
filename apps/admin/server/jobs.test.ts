@@ -20,7 +20,10 @@ for (const [kind, scriptPath] of Object.entries(SCRIPTS)) {
 }
 
 describe('buildJobArgs — enrich_region (the corpus enrich op)', () => {
-  test('dry run by default: no --apply, spends:false (no model calls)', () => {
+  // NOTE: this asserts the ADMIN labels the run free (dryRun/spends/no --apply) — NOT that the script
+  // makes zero model calls. That guarantee lives in enrich-region.ts's `if (!apply) return` BEFORE the
+  // buildWell loop (the script self-executes on import, so it can't be unit-imported to assert here).
+  test('dry run by default: no --apply, spends:false (admin labels it free; script early-returns before any model call)', () => {
     const r = buildJobArgs({ kind: 'enrich_region' })
     expect(r.dryRun).toBe(true)
     expect(r.spends).toBe(false)
