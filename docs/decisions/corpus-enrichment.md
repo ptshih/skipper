@@ -94,11 +94,22 @@ Destructive-OK (STORAGE break-freely; no users). Per region: re-`discover` (swee
 `title` but grafts an existing `facts.well` + `enrichedAt` back on and keeps the well-hash, because a
 free, idempotent, re-run-encouraged sweep must never destroy the PAID well (the old auto-wipe was a
 costly footgun). A deliberate well rebuild goes through `refetch_facts` or a re-`enrich --force`, NOT a
-routine re-discover. **Caveat:** because the sweep no longer auto-invalidates, a re-sweep whose article
-changed materially keeps the OLD well until you re-`enrich`; there is no automatic "extract changed →
-re-enrich" signal yet. NOTE: `refetch_facts` (`refetch-poi.ts`) still writes facts directly and DOES
-drop the well — a deliberate single-poi correction is treated as a well-invalidating change. Existing
-un-enriched pois fall back to the extract head until enriched.
+routine re-discover. `refetch_facts` (`refetch-poi.ts`) now PRESERVES the well too (2026-06-16, Option A
+— consistency with the sweep) and WARNS, when it refreshes an enriched poi's extract, that a fact-edit
+correction living in a well span needs `enrich-region --include-ids <id> --force --apply` to reach the
+well. **Caveat:** because neither op auto-invalidates, a re-sweep/refetch whose article changed materially
+keeps the OLD well until you re-`enrich`; there is no automatic "extract changed → re-enrich" signal yet.
+Existing un-enriched pois fall back to the extract head until enriched.
+
+**One-time hash migration (heads-up):** the order-invariant hashing in `82b2139` (`stableStringify`) was
+required to fix the roam staleness bug, but it changes the hash VALUE for the same content — so every
+EXISTING `pois.facts_hash` (written by an old sweep) is "old-algorithm." Existing tracks read fresh today
+(both `pois.facts_hash` and `tracks.facts_hash` are old-algorithm, so they still match), but the FIRST
+re-sweep / refetch / generate after deploy recomputes `pois.facts_hash` canonically → it no longer matches
+the old `tracks.facts_hash` → those tracks read STALE. That is the hash MIGRATION, not content drift; a
+regen clears it and it rides along with the enrich + regen you're doing anyway. There is NO clean backfill
+(a track's hash can't be recomputed without the facts it grounded on, which aren't stored), so the answer
+is awareness — don't be alarmed by a one-time staleness wave after the first post-deploy re-sweep.
 
 ## Awaiting (the real gate)
 
