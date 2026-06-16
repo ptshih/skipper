@@ -207,6 +207,20 @@ export function resolveStoryGrounding(
   }
 }
 
+/** The fact sheet's WIKIPEDIA spans whose verbatim text no longer substring-appears in the current
+ *  `extract` — i.e. the article DRIFTED out from under the curated sheet (an upstream edit moved or
+ *  removed a sentence the sheet quoted). A precise "this sheet may need a re-enrich" signal — far
+ *  better than "the extract changed at all", since enriched clips ground on the sheet, not the
+ *  article. Only wikipedia spans are checked (geology/wikidata facts don't come from the article).
+ *  Empty when the sheet is still fully grounded in the article (or there's no sheet/extract). */
+export function sheetDriftSpans(
+  factSheet: FactSheetEntry[] | null | undefined,
+  extract: string,
+): FactSheetEntry[] {
+  if (!factSheet || factSheet.length === 0 || !extract) return []
+  return factSheet.filter((s) => s.source === 'wikipedia' && !extract.includes(s.text))
+}
+
 interface Placed {
   poi: WikiPoi
   alongSec: number

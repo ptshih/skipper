@@ -5,7 +5,7 @@
 
 import { describe, expect, test } from 'bun:test'
 import { buildStoryFacts, hashFacts, storyFactsHash, wellToAttribution } from '../src/pipeline/persist'
-import { resolveStoryGrounding } from '../src/pipeline/select'
+import { resolveStoryGrounding, sheetDriftSpans } from '../src/pipeline/select'
 import type { FactSheetEntry } from '@skipper/db/schema'
 
 const SHEET: FactSheetEntry[] = [
@@ -135,5 +135,36 @@ describe('resolveStoryGrounding (facts, factSheet, enrichedAt, opts)', () => {
     const facts = buildStoryFacts({ extract: 'Short one. A much longer second sentence that overflows the cap.', title: 'T', url: 'u', pageId: 7 })
     const g = resolveStoryGrounding(facts, null, null, { fallbackChars: 12, retrievedAt: 'r' })
     expect(g.facts).toEqual(['Short one.'])
+  })
+})
+
+describe('sheetDriftSpans — the article-drift detector (precise "needs re-enrich")', () => {
+  const extract = 'Lake Tahoe is a freshwater lake. The bedrock is granodiorite.'
+
+  test('no drift: every wikipedia span still appears in the article → empty', () => {
+    const sheet: FactSheetEntry[] = [{ text: 'Lake Tahoe is a freshwater lake.', source: 'wikipedia', sourceId: '1', license: 'L' }]
+    expect(sheetDriftSpans(sheet, extract)).toEqual([])
+  })
+
+  test('drift: a wikipedia span no longer in the article is returned', () => {
+    const sheet: FactSheetEntry[] = [
+      { text: 'Lake Tahoe is a freshwater lake.', source: 'wikipedia', sourceId: '1', license: 'L' },
+      { text: 'It sits at 6,225 feet.', source: 'wikipedia', sourceId: '1', license: 'L' }, // edited out upstream
+    ]
+    expect(sheetDriftSpans(sheet, extract).map((s) => s.text)).toEqual(['It sits at 6,225 feet.'])
+  })
+
+  test('non-wikipedia spans (geology/wikidata) are NOT checked against the article', () => {
+    const sheet: FactSheetEntry[] = [
+      { text: 'a wikidata fact absent from the article', source: 'wikidata', sourceId: 'Q1', license: 'CC0' },
+      { text: 'a geology fact absent from the article', source: 'macrostrat', sourceId: '9', license: 'CC BY 4.0' },
+    ]
+    expect(sheetDriftSpans(sheet, extract)).toEqual([])
+  })
+
+  test('empty/absent sheet or extract → empty (nothing to check)', () => {
+    expect(sheetDriftSpans([], extract)).toEqual([])
+    expect(sheetDriftSpans(null, extract)).toEqual([])
+    expect(sheetDriftSpans([{ text: 'x', source: 'wikipedia', sourceId: '1', license: 'L' }], '')).toEqual([])
   })
 })

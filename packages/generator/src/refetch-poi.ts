@@ -28,7 +28,7 @@ import { db } from '@skipper/db'
 import { pois } from '@skipper/db/schema'
 import type { FactSheetEntry } from '@skipper/db/schema'
 import { fetchDeepExtracts } from './pipeline/wikipedia'
-import { toFacts } from './pipeline/select'
+import { sheetDriftSpans, toFacts } from './pipeline/select'
 import { buildStoryFacts, storyFactsHash } from './pipeline/persist'
 import { announce, parseFlags } from './pipeline/ops'
 import { beginJob, finishJob } from './pipeline/job-progress'
@@ -106,15 +106,20 @@ async function main() {
   console.log(`  Old hash: ${poi.factsHash?.slice(0, 12) ?? '∅'}  (${oldExtract.length} extract chars)`)
   console.log(`  New hash: ${newHash?.slice(0, 12) ?? '∅'}  (${extract.length} extract chars)`)
   if (enriched) {
-    // Enriched: the grounding hash is the WELL hash, which the preserved well keeps stable — so the
-    // extract can refresh without churning the hash. Warn LOUDLY when the extract changed, because a
-    // fact-edit correction that lives in the WELL won't reach narration until the well is rebuilt.
+    // Enriched: the grounding hash is the SHEET hash, which the preserved sheet keeps stable — so the
+    // extract can refresh without churning the hash. But that means an upstream CORRECTION won't reach
+    // narration until the sheet is rebuilt — so check precisely whether the refreshed article DRIFTED
+    // out from under the sheet (a quoted span vanished) and say exactly whether a re-enrich is needed.
+    const drifted = sheetDriftSpans(existingSheet, extract)
     console.log(
       extractChanged
-        ? `  → extract refreshed; WELL preserved → grounding hash unchanged, tracks stay fresh.\n` +
-            `    ⚠ If this refetch corrected a fact that lives in the well, the well still has the OLD text —\n` +
-            `      run \`enrich-region --include-ids ${poi.id} --force --apply\` to rebuild the well from the corrected article.`
-        : `  → unchanged: article + well identical to what's stored (only facts_fetched_at advances).`,
+        ? `  → extract refreshed; fact sheet preserved → grounding hash unchanged, tracks stay fresh.` +
+            (drifted.length > 0
+              ? `\n    ⚠ ${drifted.length}/${existingSheet!.length} sheet span(s) NO LONGER appear in the refreshed` +
+                ` article — the sheet has DRIFTED. Re-enrich to rebuild it:\n` +
+                `      \`enrich-region --include-ids ${poi.id} --force --apply\``
+              : `\n    ✓ all ${existingSheet!.length} sheet spans still appear in the article — no re-enrich needed.`)
+        : `  → unchanged: article + sheet identical to what's stored (only facts_fetched_at advances).`,
     )
   } else {
     console.log(

@@ -259,6 +259,9 @@ export interface PoiRow {
   storyEligibility: StoryEligibility
   /** A non-empty curated fact sheet exists (server checks the `fact_sheet` column) — tours & roam ground on it. */
   enriched: boolean
+  /** ENRICHED, but a curated sheet span no longer appears in the current article — the article drifted;
+   *  the place needs a re-enrich (`enrich --force`) to pick up the upstream change. */
+  sheetDrift: boolean
   roamClip: RoamClipStatus
   staleFacts: boolean
   attributed: boolean

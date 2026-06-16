@@ -836,6 +836,17 @@ app.get('/admin/pois', async (c) => {
       // resolveStoryGrounding use (an empty `fact_sheet: []` is semantically un-enriched). CASE-guards
       // jsonb_array_length so a non-array value can't error the query.
       enriched: sql<boolean>`case when jsonb_typeof(${pois.factSheet}) = 'array' then jsonb_array_length(${pois.factSheet}) > 0 else false end`,
+      // Sheet DRIFT: an ENRICHED poi whose article moved out from under its sheet — a curated wikipedia
+      // span no longer substring-appears in the current extract (an upstream edit changed/removed it).
+      // A precise "needs a re-enrich" signal (mirrors select.ts sheetDriftSpans); false when un-enriched.
+      sheetDrift: sql<boolean>`case
+        when jsonb_typeof(${pois.factSheet}) = 'array' and jsonb_array_length(${pois.factSheet}) > 0 then exists (
+          select 1 from jsonb_array_elements(${pois.factSheet}) as span
+          where span ->> 'source' = 'wikipedia'
+            and strpos(coalesce(${pois.facts} ->> 'extract', ''), span ->> 'text') = 0
+        )
+        else false
+      end`,
       createdAt: pois.createdAt,
     })
     .from(pois)
@@ -935,6 +946,7 @@ app.get('/admin/pois', async (c) => {
       roamClipCount: clip ? 1 : 0,
       storyEligibility,
       enriched: p.enriched,
+      sheetDrift: p.sheetDrift,
       roamClip,
       suspiciousDuration: clip?.suspiciousDuration ?? false,
       staleFacts: s ? Number(s.staleCount) > 0 : false,

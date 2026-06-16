@@ -668,6 +668,7 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
     // The actionable gap: story-grade but no fact well yet — exactly the rows an Enrich run will bill for.
     if (flags === 'needs-enrich' && (p.storyEligibility !== 'eligible' || p.enriched)) return false
     if (flags === 'roam-clip-stale' && p.roamClip !== 'stale') return false
+    if (flags === 'sheet-drift' && !p.sheetDrift) return false
     if (q) {
       const s = `${p.name} ${p.sourceId}`.toLowerCase()
       if (!s.includes(q.toLowerCase())) return false
@@ -804,6 +805,7 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
             <SelectItem value="enriched">Enriched</SelectItem>
             <SelectItem value="needs-enrich">Eligible · un-enriched</SelectItem>
             <SelectItem value="roam-clip-stale">Roam clip: stale</SelectItem>
+            <SelectItem value="sheet-drift">Story: sheet drifted</SelectItem>
             <SelectItem value="defect">Clip defects</SelectItem>
             <SelectItem value="stale">Stale facts</SelectItem>
             <SelectItem value="unattrib">Unattributed</SelectItem>
@@ -888,9 +890,17 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
                     <TableCell>
                       <div className="flex flex-wrap items-center gap-1">
                         <Badge variant={em.variant} title={em.hint}>{em.label}</Badge>
-                        {p.enriched && (
-                          <Badge variant="success" title="Has a curated fact well — tours & roam ground on it">
+                        {p.enriched && !p.sheetDrift && (
+                          <Badge variant="success" title="Has a curated fact sheet — tours & roam ground on it">
                             enriched
+                          </Badge>
+                        )}
+                        {p.sheetDrift && (
+                          <Badge
+                            variant="warning"
+                            title="Article drifted — a curated sheet span no longer appears in the current article. Re-enrich (enrich --force) to pick up the change."
+                          >
+                            sheet drift
                           </Badge>
                         )}
                         {p.roamClip !== 'none' && (
