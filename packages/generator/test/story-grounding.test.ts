@@ -1,29 +1,23 @@
-// The corpus-enrichment facts layer: the well-aware hash switch, the facts builder's
-// backward-compatible shape, the well→attribution dedup, and the well↔extract-head resolver.
-// Pure logic, zero network/spend. See docs/specs/corpus-enrichment-spec.md §2/§3/§6.
+// The corpus-enrichment facts layer: the fact-sheet-aware hash switch, the facts builder's shape, the
+// sheet→attribution dedup, and the fact-sheet↔extract-head resolver. The curated sheet lives in its OWN
+// `pois.fact_sheet` column now (NOT the `facts` bag). Pure logic, zero network/spend.
+// See docs/specs/corpus-enrichment-spec.md §2/§3/§6.
 
 import { describe, expect, test } from 'bun:test'
-import {
-  buildStoryFacts,
-  hashFacts,
-  storyFactsHash,
-  wellToAttribution,
-} from '../src/pipeline/persist'
+import { buildStoryFacts, hashFacts, storyFactsHash, wellToAttribution } from '../src/pipeline/persist'
 import { resolveStoryGrounding } from '../src/pipeline/select'
-import type { WellSpan } from '@skipper/db/schema'
+import type { FactSheetEntry } from '@skipper/db/schema'
 
-const WELL: WellSpan[] = [
+const SHEET: FactSheetEntry[] = [
   { text: 'Lake Tahoe is a freshwater lake.', source: 'wikipedia', sourceId: '123', license: 'CC BY-SA 4.0', url: 'https://en.wikipedia.org/?curid=123' },
   { text: 'It sits at 6,225 feet.', source: 'wikidata', sourceId: 'Q123', license: 'CC0', url: 'https://www.wikidata.org/wiki/Q123' },
   { text: 'The bedrock is granodiorite.', source: 'macrostrat', sourceId: '99', license: 'CC BY 4.0' },
 ]
 
-describe('buildStoryFacts — backward-compatible shape', () => {
-  test('un-enriched object is byte-identical to the historical shape (hash unchanged)', () => {
+describe('buildStoryFacts — the facts bag shape (the sheet is NOT in it)', () => {
+  test('object is byte-identical to the historical shape (hash unchanged)', () => {
     const facts = buildStoryFacts({ extract: 'A.', title: 'T', url: 'u', pageId: 1, qid: 'Q1' })
-    expect(JSON.stringify(facts)).toBe(
-      JSON.stringify({ extract: 'A.', title: 'T', url: 'u', pageId: 1, qid: 'Q1' }),
-    )
+    expect(JSON.stringify(facts)).toBe(JSON.stringify({ extract: 'A.', title: 'T', url: 'u', pageId: 1, qid: 'Q1' }))
   })
 
   test('qid omitted when absent', () => {
@@ -31,53 +25,44 @@ describe('buildStoryFacts — backward-compatible shape', () => {
     expect(JSON.stringify(facts)).toBe(JSON.stringify({ extract: 'A.', title: 'T', url: 'u', pageId: 1 }))
   })
 
-  test('an EMPTY well is treated as un-enriched (no well/enrichedAt keys)', () => {
-    const facts = buildStoryFacts({ extract: 'A.', title: 'T', url: 'u', pageId: 1, well: [], enrichedAt: 'x' })
+  test('the bag never carries well/enrichedAt (those moved to columns)', () => {
+    const facts = buildStoryFacts({ extract: 'A.', title: 'T', url: 'u', pageId: 1, qid: 'Q1' })
     expect('well' in facts).toBe(false)
     expect('enrichedAt' in facts).toBe(false)
-  })
-
-  test('enriched object carries well + enrichedAt right after extract', () => {
-    const facts = buildStoryFacts({
-      extract: 'A.', title: 'T', url: 'u', pageId: 1, qid: 'Q1', well: WELL, enrichedAt: '2026-06-15T00:00:00Z',
-    })
-    expect(Object.keys(facts)).toEqual(['extract', 'well', 'enrichedAt', 'title', 'url', 'pageId', 'qid'])
+    expect(Object.keys(facts)).toEqual(['extract', 'title', 'url', 'pageId', 'qid'])
   })
 })
 
-describe('storyFactsHash — the grounding fingerprint switch', () => {
-  test('un-enriched: equals hashFacts of the whole object (today’s basis)', () => {
-    const facts = buildStoryFacts({ extract: 'A.', title: 'T', url: 'u', pageId: 1 })
-    expect(storyFactsHash(facts)).toBe(hashFacts(facts))
+describe('storyFactsHash — the grounding fingerprint switch (facts, factSheet)', () => {
+  const facts = buildStoryFacts({ extract: 'A.', title: 'T', url: 'u', pageId: 1 })
+
+  test('un-enriched (no sheet): equals hashFacts of the whole object', () => {
+    expect(storyFactsHash(facts, null)).toBe(hashFacts(facts))
+    expect(storyFactsHash(facts, [])).toBe(hashFacts(facts)) // an empty sheet = un-enriched
   })
 
-  test('enriched: hashes the WELL, not the whole object', () => {
-    const facts = buildStoryFacts({ extract: 'A.', title: 'T', url: 'u', pageId: 1, well: WELL, enrichedAt: 't' })
-    expect(storyFactsHash(facts)).not.toBe(hashFacts(facts))
-    expect(storyFactsHash(facts)).toBe(storyFactsHash(facts)) // stable
+  test('enriched: hashes the SHEET, not the whole object', () => {
+    expect(storyFactsHash(facts, SHEET)).not.toBe(hashFacts(facts))
+    expect(storyFactsHash(facts, SHEET)).toBe(storyFactsHash(facts, SHEET)) // stable
   })
 
-  test('enriched: a changed EXTRACT does NOT churn the hash (narration grounds on the well)', () => {
-    const a = buildStoryFacts({ extract: 'A.', title: 'T', url: 'u', pageId: 1, well: WELL, enrichedAt: 't' })
-    const b = buildStoryFacts({ extract: 'TOTALLY different article.', title: 'T', url: 'u', pageId: 1, well: WELL, enrichedAt: 't2' })
-    expect(storyFactsHash(a)).toBe(storyFactsHash(b))
+  test('enriched: a changed EXTRACT does NOT churn the hash (narration grounds on the sheet)', () => {
+    const other = buildStoryFacts({ extract: 'TOTALLY different article.', title: 'T', url: 'u', pageId: 1 })
+    expect(storyFactsHash(facts, SHEET)).toBe(storyFactsHash(other, SHEET))
   })
 
-  test('enriched: a changed WELL DOES churn the hash (tracks go stale)', () => {
-    const a = buildStoryFacts({ extract: 'A.', title: 'T', url: 'u', pageId: 1, well: WELL, enrichedAt: 't' })
-    const b = buildStoryFacts({ extract: 'A.', title: 'T', url: 'u', pageId: 1, well: WELL.slice(0, 1), enrichedAt: 't' })
-    expect(storyFactsHash(a)).not.toBe(storyFactsHash(b))
+  test('enriched: a changed SHEET DOES churn the hash (tracks go stale)', () => {
+    expect(storyFactsHash(facts, SHEET)).not.toBe(storyFactsHash(facts, SHEET.slice(0, 1)))
   })
 
-  test('null facts → null hash', () => {
-    expect(storyFactsHash(null)).toBeNull()
+  test('null facts + null sheet → null hash', () => {
+    expect(storyFactsHash(null, null)).toBeNull()
   })
 })
 
-// `pois.facts` is jsonb — Postgres reorders object keys on read-back, so a hash stamped from a
-// writer's in-memory object (`pois.facts_hash`) must equal a hash recomputed from the DB read-back
-// (`tracks.facts_hash`) or every read-back-hashed clip reads as perpetually stale. The hash is
-// canonicalized to guarantee that. (These simulate the read-back by shuffling keys.)
+// `pois.facts` (and `fact_sheet`) are jsonb — Postgres reorders object keys on read-back, so a hash
+// stamped from a writer's in-memory object must equal one recomputed from the DB read-back, or every
+// read-back-hashed clip reads as perpetually stale. The hash is canonicalized to guarantee that.
 describe('hash is INVARIANT to object key order (the jsonb round-trip contract)', () => {
   test('hashFacts: same facts, shuffled top-level keys → same hash', () => {
     const inMemory = { extract: 'A.', title: 'T', url: 'u', pageId: 1, qid: 'Q1' }
@@ -85,26 +70,24 @@ describe('hash is INVARIANT to object key order (the jsonb round-trip contract)'
     expect(hashFacts(readBack)).toBe(hashFacts(inMemory))
   })
 
-  test('storyFactsHash (enriched): each well span’s keys may reorder → same hash', () => {
-    const inMem: WellSpan = { text: 't', source: 'wikipedia', sourceId: '1', license: 'L', url: 'u' }
-    const readBack = { url: 'u', text: 't', source: 'wikipedia', sourceId: '1', license: 'L' } as WellSpan
-    const a = buildStoryFacts({ extract: 'A.', title: 'T', url: 'u', pageId: 1, well: [inMem], enrichedAt: 'e' })
-    const b = buildStoryFacts({ extract: 'A.', title: 'T', url: 'u', pageId: 1, well: [readBack], enrichedAt: 'e' })
-    expect(storyFactsHash(b)).toBe(storyFactsHash(a))
+  test('storyFactsHash (enriched): each sheet span’s keys may reorder → same hash', () => {
+    const facts = buildStoryFacts({ extract: 'A.', title: 'T', url: 'u', pageId: 1 })
+    const inMem: FactSheetEntry = { text: 't', source: 'wikipedia', sourceId: '1', license: 'L', url: 'u' }
+    const readBack = { url: 'u', text: 't', source: 'wikipedia', sourceId: '1', license: 'L' } as FactSheetEntry
+    expect(storyFactsHash(facts, [readBack])).toBe(storyFactsHash(facts, [inMem]))
   })
 
-  test('well SPAN order stays significant (reading order is not a key reorder)', () => {
-    const s1: WellSpan = { text: 'one', source: 'wikipedia', sourceId: '1', license: 'L' }
-    const s2: WellSpan = { text: 'two', source: 'wikipedia', sourceId: '1', license: 'L' }
-    const a = buildStoryFacts({ extract: 'A.', title: 'T', url: 'u', pageId: 1, well: [s1, s2], enrichedAt: 'e' })
-    const b = buildStoryFacts({ extract: 'A.', title: 'T', url: 'u', pageId: 1, well: [s2, s1], enrichedAt: 'e' })
-    expect(storyFactsHash(b)).not.toBe(storyFactsHash(a))
+  test('sheet SPAN order stays significant (reading order is not a key reorder)', () => {
+    const facts = buildStoryFacts({ extract: 'A.', title: 'T', url: 'u', pageId: 1 })
+    const s1: FactSheetEntry = { text: 'one', source: 'wikipedia', sourceId: '1', license: 'L' }
+    const s2: FactSheetEntry = { text: 'two', source: 'wikipedia', sourceId: '1', license: 'L' }
+    expect(storyFactsHash(facts, [s2, s1])).not.toBe(storyFactsHash(facts, [s1, s2]))
   })
 })
 
 describe('wellToAttribution', () => {
   test('one distinct credit per (source, sourceId), license + url + retrievedAt preserved', () => {
-    const attr = wellToAttribution(WELL, '2026-06-15T00:00:00Z')
+    const attr = wellToAttribution(SHEET, '2026-06-15T00:00:00Z')
     expect(attr).toEqual([
       { source: 'wikipedia', sourceId: '123', url: 'https://en.wikipedia.org/?curid=123', license: 'CC BY-SA 4.0', retrievedAt: '2026-06-15T00:00:00Z' },
       { source: 'wikidata', sourceId: 'Q123', url: 'https://www.wikidata.org/wiki/Q123', license: 'CC0', retrievedAt: '2026-06-15T00:00:00Z' },
@@ -113,28 +96,34 @@ describe('wellToAttribution', () => {
   })
 
   test('dedups repeated wikipedia spans to a single credit', () => {
-    const well: WellSpan[] = [
+    const sheet: FactSheetEntry[] = [
       { text: 'One.', source: 'wikipedia', sourceId: '123', license: 'CC BY-SA 4.0' },
       { text: 'Two.', source: 'wikipedia', sourceId: '123', license: 'CC BY-SA 4.0' },
     ]
-    expect(wellToAttribution(well, 't')).toHaveLength(1)
+    expect(wellToAttribution(sheet, 't')).toHaveLength(1)
   })
 })
 
-describe('resolveStoryGrounding', () => {
-  test('ENRICHED: grounds on the well texts + well attribution', () => {
-    const facts = buildStoryFacts({ extract: 'raw.', title: 'T', url: 'u', pageId: 1, well: WELL, enrichedAt: 'e' })
-    const g = resolveStoryGrounding(facts, { fallbackChars: 4000, retrievedAt: 'r' })
+describe('resolveStoryGrounding (facts, factSheet, enrichedAt, opts)', () => {
+  test('ENRICHED: grounds on the sheet texts + sheet attribution', () => {
+    const facts = buildStoryFacts({ extract: 'raw.', title: 'T', url: 'u', pageId: 1 })
+    const g = resolveStoryGrounding(facts, SHEET, 'e', { fallbackChars: 4000, retrievedAt: 'r' })
     expect(g.enriched).toBe(true)
-    expect(g.facts).toEqual(WELL.map((s) => s.text))
+    expect(g.facts).toEqual(SHEET.map((s) => s.text))
     expect(g.attribution[0]!.source).toBe('wikipedia')
     expect(g.attribution).toHaveLength(3)
     expect(g.attribution[0]!.retrievedAt).toBe('e') // uses enrichedAt, not the caller's retrievedAt
   })
 
+  test('ENRICHED: a Date enrichedAt is serialized to ISO for the credit', () => {
+    const facts = buildStoryFacts({ extract: 'raw.', title: 'T', url: 'u', pageId: 1 })
+    const g = resolveStoryGrounding(facts, SHEET, new Date('2026-06-15T00:00:00.000Z'), { fallbackChars: 4000, retrievedAt: 'r' })
+    expect(g.attribution[0]!.retrievedAt).toBe('2026-06-15T00:00:00.000Z')
+  })
+
   test('UN-ENRICHED: grounds on toFacts of the extract head + a single Wikipedia credit', () => {
     const facts = buildStoryFacts({ extract: 'First. Second. Third.', title: 'T', url: 'u', pageId: 7 })
-    const g = resolveStoryGrounding(facts, { fallbackChars: 4000, retrievedAt: 'r' })
+    const g = resolveStoryGrounding(facts, null, null, { fallbackChars: 4000, retrievedAt: 'r' })
     expect(g.enriched).toBe(false)
     expect(g.facts).toEqual(['First.', 'Second.', 'Third.'])
     expect(g.attribution).toEqual([
@@ -144,7 +133,7 @@ describe('resolveStoryGrounding', () => {
 
   test('UN-ENRICHED: the fallback head caps to fallbackChars, trimmed to a full sentence', () => {
     const facts = buildStoryFacts({ extract: 'Short one. A much longer second sentence that overflows the cap.', title: 'T', url: 'u', pageId: 7 })
-    const g = resolveStoryGrounding(facts, { fallbackChars: 12, retrievedAt: 'r' })
+    const g = resolveStoryGrounding(facts, null, null, { fallbackChars: 12, retrievedAt: 'r' })
     expect(g.facts).toEqual(['Short one.'])
   })
 })

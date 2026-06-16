@@ -26,7 +26,7 @@
 import { eq } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { pois } from '@skipper/db/schema'
-import type { WellSpan } from '@skipper/db/schema'
+import type { FactSheetEntry } from '@skipper/db/schema'
 import { fetchDeepExtracts } from './pipeline/wikipedia'
 import { toFacts } from './pipeline/select'
 import { buildStoryFacts, storyFactsHash } from './pipeline/persist'
@@ -54,6 +54,7 @@ async function main() {
       name: pois.name,
       facts: pois.facts,
       factsHash: pois.factsHash,
+      factSheet: pois.factSheet,
     })
     .from(pois)
     .where(eq(pois.id, poiId))
@@ -83,23 +84,21 @@ async function main() {
   // identically; preserve the existing title/url/qid metadata (the deep fetch returns text only).
   const f = (poi.facts ?? {}) as Record<string, unknown>
   const extract = toFacts(full).join(' ')
-  // PRESERVE a paid enrichment WELL across a refetch (2026-06-16, Option A) — like the sweep
-  // (upsertPoi), a single-poi re-fetch refreshes the extract but keeps the curated `well` +
-  // `enrichedAt`, so it never destroys the PAID well. The grounding fingerprint is the WELL hash
+  // PRESERVE a paid fact sheet across a refetch (2026-06-16, Option A) — a single-poi re-fetch refreshes
+  // the extract but LEAVES the `fact_sheet`/`enriched_at` columns untouched (the .update below never
+  // sets them), so it never destroys the PAID sheet. The grounding fingerprint is the SHEET hash
   // (storyFactsHash) when enriched, so refreshing the extract alone does NOT mark tracks stale. A
-  // deliberate well rebuild is `enrich-region --include-ids <id> --force --apply`, not a refetch.
-  const existingWell = Array.isArray(f.well) ? (f.well as WellSpan[]) : null
-  const enriched = existingWell !== null && existingWell.length > 0
+  // deliberate sheet rebuild is `enrich-region --include-ids <id> --force --apply`, not a refetch.
+  const existingSheet = Array.isArray(poi.factSheet) ? poi.factSheet : null
+  const enriched = existingSheet !== null && existingSheet.length > 0
   const newFacts = buildStoryFacts({
     extract,
     title: (f.title as string) ?? poi.name,
     url: (f.url as string) ?? `https://en.wikipedia.org/?curid=${poi.sourceId}`,
     pageId,
     qid: f.qid as string | undefined,
-    well: existingWell,
-    enrichedAt: typeof f.enrichedAt === 'string' ? f.enrichedAt : null,
   })
-  const newHash = storyFactsHash(newFacts)
+  const newHash = storyFactsHash(newFacts, existingSheet)
 
   const oldExtract = typeof poi.facts?.extract === 'string' ? poi.facts.extract : ''
   const extractChanged = extract !== oldExtract

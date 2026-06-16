@@ -1,12 +1,25 @@
 # Corpus enrichment (the `enrich` step)
 
-**Status:** ✅ **BUILT 2026-06-15** (code shipped; a real `enrich --apply` run is PAID + founder-gated,
-not yet run). The corpus gained a distinct paid **`enrich`** op between discovery and generation: it
-scouts each story poi **once** into a curated, grounded **"fact well"** on `pois.facts.well`, which
+**Status:** ✅ **BUILT + RUN** (code shipped 2026-06-15; a paid `enrich --apply` has since been RUN
+across all story-eligible POIs — **315 welled as of 2026-06-16** — so tours + roam now ground on real
+wells, not the extract head. The founder ear-test (§11 of the spec) remains the acceptance gate.) The
+corpus gained a distinct paid **`enrich`** op between discovery and generation: it
+scouts each story poi **once** into a curated, grounded **"fact sheet"** on `pois.fact_sheet`, which
 tours AND roam both ground on. Generalizes the per-tour-stop scout (`pipeline/scout.ts`) to the corpus
 and gives **roam** enrichment for the first time. Built from `docs/specs/corpus-enrichment-spec.md`
 (now BUILT). Pairs with `docs/decisions/region-corpus-discovery.md` (the corpus + ops sequence),
 `docs/decisions/enrichment-scout.md` (the scout this generalizes), and principle #1.
+
+**Update 2026-06-16 (the `well` → `fact_sheet` COLUMN move):** the curated sheet was hoisted OUT of the
+`pois.facts` jsonb bag into its OWN typed column **`pois.fact_sheet`** (`FactSheetEntry[]`) + **`pois.enriched_at`**
+(migration `0007`, copy-only backfill of the 315 live wells; the old `facts.well` is left in place — reversible).
+WHY: the bag was `Record<string,unknown>` and the bimodal `extract`+`well` it created was the system's most
+bug-prone surface (the order-invariant-hash + the graft-back `CASE`). With its own column: the graft-back `CASE`
+is **DELETED** (a free re-sweep writes `facts` and can't touch `fact_sheet` — a plain coalesce preserves it),
+the hash rule is `storyFactsHash(facts, factSheet)` (sheet-hash when enriched, byte-identical to the old
+well-hash → the 315 rows' `facts_hash` stay valid, verified 315/315), and the ~grounding readers take a TYPED
+`FactSheetEntry[]` instead of 33 hand-written casts. `WellSpan` → `FactSheetEntry`. (A later cleanup migration
+will drop the redundant `facts.well`/`facts.enrichedAt` once everything's confirmed reading the column.)
 
 **Update 2026-06-15:** the `--thin-only`/`--thin-max` cost-slice was **REMOVED** — filtering enrich
 candidates by article length is a cost proxy, not a product axis (`--limit`/`--max-cost` are the honest

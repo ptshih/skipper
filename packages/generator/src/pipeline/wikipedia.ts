@@ -10,7 +10,7 @@
 // requests in series. License for reuse is CC BY-SA 4.0 — attribution is snapshotted onto
 // the tour_stop at generation time (see generate.ts).
 
-import type { PoiFacts } from '@skipper/db/schema'
+import type { FactSheetEntry, PoiFacts } from '@skipper/db/schema'
 import { ENRICHER_INPUT_CHARS, EXTRACT_CHARS, WIKIPEDIA_USER_AGENT } from '../config'
 import { fetchWithRetry, sleep } from './http'
 import {
@@ -71,6 +71,10 @@ export interface WikiPoi {
    *  well↔extract grounding source threaded onto the StopPlan. Absent on a freshly-discovered
    *  candidate (the live spine emits none); present when read back from the corpus. */
   facts?: PoiFacts
+  /** The poi's curated fact sheet + its enrich stamp (own `pois` columns now, NOT in `facts`) —
+   *  threaded onto the StopPlan for resolveStoryGrounding. Absent for scenic / un-enriched. */
+  factSheet?: FactSheetEntry[] | null
+  enrichedAt?: Date | null
 }
 
 /**

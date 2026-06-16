@@ -833,9 +833,9 @@ app.get('/admin/pois', async (c) => {
       // un-clipped poi this is the swept LEAD extract; clipped pois are classified by clip state.
       extractChars: sql<number>`coalesce(length(${pois.facts} ->> 'extract'), 0)::int`,
       // Enriched = a NON-EMPTY curated fact well exists — the canonical predicate buildStoryFacts /
-      // resolveStoryGrounding use (an empty `well: []` is semantically un-enriched). CASE-guards
-      // jsonb_array_length so a non-array `well` can't error the query.
-      enriched: sql<boolean>`case when jsonb_typeof(${pois.facts} -> 'well') = 'array' then jsonb_array_length(${pois.facts} -> 'well') > 0 else false end`,
+      // resolveStoryGrounding use (an empty `fact_sheet: []` is semantically un-enriched). CASE-guards
+      // jsonb_array_length so a non-array value can't error the query.
+      enriched: sql<boolean>`case when jsonb_typeof(${pois.factSheet}) = 'array' then jsonb_array_length(${pois.factSheet}) > 0 else false end`,
       createdAt: pois.createdAt,
     })
     .from(pois)

@@ -29,7 +29,7 @@
 import { and, eq, isNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { pois, segments, tracks } from '@skipper/db/schema'
-import type { PoiFacts } from '@skipper/db/schema'
+import type { FactSheetEntry, PoiFacts } from '@skipper/db/schema'
 import { announce, assertReady, parseFlags } from './pipeline/ops'
 import { beginJob, finishJob } from './pipeline/job-progress'
 import { ensurePoiOverridesLoaded } from './pipeline/poi-overrides'
@@ -116,6 +116,8 @@ async function main(): Promise<void> {
           facts: pois.facts,
           factsHash: pois.factsHash,
           factsFetchedAt: pois.factsFetchedAt,
+          factSheet: pois.factSheet,
+          enrichedAt: pois.enrichedAt,
           segmentId: segments.id,
           trackId: tracks.id,
           clipFactsHash: tracks.factsHash,
@@ -153,6 +155,9 @@ async function main(): Promise<void> {
      *  region-corpus contract (it rebuilds tour candidates from facts.qid) isn't broken. */
     qid: string | null
     factsFetchedAt: Date | null
+    /** The poi's curated fact sheet + its enrich stamp (own columns) — grounding source + fingerprint. */
+    factSheet: FactSheetEntry[] | null
+    enrichedAt: Date | null
     /** The poi's existing roam segment id (tour_id null), if any — reused so a regen keeps one
      *  roam segment per poi (the track is upserted on (segment, form, variant)). */
     segmentId: string | null
@@ -181,6 +186,8 @@ async function main(): Promise<void> {
       url: f?.url ?? `https://en.wikipedia.org/?curid=${r.sourceId}`,
       qid: f?.qid ?? null,
       factsFetchedAt: r.factsFetchedAt,
+      factSheet: r.factSheet,
+      enrichedAt: r.enrichedAt,
       segmentId: r.segmentId,
       // Fresh = a track exists AND grounds on the poi's CURRENT facts → skip unless --force.
       hasFreshClip: r.trackId !== null && r.clipFactsHash === r.factsHash && r.factsHash !== null,
@@ -247,7 +254,7 @@ async function main(): Promise<void> {
     // Ground on the curated WELL when the place is enriched, else the positional extract head (the
     // un-enriched fallback — byte-for-byte today's behavior for existing 4k rows, a strict verbatim
     // superset once re-swept to 12k). Same resolver tours use.
-    const grounding = resolveStoryGrounding(c.facts, {
+    const grounding = resolveStoryGrounding(c.facts, c.factSheet, c.enrichedAt, {
       fallbackChars: NARRATION_FALLBACK_CHARS,
       retrievedAt: (c.factsFetchedAt ?? new Date()).toISOString(),
     })
@@ -328,13 +335,13 @@ async function main(): Promise<void> {
     // Well-aware credit: an ENRICHED poi credits the well's distinct sources (wikipedia + any
     // geology/wikidata kept); an un-enriched poi credits the single Wikipedia article (the
     // extract-head fallback). Same resolver tours use, so attribution can't drift between them.
-    const { attribution } = resolveStoryGrounding(c.facts, {
+    const { attribution } = resolveStoryGrounding(c.facts, c.factSheet, c.enrichedAt, {
       fallbackChars: NARRATION_FALLBACK_CHARS,
       retrievedAt: (c.factsFetchedAt ?? new Date()).toISOString(),
     })
     // The grounding fingerprint = pois.factsHash exactly (storyFactsHash on the SAME facts the
     // freshness query read), so a freshly-generated clip never reads as stale.
-    const factsHash = storyFactsHash(c.facts)
+    const factsHash = storyFactsHash(c.facts, c.factSheet)
     // A roam telling = a placeless-of-route segment (tour_id/seq/trigger* null) + ONE story
     // track. Co-commit the segment + the track upsert: the segment is insert-or-keep (PK id;
     // a reused segment already exists), the track upserts on its (segment, form, variant)

@@ -50,6 +50,13 @@
       "when": 1781581101165,
       "tag": "0006_thankful_thunderbolts",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1781595365171,
+      "tag": "0007_premium_the_stranger",
+      "breakpoints": true
     }
   ]
 }

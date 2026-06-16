@@ -1,8 +1,8 @@
 # Corpus enrichment — Build Spec
 
-> **Status:** ✅ **BUILT 2026-06-15** — the code shipped on a "skip the ear-test, build now" founder
-> call; a real `enrich --apply` run is PAID + founder-gated and not yet run, so the ear-test (§11)
-> is still the live acceptance gate. What shipped, the resolved §9 calls, and the deviations are
+> **Status:** ✅ **BUILT 2026-06-15, RUN 2026-06-16** — the code shipped on a "skip the ear-test, build
+> now" founder call; a paid `enrich --apply` has since been RUN across all story-eligible POIs (315
+> welled), so the ear-test (§11) is now the remaining acceptance gate. What shipped, the resolved §9 calls, and the deviations are
 > recorded in **`docs/decisions/corpus-enrichment.md`** (read that for current truth — this spec is
 > the as-designed record). Promoted from [docs/ideas/corpus-enrichment.md](../ideas/corpus-enrichment.md).
 > Pairs with `docs/decisions/enrichment-scout.md` (the scout this generalizes),

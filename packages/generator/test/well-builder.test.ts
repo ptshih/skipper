@@ -94,7 +94,7 @@ describe('buildWell — verbatim span selection + bundle inclusion', () => {
   test('a fetched bundle with NO license falls back to the source default (geology→CC BY 4.0, wikidata→CC0)', async () => {
     // A real Macrostrat tile / Wikidata entity can return a bundle whose attribution.license is absent
     // (license is optional). buildWell must bake the source default, not undefined, into the frozen
-    // WellSpan.license (it flows straight into the CC credit array). (scout.ts: `?? 'CC BY 4.0'` / `?? 'CC0'`.)
+    // FactSheetEntry.license (it flows straight into the CC credit array). (scout.ts: `?? 'CC BY 4.0'` / `?? 'CC0'`.)
     const geoNoLicense: SourcedFacts = { facts: ['Granodiorite.'], attribution: { source: 'macrostrat', sourceId: 'map:9', retrievedAt: 't' } }
     const wdNoLicense: SourcedFacts = { facts: ['Inception: 1924.'], attribution: { source: 'wikidata', sourceId: 'Q9', retrievedAt: 't' } }
     const call = script(

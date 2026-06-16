@@ -23,23 +23,23 @@ import { relations, sql } from 'drizzle-orm'
 export type Polyline = [number, number][]
 
 /** Free-form structured facts about a place. For a STORY poi the canonical shape (built by
- *  `buildStoryFacts`) is `{ extract, title, url, pageId, qid? }` PLUS, once the place has been
- *  ENRICHED, `{ well, enrichedAt }` — the curated narration sheet (see `WellSpan`). The raw
- *  `extract` is preserved as the enricher's input + audit source; narration grounds on `well`
- *  when present, else the positional `extract` head (the fallback). Stays `Record<string,unknown>`
- *  so writers/readers cast the fields they need (a typed DTO would over-constrain this jsonb). */
+ *  `buildStoryFacts`) is `{ extract, title, url, pageId, qid? }` — the raw fetched article + its
+ *  provenance. The curated narration sheet was HOISTED OUT to its own typed `pois.fact_sheet` column
+ *  (+ `enriched_at`) — see `FactSheetEntry`; it is NOT in this bag. The raw `extract` stays here as
+ *  the enricher's input + audit source + the un-enriched fallback. Stays `Record<string,unknown>` so
+ *  writers/readers cast the fields they need (a typed DTO would over-constrain this jsonb). */
 export type PoiFacts = Record<string, unknown>
 
 /**
- * One VERBATIM span of a story poi's curated "fact well" (`pois.facts.well`) — a sentence/section
+ * One VERBATIM span of a story poi's curated FACT SHEET (`pois.fact_sheet`) — a sentence/section
  * the corpus `enrich` step SELECTED from the article, or a discrete fact a sourced fetcher returned
  * (Wikidata key fact, Macrostrat geology). The enricher chooses WHICH spans to keep, NEVER what they
  * say — `text` is always verbatim from `source` (the "persona lives in DELIVERY, never FACTS"
  * invariant mapped onto storage; see docs/specs/corpus-enrichment-spec.md §2). Narration grounds on
- * the well; `tracks.attribution` is frozen from the distinct `(source, sourceId, license, url)` here.
+ * the fact sheet; `tracks.attribution` is frozen from the distinct `(source, sourceId, license, url)` here.
  * `source` is a subset of `AttributionSnapshot['source']` (the fact-bearing sources only).
  */
-export type WellSpan = {
+export type FactSheetEntry = {
   text: string
   source: 'wikipedia' | 'wikidata' | 'macrostrat'
   sourceId: string
@@ -249,10 +249,18 @@ export const pois = pgTable(
     speakableLng: doublePrecision('speakable_lng'),
     summary: text('summary'),
     facts: jsonb('facts').$type<PoiFacts>(),
-    // FACTS freshness: facts_fetched_at = the TTL clock; facts_hash = change detector
-    //   (changes only on a material change). A track is fact-stale iff its facts_hash IS
-    //   DISTINCT FROM this row's facts_hash (joined via segment.poiId), for tracks whose
-    //   facts_hash is set.
+    // The curated, verbatim narration sheet (the corpus `enrich` step's output) — its OWN typed
+    // column, NOT buried in the `facts` bag: a free re-sweep writes `facts` and never touches this,
+    // so a paid enrichment is preserved by construction (no graft-back CASE). Narration grounds on
+    // this when present, else the positional `facts.extract` head.
+    factSheet: jsonb('fact_sheet').$type<FactSheetEntry[]>(),
+    // When `fact_sheet` was built (the enrich stamp; the sheet's frozen credit instant). Hoisted out
+    // of the bag so a re-enrich TTL can query it without parsing jsonb.
+    enrichedAt: timestamp('enriched_at', { withTimezone: true }),
+    // FACTS freshness: facts_fetched_at = the TTL clock; facts_hash = the grounding change detector.
+    //   facts_hash hashes the FACT SHEET when enriched (the narration's real input), else the whole
+    //   `facts` object. A track is fact-stale iff its facts_hash IS DISTINCT FROM this row's
+    //   facts_hash (joined via segment.poiId), for tracks whose facts_hash is set.
     factsHash: text('facts_hash'),
     factsFetchedAt: timestamp('facts_fetched_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

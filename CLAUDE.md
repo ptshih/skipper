@@ -86,9 +86,9 @@ you found so the next agent can re-check it.
    `docs/decisions/tour-data-model-zero-reuse.md`.) **The corpus pipeline is `discover` → `enrich`
    → `generate` (2026-06-15):** a free sweep populates `pois` for a region's bbox ONCE
    (`sweep-region-pois.ts`); a PAID `enrich` (`enrich-region.ts`) then scouts each story poi ONCE
-   into a curated **verbatim fact well** (`pois.facts.well` — `facts_hash` keys on it), and BOTH
-   tours and roam SELECT from that one shared corpus + ground on the well (the capped extract head
-   when un-enriched). Tours are AUTHORED at runtime (admin Create → `materializeRoute`), never
+   into a curated **verbatim fact sheet** (its own typed `pois.fact_sheet` column + `enriched_at`,
+   NOT in the `facts` bag — `facts_hash` keys on it), and BOTH tours and roam SELECT from that one
+   shared corpus + ground on the fact sheet (the capped extract head when un-enriched). Tours are AUTHORED at runtime (admin Create → `materializeRoute`), never
    seeded as drafts. See `docs/decisions/region-corpus-discovery.md` + `corpus-enrichment.md`.
 2. **The rails are the route; generation is everything inside the rails.** Routes
    are hand-curated + frozen, never derived. The failure mode to avoid is letting

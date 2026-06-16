@@ -246,7 +246,7 @@ export const STORY_MIN_FACT_CHARS = 140
  */
 export const ENRICHER_INPUT_CHARS = 12_000
 /**
- * The narration FALLBACK head (chars): when a story poi has NOT been enriched (no `facts.well`),
+ * The narration FALLBACK head (chars): when a story poi has NOT been enriched (no `fact_sheet`),
  * generation grounds on the positional head of `facts.extract` capped to this (the old
  * DEEP_EXTRACT_CHARS value) — byte-for-byte today's behavior for existing 4k rows; once a row is
  * re-swept under ENRICHER_INPUT_CHARS=12k the head is a strict VERBATIM superset (it packs a sentence

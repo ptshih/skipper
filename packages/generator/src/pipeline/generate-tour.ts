@@ -25,7 +25,7 @@
 // (open-now/rating) is still fetched fresh at tour-load (and "ask the skipper" later).
 
 import type { BracketKind, DurationBucket, JokeLevel } from '@skipper/shared'
-import type { AttributionSnapshot, WellSpan } from '@skipper/db/schema'
+import type { AttributionSnapshot, FactSheetEntry } from '@skipper/db/schema'
 import {
   ANTHROPIC_READY,
   EVAL_MAX_PASSES,
@@ -387,7 +387,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   // + the scout gate below. (Scenic/break carry no facts — skipped.)
   for (const s of plan) {
     if (s.stopType !== 'story' || !s.poiFacts) continue
-    const g = resolveStoryGrounding(s.poiFacts, {
+    const g = resolveStoryGrounding(s.poiFacts, s.poiFactSheet ?? null, s.poiEnrichedAt ?? null, {
       fallbackChars: NARRATION_FALLBACK_CHARS,
       retrievedAt: factsSnapshotAt.toISOString(),
     })
@@ -1108,14 +1108,14 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
               url: s.wikiUrl!,
               pageId: s.wikiPageId!,
               qid: s.wikidataQid,
-              well: (pf?.well as WellSpan[] | undefined) ?? null,
-              enrichedAt: typeof pf?.enrichedAt === 'string' ? pf.enrichedAt : null,
             })
           : null
       return {
         s,
         facts,
-        factsHash: storyFactsHash(facts),
+        // Prep re-upserts the poi facts; pass a null sheet — upsertPoi's onConflict PRESERVES an
+        // existing fact_sheet + its hash, so a tour gen never blanks or re-stales a paid sheet.
+        factsHash: storyFactsHash(facts, null),
         // The stop's place-anchor (segment) + its narration (track). The track id is the
         // clip key — every stop, break included, synthesizes to a TOUR-scoped per-run key.
         // (Break clips name the curated Places anchor; no Wikipedia text, no attribution.)

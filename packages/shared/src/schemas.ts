@@ -4,7 +4,6 @@ import {
   bracketKind,
   jokeLevel,
   platform,
-  poiSource,
   stopType,
   tourStatus,
 } from './enums'
@@ -24,19 +23,6 @@ export const region = z.object({
   displayName: z.string(),
 })
 export type Region = z.infer<typeof region>
-
-/** A real place. Deduped per (source, sourceId). FACTS are shared; narration is not. */
-export const poi = z.object({
-  id: z.uuid(),
-  source: poiSource,
-  sourceId: z.string(),
-  name: z.string(),
-  kind: z.string().nullish(),
-  lat: z.number(),
-  lng: z.number(),
-  summary: z.string().nullish(),
-})
-export type Poi = z.infer<typeof poi>
 
 /** Attribution snapshot frozen at generation time (keeps CC BY-SA / CC BY credit correct). */
 export const attribution = z.object({

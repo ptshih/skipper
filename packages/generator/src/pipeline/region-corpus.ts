@@ -48,6 +48,8 @@ export async function loadCandidatePoisInBox(sw: LngLat, ne: LngLat): Promise<Wi
           speakableLat: pois.speakableLat,
           speakableLng: pois.speakableLng,
           facts: pois.facts,
+          factSheet: pois.factSheet,
+          enrichedAt: pois.enrichedAt,
         })
         .from(pois)
         .where(
@@ -95,6 +97,8 @@ export async function loadCandidatePoisInBox(sw: LngLat, ne: LngLat): Promise<Wi
         // switch + the staleness fingerprint downstream (select → generate-tour). r.facts is the
         // jsonb; cast through StoryFacts↦PoiFacts (a story row always has facts here).
         ...(r.facts ? { facts: r.facts as PoiFacts } : {}),
+        ...(r.factSheet ? { factSheet: r.factSheet } : {}),
+        ...(r.enrichedAt ? { enrichedAt: r.enrichedAt } : {}),
         ...speakable,
       })
     } else {

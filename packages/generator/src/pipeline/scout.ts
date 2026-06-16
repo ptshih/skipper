@@ -23,7 +23,7 @@
 // and zero spend (mirrors grounding.ts's injectable decomposer).
 
 import Anthropic from '@anthropic-ai/sdk'
-import type { AttributionSnapshot, WellSpan } from '@skipper/db/schema'
+import type { AttributionSnapshot, FactSheetEntry } from '@skipper/db/schema'
 import {
   ENRICH_MAX_TOKENS,
   ENRICH_MAX_TOOL_TURNS,
@@ -368,7 +368,7 @@ export interface EnrichTools {
 }
 
 export interface EnrichResult {
-  well: WellSpan[]
+  well: FactSheetEntry[]
   /** The model's one-sentence rationale — logged + traced, never narrated. */
   reason: string
   toolCalls: number
@@ -501,7 +501,7 @@ export async function buildWell(
       const keep = [...new Set(f.keepSpanIds ?? [])]
         .filter((i) => Number.isInteger(i) && i >= 0 && i < input.spans.length)
         .sort((a, b) => a - b)
-      const well: WellSpan[] = keep.map((i) => ({
+      const well: FactSheetEntry[] = keep.map((i) => ({
         text: input.spans[i]!,
         source: 'wikipedia',
         sourceId: input.wiki.sourceId,

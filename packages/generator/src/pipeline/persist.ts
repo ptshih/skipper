@@ -27,7 +27,7 @@ import type {
   NewTrack,
   PoiFacts,
   Polyline,
-  WellSpan,
+  FactSheetEntry,
 } from '@skipper/db/schema'
 import type { BracketKind, PoiSource, StopType } from '@skipper/shared'
 
@@ -130,31 +130,31 @@ export function hashFacts(facts: PoiFacts | null): string | null {
 }
 
 /**
- * The GROUNDING fingerprint for a story poi — the hash a track's `facts_hash` is compared against
- * for staleness. THE SWITCH (corpus-enrichment-spec §3/§8):
- *   - ENRICHED (a non-empty `facts.well`) → hash the WELL ONLY. Narration grounds on the well, so a
- *     re-`discover` that rewrites `extract` but yields the SAME well must NOT mark tracks stale; and
- *     the `enrichedAt` stamp must not churn the hash. Hashing the well is the true "did the narration
- *     input change" detector.
- *   - UN-ENRICHED (no well) → hash the whole facts object (today's basis, `hashFacts`), so existing
- *     rows + the extract-head fallback keep their current hash exactly (behavior-preserving until a
- *     paid enrich run). Both facts WRITERS (sweep/enrich) and READERS (tours/roam) call THIS, and the
- *     hash is canonicalized (`stableStringify`), so a clip's stamped hash can never diverge from
- *     `pois.facts_hash` — even though one side hashes an in-memory object and the other a jsonb
- *     read-back (the well's own span keys reorder on read-back too, so the well branch canonicalizes).
+ * The GROUNDING fingerprint for a story poi — the hash a track's `facts_hash` is compared against for
+ * staleness. THE SWITCH (corpus-enrichment-spec §3/§8), now reading the typed `pois.fact_sheet` column:
+ *   - ENRICHED (a non-empty fact sheet) → hash the SHEET ONLY. Narration grounds on it, so a
+ *     re-`discover` that rewrites `extract` but keeps the SAME sheet must NOT stale tracks; the
+ *     `enriched_at` stamp can't churn it either (it isn't in the hash). The true "did the narration
+ *     input change" detector. Byte-identical to the pre-column well-hash, so existing rows stay valid.
+ *   - UN-ENRICHED (no sheet) → hash the whole facts object (`hashFacts`), so existing rows + the
+ *     extract-head fallback keep their current hash exactly. Both WRITERS (sweep/enrich) and READERS
+ *     (tours/roam) call THIS, canonicalized (`stableStringify`), so a clip's stamped hash can never
+ *     diverge from `pois.facts_hash` across the in-memory ↔ jsonb-read-back boundary.
  */
-export function storyFactsHash(facts: PoiFacts | null): string | null {
-  if (!facts) return null
-  const well = facts.well as WellSpan[] | undefined
-  if (Array.isArray(well) && well.length > 0) {
-    return createHash('sha256').update(stableStringify(well)).digest('hex')
+export function storyFactsHash(
+  facts: PoiFacts | null,
+  factSheet: FactSheetEntry[] | null | undefined,
+): string | null {
+  if (factSheet && factSheet.length > 0) {
+    return createHash('sha256').update(stableStringify(factSheet)).digest('hex')
   }
+  if (!facts) return null
   return hashFacts(facts)
 }
 
 /** The distinct sourced credits in a well → the frozen `tracks.attribution` array (one entry per
  *  (source, sourceId), CC BY-SA / CC0 / CC BY preserved). `retrievedAt` is the well's enrich stamp. */
-export function wellToAttribution(well: WellSpan[], retrievedAt: string): AttributionSnapshot[] {
+export function wellToAttribution(well: FactSheetEntry[], retrievedAt: string): AttributionSnapshot[] {
   const seen = new Set<string>()
   const out: AttributionSnapshot[] = []
   for (const s of well) {
@@ -173,32 +173,20 @@ export function wellToAttribution(well: WellSpan[], retrievedAt: string): Attrib
 }
 
 /** The canonical `pois.facts` object for a STORY place — the ONE builder every facts writer uses (the
- *  region sweep, refetch-poi, and the tour + roam deepen) so the stored shape is consistent. Key
- *  ORDER no longer affects the hash (`hashFacts` canonicalizes via `stableStringify`, since
- *  `pois.facts` is jsonb and reorders keys on read-back anyway), but key PRESENCE still does — so
- *  `qid` is OMITTED when absent (never stored as null) and an empty well drops `well`/`enrichedAt`
- *  entirely, matching the historical shape so an un-enriched row's hash is unchanged. The Wikidata
- *  `qid` linkage (region-corpus rebuilds tour candidates from it) is preserved BY CONSTRUCTION — it
- *  can't be silently dropped again (the 2026-06-15 deepen bug). (When the dual-extract redesign
- *  lands, `extractFull` slots in here as the one place that knows the shape.) */
+ *  region sweep + refetch-poi) so the stored shape is consistent. The curated narration sheet is NO
+ *  LONGER here — it lives in the typed `pois.fact_sheet` column (+ `enriched_at`). Key ORDER no longer
+ *  affects the hash (`stableStringify` canonicalizes the jsonb read-back), but key PRESENCE still does
+ *  — so `qid` is OMITTED when absent (never stored as null). The Wikidata `qid` linkage (region-corpus
+ *  rebuilds tour candidates from it) is preserved BY CONSTRUCTION. */
 export function buildStoryFacts(input: {
   extract: string
   title: string
   url: string
   pageId: number
   qid?: string | null
-  /** The curated narration sheet, set by the corpus `enrich` step. Omitted (with `enrichedAt`)
-   *  for an un-enriched row, so its object matches the historical shape — and since both keys are
-   *  ABSENT (not null), its `hashFacts` is unchanged. `well`/`enrichedAt` sit right after `extract`
-   *  cosmetically (the spec §3 shape); key order no longer affects the hash (`stableStringify`
-   *  canonicalizes), but their PRESENCE does. */
-  well?: WellSpan[] | null
-  enrichedAt?: string | null
 }): PoiFacts {
-  const enriched = Array.isArray(input.well) && input.well.length > 0
   return {
     extract: input.extract,
-    ...(enriched ? { well: input.well, enrichedAt: input.enrichedAt ?? undefined } : {}),
     title: input.title,
     url: input.url,
     pageId: input.pageId,
@@ -229,6 +217,12 @@ export interface UpsertPoiInput {
    *  adjudicated mid-run must read as NEWER than the fetch). Forced null when factsHash
    *  is null — a scenic/break write carries no facts clock. */
   factsFetchedAt: Date | null
+  /** The curated fact sheet (corpus `enrich` output) — its own column. Null/omitted for an
+   *  un-enriched write (sweep/refetch); a paid enrich writes it. Coalesce-preserved on conflict so a
+   *  free re-discover never blanks a paid sheet. */
+  factSheet?: FactSheetEntry[] | null
+  /** When the fact sheet was built (the enrich stamp). Coalesce-preserved like `factSheet`. */
+  enrichedAt?: Date | null
 }
 
 /** Upsert a POI deduped on (source, source_id); stamps facts freshness; returns its id. */
@@ -263,23 +257,17 @@ export async function upsertPoi(input: UpsertPoiInput): Promise<string> {
             // genuine re-fetch (non-null incoming) still overwrites. (Upholds the "pois is the
             // shared facts cache" invariant + keeps the facts_hash staleness contract honest.)
             summary: sql`coalesce(excluded.summary, ${pois.summary})`,
-            // PRESERVE a paid enrichment WELL across a re-sweep. The region sweep upserts well-LESS
-            // facts (it only knows the article), and a plain coalesce(excluded.facts, …) takes the
-            // incoming object WHOLE — destroying any `facts.well` a prior PAID `enrich --apply` wrote
-            // (coalesce only guards a NULL incoming, i.e. a factless scenic/break write). The sweep is
-            // free + idempotent + encouraged to re-run, so that silent money-loss is a real footgun.
-            // So when the EXISTING row is enriched, refresh extract/title/etc from the incoming write
-            // but GRAFT the existing well + enrichedAt back on, and KEEP the existing facts_hash — it
-            // is the well-hash (storyFactsHash hashes the well, which is unchanged here), so grounded
-            // tracks stay fresh. A deliberate well rebuild goes through `refetch_facts` / a re-`enrich`
-            // (both rewrite facts directly), never a routine re-discover.
-            facts: sql`case
-              when jsonb_exists(${pois.facts}, 'well')
-                then coalesce(excluded.facts, ${pois.facts}) || jsonb_build_object('well', ${pois.facts} -> 'well', 'enrichedAt', ${pois.facts} -> 'enrichedAt')
-              else coalesce(excluded.facts, ${pois.facts})
-            end`,
+            // FACTS is a plain coalesce now — the curated sheet lives in its OWN column, so a free
+            // re-sweep (factless or article-only) can't touch it. (The old graft-back CASE is GONE.)
+            facts: sql`coalesce(excluded.facts, ${pois.facts})`,
+            // PRESERVE a paid fact sheet + its stamp across a later factless/sweep write: the sweep
+            // passes them null → coalesce keeps the existing. A real re-enrich writes them directly.
+            factSheet: sql`coalesce(excluded.fact_sheet, ${pois.factSheet})`,
+            enrichedAt: sql`coalesce(excluded.enriched_at, ${pois.enrichedAt})`,
+            // When the row is ENRICHED the grounding hash is the SHEET hash — keep it so a re-sweep's
+            // (un-enriched) recomputed hash never overwrites it and stales the grounded tracks.
             factsHash: sql`case
-              when jsonb_exists(${pois.facts}, 'well') then ${pois.factsHash}
+              when ${pois.factSheet} is not null then ${pois.factsHash}
               else coalesce(excluded.facts_hash, ${pois.factsHash})
             end`,
             factsFetchedAt: sql`coalesce(excluded.facts_fetched_at, ${pois.factsFetchedAt})`,

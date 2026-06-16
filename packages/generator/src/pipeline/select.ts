@@ -17,7 +17,7 @@
 // over thin/scenic neighbours.
 
 import type { PoiSource, StopType } from '@skipper/shared'
-import type { AttributionSnapshot, PoiFacts, WellSpan } from '@skipper/db/schema'
+import type { AttributionSnapshot, PoiFacts, FactSheetEntry } from '@skipper/db/schema'
 import { wellToAttribution } from './persist'
 import {
   BREAK_MIN_GAP_SEC,
@@ -64,6 +64,10 @@ export interface StopPlan {
    *  the grounding fingerprint (resolveStoryGrounding / storyFactsHash). Carried from the corpus
    *  (region-corpus), never re-fetched. Absent for scenic. */
   poiFacts?: PoiFacts
+  /** STORY only: the poi's curated fact sheet + its stamp (own `pois` columns) — the grounding source
+   *  resolveStoryGrounding reads. Absent for scenic / un-enriched. */
+  poiFactSheet?: FactSheetEntry[] | null
+  poiEnrichedAt?: Date | null
   /** STORY only: true once generate-tour grounds this stop on a curated WELL (vs the extract head). */
   enriched?: boolean
   /** STORY only: the frozen credit for an ENRICHED stop — the well's distinct sources (set in
@@ -166,14 +170,20 @@ export interface StoryGrounding {
 
 export function resolveStoryGrounding(
   facts: PoiFacts,
+  factSheet: FactSheetEntry[] | null | undefined,
+  enrichedAt: Date | string | null | undefined,
   opts: { fallbackChars: number; retrievedAt: string },
 ): StoryGrounding {
-  const well = facts.well as WellSpan[] | undefined
-  if (Array.isArray(well) && well.length > 0) {
-    const enrichedAt = typeof facts.enrichedAt === 'string' ? facts.enrichedAt : opts.retrievedAt
+  if (factSheet && factSheet.length > 0) {
+    const stamp =
+      enrichedAt instanceof Date
+        ? enrichedAt.toISOString()
+        : typeof enrichedAt === 'string'
+          ? enrichedAt
+          : opts.retrievedAt
     return {
-      facts: well.map((s) => s.text),
-      attribution: wellToAttribution(well, enrichedAt),
+      facts: factSheet.map((s) => s.text),
+      attribution: wellToAttribution(factSheet, stamp),
       enriched: true,
     }
   }
@@ -468,6 +478,8 @@ export function selectStops(params: SelectParams): StopPlan[] {
       // (well or capped extract head) + the grounding fingerprint from it, and preserves the well
       // through the poi re-upsert. Absent when discovery surfaced no stored facts (defensive).
       ...(isStory && n.poi.facts ? { poiFacts: n.poi.facts } : {}),
+      ...(isStory && n.poi.factSheet ? { poiFactSheet: n.poi.factSheet } : {}),
+      ...(isStory && n.poi.enrichedAt ? { poiEnrichedAt: n.poi.enrichedAt } : {}),
       // Carry the Wikidata join key for STORY stops; generate.ts enriches sparse ones.
       ...(isStory && n.poi.qid ? { wikidataQid: n.poi.qid } : {}),
     })

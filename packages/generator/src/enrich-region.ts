@@ -128,6 +128,7 @@ async function main(): Promise<void> {
           lat: pois.lat,
           lng: pois.lng,
           facts: pois.facts,
+          factSheet: pois.factSheet,
         })
         .from(pois)
         .where(
@@ -165,8 +166,7 @@ async function main(): Promise<void> {
       skippedIneligible++
       continue
     }
-    const well = facts.well
-    const hasWell = Array.isArray(well) && well.length > 0
+    const hasWell = Array.isArray(r.factSheet) && r.factSheet.length > 0
     candidates.push({
       poiId: r.id,
       name: r.name,
@@ -290,24 +290,28 @@ async function main(): Promise<void> {
       return
     }
 
-    // ADD the well to the existing facts (extract preserved as the enricher's input/audit source);
-    // re-stamp facts_hash off the WELL (storyFactsHash) so the staleness contract keys on the
-    // grounding fingerprint. Do NOT touch facts_fetched_at — that is the EXTRACT fetch clock
-    // (discover/sweep owns it); the well carries its own `enrichedAt`.
+    // Write the curated sheet to its OWN columns (fact_sheet + enriched_at) — NOT into facts. Re-stamp
+    // facts_hash off the SHEET (storyFactsHash) so the staleness contract keys on the grounding
+    // fingerprint. Do NOT touch facts_fetched_at — that is the EXTRACT fetch clock (discover/sweep
+    // owns it). The extract stays in facts as the enricher's input/audit source.
     const newFacts = buildStoryFacts({
       extract: c.extract,
       title: c.title,
       url: c.url,
       pageId: c.pageId,
       qid: c.qid,
-      well: result.well,
-      enrichedAt,
     })
     await withRetry(
       () =>
         db
           .update(pois)
-          .set({ facts: newFacts, factsHash: storyFactsHash(newFacts), updatedAt: new Date() })
+          .set({
+            facts: newFacts,
+            factSheet: result.well,
+            enrichedAt: new Date(enrichedAt),
+            factsHash: storyFactsHash(newFacts, result.well),
+            updatedAt: new Date(),
+          })
           .where(eq(pois.id, c.poiId)),
       { label: `enrich(${c.name})` },
     )
