@@ -23,6 +23,19 @@ select-all checkboxes (Gmail two-tier: explicit ids vs "select all matching" →
 so server-side pagination later is a UI-only change with no contract change. Region-enrich survives as
 `filter:{bbox}`; the old region-picker dialog is gone. (`--bbox` is now optional — no bbox = whole corpus.)
 
+**Update 2026-06-16 (adversarial review fixes, pre-paid-run):** a 6-dimension review before the first
+paid run found + fixed a set of issues (commits `82b2139`, `82f4001`, `33b91e7`). The load-bearing ones:
+(1) **facts hashing is now order-invariant** (`stableStringify`) — `pois.facts` is jsonb (reorders keys
+on read-back), so the old `JSON.stringify` hash made a writer's `pois.facts_hash` differ from a reader's
+`tracks.facts_hash`, marking every freshly-generated (esp. roam) clip perpetually stale; (2) **a re-sweep
+now PRESERVES wells** (see Migration below — this REVERSES the prior "wipe by design"); (3) **selection
+ranks on the narration-visible head** (`rankLen`), so a free re-discover that re-stores extracts at 12k
+can't reorder which stops a tour picks; (4) **track attribution is deduped** across the well + the route
+geology layer (centroid + trigger commonly share a Macrostrat `map_id`); (5) **enrich-region cost/error
+guards** — a running `--max-cost` cap (not just a pre-spend estimate), an upfront `ANTHROPIC_READY` assert,
+and an all-errored → fail-loud guard so a misconfigured paid run can't report "succeeded" having enriched
+nothing. The verbatim-selection invariant reviewed CLEAN.
+
 ## What shipped
 
 - **Data model** (`@skipper/db/schema`, `pipeline/persist.ts`): `WellSpan` type; `pois.facts` for a
@@ -76,9 +89,16 @@ so server-side pagination later is a UI-only change with no contract change. Reg
 ## Migration / ops sequence
 
 Destructive-OK (STORAGE break-freely; no users). Per region: re-`discover` (sweep now stores the
-12k extract) → `enrich --apply` (populate `well`) → `generate`. **A re-sweep WIPES wells** (the
-upsert overwrites `facts`) — by design (a changed extract invalidates its well); re-`enrich` after.
-Existing un-enriched pois fall back to the extract head until enriched.
+12k extract) → `enrich --apply` (populate `well`) → `generate`. **A re-sweep PRESERVES wells**
+(2026-06-16, review-driven — REVERSES the prior "wipe by design"): `upsertPoi` refreshes `extract`/
+`title` but grafts an existing `facts.well` + `enrichedAt` back on and keeps the well-hash, because a
+free, idempotent, re-run-encouraged sweep must never destroy the PAID well (the old auto-wipe was a
+costly footgun). A deliberate well rebuild goes through `refetch_facts` or a re-`enrich --force`, NOT a
+routine re-discover. **Caveat:** because the sweep no longer auto-invalidates, a re-sweep whose article
+changed materially keeps the OLD well until you re-`enrich`; there is no automatic "extract changed →
+re-enrich" signal yet. NOTE: `refetch_facts` (`refetch-poi.ts`) still writes facts directly and DOES
+drop the well — a deliberate single-poi correction is treated as a well-invalidating change. Existing
+un-enriched pois fall back to the extract head until enriched.
 
 ## Awaiting (the real gate)
 
