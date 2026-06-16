@@ -53,13 +53,13 @@ the ordering self-enforcing.
 ## Deferred / open
 
 - **Facts depth — DONE 2026-06-15 (the "real step 1").** The sweep eagerly fetches the FULL article at
-  discovery time (`fetchDeepExtracts`) and stores it NORMALIZED (`toFacts(...).join(' ')`) in
+  discovery time (`fetchFullExtracts`) and stores it NORMALIZED (`toFacts(...).join(' ')`) in
   `facts.extract` (no separate lead field; `facts.extract` IS the full article, hashed once at sweep).
   Generation READS it — BOTH the roam AND tour per-run deepens are removed (`generate-tour.ts` no longer
-  imports `loadFreshPoiFacts`/`fetchDeepExtracts`/`FACTS_TTL_HOURS`); normalizing at the sweep makes the
+  imports `loadFreshPoiFacts`/`fetchFullExtracts`/`FACTS_TTL_HOURS`); normalizing at the sweep makes the
   sweep/tour/roam hashes IDENTICAL (no recompute drift). Override-freshness moved to `refetch_facts`
   (now fetches the FULL article + re-applies overrides) / a re-sweep — not a per-run fetch.
-  `fetchDeepExtracts` dropped the MediaWiki-clamped `exchars` (hard cap 1200), pulling full plaintext
+  `fetchFullExtracts` dropped the MediaWiki-clamped `exchars` (hard cap 1200), pulling full plaintext
   self-truncated to `DEEP_EXTRACT_CHARS=4000`. The sweep stores the FULL extract for every story-tier
   candidate regardless of length — the arbitrary 800-char `STORY_MIN_EXTRACT` eligibility floor was
   REMOVED 2026-06-16 (see `corpus-enrichment.md`): the stored extract is the enricher's raw input, and

@@ -829,10 +829,10 @@ app.get('/admin/pois', async (c) => {
       lat: pois.lat,
       lng: pois.lng,
       factsHash: pois.factsHash,
-      // Lead-extract length drives the roam story floor (a scenic pin has facts=null → 0). For an
-      // un-clipped poi this is the swept LEAD extract; clipped pois are classified by clip state.
+      // Full-extract length: just gates empty vs non-empty for story-eligibility now (a scenic pin has
+      // facts=null → 0; the 800-char floor was removed 2026-06-16). It's the full swept article, not a lead.
       extractChars: sql<number>`coalesce(length(${pois.facts} ->> 'extract'), 0)::int`,
-      // Enriched = a NON-EMPTY curated fact well exists — the canonical predicate buildStoryFacts /
+      // Enriched = a NON-EMPTY curated fact sheet exists — the canonical predicate buildStoryFacts /
       // resolveStoryGrounding use (an empty `fact_sheet: []` is semantically un-enriched). CASE-guards
       // jsonb_array_length so a non-array value can't error the query.
       enriched: sql<boolean>`case when jsonb_typeof(${pois.factSheet}) = 'array' then jsonb_array_length(${pois.factSheet}) > 0 else false end`,
@@ -925,7 +925,7 @@ app.get('/admin/pois', async (c) => {
     const storyEligibility = classifyStoryEligibility({
       source: p.source,
       name: p.name,
-      leadExtractChars: Number(p.extractChars ?? 0),
+      extractChars: Number(p.extractChars ?? 0),
     })
     // Roam-clip status — the SEPARATE roam-specific axis: does a roam clip exist, and is it grounded
     // on the poi's CURRENT facts (else a run would regenerate it).

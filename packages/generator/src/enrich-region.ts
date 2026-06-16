@@ -162,7 +162,7 @@ async function main(): Promise<void> {
     // the article is rich enough to narrate is THIS step's call (buildCorpusFactSheet builds a sheet or DEFERS),
     // not a guessed cutoff (the 800-char floor was removed 2026-06-16). A SELECTED non-eligible row
     // (non-wikipedia, taste-denied, or text-less) is skipped + COUNTED, never silently dropped.
-    if (classifyStoryEligibility({ source: r.source, name: r.name, leadExtractChars: extract.length }) !== 'eligible') {
+    if (classifyStoryEligibility({ source: r.source, name: r.name, extractChars: extract.length }) !== 'eligible') {
       skippedIneligible++
       continue
     }

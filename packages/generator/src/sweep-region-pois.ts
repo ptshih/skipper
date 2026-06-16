@@ -24,7 +24,7 @@ import {
   type WikidataCandidate,
 } from './pipeline/wikidata-discovery'
 import { ensurePoiOverridesLoaded } from './pipeline/poi-overrides'
-import { fetchDeepExtracts } from './pipeline/wikipedia'
+import { fetchFullExtracts } from './pipeline/wikipedia'
 import { toFacts } from './pipeline/select'
 import { buildStoryFacts, hashFacts, upsertPoi } from './pipeline/persist'
 import { speakableAnchorFor } from './pipeline/speakable'
@@ -148,7 +148,7 @@ async function main(): Promise<void> {
   // (MediaWiki, paced); a miss falls back to the discovery lead. There is NO separate lead field —
   // `facts.extract` IS the full article; the lead is used only transiently for discovery tiering.
   console.log(`Deepening ${stories.length} story extracts to full articles...`)
-  const deep = await fetchDeepExtracts(stories.map((s) => s.article!.pageId))
+  const deep = await fetchFullExtracts(stories.map((s) => s.article!.pageId))
   const fetchedAt = new Date()
   let wrote = 0
   let deepMiss = 0

@@ -109,14 +109,14 @@ Extend `pipeline/scout.ts` from an enrichment-bundle selector to a full **well b
 - **The 4000 raw-extract cap drops.** `extract` is now the enricher's input (a generous cap remains
   for enricher cost — §9). The **narration bound is the enricher's SELECTION** (the curated well) — NOT
   a char cap. The raw cap was needed only because narration grounded *directly* on a dumb positional
-  truncation; the well is *curated*, so judgment is the bound. `fetchDeepExtracts` keeps pulling full
+  truncation; the well is *curated*, so judgment is the bound. `fetchFullExtracts` keeps pulling full
   plaintext; the positional truncation becomes the generous enricher-input cap.
 
 ## 8. Staleness
 
 `factsHash` = hash(well). A `discover` re-fetch that materially changes the article → re-`enrich` →
 new well → new hash → every track that grounded on the old well is stale (the existing contract).
-Overrides (`poi_overrides`) apply at fetch time (already true for `fetchDeepExtracts`), so a re-enrich
+Overrides (`poi_overrides`) apply at fetch time (already true for `fetchFullExtracts`), so a re-enrich
 after an override carries the correction into the well.
 
 ## 9. Open founder-calls (resolve before/at greenlight)

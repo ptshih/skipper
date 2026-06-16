@@ -243,7 +243,7 @@ async function getEntities(ids: string[], props: string): Promise<Record<string,
  * Structured facts for one Wikidata QID, or null when there is nothing groundable (the
  * item is missing, or has none of the allowlisted properties). Non-fatal by contract:
  * any error returns null so a flaky Wikidata lookup never fails a tour (mirrors
- * geologyFacts / fetchDeepExtracts).
+ * geologyFacts / fetchFullExtracts).
  */
 export async function wikidataFacts(qid: string): Promise<WikidataResult | null> {
   let entity: Entity | undefined

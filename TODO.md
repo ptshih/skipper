@@ -24,7 +24,7 @@ the pool, same as roam's queue — so a tour can't narrate a violent-crime POI e
 
 **Facts-depth redesign — DONE 2026-06-15 (the "real step 1", one-field version).** Resolved simpler
 than "store both": `facts.extract` now IS the full article (no separate lead field) — the **sweep
-deepens at discovery time** (`fetchDeepExtracts`), stores the full extract, hashes ONCE. Generation
+deepens at discovery time** (`fetchFullExtracts`), stores the full extract, hashes ONCE. Generation
 reads it: roam's per-run deepen is removed (reads the corpus full, no re-fetch / no mutation / no
 hash churn). Eligibility measured the FULL article via `STORY_MIN_EXTRACT` (retuned 400→800) — but that
 arbitrary char floor was **REMOVED 2026-06-16**: story-grade = "the enricher built a fact sheet," and the
@@ -33,13 +33,13 @@ The lead survives only transiently for discovery tiering (`tierOf`, `STORY_MIN_F
 
 Both follow-ups DONE 2026-06-15:
 - **Tour deepen retired.** `generate.ts` no longer re-fetches/deepens — it grounds on the corpus
-  extract; `loadFreshPoiFacts`/`fetchDeepExtracts`/`FACTS_TTL_HOURS` dropped from the tour path. The
+  extract; `loadFreshPoiFacts`/`fetchFullExtracts`/`FACTS_TTL_HOURS` dropped from the tour path. The
   sweep + `refetch-poi` now store the NORMALIZED extract (`toFacts(...).join(' ')`) so the sweep, tour,
   and roam hash IDENTICALLY (no recompute drift / no spurious staleness). Override-freshness moved to
   `refetch_facts` (now fetches the FULL article + re-applies overrides) / a re-sweep — not a per-run
   fetch. (`loadFreshPoiFacts` + its `isFactsFresh`/`FACTS_TTL_HOURS`/`cachedExtractSuspect` read-through
   were DROPPED 2026-06-16 as dead code — the retired mechanism is gone; refresh is `refetch_facts`/re-sweep.)
-- **Richer extracts.** `fetchDeepExtracts` drops the MediaWiki-clamped `exchars` (hard cap 1200),
+- **Richer extracts.** `fetchFullExtracts` drops the MediaWiki-clamped `exchars` (hard cap 1200),
   pulls full plaintext, and self-truncates to `DEEP_EXTRACT_CHARS=4000` at a sentence boundary.
 
 ## Admin local-dev resilience — guard against "just errors out"

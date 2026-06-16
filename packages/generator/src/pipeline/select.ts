@@ -430,8 +430,8 @@ export function selectStops(params: SelectParams): StopPlan[] {
 
   for (const n of narrated) {
     // #1 (2026-06-16): a STORY telling REQUIRES a curated fact sheet. An eligible-but-un-enriched
-    // wikipedia POI — too thin to enrich (<800 chars) OR simply not enriched yet — is DOWNGRADED to
-    // scenic (named, delivery-only) rather than narrated from the raw extract head. Curation is the
+    // wikipedia POI — the enricher couldn't build a sheet, or it's simply not enriched yet — is
+    // DOWNGRADED to scenic (named, delivery-only) rather than narrated from the raw extract head. Curation is the
     // quality gate; we never ground a STORY on un-curated text ("silence beats a bad telling"). The
     // extract head survives only as resolveStoryGrounding's DEFENSIVE fallback (this gate keeps it unhit).
     const isStory = hasSheet(n.poi)

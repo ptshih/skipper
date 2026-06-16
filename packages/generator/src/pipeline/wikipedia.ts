@@ -2,7 +2,7 @@
 //
 // Discovery is the Wikidata spine now (pipeline/wikidata-discovery.ts); Wikipedia is the
 // prose well joined onto a story candidate by article title (`fetchExtractsByTitle`) and
-// deepened to the full article for the chosen stops (`fetchDeepExtracts`). The extract text
+// deepened to the full article for the chosen stops (`fetchFullExtracts`). The extract text
 // IS the grounded fact source — a story candidate whose extract is thin is downgraded to
 // scenic (silence beats a hallucinated battle).
 //
@@ -53,7 +53,8 @@ export interface WikiPoi {
   title: string
   lat: number
   lng: number
-  /** Lead extract — the grounded story well; '' for a scenic pin (no prose). */
+  /** Full article extract — the raw grounding text (the enricher's input + the un-enriched
+   *  fallback; the curated sheet lives on pois.fact_sheet); '' for a scenic pin (no prose). */
   extract: string
   /** Wikipedia article url (story) — the CC BY-SA attribution link; absent for a scenic pin. */
   url?: string
@@ -153,12 +154,13 @@ async function fetchArticleExtract(pageid: number): Promise<string> {
 }
 
 /**
- * Deep fact sheets for the SELECTED story POIs: one full-article extract each (in
- * series, per etiquette). Used to give a chosen story stop more grounded material
- * than the lead section alone, so the narration can run longer WITHOUT padding. A
- * per-POI failure is non-fatal — the caller keeps that stop's lead facts.
+ * Full-article extracts for the SELECTED story POIs: one per page (in series, per
+ * etiquette). The sweep stores these as the corpus grounding text, so a chosen story
+ * stop has the whole article (the enricher's input), not just an intro — the narration
+ * can run longer WITHOUT padding. A per-POI failure is non-fatal — the caller falls
+ * back to that stop's discovery lead.
  */
-export async function fetchDeepExtracts(pageids: number[]): Promise<Map<number, string>> {
+export async function fetchFullExtracts(pageids: number[]): Promise<Map<number, string>> {
   const out = new Map<number, string>()
   for (const id of pageids) {
     try {
@@ -166,7 +168,7 @@ export async function fetchDeepExtracts(pageids: number[]): Promise<Map<number, 
       if (text) out.set(id, text)
     } catch (e) {
       console.warn(
-        `Deep extract for page ${id} failed (${(e as Error).message}) — keeping lead facts.`,
+        `Full extract for page ${id} failed (${(e as Error).message}) — falling back to the discovery lead.`,
       )
     }
     await sleep(200) // gentle pacing between full-article calls

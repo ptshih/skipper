@@ -3,7 +3,7 @@
 // while every other test stays green. Wikipedia's HTTP layer is stubbed via global fetch.
 
 import { afterEach, beforeEach, expect, test } from 'bun:test'
-import { fetchDeepExtracts, fetchExtractsByTitle } from '../src/pipeline/wikipedia'
+import { fetchFullExtracts, fetchExtractsByTitle } from '../src/pipeline/wikipedia'
 import {
   clearPoiOverridesForTest,
   setPoiOverridesForTest,
@@ -55,9 +55,9 @@ test('lead extracts (fetchExtractsByTitle) pass through the correction seam', as
   expect(out[0]?.extract).toBe('This hall was built by the right person in 1900.')
 })
 
-test('deep extracts (fetchDeepExtracts) pass through the correction seam', async () => {
+test('deep extracts (fetchFullExtracts) pass through the correction seam', async () => {
   stubWikipedia('Long body text. It was built by the wrong person, sadly.\n\nReferences\nfoo')
-  const out = await fetchDeepExtracts([4242])
+  const out = await fetchFullExtracts([4242])
   // The END_SECTION cut runs first, then the correction.
   expect(out.get(4242)).toBe('Long body text. It was built by the right person, sadly.')
 })

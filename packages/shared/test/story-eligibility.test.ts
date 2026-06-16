@@ -37,8 +37,8 @@ describe('STORY_TASTE_DENYLIST', () => {
 
 describe('classifyStoryEligibility', () => {
   // A POI property — the same verdict whether the consumer is a tour or a roam encounter.
-  // leadExtractChars is the measured `facts.extract` length, which is the FULL article now.
-  const base = { source: 'wikipedia', name: 'Emerald Bay', leadExtractChars: 1200 }
+  // extractChars is the measured `facts.extract` length, which is the FULL article now.
+  const base = { source: 'wikipedia', name: 'Emerald Bay', extractChars: 1200 }
 
   test('eligible when a wikipedia place passes every gate', () => {
     expect(classifyStoryEligibility(base)).toBe('eligible')
@@ -47,14 +47,14 @@ describe('classifyStoryEligibility', () => {
     expect(classifyStoryEligibility({ ...base, source: 'wikidata' })).toBe('filtered-source')
   })
   test('filtered-taste takes precedence over the stub check', () => {
-    expect(classifyStoryEligibility({ ...base, name: 'IHOP shooting', leadExtractChars: 0 })).toBe('filtered-taste')
+    expect(classifyStoryEligibility({ ...base, name: 'IHOP shooting', extractChars: 0 })).toBe('filtered-taste')
   })
   test('a short-but-present article is ELIGIBLE — the enricher decides, not a char floor', () => {
     // The 800-char floor was removed 2026-06-16: any wikipedia article with text is enrichable.
-    expect(classifyStoryEligibility({ ...base, leadExtractChars: 120 })).toBe('eligible')
-    expect(classifyStoryEligibility({ ...base, leadExtractChars: 799 })).toBe('eligible')
+    expect(classifyStoryEligibility({ ...base, extractChars: 120 })).toBe('eligible')
+    expect(classifyStoryEligibility({ ...base, extractChars: 799 })).toBe('eligible')
   })
   test('filtered-stub ONLY when there is no article text to enrich (empty extract)', () => {
-    expect(classifyStoryEligibility({ ...base, leadExtractChars: 0 })).toBe('filtered-stub')
+    expect(classifyStoryEligibility({ ...base, extractChars: 0 })).toBe('filtered-stub')
   })
 })

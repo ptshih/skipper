@@ -27,7 +27,7 @@ import { eq } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { pois } from '@skipper/db/schema'
 import type { FactSheetEntry } from '@skipper/db/schema'
-import { fetchDeepExtracts } from './pipeline/wikipedia'
+import { fetchFullExtracts } from './pipeline/wikipedia'
 import { sheetDriftSpans, toFacts } from './pipeline/select'
 import { buildStoryFacts, storyFactsHash } from './pipeline/persist'
 import { announce, parseFlags } from './pipeline/ops'
@@ -68,13 +68,13 @@ async function main() {
   }
 
   // Re-fetch the FULL article by pageId — same depth + normalization the region sweep stores.
-  // fetchDeepExtracts applies the curated fact-edit overrides on the way out, so this IS the
+  // fetchFullExtracts applies the curated fact-edit overrides on the way out, so this IS the
   // override-application path: edit an override, then re-run refetch_facts (or re-sweep) to apply it
   // (generation no longer re-fetches per run).
   const pageId = Number(poi.sourceId)
   console.log(`\n"${poi.name}"  (wikipedia/${poi.sourceId})`)
   console.log(`  Fetching full article (pageId ${pageId})...`)
-  const deep = await fetchDeepExtracts([pageId])
+  const deep = await fetchFullExtracts([pageId])
   const full = deep.get(pageId)
   if (!full) {
     throw new Error(`Wikipedia returned no usable extract for pageId ${pageId} — leaving facts unchanged.`)

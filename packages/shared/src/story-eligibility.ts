@@ -35,10 +35,10 @@ export type StoryEligibility =
 export function classifyStoryEligibility(p: {
   source: string
   name: string
-  leadExtractChars: number
+  extractChars: number
 }): StoryEligibility {
   if (p.source !== 'wikipedia') return 'filtered-source'
   if (STORY_TASTE_DENYLIST.test(p.name)) return 'filtered-taste'
-  if (p.leadExtractChars < 1) return 'filtered-stub' // no article text → nothing for the enricher to quote
+  if (p.extractChars < 1) return 'filtered-stub' // no article text → nothing for the enricher to quote
   return 'eligible'
 }

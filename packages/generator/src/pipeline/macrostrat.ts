@@ -132,7 +132,7 @@ function buildFacts(u: MapUnit): string[] {
 /**
  * Geology facts for a point, or null when there is nothing groundable (the point is
  * over water, or only coarse cover units). Non-fatal by contract: any error returns
- * null so a flaky geology lookup never fails a tour (mirrors fetchDeepExtracts).
+ * null so a flaky geology lookup never fails a tour (mirrors fetchFullExtracts).
  */
 export async function geologyFacts(lat: number, lng: number): Promise<GeologyResult | null> {
   let json: MacrostratResponse
