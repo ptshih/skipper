@@ -48,7 +48,7 @@ import {
 } from '@skipper/db/schema'
 import { classifyStoryEligibility } from '@skipper/shared'
 import { requireAdmin, type AdminEnv } from './auth'
-import { contentTypeForKey, presignGet } from './storage'
+import { contentTypeForKey, presignGet, signClips } from './storage'
 import {
   buildJobArgs,
   cancelExecution,
@@ -57,6 +57,7 @@ import {
   jobExecutionLogsUrl,
   runJob,
   type BuildResult,
+  type ExecState,
   type JobKind,
 } from './jobs'
 import { freezeTour, proposeTour, type ProposePrompt } from './create-tour'
@@ -377,21 +378,7 @@ app.get('/admin/tours/:id/sign', async (c) => {
   ])
 
   try {
-    const stops = stopClips
-      .filter((clip) => clip.key)
-      .map((clip) => ({
-        seq: clip.seq,
-        url: presignGet(clip.key!),
-        contentType: contentTypeForKey(clip.key!),
-        durationMs: clip.durationMs,
-      }))
-    const signFrame = (kind: 'intro' | 'outro') => {
-      const b = frameClips.find((x) => x.kind === kind && x.key)
-      return b
-        ? { url: presignGet(b.key!), contentType: contentTypeForKey(b.key!), durationMs: b.durationMs }
-        : null
-    }
-    return c.json({ stops, intro: signFrame('intro'), outro: signFrame('outro') })
+    return c.json(signClips(stopClips, frameClips))
   } catch (e) {
     console.error('[admin] presign failed', e)
     return c.json({ error: 'audio_unavailable', message: 'R2 not configured or presign failed.' }, 503)
@@ -591,18 +578,8 @@ app.get('/admin/runs', async (c) => {
   if (staleNonTerminal.length > 0) {
     await Promise.all(
       staleNonTerminal.map(async (j) => {
-        const state = await executionState(j.cloudRunExecution!)
-        if (state === 'running' || state === 'succeeded' || state === 'failed') {
-          await db
-            .update(genJobs)
-            .set({
-              status: state,
-              ...(state !== 'running' && { endedAt: new Date() }),
-              ...(state === 'failed' && { error: 'reconciled: execution failed' }),
-            })
-            .where(eq(genJobs.id, j.id))
-          j.status = state
-        }
+        const state = await reconcileJobFromExecution({ id: j.id, cloudRunExecution: j.cloudRunExecution! })
+        if (state) j.status = state
       }),
     )
   }
@@ -679,6 +656,27 @@ async function expireStuckJob(job: { id: string; status: string; updatedAt: Date
   return true
 }
 
+/** Settle a non-terminal gen_jobs row from its Cloud Run execution (the in-process finishJob
+ *  never ran — a hard crash). Queries executionState, and on a definite state flips the row to
+ *  match. Returns the new status, or null when the execution is `unknown` (nothing reconciled).
+ *  Both callers pre-check non-terminal + stale + a known execution name. */
+async function reconcileJobFromExecution(job: {
+  id: string
+  cloudRunExecution: string
+}): Promise<Exclude<ExecState, 'unknown'> | null> {
+  const state = await executionState(job.cloudRunExecution)
+  if (state !== 'running' && state !== 'succeeded' && state !== 'failed') return null
+  await db
+    .update(genJobs)
+    .set({
+      status: state,
+      ...(state !== 'running' && { endedAt: new Date() }),
+      ...(state === 'failed' && { error: 'reconciled: execution failed' }),
+    })
+    .where(eq(genJobs.id, job.id))
+  return state
+}
+
 app.get('/admin/jobs/:id', async (c) => {
   const id = c.req.param('id')
   if (!UUID_RE.test(id)) return c.json({ error: 'not_found' }, 404)
@@ -691,18 +689,8 @@ app.get('/admin/jobs/:id', async (c) => {
   const nonTerminal = !TERMINAL.includes(job.status as (typeof TERMINAL)[number])
   const stale = Date.now() - new Date(job.updatedAt).getTime() > RECONCILE_AFTER_MS
   if (nonTerminal && stale && job.cloudRunExecution) {
-    const state = await executionState(job.cloudRunExecution)
-    if (state === 'running' || state === 'succeeded' || state === 'failed') {
-      await db
-        .update(genJobs)
-        .set({
-          status: state,
-          ...(state !== 'running' && { endedAt: new Date() }),
-          ...(state === 'failed' && { error: 'reconciled: execution failed' }),
-        })
-        .where(eq(genJobs.id, id))
-      job = (await db.select().from(genJobs).where(eq(genJobs.id, id)).limit(1))[0]!
-    }
+    const state = await reconcileJobFromExecution({ id, cloudRunExecution: job.cloudRunExecution })
+    if (state) job = (await db.select().from(genJobs).where(eq(genJobs.id, id)).limit(1))[0]!
   }
   // No-API backstop: a non-terminal row past the task-timeout can't still be running — settle it.
   if (await expireStuckJob(job)) {

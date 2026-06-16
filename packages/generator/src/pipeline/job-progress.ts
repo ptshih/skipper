@@ -54,6 +54,9 @@ export interface FinishOutcome {
   evalRunId?: string
 }
 
+/** Normalize a thrown value to a string message (the begin/run/finish convention everywhere). */
+export const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e))
+
 const jobId = (): string | undefined => process.env.GEN_JOB_ID || undefined
 
 const warn = (phase: string, e: unknown): void =>
@@ -134,5 +137,30 @@ export async function finishJob(outcome: FinishOutcome): Promise<void> {
     await db.update(genJobs).set(set).where(eq(genJobs.id, id))
   } catch (e) {
     warn('finish', e)
+  }
+}
+
+/** The begin → run → finish wrapper every gen-job entrypoint shares (one exit semantics).
+ *
+ *  Pass `beginFields` to have runJob flip the row `running` before `fn` (entrypoints whose
+ *  begin-fields are known up front). Pass `null` when `fn` calls beginJob itself mid-run
+ *  (its fields are computed after arg-parse / validation, or it begins in multiple branches).
+ *
+ *  On success the row settles from `fn`'s returned outcome (so a richer success payload —
+ *  tourId / costUsd / evalRunId — is forwarded), or `{ ok: true }` when it returns void.
+ *  On throw: settle failed, log the message, and exit non-zero. */
+export async function runJob(
+  kind: Kind,
+  beginFields: BeginFields | null,
+  fn: () => Promise<FinishOutcome | void>,
+): Promise<void> {
+  if (beginFields) await beginJob(kind, beginFields)
+  try {
+    const out = await fn()
+    await finishJob(out ?? { ok: true })
+  } catch (e) {
+    await finishJob({ ok: false, error: errMsg(e) })
+    console.error(e instanceof Error ? e.message : e)
+    process.exit(1)
   }
 }

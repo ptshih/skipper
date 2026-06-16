@@ -34,7 +34,7 @@ import { db } from '@skipper/db'
 import { pois } from '@skipper/db/schema'
 import type { PoiFacts } from '@skipper/db/schema'
 import { announce, maxCostFlag, parseBboxFlag, parseFlags } from './pipeline/ops'
-import { beginJob, finishJob } from './pipeline/job-progress'
+import { runJob } from './pipeline/job-progress'
 import { ensurePoiOverridesLoaded } from './pipeline/poi-overrides'
 import { regionLabel } from './pipeline/geo'
 import { buildCorpusFactSheet } from './pipeline/scout'
@@ -325,12 +325,4 @@ async function main(): Promise<void> {
   console.log(`LLM spend this run: ~$${llmSpentUsd().toFixed(2)}`)
 }
 
-await beginJob('enrich_region', { dryRun: !apply, targetId: 'region-corpus' })
-try {
-  await main()
-  await finishJob({ ok: true })
-} catch (e) {
-  await finishJob({ ok: false, error: e instanceof Error ? e.message : String(e) })
-  console.error(e instanceof Error ? e.message : e)
-  process.exit(1)
-}
+await runJob('enrich_region', { dryRun: !apply, targetId: 'region-corpus' }, main)

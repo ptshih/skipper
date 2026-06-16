@@ -31,7 +31,7 @@ import { fetchFullExtracts, wikiUrlForPageId } from './pipeline/wikipedia'
 import { sheetDriftSpans, toFacts } from './pipeline/select'
 import { buildStoryFacts, storyFactsHash, summaryFromExtract } from './pipeline/persist'
 import { announce, parseFlags } from './pipeline/ops'
-import { beginJob, finishJob } from './pipeline/job-progress'
+import { beginJob, runJob } from './pipeline/job-progress'
 
 async function main() {
   const flags = parseFlags(process.argv.slice(2))
@@ -150,12 +150,7 @@ async function main() {
           : ' (no change)') +
       '.',
   )
+  return { ok: true as const, costUsd: 0 } // FREE op — no LLM/TTS spend, so pin the cost at $0.
 }
 
-main()
-  .then(() => finishJob({ ok: true, costUsd: 0 }))
-  .catch(async (e) => {
-    await finishJob({ ok: false, error: e instanceof Error ? e.message : String(e), costUsd: 0 })
-    console.error('\nRe-fetch failed:', e instanceof Error ? e.message : e)
-    process.exitCode = 1
-  })
+await runJob('refetch_facts', null, main)

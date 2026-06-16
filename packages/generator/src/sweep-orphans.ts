@@ -17,7 +17,7 @@ import { db } from '@skipper/db'
 import { segments, tourFrames, tours, tracks } from '@skipper/db/schema'
 import { announce, assertReady, guardFanout, parseFlags, resolveTourId } from './pipeline/ops'
 import { deleteAudio, listAudioKeys, orphanKeys } from './pipeline/storage'
-import { beginJob, finishJob } from './pipeline/job-progress'
+import { beginJob, runJob } from './pipeline/job-progress'
 
 /** The R2 keys a tour's rows currently point at — the stop TRACKS (joined via their
  *  segments) ∪ the tour_frames, non-null. (Roam clips live under roam/<poiId>/ — see
@@ -129,10 +129,4 @@ async function main() {
   )
 }
 
-main()
-  .then(() => finishJob({ ok: true }))
-  .catch(async (e) => {
-    await finishJob({ ok: false, error: e instanceof Error ? e.message : String(e) })
-    console.error('\nSweep failed:', e instanceof Error ? e.message : e)
-    process.exitCode = 1
-  })
+await runJob('sweep_orphans', null, main)

@@ -56,3 +56,34 @@ export function contentTypeForKey(key: string): string {
   const ext = key.slice(key.lastIndexOf('.') + 1).toLowerCase()
   return AUDIO_CONTENT_TYPES[ext] ?? 'application/octet-stream'
 }
+
+/** One signed clip the player streams: a presigned URL + the format/duration it needs. */
+export interface SignedClip {
+  url: string
+  contentType: string
+  durationMs: number | null
+}
+
+/** The shared /sign response shape: every stop clip signed + the optional intro/outro frames.
+ *  Both the API (tier-gated) and the admin (IAP) presign the SAME stop/frame rows this way —
+ *  the per-app try/catch + 503 gating stays at the call site; only the shaping lives here.
+ *  `seq` is segments.seq (nullable in the schema — NULL only for roam, never for a tour stop). */
+export function signClips(
+  stopClips: readonly { seq: number | null; key: string | null; durationMs: number | null }[],
+  frameClips: readonly { kind: string | null; key: string | null; durationMs: number | null }[],
+): { stops: ({ seq: number | null } & SignedClip)[]; intro: SignedClip | null; outro: SignedClip | null } {
+  const stops = stopClips
+    .filter((clip) => clip.key)
+    .map((clip) => ({
+      seq: clip.seq,
+      url: presignGet(clip.key!),
+      // Format derived from the actual key — so the client never hardcodes/guesses it.
+      contentType: contentTypeForKey(clip.key!),
+      durationMs: clip.durationMs,
+    }))
+  const signFrame = (kind: 'intro' | 'outro'): SignedClip | null => {
+    const b = frameClips.find((x) => x.kind === kind && x.key)
+    return b ? { url: presignGet(b.key!), contentType: contentTypeForKey(b.key!), durationMs: b.durationMs } : null
+  }
+  return { stops, intro: signFrame('intro'), outro: signFrame('outro') }
+}

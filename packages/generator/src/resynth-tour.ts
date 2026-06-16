@@ -26,7 +26,7 @@ import { personaFromKey } from './persona'
 import { synthesizeWithTailRetake } from './pipeline/tts'
 import { estimateTtsUsd } from './pipeline/spend'
 import { clipKey, deleteAudio, uploadAudio } from './pipeline/storage'
-import { beginJob, finishJob } from './pipeline/job-progress'
+import { beginJob, runJob } from './pipeline/job-progress'
 
 /** A clip to re-render — a stop track or a frame — normalized to its label/key/script/save. */
 interface Clip {
@@ -173,10 +173,4 @@ async function main() {
   )
 }
 
-main()
-  .then(() => finishJob({ ok: true }))
-  .catch(async (e) => {
-    await finishJob({ ok: false, error: e instanceof Error ? e.message : String(e) })
-    console.error('\nResynth failed:', e instanceof Error ? e.message : e)
-    process.exitCode = 1
-  })
+await runJob('resynth', null, main)

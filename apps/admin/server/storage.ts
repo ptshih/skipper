@@ -4,4 +4,4 @@
 // live in @skipper/storage (the single R2 door, shared with the generator) — re-exported here.
 // The admin presigns ANY tour's clips with NO tier gate (it's founder-only behind IAP) — unlike
 // the public API, where presign sits behind the freemium check.
-export { presignGet, contentTypeForKey } from '@skipper/storage'
+export { presignGet, contentTypeForKey, signClips } from '@skipper/storage'

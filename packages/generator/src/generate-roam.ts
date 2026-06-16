@@ -30,7 +30,7 @@ import { db } from '@skipper/db'
 import { pois, segments, tracks } from '@skipper/db/schema'
 import type { FactSheetEntry, PoiFacts } from '@skipper/db/schema'
 import { announce, assertReady, maxCostFlag, parseBboxFlag, parseFlags } from './pipeline/ops'
-import { beginJob, finishJob } from './pipeline/job-progress'
+import { runJob } from './pipeline/job-progress'
 import { ensurePoiOverridesLoaded } from './pipeline/poi-overrides'
 import { regionLabel } from './pipeline/geo'
 import { narrateStop } from './pipeline/narrate'
@@ -382,12 +382,4 @@ async function main(): Promise<void> {
   console.log(`TTS spend (estimated from chars): ~$${ttsActual.usd.toFixed(2)}`)
 }
 
-await beginJob('generate_roam', { dryRun: !apply && !scriptsOnly, targetId: 'roam-corpus' })
-try {
-  await main()
-  await finishJob({ ok: true })
-} catch (e) {
-  await finishJob({ ok: false, error: e instanceof Error ? e.message : String(e) })
-  console.error(e instanceof Error ? e.message : e)
-  process.exit(1)
-}
+await runJob('generate_roam', { dryRun: !apply && !scriptsOnly, targetId: 'roam-corpus' }, main)

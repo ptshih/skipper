@@ -9,6 +9,9 @@
 // Importing the schema is side-effect-free (no DB connection, no env — CLAUDE.md scaffold note),
 // so this runs anywhere `bun run check` does.
 
+import { readFileSync } from 'node:fs'
+import { join, resolve } from 'node:path'
+
 // Relative source imports (not the '@skipper/*' specifiers): root scripts/ isn't a workspace
 // member, so the subpath exports don't resolve here — same reason lint-type-collisions reads
 // files as text. Importing the schema is still side-effect-free (no DB, no env).
@@ -52,9 +55,39 @@ if (missing.length) {
   )
 }
 
+// AttributionSnapshot['source'] (a pure TS literal union in @skipper/db/schema, NO runtime value)
+// duplicates the Zod `attributionSource` enum — keep them in lockstep. A pgEnum/Zod pair compares
+// by VALUE above; this union has none, so TEXT-SCAN the schema for its members (like
+// lint-type-collisions reads files as text). Only the LITERAL AttributionSnapshot union — NOT
+// FactSheetEntry's `Exclude<AttributionSnapshot['source'], …>`, a derived type with no literals.
+const SCHEMA_TS = resolve(import.meta.dir, '..', 'packages/db/src/schema.ts')
+const schemaSrc = readFileSync(SCHEMA_TS, 'utf8')
+const snapSrc = schemaSrc.match(/AttributionSnapshot\s*=\s*\{[^}]*?\bsource:\s*([^\n]+)/)?.[1]
+if (!snapSrc) {
+  // The match broke (the type was renamed or its `source:` field moved) — fail loudly rather than
+  // silently stop guarding the union ⇄ enum lockstep.
+  errors.push(
+    `Could not find AttributionSnapshot['source'] union in ${join('packages/db/src', 'schema.ts')} ` +
+      `— the type/field shape changed; update lint-enums.ts.`,
+  )
+} else {
+  const snapMembers = [...snapSrc.matchAll(/'([^']+)'/g)].map((m) => m[1]!)
+  if (snapMembers.length === 0) {
+    errors.push(`AttributionSnapshot['source'] union has no string literals — update lint-enums.ts.`)
+  } else if (norm(snapMembers) !== norm(attributionSource.options)) {
+    errors.push(
+      `AttributionSnapshot['source'] [${norm(snapMembers)}] ≠ Zod attributionSource ` +
+        `[${norm(attributionSource.options)}] — add the member to BOTH.`,
+    )
+  }
+}
+
 if (errors.length) {
   console.error(`lint:enums — ${errors.length} enum-lockstep violation(s) (CLAUDE.md):\n`)
   for (const e of errors) console.error(`  ✗ ${e}`)
   process.exit(1)
 }
-console.log(`lint:enums — OK (${PAIRS.length} pgEnum⇄Zod pairs in lockstep + attributionSource⊇poiSource)`)
+console.log(
+  `lint:enums — OK (${PAIRS.length} pgEnum⇄Zod pairs in lockstep + attributionSource⊇poiSource + ` +
+    `AttributionSnapshot['source']⇄attributionSource)`,
+)

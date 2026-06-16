@@ -29,7 +29,7 @@ import type { JokeLevel } from '@skipper/shared'
 import { formatMmss } from '@skipper/drive-core'
 import { generateTour } from './pipeline/generate-tour'
 import type { FrameSummary, GenerateResult } from './pipeline/generate-tour'
-import { beginJob, finishJob } from './pipeline/job-progress'
+import { beginJob, runJob } from './pipeline/job-progress'
 import { WORDS_PER_SECOND } from './config'
 
 const DURATIONS = ['short', 'standard', 'long'] as const
@@ -177,10 +177,4 @@ async function main() {
   return { ok: true as const, tourId: result.tourId }
 }
 
-main()
-  .then((o) => finishJob(o))
-  .catch(async (e) => {
-    await finishJob({ ok: false, error: e instanceof Error ? e.message : String(e) })
-    console.error('\nGeneration failed:', e instanceof Error ? e.message : e)
-    process.exitCode = 1
-  })
+await runJob('generate', null, main)

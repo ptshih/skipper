@@ -26,7 +26,7 @@ import { announce, assertReady, parseFlags } from './pipeline/ops'
 import { personaFromKey } from './persona'
 import { synthesizeWithTailRetake } from './pipeline/tts'
 import { clipKey, uploadAudio } from './pipeline/storage'
-import { beginJob, finishJob } from './pipeline/job-progress'
+import { beginJob, runJob } from './pipeline/job-progress'
 
 interface Args {
   id: string
@@ -221,10 +221,4 @@ async function main() {
   console.log(`Done. Re-synthesized ${(durationMs / 1000).toFixed(1)}s of audio → ${audioUrl}`)
 }
 
-main()
-  .then(() => finishJob({ ok: true }))
-  .catch(async (e) => {
-    await finishJob({ ok: false, error: e instanceof Error ? e.message : String(e) })
-    console.error('\nPatch failed:', e instanceof Error ? e.message : e)
-    process.exitCode = 1
-  })
+await runJob('patch_clip', null, main)

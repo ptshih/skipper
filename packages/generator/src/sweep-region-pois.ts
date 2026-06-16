@@ -29,7 +29,7 @@ import { toFacts } from './pipeline/select'
 import { buildStoryFacts, hashFacts, summaryFromExtract, upsertPoi } from './pipeline/persist'
 import { speakableAnchorFor } from './pipeline/speakable'
 import { announce, parseBboxFlag, parseFlags } from './pipeline/ops'
-import { beginJob, finishJob } from './pipeline/job-progress'
+import { runJob } from './pipeline/job-progress'
 import { sleep } from './pipeline/http'
 import { TAHOE_RENO_BBOX } from './config'
 import type { LngLat } from './pipeline/geo'
@@ -204,12 +204,4 @@ async function main(): Promise<void> {
   console.log(`\nUpserted ${wrote} pois (${stories.length} story + ${scenics.length} scenic).`)
 }
 
-await beginJob('sweep_region_pois', { dryRun: !apply, targetId: 'region-corpus' })
-try {
-  await main()
-  await finishJob({ ok: true })
-} catch (e) {
-  await finishJob({ ok: false, error: e instanceof Error ? e.message : String(e) })
-  console.error(e instanceof Error ? e.message : e)
-  process.exit(1)
-}
+await runJob('sweep_region_pois', { dryRun: !apply, targetId: 'region-corpus' }, main)

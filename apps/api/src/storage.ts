@@ -5,4 +5,4 @@
 // and the account wall is real. The R2 client, presign, and key→MIME helper all live in
 // @skipper/storage (the single R2 door, shared with admin + the generator) — re-exported here
 // so route handlers keep importing from './storage'.
-export { presignGet, contentTypeForKey } from '@skipper/storage'
+export { presignGet, contentTypeForKey, signClips } from '@skipper/storage'

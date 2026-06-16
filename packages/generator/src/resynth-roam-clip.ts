@@ -13,7 +13,7 @@ import { and, eq, isNull } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { pois, segments, tracks } from '@skipper/db/schema'
 import { announce, assertReady, parseFlags } from './pipeline/ops'
-import { beginJob, finishJob } from './pipeline/job-progress'
+import { runJob } from './pipeline/job-progress'
 import { personaFromKey } from './persona'
 import { synthesizeWithTailRetake } from './pipeline/tts'
 import { uploadAudio } from './pipeline/storage'
@@ -93,12 +93,4 @@ async function main(poiId: string): Promise<void> {
   console.log(`\nDone: replaced clip for "${row.poiName}" (${(row.audioDurationMs! / 1000).toFixed(1)}s → ${(durationMs / 1000).toFixed(1)}s).`)
 }
 
-await beginJob('resynth_roam_clip', { dryRun: !apply, targetId: poiId })
-try {
-  await main(poiId)
-  await finishJob({ ok: true })
-} catch (e) {
-  await finishJob({ ok: false, error: e instanceof Error ? e.message : String(e) })
-  console.error(e instanceof Error ? e.message : e)
-  process.exit(1)
-}
+await runJob('resynth_roam_clip', { dryRun: !apply, targetId: poiId }, () => main(poiId))

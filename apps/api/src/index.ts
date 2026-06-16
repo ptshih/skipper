@@ -29,7 +29,7 @@ import { hostForRegion } from './host'
 import { withRetry } from './retry'
 import { shareLandingHtml } from './share'
 import { DATA_SOURCES } from './sources'
-import { contentTypeForKey, presignGet } from './storage'
+import { contentTypeForKey, presignGet, signClips } from './storage'
 import { VERSION_POLICIES } from './version-policy'
 
 const app = new Hono<ApiEnv>()
@@ -346,26 +346,7 @@ app.post('/tours/:tourId/assets/sign', withSession, async (c) => {
   ])
 
   try {
-    const stops = stopClips
-      .filter((clip) => clip.key)
-      .map((clip) => ({
-        seq: clip.seq!,
-        url: presignGet(clip.key!),
-        // Format derived from the actual key — so the client never hardcodes/guesses it.
-        contentType: contentTypeForKey(clip.key!),
-        durationMs: clip.durationMs,
-      }))
-    const signFrame = (kind: 'intro' | 'outro') => {
-      const b = frameClips.find((x) => x.kind === kind && x.key)
-      return b
-        ? {
-            url: presignGet(b.key!),
-            contentType: contentTypeForKey(b.key!),
-            durationMs: b.durationMs,
-          }
-        : null
-    }
-    return c.json({ stops, intro: signFrame('intro'), outro: signFrame('outro') })
+    return c.json(signClips(stopClips, frameClips))
   } catch (e) {
     // R2 not configured / presign failed — don't leak which config var is missing,
     // but give the client a human message so the player can show real copy + a retry
