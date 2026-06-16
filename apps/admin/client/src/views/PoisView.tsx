@@ -212,7 +212,7 @@ type EnrichSelection =
 
 // A focused shadcn Dialog for the corpus `enrich` step (enrich_region): acts on the table SELECTION,
 // then Preview (free dry-run — NO model calls, prints the count + a cost estimate) or Enrich (apply,
-// SPENDS Anthropic; no TTS). The well it builds (pois.facts.well) is read by BOTH tours + roam, so
+// SPENDS Anthropic; no TTS). The fact sheet it builds (pois.fact_sheet) is read by BOTH tours + roam, so
 // enrich ONCE between Discover and Generate. Enrich only acts on ELIGIBLE story POIs (the CLI gates),
 // so the Preview count is the authoritative "what will actually run".
 function EnrichDialog({

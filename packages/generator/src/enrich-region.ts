@@ -2,7 +2,7 @@
 //
 // The distinct PAID op between discovery and generation: `discover` (free sweep → pois.facts.extract)
 // → **`enrich` (paid, ONCE per place)** → `generate` (paid, per tour/roam). It scouts each eligible
-// STORY poi into a curated, grounded "fact well" on `pois.facts.well` — verbatim article spans the
+// STORY poi into a curated, grounded "fact sheet" on `pois.fact_sheet` — verbatim article spans the
 // enricher SELECTED (never rewrote) + any geology/Wikidata bundles it chose to include (pipeline/
 // scout.ts buildWell). Tours + roam both READ that well (resolveStoryGrounding), so enrich cost
 // amortizes once-per-place across every telling, and roam gets enrichment for the first time. See
@@ -18,7 +18,7 @@
 //
 // Usage:
 //   dotenvx run -f .env.development -- bun packages/generator/src/enrich-region.ts
-//   ... --apply                  run it (spends Anthropic; writes pois.facts.well + facts_hash)
+//   ... --apply                  run it (spends Anthropic; writes pois.fact_sheet + facts_hash)
 //   ... --limit 5                cap how many places to enrich (a smoke run)
 //   ... --force                  re-enrich places that already have a well
 //   ... --model opus             A/B the calibration tier vs the default (sonnet)

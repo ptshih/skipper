@@ -9,7 +9,7 @@
 // DISTINCT FROM pois.facts_hash) — the operator then regenerates the owning tour/roam.
 //
 // PRESERVES a paid enrichment WELL (2026-06-16): like the sweep, a refetch keeps an existing
-// `facts.well` + `enrichedAt` (the grounding hash is the WELL hash, so refreshing the extract
+// `fact_sheet` + `enriched_at` (the grounding hash is the SHEET hash, so refreshing the extract
 // alone never marks tracks stale or destroys paid work). A deliberate well rebuild — e.g. to push
 // a fact-edit CORRECTION into a well span — is `enrich-region --include-ids <id> --force --apply`,
 // not a refetch; the refetch WARNS when it refreshes an enriched poi's extract so that's not missed.

@@ -155,7 +155,7 @@ export function headOfExtract(extract: string, maxChars: number): string {
 }
 
 /** The narration sheet + attribution for a STORY poi, resolving the curated narration sheet:
- *  the verbatim `facts.well` when the place has been ENRICHED, else the positional `extract` head
+ *  the verbatim `fact_sheet` when the place has been ENRICHED, else the positional `extract` head
  *  (the un-enriched fallback — byte-for-byte today's behavior for existing 4k corpus rows; a strict
  *  VERBATIM superset, ~one extra trailing sentence, once a row is re-swept to 12k — until enrich). The SINGLE
  *  source for BOTH tours and roam so the well↔fallback switch (and its frozen credit) can never
