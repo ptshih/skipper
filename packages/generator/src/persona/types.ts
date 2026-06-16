@@ -29,13 +29,13 @@ export interface PersonaDef {
   /** System prompt for STOP narration (grounded; kit banned). */
   systemPrompt: string
   /** System prompt for the intro/outro FRAMES (persona-only; the kit's home). */
-  bracketPrompt: string
+  framePrompt: string
   /** The host's personal kit — per-persona DATA. Banned from stops, housed in the intro. */
   kit: {
     /**
      * Kit detectors — the SINGLE source for both the generator's spent-beat tracking and
      * the diversity lint's kit-in-stops ban. Keep these in lockstep with the kit prose in
-     * `systemPrompt`/`bracketPrompt` (they describe the same kit two ways).
+     * `systemPrompt`/`framePrompt` (they describe the same kit two ways).
      */
     beats: KitBeat[]
     /** The lint's regen instruction when a stop touches the kit — names THIS kit's terms. */

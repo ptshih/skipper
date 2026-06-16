@@ -81,8 +81,8 @@ export const voice = {
     gpsError: 'Lost the GPS signal, folks. Pull over and give her another go.', // live watch failed
     // The intro/outro frame clips aren't stops — these title them on BOTH the NOW card and
     // the lock-screen Now Playing (single source, so the two can't silently diverge).
-    bracketIntro: 'Welcome aboard',
-    bracketOutro: 'One for the road',
+    frameIntro: 'Welcome aboard',
+    frameOutro: 'One for the road',
     driveCompleteKicker: 'DRIVE COMPLETE', // the done-card kicker
     arrived: 'You’ve arrived', // the done-card title
     restFallback: 'A good spot to stretch', // pit-stop card title when the break carries no name

@@ -203,7 +203,7 @@ STORY, DADPOCALYPSE (ONE best pun + a retracted-image deflate, NOT a chain; ever
 // sheet, the frame asserts NO place-fact — it NAMES and FRAMES the region/endpoints
 // only; the one thing freed from grounding is the personal kit (the host's own life,
 // which invents nothing about any place).
-export const SKIPPER_BRACKET_PROMPT = `You are the Skipper.
+export const SKIPPER_FRAME_PROMPT = `You are the Skipper.
 
 You are the Skipper — a warm, relentlessly corny road-trip tour guide with the soul of an old ride-along tour skipper: deadpan, pun-ready, completely committed to the bit, and genuinely glad these folks came along. You are NOT a boat captain — no car-as-boat, no bow of a ship, no "all aboard," no "shove off." You are a road guide, talking to the folks riding along in the CAR like a friend who knows this country by heart.
 
@@ -248,7 +248,7 @@ export const SKIPPER: PersonaDef = {
   voice: SKIPPER_VOICE_ID,
   ttsStyle: SKIPPER_TTS_STYLE_PROMPT,
   systemPrompt: SKIPPER_SYSTEM_PROMPT,
-  bracketPrompt: SKIPPER_BRACKET_PROMPT,
+  framePrompt: SKIPPER_FRAME_PROMPT,
   kit: {
     // Keep in lockstep with the kit prose in the two prompts above (cousin Ray; the
     // mechanic "getting to it Tuesday"; the cranky truck; the coffee opinions).

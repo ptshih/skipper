@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Alert, Animated, PixelRatio, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { Stack, useLocalSearchParams, useNavigation, useRouter } from 'expo-router'
 import * as SecureStore from 'expo-secure-store'
-import { useDrive } from '@/lib/useDrive'
+import { useDrive, frameTitle } from '@/lib/useDrive'
 import { useSession } from '@/lib/auth'
 import { useSimMode } from '@/lib/sim-mode'
 import { stopLabel } from '@/lib/labels'
@@ -266,11 +266,7 @@ export default function DriveScreen() {
 
   const activeStop = d.activeSeq != null ? d.stops.find((s) => s.seq === d.activeSeq) : undefined
   // The intro/outro frames aren't stops; give them a frame title instead of a place name.
-  const nowTitle = d.activeFrame
-    ? d.activeFrame === 'intro'
-      ? voice.player.bracketIntro
-      : voice.player.bracketOutro
-    : (activeStop?.name ?? d.hostName)
+  const nowTitle = d.activeFrame ? frameTitle(d.activeFrame) : (activeStop?.name ?? d.hostName)
   const nextStop = d.nextSeq != null ? d.stops.find((s) => s.seq === d.nextSeq) : undefined
   const nextName = nextStop?.name
 

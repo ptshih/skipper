@@ -25,7 +25,7 @@ describe('Skipper persona def', () => {
     // Each kit detector must actually fire on the prompt text that describes that beat —
     // the load-bearing sync the registry exists to keep (lint + generator share these beats).
     for (const beat of SKIPPER.kit.beats) {
-      const described = beat.match.test(SKIPPER.systemPrompt) || beat.match.test(SKIPPER.bracketPrompt)
+      const described = beat.match.test(SKIPPER.systemPrompt) || beat.match.test(SKIPPER.framePrompt)
       expect(described).toBe(true)
     }
   })

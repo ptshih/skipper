@@ -611,8 +611,8 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   // scripts depend only on shell/persona/jokeLevel, so WHEN they run can't change them. The
   // detached .catch keeps a panel throw from turning this still-pending promise into an
   // unhandledRejection; the real frame error still surfaces (and aborts — frames are
-  // mandatory) at the `await bracketsPromise` below.
-  const bracketsPromise = Promise.all([
+  // mandatory) at the `await framesPromise` below.
+  const framesPromise = Promise.all([
     narrateIntro(
       {
         region: shell.regionName,
@@ -622,7 +622,7 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
         headline: shell.headline,
         hostName: persona.hostName,
       },
-      persona.bracketPrompt,
+      persona.framePrompt,
     ).then((r) => r.script),
     narrateOutro(
       {
@@ -630,10 +630,10 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
         endAnchor: shell.endAnchorName,
         jokeLevel,
       },
-      persona.bracketPrompt,
+      persona.framePrompt,
     ).then((r) => r.script),
   ])
-  bracketsPromise.catch(() => {}) // guard only; the real error still throws at the await below
+  framesPromise.catch(() => {}) // guard only; the real error still throws at the await below
 
   // ---- The eval panel + evaluator-optimizer (the in-pipeline flywheel). ----------------
   // Findings feed regeneration through optimize() (accept-if-not-worse, gate-weighted, per-
@@ -974,14 +974,14 @@ export async function generateTour(opts: GenerateOptions): Promise<GenerateResul
   // banned from stops, lives in the intro; the sentimental bow in the outro. Kicked off before the
   // eval panel above (overlapping its wall-clock); awaited HERE, just before TTS. Mandatory (the
   // ready-gate requires both), so a narration failure aborts. Usually already resolved by now (it
-  // ran under the panel) — this await is then ~free, which is why lap('bracketNarration') reads ~0.
+  // ran under the panel) — this await is then ~free, which is why lap('frameNarration') reads ~0.
   console.log('Awaiting intro + outro frames (overlapped with the eval panel)...')
-  const [introScript, outroScript] = await bracketsPromise
+  const [introScript, outroScript] = await framesPromise
   const framePlan: { kind: FrameKind; script: string }[] = [
     { kind: 'intro', script: introScript },
     { kind: 'outro', script: outroScript },
   ]
-  lap('bracketNarration')
+  lap('frameNarration')
 
   // ---- Run spend: the sunk LLM tally + the TTS estimate (the --max-cost gate). --------
   // This is the LAST moment a cap can save real money: narration/judging is already paid

@@ -462,15 +462,15 @@ export function buildOutroSheet(req: OutroRequest): string {
 /** Narrate the INTRO frame with the persona's frame prompt. Persona-only, no fact sheet. */
 export async function narrateIntro(
   req: IntroRequest,
-  bracketPrompt: string,
+  framePrompt: string,
 ): Promise<NarrationResult> {
-  return runNarration(bracketPrompt, buildIntroSheet(req), `INTRO (${req.region})`)
+  return runNarration(framePrompt, buildIntroSheet(req), `INTRO (${req.region})`)
 }
 
 /** Narrate the OUTRO frame with the persona's frame prompt. Persona-only, no fact sheet. */
 export async function narrateOutro(
   req: OutroRequest,
-  bracketPrompt: string,
+  framePrompt: string,
 ): Promise<NarrationResult> {
-  return runNarration(bracketPrompt, buildOutroSheet(req), `OUTRO (${req.region})`)
+  return runNarration(framePrompt, buildOutroSheet(req), `OUTRO (${req.region})`)
 }

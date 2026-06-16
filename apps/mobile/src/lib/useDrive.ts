@@ -45,10 +45,10 @@ import { voice } from '@/ui'
 // as the preview (32k MP3 clips, 1h presigned URLs → re-sign once on a stall).
 const CLIP_STALL_MS = 12_000
 
-// Lock-screen title for a frame clip (intro/outro aren't in the stop list). Reads the SAME
-// voice constants as the NOW-card title in play.tsx — single source, so they can't diverge.
-const bracketTitle = (kind: 'intro' | 'outro'): string =>
-  kind === 'intro' ? voice.player.bracketIntro : voice.player.bracketOutro
+// Title for a frame clip (intro/outro aren't in the stop list). The ONE source for both the
+// lock-screen title here and play.tsx's NOW-card title — exported so they can't diverge.
+export const frameTitle = (kind: 'intro' | 'outro'): string =>
+  kind === 'intro' ? voice.player.frameIntro : voice.player.frameOutro
 
 // Real drive speed for the simulator (mph). A FIXED 60 for now; the trigger lead is
 // speed-adaptive in @skipper/drive-core, so this is the only knob that matters here.
@@ -277,7 +277,7 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
   const lastFixAt = useRef(0) // ms of the last accepted live fix — feeds the no-GPS watchdog (review #6)
   // Which frames this tour has (set on load); the intro is queued at start, the outro
   // (once) at the end. Refs so the queueing reads current values without dep churn.
-  const bracketsRef = useRef<{ intro: boolean; outro: boolean }>({ intro: false, outro: false })
+  const framesRef = useRef<{ intro: boolean; outro: boolean }>({ intro: false, outro: false })
   const outroQueued = useRef(false)
 
   // Audio-playback refs (cloned from the preview player).
@@ -329,7 +329,7 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
         const polyline = tour.tour.polyline as [number, number][]
         if (polyline.length < 2) throw new Error('This tour has no drivable route.')
         const cum = cumulativeMeters(polyline)
-        bracketsRef.current = { intro: urls.has(INTRO_SEQ), outro: urls.has(OUTRO_SEQ) }
+        framesRef.current = { intro: urls.has(INTRO_SEQ), outro: urls.has(OUTRO_SEQ) }
         const introMs = tour.intro?.audioDurationMs ?? null
         const outroMs = tour.outro?.audioDurationMs ?? null
         setUrls(urls)
@@ -481,7 +481,7 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
     reachedEnd.current = true
     // Outro frame — queued LAST (after any pending stops), so the sign-off plays before
     // the drive actually ends. Queued at most once.
-    if (bracketsRef.current.outro && !outroQueued.current) {
+    if (framesRef.current.outro && !outroQueued.current) {
       outroQueued.current = true
       queue.current.push(OUTRO_SEQ)
     }
@@ -568,7 +568,7 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
     engineRef.current = new TriggerEngine(triggerable)
     setDriving(true)
     // Intro frame — the welcome, played FIRST (before any geofence trigger fires).
-    if (bracketsRef.current.intro) {
+    if (framesRef.current.intro) {
       queue.current.push(INTRO_SEQ)
       pump()
     }
@@ -802,7 +802,7 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
       player.replace({ uri })
       const bk = frameKindForSeq(activeSeq)
       const stopName = bk
-        ? bracketTitle(bk)
+        ? frameTitle(bk)
         : (data.stops.find((s) => s.seq === activeSeq)?.name ?? data.hostName)
       try {
         player.setActiveForLockScreen(true, {
