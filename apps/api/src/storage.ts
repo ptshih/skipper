@@ -2,23 +2,7 @@
 //
 // Audio objects are PRIVATE in R2; tracks.audioUrl (and tour_frames.audioUrl) store the
 // object KEY. The API presigns on demand AFTER the tier check, so a leaked/shared URL expires
-// and the account wall is real. The R2 client + presign live in @skipper/storage (shared with
-// the generator); this file adds the API-only concern: deriving a clip's MIME from its key.
-
-// Re-exported so route handlers keep importing presign from './storage' (one storage door).
-export { presignGet } from '@skipper/storage'
-
-const AUDIO_CONTENT_TYPES: Record<string, string> = {
-  m4a: 'audio/mp4', // current canonical (LINEAR16 → AAC-LC 48k, see audio-compression-spike.md)
-  mp3: 'audio/mpeg', // legacy gemini-tts 32k MP3 clips, if any survive
-  wav: 'audio/wav', // legacy LINEAR16 clips, if any survive
-}
-
-/** MIME for a clip, derived from its R2 key extension. Lets the client treat the audio
- *  format as DATA (offline download writes the right extension; the player stays
- *  format-agnostic) instead of hardcoding it. Unknown extensions fall back to a generic
- *  binary type so a future codec change can't silently break the contract. */
-export function contentTypeForKey(key: string): string {
-  const ext = key.slice(key.lastIndexOf('.') + 1).toLowerCase()
-  return AUDIO_CONTENT_TYPES[ext] ?? 'application/octet-stream'
-}
+// and the account wall is real. The R2 client, presign, and key→MIME helper all live in
+// @skipper/storage (the single R2 door, shared with admin + the generator) — re-exported here
+// so route handlers keep importing from './storage'.
+export { presignGet, contentTypeForKey } from '@skipper/storage'

@@ -38,3 +38,21 @@ export function getR2Client(): S3Client {
 export function presignGet(key: string, expiresInSeconds: number = DEFAULT_TTL_SECONDS): string {
   return getR2Client().file(key).presign({ method: 'GET', expiresIn: expiresInSeconds })
 }
+
+/** Audio MIME by R2-key extension. SINGLE source for every presign caller (API + admin) — a
+ *  per-app copy DRIFTED once (admin was missing `m4a`, serving the canonical clip as
+ *  octet-stream), so it lives here next to presignGet. */
+const AUDIO_CONTENT_TYPES: Record<string, string> = {
+  m4a: 'audio/mp4', // current canonical (LINEAR16 → AAC-LC 48k, see audio-compression-spike.md)
+  mp3: 'audio/mpeg', // legacy gemini-tts 32k MP3 clips, if any survive
+  wav: 'audio/wav', // legacy LINEAR16 clips, if any survive
+}
+
+/** MIME for a clip, derived from its R2 key extension. Lets the client treat the audio format as
+ *  DATA (offline download writes the right extension; the player stays format-agnostic) instead of
+ *  hardcoding it. Unknown extensions fall back to a generic binary type so a future codec change
+ *  can't silently break the contract. */
+export function contentTypeForKey(key: string): string {
+  const ext = key.slice(key.lastIndexOf('.') + 1).toLowerCase()
+  return AUDIO_CONTENT_TYPES[ext] ?? 'application/octet-stream'
+}
