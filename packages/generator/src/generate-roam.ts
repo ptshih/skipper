@@ -166,24 +166,23 @@ async function main(): Promise<void> {
 
   const candidates: Candidate[] = []
   for (const r of rows) {
-    const extract = typeof r.facts?.extract === 'string' ? (r.facts.extract as string) : ''
-    if (extract.length < minExtract) continue
+    const f = r.facts
+    if (!f || f.extract.length < minExtract) continue
     if (STORY_TASTE_DENYLIST.test(r.name)) {
       console.log(`  taste-gate: skipping "${r.name}"`)
       continue
     }
-    const f = r.facts as { title?: string; url?: string; pageId?: number; qid?: string } | null
     candidates.push({
       poiId: r.id,
-      pageId: f?.pageId ?? Number(r.sourceId),
+      pageId: f.pageId ?? Number(r.sourceId),
       name: r.name,
       kind: r.kind,
       lat: r.lat,
       lng: r.lng,
-      extract,
-      facts: (r.facts ?? {}) as PoiFacts,
-      title: f?.title ?? r.name,
-      url: f?.url ?? `https://en.wikipedia.org/?curid=${r.sourceId}`,
+      extract: f.extract,
+      facts: f,
+      title: f.title ?? r.name,
+      url: f.url ?? `https://en.wikipedia.org/?curid=${r.sourceId}`,
       qid: f?.qid ?? null,
       factsFetchedAt: r.factsFetchedAt,
       factSheet: r.factSheet,

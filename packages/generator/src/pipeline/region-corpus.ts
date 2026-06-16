@@ -18,15 +18,6 @@ import { withRetry } from './http'
 import type { LngLat } from './geo'
 import type { WikiPoi } from './wikipedia'
 
-/** The discovery payload the region sweep stores in `pois.facts` for a STORY row. */
-interface StoryFacts {
-  extract?: string
-  title?: string
-  url?: string
-  pageId?: number
-  qid?: string
-}
-
 /**
  * Tour candidates from the region corpus, scoped to the route's bounding box. STORY rows
  * (source 'wikipedia') carry their Wikipedia prose; SCENIC rows (source 'wikidata') are named
@@ -81,22 +72,21 @@ export async function loadCandidatePoisInBox(sw: LngLat, ne: LngLat): Promise<Wi
         ? { speakableLat: r.speakableLat, speakableLng: r.speakableLng }
         : {}
     if (r.source === 'wikipedia') {
-      const f = (r.facts ?? {}) as StoryFacts
+      const f = r.facts
       out.push({
         source: 'wikipedia',
         sourceId: r.sourceId,
         title: r.name,
         lat: r.lat,
         lng: r.lng,
-        extract: f.extract ?? '',
-        ...(f.url ? { url: f.url } : {}),
-        pageid: f.pageId ?? Number(r.sourceId),
-        ...(f.qid ? { qid: f.qid } : {}),
+        extract: f?.extract ?? '',
+        ...(f?.url ? { url: f.url } : {}),
+        pageid: f?.pageId ?? Number(r.sourceId),
+        ...(f?.qid ? { qid: f.qid } : {}),
         ...(r.kind ? { kind: r.kind } : {}),
-        // Carry the FULL corpus facts (well + extract + provenance) for the well↔extract grounding
-        // switch + the staleness fingerprint downstream (select → generate-tour). r.facts is the
-        // jsonb; cast through StoryFacts↦PoiFacts (a story row always has facts here).
-        ...(r.facts ? { facts: r.facts as PoiFacts } : {}),
+        // Carry the corpus facts (extract + provenance) for the extract-fallback grounding + the
+        // un-enriched staleness fingerprint downstream (select → generate-tour). Typed PoiFacts.
+        ...(r.facts ? { facts: r.facts } : {}),
         ...(r.factSheet ? { factSheet: r.factSheet } : {}),
         ...(r.enrichedAt ? { enrichedAt: r.enrichedAt } : {}),
         ...speakable,

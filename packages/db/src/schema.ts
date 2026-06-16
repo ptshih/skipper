@@ -22,13 +22,19 @@ import { relations, sql } from 'drizzle-orm'
 /** Frozen, precomputed route geometry as [lng, lat] coordinate pairs. */
 export type Polyline = [number, number][]
 
-/** Free-form structured facts about a place. For a STORY poi the canonical shape (built by
- *  `buildStoryFacts`) is `{ extract, title, url, pageId, qid? }` — the raw fetched article + its
- *  provenance. The curated narration sheet was HOISTED OUT to its own typed `pois.fact_sheet` column
- *  (+ `enriched_at`) — see `FactSheetEntry`; it is NOT in this bag. The raw `extract` stays here as
- *  the enricher's input + audit source + the un-enriched fallback. Stays `Record<string,unknown>` so
- *  writers/readers cast the fields they need (a typed DTO would over-constrain this jsonb). */
-export type PoiFacts = Record<string, unknown>
+/** The raw fetched Wikipedia article + its provenance for a STORY poi (built by `buildStoryFacts`);
+ *  null for scenic/break rows. The curated narration sheet is NOT here — it's the separate typed
+ *  `pois.fact_sheet` column (+ `enriched_at`; see `FactSheetEntry`). `extract` = the full article (the
+ *  enricher's input + audit source + the un-enriched grounding fallback). A real interface now (was
+ *  `Record<string,unknown>`): the bag's shape is STABLE — the extensible/curated part moved to
+ *  `fact_sheet` — so typed access beats hand-written casts. */
+export interface PoiFacts {
+  extract: string
+  title: string
+  url: string
+  pageId: number
+  qid?: string
+}
 
 /**
  * One VERBATIM span of a story poi's curated FACT SHEET (`pois.fact_sheet`) — a sentence/section

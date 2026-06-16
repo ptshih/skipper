@@ -82,7 +82,7 @@ async function main() {
 
   // Normalize to the sweep's stored shape (toFacts(...).join(' ')) so an unchanged article hashes
   // identically; preserve the existing title/url/qid metadata (the deep fetch returns text only).
-  const f = (poi.facts ?? {}) as Record<string, unknown>
+  const f = poi.facts
   const extract = toFacts(full).join(' ')
   // PRESERVE a paid fact sheet across a refetch (2026-06-16, Option A) — a single-poi re-fetch refreshes
   // the extract but LEAVES the `fact_sheet`/`enriched_at` columns untouched (the .update below never
@@ -93,14 +93,14 @@ async function main() {
   const enriched = existingSheet !== null && existingSheet.length > 0
   const newFacts = buildStoryFacts({
     extract,
-    title: (f.title as string) ?? poi.name,
-    url: (f.url as string) ?? `https://en.wikipedia.org/?curid=${poi.sourceId}`,
+    title: f?.title ?? poi.name,
+    url: f?.url ?? `https://en.wikipedia.org/?curid=${poi.sourceId}`,
     pageId,
-    qid: f.qid as string | undefined,
+    qid: f?.qid,
   })
   const newHash = storyFactsHash(newFacts, existingSheet)
 
-  const oldExtract = typeof poi.facts?.extract === 'string' ? poi.facts.extract : ''
+  const oldExtract = poi.facts?.extract ?? ''
   const extractChanged = extract !== oldExtract
   const hashChanged = newHash !== poi.factsHash // the grounding fingerprint → track staleness
   console.log(`  Old hash: ${poi.factsHash?.slice(0, 12) ?? '∅'}  (${oldExtract.length} extract chars)`)

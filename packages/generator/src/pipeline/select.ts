@@ -187,10 +187,10 @@ export function resolveStoryGrounding(
       enriched: true,
     }
   }
-  const extract = typeof facts.extract === 'string' ? facts.extract : ''
-  const title = typeof facts.title === 'string' ? facts.title : undefined
-  const url = typeof facts.url === 'string' ? facts.url : undefined
-  const sourceId = typeof facts.pageId === 'number' ? String(facts.pageId) : ''
+  const extract = facts.extract
+  const title = facts.title
+  const url = facts.url
+  const sourceId = String(facts.pageId)
   return {
     facts: toFacts(headOfExtract(extract, opts.fallbackChars)),
     attribution: [

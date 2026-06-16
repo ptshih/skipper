@@ -105,7 +105,6 @@ interface Candidate {
   lat: number
   lng: number
   extract: string
-  facts: PoiFacts
   title: string
   url: string
   pageId: number
@@ -156,8 +155,8 @@ async function main(): Promise<void> {
     // `query` is part of the SELECTION predicate (a table search filter) — apply it BEFORE the
     // eligibility gate so the "not story-grade" count below reflects only SELECTED rows, not the corpus.
     if (query && !`${r.name} ${r.sourceId}`.toLowerCase().includes(query)) continue
-    const facts = (r.facts ?? {}) as PoiFacts
-    const extract = typeof facts.extract === 'string' ? facts.extract : ''
+    const facts = r.facts
+    const extract = facts?.extract ?? ''
     // Story eligibility is the SAME gate every consumer uses (single-sourced in @skipper/shared):
     // wikipedia source + not taste-denied + extract ≥ the story floor. Measured on the FULL extract.
     // Enrich can only build a well for an eligible story poi, so a SELECTED non-eligible row is
@@ -174,11 +173,10 @@ async function main(): Promise<void> {
       lat: r.lat,
       lng: r.lng,
       extract,
-      facts,
-      title: typeof facts.title === 'string' ? facts.title : r.name,
-      url: typeof facts.url === 'string' ? facts.url : `https://en.wikipedia.org/?curid=${r.sourceId}`,
-      pageId: typeof facts.pageId === 'number' ? facts.pageId : Number(r.sourceId),
-      qid: typeof facts.qid === 'string' ? facts.qid : null,
+      title: facts?.title ?? r.name,
+      url: facts?.url ?? `https://en.wikipedia.org/?curid=${r.sourceId}`,
+      pageId: facts?.pageId ?? Number(r.sourceId),
+      qid: facts?.qid ?? null,
       hasWell,
     })
   }
