@@ -47,4 +47,25 @@ describe('buildJobArgs — enrich_region (the corpus enrich op)', () => {
     expect(r.args).toContain('--bbox=-120,38,-119,39')
     expect(r.args).toContain('--limit=5')
   })
+
+  test('threads an explicit poi-id selection (hand-picked rows)', () => {
+    const r = buildJobArgs({ kind: 'enrich_region', apply: true, includeIds: ['a', 'b', 'c'] })
+    expect(r.args).toContain('--include-ids=a,b,c')
+    expect(r.args.some((a) => a.startsWith('--exclude-ids'))).toBe(false)
+  })
+
+  test('threads a filter + exclude-ids selection ("select all matching, minus a few")', () => {
+    const r = buildJobArgs({
+      kind: 'enrich_region',
+      apply: true,
+      bbox: '-120,38,-119,39',
+      source: 'wikipedia',
+      query: 'emerald',
+      excludeIds: ['x', 'y'],
+    })
+    expect(r.args).toContain('--bbox=-120,38,-119,39')
+    expect(r.args).toContain('--source=wikipedia')
+    expect(r.args).toContain('--query=emerald')
+    expect(r.args).toContain('--exclude-ids=x,y')
+  })
 })

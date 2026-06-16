@@ -15,6 +15,14 @@ flag `filtered-thin` was renamed **`filtered-stub`** to end the name collision (
 < 800 chars, excluded; the removed enrich slice was *eligible-but-short*, < 2500 chars — a different
 threshold entirely, which made one word mean two things).
 
+**Update 2026-06-15 (selection-driven enrich):** the enrich CTA is no longer region-bound — it acts on a
+table **selection**. `enrich-region.ts` now resolves the candidate set from `(filter ∪ --include-ids) \
+--exclude-ids` (then the eligibility gate): a hand-picked id list, OR a filter (`--bbox`/`--source`/
+`--query`, default = the whole corpus) minus deselected ids. The admin POIs table gained per-row +
+select-all checkboxes (Gmail two-tier: explicit ids vs "select all matching" → a server-resolved filter),
+so server-side pagination later is a UI-only change with no contract change. Region-enrich survives as
+`filter:{bbox}`; the old region-picker dialog is gone. (`--bbox` is now optional — no bbox = whole corpus.)
+
 ## What shipped
 
 - **Data model** (`@skipper/db/schema`, `pipeline/persist.ts`): `WellSpan` type; `pois.facts` for a

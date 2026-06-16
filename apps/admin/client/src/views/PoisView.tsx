@@ -14,6 +14,7 @@ import { Label } from '@/components/ui/label'
 import { Callout } from '@/components/ui/callout'
 import { SearchInput } from '@/components/ui/search-input'
 import { Segmented } from '@/components/ui/segmented'
+import { Checkbox } from '@/components/ui/checkbox'
 import { EmptyState } from '@/components/ui/empty-state'
 import { TableSkeletonRows } from '@/components/ui/skeleton'
 import {
@@ -61,7 +62,6 @@ export function PoisView() {
   const navigate = useNavigate()
   const [tab, setTab] = useState<Tab>('corpus')
   const [discoverOpen, setDiscoverOpen] = useState(false)
-  const [enrichOpen, setEnrichOpen] = useState(false)
 
   // Shared with RoamView via the ['pois'] key — both read the same corpus, fetched once + cached.
   const { data: pois = [], error: err, isPending } = useQuery({ queryKey: ['pois'], queryFn: async () => (await api.pois()).pois })
@@ -80,14 +80,9 @@ export function PoisView() {
         title="POIs"
         description="The shared place corpus — sources, tour + roam usage, attribution, and fact corrections. Tours and roam both select from here."
         actions={
-          <div className="flex items-center gap-2">
-            <Button onClick={() => setDiscoverOpen(true)}>
-              <Compass className="h-4 w-4" /> Discover POIs
-            </Button>
-            <Button variant="outline" onClick={() => setEnrichOpen(true)}>
-              <Sparkles className="h-4 w-4" /> Enrich
-            </Button>
-          </div>
+          <Button onClick={() => setDiscoverOpen(true)}>
+            <Compass className="h-4 w-4" /> Discover POIs
+          </Button>
         }
       />
 
@@ -107,7 +102,6 @@ export function PoisView() {
       {tab === 'retire' && <RetireTab flagged={flagged} />}
 
       <DiscoverDialog open={discoverOpen} onOpenChange={setDiscoverOpen} onSubmitted={() => navigate({ to: '/runs' })} />
-      <EnrichDialog open={enrichOpen} onOpenChange={setEnrichOpen} onSubmitted={() => navigate({ to: '/runs' })} />
     </div>
   )
 }
@@ -207,44 +201,48 @@ function DiscoverDialog({
 
 /* ── ENRICH (the corpus fact-well step) ── */
 
-// A focused shadcn Dialog for the corpus `enrich` step (enrich_region): pick a region, then
-// Preview (free dry-run — NO model calls, prints the count + a cost estimate) or Enrich (apply,
+/** What to enrich, resolved server-side. Either a hand-picked id list, OR a FILTER (the table's
+ *  server-resolvable axes) plus the rows DESELECTED after a "select all matching" — the Gmail model,
+ *  so server-side pagination never has to enumerate every id client-side. */
+type EnrichSelection =
+  | { kind: 'explicit'; ids: string[] }
+  | { kind: 'all'; filter: { bbox?: string; source?: string; query?: string }; excludeIds: string[] }
+
+// A focused shadcn Dialog for the corpus `enrich` step (enrich_region): acts on the table SELECTION,
+// then Preview (free dry-run — NO model calls, prints the count + a cost estimate) or Enrich (apply,
 // SPENDS Anthropic; no TTS). The well it builds (pois.facts.well) is read by BOTH tours + roam, so
-// enrich ONCE between Discover and Generate.
+// enrich ONCE between Discover and Generate. Enrich only acts on ELIGIBLE story POIs (the CLI gates),
+// so the Preview count is the authoritative "what will actually run".
 function EnrichDialog({
   open,
   onOpenChange,
+  selection,
+  summary,
   onSubmitted,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
+  selection: EnrichSelection
+  summary: string
   onSubmitted: () => void
 }) {
-  const [regionSlug, setRegionSlug] = useState('')
-  const { data: regions = [], error: loadErr } = useQuery({
-    queryKey: ['regions'],
-    queryFn: async () => (await api.regions()).regions,
-    enabled: open,
-  })
-
   const qc = useQueryClient()
   const submitMut = useMutation({
     mutationFn: (apply: boolean) => {
-      const bbox = regions.find((r) => r.slug === regionSlug)?.discoveryBbox
-      return api.createJob({
-        kind: 'enrich_region',
-        ...(bbox ? { bbox } : {}),
-        apply,
-        ...(apply ? { confirm: true } : {}), // apply SPENDS → the server's typed confirm gate
-      })
+      const body: Record<string, unknown> = { kind: 'enrich_region', apply, ...(apply ? { confirm: true } : {}) }
+      if (selection.kind === 'explicit') {
+        body.includeIds = selection.ids
+      } else {
+        if (selection.filter.bbox) body.bbox = selection.filter.bbox
+        if (selection.filter.source) body.source = selection.filter.source
+        if (selection.filter.query) body.query = selection.filter.query
+        if (selection.excludeIds.length) body.excludeIds = selection.excludeIds
+      }
+      return api.createJob(body)
     },
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ['runs'] }); onSubmitted() },
   })
-  function submit(apply: boolean) {
-    if (!regionSlug) return
-    submitMut.mutate(apply)
-  }
-  const err = loadErr ?? submitMut.error
+  const err = submitMut.error
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -260,18 +258,9 @@ function EnrichDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-2">
-          <Label htmlFor="enrich-region">Region</Label>
-          <Select value={regionSlug || undefined} onValueChange={setRegionSlug}>
-            <SelectTrigger id="enrich-region" className="w-full">
-              <SelectValue placeholder={regions.length === 0 ? 'Loading…' : 'Select a region…'} />
-            </SelectTrigger>
-            <SelectContent>
-              {regions.map((r) => (
-                <SelectItem key={r.slug} value={r.slug}>{r.displayName}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="rounded-lg border bg-muted/30 px-3 py-2 text-sm">
+          Enriching <span className="font-medium text-foreground">{summary}</span>.
+          <span className="text-muted-foreground"> Only eligible story POIs are enriched — Preview shows the exact count + cost.</span>
         </div>
 
         <div className="rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
@@ -289,10 +278,10 @@ function EnrichDialog({
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={submitMut.isPending}>
             Cancel
           </Button>
-          <Button variant="outline" disabled={submitMut.isPending || !regionSlug} onClick={() => void submit(false)}>
+          <Button variant="outline" disabled={submitMut.isPending} onClick={() => submitMut.mutate(false)}>
             {submitMut.isPending ? 'Triggering…' : 'Preview'}
           </Button>
-          <Button disabled={submitMut.isPending || !regionSlug} onClick={() => void submit(true)}>
+          <Button disabled={submitMut.isPending} onClick={() => submitMut.mutate(true)}>
             <Sparkles className="h-4 w-4" /> {submitMut.isPending ? 'Triggering…' : 'Enrich'}
           </Button>
         </DialogFooter>
@@ -640,6 +629,17 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
   const [flags, setFlags] = useState('all')
   const [sheetPoi, setSheetPoi] = useState<{ id: string; name: string; canDelete: boolean } | null>(null)
 
+  // Gmail-style selection: in 'explicit' mode `selIds` are the CHOSEN rows; in 'all' mode every filtered
+  // row is chosen EXCEPT `selIds` (the deselected). Lets "select all matching" send a server-side FILTER
+  // (pagination-proof) rather than enumerating every id, while still supporting hand-picks + unchecking.
+  const [selMode, setSelMode] = useState<'explicit' | 'all'>('explicit')
+  const [selIds, setSelIds] = useState<Set<string>>(new Set())
+  const [enrichOpen, setEnrichOpen] = useState(false)
+  const navigate = useNavigate()
+  // Region defs carry discoveryBbox, so "select all matching" can send a region as a server-side bbox
+  // filter. Shared ['regions'] cache; the `regions` list below is just slug+name for the filter dropdown.
+  const { data: regionDefs = [] } = useQuery({ queryKey: ['regions'], queryFn: async () => (await api.regions()).regions })
+
   const regions = useMemo(() => {
     const seen = new Set<string>()
     return pois
@@ -662,6 +662,54 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
     }
     return true
   }), [pois, region, source, flags, q])
+
+  const isSelected = (id: string) => (selMode === 'all' ? !selIds.has(id) : selIds.has(id))
+  const numSelected = useMemo(
+    () => filtered.reduce((n, p) => n + ((selMode === 'all' ? !selIds.has(p.id) : selIds.has(p.id)) ? 1 : 0), 0),
+    [filtered, selMode, selIds],
+  )
+  const headerChecked = filtered.length > 0 && numSelected === filtered.length
+  const headerIndeterminate = numSelected > 0 && numSelected < filtered.length
+
+  function toggleRow(id: string) {
+    setSelIds((prev) => {
+      const next = new Set(prev) // membership = the EXCEPTION to the mode (chosen in explicit, deselected in all)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+  function toggleAll() {
+    // Any selection → clear; nothing selected → "select all matching".
+    setSelMode(numSelected > 0 ? 'explicit' : 'all')
+    setSelIds(new Set())
+  }
+  function clearSel() {
+    setSelMode('explicit')
+    setSelIds(new Set())
+  }
+
+  // Resolve the selection into the enrich job's contract. 'all' mode prefers a server-side FILTER
+  // (pagination-proof) when the active table filter is faithfully resolvable (region→bbox, source,
+  // query); a hygiene `flags` view or a region without a bbox can't be reproduced server-side, so it
+  // falls back to enumerating the visible ids (exact, client-side — fine at today's corpus size).
+  function buildSelection(): EnrichSelection {
+    if (selMode === 'explicit') return { kind: 'explicit', ids: [...selIds] }
+    const bbox = region !== 'all' ? regionDefs.find((r) => r.slug === region)?.discoveryBbox ?? null : null
+    const resolvable = (flags === 'all' || flags === 'story-eligible') && (region === 'all' || !!bbox)
+    if (resolvable) {
+      return {
+        kind: 'all',
+        filter: { bbox: bbox ?? undefined, source: source !== 'all' ? source : undefined, query: q || undefined },
+        excludeIds: [...selIds],
+      }
+    }
+    return { kind: 'explicit', ids: filtered.filter((p) => isSelected(p.id)).map((p) => p.id) }
+  }
+  const selectionSummary =
+    selMode === 'explicit'
+      ? `${selIds.size} hand-picked POI${selIds.size === 1 ? '' : 's'}`
+      : `all ${numSelected} POIs matching this filter${selIds.size ? ` (minus ${selIds.size} deselected)` : ''}`
 
   const totals = {
     total: pois.length,
@@ -731,10 +779,30 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
         <span className="ml-auto text-sm text-muted-foreground">{filtered.length} of {pois.length}</span>
       </div>
 
+      {numSelected > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/40 px-3 py-2 text-sm">
+          <span className="font-medium">{selectionSummary}</span>
+          <Button size="sm" onClick={() => setEnrichOpen(true)}>
+            <Sparkles className="h-4 w-4" /> Enrich {numSelected}
+          </Button>
+          <button className="text-xs text-muted-foreground hover:text-foreground" onClick={clearSel}>
+            Clear
+          </button>
+        </div>
+      )}
+
       <div className="overflow-hidden rounded-xl border">
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-10">
+                <Checkbox
+                  checked={headerChecked}
+                  indeterminate={headerIndeterminate}
+                  onCheckedChange={toggleAll}
+                  aria-label="Select all"
+                />
+              </TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Source</TableHead>
               <TableHead>Region</TableHead>
@@ -746,16 +814,23 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {loading && <TableSkeletonRows rows={8} cols={8} />}
+            {loading && <TableSkeletonRows rows={8} cols={9} />}
             {filtered.map((p) => {
               const sm = SOURCE_META[p.source]
               const em = STORY_ELIGIBILITY_META[p.storyEligibility]
               return (
                 <Fragment key={p.id}>
                   <TableRow
-                    className="cursor-pointer"
+                    className={cn('cursor-pointer', isSelected(p.id) && 'bg-muted/40')}
                     onClick={() => setSheetPoi({ id: p.id, name: p.name, canDelete: p.tourCount + p.roamClipCount === 0 })}
                   >
+                    <TableCell className="w-10" onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={isSelected(p.id)}
+                        onCheckedChange={() => toggleRow(p.id)}
+                        aria-label={`Select ${p.name}`}
+                      />
+                    </TableCell>
                     <TableCell>
                       <span className="font-medium hover:underline">{p.name}</span>
                       {(p.staleFacts || p.suspiciousDuration) && (
@@ -804,7 +879,7 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
             })}
             {!loading && filtered.length === 0 && (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={8}>
+                <TableCell colSpan={9}>
                   <EmptyState icon={Search}>No POIs match these filters.</EmptyState>
                 </TableCell>
               </TableRow>
@@ -822,6 +897,14 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
           onOpenChange={(o) => { if (!o) setSheetPoi(null) }}
         />
       )}
+
+      <EnrichDialog
+        open={enrichOpen}
+        onOpenChange={setEnrichOpen}
+        selection={buildSelection()}
+        summary={selectionSummary}
+        onSubmitted={() => { clearSel(); navigate({ to: '/runs' }) }}
+      />
     </div>
   )
 }
