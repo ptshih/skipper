@@ -102,7 +102,7 @@ export interface TourCard {
   distanceMeters: number | null
   durationSeconds: number | null
   stops: number
-  brackets: number
+  frames: number
   authored: 'admin' | 'seed'
   createdAt: string
   updatedAt: string
@@ -160,7 +160,7 @@ export interface TourStopDetail {
   hasAudio: boolean
 }
 
-export interface TourBracketDetail {
+export interface TourFrameDetail {
   kind: 'intro' | 'outro'
   script: string | null
   audioDurationMs: number | null
@@ -184,7 +184,7 @@ export interface TourDetail {
   }
   region: { slug: string; displayName: string } | null
   stops: TourStopDetail[]
-  brackets: TourBracketDetail[]
+  frames: TourFrameDetail[]
   eval: TourEval | null
 }
 
@@ -221,7 +221,7 @@ export interface IntegrityTour {
   slug: string
   headline: string
   silentStops: number[]
-  silentBrackets: string[]
+  silentFrames: string[]
   unattributed: number[]
 }
 export interface IntegrityReport {

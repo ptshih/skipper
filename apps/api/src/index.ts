@@ -6,7 +6,7 @@
 //   *    /api/auth/*                  -> Better Auth (sign-up/in/out, session, OAuth)
 //   GET  /tours                      -> list ready tours, one card per drive (anonymous OK)
 //   GET  /tours/:tourId              -> a ready drive: route + region + host + intro/outro + stops
-//   POST /tours/:tourId/assets/sign  -> presigned R2 URLs for the drive's audio (stops + brackets)
+//   POST /tours/:tourId/assets/sign  -> presigned R2 URLs for the drive's audio (stops + frames)
 //   GET  /roam                       -> free-roam pins near a point + presigned clips (ALPHA: open)
 //   GET  /t/:tourId                  -> shareable tour link: in-app universal link + OG web fallback
 //
@@ -201,14 +201,14 @@ app.get('/tours/:tourId', withSession, async (c) => {
   if ('res' in gated) return gated.res
   const { tour } = gated
 
-  // Region, stops, and brackets are INDEPENDENT reads (each keyed only on the already-loaded
+  // Region, stops, and frames are INDEPENDENT reads (each keyed only on the already-loaded
   // tour, none on another's result). neon-http is one HTTP round-trip per query, so serial
   // awaits would pay that latency three times back-to-back — fan them out and collapse to ~the
   // slowest single query. (A reject still surfaces as a 500 via onError, same as serial.)
   //
   // A stop = a tour-bound `segment` (place-anchor + trigger geometry) + its canonical (variant 0)
-  // `track` (the narration); the stop's treatment is the track's `form`. Brackets = `tour_frames`.
-  const [regionRows, stopRows, brackets] = await Promise.all([
+  // `track` (the narration); the stop's treatment is the track's `form`. Frames = `tour_frames`.
+  const [regionRows, stopRows, frames] = await Promise.all([
     withRetry(
       () =>
         db
@@ -252,7 +252,7 @@ app.get('/tours/:tourId', withSession, async (c) => {
           })
           .from(tourFrames)
           .where(eq(tourFrames.tourId, tour.id)),
-      { label: 'tour.brackets' },
+      { label: 'tour.frames' },
     ),
   ])
   // tours.regionId is a NOT NULL FK with onDelete: restrict, so the region always exists.
@@ -270,8 +270,8 @@ app.get('/tours/:tourId', withSession, async (c) => {
     audioDurationMs: s.audioDurationMs,
     revisedAt: s.revisedAt,
   }))
-  const intro = brackets.find((b) => b.kind === 'intro')
-  const outro = brackets.find((b) => b.kind === 'outro')
+  const intro = frames.find((b) => b.kind === 'intro')
+  const outro = frames.find((b) => b.kind === 'outro')
 
   return c.json({
     tour: {
@@ -306,7 +306,7 @@ app.get('/tours/:tourId', withSession, async (c) => {
 })
 
 // Issue short-lived presigned R2 URLs for the drive's audio: every stop (story/scenic/break)
-// plus the intro/outro brackets. Same gate as fetch: `?preview=1` streams any ready tour
+// plus the intro/outro frames. Same gate as fetch: `?preview=1` streams any ready tour
 // (the funnel); without it, the bytes stay walled behind a free account (drive + offline).
 app.post('/tours/:tourId/assets/sign', withSession, async (c) => {
   const gated = await loadTourGated(c)
@@ -314,9 +314,9 @@ app.post('/tours/:tourId/assets/sign', withSession, async (c) => {
   const { tour } = gated
 
   // Independent reads → fan out (see /tours/:tourId): two neon-http round-trips become one.
-  // Stop clips live on the canonical (variant 0) `track` of each tour-bound `segment`; bracket
+  // Stop clips live on the canonical (variant 0) `track` of each tour-bound `segment`; frame
   // clips on `tour_frames`. Each stores its R2 object KEY in audioUrl (presigned below).
-  const [stopClips, bracketClips] = await Promise.all([
+  const [stopClips, frameClips] = await Promise.all([
     withRetry(
       () =>
         db
@@ -341,7 +341,7 @@ app.post('/tours/:tourId/assets/sign', withSession, async (c) => {
           })
           .from(tourFrames)
           .where(eq(tourFrames.tourId, tour.id)),
-      { label: 'sign.brackets' },
+      { label: 'sign.frames' },
     ),
   ])
 
@@ -355,8 +355,8 @@ app.post('/tours/:tourId/assets/sign', withSession, async (c) => {
         contentType: contentTypeForKey(clip.key!),
         durationMs: clip.durationMs,
       }))
-    const signBracket = (kind: 'intro' | 'outro') => {
-      const b = bracketClips.find((x) => x.kind === kind && x.key)
+    const signFrame = (kind: 'intro' | 'outro') => {
+      const b = frameClips.find((x) => x.kind === kind && x.key)
       return b
         ? {
             url: presignGet(b.key!),
@@ -365,7 +365,7 @@ app.post('/tours/:tourId/assets/sign', withSession, async (c) => {
           }
         : null
     }
-    return c.json({ stops, intro: signBracket('intro'), outro: signBracket('outro') })
+    return c.json({ stops, intro: signFrame('intro'), outro: signFrame('outro') })
   } catch (e) {
     // R2 not configured / presign failed — don't leak which config var is missing,
     // but give the client a human message so the player can show real copy + a retry

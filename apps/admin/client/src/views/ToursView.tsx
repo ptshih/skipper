@@ -175,7 +175,7 @@ export function ToursView() {
             {integrity.tours.length} ready tour{integrity.tours.length === 1 ? '' : 's'} failing the integrity check
           </div>
           <div className="mt-1 leading-relaxed text-muted-foreground">
-            A <span className="font-medium text-foreground">ready</span> tour must have audio on every stop + bracket and CC BY-SA attribution on every story stop.{' '}
+            A <span className="font-medium text-foreground">ready</span> tour must have audio on every stop + frame and CC BY-SA attribution on every story stop.{' '}
             {integrity.tours.map((t, i) => (
               <span key={t.id}>
                 {i > 0 && ', '}
@@ -264,7 +264,7 @@ export function ToursView() {
                   <TableCell><EvalCell ev={t.eval} /></TableCell>
                   <TableCell className="text-right font-mono">
                     {t.stops}
-                    {t.brackets ? <span className="text-muted-foreground"> +{t.brackets}</span> : null}
+                    {t.frames ? <span className="text-muted-foreground"> +{t.frames}</span> : null}
                   </TableCell>
                   <TableCell className="text-right font-mono text-muted-foreground">{fmtMiles(t.distanceMeters)}</TableCell>
                   <TableCell className="text-right font-mono text-muted-foreground">{fmtDuration(t.durationSeconds)}</TableCell>

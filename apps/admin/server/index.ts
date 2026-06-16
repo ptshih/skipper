@@ -13,7 +13,7 @@
 //   PATCH /admin/regions/:slug    -> update displayName / discoveryBbox
 //   POST /admin/regions/bbox-lookup -> LLM + Nominatim parallel bbox lookup by place name
 //   GET  /admin/tours             -> catalog: every tour (incl. drafts) + status + counts
-//   GET  /admin/tours/:id         -> the ear-pass: stops/brackets + scripts + latest eval
+//   GET  /admin/tours/:id         -> the ear-pass: stops/frames + scripts + latest eval
 //   GET  /admin/tours/:id/sign    -> presigned R2 URLs for every clip (no tier gate)
 //   GET  /admin/evals?slug=       -> eval_runs history for a slug (the trend)
 //   GET  /admin/jobs              -> recent gen_jobs (operational record; powers job polling)
@@ -192,7 +192,7 @@ app.post('/admin/regions/bbox-lookup', async (c) => {
 })
 
 // Catalog — EVERY tour (drafts included; the admin operates the whole catalog, unlike the
-// public /tours which only lists ready ones), with stop/bracket counts and an authored flag.
+// public /tours which only lists ready ones), with stop/frame counts and an authored flag.
 app.get('/admin/tours', async (c) => {
   const rows = await db
     .select({
@@ -214,7 +214,7 @@ app.get('/admin/tours', async (c) => {
 
   const ids = rows.map((r) => r.id)
   const stopCount = new Map<string, number>()
-  const bracketCount = new Map<string, number>()
+  const frameCount = new Map<string, number>()
   if (ids.length) {
     const [sc, bc] = await Promise.all([
       // Stops = tour-bound segments (one segment per stop; its single variant-0 track is the
@@ -231,21 +231,21 @@ app.get('/admin/tours', async (c) => {
         .groupBy(tourFrames.tourId),
     ])
     for (const r of sc) if (r.tourId) stopCount.set(r.tourId, Number(r.n))
-    for (const r of bc) bracketCount.set(r.tourId, Number(r.n))
+    for (const r of bc) frameCount.set(r.tourId, Number(r.n))
   }
 
   return c.json({
     tours: rows.map(({ routeProvenance, ...r }) => ({
       ...r,
       stops: stopCount.get(r.id) ?? 0,
-      brackets: bracketCount.get(r.id) ?? 0,
+      frames: frameCount.get(r.id) ?? 0,
       // 'admin' = LLM-proposed + human-approved at runtime; 'seed' = the committed seed/data route.
       authored: routeProvenance ? 'admin' : 'seed',
     })),
   })
 })
 
-// The ear-pass: a tour's stops/brackets WITH scripts + the latest eval scores. Audio URLs
+// The ear-pass: a tour's stops/frames WITH scripts + the latest eval scores. Audio URLs
 // come from /sign. Includes drafts (status surfaced) so a freshly-generated tour can be vetted.
 app.get('/admin/tours/:id', async (c) => {
   const id = c.req.param('id')
@@ -253,7 +253,7 @@ app.get('/admin/tours/:id', async (c) => {
   const tour = (await db.select().from(tours).where(eq(tours.id, id)).limit(1))[0]
   if (!tour) return c.json({ error: 'not_found' }, 404)
 
-  const [regionRows, stops, brackets, latestRun] = await Promise.all([
+  const [regionRows, stops, frames, latestRun] = await Promise.all([
     db
       .select({ slug: regions.slug, displayName: regions.displayName })
       .from(regions)
@@ -339,7 +339,7 @@ app.get('/admin/tours/:id', async (c) => {
     },
     region: regionRows[0] ?? null,
     stops: stops.map(({ audioUrl, ...s }) => ({ ...s, hasAudio: audioUrl != null })),
-    brackets: brackets.map(({ audioUrl, ...b }) => ({ ...b, hasAudio: audioUrl != null })),
+    frames: frames.map(({ audioUrl, ...b }) => ({ ...b, hasAudio: audioUrl != null })),
     eval: run
       ? {
           id: run.id,
@@ -363,7 +363,7 @@ app.get('/admin/tours/:id/sign', async (c) => {
   const id = c.req.param('id')
   if (!UUID_RE.test(id)) return c.json({ error: 'not_found' }, 404)
 
-  const [stopClips, bracketClips] = await Promise.all([
+  const [stopClips, frameClips] = await Promise.all([
     db
       .select({ seq: segments.seq, key: tracks.audioUrl, durationMs: tracks.audioDurationMs })
       .from(segments)
@@ -385,13 +385,13 @@ app.get('/admin/tours/:id/sign', async (c) => {
         contentType: contentTypeForKey(clip.key!),
         durationMs: clip.durationMs,
       }))
-    const signBracket = (kind: 'intro' | 'outro') => {
-      const b = bracketClips.find((x) => x.kind === kind && x.key)
+    const signFrame = (kind: 'intro' | 'outro') => {
+      const b = frameClips.find((x) => x.kind === kind && x.key)
       return b
         ? { url: presignGet(b.key!), contentType: contentTypeForKey(b.key!), durationMs: b.durationMs }
         : null
     }
-    return c.json({ stops, intro: signBracket('intro'), outro: signBracket('outro') })
+    return c.json({ stops, intro: signFrame('intro'), outro: signFrame('outro') })
   } catch (e) {
     console.error('[admin] presign failed', e)
     return c.json({ error: 'audio_unavailable', message: 'R2 not configured or presign failed.' }, 503)
@@ -468,7 +468,7 @@ app.get('/admin/evals', async (c) => {
   return c.json({ slug, runs })
 })
 
-// Integrity audit (§14.9). The generator's ready-gate enforces "every stop + bracket has
+// Integrity audit (§14.9). The generator's ready-gate enforces "every stop + frame has
 // audio, every story stop has CC BY-SA attribution" at WRITE time — but nothing audits the
 // LIVE db, so a half-failed resynth or a manual poke could leave a `ready` tour silently
 // broken (the exact way the canonical demo dies). Pure read; flags only violators.
@@ -481,7 +481,7 @@ app.get('/admin/integrity', async (c) => {
   const ids = ready.map((r) => r.id)
   if (!ids.length) return c.json({ checked: 0, tours: [] })
 
-  const [silentStops, silentBrackets, unattributed] = await Promise.all([
+  const [silentStops, silentFrames, unattributed] = await Promise.all([
     db
       .select({ tourId: segments.tourId, seq: segments.seq, stopType: tracks.form })
       .from(segments)
@@ -508,12 +508,12 @@ app.get('/admin/integrity', async (c) => {
       .orderBy(asc(segments.seq)),
   ])
 
-  type Violations = { silentStops: number[]; silentBrackets: string[]; unattributed: number[] }
+  type Violations = { silentStops: number[]; silentFrames: string[]; unattributed: number[] }
   const byTour = new Map<string, Violations>()
   const ensure = (id: string): Violations => {
     let v = byTour.get(id)
     if (!v) {
-      v = { silentStops: [], silentBrackets: [], unattributed: [] }
+      v = { silentStops: [], silentFrames: [], unattributed: [] }
       byTour.set(id, v)
     }
     return v
@@ -521,7 +521,7 @@ app.get('/admin/integrity', async (c) => {
   // tourId/seq are non-null for tour-bound segments (the CHECK keeps them in lockstep with
   // tourId), but the columns are nullable for roam — guard to satisfy the types.
   for (const s of silentStops) if (s.tourId && s.seq != null) ensure(s.tourId).silentStops.push(s.seq)
-  for (const b of silentBrackets) ensure(b.tourId).silentBrackets.push(b.kind)
+  for (const b of silentFrames) ensure(b.tourId).silentFrames.push(b.kind)
   for (const s of unattributed) if (s.tourId && s.seq != null) ensure(s.tourId).unattributed.push(s.seq)
 
   const flagged = ready.filter((t) => byTour.has(t.id)).map((t) => ({ ...t, ...byTour.get(t.id)! }))

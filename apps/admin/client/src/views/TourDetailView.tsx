@@ -142,7 +142,7 @@ function ScriptText({ children }: { children: ReactNode }) {
   )
 }
 
-function BracketRow({ kind, b, url }: { kind: 'intro' | 'outro'; b: TourDetail['brackets'][number]; url?: string }) {
+function FrameRow({ kind, b, url }: { kind: 'intro' | 'outro'; b: TourDetail['frames'][number]; url?: string }) {
   return (
     <div className="border-b bg-muted/30 px-4 py-3 last:border-b-0">
       <div className="flex items-center gap-2.5">
@@ -397,7 +397,7 @@ export function TourDetailView() {
   if (error) return <Callout variant="error">{errMsg(error)}</Callout>
   if (!data) return <TourDetailSkeleton />
 
-  const { tour, region, stops, brackets, eval: ev } = data
+  const { tour, region, stops, frames, eval: ev } = data
   const regenerate = () =>
     fireJob(
       { kind: 'generate', slug: tour.slug, dryRun: false, maxCostUsd: 5, confirm: true },
@@ -413,23 +413,23 @@ export function TourDetailView() {
   const groundingFor = (seq: number) =>
     ev?.scores.find((s) => s.seq === seq && s.dimension === 'grounding') ?? null
   const scoresForSeq = (seq: number) => ev?.scores.filter((s) => s.seq === seq) ?? []
-  const intro = brackets.find((b) => b.kind === 'intro')
-  const outro = brackets.find((b) => b.kind === 'outro')
+  const intro = frames.find((b) => b.kind === 'intro')
+  const outro = frames.find((b) => b.kind === 'outro')
   const failingStops = stops.filter((s) => { const g = groundingFor(s.seq); return g && !g.pass })
 
-  // Integrity (§14.9): a READY tour must have audio on every stop + bracket and attribution on
+  // Integrity (§14.9): a READY tour must have audio on every stop + frame and attribution on
   // every story stop. Computed from already-loaded data — the per-tour view of the fleet audit.
   const isEmptyAttr = (a: unknown) => a == null || (Array.isArray(a) && a.length === 0)
   const integrity = tour.status === 'ready'
     ? {
         silentStops: stops.filter((s) => !s.hasAudio).map((s) => s.seq),
-        silentBrackets: brackets.filter((b) => !b.hasAudio).map((b) => b.kind),
+        silentFrames: frames.filter((b) => !b.hasAudio).map((b) => b.kind),
         unattributed: stops.filter((s) => s.stopType === 'story' && isEmptyAttr(s.attribution)).map((s) => s.seq),
       }
     : null
   const integrityBroken =
     integrity != null &&
-    (integrity.silentStops.length > 0 || integrity.silentBrackets.length > 0 || integrity.unattributed.length > 0)
+    (integrity.silentStops.length > 0 || integrity.silentFrames.length > 0 || integrity.unattributed.length > 0)
   const stopPins: RouteStopPin[] = stops
     .filter((s) => s.triggerLat != null && s.triggerLng != null)
     .map((s) => ({ seq: s.seq, name: s.name, stopType: s.stopType, lat: s.triggerLat!, lng: s.triggerLng!, radiusM: s.triggerRadiusM }))
@@ -472,9 +472,9 @@ export function TourDetailView() {
             <TriangleAlert className="h-3.5 w-3.5" /> Integrity — this ready tour is broken
           </div>
           <div className="mt-1 leading-relaxed text-muted-foreground">
-            A <span className="font-medium text-foreground">ready</span> tour must have audio on every stop and bracket, and attribution on every story stop.
+            A <span className="font-medium text-foreground">ready</span> tour must have audio on every stop and frame, and attribution on every story stop.
             {integrity.silentStops.length > 0 && <> Stops with no audio: <span className="font-medium text-foreground">{integrity.silentStops.join(', ')}</span>.</>}
-            {integrity.silentBrackets.length > 0 && <> Brackets with no audio: <span className="font-medium text-foreground">{integrity.silentBrackets.join(', ')}</span>.</>}
+            {integrity.silentFrames.length > 0 && <> Frames with no audio: <span className="font-medium text-foreground">{integrity.silentFrames.join(', ')}</span>.</>}
             {integrity.unattributed.length > 0 && <> Story stops missing CC BY-SA attribution: <span className="font-medium text-foreground">{integrity.unattributed.join(', ')}</span>.</>}
             {' '}Re-run generate or resynth, or flip the status off ready.
           </div>
@@ -526,7 +526,7 @@ export function TourDetailView() {
 
       <SectionLabel className="mb-2.5 mt-6">Itinerary · {stops.length} stops</SectionLabel>
       <div className="overflow-hidden rounded-xl border">
-        {intro && <BracketRow kind="intro" b={intro} url={signed?.intro?.url} />}
+        {intro && <FrameRow kind="intro" b={intro} url={signed?.intro?.url} />}
         {stops.map((s) => (
           <StopRow
             key={s.seq}
@@ -541,7 +541,7 @@ export function TourDetailView() {
             scores={scoresForSeq(s.seq)}
           />
         ))}
-        {outro && <BracketRow kind="outro" b={outro} url={signed?.outro?.url} />}
+        {outro && <FrameRow kind="outro" b={outro} url={signed?.outro?.url} />}
       </div>
     </div>
   )
