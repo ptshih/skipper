@@ -28,7 +28,14 @@ import { AppState } from 'react-native'
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake'
 import * as Location from 'expo-location'
-import { haversineMeters, RoamEngine } from '@skipper/drive-core'
+import {
+  clampSeekSec,
+  decideStall,
+  haversineMeters,
+  POST_START_STALL_MS,
+  RoamEngine,
+  seekTargetReached,
+} from '@skipper/drive-core'
 import type { LngLat } from '@skipper/drive-core'
 import { errorMessage, getRoamManifest, getTour, listTours } from './api'
 import type { RoamManifest } from './api'
@@ -60,10 +67,8 @@ const KEEP_AWAKE_TAG = 'skipper-roam'
 /** A clip that never starts (expired URL / dead zone) is SKIPPED after this grace — roam
  *  has no re-sign machinery (alpha); a missed encounter is invisible by design. */
 const CLIP_STALL_MS = 12_000
-/** After a clip has STARTED (sawFresh), this long with no playback progress ⇒ an audio interruption
- *  (call / Siri / Bluetooth or headphone handoff — all pause expo-audio with no didJustFinish). Without
- *  recovery clipBusy latches and the roam companion goes silent for the rest of the session. (audit #1) */
-const POST_START_STALL_MS = 6_000
+// POST_START_STALL_MS (the post-start interruption threshold) + the decideStall ladder live in
+// @skipper/drive-core/player now, single-sourced + unit-tested (shared with useDrive).
 /** getCurrentPositionAsync has no built-in timeout; a cold/indoor/canyon fix can never resolve, wedging
  *  the session in 'loading' forever (no watchdog runs there). Bound the locate step. (audit #156) */
 const LOCATE_TIMEOUT_MS = 12_000
@@ -394,21 +399,32 @@ export function useRoam(mode: RoamMode): RoamState {
       if (pausedRef.current) return // user-paused — don't fight it
       const poi = activePoiId
       if (!sawFresh.current || finishedPoi.current === poi) return
-      if (Date.now() - lastProgressAt.current < POST_START_STALL_MS) return
-      if (durationRef.current > 0 && lastProgressTime.current >= durationRef.current - 0.6) {
-        finishedPoi.current = poi
-        onClipDone(poi)
-        return
+      switch (
+        decideStall({
+          now: Date.now(),
+          lastProgressAt: lastProgressAt.current,
+          lastProgressTime: lastProgressTime.current,
+          duration: durationRef.current,
+          resumeTried: resumeTried.current,
+        })
+      ) {
+        case 'wait':
+          return
+        case 'completeAtEnd': // effectively at the end but didJustFinish never fired (don't replay)
+          finishedPoi.current = poi
+          onClipDone(poi)
+          return
+        case 'resume':
+          resumeTried.current = true
+          try {
+            player.play() // resume after the interruption (no-op if already playing)
+          } catch {}
+          lastProgressAt.current = Date.now() // grace window for the resume to take
+          return
+        case 'giveUp':
+          onClipDone(poi) // resume didn't take — don't strand the session on a dead clip
+          return
       }
-      if (!resumeTried.current) {
-        resumeTried.current = true
-        try {
-          player.play() // resume after the interruption (no-op if already playing)
-        } catch {}
-        lastProgressAt.current = Date.now() // grace window for the resume to take
-        return
-      }
-      onClipDone(poi) // resume didn't take — don't strand the session on a dead clip
     }, 2_000)
     return () => clearInterval(iv)
   }, [activePoiId, player, onClipDone])
@@ -416,11 +432,7 @@ export function useRoam(mode: RoamMode): RoamState {
   // Drop the pending seek target once the clock catches it, so a later ±15 tap re-bases on
   // the real position instead of a stale target (mirrors useDrive's seek bookkeeping).
   useEffect(() => {
-    if (
-      seekTarget.current != null &&
-      status.currentTime != null &&
-      Math.abs(status.currentTime - seekTarget.current) < 0.4
-    ) {
+    if (seekTarget.current != null && status.currentTime != null && seekTargetReached(status.currentTime, seekTarget.current)) {
       seekTarget.current = null
     }
   }, [status.currentTime])
@@ -670,7 +682,7 @@ export function useRoam(mode: RoamMode): RoamState {
   const seekClipTo = useCallback(
     (ms: number) => {
       if (!clipCanSeek) return
-      const target = Math.min(clipDurSec, Math.max(0, ms / 1000))
+      const target = clampSeekSec(ms, clipDurSec)
       seekTarget.current = target
       try {
         player.seekTo(target)

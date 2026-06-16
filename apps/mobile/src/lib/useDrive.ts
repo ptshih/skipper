@@ -18,10 +18,14 @@ import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-au
 import {
   frameKindForSeq,
   buildPreviewTimeline,
+  clampSeekSec,
   cumulativeMeters,
+  decideStall,
   OFF_ROUTE_MAX_M,
   INTRO_SEQ,
   OUTRO_SEQ,
+  POST_START_STALL_MS,
+  seekTargetReached,
   snapStopsToRoute,
   TriggerEngine,
   type GpsFix,
@@ -67,12 +71,8 @@ const KEEP_AWAKE_TAG = 'skipper-drive'
 // No accepted live fix for this long → surface a "searching for GPS" note rather than a silently
 // frozen screen (covers slow acquisition + persistently poor accuracy). (review #6)
 const GPS_SEARCH_MS = 8_000
-
-// After a clip has STARTED playing (sawFresh) this long with NO playback progress ⇒ an audio
-// interruption (incoming call / Siri / Bluetooth or headphone handoff — all pause expo-audio and
-// never fire didJustFinish) or a mid-clip buffer death. Without recovery clipBusy latches and the
-// whole rest of the drive goes silent. (audit #1)
-const POST_START_STALL_MS = 6_000
+// POST_START_STALL_MS (the post-start interruption threshold) + the decideStall ladder live in
+// @skipper/drive-core/player now, single-sourced + unit-tested (shared with useRoam).
 
 // Bundled lock-screen / Now Playing artwork so the in-car lock screen isn't a blank thumbnail (the
 // persona is the product — the lock screen is a brand surface). A bundled asset URI works offline. (audit)
@@ -860,24 +860,33 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
     const iv = setInterval(() => {
       const seq = activeSeqRef.current
       if (seq === null || !sawFresh.current || finishedSeq.current === seq) return
-      if (Date.now() - lastProgressAt.current < POST_START_STALL_MS) return
-      // Effectively at the end but didJustFinish never fired → treat as finished (don't replay).
-      if (durationRef.current > 0 && lastProgressTime.current >= durationRef.current - 0.6) {
-        finishedSeq.current = seq
-        onClipDone(seq)
-        return
+      switch (
+        decideStall({
+          now: Date.now(),
+          lastProgressAt: lastProgressAt.current,
+          lastProgressTime: lastProgressTime.current,
+          duration: durationRef.current,
+          resumeTried: resumeTried.current,
+        })
+      ) {
+        case 'wait':
+          return
+        case 'completeAtEnd': // effectively at the end but didJustFinish never fired (don't replay)
+          finishedSeq.current = seq
+          onClipDone(seq)
+          return
+        case 'resume':
+          resumeTried.current = true
+          try {
+            player.play() // resume after the interruption (no-op if already playing)
+          } catch {}
+          lastProgressAt.current = Date.now() // grace window for the resume to take
+          return
+        case 'giveUp': // resume didn't take — don't strand the drive on a dead clip
+          setStallNote(voice.player.stall)
+          onClipDone(seq)
+          return
       }
-      if (!resumeTried.current) {
-        resumeTried.current = true
-        try {
-          player.play() // resume after the interruption (no-op if already playing)
-        } catch {}
-        lastProgressAt.current = Date.now() // grace window for the resume to take
-        return
-      }
-      // Resume didn't take — don't strand the drive on a dead clip.
-      setStallNote(voice.player.stall)
-      onClipDone(seq)
     }, 2_000)
     return () => clearInterval(iv)
   }, [activeSeq, paused, player, onClipDone])
@@ -885,11 +894,7 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
   // Drop the pending seek target once the clock catches up to it, so a LATER ±15 tap re-bases
   // on the real position instead of a stale committed target. (Pairs with seekBy above.)
   useEffect(() => {
-    if (
-      seekTarget.current != null &&
-      status.currentTime != null &&
-      Math.abs(status.currentTime - seekTarget.current) < 0.4
-    ) {
+    if (seekTarget.current != null && status.currentTime != null && seekTargetReached(status.currentTime, seekTarget.current)) {
       seekTarget.current = null
     }
   }, [status.currentTime])
@@ -1035,7 +1040,7 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
   const seekToMs = useCallback(
     (ms: number) => {
       if (!canSeek) return
-      const target = Math.min(dur, Math.max(0, ms / 1000))
+      const target = clampSeekSec(ms, dur)
       seekTarget.current = target
       try {
         void player.seekTo(target).catch(() => {}) // async rejection (media reset / unloaded source) (audit)
