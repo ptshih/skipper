@@ -75,7 +75,9 @@ nothing. The verbatim-selection invariant reviewed CLEAN.
   `buildJobArgs` + admin RoamView **Enrich** button). SOP-safe: dry run makes NO model calls (free);
   `--apply` spends Anthropic only (no TTS/R2). Flags: `--limit`/`--force`/`--model`/`--bbox`/`--max-cost`.
 - **Generation reads the well.** Roam (`generate-roam.ts`) and tours (`generate-tour.ts`) ground on
-  `resolveStoryGrounding(facts)` — the well when enriched, the **capped** extract head otherwise.
+  `resolveStoryGrounding` — the sheet when enriched. **#1 (2026-06-16):** a STORY telling now REQUIRES a
+  sheet — an un-enriched POI is downgraded to scenic (tours) / skipped (roam), NOT narrated from the
+  extract head (which survives only as a defensive fallback). Co-located merges fold the member's SHEET too.
   Tours append ROUTE-level road geology (the scout, narrowed to road-only for enriched stops);
   place-level geology + Wikidata retire into the well for enriched stops (spec §6). Both stamp the
   clip `facts_hash` via `storyFactsHash`, so a fresh clip never reads stale.
@@ -122,7 +124,8 @@ routine re-discover. `refetch_facts` (`refetch-poi.ts`) now PRESERVES the well t
 correction living in a well span needs `enrich-region --include-ids <id> --force --apply` to reach the
 well. **Caveat:** because neither op auto-invalidates, a re-sweep/refetch whose article changed materially
 keeps the OLD well until you re-`enrich`; there is no automatic "extract changed → re-enrich" signal yet.
-Existing un-enriched pois fall back to the extract head until enriched.
+Un-enriched story POIs are downgraded to scenic (tours) / skipped (roam) until enriched (#1) — never
+narrated from the raw extract head.
 
 **One-time hash migration (heads-up):** the order-invariant hashing in `82b2139` (`stableStringify`) was
 required to fix the roam staleness bug, but it changes the hash VALUE for the same content — so every

@@ -88,7 +88,9 @@ you found so the next agent can re-check it.
    (`sweep-region-pois.ts`); a PAID `enrich` (`enrich-region.ts`) then scouts each story poi ONCE
    into a curated **verbatim fact sheet** (its own typed `pois.fact_sheet` column + `enriched_at`,
    NOT in the `facts` bag — `facts_hash` keys on it), and BOTH tours and roam SELECT from that one
-   shared corpus + ground on the fact sheet (the capped extract head when un-enriched). Tours are AUTHORED at runtime (admin Create → `materializeRoute`), never
+   shared corpus + ground on the fact sheet. A STORY telling REQUIRES a sheet (#1, 2026-06-16) — an
+   un-enriched POI is downgraded to scenic, NEVER narrated from the raw extract ("silence beats a bad
+   telling"); the capped extract head survives only as a defensive fallback. Tours are AUTHORED at runtime (admin Create → `materializeRoute`), never
    seeded as drafts. See `docs/decisions/region-corpus-discovery.md` + `corpus-enrichment.md`.
 2. **The rails are the route; generation is everything inside the rails.** Routes
    are hand-curated + frozen, never derived. The failure mode to avoid is letting

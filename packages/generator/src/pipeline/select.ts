@@ -27,7 +27,6 @@ import {
   NARRATION_FALLBACK_CHARS,
   OFF_ROUTE_MAX_M,
   PACING,
-  STORY_MIN_FACT_CHARS,
   TARGET_SECONDS,
   TRIGGER_RADIUS_M,
 } from '../config'
@@ -44,6 +43,11 @@ import {
 import type { LngLat } from './geo'
 import type { WikiPoi } from './wikipedia'
 import type { BreakAnchor } from './places'
+
+/** A POI is STORY-grade for narration iff it carries a curated fact sheet (the #1 gate, 2026-06-16):
+ *  a story telling NEVER grounds on the raw extract — un-enriched POIs are scenic. A sheet only exists
+ *  past the enrich floor (≫ the old `STORY_MIN_FACT_CHARS`), so it SUBSUMES that char threshold here. */
+const hasSheet = (p: WikiPoi): boolean => Array.isArray(p.factSheet) && p.factSheet.length > 0
 
 export interface StopPlan {
   seq: number
@@ -68,10 +72,11 @@ export interface StopPlan {
    *  resolveStoryGrounding reads. Absent for scenic / un-enriched. */
   poiFactSheet?: FactSheetEntry[] | null
   poiEnrichedAt?: Date | null
-  /** STORY only: true once generate-tour grounds this stop on a curated WELL (vs the extract head). */
+  /** STORY only: true once generate-tour grounds this stop on its curated sheet — always, for a story
+   *  stop, since #1 requires a sheet (an un-enriched POI is downgraded to scenic, never a story). */
   enriched?: boolean
-  /** STORY only: the frozen credit for an ENRICHED stop — the well's distinct sources (set in
-   *  generate-tour from resolveStoryGrounding). An un-enriched stop builds attribution the old way. */
+  /** STORY only: the frozen credit — the fact sheet's distinct sources (set in generate-tour from
+   *  resolveStoryGrounding). Story stops are always enriched now (#1), so this is always sheet-sourced. */
   wellAttribution?: AttributionSnapshot[]
   /** STORY + SCENIC: coordinate-keyed geology facts (Macrostrat), attached post-selection in generate.ts. */
   geology?: string[]
@@ -154,12 +159,11 @@ export function headOfExtract(extract: string, maxChars: number): string {
   return (lastEnd > 0 ? head.slice(0, lastEnd + 1) : head).trim()
 }
 
-/** The narration sheet + attribution for a STORY poi, resolving the curated narration sheet:
- *  the verbatim `fact_sheet` when the place has been ENRICHED, else the positional `extract` head
- *  (the un-enriched fallback — byte-for-byte today's behavior for existing 4k corpus rows; a strict
- *  VERBATIM superset, ~one extra trailing sentence, once a row is re-swept to 12k — until enrich). The SINGLE
- *  source for BOTH tours and roam so the well↔fallback switch (and its frozen credit) can never
- *  drift between consumers. The well's credit uses its `enrichedAt`; the fallback's Wikipedia credit
+/** The narration sheet + attribution for a STORY poi: the verbatim `fact_sheet` when the place has
+ *  been ENRICHED, else the positional `extract` head. #1 (2026-06-16): selection + the roam queue now
+ *  GATE story tellings on a sheet (un-enriched → scenic / skipped), so the extract-head branch is a
+ *  DEFENSIVE fallback that should not fire for a real story stop — it stays only so a stray caller
+ *  can't crash. The SINGLE source for BOTH tours and roam so the credit can never drift between them. The well's credit uses its `enrichedAt`; the fallback's Wikipedia credit
  *  uses the caller's `retrievedAt` (the poi's facts_fetched_at). See corpus-enrichment-spec §6/§7. */
 export interface StoryGrounding {
   facts: string[]
@@ -250,11 +254,10 @@ function dedupeColocated(placed: Placed[]): Placed[] {
       kept.push(cand)
       continue
     }
-    // Co-located with a richer kept stop → fold its facts in rather than drop them.
-    if (
-      cand.poi.extract.length >= STORY_MIN_FACT_CHARS &&
-      (host.merged?.length ?? 0) < MERGE_MAX_MEMBERS
-    ) {
+    // Co-located with a richer kept stop → fold its facts in rather than drop them. #1: only an
+    // ENRICHED co-located POI folds (its CURATED sheet joins the host's telling); an un-enriched
+    // neighbour is dropped, never folded as raw text into a story.
+    if (hasSheet(cand.poi) && (host.merged?.length ?? 0) < MERGE_MAX_MEMBERS) {
       ;(host.merged ??= []).push(cand.poi)
     }
   }
@@ -426,18 +429,21 @@ export function selectStops(params: SelectParams): StopPlan[] {
   const pending: Pending[] = []
 
   for (const n of narrated) {
-    const isStory = n.poi.extract.length >= STORY_MIN_FACT_CHARS
+    // #1 (2026-06-16): a STORY telling REQUIRES a curated fact sheet. An eligible-but-un-enriched
+    // wikipedia POI — too thin to enrich (<800 chars) OR simply not enriched yet — is DOWNGRADED to
+    // scenic (named, delivery-only) rather than narrated from the raw extract head. Curation is the
+    // quality gate; we never ground a STORY on un-curated text ("silence beats a bad telling"). The
+    // extract head survives only as resolveStoryGrounding's DEFENSIVE fallback (this gate keeps it unhit).
+    const isStory = hasSheet(n.poi)
     const snap = snapOf([n.poi.lng, n.poi.lat])
     // STORY stops carry their co-located cluster (merged in dedup) as a separate fact channel,
     // and run a little longer so the fuller telling (e.g. Emerald Bay + its landmarks) has room.
-    const merged = (isStory ? (n.merged ?? []) : []).filter(
-      (m) => m.extract.length >= STORY_MIN_FACT_CHARS,
-    )
-    // Merged members are co-located STORY-grade candidates, so they are always Wikipedia-sourced
-    // (a pageid + url); the extract≥STORY_MIN_FACT_CHARS gate already excludes scenic pins.
+    const merged = (isStory ? (n.merged ?? []) : []).filter(hasSheet)
+    // Merged members are co-located ENRICHED candidates (hasSheet) → always Wikipedia-sourced (a
+    // pageid + url), and #1: their CURATED SHEET joins the host's telling, never the raw extract.
     const mergedFeatures = merged.map((m) => ({
       name: m.title,
-      facts: toFacts(m.extract),
+      facts: m.factSheet!.map((s) => s.text),
       wikiUrl: m.url!,
       wikiTitle: m.title,
       wikiPageId: m.pageid!,

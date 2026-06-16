@@ -167,7 +167,10 @@ async function main(): Promise<void> {
   const candidates: Candidate[] = []
   for (const r of rows) {
     const f = r.facts
-    if (!f || f.extract.length < minExtract) continue
+    // #1: a roam STORY encounter REQUIRES a curated fact sheet — an un-enriched poi is SKIPPED (never a
+    // raw-extract telling; the scenic-tier "wave" form will cover named-but-unenriched pins later). Every
+    // story-eligible poi is enriched today, so this is a no-op now; it guards future un-enriched rows.
+    if (!f || f.extract.length < minExtract || !(Array.isArray(r.factSheet) && r.factSheet.length > 0)) continue
     if (STORY_TASTE_DENYLIST.test(r.name)) {
       console.log(`  taste-gate: skipping "${r.name}"`)
       continue

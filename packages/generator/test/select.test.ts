@@ -3,16 +3,18 @@ import { selectStops, type SelectParams } from '../src/pipeline/select'
 import type { LngLat } from '../src/pipeline/geo'
 import type { WikiPoi } from '../src/pipeline/wikipedia'
 import type { BreakAnchor } from '../src/pipeline/places'
+import type { FactSheetEntry } from '@skipper/db/schema'
 
 // ~11.1 km north-south line (lat 38.000 → 38.100, ~111 m per 0.001°).
 const polyline: LngLat[] = Array.from({ length: 101 }, (_, i) => [0, 38.0 + i * 0.001] as LngLat)
 const TOTAL_SEC = 660 // ~11 min drive
 
-// Two grounded extracts, both well over STORY_MIN_FACT_CHARS (140); A is longer
-// so it wins its spacing window over F.
+// Two grounded extracts; A is longer so it wins its spacing window over F. #1: a STORY also REQUIRES a
+// curated fact sheet, so wiki() is ENRICHED by default; an un-enriched fixture (factSheet:null) is scenic.
 const RICH =
   'This stop has a real grounded fact about the place that runs comfortably past the one hundred forty character minimum, so it stays a story stop.'
 const RICHER = RICH + ' And one extra sentence makes this the longest candidate in its window.'
+const SHEET: FactSheetEntry[] = [{ text: 'a curated verbatim fact', source: 'wikipedia', sourceId: '1', license: 'CC BY-SA 4.0' }]
 
 const wiki = (over: Partial<WikiPoi> & { lat: number }): WikiPoi => {
   const pageid = Math.round(over.lat * 1000)
@@ -24,6 +26,7 @@ const wiki = (over: Partial<WikiPoi> & { lat: number }): WikiPoi => {
     lng: 0,
     extract: RICH,
     url: `https://en.wikipedia.org/?curid=${pageid}`,
+    factSheet: SHEET, // ENRICHED by default — a STORY needs a sheet (#1)
     ...over,
   }
 }
@@ -39,7 +42,7 @@ const params = (): SelectParams => ({
     wiki({ lat: 38.01, title: 'Rich A', extract: RICHER }), // ~66s — richest in its window
     wiki({ lat: 38.015, title: 'Near-A F', extract: RICH }), // ~83s — within minGap of A → skipped
     wiki({ lat: 38.05, title: 'Rich B', extract: RICH }), // ~330s
-    wiki({ lat: 38.09, title: 'Thin C', extract: 'A small lake.' }), // ~594s — thin → scenic
+    wiki({ lat: 38.09, title: 'Thin C', extract: 'A small lake.', factSheet: null }), // ~594s — un-enriched → scenic (#1)
     wiki({ lat: 38.052, title: 'List of things in the area', extract: RICHER }), // filtered (list page)
     wiki({ lat: 38.05, lng: 0.02, title: 'Far E', extract: RICHER }), // ~1.7 km off-route → excluded
   ],
@@ -64,7 +67,7 @@ describe('selectStops', () => {
     expect(has('Near-A F')).toBe(false)
   })
 
-  test('classifies by extract length: rich → story, thin → scenic', () => {
+  test('classifies by SHEET presence: enriched → story, un-enriched → scenic (#1)', () => {
     const a = plan.find((s) => s.name === 'Rich A')
     const c = plan.find((s) => s.name === 'Thin C')
     expect(a?.stopType).toBe('story')
