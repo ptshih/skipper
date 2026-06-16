@@ -18,7 +18,7 @@
 
 import type { PoiSource, StopType } from '@skipper/shared'
 import type { AttributionSnapshot, PoiFacts, FactSheetEntry } from '@skipper/db/schema'
-import { wellToAttribution } from './persist'
+import { factSheetToAttribution } from './persist'
 import {
   BREAK_MIN_GAP_SEC,
   MERGE_EXTRA_SEC,
@@ -60,11 +60,11 @@ export interface StopPlan {
   lng: number
   /** Along-route time (seconds) — for ordering/pacing/debug. */
   alongSec: number
-  /** STORY only: grounded fact sentences (the entire well the narrator may use). Set to the
+  /** STORY only: grounded fact sentences (the entire fact sheet the narrator may use). Set to the
    *  positional extract head by selection; generate-tour OVERRIDES it with resolveStoryGrounding
-   *  (the curated well when enriched, the capped extract head otherwise). */
+   *  (the curated fact sheet when enriched, the capped extract head otherwise). */
   facts: string[]
-  /** STORY only: the poi's full corpus facts object — the well↔extract grounding source +
+  /** STORY only: the poi's full corpus facts object — the fact-sheet↔extract grounding source +
    *  the grounding fingerprint (resolveStoryGrounding / storyFactsHash). Carried from the corpus
    *  (region-corpus), never re-fetched. Absent for scenic. */
   poiFacts?: PoiFacts
@@ -77,7 +77,7 @@ export interface StopPlan {
   enriched?: boolean
   /** STORY only: the frozen credit — the fact sheet's distinct sources (set in generate-tour from
    *  resolveStoryGrounding). Story stops are always enriched now (#1), so this is always sheet-sourced. */
-  wellAttribution?: AttributionSnapshot[]
+  sheetAttribution?: AttributionSnapshot[]
   /** STORY + SCENIC: coordinate-keyed geology facts (Macrostrat), attached post-selection in generate.ts. */
   geology?: string[]
   /** Why a STORY stop got geology: 'sparse' (thin facts) or 'iconic' (allowlisted rich) — picks the narration cue. */
@@ -163,12 +163,12 @@ export function headOfExtract(extract: string, maxChars: number): string {
  *  been ENRICHED, else the positional `extract` head. #1 (2026-06-16): selection + the roam queue now
  *  GATE story tellings on a sheet (un-enriched → scenic / skipped), so the extract-head branch is a
  *  DEFENSIVE fallback that should not fire for a real story stop — it stays only so a stray caller
- *  can't crash. The SINGLE source for BOTH tours and roam so the credit can never drift between them. The well's credit uses its `enrichedAt`; the fallback's Wikipedia credit
+ *  can't crash. The SINGLE source for BOTH tours and roam so the credit can never drift between them. The fact sheet's credit uses its `enrichedAt`; the fallback's Wikipedia credit
  *  uses the caller's `retrievedAt` (the poi's facts_fetched_at). See corpus-enrichment-spec §6/§7. */
 export interface StoryGrounding {
   facts: string[]
   attribution: AttributionSnapshot[]
-  /** True iff grounded on a curated well (vs the extract-head fallback). */
+  /** True iff grounded on a curated fact sheet (vs the extract-head fallback). */
   enriched: boolean
 }
 
@@ -187,7 +187,7 @@ export function resolveStoryGrounding(
           : opts.retrievedAt
     return {
       facts: factSheet.map((s) => s.text),
-      attribution: wellToAttribution(factSheet, stamp),
+      attribution: factSheetToAttribution(factSheet, stamp),
       enriched: true,
     }
   }
@@ -495,7 +495,7 @@ export function selectStops(params: SelectParams): StopPlan[] {
         ? { wikiUrl: n.poi.url, wikiTitle: n.poi.title, wikiPageId: n.poi.pageid }
         : {}),
       // Carry the full corpus facts for STORY stops — generate-tour resolves the narration sheet
-      // (well or capped extract head) + the grounding fingerprint from it, and preserves the well
+      // (fact sheet or capped extract head) + the grounding fingerprint from it, and preserves the fact sheet
       // through the poi re-upsert. Absent when discovery surfaced no stored facts (defensive).
       ...(isStory && n.poi.facts ? { poiFacts: n.poi.facts } : {}),
       ...(isStory && n.poi.factSheet ? { poiFactSheet: n.poi.factSheet } : {}),

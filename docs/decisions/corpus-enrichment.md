@@ -12,7 +12,7 @@ and gives **roam** enrichment for the first time. Built from `docs/specs/corpus-
 
 **Update 2026-06-16 (the 800-char story floor REMOVED — the enricher decides):** the arbitrary
 `STORY_MIN_EXTRACT = 800` char cutoff is GONE. It was only ever a cost pre-filter deciding whether to
-spend a (sub-cent) enrich call, and the enricher ALREADY has the real gate — `buildWell` returns `null`
+spend a (sub-cent) enrich call, and the enricher ALREADY has the real gate — `buildCorpusFactSheet` returns `null`
 (a clean, retryable DEFER) whenever it can't assemble a usable sheet from an article, and #1 then
 downgrades the un-enriched poi to scenic (tours) / skips it (roam). So story-grade = "the enricher built
 a fact sheet," NOT a guessed length. Changes: (a) the sweep stores `facts.extract` for EVERY story-tier
@@ -36,6 +36,14 @@ the hash rule is `storyFactsHash(facts, factSheet)` (sheet-hash when enriched, b
 well-hash → the 315 rows' `facts_hash` stay valid, verified 315/315), and the ~grounding readers take a TYPED
 `FactSheetEntry[]` instead of 33 hand-written casts. `WellSpan` → `FactSheetEntry`. (A later cleanup migration
 will drop the redundant `facts.well`/`facts.enrichedAt` once everything's confirmed reading the column.)
+
+**Identifier rename (2026-06-16, follow-up):** the "well" vocabulary that lingered in CODE after the column
+move was renamed to "fact sheet" so names match storage: `buildWell` → **`buildCorpusFactSheet`**,
+`EnrichResult.well` → **`.sheet`**, `wellToAttribution` → **`factSheetToAttribution`**, `hasWell` →
+**`hasFactSheet`**, `ENRICH_WELL_TARGET_SPANS` → **`ENRICH_FACT_SHEET_TARGET_SPANS`**, the model-facing tool
+`finalize_well` → **`finalize_fact_sheet`**, and `test/well-builder.test.ts` → `fact-sheet-builder.test.ts`.
+NOT renamed: the eval/grounding "permitted well" (`buildGroundingWell` + the audit's `well` field) — a
+distinct, still-valid concept ("the full bag of facts the narrator was given"), kept separate on purpose.
 
 **Update 2026-06-15:** the `--thin-only`/`--thin-max` cost-slice was **REMOVED** — filtering enrich
 candidates by article length is a cost proxy, not a product axis (`--limit`/`--max-cost` are the honest

@@ -27,7 +27,7 @@ import type { AttributionSnapshot, FactSheetEntry } from '@skipper/db/schema'
 import {
   ENRICH_MAX_TOKENS,
   ENRICH_MAX_TOOL_TURNS,
-  ENRICH_WELL_TARGET_SPANS,
+  ENRICH_FACT_SHEET_TARGET_SPANS,
   SCOUT_MAX_TOKENS,
   SCOUT_MAX_TOOL_TURNS,
 } from '../config'
@@ -332,23 +332,23 @@ export async function scoutStop(
 }
 
 /* -------------------------------------------------------------------------- */
-/*  buildWell — the CORPUS well builder (generalizes the scout)                */
+/*  buildCorpusFactSheet — the CORPUS fact-sheet builder (generalizes the scout) */
 /* -------------------------------------------------------------------------- */
 //
 // The corpus `enrich` step (enrich-region.ts) runs this ONCE per story place to produce the
-// shared "fact well" — the curated narration sheet tours + roam both ground on (principle #1;
-// docs/specs/corpus-enrichment-spec.md). It is the scout, generalized: instead of only
-// include/exclude-ing fetched bundles, it ALSO selects WHICH verbatim spans of the (uncapped)
-// article to keep.
+// shared fact sheet (stored on `pois.fact_sheet`) — the curated narration source tours + roam both
+// ground on (principle #1; docs/specs/corpus-enrichment-spec.md). It is the scout, generalized:
+// instead of only include/exclude-ing fetched bundles, it ALSO selects WHICH verbatim spans of the
+// (uncapped) article to keep.
 //
 // THE INVARIANT (spec §2): VERBATIM SELECTION, never summarization. The model emits SPAN IDS +
 // bundle choices — never text. Every kept span is `input.spans[id]` verbatim; every bundle line
 // is what a sourced fetcher returned. The model decides what to GATHER, never what is TRUE, so the
-// well can never carry a model-authored "fact" ("persona lives in DELIVERY, never FACTS"). Bounded
+// sheet can never carry a model-authored "fact" ("persona lives in DELIVERY, never FACTS"). Bounded
 // the same way as the scout; a cap/empty/no-wikipedia-span outcome returns null (the caller leaves
 // the place un-enriched — the read-time extract-head fallback covers it, and a re-run retries).
 
-/** What buildWell sees about a place. `spans` are the verbatim article sentences (the model picks
+/** What buildCorpusFactSheet sees about a place. `spans` are the verbatim article sentences (the model picks
  *  BY INDEX); `wiki` is the provenance every kept span credits. Geology is at the place CENTROID
  *  (the route-snapped "rock under the tires" stays at tour gen — spec §6). */
 export interface EnrichInput {
@@ -360,7 +360,7 @@ export interface EnrichInput {
   targetSeconds: number
 }
 
-/** Place-keyed fetchers for the well builder (centroid geology + QID Wikidata) — null when the
+/** Place-keyed fetchers for the fact-sheet builder (centroid geology + QID Wikidata) — null when the
  *  channel is off or unavailable (no QID), and then not offered to the model. */
 export interface EnrichTools {
   geologyAt: (() => Promise<SourcedFacts | null>) | null
@@ -368,16 +368,16 @@ export interface EnrichTools {
 }
 
 export interface EnrichResult {
-  well: FactSheetEntry[]
+  sheet: FactSheetEntry[]
   /** The model's one-sentence rationale — logged + traced, never narrated. */
   reason: string
   toolCalls: number
   usage: { inputTokens: number; outputTokens: number }
 }
 
-const ENRICH_SYSTEM = `You are the corpus FACT-WELL builder for ONE place in an AI-narrated road-trip audio tour. A separate narrator will later tell this place's story, strictly grounded on the WELL you assemble — it can only say what the well contains. Your job: pick the most narratable VERBATIM facts and round them out with grounded enrichment. You never write or reword narration, and you never state facts yourself.
+const ENRICH_SYSTEM = `You are the corpus FACT-SHEET builder for ONE place in an AI-narrated road-trip audio tour. A separate narrator will later tell this place's story, strictly grounded on the FACT SHEET you assemble — it can only say what the sheet contains. Your job: pick the most narratable VERBATIM facts and round them out with grounded enrichment. You never write or reword narration, and you never state facts yourself.
 
-You are given the place's full Wikipedia article split into NUMBERED SPANS (one sentence each). You SELECT spans by id — the kept spans go into the well VERBATIM. You never edit, summarize, or merge them.
+You are given the place's full Wikipedia article split into NUMBERED SPANS (one sentence each). You SELECT spans by id — the kept spans go into the fact sheet VERBATIM. You never edit, summarize, or merge them.
 
 What you can also fetch (include/exclude, all-or-nothing per bundle — never paraphrase what comes back):
 - GEOLOGY (fetch_geology): the bedrock that makes this place (lithology + age), from geologic maps. Include it only when the rock/landform IS part of the place's identity, or to round out a thin article.
@@ -386,10 +386,10 @@ What you can also fetch (include/exclude, all-or-nothing per bundle — never pa
 How to judge:
 - Keep the narratable BEATS: what the place is, why it matters, the human story, the vivid specific (the year, the name, the "Major Ormsby was killed" line) — wherever it sits in the article, even deep. Pull the strong deep fact a first-N-characters cap would miss; that is the whole point of doing this.
 - DROP list/table rows, demographic and census trivia, administrative/governance boilerplate, bare geographic coordinates, citation cruft, and anything that reads as an almanac entry rather than a story.
-- RESTRAINT is a feature. Aim for roughly the strongest ${ENRICH_WELL_TARGET_SPANS} spans for a telling of about the target length — fewer for a thin article. A rich article wants no enrichment bundles; piling on geology/dates makes every place close on the same deep-time/numbers beat.
+- RESTRAINT is a feature. Aim for roughly the strongest ${ENRICH_FACT_SHEET_TARGET_SPANS} spans for a telling of about the target length — fewer for a thin article. A rich article wants no enrichment bundles; piling on geology/dates makes every place close on the same deep-time/numbers beat.
 - You may fetch a bundle, read it, and still EXCLUDE it if it adds nothing.
 
-Always END by calling finalize_well with the kept span ids and a one-sentence reason. Never include what you did not fetch.`
+Always END by calling finalize_fact_sheet with the kept span ids and a one-sentence reason. Never include what you did not fetch.`
 
 const TOOL_ENRICH_GEOLOGY: Anthropic.Tool = {
   name: 'fetch_geology',
@@ -398,9 +398,9 @@ const TOOL_ENRICH_GEOLOGY: Anthropic.Tool = {
   input_schema: { type: 'object', properties: {}, additionalProperties: false },
 }
 
-const TOOL_FINALIZE_WELL: Anthropic.Tool = {
-  name: 'finalize_well',
-  description: 'Commit the curated well for this place. Always call this last.',
+const TOOL_FINALIZE_SHEET: Anthropic.Tool = {
+  name: 'finalize_fact_sheet',
+  description: 'Commit the curated fact sheet for this place. Always call this last.',
   input_schema: {
     type: 'object',
     properties: {
@@ -413,7 +413,7 @@ const TOOL_FINALIZE_WELL: Anthropic.Tool = {
       includeWikidata: { type: 'boolean' },
       reason: {
         type: 'string',
-        description: 'One sentence: what the well captures, and why anything fetched was kept or dropped.',
+        description: 'One sentence: what the fact sheet captures, and why anything fetched was kept or dropped.',
       },
     },
     required: ['keepSpanIds', 'includeGeology', 'includeWikidata', 'reason'],
@@ -430,21 +430,21 @@ function buildEnrichMessage(input: EnrichInput): string {
     'ARTICLE SPANS (id: text):',
     ...input.spans.map((s, i) => `${i}: ${s}`),
     '',
-    'Select the spans that make the strongest grounded telling, fetch enrichment only if it earns its place, then finalize_well.',
+    'Select the spans that make the strongest grounded telling, fetch enrichment only if it earns its place, then finalize_fact_sheet.',
   ]
   return lines.join('\n')
 }
 
 /**
- * Build the curated fact well for ONE story place. Returns the well (verbatim wikipedia spans +
- * any included geology/wikidata facts, each with provenance), or null when no usable well could be
+ * Build the curated fact sheet for ONE story place. Returns the sheet (verbatim wikipedia spans +
+ * any included geology/wikidata facts, each with provenance), or null when no usable sheet could be
  * assembled (a hit turn-cap, a max_tokens truncation, a text-only/refusal turn, or a finalize that
  * kept no article span). Throws only on a model-call failure — the caller treats that as "leave
  * this place un-enriched", non-fatal (the read path falls back to the positional extract head).
  * The model call is INJECTED (default: the chosen ENRICH model) so the loop unit-tests with zero
  * network and zero spend.
  */
-export async function buildWell(
+export async function buildCorpusFactSheet(
   input: EnrichInput,
   tools: EnrichTools,
   opts: { model?: string; call?: ScoutModelCall } = {},
@@ -454,7 +454,7 @@ export async function buildWell(
   const offered: Anthropic.Tool[] = [
     ...(tools.geologyAt ? [TOOL_ENRICH_GEOLOGY] : []),
     ...(tools.wikidataFacts ? [TOOL_WIKIDATA] : []),
-    TOOL_FINALIZE_WELL,
+    TOOL_FINALIZE_SHEET,
   ]
 
   const fetched = new Map<string, SourcedFacts | null>()
@@ -467,10 +467,10 @@ export async function buildWell(
     usage.inputTokens += response.usage.input_tokens
     usage.outputTokens += response.usage.output_tokens
     // A token-cap truncation can leave a PARTIAL finalize — treat it as the designed cap-failure
-    // (no well, retryable) rather than acting on a half-written span list.
+    // (no sheet, retryable) rather than acting on a half-written span list.
     if (response.stop_reason === 'max_tokens') return null
     const calls = response.content.filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
-    if (calls.length === 0) return null // text-only / refusal — no well
+    if (calls.length === 0) return null // text-only / refusal — no sheet
 
     // Dispatch fetches first so a finalize batched in the same turn sees the bundles land.
     const results: Anthropic.ToolResultBlockParam[] = []
@@ -489,7 +489,7 @@ export async function buildWell(
       })
     }
 
-    const finalize = calls.find((c) => c.name === 'finalize_well')
+    const finalize = calls.find((c) => c.name === 'finalize_fact_sheet')
     if (finalize) {
       const f = finalize.input as {
         keepSpanIds?: number[]
@@ -501,7 +501,7 @@ export async function buildWell(
       const keep = [...new Set(f.keepSpanIds ?? [])]
         .filter((i) => Number.isInteger(i) && i >= 0 && i < input.spans.length)
         .sort((a, b) => a - b)
-      const well: FactSheetEntry[] = keep.map((i) => ({
+      const sheet: FactSheetEntry[] = keep.map((i) => ({
         text: input.spans[i]!,
         source: 'wikipedia',
         sourceId: input.wiki.sourceId,
@@ -512,7 +512,7 @@ export async function buildWell(
         const b = fetched.get('geology')
         if (b) {
           for (const fact of b.facts) {
-            well.push({
+            sheet.push({
               text: fact,
               source: 'macrostrat',
               sourceId: b.attribution.sourceId,
@@ -526,7 +526,7 @@ export async function buildWell(
         const b = fetched.get('wikidata')
         if (b) {
           for (const fact of b.facts) {
-            well.push({
+            sheet.push({
               text: fact,
               source: 'wikidata',
               sourceId: b.attribution.sourceId,
@@ -536,10 +536,10 @@ export async function buildWell(
           }
         }
       }
-      // A well with no article span is not a telling — leave the place un-enriched (retryable).
-      if (!well.some((s) => s.source === 'wikipedia')) return null
+      // A sheet with no article span is not a telling — leave the place un-enriched (retryable).
+      if (!sheet.some((s) => s.source === 'wikipedia')) return null
       return {
-        well,
+        sheet,
         reason: typeof f.reason === 'string' ? f.reason : '(no reason given)',
         toolCalls,
         usage,
@@ -549,5 +549,5 @@ export async function buildWell(
     messages.push({ role: 'assistant', content: response.content }, { role: 'user', content: results })
   }
 
-  return null // turn cap without a finalize — no well (retryable)
+  return null // turn cap without a finalize — no sheet (retryable)
 }

@@ -103,10 +103,10 @@ export const SCOUT_MAX_TOOL_TURNS = 5
 /** Max output tokens per scout turn (it emits tool calls + a sentence of reason, never prose). */
 export const SCOUT_MAX_TOKENS = 1_000
 
-// --- The corpus enrich step's well builder (pipeline/scout.ts buildWell) ------
+// --- The corpus enrich step's fact-sheet builder (pipeline/scout.ts buildCorpusFactSheet) ------
 // Generalizes the per-stop scout to the CORPUS: it selects verbatim article spans (by id) +
 // includes/excludes grounded bundles (geology@centroid, Wikidata), ONCE per place — the shared
-// "fact well" tours + roam ground on (docs/specs/corpus-enrichment-spec.md). Same ReAct shape +
+// fact sheet tours + roam ground on (docs/specs/corpus-enrichment-spec.md). Same ReAct shape +
 // bounds as the scout; the only difference is the finalize emits a list of kept span ids, so it
 // gets a bit more output headroom.
 /** Max model turns per place — look (fetch geology/wikidata), then finalize. */
@@ -114,11 +114,11 @@ export const ENRICH_MAX_TOOL_TURNS = 5
 /** Max output tokens per enrich turn — a finalize emits a kept-span-id LIST + a sentence of
  *  reason (numbers, not prose), so more than the scout's 1k but still tight. */
 export const ENRICH_MAX_TOKENS = 2_000
-/** SOFT selection target: roughly how many verbatim spans the well should carry for a ~150s
- *  telling. GUIDANCE to the model (restraint is a feature), NOT a hard cap — the well's true
+/** SOFT selection target: roughly how many verbatim spans the fact sheet should carry for a ~150s
+ *  telling. GUIDANCE to the model (restraint is a feature), NOT a hard cap — the sheet's true
  *  bound is the enricher's judgment, never a char truncation (which would butcher a verbatim
  *  span). See spec §9. */
-export const ENRICH_WELL_TARGET_SPANS = 16
+export const ENRICH_FACT_SHEET_TARGET_SPANS = 16
 
 // --- Bounded fan-out (pipeline/concurrency.ts) --------------------------------
 
@@ -237,7 +237,7 @@ export const EXTRACT_CHARS = 600
 export const STORY_MIN_FACT_CHARS = 140
 /**
  * Full-article plaintext length (chars) the region sweep STORES in `pois.facts.extract` — the
- * raw, verbatim article, which is the corpus `enrich` step's INPUT (it selects the well from it)
+ * raw, verbatim article, which is the corpus `enrich` step's INPUT (it selects the fact sheet from it)
  * and the re-enrichment/audit source. Generous so a deep narratable fact isn't lost to a
  * positional cap before the enricher can even see it (a city article runs long); the bound on the
  * enricher's READ, not on narration. Trimmed of trailing meta sections (References/See also/…) in
@@ -251,7 +251,7 @@ export const ENRICHER_INPUT_CHARS = 12_000
  * DEEP_EXTRACT_CHARS value) — byte-for-byte today's behavior for existing 4k rows; once a row is
  * re-swept under ENRICHER_INPUT_CHARS=12k the head is a strict VERBATIM superset (it packs a sentence
  * or two more into the same 4k window), never a content change. An ENRICHED poi ignores this: it
- * grounds on the curated well (judgment is the bound, not a char cap). resolveStoryGrounding
+ * grounds on the curated fact sheet (judgment is the bound, not a char cap). resolveStoryGrounding
  * (pipeline/select.ts) applies it; tours + roam pass it in.
  */
 export const NARRATION_FALLBACK_CHARS = 4_000

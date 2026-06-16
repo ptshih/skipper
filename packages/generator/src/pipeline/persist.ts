@@ -152,12 +152,12 @@ export function storyFactsHash(
   return hashFacts(facts)
 }
 
-/** The distinct sourced credits in a well → the frozen `tracks.attribution` array (one entry per
- *  (source, sourceId), CC BY-SA / CC0 / CC BY preserved). `retrievedAt` is the well's enrich stamp. */
-export function wellToAttribution(well: FactSheetEntry[], retrievedAt: string): AttributionSnapshot[] {
+/** The distinct sourced credits in a fact sheet → the frozen `tracks.attribution` array (one entry per
+ *  (source, sourceId), CC BY-SA / CC0 / CC BY preserved). `retrievedAt` is the sheet's enrich stamp. */
+export function factSheetToAttribution(sheet: FactSheetEntry[], retrievedAt: string): AttributionSnapshot[] {
   const seen = new Set<string>()
   const out: AttributionSnapshot[] = []
-  for (const s of well) {
+  for (const s of sheet) {
     const key = `${s.source}:${s.sourceId}`
     if (seen.has(key)) continue
     seen.add(key)

@@ -4,14 +4,14 @@
 // → **`enrich` (paid, ONCE per place)** → `generate` (paid, per tour/roam). It scouts each eligible
 // STORY poi into a curated, grounded "fact sheet" on `pois.fact_sheet` — verbatim article spans the
 // enricher SELECTED (never rewrote) + any geology/Wikidata bundles it chose to include (pipeline/
-// scout.ts buildWell). Tours + roam both READ that well (resolveStoryGrounding), so enrich cost
+// scout.ts buildCorpusFactSheet). Tours + roam both READ that fact sheet (resolveStoryGrounding), so enrich cost
 // amortizes once-per-place across every telling, and roam gets enrichment for the first time. See
 // docs/specs/corpus-enrichment-spec.md.
 //
-// VERBATIM-only (spec §2): the well carries facts verbatim from sourced fetchers with provenance —
+// VERBATIM-only (spec §2): the fact sheet carries facts verbatim from sourced fetchers with provenance —
 // the make-or-break invariant ("persona lives in DELIVERY, never FACTS"). A poi the enricher can't
-// build a well for is LEFT un-enriched (logged) — the read path falls back to the positional extract
-// head, and a re-run retries it; never a degraded baked well.
+// build a fact sheet for is LEFT un-enriched (logged) — the read path falls back to the positional extract
+// head, and a re-run retries it; never a degraded baked fact sheet.
 //
 // SOP (docs/guides/ops-scripts-sop.md): PREVIEWS (with a cost estimate) by default; the dry run makes
 // NO model calls (free). --apply spends.
@@ -20,7 +20,7 @@
 //   dotenvx run -f .env.development -- bun packages/generator/src/enrich-region.ts
 //   ... --apply                  run it (spends Anthropic; writes pois.fact_sheet + facts_hash)
 //   ... --limit 5                cap how many places to enrich (a smoke run)
-//   ... --force                  re-enrich places that already have a well
+//   ... --force                  re-enrich places that already have a fact sheet
 //   ... --model opus             A/B the calibration tier vs the default (sonnet)
 //   ... --bbox swLng,swLat,neLng,neLat   narrow to a bbox (default: the WHOLE corpus, no geo filter)
 //   ... --source wikipedia       narrow to a POI source (faithfully resolves a table 'source' filter)
@@ -36,7 +36,7 @@ import type { PoiFacts } from '@skipper/db/schema'
 import { announce, parseFlags } from './pipeline/ops'
 import { beginJob, finishJob } from './pipeline/job-progress'
 import { ensurePoiOverridesLoaded } from './pipeline/poi-overrides'
-import { buildWell } from './pipeline/scout'
+import { buildCorpusFactSheet } from './pipeline/scout'
 import { geologyFacts } from './pipeline/macrostrat'
 import { wikidataFacts } from './pipeline/wikidata'
 import { toFacts } from './pipeline/select'
@@ -48,7 +48,7 @@ import { ANTHROPIC_READY, GEOLOGY_ENRICHMENT, SCOUT_CONCURRENCY, WIKIDATA_ENRICH
 import { llmSpendLines, llmSpentUsd } from './pipeline/spend'
 import { classifyStoryEligibility } from '@skipper/shared'
 
-/** Soft narration length the well is sized for — the LONG-FORM target (roam's band), since the well
+/** Soft narration length the fact sheet is sized for — the LONG-FORM target (roam's band), since the fact sheet
  *  is shared and a tour can always read fewer spans. Passed to the builder as guidance, not a cap. */
 const ENRICH_TARGET_SECONDS = 150
 /** Rough USD per place, by model (for the pre-run estimate only; the real tally prints after). */
@@ -109,7 +109,7 @@ interface Candidate {
   url: string
   pageId: number
   qid: string | null
-  hasWell: boolean
+  hasFactSheet: boolean
 }
 
 async function main(): Promise<void> {
@@ -159,14 +159,14 @@ async function main(): Promise<void> {
     const extract = facts?.extract ?? ''
     // Story eligibility is the SAME gate every consumer uses (single-sourced in @skipper/shared):
     // wikipedia source + not taste-denied + HAS article text. There is no char-length floor — whether
-    // the article is rich enough to narrate is THIS step's call (buildWell builds a sheet or DEFERS),
+    // the article is rich enough to narrate is THIS step's call (buildCorpusFactSheet builds a sheet or DEFERS),
     // not a guessed cutoff (the 800-char floor was removed 2026-06-16). A SELECTED non-eligible row
     // (non-wikipedia, taste-denied, or text-less) is skipped + COUNTED, never silently dropped.
     if (classifyStoryEligibility({ source: r.source, name: r.name, leadExtractChars: extract.length }) !== 'eligible') {
       skippedIneligible++
       continue
     }
-    const hasWell = Array.isArray(r.factSheet) && r.factSheet.length > 0
+    const hasFactSheet = Array.isArray(r.factSheet) && r.factSheet.length > 0
     candidates.push({
       poiId: r.id,
       name: r.name,
@@ -178,12 +178,12 @@ async function main(): Promise<void> {
       url: facts?.url ?? `https://en.wikipedia.org/?curid=${r.sourceId}`,
       pageId: facts?.pageId ?? Number(r.sourceId),
       qid: facts?.qid ?? null,
-      hasWell,
+      hasFactSheet,
     })
   }
 
-  const skipped = candidates.filter((c) => c.hasWell && !force)
-  const queue = candidates.filter((c) => !c.hasWell || force).slice(0, limit)
+  const skipped = candidates.filter((c) => c.hasFactSheet && !force)
+  const queue = candidates.filter((c) => !c.hasFactSheet || force).slice(0, limit)
 
   const selectionLabel = isExplicit
     ? `${includeIds.length} hand-picked`
@@ -221,7 +221,7 @@ async function main(): Promise<void> {
   }
 
   // --apply spends Anthropic. Fail LOUD + EARLY on a missing key, rather than letting every per-POI
-  // buildWell throw (getAnthropic throws when ANTHROPIC_API_KEY is unset) and get swallowed as a silent
+  // buildCorpusFactSheet throw (getAnthropic throws when ANTHROPIC_API_KEY is unset) and get swallowed as a silent
   // per-place "deferred" — which would report a SUCCEEDED run that enriched NOTHING (review #6).
   if (!ANTHROPIC_READY()) {
     throw new Error('ANTHROPIC_API_KEY is not set — `enrich --apply` needs it. Run via dotenvx (see the usage header).')
@@ -239,7 +239,7 @@ async function main(): Promise<void> {
   let done = 0
   let wrote = 0
   let deferred = 0
-  let errorDeferred = 0 // deferrals caused by a THROW (auth/outage), not a clean "no well found"
+  let errorDeferred = 0 // deferrals caused by a THROW (auth/outage), not a clean "no fact sheet found"
   let costCapped = false // set once the running spend crosses --max-cost (review #5)
 
   await mapLimit(queue, SCOUT_CONCURRENCY(), async (c) => {
@@ -258,7 +258,7 @@ async function main(): Promise<void> {
     const spans = toFacts(c.extract)
     let result
     try {
-      result = await buildWell(
+      result = await buildCorpusFactSheet(
         {
           name: c.name,
           kind: c.kind,
@@ -284,7 +284,7 @@ async function main(): Promise<void> {
     }
 
     if (!result) {
-      console.log(`  [${++done}/${queue.length}] ${c.name}: deferred (no well built) — falls back to the extract head.`)
+      console.log(`  [${++done}/${queue.length}] ${c.name}: deferred (no fact sheet built) — falls back to the extract head.`)
       deferred++
       return
     }
@@ -306,34 +306,34 @@ async function main(): Promise<void> {
           .update(pois)
           .set({
             facts: newFacts,
-            factSheet: result.well,
+            factSheet: result.sheet,
             enrichedAt: new Date(enrichedAt),
-            factsHash: storyFactsHash(newFacts, result.well),
+            factsHash: storyFactsHash(newFacts, result.sheet),
             updatedAt: new Date(),
           })
           .where(eq(pois.id, c.poiId)),
       { label: `enrich(${c.name})` },
     )
     wrote++
-    const wiki = result.well.filter((s) => s.source === 'wikipedia').length
-    const enrich = result.well.length - wiki
+    const wiki = result.sheet.filter((s) => s.source === 'wikipedia').length
+    const enrich = result.sheet.length - wiki
     console.log(
-      `  [${++done}/${queue.length}] ${c.name}: well = ${wiki} spans${enrich ? ` + ${enrich} enrichment` : ''} — ${result.reason}`,
+      `  [${++done}/${queue.length}] ${c.name}: fact sheet = ${wiki} spans${enrich ? ` + ${enrich} enrichment` : ''} — ${result.reason}`,
     )
   })
 
-  // SYSTEMIC-failure guard (review #6): if EVERY place failed with a THROW (not a clean "no well
+  // SYSTEMIC-failure guard (review #6): if EVERY place failed with a THROW (not a clean "no fact sheet
   // found"), it's almost certainly systemic — a bad/expired key, a sustained 429/529, an outage —
   // not per-place misses. Fail the run LOUD (the outer catch → finishJob ok:false, exit 1) so a
   // misconfigured paid run can't report "succeeded" having enriched nothing. (A cost-cap stop is a
   // `deferred` but not an `errorDeferred`, so it never trips this.)
   if (errorDeferred === queue.length && queue.length > 0) {
     throw new Error(
-      `enrich: all ${queue.length} place(s) failed with errors (not "no well found") — likely a systemic failure (auth / rate-limit / outage), not per-place misses.`,
+      `enrich: all ${queue.length} place(s) failed with errors (not "no fact sheet found") — likely a systemic failure (auth / rate-limit / outage), not per-place misses.`,
     )
   }
 
-  console.log(`\nDone: ${wrote} enriched, ${deferred} deferred (no well) of ${queue.length}.`)
+  console.log(`\nDone: ${wrote} enriched, ${deferred} deferred (no fact sheet) of ${queue.length}.`)
   for (const line of llmSpendLines()) console.log(line)
   console.log(`LLM spend this run: ~$${llmSpentUsd().toFixed(2)}`)
 }

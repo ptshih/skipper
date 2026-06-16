@@ -4,7 +4,7 @@
 // See docs/specs/corpus-enrichment-spec.md §2/§3/§6.
 
 import { describe, expect, test } from 'bun:test'
-import { buildStoryFacts, hashFacts, storyFactsHash, wellToAttribution } from '../src/pipeline/persist'
+import { buildStoryFacts, hashFacts, storyFactsHash, factSheetToAttribution } from '../src/pipeline/persist'
 import { resolveStoryGrounding, sheetDriftSpans } from '../src/pipeline/select'
 import type { FactSheetEntry } from '@skipper/db/schema'
 
@@ -85,9 +85,9 @@ describe('hash is INVARIANT to object key order (the jsonb round-trip contract)'
   })
 })
 
-describe('wellToAttribution', () => {
+describe('factSheetToAttribution', () => {
   test('one distinct credit per (source, sourceId), license + url + retrievedAt preserved', () => {
-    const attr = wellToAttribution(SHEET, '2026-06-15T00:00:00Z')
+    const attr = factSheetToAttribution(SHEET, '2026-06-15T00:00:00Z')
     expect(attr).toEqual([
       { source: 'wikipedia', sourceId: '123', url: 'https://en.wikipedia.org/?curid=123', license: 'CC BY-SA 4.0', retrievedAt: '2026-06-15T00:00:00Z' },
       { source: 'wikidata', sourceId: 'Q123', url: 'https://www.wikidata.org/wiki/Q123', license: 'CC0', retrievedAt: '2026-06-15T00:00:00Z' },
@@ -100,7 +100,7 @@ describe('wellToAttribution', () => {
       { text: 'One.', source: 'wikipedia', sourceId: '123', license: 'CC BY-SA 4.0' },
       { text: 'Two.', source: 'wikipedia', sourceId: '123', license: 'CC BY-SA 4.0' },
     ]
-    expect(wellToAttribution(sheet, 't')).toHaveLength(1)
+    expect(factSheetToAttribution(sheet, 't')).toHaveLength(1)
   })
 })
 
