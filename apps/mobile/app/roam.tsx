@@ -29,6 +29,7 @@ import {
   Divider,
   Duck,
   Icon,
+  LocationGate,
   LocationPrime,
   RouteTrack,
   Screen,
@@ -205,24 +206,12 @@ export default function RoamScreen() {
 
   if (r.phase === 'locationGate')
     return (
-      <StateView
+      <LocationGate
         title={title}
-        message={
-          r.gate?.reduced
-            ? voice.drive.locationReduced
-            : r.gate?.canAskAgain
-              ? voice.drive.locationNeeded
-              : voice.drive.locationBlocked
-        }
-        tone="danger"
-        action={
-          r.gate?.reduced || !r.gate?.canAskAgain
-            ? {
-                label: voice.drive.locationSettings,
-                onPress: () => void Linking.openSettings().catch(() => {}),
-              }
-            : { label: voice.drive.locationAllow, onPress: r.start }
-        }
+        reduced={!!r.gate?.reduced}
+        canAskAgain={!!r.gate?.canAskAgain}
+        onAllow={r.start}
+        onOpenSettings={() => void Linking.openSettings().catch(() => {})}
       />
     )
   if (r.phase === 'loading') return <StateView title={title} loading message={voice.roam.loading} />

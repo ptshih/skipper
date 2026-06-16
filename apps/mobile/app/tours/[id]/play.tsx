@@ -22,6 +22,7 @@ import {
   Button,
   Divider,
   Icon,
+  LocationGate,
   LocationPrime,
   NowCard,
   RouteTrack,
@@ -233,24 +234,13 @@ export default function DriveScreen() {
     return <LocationPrime title="Drive" onContinue={d.confirmLocationPrime} />
 
   if (d.phase === 'locationGate')
-    // Three states: precise-location-off (reduced) and hard-denied-no-reprompt both route to Settings;
-    // only a still-askable denial offers an in-app "Switch on location" re-prompt.
     return (
-      <StateView
+      <LocationGate
         title="Drive"
-        message={
-          d.locationReduced
-            ? voice.drive.locationReduced
-            : d.locationCanAskAgain
-              ? voice.drive.locationNeeded
-              : voice.drive.locationBlocked
-        }
-        tone="danger"
-        action={
-          d.locationReduced || !d.locationCanAskAgain
-            ? { label: voice.drive.locationSettings, onPress: d.openLocationSettings }
-            : { label: voice.drive.locationAllow, onPress: d.start }
-        }
+        reduced={d.locationReduced}
+        canAskAgain={d.locationCanAskAgain}
+        onAllow={d.start}
+        onOpenSettings={d.openLocationSettings}
       />
     )
   if (d.phase === 'error')
