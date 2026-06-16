@@ -285,18 +285,11 @@ function EnrichDialog({
           </Button>
           <Button
             disabled={submitMut.isPending}
-            onClick={() => {
-              // SPENDS Anthropic across the WHOLE selection — gate behind a confirm naming the scope, like
-              // every other paid admin op. The server's confirm:true is client-set, so this IS the human
-              // gate; Preview stays the free, authoritative count. (Closes the one-click-paid-run hole.)
-              if (
-                !window.confirm(
-                  `Enrich ${summary}?\n\nThis SPENDS Anthropic credits (no TTS) and isn't undoable. Run Preview first to see the exact eligible count + estimated cost.`,
-                )
-              )
-                return
-              submitMut.mutate(true)
-            }}
+            // THIS DIALOG is the paid-run gate: it names the scope + "Enrich spends" cost and
+            // requires an explicit Enrich click, so the server's client-set confirm:true is already
+            // human-gated. No extra window.confirm — that was a redundant second prompt. Preview stays
+            // the free, authoritative count. (One-click-paid-run hole stays closed by the dialog itself.)
+            onClick={() => submitMut.mutate(true)}
           >
             <Sparkles className="h-4 w-4" /> {submitMut.isPending ? 'Triggering…' : 'Enrich'}
           </Button>
