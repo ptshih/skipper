@@ -16,27 +16,32 @@ import { cn } from '@/lib/utils'
 interface RegionCoverage {
   regionSlug: string
   regionName: string
-  total: number
+  total: number // all POIs in the bbox (context only)
+  qualified: number // story-eligible POIs — what roam can actually narrate, the real coverage denominator
   withClips: number
   density: 'ok' | 'thin' | 'sparse'
   roamReady: boolean
 }
 
 function buildCoverage(pois: PoiRow[]): RegionCoverage[] {
-  const map = new Map<string, { name: string; total: number; withClips: number }>()
+  const map = new Map<string, { name: string; total: number; qualified: number; withClips: number }>()
   for (const p of pois) {
     if (!p.regionSlug) continue
-    const r = map.get(p.regionSlug) ?? { name: p.regionName ?? p.regionSlug, total: 0, withClips: 0 }
+    const r = map.get(p.regionSlug) ?? { name: p.regionName ?? p.regionSlug, total: 0, qualified: 0, withClips: 0 }
     r.total++
+    if (p.storyEligibility === 'eligible') r.qualified++ // roam's selection bar (generate-roam.ts) == story-eligible
     if (p.roamClipCount > 0) r.withClips++
     map.set(p.regionSlug, r)
   }
   return [...map.entries()].map(([slug, r]) => {
-    const pct = r.total > 0 ? r.withClips / r.total : 0
+    // Coverage is clips ÷ QUALIFIED, not ÷ total — roam never speaks scenic/stub pins, so dividing by
+    // total understated every region. Clamp: a clip on a now-unqualified poi (facts shrank/renamed)
+    // could otherwise push the ratio past 1.
+    const pct = r.qualified > 0 ? Math.min(r.withClips / r.qualified, 1) : 0
     const roamReady = r.withClips >= 5 && pct >= 0.5
     const density: 'ok' | 'thin' | 'sparse' = roamReady ? 'ok' : r.withClips >= 2 ? 'thin' : 'sparse'
-    return { regionSlug: slug, regionName: r.name, total: r.total, withClips: r.withClips, density, roamReady }
-  }).sort((a, b) => b.total - a.total)
+    return { regionSlug: slug, regionName: r.name, total: r.total, qualified: r.qualified, withClips: r.withClips, density, roamReady }
+  }).sort((a, b) => b.qualified - a.qualified)
 }
 
 const DENSITY_META: Record<RegionCoverage['density'], { variant: 'success' | 'warning' | 'secondary'; label: string; desc: string }> = {
@@ -150,7 +155,7 @@ function CoverageTable({
           <TableRow>
             <TableHead>Region</TableHead>
             <TableHead>Status</TableHead>
-            <TableHead className="text-right">Total POIs</TableHead>
+            <TableHead className="text-right">Qualified POIs</TableHead>
             <TableHead className="text-right">Roam clips</TableHead>
             <TableHead className="w-44">Coverage</TableHead>
             <TableHead className="w-px" />
@@ -159,7 +164,7 @@ function CoverageTable({
         <TableBody>
           {coverage.map((r) => {
             const m = DENSITY_META[r.density]
-            const clipPct = r.total > 0 ? (r.withClips / r.total) * 100 : 0
+            const clipPct = r.qualified > 0 ? Math.min(r.withClips / r.qualified, 1) * 100 : 0
 
             return (
               <TableRow key={r.regionSlug}>
@@ -170,7 +175,10 @@ function CoverageTable({
                     {r.roamReady && <Badge variant="success">Roam enabled</Badge>}
                   </div>
                 </TableCell>
-                <TableCell className="text-right font-mono tabular-nums">{r.total}</TableCell>
+                <TableCell className="text-right font-mono tabular-nums">
+                  {r.qualified}
+                  <span className="text-muted-foreground"> / {r.total}</span>
+                </TableCell>
                 <TableCell
                   className={cn('text-right font-mono tabular-nums', r.withClips === 0 && 'text-muted-foreground')}
                 >
