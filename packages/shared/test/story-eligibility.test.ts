@@ -47,9 +47,14 @@ describe('classifyStoryEligibility', () => {
     expect(classifyStoryEligibility({ ...base, source: 'wikidata' })).toBe('filtered-source')
   })
   test('filtered-taste takes precedence over the stub check', () => {
-    expect(classifyStoryEligibility({ ...base, name: 'IHOP shooting', leadExtractChars: 10 })).toBe('filtered-taste')
+    expect(classifyStoryEligibility({ ...base, name: 'IHOP shooting', leadExtractChars: 0 })).toBe('filtered-taste')
   })
-  test('filtered-stub when the article is below the floor', () => {
-    expect(classifyStoryEligibility({ ...base, leadExtractChars: 799 })).toBe('filtered-stub')
+  test('a short-but-present article is ELIGIBLE — the enricher decides, not a char floor', () => {
+    // The 800-char floor was removed 2026-06-16: any wikipedia article with text is enrichable.
+    expect(classifyStoryEligibility({ ...base, leadExtractChars: 120 })).toBe('eligible')
+    expect(classifyStoryEligibility({ ...base, leadExtractChars: 799 })).toBe('eligible')
+  })
+  test('filtered-stub ONLY when there is no article text to enrich (empty extract)', () => {
+    expect(classifyStoryEligibility({ ...base, leadExtractChars: 0 })).toBe('filtered-stub')
   })
 })

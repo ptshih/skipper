@@ -144,7 +144,9 @@ after an override carries the correction into the well.
 `pois.facts` shape change is destructive-OK (no users; STORAGE break-freely). Procedure: re-`discover`
 (extract already full) → `enrich --apply` to populate `well` on the corpus → drop the `STORY_MIN_EXTRACT`-on-`extract`
 read in favor of the well (eligibility itself stays on `extract` length, unchanged). Existing pois
-without a `well` fall back to the positional extract head until enriched.
+without a `well` fall back to the positional extract head until enriched. *(SUPERSEDED 2026-06-16: the
+`STORY_MIN_EXTRACT` eligibility floor was REMOVED entirely — eligibility = "has a fact sheet," the
+enricher decides; and #1 stopped the un-enriched extract-head fallback for stories. See `docs/decisions/corpus-enrichment.md`.)*
 
 ## 11. Acceptance / validation
 

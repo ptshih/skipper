@@ -23,7 +23,6 @@
 //   ... --apply                 run it (spends; writes pois facts, R2 clips, segments/tracks)
 //   ... --apply --limit 3      smoke run (the cheapest real ear-test)
 //   ... --force                regenerate even clips whose facts_hash is still fresh
-//   ... --min-extract 800     story-depth floor (full-article chars; default STORY_MIN_EXTRACT)
 //   ... --bbox swLng,swLat,neLng,neLat   constrain the corpus geographically
 
 import { and, eq, isNull, sql } from 'drizzle-orm'
@@ -43,21 +42,18 @@ import { mapLimit } from './pipeline/concurrency'
 import { personaFromKey } from './persona'
 import { NARRATION_CONCURRENCY, NARRATION_FALLBACK_CHARS, TTS_CONCURRENCY } from './config'
 import { estimateTtsUsd, llmSpendLines, llmSpentUsd } from './pipeline/spend'
-import { STORY_MIN_EXTRACT, STORY_TASTE_DENYLIST } from '@skipper/shared'
+import { STORY_TASTE_DENYLIST } from '@skipper/shared'
 
-/** Roam encounter length band + eligibility (Autio-register long-form, founder 2026-06-13).
+/** Roam encounter length band (Autio-register long-form, founder 2026-06-13).
  *  storyTargetSeconds = the AIM; storyMaxSeconds = a HARD cap so a fact-rich place doesn't sprawl
  *  into a lecture. "Never pad past the facts" governs the ACTUAL length WITHIN the band, so a thin
- *  pin lands honestly shorter (capped by its facts) rather than stretched. minExtractStory is the
- *  eligibility floor for a long-form STORY — a pin below it is WAVE-eligible (the 10–20s locked
- *  pass-2 form); until that form ships, the floor simply excludes thin articles (the `--min-extract`
- *  flag overrides). NOTE: an UN-enriched poi grounds on the FULL Wikipedia article from the corpus
- *  (deepened at sweep time to ENRICHER_INPUT_CHARS, then capped at read time to NARRATION_FALLBACK_CHARS);
- *  an ENRICHED poi grounds on its curated well instead (resolveStoryGrounding). */
+ *  pin lands honestly shorter (capped by its facts) rather than stretched. ELIGIBILITY for a roam STORY
+ *  is simply "has a curated fact sheet" (#1) — NOT a char floor (the old `minExtractStory`/`--min-extract`
+ *  800-char gate was removed 2026-06-16; a sheet only exists for an enriched poi, so it subsumes it).
+ *  An ENRICHED poi grounds on its curated sheet (resolveStoryGrounding). */
 const ROAM_LENGTH = {
   storyTargetSeconds: 150,
   storyMaxSeconds: 180,
-  minExtractStory: STORY_MIN_EXTRACT, // single-sourced in @skipper/shared (admin table reads it too)
 } as const
 /** Default corpus bbox — Tahoe–Reno corridor (matches sweep-region-pois.ts). */
 const DEFAULT_BBOX = { swLng: -120.25, swLat: 38.86, neLng: -119.55, neLat: 39.65 }
@@ -69,7 +65,7 @@ function regionLabel(lat: number, lng: number): string {
   return 'Lake Tahoe'
 }
 
-const flags = parseFlags(process.argv.slice(2), { valueFlags: ['limit', 'min-extract', 'bbox', 'max-cost'] })
+const flags = parseFlags(process.argv.slice(2), { valueFlags: ['limit', 'bbox', 'max-cost'] })
 const apply = flags.has('apply')
 const maxCostUsd = (() => {
   const v = Number(flags.value('max-cost'))
@@ -80,7 +76,6 @@ const maxCostUsd = (() => {
 const scriptsOnly = flags.has('scripts-only')
 const force = flags.has('force')
 const limit = Number(flags.value('limit') ?? Infinity)
-const minExtract = Number(flags.value('min-extract') ?? ROAM_LENGTH.minExtractStory)
 const bboxRaw = flags.value('bbox')
 const bbox = (() => {
   if (!bboxRaw) return DEFAULT_BBOX
@@ -168,9 +163,10 @@ async function main(): Promise<void> {
   for (const r of rows) {
     const f = r.facts
     // #1: a roam STORY encounter REQUIRES a curated fact sheet — an un-enriched poi is SKIPPED (never a
-    // raw-extract telling; the scenic-tier "wave" form will cover named-but-unenriched pins later). Every
-    // story-eligible poi is enriched today, so this is a no-op now; it guards future un-enriched rows.
-    if (!f || f.extract.length < minExtract || !(Array.isArray(r.factSheet) && r.factSheet.length > 0)) continue
+    // raw-extract telling; the scenic-tier "wave" form will cover named-but-unenriched pins later). The
+    // sheet IS the eligibility gate now — no char floor (removed 2026-06-16); a sheet only exists for an
+    // enriched poi, so it subsumes the old `minExtract` check. `f` guards a text-less (pin) row.
+    if (!f || !(Array.isArray(r.factSheet) && r.factSheet.length > 0)) continue
     if (STORY_TASTE_DENYLIST.test(r.name)) {
       console.log(`  taste-gate: skipping "${r.name}"`)
       continue
@@ -200,7 +196,7 @@ async function main(): Promise<void> {
   const queue = candidates.filter((c) => !c.hasFreshClip || force).slice(0, limit)
 
   console.log(
-    `Corpus: ${candidates.length} story-grade pois in bbox (≥${minExtract} chars) — ` +
+    `Corpus: ${candidates.length} story-grade pois in bbox (enriched — have a fact sheet) — ` +
       `${skipped.length} already have fresh roam clips (skipped), ${queue.length} to generate.\n`,
   )
   for (const c of queue) console.log(`  ${String(c.extract.length).padStart(5)}  ${c.name}`)

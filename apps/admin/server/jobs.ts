@@ -189,7 +189,7 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     if (body.bbox) args.push(`--bbox=${str(body.bbox)}`)
     if (body.limit) args.push(`--limit=${Number(body.limit)}`)
     if (body.force) args.push('--force')
-    if (body.minExtract) args.push(`--min-extract=${Number(body.minExtract)}`)
+    // --min-extract removed 2026-06-16: roam story-eligibility is "has a fact sheet" (#1), not a char floor.
     if (body.maxCostUsd) args.push(`--max-cost=${Number(body.maxCostUsd)}`)
     if (apply) args.push('--apply')
     return { args, dryRun: !apply, spends: apply, targetId: 'roam-corpus' }

@@ -158,9 +158,10 @@ async function main(): Promise<void> {
     const facts = r.facts
     const extract = facts?.extract ?? ''
     // Story eligibility is the SAME gate every consumer uses (single-sourced in @skipper/shared):
-    // wikipedia source + not taste-denied + extract ≥ the story floor. Measured on the FULL extract.
-    // Enrich can only build a well for an eligible story poi, so a SELECTED non-eligible row is
-    // skipped + COUNTED (honest reporting in the run log), never silently dropped.
+    // wikipedia source + not taste-denied + HAS article text. There is no char-length floor — whether
+    // the article is rich enough to narrate is THIS step's call (buildWell builds a sheet or DEFERS),
+    // not a guessed cutoff (the 800-char floor was removed 2026-06-16). A SELECTED non-eligible row
+    // (non-wikipedia, taste-denied, or text-less) is skipped + COUNTED, never silently dropped.
     if (classifyStoryEligibility({ source: r.source, name: r.name, leadExtractChars: extract.length }) !== 'eligible') {
       skippedIneligible++
       continue

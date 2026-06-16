@@ -32,7 +32,6 @@ import { announce, parseFlags } from './pipeline/ops'
 import { beginJob, finishJob } from './pipeline/job-progress'
 import { sleep } from './pipeline/http'
 import type { LngLat } from './pipeline/geo'
-import { STORY_MIN_EXTRACT } from '@skipper/shared'
 
 /** Tahoe–Reno corridor: Meyers/South Lake Tahoe west to Homewood/Sugar Pine Point,
  *  north to Kings Beach/Incline, east through Spooner/Zephyr Cove → Carson City →
@@ -153,7 +152,6 @@ async function main(): Promise<void> {
   const fetchedAt = new Date()
   let wrote = 0
   let deepMiss = 0
-  let tooThin = 0
   for (const s of stories) {
     const a = s.article!
     const full = deep.get(a.pageId)
@@ -161,32 +159,25 @@ async function main(): Promise<void> {
     // Normalize via toFacts(...).join(' ') so the stored extract (and its hash) MATCH what a tour or
     // roam run recomputes from toFacts(extract) — one shared fingerprint across every writer/reader.
     const extract = toFacts(full ?? a.extract).join(' ') // full article; lead fallback on a fetch miss
+    // Store the FULL extract for EVERY story-tier candidate regardless of length — it is the ENRICHER's
+    // raw input, and whether the article is rich enough to NARRATE is the paid enrich step's call (it
+    // builds a curated fact sheet or defers; #1 downgrades an un-enriched poi to scenic). No char floor
+    // here: a guessed cutoff would starve the enricher of borderline articles it might rescue
+    // (correctness over cost, CLAUDE.md — the old 800-char demotion was removed 2026-06-16).
+    // FULL facts payload (incl. the linked Wikidata qid) so a tour generate can rebuild the spine
+    // candidate (WikiPoi) losslessly from the pool — see pipeline/region-corpus.ts.
+    const facts = buildStoryFacts({ extract, title: a.title, url: a.url, pageId: a.pageId, qid: s.qid })
     // Seed the curated "where to look" anchor onto the corpus row (coalesce-kept by upsertPoi, so
     // an admin edit always wins on a re-sweep). select.ts reads it back off pois.speakable.
     const sp = speakableAnchorFor('wikipedia', String(a.pageId))
-    const pin = {
-      source: 'wikipedia' as const,
+    await upsertPoi({
+      source: 'wikipedia',
       sourceId: String(a.pageId),
       name: a.title,
       kind: featureKind(s.types) ?? null,
       lat: s.lat,
       lng: s.lng,
       ...(sp ? { speakableLat: sp.lat, speakableLng: sp.lng } : {}),
-    }
-    // #1 reconciliation (2026-06-16): the discovery tier uses the cheap LEAD length to decide "worth
-    // deep-fetching as a story"; now we have the FULL article. A candidate BELOW the enrich floor can
-    // never get a curated sheet → never a STORY telling (#1). Store it as a name-PIN (facts=null →
-    // scenic at selection), NOT story prose we'd never narrate.
-    if (extract.length < STORY_MIN_EXTRACT) {
-      tooThin++
-      await upsertPoi({ ...pin, summary: null, facts: null, factsHash: null, factsFetchedAt: null })
-      continue
-    }
-    // FULL facts payload (incl. the linked Wikidata qid) so a tour generate can rebuild the spine
-    // candidate (WikiPoi) losslessly from the pool — see pipeline/region-corpus.ts.
-    const facts = buildStoryFacts({ extract, title: a.title, url: a.url, pageId: a.pageId, qid: s.qid })
-    await upsertPoi({
-      ...pin,
       summary: extract.split(/(?<=[.!?])\s+/)[0] ?? null,
       facts,
       factsHash: hashFacts(facts),
@@ -195,12 +186,6 @@ async function main(): Promise<void> {
     wrote++
   }
   if (deepMiss > 0) console.warn(`  ⚠ ${deepMiss} story extract(s) fell back to the lead (deep fetch miss).`)
-  if (tooThin > 0) {
-    console.log(
-      `  ${tooThin} story candidate(s) came back below the enrich floor (${STORY_MIN_EXTRACT} chars) on the full ` +
-        `article → stored as name-PINs (scenic at selection), not story prose (#1).`,
-    )
-  }
   for (const s of scenics) {
     const sp = speakableAnchorFor('wikidata', s.qid)
     await upsertPoi({
@@ -218,11 +203,7 @@ async function main(): Promise<void> {
     })
     wrote++
   }
-  const storyRows = wrote - scenics.length // story-prose rows (tooThin pins were upserted but not counted in `wrote`)
-  console.log(
-    `\nUpserted ${wrote + tooThin} pois (${storyRows} story + ${scenics.length + tooThin} scenic — ` +
-      `${tooThin} sub-floor story candidate(s) demoted to scenic pins).`,
-  )
+  console.log(`\nUpserted ${wrote} pois (${stories.length} story + ${scenics.length} scenic).`)
 }
 
 await beginJob('sweep_region_pois', { dryRun: !apply, targetId: 'region-corpus' })

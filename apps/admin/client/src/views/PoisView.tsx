@@ -51,7 +51,7 @@ const STORY_ELIGIBILITY_META: Record<StoryEligibility, { label: string; variant:
   eligible: { label: 'eligible', variant: 'default', hint: 'Story-grade — a tour or roam telling can use it' },
   'filtered-source': { label: 'scenic pin', variant: 'outline', hint: 'Wikidata pin — not a story source (wave layer later)' },
   'filtered-taste': { label: 'taste-gate', variant: 'outline', hint: 'Title hits the taste denylist' },
-  'filtered-stub': { label: 'stub', variant: 'secondary', hint: 'Full article below the story floor (800 chars)' },
+  'filtered-stub': { label: 'stub', variant: 'secondary', hint: 'No article text to enrich (empty/disambiguation page)' },
 }
 
 /** The SEPARATE roam-specific axis — shown as a secondary badge only when a roam clip exists. */

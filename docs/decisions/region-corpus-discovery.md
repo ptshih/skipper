@@ -60,8 +60,11 @@ the ordering self-enforcing.
   sweep/tour/roam hashes IDENTICAL (no recompute drift). Override-freshness moved to `refetch_facts`
   (now fetches the FULL article + re-applies overrides) / a re-sweep — not a per-run fetch.
   `fetchDeepExtracts` dropped the MediaWiki-clamped `exchars` (hard cap 1200), pulling full plaintext
-  self-truncated to `DEEP_EXTRACT_CHARS=4000`. Eligibility (`STORY_MIN_EXTRACT`) measures the full
-  article (800, ear-tunable). This went the OPPOSITE way from the old "lazy facts" idea (fetch less,
+  self-truncated to `DEEP_EXTRACT_CHARS=4000`. The sweep stores the FULL extract for every story-tier
+  candidate regardless of length — the arbitrary 800-char `STORY_MIN_EXTRACT` eligibility floor was
+  REMOVED 2026-06-16 (see `corpus-enrichment.md`): the stored extract is the enricher's raw input, and
+  whether an article is rich enough to narrate is the enrich step's call (build a sheet or defer), not a
+  guessed cutoff. This went the OPPOSITE way from the old "lazy facts" idea (fetch less,
   later) — so that idea is now MORE appealing as a future optimization: the eager full-fetch makes the
   sweep heavier (one MediaWiki call per story poi). Revisit lazy/region-scale fetching if a big
   region's sweep gets slow.

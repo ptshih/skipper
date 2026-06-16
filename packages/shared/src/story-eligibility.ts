@@ -5,15 +5,6 @@
 // its queue. (Whether a roam CLIP exists / is fresh is a SEPARATE, roam-specific axis — computed in
 // /admin/pois as `roamClip`, not here.)
 
-/** A story-grade place needs at least this many chars of its (FULL) Wikipedia article — "enough to
- *  say". `facts.extract` IS the full article now (the region sweep deepens at discovery time), so this
- *  measures real article richness, not a lead proxy. Below it a place is wave-eligible only (the
- *  10–20s form, not yet shipped), so today the floor simply excludes stub articles. STARTING value,
- *  ear-tunable (like the LUFS target): the sweep now stores the FULL article up to ENRICHER_INPUT_CHARS
- *  (=12k; the old ~1200/4k exchars caps are gone), so the meaningful floor lives in (stub, ~12k) and 800
- *  simply excludes stubs. `generate-roam --min-extract` overrides. */
-export const STORY_MIN_EXTRACT = 800
-
 /** TASTE gate: violent-crime / personal-tragedy articles are never a charming narration target — a
  *  joke-forward persona can't carry them (the sweep is breadth-first, so these slip in). Applies to
  *  ANY telling (tour OR roam). Title-keyed; tuned for MODERN personal/violent crime while preserving
@@ -27,12 +18,19 @@ export const STORY_TASTE_DENYLIST =
   /kidnap|abduction|murder|manslaughter|homicide|killing of|mass killing|massacre|lynching|shooting(?! range)|stabbing|gunman|hostage|\brape\b|sexual assault|assault|suicide|death of|serial killer|execution of|terrorism|terrorist|genocide|torture/i
 
 /** Whether a POI is story-grade narration material — a POI property, NOT roam-specific (tours AND
- *  roam draw story-grade POIs from the same corpus). The FIRST failing gate names the reason. */
+ *  roam draw story-grade POIs from the same corpus). The FIRST failing gate names the reason.
+ *
+ *  NO char-length quality floor (the arbitrary 800-char `STORY_MIN_EXTRACT` was REMOVED 2026-06-16):
+ *  whether a Wikipedia article is rich enough to NARRATE is the paid ENRICH step's call — it builds a
+ *  curated fact sheet or DEFERS, and #1 downgrades an un-enriched poi to scenic. The only hard
+ *  precondition here is ARTICLE TEXT the enricher can quote; an empty `facts.extract` (a wikidata pin
+ *  or a text-less/disambiguation page) is genuinely un-enrichable. (Correctness over cost, CLAUDE.md —
+ *  a sub-cent enrich call beats a guessed cutoff; see docs/decisions/corpus-enrichment.md.) */
 export type StoryEligibility =
-  | 'eligible' // passes every gate → a tour OR a roam encounter can tell it
+  | 'eligible' // wikipedia + has article text + not taste-denied → ENRICHABLE (the enricher decides if it becomes a telling)
   | 'filtered-source' // not a wikipedia story source (a wikidata scenic pin — wave layer later)
   | 'filtered-taste' // title hits the taste denylist
-  | 'filtered-stub' // wikipedia, but the article is below the story floor (a stub — too short to narrate)
+  | 'filtered-stub' // wikipedia, but NO article text to enrich (empty extract — a text-less/disambiguation page)
 
 export function classifyStoryEligibility(p: {
   source: string
@@ -41,6 +39,6 @@ export function classifyStoryEligibility(p: {
 }): StoryEligibility {
   if (p.source !== 'wikipedia') return 'filtered-source'
   if (STORY_TASTE_DENYLIST.test(p.name)) return 'filtered-taste'
-  if (p.leadExtractChars < STORY_MIN_EXTRACT) return 'filtered-stub'
+  if (p.leadExtractChars < 1) return 'filtered-stub' // no article text → nothing for the enricher to quote
   return 'eligible'
 }

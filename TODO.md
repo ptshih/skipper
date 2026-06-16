@@ -16,7 +16,7 @@ shipped 2026-06-15 — all four facts writers (sweep, `refetch-poi`, tour + roam
 clip-hash now build `pois.facts` through one pure helper in `persist.ts`, so key order +
 qid-preservation are structural + unit-tested. Also shipped 2026-06-15: eligibility is now framed as
 a POI property — `@skipper/shared/story-eligibility.ts` (`classifyStoryEligibility` + `StoryEligibility`
-+ `STORY_TASTE_DENYLIST`/`STORY_MIN_EXTRACT`), split from the roam-specific clip status; `/admin/pois`
++ `STORY_TASTE_DENYLIST`), split from the roam-specific clip status; `/admin/pois`
 returns `storyEligibility` + `roamClip` and the POIs table shows a "Story" column (applies to tours +
 roam) with a separate roam-clip badge. The taste gate is now shared too (2026-06-15): the tour
 candidate loader (`region-corpus.ts::loadCandidatePoisInBox`) drops `STORY_TASTE_DENYLIST` titles from
@@ -26,9 +26,10 @@ the pool, same as roam's queue — so a tour can't narrate a violent-crime POI e
 than "store both": `facts.extract` now IS the full article (no separate lead field) — the **sweep
 deepens at discovery time** (`fetchDeepExtracts`), stores the full extract, hashes ONCE. Generation
 reads it: roam's per-run deepen is removed (reads the corpus full, no re-fetch / no mutation / no
-hash churn). Eligibility (`STORY_MIN_EXTRACT`) now measures the FULL article — retuned 400→**800** (starting value,
-ear-tunable). The lead survives only transiently for discovery tiering (`tierOf`,
-`STORY_MIN_FACT_CHARS=140`); `select.ts` needs no change (full≫140 vs empty).
+hash churn). Eligibility measured the FULL article via `STORY_MIN_EXTRACT` (retuned 400→800) — but that
+arbitrary char floor was **REMOVED 2026-06-16**: story-grade = "the enricher built a fact sheet," and the
+enricher (not a cutoff) decides if an article is rich enough to narrate (see `docs/decisions/corpus-enrichment.md`).
+The lead survives only transiently for discovery tiering (`tierOf`, `STORY_MIN_FACT_CHARS=140`).
 
 Both follow-ups DONE 2026-06-15:
 - **Tour deepen retired.** `generate.ts` no longer re-fetches/deepens — it grounds on the corpus

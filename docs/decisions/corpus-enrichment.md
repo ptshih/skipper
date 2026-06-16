@@ -10,6 +10,22 @@ and gives **roam** enrichment for the first time. Built from `docs/specs/corpus-
 (now BUILT). Pairs with `docs/decisions/region-corpus-discovery.md` (the corpus + ops sequence),
 `docs/decisions/enrichment-scout.md` (the scout this generalizes), and principle #1.
 
+**Update 2026-06-16 (the 800-char story floor REMOVED — the enricher decides):** the arbitrary
+`STORY_MIN_EXTRACT = 800` char cutoff is GONE. It was only ever a cost pre-filter deciding whether to
+spend a (sub-cent) enrich call, and the enricher ALREADY has the real gate — `buildWell` returns `null`
+(a clean, retryable DEFER) whenever it can't assemble a usable sheet from an article, and #1 then
+downgrades the un-enriched poi to scenic (tours) / skips it (roam). So story-grade = "the enricher built
+a fact sheet," NOT a guessed length. Changes: (a) the sweep stores `facts.extract` for EVERY story-tier
+candidate (no sub-800 → name-pin demotion — that was the enricher's raw input it was throwing away);
+(b) `classifyStoryEligibility` now gates on `source=wikipedia` + not-taste + HAS article text (empty
+extract → `filtered-stub`), no char floor; (c) the redundant roam char floor + `--min-extract` knob are
+deleted (the fact-sheet requirement subsumes them). This realizes the **correctness-over-cost** doctrine
+(CLAUDE.md): the ~145 sub-800 wikipedia POIs (≈$0.50 to enrich, one-time, idempotent) now enter the paid
+funnel and the model — not 800 — decides if each becomes a telling. CAVEAT (open): a thin article that
+DOES enrich yields a tiny sheet → a short telling — fine for roam (encounters are short), thin for a tour
+2-min story stop; whether to keep short-sheet POIs tour-scenic is an open ear-test call. A paid `enrich`
+run over the sub-800 backlog (founder-gated) realizes the value.
+
 **Update 2026-06-16 (the `well` → `fact_sheet` COLUMN move):** the curated sheet was hoisted OUT of the
 `pois.facts` jsonb bag into its OWN typed column **`pois.fact_sheet`** (`FactSheetEntry[]`) + **`pois.enriched_at`**
 (migration `0007`, copy-only backfill of the 315 live wells; the old `facts.well` is left in place — reversible).
@@ -24,9 +40,9 @@ will drop the redundant `facts.well`/`facts.enrichedAt` once everything's confir
 **Update 2026-06-15:** the `--thin-only`/`--thin-max` cost-slice was **REMOVED** — filtering enrich
 candidates by article length is a cost proxy, not a product axis (`--limit`/`--max-cost` are the honest
 cost knobs), so the enrich dialog always runs the full eligible corpus now. The story-eligibility floor
-flag `filtered-thin` was renamed **`filtered-stub`** to end the name collision (the floor = a *stub*,
-< 800 chars, excluded; the removed enrich slice was *eligible-but-short*, < 2500 chars — a different
-threshold entirely, which made one word mean two things).
+flag `filtered-thin` was renamed **`filtered-stub`** to end the name collision (the removed enrich slice
+was *eligible-but-short*, < 2500 chars). NOTE: `filtered-stub` originally meant "< 800 chars"; since the
+2026-06-16 floor removal (above) it means "no article text to enrich" (empty extract).
 
 **Update 2026-06-15 (selection-driven enrich):** the enrich CTA is no longer region-bound — it acts on a
 table **selection**. `enrich-region.ts` resolves the candidate set as an explicit `--include-ids` list
