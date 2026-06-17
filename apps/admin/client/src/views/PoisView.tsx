@@ -23,14 +23,8 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { JobActionDialog } from '@/components/ui/job-action-dialog'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { cn } from '@/lib/utils'
 
 type Tab = 'corpus' | 'retire'
@@ -110,14 +104,9 @@ export function PoisView() {
 
 /* ── DISCOVER POIs ── */
 
-// Fire the region-discovery sweep (sweep_region_pois) for a region. FREE — no LLM/TTS, no confirm.
-// bbox comes from the region row's discoveryBbox column — null = use the generator's default.
-export async function discoverPois(_regionSlug: string, apply: boolean, bbox?: string | null) {
-  await api.createJob({ kind: 'sweep_region_pois', ...(bbox ? { bbox } : {}), apply })
-}
-
-// A small, focused shadcn Dialog — NOT the busy New-run form. Pick a region, then Preview (dry-run)
-// or Discover (apply). Free, so no confirm gate.
+// A focused Preview+apply dialog (shared JobActionDialog shell): pick a region, then Preview (dry-run)
+// or Discover (apply). FREE — no LLM/TTS, so no confirm gate (spends={false}). bbox comes from the
+// region row's discoveryBbox column — null = use the generator's default.
 function DiscoverDialog({
   open,
   onOpenChange,
@@ -133,71 +122,43 @@ function DiscoverDialog({
     queryFn: async () => (await api.regions()).regions,
     enabled: open,
   })
-
-  const qc = useQueryClient()
-  const submitMut = useMutation({
-    mutationFn: (apply: boolean) => discoverPois(regionSlug, apply, regions.find((r) => r.slug === regionSlug)?.discoveryBbox),
-    // Refresh the Runs list so the just-created run shows immediately on navigate (not after the
-    // 15s poll / a manual refresh).
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['runs'] }); onSubmitted() },
-  })
-  function submit(apply: boolean) {
-    if (!regionSlug) return
-    submitMut.mutate(apply)
-  }
-  const err = loadErr ?? submitMut.error
+  const bbox = regions.find((r) => r.slug === regionSlug)?.discoveryBbox
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Compass className="h-4 w-4" /> Discover POIs
-          </DialogTitle>
-          <DialogDescription>
-            Discovers every Wikidata-pinned place in the region and upserts the shared POI corpus — tours and roam
-            both draw from it. Free — no LLM or TTS spend.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-2">
-          <Label htmlFor="discover-region">Region</Label>
-          <Select value={regionSlug || undefined} onValueChange={setRegionSlug}>
-            <SelectTrigger id="discover-region" className="w-full">
-              <SelectValue placeholder={regions.length === 0 ? 'Loading…' : 'Select a region…'} />
-            </SelectTrigger>
-            <SelectContent>
-              {regions.map((r) => (
-                <SelectItem key={r.slug} value={r.slug}>{r.displayName}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+    <JobActionDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      onSubmitted={onSubmitted}
+      icon={Compass}
+      title="Discover POIs"
+      description="Discovers every Wikidata-pinned place in the region and upserts the shared POI corpus — tours and roam both draw from it. Free — no LLM or TTS spend."
+      buildBody={() => ({ kind: 'sweep_region_pois', ...(bbox ? { bbox } : {}) })}
+      spends={false}
+      applyLabel="Discover"
+      applyIcon={Compass}
+      disabled={!regionSlug}
+      error={loadErr}
+      note={
+        <>
           Free preview — no spend, no deletion. <span className="font-medium text-foreground">Preview</span> dry-runs
           the discovery; <span className="font-medium text-foreground">Discover</span> upserts the corpus.
-        </div>
-
-        {err && (
-          <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {errMsg(err)}
-          </div>
-        )}
-
-        <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={submitMut.isPending}>
-            Cancel
-          </Button>
-          <Button variant="outline" disabled={submitMut.isPending || !regionSlug} onClick={() => void submit(false)}>
-            {submitMut.isPending ? 'Triggering…' : 'Preview'}
-          </Button>
-          <Button disabled={submitMut.isPending || !regionSlug} onClick={() => void submit(true)}>
-            <Compass className="h-4 w-4" /> {submitMut.isPending ? 'Triggering…' : 'Discover'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </>
+      }
+    >
+      <div className="space-y-2">
+        <Label htmlFor="discover-region">Region</Label>
+        <Select value={regionSlug || undefined} onValueChange={setRegionSlug}>
+          <SelectTrigger id="discover-region" className="w-full">
+            <SelectValue placeholder={regions.length === 0 ? 'Loading…' : 'Select a region…'} />
+          </SelectTrigger>
+          <SelectContent>
+            {regions.map((r) => (
+              <SelectItem key={r.slug} value={r.slug}>{r.displayName}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </JobActionDialog>
   )
 }
 
@@ -210,11 +171,13 @@ type EnrichSelection =
   | { kind: 'explicit'; ids: string[] }
   | { kind: 'all'; filter: { bbox?: string; source?: string; query?: string }; excludeIds: string[] }
 
-// A focused shadcn Dialog for the corpus `enrich` step (enrich_region): acts on the table SELECTION,
-// then Preview (free dry-run — NO model calls, prints the count + a cost estimate) or Enrich (apply,
-// SPENDS Anthropic; no TTS). The fact sheet it builds (pois.fact_sheet) is read by BOTH tours + roam, so
-// enrich ONCE between Discover and Generate. Enrich only acts on ELIGIBLE story POIs (the CLI gates),
-// so the Preview count is the authoritative "what will actually run".
+// A focused Preview+apply dialog (shared JobActionDialog shell) for the corpus `enrich` step
+// (enrich_region): acts on the table SELECTION, then Preview (free dry-run — NO model calls, prints the
+// count + a cost estimate) or Enrich (apply, SPENDS Anthropic; no TTS). THIS dialog is the paid-run gate:
+// it names the scope + cost and needs an explicit Enrich click, so the server's confirm:true (added by
+// JobActionDialog for the apply) is already human-gated — no extra window.confirm. The fact sheet it
+// builds (pois.fact_sheet) is read by BOTH tours + roam, so enrich ONCE between Discover and Generate.
+// Enrich only acts on ELIGIBLE story POIs (the CLI gates), so the Preview count is authoritative.
 function EnrichDialog({
   open,
   onOpenChange,
@@ -228,74 +191,48 @@ function EnrichDialog({
   summary: string
   onSubmitted: () => void
 }) {
-  const qc = useQueryClient()
-  const submitMut = useMutation({
-    mutationFn: (apply: boolean) => {
-      const body: Record<string, unknown> = { kind: 'enrich_region', apply, ...(apply ? { confirm: true } : {}) }
-      if (selection.kind === 'explicit') {
-        body.includeIds = selection.ids
-      } else {
-        if (selection.filter.bbox) body.bbox = selection.filter.bbox
-        if (selection.filter.source) body.source = selection.filter.source
-        if (selection.filter.query) body.query = selection.filter.query
-        if (selection.excludeIds.length) body.excludeIds = selection.excludeIds
-      }
-      return api.createJob(body)
-    },
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['runs'] }); onSubmitted() },
-  })
-  const err = submitMut.error
+  const buildBody = () => {
+    const body: Record<string, unknown> = { kind: 'enrich_region' }
+    if (selection.kind === 'explicit') {
+      body.includeIds = selection.ids
+    } else {
+      if (selection.filter.bbox) body.bbox = selection.filter.bbox
+      if (selection.filter.source) body.source = selection.filter.source
+      if (selection.filter.query) body.query = selection.filter.query
+      if (selection.excludeIds.length) body.excludeIds = selection.excludeIds
+    }
+    return body
+  }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4" /> Enrich corpus
-          </DialogTitle>
-          <DialogDescription>
-            Scouts each story POI ONCE into a curated, verbatim <strong>fact well</strong> on the shared corpus —
-            tours and roam both narrate from it. Run after Discover, before generating. Spends Anthropic credits
-            (no TTS). A re-discover now PRESERVES wells; rebuild one with Enrich after a material article change.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="rounded-lg border bg-muted/30 px-3 py-2 text-sm">
-          Enriching <span className="font-medium text-foreground">{summary}</span>.
-          <span className="text-muted-foreground"> Only eligible story POIs are enriched — Preview shows the exact count + cost.</span>
-        </div>
-
-        <div className="rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+    <JobActionDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      onSubmitted={onSubmitted}
+      icon={Sparkles}
+      title="Enrich corpus"
+      description={
+        <>
+          Scouts each story POI ONCE into a curated, verbatim <strong>fact well</strong> on the shared corpus —
+          tours and roam both narrate from it. Run after Discover, before generating. Spends Anthropic credits
+          (no TTS). A re-discover now PRESERVES wells; rebuild one with Enrich after a material article change.
+        </>
+      }
+      buildBody={buildBody}
+      applyLabel="Enrich"
+      applyIcon={Sparkles}
+      note={
+        <>
           <span className="font-medium text-foreground">Preview</span> dry-runs free (no model calls — prints the
           count + a cost estimate to the run log); <span className="font-medium text-foreground">Enrich</span> spends.
-        </div>
-
-        {err && (
-          <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {errMsg(err)}
-          </div>
-        )}
-
-        <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={submitMut.isPending}>
-            Cancel
-          </Button>
-          <Button variant="outline" disabled={submitMut.isPending} onClick={() => submitMut.mutate(false)}>
-            {submitMut.isPending ? 'Triggering…' : 'Preview'}
-          </Button>
-          <Button
-            disabled={submitMut.isPending}
-            // THIS DIALOG is the paid-run gate: it names the scope + "Enrich spends" cost and
-            // requires an explicit Enrich click, so the server's client-set confirm:true is already
-            // human-gated. No extra window.confirm — that was a redundant second prompt. Preview stays
-            // the free, authoritative count. (One-click-paid-run hole stays closed by the dialog itself.)
-            onClick={() => submitMut.mutate(true)}
-          >
-            <Sparkles className="h-4 w-4" /> {submitMut.isPending ? 'Triggering…' : 'Enrich'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </>
+      }
+    >
+      <div className="rounded-lg border bg-muted/30 px-3 py-2 text-sm">
+        Enriching <span className="font-medium text-foreground">{summary}</span>.
+        <span className="text-muted-foreground"> Only eligible story POIs are enriched — Preview shows the exact count + cost.</span>
+      </div>
+    </JobActionDialog>
   )
 }
 
@@ -489,6 +426,7 @@ function PoiDetailSheet({ poiId, poiName, canDelete, open, onOpenChange }: {
   onOpenChange: (open: boolean) => void
 }) {
   const qc = useQueryClient()
+  const confirm = useConfirm()
   const [tab, setTab] = useState<'facts' | 'corrections'>('facts')
   const { data: detail, error: err } = useQuery({
     queryKey: ['poi', poiId],
@@ -552,8 +490,13 @@ function PoiDetailSheet({ poiId, poiName, canDelete, open, onOpenChange }: {
                 size="sm"
                 className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                 disabled={deleteMut.isPending}
-                onClick={() => {
-                  if (!window.confirm(`Permanently delete "${poiName}"? This removes the POI record.`)) return
+                onClick={async () => {
+                  if (!(await confirm({
+                    title: 'Delete POI?',
+                    body: `Permanently delete “${poiName}”. This removes the POI record.`,
+                    confirmLabel: 'Delete',
+                    tone: 'destructive',
+                  }))) return
                   deleteMut.mutate()
                 }}
               >
@@ -962,6 +905,7 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
 function RetireTab({ flagged }: { flagged: PoiRow[] }) {
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const confirm = useConfirm()
   const [actionErr, setActionErr] = useState<string | null>(null)
 
   // Re-fetch is a FREE cloud job (MediaWiki only, no LLM/TTS) — fire it, then jump to Runs to watch.
@@ -1052,8 +996,13 @@ function RetireTab({ flagged }: { flagged: PoiRow[] }) {
                       variant="ghost"
                       size="sm"
                       disabled={!isOrphan || deleting}
-                      onClick={() => {
-                        if (!window.confirm(`Permanently delete "${p.name}"? This removes the POI record.`)) return
+                      onClick={async () => {
+                        if (!(await confirm({
+                          title: 'Retire POI?',
+                          body: `Permanently delete “${p.name}”. This removes the POI record.`,
+                          confirmLabel: 'Retire',
+                          tone: 'destructive',
+                        }))) return
                         deleteMut.mutate(p.id)
                       }}
                     >

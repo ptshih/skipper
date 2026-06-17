@@ -10,6 +10,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Callout } from '@/components/ui/callout'
 import { EmptyState } from '@/components/ui/empty-state'
+import { JobActionDialog } from '@/components/ui/job-action-dialog'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { cn } from '@/lib/utils'
 
 /* Region coverage derived from the pois array */
@@ -52,7 +54,6 @@ const DENSITY_META: Record<RegionCoverage['density'], { variant: 'success' | 'wa
 
 export function RoamView() {
   const navigate = useNavigate()
-  const qc = useQueryClient()
 
   // pois shares the ['pois'] key with PoisView; regions shares ['regions'] with Create/Regions.
   const poisQuery = useQuery({ queryKey: ['pois'], queryFn: async () => (await api.pois()).pois })
@@ -69,25 +70,15 @@ export function RoamView() {
     [pois],
   )
 
-  // Fire generate_roam for one region — this SPENDS (LLM + TTS per clip), so confirm first.
-  const generateMut = useMutation({
-    mutationFn: (r: RegionCoverage) => {
-      const bbox = regionMap.get(r.regionSlug)?.discoveryBbox
-      return api.createJob({ kind: 'generate_roam', ...(bbox ? { bbox } : {}), apply: true, confirm: true })
-    },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['runs'] }); navigate({ to: '/runs' }) },
-  })
-  function generateRoam(r: RegionCoverage) {
-    if (!window.confirm(`Generate roam clips for ${r.regionName}? This spends LLM + TTS credits per clip.`)) return
-    generateMut.mutate(r)
-  }
+  // The region whose "Generate roam" CTA is open in the dialog (null = closed). Replaces the old
+  // window.confirm — the dialog itself is the paid-run gate (names region + cost, explicit click),
+  // matching the Discover/Enrich Preview+apply pattern on the POIs page.
+  const [genTarget, setGenTarget] = useState<{ coverage: RegionCoverage; bbox: string | null } | null>(null)
 
   const err =
     poisQuery.error || regionsQuery.error
       ? `Couldn't load roam data — ${errMsg(poisQuery.error ?? regionsQuery.error)}`
-      : generateMut.error
-        ? `Generate roam failed — ${errMsg(generateMut.error)}`
-        : null
+      : null
 
   return (
     <div className="space-y-6">
@@ -111,7 +102,12 @@ export function RoamView() {
         {coverage.length === 0 ? (
           <EmptyState icon={MapPin} className="rounded-xl border bg-muted/30">No regions with POI data yet.</EmptyState>
         ) : (
-          <CoverageTable coverage={coverage} onGenerate={(r) => void generateRoam(r)} />
+          <CoverageTable
+            coverage={coverage}
+            onGenerate={(r) =>
+              setGenTarget({ coverage: r, bbox: regionMap.get(r.regionSlug)?.discoveryBbox ?? null })
+            }
+          />
         )}
       </section>
 
@@ -135,7 +131,59 @@ export function RoamView() {
           </div>
         )}
       </section>
+
+      <GenerateRoamDialog
+        target={genTarget}
+        onOpenChange={(open) => { if (!open) setGenTarget(null) }}
+        onSubmitted={() => { setGenTarget(null); navigate({ to: '/runs' }) }}
+      />
     </div>
+  )
+}
+
+/* ── GENERATE ROAM (per-region, spends) ── */
+
+// Replaces the old window.confirm with a focused shadcn Dialog matching Discover/Enrich on the POIs
+// page: Preview (free dry-run — prints the queue + cost estimate to the run log) or Generate roam
+// (apply, SPENDS Anthropic + TTS per clip). THIS dialog is the paid-run gate — it names the region +
+// cost and needs an explicit Generate click, so the server's confirm:true is already human-gated.
+function GenerateRoamDialog({
+  target,
+  onOpenChange,
+  onSubmitted,
+}: {
+  target: { coverage: RegionCoverage; bbox: string | null } | null
+  onOpenChange: (open: boolean) => void
+  onSubmitted: () => void
+}) {
+  const r = target?.coverage
+  return (
+    <JobActionDialog
+      open={target !== null}
+      onOpenChange={onOpenChange}
+      onSubmitted={onSubmitted}
+      icon={Zap}
+      title="Generate roam"
+      description="Narrates + synthesizes a free-roam encounter clip for every enriched, story-grade POI in the region. Run after Discover + Enrich on the POIs page. Spends Anthropic + TTS credits per clip."
+      buildBody={() => ({ kind: 'generate_roam', ...(target?.bbox ? { bbox: target.bbox } : {}) })}
+      applyLabel="Generate roam"
+      applyIcon={Zap}
+      note={
+        <>
+          <span className="font-medium text-foreground">Preview</span> dry-runs free (no narration or TTS —
+          prints the queue + a cost estimate to the run log); <span className="font-medium text-foreground">Generate roam</span> spends.
+        </>
+      }
+    >
+      {r && (
+        <div className="rounded-lg border bg-muted/30 px-3 py-2 text-sm">
+          Generating roam for <span className="font-medium text-foreground">{r.regionName}</span> —{' '}
+          <span className="font-mono tabular-nums">{r.qualified}</span> qualified POI{r.qualified === 1 ? '' : 's'},{' '}
+          <span className="font-mono tabular-nums">{r.withClips}</span> already have clips.
+          <span className="text-muted-foreground"> Only enriched POIs without a fresh clip run — Preview shows the exact queue + cost.</span>
+        </div>
+      )}
+    </JobActionDialog>
   )
 }
 
@@ -248,6 +296,7 @@ function ClipRow({ poi }: { poi: PoiRow }) {
 function RoamPlayer({ poiId }: { poiId: string }) {
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const confirm = useConfirm()
 
   const { data: clip, isLoading, error } = useQuery({
     queryKey: ['roamSign', poiId],
@@ -258,8 +307,12 @@ function RoamPlayer({ poiId }: { poiId: string }) {
     mutationFn: () => api.createJob({ kind: 'resynth_roam_clip', poiId, apply: true, confirm: true }),
     onSuccess: ({ job }) => { qc.invalidateQueries({ queryKey: ['runs'] }); navigate({ to: '/runs', hash: job.id }) },
   })
-  function handleResynth() {
-    if (!window.confirm('Re-synthesize the roam clip for this POI? This spends ~$0.01 in TTS credits and replaces the current clip.')) return
+  async function handleResynth() {
+    if (!(await confirm({
+      title: 'Re-synthesize roam clip?',
+      body: 'Spends ~$0.01 in TTS credits and replaces this POI’s current clip.',
+      confirmLabel: 'Re-synth',
+    }))) return
     resynthMut.mutate()
   }
 
@@ -288,7 +341,7 @@ function RoamPlayer({ poiId }: { poiId: string }) {
         )}
         {clip.factsHash && <code className="font-mono">{clip.factsHash.slice(0, 7)}</code>}
         <span className="flex-1" />
-        <Button variant="outline" size="sm" onClick={handleResynth} disabled={resynthMut.isPending}>
+        <Button variant="outline" size="sm" onClick={() => void handleResynth()} disabled={resynthMut.isPending}>
           <RefreshCw className="h-3 w-3" />
           {resynthMut.isPending ? 'Queuing…' : 'Re-synth clip'}
         </Button>

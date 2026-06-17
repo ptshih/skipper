@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input'
 import { Callout } from '@/components/ui/callout'
 import { SectionLabel } from '@/components/ui/section-label'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useConfirm, type ConfirmOptions } from '@/components/ui/confirm-dialog'
 import { cn } from '@/lib/utils'
 
 const DIMS: [string, string][] = [
@@ -168,6 +169,7 @@ function FrameRow({ kind, b, url }: { kind: 'intro' | 'outro'; b: TourDetail['fr
  *  fire a `patch_clip` job at this stop's track. Async: a launched job is watched in Runs. */
 function StopActions({ trackId }: { trackId: string }) {
   const qc = useQueryClient()
+  const confirm = useConfirm()
   const [find, setFind] = useState('')
   const [replace, setReplace] = useState('')
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
@@ -181,8 +183,8 @@ function StopActions({ trackId }: { trackId: string }) {
     onError: (e) => setMsg({ ok: false, text: errMsg(e) }),
   })
 
-  function fire(body: Record<string, unknown>, confirmText?: string) {
-    if (confirmText && !window.confirm(confirmText)) return
+  async function fire(body: Record<string, unknown>, opts?: ConfirmOptions) {
+    if (opts && !(await confirm(opts))) return
     setMsg(null)
     patchMut.mutate(body)
   }
@@ -193,14 +195,17 @@ function StopActions({ trackId }: { trackId: string }) {
         <Scissors size={12} className="shrink-0 text-muted-foreground" />
         <Input className="h-8 w-36" placeholder="find…" value={find} onChange={(e) => setFind(e.target.value)} />
         <Input className="h-8 w-36" placeholder="replace…" value={replace} onChange={(e) => setReplace(e.target.value)} />
-        <Button variant="outline" size="sm" disabled={patchMut.isPending || !find} onClick={() => fire({ find, replace })}>
+        <Button variant="outline" size="sm" disabled={patchMut.isPending || !find} onClick={() => void fire({ find, replace })}>
           Preview
         </Button>
         <Button
           variant="outline"
           size="sm"
           disabled={patchMut.isPending || !find}
-          onClick={() => fire({ find, replace, apply: true, confirm: true }, `Apply “${find}” → “${replace}” and re-synth this clip? Spends TTS credits.`)}
+          onClick={() => void fire(
+            { find, replace, apply: true, confirm: true },
+            { title: 'Apply find/replace?', body: `Replace “${find}” → “${replace}” and re-synth this clip. Spends TTS credits.`, confirmLabel: 'Apply' },
+          )}
         >
           Apply
         </Button>
@@ -209,7 +214,10 @@ function StopActions({ trackId }: { trackId: string }) {
           variant="outline"
           size="sm"
           disabled={patchMut.isPending}
-          onClick={() => fire({ revoice: true, apply: true, confirm: true }, 'Re-voice this clip with no text change? Spends TTS credits.')}
+          onClick={() => void fire(
+            { revoice: true, apply: true, confirm: true },
+            { title: 'Re-voice clip?', body: 'Re-synthesizes this clip with no text change. Spends TTS credits.', confirmLabel: 'Re-voice' },
+          )}
         >
           <RefreshCw size={12} /> Re-voice
         </Button>
@@ -370,6 +378,7 @@ export function TourDetailView() {
   const { id } = useParams({ strict: false })
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const confirm = useConfirm()
 
   const { data, error } = useQuery({ queryKey: ['tour', id], queryFn: () => api.tour(id!), enabled: !!id })
   // Signed audio URLs — a failure here is non-fatal (the page renders without playable audio).
@@ -389,8 +398,9 @@ export function TourDetailView() {
       navigate({ to: '/runs' })
     },
   })
-  function fireJob(body: Record<string, unknown>, confirmText: string) {
-    if (jobMut.isPending || !window.confirm(confirmText)) return
+  async function fireJob(body: Record<string, unknown>, opts: ConfirmOptions) {
+    if (jobMut.isPending) return
+    if (!(await confirm(opts))) return
     jobMut.mutate(body)
   }
 
@@ -401,12 +411,12 @@ export function TourDetailView() {
   const regenerate = () =>
     fireJob(
       { kind: 'generate', slug: tour.slug, dryRun: false, maxCostUsd: 5, confirm: true },
-      `Regenerate “${tour.slug}” from scratch? This spends up to ~$5 of TTS credits.`,
+      { title: 'Regenerate tour?', body: `Regenerate “${tour.slug}” from scratch. Spends up to ~$5 of TTS credits.`, confirmLabel: 'Regenerate' },
     )
   const resynth = () =>
     fireJob(
       { kind: 'resynth', tourId: tour.id, apply: true, confirm: true },
-      `Re-voice every clip of “${tour.slug}”? This spends TTS credits.`,
+      { title: 'Re-voice every clip?', body: `Re-voice every clip of “${tour.slug}”. Spends TTS credits.`, confirmLabel: 'Re-voice' },
     )
 
   const urlForSeq = new Map(signed?.stops.map((s) => [s.seq, s.url]) ?? [])

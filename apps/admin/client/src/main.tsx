@@ -4,6 +4,7 @@ import { RouterProvider } from '@tanstack/react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { router } from './router'
 import { ErrorBoundary, renderBootError } from './components/ErrorBoundary'
+import { ConfirmProvider } from './components/ui/confirm-dialog'
 import './index.css'
 
 const queryClient = new QueryClient({
@@ -27,7 +28,9 @@ try {
     <React.StrictMode>
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
-          <RouterProvider router={router} />
+          <ConfirmProvider>
+            <RouterProvider router={router} />
+          </ConfirmProvider>
         </QueryClientProvider>
       </ErrorBoundary>
     </React.StrictMode>,

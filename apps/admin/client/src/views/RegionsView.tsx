@@ -202,9 +202,7 @@ function RegionDialog({
         </div>
 
         {saveMut.error && (
-          <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {errMsg(saveMut.error)}
-          </div>
+          <Callout variant="error" className="rounded-lg px-3 py-2">{errMsg(saveMut.error)}</Callout>
         )}
 
         <DialogFooter>

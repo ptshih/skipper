@@ -22,6 +22,7 @@ import { Segmented } from '@/components/ui/segmented'
 import { EmptyState } from '@/components/ui/empty-state'
 import { TableSkeletonRows } from '@/components/ui/skeleton'
 import { SectionLabel } from '@/components/ui/section-label'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import {
   Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle,
 } from '@/components/ui/sheet'
@@ -50,6 +51,7 @@ function PulseDot() {
 export function RunsView() {
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const confirm = useConfirm()
   const [src, setSrc] = useState<'all' | 'job' | 'eval'>('all')
   const [kindFilter, setKindFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<string>('all')
@@ -69,8 +71,13 @@ export function RunsView() {
     mutationFn: () => api.createJob({ kind: 'sweep_orphans', allTours: true, apply: true, confirm: true }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['runs'] }),
   })
-  function sweepOrphans() {
-    if (!window.confirm('Sweep orphaned clips across ALL tours? This permanently DELETES R2 bytes that no track or frame references.')) return
+  async function sweepOrphans() {
+    if (!(await confirm({
+      title: 'Sweep orphaned clips?',
+      body: 'Permanently DELETES R2 bytes that no track or frame references — across ALL tours.',
+      confirmLabel: 'Sweep',
+      tone: 'destructive',
+    }))) return
     sweepMut.mutate()
   }
 
@@ -112,7 +119,7 @@ export function RunsView() {
           <Button
             variant="outline"
             disabled={sweepMut.isPending}
-            onClick={() => sweepOrphans()}
+            onClick={() => void sweepOrphans()}
             title="Maintenance — delete R2 clips no track or frame references"
           >
             <Trash2 className="h-4 w-4" /> {sweepMut.isPending ? 'Sweeping…' : 'Sweep orphans'}

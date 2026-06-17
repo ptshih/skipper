@@ -15,6 +15,7 @@ import { SearchInput } from '@/components/ui/search-input'
 import { Segmented } from '@/components/ui/segmented'
 import { EmptyState } from '@/components/ui/empty-state'
 import { TableSkeletonRows } from '@/components/ui/skeleton'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { cn } from '@/lib/utils'
 
 type SortKey = 'headline' | 'regionName' | 'status' | 'stops' | 'distanceMeters' | 'durationSeconds' | 'eval' | 'updatedAt'
@@ -75,6 +76,7 @@ function SortHead({
 export function ToursView() {
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const confirm = useConfirm()
   const [q, setQ] = useState('')
   const [status, setStatus] = useState<StatusFilter>('all')
   const [region, setRegion] = useState('all')
@@ -100,9 +102,13 @@ export function ToursView() {
       navigate({ to: '/runs' })
     },
   })
-  function generate(slugs: string[]) {
+  async function generate(slugs: string[]) {
     if (slugs.length === 0) return
-    if (!window.confirm(`Generate ${slugs.length} tour${slugs.length > 1 ? 's' : ''}? This spends LLM + TTS credits.`)) return
+    if (!(await confirm({
+      title: `Generate ${slugs.length} tour${slugs.length > 1 ? 's' : ''}?`,
+      body: 'Spends LLM + TTS credits.',
+      confirmLabel: 'Generate',
+    }))) return
     generateMut.mutate(slugs)
   }
 
@@ -153,7 +159,7 @@ export function ToursView() {
         actions={
           <>
             {draftSlugs.length > 0 && (
-              <Button variant="outline" onClick={() => generate(draftSlugs)}>
+              <Button variant="outline" onClick={() => void generate(draftSlugs)}>
                 <Sparkles className="h-4 w-4" /> Generate all drafts ({draftSlugs.length})
               </Button>
             )}
@@ -253,7 +259,7 @@ export function ToursView() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={(e) => { e.stopPropagation(); generate([t.slug]) }}
+                          onClick={(e) => { e.stopPropagation(); void generate([t.slug]) }}
                           title="Generate this tour (spends credits)"
                         >
                           <Sparkles className="h-3 w-3" /> Generate
