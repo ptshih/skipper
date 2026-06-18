@@ -18,9 +18,9 @@
 // not ownership.
 
 import { Hono, type Context } from 'hono'
-import { and, asc, between, desc, eq, inArray, isNull } from 'drizzle-orm'
+import { and, asc, between, desc, eq, inArray } from 'drizzle-orm'
 import { db } from '@skipper/db'
-import { pois, regions, segments, tracks, tourFrames, tours } from '@skipper/db/schema'
+import { narrations, pois, regions, segments, tracks, tourFrames, tours } from '@skipper/db/schema'
 import type { StopType } from '@skipper/shared'
 import type { Tour as TourRow } from '@skipper/db/schema'
 import { auth } from './auth'
@@ -388,9 +388,8 @@ function haversineMeters(aLat: number, aLng: number, bLat: number, bLng: number)
 }
 
 // FREE-ROAM manifest: every roam-narratable place near a point, with presigned clip URLs
-// (shared schema: roamManifest). Roam narration is ROAM-owned: a roam encounter is a
-// placeless-of-tour `segment` (tour_id NULL) with its canonical (variant 0) `track`
-// (docs/ideas/free-roam-mode.md); a track only goes live complete, so everything returned is
+// (shared schema: roamManifest). Roam is a MODE over the SHARED narration layer (V2): a roam
+// encounter is a poi's 1:1 `narration` — audio_url is NOT NULL, so everything returned is
 // playable. Geo filter runs in JS — the corpus is a few hundred rows per region at most, so a
 // bbox prefilter + haversine beats dragging in PostGIS.
 // ALPHA: OPEN, like ?preview=1 (founder TestFlight toy; no UI links it for anyone else).
@@ -414,20 +413,18 @@ app.get('/roam', async (c) => {
     () =>
       db
         .select({
-          poiId: segments.poiId,
+          poiId: narrations.poiId,
           name: pois.name,
           kind: pois.kind,
           lat: pois.lat,
           lng: pois.lng,
-          key: tracks.audioUrl,
-          durationMs: tracks.audioDurationMs,
+          key: narrations.audioUrl,
+          durationMs: narrations.audioDurationMs,
         })
-        .from(segments)
-        .innerJoin(tracks, and(eq(tracks.segmentId, segments.id), eq(tracks.variant, 0)))
-        .innerJoin(pois, eq(pois.id, segments.poiId))
+        .from(narrations)
+        .innerJoin(pois, eq(pois.id, narrations.poiId))
         .where(
           and(
-            isNull(segments.tourId),
             between(pois.lat, lat - dLat, lat + dLat),
             between(pois.lng, lng - dLng, lng + dLng),
           ),
