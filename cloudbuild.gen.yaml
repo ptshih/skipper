@@ -26,7 +26,13 @@ steps:
 
   # 3. Create-or-update the Cloud Run Job (idempotent on every run).
   #    --max-retries=0: a half-run regen must never silently re-fire (it spends $ + writes prod).
-  #    --task-timeout=3600: the only hard wall on a runaway run (~13-min worst case today).
+  #    --task-timeout=21600 (6h): wall-clock cap. The real spend guard is the script's own
+  #      --max-cost (aborts before any $ if the estimate exceeds the cap); this is just the
+  #      runaway-wall-clock backstop. 3600 (1h) was too small once a FULL-REGION roam run
+  #      (the whole TAHOE_RENO_BBOX — hundreds of clips narrated then synthesized at conc 6)
+  #      became the worst case: it timed out at 1h and --max-retries=0 made that a hard fail.
+  #      generate-roam is idempotent (per-clip upsert; a re-run skips fresh clips), so a 6h
+  #      one-shot covers a full region with headroom. Max allowed is 168h.
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:slim'
     entrypoint: gcloud
     args:
@@ -39,7 +45,7 @@ steps:
       - --service-account=skipper-gen@$PROJECT_ID.iam.gserviceaccount.com
       - --set-secrets=DOTENV_PRIVATE_KEY_PRODUCTION=dotenv-private-key-production:latest
       - --max-retries=0
-      - --task-timeout=3600
+      - --task-timeout=21600
       - --memory=2Gi
       - --cpu=1
 

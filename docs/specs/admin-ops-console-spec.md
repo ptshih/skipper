@@ -132,9 +132,11 @@ Migration: add the table → `bun run db:generate` (emits SQL in `packages/db/dr
   `GOOGLE_CLOUD_PROJECT` + R2 vars come from the decrypted `.env.production`.
 - **Create:** `gcloud run jobs deploy skipper-gen --image=… --region=us-east4
   --set-secrets=DOTENV_PRIVATE_KEY_PRODUCTION=dotenv-private-key-production:latest
-  --service-account=skipper-gen@… --max-retries=0 --task-timeout=3600` (`jobs deploy` is
-  create-or-update; **`--max-retries=0`** so a half-run regen never silently re-fires; 60-min
-  timeout covers the ~13-min worst case AND is the only hard wall on a runaway run — see §12).
+  --service-account=skipper-gen@… --max-retries=0 --task-timeout=21600` (`jobs deploy` is
+  create-or-update; **`--max-retries=0`** so a half-run regen never silently re-fires; 6h
+  timeout covers a full-region roam run — the real spend guard is the script's own `--max-cost`;
+  the wall-clock cap is just the runaway backstop. Raised from 3600 (it timed out a full-region
+  generate_roam) 2026-06-17 — see §12).
 
 ### Override-args contract (admin-api / gcloud builds these per kind)
 
@@ -340,7 +342,7 @@ A truly minimal first cut can defer step 2's per-phase tick — terminal status 
   - **The seed's Tahoe-bbox sanity check** (validates the polyline sits in a Tahoe bounding box) must be
     generalized/parameterized by region — or dropped — before creating tours outside Tahoe.
 - **`--max-cost` is pre-TTS only:** it aborts before audio, but LLM spend is already sunk and there's
-  no Ctrl-C in the cloud — a runaway narration is capped only by the 60-min task-timeout. Keep it tight.
+  no Ctrl-C in the cloud — a runaway narration is capped by the script's `--max-cost` and the 6h task-timeout. Keep it tight.
 - **Concurrent executions** on the same slug can race the ready-gate (Jobs allow parallel executions);
   the §8 idempotency gate covers the common double-trigger, not two deliberately different ops at once.
 - **Crashed `running` rows** linger until someone opens the UI to trigger the reconcile (fine, single-user).
