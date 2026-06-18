@@ -6,7 +6,7 @@
 // to ENFORCE a declared constraint; what these catch is a schema edit that silently DROPS one.
 import { describe, expect, it } from 'bun:test'
 import { getTableConfig, type PgTable } from 'drizzle-orm/pg-core'
-import { pois, segments, tourFrames, tracks } from '../src/schema'
+import { drives, interludes, narrations, pois, segments, tourFrames, tracks } from '../src/schema'
 
 function columnByDbName(table: PgTable, dbName: string) {
   const c = getTableConfig(table).columns.find((col) => col.name === dbName)
@@ -19,6 +19,11 @@ function uniqueIndexNames(table: PgTable): string[] {
     .indexes.filter((i) => i.config.unique)
     .map((i) => i.config.name)
     .filter((n): n is string => typeof n === 'string')
+}
+
+/** Names of UNIQUE CONSTRAINTS (vs uniqueIndex) — e.g. a `unique().nullsNotDistinct()`. */
+function uniqueConstraintNames(table: PgTable): string[] {
+  return getTableConfig(table).uniqueConstraints.map((u) => u.name)
 }
 
 /** The ON DELETE action for the FK whose LOCAL column is `localDbName` (e.g. 'segment_id'). */
@@ -79,5 +84,27 @@ describe('per-tour ordering uniques (no duplicate seq / form / frame-kind)', () 
   })
   it('frames are unique per (tour, kind) — one intro, one outro', () => {
     expect(uniqueIndexNames(tourFrames)).toContain('tour_frames_tour_kind_uq')
+  })
+})
+
+describe('V2 — narrations / drives / interludes structural invariants', () => {
+  it('narrations are 1:1 with a poi (UNIQUE poi_id)', () => {
+    expect(uniqueIndexNames(narrations)).toContain('narrations_poi_uq')
+  })
+  it('a narration cascade-deletes with its poi (the telling dies with the place)', () => {
+    expect(fkOnDelete(narrations, 'poi_id')).toBe('cascade')
+  })
+  it('a narration always carries audio (audio_url + audio_duration_ms NOT NULL)', () => {
+    expect(columnByDbName(narrations, 'audio_url').notNull).toBe(true)
+    expect(columnByDbName(narrations, 'audio_duration_ms').notNull).toBe(true)
+  })
+  it('interludes always carry audio + are unique per (region, persona, kind, variant)', () => {
+    expect(columnByDbName(interludes, 'audio_url').notNull).toBe(true)
+    expect(columnByDbName(interludes, 'audio_duration_ms').notNull).toBe(true)
+    expect(uniqueConstraintNames(interludes)).toContain('interludes_lookup_uq')
+  })
+  it('a drive is user-owned (user_id NOT NULL) and carries a route signature', () => {
+    expect(columnByDbName(drives, 'user_id').notNull).toBe(true)
+    expect(columnByDbName(drives, 'route_sig').notNull).toBe(true)
   })
 })

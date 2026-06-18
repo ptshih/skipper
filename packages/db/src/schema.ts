@@ -104,6 +104,27 @@ export type RouteProvenance = {
   }
 }
 
+/**
+ * A DRIVE's frozen, ordered manifest (the `drives.selection` jsonb). One entry per played item in
+ * route order: a place NARRATION (referenced 1:1 via its poi — content resolves LIVE so a regenerated
+ * telling auto-improves a saved drive) or a generic INTERLUDE (intro/outro/clock beat). The STRUCTURE
+ * is frozen at create time (which items, order, snapped trigger geometry); only a narration's audio
+ * resolves live. buildDrive (drive-core) produces the narration items; the API weaves the interludes.
+ */
+export type DriveSelectionItem =
+  | {
+      kind: 'narration'
+      seq: number
+      poiId: string
+      narrationId: string
+      alongSec: number
+      triggerLat: number
+      triggerLng: number
+      approachHeadingDeg: number
+    }
+  | { kind: 'interlude'; seq: number; interludeId: string; alongSec: number }
+export type DriveSelection = DriveSelectionItem[]
+
 /* -------------------------------------------------------------------------- */
 /*  Enums — keep these in lockstep with the Zod enums in @skipper/shared        */
 /* -------------------------------------------------------------------------- */
@@ -517,6 +538,122 @@ export const tourFrames = pgTable(
 )
 
 /* -------------------------------------------------------------------------- */
+/*  V2 — narrations / interludes / drives / drive_demand                        */
+/*  The roam-first model: pois ──1:1── narrations (the shared telling); roam is  */
+/*  a MODE over them; a `drive` is a user-owned ordered sequence; interludes are */
+/*  the generic placeless flavor. EXPAND phase — added ALONGSIDE the legacy tour */
+/*  tables (tours/segments/tracks/tour_frames), which drop once consumers rewire. */
+/* -------------------------------------------------------------------------- */
+
+// The ONE shared telling of a place — 1:1 with its poi (UNIQUE poi_id). The atom: roam plays these by
+// proximity and every drive REFERENCES them (narration content resolves live via poi_id; nothing else
+// owns it). The old roam `tracks` hoisted to hang directly off the poi — no segment, no `variant` (one
+// telling per place; multi-telling axes — authored tours, region-skippers, joke notches — are deferred
+// and re-expand storage then). Persona is baked into the single telling (one host per region in v2). A
+// row goes live only post-synthesis (audio_url NOT NULL, via trackColumns).
+export const narrations = pgTable(
+  'narrations',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    poiId: uuid('poi_id')
+      .notNull()
+      .references(() => pois.id, { onDelete: 'cascade' }),
+    // story|scenic|break|wave — the telling's treatment (1:1, so no `variant`).
+    form: trackFormEnum('form').notNull(),
+    ...trackColumns,
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull()
+      .$onUpdate(() => new Date()),
+  },
+  // UNIQUE poi_id = the 1:1 invariant (and the lookup index for roam/drive joins).
+  (t) => [uniqueIndex('narrations_poi_uq').on(t.poiId)],
+)
+
+// Generic, region/persona-owned FLAVOR woven BETWEEN place narrations: intro/outro brackets + the
+// clock-anchored "halfway there" beats. Placeless (no poi, no facts → no attribution/factsHash).
+// SHARED + reused across every drive in a region (the inverse of zero-reuse, which governs only the
+// deferred authored rung). `kind` is plain text validated by the Zod `interludeKind` enum at the
+// boundary (the vocabulary churns — the gen_jobs.kind precedent). Starts EMPTY (filled by a
+// founder-gated synth run); region_id null = a GLOBAL interlude.
+export const interludes = pgTable(
+  'interludes',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    regionId: uuid('region_id').references(() => regions.id, { onDelete: 'cascade' }),
+    personaKey: text('persona_key').notNull(),
+    kind: text('kind').notNull(),
+    /** Distinguishes variants of the same (region, persona, kind) so a beat rarely repeats. */
+    variant: integer('variant').notNull().default(0),
+    script: text('script'),
+    audioUrl: text('audio_url').notNull(),
+    audioDurationMs: integer('audio_duration_ms').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    // One row per (region, persona, kind, variant); NULLS NOT DISTINCT so a GLOBAL (null-region)
+    // beat is still unique on its (persona, kind, variant).
+    unique('interludes_lookup_uq')
+      .on(t.regionId, t.personaKey, t.kind, t.variant)
+      .nullsNotDistinct(),
+    index('interludes_lookup_idx').on(t.regionId, t.personaKey, t.kind),
+  ],
+)
+
+// A user-owned DRIVE: an ordered sequence of place narrations (+ interludes) along a frozen route.
+// Ownership lives HERE on `user_id` (a user-side table), NEVER on tours — preserving the
+// anonymous/shareable-tour invariant. References shared narrations; mints no narration. The frozen
+// `selection` manifest is replayed verbatim on re-open (structure frozen; narration content live).
+export const drives = pgTable(
+  'drives',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    // Soft ref to the auth `user.id` (TEXT) — auth runs on a SEPARATE neon-serverless pool, so a
+    // DB-level FK isn't enforceable here; validated at the app boundary.
+    userId: text('user_id').notNull(),
+    regionId: uuid('region_id').references(() => regions.id, { onDelete: 'set null' }),
+    label: text('label'),
+    startName: text('start_name'),
+    startLat: doublePrecision('start_lat').notNull(),
+    startLng: doublePrecision('start_lng').notNull(),
+    endName: text('end_name'),
+    endLat: doublePrecision('end_lat').notNull(),
+    endLng: doublePrecision('end_lng').notNull(),
+    polyline: jsonb('polyline').$type<Polyline>().notNull(),
+    distanceMeters: integer('distance_meters'),
+    durationSeconds: integer('duration_seconds'),
+    routeProvenance: jsonb('route_provenance').$type<RouteProvenance>(),
+    // Shape-aware route signature (region + quantized endpoints + via-points) — the demand +
+    // cache-warming key (instrumentation only in v2). Indexed.
+    routeSig: text('route_sig').notNull(),
+    selection: jsonb('selection').$type<DriveSelection>().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [index('drives_user_idx').on(t.userId), index('drives_route_sig_idx').on(t.routeSig)],
+)
+
+// Shared route-sig DEMAND counter — instrumentation ONLY in v2 (the cache-warming / authored-tour
+// graduation job that CONSUMES it is deferred behind a real route-concentration histogram). One row
+// per normalized route signature.
+export const driveDemand = pgTable('drive_demand', {
+  routeSig: text('route_sig').primaryKey(),
+  regionId: uuid('region_id').references(() => regions.id, { onDelete: 'set null' }),
+  hits: integer('hits').notNull().default(0),
+  distinctUsers: integer('distinct_users').notNull().default(0),
+  lastHitAt: timestamp('last_hit_at', { withTimezone: true }).defaultNow().notNull(),
+  warmedAt: timestamp('warmed_at', { withTimezone: true }),
+})
+
+/* -------------------------------------------------------------------------- */
 /*  eval_runs / eval_scores — the DURABLE eval record (observability, not state) */
 /* -------------------------------------------------------------------------- */
 
@@ -681,8 +818,9 @@ export const personasRelations = relations(personas, ({ many }) => ({
   segments: many(segments),
 }))
 
-export const poisRelations = relations(pois, ({ many }) => ({
+export const poisRelations = relations(pois, ({ one, many }) => ({
   segments: many(segments),
+  narration: one(narrations),
 }))
 
 export const toursRelations = relations(tours, ({ one, many }) => ({
@@ -724,6 +862,18 @@ export const tourFramesRelations = relations(tourFrames, ({ one }) => ({
   }),
 }))
 
+export const narrationsRelations = relations(narrations, ({ one }) => ({
+  poi: one(pois, { fields: [narrations.poiId], references: [pois.id] }),
+}))
+
+export const interludesRelations = relations(interludes, ({ one }) => ({
+  region: one(regions, { fields: [interludes.regionId], references: [regions.id] }),
+}))
+
+export const drivesRelations = relations(drives, ({ one }) => ({
+  region: one(regions, { fields: [drives.regionId], references: [regions.id] }),
+}))
+
 /* -------------------------------------------------------------------------- */
 /*  Inferred row types (import via the "@skipper/db/schema" subpath, aliased)   */
 /* -------------------------------------------------------------------------- */
@@ -750,3 +900,11 @@ export type TourFrame = typeof tourFrames.$inferSelect
 export type NewTourFrame = typeof tourFrames.$inferInsert
 export type GenJob = typeof genJobs.$inferSelect
 export type NewGenJob = typeof genJobs.$inferInsert
+export type Narration = typeof narrations.$inferSelect
+export type NewNarration = typeof narrations.$inferInsert
+export type Interlude = typeof interludes.$inferSelect
+export type NewInterlude = typeof interludes.$inferInsert
+export type Drive = typeof drives.$inferSelect
+export type NewDrive = typeof drives.$inferInsert
+export type DriveDemand = typeof driveDemand.$inferSelect
+export type NewDriveDemand = typeof driveDemand.$inferInsert
