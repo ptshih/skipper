@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import {
   attributionSource,
+  driveClipForm,
   frameKind,
   jokeLevel,
   platform,
@@ -275,3 +276,108 @@ export type RoamPin = z.infer<typeof roamPin>
 /** GET /roam?lat=&lng=&radiusKm= — every roam-narratable place near a point. */
 export const roamManifest = z.object({ pins: z.array(roamPin) })
 export type RoamManifest = z.infer<typeof roamManifest>
+
+/* -------------------------------------------------------------------------- */
+/*  Create-a-Drive (V2) — a user-owned, on-demand A→B drive over reused narrations */
+/* -------------------------------------------------------------------------- */
+
+/** A free-text-or-coords endpoint. The propose step's LLM resolves `text` to the best in-region
+ *  anchor; explicit `lat`/`lng` skip resolution. */
+export const driveEndpointInput = z.object({
+  text: z.string().optional(),
+  name: z.string().optional(),
+  lat: z.number().optional(),
+  lng: z.number().optional(),
+})
+export type DriveEndpointInput = z.infer<typeof driveEndpointInput>
+
+/** POST /drives/propose — resolve free-text A→B + preview the route. Cheap; persists nothing, no credit. */
+export const driveProposeRequest = z.object({
+  regionId: z.uuid(),
+  start: driveEndpointInput,
+  end: driveEndpointInput,
+})
+export type DriveProposeRequest = z.infer<typeof driveProposeRequest>
+
+const resolvedEndpoint = z.object({ name: z.string(), lat: z.number(), lng: z.number() })
+
+/** The proposed route to CONFIRM before generating: resolved endpoints + a route preview. */
+export const driveProposal = z.object({
+  regionId: z.uuid(),
+  start: resolvedEndpoint,
+  end: resolvedEndpoint,
+  polyline,
+  distanceMeters: z.number().int(),
+  durationSeconds: z.number().int(),
+  routeSig: z.string(),
+  /** Rough # of narratable places along the route (for the confirm screen). */
+  estStopCount: z.number().int().nullish(),
+})
+export type DriveProposal = z.infer<typeof driveProposal>
+
+/** POST /drives — generate + persist the confirmed drive (consumes a credit; account-gated). */
+export const createDriveRequest = z.object({
+  regionId: z.uuid(),
+  start: resolvedEndpoint,
+  end: resolvedEndpoint,
+  jokeLevel: jokeLevel.optional(),
+})
+export type CreateDriveRequest = z.infer<typeof createDriveRequest>
+
+/** One played item in a drive: a place NARRATION or a placeless INTERLUDE, with its presigned clip.
+ *  A superset of roamPin (a narration) + the framing beats — the player's single clip shape. */
+export const driveClip = z.object({
+  /** ≥0 for a real stop in route order; framing/interludes use negative sentinels the player maps. */
+  seq: z.number().int(),
+  form: driveClipForm,
+  poiId: z.uuid().nullish(),
+  name: z.string().nullish(),
+  /** Trigger point (the narration snapped to THIS route). Null for clock-anchored interludes. */
+  lat: z.number().nullish(),
+  lng: z.number().nullish(),
+  triggerRadiusM: z.number().int().nullish(),
+  approachHeadingDeg: z.number().int().nullish(),
+  /** Along-route time (s) — ordering + clock-anchored placement. */
+  alongSec: z.number(),
+  durationMs: z.number().int().nullish(),
+  /** Presigned clip URL (short TTL); null for a silent rest beat. */
+  url: z.url().nullish(),
+  contentType: z.string().nullish(),
+  attribution: attributionList.optional(),
+  /** Offline-staleness token — see tourStopView.revisedAt. */
+  revisedAt: z.iso.datetime().nullish(),
+})
+export type DriveClip = z.infer<typeof driveClip>
+
+/** POST /drives result / GET /drives/:id — the playable drive: route + ordered clips. */
+export const driveManifest = z.object({
+  /** Null for an unsaved/ephemeral manifest; set once persisted + owned. */
+  driveId: z.uuid().nullable(),
+  label: z.string(),
+  regionId: z.uuid().nullish(),
+  polyline,
+  distanceMeters: z.number().int().nullish(),
+  durationSeconds: z.number().int().nullish(),
+  clips: z.array(driveClip),
+})
+export type DriveManifest = z.infer<typeof driveManifest>
+
+/** GET /drives — one card per saved drive (the caller's own; no geometry). */
+export const driveSummary = z.object({
+  driveId: z.uuid(),
+  label: z.string(),
+  regionId: z.uuid().nullish(),
+  startName: z.string().nullish(),
+  endName: z.string().nullish(),
+  distanceMeters: z.number().int().nullish(),
+  durationSeconds: z.number().int().nullish(),
+  clipCount: z.number().int(),
+  createdAt: z.iso.datetime(),
+})
+export type DriveSummary = z.infer<typeof driveSummary>
+export const driveList = z.object({ drives: z.array(driveSummary) })
+export type DriveList = z.infer<typeof driveList>
+
+/** POST /drives/:id/assets/sign — re-presigned clip URLs (offline refresh), keyed by seq. */
+export const signedDriveAudio = z.object({ clips: z.array(signedStopClip) })
+export type SignedDriveAudio = z.infer<typeof signedDriveAudio>

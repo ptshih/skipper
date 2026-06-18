@@ -41,6 +41,25 @@ export type StopType = z.infer<typeof stopType>
 export const frameKind = z.enum(['intro', 'outro'])
 export type FrameKind = z.infer<typeof frameKind>
 
+/** The WIRE form of one clip in a DRIVE manifest — a superset of the played narration forms
+ *  (story/scenic/break/wave) plus the placeless framing woven between place narrations
+ *  (intro/outro brackets + clock-anchored interlude beats). The player's icon/treatment switch. */
+export const driveClipForm = z.enum(['story', 'scenic', 'break', 'wave', 'intro', 'outro', 'interlude'])
+export type DriveClipForm = z.infer<typeof driveClipForm>
+
+/** The kind of a generic INTERLUDE (the `interludes` table) — a placeless persona beat. `intro`/
+ *  `outro` bracket the drive; the rest are clock-anchored progress beats. Plain `text` in the DB
+ *  (the vocabulary churns — the gen_jobs.kind precedent); this Zod enum is the boundary-validated set. */
+export const interludeKind = z.enum([
+  'intro',
+  'outro',
+  'quarter',
+  'half',
+  'three_quarter',
+  'last_stretch',
+])
+export type InterludeKind = z.infer<typeof interludeKind>
+
 /** Where a POI came from (its DISCOVERY source). Stored for dedup + attribution (Wikipedia is
  *  CC BY-SA; a named scenic pin is discovered from Wikidata, CC0). */
 export const poiSource = z.enum(['wikipedia', 'google_places', 'wikidata'])
