@@ -66,12 +66,12 @@ regenerated telling auto-improves a saved drive; a deleted POI → skip).
    Persists nothing, no credit. (Loops: the LLM resolves "around the lake" → waypoints; `materializeRoute`
    takes a waypoint ARRAY; `route_sig` must be SHAPE-AWARE so loops don't collide on endpoints.)
 3. **Confirm or modify** (re-propose is free).
-4. → **`POST /drives`**: deterministic `generateDrive` over reused narrations + interludes, persist the
+4. → **`POST /drives`**: deterministic `buildDrive` over reused narrations + interludes, persist the
    owned `drives` row, bump `drive_demand`. **Consumes 1 credit (refunded on failure).**
 5. Push to **preview** (couch sim via `buildPreviewTimeline`) → **start drive** (live GPS).
 
 - **LLM does ONLY endpoint resolution**; route = `materializeRoute` (Google Routes v2), selection =
-  deterministic `generateDrive` (keeps drives fast/frozen/reproducible). No TTS on the path → ~1–2s.
+  deterministic `buildDrive` (keeps drives fast/frozen/reproducible). No TTS on the path → ~1–2s.
 - **Loading = persona-voiced "thinking" phases** (theatrical for v2; don't pad past the real work).
 - Sparse route → "not enough here, try a different start/end" (no auto-handoff). Degenerate-route bounds
   ADMIN-configurable.
@@ -86,11 +86,13 @@ core; the credit IAP is a fast-follow.
 
 ## Key engineering decisions
 
-- **`generateDrive()` is NEW in `drive-core`** (NOT a refactor of `selectStops`): co-located dedupe
+- **`buildDrive()` is NEW in `drive-core`** (named `buildDrive`, not `generateDrive` — the drive
+  simulator already owns `generateDrive` for GPS-fix generation; "drive" stays the product verb +
+  `POST /drives`. NOT a refactor of `selectStops`): co-located dedupe
   **inverts to pick-one** (can't fuse finished `.m4a`s); ranks by along-route fit + real
   `audioDurationMs` best-fit + variety; runs server-side AND on-device (offline re-pace). Lift shared
   pacing (`snapOf`, min-gap windowing, `selectBreaks`, `projectQueueLag`) into `drive-core/pacing.ts`,
-  imported by both `selectStops` and `generateDrive`. **Pin `selectStops` behavior with tests BEFORE
+  imported by both `selectStops` and `buildDrive`. **Pin `selectStops` behavior with tests BEFORE
   extracting** so the live generator can't regress.
 - **Interludes = pre-generated GENERIC** (intro/outro + clock-anchored beats). Live-gen / name-
   personalized brackets POSTPONED (measured synth latency too fragile for the mandatory first beat).
@@ -104,7 +106,11 @@ core; the credit IAP is a fast-follow.
 ## Build phases
 
 - **P1 — selection core (drive-core).** Pin `selectStops` tests → extract `drive-core/pacing.ts` →
-  `generateDrive()` + unit tests. Zero spend, no schema, no UI. **(in progress)**
+  `buildDrive()` + unit tests. Zero spend, no schema, no UI. **(DONE 2026-06-18: the 4 route-geometry
+  helpers single-sourced into `drive-core/geo.ts` (re-exported via `pipeline/geo.ts`, `selectStops`
+  untouched); new `drive-core/pacing.ts` (`buildRouteSnapper` + `projectQueueLag`) + `drive-core/drive-select.ts`
+  (`buildDrive`); both packages typecheck clean + 63 drive-core tests pass + generator `geo`/`select`
+  regression green. UNCOMMITTED.)**
 - **P2 — thinnest demoable slice.** `POST /drives/propose` + `POST /drives` + `@skipper/shared` DTOs +
   minimal free-text A→B screen → couch preview. (Needs a free account; persists.)
 - **P3 — interludes library.** Generic intro/outro + clock beats. **ONE founder-gated paid synth run.**

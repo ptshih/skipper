@@ -102,3 +102,49 @@ export function nearestOnRoute(polyline: LngLat[], cumulative: number[], point: 
   const v = polyline[bestIndex]!
   return { index: bestIndex, lng: v[0], lat: v[1], offRouteM: bestDist, alongM: cumulative[bestIndex] ?? 0 }
 }
+
+// --- Route-relative helpers ---------------------------------------------------
+// Pure route geometry shared by the generator's stop selection (re-exported via
+// pipeline/geo.ts) and drive-core's own buildDrive pacing — single-sourced here so
+// both place candidates on a route identically.
+
+/** Total polyline length in meters (0 for a degenerate <2-point line). */
+export function totalMeters(cumulative: number[]): number {
+  return cumulative.length ? cumulative[cumulative.length - 1]! : 0
+}
+
+/**
+ * The route's heading of travel (degrees, 0=N) at vertex `index` — the direction a vehicle is
+ * moving as it passes that point. Uses the forward segment (index → index+1), or the trailing
+ * segment at the final vertex. Returns 0 for a degenerate (<2-vertex) polyline.
+ */
+export function routeBearingAt(polyline: LngLat[], index: number): number {
+  if (polyline.length < 2) return 0
+  const i = Math.min(Math.max(index, 0), polyline.length - 1)
+  const [from, to] = i < polyline.length - 1 ? [polyline[i]!, polyline[i + 1]!] : [polyline[i - 1]!, polyline[i]!]
+  return bearingDeg(from, to)
+}
+
+/**
+ * Convert an along-route distance to an along-route TIME (seconds), assuming the frozen total
+ * drive time is spread uniformly over the route length. A linear approximation — real speed
+ * varies — but accurate enough to PACE and ORDER stops, and honest to the "pace by drive time"
+ * invariant. Not a precise ETA.
+ */
+export function timeAtAlong(alongM: number, totalRouteM: number, totalRouteSec: number): number {
+  if (totalRouteM <= 0) return 0
+  return (alongM / totalRouteM) * totalRouteSec
+}
+
+/**
+ * Which side of the road a point sits on, relative to the direction of travel. `headingDeg` is the
+ * compass heading of travel (0=N, clockwise); `from` is the on-route trigger point and `to` is the
+ * off-route POI. Compass bearings increase clockwise, so a target whose bearing is clockwise of the
+ * heading is on the RIGHT. Returns null when too near dead-ahead/behind to call a side confidently.
+ */
+export function sideOfApproach(headingDeg: number, from: LngLat, to: LngLat): 'left' | 'right' | null {
+  const rel = signedBearingDeltaDeg(bearingDeg(from, to), headingDeg) // (-180, 180]
+  const mag = Math.abs(rel)
+  if (mag < 10 || mag > 170) return null // ~collinear with travel — no clear side
+  return rel > 0 ? 'right' : 'left'
+}
