@@ -48,6 +48,11 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
 - [tour-data-model-zero-reuse.md](decisions/tour-data-model-zero-reuse.md) — **the canonical entity
   model** (shared facts on `pois`, tour-owned narration on `tour_stops`, zero content reuse); built +
   live-migrated 2026-06-08.
+- [create-a-drive-architecture.md](decisions/create-a-drive-architecture.md) — **the V2 build record**
+  (decided + build-started 2026-06-18): the roam-first data model (one atom `pois`──1:1──`narrations` +
+  sequences; `segments`/`tour_frames` dissolve; roam = a mode; `drives` = user-owned sequences;
+  `interludes` flavor) + the two-phase Create-a-Drive flow, access/credits, and the build phases.
+  Product rationale: [roam-first-create-a-drive.md](ideas/roam-first-create-a-drive.md).
 - [tour-structure-design-review.md](decisions/tour-structure-design-review.md) — adversarial
   pre-build review of the tour-structure spec (verdict: build-with-fixes); historical.
 - [audio-compression-spike.md](decisions/audio-compression-spike.md) — WAV → MP3 32 kbps spike;
@@ -110,6 +115,11 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
 - [roam-first-region-expansion.md](ideas/roam-first-region-expansion.md) — the beachhead
   inversion: roam (a bbox + ~$15) opens a region, the demand heatmap picks the tour to build;
   probed Yosemite/Moab/Big Sur corpora for $0 on capture day (2026-06-11).
+- [roam-first-create-a-drive.md](ideas/roam-first-create-a-drive.md) — **the V2 product
+  structure** (founder-converged 2026-06-18): roam + on-demand "Create a Drive" (enter A→B → route
+  in seconds → roam clips pre-ordered along it, user-owned) are the two first-day experiences;
+  the hand-authored tour is DEFERRED. journey-layer rung 2 made buildable on the batch stack via
+  clip REUSE; zero-reuse scopes down to the authored rung; V2 may break freely (V1 never shipped).
 - [corpus-enrichment.md](ideas/corpus-enrichment.md) — enrich the POI facts ONCE at the corpus
   (a paid `enrich` step) instead of per-tour-stop, so tours + roam share it; the curated "fact
   well" becomes the narration bound, letting the raw-extract cap drop (2026-06-15, pre-spec).
