@@ -358,15 +358,22 @@ function selectBreaks(
     for (const ns of narratedSecs) if (ns <= p.alongSec && ns > prev) prev = ns
     return prev === -Infinity ? Infinity : p.alongSec - prev
   }
+  // A break may NEVER open the drive — it must fall AFTER the first narrated stop. The intro
+  // frame owns the opening, and a "good spot to pull over" before the skipper has told you a
+  // single thing reads as broken (a food anchor by the start snapped to ~0:13 on the first West
+  // Shore tour). precedingGap can't catch this: with no story before it the gap is Infinity,
+  // which passes every check — so gate on the first narrated stop explicitly.
+  const firstNarratedSec = narratedSecs.length ? Math.min(...narratedSecs) : Infinity
   for (let k = 1; k <= count; k++) {
     const targetSec = (k / (count + 1)) * params.totalSec
-    // Eligible = unused, clear of the PRECEDING story, and not stacked on an already-picked
-    // break (food anchors bunch at a town, so two can sit seconds apart). Food only exists at
-    // the towns, so this naturally caps how many fit; when nothing's eligible we stop — breaks
-    // are optional, and a badly-lagging break is worse than one fewer.
+    // Eligible = unused, AFTER the first narrated stop, clear of the PRECEDING story, and not
+    // stacked on an already-picked break (food anchors bunch at a town, so two can sit seconds
+    // apart). Food only exists at the towns, so this naturally caps how many fit; when nothing's
+    // eligible we stop — breaks are optional, and a badly-lagging break is worse than one fewer.
     const avail = placed.filter(
       (p) =>
         !used.has(p.anchor.placeId) &&
+        p.alongSec >= firstNarratedSec &&
         precedingGap(p) >= BREAK_MIN_GAP_SEC &&
         out.every((b) => Math.abs(b.alongSec - p.alongSec) >= BREAK_MIN_GAP_SEC),
     )

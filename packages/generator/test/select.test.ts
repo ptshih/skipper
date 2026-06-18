@@ -92,6 +92,11 @@ describe('selectStops', () => {
     }
   })
 
+  test('the drive never opens on a break (no pit stop before the first stop)', () => {
+    const sorted = [...plan].sort((a, b) => a.alongSec - b.alongSec)
+    expect(sorted[0]!.stopType).not.toBe('break')
+  })
+
   test('is ordered: seq is 0..n-1 and alongSec is non-decreasing', () => {
     plan.forEach((s, i) => expect(s.seq).toBe(i))
     for (let i = 1; i < plan.length; i++) {
@@ -125,6 +130,33 @@ describe('selectStops trigger points + break off-route filter', () => {
       breakAnchors: [{ placeId: 'far-gas', name: 'Far Gas', lat: 38.05, lng: 0.02, primaryType: 'gas_station' }] as BreakAnchor[],
     })
     expect(farBreak.some((s) => s.stopType === 'break')).toBe(false)
+  })
+
+  test('drops a break anchor sitting before the first narrated stop (the 0:13 pit-stop bug)', () => {
+    // An anchor at lat 38.003 ≈ 20s is before the first narrated stop (Rich A ≈ 66s) — the exact
+    // "pit stop before the first stop" case. With no story before it, precedingGap is Infinity,
+    // so only the first-narrated gate can reject it; the only break anchor being early ⇒ no break.
+    const early = selectStops({
+      ...params(),
+      breakAnchors: [
+        { placeId: 'early-gas', name: 'Early Gas', lat: 38.003, lng: 0, primaryType: 'gas_station' },
+      ] as BreakAnchor[],
+    })
+    expect(early.some((s) => s.stopType === 'break')).toBe(false)
+  })
+
+  test('with both an early and a valid anchor, only the post-first-stop break is kept', () => {
+    const both = selectStops({
+      ...params(),
+      pacing: { minGapSec: 180, maxNarratedStops: 5, breakStops: 2 },
+      breakAnchors: [
+        { placeId: 'early-gas', name: 'Early Gas', lat: 38.003, lng: 0, primaryType: 'gas_station' }, // ≈20s, before Rich A
+        { placeId: 'good-gas', name: 'Good Gas', lat: 38.075, lng: 0, primaryType: 'gas_station' }, // ≈495s, valid
+      ] as BreakAnchor[],
+    })
+    const breaks = both.filter((s) => s.stopType === 'break')
+    expect(breaks.length).toBe(1)
+    expect(breaks[0]!.name).toBe('Good Gas')
   })
 
   test('keeps an on-route break anchor', () => {

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   buildGroundingWell,
   evaluateGrounding,
+  normalizeClaims,
   type ClaimDecomposer,
   type GroundingInput,
 } from '../src/eval/grounding'
@@ -66,6 +67,50 @@ describe('evaluateGrounding — the gate scoring', () => {
     )
     expect(e.pass).toBe(false)
     expect(e.score).toBe(0)
+  })
+})
+
+describe('normalizeClaims — never trust the wire (the non-array crash regression)', () => {
+  test('a proper array maps through, unknown status → ungrounded', () => {
+    const out = normalizeClaims([
+      { claim: 'a', status: 'grounded', evidence: 'x' },
+      { claim: 'b', status: 'weird', evidence: null },
+    ])
+    expect(out).toHaveLength(2)
+    expect(out[0]).toEqual({ claim: 'a', status: 'grounded', evidence: 'x' })
+    expect(out[1]!.status).toBe('ungrounded') // unrecognized status is a violation, never passed
+  })
+
+  test('a lone claim OBJECT (not wrapped in an array) is recovered, not crashed', () => {
+    // The exact shape that threw `(call.input.claims ?? []).map is not a function`.
+    const out = normalizeClaims({ claim: 'one fact', status: 'grounded', evidence: 'sheet' })
+    expect(out).toEqual([{ claim: 'one fact', status: 'grounded', evidence: 'sheet' }])
+  })
+
+  test('null / undefined → empty list (the legitimate no-claims case)', () => {
+    expect(normalizeClaims(null)).toEqual([])
+    expect(normalizeClaims(undefined)).toEqual([])
+  })
+
+  test('a primitive (string/number) → empty list, never throws', () => {
+    expect(() => normalizeClaims('nope')).not.toThrow()
+    expect(normalizeClaims('nope')).toEqual([])
+    expect(normalizeClaims(42)).toEqual([])
+  })
+
+  test('array entries missing fields get safe defaults', () => {
+    const out = normalizeClaims([{}, { claim: 7, status: 'grounded', evidence: 9 }])
+    expect(out[0]).toEqual({ claim: '(unspecified claim)', status: 'ungrounded', evidence: null })
+    expect(out[1]).toEqual({ claim: '(unspecified claim)', status: 'grounded', evidence: null })
+  })
+
+  test('a coerced lone object flows through evaluateGrounding without crashing', async () => {
+    const e = await evaluateGrounding(
+      input(),
+      async () => normalizeClaims({ claim: 'invented depth', status: 'ungrounded', evidence: null }),
+    )
+    expect(e.pass).toBe(false) // one ungrounded claim, surfaced — not a skipped audit
+    expect(e.findings).toHaveLength(1)
   })
 })
 

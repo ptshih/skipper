@@ -177,6 +177,27 @@ function buildUserMessage(input: GroundingInput): string {
   ].join('\n')
 }
 
+/** Coerce the model's raw `claims` value into ClaimVerdicts — never trust the wire.
+ *  The forced-tool schema declares `claims` an array, but the model can still emit a
+ *  non-array: a lone claim object (recovered here as a one-element list) or
+ *  null/primitive (treated as "no claims"). A non-array used to crash `.map` — the bug
+ *  this fixes. An unrecognized per-claim status is treated as `ungrounded`: a malformed
+ *  claim is a violation, never silently passed. */
+export function normalizeClaims(raw: unknown): ClaimVerdict[] {
+  const list: unknown[] = Array.isArray(raw) ? raw : raw && typeof raw === 'object' ? [raw] : []
+  return list.map((c): ClaimVerdict => {
+    const o = (c ?? {}) as Record<string, unknown>
+    const status = CLAIM_STATUSES.includes(o.status as ClaimStatus)
+      ? (o.status as ClaimStatus)
+      : 'ungrounded'
+    return {
+      claim: typeof o.claim === 'string' ? o.claim : '(unspecified claim)',
+      status,
+      evidence: typeof o.evidence === 'string' ? o.evidence : null,
+    }
+  })
+}
+
 /** The real, Anthropic-backed decomposer (tool-use structured output). */
 export const anthropicDecomposer: ClaimDecomposer = async (input) => {
   const response = await getAnthropic('grounding eval needs it').messages.create({
@@ -190,19 +211,15 @@ export const anthropicDecomposer: ClaimDecomposer = async (input) => {
   recordModelUsage(GROUNDING_MODEL, response.usage)
   const call = response.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
   if (!call) throw new Error(`Grounding eval: model returned no tool call for stop ${input.seq}.`)
-  const raw = (call.input as { claims?: unknown[] }).claims ?? []
-  // Defensive normalization — the schema constrains the model, but never trust the wire.
-  return raw.map((c): ClaimVerdict => {
-    const o = (c ?? {}) as Record<string, unknown>
-    const status = CLAIM_STATUSES.includes(o.status as ClaimStatus)
-      ? (o.status as ClaimStatus)
-      : 'ungrounded' // an unrecognized status is treated as a violation, never silently passed
-    return {
-      claim: typeof o.claim === 'string' ? o.claim : '(unspecified claim)',
-      status,
-      evidence: typeof o.evidence === 'string' ? o.evidence : null,
-    }
-  })
+  const rawClaims = (call.input as { claims?: unknown }).claims
+  if (rawClaims != null && !Array.isArray(rawClaims)) {
+    // Visibility for recurrence — this shape used to crash `.map`; it is now coerced, not dropped.
+    console.warn(
+      `Grounding eval: model returned non-array 'claims' (${typeof rawClaims}) for stop ${input.seq} — coercing.`,
+    )
+  }
+  // Never trust the wire — the schema constrains the model, but coerce defensively anyway.
+  return normalizeClaims(rawClaims)
 }
 
 /**
