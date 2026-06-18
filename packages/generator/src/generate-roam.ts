@@ -196,10 +196,15 @@ async function main(): Promise<void> {
   }
 
   // Cost preview: narration ≈ system+sheet in / ~1k thinking+output out per clip (Opus 4.8
-  // $5/$25 per MTok → very roughly $0.03–0.08 per clip), TTS estimated exactly by chars.
-  const estClipChars = 800 // ~150 spoken words
+  // $5/$25 per MTok → very roughly $0.03–0.08 per clip). TTS cost is DOMINATED by audio tokens,
+  // which estimateTtsUsd derives from the WORD count (estSeconds = words / WORDS_PER_SECOND) — so
+  // the dummy clip must contain that many real WORDS. A space-less char blob ('x'.repeat(n)) reads
+  // as ONE word and collapses the audio estimate ~100× (it under-quoted a full-region run by ~$28
+  // and silently defeated the --max-cost gate). Model a target-length clip's word budget.
+  const estWordsPerClip = Math.round(ROAM_LENGTH.storyTargetSeconds * WORDS_PER_SECOND)
+  const dummyClip = Array(estWordsPerClip).fill('word').join(' ')
   const tts = estimateTtsUsd(
-    queue.map(() => 'x'.repeat(estClipChars)),
+    queue.map(() => dummyClip),
     personaFromKey('skipper').ttsStyle.length,
   )
   console.log(
@@ -302,80 +307,102 @@ async function main(): Promise<void> {
   }
 
   // ── Synthesize + upload + upsert rows (a row only lands COMPLETE) ──
+  // RESILIENT batch: a single clip's HARD failure (e.g. a Cloud TTS 400 on an over-length script)
+  // must NOT abort the whole run — roam clips are independent and land individually, so we skip +
+  // warn + continue ("ship the rest with a loud warn", the alpha posture) and report the casualties
+  // at the end. A skipped poi simply gets no roam track (it won't be encountered) — silence beats
+  // letting one bad clip drop the rest. Re-run to retry the skips (narration is non-deterministic,
+  // so an over-length outlier usually narrates within limits next time). mapLimit fails fast on a
+  // throw, so the try/catch — not mapLimit — is what keeps the batch going.
   console.log(`\nSynthesizing ${queue.length} clips (concurrency ${TTS_CONCURRENCY()})...`)
   let synthDone = 0
+  const failures: { name: string; error: string }[] = []
   const results = await mapLimit(queue, TTS_CONCURRENCY(), async (c, i) => {
     const script = scripts[i]!
-    // Reuse the poi's existing roam segment (one per poi); mint one on first generation.
-    const segmentId = c.segmentId ?? crypto.randomUUID()
-    const trackId = crypto.randomUUID()
-    // Tail-collapse retake (pipeline/tts.ts): roam clips ship unheard, so a mumbled
-    // closing sentence would reach riders' ears first — measure + retake here too.
-    const { audio, durationMs } = await synthesizeWithTailRetake(
-      script,
-      persona.voice,
-      persona.ttsStyle,
-      `"${c.title}"`,
-    )
-    const audioUrl = await uploadAudio(roamClipKey(c.poiId, trackId), audio)
-    // Well-aware credit: an ENRICHED poi credits the well's distinct sources (wikipedia + any
-    // geology/wikidata kept); an un-enriched poi credits the single Wikipedia article (the
-    // extract-head fallback). Same resolver tours use, so attribution can't drift between them.
-    const { attribution } = resolveStoryGrounding(c.facts, c.factSheet, c.enrichedAt, {
-      fallbackChars: NARRATION_FALLBACK_CHARS,
-      retrievedAt: (c.factsFetchedAt ?? new Date()).toISOString(),
-    })
-    // The grounding fingerprint = pois.factsHash exactly (storyFactsHash on the SAME facts the
-    // freshness query read), so a freshly-generated clip never reads as stale.
-    const factsHash = storyFactsHash(c.facts, c.factSheet)
-    // A roam telling = a placeless-of-route segment (tour_id/seq/trigger* null) + ONE story
-    // track. Co-commit the segment + the track upsert: the segment is insert-or-keep (PK id;
-    // a reused segment already exists), the track upserts on its (segment, form, variant)
-    // unique so a regen replaces the same row's script/audio in place.
-    await withRetry(
-      () =>
-        db.batch([
-          db
-            .insert(segments)
-            .values({ id: segmentId, poiId: c.poiId, personaId })
-            .onConflictDoNothing({ target: segments.id }),
-          db
-            .insert(tracks)
-            .values({
-              id: trackId,
-              segmentId,
-              form: 'story',
-              variant: 0,
-              script,
-              audioUrl,
-              audioDurationMs: durationMs,
-              attribution,
-              factsHash,
-            })
-            .onConflictDoUpdate({
-              target: [tracks.segmentId, tracks.form, tracks.variant],
-              set: {
+    try {
+      // Reuse the poi's existing roam segment (one per poi); mint one on first generation.
+      const segmentId = c.segmentId ?? crypto.randomUUID()
+      const trackId = crypto.randomUUID()
+      // Tail-collapse retake (pipeline/tts.ts): roam clips ship unheard, so a mumbled
+      // closing sentence would reach riders' ears first — measure + retake here too.
+      const { audio, durationMs } = await synthesizeWithTailRetake(
+        script,
+        persona.voice,
+        persona.ttsStyle,
+        `"${c.title}"`,
+      )
+      const audioUrl = await uploadAudio(roamClipKey(c.poiId, trackId), audio)
+      // Well-aware credit: an ENRICHED poi credits the well's distinct sources (wikipedia + any
+      // geology/wikidata kept); an un-enriched poi credits the single Wikipedia article (the
+      // extract-head fallback). Same resolver tours use, so attribution can't drift between them.
+      const { attribution } = resolveStoryGrounding(c.facts, c.factSheet, c.enrichedAt, {
+        fallbackChars: NARRATION_FALLBACK_CHARS,
+        retrievedAt: (c.factsFetchedAt ?? new Date()).toISOString(),
+      })
+      // The grounding fingerprint = pois.factsHash exactly (storyFactsHash on the SAME facts the
+      // freshness query read), so a freshly-generated clip never reads as stale.
+      const factsHash = storyFactsHash(c.facts, c.factSheet)
+      // A roam telling = a placeless-of-route segment (tour_id/seq/trigger* null) + ONE story
+      // track. Co-commit the segment + the track upsert: the segment is insert-or-keep (PK id;
+      // a reused segment already exists), the track upserts on its (segment, form, variant)
+      // unique so a regen replaces the same row's script/audio in place.
+      await withRetry(
+        () =>
+          db.batch([
+            db
+              .insert(segments)
+              .values({ id: segmentId, poiId: c.poiId, personaId })
+              .onConflictDoNothing({ target: segments.id }),
+            db
+              .insert(tracks)
+              .values({
+                id: trackId,
+                segmentId,
+                form: 'story',
+                variant: 0,
                 script,
                 audioUrl,
                 audioDurationMs: durationMs,
                 attribution,
                 factsHash,
-                updatedAt: new Date(),
-              },
-            }),
-        ]),
-      { label: `upsert roam track(${c.name})` },
-    )
-    synthDone++
-    console.log(`  [${synthDone}/${queue.length}] ${c.name} (${(durationMs / 1000).toFixed(0)}s)`)
-    return { name: c.name, durationMs }
+              })
+              .onConflictDoUpdate({
+                target: [tracks.segmentId, tracks.form, tracks.variant],
+                set: {
+                  script,
+                  audioUrl,
+                  audioDurationMs: durationMs,
+                  attribution,
+                  factsHash,
+                  updatedAt: new Date(),
+                },
+              }),
+          ]),
+        { label: `upsert roam track(${c.name})` },
+      )
+      synthDone++
+      console.log(`  [${synthDone}/${queue.length}] ${c.name} (${(durationMs / 1000).toFixed(0)}s)`)
+      return { name: c.name, durationMs }
+    } catch (e) {
+      const error = e instanceof Error ? e.message : String(e)
+      failures.push({ name: c.name, error })
+      console.warn(`  ⚠ SKIP ${c.name}: synthesis failed (clip dropped) — ${error.slice(0, 200)}`)
+      return null
+    }
   })
 
-  const totalSec = results.reduce((a, r) => a + r.durationMs, 0) / 1000
+  const ok = results.filter((r): r is { name: string; durationMs: number } => r !== null)
+  const totalSec = ok.reduce((a, r) => a + r.durationMs, 0) / 1000
   console.log(
-    `\nDone: ${results.length} roam clips, ${(totalSec / 60).toFixed(1)} min of audio total ` +
-      `(avg ${(totalSec / results.length).toFixed(0)}s).`,
+    `\nDone: ${ok.length}/${queue.length} roam clips, ${(totalSec / 60).toFixed(1)} min of audio total ` +
+      `(avg ${ok.length ? (totalSec / ok.length).toFixed(0) : '0'}s).`,
   )
+  if (failures.length > 0) {
+    console.warn(
+      `\n⚠ ${failures.length} clip(s) FAILED synthesis and were SKIPPED — re-run to retry (or patch individually):`,
+    )
+    for (const f of failures) console.warn(`  • ${f.name}: ${f.error.slice(0, 200)}`)
+  }
   for (const line of llmSpendLines()) console.log(line)
   console.log(`LLM spend this run: ~$${llmSpentUsd().toFixed(2)}`)
   const ttsActual = estimateTtsUsd(scripts, persona.ttsStyle.length)
