@@ -2,7 +2,7 @@
 
 An AI-narrated, GPS-triggered driving audio tour. Think _Shaka Guide, but the
 narration is AI-generated_ — played by a charming Jungle-Cruise-skipper persona,
-over hand-curated driving routes, as phone audio (CarPlay later). First region:
+over a route you pick (any A→B), as phone audio (CarPlay later). First region:
 **Lake Tahoe**.
 
 > **Posture:** a toy / lifestyle side project. Optimize for _charm_ and for being
@@ -11,16 +11,19 @@ over hand-curated driving routes, as phone audio (CarPlay later). First region:
 
 ## The two principles
 
-1. **Assemble per drive; fetch FACTS once per place, the NARRATION is the shared atom.**
+1. **Fetch FACTS once per place; the NARRATION is the shared atom; ASSEMBLE per drive.**
    `pois` is the facts cache — a place's grounded facts (TTL + hash), SHARED by every
-   drive. Each place has ONE shared telling: a `narrations` row (1:1 per poi). The
-   assembly is the user-owned `drives` (an ordered selection of those narrations along a
-   route) and anonymous ROAM (the same narrations, played by proximity) — content
-   resolves LIVE via `poi_id`, so a regenerated telling auto-improves every saved drive.
-2. **The rails are the route; the generation is everything inside the rails.**
-   Routes are hand-curated and frozen. Inside the rails the model does
-   everything: which stops, what story, pacing, interest filtering, voice.
-   _Human picks the road; the model narrates the drive._
+   drive. Each place has ONE shared telling: a `narrations` row (1:1 per poi). Two
+   things consume that one corpus: anonymous **ROAM** (the front door — narrations played
+   by proximity, no account) and a user-owned **DRIVE** (which REUSES the same narrations,
+   pre-ordered along its route). Content resolves LIVE via `poi_id`, so a regenerated
+   telling auto-improves every saved drive.
+2. **The route is the rails; the generation is everything inside.**
+   A drive's route is materialized from the rider's A→B (Google Routes) and frozen per
+   drive — the LLM resolves ONLY the endpoints, and the SELECTION of which narrations ride
+   the route is deterministic. Inside the rails the corpus does the work: which stories,
+   the persona, pacing, the voice. _Hand-authored tours are deferred — the rider picks the
+   road, the shared corpus narrates it._
 
 ## Stack
 
