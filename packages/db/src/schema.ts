@@ -197,9 +197,10 @@ export const regions = pgTable(
     id: uuid('id').defaultRandom().primaryKey(),
     slug: text('slug').notNull(), // 'lake-tahoe' (the key)
     displayName: text('display_name').notNull(), // 'Lake Tahoe' (spoken + shown in the picker)
-    // Optional bbox for the region POI-discovery sweep — "lng_min,lat_min,lng_max,lat_max".
-    // Null = use the studio pipeline's built-in default (currently the Tahoe basin).
-    discoveryBbox: text('discovery_bbox'),
+    // The region's bbox — "lng_min,lat_min,lng_max,lat_max". Drives the POI-discovery sweep and
+    // the geometry-first point-in-bbox region test. Null = use the studio pipeline's built-in
+    // default (currently the Tahoe basin).
+    bbox: text('bbox'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .defaultNow()

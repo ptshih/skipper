@@ -77,8 +77,8 @@ export function RegionsView() {
                 <TableCell className="font-mono text-sm">{r.slug}</TableCell>
                 <TableCell className="font-medium">{r.displayName}</TableCell>
                 <TableCell>
-                  {r.discoveryBbox ? (
-                    <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{r.discoveryBbox}</code>
+                  {r.bbox ? (
+                    <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{r.bbox}</code>
                   ) : (
                     <Badge variant="secondary">default (Tahoe)</Badge>
                   )}
@@ -131,11 +131,11 @@ function RegionDialog({
 
   const [slug, setSlug] = useState(existing?.slug ?? '')
   const [displayName, setDisplayName] = useState(existing?.displayName ?? '')
-  const [bbox, setBbox] = useState(existing?.discoveryBbox ?? '')
+  const [bbox, setBbox] = useState(existing?.bbox ?? '')
 
   const saveMut = useMutation({
     mutationFn: () => {
-      const patch = { displayName: displayName.trim(), discoveryBbox: bbox.trim() || null }
+      const patch = { displayName: displayName.trim(), bbox: bbox.trim() || null }
       return mode.mode === 'create'
         ? api.createRegion({ slug: slug.trim(), ...patch })
         : api.updateRegion(mode.region.slug, patch)

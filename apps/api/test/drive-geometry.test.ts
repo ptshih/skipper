@@ -39,7 +39,7 @@ describe('polylineBbox', () => {
 })
 
 describe('geocodeBoundsFor', () => {
-  test('reorders the lng,lat-ordered discoveryBbox into a lat,lng geocode viewport', () => {
+  test('reorders the lng,lat-ordered bbox into a lat,lng geocode viewport', () => {
     // input "lngMin,latMin,lngMax,latMax" → "latMin,lngMin|latMax,lngMax"
     expect(geocodeBoundsFor('-120.25,38.86,-119.55,39.65')).toBe('38.86,-120.25|39.65,-119.55')
   })

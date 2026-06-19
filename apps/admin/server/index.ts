@@ -9,9 +9,9 @@
 //
 //   GET  /health                  -> liveness (OPEN — Cloud Run probes don't pass through IAP)
 //   --- everything below is behind requireAdmin (IAP founder-only) ---
-//   GET  /admin/regions           -> region list with discoveryBbox
+//   GET  /admin/regions           -> region list with bbox
 //   POST /admin/regions           -> create a new region
-//   PATCH /admin/regions/:slug    -> update displayName / discoveryBbox
+//   PATCH /admin/regions/:slug    -> update displayName / bbox
 //   POST /admin/regions/bbox-lookup -> LLM + Nominatim parallel bbox lookup by place name
 //   GET  /admin/jobs              -> recent studio_jobs (operational record; powers job polling)
 //   GET  /admin/runs              -> unified Runs timeline: studio_jobs + orphan eval_runs
@@ -85,36 +85,36 @@ app.use('/admin/*', requireAdmin)
 
 app.get('/admin/regions', async (c) => {
   const rows = await db
-    .select({ slug: regions.slug, displayName: regions.displayName, discoveryBbox: regions.discoveryBbox })
+    .select({ slug: regions.slug, displayName: regions.displayName, bbox: regions.bbox })
     .from(regions)
     .orderBy(asc(regions.displayName))
   return c.json({ regions: rows })
 })
 
 app.post('/admin/regions', async (c) => {
-  const body = await c.req.json<{ slug: string; displayName: string; discoveryBbox?: string | null }>()
+  const body = await c.req.json<{ slug: string; displayName: string; bbox?: string | null }>()
   if (!body.slug?.trim() || !body.displayName?.trim()) {
     return c.json({ error: 'slug and displayName are required' }, 400)
   }
   const [row] = await db.insert(regions).values({
     slug: body.slug.trim(),
     displayName: body.displayName.trim(),
-    discoveryBbox: body.discoveryBbox?.trim() || null,
-  }).returning({ slug: regions.slug, displayName: regions.displayName, discoveryBbox: regions.discoveryBbox })
+    bbox: body.bbox?.trim() || null,
+  }).returning({ slug: regions.slug, displayName: regions.displayName, bbox: regions.bbox })
   return c.json({ region: row }, 201)
 })
 
 app.patch('/admin/regions/:slug', async (c) => {
   const slug = c.req.param('slug')
-  const body = await c.req.json<{ displayName?: string; discoveryBbox?: string | null }>()
+  const body = await c.req.json<{ displayName?: string; bbox?: string | null }>()
   const update: Record<string, unknown> = {}
   if (body.displayName !== undefined) update.displayName = body.displayName.trim()
-  if (body.discoveryBbox !== undefined) update.discoveryBbox = body.discoveryBbox?.trim() || null
+  if (body.bbox !== undefined) update.bbox = body.bbox?.trim() || null
   if (!Object.keys(update).length) return c.json({ error: 'nothing to update' }, 400)
   const [row] = await db.update(regions)
     .set(update)
     .where(eq(regions.slug, slug))
-    .returning({ slug: regions.slug, displayName: regions.displayName, discoveryBbox: regions.discoveryBbox })
+    .returning({ slug: regions.slug, displayName: regions.displayName, bbox: regions.bbox })
   if (!row) return c.json({ error: 'not_found' }, 404)
   return c.json({ region: row })
 })
@@ -596,7 +596,7 @@ app.get('/admin/pois', async (c) => {
     // how roam actually selects candidates (region-corpus.ts / generate-narrations.ts). A region with no
     // bbox can't claim any poi.
     db
-      .select({ slug: regions.slug, displayName: regions.displayName, discoveryBbox: regions.discoveryBbox })
+      .select({ slug: regions.slug, displayName: regions.displayName, bbox: regions.bbox })
       .from(regions)
       .orderBy(asc(regions.displayName)),
   ])
@@ -617,8 +617,8 @@ app.get('/admin/pois', async (c) => {
   // (deterministic by displayName) whose box contains its coords. A region with no/invalid bbox
   // claims nothing — set one in the admin Regions view to light up coverage.
   const regionBoxes = regionRows.flatMap((r) => {
-    if (!r.discoveryBbox) return []
-    const p = r.discoveryBbox.split(',').map(Number)
+    if (!r.bbox) return []
+    const p = r.bbox.split(',').map(Number)
     if (p.length !== 4 || p.some((n) => !Number.isFinite(n))) return []
     return [{ slug: r.slug, name: r.displayName, swLng: p[0]!, swLat: p[1]!, neLng: p[2]!, neLat: p[3]! }]
   })

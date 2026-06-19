@@ -2,12 +2,12 @@
 // auth/DB import side-effects and stay unit-testable (drives.ts pulls in the auth stack at import).
 import type { Polyline } from '@skipper/db/schema'
 
-/** Parse a region's "lng_min,lat_min,lng_max,lat_max" discoveryBbox → a geocoding bias viewport
+/** Parse a region's "lng_min,lat_min,lng_max,lat_max" bbox → a geocoding bias viewport
  *  "swLat,swLng|neLat,neLng" so an ambiguous in-region name resolves locally. Undefined when unset/bad.
  *  NOTE the reorder: the input is lng,lat-ordered; the geocode viewport is lat,lng-ordered. */
-export function geocodeBoundsFor(discoveryBbox: string | null): string | undefined {
-  if (!discoveryBbox) return undefined
-  const p = discoveryBbox.split(',').map(Number)
+export function geocodeBoundsFor(bbox: string | null): string | undefined {
+  if (!bbox) return undefined
+  const p = bbox.split(',').map(Number)
   if (p.length !== 4 || p.some((n) => !Number.isFinite(n))) return undefined
   const [lngMin, latMin, lngMax, latMax] = p as [number, number, number, number]
   return `${latMin},${lngMin}|${latMax},${lngMax}`

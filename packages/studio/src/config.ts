@@ -257,6 +257,6 @@ export const WORDS_PER_SECOND = 2.5
 export const DEFAULT_REGION_SLUG = 'lake-tahoe' as const
 
 /** The Tahoe–Reno corridor fallback bbox — used ONLY by `discover-pois` when the resolved region has
- *  no `discoveryBbox` set yet (the sweep needs a box to query WDQS). Mirrors the `lake-tahoe` region's
+ *  no `bbox` set yet (the sweep needs a box to query WDQS). Mirrors the `lake-tahoe` region's
  *  seeded bbox; enrich/generate REQUIRE a real region bbox instead (no silent fallback). */
 export const TAHOE_RENO_BBOX = { swLng: -120.25, swLat: 38.86, neLng: -119.55, neLat: 39.65 } as const

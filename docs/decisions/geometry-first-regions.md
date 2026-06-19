@@ -13,7 +13,7 @@ A **region is a bounding box** (geometry), not an identity a row points at. Memb
 geometry at query time**, never stored as a foreign key on anything that has its own coordinates:
 
 - **A POI's region = point-in-bbox.** `pois` carries NO `region_id`. "POIs in region X" =
-  `lat/lng BETWEEN X.discoveryBbox`. The corpus CLIs (`discover`/`enrich`/`generate-narrations`) take
+  `lat/lng BETWEEN X.bbox`. The corpus CLIs (`discover`/`enrich`/`generate-narrations`) take
   `--region <slug>` and resolve it to that bbox internally — bbox is never a user-facing input.
 - **A DRIVE's region = bbox-intersect.** `drives` carries NO `region_id`. A drive stores its own route
   **bbox** (`bbox_min/max_lat/lng`), derived from the frozen polyline at create time; a drive's

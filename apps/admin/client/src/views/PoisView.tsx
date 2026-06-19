@@ -985,7 +985,7 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
     // The server resolves a region SLUG → its discovery bbox, so we send the slug (not a bbox). region='all'
     // → no region → the CLI defaults to the launch region. Only send a region the server can resolve (has a
     // bbox); a bbox-less region falls back to enumerating the visible ids.
-    const regionHasBbox = region === 'all' || !!regionDefs.find((r) => r.slug === region)?.discoveryBbox
+    const regionHasBbox = region === 'all' || !!regionDefs.find((r) => r.slug === region)?.bbox
     const resolvable = (flags === 'all' || flags === 'story-eligible') && regionHasBbox
     if (resolvable) {
       return {

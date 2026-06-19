@@ -300,7 +300,7 @@ driveRoutes.post('/propose', async (c) => {
   const regionRows = await withRetry(
     () =>
       db
-        .select({ slug: regions.slug, name: regions.displayName, bbox: regions.discoveryBbox })
+        .select({ slug: regions.slug, name: regions.displayName, bbox: regions.bbox })
         .from(regions)
         .where(eq(regions.id, regionId))
         .limit(1),

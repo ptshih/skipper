@@ -55,7 +55,7 @@ export interface StudioJob {
 export interface Region {
   slug: string
   displayName: string
-  discoveryBbox: string | null
+  bbox: string | null
 }
 
 export interface BboxLlmResult {
@@ -239,9 +239,9 @@ export const api = {
   poiCorrections: (id: string) => req<PoiCorrections>(`/admin/pois/${id}/corrections`),
   saveCorrection: (id: string, body: CorrectionBody) =>
     req<PoiCorrections>(`/admin/pois/${id}/corrections`, { method: 'POST', body: JSON.stringify(body) }),
-  createRegion: (body: { slug: string; displayName: string; discoveryBbox?: string | null }) =>
+  createRegion: (body: { slug: string; displayName: string; bbox?: string | null }) =>
     req<{ region: Region }>('/admin/regions', { method: 'POST', body: JSON.stringify(body) }),
-  updateRegion: (slug: string, body: { displayName?: string; discoveryBbox?: string | null }) =>
+  updateRegion: (slug: string, body: { displayName?: string; bbox?: string | null }) =>
     req<{ region: Region }>(`/admin/regions/${slug}`, { method: 'PATCH', body: JSON.stringify(body) }),
   bboxLookup: (query: string) =>
     req<BboxLookupResult>('/admin/regions/bbox-lookup', { method: 'POST', body: JSON.stringify({ query }) }),
