@@ -147,6 +147,9 @@ export default function CreateDriveScreen() {
 
   if (phase === 'confirm' && proposal) {
     const min = Math.round(proposal.durationSeconds / 60)
+    // No stories along the route → block generation (the server also 422s, but don't let the rider
+    // spend a credit on an unplayable drive). estStopCount runs the REAL selection in propose.
+    const noStories = proposal.estStopCount === 0
     const endpoints: DriveMapStop[] = [
       { seq: 0, name: cleanPlaceName(proposal.start.name), lat: proposal.start.lat, lng: proposal.start.lng, state: 'upcoming' },
       { seq: 1, name: cleanPlaceName(proposal.end.name), lat: proposal.end.lat, lng: proposal.end.lng, state: 'active' },
@@ -186,8 +189,14 @@ export default function CreateDriveScreen() {
           </Text>
         ) : null}
 
+        {noStories && !error ? (
+          <Text variant="dim" color="inkFaint">
+            No stories along that route yet — try a longer trip, or different start and end points.
+          </Text>
+        ) : null}
+
         <View style={styles.ctaGroup}>
-          <Button icon="car" title="Make this drive" onPress={() => void doCreate()} />
+          <Button icon="car" title="Make this drive" onPress={() => void doCreate()} disabled={noStories} />
           <Button variant="ghost" title="Adjust the start & end" fullWidth={false} onPress={() => setPhase('form')} />
         </View>
       </Screen>

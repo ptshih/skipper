@@ -453,6 +453,28 @@ driveRoutes.post('/', async (c) => {
     maxStops: driveMaxStops(route.durationSeconds),
   })
 
+  // GUARD: an empty selection must NOT persist. buildDrive returns [] when nothing rides the route
+  // (sparse corpus, everything off-route, or a degenerate/zero-length route — the likeliest cause
+  // being a LOOP whose start≈end collapsed to a near-zero route). A saved 0-stop drive is unplayable
+  // AND burns a LIFETIME credit (the row counts toward the cap and is never refunded), so reject with
+  // a 422 BEFORE the insert + demand bump. The loop-aware log keeps that root cause visible for the
+  // verification pass instead of masking it behind the generic message (runbook Finding 1/2).
+  if (stops.length === 0) {
+    const loopish = Math.abs(start.lat - end.lat) < 1e-4 && Math.abs(start.lng - end.lng) < 1e-4
+    console.warn(
+      `[api] drive create produced 0 stops — rejecting before persist (${start.name} → ${end.name}, ` +
+        `loopish=${loopish}, candidates=${corpus.size}, durationSec=${Math.round(route.durationSeconds)})`,
+    )
+    return c.json(
+      {
+        error: 'no_stories',
+        message:
+          "The skipper couldn't find any stories along that route. Try different start and end points, or a longer drive.",
+      },
+      422,
+    )
+  }
+
   // Freeze the structure: a narration selection item per stop (content resolves live via poiId).
   const selection: DriveSelection = stops.map(
     (s): DriveSelectionItem => ({
