@@ -1,9 +1,9 @@
 # @skipper/mobile — Expo app (backend wiring scaffolded; phone player TODO, CarPlay deferred)
 
-> **Status:** the JS/TS app is scaffolded and wired to the M2 backend (browse,
-> auth, gated tour fetch), and a **map-less couch preview player** (simulated
+> **Status:** the JS/TS app is scaffolded and wired to the M2 backend (browse
+> drives + roam, auth, gated drive fetch/sign), and a **map-less couch preview player** (simulated
 > drive over `expo-audio`) is the `?mode=preview` branch of `app/drives/[id]/play.tsx`
-> (the unified player; the standalone `app/preview/[id].tsx` was folded in). A local iOS
+> (the unified player). A local iOS
 > **simulator build compiles** (`xcodebuild` succeeds with `expo-audio` linked),
 > but there is **no EAS build, no device run, and no LIVE GPS-triggered phone
 > player yet** — that work (offline download, on-device triggering, lock-screen
@@ -15,19 +15,20 @@
 
 ## What's wired (works against the M2 API)
 
-- **Expo Router** app (`app/`): tour browse (`index`), `sign-in` (email/password),
-  `tours/[id]` (gated detail fetch + presign), and the unified **player**
-  (`tours/[id]/play`, with a `?mode=preview` couch-preview branch).
+- **Expo Router** app (`app/`): drive browse (`index`), `sign-in` (email/password),
+  `drives/[id]` (gated detail fetch + presign), and the unified **player**
+  (`drives/[id]/play`, with a `?mode=preview` couch-preview branch).
 - **Auth:** Better Auth Expo client (`src/lib/auth.ts`) — sessions in
   `expo-secure-store`, scheme `skipper` (matches the server `trustedOrigins` and
   the `expo()` server plugin in `apps/api/src/auth.ts`).
 - **API client:** `src/lib/api.ts` — typed against `@skipper/shared` DTOs
-  (`tourList`/`tourDetail`/`signedAudio`); auth via `authClient.getCookie()`.
-- **Gating:** anonymous can PREVIEW any ready tour — a `?preview=1` fetch/sign is
-  OPEN for every tour (the couch preview is the funnel; `tours.isPreview` is gone,
-  there's no single "preview tour"). The wall is the LIVE DRIVE + OFFLINE download:
-  an UNFLAGGED fetch needs a free account, so it returns 401 → the screen prompts to
-  sign up (`AccountGate`).
+  (`driveList`/`driveManifest`/`signedDriveAudio`, plus `roamManifest`/`regionList`);
+  auth via `authClient.getCookie()`.
+- **Gating:** anonymous can only ROAM — `GET /roam` (`getRoamManifest`, sent
+  anonymously) is the open front door. Everything under `/drives*` (list, detail,
+  propose/create, asset sign) is account-gated, so an anonymous call returns 401 →
+  the screen prompts to sign up (`AccountGate`). There is no anonymous per-tour
+  preview fetch/sign in the client.
 
 ## Materialize it (first steps toward the phone player)
 
@@ -58,7 +59,7 @@ does exactly that and launches the server through dotenvx.
 
 ## Still TODO — the phone player (the MVP)
 
-### M1 — Phone player (`tours/[id]/play`)
+### M1 — Phone player (`drives/[id]/play`)
 
 - [ ] Custom dev build via **EAS** (Expo Go can't run the native player); this
       build confirms the SDK 56 pin (or whatever `expo install --fix` resolves) + RN.

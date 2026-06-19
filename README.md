@@ -11,11 +11,12 @@ over hand-curated driving routes, as phone audio (CarPlay later). First region:
 
 ## The two principles
 
-1. **Assemble per request; fetch FACTS once per place, generate NARRATION per tour.**
-   `pois` is the cache — a place's grounded facts (TTL + hash), SHARED by every
-   tour. Narration is NOT cached — it's tour-owned: `tours` + ordered
-   `segments`/`tracks` are the assembly (a curated route whose stops each carry
-   their own telling). No content cache, no cross-tour reuse — by design.
+1. **Assemble per drive; fetch FACTS once per place, the NARRATION is the shared atom.**
+   `pois` is the facts cache — a place's grounded facts (TTL + hash), SHARED by every
+   drive. Each place has ONE shared telling: a `narrations` row (1:1 per poi). The
+   assembly is the user-owned `drives` (an ordered selection of those narrations along a
+   route) and anonymous ROAM (the same narrations, played by proximity) — content
+   resolves LIVE via `poi_id`, so a regenerated telling auto-improves every saved drive.
 2. **The rails are the route; the generation is everything inside the rails.**
    Routes are hand-curated and frozen. Inside the rails the model does
    everything: which stops, what story, pacing, interest filtering, voice.
@@ -25,7 +26,7 @@ over hand-curated driving routes, as phone audio (CarPlay later). First region:
 
 - **TypeScript 6** everywhere · **bun** (package manager + runtime + workspaces)
 - **Backend:** Hono (served natively by bun) · **DB:** Neon + Drizzle · **Auth:** Better Auth (freemium) · **Audio:** Cloudflare R2 (private; presigned URLs)
-- **AI:** Anthropic `claude-opus-4-8` (narration) · Google Cloud Text-to-Speech — Gemini-TTS voice "Charon" (OAuth/ADC, no API key; MP3 32 kbps)
+- **AI:** Anthropic `claude-opus-4-8` (narration) · Google Cloud Text-to-Speech — Gemini-TTS voice "Charon" (OAuth/ADC, no API key; AAC-LC 48 kbps .m4a — LINEAR16 from TTS, then ffmpeg loudnorm + AAC encode)
 - **Mobile (MVP = phone player):** Expo SDK 56, `expo-audio` + `expo-location`; CarPlay (`@g4rb4g3/react-native-carplay`) deferred past the MVP
 
 ## Layout
@@ -38,7 +39,7 @@ skipper/
 ├── packages/
 │   ├── shared/     @skipper/shared    — Zod schemas + types, imported everywhere.
 │   ├── db/         @skipper/db        — Drizzle schema + Neon client.
-│   ├── generator/  @skipper/generator — server-side tour generation (M1).
+│   ├── generator/  @skipper/generator — server-side narration/corpus generation (discover → enrich → generate).
 │   ├── drive-core/ @skipper/drive-core — pure geo + trigger engine + drive sim + preview timeline (RN-safe; shared by sim & mobile).
 │   └── sim/        @skipper/sim       — DB-backed drive-sim CLI (runs @skipper/drive-core against a real tour).
 ├── design-system/  — browsable HTML mirror of the "Trailhead 89" design system (open index.html). A specimen book; not a workspace. Canonical source = apps/mobile/DESIGN.md + src/theme + src/ui.

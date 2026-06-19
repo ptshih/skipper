@@ -98,10 +98,10 @@ Three items locked from the 2026-06-11 brainstorm (full capture: `docs/ideas/fre
 §Alpha learnings). Order within the pass is free; all three are founder-facing on his daily drive.
 
 - [ ] **Waves: narrate the scenic tier.** ~126 swept scenic pins sit unnarrated (`pois` story/scenic
-      tiers — `discover-pois.ts`). Schema first: `roam_clips` has NO `form` column and a
-      `roam_clips_poi_uq` unique index on poiId (one telling per place) — the schema comment
-      already names the move: a clean DESTRUCTIVE migration adding `form` ('story'|'wave';
-      'bside' later) + uniqueness on (poiId, form). Then the 10–20s WAVE form in
+      tiers — `discover-pois.ts`). Schema already done (V2): `narrations` HAS a `form` column
+      ('story'|'scenic'|'break'|'wave', 'bside' reserved) and a `narrations_poi_uq` unique index on
+      poiId (one telling per place); the Zod vocabulary is `narrationForm` in
+      `@skipper/shared`. The remaining work is the 10–20s WAVE form in
       `generate-narrations.ts` (grammar: one-liner, self-contained, no laterality/volatile; no "ask
       me about it" tease until B-sides exist). Engine + manifest: waves suppressed on quiet
       chattiness, story-over-wave priority on simultaneous candidates. Prompt work is the real
@@ -170,7 +170,7 @@ Job runs measure too).
 
 The second defect — **clip-to-clip level spread + overall quiet-vs-Spotify** — shipped its
 mechanism 2026-06-11: `synthesizeWithTailRetake` now loudness-normalizes the WINNING take via
-an ffmpeg two-pass LINEAR loudnorm (MP3→MP3 32k re-encode) to `LOUDNORM_TARGET_LUFS = −14` /
+an ffmpeg two-pass LINEAR loudnorm (LINEAR16→AAC-LC 48k .m4a single encode) to `LOUDNORM_TARGET_LUFS = −14` /
 `LOUDNORM_TRUE_PEAK_DB = −1.5` (`pipeline/loudnorm.ts` + the constants in `models.ts`). Linear
 gain lands every clip at the SAME integrated level (kills the 7.2 dB spread) without touching
 speech dynamics or reintroducing tail collapse; −14 LUFS = Spotify's target, so it also closes
@@ -220,7 +220,8 @@ recoverable on-device. Each stop/bracket carries a `revisedAt` content token (th
 offline manifest embeds the detail, and the tour screen compares a fresh fetch against the
 saved copy (`isDownloadStale`, zero extra network) → a "Fresh cut ready" chip + a "Pull the
 fresh copy" ⋯ action. NEVER forced; offline play keeps using the saved bytes until the rider
-re-pulls. Manifest bumped to v2 (a v1 download lacks tokens → re-downloads).
+re-pulls. Manifest bumped to v3 (the V2 reshape — embedded detail is now a DRIVE manifest; a
+pre-token download lacks tokens → re-downloads).
 
 REMAINING (post-MVP): the re-pull re-downloads EVERY clip, not just the changed ones. A
 per-clip diff (download only the stale clips, merge into the existing manifest) is the
@@ -228,7 +229,7 @@ optimization — only matters once tours are large or strangers hold many offlin
 
 Refs: `apps/mobile/src/lib/offline.ts` (manifest + `isDownloadStale`),
 `apps/mobile/app/drives/[id]/index.tsx` (chip + ⋯ action), `packages/shared/src/schemas.ts`
-(`tourStopView`/`tourFrameView` `revisedAt`), `apps/api/src/index.ts` (detail route).
+(`driveClip`/`driveManifest` `revisedAt`), `apps/api/src/index.ts` (detail route).
 
 ## Offline downloads: expiration / forced freshness re-check (TTL)
 

@@ -34,17 +34,22 @@ away from the lakeside content the script describes.
   bootstrap rows in `packages/db/seed/poi-overrides.ts`, idempotently upserted without
   clobbering workflow state). Each row is ONE documented correction, keyed by the pois
   dedup identity `(source, source_id)` — poiId can't work, the row may predate the place.
-  Two kinds:
-  - **`fact_edit`** — literal find→replace on fetched extract text, applied in
-    `pipeline/wikipedia.ts` (both fetch paths — leads feed `mergedFeatures`, deeps feed the
-    story sheet) after a once-per-process load (`pipeline/poi-overrides.ts`). Scope honesty:
-    this seam carries **Wikipedia prose only** — geology (Macrostrat) and Wikidata lines
-    enter the well through their own fetchers and are not editable here today.
-  - **`side_anchor`** — a corrected COORDINATE for the place's speakable content,
-    **deliberately not a stored left/right** (review-caught: side flips with travel
-    direction, and S→N / N→S are peer tours). `select.ts` resolves the anchor through the
-    same heading-aware geometry as the pin, so it stays correct per drive — validated:
-    Sugar Pine Point's lighthouse anchor → `right` northbound, `left` southbound.
+  `poi_overrides` is now **fact-corrections ONLY** — a literal find→replace on fetched
+  extract text, applied in `pipeline/wikipedia.ts` (both fetch paths — leads feed
+  `mergedFeatures`, deeps feed the story sheet) after a once-per-process load
+  (`pipeline/poi-overrides.ts`). Scope honesty: this seam carries **Wikipedia prose only** —
+  geology (Macrostrat) and Wikidata lines enter the well through their own fetchers and are
+  not editable here today. (The table no longer has a `kind` discriminator.)
+
+  The corrected COORDINATE for a place's speakable content — once the lone `side_anchor`
+  override row — **relocated off `poi_overrides` onto `pois.speakable_lat/lng`** (the seed
+  defaults live in `pipeline/speakable.ts`, applied by `discover-pois.ts` when it sweeps a
+  place; the DB column is authoritative thereafter, an admin edit wins on a re-sweep). It is
+  **deliberately not a stored left/right** (review-caught: side flips with travel direction,
+  and S→N / N→S are peer tours): the per-segment side is recomputed from
+  `approach_heading_deg` × the anchor through the same heading-aware geometry as the pin, so
+  it stays correct per drive — validated: Sugar Pine Point's lighthouse anchor → `right`
+  northbound, `left` southbound.
 - **No silent misses** (review-caught): an unmatched find-string is "source healed" OR
   "source reworded, still wrong" — indistinguishable without a human look, so the generator
   **warns** per unmatched edit per fetch context, never no-ops silently.
@@ -66,10 +71,13 @@ away from the lakeside content the script describes.
 
 Corrections apply at fetch time, so on the next generation they reach the narration sheet
 and — for a place that is itself a STOP — `pois.facts` and `facts_hash`, making that poi's
-old `tour_stops` detectably stale. A page that appears only as a **mergedFeature** corrects
-the spoken text but does NOT touch any `facts_hash` (merged features aren't pois rows) —
-re-telling the tour is what refreshes those clips. `patch-clip` stays the surgical
-single-stop delivery tool.
+old narration rows detectably stale (`narration.facts_hash IS DISTINCT FROM
+pois.facts_hash`). A page that appears only as a **mergedFeature** corrects the spoken text
+but does NOT touch any `facts_hash` (merged features aren't pois rows) — re-telling is what
+refreshes those clips. `resynth-narration.ts` (the `resynth_narration` job) stays the
+surgical single-narration refresh tool. (The old `patch-clip` script was removed with the
+authored-tour pipeline in V1→V2; its `patch_clip` jobKind enum member survives in
+`@skipper/shared` but has no dispatchable script.)
 
 ### CC BY-SA note
 

@@ -132,11 +132,13 @@ verified — they share the build, so do them together.
   rig animating (it's static); the headline falling back to plain bold (Alfa Slab not loaded); the
   dashed trail rendering solid on iOS. (`apps/mobile/app/drives/[id]/index.tsx:213-245`)
 - [ ] **Headline + summary wrap, never truncate.** Do: open a tour with a long name (or bump
-  Dynamic Type larger). Expect: the slab headline grows onto 2–3 lines fully visible; the `tour.summary`
-  paragraph (inkDim body, Bitter) sits just below the placard and wraps in full — no `…` anywhere,
-  nothing cut at the gutter. Watch-for: an ellipsis (a stray `numberOfLines`); summary missing on a
-  tour that should have one (DTO/regen gap); text colliding with the screw-dots at large type.
-  (`apps/mobile/app/drives/[id]/index.tsx:217-222,248-252`)
+  Dynamic Type larger). Expect: the slab headline grows onto 2–3 lines fully visible; the static
+  explainer string `voice.drive.blurb` ("The skipper talks as you reach each stop on the real roads.")
+  sits under the Start CTA and wraps in full — no `…` anywhere, nothing cut at the gutter. Note: there
+  is **no** per-drive summary paragraph (no `summary` field on the drive DTO); the only body text is
+  that fixed blurb. Watch-for: an ellipsis (a stray `numberOfLines`); the blurb truncating; text
+  colliding with the screw-dots at large type.
+  (`apps/mobile/app/drives/[id]/index.tsx:355`, `src/ui/voice.ts:46`)
 - [ ] **Place names are cleaned.** Do: read the `THE ROUTE · N STOPS` itinerary and the home teaser.
   Expect: no name ends in `, California` / `, Nevada` — names read as spoken ("Emerald Bay", "Tahoe
   Keys"). Watch-for: a state suffix slipping through. Note: `cleanPlaceName` strips **only** the

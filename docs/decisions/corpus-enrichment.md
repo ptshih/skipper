@@ -1,8 +1,11 @@
 # Corpus enrichment (the `enrich` step)
 
 **Status:** ✅ **BUILT + RUN** (code shipped 2026-06-15; a paid `enrich --apply` has since been RUN
-across all story-eligible POIs — **315 welled as of 2026-06-16** — so tours + roam now ground on real
-wells, not the extract head. The founder ear-test (§11 of the spec) remains the acceptance gate.) The
+across all story-eligible POIs — **315 welled as of 2026-06-16** — so roam now grounds on real
+wells, not the extract head. The founder ear-test (§11 of the spec) remains the acceptance gate.)
+**Tour integration below is DEFERRED, NOT current behavior** (the `generate-tour.ts` + tours/segments/
+tracks/tour_frames tables were dropped in migration 0009 with the V1→V2 roam-first collapse; hand-authored
+tours are DEFERRED — see CLAUDE.md and `packages/db/src/schema.ts` for current truth). The
 corpus gained a distinct paid **`enrich`** op between discovery and generation: it
 scouts each story poi **once** into a curated, grounded **"fact sheet"** on `pois.fact_sheet`, which
 tours AND roam both ground on. Generalizes the per-tour-stop scout (`pipeline/scout.ts`) to the corpus
@@ -98,13 +101,16 @@ nothing. The verbatim-selection invariant reviewed CLEAN.
 - **The CLI** (`enrich-pois.ts`) + `jobKind` `enrich_pois` (shared enum + `jobs.ts` SCRIPTS +
   `buildJobArgs` + admin RoamView **Enrich** button). SOP-safe: dry run makes NO model calls (free);
   `--apply` spends Anthropic only (no TTS/R2). Flags: `--limit`/`--force`/`--model`/`--bbox`/`--max-cost`.
-- **Generation reads the well.** Roam (`generate-narrations.ts`) and tours (`generate-tour.ts`) ground on
+- **Generation reads the well.** Roam (`generate-narrations.ts`) grounds on
   `resolveStoryGrounding` — the sheet when enriched. **#1 (2026-06-16):** a STORY telling now REQUIRES a
-  sheet — an un-enriched POI is downgraded to scenic (tours) / skipped (roam), NOT narrated from the
+  sheet — an un-enriched POI is downgraded to scenic / skipped (roam), NOT narrated from the
   extract head (which survives only as a defensive fallback). Co-located merges fold the member's SHEET too.
-  Tours append ROUTE-level road geology (the scout, narrowed to road-only for enriched stops);
-  place-level geology + Wikidata retire into the well for enriched stops (spec §6). Both stamp the
-  clip `facts_hash` via `storyFactsHash`, so a fresh clip never reads stale.
+  Both stamp the clip `facts_hash` via `storyFactsHash`, so a fresh clip never reads stale.
+  **(DEFERRED tour pipeline, NOT current behavior — `generate-tour.ts` + the tours/segments/tracks/tour_frames
+  tables were dropped in migration 0009 with the V1→V2 collapse; hand-authored tours are DEFERRED, see
+  CLAUDE.md.)** When the authored-tour rung is built, tours will append ROUTE-level road geology (the scout,
+  narrowed to road-only for enriched stops) and place-level geology + Wikidata will retire into the well
+  for enriched stops (spec §6).
 - **Cap migration** (spec §7): `DEEP_EXTRACT_CHARS`(4000) → **`ENRICHER_INPUT_CHARS`(12000)** — the
   sweep now STORES the bigger raw article (the enricher's input) — plus **`NARRATION_FALLBACK_CHARS`**
   (4000) — the un-enriched read-time head cap, preserving today's narration length byte-for-byte.
@@ -126,14 +132,16 @@ nothing. The verbatim-selection invariant reviewed CLEAN.
   retryable on re-run), NOT baked with a degraded positional well. The read-time extract-head
   fallback covers it identically at narration time, so it's "never well-less" in effect — but
   recoverable, and a re-run can still build a real well.
-- **Tour place-scout retirement is per-poi, not wholesale.** An enriched stop skips the place-level
-  scout (geology landmark + Wikidata are in the well) and does route road-geology only; an
-  un-enriched stop keeps the full scout. So **nothing changes until a paid `enrich` run exists** —
-  the un-enriched path is byte-identical to today (the spec staged tour integration behind an
-  ear-test that was skipped; this switch makes the change activate per-poi, founder-controlled).
-- **Tours no longer re-derive poi facts from the narration sheet.** `prep` rebuilds the upserted
-  facts from the CORPUS facts (full extract + well, preserved), so a tour gen can never clobber the
-  well or shrink the stored extract.
+- **Tour place-scout retirement is per-poi, not wholesale** (DEFERRED tour pipeline — these describe the
+  authored-tour rung that is not built; `generate-tour.ts` and the tour tables were dropped in migration
+  0009, see What shipped). An enriched stop will skip the place-level scout (geology landmark + Wikidata are
+  in the well) and do route road-geology only; an un-enriched stop keeps the full scout. So **nothing
+  changes until a paid `enrich` run exists** — the un-enriched path is byte-identical to today (the spec
+  staged tour integration behind an ear-test that was skipped; this switch makes the change activate per-poi,
+  founder-controlled).
+- **Tours will no longer re-derive poi facts from the narration sheet** (same DEFERRED rung). `prep` rebuilds
+  the upserted facts from the CORPUS facts (full extract + well, preserved), so a tour gen can never clobber
+  the well or shrink the stored extract.
 
 ## Migration / ops sequence
 

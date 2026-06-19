@@ -11,11 +11,12 @@ a roam clip. Tahoe-basin corpus only; the founder (Zephyr Cove) is the alpha use
 
 ## What shipped (code anchors)
 
-- **Data:** `roam_clips` (`packages/db/src/schema.ts`) — the THIRD narration owner
+- **Data:** the shared `narrations` table (`packages/db/src/schema.ts`) — the 1:1 telling owner
+  (UNIQUE `poi_id` via `narrations_poi_uq`; roam is a MODE, not a separate owner)
   (`docs/decisions/tour-data-model-zero-reuse.md` §9): one complete telling per POI, `facts_hash`
-  staleness, frozen attribution, per-clip R2 keys `roam/<poiId>/<clipId>.mp3` (regen orphans the
+  staleness, frozen attribution, per-clip R2 keys `narration/<poiId>/<clipId>.m4a` (regen orphans the
   old object for sweep-orphans).
-- **Corpus:** `sweep-roam-pois.ts` — bbox Wikidata-spine discovery (3×4 grid over the basin,
+- **Corpus:** `discover-pois.ts` — bbox Wikidata-spine discovery (3×4 grid over the basin,
   story + scenic tiers upserted through the existing `pois` dedup seam; scenic pins seed the
   future wave layer, unnarrated in v0). First sweep: ~116 story / ~117 scenic.
 - **Generation:** `generate-narrations.ts` — ~60s self-contained ENCOUNTERS off the unchanged Skipper

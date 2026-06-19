@@ -7,7 +7,7 @@
 Today `voice.driveComplete` is one string on a plain screen; this beat is the emotional
 climax of the whole drive (the road's-end exhale), and the design language is
 mature on static visuals but bare on the two axes a _moment_ lives in — **motion
-and sound**. Design it as a beat: the trip total ticking up on the odometer (Space
+and sound**. Design it as a beat: the trip total ticking up on the odometer (Overpass
 Mono is already the "stamped clock"), the stops you passed collected and **inked as
 passport stamps** (`StopRow` already models the `passed` state; the DESIGN §9 stamp
 animation lands here first), an **engine-off sigh** + soft haptic to close the
@@ -28,5 +28,5 @@ What it stresses:
   stops passed — never an invented "remember when we saw…" the drive didn't include.
 - **Sequencing:** post-MVP, gated behind the proven phone player; build BEFORE the
   tip jar and the §9 passport-stamp animation (both want this surface) — reuses
-  `StopRow` `passed`, the Space Mono numerals, and the existing `voice.driveComplete`
+  `StopRow` `passed`, the Overpass Mono numerals, and the existing `voice.driveComplete`
   copy, so it's mostly motion + sound on pieces that already exist.

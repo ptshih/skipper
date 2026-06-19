@@ -160,8 +160,8 @@ All token-driven and theme-aware. Compose these; don't restyle from scratch.
   `active` (a sunken "you-are-here" well + **pine** accent glyph + bold name — never amber;
   the player card owns the one glow), `passed` (dimmed + a quiet check). Composed by `StopList`.
 - **`StopList`** — the route itinerary: one card of `StopRow`s, hairline-ruled, shared by
-  tour detail and the player. A `scroll` mode makes it a fixed shell (rows scroll inside,
-  the player) vs content-sized (the host page scrolls, tour detail).
+  drive detail (`app/drives/[id]`) and the player. A `scroll` mode makes it a fixed shell
+  (rows scroll inside, the player) vs content-sized (the host page scrolls, drive detail).
 - **`NowCard`** — the now-playing placard; the one surface that earns the amber glow. Holds a
   kicker + title (+ optional mono timer/badge), a state-dependent middle, and the transport.
 - **`TransportBar`** — the player transport: a glow-less center play/pause flanked by ±15

@@ -104,8 +104,10 @@ each is a real edge. Severity is "how likely to bite a real rider."
    Low impact (auth'd toy), but a cheap hardening is a bbox-containment check on the geocoded coords.
 4. **🟡 Free-cap check is non-atomic (TOCTOU).** Count-then-insert (`drives.ts:413-428` + the insert)
    races: two concurrent creates at 9 both pass → 11. Negligible for a single user; note only.
-5. **⚪ Stale V1 doc-comments** in `apps/mobile/src/lib/api.ts:4-7,42` still say "tour" / "GET /tours"
-   (the routes are gone). Not a runtime bug; likely swept by the in-flight V2 naming pass.
+5. **⚪ RESOLVED (2026-06-19).** The stale V1 doc-comments in `apps/mobile/src/lib/api.ts` are gone:
+   the V2 naming pass landed — lines 4-7 now describe the V2 drives client (GET /drives, GET
+   /drives/:id, POST /drives/propose, POST /drives; plus GET /regions, GET /roam) with zero
+   "tour" / "GET /tours" references, and line 42 is `this.name = 'ApiError'`.
 6. **⚪ Forward-looking, NOT a live bug:** `toClipForm` coerces `bside`→`story` and nothing filters
    drive corpus by form (`drives.ts:62-71`, `loadCorpusForRoute`). The corpus is 100% `story` today,
    so this is inert; when `scenic`/`wave` forms ship they will flow into drives by design.

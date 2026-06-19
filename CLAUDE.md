@@ -123,9 +123,9 @@ you found so the next agent can re-check it.
   column on `narrations` (one host needs none; a per-narration key returns with region-skippers, M4).
   The `personas` row holds the host DEFINITION but is un-consumed scaffolding today (v2 playback shows a
   fixed `'Skipper'`). **Voice** (no column) derives from the persona, and the
-  **notch** is a generation-time INPUT only (`run.ts --joke-level`, default `dadpocalypse`) — NOT
-  persisted (M1 is dadpocalypse-only). The `jokeLevel` Zod enum in `@skipper/shared` stays as the
-  narration vocabulary.
+  **notch** is a generation-time INPUT only, hardcoded to `dadpocalypse` in `generate-narrations.ts`
+  (no CLI joke-level flag yet) — NOT persisted (M1 is dadpocalypse-only). The `jokeLevel` Zod enum in
+  `@skipper/shared` stays as the narration vocabulary.
 - **A narration is only live once it has non-null audio** (story, scenic, AND break — `audio_url`
   is NOT NULL on `narrations` at the DB boundary). Generator enforces; the player also defends. A
   drive can't be `ready` until every selected stop resolves to a narration with audio.
@@ -139,7 +139,7 @@ you found so the next agent can re-check it.
   drive-load (and "ask the skipper" later). Break audio is **mandatory** — every
   selected break gets a narration with audio; a silent break never rides a drive.
   (NOTE: baking the Places name into a frozen R2 clip extends its lifetime
-  past the DB anchor — mind Places ToS; `patch-clip` re-synths one stop's clip if a
+  past the DB anchor — mind Places ToS; `resynth-narration` re-synths one place's clip if a
   place renames.)
 
 ## Stack notes
@@ -282,33 +282,35 @@ proven first. Full write-ups live in `docs/ideas/` (pre-spec) and `docs/specs/`
 From an adversarial review of the scaffold. Verdict: sound foundation. Guardrails:
 
 - **Type-name collisions (enforced: `bun run lint:types`).** `@skipper/shared` (Zod
-  boundary types) and `@skipper/db/schema` (Drizzle `$inferSelect` row types) both export
-  `Poi`, `Tour`, `Region` — DIFFERENT shapes (Zod = read DTOs: nullish, omit internal cols
-  like `facts`). Use Zod types from `@skipper/shared` at
-  boundaries; import a DB ROW type only from the `@skipper/db/schema` subpath, ALIASED
-  (`import type { Poi as PoiRow }`). NEVER `export * from` both in one barrel. (`Polyline`
+  boundary types) and `@skipper/db/schema` (Drizzle `$inferSelect` row types) can export the same
+  NAME at DIFFERENT shapes (Zod = read DTOs: nullish, omit internal cols like `facts`) — today the
+  only live collision is `Region` (`Poi` only if/when re-added as a shared DTO). Use Zod types from
+  `@skipper/shared` at boundaries; import a DB ROW type only from the `@skipper/db/schema` subpath, ALIASED
+  (`import type { Region as RegionRow }`). NEVER `export * from` both in one barrel. (`Polyline`
   collides by name too but is the SAME shape, so the guard ignores it.) The guard derives the
   set from the schema each run; the `@skipper/db` client deliberately does NOT re-export the schema.
 - **`@skipper/db` import is side-effect-free.** The client is lazy (`getDb()` /
   the `db` proxy build on first query) so importing it never forces
   `DATABASE_URL` to exist — env-free routes like `GET /health` keep booting.
 - **`voice` is a fixed function of persona** (each `PersonaDef.voice` in
-  `packages/generator/src/persona/`, resolved in code by `personaFromKey('skipper')` — one host in v2:
+  `packages/generator/src/persona/`, resolved in code by `personaFromKey('skipper')` — one host in v2 —
+  and baked onto the `narrations` row at generation:
   skipper → the Google Cloud Gemini-TTS voice name "Charon"; `SKIPPER_VOICE_ID` in
   `models.ts` is the source constant the def references). Not a per-request knob (deferred to
   region-skippers, M4). (Gemini-TTS voice names are stable
   identifiers — no ElevenLabs-style sunset to mind.)
-- **The generator MUST populate `tracks.attribution`** for every
+- **The generator MUST populate `narrations.attribution`** for every
   wikipedia-sourced clip (CC BY-SA is legal, not optional) — put it on the
   generation invariant checklist + the human-review gate.
 - **scenic ≠ break.** A scenic stop is delivery-only ambient audio (no facts); a
   break stop names the curated Places anchor (name + kind only). Both — and story —
-  carry non-null `audioUrl` on the stop's `track`: **every** stop type carries audio and
+  carry non-null `audio_url` on the `narrations` row: **every** stop type carries audio and
   the ready-gate requires it on all of them (no stop type is silent). Only fact-grounded
-  (story) tracks carry a `facts_hash`; scenic/break carry none and are never fact-stale.
-- **M1 ready-gate is atomic via `db.batch([...])`** — neon-http has no
-  interactive transactions, but co-committing the `status='ready'` flip with the
-  final segment/track/frame writes in one batch suffices (no neon-serverless Pool needed).
+  (story) narrations carry a `facts_hash`; scenic/break carry none and are never fact-stale.
+- **Readiness derives from audio, not a tour status flip.** The V1 batched
+  `status='ready'` gate (segment/track/frame writes) was removed in the V1→V2 migration
+  (`pipeline/persist.ts`); roam upserts a 1:1 `narration` directly, and a drive is `ready`
+  once every selected narration resolves to non-null `audio_url`.
 - Three further scaffold guardrails about the old `poi_content` content cache
   (DB-enforced cache-key dimensions, M4 cache invalidation, the `stopType`-not-in-key
   precondition) were **SUPERSEDED by zero-reuse (2026-06-08)** — narration is tour-owned,

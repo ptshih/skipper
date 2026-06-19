@@ -163,8 +163,9 @@ from `apps/site` (a `.firebaserc` pins the project).
 
 `apps/admin` (the founder-only ops console: a bun Hono API + the built `apps/admin/client`
 Vite/React SPA, ONE container) → a Cloud Run **service** `skipper-admin` behind **Google
-IAP**. `packages/generator` → a Cloud Run **job** `skipper-gen` (the tour-ops CLI runner:
-generate / patch-clip / resynth / sweep, one image, per-execution `args`). Both reuse the
+IAP**. `packages/generator` → a Cloud Run **job** `skipper-gen` (the corpus/roam CLI runner:
+discover-pois / enrich-pois / generate-narrations / resynth-narration / sweep-orphans / refetch-poi,
+one image, per-execution `args`). Both reuse the
 SAME `skipper-gh` connection + the `skipper` Artifact Registry repo — CD is two more
 triggers. Full design: `docs/specs/admin-ops-console-spec.md` (§7/§10). Code-complete on
 branch `feat/admin-ops-v0`; the steps below are the first deploy.
@@ -259,9 +260,11 @@ gcloud iap web add-iam-policy-binding --resource-type=cloud-run --service=skippe
 # REAL check: open $URL in a browser → IAP sign-in with ADMIN_EMAIL → you reach the SPA (a 403
 # after sign-in = IAP ok but the email != ADMIN_EMAIL).
 URL=$(gcloud run services describe skipper-admin --region=us-east4 --format='value(status.url)')
-# the gen job runs out-of-band (not behind IAP):
+# the gen job runs out-of-band (not behind IAP). The CLI was split into per-script
+# entry-points in the V1→V2 migration (no single run.ts dispatcher) — name a real script,
+# e.g. sweep-orphans.ts (or discover-pois.ts / enrich-pois.ts / generate-narrations.ts):
 gcloud run jobs execute skipper-gen --region=us-east4 \
-  --args="packages/generator/src/run.ts,emerald-bay-run,--dry-run"
+  --args="packages/generator/src/sweep-orphans.ts,--dry-run"
 ```
 
 ⚠️ **DRS gotcha (same as the api's `--no-invoker-iam-check`):** enabling IAP adds a
@@ -277,6 +280,6 @@ agent). Temporarily relax DRS (needs `roles/orgpolicy.policyAdmin`) to register 
 - `cloudbuild.admin.yaml` — the `skipper-admin` service (multi-stage: SPA + Hono) build → deploy.
 - `.gcloudignore` — trims the Cloud Build upload; re-excludes `.env.keys`.
 - `apps/api/Dockerfile` — the lean Bun image (header explains the workspace trim).
-- `packages/generator/Dockerfile` — the `skipper-gen` Job image (one image, all four CLIs).
+- `packages/generator/Dockerfile` — the `skipper-gen` Job image (one image, all six corpus/roam CLIs).
 - `apps/admin/Dockerfile` — the admin service (stage 1 builds `apps/admin/client`, stage 2 serves it).
 - `apps/site/` — the Astro apex site (`firebase.json`, `.firebaserc`, static AASA).

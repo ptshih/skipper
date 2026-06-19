@@ -1,15 +1,15 @@
 # Ops-scripts SOP
 
 **Status:** ✅ **ADOPTED 2026-06-10.** Enforced by reuse via `packages/generator/src/pipeline/ops.ts`;
-reference implementation = `sweep-orphans.ts`; `patch-clip.ts` + `resynth-tour.ts` retrofitted to
-conform (their old default-execute was flipped to default-preview). This is the contract for the
-generator's one-off operational CLIs.
+reference implementation = `sweep-orphans.ts`; `resynth-narration.ts` (1:1 narration resynth) and
+`rename-roam-prefix.ts` conform to the contract (preview by default, act only on `--apply`). This is
+the contract for the generator's one-off operational CLIs.
 
 ## What this covers
 
 The generator's **one-off ops CLIs** — `packages/generator/src/*.ts` you run by hand via
-`dotenvx … bun …` to fix or maintain live data (`sweep-orphans`, `patch-clip`, `resynth-tour`,
-backfills). NOT the generation pipeline itself, and not app/API code.
+`dotenvx … bun …` to fix or maintain live data (`sweep-orphans`, `resynth-narration`,
+`rename-roam-prefix`, backfills). NOT the generation pipeline itself, and not app/API code.
 
 These touch live, irreversible things — the DB, R2 bytes, and metered TTS/LLM spend (a live regen
 burns GCP credits). So they share one safety contract.
@@ -23,7 +23,7 @@ burns GCP credits). So they share one safety contract.
    by default and acts only on `--apply`.** A read-only tool needs no gate. (This is the rule —
    never make "execute" the no-flag default.)
 3. **Scope guards.** Confine the blast to a single entity or key prefix (e.g. the sweep only ever
-   touches `clips/<tourId>/`). A fan-out (`--all`) combined with `--apply` requires `--yes`.
+   touches `narration/`). A fan-out (`--all`) combined with `--apply` requires `--yes`.
 4. **Use `pipeline/ops.ts`.** Don't re-roll arg parsing, tour resolution, env checks, or the
    preamble — the SOP is enforced by reuse, not prose.
 5. **Invocation + env.** Run via `dotenvx run -f .env.development -- bun
@@ -36,8 +36,9 @@ burns GCP credits). So they share one safety contract.
 
 - `parseFlags(argv, { valueFlags })` → `{ positionals, has(name), value(name) }` — supports
   `--flag`, `--flag=val`, `--flag val`; `valueFlags` keeps a value token from being read as a
-  positional (e.g. `patch-clip`'s `--find`/`--replace`).
-- `resolveTourId(arg)` — full id or unique id prefix.
+  positional (e.g. `generate-narrations`'s `--bbox`/`--limit`/`--max-cost`).
+- `parseBboxFlag(raw)` → `{ swLng, swLat, neLng, neLat }`; `maxCostFlag(flags)` — shared parsers for
+  the region/cost flags the discover/enrich/generate CLIs take.
 - `assertReady(['r2' | 'tts'])` — throws a clear, actionable message if an `--apply` run's env is
   missing.
 - `announce({ tool, blast, apply })` — the loud preamble (`DRY RUN — pass --apply` vs `APPLYING`).
@@ -58,5 +59,5 @@ burns GCP credits). So they share one safety contract.
 | Tool | Blast radius | Default | Conforms |
 | --- | --- | --- | --- |
 | `sweep-orphans.ts` | DELETES BYTES | dry-run | ✅ (reference) |
-| `patch-clip.ts` | SPENDS $ + MUTATES DB | dry-run | ✅ (retrofit 2026-06-10) |
-| `resynth-tour.ts` | SPENDS $ + MUTATES DB + DELETES BYTES | dry-run | ✅ (retrofit 2026-06-10) |
+| `resynth-narration.ts` | SPENDS $ + MUTATES DB | dry-run | ✅ |
+| `rename-roam-prefix.ts` | MUTATES DB + DELETES BYTES | dry-run | ✅ |

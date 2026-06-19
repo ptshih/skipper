@@ -92,13 +92,13 @@ Everything ships through the **phone** (mount / Bluetooth). CarPlay is deferred 
 Import everything from `@skipper/drive-core` (the barrel re-exports `geo`/`trigger`/`simulate`/`preview`).
 
 `trigger.ts`:
-- `class TriggerEngine` — `new TriggerEngine(stops: TourStopRef[], opts?: Partial<TriggerOptions>)`;
+- `class TriggerEngine` — `new TriggerEngine(stops: DriveStopRef[], opts?: Partial<TriggerOptions>)`;
   `update(fix: GpsFix): TriggerEvent[]` (the stops that fired this tick, usually 0 or 1);
   `hasFired(seq)`, `get firedCount()`. **Stateful** — one instance per drive; on restart, make a NEW one
   (it has no reset).
 - `GpsFix = { lat, lng, speedMps, headingDeg, tSec, alongM }`. Only `lat/lng/speedMps/headingDeg` matter
   to the fire decision; `tSec` = seconds since drive start (for reported lead), `alongM` = UI only (use 0).
-- `TourStopRef = { seq, lat, lng, triggerRadiusM, durationMs?, name?, stopType? }`.
+- `DriveStopRef = { seq, lat, lng, triggerRadiusM, durationMs?, name?, stopType? }`.
 - `TriggerEvent = { seq, tSec, alongM, distanceM, speedMps, leadSec }`.
 - Fire logic: skip if already fired → distance ≤ `effectiveRadiusM(triggerRadiusM, speed, leadSeconds)`
   (`= max(triggerRadiusM, speed*leadSeconds)`) → **heading gate** only above `headingGateMps` (2.2 m/s ≈
@@ -225,7 +225,7 @@ the API does **not** return the persisted `triggerLat/triggerLng` (they exist in
 
 **Audio** comes separately: `POST /tours/:tourId/assets/sign` → `{ urls: [{ seq, url, contentType, durationMs }] }`
 (one presigned R2 GET per stop with audio). **Presign TTL = 1 hour** (`apps/api/src/storage.ts`).
-`contentType` is the clip's MIME (e.g. `audio/mpeg`), derived server-side from the R2 key — use it to
+`contentType` is the clip's MIME (e.g. `audio/mp4`), derived server-side from the R2 key — use it to
 pick the on-disk extension; do NOT hardcode the format.
 
 **To drive ONE tour fully offline you must persist:**
@@ -234,10 +234,10 @@ pick the on-disk extension; do NOT hardcode the format.
 Network to prep: `1× GET /tours` + `1× POST /sign` + `N` audio GETs.
 
 **Offline storage:** `Paths.document/tours/<tourId>/<seq>.<ext>` (persistent), where `<ext>` comes from
-each clip's `contentType` in the sign response (`audio/mpeg` → `mp3`) — never hardcoded. Write a
+each clip's `contentType` in the sign response (`audio/mp4` → `m4a`) — never hardcoded. Write a
 **manifest** (`manifest.json`: tourId, a version/generatedAt, polyline, stops, per-seq file path +
 contentType). At playback prefer the local `file://` if present, else the presigned URL (re-sign if the
-1 h TTL lapsed). Note: clips are now **32k MP3** (~12× smaller than the old LINEAR16 WAVs — a few MB/tour),
+1 h TTL lapsed). Note: clips are now **AAC-LC 48k `.m4a` (`audio/mp4`)** (~12× smaller than the old LINEAR16 WAVs — a few MB/tour),
 but still budget storage + download time + a progress UI that gates "Start drive". Gating is real: a
 non-preview tour needs a signed-in (free) account at prep time (the `/tours` + `/sign` tier check).
 
@@ -384,7 +384,7 @@ Pins (`apps/mobile/package.json`): `expo ~56.0.9`, `react-native 0.85.3`, `expo-
 
 ## 9. File map
 
-- `packages/drive-core/src/trigger.ts` — `TriggerEngine`, `GpsFix`, `TourStopRef`, `TriggerEvent`,
+- `packages/drive-core/src/trigger.ts` — `TriggerEngine`, `GpsFix`, `DriveStopRef`, `TriggerEvent`,
   `snapStopsToRoute`, `effectiveRadiusM`, `DEFAULT_TRIGGER`. **Reuse; don't modify.**
 - `packages/drive-core/src/simulate.ts` — `generateDrive` (the sim source), `runDrive`, `DEFAULT_MAX_OFF_ROUTE_M`.
 - `packages/drive-core/src/geo.ts` — geometry helpers.

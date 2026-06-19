@@ -1,6 +1,12 @@
 # The drive's thesis — build spec
 
-> **Schema-names note (2026-06-13):** the `tour_brackets` table referenced below was renamed `tour_frames` in the 2026-06-12 segments/tracks refactor.
+> **Schema-names note (2026-06-19):** the `tour_brackets`/`tour_frames` and `tours`/`tour_stops`
+> tables this spec references were ALL dropped in migration 0009 (V2 roam-first model — see
+> `packages/db/src/schema.ts`). Mapping for a future build: the user-owned ordered sequence is now
+> the `drives` table (not `tours`); place tellings are 1:1 `narrations` (not `tour_stops`); and the
+> placeless intro/outro "brackets" are now **frames persisted to the `asides` table** (see
+> `packages/generator/src/pipeline/narrate.ts`). Read every `tours.*`/`tour_*` reference below as the
+> corresponding V2 entity.
 
 > **Status:** SPEC ONLY — unbuilt. Generation-only feature; post-MVP, gated behind the proven phone
 > player. Decided 2026-06-09. **The keystone** of the charm layer: it organizes the through-line
@@ -21,8 +27,8 @@
 - **Grounding rule:** the thesis is **delivery** (a framing/take) but must be **earned by the
   grounded facts** — never a frame that manufactures a connection the facts don't support.
   **Exhaustion-gated:** if the stops don't honestly share an idea, *don't force one.*
-- **Cheap — generation-only.** Reuses brackets + the within-tour conditioning machinery + the
-  persona; one nullable `tours.thesis` column; no player change.
+- **Cheap — generation-only.** Reuses the intro/outro frames + the within-tour conditioning
+  machinery + the persona; one nullable `thesis` field on the drive entity; no player change.
 - **Production:** model proposes candidate theses, **founder blesses** one per corridor (the
   hand-authored-charm-artifact pattern) — a thesis is a *lens* (structure-adjacent), so the words
   stay generated and principle #2 holds.
@@ -100,15 +106,16 @@ contents-creep; keep it a frame.
 
 ## 6. Where it lives (data + generation)
 
-- **`tours.thesis`** — a nullable text column (the blessed framing string; null when the
-  exhaustion-gate found none). It's a tour-level *input to generation* (like `tours.headline`/the
-  route), not narration — so it sits on `tours`, not `tour_stops`. Persisting it makes regen stable.
-- **Intro/outro brackets** (`tour_brackets`, `docs/specs/tour-structure-spec.md`) carry the
-  plant/land — generated *from* `tours.thesis`. This is where 90% of the thesis lives.
+- **A `thesis` field on the drive entity** — a nullable text column (the blessed framing string;
+  null when the exhaustion-gate found none). It's a drive-level *input to generation* (like the
+  drive's headline/the route), not narration — so it sits on `drives`, not on the `narrations` atom.
+  Persisting it makes regen stable. (No `thesis` column exists yet — schema TBD at build time.)
+- **Intro/outro frames** (the `asides` table, `docs/specs/tour-structure-spec.md`) carry the
+  plant/land — generated *from* the blessed thesis. This is where 90% of the thesis lives.
 - **Light stop conditioning:** each stop's narration is *optionally* told the thesis (a nod when
   natural), threaded through the within-tour conditioning the generator already runs
-  (`generate.ts`'s `priorStops`/motif window — the thesis becomes one more threaded element). This is
-  the **bookends-first** refinement (§9) — ship the brackets first, add stop-nods later.
+  (`narrate.ts`'s `priorStops`/motif window — the thesis becomes one more threaded element). This is
+  the **bookends-first** refinement (§9) — ship the frames first, add stop-nods later.
 - Reuses the persona (`packages/generator/src/persona/`) — the thesis is spoken in the skipper's
   voice; for region skippers it's *his* take (ties the thesis to the region-host identity).
 
@@ -116,19 +123,21 @@ contents-creep; keep it a frame.
 
 Generation-only and cheap: a thesis-proposal step (one model call over the collective wells, at
 generation), the bracket generation (already exists), optional light stop conditioning (reuses
-existing threading), one nullable `tours.thesis` column. **No player change, no new audio path** (the
-thesis rides the brackets + stops, which already carry audio). Same weight class as the through-line.
+existing threading), one nullable `thesis` field on the drive entity. **No player change, no new audio
+path** (the thesis rides the frames + stops, which already carry audio). Same weight class as the
+through-line.
 
 ## 8. Build phases (file-level)
 
 1. **Thesis proposal + bless loop.** A generator step that reads the route's wells and emits 2–3
    grounded candidate theses (+ their supporting stops) for founder review; persist the blessed one to
-   `tours.thesis`. Exhaustion-gate (propose *none* when honest). Add the thesis judge (validation
-   harness).
-2. **Schema:** the nullable `tours.thesis` column (`packages/db/src/schema.ts`). Clean/destructive.
-3. **Brackets generate from the thesis** (`narrate.ts` intro/outro): plant in intro, land in outro;
+   the drive's `thesis` field. Exhaustion-gate (propose *none* when honest). Add the thesis judge
+   (validation harness).
+2. **Schema:** the nullable `thesis` column on the `drives` entity (`packages/db/src/schema.ts`).
+   Clean/destructive.
+3. **Frames generate from the thesis** (`narrate.ts` intro/outro): plant in intro, land in outro;
    feeds the drive-complete payoff content. Theme-less fallback when `thesis` is null.
-4. **(Refinement) Light stop nods** — thread `tours.thesis` into stop narration; tune restraint by ear.
+4. **(Refinement) Light stop nods** — thread the drive's `thesis` into stop narration; tune restraint by ear.
 5. **Ear-tune:** is the thesis specific + earned, or generic + forced? Does the payoff land? (Founder
    gate — the highest-leverage iteration, like the narration prompt itself.)
 
@@ -144,8 +153,8 @@ thesis rides the brackets + stops, which already carry audio). Same weight class
 
 ## 10. Edge cases
 
-- **No honest thesis** → `tours.thesis` null; warm theme-less brackets; no stop-nods. Correct, common.
-- **Regen** → reuses the blessed `tours.thesis` (stable), unless facts changed enough to re-propose
+- **No honest thesis** → the drive's `thesis` null; warm theme-less frames; no stop-nods. Correct, common.
+- **Regen** → reuses the blessed drive `thesis` (stable), unless facts changed enough to re-propose
   (founder re-blesses).
 - **Thin/short tour** → usually no thesis (too little evidence); don't force.
 - **Spoiler risk** → the §4 no-spoiler discipline + the judge.
@@ -157,13 +166,13 @@ thesis rides the brackets + stops, which already carry audio). Same weight class
   (`docs/specs/downtime-callouts-spec.md` + the pull ladder) and `docs/specs/skipper-opinions-spec.md`
   (the thesis is taste at drive-altitude). Borrows the **exhaustion gate** from
   `docs/specs/tell-me-more-spec.md`.
-- Generation seams: `packages/generator/src/pipeline/narrate.ts` (bracket gen),
-  `packages/generator/src/pipeline/generate.ts` (the proposal step + within-tour conditioning),
-  `packages/generator/src/persona/` (`PersonaDef` — the voice), `packages/db/src/schema.ts`
-  (`tours.thesis`). Narration stays tour-owned (`docs/decisions/tour-data-model-zero-reuse.md`); the
-  thesis is a tour-level *input*, not cached cross-tour content.
+- Generation seams: `packages/generator/src/pipeline/narrate.ts` (intro/outro frame gen + the
+  proposal step + within-tour conditioning), `packages/generator/src/persona/` (`PersonaDef` — the
+  voice), `packages/db/src/schema.ts` (the drive `thesis` field). Narration stays place-owned
+  (`docs/decisions/tour-data-model-zero-reuse.md`); the thesis is a drive-level *input*, not cached
+  cross-drive content.
 
 **Decisions locked:** the thesis is the keystone (plant → evidence → land); delivery but
 fact-earned + exhaustion-gated (no forced theses) + judged; model-proposes/founder-blesses (a lens,
-not a script — principle #2 safe); persisted on `tours.thesis`; generation-only; bookends-first with
+not a script — principle #2 safe); persisted on the drive's `thesis` field; generation-only; bookends-first with
 light stop-nods deferred.

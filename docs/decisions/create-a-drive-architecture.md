@@ -93,17 +93,17 @@ core; the credit IAP is a fast-follow.
   simulator already owns `generateDrive` for GPS-fix generation; "drive" stays the product verb +
   `POST /drives`. NOT a refactor of `selectStops`): co-located dedupe
   **inverts to pick-one** (can't fuse finished `.m4a`s); ranks by along-route fit + real
-  `audioDurationMs` best-fit + variety; runs server-side AND on-device (offline re-pace). Lift shared
-  pacing (`snapOf`, min-gap windowing, `selectBreaks`, `projectQueueLag`) into `drive-core/pacing.ts`,
-  imported by both `selectStops` and `buildDrive`. **Pin `selectStops` behavior with tests BEFORE
-  extracting** so the live generator can't regress.
+  `audioDurationMs` best-fit + variety; runs server-side AND on-device (offline re-pace). Shared
+  pacing (`buildRouteSnapper`, `projectQueueLag`) lives in `drive-core/pacing.ts`, imported by
+  `buildDrive` (the legacy `selectStops`/`selectBreaks`/`snapOf` tour-generation pipeline was removed in
+  the V2 migration this doc documents as shipped).
 - **Asides = pre-generated GENERIC** (intro/outro + clock-anchored beats). Live-gen / name-
   personalized brackets POSTPONED (measured synth latency too fragile for the mandatory first beat).
   Placed like `selectBreaks` via negative-sentinel seqs (extend `INTRO_SEQ`/`OUTRO_SEQ` in
   `drive-core/preview.ts` to N asides).
 - **`route_sig` + `drive_demand` ship as instrumentation only**; the route cache-warming /
   authored-graduation infra is deferred behind a real route-concentration histogram (charm-not-scale).
-- **Offline:** reuse `downloadTour`'s byte-freeze (`apps/mobile/src/lib/offline.ts`) — store BYTES, not
+- **Offline:** reuse `downloadDrive`'s byte-freeze (`apps/mobile/src/lib/offline.ts`) — store BYTES, not
   presigned URLs; re-presign the stable R2 key at assemble time.
 
 ## Build phases

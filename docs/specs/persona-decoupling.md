@@ -1,18 +1,23 @@
 # Persona decoupling from region
 
-**Status:** BUILT — 2026-06-13
+**Status:** SUPERSEDED — 2026-06-19 (V2 roam-first collapse). The `tours` table this spec's plumbing
+hangs off was DROPPED in migration `0009` along with `segments`/`tracks`/`tour_frames`; there is no
+`tours.persona_key` column anymore. Persona is now keyed via the `personas` and `asides` tables and the
+roam/narration pipeline. Current truth: the live schema `packages/db/src/schema.ts` and
+`docs/decisions/region-corpus-discovery.md` / the V2 narrations atom. The body below is retained as
+append-only history; the build it describes was later superseded.
 
-> **Built 2026-06-13.** `tours.persona_key` added (migration `0003_sticky_the_spike`, default
-> `'skipper'`). `personaForRegion` deleted and replaced by `personaFromKey` (the `PERSONAS` map is
-> now keyed by persona key, not region slug). The blast radius was wider than the original
-> generate.ts-only framing: every caller was re-pointed — tour ops (`patch-clip`, `resynth-tour`)
-> read `tours.persona_key`; roam/eval ops (`generate-narrations`, `resynth-narration`, `eval/run`) use
-> `'skipper'` (single persona in M1). The CLAUDE.md hard invariant ("none of persona/voice/notch is
-> a stored `tours` column") was amended: persona is now the one stored column (a *selector*; the
-> definition still lives in `personas` + frozen on `segments.persona_id`). No persona picker UI —
-> the admin create flow wires `personaKey: 'skipper'` explicitly. Follow-up for M4: eval artifacts
-> don't yet carry a persona key, so `eval/run` hardcodes `'skipper'`; when named hosts ship, thread
-> the key onto the artifact so the offline auditor mirrors the live persona.
+> **Built 2026-06-13 (later superseded by the V2 collapse).** Originally `tours.persona_key` was added
+> (migration `0003_sticky_the_spike`, default `'skipper'`). `personaForRegion` was deleted and replaced
+> by `personaFromKey` (the `PERSONAS` map is now keyed by persona key, not region slug) — that resolver
+> survives (`packages/generator/src/persona/index.ts`). The `tours` table and its `persona_key` column
+> were later dropped in migration `0009`; the only persona callers that remain are the roam/narration
+> ops (`generate-narrations`, `resynth-narration`), which hardcode `personaFromKey('skipper')` (single
+> persona in M1). Persona definitions live in the `personas` table; in V2 the persona is baked onto the
+> single shared `narrations` telling (the legacy `segments.persona_id` freeze went away with the
+> `segments` table). There is no persona picker UI and no admin create-tour flow — hand-authored tours
+> are deferred; the first-day artifacts are ROAM + user-owned DRIVES. Follow-up for M4 when named hosts
+> ship: thread a persona key onto the eval artifact so the offline auditor mirrors the live persona.
 
 ## Problem
 
@@ -122,7 +127,7 @@ grep -r "personaForRegion" packages/ apps/ --include="*.ts"
 ## What NOT to do
 
 - Do **not** add a persona picker UI — just wire the default.
-- Do **not** change how `segments.persona_id` is written — `resolvePersonaId(persona.personaKey)`
-  in `persist.ts` already handles that and is correct.
+- (Historical — no longer applies: the `segments` table was dropped in migration `0009`, so there is
+  no `segments.persona_id` to write. In V2 persona is baked onto the shared `narrations` telling.)
 - Do **not** touch the eval or test files unless typecheck forces it.
 - Do **not** change the `personas` table — it already stores persona data correctly.

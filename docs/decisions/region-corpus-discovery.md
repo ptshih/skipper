@@ -1,10 +1,19 @@
 # Region-corpus discovery (discovery-first reorder)
 
-**Status:** ✅ **BUILT 2026-06-12.** Tour generation no longer discovers POIs live; it selects
+**Status:** ⚠ **CONSUMER SUPERSEDED by V2 (2026-06-19); the SWEEP survives.** The discovery-first
+reorder's region-corpus SWEEP is still live (`discover-pois.ts` → `pois`), but its original consumer
+— tour generation off the segments/tracks model — was DROPPED by migration `0009` (V2, 2026-06-18,
+which removed `tours`/`segments`/`tracks`/`tour_frames`). The live model is `pois ─1:1─ narrations`
+(shared atom) + user-owned `drives`; the live generate step is `generate-narrations.ts`. Current
+truth: the schema (`packages/db/src/schema.ts`) and `docs/decisions/tour-data-model-zero-reuse.md`
+(itself now "ENTITY MODEL SUPERSEDED by V2"). The history below is preserved as written; present-tense
+tour claims are corrected inline.
+
+**Originally BUILT 2026-06-12.** Tour generation no longer discovered POIs live; it selected
 from a shared region corpus that a discovery sweep populates first. Seeded draft shells +
-committed curated-route artifacts are gone — tours are authored at runtime. Supersedes the
-"tour generate discovers its own route box" flow. Pairs with
-`docs/decisions/tour-data-model-zero-reuse.md` (the segments/tracks model this rides on) and the
+committed curated-route artifacts are gone. Superseded the
+"tour generate discovers its own route box" flow. Paired with
+`docs/decisions/tour-data-model-zero-reuse.md` (the segments/tracks model it rode on) and the
 Wikidata discovery spine (`pipeline/wikidata-discovery.ts`).
 
 ## The reorder
@@ -21,11 +30,13 @@ pre-seeded as draft shells from committed `tour-specs.ts` + `seed/data/*.json` r
    them, and upserts STORY rows (Wikipedia prose) + SCENIC pins into `pois`, deduped by
    `(source, source_id)`. The bbox is a generation-op PARAMETER / a per-region default in code —
    `regions` stays geometry-free (D4 of the segments/tracks refactor holds).
-2a. **Generate a tour.** `generate-tour.ts` reads candidates from the corpus
-   (`pipeline/region-corpus.ts::loadCandidatePoisInBox`), scoped to the route's bounding box, and
-   rebuilds the SAME `WikiPoi` shape the spine emitted — no live WDQS. An empty corpus throws at
-   `$0` ("discover the region first") before any paid call. Selection (`select.ts`) and the facts
-   deepen (`loadFreshPoiFacts`) downstream are unchanged.
+2a. **Generate.** _(V2: tours are deferred; the live generate step is `generate-narrations.ts`,
+   which narrates the `pois` corpus 1:1 into `narrations`.)_ Historically `generate-tour.ts` read
+   candidates from the corpus (`pipeline/region-corpus.ts::loadCandidatePoisInBox` — now dead code,
+   no live importer), scoped to the route's bounding box, and rebuilt the SAME `WikiPoi` shape the
+   spine emitted — no live WDQS. An empty corpus throws at `$0` ("discover the region first") before
+   any paid call. Selection (`select.ts`) and the facts deepen (`loadFreshPoiFacts`) downstream are
+   unchanged.
 2b. **Generate roam.** Already narrates the corpus — unchanged.
 
 ## Why
@@ -38,17 +49,20 @@ pre-seeded as draft shells from committed `tour-specs.ts` + `seed/data/*.json` r
   rows — `{extract, title, url, pageId, qid}` — so `loadCandidatePoisInBox` reconstructs the
   `WikiPoi` (incl. the Wikidata `qid` enrichment join) without calling WDQS. SCENIC rows
   (`source 'wikidata'`) carry no prose, exactly as before.
-- **No seeded shells.** The seed is now just `regions` + `personas` + `poi_overrides`. Tours are
-  AUTHORED at runtime via the admin Create flow (`materializeRoute` survives; the seed-time
-  materialize CLI + `tour-specs.ts` + `seed/data/*.json` + the `wikidata-spine-diff` artifact tool
-  were deleted). The two curated Tahoe routes are re-authored through the new system (they were
+- **No seeded shells.** The seed is now just `regions` + `personas` + `poi_overrides`. _(V2: tours
+  are DEFERRED — the first-day artifacts are Roam + user-owned Drives. `materializeRoute` survives but
+  now freezes user-owned DRIVE routes — `apps/api/src/drives.ts` — not admin-authored tours.)_ The
+  seed-time materialize CLI + `tour-specs.ts` + `seed/data/*.json` + the `wikidata-spine-diff` artifact
+  tool were deleted. The two curated Tahoe routes are re-authored through the new system (they were
   not valuable enough to preserve).
 
 ## Operator flow (admin)
 
-Discover region (`discover_pois --apply`) → author a route (Create tour → `materializeRoute`) →
-`generate` the draft → (optionally) `generate_narrations` for the corpus. The empty-corpus guard makes
-the ordering self-enforcing.
+_(V2: the live corpus pipeline is three steps.)_ Discover region (`discover_pois --apply`) →
+`enrich_pois` (paid fact-sheet scout) → `generate_narrations` for the corpus. The empty-corpus guard
+makes the ordering self-enforcing. (The old "author a route → `generate` the draft" tour steps are
+gone — tours are deferred in V2; user-owned drives freeze their own route via `materializeRoute` at
+runtime, see `apps/api/src/drives.ts`.)
 
 ## Deferred / open
 

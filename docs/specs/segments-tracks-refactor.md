@@ -1,6 +1,15 @@
 # Segments / Tracks data-model refactor
 
-> **Status:** BUILT 2026-06-12 — cutover executed on `main` (no worktree). The data-preserving
+> **Status:** SUPERSEDED 2026-06-19 — the `segments`/`tracks`/`tour_frames`/`tours` model this spec
+> built was itself dropped in migration `0009` (the V2 roam-first pivot). Current truth = the live
+> schema `packages/db/src/schema.ts`: `pois` ──1:1── `narrations` (the shared telling hangs directly
+> off the poi — no segment, no `variant`), the placeless flavor moved to `asides` (not `tour_frames`),
+> and the user-facing ordered artifact is the user-owned `drives` table; `tours` was removed entirely
+> and authored tours are deferred. Only `personas` survived from this spec. See the V2 doctrine in
+> CLAUDE.md (principle #1) and `docs/decisions/tour-data-model-zero-reuse.md`. Body kept below as the
+> 2026-06-12 design record.
+>
+> _Historical (BUILT 2026-06-12):_ cutover executed on `main` (no worktree). The data-preserving
 > `0010` below was DROPPED in favor of a clean NUKE (founder OK'd; no users): schema rewritten to
 > the locked model, single fresh `0000` baseline, DB + R2 wiped + reseeded, every caller repointed
 > (generator/api/admin/mobile/sim/drive-core/shared), `bun run check` green. Content REGEN (the 2
@@ -11,6 +20,10 @@
 > read the `personas` table (still served region-keyed from `apps/api/host.ts`).
 
 ## TL;DR
+
+> SUPERSEDED: `segments`+`tracks`+`tour_frames` were never the final model — migration `0009` dropped
+> them (along with `tours`). The shipped model is `pois` 1:1 `narrations` + placeless `asides` +
+> user-owned `drives`; only `personas` survived. The text below is the 2026-06-12 design record.
 
 Collapse the three narration owners (`tour_stops`, `tour_brackets`, `roam_clips`) into a clean
 two-table model — **`segments`** (a place-anchor) + **`tracks`** (the narration units, 1:N per
@@ -34,6 +47,8 @@ poi_overrides fact-corrections ONLY: drop kind / side_anchor_lat / side_anchor_l
               unique index becomes (source, source_id, find) NULLS NOT DISTINCT
 
 tours         UNCHANGED: region_id is a MANUAL FK set at creation (no derivation)
+              -- SUPERSEDED (0009): `tours` was DROPPED entirely (not kept). Authored tours are
+              -- deferred; the user-facing ordered artifact is now the user-owned `drives` table.
 
 segments      id, poi_id NOT NULL→pois, tour_id?→tours (set=stop / null=roam),
               persona_id NOT NULL→personas (frozen host), seq?, trigger_lat?, trigger_lng?,
@@ -50,6 +65,9 @@ tour_frames   id, tour_id NOT NULL→tours, kind (frame_kind: intro|outro), ...t
 --   script, audio_url, audio_duration_ms, attribution jsonb, facts_hash)
 -- enums: NEW track_form('story','scenic','break','wave','bside'), frame_kind('intro','outro')
 --        DROP stop_type, bracket_kind, poi_override_kind
+-- SUPERSEDED (0009): track_form was renamed `narration_form` (same values; Zod twin `narrationForm`);
+--        frame_kind is GONE — placeless beats use the Zod `asideKind` enum, and `driveClipForm`
+--        carries the 'aside' value.
 -- DROPPED tables: tour_stops, roam_clips, tour_brackets, saved_tours
 -- UNCHANGED: eval_runs, eval_scores, pipeline_jobs, auth tables
 ```

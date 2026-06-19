@@ -162,9 +162,11 @@ A north-star earns its keep by tilting near-term decisions:
 - Grounded in the category lessons: `docs/research/competitive-research.md` (Detour distribution
   post-mortem; the existential risk), `docs/research/competitor-ux-studies.md` (Autio's coverage model
   produces "nothing for miles" — the any-road failure mode our charm machinery must beat).
-- Architecture it inverts: the offline-batch generation pipeline; narration stays tour-owned
-  (`docs/decisions/tour-data-model-zero-reuse.md`) — per-trip bespoke is a new generation *mode*, not
-  cross-tour content reuse.
+- Architecture it inverts: the offline-batch generation pipeline; narration is poi-owned — one shared
+  telling 1:1 per place, reused across roam and user-owned drives, NOT tour-owned (tours were dropped in
+  migration 0009; `docs/decisions/create-a-drive-architecture.md`). The zero-reuse principle survives
+  (the telling is owned by its context, no content cache), so per-trip bespoke is a new generation
+  *mode*, not shared content reuse across drives.
 
 **Not a commitment — a direction.** The toy ships first and pays its own way; this is the star it
 steers by.

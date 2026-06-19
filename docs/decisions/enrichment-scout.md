@@ -1,7 +1,7 @@
 # Story-stop enrichment: the scout (judgment) replaces the char-count sparse-gates
 
 **Status (2026-06-09):** built, wired, and MEASURED-IN (`packages/generator/src/pipeline/scout.ts`,
-called from `generate.ts`); the old `GEOLOGY_STORY_MAX_FACT_CHARS` / `WIKIDATA_STORY_MAX_FACT_CHARS` /
+called from `enrich-pois.ts` via `buildCorpusFactSheet`); the old `GEOLOGY_STORY_MAX_FACT_CHARS` / `WIKIDATA_STORY_MAX_FACT_CHARS` /
 `GEOLOGY_ICONIC_STOPS` constants are deleted. Scenic geology is untouched (a contract, not a
 heuristic). The before/after eval on the canonical corridor passed the ship-gate — see "Measured".
 
@@ -16,9 +16,11 @@ narration is cued to use them — was decided by three hardcoded heuristics:
   rock IS the headline ("iconic" cue), with a coordinate rule riding it (iconic → query the
   landmark point; sparse → the road/trigger point).
 
-Now a bounded tool-using agent (the **scout**, Sonnet) reads each story stop's deepened
-sheet, judges what the telling is missing, fetches candidate enrichment, reads what came
-back, and finalizes — including or excluding each fetched bundle and picking the cue
+Now a bounded tool-using agent (the **scout**, Opus) runs ONCE per place at the corpus
+`enrich` step (`buildCorpusFactSheet`, writing `pois.fact_sheet` — a shared sheet tours AND
+roam later READ via `resolveStoryGrounding`): it reads the story poi's article, judges what
+the telling is missing, fetches candidate enrichment, reads what came back, and finalizes —
+including or excluding each fetched bundle and picking the cue
 (`headline`→ the old `iconic`, `supporting`→ the old `sparse`) and the geology coordinate
 (`road` vs `landmark`). This is step 2 of the agentic-generation build: judgment inside the
 rails, replacing thresholds that were always proxies for judgment (700 was tuned to one
@@ -61,8 +63,8 @@ radius as a fetcher failure under the old gates. `SKIPPER_SCOUT=off` skips the p
 
 The handoff's rule: the scout ships only if it beats the heuristics on the eval panel per
 dollar. Before/after on the canonical corridor (emerald-bay-run, dry-run pairs, both
-Opus-narrated, scored by the same offline eval CLI — grounding Sonnet + charm Opus),
-2026-06-09:
+Opus-narrated, scored by the same offline eval CLI — grounding Opus + charm Opus, both on `JUDGMENT_MODEL`
+after the 2026-06-09 Sonnet→Opus upgrade), 2026-06-09:
 
 | dimension | gates (before) | scout (after) |
 | --- | --- | --- |
@@ -75,7 +77,7 @@ Opus-narrated, scored by the same offline eval CLI — grounding Sonnet + charm 
 Verdict: **ship**. Better grounding with FEWER, better-chosen bundles (selectivity is the
 mechanism: 6 of 11 story stops got an explicit reasoned "nothing — the sheet is rich /
 the fetch added nothing", and the scout reproduced the hand-curated Emerald Bay
-geology-as-headline call from the sheet alone). Scout cost ≈ 11 stops × 2–3 short Sonnet
+geology-as-headline call from the sheet alone). Scout cost ≈ 11 stops × 2–3 short Opus
 turns ≈ $0.15/tour — noise against the narration spend. Caveat: a single stochastic
 sample (different narration rolls + judge variance between runs); the standing eval panel
 keeps measuring every future run, so a regression would surface on the scorecard.

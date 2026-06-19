@@ -1,6 +1,6 @@
 # The skipper's opinions ("the world off the rails") — build spec / handoff
 
-> **Schema-names note (2026-06-13):** identifiers below predate later refactors — read `personaForRegion`→`personaFromKey` (persona is `tours.persona_key`, decoupled from region) and `corridors`→`tours` (merged).
+> **Schema-names note (updated 2026-06-19):** identifiers below predate later refactors. `personaForRegion`→`personaFromKey` (persona is keyed by `persona_key`, decoupled from region). The `tours`/`corridors` tables were dropped — the live schema (`packages/db/src/schema.ts`) is the atom+sequences model: `regions`/`personas`/`pois`/`narrations`/`asides`/`drives`. `persona_key` now lives on `personas` and `asides`, NOT on any `tours` table; a `drive` carries a `selection` JSONB and references its persona via the seeded `personas` row (and `region_id`), not a `tours.persona_key` column.
 
 **The skipper has a point of view about the world the drive passes through — the road, the
 landscape, the stuff off the frozen route — surfaced as opinionated asides that make him a

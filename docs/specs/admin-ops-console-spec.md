@@ -2,8 +2,14 @@
 
 > **Schema-names note (2026-06-13):** this BUILT spec predates the 2026-06-12 segments/tracks refactor — read `roam_clips`→`segments`+`tracks`, `personaForRegion`→`personaFromKey`, `saved_tours`→dropped. The shipped admin already uses the current names; this is a historical build record. **(V2 2026-06-18):** the segments/tracks model was further collapsed — read `tracks`→`narrations`, `tour_frames`→`asides`, `tours`→user-owned `drives`, and the `/tours*` routes → `/drives*`; hand-authored tours are deferred.
 
-> **Status:** spec, **BUILT + DEPLOYED 2026-06-11** — the `skipper-admin` service is live on Cloud
-> Run behind Google IAP; greenlit 2026-06-10 (promoted from the `docs/ideas/admin-ops-console.md` brainstorm,
+> **Status:** spec, **BUILT + DEPLOYED 2026-06-11**, **PARTIALLY SUPERSEDED 2026-06-19** — the
+> `skipper-admin` service is live on Cloud Run behind Google IAP, but the spec has drifted from the code:
+> the §5b **Create Tour** authoring flow was never built (hand-authored tours are deferred — V2 doctrine;
+> `apps/admin/server/jobs.ts:60`), the §4 `pipeline_jobs` schema and §6 route table no longer match the
+> shipped surface, and the committed seed-spec chain was deleted. Current truth: the live schema
+> `packages/db/src/schema.ts` and the live routes in `apps/admin/server/index.ts`; the deferred-authoring
+> posture is `docs/decisions/tour-data-model-zero-reuse.md`. Drifted claims are flagged inline below.
+> Greenlit 2026-06-10 (promoted from the `docs/ideas/admin-ops-console.md` brainstorm,
 > which this supersedes). **Reviewed under a microscope + hardened 2026-06-10:** GCP claims
 > re-verified against current docs, internal contracts spot-checked against the code, and the work
 > **sequenced v0 (the Job = cloud execution) → v1 (the admin app = UX/monitoring)** — see §1, §11.
@@ -84,25 +90,35 @@ The SPA calls `/admin/*` same-origin, so IAP's auth flows naturally.
 New table in `packages/db/src/schema.ts` on the main **neon-http** client (the `db` proxy;
 no interactive tx needed). `id` doubles as the `GEN_JOB_ID` the Job receives.
 
+> **(2026-06-19) Live schema drifted from the block below** — `kind` is a plain `text`
+> column (NO `gen_job_kind` pgEnum; the closed set is the Zod `jobKind` enum in `@skipper/shared`,
+> validated at the admin-api boundary); there is **no `tourId`/`tour_id` FK** (the `tours` table is
+> dropped); and the table gained `outputLog`/`outputSummary`/`outputData`. Read the schema as it is
+> now in `packages/db/src/schema.ts`:
+
 ```ts
-export const genJobKind = pgEnum('gen_job_kind', ['generate', 'patch_clip', 'resynth', 'sweep_orphans'])
-export const genJobStatus = pgEnum('pipeline_job_status', ['queued', 'running', 'succeeded', 'failed', 'canceled'])
+// NO gen_job_kind pgEnum — the job-kind vocabulary churns (a new ops script = a new kind) and
+// the column is OBSERVABILITY-only, so kind is a plain `text` column; the closed set is the
+// Zod `jobKind` enum in @skipper/shared, validated at the admin-api boundary.
+export const pipelineJobStatusEnum = pgEnum('pipeline_job_status', ['queued', 'running', 'succeeded', 'failed', 'canceled'])
 
 export const pipelineJobs = pgTable('pipeline_jobs', {
   id: uuid('id').defaultRandom().primaryKey(),            // == GEN_JOB_ID
-  kind: genJobKind('kind').notNull(),
-  status: genJobStatus('status').notNull().default('queued'),
-  targetSlug: text('target_slug'),                        // generate
-  tourId: uuid('tour_id').references(() => tours.id, { onDelete: 'set null' }),
-  targetId: text('target_id'),                            // stop/bracket/tour id for ops
-  args: jsonb('args').notNull(),                          // the exact override args (audit + replay)
+  kind: text('kind').notNull(),                           // Zod `jobKind` enum (@skipper/shared)
+  status: pipelineJobStatusEnum('status').notNull().default('queued'),
+  targetSlug: text('target_slug'),                        // generate_narrations etc: the region slug
+  targetId: text('target_id'),                            // an ops audit label (poi/region id acted on)
+  args: jsonb('args').$type<string[]>().notNull(),        // the exact override args (audit + replay)
   dryRun: boolean('dry_run').notNull().default(true),
-  phase: text('phase'),                                   // best-effort: discovery|narration|tts|finalize|…
+  phase: text('phase'),                                   // best-effort progress label
   costUsd: doublePrecision('cost_usd'),                   // exact LLM + ESTIMATED TTS; null if the run crashed pre-finishJob (§9)
   evalRunId: uuid('eval_run_id').references(() => evalRuns.id, { onDelete: 'set null' }),
   cloudRunExecution: text('cloud_run_execution'),         // execution resource name (logs/cancel/reconcile)
   triggeredBy: text('triggered_by').notNull(),            // IAP-asserted email (v0: 'cli')
   error: text('error'),
+  outputLog: text('output_log'),                          // raw Cloud Run stdout captured after the execution settles
+  outputSummary: text('output_summary'),                  // LLM-generated one-paragraph summary of the run
+  outputData: jsonb('output_data').$type<Record<string, unknown>>(), // LLM-extracted structured metrics (kind-specific)
   startedAt: timestamp('started_at', { withTimezone: true }),
   endedAt: timestamp('ended_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -110,8 +126,11 @@ export const pipelineJobs = pgTable('pipeline_jobs', {
 })
 ```
 
-Migration: add the table → `bun run db:generate` (emits SQL in `packages/db/drizzle/`) →
-`bun run db:migrate` (dev) and `bun run db:migrate:prod` (prod). Additive, no destructive change.
+Migration: the table arrived additively; `kind` started as a `gen_job_kind` pgEnum but migration
+`0005_jobkind_to_text.sql` (2026-06-15) **dropped that enum type** and converted `kind` to plain
+`text` (also renaming `sweep_roam_pois` → `sweep_region_pois`). Generate SQL with
+`bun run db:generate` (emits into `packages/db/drizzle/`) → `bun run db:migrate` (dev) and
+`bun run db:migrate:prod` (prod).
 
 > `pipeline_jobs` is part of **v0** too — even gcloud-triggered runs should record. In v0 the Job's
 > `job-progress.ts` hook creates the row itself (no admin-api) and `triggeredBy='cli'`.
@@ -163,11 +182,20 @@ Because this sends an `overrides` body, the caller SA needs `run.jobs.runWithOve
 
 ## 5b. Create Tour — LLM-proposed, human-approved (v1)
 
-**Today** authoring is a 3-step commit operation: a `TourSpec` in `packages/db/seed/tour-specs.ts`
+> **DEFERRED / SUPERSEDED (2026-06-19).** Hand-authored tours are deferred (V2 doctrine;
+> `apps/admin/server/jobs.ts:60` "authored-tour generation is deferred"), so this Create-Tour
+> propose→freeze flow was **never built** — the admin gained no `/admin/tours*` (or `/admin/drives*`)
+> authoring routes. Two factual corrections to the description below: the committed seed-spec chain it
+> calls "Today" **no longer exists** (`packages/db/seed/` has only `materialize.ts`/`personas.ts`/
+> `poi-overrides.ts`/`seed.ts`; there is no `tour-specs.ts` and no `seed/data/*.json`), and the
+> `routeProvenance` column lives on the user-owned **`drives`** table, not `tours` (which is dropped) —
+> `packages/db/src/schema.ts:451`. Kept below as design history.
+
+**Then** authoring was a 3-step commit operation: a `TourSpec` in `packages/db/seed/tour-specs.ts`
 (slug, region, headline, summary, anchors, **ordered `waypoints[{label,lat,lng}]`**) → `materialize.ts`
 calls **Google Routes v2** (`routes.googleapis.com/directions/v2:computeRoutes`, `GOOGLE_MAPS_API_KEY`,
 `HIGH_QUALITY`) to snap the pins into a frozen `[lng,lat]` polyline + distance/duration → a **committed**
-`seed/data/<slug>.json` → `seed.ts` upserts the region + a `draft` row.
+`seed/data/<slug>.json` → `seed.ts` upserts the region + a `draft` row. (That chain has since been removed.)
 
 **The admin replaces the hand-written spec with an LLM-drafted, human-approved one** (founder decision
 2026-06-10). The flow is deliberately two-phase so the **human-approval gate is structural, not UI
@@ -207,7 +235,8 @@ let the route-LLM pick content; that re-tangles the exact separation #2 protects
    "why this route exists" trail than the old committed JSON) → return the draft.
 5. **Generate** — you hit Generate → the existing `skipper-gen` Job (§5) fills the stops.
 
-**Schema add:** `routeProvenance: jsonb('route_provenance')` on `tours` (additive; storage break-freely).
+**Schema add:** `routeProvenance: jsonb('route_provenance')` — in the shipped schema this landed on
+the user-owned **`drives`** table (`schema.ts:451`), not `tours` (dropped) (additive; storage break-freely).
 Both propose + freeze are cheap synchronous calls, so Create Tour runs **inline in the admin-api**, not as
 a Cloud Run Job (only generation is Job-worthy).
 
@@ -220,20 +249,27 @@ a Cloud Run Job (only generation is Job-worthy).
 One bun + Hono container (same stack as `apps/api`) that serves the built **Vite SPA** (React +
 TS) as static assets AND exposes the `/admin/*` JSON API:
 
+> **(2026-06-19) The shipped route surface is now POI/region/job-centric, not tour-centric.**
+> Authored-tour authoring is deferred, so the `/admin/tours*` propose/freeze/ear-pass/evals routes
+> below were never built (no `/admin/drives*` either). The live routes in
+> `apps/admin/server/index.ts` are:
+
 | Route | Does |
 |---|---|
 | `POST /admin/jobs` | Validate + guard (§8), insert a `pipeline_jobs` row (`queued`), call `jobs:run` with `GEN_JOB_ID`, store `cloudRunExecution`, return the row |
 | `GET /admin/jobs` / `GET /admin/jobs/:id` | List/poll runs; on read, reconcile a stale `running` row against the Run execution status (backstop) |
-| `GET /admin/tours` / `GET /admin/tours/:id` | Catalog + full tour (stops/brackets/scripts/eval) for the ear-pass |
-| `GET /admin/tours/:id/sign` | Presigned R2 URLs for inline audio (reuse `@skipper/storage` + the api's sign logic) |
-| `GET /admin/evals?slug=` | `eval_runs`/`eval_scores` history; the UI auto-diffs latest-vs-prior |
-| `POST /admin/tours/propose` | **Create Tour, phase 1** (§5b): prompt → 1 LLM call → named waypoints → geocode (region-biased) → return the proposal for the map. No DB write, no freeze |
-| `POST /admin/tours` | **Create Tour, phase 2** (§5b): the approved waypoints → `materializeRoute()` (inline Routes call) → upsert region + insert `draft` + `routeProvenance` → return the draft |
-| `GET /admin/regions` | List regions for the Create-Tour form |
+| `GET /admin/runs` | Unified runs timeline (`pipeline_jobs` + orphan `eval_runs`) |
+| `POST /admin/jobs/:id/cancel` | Cancel a running execution (`executions:cancel`) |
+| `GET /admin/regions` / `POST /admin/regions` / `PATCH /admin/regions/:slug` | List / create / edit regions |
+| `POST /admin/regions/bbox-lookup` | Resolve a region discovery bbox for the form |
+| `GET /admin/pois` / `GET /admin/pois/:id` | Browse the corpus; inspect one POI (facts/coords/attribution/staleness) |
+| `GET /admin/pois/:poiId/narration` | The narration (script + presigned audio) for a POI's ear-pass |
+| `GET /admin/pois/:id/corrections` / `POST /admin/pois/:id/corrections` | List / insert `poi_overrides` corrections |
+| `DELETE /admin/pois/:id` | Retire a POI |
 
-The SPA: a **Runs** view (table + a "New run" form, dry-run default, live status poll), a **Tour**
-ear-pass view (ordered stops/brackets, inline audio, grounding/diversity/charm verdicts), and an
-**Evals** view (per-slug trend + auto prior-vs-latest diff — the "0.818→0.909" done by hand today).
+The SPA: a **Runs** view (table + a "New run" form, dry-run default, live status poll), and the
+POI/region corpus views (region list/edit, POI browse + per-POI narration ear-pass with inline
+audio, the corrections desk). The tour/evals ear-pass views are deferred with authored tours.
 
 `apps/admin` joins the bun workspace; declare its phantom deps explicitly (the mobile workspace's
 isolated-linker lesson) — it's a server+SPA, so lower-risk than the RN app.
@@ -355,7 +391,7 @@ A truly minimal first cut can defer step 2's per-phase tick — terminal status 
 - `docs/guides/ops-scripts-sop.md` (the safe-by-default contract)
 - `packages/generator/src/{run,patch-clip,resynth-tour,sweep-orphans}.ts`, `pipeline/{ops,spend,generate,persist,tts}.ts` (arg contracts incl. the `=`-form value-flag rule at `ops.ts:40`; the `lap()` phase points; eval/cost recording; the seed requirement at `persist.ts:85`; TTS ADC)
 - `packages/db/src/schema.ts` (`eval_runs`/`eval_scores` — note: no cost column; `pipeline_jobs` + `tours.routeProvenance` land here), `packages/db/drizzle/` (migrations)
-- `packages/db/seed/{tour-specs,materialize,seed}.ts` + `seed/data/*.json` (the today authoring chain Create Tour refactors: `materializeRoute()` extraction, Routes v2 + Geocoding/Places via `GOOGLE_MAPS_API_KEY`, the `draft` upsert, the Tahoe-bbox check to generalize)
+- `packages/db/seed/{materialize,seed}.ts` (the seed chain; **NB (2026-06-19)** the `tour-specs.ts` + `seed/data/*.json` committed-spec chain this §5b described has since been deleted — authored tours are deferred)
 - **GCP docs verified 2026-06-10:** [`jobs:run` overrides](https://docs.cloud.google.com/run/docs/execute/jobs) · [IAP-for-Cloud-Run (GA, direct)](https://docs.cloud.google.com/run/docs/securing/identity-aware-proxy-cloud-run) · [IAP signed-header audience](https://docs.cloud.google.com/iap/docs/signed-headers-howto) · [run IAM roles](https://docs.cloud.google.com/iam/docs/roles-permissions/run) · `run.invoker` lacks `runWithOverrides`: [issuetracker 298810674](https://issuetracker.google.com/issues/298810674) · [TTS auth](https://docs.cloud.google.com/text-to-speech/docs/authentication) · [DRS](https://docs.cloud.google.com/organization-policy/domain-restricted-sharing)
 
 ## 14. Post-MVP enhancements (backlog)

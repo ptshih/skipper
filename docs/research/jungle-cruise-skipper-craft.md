@@ -55,8 +55,8 @@ repo already works (a fixed kit/palette + per-telling generation freedom + a del
   comedy-specific audition appears in any verified account.
 
 **Mapping to the repo:** the joke book ≈ the persona kit + joke-shape rules in
-`skipper.ts`; selection-and-delivery latitude ≈ what `GenerateOptions` + per-telling
-zero-reuse narration already provide; the approval pipeline ≈ the lint/judge/founder-ear
+`skipper.ts`; selection-and-delivery latitude ≈ the per-telling generation options
+(`generate-narrations.ts` → `pipeline/narrate.ts`) + zero-reuse narration already provide; the approval pipeline ≈ the lint/judge/founder-ear
 gates. The research validates the architecture: don't loosen authorship (free invention);
 widen the *menu* when the voice feels samey.
 
@@ -116,10 +116,11 @@ questions)
 - Skipper roulette as a *performer* mechanism (one fixed narrator) — partially substituted by
   per-telling generation variability, as above.
 - **Groan-harvesting pauses.** A beat held FOR an audible audience reaction is a boat thing.
-  In solo audio the pause serves *deadpan rhythm*, not an absent groan. The current style
-  prompt ("a small pause right before the pun and a beat right after for the groan, then roll
-  on") is mostly rhythm-framed already, but the words "for the groan" anchor the wrong model —
-  a candidate tweak if the read ever feels like it's waiting for applause.
+  In solo audio the pause serves *deadpan rhythm*, not an absent groan. This tweak has since
+  been applied (`models.ts`, 2026-06-10): the style prompt's old "for the groan" wording was
+  rhythm-reframed and now reads "Put a small pause right before the pun, and after it lands
+  hold one short beat — not waiting for anything, just letting it sit — then roll on," so the
+  pause anchors deadpan rhythm rather than an absent groan.
 
 ## 6. Refuted — myths to keep OUT of the persona and its lore
 

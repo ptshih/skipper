@@ -1,8 +1,11 @@
 # Region-specific skipper identities — a different host per region
 
 > **Status:** idea, pre-spec — needs breadth to matter (M4, multiple regions); pairs with the region
-> expansion. The underlying registries are BUILT (generation: `PersonaDef`, commit `687c885`;
-> presentation: `apps/api/src/host.ts`). Captured 2026-06-08; extracted from CLAUDE.md 2026-06-09.
+> expansion. The generation registry is BUILT (`PersonaDef`, commit `687c885`). Presentation host
+> identity is now resolved in code via `personaFromKey('skipper')` and baked into the audio (the
+> `personas` table is forward-compat scaffolding, UN-CONSUMED in v2 — `apps/api/src/host.ts` was
+> dropped with the legacy tour tables, commit `e5afa38`). Captured 2026-06-08; extracted from
+> CLAUDE.md 2026-06-09.
 
 The Tahoe skipper is not the Yosemite skipper: each region gets a named guide with its own persona,
 backstory, and (optionally) voice — variations on the deadpan pun-machine DNA, not a
@@ -16,13 +19,14 @@ What it stresses:
   tour-owned (no content cache), a per-region persona/voice/prompt-overlay is just a
   different generation input per tour — each region generates its own content, no schema fight.
 - **A region skipper can SOUND different.** Each `PersonaDef`
-  (`packages/generator/src/persona/`, resolved per-tour by `personaForRegion(slug)`) carries its
-  own `voice` (skipper → Charon), so a Yosemite skipper just sets a different Gemini-TTS voice on
-  its def. Tune + ear-judge per region (the voice gate is already per-region).
+  (`packages/generator/src/persona/`, resolved by `personaFromKey(key)` — keyed by persona key,
+  decoupled from region) carries its own `voice` (skipper → Charon), so a Yosemite skipper just
+  sets a different Gemini-TTS voice on its def. Tune + ear-judge per region (the voice gate is
+  already per-region).
 - **The generation persona is a per-region `PersonaDef`** (registry BUILT, commit `687c885`):
   system + bracket prompt, voice, TTS style, and the personal KIT, resolved by region slug. The
   KIT is SINGLE-SOURCED on `PersonaDef.kit` and read by BOTH the diversity lint and
-  `generate.ts` — there are no duplicated `lint.ts`/`generate.ts` kit regexes to keep in sync
+  `generate-narrations.ts` — there are no duplicated `lint.ts`/`generate-narrations.ts` kit regexes to keep in sync
   (that silent-drift footgun is closed). Still TODO for a 2nd region: factor the prompt into a
   base skipper layer + a per-region overlay (backstory, regional idioms) so the shared grounding
   rules stay single-sourced.

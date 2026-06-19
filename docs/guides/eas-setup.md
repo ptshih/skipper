@@ -29,9 +29,9 @@ cd ../.. && bun run dev                      # API on http://localhost:8787
 - **`eas-cli 20.1.0`** installed.
 - **Logged in** as `ptshih@gmail.com` (Owner on the `manoa-inc` org).
 - **EAS project linked** — `@manoa-inc/skipper`, project id
-  `5dded9ce-af00-4c5f-957d-52644d7ab155` (in `apps/mobile/app.json` under
+  `dd556bd3-5c16-430e-8b1f-cfdeb410f26d` (in `apps/mobile/app.json` under
   `extra.eas.projectId`, `owner: "manoa-inc"`).
-- **`apps/mobile` installed** — Expo SDK 56.0.9 / RN 0.85.3, `expo-dev-client`
+- **`apps/mobile` installed** — Expo SDK ~56.0.11 / RN 0.85.3, `expo-dev-client`
   already in `package.json`.
 - **`apps/mobile/eas.json` created** with four build profiles:
 
@@ -123,9 +123,9 @@ build, otherwise the app loads but gets no data.
 - **Monorepo upload — already handled.** EAS `git clone`s the **whole repo** from
   the git root (and with the default `requireCommit: false` also copies
   uncommitted/untracked files), so `@skipper/shared`
-  (`file:../../packages/shared`) ships with the upload and resolves on the
-  builder — even though `apps/mobile` is deliberately kept out of the bun
-  workspace. No action needed.
+  (a `workspace:*` dependency) ships with the upload and resolves on the
+  builder — `apps/mobile` is now part of the bun workspace (listed in the root
+  `workspaces`). No action needed.
 
 - **`.env.keys` stays local.** It's gitignored, so it is **not** uploaded — good
   (secrets stay off EAS). App-facing config comes from `EXPO_PUBLIC_*` env in
