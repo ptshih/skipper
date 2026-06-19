@@ -171,9 +171,19 @@ export interface RunEvent {
   createdAt: string
 }
 
+// Readiness probe result (GET /health?deep=1). `db === false` = api up but the DB is unreachable
+// (e.g. DATABASE_URL unset); a request rejection/502 instead means the api itself is down.
+export interface HealthStatus {
+  ok: boolean
+  db?: boolean
+  dbError?: string
+}
+
 /* ------------------------------- client ------------------------------ */
 
 export const api = {
+  // OPEN route (not under /admin) — the boot/interval health probe. `?deep=1` adds a DB ping.
+  health: () => req<HealthStatus>('/health?deep=1'),
   regions: () => req<{ regions: Region[] }>('/admin/regions'),
   jobs: () => req<{ jobs: StudioJob[] }>('/admin/jobs'),
   runs: () => req<{ runs: RunEvent[] }>('/admin/runs'),

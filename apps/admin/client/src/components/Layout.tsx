@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link, Outlet, useNavigate } from '@tanstack/react-router'
 import { Activity, Anchor, BookOpen, Layers, MapPin, Menu, Moon, Search, Sun } from 'lucide-react'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
+import { HealthBanner } from '@/components/HealthBanner'
 import { cn } from '@/lib/utils'
 
 type AppPath = '/runs' | '/regions' | '/pois' | '/reference'
@@ -177,6 +178,7 @@ export function Layout() {
       <main className="flex flex-1 flex-col pb-2 max-lg:pt-2 lg:min-w-0 lg:py-2 lg:pr-2 lg:pl-64">
         <div className="grow px-4 py-6 max-lg:mx-2 max-lg:rounded-xl max-lg:border max-lg:bg-card lg:ml-2 lg:rounded-xl lg:bg-card lg:p-10 lg:shadow-sm lg:ring-1 lg:ring-border dark:lg:ring-white/10">
           <div className="mx-auto max-w-[1200px]">
+            <HealthBanner />
             <Outlet />
           </div>
         </div>

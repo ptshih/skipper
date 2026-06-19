@@ -63,7 +63,21 @@ app.onError((err, c) => {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 // Liveness — OPEN (Cloud Run startup/liveness probes hit the container directly, not via IAP).
-app.get('/health', (c) => c.json({ ok: true }))
+// Plain GET /health stays DB-free and cheap so a DB blip can never restart the Cloud Run container.
+// GET /health?deep=1 is the admin client's readiness probe (HealthBanner): it also pings the DB so
+// the UI can tell "api up but DB / DATABASE_URL broken" apart from "api down". It returns 200 even
+// when the DB is down — the client reads `db`, not the HTTP status (a transport failure is what the
+// client catches; a reachable-but-unhealthy api must come back as a body it can branch on).
+app.get('/health', async (c) => {
+  if (c.req.query('deep') !== '1') return c.json({ ok: true })
+  try {
+    await db.execute(sql`select 1`)
+    return c.json({ ok: true, db: true })
+  } catch (err) {
+    console.error('[admin] /health deep DB check failed', err)
+    return c.json({ ok: true, db: false, dbError: err instanceof Error ? err.message : String(err) })
+  }
+})
 
 // Everything else is founder-only.
 app.use('/admin/*', requireAdmin)

@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev:server": "bun --watch server/index.ts",
+    "dev:server": "bun server/dev.ts",
     "dev:client": "cd client && vite",
     "build": "cd client && vite build",
     "start": "bun server/index.ts",
