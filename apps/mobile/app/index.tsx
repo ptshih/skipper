@@ -20,6 +20,9 @@ export default function HomeScreen() {
   const [error, setError] = useState<string | null>(null)
   // True when the /drives fetch failed but saved downloads carried us (dead-zone fallback).
   const [offline, setOffline] = useState(false)
+  // Free-tier credit balance for the gentle "N free drives left" hint. Null = hidden: anonymous, paid
+  // (server sends credits:null for uncapped), or an older server without the field.
+  const [credits, setCredits] = useState<{ remaining: number; cap: number } | null>(null)
 
   // Navigation in-flight guard: expo-router does NOT de-dupe identical pushes, so a fast
   // double-tap would stack two identical screens. Set on the first push, cleared on refocus.
@@ -41,12 +44,14 @@ export default function HomeScreen() {
     if (!session) {
       setDrives(listDownloadedDrives())
       setOffline(false)
+      setCredits(null) // anonymous (or signed-out) — no credit balance to show
       setLoading(false)
       return
     }
     try {
       const r = await listDrives()
       setDrives(r.drives)
+      setCredits(r.credits ?? null) // null for paid/uncapped (or an older server) → hint hidden
       setOffline(false)
     } catch (e) {
       // Offline-first: in a dead zone the list fetch fails — fall back to the drives saved on disk
@@ -148,6 +153,14 @@ export default function HomeScreen() {
           <Text variant="label" color="accentWarm" style={styles.flex}>
             MY DRIVES
           </Text>
+          {/* Gentle, free-tier-only credit hint — informational, not a depleting "X/10" toll gauge. */}
+          {credits ? (
+            <Text variant="label" color="inkFaint">
+              {credits.remaining > 0
+                ? `${credits.remaining} free ${credits.remaining === 1 ? 'drive' : 'drives'} left`
+                : 'No free drives left'}
+            </Text>
+          ) : null}
         </View>
         {offline ? (
           <Text variant="dim" color="inkFaint" style={styles.offlineNote}>
