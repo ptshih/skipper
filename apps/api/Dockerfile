@@ -51,6 +51,7 @@ RUN bun -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.j
 # 2) The source the API actually runs (bun executes .ts directly — no dist build).
 COPY apps/api/src apps/api/src
 COPY packages/db/src packages/db/src
+COPY packages/db/seed packages/db/seed
 COPY packages/shared/src packages/shared/src
 COPY packages/storage/src packages/storage/src
 COPY packages/drive-core/src packages/drive-core/src
