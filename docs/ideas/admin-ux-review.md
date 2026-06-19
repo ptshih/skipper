@@ -3,8 +3,10 @@
 **Status:** idea / partially-built — 2026-06-19. A full visual pass of the admin (Runs/Regions/POIs/
 Reference + dialogs, dark mode, ⌘K) cross-referenced against the admin server routes, the studio
 pipeline, and the DB/public-API surface (5-agent capability-map workflow + direct browser pass).
-**Tier 1 BUILT** (commit pending): per-POI Regenerate + a spend-cap field. Tiers 2–4 are the
-backlog below. Code wins — line/symbol anchors were true at capture and will drift.
+**Tier 1 BUILT** (`a01fb47`): per-POI Regenerate + a spend-cap field. **Tier 2 keystone BUILT**: the
+`offline_audit` "Re-score corpus" job (grounding/tts/diversity over existing narrations, no regen).
+Tier 2 ② (charm/veracity dimensions) + ③ (Reference honesty) and Tiers 3–4 remain the backlog below.
+Code wins — line/symbol anchors were true at capture and will drift.
 
 ## What's strong (don't regress)
 
@@ -54,13 +56,14 @@ This tier crosses the written "automated groundedness gate — human ear instead
   being WRONG. `eval/veracity.ts` (Opus + web_search world-check) runs nowhere. Add a dispatchable,
   read-only, advisory veracity job (region/selection-scoped, writes `eval_scores` dimension=veracity)
   → a ranked list of suspect facts that flow into the existing Corrections fact-edit flow. *Effort M.*
-- **"Re-score corpus" (offline_audit).** Every eval today is a side-effect of a PAID regen — you
-  can't ask "how grounded/charming is what I already shipped?" about the 459 live narrations without
-  paying to remake them. Schema reserves `eval_run.kind='offline_audit'` but nothing writes it. Build
-  a job that runs grounding+tts+diversity (+charm/veracity once wired) over EXISTING
-  `narrations.script` with NO regeneration/TTS; surface a "Re-score corpus" button; it reuses the
-  whole existing eval-report drawer. *Effort M.* (This is the keystone — it makes charm/veracity
-  cheap to run on demand without touching the generation gate.)
+- ✅ **"Re-score corpus" (offline_audit) — BUILT 2026-06-19.** `packages/studio/src/audit-corpus.ts`
+  scores EXISTING `narrations.script` (grounding via Opus on `--apply`; tts + cross-clip diversity free)
+  with NO regeneration/TTS, rebuilding each well via the shared `resolveStoryGrounding`→`buildGroundingWell`
+  seam so the audit can't drift from generation; records an `eval_run{kind:'offline_audit'}` + scores.
+  Registered as the `offline_audit` job kind (jobKind enum + `jobs.ts` SCRIPTS/buildJobArgs); surfaced
+  as a "Re-score corpus" dialog on the POIs page (Preview = free count+estimate; Apply = Opus + record,
+  with the spend-cap field) and rendered in the Runs report drawer. Dry smoke confirmed it flags
+  corpus-wide sameness (a repeated "here is the/where…" wind-up) for $0. (+charm/veracity plug in next.)
 - **Make the Reference doc honest.** Its glossary lists grounding/veracity/diversity/charm/tts but
   only grounding/tts/diversity ever appear on a run (`pacing` has no evaluator at all). Either wire
   the above or annotate the unwired dims as "on-demand audit only." *Effort S.*

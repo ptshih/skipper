@@ -1,7 +1,7 @@
 import { Fragment, useMemo, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CircleCheck, Compass, Locate, Plus, RefreshCw, Search, Sparkles, Trash2, Wrench, X, Zap } from 'lucide-react'
+import { Activity, CircleCheck, Compass, Locate, Plus, RefreshCw, Search, Sparkles, Trash2, Wrench, X, Zap } from 'lucide-react'
 import { api, ApiError, type CorrectionOverride, type PoiDetail, type PoiRow, type StoryEligibility } from '@/lib/api'
 import { errMsg, timeAgo } from '@/lib/format'
 import { PageHeader } from '@/components/PageHeader'
@@ -58,6 +58,7 @@ export function PoisView() {
   const [tab, setTab] = useState<Tab>('corpus')
   const [discoverOpen, setDiscoverOpen] = useState(false)
   const [generateOpen, setGenerateOpen] = useState(false)
+  const [rescoreOpen, setRescoreOpen] = useState(false)
 
   // The shared place corpus, fetched once + cached under the ['pois'] key.
   const { data: pois = [], error: err, isPending } = useQuery({ queryKey: ['pois'], queryFn: async () => (await api.pois()).pois })
@@ -79,6 +80,9 @@ export function PoisView() {
           <>
             <Button variant="outline" onClick={() => setDiscoverOpen(true)}>
               <Compass className="h-4 w-4" /> Discover POIs
+            </Button>
+            <Button variant="outline" onClick={() => setRescoreOpen(true)}>
+              <Activity className="h-4 w-4" /> Re-score corpus
             </Button>
             <Button onClick={() => setGenerateOpen(true)}>
               <Zap className="h-4 w-4" /> Generate Narration
@@ -103,6 +107,7 @@ export function PoisView() {
       {tab === 'retire' && <RetireTab flagged={flagged} />}
 
       <DiscoverDialog open={discoverOpen} onOpenChange={setDiscoverOpen} onSubmitted={() => navigate({ to: '/runs' })} />
+      <ReScoreDialog open={rescoreOpen} onOpenChange={setRescoreOpen} onSubmitted={() => navigate({ to: '/runs' })} />
       <GenerateNarrationDialog open={generateOpen} onOpenChange={setGenerateOpen} onSubmitted={() => navigate({ to: '/runs' })} />
     </div>
   )
@@ -212,6 +217,65 @@ function GenerateNarrationDialog({
         <Label htmlFor="generate-region">Region</Label>
         <Select value={regionSlug || undefined} onValueChange={setRegionSlug}>
           <SelectTrigger id="generate-region" className="w-full">
+            <SelectValue placeholder={regions.length === 0 ? 'Loading…' : 'Select a region…'} />
+          </SelectTrigger>
+          <SelectContent>
+            {regions.map((r) => (
+              <SelectItem key={r.slug} value={r.slug}>{r.displayName}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </JobActionDialog>
+  )
+}
+
+/* ── RE-SCORE CORPUS (offline_audit — read-only quality read on existing narrations) ── */
+
+// Re-score the EXISTING narration corpus without regenerating: scores each region story narration's
+// stored script for grounding (Opus) + tts + diversity and records an offline_audit eval_run, viewable
+// in the Runs report drawer. READ-ONLY on narrations/R2; --apply spends one Opus grounding call per clip
+// (gated like the other paid dialogs); the Preview is a free count + estimate.
+function ReScoreDialog({
+  open,
+  onOpenChange,
+  onSubmitted,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onSubmitted: () => void
+}) {
+  const [regionSlug, setRegionSlug] = useState('')
+  const { data: regions = [], error: loadErr } = useQuery({
+    queryKey: ['regions'],
+    queryFn: async () => (await api.regions()).regions,
+    enabled: open,
+  })
+  return (
+    <JobActionDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      onSubmitted={onSubmitted}
+      icon={Activity}
+      title="Re-score corpus"
+      description="Re-scores the region's EXISTING story narrations (grounding, tts-cleanliness, diversity) WITHOUT regenerating or re-synthesizing — a quality read on what's already shipped. Records an offline_audit run, viewable in the Runs report."
+      buildBody={() => ({ kind: 'offline_audit', region: regionSlug })}
+      applyLabel="Re-score"
+      applyIcon={Activity}
+      disabled={!regionSlug}
+      error={loadErr}
+      note={
+        <>
+          <span className="font-medium text-foreground">Preview</span> is free (counts the narrations +
+          estimates the grounding spend); <span className="font-medium text-foreground">Re-score</span> spends
+          one Opus call per clip. Read-only — it never changes a narration.
+        </>
+      }
+    >
+      <div className="space-y-2">
+        <Label htmlFor="rescore-region">Region</Label>
+        <Select value={regionSlug || undefined} onValueChange={setRegionSlug}>
+          <SelectTrigger id="rescore-region" className="w-full">
             <SelectValue placeholder={regions.length === 0 ? 'Loading…' : 'Select a region…'} />
           </SelectTrigger>
           <SelectContent>

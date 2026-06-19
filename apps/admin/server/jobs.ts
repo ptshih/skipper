@@ -69,6 +69,7 @@ export const SCRIPTS: Partial<Record<JobKind, string>> = {
   enrich_pois: 'packages/studio/src/enrich-pois.ts',
   generate_narrations: 'packages/studio/src/generate-narrations.ts',
   refetch_facts: 'packages/studio/src/refetch-poi.ts',
+  offline_audit: 'packages/studio/src/audit-corpus.ts',
 }
 
 export type { JobKind }
@@ -154,6 +155,23 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     // --min-extract removed 2026-06-16: roam story-eligibility is "has a fact sheet" (#1), not a char floor.
     if (body.maxCostUsd) args.push(`--max-cost=${Number(body.maxCostUsd)}`)
     if (apply) args.push('--apply')
+    return { args, dryRun: !apply, spends: apply, targetId: 'roam-corpus' }
+  }
+
+  if (kind === 'offline_audit') {
+    const apply = body.apply === true
+    const args: string[] = [script]
+    // Same geometry-first selection as generate (region XOR include-ids, narrowable by query/exclude-ids).
+    const idCsv = (v: unknown): string => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string').join(',') : '')
+    if (body.region) args.push(`--region=${str(body.region)}`)
+    if (body.query) args.push(`--query=${str(body.query)}`)
+    if (idCsv(body.includeIds)) args.push(`--include-ids=${idCsv(body.includeIds)}`)
+    if (idCsv(body.excludeIds)) args.push(`--exclude-ids=${idCsv(body.excludeIds)}`)
+    if (body.limit) args.push(`--limit=${Number(body.limit)}`)
+    if (body.maxCostUsd) args.push(`--max-cost=${Number(body.maxCostUsd)}`)
+    if (apply) args.push('--apply')
+    // Re-score the EXISTING corpus: READ-ONLY on narrations/R2, but --apply runs one Opus grounding
+    // call per clip → spends → confirm gate. The dry preview makes no model calls (free).
     return { args, dryRun: !apply, spends: apply, targetId: 'roam-corpus' }
   }
 

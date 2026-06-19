@@ -148,6 +148,12 @@ const RUN_KINDS: { kind: string; does: string; cost: ReactNode; safe: string }[]
     safe: 'Preview — shows the queue + cost estimate, makes no model calls.',
   },
   {
+    kind: 'Re-score corpus',
+    does: 'Re-score the EXISTING story narrations (grounding / tts-cleanliness / diversity) WITHOUT regenerating or re-synthesizing — a quality read on what is already shipped. Records an offline_audit run, viewable in the Runs report. Read-only on narrations.',
+    cost: <span>LLM grounding per clip (~$0.06, Opus, when applied); the free tts + diversity checks run in Preview.</span>,
+    safe: 'Preview — counts the narrations + estimates the grounding spend, makes no model calls.',
+  },
+  {
     kind: 'Re-synth narration',
     does: "Re-voice ONE POI's narration unchanged — e.g. after a voice or style-prompt change, or a dud TTS take. Run from the POI's Narration tab.",
     cost: 'TTS for one narration (when applied).',

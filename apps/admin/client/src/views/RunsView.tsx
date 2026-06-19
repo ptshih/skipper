@@ -41,6 +41,7 @@ const KIND_META: Record<string, { label: string; icon: React.ElementType; desc: 
   discover_pois: { label: 'Discover POIs',     icon: Filter,     desc: "Discover + upsert the region's POI corpus — roam draws from it.", spends: 'free'   },
   enrich_pois:   { label: 'Enrich corpus',    icon: Sparkles,   desc: 'Scout story POIs into verbatim fact sheets (pois.fact_sheet) for roam.', spends: 'spend'  },
   generate_narrations:   { label: 'Generate Narration', icon: Zap,        desc: 'Narrate + synthesize narrations for the corpus.',  spends: 'spend'  },
+  offline_audit:   { label: 'Re-score corpus',  icon: Activity,   desc: 'Re-score EXISTING narrations (grounding/tts/diversity) — no regen, no TTS.', spends: 'spend'  },
 }
 
 const isLive = (s?: JobStatus | null) => s === 'running' || s === 'queued'

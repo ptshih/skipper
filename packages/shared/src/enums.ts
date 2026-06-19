@@ -74,6 +74,7 @@ export const jobKind = z.enum([
   'enrich_pois',
   'generate_narrations',
   'refetch_facts',
+  'offline_audit',
 ])
 export type JobKind = z.infer<typeof jobKind>
 
