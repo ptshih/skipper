@@ -93,11 +93,6 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   tour-ops CLIs (generate/patch/resynth/sweep) as **Cloud Run Jobs** (v0), then a deployed `apps/admin`
   (Vite + Hono) behind **Google IAP** with a `pipeline_jobs` record + ear-pass/eval monitor (v1);
   build-ready, unbuilt, greenlit + microscope-hardened 2026-06-10.
-- [segments-tracks-refactor.md](specs/segments-tracks-refactor.md) — **the data-model refactor handoff**:
-  collapse tour_stops/tour_brackets/roam_clips → segments + tracks (+ tour_frames, + a personas table,
-  persona decoupled from region); side-of-road → pois.speakable; poi_overrides → fact-corrections;
-  saved_tours dropped. Model locked + migration `0010` drafted (data-preserving) 2026-06-12; cutover
-  pending (do in a worktree). Zero-reuse survives.
 - [free-roam-alpha-spec.md](specs/free-roam-alpha-spec.md) — what the free-roam ALPHA actually is
   (roam_clips third owner, basin sweep, ~60s encounters, RoamEngine, duckOthers posture) + its
   deliberate cuts; BUILT 2026-06-10, founder-only TestFlight.

@@ -306,5 +306,5 @@ track is owned by its segment's context, and tours never read roam tracks (and v
 `tourId`-presence discriminator makes the no-cross-feed rule structural. Staleness still rides
 `facts_hash` (now on the `track`, vs `pois.facts_hash`). Executed as a clean NUKE (no users):
 schema rewrite + fresh `0000` baseline + DB/R2 reset + reseed, NOT the data-preserving `0010` the
-spec drafted. Full design + cutover record: `docs/specs/segments-tracks-refactor.md` (BUILT). This
+spec drafted. Full design + cutover record: [create-a-drive-architecture.md](create-a-drive-architecture.md) (the V2 model that absorbed the segments/tracks step). This
 supersedes the "three narration owners" wording everywhere above.

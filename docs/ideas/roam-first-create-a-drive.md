@@ -226,5 +226,5 @@ remove authored-drive from v1 → tag V2, break freely (V1 never shipped). Paren
 [journey-layer.md](journey-layer.md) (rung 2 per-trip bespoke — realized here via *reuse*, not the
 live-gen that doc assumed), [roam-first-region-expansion.md](roam-first-region-expansion.md) (roam as
 beachhead → here the first-day product), [free-roam-mode.md](free-roam-mode.md) (the mode itself),
-[../specs/segments-tracks-refactor.md](../specs/segments-tracks-refactor.md) (the unified model that
-makes roam=tour one substrate). Grounded by a 2026-06-18 code scout (the leverage finding above).
+[../decisions/create-a-drive-architecture.md](../decisions/create-a-drive-architecture.md) (the V2 model that
+makes roam and drives one substrate). Grounded by a 2026-06-18 code scout (the leverage finding above).
