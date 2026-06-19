@@ -64,13 +64,16 @@ instead" deferral is untouched; inline auto-gating on every generate stays defer
 - ✅ **Reference glossary honest.** Each dimension marked gate-vs-advisory + where it runs; `pacing`
   annotated "reserved — no evaluator yet"; the Re-score row added to the run-kinds table.
 
-## Tier 3 — geography & power-operator (code-only items BUILT 2026-06-19; map pending)
+## Tier 3 — geography & power-operator — BUILT 2026-06-19
 
-- **Map view** (Leaflet + OSM, no key): draw-the-bbox in the Regions dialog; pin + draggable
-  speakable-anchor in the POI Corrections tab. The `bbox-lookup` helper + the too-far anchor guard are
-  textual compensations for this missing map. *Effort L.* — **PENDING**: needs a `bun add`
-  (react-leaflet@5 + leaflet) which rewrites the shared root `bun.lock`; deferred to a quiet-tree
-  moment to avoid lockfile collisions with the other agents' in-flight dep churn.
+- ✅ **Map view** (Leaflet + OSM, no key) — BUILT. `components/ui/leaflet-map.tsx`: `BboxMap`
+  (a "Draw bbox" toggle → drag a rectangle → fills the `lng_min,lat_min,lng_max,lat_max` field; normal
+  drag pans) in the Regions add/edit dialog, and `AnchorMap` (fixed POI pin + draggable amber speakable
+  anchor → writes the lat/lng inputs, preserving the Set-anchor + `speakable_too_far` confirm flow) in
+  the POI Corrections tab. Added `react-leaflet@5` + `leaflet` (single-file import → splits into the
+  vite `maps` chunk); inline-SVG divIcons (no Vite marker-PNG gotcha) + invalidateSize. Regions map
+  verified LIVE; the Corrections map is typecheck-verified pending the regions.bbox migration clearing
+  the /admin/pois 500.
 - ✅ **⌘K is useful** — BUILT. The palette now searches the POI corpus by name (shared `['pois']`
   cache, capped at 8) + has action commands (Discover / Generate Narration / Re-score corpus). Deep-link
   via typed `/pois?poi=<id>` / `?act=<discover|generate|rescore>` search params (`validateSearch`, no
