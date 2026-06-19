@@ -8,10 +8,9 @@ import { ThemeProvider, readStoredThemeMode, useAppFonts, useTheme, type ThemeMo
 import { fonts } from '@/theme/tokens'
 import { HeaderIconButton, StateView, VersionGate, voice } from '@/ui'
 
-// Anchor the stack at the home route so a COLD universal-link deep link
-// (skipper.fm/t/<id> → /tours/[id]) keeps `index` underneath it — otherwise the tour
-// screen is the bottom of the stack, the back chevron hides, and "Back to tours" no-ops,
-// stranding the recipient with no way home. (expo-router router-settings.)
+// Anchor the stack at the home route so any COLD deep link keeps `index` underneath it —
+// otherwise the linked screen is the bottom of the stack, the back chevron hides, and the
+// rider is stranded with no way home. (expo-router router-settings.)
 export const unstable_settings = { initialRouteName: 'index' }
 
 // App-authored error boundary — expo-router renders this when a screen (or the

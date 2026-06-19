@@ -11,7 +11,6 @@
 //   GET  /drives/:id                 -> replay a saved drive (frozen structure + live narration content)
 //   POST /drives/:id/assets/sign     -> re-presigned clip URLs for offline refresh
 //   GET  /roam                       -> free-roam pins near a point + presigned clips
-//   GET  /t/:id                      -> shareable link → in-app deep link + generic OG web fallback
 //
 // V2: the app runs on user-owned DRIVES (assembled from shared roam narrations) + free ROAM —
 // hand-authored tours are gone. Anonymous riders get roam only; creating/playing a drive needs a
@@ -26,7 +25,6 @@ import { auth } from './auth'
 import { driveRoutes } from './drives'
 import type { ApiEnv } from './entitlements'
 import { withRetry } from './retry'
-import { shareLandingHtml } from './share'
 import { DATA_SOURCES } from './sources'
 import { contentTypeForKey, presignGet } from './storage'
 import { VERSION_POLICIES } from './version-policy'
@@ -56,26 +54,6 @@ app.get('/sources', (c) => c.json({ sources: DATA_SOURCES }))
 // never an App Store release. The client compares its own version (@skipper/shared
 // `gateFor`) and shows a dismissible nudge or a blocking "update required" wall.
 app.get('/version', (c) => c.json({ policies: VERSION_POLICIES }))
-
-// NOTE: the iOS universal-links AASA is served by the apex site (apps/site → skipper.fm)
-// as a static file at /.well-known/apple-app-site-association. The API is api.skipper.fm,
-// which is NOT an associated domain, so it does not serve the AASA — single source of truth.
-
-// Human/crawler fallback for a shared link — the app intercepts it on an installed iPhone;
-// everyone else (Android, desktop, iMessage/social unfurlers) lands here. V2 drives are
-// user-OWNED (not anonymous-shareable like V1 tours), so this serves GENERIC Open Graph copy —
-// no DB lookup, no naming someone else's private drive. The deep link still opens the app for
-// the owner. (Cross-user drive sharing isn't a V2 feature yet.)
-app.get('/t/:id', (c) => {
-  const id = c.req.param('id')
-  return c.html(
-    shareLandingHtml({
-      title: 'Skipper',
-      description: 'An AI-narrated, GPS-triggered road-trip audio tour.',
-      url: `https://skipper.fm/t/${id}`,
-    }),
-  )
-})
 
 // The pickable regions for the Create-a-Drive region selector. Anonymous + tiny (just
 // id/slug/name) — the create FLOW is gated, but listing region names to pick from is open.

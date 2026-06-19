@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ActionSheetIOS, Alert, Animated, Linking, Platform, Share, StyleSheet, View } from 'react-native'
+import { ActionSheetIOS, Alert, Animated, Linking, Platform, StyleSheet, View } from 'react-native'
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
 import { ApiError, deleteDrive, errorMessage, getDrive, type DriveManifest } from '@/lib/api'
 import {
@@ -31,9 +31,6 @@ import {
   voice,
 } from '@/ui'
 
-// The shareable web face of a drive — the AASA-claimed universal link (apps/api/src/share.ts,
-// app/t/[id].tsx). Override per-environment; defaults to the canonical brand domain.
-const SHARE_BASE = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://skipper.fm'
 // "Report an issue" opens the rider's mail composer (no in-app support backend yet — alpha).
 // Set EXPO_PUBLIC_SUPPORT_EMAIL to the real inbox; the default is a brand-domain placeholder.
 const SUPPORT_EMAIL = process.env.EXPO_PUBLIC_SUPPORT_EMAIL ?? 'feedback@skipper.fm'
@@ -109,17 +106,6 @@ export default function DriveDetailScreen() {
   // stays mounted under the pushed player, so a download keeps running while the rider previews.
   useEffect(() => () => downloadAbort.current?.abort(), [])
 
-  // Share the drive's universal link (skipper.fm/t/<id>) via the OS share sheet.
-  const shareDrive = useCallback(() => {
-    if (!id) return
-    const url = `${SHARE_BASE}/t/${id}`
-    const label = drive?.label
-    void Share.share({
-      message: label ? `${label} — a narrated road-trip drive on Skipper\n${url}` : url,
-      url, // iOS attaches the link as its own item
-    })
-  }, [id, drive])
-
   // Report an issue → the rider's mail composer, pre-filled with the drive's context (no
   // in-app support backend yet — alpha). The address is env-configurable (SUPPORT_EMAIL).
   const reportIssue = useCallback(() => {
@@ -170,7 +156,6 @@ export default function DriveDetailScreen() {
   // stacked buttons — the offline download (state-aware) + the dev-only on-device simulator.
   const openMenu = useCallback(() => {
     const actions: { label: string; onPress: () => void; destructive?: boolean }[] = []
-    actions.push({ label: 'Share this drive', onPress: shareDrive })
     if (downloading) {
       actions.push({ label: 'Cancel download', onPress: cancelDownload, destructive: true })
     } else if (downloaded) {
@@ -221,7 +206,6 @@ export default function DriveDetailScreen() {
     startDownload,
     removeDownload,
     cancelDownload,
-    shareDrive,
     reportIssue,
     deleteDriveAction,
   ])
