@@ -638,6 +638,10 @@ export const evalScores = pgTable(
     findings: jsonb('findings').$type<string[]>().notNull(),
     /** Dimension payload (grounding → ClaimVerdict[]) — the actual report content. */
     detail: jsonb('detail'),
+    /** The WITHHELD clip's best-attempt script, so the report can show the held-back telling (a
+     *  false-positive sanity check). Set ONLY for a withheld clip + denormalized onto its rows; a
+     *  shipped clip's script lives in `narrations`, so this stays null there. */
+    script: text('script'),
     /** Free-text annotation (human rows). */
     comment: text('comment'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

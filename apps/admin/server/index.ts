@@ -284,6 +284,8 @@ app.get('/admin/runs', async (c) => {
       costUsd: j.costUsd,
       grounding: null,
       withheld: null,
+      // The eval run this job produced (if any) — lets the drawer pull the per-poi report.
+      evalRunId: j.evalRunId,
       narrationModel: null,
       gitSha: null,
       triggeredBy: j.triggeredBy,
@@ -303,6 +305,8 @@ app.get('/admin/runs', async (c) => {
         costUsd: null,
         grounding: e.grounding,
         withheld: e.withheld,
+        // An eval-source row IS the eval run, so the report keys on its own id.
+        evalRunId: e.id,
         narrationModel: e.narrationModel,
         gitSha: e.gitSha,
         triggeredBy: null,
@@ -352,6 +356,7 @@ app.get('/admin/runs/:id/scores', async (c) => {
       withheld: evalScores.withheld,
       findings: evalScores.findings,
       detail: evalScores.detail,
+      script: evalScores.script,
     })
     .from(evalScores)
     .where(eq(evalScores.runId, runId))

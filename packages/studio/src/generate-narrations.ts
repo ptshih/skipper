@@ -368,7 +368,12 @@ async function main(): Promise<void> {
   const withheldClips = gated.filter((g) => !g.shipped)
   const runRegion = region ? region.slug : 'roam-corpus'
   const identityBySeq = new Map<number, ClipIdentity>(
-    gated.map((g) => [g.seq, { poiId: g.c.poiId, qid: g.c.qid, name: g.c.name, withheld: !g.shipped }]),
+    gated.map((g) => [
+      g.seq,
+      // A withheld clip carries its best-attempt script (for the admin report); a shipped clip's
+      // script lives in narrations, so we leave it null here.
+      { poiId: g.c.poiId, qid: g.c.qid, name: g.c.name, withheld: !g.shipped, script: g.shipped ? null : g.script },
+    ]),
   )
   const scorecard = buildScorecard({
     slug: runRegion,

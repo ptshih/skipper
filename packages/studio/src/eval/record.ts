@@ -19,6 +19,9 @@ export interface ClipIdentity {
   name: string
   /** True when this clip was WITHHELD (a GATE dim stayed dirty after the retakes). */
   withheld: boolean
+  /** The withheld clip's best-attempt script (so the report shows the held-back telling). Null for
+   *  a shipped clip — its script lives in `narrations`. */
+  script: string | null
 }
 
 export interface EvalRunInput {
@@ -63,6 +66,7 @@ export function buildScoreRows(
       withheld: id?.withheld ?? false,
       findings: s.findings,
       detail: (s.detail ?? null) as NewEvalScore['detail'],
+      script: id?.script ?? null,
     }
   })
 }

@@ -1,0 +1,1 @@
+ALTER TABLE "eval_scores" ADD COLUMN "script" text;

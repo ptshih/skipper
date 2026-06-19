@@ -165,10 +165,50 @@ export interface RunEvent {
   phase: string | null
   costUsd: number | null
   grounding: number | null
+  /** Clips the fail-closed gate held back (eval runs only). */
+  withheld: number | null
+  /** The eval run behind this row (a job's produced run, or an eval row's own id) — keys the report. */
+  evalRunId: string | null
   narrationModel: string | null
   gitSha: string | null
   triggeredBy: string | null
   createdAt: string
+}
+
+/** One (poi × dimension) verdict in an eval run's report (GET /admin/runs/:id/scores). */
+export interface EvalScoreRow {
+  poiId: string | null
+  qid: string | null
+  name: string | null
+  dimension: string
+  pass: boolean
+  value: number
+  withheld: boolean
+  findings: string[]
+  detail: unknown
+  /** The withheld clip's best-attempt script (null for a shipped clip). */
+  script: string | null
+}
+
+export interface EvalRunReport {
+  run: {
+    id: string
+    region: string
+    kind: string
+    pass: boolean
+    dryRun: boolean
+    total: number
+    shipped: number
+    withheld: number
+    grounding: number | null
+    tts: number | null
+    diversity: number | null
+    narrationModel: string | null
+    judgeModel: string | null
+    gitSha: string | null
+    createdAt: string
+  }
+  scores: EvalScoreRow[]
 }
 
 // Readiness probe result (GET /health?deep=1). `db === false` = api up but the DB is unreachable
@@ -187,6 +227,7 @@ export const api = {
   regions: () => req<{ regions: Region[] }>('/admin/regions'),
   jobs: () => req<{ jobs: StudioJob[] }>('/admin/jobs'),
   runs: () => req<{ runs: RunEvent[] }>('/admin/runs'),
+  runScores: (id: string) => req<EvalRunReport>(`/admin/runs/${id}/scores`),
   job: (id: string) => req<{ job: StudioJob; logsUrl: string | null }>(`/admin/jobs/${id}`),
   cancelJob: (id: string) => req<{ job: StudioJob }>(`/admin/jobs/${id}/cancel`, { method: 'POST' }),
   pois: () => req<{ pois: PoiRow[] }>('/admin/pois'),

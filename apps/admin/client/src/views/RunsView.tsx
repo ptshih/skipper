@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import {
   api,
-  type JobStatus, type RunEvent,
+  type EvalScoreRow, type JobStatus, type RunEvent,
 } from '@/lib/api'
 import { errMsg, fmtCost, fmtDate, timeAgo } from '@/lib/format'
 import { JOB_STATUS_VARIANT } from '@/lib/status'
@@ -300,6 +300,9 @@ function RunResultCell({ r }: { r: RunEvent }) {
           g {r.grounding.toFixed(2)}
         </span>
       )}
+      {r.withheld != null && r.withheld > 0 && (
+        <Badge variant="warning">{r.withheld} withheld</Badge>
+      )}
     </span>
   )
 }
@@ -461,15 +464,9 @@ function RunDrawer({ run, onClose }: { run: RunEvent; onClose: () => void }) {
             </>
           )}
 
-          {/* Eval scores for eval-source runs */}
-          {!isJob && run.grounding != null && (
-            <div className="space-y-2">
-              <SectionLabel>Eval scores</SectionLabel>
-              <dl className="grid grid-cols-[120px_1fr] gap-px overflow-hidden rounded-lg border bg-border">
-                {run.grounding != null && <Def label="Grounding" mono>{run.grounding.toFixed(3)}</Def>}
-              </dl>
-            </div>
-          )}
+          {/* The eval report — per-poi gate verdicts + the held-back tellings (eval-source rows AND
+              a generate_narrations job that produced an eval run). */}
+          {run.evalRunId && <EvalReport runId={run.evalRunId} />}
 
           {/* Cancel failure — a cancel of a live (possibly spending) job that errored. Surfaced
               here so the button doesn't just silently flip back. Matches the run-failed box above. */}
@@ -500,5 +497,109 @@ function RunDrawer({ run, onClose }: { run: RunEvent; onClose: () => void }) {
         </SheetFooter>
       </SheetContent>
     </Sheet>
+  )
+}
+
+/* ─── Eval report (per-poi gate verdicts + the held-back tellings) ─── */
+
+type PoiGroup = {
+  key: string
+  name: string | null
+  qid: string | null
+  withheld: boolean
+  script: string | null
+  dims: EvalScoreRow[]
+}
+
+/** Collapse the per-(poi × dimension) rows into one entry per place, worst-first. */
+function groupByPoi(scores: EvalScoreRow[]): PoiGroup[] {
+  const map = new Map<string, PoiGroup>()
+  for (const s of scores) {
+    const key = s.poiId ?? s.qid ?? s.name ?? s.dimension
+    let g = map.get(key)
+    if (!g) {
+      g = { key, name: s.name, qid: s.qid, withheld: false, script: null, dims: [] }
+      map.set(key, g)
+    }
+    g.dims.push(s)
+    if (s.withheld) g.withheld = true
+    if (s.script) g.script = s.script
+  }
+  const failing = (g: PoiGroup) => g.dims.some((d) => !d.pass)
+  return [...map.values()].sort(
+    (a, b) => Number(b.withheld) - Number(a.withheld) || Number(failing(b)) - Number(failing(a)),
+  )
+}
+
+function EvalReport({ runId }: { runId: string }) {
+  const { data, isPending, error } = useQuery({
+    queryKey: ['runScores', runId],
+    queryFn: () => api.runScores(runId),
+  })
+  if (isPending) return <div className="text-xs text-muted-foreground">Loading eval report…</div>
+  if (error) return <Callout variant="error">{errMsg(error)}</Callout>
+  if (!data) return null
+
+  const { run, scores } = data
+  const withheld = groupByPoi(scores).filter((p) => p.withheld)
+  const score = (v: number | null) => (v == null ? '—' : v.toFixed(2))
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <SectionLabel>Eval report</SectionLabel>
+        <dl className="grid grid-cols-[120px_1fr] gap-px overflow-hidden rounded-lg border bg-border">
+          <Def label="Clips">
+            {run.total} total · {run.shipped} shipped ·{' '}
+            <span className={cn(run.withheld > 0 && 'font-medium text-warning')}>{run.withheld} withheld</span>
+          </Def>
+          <Def label="Scores" mono>g {score(run.grounding)} · tts {score(run.tts)} · div {score(run.diversity)}</Def>
+          {run.judgeModel && <Def label="Judge" mono>{run.judgeModel}</Def>}
+        </dl>
+      </div>
+
+      {scores.length === 0 ? (
+        <div className="text-xs text-muted-foreground">No per-clip scores recorded for this run.</div>
+      ) : withheld.length === 0 ? (
+        <div className="text-xs text-muted-foreground">Every clip cleared the gate — nothing withheld.</div>
+      ) : (
+        <div className="space-y-2">
+          <SectionLabel className="text-warning">
+            Withheld — {withheld.length} {withheld.length === 1 ? 'place' : 'places'} held back
+          </SectionLabel>
+          <div className="space-y-3">
+            {withheld.map((p) => <PlaceReport key={p.key} place={p} />)}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PlaceReport({ place }: { place: PoiGroup }) {
+  const failing = place.dims.filter((d) => !d.pass)
+  return (
+    <div className="space-y-2 rounded-lg border border-warning/40 bg-warning/5 p-3">
+      <div className="flex items-center gap-2">
+        <Badge variant="warning">withheld</Badge>
+        <span className="font-medium">{place.name ?? place.qid ?? 'unknown place'}</span>
+      </div>
+      {failing.map((d, i) => (
+        <div key={i} className="space-y-1">
+          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{d.dimension}</div>
+          <ul className="space-y-0.5 text-xs text-foreground">
+            {d.findings.map((f, j) => <li key={j}>• {f}</li>)}
+          </ul>
+        </div>
+      ))}
+      {place.script && (
+        <details>
+          <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+            Show the held-back telling ({place.script.trim().split(/\s+/).filter(Boolean).length} words)
+          </summary>
+          <LogBlock className="mt-1.5 max-h-64 overflow-y-auto whitespace-pre-wrap">{place.script}</LogBlock>
+        </details>
+      )}
+    </div>
   )
 }

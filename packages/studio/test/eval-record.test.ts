@@ -13,8 +13,8 @@ const evals: StopEval[] = [
 const card = buildScorecard({ slug: 'lake-tahoe', runName: 'generate_narrations', evaluatedAt: null, stops: evals })
 
 const identity = new Map<number, ClipIdentity>([
-  [0, { poiId: 'poi-a', qid: 'Q1', name: 'Emerald Bay', withheld: false }],
-  [1, { poiId: 'poi-b', qid: 'Q2', name: 'Fannette Island', withheld: true }],
+  [0, { poiId: 'poi-a', qid: 'Q1', name: 'Emerald Bay', withheld: false, script: null }],
+  [1, { poiId: 'poi-b', qid: 'Q2', name: 'Fannette Island', withheld: true, script: 'A withheld telling about the deepest cove.' }],
 ])
 
 describe('buildScoreRows', () => {
@@ -32,11 +32,18 @@ describe('buildScoreRows', () => {
     expect(grounding1.pass).toBe(false)
     expect(grounding1.findings.length).toBe(1)
     expect(grounding1.source).toBe('judge')
+    // The withheld clip carries its best-attempt script (denormalized onto its rows) for the report.
+    expect(withheldRows.every((r) => r.script === 'A withheld telling about the deepest cove.')).toBe(true)
+  })
+
+  test('a shipped clip carries no script (it lives in narrations)', () => {
+    const rows = buildScoreRows('run-1', card, identity)
+    expect(rows.filter((r) => r.qid === 'Q1').every((r) => r.script === null)).toBe(true)
   })
 
   test('a clip with no identity gets null keys and withheld=false', () => {
     const rows = buildScoreRows('run-1', card) // no identity map
-    expect(rows.every((r) => r.poiId === null && r.qid === null && !r.withheld)).toBe(true)
+    expect(rows.every((r) => r.poiId === null && r.qid === null && !r.withheld && r.script === null)).toBe(true)
   })
 })
 
