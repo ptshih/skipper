@@ -60,6 +60,9 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
 - [region-corpus-discovery.md](decisions/region-corpus-discovery.md) — the discovery-first sweep
   (`discover-pois.ts` → `pois`) that populates a region's shared POI corpus; the SWEEP survives but
   its original tour-generation consumer is **CONSUMER SUPERSEDED by V2** (migration `0009`).
+- [geometry-first-regions.md](decisions/geometry-first-regions.md) — a region is a BBOX, never a
+  stored FK: a POI's region = point-in-bbox; a drive stores its route bbox + derives region by
+  intersect — no `region_id` FK anywhere (2026-06-19).
 - [corpus-enrichment.md](decisions/corpus-enrichment.md) — the paid `enrich` step that scouts story
   POIs into curated fact wells (`pois.fact_sheet`) shared by roam + drives; ✅ BUILT 2026-06-15, RUN
   2026-06-16 (315 welled).

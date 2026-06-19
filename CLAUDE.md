@@ -5,6 +5,8 @@ Jungle-Cruise-skipper persona, played as phone audio (CarPlay later). **Optimize
 The persona is the product.** When a choice trades polish-for-the-builder against
 scale-for-a-market, pick polish.
 
+## Posture & doctrine
+
 **Correctness over cost — never let spend-anxiety pick a worse design.** Choose the right architecture and
 let the model/tooling do the judgment even when a cheap heuristic would save a few dollars (don't keep an
 arbitrary char-count pre-filter ahead of a paid `enrich` step — let the enricher decide). Triggering a paid run still needs a founder OK; that *spend* guardrail never licenses a cheaper-but-worse design.
@@ -122,8 +124,8 @@ you found so the next agent can re-check it.
   **persona** is resolved in CODE at generation (`personaFromKey`, default `'skipper'`, one host per
   region in v2 → `PersonaDef`) and baked into the narration's AUDIO/delivery — there is NO persona
   column on `narrations` (one host needs none; a per-narration key returns with region-skippers, M4).
-  The `personas` row holds the host DEFINITION but is un-consumed scaffolding today (v2 playback shows a
-  fixed `'Skipper'`). **Voice** (no column) derives from the persona, and the
+  The host DEFINITION lives in the `PersonaDef` registry in code (the `personas` table was dropped in
+  migration 0014); v2 playback shows a fixed `'Skipper'`. **Voice** (no column) derives from the persona, and the
   **notch** is a generation-time INPUT only, hardcoded to `dadpocalypse` in `generate-narrations.ts`
   (no CLI joke-level flag yet) — NOT persisted (M1 is dadpocalypse-only). The `jokeLevel` Zod enum in
   `@skipper/shared` stays as the narration vocabulary.
@@ -216,10 +218,9 @@ is a region's shared `narrations` corpus, and a drive REUSES it pre-ordered alon
 0. **Content + phone-player spike.** Skipper prompt; a Tahoe **roam corpus** (shared
    `narrations`, one telling per place); stand up the **phone** audio player — that is the
    MVP target, and its build (Expo SDK 56 / RN 0.85 / new arch) decides the SDK pin.
-   **CarPlay is no longer a hard gate** — it's deferred past the MVP (see Deferred). The
-   MVP plays through the phone (in a mount / over Bluetooth), not CarPlay. You may file the
-   `carplay-audio` Apple entitlement in the background since Apple review is slow, but
-   nothing waits on it.
+   **CarPlay is deferred** past the MVP (see Deferred) — the MVP plays through the phone
+   (mount / Bluetooth). The `carplay-audio` entitlement can be filed in the background (Apple
+   review is slow), but nothing waits on it.
 1. **Walking skeleton.** ROAM as the anonymous front door + ONE user-created **drive**
    (A→B → route → reuse roam narrations pre-ordered), `dadpocalypse` only.
    discover → enrich → generate → TTS → R2 → Neon. Build the **drive simulator**. Player:
@@ -249,24 +250,10 @@ fallback (build-ready spec: `docs/specs/ask-the-skipper-spec.md`).
 
 ## Future ideas (post-MVP, not scheduled)
 
-Captured so they aren't lost; NONE are v1, all gated behind the phone-player bet being
-proven first. Full write-ups live in `docs/ideas/` (pre-spec) and `docs/specs/`
-(build-ready) — see the index in `docs/README.md`.
-
-- **"Ask the Skipper"** — live, grounded, in-persona voice Q&A mid-drive (the north-star
-  delighter). Build-ready spec: `docs/specs/ask-the-skipper-spec.md`.
-- **The drive-complete payoff as a designed moment** — the climax beat done in motion +
-  sound; the stage the tip jar + passport stamps plug into. `docs/ideas/drive-complete-moment.md`.
-- **"Tip the skipper"** — end-of-tour tip jar (Apple IAP; delight, not extraction; never a
-  toll). `docs/ideas/tip-the-skipper.md`.
-- **Sponsor read in the intro bracket** — in-character host-read ad; the riskiest
-  monetization idea vs the toy lens; only if it stays charming. `docs/ideas/sponsor-read.md`.
-- **Region-specific skipper identities** — a named host per region on the `PersonaDef`
-  registry (M4). `docs/ideas/region-skippers.md`.
-- **Passport + logbook** — souvenir stamps + the skipper reading your cumulative stats
-  back in character. `docs/ideas/passport-logbook.md`.
-- Also specced-but-unbuilt in `docs/specs/`: downtime callouts, "tell me more" B-sides,
-  replay-last-stop, skipper opinions, scenic stops.
+Captured so they aren't lost; NONE are v1, all gated behind the phone-player bet being proven
+first. Full write-ups + index live in `docs/ideas/` (pre-spec) and `docs/specs/` (build-ready) —
+see `docs/README.md`. The north-star delighter is **"Ask the Skipper"** (live, grounded,
+in-persona voice Q&A mid-drive — `docs/specs/ask-the-skipper-spec.md`).
 
 ## In-car player landmines (when you get there)
 
@@ -278,9 +265,7 @@ proven first. Full write-ups live in `docs/ideas/` (pre-spec) and `docs/specs/`
   via config plugin. Duck (don't stop) the user's music at a trigger.
 - **Offline-first:** download a complete tour before driving (Tahoe dead zones).
 
-## Scaffold review notes (carry into M1/M2)
-
-From an adversarial review of the scaffold. Verdict: sound foundation. Guardrails:
+## Engineering guardrails
 
 - **Type-name collisions (enforced: `bun run lint:types`).** `@skipper/shared` (Zod
   boundary types) and `@skipper/db/schema` (Drizzle `$inferSelect` row types) can export the same
@@ -308,12 +293,3 @@ From an adversarial review of the scaffold. Verdict: sound foundation. Guardrail
   carry non-null `audio_url` on the `narrations` row: **every** stop type carries audio and
   the ready-gate requires it on all of them (no stop type is silent). Only fact-grounded
   (story) narrations carry a `facts_hash`; scenic/break carry none and are never fact-stale.
-- **Readiness derives from audio, not a tour status flip.** The V1 batched
-  `status='ready'` gate (segment/track/frame writes) was removed in the V1→V2 migration
-  (`pipeline/persist.ts`); roam upserts a 1:1 `narration` directly, and a drive is `ready`
-  once every selected narration resolves to non-null `audio_url`.
-- Three further scaffold guardrails about the old `poi_content` content cache
-  (DB-enforced cache-key dimensions, M4 cache invalidation, the `stopType`-not-in-key
-  precondition) were **SUPERSEDED by zero-reuse (2026-06-08)** — narration is tour-owned,
-  so those hazards can't occur; the surviving concern is FACTS staleness via
-  `pois.facts_hash` (principle #1). History: `docs/decisions/tour-data-model-zero-reuse.md`.
