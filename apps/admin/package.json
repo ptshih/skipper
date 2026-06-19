@@ -15,6 +15,7 @@
     "@anthropic-ai/sdk": "^0.104.1",
     "@neondatabase/serverless": "^1.1.0",
     "@skipper/db": "workspace:*",
+    "@skipper/engine": "workspace:*",
     "@skipper/shared": "workspace:*",
     "@skipper/storage": "workspace:*",
     "@tanstack/react-query": "^5.101.0",

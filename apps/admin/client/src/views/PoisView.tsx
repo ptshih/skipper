@@ -2,7 +2,7 @@ import { Fragment, useMemo, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CircleCheck, Compass, Locate, Plus, RefreshCw, Search, Sparkles, Trash2, Wrench, X, Zap } from 'lucide-react'
-import { api, type CorrectionOverride, type PoiDetail, type PoiRow, type StoryEligibility } from '@/lib/api'
+import { api, ApiError, type CorrectionOverride, type PoiDetail, type PoiRow, type StoryEligibility } from '@/lib/api'
 import { errMsg, timeAgo } from '@/lib/format'
 import { PageHeader } from '@/components/PageHeader'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -305,6 +305,7 @@ function EnrichDialog({
 // expand. Corrections take effect on the NEXT generate/regeneration — they don't rewrite audio.
 function Corrections({ poiId }: { poiId: string }) {
   const qc = useQueryClient()
+  const confirm = useConfirm()
   const [validationErr, setValidationErr] = useState<string | null>(null)
 
   // Add-correction form
@@ -350,13 +351,38 @@ function Corrections({ poiId }: { poiId: string }) {
     save({ kind: 'retire', find: f })
   }
 
-  function setSpeakable() {
+  async function setSpeakable() {
+    if (saving) return
     const la = Number(lat), ln = Number(lng)
     if (!Number.isFinite(la) || !Number.isFinite(ln) || lat.trim() === '' || lng.trim() === '') {
       setValidationErr('Speakable anchor needs two numeric coordinates.')
       return
     }
-    save({ kind: 'speakable', lat: la, lng: ln }, { onSuccess: () => { setLat(''); setLng('') } })
+    setValidationErr(null)
+    try {
+      await saveMut.mutateAsync({ kind: 'speakable', lat: la, lng: ln })
+      setLat(''); setLng('')
+    } catch (e) {
+      // The server rejects an anchor that's implausibly far from the pin (likely a typo). Offer to
+      // override for the rare genuinely-distant vantage; any other error stays surfaced via `err`.
+      if (e instanceof ApiError && e.code === 'speakable_too_far') {
+        const ok = await confirm({
+          title: 'Anchor looks far from the pin',
+          body: `${e.message} Set it anyway?`,
+          confirmLabel: 'Set anyway',
+        })
+        // Declining is a handled choice, not a failure — clear the rejected mutation so the error
+        // banner doesn't keep showing the (intentional) "too far" message behind the dismissed dialog.
+        if (!ok) {
+          saveMut.reset()
+          return
+        }
+        try {
+          await saveMut.mutateAsync({ kind: 'speakable', lat: la, lng: ln, force: true })
+          setLat(''); setLng('')
+        } catch { /* surfaced via saveMut.error → err */ }
+      }
+    }
   }
 
   function clearSpeakable() {

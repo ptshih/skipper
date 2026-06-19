@@ -39,6 +39,7 @@ import {
   regions,
 } from '@skipper/db/schema'
 import { CLAUDE_MODELS, classifyStoryEligibility } from '@skipper/shared'
+import { checkSpeakableAnchor } from '@skipper/engine'
 import { requireAdmin, type AdminEnv } from './auth'
 import { contentTypeForKey, presignGet } from './storage'
 import {
@@ -838,6 +839,11 @@ app.post('/admin/pois/:id/corrections', async (c) => {
         name: pois.name,
         source: pois.source,
         sourceId: pois.sourceId,
+        // pin + kind: the speakable-anchor sanity guard compares the anchor to the pin against the
+        // kind-aware bound (a vantage is "roughly here," not km away).
+        kind: pois.kind,
+        lat: pois.lat,
+        lng: pois.lng,
         speakableLat: pois.speakableLat,
         speakableLng: pois.speakableLng,
       })
@@ -902,7 +908,27 @@ app.post('/admin/pois/:id/corrections', async (c) => {
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
         return c.json({ error: 'bad_request', message: '`lat`/`lng` must be finite numbers (or pass clear:true / lat:null).' }, 400)
       }
-      console.log(`[admin] ${operator} set speakable anchor on ${poi.source}:${poi.sourceId} → ${lat},${lng}`)
+      // Sanity-guard the anchor against the pin: a "where to look" vantage is roughly within the
+      // feature's own body, never km away. A coordinate beyond the kind-aware bound is almost
+      // certainly a typo or a hallucination, so reject it — overridable with `force:true` for the
+      // rare genuinely-distant vantage. The corpus audit (`audit-speakable.ts`) enforces the SAME
+      // bound over existing rows.
+      const check = checkSpeakableAnchor([poi.lng, poi.lat], [lng, lat], poi.kind)
+      if (!check.ok && body.force !== true) {
+        console.log(
+          `[admin] ${operator} REJECTED speakable anchor on ${poi.source}:${poi.sourceId} — ${Math.round(check.distanceM)}m > ${check.maxM}m`,
+        )
+        return c.json(
+          {
+            error: 'speakable_too_far',
+            message: `That anchor is ${Math.round(check.distanceM)} m from the POI pin — beyond the ${check.maxM} m sanity bound for a “${poi.kind ?? 'place'}”. A vantage is roughly here, not km away, so this looks like a typo. Double-check the coordinates, or pass force:true to set it anyway.`,
+            distanceM: Math.round(check.distanceM),
+            maxM: check.maxM,
+          },
+          422,
+        )
+      }
+      console.log(`[admin] ${operator} set speakable anchor on ${poi.source}:${poi.sourceId} → ${lat},${lng} (${Math.round(check.distanceM)}m from pin)`)
       await db.update(pois).set({ speakableLat: lat, speakableLng: lng }).where(eq(pois.id, id))
     }
   } else {

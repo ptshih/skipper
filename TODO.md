@@ -5,26 +5,6 @@ Carry-forward **engineering** items (the near-term layer of the truth system —
 Each item has enough context to action without re-deriving the reasoning. **Delete items
 when done** — git history is the archive.
 
-## Admin local-dev resilience — guard against "just errors out"
-
-The admin in local dev (vite `:5173` client + Hono admin-api `:8788`, `bun run dev:admin`)
-sometimes just errors out; add guards so a transient/dev-only failure degrades VISIBLY instead of
-a blank or cryptic crash. **Capture the actual error next time it happens to scope this** (the
-browser console + the failing request).
-
-**Shipped:** a top-level React `ErrorBoundary` (catches post-mount render crashes) + a plain-DOM
-boot-error fallback — `src/components/ErrorBoundary.tsx`, wired in `main.tsx` — that catches a
-PRE-mount fatal too (incl. the dual-React `ReactCurrentDispatcher` crash an error boundary can't
-catch) via a `window` error guard, and shows the error + the exact dual-React fix + Reload instead
-of a blank screen. Remaining:
-
-- [ ] **API-down / env-missing** — if the admin-api (`:8788`) is down or `DATABASE_URL` is unset,
-      surface a clear "admin-api unreachable" state instead of silent failed fetches / 500s (a
-      `/health` probe on boot + a banner).
-- [ ] **dev:server crash visibility** — `bun --watch server/index.ts` can exit on a bad import/env
-      and leave the vite proxy 502-ing with no signal; a supervisor/auto-restart, or at least a
-      client message distinguishing "api crashed" from "api booting".
-
 ## Location: When-In-Use → Always/background (deferred half of permission priming)
 
 The pre-permission **explainer** shipped 2026-06-13 in front of the existing *When-In-Use*
@@ -42,8 +22,9 @@ its own pass.
 - [ ] `gps.ts liveSource`: `allowsBackgroundLocationUpdates: true` on the watch; reconsider whether
       `expo-keep-awake` can drop once background triggering is reliable.
 - [ ] Request **sequence**: foreground first, THEN `requestBackgroundPermissionsAsync()` (you cannot
-      ask for Always cold). Extend the `LocationPrime` copy to prime the Always reason (it's already
-      worded to survive this). Reuse the `'locationPrime'` phase.
+      ask for Always cold). Extend the `LocationPrime` copy to prime the Always reason — note the
+      current copy is When-In-Use-scoped (`voice.ts`: "Parked, I'm off the clock — no tracking"), so
+      it needs an Always-rationale rewrite, not just reuse. Reuse the `'locationPrime'` phase.
 - [ ] Handle the **"Allow Once" silent-fail**: a same-session background request returns denied with
       NO prompt → route to Settings (the existing reduced/denied gate pattern).
 - [ ] Needs a native rebuild (dev build / EAS) + **App Store Review notes** stating background
@@ -80,78 +61,21 @@ Three items locked from the 2026-06-11 brainstorm (full capture: `docs/ideas/fre
       writes `muted`. Unlocks later: deep-cuts rotation targeting, the corpus meter, revisit
       preambles, mute-as-curation-telemetry. Keep it client-side (toy lens: no server surveillance).
 
-## Generation resumability — SHELVED 2026-06-10 (low ROI)
-
-The cost *guardrail* shipped 2026-06-09 (`pipeline/spend.ts` usage tally + the `--max-cost`
-pre-TTS abort + the hard-capped regen loop). The remaining ROBUSTNESS half — resuming a
-crashed run instead of re-paying narration + TTS — was evaluated 2026-06-10 and **shelved as
-low ROI**: the pipeline already retries transients (`pipeline/http.ts` 4× backoff on every
-external call incl. TTS; the eval loop is budgeted + `allSettled` + never-gates; per-stop
-failures are non-fatal), so only ~5% of failures are hard crashes, each wasting only
-~$0.20–0.35 (narration ~$0.04–0.15, TTS ~$0.20–0.30). A durable checkpoint (DB table +
-journal + resume branches in the demo-sensitive `generate.ts`) plus its correctness landmines
-(stale-narration, truncated-clip reuse) isn't worth that. **Revisit ONLY if** crash/stage
-logging later shows hard crashes are common.
-
-Refs: 2026-06-10 ROI validation (this session); `pipeline/generate.ts` (all in-memory until
-the atomic ready-gate), `pipeline/http.ts` (the retry that already covers most failures).
-
-## Generation pipeline: overlap independent phases (perf, output-neutral)
-
-The big parallel wins (first-pass narration + the regen passes) already shipped (B + A-simple,
-commits `be83c7e` / `5283fe6`). Of the three follow-on overlaps surfaced 2026-06-10, one shipped
-and two were evaluated-and-SKIPPED 2026-06-13 (verified against the post-corpus/segments-refactor
-code — the original framing had gone stale):
-
-- ✅ **bracket-narration ‖ eval-panel** — SHIPPED 2026-06-13. The intro/outro Opus calls are now
-      kicked off right after first-pass narration (`lap('narration')`) and awaited just before TTS,
-      so they run under the eval panel's wall-clock. Byte-identical output (brackets thread zero
-      cross-stop state); a detached `.catch` guard keeps a panel throw from orphaning the pending
-      promise, while the mandatory-abort still fires at the await. `lap('bracketNarration')` now
-      reads ~0 (honest — it overlapped). Refs: `pipeline/generate.ts` (the `bracketsPromise`).
-- ⛔ **geology ‖ scout** — SKIPPED (output-neutrality risk > tiny win). They touch DISJOINT stop
-      sets (scenic vs story) but BOTH hit Macrostrat (the scout's `geologyAt` tool + the scenic
-      geology phase). Overlapping STACKS that load; a throttle that exhausts the retry budget drops
-      a scenic stop's geology → DIFFERENT output, breaking the output-neutral contract. And geology
-      is the FAST phase (4 concurrent coord lookups) vs the slow Opus scouts, so the saved
-      wall-clock is small. Revisit only if Macrostrat headroom is confirmed (or geology is cached).
-- ⛔ **places ‖ discovery** — SKIPPED (premise stale). Post-corpus-refactor, "discovery" is a cheap
-      DB corpus SELECT (`loadCandidatePoisInBox`), not the live WDQS fetch this item assumed — so
-      there's little to overlap. Worse, the empty-corpus check throws "at $0 before any paid call",
-      and Places IS a paid Google API; firing it concurrently would forfeit that guard. Not worth it.
-
 ## TTS audio QA: clip loudness normalization
 
-Measured 2026-06-10 (ffmpeg volumedetect over all 30 live clips, founder-ear-confirmed):
-Gemini-TTS takes are non-deterministic in LEVEL. The first defect — **tail collapse (the
-"mumble")** — shipped its fix 2026-06-11: every ship path (generate, generate-narrations,
-resynth-tour, patch-clip) now measures tail(12s)-vs-body after each synth and re-synths
-once on a ≥3 dB drop, keeping the better take; a still-collapsed shipped take fails that
-stop's tts eval row (`pipeline/tail.ts` + `synthesizeWithTailRetake` in `pipeline/tts.ts`;
-graceful skip when ffmpeg is absent; the skipper-studio Dockerfile installs ffmpeg so cloud
-Job runs measure too).
+The mechanism shipped 2026-06-11: every ship path (`generate-narrations`, `resynth-narration`)
+re-synths once on a ≥3 dB tail-collapse drop (the "mumble"), then linear-loudnorms the winning take
+to `LOUDNORM_TARGET_LUFS = −14` / `LOUDNORM_TRUE_PEAK_DB = −1.5` (`pipeline/tail.ts` +
+`pipeline/loudnorm.ts`; constants in `models.ts`; ffmpeg-optional). Kills the clip-to-clip spread +
+the quiet-vs-Spotify gap.
 
-The second defect — **clip-to-clip level spread + overall quiet-vs-Spotify** — shipped its
-mechanism 2026-06-11: `synthesizeWithTailRetake` now loudness-normalizes the WINNING take via
-an ffmpeg two-pass LINEAR loudnorm (LINEAR16→AAC-LC 48k .m4a single encode) to `LOUDNORM_TARGET_LUFS = −14` /
-`LOUDNORM_TRUE_PEAK_DB = −1.5` (`pipeline/loudnorm.ts` + the constants in `models.ts`). Linear
-gain lands every clip at the SAME integrated level (kills the 7.2 dB spread) without touching
-speech dynamics or reintroducing tail collapse; −14 LUFS = Spotify's target, so it also closes
-the quiet gap. ffmpeg-optional (graceful null → ships un-normalized, no regression); runs even
-on short break clips the tail probe skips. Verified locally: a −48 LUFS tone → −14.45 LUFS,
-TP −10.3 dBTP (no clip).
+REMAINING — **founder ear-gate on the −14 target.** A single tunable constant; before the first paid
+full regen, A/B the smoke clips on-device against a Spotify reference (the old "music at −13 still
+reads 20% quiet" measure suggests −14 may want to nudge to −13/−12). One-line change in `models.ts`.
+(Drive-music level is tracked under "Drive music bed" below — blocked on this same ear-gate.)
 
-REMAINING — **founder ear-gate on the −14 target.** The number is a single tunable constant.
-Before the first paid full regen, A/B the smoke clips on-device against a Spotify reference; the
-old founder-ear measure ("music at −13 still reads 20% quiet") suggests real playback ≠ authored
-LUFS, so −14 may want to nudge to −13/−12. One-line change in `models.ts`, no other code.
-
-REMAINING — **drive music level (separate task).** The 17 bundled tracks (`apps/mobile`
-`licenses.ts`) are NOT in this pipeline — match them with a one-time offline re-encode (or a
-player-side gain) to the SAME target once −14 is locked by the ear-gate above.
-
-Refs: `packages/studio/src/pipeline/loudnorm.ts`, `pipeline/tts.ts`, `pipeline/tail.ts`,
-`models.ts` (the LOUDNORM_* constants), `docs/decisions/audio-compression-spike.md`.
+Refs: `pipeline/loudnorm.ts`, `pipeline/tts.ts`, `pipeline/tail.ts`, `models.ts` (LOUDNORM_*),
+`docs/decisions/audio-compression-spike.md`.
 
 ## In-app narration volume trim — DEFERRED pending the −14 ear-gate (founder feedback 2026-06-11)
 
@@ -174,6 +98,42 @@ Design conclusions if/when it IS built (so this isn't re-litigated):
   "skipper a touch louder than my quiet-music device volume" need shows up. True >unity boost would
   need a real gain node (AVAudioEngine / Web Audio / react-native-audio-api) — overkill for v1.
 Refs: `useDrive.ts` / `useRoam.ts` (the narration player), `models.ts` (LOUDNORM_* target).
+
+## Drive music bed — CONFIRM-ON-DEVICE it plays under V2 drives (static trace: it should)
+
+Founder ask 2026-06-19: "reintroduce / does the music play in V2 drives?" **Static investigation
+(2026-06-19) found the bed is fully wired and SHOULD play — nothing was removed in the V2 reshape.**
+Evidence chain:
+- `useDriveMusic` (`apps/mobile/src/lib/driveMusic.ts`; 17 bundled tracks under `assets/audio/`,
+  credits in `licenses.ts`) is live-wired into `useDrive.ts` (~L891), which is exactly what the V2
+  player `app/drives/[id]/play.tsx` mounts (`useDrive(id, { mode: driveMode })`). No feature flag.
+- `useAudioPlaylist` (+ `.play/.pause/.next/.volume`) is a REAL export in the installed expo-audio
+  **56.0.12** — the API the hook depends on exists.
+- The gating opens audible windows in EVERY mode: between stops `activeSeq` goes null while
+  `driving` stays true (`onClipDone`→`setActiveSeq(null)`+`pump()` in sim/live; explicit `drive`/
+  `rest` segments in preview), so `active: driving && !done && !paused && activeSeq === null` is true
+  between stops. The earlier "the `activeSeq` gating may be the bug" guess was DISPROVEN.
+- Ruled out the main two-player session suspect: the narration player's `setActiveForLockScreen(false)`
+  between stops only calls `MediaController.setActivePlayer(nil)` (clears the lock-screen Now-Playing
+  owner) — it does NOT deactivate the AVAudioSession (verified in expo-audio's `AudioPlayer.swift` /
+  `AudioModule.swift`), so it can't silence the separate music `AVQueuePlayer`.
+
+Could NOT do a live listen this pass: Metro (8081) was down, the app wasn't on the booted sim, and
+sim audio isn't capturable anyway. So one box remains — a human ear (or instrumented proof):
+
+- [ ] **Confirm by listening.** Start a sim drive (Settings → dev sim toggle, or `__DEV__` defaults to
+      'sim') and confirm the bed fades in between stops and ducks to silence under each narration. If
+      it's SILENT, the only residual static-unprovable risk is whether the two simultaneous expo-audio
+      objects (narration `AVPlayer` + music `AVQueuePlayer`) actually MIX on-device vs one stealing
+      focus — iOS's session model says they mix within one app, but it's the one thing a trace can't
+      guarantee. (Definitive non-ear proof if wanted: temporarily log `useAudioPlaylistStatus(playlist)
+      .playing` in the hook and watch it flip true between stops.)
+- [ ] Once confirmed audible, fold in the deferred **drive-music level** task from the loudness
+      section above (match the 17 tracks to the −14 LUFS narration target after the ear-gate locks).
+
+Refs: `apps/mobile/src/lib/driveMusic.ts` (`useDriveMusic` + the `TRACKS` rotation),
+`apps/mobile/src/lib/useDrive.ts` (~L888 the soundtrack effect; `onClipDone`/`pump` at ~L397-429),
+`apps/mobile/app/drives/[id]/play.tsx` (the V2 player + `driveMode`).
 
 ## Offline downloads: full re-pull only (no per-clip diff)
 
@@ -249,34 +209,13 @@ Refs: `docs/decisions/fact-overrides-and-veracity.md` ("Contribute back" + the d
 the `poi_overrides` table rows (reasons + source_urls; curated via the admin console),
 `poi_overrides.upstream_status` / `upstream_url` (the workflow columns).
 
-## Speakable anchors: validate the coordinate (no pin-vs-speakable mismatch guard today)
-
-`pois.speakable_lat/lng` is a corrected "where to look" vantage for a misleading pin — it drives the
-side-of-road left/right callout in `select.ts`. It's admin-set only now (the `speakable.ts` bootstrap
-seed was removed 2026-06-19; the value lives in the DB).
-
-GAP (founder-flagged 2026-06-19): the ONE existing anchor — Sugar Pine Point (`wikipedia:41195091`
-→ `39.061266, -120.113971`) — was **LLM-generated during the seed research phase and is UNVERIFIED**.
-Nothing validates a speakable coordinate against the pin, so a hallucinated/typo'd anchor yields a
-confidently-wrong "look to your right." `discover-pois` is NOT the place to check it (it no longer
-sets speakable).
-
-- [ ] Add a sanity guard: reject/warn when `haversine(pin, speakable)` exceeds a reasonable bound
-      (a vantage is "roughly here," not km away) — at the admin write boundary
-      (`POST /admin/pois/:id/corrections`) and/or a corpus audit over all pois with a non-null speakable.
-- [ ] Re-verify the Sugar Pine Point anchor specifically (only one, LLM-sourced) — confirm it points
-      lakeside toward the lighthouse, not into open water.
-
-Refs: `pois.speakable_lat/lng` (`schema.ts`), `select.ts` (side-of-road resolve), `region-corpus.ts`
-(reads speakable onto the StopPlan), admin `/admin/pois/:id/corrections`.
-
 ## Autio competitive borrows (small in-car/UX wins)
 
 From a 2026-06-10 teardown of Autio (formerly HearHere — the closest real-world comp:
 curated, celebrity-narrated, GPS-triggered road-trip audio; 4.8★, ~70% renewal). Their
 ceiling is coverage gaps + multi-narrator inconsistency — both things our generation +
 single-Charon model already answer, so the moat (persona continuity, in-car quality) is NOT
-a feature to copy. These three borrows are small and serve that moat. NOT borrowing:
+a feature to copy. This borrow is small and serves that moat. NOT borrowing:
 subscription-first pricing, celebrity narrator roster, national free-roam pin-map,
 over-broad trigger radius (all anti-charm or anti-doctrine).
 
@@ -291,17 +230,6 @@ over-broad trigger radius (all anti-charm or anti-doctrine).
       when we flip back to `mixWithOthers` (grounded in SDK 56 docs, but the actual resume is
       unverified). Run runbook §6 (resume after a 60s encounter, re-pause on the next, dead-zone skip
       never interrupts) before relying on it. Refs: `useRoam.ts`, `docs/guides/device-verification-runbook.md` §6.
-- [ ] **Heard/unheard stop-progress affordance on the drive screen.** Autio grays out
-      played map pins so you can glance at what's coming. Cheap, in-car-safe charm: a
-      "stop N of M" / dimmed-completed-stops indicator on the drive screen. Costs almost
-      nothing, reads at 60 mph.
-- [ ] **Upfront permission-explainer screens before Location-Always.** Autio runs a short
-      onboarding that *explains* why it needs Location-Always + Notifications before firing
-      the OS prompt, cutting denial. We hit this exact wall on the real-drive device pass —
-      a 1–2 screen explainer before the system dialog. (Note: no `UIBackgroundModes:['audio']`
-      yet — locked-screen live audio is still unverified; see the runbook.)
 
-Refs: `apps/mobile/src/lib/useDrive.ts` (the duck flip), the drive screen
-(`apps/mobile/app/drives/[id]/play.tsx`), `docs/guides/device-verification-runbook.md` (duck +
-lock-screen landmines). Validated-already (no action): our anonymous couch preview = Autio's
+Validated-already (no action): our anonymous couch preview = Autio's
 tap-a-pin preview; the M3 notch/interests-as-setting = their interest-ordered queue.

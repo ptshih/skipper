@@ -150,7 +150,9 @@ export interface PoiCorrections {
 export type CorrectionBody =
   | { kind: 'fact_edit'; find: string; replace: string; reason: string; sourceUrl?: string }
   | { kind: 'retire'; find: string }
-  | { kind: 'speakable'; lat: number; lng: number }
+  // `force` overrides the pin-vs-anchor sanity guard (the server rejects a too-far anchor with 422
+  // `speakable_too_far` unless force is set) — for the rare genuinely-distant vantage.
+  | { kind: 'speakable'; lat: number; lng: number; force?: boolean }
   | { kind: 'speakable'; lat: null }
 
 // A unified Runs-timeline row: either an operational gen_job or a historical eval_run.
