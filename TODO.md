@@ -137,22 +137,17 @@ Refs: `apps/mobile/src/lib/driveMusic.ts` (`useDriveMusic` + the `TRACKS` rotati
 
 ## Offline downloads: full re-pull only (no per-clip diff)
 
-DONE (2026-06-10): a re-cut clip (patch-clip / resynth-tour / a regen) is now DETECTABLE +
-recoverable on-device. Each stop/bracket carries a `revisedAt` content token (the DB
-`updated_at`, which every re-synth path already bumps, surfaced on the tour-detail DTO); the
-offline manifest embeds the detail, and the tour screen compares a fresh fetch against the
-saved copy (`isDownloadStale`, zero extra network) → a "Fresh cut ready" chip + a "Pull the
-fresh copy" ⋯ action. NEVER forced; offline play keeps using the saved bytes until the rider
-re-pulls. Manifest bumped to v3 (the V2 reshape — embedded detail is now a DRIVE manifest; a
-pre-token download lacks tokens → re-downloads).
+DONE: a re-cut clip (a `resynth-narration` or a regen) is detectable + recoverable on-device — each
+stop carries a `revisedAt` token, the offline manifest embeds it, and the drive screen compares a
+fresh fetch (`isDownloadStale`) → a "Fresh cut ready" chip + a "Pull the fresh copy" ⋯ action (never
+forced; offline play keeps the saved bytes until the rider re-pulls).
 
-REMAINING (post-MVP): the re-pull re-downloads EVERY clip, not just the changed ones. A
-per-clip diff (download only the stale clips, merge into the existing manifest) is the
-optimization — only matters once tours are large or strangers hold many offline tours.
+REMAINING (post-MVP): the re-pull re-downloads EVERY clip, not just the changed ones. A per-clip diff
+(download only the stale clips, merge into the existing manifest) — only matters once drives are large
+or strangers hold many offline.
 
-Refs: `apps/mobile/src/lib/offline.ts` (manifest + `isDownloadStale`),
-`apps/mobile/app/drives/[id]/index.tsx` (chip + ⋯ action), `packages/shared/src/schemas.ts`
-(`driveClip`/`driveManifest` `revisedAt`), `apps/api/src/index.ts` (detail route).
+Refs: `apps/mobile/src/lib/offline.ts`, `apps/mobile/app/drives/[id]/index.tsx`,
+`packages/shared/src/schemas.ts` (`driveManifest`/`revisedAt`), `apps/api/src/index.ts`.
 
 ## Offline downloads: expiration / forced freshness re-check (TTL)
 
@@ -162,7 +157,7 @@ WHY: offline clips never auto-refresh — the device keeps its cached bytes inde
 content-diff (`isDownloadStale` + the "Fresh cut ready" chip — see the section above) only catches
 drift IF the rider re-opens the tour-detail screen AND a fresh fetch is reachable; a tour downloaded
 once and never re-opened (or held in a dead zone) can carry STALE facts / a superseded clip forever.
-This is the maintenance gap made concrete: a `facts_hash` move, a `patch-clip`, or a `resynth-tour`
+This is the maintenance gap made concrete: a `facts_hash` move or a `resynth-narration`
 never reaches an already-downloaded device. A time-based TTL is the safety net INDEPENDENT of the
 content-diff — it fires even when the device never got to compare. Secondary benefit: it bounds how
 long a baked Places break-name persists offline (CLAUDE.md notes the frozen-clip-outlives-the-DB-anchor
