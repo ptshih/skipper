@@ -6,7 +6,7 @@
 // on this prose more than on anything else in the codebase.
 //
 // How it's used (the wiring is M1, NOT built here): this string is the SYSTEM
-// message for the Anthropic narration call. For each stop the generator sends a
+// message for the Anthropic narration call. For each stop the studio pipeline sends a
 // USER message carrying that stop's grounded FACT SHEET plus the tour's region /
 // corridor, the active stop type, and the joke notch. This system prompt is
 // static; it teaches Skipper how to behave for WHATEVER notch / stop type / fact

@@ -27,7 +27,7 @@ let installed = false
  *  We patch the CONSOLE methods, NOT process.stdout.write: Bun's console writes to the fd
  *  natively and BYPASSES the stream wrapper (Cloud Run still captures the fd — which is why
  *  Cloud Logging saw these lines — but an in-process stdout.write monkeypatch captures
- *  nothing). The generator logs exclusively via console.*, so this catches it all. */
+ *  nothing). The studio pipeline logs exclusively via console.*, so this catches it all. */
 export function installLogCapture(): void {
   if (installed) return
   installed = true

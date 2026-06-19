@@ -22,7 +22,7 @@ import { seedPoiOverrides } from './poi-overrides'
  *  AND drives the admin Roam coverage view, where POI→region is bbox containment. The admin Regions
  *  view can re-tune it; without one a region claims no POIs and shows empty coverage. */
 const REGION_SEED: { slug: string; displayName: string; discoveryBbox: string }[] = [
-  // The Tahoe–Reno corridor — matches the generator's hardcoded default (discover-pois / generate-narrations).
+  // The Tahoe–Reno corridor — matches the studio pipeline's hardcoded default (discover-pois / generate-narrations).
   { slug: 'lake-tahoe', displayName: 'Lake Tahoe', discoveryBbox: '-120.25,38.86,-119.55,39.65' },
 ]
 

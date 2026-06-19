@@ -1,5 +1,5 @@
-// Audio storage — the generator's R2 keys + uploads. The R2 client + presign live in
-// @skipper/storage (shared with the API); this file adds the generator-only concerns: narration
+// Audio storage — the studio pipeline's R2 keys + uploads. The R2 client + presign live in
+// @skipper/storage (shared with the API); this file adds the studio-only concerns: narration
 // clip key minting + writes. Audio objects are PRIVATE; we persist the R2 object KEY on
 // narrations.audio_url, and the API issues short-lived presigned GET URLs after the tier check
 // (so a shared URL expires and the account wall is real). Keys are narration/<poiId>/<clipId>.

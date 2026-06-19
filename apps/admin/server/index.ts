@@ -557,7 +557,7 @@ app.get('/admin/pois', async (c) => {
     const clip = clipMap.get(p.id)
     const region = regionForPoi(p.lat, p.lng)
     // Story-eligibility — a POI property (roam draws story-grade POIs from this corpus);
-    // single-sourced with the generator's gate constants (@skipper/shared).
+    // single-sourced with the studio pipeline's gate constants (@skipper/shared).
     const storyEligibility = classifyStoryEligibility({
       source: p.source,
       name: p.name,
@@ -643,7 +643,7 @@ app.get('/admin/pois/:poiId/narration', async (c) => {
 /*  POI corrections — operator-editable upstream-fact corrections + speakable    */
 /*  anchor, replacing the seed-edit + reseed CLI loop. These MUTATE the curation  */
 /*  layer (poi_overrides + pois.speakable_lat/lng) but spend nothing — corrections */
-/*  take effect on the NEXT generate/regeneration (the generator loads overrides + */
+/*  take effect on the NEXT generate/regeneration (the studio pipeline loads overrides + */
 /*  reads pois.speakable fresh per run); they never rewrite existing audio.        */
 /* -------------------------------------------------------------------------- */
 

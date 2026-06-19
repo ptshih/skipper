@@ -39,7 +39,7 @@ key/
 
 # Scratch / throwaway verification scripts (agent workspace)
 .scratch/
-# Scratch audio (generator TTS/clip output dumped during verification)
+# Scratch audio (studio TTS/clip output dumped during verification)
 .scratch-audio/
 # Design-review agent output (local report artifacts, not committed)
 .design-review/

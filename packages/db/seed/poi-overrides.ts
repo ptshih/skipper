@@ -1,6 +1,6 @@
 // Bootstrap rows for `poi_overrides` — the curated upstream-error corrections.
 //
-// The TABLE is the source of truth at runtime (the generator loads it per run; workflow
+// The TABLE is the source of truth at runtime (the studio pipeline loads it per run; workflow
 // state like upstream_status lives only there). This file is the reviewed BOOTSTRAP: the
 // founder-adjudicated corrections, upserted idempotently so a fresh database starts with
 // them. Re-running refreshes the correction CONTENT (find/replace/reason/source_url) but
@@ -19,7 +19,7 @@ import { db } from '../src/client'
 import { poiOverrides, type NewPoiOverride } from '../src/schema'
 
 // FACT corrections only now — the side-of-road coordinate moved onto `pois.speakable_lat/lng`
-// (a place's stored vantage, written by the generator). The Sugar Pine Point speakable anchor
+// (a place's stored vantage, written by the studio pipeline). The Sugar Pine Point speakable anchor
 // lives as a curated map in packages/studio/src/pipeline/speakable.ts.
 export const POI_OVERRIDE_SEED: NewPoiOverride[] = [
   {

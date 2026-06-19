@@ -112,7 +112,7 @@ core; the credit IAP is a fast-follow.
   `buildDrive()` + unit tests. Zero spend, no schema, no UI. **(DONE 2026-06-18: the 4 route-geometry
   helpers single-sourced into `engine/geo.ts` (re-exported via `pipeline/geo.ts`, `selectStops`
   untouched); new `engine/pacing.ts` (`buildRouteSnapper` + `projectQueueLag`) + `engine/drive-select.ts`
-  (`buildDrive`); both packages typecheck clean + 63 engine tests pass + generator `geo`/`select`
+  (`buildDrive`); both packages typecheck clean + 63 engine tests pass + studio `geo`/`select`
   regression green. UNCOMMITTED.)**
 - **P2 — thinnest demoable slice.** `POST /drives/propose` + `POST /drives` + `@skipper/shared` DTOs +
   minimal free-text A→B screen → couch preview. (Needs a free account; persists.)

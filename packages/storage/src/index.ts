@@ -1,6 +1,6 @@
 // @skipper/storage — the SINGLE R2 (S3-compatible) access point: one S3Client builder + one
 // presign helper, shared by the API (presigned GET after the freemium tier check) and the
-// generator (upload + presign during a run). Audio objects are PRIVATE in R2; callers store
+// studio pipeline (upload + presign during a run). Audio objects are PRIVATE in R2; callers store
 // the object KEY and presign on demand, so a leaked/shared URL expires and the account wall
 // is real. Uses Bun's native S3Client (no @aws-sdk); set S3_ENDPOINT to retarget any other
 // S3-compatible provider (Tigris, B2, AWS S3) with no rewrite.

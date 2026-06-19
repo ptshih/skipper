@@ -1,4 +1,4 @@
-// Persistence — the SHARED facts + grounding writes for the V2 generator.
+// Persistence — the SHARED facts + grounding writes for the V2 studio pipeline.
 //
 // The DEFERRED hand-authored tour pipeline (the draft-shell load + the atomic narration/aside
 // ready-gate; its segments/tracks/tour_frames tables were dropped in migration 0009) was removed in
@@ -7,7 +7,7 @@
 // writer reads: the `pois` upsert (deduped on (source, source_id); stamps facts_hash/
 // facts_fetched_at) + the grounding fingerprint helpers (storyFactsHash / hashFacts) that key the
 // staleness contract, used by the corpus tools (discover-pois / enrich-pois / refetch-poi)
-// and the roam generator.
+// and the roam studio pipeline.
 
 import { createHash } from 'node:crypto'
 import { sql } from 'drizzle-orm'

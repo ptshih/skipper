@@ -174,7 +174,7 @@ const narrationColumns = {
   audioUrl: text('audio_url').notNull(),
   audioDurationMs: integer('audio_duration_ms').notNull(),
   // Frozen attribution — an ARRAY, one entry per source this clip drew on (Wikipedia
-  // CC BY-SA + Macrostrat CC BY + Wikidata CC0, etc.). The generator MUST populate it for
+  // CC BY-SA + Macrostrat CC BY + Wikidata CC0, etc.). The studio pipeline MUST populate it for
   // every wikipedia-grounded clip (CC BY-SA is legal, not optional).
   attribution: jsonb('attribution').$type<AttributionSnapshot[]>(),
   // The pois.facts_hash this narration grounded on. NULL for tellings that don't ground on
@@ -194,7 +194,7 @@ export const regions = pgTable(
     slug: text('slug').notNull(), // 'lake-tahoe' (the key)
     displayName: text('display_name').notNull(), // 'Lake Tahoe' (spoken + shown in the picker)
     // Optional bbox for the region POI-discovery sweep — "lng_min,lat_min,lng_max,lat_max".
-    // Null = use the generator's built-in default (currently the Tahoe basin).
+    // Null = use the studio pipeline's built-in default (currently the Tahoe basin).
     discoveryBbox: text('discovery_bbox'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
@@ -274,7 +274,7 @@ export const pois = pgTable(
 // The fix layer for UPSTREAM source errors. The grounding gate verifies script ↔ sheet, so it
 // is structurally blind to a sheet whose source is wrong (found live: Wikipedia's "Leonard" for
 // Lennart Palme; the Pope Estate's builder/decade). Each row is ONE documented correction — a
-// literal find→replace on the fetched extract — applied by the generator at fetch time (the seam
+// literal find→replace on the fetched extract — applied by the studio pipeline at fetch time (the seam
 // every fact flows through), so the corrected text reaches the narration sheet, pois.facts, and
 // facts_hash identically, and old narrations become detectably stale.
 //
@@ -284,7 +284,7 @@ export const pois = pgTable(
 // Fact corrections ONLY now (the side_anchor coordinate moved to `pois.speakable_lat/lng`):
 //   find/replace — a literal substring edit on the fetched extract ('' deletes the match).
 //   Applies ONLY to Wikipedia-fetched prose today (geology/wikidata enrichment lines do not
-//   pass the fetch seam). An unmatched find is a no-op — but the generator WARNS on it, because
+//   pass the fetch seam). An unmatched find is a no-op — but the studio pipeline WARNS on it, because
 //   "source healed" and "source reworded, still wrong" are indistinguishable without a human look.
 //
 // Discipline: a row is a repair of a VERIFIABLE error, never an editorial rewrite — `reason` is

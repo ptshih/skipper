@@ -20,7 +20,7 @@
 > image) and v1 — **one app `apps/admin`**: the Hono server in `server/` (IAP gate, monitor reads,
 > job trigger/reconcile, Create Tour) + the React/Vite/Tailwind/shadcn SPA in `client/` (the
 > Google-Maps Create-Tour flow), served as one container behind IAP, plus the admin Dockerfile/
-> cloudbuild. All packages typecheck/build, 238 generator tests pass.
+> cloudbuild. All packages typecheck/build, 238 studio tests pass.
 > **Deployed + smoke-tested 2026-06-11:** admin service behind IAP, **identity `peter@manoa.health`**
 > (in-domain; a personal-gmail accessor needed DRS relaxed, so we switched + re-enabled DRS); the
 > `skipper-studio` Job is deployed and the full **New run → jobs:run → reconcile** chain ran green (a
@@ -79,10 +79,10 @@ The SPA calls `/admin/*` same-origin, so IAP's auth flows naturally.
 
 | # | Question | Decision | Why |
 |---|---|---|---|
-| 1 | Reuse API image or dedicated? | **Dedicated `skipper-studio` Job image** (own Dockerfile mirroring `apps/api/Dockerfile`, workspace trimmed to `studio+db+shared+storage`) | The generator's install closure (Anthropic SDK, google-auth, eval) differs from the API's |
+| 1 | Reuse API image or dedicated? | **Dedicated `skipper-studio` Job image** (own Dockerfile mirroring `apps/api/Dockerfile`, workspace trimmed to `studio+db+shared+storage`) | The studio pipeline's install closure (Anthropic SDK, google-auth, eval) differs from the API's |
 | 2 | DB target dev vs prod? | **Prod only.** ENTRYPOINT bakes `-f .env.production`; dev experiments stay on the laptop CLI | Cloud ops exist to operate the *live* prod catalog |
 | 3 | Live phase/cost surfacing? | A no-op-unless-`STUDIO_JOB_ID` **`pipeline/job-progress.ts`**, wired ONLY at the 4 ops entrypoint boundaries — never inside `generate.ts`. NB: **cost is not persisted anywhere today** (§9), so the hook is the *only* source of `pipeline_jobs.costUsd` | Keeps the CLI byte-identical (laptop has no `STUDIO_JOB_ID`) and risky edits out of `generate.ts` |
-| 4 | Light ops same Job or inline? | **All four CLIs through the one `skipper-studio` Job**; override `args` pick the script | Uniform secrets/logging/guardrails + keeps generator deps out of the admin image |
+| 4 | Light ops same Job or inline? | **All four CLIs through the one `skipper-studio` Job**; override `args` pick the script | Uniform secrets/logging/guardrails + keeps studio deps out of the admin image |
 | 5 | IAM identities | **Dedicated SAs:** `skipper-studio@` (Job runtime) and `skipper-admin@` (admin service) | Scopes the spend + trigger surface |
 
 ## 4. Data model — `pipeline_jobs`
@@ -208,7 +208,7 @@ frozen-once (never re-derived at request time). This was an explicit founder che
 reinterpretation; a *one-shot* prompt→tour with no gate would have amended the doctrine and was rejected.
 **On build, principle #2 gets a one-line clarification** ("LLM-drafted, human-approved, then frozen").
 Keep this separate from the content rule: the LLM proposes **the rails only** — the narratable **stops**
-are still discovered independently by the generator from the corridor (Wikidata/Wikipedia/Places). Don't
+are still discovered independently by the studio pipeline from the corridor (Wikidata/Wikipedia/Places). Don't
 let the route-LLM pick content; that re-tangles the exact separation #2 protects.
 
 ### Labor split (each tool does what it's good at)
@@ -444,7 +444,7 @@ almost every one rides on a column the schema already has but the UI throws away
 > Drive-by: `gen_job_kind` enum aligned to the 6 wired job kinds (drift from `287a64a` — the
 > source was 4-valued while `jobs.ts`/client/insert use `sweep_roam_pois`/`generate_roam`; run
 > `db:generate`+`db:migrate` to formalize on the shared DB if not already applied). Admin
-> typecheck + SPA build + 250 generator tests green. NOT yet done from this pass: **10**
+> typecheck + SPA build + 250 studio tests green. NOT yet done from this pass: **10**
 > (prompt-provenance badge), **11** (style-prompt A/B to scratch R2), **12** (inline play
 > primitive), and the roam corpus *listen* view (the roam job-triggers half already shipped in
 > `287a64a`). **Dropped 2026-06-11: the old #13 "demo-lock" — the canonical-preview "demo"

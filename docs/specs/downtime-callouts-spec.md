@@ -18,7 +18,7 @@ audio content type alongside route-anchored `tour_stops` and lifecycle `tour_bra
   ("persona in DELIVERY, never FACTS") entirely. Mood/character/drive-state beats only —
   *"long quiet stretch… my favorite kind,"* *"that light right now, huh."*
 - **Own table (`tour_callouts`), own scheduler (in `@skipper/engine`).** NOT a `stopType`,
-  NOT placed by the generator. This keeps `tour_stops` strict and the geofence engine
+  NOT placed by the studio pipeline. This keeps `tour_stops` strict and the geofence engine
   homogeneous (same reasoning that put intro/outro in their own `tour_brackets` table).
 - **The playback path already exists.** `useDrive` is a queue + pump + single audio player, and
   the intro/outro brackets already prove that a non-route item rides that queue under a sentinel
@@ -51,10 +51,10 @@ tour is ready**. The core pipeline is untouched; callouts are pure enhancement.
 ## 2. Why this shape (decisions — do NOT re-derive)
 
 A "fold callouts into scenic stops" alternative was considered and **rejected**. Scenic stops are
-also persona-only, so the fold would have made callouts generator-placed geofenced anchors with a
+also persona-only, so the fold would have made callouts studio-placed geofenced anchors with a
 pool — cheaper, but it can't do the thing that matters. The decisions:
 
-- **Runtime scheduler over generator-placed anchors.** A fixed anchor is *condition*-aware at
+- **Runtime scheduler over studio-placed anchors.** A fixed anchor is *condition*-aware at
   best (golden hour at a known point). The beats that most prove "he's alive" are **emergent** —
   *"you've been quiet a while," "we've been crawling through this for ten minutes," "take your
   time"* — and emergent downtime is unpredictable at generation time. For a charm-first toy where
@@ -71,7 +71,7 @@ pool — cheaper, but it can't do the thing that matters. The decisions:
 
 Grounded in `packages/studio/src/config.ts`:
 - `PACING.standard.minGapSec = 180`, `TARGET_SECONDS.story = 120` → the config's own comment:
-  *"a ~120s clip with a 180s floor leaves ~60s of quiet."* The generator **deliberately
+  *"a ~120s clip with a 180s floor leaves ~60s of quiet."* The studio pipeline **deliberately
   densifies to kill silence** (it lowered the floor from 240s to admit more grounded POIs).
 - **Finding 1 — callouts barely fire on dense corridors via *planned* gaps.** ~60s standard gaps
   are below any sane floor. Where a grounded POI exists, a real story stop beats a persona-only
@@ -255,7 +255,7 @@ stuck in Tahoe traffic. Extend `simulatedSource` in `apps/mobile/src/lib/gps.ts`
 
 ```ts
 simulatedSource(polyline, {
-  baseMph: 30,            // was effectively 60 (SIM_MPH); 30 matches the generator's design
+  baseMph: 30,            // was effectively 60 (SIM_MPH); 30 matches the studio pipeline's design
   timeScale: 1,          // 8× fast-replay still correct: tSec is drive-time, dwells read right
   perturbations: [
     { atM,        kind: 'stop',  durationSec },   // emits speed≈0 fixes, tSec advancing
@@ -268,7 +268,7 @@ simulatedSource(polyline, {
   `[fromM, toM]` → drives the crawl band. Pure, deterministic; composes with fast `timeScale`.
 - **Also flip the `useDrive` default `SIM_MPH` from 60 → ~30.** Beyond callouts this fixes a
   latent correctness gap (at 60 mph the sequential player backs up, violating the `QUEUE_LAG`
-  invariant the generator enforces at 30 mph).
+  invariant the studio pipeline enforces at 30 mph).
 
 **Ship three canned scenarios — they double as the emergent-path acceptance tests:**
 1. 45s `stop` on open road → expect **one `halt` beat**.
@@ -287,7 +287,7 @@ If those pass in the sim, the emergent path is verified before you're ever in a 
    Wire the three acceptance scenarios into the sim screen for manual exercise.
 3. **Schema + migration (CHECKPOINT — live DB).** `tour_callouts` + `callout_mood` enum. Clean +
    destructive (no users; CLAUDE.md). NOT added to `finalizeTourReady`.
-4. **Generator.** `narrateCallouts()` (persona-only pool, mood-tagged, diversity-tracked) + the
+4. **Studio.** `narrateCallouts()` (persona-only pool, mood-tagged, diversity-tracked) + the
    no-fact lint guard + tour-scoped R2 writes + a regen path in `resynth-tour.ts`. Separate pass.
 5. **API/DTO + offline.** `CalloutDTO`, `/sign` for callout clips, offline manifest entries.
 6. **Player wiring (`useDrive` + `useDriveMusic`).** Tick the scheduler from `handleFix`; the
@@ -336,6 +336,6 @@ Designed 2026-06-09. Grounded against, and citing for re-check:
 - The per-region persona registry (`personaForRegion`, `PersonaDef`, the kit) and the
   `tour_brackets` Option-B precedent (docs/specs/tour-structure-spec.md; the tour-structure handoff doc has since been deleted).
 
-**Decisions locked this session:** runtime scheduler over the generator-placed "fold"; separate
+**Decisions locked this session:** runtime scheduler over the studio-placed "fold"; separate
 `tour_callouts` table; persona-only v1 (spatial = Phase 2); duck-overlay; stops-win-by-construction;
 the §7 tuned ruleset incl. the parked-car rule (Req B) and the sim perturbations (Req A).

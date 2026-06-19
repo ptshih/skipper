@@ -6,7 +6,7 @@ import { z } from 'zod'
  * no `joke_level` column and the notch is absent from every read DTO and the API. M1 is
  * `dadpocalypse`-only, so a stored notch would carry no information. When the 1-N notch
  * ships (M3) the column lands on the NARRATION (narrations) — a notch describes a telling,
- * not a route. This enum stays because the generator's narration is parameterized by it
+ * not a route. This enum stays because the studio pipeline's narration is parameterized by it
  * (the persona prompt's whole notch ladder) and `tourRequest` carries it as the run input.
  */
 export const jokeLevel = z.enum(['off', 'mild', 'dad', 'dadpocalypse'])
@@ -70,7 +70,7 @@ export type AttributionSource = z.infer<typeof attributionSource>
 /**
  * Admin gen-job KINDS — the closed vocabulary of cloud-ops scripts the admin can launch, and the
  * SINGLE SOURCE OF TRUTH for it: the admin-api dispatch (`jobs.ts` SCRIPTS, typed `Record<JobKind>`),
- * the generator's `beginJob`, and the admin client's `JobKind` all derive from this. Deliberately
+ * the studio pipeline's `beginJob`, and the admin client's `JobKind` all derive from this. Deliberately
  * NOT a pg enum — `studio_jobs.kind` is an OBSERVABILITY label (nothing reads it for logic) and this
  * set CHURNS as ops scripts are added, so the vocabulary lives in code over a plain `text` column,
  * not a migration-bound DB type. Add a kind here + in `jobs.ts` SCRIPTS; no migration needed.
@@ -90,7 +90,7 @@ export type JobKind = z.infer<typeof jobKind>
 
 /**
  * DEFERRED axis (no variant matrix in v1). Not a stored tour column — kept only as the
- * generator's internal pacing key (config PACING). When the duration=skip-stops feature
+ * studio pipeline's internal pacing key (config PACING). When the duration=skip-stops feature
  * lands it becomes a player-side trim, never separate tours.
  */
 export const durationBucket = z.enum(['short', 'standard', 'long'])

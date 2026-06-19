@@ -18,7 +18,7 @@
  *  - grounded:   traces to a specific fact-sheet line (evidence = that line).
  *  - ambient:    only NAMES/frames the region or corridor, or is plain world-knowledge
  *                that asserts no fact about a specific place (the sky is big) — the
- *                generator's two sanctioned sheet-free carve-outs.
+ *                studio pipeline's two sanctioned sheet-free carve-outs.
  *  - ungrounded: a place-fact NOT on the sheet — even if hedged ("I bet", "must have
  *                been") or COMPUTED from sheet facts (a span subtracted from two years).
  */

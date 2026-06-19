@@ -18,7 +18,7 @@ If the file is missing, the player degrades gracefully to a charming **"warming 
 lands at launch"** state, so the page is never broken pre-clip.
 
 Recommended: ~20 s, the Emerald Bay overlook telling (the stop named in the hero caption).
-Keep it MP3 (the generator already outputs 32 kbps MP3); ≤ ~150 KB at that bitrate. Audio
+Keep it MP3 (the studio pipeline already outputs 32 kbps MP3); ≤ ~150 KB at that bitrate. Audio
 in R2 is presigned/private, so **export a copy** of the blessed clip and commit it here as a
 public static asset — don't link a short-TTL presigned URL.
 

@@ -127,7 +127,7 @@ you found so the next agent can re-check it.
   (no CLI joke-level flag yet) — NOT persisted (M1 is dadpocalypse-only). The `jokeLevel` Zod enum in
   `@skipper/shared` stays as the narration vocabulary.
 - **A narration is only live once it has non-null audio** (story, scenic, AND break — `audio_url`
-  is NOT NULL on `narrations` at the DB boundary). Generator enforces; the player also defends. A
+  is NOT NULL on `narrations` at the DB boundary). The studio pipeline enforces; the player also defends. A
   drive can't be `ready` until every selected stop resolves to a narration with audio.
 - **Persona lives in DELIVERY, never in FACTS.** "Make it funny" never loosens
   accuracy. A POI with thin/no Wikipedia is downgraded to scenic/break — silence
@@ -162,7 +162,7 @@ you found so the next agent can re-check it.
   off MP3-direct dropped a double-encode — see `docs/decisions/audio-compression-spike.md`.
   Switched off ElevenLabs (commit `6af019e`) to bill GCP credits and dodge its quota +
   2026-12-31 voice sunset.
-- **R2 = Bun's native `S3Client`** (no `@aws-sdk`; `region: "auto"`); the generator
+- **R2 = Bun's native `S3Client`** (no `@aws-sdk`; `region: "auto"`); the studio pipeline
   tsconfig needs `types: ["node","bun"]` for it.
 - **Auth = Better Auth** (`apps/api/auth.ts`). It needs interactive transactions,
   so it runs on its OWN `drizzle-orm/neon-serverless` Pool client (`auth-db.ts`)
@@ -299,7 +299,7 @@ From an adversarial review of the scaffold. Verdict: sound foundation. Guardrail
   `models.ts` is the source constant the def references). Not a per-request knob (deferred to
   region-skippers, M4). (Gemini-TTS voice names are stable
   identifiers — no ElevenLabs-style sunset to mind.)
-- **The generator MUST populate `narrations.attribution`** for every
+- **The studio pipeline MUST populate `narrations.attribution`** for every
   wikipedia-sourced clip (CC BY-SA is legal, not optional) — put it on the
   generation invariant checklist + the human-review gate.
 - **scenic ≠ break.** A scenic stop is delivery-only ambient audio (no facts); a

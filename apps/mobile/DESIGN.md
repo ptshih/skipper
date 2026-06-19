@@ -189,7 +189,7 @@ string speaks as the skipper. Keep it warm, corny, and short (glanceable). Examp
 - Drive complete: _"That’s the end of the road, folks. Watch your step climbing out."_
 
 **Invariant:** voice is _delivery_, never _facts_. No place names, hours, or data
-live in `voice.ts`. (Mirrors the generator's "persona lives in DELIVERY" rule.)
+live in `voice.ts`. (Mirrors the studio pipeline's "persona lives in DELIVERY" rule.)
 
 ## 8. In-car & accessibility rules
 

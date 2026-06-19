@@ -113,7 +113,7 @@ contents-creep; keep it a frame.
 - **Intro/outro frames** (the `asides` table, `docs/specs/tour-structure-spec.md`) carry the
   plant/land — generated *from* the blessed thesis. This is where 90% of the thesis lives.
 - **Light stop conditioning:** each stop's narration is *optionally* told the thesis (a nod when
-  natural), threaded through the within-tour conditioning the generator already runs
+  natural), threaded through the within-tour conditioning the studio pipeline already runs
   (`narrate.ts`'s `priorStops`/motif window — the thesis becomes one more threaded element). This is
   the **bookends-first** refinement (§9) — ship the frames first, add stop-nods later.
 - Reuses the persona (`packages/studio/src/persona/`) — the thesis is spoken in the skipper's
@@ -129,7 +129,7 @@ through-line.
 
 ## 8. Build phases (file-level)
 
-1. **Thesis proposal + bless loop.** A generator step that reads the route's wells and emits 2–3
+1. **Thesis proposal + bless loop.** A studio pipeline step that reads the route's wells and emits 2–3
    grounded candidate theses (+ their supporting stops) for founder review; persist the blessed one to
    the drive's `thesis` field. Exhaustion-gate (propose *none* when honest). Add the thesis judge
    (validation harness).

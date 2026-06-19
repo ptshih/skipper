@@ -23,7 +23,7 @@ describe('Skipper persona def', () => {
 
   test('kit beats stay in lockstep with the kit prose in the prompts (no prose↔regex desync)', () => {
     // Each kit detector must actually fire on the prompt text that describes that beat —
-    // the load-bearing sync the registry exists to keep (lint + generator share these beats).
+    // the load-bearing sync the registry exists to keep (lint + studio share these beats).
     for (const beat of SKIPPER.kit.beats) {
       const described = beat.match.test(SKIPPER.systemPrompt) || beat.match.test(SKIPPER.framePrompt)
       expect(described).toBe(true)

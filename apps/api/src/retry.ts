@@ -1,6 +1,6 @@
 // Bounded retry for the API's neon-http reads — mask a Neon cold-start blip on the USER's
 // latency path. The public API sits idle between visitors, so the FIRST query after idle wakes
-// a suspended Neon serverless compute and can transiently throw (429/5xx/reset). The generator
+// a suspended Neon serverless compute and can transiently throw (429/5xx/reset). The studio pipeline
 // hit this same DB enough to add its own retry (packages/studio/src/pipeline/http.ts —
 // observed 2026-06-10); the API is even MORE cold-start-prone (it idles between rare anonymous
 // visitors, so every funnel visitor is a cold start), but its reads were bare `db.select`.
@@ -10,7 +10,7 @@
 // honest answer. (Contrast ./session `resolveSessionSafely`, which shares this loop but fails
 // OPEN to null — the secure direction for AUTH, where a missing session legitimately = anonymous.)
 //
-// Budget is SHORTER/FEWER than the generator's (4×/500 ms) because this is on the user's latency
+// Budget is SHORTER/FEWER than the studio pipeline's (4×/500 ms) because this is on the user's latency
 // budget: with the defaults the worst added wait before a 500 is baseMs·(2^0 + 2^1) = 360 ms, and
 // the common case is a single blip masked into a slightly-slower success.
 

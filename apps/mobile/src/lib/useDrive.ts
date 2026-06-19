@@ -468,7 +468,7 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
       dot.setValue(total > 0 ? Math.min(1, Math.max(0, fix.alongM / total)) : 0)
       const events = engineRef.current?.update(fix) ?? []
       if (events.length === 0) return
-      // Multiple stops on ONE fix play back-to-back with no gap (relies on generator spacing). Not a
+      // Multiple stops on ONE fix play back-to-back with no gap (relies on the studio pipeline's spacing). Not a
       // crash, but surface it in dev so a too-tight cluster is visible rather than silent. (audit #296)
       if (events.length > 1 && __DEV__) console.warn(`[drive] ${events.length} stops fired on one fix`)
       setFiredSeqs((prev) => {

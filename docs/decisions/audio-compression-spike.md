@@ -100,7 +100,7 @@ Three live options after disqualifying Opus (iOS) and the raw status quo:
   "ready-gate needs a real duration" invariant.
 - + Free codec/bitrate choice; **AAC@32k ≈ MP3@32k in size but clearly better
   quality**, or AAC@48k for a quality cushion at 7.8×.
-- − Adds **ffmpeg as an environmental dependency** of the generator (an offline
+- − Adds **ffmpeg as an environmental dependency** of the studio pipeline (an offline
   builder batch tool — acceptable, but document it; any machine/CI that generates
   needs it). ffmpeg→.m4a can't stream to a pipe (mp4 needs seek) → temp file, or
   emit ADTS `.aac` which is pipe-friendly and iOS-playable.
@@ -112,13 +112,13 @@ AVPlayer can't play it.** Revisit only if a tour ever targets Android/web *only*
 the QA bugs immediately, and needs no new infra. **Gate the lock on one ear test:**
 synth a canonical clip as 32k MP3 vs a locally-transcoded AAC@48k and listen. If 32k
 MP3 audibly dulls the deadpan, switch to **B** (ffmpeg is already on the builder
-machine). The player/API are codec-agnostic either way, so A↔B is a generator-only
+machine). The player/API are codec-agnostic either way, so A↔B is a studio-only
 swap.
 
 ## 5. Duration strategy (the only real engineering in option A)
 
 Replace the PCM byte-length derivation with an **MP3 frame-sum parser** in the
-generator (pure code, no deps — mirrors the existing `wav.ts` parser style; add a new
+studio pipeline (pure code, no deps — mirrors the existing `wav.ts` parser style; add a new
 `pipeline/mp3.ts` + `mp3.test.ts`):
 
 - Walk MP3 frames from the sync word `0xFFE`; read the MPEG version + bitrate +
@@ -147,7 +147,7 @@ ADC creds (absent in the spike env), so it's the builder's call.
 
 ## 7. Implementation plan (option A) & blast radius
 
-Generator-only; **no mobile/API code change** (they take a URL + duration; expo-audio
+Studio-only; **no mobile/API code change** (they take a URL + duration; expo-audio
 plays MP3 by content-type/extension).
 
 - `models.ts`: `TTS_AUDIO_ENCODING 'LINEAR16'→'MP3'`, `TTS_AUDIO_CONTENT_TYPE
@@ -166,7 +166,7 @@ plays MP3 by content-type/extension).
 **Migration (one-time):**
 - Re-synth every existing `poi_content` clip → new `.mp3` keys; `audioUrl` updates;
   `audioDurationMs` re-derived (should match within ms). Canonical preview `9813e519`
-  is 10 clips — re-run the generator / `patch-clip` for them.
+  is 10 clips — re-run the studio pipeline / `patch-clip` for them.
 - Old `.wav` objects become orphaned in R2 (the key extension changed) → delete them
   after the re-synth verifies (`audioExists` on the new keys, then sweep the `.wav`).
 - Per CLAUDE.md's M4 note: format/extension is **not** in the `poi_content` cache key

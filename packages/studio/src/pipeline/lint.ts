@@ -1,8 +1,8 @@
-// Post-assembly diversity lint — the cross-stop backstop the per-stop generator
+// Post-assembly diversity lint — the cross-stop backstop the per-stop studio pipeline
 // can't be.
 //
 // Each stop's narration is an INDEPENDENT per-stop LLM call (narrateStop) with no
-// view of its siblings, so a stop can't know what its neighbours did. The generator
+// view of its siblings, so a stop can't know what its neighbours did. The studio pipeline
 // threads a recent-openers/closers/kit window to dampen repetition, but a window
 // can't catch a gag that recurs >3 stops apart, and a per-stop prompt quota can't
 // enforce a tour-level budget. After every stop is narrated, this lints the
@@ -52,7 +52,7 @@ export interface LintFinding {
 }
 
 // Personal-kit detectors come from the active persona (passed in), so the lint and the
-// generator's spent-beat tracking read the SAME source — they can never desync (the bug
+// studio pipeline's spent-beat tracking read the SAME source — they can never desync (the bug
 // the per-region registry fixed). See packages/studio/src/persona/.
 
 // HARD-BANNED reveal wind-ups and AI/brochure tics — the persona prompt forbids

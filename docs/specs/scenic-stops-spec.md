@@ -188,7 +188,7 @@ In dependency order:
 4. (Optionally defer the full mode palette for the very first smoke test — a single scenic stop can't
    be monotone against itself — but at least wire the `scenicMode` plumbing.)
 
-**Success:** the generator log shows `1 scenic` in the breakdown (the deliberate birth path the
+**Success:** the studio pipeline log shows `1 scenic` in the breakdown (the deliberate birth path the
 accidental one never hits) and `(1 scenic …)` in the geology line; the scenic clip **names no peak/
 town/island**, asserts **only** the granite + rough age, sets a mood, ~20s; its `poi_content` row has
 non-null `audioUrl` + `audioDurationMs` with `attribution` carrying the Macrostrat CC BY entry; tour

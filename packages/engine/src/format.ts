@@ -1,4 +1,4 @@
-// Shared display formatting for the drive — one implementation so the generator CLI, the
+// Shared display formatting for the drive — one implementation so the studio pipeline CLI, the
 // sim CLI, and the mobile player can't drift on how a clock reads.
 
 /**

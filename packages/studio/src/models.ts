@@ -121,7 +121,7 @@ export const TTS_MODEL = 'gemini-3.1-flash-tts-preview' as const
 // ⚠ ffmpeg is now REQUIRED on every SHIP path (it IS the encoder, not just QA) — Cloud Run
 // carries it (packages/studio/Dockerfile); a bare box without it fails loudly. The
 // player/API are codec-agnostic (they take a presigned URL + a duration; MIME derives from
-// the .m4a key extension), so this was a generator-only flip.
+// the .m4a key extension), so this was a studio-only flip.
 export const TTS_AUDIO_ENCODING = 'LINEAR16' as const
 export const TTS_SAMPLE_RATE_HZ = 24_000 as const // Gemini-TTS LINEAR16 native rate
 export const TTS_AUDIO_CONTENT_TYPE = 'audio/mp4' as const

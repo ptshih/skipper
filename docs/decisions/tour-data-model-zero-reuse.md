@@ -22,7 +22,7 @@ CLAUDE.md principle #1.
 anonymously and the freemium wall gates the live drive + offline for EVERY tour, so the `is_preview`
 column in the §3 DDL no longer exists in `schema.ts`.
 
-**Addendum 2026-06-10:** the §4A facts-TTL **READ side SHIPPED** — `FACTS_TTL_HOURS` (generator
+**Addendum 2026-06-10:** the §4A facts-TTL **READ side SHIPPED** — `FACTS_TTL_HOURS` (studio
 `config.ts`, default 168 h, env `SKIPPER_FACTS_TTL_HOURS`, 0 disables) + `persist.loadFreshPoiFacts`
 / `isFactsFresh`: a regen reuses a place's stored deepened extract when (a) it would actually be
 ADOPTED (outsizes the lead — a lead-only row from a failed deep fetch re-fetches and heals), (b)

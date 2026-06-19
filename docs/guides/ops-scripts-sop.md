@@ -3,11 +3,11 @@
 **Status:** ✅ **ADOPTED 2026-06-10.** Enforced by reuse via `packages/studio/src/pipeline/ops.ts`;
 reference implementation = `sweep-orphans.ts`; `resynth-narration.ts` (1:1 narration resynth) and
 `rename-roam-prefix.ts` conform to the contract (preview by default, act only on `--apply`). This is
-the contract for the generator's one-off operational CLIs.
+the contract for the studio pipeline's one-off operational CLIs.
 
 ## What this covers
 
-The generator's **one-off ops CLIs** — `packages/studio/src/*.ts` you run by hand via
+The studio pipeline's **one-off ops CLIs** — `packages/studio/src/*.ts` you run by hand via
 `dotenvx … bun …` to fix or maintain live data (`sweep-orphans`, `resynth-narration`,
 `rename-roam-prefix`, backfills). NOT the generation pipeline itself, and not app/API code.
 

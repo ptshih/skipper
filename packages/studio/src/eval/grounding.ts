@@ -1,14 +1,14 @@
 // GROUNDING evaluator — the crown-jewel gate.
 //
 // The product's cardinal invariant is "persona lives in DELIVERY, never in FACTS": every
-// claim a stop makes about its PLACE must trace to that stop's fact sheet. The generator's
+// claim a stop makes about its PLACE must trace to that stop's fact sheet. The studio pipeline's
 // system prompt TEACHES this; this evaluator CHECKS it, after the fact, on the finished
 // script — turning the human-ear / ad-hoc-audit gate into a standing, near-objective one.
 //
 // Why this can be a hard GATE (not a fuzzy judge): grounding is checkable. We don't ask
 // "is this grounded?" holistically — we DECOMPOSE the script into atomic place-claims and
 // classify each against the permitted well (entailment), mirroring the exact contract the
-// generator is told to follow (skipper.ts "THE ONE RULE ABOVE ALL"): hedging doesn't launder
+// studio pipeline is told to follow (skipper.ts "THE ONE RULE ABOVE ALL"): hedging doesn't launder
 // an invented fact; a number computed from sheet facts is still invented; only naming the
 // region/corridor + plain world-knowledge are sheet-free.
 //

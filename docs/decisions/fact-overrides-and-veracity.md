@@ -51,7 +51,7 @@ away from the lakeside content the script describes.
   it stays correct per drive — validated: Sugar Pine Point's lighthouse anchor → `right`
   northbound, `left` southbound.
 - **No silent misses** (review-caught): an unmatched find-string is "source healed" OR
-  "source reworded, still wrong" — indistinguishable without a human look, so the generator
+  "source reworded, still wrong" — indistinguishable without a human look, so the studio pipeline
   **warns** per unmatched edit per fetch context, never no-ops silently.
 - **Retire, never delete** (the staleness stamp is max-over-EXISTING-rows, so a DELETE can't
   bust caches holding a withdrawn correction). Two cases: when the source text is still there

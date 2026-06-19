@@ -1,4 +1,4 @@
-// Shared helpers for the generator's one-off OPS CLIs (sweep-orphans,
+// Shared helpers for the studio pipeline's one-off OPS CLIs (sweep-orphans,
 // resynth-narration, …). The contract these enforce is documented in
 // `docs/guides/ops-scripts-sop.md`. The headline rule: anything that mutates the DB,
 // deletes bytes, or spends money PREVIEWS by default and acts only on `--apply`.

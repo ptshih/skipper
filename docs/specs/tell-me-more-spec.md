@@ -5,7 +5,7 @@ leftover fact-sheet material the tight ~2-min main clip didn't use. The **offlin
 middle** of the pull ladder for dead air: `replay-last → tell-me-more → Ask the Skipper`. No live
 LLM, no STT, no network — works in the dead zones where dead air is worst.
 
-> **Status: SPEC ONLY — nothing built.** A generator + player feature, fully offline. Decided
+> **Status: SPEC ONLY — nothing built.** A studio pipeline + player feature, fully offline. Decided
 > 2026-06-09. Builds on `docs/specs/replay-last-stop-spec.md` (the soft-clip player concept it shares) and
 > `docs/specs/downtime-callouts-spec.md`; it's the pre-canned rung of the pull ladder formalized in
 > `docs/specs/ask-the-skipper-spec.md` §4.6.
@@ -47,7 +47,7 @@ A deeper cut is a **second, non-redundant telling** of the same stop:
 - **Generation:** a second `narrate.ts` call (sibling to `narrateStop`/`narrateIntro`/`narrateOutro`),
   **conditioned on the main script**: *"Here is what was already said about this place; go DEEPER or
   ELSEWHERE in these facts — never repeat the main telling. If the facts are exhausted, return
-  nothing."* This reuses the within-tour conditioning machinery the generator already runs for
+  nothing."* This reuses the within-tour conditioning machinery the studio pipeline already runs for
   diversity (`generate.ts`'s `priorStops`/`recentMotifs` threading), pointed *within* a stop.
 - **Eligibility is automatic (the exhaustion gate).** "Return nothing if the facts are exhausted" is
   the same *silence-beats-padding* discipline already enforced (thin articles stay short). A
@@ -158,7 +158,7 @@ lands, Ask is the natural upgrade: swap the *fixed* B-side for a *responsive* gr
 
 - Surfaced from the dead-air thread (`docs/research/competitor-ux-studies.md`: the too-little/too-much
   contradiction) and the pull-ladder framing (`docs/specs/ask-the-skipper-spec.md` §4.6).
-- Generator seams: `packages/studio/src/pipeline/narrate.ts` (the new `narrateDeeperCut`),
+- Studio seams: `packages/studio/src/pipeline/narrate.ts` (the new `narrateDeeperCut`),
   `generate.ts` (within-tour conditioning: `priorStops`/`recentMotifs`), `config.ts`
   (`DEEP_EXTRACT_CHARS=4000`, `TARGET_SECONDS.story=120`), `persist.ts`, the `finalizeTourReady`
   ready-gate (deliberately NOT included), `resynth-tour.ts`.

@@ -69,7 +69,7 @@ export interface BuildDriveParams {
 }
 
 /** Two narrations closer than this on the ground are the same physical stop — collapse to one.
- *  Mirrors the generator's MIN_STOP_SEPARATION_M. */
+ *  Mirrors the studio pipeline's MIN_STOP_SEPARATION_M. */
 export const DRIVE_MIN_SEPARATION_M = 1_000
 /** A clip that would start more than this many seconds after its trigger (FIFO queue lag) is
  *  DROPPED — silence beats a clip playing far behind the car. Mirrors QUEUE_LAG_WARN_SEC. */
@@ -109,7 +109,7 @@ export function buildDrive(params: BuildDriveParams): DriveStop[] {
     }
   }
 
-  // 2. PICK-ONE co-located dedupe — the INVERSE of the generator's merge (you cannot fuse two
+  // 2. PICK-ONE co-located dedupe — the INVERSE of the studio pipeline's merge (you cannot fuse two
   //    finished clips). Greedy best-first (quality, then richer/longer) so the survivor is strongest.
   const byScore = [...placed].sort(
     (a, b) => scoreOf(b.cand) - scoreOf(a.cand) || b.cand.audioDurationMs - a.cand.audioDurationMs,

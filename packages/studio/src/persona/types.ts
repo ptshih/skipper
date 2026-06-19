@@ -33,7 +33,7 @@ export interface PersonaDef {
   /** The host's personal kit — per-persona DATA. Banned from stops, housed in the intro. */
   kit: {
     /**
-     * Kit detectors — the SINGLE source for both the generator's spent-beat tracking and
+     * Kit detectors — the SINGLE source for both the studio pipeline's spent-beat tracking and
      * the diversity lint's kit-in-stops ban. Keep these in lockstep with the kit prose in
      * `systemPrompt`/`framePrompt` (they describe the same kit two ways).
      */

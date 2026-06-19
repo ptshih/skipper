@@ -1,7 +1,7 @@
 // Geometry for the drive simulator — pure functions, no deps.
 //
 // Mirrors @skipper/studio's geo helpers (kept local so the sim + the eventual
-// player core stay decoupled from the generator). [lng, lat] axis order throughout,
+// player core stay decoupled from the studio pipeline). [lng, lat] axis order throughout,
 // matching drives.polyline.
 
 export type LngLat = [number, number]
@@ -11,9 +11,9 @@ export const MPH_TO_MPS = 0.44704
 /** Meters per statute mile (exact) — the one constant for every meters→miles display. */
 export const METERS_PER_MILE = 1609.344
 /** A POI farther off the road than this isn't honestly "along the drive" — it has no
- *  trustworthy trigger point. The SINGLE source for the off-route floor: the generator's
+ *  trustworthy trigger point. The SINGLE source for the off-route floor: the studio pipeline's
  *  selection floor (`OFF_ROUTE_MAX_M`, re-exported from config), the sim, and the live
- *  player all read THIS, so "a stop the generator accepts will trigger" holds by construction. */
+ *  player all read THIS, so "a stop the studio pipeline accepts will trigger" holds by construction. */
 export const OFF_ROUTE_MAX_M = 700
 
 /**
@@ -120,7 +120,7 @@ export function nearestOnRoute(polyline: LngLat[], cumulative: number[], point: 
 }
 
 // --- Route-relative helpers ---------------------------------------------------
-// Pure route geometry shared by the generator's stop selection (re-exported via
+// Pure route geometry shared by the studio pipeline's stop selection (re-exported via
 // pipeline/geo.ts) and engine's own buildDrive pacing — single-sourced here so
 // both place candidates on a route identically.
 

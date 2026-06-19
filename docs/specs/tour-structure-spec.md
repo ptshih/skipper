@@ -46,7 +46,7 @@ docs/decisions/audio-compression-spike.md).
 - **The DRIVE (= a tour) is the primary, self-contained unit.** It carries its own route geometry,
   ordered stops, intro/outro, name, and **direction**. A drive is "forward" in its own frame.
 - **A "tour" is a one-way RUN.** Bidirectional routes become **two discrete drives**, each
-  **independently generated** (run the generator twice over the same frozen route, once per
+  **independently generated** (run the studio pipeline twice over the same frozen route, once per
   direction) — NOT a mechanically-reversed mirror. This matches the incumbents (Shaka authors
   Classic vs Reverse as distinct experiences; GuideAlong records different return commentary) and
   is simpler for AI generation. **Under zero-reuse (docs/decisions/tour-data-model-zero-reuse.md) each
@@ -249,7 +249,7 @@ facts}**. Frozen rails (§0); persona human (§0); everything else generates.
    (route + `headline` + end-anchors + `region_id`), the `regions` table, the **`tour_brackets`** intro/outro
    table (NOT stop-types; §3), the **zero-reuse reshape** (drop `poi_content`, narration onto `tour_stops`,
    `pois.facts_hash`/`facts_fetched_at`), and drop `durationBucket`/`interests[]`/`persona`. Clean + destructive (no users).
-3. Generator: `narrateIntro`/`narrateOutro` + **one independent tour per route** + the regenerate tool.
+3. Studio: `narrateIntro`/`narrateOutro` + **one independent tour per route** + the regenerate tool.
    Persona config object + persona-aware kit guards (§4).
 4. Shared DTO + API: serve the bracket clips; the tour DTO = a drive `{ intro, outro, stops[] }` carrying
    route/anchors/region. (Nearby/proximity recommender deferred to v2.)

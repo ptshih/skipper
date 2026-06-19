@@ -4,7 +4,7 @@
 // legal screen survives offline; the API list wins whenever it's reachable.)
 //
 // These are LEGAL facts (license codes, canonical license + source URLs), kept OUT of the
-// persona layer. This mirrors what the generator freezes onto each clip's
+// persona layer. This mirrors what the studio pipeline freezes onto each clip's
 // `narrations.attribution` at generation time (wikipedia → "CC BY-SA 4.0", macrostrat →
 // "CC BY 4.0", wikidata → "CC0"; break anchors come from Google Places). When a new source lands in
 // `@skipper/shared` `attributionSource`, add it HERE so the public legal surface stays in

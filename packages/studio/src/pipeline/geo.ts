@@ -1,9 +1,9 @@
-// Route geometry for the M1 generator.
+// Route geometry for the M1 studio pipeline.
 //
 // The shared route-geometry — haversineMeters, bearingDeg, cumulativeMeters, nearestOnRoute,
 // totalMeters, routeBearingAt, timeAtAlong, sideOfApproach (+ LngLat / RoutePosition) — now lives
 // in @skipper/engine (the pure, RN-safe driving/trigger core, single-sourced with
-// buildDrive's pacing) and is RE-EXPORTED here, so generator call sites keep importing it from
+// buildDrive's pacing) and is RE-EXPORTED here, so studio call sites keep importing it from
 // './geo' unchanged. This file adds only the GENERATION-specific helpers on top: the sub-region
 // narration label (regionLabel) and polyline encoding for Places search-along-route (encodePolyline).
 // [lng, lat] axis order throughout, matching drives.polyline.
@@ -19,7 +19,7 @@ export {
   nearestOnRoute,
   METERS_PER_MILE,
   // Route-relative helpers moved DOWN to @skipper/engine (single-sourced with buildDrive's
-  // pacing); re-exported so generator call sites keep importing them from './geo' unchanged.
+  // pacing); re-exported so studio call sites keep importing them from './geo' unchanged.
   totalMeters,
   routeBearingAt,
   timeAtAlong,
