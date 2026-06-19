@@ -15,6 +15,7 @@ import { Callout } from '@/components/ui/callout'
 import { SearchInput } from '@/components/ui/search-input'
 import { Segmented } from '@/components/ui/segmented'
 import { Checkbox } from '@/components/ui/checkbox'
+import { AnchorMap } from '@/components/ui/leaflet-map'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Skeleton, TableSkeletonRows } from '@/components/ui/skeleton'
 import {
@@ -442,7 +443,7 @@ function EnrichDialog({
 
 // Operator surface for a POI's upstream-fact corrections + speakable anchor. Lazy-loads on
 // expand. Corrections take effect on the NEXT generate/regeneration — they don't rewrite audio.
-function Corrections({ poiId }: { poiId: string }) {
+function Corrections({ poiId, poiLat, poiLng }: { poiId: string; poiLat?: number; poiLng?: number }) {
   const qc = useQueryClient()
   const confirm = useConfirm()
   const [validationErr, setValidationErr] = useState<string | null>(null)
@@ -630,7 +631,15 @@ function Corrections({ poiId }: { poiId: string }) {
         <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Speakable anchor</div>
         <div className="text-xs leading-relaxed text-muted-foreground">
           The vantage point side-of-road content speaks from — only needed when the POI's own centroid is misleading.
+          Drag the amber marker to set it; the coords fill below, then hit Set anchor.
         </div>
+        {poiLat != null && poiLng != null && (
+          <AnchorMap
+            poi={{ lat: poiLat, lng: poiLng }}
+            anchor={data?.speakable ?? null}
+            onAnchor={({ lat: a, lng: o }) => { setLat(a.toFixed(6)); setLng(o.toFixed(6)) }}
+          />
+        )}
         <div className="flex flex-wrap items-center gap-2">
           <Locate className="h-3.5 w-3.5 text-muted-foreground" />
           {data?.speakable ? (
@@ -743,7 +752,7 @@ function PoiDetailSheet({ poiId, poiName, canDelete, hasNarration, open, onOpenC
 
           {tab === 'narration' && <NarrationTab poiId={poiId} hasNarration={hasNarration} />}
 
-          {tab === 'corrections' && <Corrections poiId={poiId} />}
+          {tab === 'corrections' && <Corrections poiId={poiId} poiLat={detail?.lat} poiLng={detail?.lng} />}
         </div>
 
         {canDelete && (

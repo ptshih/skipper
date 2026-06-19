@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { router } from './router'
 import { ErrorBoundary, renderBootError } from './components/ErrorBoundary'
 import { ConfirmProvider } from './components/ui/confirm-dialog'
+import 'leaflet/dist/leaflet.css'
 import './index.css'
 
 const queryClient = new QueryClient({

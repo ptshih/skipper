@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label'
 import { Callout } from '@/components/ui/callout'
 import { EmptyState } from '@/components/ui/empty-state'
 import { TableSkeletonRows } from '@/components/ui/skeleton'
+import { BboxMap } from '@/components/ui/leaflet-map'
 import {
   Dialog,
   DialogContent,
@@ -190,9 +191,11 @@ function RegionDialog({
             />
             <p className="text-xs text-muted-foreground">
               <code className="font-mono">lng_min,lat_min,lng_max,lat_max</code>. Leave blank to use the built-in
-              default (Tahoe basin). Use the lookup below to find a bbox.
+              default (Tahoe basin). Use the lookup below, or draw a box on the map.
             </p>
           </div>
+
+          <BboxMap bbox={bbox} onBbox={setBbox} />
 
           {/* ── Bbox lookup ── */}
           <BboxLookup
