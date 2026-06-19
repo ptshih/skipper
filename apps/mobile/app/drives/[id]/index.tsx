@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ActionSheetIOS, Alert, Animated, Linking, Platform, Share, StyleSheet, View } from 'react-native'
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
-import { ApiError, errorMessage, getDrive, type DriveManifest } from '@/lib/api'
+import { ApiError, deleteDrive, errorMessage, getDrive, type DriveManifest } from '@/lib/api'
 import {
   deleteDriveDownload,
   downloadDrive,
@@ -128,6 +128,44 @@ export default function DriveDetailScreen() {
     void Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`).catch(() => {})
   }, [id, drive])
 
+  // Permanently delete the drive (server soft-delete). Guarded by a confirm because it's
+  // irreversible AND does NOT refund the free drive it used (a credit is spent at generation, never
+  // returned). On success (or a 404 = already gone) we drop the orphaned offline copy and pop back
+  // to the list — which refetches on focus, so the deleted drive falls out.
+  const deleteDriveAction = useCallback(() => {
+    if (!id) return
+    Alert.alert(
+      'Delete this drive?',
+      "This can't be undone — and it won't give back the free drive it used.",
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              try {
+                await deleteDrive(id)
+              } catch (e) {
+                if (e instanceof ApiError && e.needsAccount) {
+                  router.push('/sign-in')
+                  return
+                }
+                // 404 = already gone → fall through to cleanup + back. Anything else is a real failure.
+                if (!(e instanceof ApiError && e.status === 404)) {
+                  Alert.alert('Could not delete', errorMessage(e, voice.error.generic))
+                  return
+                }
+              }
+              deleteDriveDownload(id) // the drive is gone — drop its now-orphaned offline copy
+              router.back()
+            })()
+          },
+        },
+      ],
+    )
+  }, [id, router])
+
   // Secondary/utility actions live in a header ⋯ menu (native iOS action sheet) instead of
   // stacked buttons — the offline download (state-aware) + the dev-only on-device simulator.
   const openMenu = useCallback(() => {
@@ -148,8 +186,13 @@ export default function DriveDetailScreen() {
     if (__DEV__) {
       actions.push({ label: voice.cta.simDrive, onPress: () => router.push(`/drives/${id}/play`) })
     }
+    // The one truly irreversible action — always last, above Cancel.
+    actions.push({ label: 'Delete drive', onPress: deleteDriveAction, destructive: true })
     if (actions.length === 0) return
-    const destructive = actions.findIndex((a) => a.destructive)
+    // Highlight "Delete drive" as iOS's single red button (it's the only irreversible one); the
+    // reversible "Remove download" stays plain on iOS but keeps its destructive style on Android.
+    const deleteIdx = actions.findIndex((a) => a.label === 'Delete drive')
+    const destructive = deleteIdx >= 0 ? deleteIdx : actions.findIndex((a) => a.destructive)
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
         {
@@ -180,6 +223,7 @@ export default function DriveDetailScreen() {
     cancelDownload,
     shareDrive,
     reportIssue,
+    deleteDriveAction,
   ])
 
   const load = useCallback(async () => {
