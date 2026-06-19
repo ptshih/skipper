@@ -34,14 +34,12 @@ type Kind = JobKind
 // The kind of the run in progress — set at begin, used to flavor the finish-time log summary.
 let currentKind: Kind | undefined
 
-/** The identity of a tour-ops run, set at begin. */
+/** The identity of an ops run, set at begin. */
 interface BeginFields {
   dryRun: boolean
-  /** generate: the tour slug. */
+  /** e.g. the region slug for a roam gen. */
   targetSlug?: string
-  /** Known up front for ops; generate backfills via finishJob. */
-  tourId?: string
-  /** patch_clip: the stop/frame id; resynth/sweep: the tour id. */
+  /** An ops audit label (the poi/region id the job acted on). */
   targetId?: string
 }
 
@@ -50,7 +48,6 @@ export interface FinishOutcome {
   ok: boolean
   error?: string
   costUsd?: number
-  tourId?: string
   evalRunId?: string
 }
 
@@ -75,7 +72,6 @@ export async function beginJob(kind: Kind, fields: BeginFields): Promise<void> {
     status: 'running',
     dryRun: fields.dryRun,
     targetSlug: fields.targetSlug ?? null,
-    tourId: fields.tourId ?? null,
     targetId: fields.targetId ?? null,
     args: process.argv.slice(2),
     triggeredBy: process.env.GEN_JOB_TRIGGERED_BY || 'cli',
@@ -115,7 +111,6 @@ export async function finishJob(outcome: FinishOutcome): Promise<void> {
     updatedAt: new Date(),
   }
   if (outcome.error !== undefined) set.error = outcome.error.slice(0, 4000)
-  if (outcome.tourId !== undefined) set.tourId = outcome.tourId
   if (outcome.evalRunId !== undefined) set.evalRunId = outcome.evalRunId
   // Persist THIS run's own captured output + an LLM summary in the same update that settles
   // status, so the operational record is complete the instant the row goes terminal — no

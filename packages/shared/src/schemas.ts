@@ -1,13 +1,5 @@
 import { z } from 'zod'
-import {
-  attributionSource,
-  driveClipForm,
-  frameKind,
-  jokeLevel,
-  platform,
-  stopType,
-  tourStatus,
-} from './enums'
+import { attributionSource, driveClipForm, jokeLevel, platform } from './enums'
 
 /** A single [lng, lat] pair (GeoJSON axis order). */
 export const coordinate = z.tuple([z.number(), z.number()])
@@ -95,139 +87,9 @@ export type VersionPolicy = z.infer<typeof versionPolicy>
 export const versionResponse = z.object({ policies: z.array(versionPolicy) })
 export type VersionResponse = z.infer<typeof versionResponse>
 
-/** A tour: the whole self-contained drive (route + endpoints + ordered stops + frames). */
-export const tour = z.object({
-  id: z.uuid(),
-  regionId: z.uuid(),
-  slug: z.string(),
-  headline: z.string(),
-  polyline,
-  distanceMeters: z.number().int().nullish(),
-  durationSeconds: z.number().int().nullish(),
-  summary: z.string().nullish(),
-  startAnchorName: z.string(),
-  startAnchorLat: z.number(),
-  startAnchorLng: z.number(),
-  endAnchorName: z.string(),
-  endAnchorLat: z.number(),
-  endAnchorLng: z.number(),
-  // No jokeLevel: the notch is a generation INPUT, not stored tour state (see @skipper/shared
-  // enums `jokeLevel`). `tourRequest` below carries it as the generation knob.
-  status: tourStatus,
-})
-export type Tour = z.infer<typeof tour>
-
-/** The "generate a tour" request. A tour is defined by its route slug; M1 = dadpocalypse. */
-export const tourRequest = z.object({
-  slug: z.string(),
-  jokeLevel: jokeLevel.default('dadpocalypse'),
-})
-export type TourRequest = z.infer<typeof tourRequest>
-
 /* -------------------------------------------------------------------------- */
 /*  API response DTOs (apps/api ⇄ clients). Lightweight, no internal columns.   */
 /* -------------------------------------------------------------------------- */
-
-/**
- * GET /tours — one card per tour (the whole catalog; no polyline). A tour is the whole
- * self-contained drive now (corridors merged in), so this replaces the old
- * /corridors + /corridors/:id/tours pair. Carries the region (for the location filter)
- * and the endpoints (for the card title), but never the route geometry.
- */
-export const tourListItem = z.object({
-  id: z.uuid(),
-  slug: z.string(),
-  headline: z.string(),
-  regionSlug: z.string(),
-  regionName: z.string(),
-  startAnchorName: z.string(),
-  endAnchorName: z.string(),
-  summary: z.string().nullish(),
-  distanceMeters: z.number().int().nullish(),
-  durationSeconds: z.number().int().nullish(),
-  /** A glanceable hook of the tour's marquee places (story/scenic anchors), e.g.
-   *  "Emerald Bay & Vikingsholm" — so a tour card has an identity without a tap.
-   *  Nullish: pre-teaser rows degrade to no hook. */
-  teaser: z.string().nullish(),
-})
-export type TourListItem = z.infer<typeof tourListItem>
-export const tourList = z.object({ tours: z.array(tourListItem) })
-export type TourList = z.infer<typeof tourList>
-
-/** A stop as the player needs it: location + trigger + whether it has audio. */
-export const tourStopView = z.object({
-  seq: z.number().int(),
-  stopType,
-  name: z.string(),
-  lat: z.number(),
-  lng: z.number(),
-  triggerRadiusM: z.number().int(),
-  approachHeadingDeg: z.number().int().nullish(),
-  audioDurationMs: z.number().int().nullish(),
-  /**
-   * When this stop's narration/audio was last revised (ISO) — the OFFLINE-STALENESS token.
-   * A re-synth (patch-clip / resynth-tour) or a regen bumps the track's `updated_at`, surfaced
-   * here. The offline manifest embeds the detail, so a downloaded drive compares this against a
-   * fresh fetch to detect its clips are behind the server (see mobile `isDownloadStale`). The
-   * player ignores it; it's a content fingerprint, not playback state.
-   */
-  revisedAt: z.iso.datetime().nullish(),
-})
-export type TourStopView = z.infer<typeof tourStopView>
-
-/** A frame as the player needs it: which frame + how long. Audio comes from /sign. */
-export const tourFrameView = z.object({
-  kind: frameKind,
-  audioDurationMs: z.number().int().nullish(),
-  /** When this frame's audio was last revised (ISO) — the offline-staleness token; see
-   *  `tourStopView.revisedAt`. */
-  revisedAt: z.iso.datetime().nullish(),
-})
-export type TourFrameView = z.infer<typeof tourFrameView>
-
-/**
- * The narrating host's display identity, resolved SERVER-SIDE from the tour's region.
- * The app RENDERS this; it must never bundle host identity itself, so a new region/host
- * ships with a backend deploy, never an App Store release. The GENERATION persona (system
- * prompt, kit, voice) stays in @skipper/generator and never reaches the client. Art is a
- * URL (R2), never a bundled asset — same reason.
- */
-export const hostIdentity = z.object({
-  /** Display name, e.g. "Skipper" — the lock-screen Now Playing artist + meet-your-host title. */
-  name: z.string(),
-  /** One-liner for the meet-your-host card. */
-  tagline: z.string().nullish(),
-  /** A few sentences of in-voice backstory (DELIVERY, never facts). */
-  backstory: z.string().nullish(),
-  /** R2 URL for the host portrait/badge. Null until art exists — never a bundled asset. */
-  portraitUrl: z.url().nullish(),
-  /** R2 URL for a short "hear the host" sample. Null until one exists. */
-  voiceSampleUrl: z.url().nullish(),
-})
-export type HostIdentity = z.infer<typeof hostIdentity>
-
-/** GET /tours/:id — the drive: route + endpoints, the narrating host, intro/outro, stops. */
-export const tourDetail = z.object({
-  tour: z.object({
-    id: z.uuid(),
-    slug: z.string(),
-    headline: z.string(),
-    regionId: z.uuid(),
-    status: tourStatus,
-    polyline,
-    distanceMeters: z.number().int().nullish(),
-    durationSeconds: z.number().int().nullish(),
-    summary: z.string().nullish(),
-    startAnchor: z.object({ name: z.string(), lat: z.number(), lng: z.number() }),
-    endAnchor: z.object({ name: z.string(), lat: z.number(), lng: z.number() }),
-  }),
-  region: z.object({ slug: z.string(), displayName: z.string() }),
-  host: hostIdentity,
-  intro: tourFrameView.nullish(),
-  outro: tourFrameView.nullish(),
-  stops: z.array(tourStopView),
-})
-export type TourDetail = z.infer<typeof tourDetail>
 
 /** A single presigned audio clip. */
 export const signedClip = z.object({
@@ -243,18 +105,6 @@ export type SignedClip = z.infer<typeof signedClip>
 /** A presigned stop clip, keyed by the stop's seq. */
 export const signedStopClip = signedClip.extend({ seq: z.number().int() })
 export type SignedStopClip = z.infer<typeof signedStopClip>
-
-/**
- * POST /tours/:id/assets/sign — presigned audio URLs for the drive. `stops` are keyed
- * by seq; `intro`/`outro` are the frame clips (null until a tour has them — the player
- * may ignore them until frame playback lands).
- */
-export const signedAudio = z.object({
-  stops: z.array(signedStopClip),
-  intro: signedClip.nullish(),
-  outro: signedClip.nullish(),
-})
-export type SignedAudio = z.infer<typeof signedAudio>
 
 /* -------------------------------------------------------------------------- */
 /*  Free-roam (ALPHA surface — docs/ideas/free-roam-mode.md)                    */

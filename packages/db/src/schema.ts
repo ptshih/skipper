@@ -139,15 +139,11 @@ export const poiSourceEnum = pgEnum('poi_source', ['wikipedia', 'google_places',
 // NO `joke_level` pgEnum: the Dad-Joke-O-Meter notch is a generation-time INPUT, never a
 // stored column (M1 = dadpocalypse-only — see `tours`). The notch VOCABULARY lives as the
 // `jokeLevel` Zod enum in @skipper/shared; re-add a pgEnum here only when a notch column lands
-// on the narration (tracks) at M3.
+// on the narration at M3.
 
-export const tourStatusEnum = pgEnum('tour_status', ['draft', 'generating', 'ready', 'failed'])
-
-// A TRACK's treatment/depth — the "what kind of telling" axis, now a per-TRACK property (a
-// segment can carry several forms). `story`/`scenic`/`break` are the tour-stop forms (the old
-// stop_type); `wave`/`bside` are the roam/tell-me-more forms the model now has room for. The
-// wire DTO (`tourStopView.stopType`, 3 values) is a projection of a tour track's form — for
-// tour data the form is always one of the first three. Mirror with the Zod `trackForm` enum.
+// A NARRATION's treatment/depth — the "what kind of telling" axis. `story`/`scenic`/`break` are
+// the drive-stop forms; `wave` is the roam call-out; `bside` is a deferred "tell me more". Mirror
+// with the Zod `trackForm` enum.
 export const trackFormEnum = pgEnum('track_form', ['story', 'scenic', 'break', 'wave', 'bside'])
 
 // poi_overrides is now fact-corrections ONLY (the side_anchor coordinate moved onto
@@ -162,18 +158,12 @@ export const upstreamStatusEnum = pgEnum('upstream_status', [
   'not_applicable', // nothing to file (our judgment, not the source's error)
 ])
 
-// A drive's FRAME pieces (the intro/outro — see tour_frames, the renamed tour_brackets).
-// Kept as a pgEnum (typo-safe) and mirrored by the Zod `frameKind` enum in @skipper/shared.
-export const frameKindEnum = pgEnum('frame_kind', ['intro', 'outro'])
-
 /* -------------------------------------------------------------------------- */
-/*  Shared narration columns — spread into BOTH `tracks` and `tour_frames`.     */
+/*  Shared narration columns — spread into `narrations` (+ future interlude reuse). */
 /* -------------------------------------------------------------------------- */
 
 // The narration payload a player consumes: the script + its synthesized clip + frozen
-// provenance. A `track` (place-anchored, via its segment) and a `tour_frame` (placeless
-// intro/outro) carry the SAME deliverable shape — shared spread; both tables MUST keep using
-// `trackColumns`. Frames leave `attribution`/`factsHash` null (no place-facts).
+// provenance. Spread into `narrations`; a row goes live only post-synthesis (audio_url NOT NULL).
 const trackColumns = {
   // The narration text. Nullable through generation; a row only goes live once filled.
   script: text('script'),
@@ -371,178 +361,11 @@ export const poiOverrides = pgTable(
 )
 
 /* -------------------------------------------------------------------------- */
-/*  tours — the whole self-contained DRIVE (route + the generation that fills it)*/
-/* -------------------------------------------------------------------------- */
-
-// `corridors` is MERGED IN: a tour carries its OWN polyline, distance/duration, headline,
-// start/end anchors, and region. One tour = one catalog card; there is no direction/family and
-// no duration/interest variant matrix (those are deferred axes). `region_id` is a MANUAL FK set
-// at creation — never derived from geometry.
-export const tours = pgTable(
-  'tours',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-    regionId: uuid('region_id')
-      .notNull()
-      .references(() => regions.id, { onDelete: 'restrict' }),
-    slug: text('slug').notNull(),
-    // The host persona, EXPLICIT + decoupled from region (the generator resolves the recipe via
-    // personaFromKey, not the region slug). Set at create time; frozen onto segments.persona_id at
-    // generation. Defaults to the Skipper — the only persona in M1.
-    personaKey: text('persona_key').notNull().default('skipper'),
-    // Marquee POI ("Emerald Bay"); display name = "[headline], [start] to [end]".
-    headline: text('headline').notNull(),
-    // Route — absorbed from the old `corridors` table; a frozen rail, authored once via the
-    // Routes API and never re-derived.
-    polyline: jsonb('polyline').$type<Polyline>().notNull(),
-    distanceMeters: integer('distance_meters'),
-    durationSeconds: integer('duration_seconds'),
-    summary: text('summary'),
-    // How the route was authored — set by the admin Create Tour flow (tours are authored at
-    // runtime now; seeded shells are gone). Null only for a pre-provenance row. See RouteProvenance.
-    routeProvenance: jsonb('route_provenance').$type<RouteProvenance>(),
-    // End-anchors {name, lat, lng}: naming, intro/outro anchoring, the GPS-start pin, and the
-    // proximity recommender.
-    startAnchorName: text('start_anchor_name').notNull(),
-    startAnchorLat: doublePrecision('start_anchor_lat').notNull(),
-    startAnchorLng: doublePrecision('start_anchor_lng').notNull(),
-    endAnchorName: text('end_anchor_name').notNull(),
-    endAnchorLat: doublePrecision('end_anchor_lat').notNull(),
-    endAnchorLng: doublePrecision('end_anchor_lng').notNull(),
-    // NOTE: there is NO joke-notch column. The Dad-Joke-O-Meter notch is a generation-time INPUT
-    // (baked into the audio), not stored state — M1 is dadpocalypse-only. When the 1-N notch ships
-    // (M3) it lands on the NARRATION (tracks), never here: a notch describes a telling, not a route.
-    status: tourStatusEnum('status').notNull().default('draft'),
-    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-    updatedAt: timestamp('updated_at', { withTimezone: true })
-      .defaultNow()
-      .notNull()
-      .$onUpdate(() => new Date()),
-  },
-  (t) => [
-    uniqueIndex('tours_slug_uq').on(t.slug),
-    index('tours_region_idx').on(t.regionId),
-    index('tours_status_idx').on(t.status),
-  ],
-)
-
-/* -------------------------------------------------------------------------- */
-/*  segments — a place-anchor (the composition root). Stop when tour-bound, roam */
-/*  when not. Treatment/depth lives on its tracks, never here.                   */
-/* -------------------------------------------------------------------------- */
-
-// A segment is a location's chapter: the shared PLACE (poi) + WHERE it speaks (trigger geometry)
-// + WHO tells it (frozen persona). It carries NO `kind` and NO `context` — treatment is per-TRACK
-// (`form`), and context is DERIVED (tour_id set = a tour stop; tour_id null = a roam encounter).
-// A place can have BOTH a tour segment and a roam segment (different tellings, zero cross-feed).
-export const segments = pgTable(
-  'segments',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-    // The shared PLACE this segment narrates. NOT NULL — frames (intro/outro) are placeless and
-    // live in their own `tour_frames` table, so this FK never relaxes.
-    poiId: uuid('poi_id')
-      .notNull()
-      .references(() => pois.id, { onDelete: 'restrict' }),
-    // Tour stop when set; free-roam encounter when null. The context discriminator (D3).
-    tourId: uuid('tour_id').references(() => tours.id, { onDelete: 'cascade' }),
-    // The FROZEN host of this telling (assigned at generation). A live FK, not provenance —
-    // restrict so a persona can't be deleted out from under its segments.
-    personaId: uuid('persona_id')
-      .notNull()
-      .references(() => personas.id, { onDelete: 'restrict' }),
-    // Ordering within a tour. NULL for roam (CHECK keeps it in lockstep with tour_id).
-    seq: integer('seq'),
-    // TRIGGER POINT: the poi snapped onto the route (nearest point on the frozen polyline) + the
-    // route heading there, computed once at generation. Null for roam (un-snapped centroids).
-    triggerLat: doublePrecision('trigger_lat'),
-    triggerLng: doublePrecision('trigger_lng'),
-    approachHeadingDeg: integer('approach_heading_deg'),
-    // Trigger floor (m), not the rule — the player uses speed-adaptive lead time. Null = default.
-    radiusM: integer('radius_m'),
-    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-    updatedAt: timestamp('updated_at', { withTimezone: true })
-      .defaultNow()
-      .notNull()
-      .$onUpdate(() => new Date()),
-  },
-  (t) => [
-    // tour stop ⇒ both set; roam ⇒ both null. The context invariant, enforced.
-    check('segments_tour_seq_ck', sql`(${t.tourId} is null) = (${t.seq} is null)`),
-    // Stable ordering: one segment per position within a tour (NULLs are distinct, so any number
-    // of roam segments coexist).
-    uniqueIndex('segments_tour_seq_uq').on(t.tourId, t.seq),
-    index('segments_poi_idx').on(t.poiId),
-    index('segments_tour_idx').on(t.tourId),
-    index('segments_persona_idx').on(t.personaId),
-  ],
-)
-
-/* -------------------------------------------------------------------------- */
-/*  tracks — the narration units (1:N per segment). What the phone plays.        */
-/* -------------------------------------------------------------------------- */
-
-// A track is the dry narration STEM for a segment in one `form` (the bed is the rider's audio /
-// client driveMusic, mixed at playback — not stored). 1:N per segment lets a place carry several
-// tellings (a `story` + a future `bside`, a roam `wave` + `story`), keyed unique by
-// (segment, form, variant). A track is owned by its segment's context; tours and roam never
-// cross-feed (zero-reuse, cleaner shape). A row only goes live once script + audio are filled.
-export const tracks = pgTable(
-  'tracks',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-    segmentId: uuid('segment_id')
-      .notNull()
-      .references(() => segments.id, { onDelete: 'cascade' }),
-    form: trackFormEnum('form').notNull(),
-    /** Distinguishes multiple tracks of the same form (e.g. alternate B-sides). 0 = the canonical. */
-    variant: integer('variant').notNull().default(0),
-    ...trackColumns,
-    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-    updatedAt: timestamp('updated_at', { withTimezone: true })
-      .defaultNow()
-      .notNull()
-      .$onUpdate(() => new Date()),
-  },
-  (t) => [
-    uniqueIndex('tracks_segment_form_variant_uq').on(t.segmentId, t.form, t.variant),
-    index('tracks_segment_idx').on(t.segmentId),
-  ],
-)
-
-/* -------------------------------------------------------------------------- */
-/*  tour_frames — the drive's FRAME (intro/outro). Placeless. (was tour_brackets)*/
-/* -------------------------------------------------------------------------- */
-
-// Placeless by construction, fired by drive LIFECYCLE not geofence, so they get their own
-// homogeneous table — keeping `segments` strict (poiId NOT NULL) and the geofence engine pure.
-// No poiId, no trigger coords; shares the `trackColumns` narration shape but leaves
-// attribution/facts_hash null (a frame is about the DRIVE and carries no place-facts).
-export const tourFrames = pgTable(
-  'tour_frames',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-    tourId: uuid('tour_id')
-      .notNull()
-      .references(() => tours.id, { onDelete: 'cascade' }),
-    kind: frameKindEnum('kind').notNull(), // 'intro' | 'outro'
-    ...trackColumns,
-    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-    updatedAt: timestamp('updated_at', { withTimezone: true })
-      .defaultNow()
-      .notNull()
-      .$onUpdate(() => new Date()),
-  },
-  // Exactly one intro + one outro per tour.
-  (t) => [uniqueIndex('tour_frames_tour_kind_uq').on(t.tourId, t.kind)],
-)
-
-/* -------------------------------------------------------------------------- */
 /*  V2 — narrations / interludes / drives / drive_demand                        */
 /*  The roam-first model: pois ──1:1── narrations (the shared telling); roam is  */
 /*  a MODE over them; a `drive` is a user-owned ordered sequence; interludes are */
-/*  the generic placeless flavor. EXPAND phase — added ALONGSIDE the legacy tour */
-/*  tables (tours/segments/tracks/tour_frames), which drop once consumers rewire. */
+/*  the generic placeless flavor. (The legacy tour tables — tours/segments/      */
+/*  tracks/tour_frames — were dropped in migration 0009.)                        */
 /* -------------------------------------------------------------------------- */
 
 // The ONE shared telling of a place — 1:1 with its poi (UNIQUE poi_id). The atom: roam plays these by
@@ -675,8 +498,7 @@ export const evalRuns = pgTable(
   'eval_runs',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    /** The tour the artifact came from; survives as slug if the tour row is deleted. */
-    tourId: uuid('tour_id').references(() => tours.id, { onDelete: 'set null' }),
+    /** The artifact's identity slug (the run is keyed to a pinned artifact, not a tour row). */
     slug: text('slug').notNull(),
     kind: evalRunKindEnum('kind').notNull(),
     dryRun: boolean('dry_run').notNull().default(false),
@@ -765,11 +587,9 @@ export const genJobs = pgTable(
     // Plain text — the closed set is the Zod `jobKind` enum in @skipper/shared (see note above).
     kind: text('kind').notNull(),
     status: genJobStatusEnum('status').notNull().default('queued'),
-    /** generate: the tour slug. */
+    /** generate_roam etc: the region slug. */
     targetSlug: text('target_slug'),
-    /** Set once known (generate backfills from the result; ops resolve it up front). */
-    tourId: uuid('tour_id').references(() => tours.id, { onDelete: 'set null' }),
-    /** patch_clip: the track/frame id; resynth/sweep: the tour id — an audit label. */
+    /** An ops audit label (e.g. the poi/region id the job acted on). */
     targetId: text('target_id'),
     /** The exact CLI override args (process.argv.slice(2)) — audit + replay. */
     args: jsonb('args').$type<string[]>().notNull(),
@@ -810,56 +630,8 @@ export const genJobs = pgTable(
 /*  Relations                                                                  */
 /* -------------------------------------------------------------------------- */
 
-export const regionsRelations = relations(regions, ({ many }) => ({
-  tours: many(tours),
-}))
-
-export const personasRelations = relations(personas, ({ many }) => ({
-  segments: many(segments),
-}))
-
-export const poisRelations = relations(pois, ({ one, many }) => ({
-  segments: many(segments),
+export const poisRelations = relations(pois, ({ one }) => ({
   narration: one(narrations),
-}))
-
-export const toursRelations = relations(tours, ({ one, many }) => ({
-  region: one(regions, {
-    fields: [tours.regionId],
-    references: [regions.id],
-  }),
-  segments: many(segments),
-  frames: many(tourFrames),
-}))
-
-export const segmentsRelations = relations(segments, ({ one, many }) => ({
-  tour: one(tours, {
-    fields: [segments.tourId],
-    references: [tours.id],
-  }),
-  poi: one(pois, {
-    fields: [segments.poiId],
-    references: [pois.id],
-  }),
-  persona: one(personas, {
-    fields: [segments.personaId],
-    references: [personas.id],
-  }),
-  tracks: many(tracks),
-}))
-
-export const tracksRelations = relations(tracks, ({ one }) => ({
-  segment: one(segments, {
-    fields: [tracks.segmentId],
-    references: [segments.id],
-  }),
-}))
-
-export const tourFramesRelations = relations(tourFrames, ({ one }) => ({
-  tour: one(tours, {
-    fields: [tourFrames.tourId],
-    references: [tours.id],
-  }),
 }))
 
 export const narrationsRelations = relations(narrations, ({ one }) => ({
@@ -890,14 +662,6 @@ export type EvalRun = typeof evalRuns.$inferSelect
 export type NewEvalRun = typeof evalRuns.$inferInsert
 export type EvalScore = typeof evalScores.$inferSelect
 export type NewEvalScore = typeof evalScores.$inferInsert
-export type Tour = typeof tours.$inferSelect
-export type NewTour = typeof tours.$inferInsert
-export type Segment = typeof segments.$inferSelect
-export type NewSegment = typeof segments.$inferInsert
-export type Track = typeof tracks.$inferSelect
-export type NewTrack = typeof tracks.$inferInsert
-export type TourFrame = typeof tourFrames.$inferSelect
-export type NewTourFrame = typeof tourFrames.$inferInsert
 export type GenJob = typeof genJobs.$inferSelect
 export type NewGenJob = typeof genJobs.$inferInsert
 export type Narration = typeof narrations.$inferSelect

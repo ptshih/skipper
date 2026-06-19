@@ -1,93 +1,86 @@
-// Drive-simulator CLI — replay a real corridor + its generated tour and report the
-// triggering schedule. Env injected by dotenvx (needs DATABASE_URL):
+// Drive-simulator CLI — replay a user-owned DRIVE + report the triggering schedule. Env injected
+// by dotenvx (needs DATABASE_URL):
 //
-//   dotenvx run -f .env.development -- bun packages/sim/src/run.ts <slug> [flags]
+//   dotenvx run -f .env.development -- bun packages/sim/src/run.ts <driveId> [flags]
 //
 // Flags:
 //   --mph=<n>        constant drive speed (default 60)
 //   --tick=<hz>      simulated GPS fix rate (default 4)
 //   --lead=<sec>     speed-adaptive lead time (default 12)
-//   --tour=<id>      a specific tour id (default: newest ready tour for the slug)
+//
+// V2: a drive is a frozen `selection` of place NARRATIONS (each 1:1 with its poi) along a route.
+// We resolve each narration's poi coords/name + form/duration live, then run the SAME trigger
+// engine the in-car player uses (drive-core runDrive) over the raw POI coords (it snaps them).
 
-import { and, asc, desc, eq } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 import { db } from '@skipper/db'
-import { pois, regions, segments, tours, tracks } from '@skipper/db/schema'
+import { drives, narrations, pois } from '@skipper/db/schema'
 import { OFF_ROUTE_MAX_M, METERS_PER_MILE, formatMmss, runDrive } from '@skipper/drive-core'
 import type { LngLat, TourStopRef } from '@skipper/drive-core'
 
 function parseArgs(argv: string[]) {
   const args = argv.slice(2)
-  const slug = args.find((a) => !a.startsWith('--'))
-  if (!slug) throw new Error('Usage: run.ts <tour-slug> [--mph=60] [--tick=4] [--lead=12] [--tour=<id>]')
+  const driveId = args.find((a) => !a.startsWith('--'))
+  if (!driveId) throw new Error('Usage: run.ts <drive-id> [--mph=60] [--tick=4] [--lead=12]')
   const num = (name: string, def: number) => {
     const raw = args.find((a) => a.startsWith(`--${name}=`))?.split('=')[1]
     return raw === undefined ? def : Number(raw)
   }
-  return {
-    slug,
-    mph: num('mph', 60),
-    tickHz: num('tick', 4),
-    leadSeconds: num('lead', 12),
-    tourId: args.find((a) => a.startsWith('--tour='))?.split('=')[1],
-  }
+  return { driveId, mph: num('mph', 60), tickHz: num('tick', 4), leadSeconds: num('lead', 12) }
 }
 
 async function main() {
-  const { slug, mph, tickHz, leadSeconds, tourId } = parseArgs(process.argv)
+  const { driveId, mph, tickHz, leadSeconds } = parseArgs(process.argv)
 
-  // A tour is the whole self-contained drive now (corridors merged in): its own route +
-  // region. Load it by slug (newest ready) or by explicit --tour id.
-  const tour = (
+  const drive = (
     await db
-      .select({
-        id: tours.id,
-        headline: tours.headline,
-        regionName: regions.displayName,
-        polyline: tours.polyline,
-      })
-      .from(tours)
-      .innerJoin(regions, eq(tours.regionId, regions.id))
-      .where(tourId ? eq(tours.id, tourId) : and(eq(tours.slug, slug), eq(tours.status, 'ready')))
-      .orderBy(desc(tours.createdAt))
+      .select({ id: drives.id, label: drives.label, polyline: drives.polyline, selection: drives.selection })
+      .from(drives)
+      .where(eq(drives.id, driveId))
       .limit(1)
   )[0]
-  if (!tour) throw new Error(`No ready tour found for "${slug}".`)
+  if (!drive) throw new Error(`No drive found for id "${driveId}".`)
 
-  // A tour stop is now a `segments` row (place-anchor + trigger geometry) joined to its
-  // canonical `tracks` row (variant 0 — the one telling per tour stop), which carries the
-  // form/script/audio. seq is non-null for tour-bound segments (the schema CHECK keeps it in
-  // lockstep with tourId), and radiusM is nullable now → fall back to the engine's floor.
-  const stopRows = await db
-    .select({
-      seq: segments.seq,
-      stopType: tracks.form,
-      lat: pois.lat,
-      lng: pois.lng,
-      name: pois.name,
-      radiusM: segments.radiusM,
-      durationMs: tracks.audioDurationMs,
+  // The selection's place narrations, in route order. Resolve each poi's raw coords/name + the
+  // narration's form/duration live (the drive freezes structure, not content).
+  const narrationItems = (drive.selection ?? []).filter((i) => i.kind === 'narration')
+  const poiIds = narrationItems.map((i) => i.poiId)
+  const rows = poiIds.length
+    ? await db
+        .select({
+          poiId: narrations.poiId,
+          form: narrations.form,
+          durationMs: narrations.audioDurationMs,
+          lat: pois.lat,
+          lng: pois.lng,
+          name: pois.name,
+        })
+        .from(narrations)
+        .innerJoin(pois, eq(pois.id, narrations.poiId))
+        .where(inArray(narrations.poiId, poiIds))
+    : []
+  const byPoi = new Map(rows.map((r) => [r.poiId, r]))
+
+  const stops: TourStopRef[] = []
+  for (const item of narrationItems) {
+    const n = byPoi.get(item.poiId)
+    if (!n) continue
+    stops.push({
+      seq: item.seq,
+      lat: n.lat,
+      lng: n.lng,
+      name: n.name,
+      stopType: n.form,
+      triggerRadiusM: 120,
+      durationMs: n.durationMs,
     })
-    .from(segments)
-    .innerJoin(tracks, and(eq(tracks.segmentId, segments.id), eq(tracks.variant, 0)))
-    .innerJoin(pois, eq(segments.poiId, pois.id))
-    .where(eq(segments.tourId, tour.id))
-    .orderBy(asc(segments.seq))
+  }
 
-  const stops: TourStopRef[] = stopRows.map((s) => ({
-    seq: s.seq!,
-    lat: s.lat,
-    lng: s.lng,
-    name: s.name,
-    stopType: s.stopType,
-    triggerRadiusM: s.radiusM ?? 120,
-    durationMs: s.durationMs,
-  }))
-
-  const report = runDrive(tour.polyline as LngLat[], stops, { mph, tickHz, leadSeconds })
+  const report = runDrive(drive.polyline as LngLat[], stops, { mph, tickHz, leadSeconds })
 
   const r = report
   console.log('\n' + '='.repeat(78))
-  console.log(`DRIVE SIM — ${tour.headline} (${tour.regionName}) · tour ${tour.id}`)
+  console.log(`DRIVE SIM — ${drive.label ?? '(untitled)'} · drive ${drive.id}`)
   console.log(
     `${(r.totalRouteM / METERS_PER_MILE).toFixed(1)} mi @ ${r.speedMph} mph → ${formatMmss(r.driveSec)} drive · ` +
       `${r.fixCount} fixes @ ${r.tickHz} Hz · lead ${r.trigger.leadSeconds}s, floor varies, cone ${r.trigger.headingConeDeg}°`,
