@@ -100,9 +100,8 @@ interface DriveStop {
 }
 
 interface DriveData {
-  tourName: string
-  region: string
-  /** The narrating host's display name, from the API — never bundled (host-agnostic). */
+  driveName: string
+  /** The narrating host's display name (the persona — "Skipper"). */
   hostName: string
   polyline: [number, number][]
   /** Total route length (m) — for projecting a fix's alongM onto a 0..1 progress dot. */
@@ -142,9 +141,8 @@ export interface UseDrive {
   error: string | null
   retry: () => void
 
-  tourName: string
-  region: string
-  /** The narrating host's display name, served by the API (never bundled). */
+  driveName: string
+  /** The narrating host's display name (the persona — "Skipper"). */
   hostName: string
   stops: DriveStopView[]
   totalStops: number
@@ -336,8 +334,7 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
         const outroMs = manifest.clips.find((c) => c.form === 'outro')?.durationMs ?? null
         setUrls(urls)
         setData({
-          tourName: manifest.label,
-          region: '', // V2 drives carry no region display name on the manifest — the label is the title
+          driveName: manifest.label,
           hostName: DRIVE_HOST_NAME,
           polyline,
           totalM: cum.length > 0 ? (cum[cum.length - 1] ?? 0) : 0,
@@ -773,7 +770,7 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
         player.setActiveForLockScreen(true, {
           title: stopName,
           artist: data.hostName,
-          albumTitle: data.tourName,
+          albumTitle: data.driveName,
           artworkUrl: LOCK_ARTWORK_URI, // bundled badge so the lock screen isn't a blank thumbnail (audit)
         })
       } catch {}
@@ -1123,8 +1120,7 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
     phase,
     error,
     retry,
-    tourName: data?.tourName ?? '',
-    region: data?.region ?? '',
+    driveName: data?.driveName ?? '',
     hostName: data?.hostName ?? '',
     stops,
     totalStops: stops.length,

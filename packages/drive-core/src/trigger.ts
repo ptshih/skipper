@@ -36,7 +36,7 @@ export interface GpsFix {
 }
 
 /** A stop the engine can fire, with its trigger floor and (for audio stops) clip length. */
-export interface TourStopRef {
+export interface DriveStopRef {
   seq: number
   lat: number
   lng: number
@@ -86,7 +86,7 @@ export class TriggerEngine {
   private readonly opts: TriggerOptions
 
   constructor(
-    private readonly stops: TourStopRef[],
+    private readonly stops: DriveStopRef[],
     opts: Partial<TriggerOptions> = {},
   ) {
     this.opts = { ...DEFAULT_TRIGGER, ...opts }
@@ -140,7 +140,7 @@ export class TriggerEngine {
 }
 
 /** A stop with its lat/lng moved to its TRIGGER POINT (the POI snapped to the road). */
-export interface SnappedStop extends TourStopRef {
+export interface SnappedStop extends DriveStopRef {
   /** Off-route distance of the POI (m) — how far off the road it actually sits. */
   offRouteM: number
   /** The original POI position, preserved for reference. */
@@ -154,7 +154,7 @@ export interface SnappedStop extends TourStopRef {
  * preprocessing both the simulator and the real player run once at tour-load
  * (the player has the tour's polyline) before feeding stops to TriggerEngine.
  */
-export function snapStopsToRoute(polyline: LngLat[], stops: TourStopRef[]): SnappedStop[] {
+export function snapStopsToRoute(polyline: LngLat[], stops: DriveStopRef[]): SnappedStop[] {
   const cum = cumulativeMeters(polyline)
   return stops.map((s) => {
     const pos = nearestOnRoute(polyline, cum, [s.lng, s.lat])

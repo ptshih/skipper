@@ -79,7 +79,7 @@ export interface DimensionRollup {
 }
 
 /** The full per-tour scorecard. `pass` = every GATE dimension passes. */
-export interface TourScorecard {
+export interface RunScorecard {
   slug: string
   tourName: string
   /** ISO-8601 stamp, or null if the caller didn't supply one. */

@@ -23,6 +23,6 @@ export const meetsTier = (have: AccessTier, need: AccessTier): boolean => TIER_R
 
 /** Feature -> minimum tier. Edit here as paid features land (M3+/player). */
 export const FEATURES = {
-  // Playing a non-preview tour requires at least a free account.
-  playTour: 'free',
+  // Creating/playing a drive requires at least a free account (anonymous = roam only).
+  playDrive: 'free',
 } as const satisfies Record<string, AccessTier>

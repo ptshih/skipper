@@ -202,7 +202,7 @@ export const GROUNDING_CASES: GroundingCase[] = [
       script:
         'Cave Rock, dead ahead — the tunnel runs right through it. Volcanic rock, says my sheet. Quite a morning we are having: first Vikingsholm, now a road that drives through a rock.',
       well: ['Cave Rock is a tunnel formation of volcanic rock on the east shore of Lake Tahoe.'],
-      tourStops: ['Vikingsholm', 'Emerald Bay State Park'],
+      otherStops: ['Vikingsholm', 'Emerald Bay State Park'],
       ...LT,
     },
     expect: { pass: true, ungrounded: [] },

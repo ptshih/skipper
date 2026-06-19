@@ -5,7 +5,7 @@
 import { bearingDeg, cumulativeMeters, interpolate, MPH_TO_MPS, OFF_ROUTE_MAX_M } from './geo'
 import type { LngLat } from './geo'
 import { DEFAULT_TRIGGER, snapStopsToRoute, TriggerEngine } from './trigger'
-import type { GpsFix, TourStopRef, TriggerEvent, TriggerOptions } from './trigger'
+import type { GpsFix, DriveStopRef, TriggerEvent, TriggerOptions } from './trigger'
 
 export interface DriveOptions extends Partial<TriggerOptions> {
   /** Constant drive speed (mph). Default 60. */
@@ -86,7 +86,7 @@ export interface SimReport {
 }
 
 /** Simulate a drive and report triggering + overlap + coverage. */
-export function runDrive(polyline: LngLat[], stops: TourStopRef[], opts: DriveOptions = {}): SimReport {
+export function runDrive(polyline: LngLat[], stops: DriveStopRef[], opts: DriveOptions = {}): SimReport {
   const fixes = generateDrive(polyline, opts)
   const trigger: TriggerOptions = { ...DEFAULT_TRIGGER, ...opts }
   const maxOffRouteM = opts.maxOffRouteM ?? OFF_ROUTE_MAX_M

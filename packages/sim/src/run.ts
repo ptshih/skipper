@@ -16,7 +16,7 @@ import { eq, inArray } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { drives, narrations, pois } from '@skipper/db/schema'
 import { OFF_ROUTE_MAX_M, METERS_PER_MILE, formatMmss, runDrive } from '@skipper/drive-core'
-import type { LngLat, TourStopRef } from '@skipper/drive-core'
+import type { LngLat, DriveStopRef } from '@skipper/drive-core'
 
 function parseArgs(argv: string[]) {
   const args = argv.slice(2)
@@ -61,7 +61,7 @@ async function main() {
     : []
   const byPoi = new Map(rows.map((r) => [r.poiId, r]))
 
-  const stops: TourStopRef[] = []
+  const stops: DriveStopRef[] = []
   for (const item of narrationItems) {
     const n = byPoi.get(item.poiId)
     if (!n) continue

@@ -34,13 +34,6 @@ export type TrackForm = z.infer<typeof trackForm>
 export const stopType = z.enum(['story', 'scenic', 'break'])
 export type StopType = z.infer<typeof stopType>
 
-/** The drive's FRAME pieces — intro/outro (the `tour_frames` table, pg `frame_kind`). The JSON
- *  this enum validates is the VALUES ('intro'/'outro') + the parent's `intro`/`outro` keys — none
- *  contain "frame"/"bracket", so the 2026-06-16 bracket→frame identifier rename changed NO wire
- *  bytes (only TS names), and installed clients are unaffected. */
-export const frameKind = z.enum(['intro', 'outro'])
-export type FrameKind = z.infer<typeof frameKind>
-
 /** The WIRE form of one clip in a DRIVE manifest — a superset of the played narration forms
  *  (story/scenic/break/wave) plus the placeless framing woven between place narrations
  *  (intro/outro brackets + clock-anchored interlude beats). The player's icon/treatment switch. */
@@ -74,9 +67,6 @@ export type PoiSource = z.infer<typeof poiSource>
  */
 export const attributionSource = z.enum(['wikipedia', 'google_places', 'macrostrat', 'wikidata'])
 export type AttributionSource = z.infer<typeof attributionSource>
-
-export const tourStatus = z.enum(['draft', 'generating', 'ready', 'failed'])
-export type TourStatus = z.infer<typeof tourStatus>
 
 /**
  * Admin gen-job KINDS — the closed vocabulary of cloud-ops scripts the admin can launch, and the

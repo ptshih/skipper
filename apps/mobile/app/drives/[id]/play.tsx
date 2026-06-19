@@ -289,7 +289,7 @@ export default function DriveScreen() {
   } else if (showReady) {
     card = {
       kicker: voice.drive.ready,
-      title: d.tourName,
+      title: d.driveName,
       body: voice.drive.readyBody,
       glow: false,
     }
@@ -520,7 +520,7 @@ export default function DriveScreen() {
 
       <View style={styles.header}>
         <Text variant="title" color="ink">
-          {d.tourName}
+          {d.driveName}
         </Text>
         <Text variant="dim" color="inkDim">
           {isPreview ? (

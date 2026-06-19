@@ -1,46 +1,22 @@
 // Audio storage — the generator's R2 keys + uploads. The R2 client + presign live in
-// @skipper/storage (shared with the API); this file adds the generator-only concerns:
-// TOUR-scoped key minting and writes. Audio objects are PRIVATE; we persist the R2 object
-// KEY on tracks.audioUrl / tour_frames.audioUrl, and the API issues short-lived presigned
-// GET URLs after the freemium tier check (so a shared URL expires and the account wall is
-// real). Keys are TOUR-scoped (narration is tour-owned, never reused across tours):
-// clips/<tourId>/<trackId> for stops, clips/<tourId>/<runId>-intro|outro for frames.
+// @skipper/storage (shared with the API); this file adds the generator-only concerns: roam clip
+// key minting + writes. Audio objects are PRIVATE; we persist the R2 object KEY on
+// narrations.audio_url, and the API issues short-lived presigned GET URLs after the tier check
+// (so a shared URL expires and the account wall is real). Keys are roam/<poiId>/<clipId>.
 
-import type { FrameKind } from '@skipper/shared'
 import { getR2Client, presignGet } from '@skipper/storage'
 import { TTS_AUDIO_CONTENT_TYPE, TTS_CLIP_EXTENSION } from '../models'
 
 // Re-exported so callers (e.g. judge-voice.ts) keep importing presign from './storage'.
 export { presignGet }
 
-/** Tour-scoped object key for a stop track's clip: clips/<tourId>/<trackId>.<ext>. */
-export function clipKey(tourId: string, trackId: string): string {
-  return `clips/${tourId}/${trackId}.${TTS_CLIP_EXTENSION}`
-}
-
 /**
- * Frame clip key — PER-RUN unique: clips/<tourId>/<runId>-intro|outro.<ext>.
- *
- * The runId component is deliberate (audit-caught): with a fixed per-tour key, a regen (or
- * a stray concurrent run) overwrites the LIVE telling's frame bytes in place before its
- * own ready-gate commits — leaving rows that describe someone else's audio. Stop clips are
- * immune via fresh per-run track ids; this gives frames the same property. The row's
- * audioUrl is the only pointer to the key, and superseded keys orphan in R2 on regen —
- * the same accepted trade as stop clips. Tools that PATCH an existing frame in place
- * write to the row's stored audioUrl, never to a freshly minted key.
+ * Roam narration clip key — per-CLIP unique: roam/<poiId>/<clipId>.<ext>. A regen mints a fresh
+ * clipId, the narration row repoints its audio_url at the new key, and the superseded object
+ * orphans for `sweep-orphans` — never overwriting a live narration's bytes in place.
  */
-export function frameKey(tourId: string, kind: FrameKind, runId: string): string {
-  return `clips/${tourId}/${runId}-${kind}.${TTS_CLIP_EXTENSION}`
-}
-
-/**
- * Free-roam clip key — per-TRACK unique: roam/<poiId>/<trackId>.<ext>. Same
- * never-overwrite-live-bytes property as frame keys: a roam regen mints a fresh
- * trackId, the row points at the new key, and the superseded object orphans for
- * `sweep-orphans --roam`. (Roam narration is ROAM-owned — a segment(tourId null) + its track.)
- */
-export function roamClipKey(poiId: string, trackId: string): string {
-  return `roam/${poiId}/${trackId}.${TTS_CLIP_EXTENSION}`
+export function roamClipKey(poiId: string, clipId: string): string {
+  return `roam/${poiId}/${clipId}.${TTS_CLIP_EXTENSION}`
 }
 
 /** Upload an MP3 (private) and return its R2 object KEY to store on the track/frame row. */

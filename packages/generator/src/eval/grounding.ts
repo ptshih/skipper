@@ -49,7 +49,7 @@ export interface GroundingInput {
   /** Sanctioned-callback carve-out: names of OTHER stops on this drive. The narrator is fed
    *  earlier stops for earned callbacks, so RECALLING one (asserting nothing new about it)
    *  is delivery, not an invented place-fact. */
-  tourStops?: string[]
+  otherStops?: string[]
 }
 
 /**
@@ -155,7 +155,7 @@ function buildUserMessage(input: GroundingInput): string {
     input.well.length > 0
       ? input.well.map((f) => `- ${f}`).join('\n')
       : '(empty — this stop was given NO place-facts)'
-  const otherStops = (input.tourStops ?? []).filter((n) => n && n !== input.placeName)
+  const otherStops = (input.otherStops ?? []).filter((n) => n && n !== input.placeName)
   return [
     `REGION: ${input.region}`,
     `CORRIDOR: ${input.corridor}`,

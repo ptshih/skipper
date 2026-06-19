@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { effectiveRadiusM, snapStopsToRoute, TriggerEngine } from '../src/trigger'
-import type { GpsFix, TourStopRef } from '../src/trigger'
+import type { GpsFix, DriveStopRef } from '../src/trigger'
 import { runDrive } from '../src/simulate'
 import type { LngLat } from '../src/geo'
 
@@ -14,7 +14,7 @@ const fix = (lat: number, lng: number, speedMps: number, headingDeg: number, tSe
 })
 
 // A stop due north of the origin (0.01° lat ≈ 1.11 km).
-const NORTH: TourStopRef = { seq: 1, lat: 0.01, lng: 0, triggerRadiusM: 120, durationMs: 30_000, name: 'North' }
+const NORTH: DriveStopRef = { seq: 1, lat: 0.01, lng: 0, triggerRadiusM: 120, durationMs: 30_000, name: 'North' }
 const MPH60 = 26.82 // m/s
 const MPH20 = 8.94
 
@@ -73,7 +73,7 @@ describe('TriggerEngine', () => {
     // The catastrophic case: ONE bad fix would otherwise fire EVERY unfired stop at once,
     // because a NaN distance (or a NaN effective radius from a NaN speed) makes `d > radius`
     // read FALSE — so the distance gate is skipped and the stop fires.
-    const stops: TourStopRef[] = [
+    const stops: DriveStopRef[] = [
       { seq: 1, lat: 0.008, lng: 0, triggerRadiusM: 120, durationMs: 30_000, name: 'A' },
       { seq: 2, lat: 0.0081, lng: 0, triggerRadiusM: 120, durationMs: 30_000, name: 'B' },
     ]
@@ -88,7 +88,7 @@ describe('TriggerEngine', () => {
 
   test('snapStopsToRoute moves the trigger point onto the road, keeps the POI, records off-route', () => {
     const route: LngLat[] = Array.from({ length: 11 }, (_, i) => [0, i * 0.001] as LngLat) // lat 0..0.01 along lng 0
-    const stops: TourStopRef[] = [{ seq: 0, lat: 0.005, lng: 0.001, triggerRadiusM: 120 }] // ~111 m east of the line
+    const stops: DriveStopRef[] = [{ seq: 0, lat: 0.005, lng: 0.001, triggerRadiusM: 120 }] // ~111 m east of the line
     const snapped = snapStopsToRoute(route, stops)[0]!
     expect(snapped.poiLat).toBe(0.005) // POI preserved
     expect(snapped.poiLng).toBe(0.001)
@@ -101,7 +101,7 @@ describe('TriggerEngine', () => {
   test('a far off-route stop never fires over a whole drive', () => {
     // Drive straight north along lng 0; stops near the line + one 5 km to the east.
     const route: LngLat[] = Array.from({ length: 101 }, (_, i) => [0, i * 0.001] as LngLat)
-    const stops: TourStopRef[] = [
+    const stops: DriveStopRef[] = [
       { seq: 0, lat: 0.02, lng: 0.0003, triggerRadiusM: 120, durationMs: 20_000, name: 'near A' },
       { seq: 1, lat: 0.06, lng: 0.0003, triggerRadiusM: 120, durationMs: 20_000, name: 'near B' },
       { seq: 2, lat: 0.05, lng: 0.05, triggerRadiusM: 120, durationMs: 20_000, name: 'far off-route' },

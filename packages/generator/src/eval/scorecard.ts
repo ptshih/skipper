@@ -1,10 +1,10 @@
-// Assemble per-stop dimension evals into one TourScorecard + decide the overall gate.
+// Assemble per-stop dimension evals into one RunScorecard + decide the overall gate.
 //
 // Pure aggregation — no I/O, no model calls — so it is fully unit-tested. The overall
 // `pass` is the AND of every GATE dimension (advisory dimensions never block, they only
 // inform the regen loop + the human-calibrated judges).
 
-import { DIMENSION_KIND, type DimensionRollup, type EvalDimension, type StopEval, type TourScorecard } from './types'
+import { DIMENSION_KIND, type DimensionRollup, type EvalDimension, type StopEval, type RunScorecard } from './types'
 
 const mean = (xs: number[]): number => (xs.length === 0 ? 1 : xs.reduce((a, b) => a + b, 0) / xs.length)
 
@@ -36,7 +36,7 @@ export interface ScorecardInput {
  * rollup. Overall `pass` = every GATE dimension that ran passed (a gate dimension that
  * produced zero evals is vacuously passing — it simply wasn't checked).
  */
-export function buildScorecard(input: ScorecardInput): TourScorecard {
+export function buildScorecard(input: ScorecardInput): RunScorecard {
   const present = [...new Set(input.stops.map((e) => e.dimension))]
   const dimensions = present.map((d) => rollupDimension(d, input.stops))
   const pass = dimensions.filter((d) => d.kind === 'gate').every((d) => d.pass)

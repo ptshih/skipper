@@ -164,7 +164,7 @@ export const upstreamStatusEnum = pgEnum('upstream_status', [
 
 // The narration payload a player consumes: the script + its synthesized clip + frozen
 // provenance. Spread into `narrations`; a row goes live only post-synthesis (audio_url NOT NULL).
-const trackColumns = {
+const narrationColumns = {
   // The narration text. Nullable through generation; a row only goes live once filled.
   script: text('script'),
   // R2 object KEY (private). Stops/roam: clips are keyed per-track; the API presigns it
@@ -373,7 +373,7 @@ export const poiOverrides = pgTable(
 // owns it). The old roam `tracks` hoisted to hang directly off the poi — no segment, no `variant` (one
 // telling per place; multi-telling axes — authored tours, region-skippers, joke notches — are deferred
 // and re-expand storage then). Persona is baked into the single telling (one host per region in v2). A
-// row goes live only post-synthesis (audio_url NOT NULL, via trackColumns).
+// row goes live only post-synthesis (audio_url NOT NULL, via narrationColumns).
 export const narrations = pgTable(
   'narrations',
   {
@@ -383,7 +383,7 @@ export const narrations = pgTable(
       .references(() => pois.id, { onDelete: 'cascade' }),
     // story|scenic|break|wave — the telling's treatment (1:1, so no `variant`).
     form: trackFormEnum('form').notNull(),
-    ...trackColumns,
+    ...narrationColumns,
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .defaultNow()
@@ -516,7 +516,7 @@ export const evalRuns = pgTable(
     veracityScore: doublePrecision('veracity_score'),
     /** The full GenerateResult artifact (scripts + fact wells + embedded scorecard). */
     artifact: jsonb('artifact').$type<Record<string, unknown>>().notNull(),
-    /** The TourScorecard this run produced (the offline CLI's may differ from the embedded one). */
+    /** The RunScorecard this run produced (the offline CLI's may differ from the embedded one). */
     scorecard: jsonb('scorecard').$type<Record<string, unknown>>().notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
