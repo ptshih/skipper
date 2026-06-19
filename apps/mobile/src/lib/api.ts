@@ -9,6 +9,7 @@ import {
   driveList,
   driveManifest,
   driveProposal,
+  regionList,
   roamManifest,
   signedAudio,
   signedDriveAudio,
@@ -24,6 +25,8 @@ import type {
   DriveManifest,
   DriveProposal,
   DriveProposeRequest,
+  DriveSummary,
+  Region,
   RoamManifest,
   SignedAudio,
   SignedDriveAudio,
@@ -200,8 +203,12 @@ export const getRoamManifest = async (
 /*  (anonymous = roam only), so every call sends the session cookie.             */
 /* -------------------------------------------------------------------------- */
 
-/** Phase 1: resolve free-text A→B → in-region anchors + preview the route. Cheap, persists nothing,
- *  costs no credit — the confirm-before-spend interstitial. 401 ⇒ needs a free account. */
+/** The pickable regions for the Create-a-Drive region selector (anonymous; just id/slug/name). */
+export const listRegions = async (): Promise<Region[]> =>
+  parseDto(regionList, await fetchJson('/regions')).regions
+
+/** Phase 1: resolve the rider's free-text prompt → in-region anchors + preview the route. Cheap,
+ *  persists nothing, costs no credit — the confirm-before-spend interstitial. 401 ⇒ needs an account. */
 export const proposeDrive = async (req: DriveProposeRequest): Promise<DriveProposal> =>
   parseDto(
     driveProposal,
@@ -243,6 +250,8 @@ export type {
   DriveManifest,
   DriveProposal,
   DriveProposeRequest,
+  DriveSummary,
+  Region,
   RoamManifest,
   SignedAudio,
   SignedDriveAudio,

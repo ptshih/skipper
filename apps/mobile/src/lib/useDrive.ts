@@ -49,6 +49,16 @@ const CLIP_STALL_MS = 12_000
 export const frameTitle = (kind: 'intro' | 'outro'): string =>
   kind === 'intro' ? voice.player.frameIntro : voice.player.frameOutro
 
+// V2 drives carry no host on the manifest (persona is decoupled + single in v2), so the lock-screen
+// "artist" is the persona name. The Skipper is the only host today.
+const DRIVE_HOST_NAME = 'Skipper'
+
+// buildPreviewTimeline's PreviewStop only knows story|scenic|break; a drive clip's form widens to
+// include 'wave' (a roam-style call-out). Map it down for the preview timeline (a wave plays as a
+// full narration beat). snapStopsToRoute takes a free-form string, so it needs no mapping.
+const toPreviewStopType = (form: string): 'story' | 'scenic' | 'break' =>
+  form === 'scenic' ? 'scenic' : form === 'break' ? 'break' : 'story'
+
 // Real drive speed for the simulator (mph). A FIXED 60 for now; the trigger lead is
 // speed-adaptive in @skipper/drive-core, so this is the only knob that matters here.
 const SIM_MPH = 60
@@ -219,7 +229,7 @@ export interface UseDriveOptions {
   defaultFast?: boolean
 }
 
-export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {}): UseDrive {
+export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}): UseDrive {
   const mode = opts.mode ?? 'sim'
   const reducedMotion = useReducedMotion() // honor OS "Reduce Motion" for the preview token glide
   const [data, setData] = useState<DriveData | null>(null)
@@ -293,11 +303,11 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
     subRef.current = null
   }, [])
 
-  // ---- load: tour geometry + presigned audio + the audio session ----
+  // ---- load: drive geometry + presigned audio + the audio session ----
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      if (!tourId) return
+      if (!driveId) return
       setError(null)
       setNeedsAccount(false)
       try {
@@ -306,37 +316,39 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
           shouldPlayInBackground: true,
           interruptionMode: DRIVE_INTERRUPTION_MODE,
         }).catch(() => {})
-        // OFFLINE-FIRST: a downloaded tour loads detail + local file:// clips with zero
-        // network; otherwise this fetches + signs and streams. The url map keys stops by
-        // seq and the frames under INTRO_SEQ/OUTRO_SEQ, either way. PREVIEW is the OPEN
-        // funnel — every ready tour is previewable anonymously (`preview: true` → ?preview=1),
-        // even ones whose gated live drive + offline download stay account-walled.
-        const { detail: tour, urls } = await loadPlayback(
-          tourId,
-          mode === 'preview' ? { preview: true } : undefined,
-        )
+        // OFFLINE-FIRST: a downloaded drive loads its manifest + local file:// clips with zero
+        // network; otherwise this fetches the manifest (clips pre-signed inline) and streams. The
+        // url map keys place narrations by seq and any intro/outro framing under the
+        // INTRO_SEQ/OUTRO_SEQ sentinels, either way.
+        const { detail: manifest, urls } = await loadPlayback(driveId)
         if (cancelled) return
-        const polyline = tour.tour.polyline as [number, number][]
-        if (polyline.length < 2) throw new Error('This tour has no drivable route.')
+        const polyline = manifest.polyline as [number, number][]
+        if (polyline.length < 2) throw new Error('This drive has no drivable route.')
         const cum = cumulativeMeters(polyline)
+        // A drive's clips are place NARRATIONS (with coords) woven with placeless FRAMING (intro/
+        // outro/interlude, no coords). Stops = the narrations; frames feed the bracket queue by
+        // sentinel. (Framing is empty in v2 core — the library isn't synthesized yet.)
+        const narrationClips = manifest.clips.filter(
+          (c): c is typeof c & { lat: number; lng: number } => c.lat != null && c.lng != null,
+        )
         framesRef.current = { intro: urls.has(INTRO_SEQ), outro: urls.has(OUTRO_SEQ) }
-        const introMs = tour.intro?.audioDurationMs ?? null
-        const outroMs = tour.outro?.audioDurationMs ?? null
+        const introMs = manifest.clips.find((c) => c.form === 'intro')?.durationMs ?? null
+        const outroMs = manifest.clips.find((c) => c.form === 'outro')?.durationMs ?? null
         setUrls(urls)
         setData({
-          tourName: tour.tour.headline,
-          region: tour.region.displayName,
-          hostName: tour.host.name,
+          tourName: manifest.label,
+          region: '', // V2 drives carry no region display name on the manifest — the label is the title
+          hostName: DRIVE_HOST_NAME,
           polyline,
           totalM: cum.length > 0 ? (cum[cum.length - 1] ?? 0) : 0,
-          stops: tour.stops.map((s) => ({
-            seq: s.seq,
-            name: cleanPlaceName(s.name), // display-only: drops Wikipedia's ", California" title suffix
-            stopType: s.stopType,
-            lat: s.lat,
-            lng: s.lng,
-            triggerRadiusM: s.triggerRadiusM,
-            audioDurationMs: s.audioDurationMs,
+          stops: narrationClips.map((c) => ({
+            seq: c.seq,
+            name: cleanPlaceName(c.name ?? ''), // display-only: drops Wikipedia's ", California" suffix
+            stopType: c.form, // the clip's form (story|scenic|break|wave) — the view-model treatment axis
+            lat: c.lat,
+            lng: c.lng,
+            triggerRadiusM: c.triggerRadiusM ?? 120,
+            audioDurationMs: c.durationMs,
           })),
           introMs,
           outroMs,
@@ -344,16 +356,15 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
         // PREVIEW: build the compressed segment timeline (the preview's clock). Stretch the
         // between-stop drive gaps to 12–20s (vs the engine's short default) so the drive music
         // has room to breathe — preview-only pacing (the real drive uses actual elapsed time).
-        // intro/outro frames bookend the timeline (full length, not compressed).
         if (mode === 'preview') {
           const tl = buildPreviewTimeline(
-            tour.stops.map((s) => ({
-              seq: s.seq,
-              stopType: s.stopType,
-              name: s.name,
-              lat: s.lat,
-              lng: s.lng,
-              audioDurationMs: s.audioDurationMs,
+            narrationClips.map((c) => ({
+              seq: c.seq,
+              stopType: toPreviewStopType(c.form),
+              name: c.name ?? '',
+              lat: c.lat,
+              lng: c.lng,
+              audioDurationMs: c.durationMs,
             })),
             polyline,
             {
@@ -376,14 +387,14 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
     return () => {
       cancelled = true
     }
-  }, [tourId, reloadKey, mode])
+  }, [driveId, reloadKey, mode])
 
   // ---- re-sign expired presigned URLs (online stall only; downloaded files never expire) ----
   const resign = useCallback(async (): Promise<boolean> => {
-    if (!tourId) return false
+    if (!driveId) return false
     try {
-      // local map when downloaded, else freshly re-signed (preview uses the open-funnel sign path)
-      const fresh = await resignPlayback(tourId, mode === 'preview' ? { preview: true } : undefined)
+      // local map when downloaded, else freshly re-signed off the drive's clips
+      const fresh = await resignPlayback(driveId)
       if (sawFresh.current) return true // clip started during the re-sign — leave it alone
       loadedSeq.current = null
       setUrls(fresh)
@@ -391,7 +402,7 @@ export function useDrive(tourId: string | undefined, opts: UseDriveOptions = {})
     } catch {
       return false // offline / 503 — the caller skips the stop so the drive never hangs
     }
-  }, [tourId, mode])
+  }, [driveId])
 
   // ---- the whole drive finished (sim ran out + nothing left to play) ----
   const finishDrive = useCallback(() => {

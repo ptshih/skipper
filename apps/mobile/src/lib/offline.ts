@@ -1,31 +1,30 @@
-// Offline tour download (Phase 3) — persist a complete tour to disk so it plays with
-// ZERO network. Tahoe has dead zones, so offline-first is a hard product requirement.
+// Offline DRIVE download (Phase 3) — persist a complete drive to disk so it plays with ZERO
+// network. Tahoe has dead zones, so offline-first is a hard product requirement.
 //
-// We download every clip's BYTES (stops + the intro/outro frames) to the PERSISTENT
-// document dir (Paths.document — NOT Paths.cache, which the OS can evict) and write a
-// manifest carrying the full drive detail, so a downloaded tour needs no network at all.
-// Presigned R2 URLs die in 1h, so we store the BYTES, not the URLs.
+// A drive's manifest (GET /drives/:id) carries its clips' presigned URLs INLINE, so a download
+// needs no separate sign call: fetch the manifest, then download every clip's BYTES to the
+// PERSISTENT document dir (Paths.document — NOT Paths.cache, which the OS can evict). Presigned R2
+// URLs die in ~1h, so we store the BYTES, not the URLs.
 //
-// Robustness: the manifest stores RELATIVE filenames, not absolute `file://` URIs — the
-// document container path can change across app updates, so URIs are reconstructed from
-// `Paths.document` at read time. API (SDK-56 expo-file-system, re-verified against the
-// live docs): `File`/`Directory`/`Paths`; `File.downloadFileAsync(url, destFile)` (static)
-// → a File with `.uri`/`.exists`/`.size`; `dir.create({intermediates,idempotent})`;
-// `file.write(str)`/`file.textSync()`/`file.delete()`.
+// Robustness: the manifest stores RELATIVE filenames, not absolute `file://` URIs — the document
+// container path can change across app updates, so URIs are reconstructed from `Paths.document` at
+// read time. API (SDK-56 expo-file-system): `File`/`Directory`/`Paths`;
+// `File.downloadFileAsync(url, destFile)` (static) → a File with `.uri`/`.exists`/`.size`;
+// `dir.create({intermediates,idempotent})`; `file.write(str)`/`file.textSync()`/`file.delete()`.
 
 import { Directory, File, Paths } from 'expo-file-system'
 import { INTRO_SEQ, OUTRO_SEQ } from '@skipper/drive-core'
-import type { TourListItem } from '@skipper/shared'
-import { getTour, signTourAudio, type SignedAudio, type TourDetail } from './api'
-import { extForContentType, urlMapFromSigned } from './offline-util'
+import type { DriveClip, DriveManifest, DriveSummary } from '@skipper/shared'
+import { getDrive, signDriveAudio } from './api'
+import { extForContentType, urlMapFromDriveManifest, urlMapFromDriveSigned } from './offline-util'
 
-// Manifest schema version — bump on any shape change so a stale-format manifest left by an
-// older app build reads as NOT-downloaded (and re-downloads) instead of crashing the player.
-// v2: the embedded `detail` now carries per-clip `revisedAt` content tokens (offline staleness);
-// a v1 download lacked them, so it's invalidated → re-downloaded with tokens.
-const MANIFEST_VERSION = 2
+// Manifest schema version — bump on any shape change so a stale-format manifest left by an older
+// app build reads as NOT-downloaded (and re-downloads) instead of crashing the player.
+// v3: V2 reshape — the embedded `detail` is now a DRIVE manifest (flat clips[] keyed by seq, with
+// per-clip `revisedAt`), not a tour detail; a v2 download is a different shape → invalidated.
+const MANIFEST_VERSION = 3
 
-/** A downloaded clip — a RELATIVE filename within the tour dir (NOT an absolute uri). */
+/** A downloaded clip — a RELATIVE filename within the drive dir (NOT an absolute uri). */
 interface ClipFile {
   name: string
   contentType: string
@@ -33,34 +32,38 @@ interface ClipFile {
 }
 
 export interface OfflineManifest {
-  tourId: string
+  driveId: string
   /** Manifest schema version (MANIFEST_VERSION) — a mismatch invalidates the download. */
   version: number
   /** When this download was captured (ISO). */
   savedAt: string
-  /** The full drive detail (route/anchors/region/host/intro/outro/stops) — zero-network playback. */
-  detail: TourDetail
-  clips: {
-    /** Keyed by stop seq (string, for JSON). */
-    stops: Record<string, ClipFile>
-    intro: ClipFile | null
-    outro: ClipFile | null
-  }
+  /** The full drive manifest (route/clips/geometry) — zero-network playback. The clips' presigned
+   *  `url`s are stale on disk (and ignored — offline reads the local file map below). */
+  detail: DriveManifest
+  /** Keyed by the player seq (string), including the INTRO_SEQ/OUTRO_SEQ frame sentinels. */
+  clips: Record<string, ClipFile>
 }
 
 // NOTE: clips live under Paths.document (survives restarts; NOT cache-evicted) but are INCLUDED in
 // iCloud/iTunes backups — SDK 56's File API exposes no isExcludedFromBackup setter from JS, so a
-// Tahoe tour's tens of MB of re-downloadable audio inflates backups until that lands (then exclude
+// Tahoe drive's tens of MB of re-downloadable audio inflates backups until that lands (then exclude
 // via a native config plugin or a backup-excluded subpath). (audit #508)
-function tourDir(tourId: string): Directory {
-  return new Directory(Paths.document, 'tours', tourId)
+function driveDir(driveId: string): Directory {
+  return new Directory(Paths.document, 'drives', driveId)
 }
-function manifestFile(tourId: string): File {
-  return new File(tourDir(tourId), 'manifest.json')
+function manifestFile(driveId: string): File {
+  return new File(driveDir(driveId), 'manifest.json')
 }
 /** Reconstruct a clip's local `file://` uri from the (relative) manifest name. */
-function clipUri(tourId: string, clip: ClipFile): string {
-  return new File(tourDir(tourId), clip.name).uri
+function clipUri(driveId: string, clip: ClipFile): string {
+  return new File(driveDir(driveId), clip.name).uri
+}
+
+/** The player seq a clip maps to: a placeless intro/outro frame keys under the sentinel the player
+ *  understands, every place narration under its own seq. Mirrors offline-util's urlMapFromDriveManifest
+ *  so the on-disk keys line up with the online url map. */
+function clipSeq(c: DriveClip): number {
+  return c.form === 'intro' ? INTRO_SEQ : c.form === 'outro' ? OUTRO_SEQ : c.seq
 }
 
 export interface DownloadProgress {
@@ -68,8 +71,8 @@ export interface DownloadProgress {
   total: number
 }
 
-/** Build the flat list of clips to download from a sign response (stops + frames). */
-function clipsToDownload(signed: SignedAudio): {
+/** Build the flat list of clips to download from a drive manifest (every clip that has audio). */
+function clipsToDownload(detail: DriveManifest): {
   key: string
   url: string
   contentType: string
@@ -77,31 +80,15 @@ function clipsToDownload(signed: SignedAudio): {
   name: string
 }[] {
   const out: { key: string; url: string; contentType: string; durationMs: number | null; name: string }[] = []
-  for (const s of signed.stops) {
+  for (const c of detail.clips) {
+    if (!c.url || !c.contentType) continue // a silent beat (rest) carries no audio — nothing to fetch
+    const seq = clipSeq(c)
     out.push({
-      key: `stop:${s.seq}`,
-      url: s.url,
-      contentType: s.contentType,
-      durationMs: s.durationMs ?? null,
-      name: `${s.seq}.${extForContentType(s.contentType)}`,
-    })
-  }
-  if (signed.intro) {
-    out.push({
-      key: 'intro',
-      url: signed.intro.url,
-      contentType: signed.intro.contentType,
-      durationMs: signed.intro.durationMs ?? null,
-      name: `intro.${extForContentType(signed.intro.contentType)}`,
-    })
-  }
-  if (signed.outro) {
-    out.push({
-      key: 'outro',
-      url: signed.outro.url,
-      contentType: signed.outro.contentType,
-      durationMs: signed.outro.durationMs ?? null,
-      name: `outro.${extForContentType(signed.outro.contentType)}`,
+      key: String(seq),
+      url: c.url,
+      contentType: c.contentType,
+      durationMs: c.durationMs ?? null,
+      name: `${seq}.${extForContentType(c.contentType)}`,
     })
   }
   return out
@@ -109,9 +96,9 @@ function clipsToDownload(signed: SignedAudio): {
 
 const DOWNLOAD_CONCURRENCY = 4
 
-// Per-clip byte-transfer budget. The JSON paths (getTour/sign) are time-boxed in api.ts, but the
-// DOWNLOAD bytes were not — a half-open / slow-drip dead-zone connection would hang forever. Bound
-// each clip with an AbortController so a stuck transfer rejects instead of wedging downloadTour. (audit #2)
+// Per-clip byte-transfer budget. The JSON path (getDrive) is time-boxed in api.ts, but the DOWNLOAD
+// bytes were not — a half-open / slow-drip dead-zone connection would hang forever. Bound each clip
+// with an AbortController so a stuck transfer rejects instead of wedging downloadDrive. (audit #2)
 const CLIP_DOWNLOAD_TIMEOUT_MS = 30_000
 
 // Rough bytes/sec for the 32 kbps MP3 clips (32 kbit/s ÷ 8), for the pre-flight free-space estimate.
@@ -147,55 +134,55 @@ async function downloadClip(url: string, dest: File, outer?: AbortSignal): Promi
   }
 }
 
-// In-flight downloads by tourId — dedupes concurrent downloadTour calls for the same tour so two
+// In-flight downloads by driveId — dedupes concurrent downloadDrive calls for the same drive so two
 // taps (a fast double-select before React commits the busy state) can't race on the same files (one
 // run's failure-cleanup wiping the other's bytes). Cleared in finally. (audit #825)
 const inFlight = new Map<string, Promise<OfflineManifest>>()
 
 /**
- * Download a complete tour (detail + every clip's bytes) to persistent storage and write the
+ * Download a complete drive (manifest + every clip's bytes) to persistent storage and write the
  * manifest. Throws if any clip fails to download/verify (a half-download must never read as "ready");
  * on failure the partial dir is removed. Pass `signal` to cancel (navigation away / a Cancel tap).
- * Concurrent calls for the same tour share one in-flight run. Needs network + (for a non-preview
- * tour) a signed-in account — the /tours + /sign tier check enforces it.
+ * Concurrent calls for the same drive share one in-flight run. Needs network + a signed-in account
+ * (the /drives tier check enforces it — a drive is owned).
  */
-export function downloadTour(
-  tourId: string,
+export function downloadDrive(
+  driveId: string,
   onProgress?: (p: DownloadProgress) => void,
   signal?: AbortSignal,
 ): Promise<OfflineManifest> {
-  const existing = inFlight.get(tourId)
+  const existing = inFlight.get(driveId)
   if (existing) return existing
-  const p = runDownload(tourId, onProgress, signal).finally(() => {
-    if (inFlight.get(tourId) === p) inFlight.delete(tourId)
+  const p = runDownload(driveId, onProgress, signal).finally(() => {
+    if (inFlight.get(driveId) === p) inFlight.delete(driveId)
   })
-  inFlight.set(tourId, p)
+  inFlight.set(driveId, p)
   return p
 }
 
 async function runDownload(
-  tourId: string,
+  driveId: string,
   onProgress?: (p: DownloadProgress) => void,
   signal?: AbortSignal,
 ): Promise<OfflineManifest> {
   if (signal?.aborted) throw abortError()
-  // Fetch + sign FIRST (network). If offline (a dead-zone "Update" tap), this throws here — BEFORE
-  // we touch the existing download, so the saved copy survives a failed re-pull attempt.
-  const detail = await getTour(tourId)
-  const signed = await signTourAudio(tourId)
+  // Fetch the manifest FIRST (network; clips come pre-signed). If offline (a dead-zone "Update"
+  // tap), this throws here — BEFORE we touch the existing download, so the saved copy survives a
+  // failed re-pull attempt.
+  const detail = await getDrive(driveId)
 
   // Clean re-pull: drop any prior download now that the network is confirmed, so an "Update" can't
   // fail on DestinationAlreadyExists (downloadFileAsync's exists-check runs AFTER the bytes transfer,
   // burning bandwidth then throwing) and then have the catch wipe the good copy. No back-compat
   // needed (clean destructive) — also drops stale clips from an old cut. (audit #3)
-  deleteTourDownload(tourId)
+  deleteDriveDownload(driveId)
 
-  const dir = tourDir(tourId)
+  const dir = driveDir(driveId)
   dir.create({ intermediates: true, idempotent: true })
 
-  const items = clipsToDownload(signed)
+  const items = clipsToDownload(detail)
   const total = items.length
-  if (total === 0) throw new Error('This tour has no audio to download.')
+  if (total === 0) throw new Error('This drive has no audio to download.')
 
   // Pre-flight free-space check: estimate total bytes from clip durations and require comfortable
   // headroom, so a doomed download fails fast with an actionable message instead of a misleading
@@ -226,7 +213,7 @@ async function runDownload(
       const item = items[next++]!
       const dest = new File(dir, item.name)
       const out = await downloadClip(item.url, dest, signal)
-      // Integrity is a PRESENCE/nonzero-size check only — no Content-Length/checksum (the sign DTO
+      // Integrity is a PRESENCE/nonzero-size check only — no Content-Length/checksum (the manifest
       // carries no size/hash). iOS URLSession enforces a declared Content-Length (R2 object GETs
       // always send one), so a mid-body drop normally rejects in downloadClip; a server
       // short-Content-Length is the only silent-truncation gap. (audit #834)
@@ -246,21 +233,13 @@ async function runDownload(
     // Write the manifest INSIDE the try — a manifest-write failure must also sweep the
     // (verified-but-orphaned) clip files, or they'd leak with no manifest to find them.
     const manifest: OfflineManifest = {
-      tourId,
+      driveId,
       version: MANIFEST_VERSION,
       savedAt: new Date().toISOString(),
       detail,
-      clips: {
-        stops: Object.fromEntries(
-          signed.stops
-            .filter((s) => results.has(`stop:${s.seq}`))
-            .map((s) => [String(s.seq), results.get(`stop:${s.seq}`)!]),
-        ),
-        intro: results.get('intro') ?? null,
-        outro: results.get('outro') ?? null,
-      },
+      clips: Object.fromEntries(results),
     }
-    manifestFile(tourId).write(JSON.stringify(manifest))
+    manifestFile(driveId).write(JSON.stringify(manifest))
     return manifest
   } catch (e) {
     // Partial download / cancel / manifest-write failure — sweep the dir so it can't read as ready
@@ -273,14 +252,14 @@ async function runDownload(
 }
 
 /** Read the manifest from disk; null if absent, corrupt, or a stale/foreign schema version. */
-export function loadManifest(tourId: string): OfflineManifest | null {
-  const f = manifestFile(tourId)
+export function loadManifest(driveId: string): OfflineManifest | null {
+  const f = manifestFile(driveId)
   if (!f.exists) return null
   try {
     const m = JSON.parse(f.textSync()) as OfflineManifest
     // Reject a malformed or stale-format manifest → treat as not-downloaded (re-download)
     // rather than return a half-shape the player would crash on (e.g. a missing `detail`).
-    if (!m || m.version !== MANIFEST_VERSION || !m.detail || !m.clips || typeof m.clips.stops !== 'object') {
+    if (!m || m.version !== MANIFEST_VERSION || !m.detail || !Array.isArray(m.detail.clips) || typeof m.clips !== 'object') {
       return null
     }
     return m
@@ -290,98 +269,92 @@ export function loadManifest(tourId: string): OfflineManifest | null {
 }
 
 /** Every clip the manifest references is present on disk + nonzero. */
-function clipsPresentOnDisk(tourId: string, m: OfflineManifest): boolean {
-  const clips = [...Object.values(m.clips.stops), m.clips.intro, m.clips.outro].filter(
-    (c): c is ClipFile => c != null,
-  )
+function clipsPresentOnDisk(driveId: string, m: OfflineManifest): boolean {
+  const clips = Object.values(m.clips)
   if (clips.length === 0) return false
   return clips.every((c) => {
-    const f = new File(tourDir(tourId), c.name)
+    const f = new File(driveDir(driveId), c.name)
     return f.exists && (f.size ?? 0) > 0
   })
 }
 
-/** Build the seq → local `file://` url map (+ frame sentinels) from a downloaded manifest. */
-function localUrlMap(tourId: string, m: OfflineManifest): Map<number, string> {
+/** Build the seq → local `file://` url map from a downloaded manifest. Keys (incl. the frame
+ *  sentinels) were baked in at download time, so this is a direct projection. */
+function localUrlMap(driveId: string, m: OfflineManifest): Map<number, string> {
   const urls = new Map<number, string>()
-  for (const [seqStr, c] of Object.entries(m.clips.stops)) {
+  for (const [seqStr, c] of Object.entries(m.clips)) {
     const seq = Number(seqStr)
-    if (Number.isFinite(seq)) urls.set(seq, clipUri(tourId, c)) // skip a tampered non-numeric key
+    if (Number.isFinite(seq)) urls.set(seq, clipUri(driveId, c)) // skip a tampered non-numeric key
   }
-  if (m.clips.intro) urls.set(INTRO_SEQ, clipUri(tourId, m.clips.intro))
-  if (m.clips.outro) urls.set(OUTRO_SEQ, clipUri(tourId, m.clips.outro))
   return urls
 }
 
 /** True iff a complete, verified download exists (valid manifest + every clip on disk, nonzero). */
-export function isTourDownloaded(tourId: string): boolean {
-  const m = loadManifest(tourId)
-  return m != null && clipsPresentOnDisk(tourId, m)
+export function isDriveDownloaded(driveId: string): boolean {
+  const m = loadManifest(driveId)
+  return m != null && clipsPresentOnDisk(driveId, m)
 }
 
 /**
- * Fold a detail's per-clip content tokens (`revisedAt`) + stop set + frame presence into one
- * comparable string. Any drift changes it: a clip re-synth (token bumps), a regen (fresh stop ids
- * → fresh tokens), a stop added/removed (seq set changes), a frame appearing/vanishing.
+ * Fold a manifest's per-clip content tokens (`revisedAt`) + clip set into one comparable string.
+ * Any drift changes it: a clip re-synth (token bumps), a regen (fresh narration → fresh token), a
+ * clip added/removed (seq set changes).
  */
-function contentSignature(d: TourDetail): string {
-  const stops = d.stops
+function contentSignature(d: DriveManifest): string {
+  const clips = d.clips
     .slice()
     .sort((a, b) => a.seq - b.seq)
-    .map((s) => `${s.seq}:${s.revisedAt ?? ''}`)
+    .map((c) => `${c.seq}:${c.revisedAt ?? ''}`)
     .join(',')
-  return `stops[${stops}]|intro:${d.intro?.revisedAt ?? ''}|outro:${d.outro?.revisedAt ?? ''}`
+  return `clips[${clips}]`
 }
 
 /**
- * Is a downloaded tour's audio STALE vs the server's current content? Compares the content
- * tokens embedded in the saved manifest's detail against a freshly-fetched detail. ONLINE-ONLY by
- * nature — the caller already holds fresh detail (the tour screen fetches it to render), so this
- * costs ZERO extra network and is never run in a dead zone. Returns false when nothing is
- * downloaded. NEVER blocks playback: it only powers a "pull the fresh copy" affordance — offline
- * driving always plays the bytes on disk, stale or not.
+ * Is a downloaded drive's audio STALE vs the server's current content? Compares the content tokens
+ * embedded in the saved manifest against a freshly-fetched manifest. ONLINE-ONLY by nature — the
+ * caller already holds the fresh manifest (the drive screen fetches it to render), so this costs
+ * ZERO extra network and is never run in a dead zone. Returns false when nothing is downloaded.
+ * NEVER blocks playback: it only powers a "pull the fresh copy" affordance.
  */
-export function isDownloadStale(tourId: string, fresh: TourDetail): boolean {
-  const m = loadManifest(tourId)
+export function isDownloadStale(driveId: string, fresh: DriveManifest): boolean {
+  const m = loadManifest(driveId)
   if (!m) return false
   return contentSignature(m.detail) !== contentSignature(fresh)
 }
 
-/** A downloaded manifest's drive detail projected to a catalog list-item (the home card's shape).
- *  Detail carries no `teaser`, so the card degrades to its `summary`. */
-function listItemFromDetail(d: TourDetail): TourListItem {
+/** A downloaded manifest projected to a drive list-card (the home "My Drives" shape). */
+function summaryFromManifest(m: OfflineManifest): DriveSummary {
+  const d = m.detail
   return {
-    id: d.tour.id,
-    slug: d.tour.slug,
-    headline: d.tour.headline,
-    regionSlug: d.region.slug,
-    regionName: d.region.displayName,
-    startAnchorName: d.tour.startAnchor.name,
-    endAnchorName: d.tour.endAnchor.name,
-    summary: d.tour.summary,
-    distanceMeters: d.tour.distanceMeters,
-    durationSeconds: d.tour.durationSeconds,
-    teaser: null,
+    driveId: d.driveId ?? m.driveId,
+    label: d.label,
+    regionId: d.regionId ?? null,
+    startName: null,
+    endName: null,
+    distanceMeters: d.distanceMeters ?? null,
+    durationSeconds: d.durationSeconds ?? null,
+    clipCount: d.clips.length,
+    createdAt: m.savedAt,
   }
 }
 
 /**
- * Every fully-downloaded tour as a catalog list-item, read from disk with ZERO network.
- * Powers the home screen's offline-first fallback: when the catalog fetch fails in a dead
- * zone, the saved drives stay browsable (and reachable) instead of a blank error wall.
+ * Every fully-downloaded drive as a list-card, read from disk with ZERO network. Powers the home
+ * screen's offline-first fallback: when the /drives fetch fails in a dead zone, the saved drives
+ * stay browsable (and reachable) instead of a blank error wall.
  */
-export function listDownloadedTours(): TourListItem[] {
-  const root = new Directory(Paths.document, 'tours')
+export function listDownloadedDrives(): DriveSummary[] {
+  const root = new Directory(Paths.document, 'drives')
   if (!root.exists) return []
-  const out: TourListItem[] = []
+  const out: DriveSummary[] = []
   for (const entry of root.list()) {
-    // tour dirs only; each dir name IS the tourId. A complete download = valid manifest + clips on disk.
+    // drive dirs only; each dir name IS the driveId. A complete download = valid manifest + clips on disk.
     if (!(entry instanceof Directory)) continue
     try {
       const m = loadManifest(entry.name)
-      if (m && clipsPresentOnDisk(entry.name, m)) out.push(listItemFromDetail(m.detail))
+      if (m && clipsPresentOnDisk(entry.name, m)) out.push(summaryFromManifest(m))
     } catch {
-      // A tour dir torn down mid-scan (deleteTourDownload / a failed re-pull's cleanup) can make a
+      // A drive dir torn down mid-scan (deleteDriveDownload / a failed re-pull's cleanup) can make a
       // File.exists/size throw — skip that entry rather than aborting the whole offline catalog,
       // which would error-wall the home screen out of its dead-zone fallback. (audit #843)
     }
@@ -389,9 +362,9 @@ export function listDownloadedTours(): TourListItem[] {
   return out
 }
 
-/** Remove a tour's offline download (manifest + clips). Idempotent. */
-export function deleteTourDownload(tourId: string): void {
-  const dir = tourDir(tourId)
+/** Remove a drive's offline download (manifest + clips). Idempotent. */
+export function deleteDriveDownload(driveId: string): void {
+  const dir = driveDir(driveId)
   if (dir.exists) {
     try {
       dir.delete()
@@ -404,7 +377,7 @@ export function deleteTourDownload(tourId: string): void {
 /* -------------------------------------------------------------------------- */
 
 export interface Playback {
-  detail: TourDetail
+  detail: DriveManifest
   /** seq → uri (local `file://` when downloaded, presigned https when streaming). */
   urls: Map<number, string>
   /** true when served entirely from disk (no network used to load). */
@@ -412,34 +385,27 @@ export interface Playback {
 }
 
 /**
- * Load a tour for playback, OFFLINE-FIRST: if a complete download exists, return the manifest's
- * detail + local `file://` uris with ZERO network. Otherwise fetch + sign and stream online.
+ * Load a drive for playback, OFFLINE-FIRST: if a complete download exists, return the manifest +
+ * local `file://` uris with ZERO network. Otherwise fetch the manifest (clips pre-signed inline) and
+ * stream online.
  */
-export async function loadPlayback(
-  tourId: string,
-  opts?: { preview?: boolean },
-): Promise<Playback> {
-  const m = loadManifest(tourId) // load ONCE (don't isTourDownloaded() then loadManifest() again)
-  if (m && clipsPresentOnDisk(tourId, m)) {
-    return { detail: m.detail, urls: localUrlMap(tourId, m), offline: true }
+export async function loadPlayback(driveId: string): Promise<Playback> {
+  const m = loadManifest(driveId) // load ONCE (don't isDriveDownloaded() then loadManifest() again)
+  if (m && clipsPresentOnDisk(driveId, m)) {
+    return { detail: m.detail, urls: localUrlMap(driveId, m), offline: true }
   }
-  // `preview` streams any ready tour (the open funnel); omit it for the gated live drive.
-  const detail = await getTour(tourId, opts)
-  const signed = await signTourAudio(tourId, opts)
-  return { detail, urls: urlMapFromSigned(signed), offline: false }
+  const detail = await getDrive(driveId)
+  return { detail, urls: urlMapFromDriveManifest(detail), offline: false }
 }
 
 /**
- * A fresh url map for the stall-recovery path. When the tour is downloaded it returns the LOCAL
- * file:// map (which never expires — and re-points a player that loaded ONLINE at the
- * now-downloaded files); otherwise it re-signs the presigned URLs (~1h TTL). Always returns a map.
+ * A fresh url map for the stall-recovery path. When the drive is downloaded it returns the LOCAL
+ * file:// map (which never expires — and re-points a player that loaded ONLINE at the now-downloaded
+ * files); otherwise it re-signs the presigned URLs (~1h TTL). Always returns a map.
  */
-export async function resignPlayback(
-  tourId: string,
-  opts?: { preview?: boolean },
-): Promise<Map<number, string>> {
-  const m = loadManifest(tourId)
-  if (m && clipsPresentOnDisk(tourId, m)) return localUrlMap(tourId, m)
-  const signed = await signTourAudio(tourId, opts)
-  return urlMapFromSigned(signed)
+export async function resignPlayback(driveId: string): Promise<Map<number, string>> {
+  const m = loadManifest(driveId)
+  if (m && clipsPresentOnDisk(driveId, m)) return localUrlMap(driveId, m)
+  const signed = await signDriveAudio(driveId)
+  return urlMapFromDriveSigned(signed)
 }

@@ -102,6 +102,20 @@ app.get('/t/:id', async (c) => {
   return c.html(shareLandingHtml({ title, description, url: `https://skipper.fm/t/${id}` }))
 })
 
+// The pickable regions for the Create-a-Drive region selector. Anonymous + tiny (just
+// id/slug/name) — the create FLOW is gated, but listing region names to pick from is open.
+app.get('/regions', async (c) => {
+  const rows = await withRetry(
+    () =>
+      db
+        .select({ id: regions.id, slug: regions.slug, displayName: regions.displayName })
+        .from(regions)
+        .orderBy(asc(regions.displayName)),
+    { label: 'regions.list' },
+  )
+  return c.json({ regions: rows })
+})
+
 // Better Auth owns everything under /api/auth/* (its own handler).
 app.on(['POST', 'GET'], '/api/auth/*', (c) => auth.handler(c.req.raw))
 

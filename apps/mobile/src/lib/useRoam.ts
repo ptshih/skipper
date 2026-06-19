@@ -37,7 +37,7 @@ import {
   seekTargetReached,
 } from '@skipper/drive-core'
 import type { LngLat } from '@skipper/drive-core'
-import { errorMessage, getRoamManifest, getTour, listTours } from './api'
+import { errorMessage, getRoamManifest } from './api'
 import type { RoamManifest } from './api'
 import { liveRoamSource, simulatedSource } from './gps'
 import type { FixSubscription } from './gps'
@@ -500,16 +500,22 @@ export function useRoam(mode: RoamMode): RoamState {
         interruptionMode: 'mixWithOthers',
       }).catch(() => {})
 
-      // Where are we? (sim: the demo polyline's start — same roads the corpus covers.)
+      // Where are we? (sim: a fixed demo polyline through the corpus's basin — same roads it covers.)
       let here: { lat: number; lng: number }
       let simPolyline: LngLat[] | null = null
       if (mode === 'sim') {
-        const tours = await listTours()
-        const first = tours.tours[0]
-        if (!first) throw new Error('No ready tour to simulate along.')
-        const detail = await getTour(first.id, { preview: true })
-        simPolyline = detail.tour.polyline as LngLat[]
-        const [lng, lat] = simPolyline[0]!
+        // Drive a FIXED demo line through the South/West shore (no tour/drive dependency — a fresh
+        // rider has neither). Enough points for simulatedSource to roll the rider past roam pins.
+        const demo: LngLat[] = [
+          [-119.977, 38.945],
+          [-120.01, 38.935],
+          [-120.045, 38.93],
+          [-120.08, 38.94],
+          [-120.1, 38.954],
+          [-120.11, 38.965],
+        ]
+        simPolyline = demo
+        const [lng, lat] = demo[0]!
         here = { lat, lng }
       } else {
         // Time-box the cold-fix locate — getCurrentPositionAsync has no built-in timeout, and the

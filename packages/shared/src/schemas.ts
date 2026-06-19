@@ -17,13 +17,17 @@ export type Coordinate = z.infer<typeof coordinate>
 export const polyline = z.array(coordinate)
 export type Polyline = z.infer<typeof polyline>
 
-/** A region — the minimal keying entity (a tour belongs to one). */
+/** A region — the minimal keying entity (a tour/drive belongs to one). */
 export const region = z.object({
   id: z.uuid(),
   slug: z.string(),
   displayName: z.string(),
 })
 export type Region = z.infer<typeof region>
+
+/** GET /regions — the pickable regions (for the Create-a-Drive region selector). Anonymous. */
+export const regionList = z.object({ regions: z.array(region) })
+export type RegionList = z.infer<typeof regionList>
 
 /** Attribution snapshot frozen at generation time (keeps CC BY-SA / CC BY credit correct). */
 export const attribution = z.object({

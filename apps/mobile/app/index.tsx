@@ -1,38 +1,28 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Animated, FlatList, RefreshControl, StyleSheet, View } from 'react-native'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useCallback, useRef, useState } from 'react'
+import { Animated, StyleSheet, View } from 'react-native'
 import { Stack, useFocusEffect, useRouter } from 'expo-router'
-import { errorMessage, listTours, type TourList } from '@/lib/api'
+import { errorMessage, listDrives, type DriveSummary } from '@/lib/api'
 import { useSession } from '@/lib/auth'
-import { listDownloadedTours } from '@/lib/offline'
+import { listDownloadedDrives } from '@/lib/offline'
 import { cleanPlaceName } from '@/lib/labels'
-import { useDrivesFilter } from '@/lib/drives-filter'
-import { deriveRegions, filterByRegion } from '@/lib/regions'
-import { useTheme } from '@/theme'
 import { space } from '@/theme/tokens'
-import { Badge, Button, Card, Divider, EdgeFade, FilterChip, HeaderIconButton, RouteTrack, Screen, Skeleton, SkeletonGroup, Sunburst, Text, voice } from '@/ui'
+import { Badge, Button, Card, Divider, HeaderIconButton, RouteTrack, Screen, Skeleton, SkeletonGroup, Sunburst, Text, voice } from '@/ui'
 
-// Browse drives — anonymous-friendly. A tour is the whole self-contained drive now, so a
-// card opens straight into the drive (gated). The top is a framed travel-poster hero with
-// the signature car-token-on-the-trail motif; below it the "THE DRIVES" seam carries a
-// location filter ("Where to?") — a region chip, live whenever the catalog has a region.
-export default function DrivesScreen() {
-  const theme = useTheme()
-  const insets = useSafeAreaInsets()
+// Home — the two first-day modes, ranked by friction. RIDE ALONG (roam) is the PRIMARY CTA: it
+// works anonymously, no plan, the front door for a new rider. CREATE A DRIVE is the secondary,
+// higher-intent action (account-gated at the create tap). MY DRIVES — the rider's saved drives —
+// sits at the bottom as a list (or a zero-state). A framed travel-poster hero crowns it.
+export default function HomeScreen() {
   const router = useRouter()
   const { data: session } = useSession()
-  const { regions, setRegions, selectedRegion, setSelectedRegion } = useDrivesFilter()
-  const [tours, setTours] = useState<TourList['tours']>([])
+  const [drives, setDrives] = useState<DriveSummary[]>([])
   const [loading, setLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  // True when the catalog fetch failed but saved downloads carried us (dead-zone fallback).
+  // True when the /drives fetch failed but saved downloads carried us (dead-zone fallback).
   const [offline, setOffline] = useState(false)
 
   // Navigation in-flight guard: expo-router does NOT de-dupe identical pushes, so a fast
-  // double-tap on a card would stack two identical /tours/[id] screens. The flag is set on
-  // the first push and cleared when the home screen regains focus (the user backed out, or
-  // the push never landed) — see the reset in the focus effect below.
+  // double-tap would stack two identical screens. Set on the first push, cleared on refocus.
   const navigatingRef = useRef(false)
   const navigateOnce = useCallback((go: () => void) => {
     if (navigatingRef.current) return
@@ -40,34 +30,30 @@ export default function DrivesScreen() {
     go()
   }, [])
 
-  // The signature car token, parked at the trailhead (~0.12 — clearly ON the road, not
-  // flush at the gutter, the rig "ready to roll"). STATIC: created once and never
-  // animated, so it satisfies both the one-thing-animating and the one-glowing-amber
-  // rules. The home has no NOW card, so this halo is the screen's sole amber glow.
+  // The signature car token, parked at the trailhead (~0.12). STATIC: created once and never
+  // animated. The home has no NOW card, so this halo is the screen's sole amber glow.
   const parkedAnim = useRef(new Animated.Value(0.12)).current
 
   const load = useCallback(async () => {
+    setError(null)
+    // Anonymous riders can't own drives (creating one needs a free account), so skip the gated
+    // call and show whatever's saved on disk (normally nothing → the zero-state invite to create).
+    if (!session) {
+      setDrives(listDownloadedDrives())
+      setOffline(false)
+      setLoading(false)
+      return
+    }
     try {
-      setError(null)
-      const r = await listTours()
-      // A reachable-but-EMPTY 200 catalog must still surface the rider's fully-downloaded
-      // drives (e.g. a freshly-wiped server, or a region with nothing live yet) — union the
-      // saved drives in, deduped by id, so disk content never reads as "no drives" just
-      // because the network returned an empty list.
-      if (r.tours.length === 0) {
-        const saved = listDownloadedTours()
-        setTours(saved)
-        setOffline(false)
-      } else {
-        setTours(r.tours)
-        setOffline(false)
-      }
+      const r = await listDrives()
+      setDrives(r.drives)
+      setOffline(false)
     } catch (e) {
-      // Offline-first: in a dead zone the catalog fetch fails — fall back to the drives the
-      // rider has saved so they stay browsable (and reachable) rather than a blank error wall.
-      const saved = listDownloadedTours()
+      // Offline-first: in a dead zone the list fetch fails — fall back to the drives saved on disk
+      // so they stay reachable rather than a blank error wall.
+      const saved = listDownloadedDrives()
       if (saved.length > 0) {
-        setTours(saved)
+        setDrives(saved)
         setOffline(true)
       } else {
         setError(errorMessage(e, voice.error.generic))
@@ -75,70 +61,24 @@ export default function DrivesScreen() {
     } finally {
       setLoading(false)
     }
-  }, [])
-
-  const refresh = useCallback(async () => {
-    setRefreshing(true)
-    await load()
-    setRefreshing(false)
-  }, [load])
+  }, [session])
 
   useFocusEffect(
     useCallback(() => {
-      // Regaining focus means any in-flight navigation settled (or the rider backed out) —
-      // clear the guard so the next tap can push again.
-      navigatingRef.current = false
+      navigatingRef.current = false // any in-flight nav settled (or the rider backed out)
       load()
     }, [load]),
   )
 
-  // Publish the regions present in the catalog into the filter context (the "Where to?"
-  // picker reads them), and drop a selected region that's no longer present (e.g. after a
-  // refresh removed it) so the list can't get stuck filtered to nothing.
-  useEffect(() => {
-    const opts = deriveRegions(tours)
-    setRegions(opts)
-    setSelectedRegion((cur) => (cur && opts.some((o) => o.slug === cur) ? cur : null))
-  }, [tours, setRegions, setSelectedRegion])
-
-  // The drives shown, narrowed to the picked region (null = all).
-  const visibleTours = useMemo(
-    () => filterByRegion(tours, selectedRegion),
-    [tours, selectedRegion],
-  )
-  const selectedRegionName = regions.find((o) => o.slug === selectedRegion)?.name ?? null
-
-  // The settings gear (our themed circular chip), shared by headerRight (Android +
-  // iOS<26) and the iOS-26 *Items API below — the latter strips the Liquid Glass capsule
-  // via hidesSharedBackground. See app/_layout.tsx for the full rationale.
   const settingsButton = (
-    <HeaderIconButton
-      name="settings"
-      accessibilityLabel="Settings"
-      onPress={() => router.push('/settings')}
-    />
+    <HeaderIconButton name="settings" accessibilityLabel="Settings" onPress={() => router.push('/settings')} />
   )
-
-  // Sign-in is an OPTIONAL account affordance, NOT on the conversion path (the freemium
-  // wall is the playback AccountGate, not the front door). So it rides quietly in the
-  // header-right cluster, left of the gear — never a mid-body button competing with the
-  // hero or the drives. Once signed in it disappears entirely; identity + Sign out live
-  // in Settings behind the gear, so an anonymous newcomer sees ZERO account chrome below
-  // the chrome line.
   const signInButton = (
-    <Button
-      variant="ghost"
-      title="Sign in"
-      fullWidth={false}
-      onPress={() => router.push('/sign-in')}
-    />
+    <Button variant="ghost" title="Sign in" fullWidth={false} onPress={() => router.push('/sign-in')} />
   )
 
-  // The travel-poster hero, a FRAMELESS MASTHEAD over the two CO-EQUAL mode sections below
-  // (Ride along / The drives — founder 2026-06-11: roam promoted from a guest card to a peer):
-  // a faint WPA sunburst watermark behind the enamel kicker → big Alfa-Slab headline (the
-  // persona's line) → the signature trail with the parked rig (the one amber glow) → the
-  // quiet "what is this" tagline (now naming BOTH modes).
+  // The travel-poster hero — a frameless masthead: a faint WPA sunburst behind the enamel kicker →
+  // big Alfa-Slab headline → the signature trail with the parked rig (the one amber glow) → tagline.
   const hero = (
     <View style={styles.hero}>
       <View style={styles.heroSunburst} pointerEvents="none">
@@ -147,17 +87,7 @@ export default function DrivesScreen() {
       <Text variant="label" color="accentWarm">
         {voice.home.kicker}
       </Text>
-      {/* Keep the Alfa-Slab display face but auto-shrink to a single line — the headline
-          is a fixed string, so adjustsFontSizeToFit fits it on every width (it wrapped to
-          two lines at the full 30pt) without hardcoding a size that re-wraps on narrow phones. */}
-      <Text
-        variant="display"
-        color="ink"
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        minimumFontScale={0.5}
-        style={styles.heroHeadline}
-      >
+      <Text variant="display" color="ink" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5} style={styles.heroHeadline}>
         {voice.greeting}
       </Text>
       <View style={styles.heroTrail}>
@@ -169,69 +99,27 @@ export default function DrivesScreen() {
     </View>
   )
 
-  // The hero + the dashed seam that introduces the list (and carries the location filter),
-  // used as the FlatList header so it scrolls away as you browse. (Loading/error render the
-  // hero alone — without the seam — so the seam never dangles above a spinner.)
-  const listHeader = (
-    <>
-      {hero}
-      {/* RIDE ALONG — a CO-EQUAL mode SECTION, peer to THE DRIVES (never a tab). De-framed
-          from its old card to a flat section that MATCHES the drives header below, so the home
-          reads as "two modes" rather than a tours list with a roam card wedged in. NO glow —
-          the hero's parked rig owns the home screen's one amber glow. */}
-      <View style={styles.section}>
-        <Divider dashed />
-        <View style={styles.sectionHead}>
-          <Text variant="label" color="accentWarm" style={styles.flex}>
-            {voice.roam.entryKicker}
-          </Text>
-          <Badge tone="teal" label={voice.roam.entryAlpha} />
-        </View>
-        <Text variant="body" color="inkDim" style={styles.sectionBlurb}>
-          {voice.roam.entryBlurb}
+  // RIDE ALONG — the PRIMARY CTA (amber). Lowest friction: anonymous, no plan. CREATE A DRIVE —
+  // the secondary action just under it. Each carries a one-line blurb.
+  const modes = (
+    <View style={styles.modes}>
+      <View style={styles.modeBlock}>
+        <Button icon="car" title={voice.roam.start} onPress={() => navigateOnce(() => router.push('/roam'))} fullWidth />
+        <Text variant="dim" color="inkFaint" align="center">
+          Pull over for stories as you go — no plan needed.
         </Text>
-        <Button
-          icon="car"
-          title={voice.roam.start}
-          onPress={() => navigateOnce(() => router.push('/roam'))}
-          glow={false}
-          fullWidth
-        />
       </View>
-      {/* THE DRIVES — the peer section; the tours list renders below as this section's content.
-          Same header treatment as RIDE ALONG (matching dashed seam + accentWarm kicker) so the
-          two sit at equal altitude. */}
-      <View style={styles.section}>
-        <Divider dashed />
-        <View style={styles.sectionHead}>
-          <Text variant="label" color="accentWarm" style={styles.flex}>
-            {voice.home.section}
-          </Text>
-          {/* Show the region filter whenever there's a region to pick. (With one region
-              today, picking it is a no-op — but the chip + picker are live.) */}
-          {regions.length > 0 ? (
-            <FilterChip
-              label={selectedRegionName ?? voice.home.where.all}
-              active={selectedRegion !== null}
-              onPress={() => router.push('/regions')}
-              accessibilityLabel={`Filter drives by region: ${selectedRegionName ?? voice.home.where.all}`}
-            />
-          ) : null}
-        </View>
-        {offline ? (
-          <Text variant="dim" color="inkFaint" style={styles.offlineNote}>
-            {voice.offline.home}
-          </Text>
-        ) : null}
+      <View style={styles.modeBlock}>
+        <Button variant="secondary" icon="map" title="Create a Drive" glow={false} onPress={() => navigateOnce(() => router.push('/create'))} fullWidth />
+        <Text variant="dim" color="inkFaint" align="center">
+          Pick a start and end; the skipper lines up the stories.
+        </Text>
       </View>
-    </>
+    </View>
   )
 
-  // The FlatList scrolls, so it owns the bottom safe-area inset as content paddingBottom (drop
-  // 'bottom' from Screen's frame edges): the last card scrolls clear of the home indicator
-  // instead of clipping at an opaque inset band — same rationale as Screen's scroll path.
   return (
-    <Screen edges={[]}>
+    <Screen scroll padded edges={['bottom']} contentContainerStyle={styles.body}>
       <Stack.Screen
         options={{
           headerTitle: () => (
@@ -239,192 +127,108 @@ export default function DrivesScreen() {
               SKIPPER
             </Text>
           ),
-          // The wordmark sits DEAD-CENTER, so the two affordances balance across it: "Sign in"
-          // rides headerLeft, the gear headerRight (gear-only once signed in). Without this the
-          // one-sided [Sign in + gear] cluster shoved SKIPPER off to the left.
-          // headerTitleAlign keeps it centered on Android too (iOS centers by default).
           headerTitleAlign: 'center',
-          // headerLeft / headerRight cover Android + iOS<26; the *Items API below overrides
-          // them on iOS 26 to strip the Liquid Glass capsule. (Home is root — no back button
-          // contends for headerLeft.)
           headerLeft: () => (session ? undefined : signInButton),
           headerRight: () => settingsButton,
-          // iOS 26: every nav-bar button MUST carry hidesSharedBackground:true or its bright
-          // Liquid Glass capsule becomes a second glowing element on the dusk bar (it would
-          // break the one-amber-glow budget). Mirrors the back/gear handling in _layout.tsx.
           unstable_headerLeftItems: () =>
-            session
-              ? []
-              : [{ type: 'custom', hidesSharedBackground: true, element: signInButton }],
+            session ? [] : [{ type: 'custom', hidesSharedBackground: true, element: signInButton }],
           unstable_headerRightItems: () => [
             { type: 'custom', hidesSharedBackground: true, element: settingsButton },
           ],
         }}
       />
 
-      {loading ? (
-        // Mirror the real list: the static chrome (hero + both mode sections) renders for
-        // real — roam stays tappable while drives load — and only the data-dependent cards
-        // are skeletoned, so the screen reveals in place instead of snapping from a spinner.
-        <View style={styles.flex}>
-          {listHeader}
-          <SkeletonGroup accessibilityLabel={voice.loading.drives} style={styles.skeletonList}>
-            <DriveCardSkeleton />
+      {hero}
+      {modes}
+
+      {/* MY DRIVES — the rider's saved drives at the bottom: a list, or a zero-state invite. */}
+      <View style={styles.section}>
+        <Divider dashed />
+        <View style={styles.sectionHead}>
+          <Text variant="label" color="accentWarm" style={styles.flex}>
+            MY DRIVES
+          </Text>
+        </View>
+        {offline ? (
+          <Text variant="dim" color="inkFaint" style={styles.offlineNote}>
+            {voice.offline.home}
+          </Text>
+        ) : null}
+
+        {loading ? (
+          <SkeletonGroup accessibilityLabel={voice.loading.drives} style={styles.list}>
             <DriveCardSkeleton />
             <DriveCardSkeleton />
           </SkeletonGroup>
-        </View>
-      ) : error ? (
-        <>
-          {hero}
-          <View style={styles.loading}>
+        ) : error ? (
+          <View style={styles.zeroState}>
             <Text variant="body" color="danger" align="center">
               {error}
             </Text>
-            <Button variant="secondary" title={voice.error.retry} fullWidth={false} onPress={load} />
+            <Button variant="ghost" title={voice.error.retry} fullWidth={false} onPress={load} />
           </View>
-        </>
-      ) : (
-        // The scrolling drives list owns the soft top/bottom edge fades — content dissolves
-        // under the header and at the bottom edge, like every Screen-scroll surface.
-        <View style={styles.flex}>
-        <FlatList
-          data={visibleTours}
-          keyExtractor={(t) => t.id}
-          ListHeaderComponent={listHeader}
-          contentContainerStyle={[styles.list, { paddingBottom: space.gutter + insets.bottom }]}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={refresh}
-              tintColor={theme.colors.accent}
-            />
-          }
-          ListEmptyComponent={
-            // With the picker only ever listing non-empty regions, a filtered dead-end is
-            // near-impossible — but if it happens, soft-degrade in the skipper's voice with
-            // a one-tap reset rather than a blank wall.
-            selectedRegion ? (
-              <View style={styles.emptyWrap}>
-                <Text variant="body" color="inkDim" align="center">
-                  {voice.home.where.empty}
-                </Text>
-                <Button
-                  variant="ghost"
-                  title={voice.home.where.showAll}
-                  fullWidth={false}
-                  onPress={() => setSelectedRegion(null)}
-                />
-              </View>
-            ) : (
-              <Text variant="body" color="inkDim" align="center" style={styles.pad}>
-                {voice.empty.drives}
-              </Text>
-            )
-          }
-          renderItem={({ item }) => (
-            // Group the card's children into ONE button for VoiceOver with a clean spoken
-            // label — otherwise the reader walks each Text + reads the "→" / meta as loose
-            // fragments. `accessible` collapses the subtree; the label names the drive +
-            // its endpoints (+ duration when present). Debounced push (navigateOnce) so a
-            // fast double-tap can't stack two identical /tours/[id] screens.
-            <View
-              style={styles.row}
-              accessible
-              accessibilityRole="button"
-              accessibilityLabel={`${item.headline}, from ${item.startAnchorName} to ${item.endAnchorName}${
-                item.durationSeconds ? `, ${Math.round(item.durationSeconds / 60)} minutes` : ''
-              }`}
-            >
-              <Card
-                onPress={() =>
-                  navigateOnce(() =>
-                    router.push({ pathname: '/tours/[id]', params: { id: item.id } }),
-                  )
-                }
-              >
-                <Text variant="title" color="ink">
-                  {item.headline}
-                </Text>
-                <View style={styles.metaRow}>
-                  <Text variant="label" color="inkFaint" style={styles.flex} numberOfLines={1}>
-                    {item.startAnchorName} → {item.endAnchorName}
-                  </Text>
-                  {item.durationSeconds ? (
-                    <Badge tone="amber" label={`${Math.round(item.durationSeconds / 60)} MIN`} />
-                  ) : null}
+        ) : drives.length === 0 ? (
+          <Card>
+            <Text variant="body" color="inkDim" align="center">
+              No drives yet — plan one and it lands here for the road.
+            </Text>
+          </Card>
+        ) : (
+          <View style={styles.list}>
+            {drives.map((dr) => {
+              const min = dr.durationSeconds ? Math.round(dr.durationSeconds / 60) : null
+              return (
+                <View
+                  key={dr.driveId}
+                  accessible
+                  accessibilityRole="button"
+                  accessibilityLabel={`${dr.label}${dr.clipCount ? `, ${dr.clipCount} stops` : ''}${min ? `, ${min} minutes` : ''}`}
+                >
+                  <Card onPress={() => navigateOnce(() => router.push({ pathname: '/drives/[id]', params: { id: dr.driveId } }))}>
+                    <Text variant="title" color="ink" numberOfLines={2}>
+                      {cleanPlaceName(dr.label)}
+                    </Text>
+                    <View style={styles.metaRow}>
+                      <Text variant="label" color="inkFaint" style={styles.flex}>
+                        {dr.clipCount} {dr.clipCount === 1 ? 'stop' : 'stops'}
+                      </Text>
+                      {min ? <Badge tone="amber" label={`${min} MIN`} /> : null}
+                    </View>
+                  </Card>
                 </View>
-                {item.teaser ? (
-                  // The teaser is a names list ("A & B") — clean the ", California" title suffix
-                  // off each (safe here; summary is prose, so it's left untouched).
-                  <Text variant="body" color="inkDim" numberOfLines={1} style={styles.summary}>
-                    {cleanPlaceName(item.teaser)}
-                  </Text>
-                ) : item.summary ? (
-                  <Text variant="body" color="inkDim" style={styles.summary}>
-                    {item.summary}
-                  </Text>
-                ) : null}
-              </Card>
-            </View>
-          )}
-        />
-        <EdgeFade />
-        </View>
-      )}
+              )
+            })}
+          </View>
+        )}
+      </View>
     </Screen>
   )
 }
 
-// A drive card's silhouette — title bar, the start→end meta line, a teaser line. Inert; the
-// enclosing SkeletonGroup owns the pulse. Wrapped in `row` so it sits on the same gutter as a
-// real card.
+// A drive card's silhouette while the list loads. Inert; the enclosing SkeletonGroup owns the pulse.
 function DriveCardSkeleton() {
   return (
-    <View style={styles.row}>
-      <Card>
-        <Skeleton width="72%" height={20} />
-        <Skeleton width="48%" height={12} style={styles.skLine} />
-        <Skeleton width="90%" height={14} style={styles.skLine} />
-      </Card>
-    </View>
+    <Card>
+      <Skeleton width="72%" height={20} />
+      <Skeleton width="48%" height={12} style={styles.skLine} />
+    </Card>
   )
 }
 
 const styles = StyleSheet.create({
+  body: { gap: space.md },
   flex: { flex: 1 },
-  // Hero + seam each carry their own horizontal gutter so they line up whether rendered
-  // standalone (loading/error) or inside the FlatList, whose content padding is vertical.
-  hero: { paddingHorizontal: space.gutter, paddingTop: space.sm, paddingBottom: space.md, overflow: 'hidden' },
+  hero: { paddingTop: space.sm, paddingBottom: space.md, overflow: 'hidden' },
   heroSunburst: { position: 'absolute', top: -54, right: -38 },
   heroHeadline: { marginTop: space.sm },
   heroTrail: { marginTop: space.md, marginBottom: space.md },
-  // Two co-equal mode sections (Ride along / The drives) share this header treatment so they
-  // sit at equal altitude — a dashed seam, an accentWarm kicker, matching gutters.
-  section: { paddingHorizontal: space.gutter, marginTop: space.lg },
-  sectionHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.sm,
-    marginTop: space.md,
-    marginBottom: space.sm,
-  },
-  sectionBlurb: { marginBottom: space.md },
-  list: { paddingVertical: space.gutter, gap: space.md },
-  row: { paddingHorizontal: space.gutter },
-  // The skeleton drive cards under the (real) section header while the catalog loads.
-  skeletonList: { paddingTop: space.md, gap: space.md },
-  skLine: { marginTop: space.sm },
+  modes: { gap: space.lg },
+  modeBlock: { gap: space.xs }, // a CTA + its tucked caption read as one unit
+  section: { marginTop: space.lg },
+  sectionHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.md, marginBottom: space.sm },
+  offlineNote: { marginBottom: space.sm },
+  list: { gap: space.md },
   metaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space.sm, marginTop: space.xs },
-  summary: { marginTop: space.xs },
-  offlineNote: { marginTop: space.sm },
-  loading: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: space.md,
-    padding: space.xxl,
-  },
-  emptyWrap: { padding: space.gutter, gap: space.md, alignItems: 'center' },
-  pad: { padding: space.gutter },
+  zeroState: { gap: space.md, alignItems: 'center', paddingVertical: space.md },
+  skLine: { marginTop: space.sm },
 })

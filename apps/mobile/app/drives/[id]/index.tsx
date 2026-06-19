@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ActionSheetIOS, Alert, Animated, Linking, Platform, Share, StyleSheet, View } from 'react-native'
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
-import { ApiError, errorMessage, getTour, type TourDetail } from '@/lib/api'
+import { ApiError, errorMessage, getDrive, type DriveManifest } from '@/lib/api'
 import {
-  deleteTourDownload,
-  downloadTour,
+  deleteDriveDownload,
+  downloadDrive,
   InsufficientStorageError,
   isDownloadStale,
-  isTourDownloaded,
+  isDriveDownloaded,
   loadManifest,
   type DownloadProgress,
 } from '@/lib/offline'
@@ -38,31 +38,30 @@ const SHARE_BASE = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://skipper.fm'
 // Set EXPO_PUBLIC_SUPPORT_EMAIL to the real inbox; the default is a brand-domain placeholder.
 const SUPPORT_EMAIL = process.env.EXPO_PUBLIC_SUPPORT_EMAIL ?? 'feedback@skipper.fm'
 
-// Tour detail. Open to anyone (the detail fetch uses the `preview` funnel path), so every
-// tour is browsable + previewable anonymously. The wall is on the LIVE DRIVE + OFFLINE
-// download (their gated fetches still 401 anonymous → AccountGate). Offers the live GPS
-// drive (the M1 phone player, fed by a simulated fix source) + the couch preview + manifest.
-export default function TourScreen() {
+// A saved drive (the rider's own, account-gated): route + stops + the live GPS drive (the M1
+// phone player, fed by a simulated fix source) + the couch preview + offline download. Reached
+// from "My Drives" or straight after creating one (Create-a-Drive → preview → here).
+export default function DriveDetailScreen() {
   const router = useRouter()
   const { id } = useLocalSearchParams<{ id: string }>()
-  const [tour, setTour] = useState<TourDetail | null>(null)
+  const [drive, setDrive] = useState<DriveManifest | null>(null)
   const [needsAccount, setNeedsAccount] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  // True when the detail fetch failed but a saved download carried us (dead-zone fallback).
+  // True when the manifest fetch failed but a saved download carried us (dead-zone fallback).
   const [offline, setOffline] = useState(false)
   // Offline download state — Tahoe has dead zones, so a rider can save the whole drive.
   const [downloaded, setDownloaded] = useState(false)
   const [downloading, setDownloading] = useState<DownloadProgress | null>(null)
   const [downloadError, setDownloadError] = useState<string | null>(null)
   // True when this drive IS downloaded but the server has re-cut its clips since (a re-synth or
-  // regen). Detected on the online detail fetch; offers a re-pull. Never blocks offline play.
+  // regen). Detected on the online fetch; offers a re-pull. Never blocks offline play.
   const [updatable, setUpdatable] = useState(false)
   // The signature rig, parked at the trailhead (~0.06) on the placard's static trail. Created
   // once, never animated — a still motif (the Start CTA owns this screen's one amber glow).
   const parked = useRef(new Animated.Value(0.06)).current
-  // Mirror of `tour` so load() can skip the full-screen spinner on a refocus refetch. (audit #531)
-  const tourRef = useRef<TourDetail | null>(null)
+  // Mirror of `drive` so load() can skip the full-screen spinner on a refocus refetch. (audit #531)
+  const driveRef = useRef<DriveManifest | null>(null)
   // Cancels an in-flight download (Cancel tap / screen unmount). (audit #816)
   const downloadAbort = useRef<AbortController | null>(null)
 
@@ -74,16 +73,15 @@ export default function TourScreen() {
     const ctrl = new AbortController()
     downloadAbort.current = ctrl
     try {
-      await downloadTour(id, setDownloading, ctrl.signal)
+      await downloadDrive(id, setDownloading, ctrl.signal)
       setDownloaded(true)
       setUpdatable(false) // a fresh pull writes the current tokens — no longer behind the server
     } catch (e) {
       if (e instanceof Error && e.name === 'AbortError') {
         // Canceled (navigated away / Cancel tap) — silent, no error toast.
       } else if (e instanceof ApiError && e.needsAccount) {
-        // A gated (non-preview) download 401s when the account lapsed. Route to sign-in instead of
-        // swapping the whole detail for a full-screen gate — the loaded tour + open preview stay
-        // usable underneath. (audit #269)
+        // A gated download 401s when the account lapsed. Route to sign-in instead of swapping the
+        // whole detail for a full-screen gate — the loaded drive stays usable underneath. (audit #269)
         router.push('/sign-in')
       } else if (e instanceof InsufficientStorageError) {
         setDownloadError(voice.error.storage)
@@ -99,7 +97,7 @@ export default function TourScreen() {
 
   const removeDownload = useCallback(() => {
     if (!id) return
-    deleteTourDownload(id)
+    deleteDriveDownload(id)
     setDownloaded(false)
   }, [id])
 
@@ -112,29 +110,29 @@ export default function TourScreen() {
   useEffect(() => () => downloadAbort.current?.abort(), [])
 
   // Share the drive's universal link (skipper.fm/t/<id>) via the OS share sheet.
-  const shareTour = useCallback(() => {
+  const shareDrive = useCallback(() => {
     if (!id) return
     const url = `${SHARE_BASE}/t/${id}`
-    const headline = tour?.tour.headline
+    const label = drive?.label
     void Share.share({
-      message: headline ? `${headline} — a narrated road-trip drive on Skipper\n${url}` : url,
+      message: label ? `${label} — a narrated road-trip drive on Skipper\n${url}` : url,
       url, // iOS attaches the link as its own item
     })
-  }, [id, tour])
+  }, [id, drive])
 
   // Report an issue → the rider's mail composer, pre-filled with the drive's context (no
   // in-app support backend yet — alpha). The address is env-configurable (SUPPORT_EMAIL).
   const reportIssue = useCallback(() => {
     const subject = encodeURIComponent('Skipper — report an issue')
-    const body = encodeURIComponent(`\n\n—\nDrive: ${tour?.tour.headline ?? id ?? '—'}\nID: ${id ?? '—'}`)
+    const body = encodeURIComponent(`\n\n—\nDrive: ${drive?.label ?? id ?? '—'}\nID: ${id ?? '—'}`)
     void Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`).catch(() => {})
-  }, [id, tour])
+  }, [id, drive])
 
   // Secondary/utility actions live in a header ⋯ menu (native iOS action sheet) instead of
   // stacked buttons — the offline download (state-aware) + the dev-only on-device simulator.
   const openMenu = useCallback(() => {
     const actions: { label: string; onPress: () => void; destructive?: boolean }[] = []
-    actions.push({ label: 'Share this drive', onPress: shareTour })
+    actions.push({ label: 'Share this drive', onPress: shareDrive })
     if (downloading) {
       actions.push({ label: 'Cancel download', onPress: cancelDownload, destructive: true })
     } else if (downloaded) {
@@ -148,7 +146,7 @@ export default function TourScreen() {
     }
     actions.push({ label: 'Report an issue', onPress: reportIssue })
     if (__DEV__) {
-      actions.push({ label: voice.cta.simDrive, onPress: () => router.push(`/tours/${id}/play`) })
+      actions.push({ label: voice.cta.simDrive, onPress: () => router.push(`/drives/${id}/play`) })
     }
     if (actions.length === 0) return
     const destructive = actions.findIndex((a) => a.destructive)
@@ -162,7 +160,7 @@ export default function TourScreen() {
         (i) => actions[i]?.onPress(),
       )
     } else {
-      Alert.alert('Tour options', undefined, [
+      Alert.alert('Drive options', undefined, [
         ...actions.map((a) => ({
           text: a.label,
           onPress: a.onPress,
@@ -180,40 +178,34 @@ export default function TourScreen() {
     startDownload,
     removeDownload,
     cancelDownload,
-    shareTour,
+    shareDrive,
     reportIssue,
   ])
 
-  // The ⋯ always has actions now — Share + Report are always offer-able (download/remove are
-  // the state-aware extras).
-  const hasMenuActions = true
-
   const load = useCallback(async () => {
     if (!id) return
-    if (!tourRef.current) setLoading(true) // keep the loaded detail on a refocus refetch — no full-screen spinner flash (audit #531)
+    if (!driveRef.current) setLoading(true) // keep the loaded detail on a refocus refetch — no full-screen spinner flash (audit #531)
     setError(null)
     setNeedsAccount(false)
     try {
-      // Open funnel: any tour's detail is viewable anonymously so the Preview CTA is reachable.
-      const fresh = await getTour(id, { preview: true })
-      setTour(fresh)
-      tourRef.current = fresh
+      const fresh = await getDrive(id)
+      setDrive(fresh)
+      driveRef.current = fresh
       setOffline(false)
       // Online: flag a saved copy whose clips the server has re-cut since the download (free —
-      // we already hold the fresh detail). Returns false when nothing's downloaded.
+      // we already hold the fresh manifest). Returns false when nothing's downloaded.
       setUpdatable(isDownloadStale(id, fresh))
     } catch (e) {
       if (e instanceof ApiError && e.needsAccount) setNeedsAccount(true)
       else {
-        // Offline-first: if this drive is downloaded, render from the saved manifest so "Start
-        // the drive" + the preview stay reachable in a dead zone (the player is offline-first).
-        // Otherwise surface the error. (The error wall used to hide a fully-downloaded drive.)
+        // Offline-first: if this drive is downloaded, render from the saved manifest so "Start the
+        // drive" + the preview stay reachable in a dead zone (the player is offline-first).
         const m = loadManifest(id)
         if (m) {
-          setTour(m.detail)
-          tourRef.current = m.detail
+          setDrive(m.detail)
+          driveRef.current = m.detail
           setOffline(true)
-          setUpdatable(false) // dead zone: no fresh detail to compare — never nag offline
+          setUpdatable(false) // dead zone: no fresh manifest to compare — never nag offline
         } else {
           setError(errorMessage(e, voice.error.generic))
         }
@@ -226,14 +218,12 @@ export default function TourScreen() {
   useFocusEffect(
     useCallback(() => {
       load()
-      if (id) setDownloaded(isTourDownloaded(id))
+      if (id) setDownloaded(isDriveDownloaded(id))
     }, [load, id]),
   )
 
-  if (loading) return <TourDetailSkeleton />
+  if (loading) return <DriveDetailSkeleton />
   if (needsAccount)
-    // A download 401 swaps the whole detail for the gate; "Keep browsing" dismisses BACK to the
-    // tour (clears the gate) rather than the old back() that popped all the way to home.
     return (
       <AccountGate
         secondaryAction={{ label: voice.gate.keepBrowsing, onPress: () => setNeedsAccount(false) }}
@@ -242,67 +232,55 @@ export default function TourScreen() {
   if (error)
     return (
       <StateView
-        title="Tour"
+        title="Drive"
         message={error}
         tone="danger"
         action={{ label: voice.error.retry, onPress: load }}
       />
     )
-  if (!tour)
+  if (!drive)
     return (
       <StateView
-        title="Tour"
+        title="Drive"
         message={voice.empty.tour}
-        action={{ label: 'Back to tours', onPress: () => router.back() }}
+        action={{ label: 'Back', onPress: () => router.back() }}
       />
     )
 
-  const durationMin = tour.tour.durationSeconds
-    ? Math.round(tour.tour.durationSeconds / 60)
-    : null
+  const durationMin = drive.durationSeconds ? Math.round(drive.durationSeconds / 60) : null
+  // A drive's clips are place narrations (with coords) woven with placeless framing (no coords);
+  // the itinerary is the narrations.
+  const stops = drive.clips.filter((c) => c.lat != null && c.lng != null)
 
   return (
     <Screen scroll padded edges={['bottom']} contentContainerStyle={styles.body}>
       <Stack.Screen
         options={{
-          // The header is a breadcrumb (the region) — the Alfa-Slab hero in the placard owns the
-          // tour name, so the two no longer say the same thing within one glance.
-          title: tour.region.displayName,
-          ...(hasMenuActions
-            ? {
-                headerRight: () => (
-                  <HeaderIconButton name="more" accessibilityLabel="More actions" onPress={openMenu} />
-                ),
-                // iOS 26: strip the Liquid Glass capsule so the chip isn't a second glow (mirrors index).
-                unstable_headerRightItems: () => [
-                  {
-                    type: 'custom',
-                    hidesSharedBackground: true,
-                    element: (
-                      <HeaderIconButton
-                        name="more"
-                        accessibilityLabel="More actions"
-                        onPress={openMenu}
-                      />
-                    ),
-                  },
-                ],
-              }
-            : {}),
+          title: 'Drive',
+          headerRight: () => (
+            <HeaderIconButton name="more" accessibilityLabel="More actions" onPress={openMenu} />
+          ),
+          // iOS 26: strip the Liquid Glass capsule so the chip isn't a second glow (mirrors index).
+          unstable_headerRightItems: () => [
+            {
+              type: 'custom',
+              hidesSharedBackground: true,
+              element: (
+                <HeaderIconButton name="more" accessibilityLabel="More actions" onPress={openMenu} />
+              ),
+            },
+          ],
         }}
       />
 
-      {/* THE TRAILHEAD SIGN — a carved ranger placard: region kicker → headline → start→end
-          anchors → the trail with the rig parked at the start → a stamped permit line. */}
+      {/* THE TRAILHEAD SIGN — a carved ranger placard: "your drive" kicker → the A→B label →
+          the trail with the rig parked at the start → a stamped permit line. */}
       <Card framed style={styles.placard}>
         <Text variant="label" color="accentWarm">
-          {tour.region.displayName.toUpperCase()}
+          YOUR DRIVE
         </Text>
         <Text variant="display" color="ink">
-          {tour.tour.headline}
-        </Text>
-        <Text variant="label" color="inkFaint">
-          {tour.tour.startAnchor.name} → {tour.tour.endAnchor.name}
+          {drive.label}
         </Text>
         <View style={styles.trail}>
           <RouteTrack progress={parked} glow={false} />
@@ -310,20 +288,14 @@ export default function TourScreen() {
         <Divider dashed />
         <View style={styles.permitRow}>
           <Text variant="monoStrong" color="inkDim">
-            {tour.stops.length} STOPS{durationMin ? ` · ~${durationMin} MIN` : ''}
+            {stops.length} STOPS{durationMin ? ` · ~${durationMin} MIN` : ''}
           </Text>
           {/* Offline state rides here as a compact chip — the ACTION lives in the ⋯ menu. */}
           {downloading ? (
             <Text variant="label" color="inkFaint">
-              {/* Until the file count is known (total still 0), show a bare "Saving…" rather
-                  than a "0/…" fraction that flickers as the manifest resolves. */}
-              {downloading.total
-                ? `Saving ${downloading.done}/${downloading.total}`
-                : 'Saving…'}
+              {downloading.total ? `Saving ${downloading.done}/${downloading.total}` : 'Saving…'}
             </Text>
           ) : downloaded && updatable ? (
-            // A re-cut waits on the server — amber to read as "there's something new" (the ACTION
-            // is in the ⋯ menu). Offline play still uses the saved copy until the rider re-pulls.
             <View style={styles.savedChip}>
               <Icon name="update" size={14} color="accentWarm" />
               <Text variant="label" color="accentWarm">
@@ -341,25 +313,16 @@ export default function TourScreen() {
         </View>
       </Card>
 
-      {/* The crown-jewel blurb — finally shown (it was authored but never rendered anywhere). */}
-      {tour.tour.summary ? (
-        <Text variant="body" color="inkDim">
-          {tour.tour.summary}
-        </Text>
-      ) : null}
-
       {offline ? (
         <Text variant="dim" color="inkFaint">
           {voice.offline.detail}
         </Text>
       ) : null}
 
-      {/* Two real choices only — the live drive (M1 headline) + the free couch preview (the
-          funnel, and the only play path for anonymous riders). Flattened: ONE bold primary
-          with its caption tucked under it, and the preview demoted to a ghost link. The dev
+      {/* Two real choices — the live drive (M1 headline) + the free couch preview. The dev
           simulator + offline download live in the header ⋯ menu so this stays glanceable. */}
       <View style={styles.ctaGroup}>
-        <Button icon="car" title={voice.cta.drive} onPress={() => router.push(`/tours/${id}/play?mode=live`)} />
+        <Button icon="car" title={voice.cta.drive} onPress={() => router.push(`/drives/${id}/play?mode=live`)} />
         <Text variant="dim" color="inkFaint" align="center">
           {voice.drive.blurb}
         </Text>
@@ -369,7 +332,7 @@ export default function TourScreen() {
         variant="ghost"
         icon="play"
         title={voice.cta.preview}
-        onPress={() => router.push(`/tours/${id}/play?mode=preview`)}
+        onPress={() => router.push(`/drives/${id}/play?mode=preview`)}
       />
 
       {downloadError ? (
@@ -381,40 +344,33 @@ export default function TourScreen() {
       {/* THE ITINERARY — the shared StopList (same card + hairline-ruled rows as the in-drive
           player). No raw per-stop seconds — the tally lives on the sign. */}
       <StopList
-        title={`THE ROUTE · ${tour.stops.length} STOPS`}
-        items={tour.stops.map((s) => ({
+        title={`THE ROUTE · ${stops.length} STOPS`}
+        items={stops.map((s) => ({
           seq: s.seq,
-          name: cleanPlaceName(s.name),
-          icon: stopIcon(s.stopType),
+          name: cleanPlaceName(s.name ?? ''),
+          icon: stopIcon(s.form),
         }))}
       />
     </Screen>
   )
 }
 
-// The trailhead-placard silhouette shown while the detail loads — mirrors the real layout
-// (placard → blurb → CTA → route list) so the screen reveals in place. Reuses the screen's own
-// layout styles so the skeleton lines sit exactly where the real text will. The enclosing
-// SkeletonGroup owns the single pulse; the persona line rides as the VoiceOver label.
-function TourDetailSkeleton() {
+// The trailhead-placard silhouette shown while the drive loads — mirrors the real layout
+// (placard → CTA → route list) so the screen reveals in place.
+function DriveDetailSkeleton() {
   return (
     <Screen scroll padded edges={['bottom']}>
-      <Stack.Screen options={{ title: 'Tour' }} />
+      <Stack.Screen options={{ title: 'Drive' }} />
       <SkeletonGroup accessibilityLabel={voice.loading.tour} style={styles.body}>
         <Card framed style={styles.placard}>
           <Skeleton width="40%" height={12} />
           <Skeleton width="80%" height={28} />
-          <Skeleton width="60%" height={12} />
           <View style={styles.trail}>
             <Skeleton width="100%" height={6} radius="pill" />
           </View>
           <Divider dashed />
           <Skeleton width="46%" height={14} />
         </Card>
-        <View style={styles.skLines}>
-          <Skeleton width="100%" height={14} />
-          <Skeleton width="92%" height={14} />
-        </View>
         <View style={styles.ctaGroup}>
           <Skeleton width="100%" height={48} radius="md" />
           <Skeleton width="56%" height={12} style={styles.skCtaCaption} />
@@ -446,6 +402,6 @@ const styles = StyleSheet.create({
   },
   savedChip: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   ctaGroup: { gap: space.xs }, // the bold Start CTA + its tucked caption read as one unit
-  skLines: { gap: space.sm }, // a cluster of skeleton lines (a blurb paragraph / route rows)
+  skLines: { gap: space.sm }, // a cluster of skeleton lines (the route rows)
   skCtaCaption: { alignSelf: 'center' },
 })

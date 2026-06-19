@@ -214,16 +214,15 @@ export default function DriveScreen() {
   }, [d.phase, reduce, d.progress])
 
   if (d.phase === 'gate')
-    // Only the LIVE/SIM drive can gate — preview uses the open `?preview=1` funnel and never
-    // 401s, so it never reaches this phase (every tour is previewable; the wall is the drive).
+    // A drive is owned (account-gated), so loading it at all needs a free account — the gate
+    // catches the 401 here. "Just take the sample ride" swaps the gated live drive for the couch
+    // preview (still the owner's drive — the manifest is already loaded once they're signed in).
     return (
       <AccountGate
         note={voice.gate.driveNote}
-        // "Just take the sample ride" now keeps its promise: swap the gated live drive for the
-        // open couch preview (the funnel), instead of a no-op back().
         secondaryAction={{
           label: voice.gate.secondary,
-          onPress: () => router.replace(`/tours/${id}/play?mode=preview`),
+          onPress: () => router.replace(`/drives/${id}/play?mode=preview`),
         }}
       />
     )
@@ -526,17 +525,14 @@ export default function DriveScreen() {
         <Text variant="dim" color="inkDim">
           {isPreview ? (
             // Rider-facing: no "simulated drive" dev-vocab — the "preview of the full drive"
-            // line already says what this is.
-            <>
-              {d.region}
-              {d.totalPreviewMs != null && d.totalRealMs != null
-                ? ` · ${formatMmssMs(d.totalPreviewMs)} preview of the full ${formatMmssMs(d.totalRealMs)} drive`
-                : ' · preview'}
-            </>
+            // line already says what this is. (A drive carries no region name on the manifest.)
+            d.totalPreviewMs != null && d.totalRealMs != null
+              ? `${formatMmssMs(d.totalPreviewMs)} preview of the full ${formatMmssMs(d.totalRealMs)} drive`
+              : 'preview'
           ) : (
             <>
-              {d.region} · {driveMode === 'live' ? 'live drive' : 'simulated drive'} ·{' '}
-              {d.firedCount}/{d.totalStops} stops
+              {driveMode === 'live' ? 'live drive' : 'simulated drive'} · {d.firedCount}/
+              {d.totalStops} stops
             </>
           )}
         </Text>
