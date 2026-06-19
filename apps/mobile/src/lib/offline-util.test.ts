@@ -1,11 +1,10 @@
 import { describe, expect, test } from 'bun:test'
 import { INTRO_SEQ, OUTRO_SEQ } from '@skipper/drive-core'
-import type { DriveClip, SignedAudio, SignedDriveAudio } from '@skipper/shared'
+import type { DriveClip, SignedDriveAudio } from '@skipper/shared'
 import {
   extForContentType,
   urlMapFromDriveManifest,
   urlMapFromDriveSigned,
-  urlMapFromSigned,
 } from './offline-util'
 
 describe('extForContentType', () => {
@@ -24,38 +23,6 @@ describe('extForContentType', () => {
   })
 })
 
-describe('urlMapFromSigned', () => {
-  const clip = (url: string) => ({ url, contentType: 'audio/mpeg', durationMs: 1000 })
-
-  test('keys stops by seq and frames under the INTRO_SEQ/OUTRO_SEQ sentinels', () => {
-    const signed: SignedAudio = {
-      stops: [
-        { seq: 0, ...clip('https://r2/stop0') },
-        { seq: 1, ...clip('https://r2/stop1') },
-      ],
-      intro: clip('https://r2/intro'),
-      outro: clip('https://r2/outro'),
-    }
-    const m = urlMapFromSigned(signed)
-    expect(m.get(0)).toBe('https://r2/stop0')
-    expect(m.get(1)).toBe('https://r2/stop1')
-    expect(m.get(INTRO_SEQ)).toBe('https://r2/intro')
-    expect(m.get(OUTRO_SEQ)).toBe('https://r2/outro')
-    expect(m.size).toBe(4)
-  })
-
-  test('omits absent frames (a tour with no intro/outro)', () => {
-    const signed: SignedAudio = {
-      stops: [{ seq: 0, ...clip('https://r2/stop0') }],
-      intro: null,
-      outro: null,
-    }
-    const m = urlMapFromSigned(signed)
-    expect(m.has(INTRO_SEQ)).toBe(false)
-    expect(m.has(OUTRO_SEQ)).toBe(false)
-    expect(m.size).toBe(1)
-  })
-})
 
 describe('urlMapFromDriveManifest', () => {
   const driveClip = (seq: number, form: DriveClip['form'], url: string | null): DriveClip => ({

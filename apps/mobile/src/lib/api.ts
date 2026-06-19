@@ -11,11 +11,8 @@ import {
   driveProposal,
   regionList,
   roamManifest,
-  signedAudio,
   signedDriveAudio,
   sourcesResponse,
-  tourDetail,
-  tourList,
   versionResponse,
 } from '@skipper/shared'
 import type {
@@ -28,10 +25,7 @@ import type {
   DriveSummary,
   Region,
   RoamManifest,
-  SignedAudio,
   SignedDriveAudio,
-  TourDetail,
-  TourList,
   VersionPolicy,
 } from '@skipper/shared'
 import { API_URL, authClient } from './auth'
@@ -145,36 +139,6 @@ function parseDto<T>(schema: { parse: (data: unknown) => T }, data: unknown): T 
   }
 }
 
-/** The catalog — one card per ready drive (no polyline). */
-export const listTours = async (): Promise<TourList> =>
-  parseDto(tourList, await fetchJson('/tours'))
-
-// `preview: true` adds `?preview=1` — the OPEN funnel path (any ready tour, no account).
-// Omit it for the live drive + offline download, which stay walled behind a free account.
-const previewQuery = (opts?: { preview?: boolean }) => (opts?.preview ? '?preview=1' : '')
-
-export const getTour = async (tourId: string, opts?: { preview?: boolean }): Promise<TourDetail> =>
-  parseDto(
-    tourDetail,
-    // Preview is the OPEN funnel — don't link a signed-in identity to it; send it anonymously.
-    // encodeURIComponent the id — it can arrive from an attacker-craftable skipper:// / universal link. (audit #879)
-    await fetchJson(`/tours/${encodeURIComponent(tourId)}${previewQuery(opts)}`, undefined, {
-      anonymous: opts?.preview,
-    }),
-  )
-
-export const signTourAudio = async (
-  tourId: string,
-  opts?: { preview?: boolean },
-): Promise<SignedAudio> =>
-  parseDto(
-    signedAudio,
-    // Preview-sign rides the open funnel too (anonymous); the walled drive/offline sign keeps the cookie.
-    await fetchJson(`/tours/${encodeURIComponent(tourId)}/assets/sign${previewQuery(opts)}`, { method: 'POST' }, {
-      anonymous: opts?.preview,
-    }),
-  )
-
 // Coarsen a coordinate to 3 decimals (~110 m) before it goes on the wire. The manifest is a
 // ~50 km region pull, so 110 m precision is irrelevant to selection — yet sending exact lat/lng as
 // GET query params would persist the rider's precise location in server/proxy access logs. The
@@ -253,9 +217,6 @@ export type {
   DriveSummary,
   Region,
   RoamManifest,
-  SignedAudio,
   SignedDriveAudio,
-  TourDetail,
-  TourList,
   VersionPolicy,
 }

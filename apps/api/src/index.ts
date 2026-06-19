@@ -4,38 +4,31 @@
 //   GET  /sources                    -> data-source/license catalog (anonymous; env-free)
 //   GET  /version                    -> per-platform app-version policy (anonymous; env-free)
 //   *    /api/auth/*                  -> Better Auth (sign-up/in/out, session, OAuth)
-//   GET  /tours                      -> list ready tours, one card per drive (anonymous OK)
-//   GET  /tours/:tourId              -> a ready drive: route + region + host + intro/outro + stops
-//   POST /tours/:tourId/assets/sign  -> presigned R2 URLs for the drive's audio (stops + frames)
-//   POST /drives/propose             -> resolve free-text A→B + preview route (free account; no credit)
+//   GET  /regions                    -> pickable regions for the Create-a-Drive picker (anonymous)
+//   POST /drives/propose             -> resolve a free-text prompt + preview route (free account; no credit)
 //   POST /drives                     -> generate + persist a user-owned drive (free account; counts a credit)
 //   GET  /drives                     -> the caller's saved drives (one card each)
 //   GET  /drives/:id                 -> replay a saved drive (frozen structure + live narration content)
 //   POST /drives/:id/assets/sign     -> re-presigned clip URLs for offline refresh
-//   GET  /roam                       -> free-roam pins near a point + presigned clips (ALPHA: open)
-//   GET  /t/:tourId                  -> shareable tour link: in-app universal link + OG web fallback
+//   GET  /roam                       -> free-roam pins near a point + presigned clips
+//   GET  /t/:id                      -> shareable link → in-app deep link + generic OG web fallback
 //
-// A tour is the whole self-contained drive now (corridors merged in; zero-reuse:
-// narration is tour-owned). Freemium gating: a `?preview=1` fetch/sign is OPEN for any
-// ready tour (the couch preview is the funnel — anyone can stream any tour), while a
-// request WITHOUT the flag needs a free account — so the LIVE DRIVE
-// + OFFLINE download stay walled. Tours stay anonymous/shareable — gating is on access,
-// not ownership.
+// V2: the app runs on user-owned DRIVES (assembled from shared roam narrations) + free ROAM —
+// hand-authored tours are gone. Anonymous riders get roam only; creating/playing a drive needs a
+// free account (the /drives sub-app's requireAccount). Audio is private in R2 — presigned on
+// demand after the tier check.
 
-import { Hono, type Context } from 'hono'
-import { and, asc, between, desc, eq, inArray } from 'drizzle-orm'
+import { Hono } from 'hono'
+import { and, asc, between, eq } from 'drizzle-orm'
 import { db } from '@skipper/db'
-import { narrations, pois, regions, segments, tracks, tourFrames, tours } from '@skipper/db/schema'
-import type { StopType } from '@skipper/shared'
-import type { Tour as TourRow } from '@skipper/db/schema'
+import { narrations, pois, regions } from '@skipper/db/schema'
 import { auth } from './auth'
 import { driveRoutes } from './drives'
-import { FEATURES, meetsTier, withSession, type ApiEnv } from './entitlements'
-import { hostForRegion } from './host'
+import type { ApiEnv } from './entitlements'
 import { withRetry } from './retry'
 import { shareLandingHtml } from './share'
 import { DATA_SOURCES } from './sources'
-import { contentTypeForKey, presignGet, signClips } from './storage'
+import { contentTypeForKey, presignGet } from './storage'
 import { VERSION_POLICIES } from './version-policy'
 
 const app = new Hono<ApiEnv>()
@@ -68,38 +61,20 @@ app.get('/version', (c) => c.json({ policies: VERSION_POLICIES }))
 // as a static file at /.well-known/apple-app-site-association. The API is api.skipper.fm,
 // which is NOT an associated domain, so it does not serve the AASA — single source of truth.
 
-// Human/crawler fallback for a shared tour link — the app intercepts it on an installed
-// iPhone; everyone else (Android, desktop, iMessage/social unfurlers) lands here. Open, since
-// tours are shareable/anonymous. Names the tour so the link unfurls with Open Graph tags;
-// falls back to generic copy on a bad id, a missing/not-ready tour, or a DB hiccup — the
-// share page never 500s.
-app.get('/t/:id', async (c) => {
+// Human/crawler fallback for a shared link — the app intercepts it on an installed iPhone;
+// everyone else (Android, desktop, iMessage/social unfurlers) lands here. V2 drives are
+// user-OWNED (not anonymous-shareable like V1 tours), so this serves GENERIC Open Graph copy —
+// no DB lookup, no naming someone else's private drive. The deep link still opens the app for
+// the owner. (Cross-user drive sharing isn't a V2 feature yet.)
+app.get('/t/:id', (c) => {
   const id = c.req.param('id')
-  let title = 'Skipper'
-  let description = 'An AI-narrated, GPS-triggered road-trip audio tour.'
-  if (UUID_RE.test(id)) {
-    try {
-      const rows = await db
-        .select({
-          headline: tours.headline,
-          summary: tours.summary,
-          status: tours.status,
-          region: regions.displayName,
-        })
-        .from(tours)
-        .innerJoin(regions, eq(tours.regionId, regions.id))
-        .where(eq(tours.id, id))
-        .limit(1)
-      const t = rows[0]
-      if (t && t.status === 'ready') {
-        title = t.headline ?? title
-        description = t.summary ?? `A Skipper road-trip tour of ${t.region}.`
-      }
-    } catch (e) {
-      console.error('[api] /t/:id share-page lookup failed', e) // fall through to generic copy
-    }
-  }
-  return c.html(shareLandingHtml({ title, description, url: `https://skipper.fm/t/${id}` }))
+  return c.html(
+    shareLandingHtml({
+      title: 'Skipper',
+      description: 'An AI-narrated, GPS-triggered road-trip audio tour.',
+      url: `https://skipper.fm/t/${id}`,
+    }),
+  )
 })
 
 // The pickable regions for the Create-a-Drive region selector. Anonymous + tiny (just
@@ -122,269 +97,6 @@ app.on(['POST', 'GET'], '/api/auth/*', (c) => auth.handler(c.req.raw))
 // Create-a-Drive (V2): user-owned, on-demand A→B drives over the shared narration corpus. The
 // whole sub-app is behind a free account (anonymous = roam only) — see ./drives.
 app.route('/drives', driveRoutes)
-
-// List READY tours — one card per drive (no polyline; that comes with the tour). A tour
-// carries its own route + region now, so this replaces the old /corridors + per-corridor
-// tour list. Anonymous browsing is free; playing a tour is gated via /tours/:id.
-app.get('/tours', async (c) => {
-  const rows = await withRetry(
-    () =>
-      db
-        .select({
-          id: tours.id,
-          slug: tours.slug,
-          headline: tours.headline,
-          regionSlug: regions.slug,
-          regionName: regions.displayName,
-          startAnchorName: tours.startAnchorName,
-          endAnchorName: tours.endAnchorName,
-          summary: tours.summary,
-          distanceMeters: tours.distanceMeters,
-          durationSeconds: tours.durationSeconds,
-        })
-        .from(tours)
-        .innerJoin(regions, eq(tours.regionId, regions.id))
-        .where(eq(tours.status, 'ready'))
-        .orderBy(asc(regions.displayName), desc(tours.createdAt)),
-    { label: 'tours.list' },
-  )
-
-  // Build a glanceable place teaser per tour from its marquee anchors, so the catalog
-  // card has an identity ("Emerald Bay & Vikingsholm") without forcing a tap. We take
-  // the first couple of STORY/SCENIC stops (the real named places); breaks are skipped
-  // so a café never headlines, and no volatile data is involved (just the frozen name).
-  // A tour stop = a tour-bound segment + its canonical (variant 0) track; the stop's
-  // treatment is the track's `form` (always story|scenic|break for tour data).
-  const teaserByTour = new Map<string, string>()
-  const tourIds = rows.map((r) => r.id)
-  if (tourIds.length) {
-    const stopRows = await withRetry(
-      () =>
-        db
-          .select({ tourId: segments.tourId, stopType: tracks.form, name: pois.name })
-          .from(segments)
-          .innerJoin(tracks, and(eq(tracks.segmentId, segments.id), eq(tracks.variant, 0)))
-          .innerJoin(pois, eq(segments.poiId, pois.id))
-          .where(inArray(segments.tourId, tourIds))
-          .orderBy(asc(segments.seq)),
-      { label: 'tours.teaser' },
-    )
-    const byTour = new Map<string, { stopType: string; name: string }[]>()
-    for (const s of stopRows) {
-      // tour segments are never roam (tourId set ⇒ in the inArray filter), so tourId is non-null.
-      const arr = byTour.get(s.tourId!) ?? []
-      arr.push({ stopType: s.stopType, name: s.name })
-      byTour.set(s.tourId!, arr)
-    }
-    for (const [tid, stops] of byTour) {
-      const named = stops.filter((s) => s.stopType === 'story' || s.stopType === 'scenic')
-      const pick = (named.length ? named : stops).slice(0, 2).map((s) => s.name)
-      if (pick.length) teaserByTour.set(tid, pick.join(' & '))
-    }
-  }
-
-  return c.json({ tours: rows.map((r) => ({ ...r, teaser: teaserByTour.get(r.id) ?? null })) })
-})
-
-/**
- * Load a tour and enforce the freemium gate:
- *   - 404 if missing, 409 if not `ready`
- *   - `?preview=1` requests are OPEN for any ready tour — the couch preview is the funnel
- *     (anyone can stream any tour's clips; "the audio is the funnel"). The wall moved to the
- *     LIVE DRIVE + OFFLINE: a request WITHOUT the flag needs a free account (gated for EVERY
- *     tour now — no demo exception), so the drive/download stay walled (401 → AccountGate). A
- *     determined client could pass `preview=1` to stream — that's intended, not a leak.
- * Returns the tour, or a ready-to-return error Response.
- */
-async function loadTourGated(c: Context<ApiEnv>): Promise<{ tour: TourRow } | { res: Response }> {
-  const tourId = c.req.param('tourId')
-  if (!tourId || !UUID_RE.test(tourId)) return { res: c.json({ error: 'not_found' }, 404) }
-  const rows = await withRetry(() => db.select().from(tours).where(eq(tours.id, tourId)).limit(1), {
-    label: 'tour.load',
-  })
-  const tour = rows[0]
-  if (!tour) return { res: c.json({ error: 'not_found' }, 404) }
-  if (tour.status !== 'ready')
-    return { res: c.json({ error: 'not_ready', message: 'Tour is still generating.' }, 409) }
-  const preview = c.req.query('preview') === '1'
-  if (!preview && !meetsTier(c.get('tier'), FEATURES.playTour)) {
-    return {
-      res: c.json(
-        { error: 'account_required', message: 'Create a free account to play this tour.' },
-        401,
-      ),
-    }
-  }
-  return { tour }
-}
-
-// Fetch a single drive: route + endpoints + region + host + intro/outro + ordered stops
-// (with coordinates for the player's geofencing). Audio URLs come from the /sign endpoint.
-app.get('/tours/:tourId', withSession, async (c) => {
-  const gated = await loadTourGated(c)
-  if ('res' in gated) return gated.res
-  const { tour } = gated
-
-  // Region, stops, and frames are INDEPENDENT reads (each keyed only on the already-loaded
-  // tour, none on another's result). neon-http is one HTTP round-trip per query, so serial
-  // awaits would pay that latency three times back-to-back — fan them out and collapse to ~the
-  // slowest single query. (A reject still surfaces as a 500 via onError, same as serial.)
-  //
-  // A stop = a tour-bound `segment` (place-anchor + trigger geometry) + its canonical (variant 0)
-  // `track` (the narration); the stop's treatment is the track's `form`. Frames = `tour_frames`.
-  const [regionRows, stopRows, frames] = await Promise.all([
-    withRetry(
-      () =>
-        db
-          .select({ slug: regions.slug, displayName: regions.displayName })
-          .from(regions)
-          .where(eq(regions.id, tour.regionId))
-          .limit(1),
-      { label: 'tour.region' },
-    ),
-    withRetry(
-      () =>
-        db
-          .select({
-            seq: segments.seq,
-            form: tracks.form,
-            name: pois.name,
-            lat: pois.lat,
-            lng: pois.lng,
-            radiusM: segments.radiusM,
-            approachHeadingDeg: segments.approachHeadingDeg,
-            audioDurationMs: tracks.audioDurationMs,
-            // The offline-staleness token (Date → ISO via c.json). The narration's revision is the
-            // staleness token: a clip re-synth/regen bumps `tracks.updated_at`, so a downloaded drive
-            // can detect it's behind the server. See shared `tourStopView.revisedAt`.
-            revisedAt: tracks.updatedAt,
-          })
-          .from(segments)
-          .innerJoin(tracks, and(eq(tracks.segmentId, segments.id), eq(tracks.variant, 0)))
-          .innerJoin(pois, eq(segments.poiId, pois.id))
-          .where(eq(segments.tourId, tour.id))
-          .orderBy(asc(segments.seq)),
-      { label: 'tour.stops' },
-    ),
-    withRetry(
-      () =>
-        db
-          .select({
-            kind: tourFrames.kind,
-            audioDurationMs: tourFrames.audioDurationMs,
-            revisedAt: tourFrames.updatedAt,
-          })
-          .from(tourFrames)
-          .where(eq(tourFrames.tourId, tour.id)),
-      { label: 'tour.frames' },
-    ),
-  ])
-  // tours.regionId is a NOT NULL FK with onDelete: restrict, so the region always exists.
-  const region = regionRows[0]!
-  // Project a tour track's `form` (the 5-value enum) onto the wire's 3-value stopType — tour
-  // tracks are always story|scenic|break (the old stop_type), and seq is non-null for a tour stop.
-  const stops = stopRows.map((s) => ({
-    seq: s.seq!,
-    stopType: s.form as StopType,
-    name: s.name,
-    lat: s.lat,
-    lng: s.lng,
-    triggerRadiusM: s.radiusM ?? 120,
-    approachHeadingDeg: s.approachHeadingDeg,
-    audioDurationMs: s.audioDurationMs,
-    revisedAt: s.revisedAt,
-  }))
-  const intro = frames.find((b) => b.kind === 'intro')
-  const outro = frames.find((b) => b.kind === 'outro')
-
-  return c.json({
-    tour: {
-      id: tour.id,
-      slug: tour.slug,
-      headline: tour.headline,
-      regionId: tour.regionId,
-      status: tour.status,
-      polyline: tour.polyline,
-      distanceMeters: tour.distanceMeters,
-      durationSeconds: tour.durationSeconds,
-      summary: tour.summary,
-      startAnchor: {
-        name: tour.startAnchorName,
-        lat: tour.startAnchorLat,
-        lng: tour.startAnchorLng,
-      },
-      endAnchor: { name: tour.endAnchorName, lat: tour.endAnchorLat, lng: tour.endAnchorLng },
-    },
-    region: { slug: region.slug, displayName: region.displayName },
-    // The narrating host, resolved from the region server-side so the app renders identity
-    // rather than bundling it (host-agnostic: a new host ships without an app update).
-    host: hostForRegion(region.slug),
-    intro: intro
-      ? { kind: 'intro', audioDurationMs: intro.audioDurationMs, revisedAt: intro.revisedAt }
-      : null,
-    outro: outro
-      ? { kind: 'outro', audioDurationMs: outro.audioDurationMs, revisedAt: outro.revisedAt }
-      : null,
-    stops,
-  })
-})
-
-// Issue short-lived presigned R2 URLs for the drive's audio: every stop (story/scenic/break)
-// plus the intro/outro frames. Same gate as fetch: `?preview=1` streams any ready tour
-// (the funnel); without it, the bytes stay walled behind a free account (drive + offline).
-app.post('/tours/:tourId/assets/sign', withSession, async (c) => {
-  const gated = await loadTourGated(c)
-  if ('res' in gated) return gated.res
-  const { tour } = gated
-
-  // Independent reads → fan out (see /tours/:tourId): two neon-http round-trips become one.
-  // Stop clips live on the canonical (variant 0) `track` of each tour-bound `segment`; frame
-  // clips on `tour_frames`. Each stores its R2 object KEY in audioUrl (presigned below).
-  const [stopClips, frameClips] = await Promise.all([
-    withRetry(
-      () =>
-        db
-          .select({
-            seq: segments.seq,
-            key: tracks.audioUrl,
-            durationMs: tracks.audioDurationMs,
-          })
-          .from(segments)
-          .innerJoin(tracks, and(eq(tracks.segmentId, segments.id), eq(tracks.variant, 0)))
-          .where(eq(segments.tourId, tour.id))
-          .orderBy(asc(segments.seq)),
-      { label: 'sign.stops' },
-    ),
-    withRetry(
-      () =>
-        db
-          .select({
-            kind: tourFrames.kind,
-            key: tourFrames.audioUrl,
-            durationMs: tourFrames.audioDurationMs,
-          })
-          .from(tourFrames)
-          .where(eq(tourFrames.tourId, tour.id)),
-      { label: 'sign.frames' },
-    ),
-  ])
-
-  try {
-    return c.json(signClips(stopClips, frameClips))
-  } catch (e) {
-    // R2 not configured / presign failed — don't leak which config var is missing,
-    // but give the client a human message so the player can show real copy + a retry
-    // (not a raw "Request failed (503)").
-    console.error('[api] presign failed', e)
-    return c.json(
-      {
-        error: 'audio_unavailable',
-        message: 'Audio is warming up. Give it a moment and try again.',
-      },
-      503,
-    )
-  }
-})
 
 // Kind-aware roam trigger radius (m). Roam pins are raw POI centroids — never road-snapped
 // (no route exists to snap to) — so an areal place needs a floor that matches its body: a
