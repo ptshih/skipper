@@ -1,13 +1,13 @@
-// Re-synthesize ONE roam clip from its STORED script — for fixing a malformed audio
+// Re-synthesize ONE narration from its STORED script — for fixing a malformed audio
 // file (e.g. TTS returned duplicated audio) without changing the narration or the
 // poi's facts. Writes to the same R2 key (overwrites in place) and updates the roam
-// narration's audioDurationMs. A roam clip is the poi's 1:1 `narrations` row.
+// narration's audioDurationMs. A narration is the poi's 1:1 `narrations` row.
 //
 // SOP (docs/guides/ops-scripts-sop.md): PREVIEWS by default; writes only on --apply.
 // Blast radius: SPENDS $ (one TTS synth) + MUTATES DB (updates audioDurationMs).
 //
-//   dotenvx run -f .env.development -- bun packages/generator/src/resynth-roam-clip.ts <poiId>
-//   dotenvx run -f .env.development -- bun packages/generator/src/resynth-roam-clip.ts <poiId> --apply
+//   dotenvx run -f .env.development -- bun packages/generator/src/resynth-narration.ts <poiId>
+//   dotenvx run -f .env.development -- bun packages/generator/src/resynth-narration.ts <poiId> --apply
 
 import { eq } from 'drizzle-orm'
 import { db } from '@skipper/db'
@@ -23,11 +23,11 @@ const poiId = flags.positionals[0]
 const apply = flags.has('apply')
 
 if (!poiId) {
-  console.error('Usage: resynth-roam-clip.ts <poiId> [--apply]')
+  console.error('Usage: resynth-narration.ts <poiId> [--apply]')
   process.exit(1)
 }
 
-announce({ tool: 'resynth-roam-clip', blast: ['SPENDS $', 'MUTATES DB'], apply })
+announce({ tool: 'resynth-narration', blast: ['SPENDS $', 'MUTATES DB'], apply })
 if (apply) assertReady(['tts', 'r2'])
 
 async function main(poiId: string): Promise<void> {
@@ -46,7 +46,7 @@ async function main(poiId: string): Promise<void> {
     .where(eq(narrations.poiId, poiId))
 
   if (!row) {
-    throw new Error(`No roam clip found for poiId ${poiId}`)
+    throw new Error(`No narration found for poiId ${poiId}`)
   }
 
   const words = row.script?.split(/\s+/).length ?? 0
@@ -89,4 +89,4 @@ async function main(poiId: string): Promise<void> {
   console.log(`\nDone: replaced clip for "${row.poiName}" (${(row.audioDurationMs! / 1000).toFixed(1)}s → ${(durationMs / 1000).toFixed(1)}s).`)
 }
 
-await runJob('resynth_roam_clip', { dryRun: !apply, targetId: poiId }, () => main(poiId))
+await runJob('resynth_narration', { dryRun: !apply, targetId: poiId }, () => main(poiId))

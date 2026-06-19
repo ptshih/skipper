@@ -63,7 +63,7 @@ export class HttpError extends Error {
 // dispatchable script here, so buildJobArgs rejects them with "unknown kind". Hence a PARTIAL
 // record (only the live corpus/roam ops); the test only checks the scripts that remain.
 export const SCRIPTS: Partial<Record<JobKind, string>> = {
-  resynth_roam_clip: 'packages/generator/src/resynth-roam-clip.ts',
+  resynth_narration: 'packages/generator/src/resynth-narration.ts',
   sweep_orphans: 'packages/generator/src/sweep-orphans.ts',
   discover_pois: 'packages/generator/src/discover-pois.ts',
   enrich_pois: 'packages/generator/src/enrich-pois.ts',
@@ -91,9 +91,9 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
   const script = SCRIPTS[kind]
   if (!script) throw new HttpError(400, `unknown kind: ${String(body.kind)}`)
 
-  if (kind === 'resynth_roam_clip') {
+  if (kind === 'resynth_narration') {
     const poiId = str(body.poiId)
-    if (!poiId) throw new HttpError(400, 'resynth_roam_clip needs poiId')
+    if (!poiId) throw new HttpError(400, 'resynth_narration needs poiId')
     const apply = body.apply === true
     const args = [script, poiId]
     if (apply) args.push('--apply')

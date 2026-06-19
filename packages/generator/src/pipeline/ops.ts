@@ -1,5 +1,5 @@
 // Shared helpers for the generator's one-off OPS CLIs (sweep-orphans,
-// resynth-roam-clip, …). The contract these enforce is documented in
+// resynth-narration, …). The contract these enforce is documented in
 // `docs/guides/ops-scripts-sop.md`. The headline rule: anything that mutates the DB,
 // deletes bytes, or spends money PREVIEWS by default and acts only on `--apply`.
 

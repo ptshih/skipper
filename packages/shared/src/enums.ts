@@ -79,7 +79,7 @@ export const jobKind = z.enum([
   'generate',
   'patch_clip',
   'resynth',
-  'resynth_roam_clip',
+  'resynth_narration',
   'sweep_orphans',
   'discover_pois',
   'enrich_pois',

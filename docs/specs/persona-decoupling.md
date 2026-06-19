@@ -6,7 +6,7 @@
 > `'skipper'`). `personaForRegion` deleted and replaced by `personaFromKey` (the `PERSONAS` map is
 > now keyed by persona key, not region slug). The blast radius was wider than the original
 > generate.ts-only framing: every caller was re-pointed — tour ops (`patch-clip`, `resynth-tour`)
-> read `tours.persona_key`; roam/eval ops (`generate-narrations`, `resynth-roam-clip`, `eval/run`) use
+> read `tours.persona_key`; roam/eval ops (`generate-narrations`, `resynth-narration`, `eval/run`) use
 > `'skipper'` (single persona in M1). The CLAUDE.md hard invariant ("none of persona/voice/notch is
 > a stored `tours` column") was amended: persona is now the one stored column (a *selector*; the
 > definition still lives in `personas` + frozen on `segments.persona_id`). No persona picker UI —

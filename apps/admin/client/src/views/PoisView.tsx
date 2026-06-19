@@ -660,7 +660,7 @@ function NarrationTab({ poiId, hasNarration }: { poiId: string; hasNarration: bo
   })
 
   const resynthMut = useMutation({
-    mutationFn: () => api.createJob({ kind: 'resynth_roam_clip', poiId, apply: true, confirm: true }),
+    mutationFn: () => api.createJob({ kind: 'resynth_narration', poiId, apply: true, confirm: true }),
     onSuccess: ({ job }) => { void qc.invalidateQueries({ queryKey: ['runs'] }); navigate({ to: '/runs', hash: job.id }) },
   })
   async function handleResynth() {
