@@ -5,12 +5,12 @@
 // lead extract for ONE place by title (the SAME path discovery uses, so an unchanged article
 // hashes identically), apply the curated fact-edit overrides, and rewrite facts / facts_hash /
 // facts_fetched_at / summary. When the re-fetched facts MATERIALLY change (a new facts_hash),
-// every track that grounded on the old facts goes detectably stale (tracks.facts_hash IS
-// DISTINCT FROM pois.facts_hash) — the operator then regenerates the owning tour/roam.
+// every narration that grounded on the old facts goes detectably stale (narrations.facts_hash IS
+// DISTINCT FROM pois.facts_hash) — the operator then regenerates the owning drive/roam.
 //
 // PRESERVES a paid enrichment WELL (2026-06-16): like the sweep, a refetch keeps an existing
 // `fact_sheet` + `enriched_at` (the grounding hash is the SHEET hash, so refreshing the extract
-// alone never marks tracks stale or destroys paid work). A deliberate well rebuild — e.g. to push
+// alone never marks narrations stale or destroys paid work). A deliberate well rebuild — e.g. to push
 // a fact-edit CORRECTION into a well span — is `enrich-pois --include-ids <id> --force --apply`,
 // not a refetch; the refetch WARNS when it refreshes an enriched poi's extract so that's not missed.
 //
@@ -87,7 +87,7 @@ async function main() {
   // PRESERVE a paid fact sheet across a refetch (2026-06-16, Option A) — a single-poi re-fetch refreshes
   // the extract but LEAVES the `fact_sheet`/`enriched_at` columns untouched (the .update below never
   // sets them), so it never destroys the PAID sheet. The grounding fingerprint is the SHEET hash
-  // (storyFactsHash) when enriched, so refreshing the extract alone does NOT mark tracks stale. A
+  // (storyFactsHash) when enriched, so refreshing the extract alone does NOT mark narrations stale. A
   // deliberate sheet rebuild is `enrich-pois --include-ids <id> --force --apply`, not a refetch.
   const existingSheet = Array.isArray(poi.factSheet) ? poi.factSheet : null
   const enriched = existingSheet !== null && existingSheet.length > 0
@@ -102,7 +102,7 @@ async function main() {
 
   const oldExtract = poi.facts?.extract ?? ''
   const extractChanged = extract !== oldExtract
-  const hashChanged = newHash !== poi.factsHash // the grounding fingerprint → track staleness
+  const hashChanged = newHash !== poi.factsHash // the grounding fingerprint → narration staleness
   console.log(`  Old hash: ${poi.factsHash?.slice(0, 12) ?? '∅'}  (${oldExtract.length} extract chars)`)
   console.log(`  New hash: ${newHash?.slice(0, 12) ?? '∅'}  (${extract.length} extract chars)`)
   if (enriched) {

@@ -42,7 +42,7 @@ export interface PoiFacts {
  * (Wikidata key fact, Macrostrat geology). The enricher chooses WHICH spans to keep, NEVER what they
  * say — `text` is always verbatim from `source` (the "persona lives in DELIVERY, never FACTS"
  * invariant mapped onto storage; see docs/specs/corpus-enrichment-spec.md §2). Narration grounds on
- * the fact sheet; `tracks.attribution` is frozen from the distinct `(source, sourceId, license, url)` here.
+ * the fact sheet; `narrations.attribution` is frozen from the distinct `(source, sourceId, license, url)` here.
  * `source` is a subset of `AttributionSnapshot['source']` (the fact-bearing sources only).
  */
 export type FactSheetEntry = {
@@ -60,11 +60,11 @@ export type FactSheetEntry = {
  * Attribution snapshot frozen at narration time so credit stays correct even if
  * the source POI row is later edited (e.g. Wikipedia CC BY-SA requirements).
  *
- * Lives on the `tracks` row now (narration is tour/roam-owned; there is no shared
+ * Lives on the `narrations` row now (narration is drive/roam-owned; there is no shared
  * content cache). `source` is the ATTRIBUTION source, a SUPERSET of `poiSourceEnum`
  * (a POI's discovery source): a clip can blend a Wikipedia POI with enrichment that
  * owns no `pois` row — coordinate-keyed Macrostrat geology, or QID-keyed Wikidata
- * structured facts. `tracks.attribution` is therefore an ARRAY — one entry per
+ * structured facts. `narrations.attribution` is therefore an ARRAY — one entry per
  * source the clip drew on — so a multi-source clip credits each (Wikipedia CC BY-SA +
  * Macrostrat CC BY + Wikidata CC0, etc.). Keep this union in lockstep with the Zod
  * `attributionSource` enum in @skipper/shared.
@@ -248,8 +248,8 @@ export const personas = pgTable(
 /*  pois — a shared PLACE (facts/coords, deduped per external source)           */
 /* -------------------------------------------------------------------------- */
 
-// The ONLY cache in the model: a place's facts are SHARED by every tour/roam that visits it.
-// Narration is NOT here — it is tour/roam-owned (see segments + tracks).
+// The ONLY cache in the model: a place's facts are SHARED by every drive/roam that visits it.
+// Narration is NOT here — it is drive/roam-owned (see narrations).
 export const pois = pgTable(
   'pois',
   {
@@ -279,8 +279,8 @@ export const pois = pgTable(
     enrichedAt: timestamp('enriched_at', { withTimezone: true }),
     // FACTS freshness: facts_fetched_at = the TTL clock; facts_hash = the grounding change detector.
     //   facts_hash hashes the FACT SHEET when enriched (the narration's real input), else the whole
-    //   `facts` object. A track is fact-stale iff its facts_hash IS DISTINCT FROM this row's
-    //   facts_hash (joined via segment.poiId), for tracks whose facts_hash is set.
+    //   `facts` object. A narration is fact-stale iff its facts_hash IS DISTINCT FROM this row's
+    //   facts_hash (joined via narration.poiId), for narrations whose facts_hash is set.
     factsHash: text('facts_hash'),
     factsFetchedAt: timestamp('facts_fetched_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -294,7 +294,7 @@ export const pois = pgTable(
     uniqueIndex('pois_source_source_id_uq').on(t.source, t.sourceId),
     index('pois_kind_idx').on(t.kind),
     // Bounding-box prefilter for /roam (and any near-a-point query) — bounds the scan instead
-    // of loading every roam track globally before the haversine pass.
+    // of loading every roam narration globally before the haversine pass.
     index('pois_lat_lng_idx').on(t.lat, t.lng),
   ],
 )
@@ -308,7 +308,7 @@ export const pois = pgTable(
 // Lennart Palme; the Pope Estate's builder/decade). Each row is ONE documented correction — a
 // literal find→replace on the fetched extract — applied by the generator at fetch time (the seam
 // every fact flows through), so the corrected text reaches the narration sheet, pois.facts, and
-// facts_hash identically, and old tracks become detectably stale.
+// facts_hash identically, and old narrations become detectably stale.
 //
 // Keyed by the pois dedup identity (source, source_id), NOT poiId: overrides apply at FETCH
 // time, before generation has upserted the place, so the poi row may not exist yet.

@@ -2,7 +2,7 @@
 
 > **Status:** the JS/TS app is scaffolded and wired to the M2 backend (browse,
 > auth, gated tour fetch), and a **map-less couch preview player** (simulated
-> drive over `expo-audio`) is the `?mode=preview` branch of `app/tours/[id]/play.tsx`
+> drive over `expo-audio`) is the `?mode=preview` branch of `app/drives/[id]/play.tsx`
 > (the unified player; the standalone `app/preview/[id].tsx` was folded in). A local iOS
 > **simulator build compiles** (`xcodebuild` succeeds with `expo-audio` linked),
 > but there is **no EAS build, no device run, and no LIVE GPS-triggered phone
@@ -103,9 +103,10 @@ the bet. When you do:
 
 ## Backend endpoints consumed
 
-- `GET /tours` (anon list) · `GET /tours/:id` + `POST /tours/:id/assets/sign`
-  (open with `?preview=1` for anon, else free account) · `POST /api/auth/*` (Better Auth).
+- `GET /drives` (the caller's saved drives) · `GET /drives/:id` + `POST /drives/:id/assets/sign`
+  · `POST /drives/propose` + `POST /drives` (create) · `GET /regions` · `GET /roam` (anon) ·
+  `POST /api/auth/*` (Better Auth). Create-a-Drive is account-gated; roam is the anonymous front door.
 
-> **Browse→play flow is wired:** `GET /tours` (anon list) and `GET /tours/:id` are
-> consumed by `app/tours/[id]/*` (tour detail → gated player); the region picker is
-> `app/regions.tsx`. The remaining gap is the LIVE phone player itself (see TODO above).
+> **Browse→play flow is wired:** `GET /drives` and `GET /drives/:id` are
+> consumed by `app/drives/[id]/*` (drive detail → gated player); the region picker is
+> `app/create.tsx`. The remaining gap is the LIVE phone player itself (see TODO above).

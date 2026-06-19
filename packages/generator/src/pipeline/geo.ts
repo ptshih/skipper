@@ -6,7 +6,7 @@
 // buildDrive's pacing) and is RE-EXPORTED here, so generator call sites keep importing it from
 // './geo' unchanged. This file adds only the GENERATION-specific helpers on top: the sub-region
 // narration label (regionLabel) and polyline encoding for Places search-along-route (encodePolyline).
-// [lng, lat] axis order throughout, matching tours.polyline.
+// [lng, lat] axis order throughout, matching drives.polyline.
 
 import type { LngLat } from '@skipper/drive-core'
 

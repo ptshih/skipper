@@ -2,6 +2,8 @@
 
 **Status:** review output, 2026-06-08. Pressure-test of `docs/specs/tour-structure-spec.md` + the tour-structure handoff (doc since deleted) against current code, BEFORE building. No code was changed.
 
+> **Schema-names note (V2 2026-06-18):** the segments/tracks model was further collapsed — read `tracks`→`narrations`, `tour_frames`→`interludes`, `tours`→user-owned `drives`, and the `/tours*` routes → `/drives*`; hand-authored tours are deferred. This whole doc is a pre-V2 historical critique.
+
 **Method:** 8 reviewer lenses (invariants · schema/migration · directionality · catalog/mobile · persona-registry · intro/outro · narration-coherence · scale/staleness) fanned out over the docs cross-checked against actual code; every finding got an independent skeptic that re-read the cited evidence to confirm/refute; a synthesis pass deduped, ranked, and ran a completeness critic. 62 agents.
 
 **Counts:** 53 raised, 50 survived, 3 refuted. By severity (post-verification, re-rated): 1 blocker-rated by the ranker but **3 promoted to Blockers in synthesis**, 14 major, 18 minor, 17 nit.

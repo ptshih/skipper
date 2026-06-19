@@ -227,7 +227,7 @@ per-clip diff (download only the stale clips, merge into the existing manifest) 
 optimization — only matters once tours are large or strangers hold many offline tours.
 
 Refs: `apps/mobile/src/lib/offline.ts` (manifest + `isDownloadStale`),
-`apps/mobile/app/tours/[id]/index.tsx` (chip + ⋯ action), `packages/shared/src/schemas.ts`
+`apps/mobile/app/drives/[id]/index.tsx` (chip + ⋯ action), `packages/shared/src/schemas.ts`
 (`tourStopView`/`tourFrameView` `revisedAt`), `apps/api/src/index.ts` (detail route).
 
 ## Offline downloads: expiration / forced freshness re-check (TTL)
@@ -254,7 +254,7 @@ Places-ToS concern).
       as expired / re-pull, same pattern as the v1→v2 `revisedAt`-token migration).
 
 Refs: `apps/mobile/src/lib/offline.ts` (manifest + `isDownloadStale`),
-`apps/mobile/app/tours/[id]/index.tsx` (the chip/⋯ action this rides alongside). Pairs with the
+`apps/mobile/app/drives/[id]/index.tsx` (the chip/⋯ action this rides alongside). Pairs with the
 "Offline downloads: full re-pull only" section above (the time-based complement to its content-diff).
 
 ## Upstream-contribution drafts for the active poi_overrides (agent drafts, human submits)
@@ -317,6 +317,6 @@ over-broad trigger radius (all anti-charm or anti-doctrine).
       yet — locked-screen live audio is still unverified; see the runbook.)
 
 Refs: `apps/mobile/src/lib/useDrive.ts` (the duck flip), the drive screen
-(`apps/mobile/app/tours/[id]/play.tsx`), `docs/guides/device-verification-runbook.md` (duck +
+(`apps/mobile/app/drives/[id]/play.tsx`), `docs/guides/device-verification-runbook.md` (duck +
 lock-screen landmines). Validated-already (no action): our anonymous couch preview = Autio's
 tap-a-pin preview; the M3 notch/interests-as-setting = their interest-ordered queue.

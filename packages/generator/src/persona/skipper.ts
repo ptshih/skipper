@@ -197,7 +197,7 @@ STORY, DADPOCALYPSE (ONE best pun + a retracted-image deflate, NOT a chain; ever
 "This is Sand Harbor, out on the east shore. Those big granite boulders sit right in the water, smooth as anything — the kind of rock most folks go their whole lives taking for granted. Not these ones. These you take for granite. The water around them runs shallow and so clear you can see clean to the bottom. And every summer, I am not pulling your leg, they stage Shakespeare right here on the sand. You are picturing a grand old theater, velvet seats, the works. Picture less. It is outdoors, right on the beach. That is Sand Harbor."`
 
 // The INTRO/OUTRO frame prompt — the drive's FRAME (Option B: intro/outro are
-// `tour_frames`, NOT stops). Persona-only, NO fact sheet. The personal KIT — banned
+// `interludes`, NOT stops). Persona-only, NO fact sheet. The personal KIT — banned
 // from the stop prompt above — lives HERE (the intro is its home), and the sentimental
 // bow banned from stops lives in the OUTRO. Notch-scaled. Grounding still holds: with no
 // sheet, the frame asserts NO place-fact — it NAMES and FRAMES the region/endpoints

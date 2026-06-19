@@ -34,9 +34,9 @@ export const withSession: MiddlewareHandler<ApiEnv> = async (c, next) => {
 
 /**
  * Free-account wall: reject anonymous callers. (Requires withSession upstream.)
- * Pre-placed gate for the planned `POST /tours/:tourId/ask` route — kept intentionally
+ * Pre-placed gate for the planned `POST /drives/:id/ask` route — kept intentionally
  * UNMOUNTED until Ask ships (its first real caller). The 401 shape + message mirror the
- * live drive/offline wall in `loadTourGated` (index.ts) so the two gates stay aligned.
+ * live drive/offline wall in `loadOwnedDrive` (drives.ts) so the two gates stay aligned.
  */
 export const requireAccount: MiddlewareHandler<ApiEnv> = async (c, next) => {
   if (c.get('tier') === 'anonymous') {

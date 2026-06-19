@@ -5,8 +5,8 @@ import * as schema from './schema'
 function createDb(databaseUrl: string) {
   // HTTP (one-shot) driver — ideal for serverless request/response handlers.
   // NOTE: neon-http has no interactive transactions. For multi-statement
-  // atomicity (e.g. the M1 ready-gate that flips tours.status -> 'ready' in the
-  // same write as the final stop rows) use db.batch([...]) — it co-commits.
+  // atomicity (e.g. co-committing a parent row with its dependent rows — a poi
+  // and its 1:1 narration — in one write) use db.batch([...]) — it co-commits.
   // Switch to drizzle-orm/neon-serverless (Pool) only if you ever need real
   // interactive transactions.
   return drizzle({ client: neon(databaseUrl), schema })

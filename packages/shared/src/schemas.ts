@@ -34,7 +34,7 @@ export type Attribution = z.infer<typeof attribution>
 
 /**
  * A clip's frozen attribution: an ARRAY, one entry per source it drew on (Wikipedia +
- * Macrostrat, etc.). Stored as a jsonb array on `tracks` — there is no legacy
+ * Macrostrat, etc.). Stored as a jsonb array on `narrations` — there is no legacy
  * single-object shape to tolerate (zero-reuse, no users → clean array contract).
  */
 export const attributionList = z.array(attribution)

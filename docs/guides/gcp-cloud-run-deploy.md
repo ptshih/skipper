@@ -102,7 +102,7 @@ If `connections create` reports us-east4 isn't a supported Cloud Build region, u
 ```bash
 URL=$(gcloud run services describe skipper-api --region=us-east4 --format='value(status.url)')
 curl -s "$URL/health"   # {"ok":true}            — container up + public
-curl -s "$URL/tours"    # {"tours":[...]}        — DB reachable + secret decrypted
+curl -s "$URL/regions"  # {"regions":[...]}      — DB reachable + secret decrypted
 ```
 
 ## Post-deploy wiring

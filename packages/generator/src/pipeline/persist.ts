@@ -1,7 +1,8 @@
 // Persistence — the SHARED facts + grounding writes for the V2 generator.
 //
-// The hand-authored tour pipeline (the draft-shell load + the atomic segments/tracks/tour_frames
-// ready-gate) was removed in the V1→V2 migration; roam writes its 1:1 narration directly
+// The DEFERRED hand-authored tour pipeline (the draft-shell load + the atomic narration/interlude
+// ready-gate; its segments/tracks/tour_frames tables were dropped in migration 0009) was removed in
+// the V1→V2 migration; roam writes its 1:1 narration directly
 // (generate-narrations.ts upserts `narrations`). What survives here is the SHARED facts layer every
 // writer reads: the `pois` upsert (deduped on (source, source_id); stamps facts_hash/
 // facts_fetched_at) + the grounding fingerprint helpers (storyFactsHash / hashFacts) that key the
@@ -21,10 +22,10 @@ import type { PoiSource } from '@skipper/shared'
  * facts object is INVARIANT to key ORDER. This is load-bearing because `pois.facts` is `jsonb`:
  * Postgres does NOT preserve object key order, so the SAME logical facts serialize one way
  * in-memory (a writer's freshly-built object, stamped onto `pois.facts_hash`) and a DIFFERENT way
- * read back from the DB (what tours/roam stamp onto `tracks.facts_hash` — e.g. `{text,source,…}`
+ * read back from the DB (what drives/roam stamp onto `narrations.facts_hash` — e.g. `{text,source,…}`
  * comes back as `{url,text,…}`). Plain `JSON.stringify` would make those two hashes diverge, so a
  * read-back-hashed clip would read as perpetually stale against the staleness contract
- * (`tracks.facts_hash IS DISTINCT FROM pois.facts_hash`). Sorting keys normalizes both sides to one
+ * (`narrations.facts_hash IS DISTINCT FROM pois.facts_hash`). Sorting keys normalizes both sides to one
  * canonical form. ARRAY order is PRESERVED (significant — the well's spans are in reading order);
  * only object keys are reordered. Mirrors `JSON.stringify`'s treatment of `undefined` (object
  * entries dropped, array holes → null) so an omitted-vs-undefined key never shifts the hash.
@@ -46,7 +47,7 @@ function stableStringify(value: unknown): string {
 
 /** Order-invariant hash of a poi's facts — the change-detector for narration staleness. Null when
  *  no facts. Canonicalizes via `stableStringify` so the hash survives the `pois.facts` jsonb
- *  round-trip: a writer's in-memory `pois.facts_hash` equals a reader's read-back `tracks.facts_hash`
+ *  round-trip: a writer's in-memory `pois.facts_hash` equals a reader's read-back `narrations.facts_hash`
  *  for the same content (the staleness contract compares those two STORED columns by inequality). */
 export function hashFacts(facts: PoiFacts | null): string | null {
   if (!facts) return null
@@ -54,15 +55,15 @@ export function hashFacts(facts: PoiFacts | null): string | null {
 }
 
 /**
- * The GROUNDING fingerprint for a story poi — the hash a track's `facts_hash` is compared against for
+ * The GROUNDING fingerprint for a story poi — the hash a narration's `facts_hash` is compared against for
  * staleness. THE SWITCH (corpus-enrichment-spec §3/§8), now reading the typed `pois.fact_sheet` column:
  *   - ENRICHED (a non-empty fact sheet) → hash the SHEET ONLY. Narration grounds on it, so a
- *     re-`discover` that rewrites `extract` but keeps the SAME sheet must NOT stale tracks; the
+ *     re-`discover` that rewrites `extract` but keeps the SAME sheet must NOT stale narrations; the
  *     `enriched_at` stamp can't churn it either (it isn't in the hash). The true "did the narration
  *     input change" detector. Byte-identical to the pre-column well-hash, so existing rows stay valid.
  *   - UN-ENRICHED (no sheet) → hash the whole facts object (`hashFacts`), so existing rows + the
  *     extract-head fallback keep their current hash exactly. Both WRITERS (sweep/enrich) and READERS
- *     (tours/roam) call THIS, canonicalized (`stableStringify`), so a clip's stamped hash can never
+ *     (drives/roam) call THIS, canonicalized (`stableStringify`), so a clip's stamped hash can never
  *     diverge from `pois.facts_hash` across the in-memory ↔ jsonb-read-back boundary.
  */
 export function storyFactsHash(
@@ -76,7 +77,7 @@ export function storyFactsHash(
   return hashFacts(facts)
 }
 
-/** The distinct sourced credits in a fact sheet → the frozen `tracks.attribution` array (one entry per
+/** The distinct sourced credits in a fact sheet → the frozen `narrations.attribution` array (one entry per
  *  (source, sourceId), CC BY-SA / CC0 / CC BY preserved). `retrievedAt` is the sheet's enrich stamp. */
 export function factSheetToAttribution(sheet: FactSheetEntry[], retrievedAt: string): AttributionSnapshot[] {
   const seen = new Set<string>()
@@ -195,7 +196,7 @@ export async function upsertPoi(input: UpsertPoiInput): Promise<string> {
             factSheet: sql`coalesce(excluded.fact_sheet, ${pois.factSheet})`,
             enrichedAt: sql`coalesce(excluded.enriched_at, ${pois.enrichedAt})`,
             // When the row is ENRICHED the grounding hash is the SHEET hash — keep it so a re-sweep's
-            // (un-enriched) recomputed hash never overwrites it and stales the grounded tracks.
+            // (un-enriched) recomputed hash never overwrites it and stales the grounded narrations.
             factsHash: sql`case
               when ${pois.factSheet} is not null then ${pois.factsHash}
               else coalesce(excluded.facts_hash, ${pois.factsHash})

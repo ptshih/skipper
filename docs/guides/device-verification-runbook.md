@@ -130,13 +130,13 @@ verified — they share the build, so do them together.
   dashed rule, then a mono `N STOPS · ~M MIN` permit line. Reads comfortably in dark mode (dark-first).
   Watch-for: the rig showing an amber halo (only the Start CTA owns this screen's one glow) or the
   rig animating (it's static); the headline falling back to plain bold (Alfa Slab not loaded); the
-  dashed trail rendering solid on iOS. (`apps/mobile/app/tours/[id]/index.tsx:213-245`)
+  dashed trail rendering solid on iOS. (`apps/mobile/app/drives/[id]/index.tsx:213-245`)
 - [ ] **Headline + summary wrap, never truncate.** Do: open a tour with a long name (or bump
   Dynamic Type larger). Expect: the slab headline grows onto 2–3 lines fully visible; the `tour.summary`
   paragraph (inkDim body, Bitter) sits just below the placard and wraps in full — no `…` anywhere,
   nothing cut at the gutter. Watch-for: an ellipsis (a stray `numberOfLines`); summary missing on a
   tour that should have one (DTO/regen gap); text colliding with the screw-dots at large type.
-  (`apps/mobile/app/tours/[id]/index.tsx:217-222,248-252`)
+  (`apps/mobile/app/drives/[id]/index.tsx:217-222,248-252`)
 - [ ] **Place names are cleaned.** Do: read the `THE ROUTE · N STOPS` itinerary and the home teaser.
   Expect: no name ends in `, California` / `, Nevada` — names read as spoken ("Emerald Bay", "Tahoe
   Keys"). Watch-for: a state suffix slipping through. Note: `cleanPlaceName` strips **only** the
@@ -148,7 +148,7 @@ verified — they share the build, so do them together.
   `Saved offline` chip with a vector "downloaded" icon; the `⋯` item flips to a destructive "Remove
   offline download". Watch-for: the chip colliding with the `N STOPS · ~M MIN` text on a narrow
   device; tofu icon (must be vector, not emoji); the row not wrapping at large text.
-  (`apps/mobile/app/tours/[id]/index.tsx:227-244,300-307`)
+  (`apps/mobile/app/drives/[id]/index.tsx:227-244,300-307`)
 
 ## §3 — The gate: anonymous vs signed-in (the honest sample ride)
 
@@ -158,19 +158,19 @@ Preview is the open funnel; the wall is the **live drive + offline download** fo
   simulated drive". Expect: detail renders fully (placard + summary + itinerary) anonymously; the
   preview player opens and autostarts; header "Preview drive". **No gate, ever, on this path.**
   Watch-for: a 401 gate appearing on detail or preview (preview must never 401).
-  (`apps/mobile/app/tours/[id]/index.tsx:120-121`, `play.tsx:45-47`)
+  (`apps/mobile/app/drives/[id]/index.tsx:120-121`, `play.tsx:45-47`)
 - [ ] **Live-drive gate keeps its promise.** Do: signed out, tap the primary "Start the drive"
   (`?mode=live`); the fetch 401s → AccountGate. Read it, then tap the ghost "Just take the sample
   ride". Expect: gate titled "Grab your ticket", FREE badge, note "This is the live, on-the-road
   drive.", primary "Get my free ticket", ghost "Just take the sample ride" — and the ghost **routes
   into the open couch preview** (`?mode=preview`), no bounce back. Watch-for: the ghost being a
   no-op `back()` (the exact regression `6ee056c` fixed); gate body + note both saying "needs a free
-  ticket" (stutter). (`apps/mobile/app/tours/[id]/play.tsx:150-163`, `src/ui/AccountGate.tsx:43-47`)
+  ticket" (stutter). (`apps/mobile/app/drives/[id]/play.tsx:150-163`, `src/ui/AccountGate.tsx:43-47`)
 - [ ] **Download gate "Keep browsing" restores the tour.** Do: signed out, `⋯` → "Download for
   offline"; the 401 swaps detail for the AccountGate. Tap the ghost "Keep browsing". Expect: it
   returns to the fully-rendered tour-detail **in place** (`setNeedsAccount(false)`) — it does NOT pop
   to home. Watch-for: wrong ghost label, or it popping the stack to the drives list.
-  (`apps/mobile/app/tours/[id]/index.tsx:51-67,150-157`)
+  (`apps/mobile/app/drives/[id]/index.tsx:51-67,150-157`)
 - [ ] **Signed-in user never sees the gate.** Do: sign in (free account), tap "Start the drive" and
   separately `⋯` → "Download for offline". Expect: live drive opens (a *location* permission gate may
   appear — that's GPS, §7, not the account gate); download shows the saving→saved chip; no
@@ -187,13 +187,13 @@ Same component (`apps/mobile/src/ui/StopList.tsx`) in two modes.
   **inset**, not full-bleed; the card has no internal scrollbar — the *page* scrolls and the card
   grows to fit; no row highlighted (all "upcoming"). Watch-for: rows as separate floating cards; the
   card scrolling internally; a row looking active/checked on the static screen.
-  (`apps/mobile/app/tours/[id]/index.tsx:283`, `src/ui/StopList.tsx:105`)
+  (`apps/mobile/app/drives/[id]/index.tsx:283`, `src/ui/StopList.tsx:105`)
 - [ ] **Player = fixed shell, rows scroll inside.** Do: open the player (Preview, or dev `⋯` → "Sim
   drive"); drag up/down inside the route card between the trail (top) and the player dock (bottom).
   Expect: the card's outer rounded rect (all four corners) stays anchored and fills the gap; only the
   rows slide inside it. Watch-for: the whole card scrolling with the page; the card collapsing to
   content height and leaving a gap (flex:1 not applied); rows not scrolling at all (clipped out of
-  reach). (`apps/mobile/app/tours/[id]/play.tsx:351,499`)
+  reach). (`apps/mobile/app/drives/[id]/play.tsx:351,499`)
 - [ ] **Rows clip to the rounded corners.** Do: slowly drag so a row is half-in/half-out at the top
   and bottom edges. Expect: the partial row is cut along the card's corner radius — the cream edge
   stays a clean rounded rect, nothing spills past the corners. Watch-for: content leaking over square
@@ -216,12 +216,12 @@ Same component (`apps/mobile/src/ui/StopList.tsx`) in two modes.
   *next* transition, does auto-scroll quietly re-centre (focused row near the top). Watch-for: the
   list snapping back every ~0.5s (the pre-fix regression — stops array rebuilt each tick); a jump the
   instant you release; auto-scroll never resuming (grace timer stuck).
-  (`apps/mobile/app/tours/[id]/play.tsx:101,113,128`)
+  (`apps/mobile/app/drives/[id]/play.tsx:101,113,128`)
 - [ ] **Rows tappable only in preview.** Do: in *preview*, note the faded hint line above the list
   and tap a row; then in a *sim/live* drive, try tapping a row. Expect: preview rows jump the drive
   to that stop (brief pressed dim); drive rows are read-only — no hint line, no pressed feedback,
   nothing happens. Watch-for: a real/sim row tap jumping the clock; preview taps doing nothing.
-  (`apps/mobile/app/tours/[id]/play.tsx:346,358`, `src/ui/StopRow.tsx:64-65`)
+  (`apps/mobile/app/drives/[id]/play.tsx:346,358`, `src/ui/StopRow.tsx:64-65`)
 
 ## §5 — The drive-complete moment (reach it via the 8× sim)
 
@@ -234,35 +234,35 @@ There is **no** dedicated drive-complete component — the moment is composed in
   road" outro), the card flips to kicker "DRIVE COMPLETE", title "You've arrived", body "That's the
   end of the road, folks. Watch your step climbing out." Watch-for: the drive hanging on the last
   clip; the outro double-playing or skipping; the run stalling if the screen locks mid-sim.
-  (`apps/mobile/app/tours/[id]/play.tsx:45,404`, `src/lib/useDrive.ts:437`)
+  (`apps/mobile/app/drives/[id]/play.tsx:45,404`, `src/lib/useDrive.ts:437`)
 - [ ] **Rig pulls into the driveway.** Do: watch the dashed RouteTrack as phase flips to `done`.
   Expect: the amber car token **glides** smoothly to the far-right end over ~0.4s (a single eased
   timing) — like rolling the last few feet to a stop, not a jump; the token's halo turns **off** in
   the done state. Watch-for: the token snapping instantly (timing didn't run, or Reduce Motion is
-  on); stopping short / overshooting; jank. (`apps/mobile/app/tours/[id]/play.tsx:134`,
+  on); stopping short / overshooting; jank. (`apps/mobile/app/drives/[id]/play.tsx:134`,
   `src/ui/RouteTrack.tsx:23`)
 - [ ] **Stamp cascade down the itinerary.** Do: scroll the list to the top first, then watch at
   completion. Expect: each passed row's check (checkmark-circle, inkFaint) pops in top-to-bottom,
   staggered ~80ms apart, each with a small scale-up + rotate settle (a postmark stamp) — checkmarks
   rubber-stamped down the list, not all at once. Watch-for: all checks appearing simultaneously
   (stagger not applied); no animation; the cascade re-firing on every tick.
-  (`apps/mobile/app/tours/[id]/play.tsx:359`, `src/ui/StopRow.tsx:48`)
+  (`apps/mobile/app/drives/[id]/play.tsx:359`, `src/ui/StopRow.tsx:48`)
 - [ ] **The done card owns the single glow.** Do: compare the done card against the token and the
   transport buttons. Expect: the done card has an amber keyline + soft amber halo and is the **only**
   amber-glowing element (token halo off, Restart CTA glow-less). Watch-for: a flat/dead card (no
   glow), or a *second* glow somewhere (the two-glow regression this fixed); the halo washing out in
-  light vs dark. (`apps/mobile/app/tours/[id]/play.tsx:226,277`, `src/ui/NowCard.tsx:50`)
+  light vs dark. (`apps/mobile/app/drives/[id]/play.tsx:226,277`, `src/ui/NowCard.tsx:50`)
 - [ ] **Copy + exits.** Do: read the card; tap "Run it again, skipper" (replays); re-complete, tap
   "Back to the trailhead". Expect: a mono tally reads **`{N} STOPS` — a STATIC stamped count, NOT an
   animated odometer**; Restart replays from the top; "Back to the trailhead" calls `goBack()` with
   **no** "Pull over?" confirm (that guard fires only while `driving`). Watch-for: a tester expecting
   an odometer roll and filing the static count as a bug; the confirm alert wrongly firing at done.
-  (`apps/mobile/app/tours/[id]/play.tsx:227,269`)
+  (`apps/mobile/app/drives/[id]/play.tsx:227,269`)
 - [ ] **Reduce Motion fallback.** Do: iOS Settings → Accessibility → Motion → Reduce Motion ON; complete
   a drive again. Expect: the rig jumps straight to 100% (no glide), the stamp cascade is replaced by
   the static end state (checks simply present), card copy/glow unchanged — still looks *finished*,
   just no flourishes. Watch-for: animations still playing; or the checks NOT appearing at all (end
-  state not rendered, leaving passed rows uncheck'd). (`apps/mobile/app/tours/[id]/play.tsx:136,359`)
+  state not rendered, leaving passed rows uncheck'd). (`apps/mobile/app/drives/[id]/play.tsx:136,359`)
 
 ## §6 — Audio pause+resume (no prereq flip — it's already in code)
 
@@ -300,7 +300,7 @@ conflate them. Use a real device with a real music app; the simulator can't run 
   (focus is taken only on real audio). Watch-for: music pausing for a clip that then never plays.
 - [ ] **Same behaviour in live mode.** Do: re-confirm tour + roam in a real `?mode=live` session (the
   audio session is mode-agnostic). Watch-for: any `live`↔`sim` divergence (would be surprising —
-  report it). (`apps/mobile/app/tours/[id]/play.tsx:45`)
+  report it). (`apps/mobile/app/drives/[id]/play.tsx:45`)
 
 ## §7 — Real GPS, outdoors & in motion (Phase 4 — the bike/drive test)
 
@@ -419,9 +419,9 @@ Foreground When-In-Use only. Mode resolves to `live` via "Start the drive" (`ind
 
 ## Map notes for the tester / next agent (current code, not stale memory)
 
-- The drive/preview/sim screen is **one file**: `apps/mobile/app/tours/[id]/play.tsx`, switched by
+- The drive/preview/sim screen is **one file**: `apps/mobile/app/drives/[id]/play.tsx`, switched by
   `?mode=` (`live | preview | sim`). There is no `app/drive/[id].tsx` or `app/preview/[id].tsx`
-  (older memory names them — they don't exist). Tour detail is `apps/mobile/app/tours/[id]/index.tsx`.
+  (older memory names them — they don't exist). Tour detail is `apps/mobile/app/drives/[id]/index.tsx`.
 - No dedicated drive-complete component — composed inline in `play.tsx` + the StopList/StopRow stamp
   path. The completion tally is a **static `{N} STOPS`**, not an animated odometer. The "passport
   cascade" is the existing itinerary's checkmarks stamping in, not a separate passport screen.

@@ -7,7 +7,7 @@
 // Top → bottom: header row (warm kicker + optional badge) → big placard title (with an
 // optional mono timer beside it) → a state-dependent MIDDLE slot (a body line in
 // ready/done, the Scrubber while driving) → the transport row. Used by the live driving
-// player and the preview, both via app/tours/[id]/play.tsx.
+// player and the preview, both via app/drives/[id]/play.tsx.
 import type { ReactNode } from 'react'
 import { StyleSheet, View } from 'react-native'
 import { IN_CAR_MAX_FONT_SCALE, border, radius, space } from '../theme/tokens'

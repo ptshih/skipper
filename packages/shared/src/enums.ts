@@ -5,7 +5,7 @@ import { z } from 'zod'
  * (baked into the narration audio at generation time), NOT stored tour STATE: there is
  * no `joke_level` column and the notch is absent from every read DTO and the API. M1 is
  * `dadpocalypse`-only, so a stored notch would carry no information. When the 1-N notch
- * ships (M3) the column lands on the NARRATION (tracks) — a notch describes a telling,
+ * ships (M3) the column lands on the NARRATION (narrations) — a notch describes a telling,
  * not a route. This enum stays because the generator's narration is parameterized by it
  * (the persona prompt's whole notch ladder) and `tourRequest` carries it as the run input.
  */
@@ -27,7 +27,7 @@ export type NarrationForm = z.infer<typeof narrationForm>
 /**
  * The WIRE projection of a TOUR stop's track form: a tour track is always one of these three,
  * so `tourStopView.stopType` stays a 3-value field (the player's icon/treatment switch). This is
- * a read-DTO vocabulary, no longer backed by its own pg enum — `tracks.form` (a superset) is the
+ * a read-DTO vocabulary, no longer backed by its own pg enum — `narrations.form` (a superset) is the
  * storage truth, projected down by the API.
  */
 export const stopType = z.enum(['story', 'scenic', 'break'])
