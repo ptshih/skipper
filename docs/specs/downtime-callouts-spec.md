@@ -1,14 +1,32 @@
 # Downtime callouts — build spec / handoff
 
-> **Schema-names note (2026-06-13):** identifiers below predate the 2026-06-12 segments/tracks refactor — read `tour_stops`→`segments`+`tracks` and `tour_brackets`→`tour_frames`.
-
-**Small persona-only audio beats the skipper drops into the quiet stretches so he feels
-*present on this drive*, not like a jukebox that only fires at the curated stops.** A third
-audio content type alongside route-anchored `tour_stops` and lifecycle `tour_brackets`.
-
 > **Status: SPEC ONLY — nothing built.** This is a future-feature design, gated behind the
 > proven phone player (M1 Phase 4/5) like the rest of the charm roadmap. Decided in a design
 > session 2026-06-09; supersedes an earlier "fold callouts into scenic stops" sketch (see §2).
+
+> **Schema-names note (updated 2026-06-19 for the V2 roam-first model):** identifiers below predate
+> the V2 pivot that dropped the entire authored-tour storage (migration 0009) — `tours`,
+> `tour_stops`, `segments`, `tracks`, and `tour_brackets` are ALL gone (see `packages/db/src/schema.ts`).
+> Read every reference as its V2 equivalent. The DELIVERY concept (placeless, persona-only downtime
+> beats, duck-overlaid) survives intact onto V2 — only the storage/seams move:
+> - `tour_stops` → the 1:1 `narrations` atom (one telling per `pois` row).
+> - `tour_brackets` (intro/outro frames) → the placeless `asides` table (region/persona-keyed —
+>   the live home for intro/outro + clock-anchored beats).
+> - `tour_callouts` → a **callout is a new placeless beat**; its natural V2 home is the `asides`
+>   table (region/persona-keyed, no poi, no facts — exactly a callout's shape), OR a sibling table
+>   if the mood-tagging + per-drive selection earns its own. There is NO per-tour FK in v2 — a
+>   callout scopes to a **region/persona** (and rides whatever drive plays in that region), not to
+>   a `tours` row.
+> - `personaForRegion` → `personaFromKey('skipper')` (persona keyed by `persona_key`, resolved in
+>   code, decoupled from region).
+> - `finalizeTourReady` is GONE — readiness now derives from non-null `audio_url` on each
+>   `narrations`/`asides` row, not a batched status flip. "Optional / never gates ready" still holds:
+>   a callout simply never blocks a drive becoming playable.
+
+**Small persona-only audio beats the skipper drops into the quiet stretches so he feels
+*present on this drive*, not like a jukebox that only fires at the curated stops.** A third
+audio content type alongside route-anchored place narrations and the placeless intro/outro/clock
+`asides`.
 
 ## 0. TL;DR for the next Claude
 
@@ -17,9 +35,9 @@ audio content type alongside route-anchored `tour_stops` and lifecycle `tour_bra
   no facts, so they can't hallucinate and they sidestep the project's hardest invariant
   ("persona in DELIVERY, never FACTS") entirely. Mood/character/drive-state beats only —
   *"long quiet stretch… my favorite kind,"* *"that light right now, huh."*
-- **Own table (`tour_callouts`), own scheduler (in `@skipper/engine`).** NOT a `stopType`,
-  NOT placed by the studio pipeline. This keeps `tour_stops` strict and the geofence engine
-  homogeneous (same reasoning that put intro/outro in their own `tour_brackets` table).
+- **Own storage (the placeless `asides` table, or a sibling), own scheduler (in `@skipper/engine`).**
+  NOT a narration `form`, NOT placed by the studio pipeline. This keeps the `narrations` atom strict
+  and the geofence engine homogeneous (same reasoning that put intro/outro in the placeless `asides`).
 - **The playback path already exists.** `useDrive` is a queue + pump + single audio player, and
   the intro/outro brackets already prove that a non-route item rides that queue under a sentinel
   seq. Callouts reuse it verbatim. **The only genuinely new code is (1) a pure
@@ -34,19 +52,22 @@ audio content type alongside route-anchored `tour_stops` and lifecycle `tour_bra
 
 ## 1. The three audio content types (where callouts fit)
 
-| | `tour_stops` (story/scenic/break) | `tour_brackets` (intro/outro) | **`tour_callouts`** |
+(V2 names; the banner maps the V1 originals.)
+
+| | place `narrations` (story/scenic/break) | intro/outro `asides` | **callouts** |
 |---|---|---|---|
 | Anchor | route position (geofence) | placeless | **placeless** |
 | Trigger | `TriggerEngine` proximity | lifecycle (start / end-anchor) | **runtime scheduler (downtime)** |
 | Grounding | story=facts; scenic/break=persona | persona-only | **persona-only (no facts)** |
-| Ready-gate | mandatory (non-null audio) | mandatory (co-commit in batch) | **OPTIONAL (never gates ready)** |
+| Ready-gate | mandatory (non-null audio) | mandatory (non-null audio) | **OPTIONAL (never gates ready)** |
 | Count | many | 0–2 | a **pool** (~12–15), few fire |
 | Music | replaces (`'clip'` segment) | replaces | **ducks OVER (overlay)** |
 | Selection | the one baked clip | the one baked clip | **runtime-picked from pool by drive-state** |
 
-Callouts being **optional** is load-bearing: a tour is `ready` with zero callouts, they do NOT
-co-commit in `finalizeTourReady`, and they can be generated in a **separate pass even after a
-tour is ready**. The core pipeline is untouched; callouts are pure enhancement.
+Callouts being **optional** is load-bearing: a drive is `ready` with zero callouts (readiness
+derives from non-null `audio_url` on the selected items, not a batched status flip), and callouts
+can be generated in a **separate pass even after a drive is playable**. The core pipeline is
+untouched; callouts are pure enhancement.
 
 ## 2. Why this shape (decisions — do NOT re-derive)
 
@@ -59,10 +80,10 @@ pool — cheaper, but it can't do the thing that matters. The decisions:
   *"you've been quiet a while," "we've been crawling through this for ten minutes," "take your
   time"* — and emergent downtime is unpredictable at generation time. For a charm-first toy where
   the persona IS the product, responsiveness beats cost-efficiency (polish-over-scale, on brand).
-- **Separate `tour_callouts` table over overloading scenic stops.** Pool + duck + placeless +
-  optional + scheduler-fired is genuinely a different beast; folding it into a `tour_stop`
-  muddies what a stop means (route-anchored, grounded-or-scenic, ready-gated, homogeneous engine).
-  Keep both abstractions sharp — the `tour_brackets`/Option-B precedent.
+- **Separate placeless storage (the `asides` table or a sibling) over overloading scenic stops.**
+  Pool + duck + placeless + optional + scheduler-fired is genuinely a different beast; folding it
+  into a place `narrations` row muddies what a stop means (route-anchored, grounded-or-scenic,
+  ready-gated, homogeneous engine). Keep both abstractions sharp — the placeless-`asides` precedent.
 - **The cost is accepted with eyes open.** The pressure test (§ below) found this is the more
   complex path and that on dense corridors callouts fire *mostly on the emergent path*. That is
   the deliberate trade.
@@ -84,22 +105,27 @@ Grounded in `packages/studio/src/config.ts`:
 - **Finding 3 → Requirement B (§7.2).** Emergent downtime is now the primary path, so the
   parked-empty-car case is central, not an edge.
 
-## 3. Data model — `tour_callouts`
+## 3. Data model — a placeless callout (on `asides`, or a sibling)
+
+A callout has exactly the `asides` shape (placeless, region/persona-keyed, no poi, no facts) PLUS a
+`mood` tag. The build choice: add a `mood` (+ region-scoped pool) to `asides`, or — if mood-tagging
+and per-drive selection earn isolation — a sibling `callouts` table that mirrors `asides`. Sketch:
 
 ```
-tour_callouts(
+callout(                          -- shaped like an `asides` row + a mood tag
   id              uuid pk,
-  tour_id         uuid → tours (cascade),
+  region_id       uuid → regions (cascade, nullable = a GLOBAL callout),
+  persona_key     text,           -- resolved in code via personaFromKey('skipper')
   script          text,
-  audio_url       text,            -- tour-scoped R2 key: clips/<tourId>/callouts/<id>
+  audio_url       text,           -- region-scoped R2 key: clips/callouts/<region>/<id>
   audio_duration_ms  int,
   mood            callout_mood,    -- the applicability tag the scheduler matches on
-  reviewed        bool default false
+  variant         int default 0    -- so a beat rarely repeats (the `asides` precedent)
 )
 -- callout_mood pgEnum: generic | golden_hour | night | crawl | halt | long_gap
--- NO poi_id, NO lat/lng/trigger_radius (placeless).
+-- NO poi_id, NO lat/lng/trigger_radius (placeless); NO tour_id (v2 has no tours — region/persona scope).
 -- attribution + facts_hash OMITTED (persona-only → nothing to attribute, nothing to go stale).
--- NOT referenced by tour_stops; NOT in the finalizeTourReady batch (optional).
+-- NOT a place `narrations` row; readiness derives from non-null audio_url, never gating a drive (optional).
 ```
 
 `mood` is how a drive-state signal selects a clip at fire time:
@@ -111,29 +137,34 @@ tour_callouts(
 
 ## 4. Generation — `narrateCallouts()`
 
-A new pipeline step (alongside `narrateIntro`/`narrateOutro` in `packages/studio/src/pipeline/narrate.ts`):
-- **persona-only, no fact sheet**, notch-parameterized, from the region's `PersonaDef`
-  (the per-region persona registry — `personaForRegion`).
+A new pipeline step (alongside `narrateIntro`/`narrateOutro` in `packages/studio/src/pipeline/narrate.ts`,
+which today persist to the placeless `asides` table):
+- **persona-only, no fact sheet**, notch-parameterized, from the persona's `PersonaDef`
+  (the persona registry — `personaFromKey('skipper')`; persona is resolved in code, keyed by
+  `persona_key`, decoupled from region).
 - **quality-gated** like stops (warmer delivery, no-bow, no mini-recap) but scaled to ~1–2
   sentences (`TARGET ~12s`, shorter than a `scenic` at 20s).
 - **kit BANNED** (the persona kit's only home is the intro — same guard as stops).
 - **`mood`-tagged**, run through the existing diversity tracker so the pool isn't 12 variants of
-  one beat. Over-provision: ~**12–15** per tour so the scheduler has variety + drive-state
+  one beat. Over-provision: ~**12–15** per region/persona so the scheduler has variety + drive-state
   matches, and so cross-drive replays don't repeat for ~3 drives (§7.3).
-- TTS → tour-scoped R2 (`clips/<tourId>/callouts/<id>`), then insert `tour_callouts` rows.
-- **Separate pass:** can run after a tour is already `ready` (no batch co-commit). A regen tool
-  (extend `resynth-tour.ts`) can re-author the pool independently.
+- TTS → region-scoped R2 (`clips/callouts/<region>/<id>`), then insert the callout rows (the
+  `asides`-shaped storage of §3).
+- **Separate pass:** can run after a drive is already playable (no batch co-commit; readiness is
+  per-item non-null `audio_url`). A regen tool (extend `resynth-narration.ts`) can re-author the
+  pool independently.
 
 **Lint guard:** add a check that a callout script names *nothing factual* (mirrors the
 kit-from-stops ban). A callout that asserts a fact is a bug — that's a story stop's job.
 
 ## 5. API / DTO / offline
 
-- `@skipper/shared`: tour detail grows `callouts: CalloutDTO[]` ( `{ id, script, mood, audio }` )
-  alongside `intro`/`outro`/`stops[]`.
-- `apps/api`: `/sign` serves callout clips (tour-scoped R2 keys), same presign path as stops/brackets.
+- `@skipper/shared`: the drive detail grows `callouts: CalloutDTO[]` ( `{ id, script, mood, audio }` )
+  alongside the intro/outro `asides` + the place narrations.
+- `apps/api`: `/sign` serves callout clips (region-scoped R2 keys), same presign path as
+  narrations/asides.
 - **Offline (`apps/mobile/src/lib/offline.ts`):** add callout clips to the download manifest so a
-  downloaded tour carries its whole pool — selection is 100% on-device (Tahoe dead zones; §8).
+  downloaded drive carries its whole pool — selection is 100% on-device (Tahoe dead zones; §8).
 
 ## 6. The player — the load-bearing new code
 
@@ -306,7 +337,7 @@ If those pass in the sim, the emergent path is verified before you're ever in a 
   phone-on-mount case).
 - **Don't let a callout step on the outro** — the §6.3 lookahead must treat the end-anchor as a
   pseudo-stop.
-- **Callouts are optional** — never add them to the ready-gate; a tour with zero callouts is
+- **Callouts are optional** — never add them to the ready-gate; a drive with zero callouts is
   valid and common (dense corridors).
 
 ## 12. Phase 2 (deferred) — fact-grounded spatial callouts
@@ -314,8 +345,8 @@ If those pass in the sim, the emergent path is verified before you're ever in a 
 The *"look left, that's Cave Rock"* magic. Materially harder and out of v1 scope: it names real
 things → it's **fact-grounded**, so it needs minor-POI anchors along the route (curated or OSM) +
 the full attribution path + a **second geofence pass** (callouts become coordinate-bearing
-triggerables, breaking the "engine consumes only `tour_stops`" homogeneity). Gate it behind v1
-landing and the proven player. Do not let it leak into v1's persona-only scope.
+triggerables, breaking the "engine consumes only the route-anchored place `narrations`" homogeneity).
+Gate it behind v1 landing and the proven player. Do not let it leak into v1's persona-only scope.
 
 ## 13. Provenance
 
@@ -331,11 +362,14 @@ Designed 2026-06-09. Grounded against, and citing for re-check:
 - `packages/studio/src/config.ts` — `PACING` (standard `minGapSec 180`/`maxNarratedStops 16`),
   `TARGET_SECONDS` (`story 120`/`scenic 20`), `QUEUE_LAG_WARN_SEC 45`, `TRIGGER_RADIUS_M 120`,
   design speed `13.4 m/s ≈ 30 mph`.
-- `packages/studio/src/pipeline/narrate.ts` — `narrateIntro`/`narrateOutro`/`persistBracket`,
-  the `finalizeTourReady` `db.batch` ready-gate.
-- The per-region persona registry (`personaForRegion`, `PersonaDef`, the kit) and the
-  `tour_brackets` Option-B precedent (docs/specs/tour-structure-spec.md; the tour-structure handoff doc has since been deleted).
+- `packages/studio/src/pipeline/narrate.ts` — `narrateIntro`/`narrateOutro` (the frames persist to
+  the placeless `asides` table). Readiness now derives from non-null `audio_url` per item (the
+  V1 `finalizeTourReady` `db.batch` ready-gate is GONE).
+- The persona registry (`personaFromKey`, `PersonaDef`, the kit) and the placeless-`asides`
+  precedent for intro/outro frames (the V2 model — see [tour-data-model-zero-reuse](../decisions/tour-data-model-zero-reuse.md);
+  the V1 `tour_brackets`/`tour-structure-spec` it descends from is superseded).
 
 **Decisions locked this session:** runtime scheduler over the studio-placed "fold"; separate
-`tour_callouts` table; persona-only v1 (spatial = Phase 2); duck-overlay; stops-win-by-construction;
-the §7 tuned ruleset incl. the parked-car rule (Req B) and the sim perturbations (Req A).
+placeless callout storage (the `asides` table or a sibling); persona-only v1 (spatial = Phase 2);
+duck-overlay; stops-win-by-construction; the §7 tuned ruleset incl. the parked-car rule (Req B) and
+the sim perturbations (Req A).

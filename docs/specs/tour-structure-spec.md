@@ -2,26 +2,35 @@
 
 > **Schema-names note (2026-06-13):** the `tour_brackets` table referenced below was renamed `tour_frames` in the 2026-06-12 segments/tracks refactor — read `tour_brackets`→`tour_frames` throughout.
 
-**Status:** design, 2026-06-08. Most of this is SUPERSEDED (see the banner). The live parts (§3, §4) are
-now ✅ **BUILT**: the quality-gated prompt + intro/outro narration modes (67e9313/7860b3f), the
-`tour_brackets` table + the atomic ready-gate co-committing both brackets (d0f2ba6), and intro/outro
-bracket PLAYBACK in both players (ecc78a0). The §4a R2-path/region-pgEnum migration notes are moot — clips
-are tour-scoped (`clips/<tourId>/…`) and `regions` is a TABLE; see `docs/decisions/tour-data-model-zero-reuse.md`.
+**Status:** design, 2026-06-08; **largely SUPERSEDED by V2 (2026-06-19)** — the durable survivors are
+**§0 (frozen-rails doctrine)** and **§4 (quality-gated narration + persona kit)**, both still load-bearing
+and absorbed into CLAUDE.md + the live persona. The quality-gated prompt + intro/outro narration modes
+shipped (67e9313/7860b3f). Everything structural in §1/§2/§3/§5/§6/§7 is HISTORY — see the V2 banner.
 
-> 🔴 **SUPERSEDED ON THE DATA MODEL + STRUCTURE (2026-06-08, after this was written).** The canonical
-> model is now **`docs/decisions/tour-data-model-zero-reuse.md`** — read it, not this, for the entity model. Three
-> later decisions deleted this spec's spine:
-> 1. **Every tour is INDEPENDENT** — no `direction`/reverse/forward, no "drive family." S→N and N→S are
->    two PEER tours, related only via the proximity recommender. → §1, §2, §5's directional/family/"2-ways"
->    framing, §6 (wrong-direction), §7's both-directions heuristic, and §8 #6/#7 are all **moot**.
-> 2. **`corridors` MERGED into `tours`** — a tour is the whole self-contained drive (route + content). No
->    corridor/tour split, no "corridor → drive family" rename.
-> 3. **No variant matrix** — duration/notch/interests are NOT separate tours; **one tour = one card**
->    (`durationBucket`/`interests[]` dropped; notch is a per-stop setting; regions are a minimal TABLE,
->    not a pgEnum). → §5's "{drive + duration + notch}" cards and §4a's region-pgEnum are **moot**.
+> 🟥 **SUPERSEDED — STRUCTURE FULLY DISSOLVED IN V2 (updated 2026-06-19).** The canonical entity model is
+> **`docs/decisions/tour-data-model-zero-reuse.md`** §9 + the live [`packages/db/src/schema.ts`](../../packages/db/src/schema.ts) —
+> read those, not this, for the model. The dissolutions, latest first:
+> 1. **(V2 2026-06-18) `tour_brackets`/`tour_frames` are GONE — intro/outro + clock beats are now shared,
+>    region-owned `asides`** (the `asides` table, keyed `(region, persona, kind, variant)`, REUSED across
+>    every drive — the inverse of per-tour brackets). So **§3's entire `tour_brackets`-as-a-per-tour-table
+>    design — the Concrete-Table-Inheritance vs STI reasoning, the `finalizeTourReady` co-commit seam, the
+>    placeless-subtype modeling — is MOOT**: brackets were never a per-tour table in the shipped model, and
+>    `tours`/`tour_stops`/`corridors` are all dropped. Keep §3 only as a record of the design thinking.
+> 2. **(V2 2026-06-18) `tours` → user-owned `drives`; narration → the shared 1:1 `narrations` atom.** A
+>    drive REUSES region narrations pre-ordered along an A→B route; hand-authored tours are DEFERRED.
+> 3. **(2026-06-08) Every tour INDEPENDENT** — no `direction`/reverse/forward, no "drive family." → §1, §2,
+>    §5's directional/"2-ways" framing, §6 (wrong-direction), §7's both-directions heuristic, §8 #6/#7 moot.
+> 4. **(2026-06-08) `corridors` MERGED, then dropped** — no corridor/tour split.
+> 5. **No variant matrix** — duration/notch/interests are NOT separate tours. → §5's "{drive + duration +
+>    notch}" cards moot.
+> 6. **§4a persona model SUPERSEDED.** `region` did NOT become a `pgEnum` (regions are a minimal **TABLE**,
+>    schema.ts) and persona is NOT a 1:1 region registry resolved by a `Record<Region>` — the one host is
+>    resolved in CODE via **`personaFromKey('skipper')`** ([`packages/studio/src/persona/`](../../packages/studio/src/persona/)),
+>    baked into the audio; per-region hosts are the deferred region-skippers (M4). The §4a R2-path/region-pgEnum
+>    migration notes are moot.
 >
-> **Still LIVE in this spec:** §0 (governing principles), **§3 (the `tour_brackets` intro/outro design)**,
-> and **§4 (quality-gated narration + persona kit)** — correct + load-bearing. Treat the rest as history.
+> **Still LIVE (the durable survivors):** **§0 (governing principles — frozen rails)** and **§4 (quality-gated
+> narration + persona kit)**. Treat §1/§2/§3/§5/§6/§7 + §4a as history.
 
 Sits on top of the voice/narration work already shipped this session: Algenib ·
 `gemini-3.1-flash-tts-preview` · 32k MP3 · the **warmer** delivery prompt (see

@@ -3,8 +3,8 @@
 > **Status:** ✅ **BUILT 2026-06-15, RUN 2026-06-16** — the code shipped on a "skip the ear-test, build
 > now" founder call; a paid `enrich --apply` has since been RUN across all story-eligible POIs (315
 > welled), so the ear-test (§11) is now the remaining acceptance gate. What shipped, the resolved §9 calls, and the deviations are
-> recorded in **`docs/decisions/corpus-enrichment.md`** (read that for current truth — this spec is
-> the as-designed record). Promoted from [docs/ideas/corpus-enrichment.md](../ideas/corpus-enrichment.md).
+> recorded in [`docs/decisions/corpus-enrichment.md`](../decisions/corpus-enrichment.md) (read that for
+> current truth — this spec is the as-designed record).
 > Pairs with `docs/decisions/enrichment-scout.md` (the scout this generalizes),
 > `docs/decisions/region-corpus-discovery.md` (the corpus + ops sequence), and principle #1.
 
@@ -37,6 +37,15 @@ positional 4000-char cap: *the most narratable verbatim facts, **wherever** they
 chars."
 
 ## 3. Data model — `pois.facts` shape
+
+> **(AS-BUILT correction, 2026-06-19):** the curated sheet did NOT ship as `pois.facts.well` (the nested
+> array sketched below). It landed as a **separate typed `pois.fact_sheet` jsonb column** (`FactSheetEntry[]`,
+> `+ enriched_at`) in [`packages/db/src/schema.ts`](../../packages/db/src/schema.ts), so a free re-sweep can
+> overwrite `facts` without ever clobbering a paid enrichment (no graft-back CASE). Consequently: narration
+> grounds on `pois.fact_sheet` (else the positional `facts.extract` head); **`facts_hash` keys on the FACT
+> SHEET** when enriched (the whole `facts` object otherwise); attribution freezes from the sheet's distinct
+> `(source, sourceId, license, url)` onto `narrations.attribution` (`tracks` → `narrations` in V2). Read the
+> `well`/`pois.facts.well` shape below as the AS-DESIGNED record; the shipped column is `pois.fact_sheet`.
 
 Break-freely (storage). `pois.facts` for a story poi becomes:
 
@@ -103,9 +112,9 @@ Extend `pipeline/scout.ts` from an enrichment-bundle selector to a full **well b
 
 ## 7. Generation integration + the cap migration
 
-- **Roam** (`generate-narrations`): grounds on `pois.facts.well`. No per-clip scout. (The original win.)
-- **Tours** (`generate-tour.ts`): grounds on the corpus well + the route-level geology (§6); no per-stop
-  place-fact scouting.
+- **Roam** (`generate-narrations`): grounds on the fact sheet (`pois.fact_sheet`; see §3). No per-clip scout. (The original win.)
+- **Tours** (deferred in V2; the generation CLI is `generate-narrations.ts` — there is no `generate-tour.ts`):
+  grounds on the corpus fact sheet + the route-level geology (§6); no per-stop place-fact scouting.
 - **The 4000 raw-extract cap drops.** `extract` is now the enricher's input (a generous cap remains
   for enricher cost — §9). The **narration bound is the enricher's SELECTION** (the curated well) — NOT
   a char cap. The raw cap was needed only because narration grounded *directly* on a dumb positional

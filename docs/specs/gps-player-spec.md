@@ -1,11 +1,20 @@
 # M1 GPS Phone Player — Build Spec / Handoff
 
 > **Schema-names note (2026-06-13):** identifiers below predate later refactors — read `corridors`→`tours` (merged; `corridor.polyline`→`tour.polyline`) and `poiContentId`→dropped (`poi_content` is gone; narration lives on a `tracks` row). **(V2 2026-06-18):** the segments/tracks model was further collapsed — read `tracks`→`narrations`, `tour_frames`→`asides`, `tours`→user-owned `drives`, and the `/tours*` routes → `/drives*`; hand-authored tours are deferred.
+>
+> **(V2 API/DTO + screen drift — 2026-06-19, read before §3/§4/§9):** the data contract this spec describes is the dissolved V1 surface. Map it forward:
+> - **Endpoints:** `GET /tours/:tourId` → `GET /drives/:id`; `POST /tours/:tourId/assets/sign` → `POST /drives/:id/assets/sign` (both under `withSession` + `requireAccount`, [`apps/api/src/drives.ts`](../../apps/api/src/drives.ts)).
+> - **DTO:** the `tourStopView` stop array + inline `corridor.polyline` → a **`drives.selection` jsonb manifest** of `DriveSelectionItem`s (`narration` | `aside` entries, the `DriveSelection` type in [`packages/db/src/schema.ts`](../../packages/db/src/schema.ts)); `poiContentId` is gone (a selection item carries `poiId`/`narrationId` and resolves content live). The drive's `polyline` is the top-level `drives.polyline` column.
+> - **Screens:** `app/preview/[id].tsx` / `app/tour/[id].tsx` no longer exist — the live player screens are **`app/drives/[id]/index.tsx`** (detail) + **`app/drives/[id]/play.tsx`** (the driving player). Read every `preview/[id].tsx` reference below as the `drives/[id]/` equivalent.
+> - **Engine-function correction:** this spec calls **`generateDrive` in `@skipper/engine`** "the simulated drive" — but `generateDrive` ([`packages/engine/src/simulate.ts`](../../packages/engine/src/simulate.ts)) only produces the synthetic **GPS-fix stream** for the simulator. The DRIVE *assembler* (pick + order the reused roam narrations along an A→B route) is **`buildDrive`** ([`packages/engine/src/drive-select.ts`](../../packages/engine/src/drive-select.ts)). Where the prose below says `generateDrive` builds a drive, read `buildDrive`; `generateDrive` is only the sim fix source the simulated player replays.
 
-> **Status (2026-06-09):** mostly built — Phase 2 (GPS player on the simulated source) and Phase 3
-> (offline download) ✅ shipped; Phase 4 (real `expo-location` source) code-built + reviewed, NOT
-> device-verified. Remaining: the Phase-0 duck flip (audio session still `doNotMix`) + Phase 5 (the
-> real drive), both pending an EAS dev-build session.
+> **Status (2026-06-19):** mostly built + the **M1 on-device drive pass has since landed** (real-device
+> GPS triggering verified; see the device-verification runbook + the `first-tour-live-west-shore` baton).
+> Phase 2 (GPS player on the simulated source) and Phase 3 (offline download) ✅ shipped; Phase 4 (real
+> `expo-location` source) code-built, reviewed, and device-verified. The remaining historical TODO from
+> the 2026-06-09 status — the Phase-0 duck flip + a polished Phase 5 real drive — is folded into the live
+> V2 `drives/[id]/play.tsx` player. The phases/§3/§4/§9 below are kept as the build record; read them
+> through the V2 API/DTO/screen map in the banner above.
 
 > Self-contained handoff for the **live, on-device, GPS-triggered phone player** — the
 > M1 MVP bet. Grounded against the live repo (`packages/engine/src/{trigger,simulate,geo,preview}.ts`,
