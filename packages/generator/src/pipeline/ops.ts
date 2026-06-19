@@ -1,10 +1,8 @@
-// Shared helpers for the generator's one-off OPS CLIs (sweep-orphans, patch-clip,
-// resynth-tour, …). The contract these enforce is documented in
+// Shared helpers for the generator's one-off OPS CLIs (sweep-orphans, dedup-roam-corpus,
+// resynth-roam-clip, …). The contract these enforce is documented in
 // `docs/guides/ops-scripts-sop.md`. The headline rule: anything that mutates the DB,
 // deletes bytes, or spends money PREVIEWS by default and acts only on `--apply`.
 
-import { db } from '@skipper/db'
-import { tours } from '@skipper/db/schema'
 import { GOOGLE_TTS_READY, R2_READY } from '../config'
 
 export interface Flags {
@@ -66,16 +64,6 @@ export function parseBboxFlag(raw: string): { swLng: number; swLat: number; neLn
 export function maxCostFlag(flags: Flags): number {
   const v = Number(flags.value('max-cost'))
   return Number.isFinite(v) && v > 0 ? v : Infinity
-}
-
-/** Resolve a tour by its full id OR a unique id prefix (convenience for the short ids we log). */
-export async function resolveTourId(arg: string | undefined): Promise<string> {
-  if (!arg) throw new Error('Pass an explicit <tourId> (or a unique id prefix).')
-  const all = await db.select({ id: tours.id }).from(tours)
-  const matches = all.filter((t) => t.id === arg || t.id.startsWith(arg))
-  if (matches.length === 0) throw new Error(`No tour matches "${arg}".`)
-  if (matches.length > 1) throw new Error(`"${arg}" matches ${matches.length} tours — use the full id.`)
-  return matches[0]!.id
 }
 
 /** Assert the env an --apply run needs is present, with a clear, actionable message. */

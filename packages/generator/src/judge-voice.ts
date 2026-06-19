@@ -14,16 +14,30 @@
 // markdown report + the by-ear VOICE worksheet on top of that core.
 //
 // Usage (env via dotenvx — ANTHROPIC_API_KEY for the judge, R2_* to presign audio):
-//   # writing-only (cheap, no audio — works on a --dry-run JSON):
-//   dotenvx run -f .env.development -- bun packages/generator/src/run.ts emerald-bay-run --dry-run --json=/tmp/tour.json
-//   dotenvx run -f .env.development -- bun packages/generator/src/judge-voice.ts /tmp/tour.json --out=/tmp/voice.md
-//   # writing + voice (full run gives audioUrls to presign):
-//   dotenvx run -f .env.development -- bun packages/generator/src/run.ts emerald-bay-run --json=/tmp/tour.json
+//   # Feed it a narration-run JSON artifact (stops with scripts; audioUrls to presign the voice):
 //   dotenvx run -f .env.development -- bun packages/generator/src/judge-voice.ts /tmp/tour.json --out=/tmp/voice.md
 
-import type { GenerateResult } from './pipeline/generate-tour'
 import { presignGet } from './pipeline/storage'
 import { judgeCharm, type CharmVerdict } from './eval/charm'
+
+// The minimal structural shape this report reads from a narration-run JSON artifact. Kept LOCAL
+// (decoupled from any pipeline type) so the report survives the V1→V2 tour-pipeline removal — it
+// tolerates extra fields and only depends on what it prints.
+interface VoiceArtifactStop {
+  seq: number
+  stopType: string
+  name: string
+  script?: string
+  durationMs?: number
+  audioUrl?: string
+}
+interface VoiceArtifact {
+  tourId?: string
+  tourName: string
+  region: string
+  durationBucket: string
+  stops: VoiceArtifactStop[]
+}
 
 const RECO_LABEL: Record<CharmVerdict['recommendation'], string> = {
   ship: '✅ SHIP — charming enough to bet the player on',
@@ -31,7 +45,7 @@ const RECO_LABEL: Record<CharmVerdict['recommendation'], string> = {
   rework: '🔁 REWORK — reads as competent AI, not the skipper',
 }
 
-function buildReport(r: GenerateResult, v: CharmVerdict): string {
+function buildReport(r: VoiceArtifact, v: CharmVerdict): string {
   const bySeq = new Map(v.stops.map((s) => [s.seq, s]))
   const out: string[] = []
   out.push(`# Voice & charm report — ${r.tourName} (${r.region}) · ${r.durationBucket}`)
@@ -85,7 +99,7 @@ async function main() {
     )
   }
 
-  const result = (await Bun.file(jsonPath).json()) as GenerateResult
+  const result = (await Bun.file(jsonPath).json()) as VoiceArtifact
   const scripted = result.stops.filter((s) => s.script)
   if (scripted.length === 0)
     throw new Error('No narrated scripts in the JSON (did you point at a real run result?).')

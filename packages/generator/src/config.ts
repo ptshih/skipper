@@ -8,8 +8,6 @@
 
 import { existsSync } from 'node:fs'
 
-import type { DurationBucket } from '@skipper/shared'
-
 /** Read a required env var or throw a clear, actionable error. */
 export function requireEnv(name: string): string {
   const v = process.env[name]
@@ -219,16 +217,6 @@ export const WDQS_USER_AGENT = WIKIPEDIA_USER_AGENT
  *  pool but does NOT become a stop today. Persisting areal stops out to 1500 m would need
  *  areal-aware selection + the sim/player to honor it (a deferred feature, not just this gate). */
 export const SPINE_AREAL_OFF_ROUTE_MAX_M = 1_500
-/**
- * Minimum on-the-ground separation between two NARRATED stops (m). A SPATIAL floor
- * complementary to the minGapSec TIME floor: two POIs can clear the time gap yet
- * sit on top of each other where the road wraps (Fannette Island sits INSIDE
- * Emerald Bay State Park — 571 m apart, 254 s apart in drive time — and both leads
- * named "the only island in Lake Tahoe"). Co-located candidates are deduped to the
- * richest extract. Measured margin on emerald-bay-run: the only sub-1.5 km pair is
- * that 571 m overlap; the next-closest stops are 2.3 km apart, so 1000 m is safe.
- */
-export const MIN_STOP_SEPARATION_M = 1_000
 /** Lead-section extract length to request (chars). ~3–5 sentences — used to RANK and
  * classify candidates at selection time (cheap, batched). The chosen story stops get
  * the full article (ENRICHER_INPUT_CHARS) stored at sweep time. */
@@ -256,69 +244,13 @@ export const ENRICHER_INPUT_CHARS = 12_000
  */
 export const NARRATION_FALLBACK_CHARS = 4_000
 
-// --- Pacing (by drive TIME, not distance) -----------------------------------
-
-export interface BucketPacing {
-  /** Minimum drive-time gap between consecutive narrated stops (seconds). */
-  minGapSec: number
-  /** Hard cap on story+scenic stops for the whole corridor. */
-  maxNarratedStops: number
-  /** Number of food/rest break stops to interleave. */
-  breakStops: number
-}
-
-// M1 ships `standard` only; short/long are defined for forward use (M3).
-// minGapSec is the floor between consecutive stops — it directly governs the SILENCE
-// between clips (a ~120s clip with a 180s floor leaves ~60s of quiet, vs the ~120s+ of
-// dead air a 240s floor left). Lowered to admit more of the already-discovered grounded
-// POIs (discovery finds ~40+ along a route; the old floor used only ~9) so the drive
-// stops having 5–7 min silent stretches. Stays ABOVE the clip length so the sequential
-// player never backs up (the QUEUE_LAG guard in generate.ts asserts this per tour).
-// breakStops is a TARGET, not a guarantee — breaks are optional rest/food callouts, so we
-// scatter a few through the drive (selectBreaks prefers slots clear of a story, but keeps the
-// least-stacked rather than dropping one). Generous on purpose; the rider takes them or not.
-export const PACING: Record<DurationBucket, BucketPacing> = {
-  short: { minGapSec: 300, maxNarratedStops: 8, breakStops: 1 },
-  standard: { minGapSec: 180, maxNarratedStops: 16, breakStops: 3 },
-  long: { minGapSec: 150, maxNarratedStops: 24, breakStops: 4 },
-}
+// --- Narration pacing -------------------------------------------------------
 
 /** Spoken narration pace (~2.5 words/second) — the single base pace every length estimate reads:
- *  narration's target-duration→word hint (narrate.ts), the dry-run length print (run.ts / generate-roam.ts),
- *  and the TTS cost estimate's base (spend.ts, which layers TTS_ESTIMATE_SAFETY on top). */
+ *  narration's target-duration→word hint (narrate.ts), the roam dry-run length print
+ *  (generate-roam.ts), and the TTS cost estimate's base (spend.ts, which layers
+ *  TTS_ESTIMATE_SAFETY on top). */
 export const WORDS_PER_SECOND = 2.5
-
-/** Target spoken length per stop type (seconds) — honored by narration, never padded.
- * `story` targets a Shaka-Guide-length telling (~2 min) so a rich fact sheet gets room
- * to breathe; the model still stops when the FACTS run out, so thin sheets stay short.
- * `scenic` stays short (delivery-only, no facts to fill time); `break` is a brief cue. */
-export const TARGET_SECONDS = { story: 120, scenic: 20, break: 15 } as const
-
-/** Generation-time overlap guard: the player plays clips through a sequential FIFO queue,
- *  so if stops are paced TIGHTER than their clips are long, the audio backs up and lags
- *  behind the car. Warn if any clip would start more than this many seconds after its
- *  trigger — a signal the pacing is too dense (lower the stop count or shorten clips). */
-export const QUEUE_LAG_WARN_SEC = 45
-
-/** Co-located cluster MERGE: when dedup would drop a POI sitting within MIN_STOP_SEPARATION_M
- *  of a kept stop, FOLD its facts onto that stop instead of discarding them — so a highlight
- *  like Emerald Bay becomes ONE richer telling (bay + castle + island + falls) rather than 3
- *  dropped landmarks (or 3 overlapping clips). Cap members so a survivor can't bloat; only
- *  fold members with a real (story-grade) extract; each adds room to the clip target. */
-export const MERGE_MAX_MEMBERS = 3
-export const MERGE_EXTRA_SEC = 40
-
-/** Keep a BREAK from stacking on a narrated stop: a break within this many seconds of a story
- *  would queue behind that story's ~120s clip and play late (the +115s lag the guard caught).
- *  Breaks are flexible, so we just skip anchors this close to a chosen narrated stop. */
-export const BREAK_MIN_GAP_SEC = 90
-
-/** Default speed-adaptive trigger floor (m). The reader's fallback when segments.radius_m is
- *  null (nullable now); the generator still writes it explicitly onto every segment. */
-export const TRIGGER_RADIUS_M = 120
-
-/** Fallback average drive speed (m/s ≈ 30 mph) if a corridor lacks a frozen durationSeconds. */
-export const FALLBACK_SPEED_MPS = 13.4
 
 /** The Tahoe–Reno corridor default bbox — the standalone CLI default when no --bbox is passed
  *  (sweep-region-pois / generate-roam). Matches the `lake-tahoe` region seed's discoveryBbox

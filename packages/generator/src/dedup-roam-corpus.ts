@@ -1,24 +1,24 @@
 // dedup-roam-corpus — find and clean up same-place duplicate roam clips.
 //
 // Multiple sweep runs (or slightly different Wikidata QID→pageId mappings) can produce
-// several `pois` rows for the same physical place, each getting its own roam clip (a
-// segment with tour_id null + its story track). The `(source, source_id)` DB unique key
-// prevents re-inserting the SAME article, but two DIFFERENT Wikipedia articles covering the
-// same place (different pageIds) create two rows — both get clips, both fire on drives.
+// several `pois` rows for the same physical place, each getting its own roam clip (the poi's
+// 1:1 `narrations` row). The `(source, source_id)` DB unique key prevents re-inserting the SAME
+// article, but two DIFFERENT Wikipedia articles covering the same place (different pageIds)
+// create two rows — both get narrations, both fire on drives.
 //
 // This script groups clips by normName(poi.name), reports the duplicates, and on --apply
 // keeps the RICHEST row (longest facts.extract) and deletes the orphaned clips from both
-// DB (the roam SEGMENT — its track cascades) and R2.
+// DB (the poi's `narrations` row) and R2.
 //
 // SOP (docs/guides/ops-scripts-sop.md): PREVIEWS by default; writes only on --apply.
-// Blast radius: DELETES R2 objects + roam segment/track rows. Reads the DB.
+// Blast radius: DELETES R2 objects + narration rows. Reads the DB.
 //
 //   dotenvx run -f .env.development -- bun packages/generator/src/dedup-roam-corpus.ts
 //   dotenvx run -f .env.development -- bun packages/generator/src/dedup-roam-corpus.ts --apply
 
-import { and, eq, isNull } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { db } from '@skipper/db'
-import { pois, segments, tracks } from '@skipper/db/schema'
+import { narrations, pois } from '@skipper/db/schema'
 import { normName } from './pipeline/wikidata-discovery'
 import { deleteAudio } from './pipeline/storage'
 import { announce, assertReady, parseFlags } from './pipeline/ops'
@@ -29,7 +29,7 @@ const apply = flags.has('apply')
 announce({ tool: 'dedup-roam-corpus', blast: ['DELETES BYTES', 'MUTATES DB'], apply })
 if (apply) assertReady(['r2'])
 
-// Load all pois that have a roam clip (a segment with tour_id null + its story track).
+// Load all pois that have a roam clip (the poi's 1:1 narration row).
 const rows = await db
   .select({
     poiId: pois.id,
@@ -39,17 +39,12 @@ const rows = await db
     lat: pois.lat,
     lng: pois.lng,
     facts: pois.facts,
-    segmentId: segments.id,
-    clipUrl: tracks.audioUrl,
-    clipDurationMs: tracks.audioDurationMs,
+    narrationId: narrations.id,
+    clipUrl: narrations.audioUrl,
+    clipDurationMs: narrations.audioDurationMs,
   })
-  .from(segments)
-  .innerJoin(
-    tracks,
-    and(eq(tracks.segmentId, segments.id), eq(tracks.form, 'story'), eq(tracks.variant, 0)),
-  )
-  .innerJoin(pois, eq(segments.poiId, pois.id))
-  .where(isNull(segments.tourId))
+  .from(narrations)
+  .innerJoin(pois, eq(narrations.poiId, pois.id))
 
 console.log(`Loaded ${rows.length} roam clip(s).`)
 
@@ -68,7 +63,7 @@ if (dupeGroups.length === 0) {
 
 console.log(`\nFound ${dupeGroups.length} duplicate name group(s):\n`)
 
-const toDelete: { segmentId: string; clipUrl: string | null; poiId: string; name: string }[] = []
+const toDelete: { narrationId: string; clipUrl: string | null; poiId: string; name: string }[] = []
 
 for (const group of dupeGroups) {
   // Sort: richest extract first (longest string); fall back to longest clip if no extract.
@@ -93,7 +88,7 @@ for (const group of dupeGroups) {
       `  DROP  poiId=${d.poiId.slice(0, 8)} source=${d.source}:${d.sourceId} ` +
         `extract=${dropExtractLen}ch  clip=${(d.clipDurationMs ?? 0) / 1000}s  r2=${d.clipUrl}`,
     )
-    toDelete.push({ segmentId: d.segmentId, clipUrl: d.clipUrl, poiId: d.poiId, name: d.name })
+    toDelete.push({ narrationId: d.narrationId, clipUrl: d.clipUrl, poiId: d.poiId, name: d.name })
   }
   console.log()
 }
@@ -106,7 +101,7 @@ if (!apply) {
 }
 
 let deleted = 0
-for (const { segmentId, clipUrl, name } of toDelete) {
+for (const { narrationId, clipUrl, name } of toDelete) {
   process.stdout.write(`  deleting clip "${name}" (${clipUrl})... `)
   if (clipUrl) {
     try {
@@ -118,8 +113,8 @@ for (const { segmentId, clipUrl, name } of toDelete) {
   } else {
     process.stdout.write('R2 (no clip)  ')
   }
-  // Delete the roam SEGMENT — its track cascades (tracks.segmentId onDelete cascade).
-  await db.delete(segments).where(eq(segments.id, segmentId))
+  // Delete the poi's roam narration row.
+  await db.delete(narrations).where(eq(narrations.id, narrationId))
   process.stdout.write('DB ✓\n')
   deleted++
 }

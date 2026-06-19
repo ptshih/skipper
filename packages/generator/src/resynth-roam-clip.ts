@@ -1,7 +1,7 @@
 // Re-synthesize ONE roam clip from its STORED script — for fixing a malformed audio
 // file (e.g. TTS returned duplicated audio) without changing the narration or the
 // poi's facts. Writes to the same R2 key (overwrites in place) and updates the roam
-// track's audioDurationMs. A roam clip is the poi's segment(tour_id null) + its story track.
+// narration's audioDurationMs. A roam clip is the poi's 1:1 `narrations` row.
 //
 // SOP (docs/guides/ops-scripts-sop.md): PREVIEWS by default; writes only on --apply.
 // Blast radius: SPENDS $ (one TTS synth) + MUTATES DB (updates audioDurationMs).
@@ -9,9 +9,9 @@
 //   dotenvx run -f .env.development -- bun packages/generator/src/resynth-roam-clip.ts <poiId>
 //   dotenvx run -f .env.development -- bun packages/generator/src/resynth-roam-clip.ts <poiId> --apply
 
-import { and, eq, isNull } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { db } from '@skipper/db'
-import { pois, segments, tracks } from '@skipper/db/schema'
+import { narrations, pois } from '@skipper/db/schema'
 import { announce, assertReady, parseFlags } from './pipeline/ops'
 import { runJob } from './pipeline/job-progress'
 import { personaFromKey } from './persona'
@@ -33,21 +33,17 @@ if (apply) assertReady(['tts', 'r2'])
 async function main(poiId: string): Promise<void> {
   const [row] = await db
     .select({
-      trackId: tracks.id,
-      audioUrl: tracks.audioUrl,
-      audioDurationMs: tracks.audioDurationMs,
-      script: tracks.script,
+      narrationId: narrations.id,
+      audioUrl: narrations.audioUrl,
+      audioDurationMs: narrations.audioDurationMs,
+      script: narrations.script,
       poiName: pois.name,
       poiLat: pois.lat,
       poiLng: pois.lng,
     })
-    .from(segments)
-    .innerJoin(
-      tracks,
-      and(eq(tracks.segmentId, segments.id), eq(tracks.form, 'story'), eq(tracks.variant, 0)),
-    )
-    .innerJoin(pois, eq(segments.poiId, pois.id))
-    .where(and(eq(segments.poiId, poiId), isNull(segments.tourId)))
+    .from(narrations)
+    .innerJoin(pois, eq(narrations.poiId, pois.id))
+    .where(eq(narrations.poiId, poiId))
 
   if (!row) {
     throw new Error(`No roam clip found for poiId ${poiId}`)
@@ -86,9 +82,9 @@ async function main(poiId: string): Promise<void> {
   // Overwrite the same R2 key so the DB audioUrl never changes.
   await uploadAudio(row.audioUrl!, audio)
   await db
-    .update(tracks)
+    .update(narrations)
     .set({ audioDurationMs: durationMs, updatedAt: new Date() })
-    .where(eq(tracks.id, row.trackId))
+    .where(eq(narrations.id, row.narrationId))
 
   console.log(`\nDone: replaced clip for "${row.poiName}" (${(row.audioDurationMs! / 1000).toFixed(1)}s → ${(durationMs / 1000).toFixed(1)}s).`)
 }

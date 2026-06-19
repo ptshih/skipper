@@ -1,25 +1,12 @@
-// @skipper/generator — server-side tour generation. Runs entirely before the
-// app downloads anything.
+// @skipper/generator — server-side narration generation for the V2 roam-first model.
 //
-// M1 (walking skeleton) implements, for ONE seeded tour shell (loaded by slug) /
-// duration / persona / dadpocalypse:
-//   tour polyline (from the seeded shell)
-//     -> Wikidata SPARQL spine                  (the POI discovery spine)
-//     -> Wikipedia extracts                     (per-candidate PROSE enrichment)
-//     -> Google Places searchAlongRoute         (food/rest break stops)
-//     -> select stops to fit duration           (pace by drive TIME, not distance)
-//     -> skipper narration (Anthropic)          (facts-only prompt; never invent)
-//     -> TTS (Google Cloud, Gemini-TTS) -> Cloudflare R2
-//     -> write tours + ordered segments/tracks (Neon/Drizzle; a stop = 1 segment + 1 track)
+// pois (shared FACTS) ──1:1── narrations (the shared telling) is the spine: the corpus
+// pipeline is `discover` → `enrich` → `generate`, and roam + every drive SELECT from that
+// one shared corpus. The hand-authored tour pipeline (run.ts → segments/tracks/tour_frames)
+// was removed in the V1→V2 migration; only the roam/corpus generators + their pipeline
+// helpers remain. CLI entry points: generate-roam.ts, enrich-region.ts, sweep-region-pois.ts.
 //
-// Invariant: a tour may not be marked `ready` until every story/scenic stop has
-// non-null audio. NO cache variants, NO dedup, NO feedback in M1 — generate naively.
-// CLI entry point: ./run.ts.
+// Invariant: a narration goes live only once its audio is synthesized (audio_url NOT NULL).
+// Persona lives in DELIVERY (the telling), never in FACTS — "make it funny" never loosens
+// accuracy; a place with no curated fact sheet is never narrated from the raw extract.
 export * from './models'
-export { generateTour } from './pipeline/generate-tour'
-export type {
-  FrameSummary,
-  GenerateOptions,
-  GenerateResult,
-  StopSummary,
-} from './pipeline/generate-tour'
