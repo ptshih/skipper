@@ -145,7 +145,14 @@ export const driveProposeRequest = z.object({
 })
 export type DriveProposeRequest = z.infer<typeof driveProposeRequest>
 
-const resolvedEndpoint = z.object({ name: z.string(), lat: z.number(), lng: z.number() })
+// lat/lng are bounded to valid WGS84 ranges (which also excludes ±Infinity); z.number() already
+// rejects NaN. `start`/`end` are CLIENT-supplied on POST /drives and flow straight into the route
+// materialization + bbox math, so the bounds are boundary hardening, not just typing.
+const resolvedEndpoint = z.object({
+  name: z.string().min(1).max(200),
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+})
 
 /** The proposed route to CONFIRM before generating: resolved endpoints + a route preview. */
 export const driveProposal = z.object({

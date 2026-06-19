@@ -33,6 +33,14 @@ import { VERSION_POLICIES } from './version-policy'
 
 const app = new Hono<ApiEnv>()
 
+// NO CORS by design. Every consumer is native (Expo/RN mobile) — CORS is a browser mechanism, so
+// it doesn't apply — and the static site (skipper.fm) makes no client-side call here (its hero
+// audio is a bundled same-origin asset). With no `Access-Control-Allow-Origin`, browsers already
+// default-deny cross-origin reads, so the absence of CORS is the SAFE posture, not a gap; adding a
+// policy would only OPEN access to a web client that doesn't exist. Add a strict allowlist here
+// (and extend auth.ts `trustedOrigins`) ONLY if a real browser client appears — a web player, or a
+// live (non-static) /t/:id share page that fetches this API from the browser.
+
 // Defense-in-depth: any unhandled throw returns a clean JSON 500 with no internal
 // details (DB messages etc.) leaked; the detail goes to the server log.
 app.onError((err, c) => {
