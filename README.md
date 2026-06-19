@@ -9,6 +9,10 @@ over a route you pick (any A→B), as phone audio (CarPlay later). First region:
 > a thing the founder actually wants to use — not for scale or defensibility.
 > **The persona is the product.**
 
+**Working in this repo?** `CLAUDE.md` is the operating truth — doctrine, hard invariants,
+stack, and the (multi-agent) git workflow; read it before changing anything. Durable
+decisions, specs, and ideas live in `docs/` (indexed in `docs/README.md`).
+
 ## The two principles
 
 1. **Fetch FACTS once per place; the NARRATION is the shared atom; ASSEMBLE per drive.**
@@ -38,7 +42,7 @@ over a route you pick (any A→B), as phone audio (CarPlay later). First region:
 ```
 skipper/
 ├── apps/
-│   ├── api/        @skipper/api       — Hono API (M2). Bun-native serve.
+│   ├── api/        @skipper/api       — Hono API: /roam, /drives, /regions, signed R2 URLs. Bun-native serve.
 │   ├── admin/      @skipper/admin     — Vite + Hono ops console (cloud-run the studio CLIs) behind Google IAP.
 │   ├── site/       @skipper/site      — Astro landing page (skipper.fm).
 │   └── mobile/     @skipper/mobile    — Expo app. Phone player is the MVP (CarPlay later).
@@ -49,7 +53,7 @@ skipper/
 │   ├── routing/    @skipper/routing   — Google Routes client (A→B route materialization).
 │   ├── storage/    @skipper/storage   — Cloudflare R2 / S3 client (audio upload + presign).
 │   ├── engine/     @skipper/engine    — pure geo + trigger engine + drive sim + preview timeline (RN-safe; shared by sim & mobile).
-│   └── sim/        @skipper/sim       — DB-backed drive-sim CLI (runs @skipper/engine against a real tour).
+│   └── sim/        @skipper/sim       — DB-backed drive-sim CLI (runs @skipper/engine against a real drive).
 ├── design-system/  — browsable HTML mirror of the "Trailhead 89" design system (open index.html). A specimen book; not a workspace. Canonical source = apps/mobile/DESIGN.md + src/theme + src/ui.
 ├── tsconfig.base.json · package.json (bun workspaces)
 ```
@@ -62,9 +66,16 @@ runs `.ts`, and `tsc --noEmit` type-checks. There is no `tsx`, no
 
 ```bash
 bun install
-bun run dev                 # dotenvx decrypts .env.development, then bun --watch the api (http://localhost:8787/health)
-bun run typecheck           # bun --filter -> tsc --noEmit across all packages
+bun run dev          # the API on http://localhost:8787 (dotenvx decrypts .env.development, bun --watch)
+bun run check        # lint:docs + lint:types + lint:enums + typecheck + test — run before committing
 ```
+
+Other dev surfaces (the human keeps these running — use them, don't restart a live one):
+
+- `bun run dev:admin` — the ops console (Vite client **:5173** → Hono admin-api **:8788**; cloud-runs the studio CLIs)
+- `bun run dev:site` — the Astro landing page
+- `bun --filter @skipper/mobile start` — the Expo phone player
+- `bun run sim` — the DB-backed drive simulator (`packages/sim`)
 
 ### Environment & secrets
 
