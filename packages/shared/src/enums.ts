@@ -39,6 +39,22 @@ export type StopType = z.infer<typeof stopType>
 export const driveClipForm = z.enum(['story', 'scenic', 'break', 'wave'])
 export type DriveClipForm = z.infer<typeof driveClipForm>
 
+/**
+ * A place's DELIVERY REGISTER — how the TTS voice should READ this stop, derived from the place's
+ * TYPE (not its facts, and not the joke notch). A stable property of the PLACE, stored once on the
+ * POI (like `kind`), classified primarily from the Wikidata P31 "instance of" type (structural,
+ * free) with an LLM fallback for the ambiguous tail. It picks a TTS style SUFFIX (`ttsStyleFor`)
+ * on the shared persona base — the persona/voice/anti-fade base is unchanged; only pace/space/energy
+ * shift, so it stays ONE host modulating his read, not different personas:
+ *   landscape = natural features (mountain, lake, vista, geology) — slower, spacious, wonderstruck.
+ *   story     = human history / built heritage (house, monument, event) — the warm storytelling BASE.
+ *   town      = settlements / communities — folksier, lighter, neighborly.
+ *   civic     = infrastructure / public works (dam, bridge, road, reservoir) — plain, quiet engineering pride.
+ * Keep in lockstep with the pg `delivery_register` enum (@skipper/db/schema).
+ */
+export const deliveryRegister = z.enum(['landscape', 'story', 'town', 'civic'])
+export type DeliveryRegister = z.infer<typeof deliveryRegister>
+
 /** Where a POI came from (its DISCOVERY source) — Wikidata-spine ONLY (every poi has a QID).
  *  `wikipedia` = a story place with an article; `wikidata` = a named scenic pin (CC0). Google break
  *  anchors are NOT pois — they have no QID and live in the `places` table; `google_places` is an

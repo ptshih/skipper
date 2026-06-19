@@ -150,6 +150,12 @@ export const poiSourceEnum = pgEnum('poi_source', ['wikipedia', 'wikidata'])
 // with the Zod `narrationForm` enum.
 export const narrationFormEnum = pgEnum('narration_form', ['story', 'scenic', 'break', 'wave', 'bside'])
 
+// A POI's DELIVERY REGISTER — how the TTS voice READS this place (pace/space/energy), a stable
+// property of the place classified once from its Wikidata P31 type (see classify-register.ts) and
+// stored on `pois`. Picks a `ttsStyleFor` style suffix on the shared persona base. Mirror with the
+// Zod `deliveryRegister` enum (@skipper/shared).
+export const deliveryRegisterEnum = pgEnum('delivery_register', ['landscape', 'story', 'town', 'civic'])
+
 // poi_overrides is now fact-corrections ONLY (the side_anchor coordinate moved onto
 // `pois.speakable_lat/lng`), so the kind discriminator is GONE. `upstream_status` tracks the
 // contribute-back workflow (agent DRAFTS a Wikipedia correction, human SUBMITS it — never
@@ -241,6 +247,11 @@ export const pois = pgTable(
     sourceId: text('source_id').notNull(),
     name: text('name').notNull(),
     kind: text('kind'),
+    // DELIVERY REGISTER — how the TTS voice reads this place (landscape/story/town/civic), classified
+    // once from the Wikidata P31 type (classify-register.ts) + an LLM fallback for the ambiguous tail.
+    // Nullable: an unclassified place reads on the `story` base (ttsStyleFor defaults null→story), so
+    // this is additive — populating it differentiates the read, never breaks an un-backfilled place.
+    deliveryRegister: deliveryRegisterEnum('delivery_register'),
     lat: doublePrecision('lat').notNull(),
     lng: doublePrecision('lng').notNull(),
     // The "where to look" anchor for side-of-road content — a place's vantage point, SHARED

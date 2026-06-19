@@ -1,14 +1,14 @@
-// generate-narrations — FREE-ROAM encounter generation: narrate + synthesize the POI corpus.
+// generate-narrations — the shared NARRATION corpus: narrate + synthesize one telling per POI.
 // SPENDS $ (Anthropic narration + Cloud TTS) and MUTATES DB + R2 on --apply.
 //
-// Free-roam writes the shared NARRATION layer (V2): pois = shared FACTS, and a poi's ONE
-// narration (1:1, the `narrations` table) = the shared telling that ROAM plays by proximity AND
-// every DRIVE reuses (pre-ordered along its route). Regenerated when the place's facts_hash moves
-// (the staleness contract). Encounters are a FORM, not a new persona: the Skipper's stop prompt
-// rides unchanged; the sheet adds the FREE-ROAM ENCOUNTER frame (self-contained, route-agnostic, no
-// baked laterality — narrate.ts) and targets the roam length band, threading no callbacks. A
-// narration is placeless: form='story', no segment, no route geometry (a drive snaps a trigger point
-// onto its route at assemble time; roam triggers on the poi's own location).
+// Writes the shared NARRATION layer (V2): pois = shared FACTS, and a poi's ONE narration (1:1, the
+// `narrations` table) = the shared telling that ROAM plays by proximity AND every DRIVE reuses
+// (pre-ordered along its route) — so each clip must accommodate BOTH modes. Regenerated when the
+// place's facts_hash moves (the staleness contract). The Skipper's stop prompt rides unchanged; the
+// sheet adds the SELF-CONTAINED frame (route-agnostic, no order, no baked laterality — narrate.ts),
+// targets the register length band (per delivery_register), threads no callbacks, and names no
+// corridor. A narration is placeless: form='story', no segment, no route geometry (a drive snaps a
+// trigger point onto its route at assemble time; roam triggers on the poi's own location).
 //
 // AUTOMATED QUALITY GATE (2026-06-19): every clip is scored by the eval panel (grounding via Opus
 // + laterality + tts-cleanliness as GATES, diversity as advisory), auto-retaken via optimize() when
@@ -57,8 +57,8 @@ import {
   WORDS_PER_SECOND,
 } from './config'
 import { estimateTtsUsd, llmSpendLines, llmSpentUsd } from './pipeline/spend'
-import { STORY_TASTE_DENYLIST } from '@skipper/shared'
-import { NARRATION_MODEL, JUDGMENT_MODEL } from './models'
+import { STORY_TASTE_DENYLIST, type DeliveryRegister } from '@skipper/shared'
+import { NARRATION_MODEL, JUDGMENT_MODEL, ttsStyleFor, lengthForRegister } from './models'
 import { buildGroundingWell, evaluateGrounding } from './eval/grounding'
 import { evaluateTts } from './eval/tts'
 import { evaluateDiversity } from './eval/diversity'
@@ -68,19 +68,12 @@ import { buildScorecard } from './eval/scorecard'
 import { DIMENSION_KIND, type StopEval } from './eval/types'
 import { recordEvalRun, type ClipIdentity } from './eval/record'
 
-/** Roam encounter length band (Autio-register long-form, founder 2026-06-13).
- *  storyTargetSeconds = the AIM; storyMaxSeconds = a HARD cap so a fact-rich place doesn't sprawl
- *  into a lecture. "Never pad past the facts" governs the ACTUAL length WITHIN the band, so a thin
- *  pin lands honestly shorter (capped by its facts) rather than stretched. ELIGIBILITY for a roam STORY
- *  is simply "has a curated fact sheet" (#1) — NOT a char floor (the old `minExtractStory`/`--min-extract`
- *  800-char gate was removed 2026-06-16; a sheet only exists for an enriched poi, so it subsumes it).
- *  An ENRICHED poi grounds on its curated sheet (resolveStoryGrounding). */
-const ROAM_LENGTH = {
-  storyTargetSeconds: 150,
-  storyMaxSeconds: 180,
-} as const
-/** The corridor framing for a free-roam encounter (no planned route). Named + framed, never a fact. */
-const FREE_ROAM_CORRIDOR = 'Free roam — an unplanned drive, no route'
+// Roam encounter length is now REGISTER-VARIED (REGISTER_LENGTH / lengthForRegister in ./models): a
+// landscape glance is shorter than a rich story (research-grounded 2026-06-19; the old single 150/180
+// "Autio-register" band fought the "let the facts set the length" doctrine). Eligibility for a roam
+// STORY is still "has a curated fact sheet" (#1); "never pad past the facts" governs the ACTUAL length
+// within the band, so a thin pin lands honestly short. An ENRICHED poi grounds on its sheet.
+
 const flags = parseFlags(process.argv.slice(2), {
   valueFlags: ['limit', 'region', 'max-cost', 'query', 'include-ids', 'exclude-ids'],
 })
@@ -128,6 +121,7 @@ async function main(): Promise<void> {
           qid: pois.qid,
           name: pois.name,
           kind: pois.kind,
+          deliveryRegister: pois.deliveryRegister,
           lat: pois.lat,
           lng: pois.lng,
           facts: pois.facts,
@@ -157,6 +151,9 @@ async function main(): Promise<void> {
     pageId: number
     name: string
     kind: string | null
+    /** The poi's stored delivery register (classify-registers) — picks the TTS read + length band.
+     *  null = not yet classified → reads on the `story` base (the additive default). */
+    deliveryRegister: DeliveryRegister | null
     lat: number
     lng: number
     extract: string
@@ -193,6 +190,7 @@ async function main(): Promise<void> {
       pageId: f.pageId ?? Number(r.sourceId),
       name: r.name,
       kind: r.kind,
+      deliveryRegister: r.deliveryRegister,
       lat: r.lat,
       lng: r.lng,
       extract: f.extract,
@@ -231,15 +229,18 @@ async function main(): Promise<void> {
   // space-less char blob ('x'.repeat(n)) reads as ONE word and collapses the audio estimate ~100× (it
   // under-quoted a full-region run by ~$28 and silently defeated --max-cost). Model a target-length clip.
   const llmUsdPerClip = GROUNDING_EVAL() ? 0.15 : 0.1
-  const estWordsPerClip = Math.round(ROAM_LENGTH.storyTargetSeconds * WORDS_PER_SECOND)
-  const dummyClip = Array(estWordsPerClip).fill('word').join(' ')
+  // Per-clip TTS estimate uses each poi's REGISTER target (a story clip quotes longer than a landscape
+  // glance); the dummy clip must carry that many real WORDS (estimateTtsUsd derives audio tokens from the
+  // word count — a space-less blob reads as ONE word and collapses the audio estimate ~100×).
+  const targetSecFor = (c: Candidate): number => lengthForRegister(c.deliveryRegister ?? 'story').targetSeconds
   const tts = estimateTtsUsd(
-    queue.map(() => dummyClip),
+    queue.map((c) => Array(Math.round(targetSecFor(c) * WORDS_PER_SECOND)).fill('word').join(' ')),
     personaFromKey('skipper').ttsStyle.length,
   )
+  const estAudioMin = Math.round(queue.reduce((s, c) => s + targetSecFor(c), 0) / 60)
   console.log(
     `\nEstimated spend: narration+gate ~$${(queue.length * llmUsdPerClip).toFixed(2)} ± half ` +
-      `+ TTS ~$${tts.usd.toFixed(2)} (${queue.length} clips ≈ ${Math.round((queue.length * ROAM_LENGTH.storyTargetSeconds) / 60)} min of audio` +
+      `+ TTS ~$${tts.usd.toFixed(2)} (${queue.length} clips ≈ ${estAudioMin} min of audio` +
       `${GROUNDING_EVAL() ? '' : '; grounding gate OFF'})`,
   )
 
@@ -286,16 +287,21 @@ async function main(): Promise<void> {
       fallbackChars: NARRATION_FALLBACK_CHARS,
       retrievedAt: (c.factsFetchedAt ?? new Date()).toISOString(),
     })
+    // The poi's delivery register sets BOTH the read (ttsStyleFor, at synth) and the length band.
+    // null (un-classified) → 'story' base, so this is additive: classifying a poi differentiates it.
+    const register: DeliveryRegister = c.deliveryRegister ?? 'story'
+    const band = lengthForRegister(register)
     const base = {
       region: regionLabel(c.lat, c.lng),
-      corridor: FREE_ROAM_CORRIDOR,
+      // No corridor: the shared atom plays on its own (roam) OR on any route (a drive reusing it), so
+      // it names only the stable REGION, never a specific stretch.
       stopType: 'story' as const,
       jokeLevel: 'dadpocalypse' as const,
       place: { name: c.name, ...(c.kind ? { kind: c.kind } : {}) },
       facts: grounding.facts,
-      targetSeconds: ROAM_LENGTH.storyTargetSeconds,
-      maxSeconds: ROAM_LENGTH.storyMaxSeconds,
-      encounterFrame: true,
+      targetSeconds: band.targetSeconds,
+      maxSeconds: band.maxSeconds,
+      selfContained: true,
     }
     // The permitted well, built from the SAME facts the narrator saw (buildGroundingWell is the
     // shared seam, so the auditor's well can never drift from the narrator's sheet).
@@ -319,7 +325,6 @@ async function main(): Promise<void> {
             script,
             well,
             region: base.region,
-            corridor: base.corridor,
           }),
         )
       return evals
@@ -422,7 +427,13 @@ async function main(): Promise<void> {
         `\n──── ${g.c.name} · ${g.shipped ? 'SHIP' : 'WITHHELD'} · ${words} words ≈ ${Math.round(words / WORDS_PER_SECOND)}s ────\n${g.script}`,
       )
     }
-    console.log(`\n(band: aim ${ROAM_LENGTH.storyTargetSeconds}s, cap ${ROAM_LENGTH.storyMaxSeconds}s)`)
+    console.log(
+      `\n(register length bands, aim/cap s: ` +
+        (['landscape', 'story', 'town', 'civic'] as const)
+          .map((r) => `${r} ${lengthForRegister(r).targetSeconds}/${lengthForRegister(r).maxSeconds}`)
+          .join(', ') +
+        `)`,
+    )
     await recordRun(true) // a DRY eval run — observability without synth/persist
     for (const line of llmSpendLines()) console.log(line)
     console.log(`LLM spend this run: ~$${llmSpentUsd().toFixed(2)}`)
@@ -458,10 +469,11 @@ async function main(): Promise<void> {
       const clipId = crypto.randomUUID()
       // Tail-collapse retake (pipeline/tts.ts): narration clips ship unheard, so a mumbled
       // closing sentence would reach riders' ears first — measure + retake here too.
+      // The poi's register modulates the READ (pace/space/energy) on the shared base; null → story base.
       const { audio, durationMs } = await synthesizeWithTailRetake(
         script,
         persona.voice,
-        persona.ttsStyle,
+        ttsStyleFor(persona.ttsStyle, c.deliveryRegister ?? 'story'),
         `"${c.title}"`,
       )
       const audioUrl = await uploadAudio(narrationClipKey(c.poiId, clipId), audio)

@@ -6,7 +6,7 @@
 // before bumping.
 
 import Anthropic from '@anthropic-ai/sdk'
-import { CLAUDE_MODELS } from '@skipper/shared'
+import { CLAUDE_MODELS, type DeliveryRegister } from '@skipper/shared'
 
 // Re-export the shared HAIKU id so the in-job summarizer (pipeline/job-output.ts) sources it from
 // studio/models.ts alongside the other model ids, while @skipper/shared stays the single source.
@@ -198,3 +198,58 @@ export const SKIPPER_TTS_STYLE_PROMPT =
 // (The voice↔persona binding now lives in the persona registry — each PersonaDef carries
 // its own `voice`; see packages/studio/src/persona/. `SKIPPER_VOICE_ID` above is the
 // source constant the Skipper def references + the synthesize() default.)
+
+// DELIVERY REGISTER → style SUFFIX. The base above (SKIPPER_TTS_STYLE_PROMPT) is the `story` read —
+// the ear-tuned default that carries the persona, the joke delivery, and the load-bearing ANTI-FADE
+// rule. A place's register (classified once from its Wikidata P31 type; see classify-registers) only
+// MODULATES that base — pace, space, energy — so it stays ONE host adjusting his read, never a
+// different voice. anti-fade lives in the base, so every register keeps "full volume to the last
+// word" (each suffix re-asserts it where it could be misread). `story` = no suffix (byte-identical to
+// today, so the tuned read is preserved). ⚠ These are DELIVERY wording — re-tune only behind a fresh
+// founder ear-test (same rule as the base), never blind.
+const REGISTER_STYLE_SUFFIX: Record<DeliveryRegister, string> = {
+  story: '',
+  landscape:
+    ' This stop is a piece of landscape, not a tale — so give it a little more air. Ease the pace a touch, let the spaces between thoughts breathe, and let real, quiet wonder into your voice, like a man who has gone still to let the folks take in the view. Unhurried, never sleepy; and still hold the level clear to the very last word.',
+  town:
+    ' This stop is a town — keep it light and neighborly, a shade brighter and more conversational, the easy warmth of pointing out a place you are fond of to a friend riding shotgun. A touch quicker and chattier than a story, but never rushed, and never trailing off at the end.',
+  civic:
+    ' This stop is a built thing — a piece of engineering, not a story. Read it plain and grounded, with a little quiet pride in how it was made; less wonder, more matter-of-fact respect for the work. Steady and clear the whole way through, full volume to the last word.',
+}
+
+/**
+ * The TTS delivery directive for a place, given its persona BASE style and its delivery REGISTER:
+ * the base (the `story` read) plus a register suffix that modulates pace/space/energy. `story` returns
+ * the base unchanged. Persona-agnostic in the base (any PersonaDef's `ttsStyle` can be passed), since
+ * the register suffixes describe HOW to read a landscape/town/civic place, not a specific host.
+ */
+export function ttsStyleFor(baseStyle: string, register: DeliveryRegister): string {
+  return `${baseStyle}${REGISTER_STYLE_SUFFIX[register]}`
+}
+
+// DELIVERY REGISTER → LENGTH band. The register also biases HOW LONG a telling runs, not just how
+// it's read — a landscape glance and a rich historic story should not aim for the same duration (the
+// single fixed ~150s band fought this AND the "let the facts set the length" doctrine; folded in
+// 2026-06-19). `target` = the typical AIM (the number that actually drives length); `max` = an
+// anti-sprawl CEILING. Length stays FACT-DRIVEN underneath — a thin sheet lands short regardless
+// ("never pad to reach the aim"); the register only sets the per-type aim/ceiling.
+//
+// Values are RESEARCH-GROUNDED (2026-06-19 external research, cited in the length TODO): museum/heritage
+// audio guides run 60–90s/stop ("not a lecture"), GuideAlong (GPS auto-play, our closest analog) keeps
+// tracks "under 3 min", Autio's 3–5 min is the market's long end, and NPS pegs wayside dwell ~45s. A
+// drive has long silent gaps between stops (each trigger is a welcome event), so we sit ABOVE the museum
+// floor, BELOW the Autio ceiling. The old 150s blanket default was too long → dropped to a 90s story aim.
+// STORY keeps a 180s MAX (founder, "just in case" a genuinely rich telling earns it) while its TARGET
+// stays 90s, so a typical story is tight and only a fact-rich one stretches. A clip that HITS the cap is
+// a prompt problem, not a length one. ⚠ Ear-gated — these are starting points; A/B by ear while driving.
+const REGISTER_LENGTH: Record<DeliveryRegister, { targetSeconds: number; maxSeconds: number }> = {
+  landscape: { targetSeconds: 60, maxSeconds: 100 }, // natural feature: wonder over inventory, not a factless glance
+  story: { targetSeconds: 90, maxSeconds: 180 }, // human history: tight by default, headroom for a rich arc
+  town: { targetSeconds: 60, maxSeconds: 90 }, // orient + one hook, not a full story
+  civic: { targetSeconds: 70, maxSeconds: 110 }, // one "how/why it exists" beat; fact-dense → capped tighter
+}
+
+/** The target/max length band for a place, by its delivery register. */
+export function lengthForRegister(register: DeliveryRegister): { targetSeconds: number; maxSeconds: number } {
+  return REGISTER_LENGTH[register]
+}

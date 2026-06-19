@@ -32,10 +32,12 @@ import { WORDS_PER_SECOND } from '../config'
 const NARRATION_MAX_TOKENS = 16000
 
 export interface NarrationRequest {
-  /** e.g. "Lake Tahoe". Naming the region is allowed without the sheet. */
+  /** e.g. "Lake Tahoe". Naming the region is allowed without the sheet — it's STABLE in both modes. */
   region: string
-  /** e.g. "Emerald Bay Run". Naming/framing the corridor is allowed without the sheet. */
-  corridor: string
+  /** OPTIONAL named stretch, e.g. "Emerald Bay Run". OMITTED for the shared atom (roam corpus): the
+   *  same telling plays on its own OR on any route, so it can't bake a specific corridor. A future
+   *  authored-tour path may pass one; naming a GIVEN corridor is allowed without the sheet. */
+  corridor?: string
   stopType: StopType
   jokeLevel: JokeLevel
   /** Required for STORY and BREAK (the curated, stable name + kind). OPTIONAL for SCENIC: a
@@ -70,10 +72,11 @@ export interface NarrationRequest {
   maxSeconds?: number
   /** Re-narration notes from the diversity lint — concrete things THIS take must avoid. */
   avoid?: string[]
-  /** FREE-ROAM encounter framing (generate-narrations.ts): the telling is a one-off roadside
-   *  encounter on an unplanned drive — fully self-contained, route-agnostic, no tour shape.
-   *  Adds the encounter block to the sheet; all grounding rules are unchanged. */
-  encounterFrame?: boolean
+  /** SHARED-ATOM framing (generate-narrations.ts): this telling is the place's ONE narration, played
+   *  BOTH on its own by proximity (roam) AND reused mid-drive on a planned route. Adds the
+   *  self-contained block to the sheet (route-agnostic, no order, no baked laterality, no tour shape);
+   *  all grounding rules are unchanged. */
+  selfContained?: boolean
 }
 
 export interface NarrationResult {
@@ -175,7 +178,9 @@ function mergedFeatureLines(features: { name: string; facts: string[] }[] | unde
 export function buildFactSheet(req: NarrationRequest): string {
   const lines: string[] = []
   lines.push(`REGION: ${req.region}`)
-  lines.push(`CORRIDOR: ${req.corridor}`)
+  // Only when a named stretch is actually given (authored-tour path). The shared atom omits it — the
+  // same telling plays on its own or on any route, so it must not name a specific corridor/drive.
+  if (req.corridor) lines.push(`CORRIDOR: ${req.corridor}`)
   lines.push(`STOP TYPE: ${req.stopType.toUpperCase()}`)
   lines.push(`JOKE NOTCH: ${req.jokeLevel.toUpperCase()}`)
   lines.push('')
@@ -264,10 +269,10 @@ export function buildFactSheet(req: NarrationRequest): string {
     )
   }
 
-  if (req.encounterFrame) {
+  if (req.selfContained) {
     lines.push('')
     lines.push(
-      'FREE-ROAM ENCOUNTER — this is NOT a tour stop. The rider is out on their OWN drive (an errand, a wander — no planned route), and you are riding shotgun, piping up because you are passing a place you know. The telling must be fully SELF-CONTAINED: no welcome-aboard, no tour framing, no "next stop" or "later on this drive", no promising anything else, no callbacks to other stops. You do NOT know the direction of travel or which side of the road the place is on — never name a side, never say "behind us" or "up ahead on the left"; "coming up", "just out there", and "right about here" are fine. Open on the place or its best fact, land your best bit, and get out clean — a good minute, not a chapter.',
+      'SELF-CONTAINED PLACE TELLING — this is ONE place\'s telling, and it is the SHARED ATOM: the very same clip plays on its own when a rider rolls past this spot, AND is reused mid-drive on a planned route, in an order you cannot predict. So it has to stand completely on its own, every time, in either mode — no welcome-aboard, no tour framing, no "next stop" or "later on this drive", no promising anything else, no callbacks to other places; you never know what came before or after, or whether there is a before or after at all. You also do NOT know the direction of travel or which side of the road the place is on — never name a side, never say "behind us" or "up ahead on the left"; "coming up", "just out there", and "right about here" are fine. Open on the place or its best fact, land your best bit, and get out clean — honor the target length below, and never a chapter.',
     )
   }
 

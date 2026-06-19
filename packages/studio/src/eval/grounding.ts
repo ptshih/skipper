@@ -45,7 +45,8 @@ export interface GroundingInput {
   well: string[]
   /** Ambient carve-out: NAMING these (not asserting facts about them) is allowed sheet-free. */
   region: string
-  corridor: string
+  /** OPTIONAL named stretch — the shared atom (roam corpus) names no corridor (it plays on any route). */
+  corridor?: string
   /** Sanctioned-callback carve-out: names of OTHER stops on this drive. The narrator is fed
    *  earlier stops for earned callbacks, so RECALLING one (asserting nothing new about it)
    *  is delivery, not an invented place-fact. */
@@ -159,7 +160,7 @@ function buildUserMessage(input: GroundingInput): string {
   const otherStops = (input.otherStops ?? []).filter((n) => n && n !== input.placeName)
   return [
     `REGION: ${input.region}`,
-    `CORRIDOR: ${input.corridor}`,
+    ...(input.corridor ? [`CORRIDOR: ${input.corridor}`] : []),
     `STOP TYPE: ${input.stopType.toUpperCase()}`,
     input.placeName ? `PLACE: ${input.placeName}` : 'PLACE: (unnamed scenic stop)',
     ...(otherStops.length > 0
