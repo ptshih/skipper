@@ -58,13 +58,15 @@ you found so the next agent can re-check it.
   yes. (Multiple agents share this one working tree, so unannounced branch switches are
   especially disruptive.)
 
-- **Commits on `main` must be surgical and explicit.** NEVER `git add -A` / `git add .`
-  / `git commit -a`. Multiple agents share this one working tree, so the working set is
-  almost always a MIX of your changes and other agents' (and pre-existing) uncommitted
-  work. Stage by explicit path (`git add path/a path/b`), then `git diff --cached --stat`
-  to confirm ONLY your intended files are staged before committing. A blanket add sweeps
-  in someone else's half-finished work — the exact failure this repo's multi-agent setup
-  invites.
+- **Commits on `main` must be surgical, explicit, and atomic — never leave changes STAGED.**
+  Multiple agents share this one working tree AND its single git index, so the working set is
+  almost always a MIX of your changes and other agents' (and pre-existing) uncommitted work —
+  and anything you `git add` sits in a SHARED staging area another agent's commit can then sweep
+  in. So NEVER `git add -A` / `git add .` / `git commit -a`, and never `git add` early or to
+  "checkpoint" progress. Stage + commit in ONE step at the very end: `git commit path/a path/b`
+  (it stages exactly those paths and commits, leaving the index clean); confirm first with
+  `git diff --stat path/a path/b`. A blanket or premature add sweeps in someone else's
+  half-finished work — the exact failure this repo's multi-agent setup invites.
 
 - **Docs ride along with the change.** If your work ships, supersedes, or invalidates
   anything described in `docs/` (or in this file), update that doc's status line in the
