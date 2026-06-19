@@ -64,6 +64,9 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
 - [geometry-first-regions.md](decisions/geometry-first-regions.md) — a region is a BBOX, never a
   stored FK: a POI's region = point-in-bbox; a drive stores its route bbox + derives region by
   intersect — no `region_id` FK anywhere (2026-06-19).
+- [credit-ledger.md](decisions/credit-ledger.md) — drive credits are a user-owned, append-only
+  `credit_entries` ledger (balance = SUM), NOT a `count(drives)`; free-tier lifetime grant + per-drive
+  consume live (migration `0016`), Apple IAP / Google Play purchase plumbing deferred; built 2026-06-19.
 - [automated-grounding-gate.md](decisions/automated-grounding-gate.md) — the founder reversed "human
   ear instead": `generate-narrations.ts` now scores every clip through the eval panel and is
   FAIL-CLOSED (a clip whose grounding/tts gate stays dirty after the bounded `optimize()` retakes is
@@ -75,10 +78,12 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
 - [t-share-funnel-removed.md](decisions/t-share-funnel-removed.md) — the `/t/<id>` share funnel
   removed (drives are user-owned, not anonymous-shareable); the iOS universal-link capability kept
   dormant; decided + done 2026-06-19.
-- [tour-structure-design-review.md](decisions/tour-structure-design-review.md) — adversarial
-  pre-build review of the tour-structure spec (verdict: build-with-fixes); historical.
-- [audio-compression-spike.md](decisions/audio-compression-spike.md) — WAV → MP3 32 kbps spike;
-  shipped 2026-06-08.
+- [tour-structure-design-review.md](decisions/tour-structure-design-review.md) — a 2026-06-08
+  adversarial pre-build critique; the design it reviewed is fully deleted, so the record is now a
+  tombstone (the full body lives in git history) pointing to the live model.
+- [audio-compression-spike.md](decisions/audio-compression-spike.md) — get clips off uncompressed
+  WAV: MP3 32k shipped 2026-06-08, then switched to LINEAR16 → AAC-LC 48k `.m4a` (one ffmpeg
+  loudnorm+encode pass) 2026-06-14; the MP3 body is historical.
 - [enrichment-scout.md](decisions/enrichment-scout.md) — story-stop enrichment decided by a
   bounded tool-using scout (judgment) instead of char-count sparse-gates; built 2026-06-09.
 - [location-permission-priming.md](decisions/location-permission-priming.md) — a pre-permission

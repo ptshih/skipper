@@ -10,6 +10,16 @@ and the facts-staleness contract (§4, now riding `narrations.facts_hash`). Curr
 `docs/decisions/create-a-drive-architecture.md` (✅ BUILT); the hand-authored-tour rung this doc was written
 for is DEFERRED — live artifacts are ROAM + drives.
 
+**Addendum 2026-06-19 — the PRINCIPLE was SCOPED DOWN, not carried "intact."** Read the "zero-reuse
+survives intact" line above with this correction: under V2 a `narrations` row is **SHARED** (1:1 with
+the poi, region-owned — `narrations_poi_uq`), so §1's "NARRATION is TOUR-OWNED, never shared across
+tours" is INVERTED for the live surfaces (roam + drives REUSE the one telling). Zero-reuse now governs
+ONLY the **deferred authored-tour rung** (`create-a-drive-architecture.md`: "zero-reuse scopes DOWN to
+govern only narration-kind #3"). What truly survives: facts shared via `pois` — now **QID-deduped**
+(`pois_qid_uq`, migration 0018), not `(source, source_id)` (now a secondary guard) — plus the
+facts-staleness contract on `narrations.facts_hash` and the no-content-cache posture. The §3 DDL's
+`(source, source_id)` dedup, like the rest of the body, is HISTORY.
+
 **Prior status (V1):** ✅ **BUILT + live-migrated 2026-06-08** (commits `d0f2ba6` schema + cascade, `f1396cf` the
 applied migration baseline; the canonical preview was regenerated into this model = tour `9ac50db5`). The
 design below is now the SHIPPED entity model, not a proposal. It remains the **single source of truth** for

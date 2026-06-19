@@ -1,187 +1,28 @@
-# Tour-structure design review — adversarial critique
+# Tour-structure design review — adversarial critique (TOMBSTONE)
 
-**Status:** review output, 2026-06-08. Pressure-test of `docs/specs/tour-structure-spec.md` + the tour-structure handoff (doc since deleted) against current code, BEFORE building. No code was changed.
+**Status:** 🔴 **HISTORICAL — body excised 2026-06-19 (full text in git history).** A 2026-06-08
+adversarial, pre-build pressure-test of the (since-deleted) tour-structure spec + handoff. The design
+it critiqued is **fully deleted** — directionality, drive families, `corridors`, the `tour_brackets`/
+`tour_frames` bracket pair (and the `asides` that briefly replaced them, dropped in migration `0019`),
+`poi_content`, the `region` pgEnum — every axis it examined is gone. Nothing here is current; it is
+retained only as a decision-history pointer.
 
-> **Schema-names note (V2 2026-06-18):** the segments/tracks model was further collapsed — read `tracks`→`narrations`, `tour_frames`→`asides`, `tours`→user-owned `drives`, and the `/tours*` routes → `/drives*`; hand-authored tours are deferred. This whole doc is a pre-V2 historical critique.
+**Live model:** `docs/decisions/create-a-drive-architecture.md` + `docs/decisions/geometry-first-regions.md`
+(and `docs/decisions/tour-data-model-zero-reuse.md` for the zero-reuse principle's own history).
 
-**Method:** 8 reviewer lenses (invariants · schema/migration · directionality · catalog/mobile · persona-registry · intro/outro · narration-coherence · scale/staleness) fanned out over the docs cross-checked against actual code; every finding got an independent skeptic that re-read the cited evidence to confirm/refute; a synthesis pass deduped, ranked, and ran a completeness critic. 62 agents.
+## What it was
 
-**Counts:** 53 raised, 50 survived, 3 refuted. By severity (post-verification, re-rated): 1 blocker-rated by the ranker but **3 promoted to Blockers in synthesis**, 14 major, 18 minor, 17 nit.
+- **Method:** 8 reviewer lenses (invariants · schema/migration · directionality · catalog/mobile ·
+  persona-registry · intro/outro · narration-coherence · scale/staleness) fanned out over the docs vs.
+  code; every finding got an independent skeptic that re-read the cited evidence to confirm/refute, then
+  a synthesis + completeness-critic pass deduped and ranked. **62 agents.** Counts: 53 raised, 50
+  survived, 3 refuted — 3 Blockers, 14 major, 18 minor, 17 nit. **Verdict:** `build-with-fixes`.
+- **Outcome:** the design was then simplified into the zero-reuse model, and later the V2 roam +
+  user-owned-drives model. Its one still-relevant finding that shipped — **M6**, the prompt/lint
+  inversion ("1–2 best groaners per stop," not "three or four") — is DONE (commits `67e9313` / `7860b3f`).
+  Every Blocker dissolved with the deleted design (B1/B2 the place-less bracket schema holes; B3 the
+  reverse-polyline source — there is no "reverse," every drive is independent).
 
-**Verdict:** `build-with-fixes`
-
-> 🔴 **HISTORICAL ARTIFACT — re-grounded 2026-06-08, after this review.** The design it critiques was then
-> simplified; the canonical model is now **`docs/decisions/tour-data-model-zero-reuse.md`**. Still-valid findings:
-> B1/B2 (annotated resolved below) and **M6** — the prompt/lint inversion — which is DONE (committed
-> 67e9313/7860b3f). MOOT because the model changed:
-> - **B3** (reverse-polyline source) — **DISSOLVED**: every tour is independent; there is no "reverse" to source.
-> - **M2** (drive/family table model) — **REFRAMED**: no `families`, no `corridorId` FK, no `direction`
->   column. `corridors` is MERGED into `tours`; region is a `regions` TABLE FK.
-> - **M5** ("both directions?" heuristic) — **MOOT**: no 2× / pairing decision exists.
-> - Anything about "directionality," "drive family," the variant matrix, or a `region` pgEnum reviews a
->   now-deleted axis.
-
----
-
-## Verdict
-
-The design is **fundamentally sound and ready to build with a short list of fixes** — the entity model (drive-as-primary, corridor→family), the bracket pair, region-keyed host, and the quality-gated prompt are all coherent decisions, and the phasing (founder-gated DB + regen checkpoints) is the right shape. But the spec ships with **one factually-wrong sentence that would silently destroy generated content** (§8 #7's "non-issue"), **two place-less schema holes the brackets fall into** (intro/outro have no POI for a NOT-NULL `poiId`), and a cluster of **prompt-incoherence drifts** where the live `skipper.ts` still says the opposite of the new cap ("three or four groaners per stop" vs "1–2 best"). None of these break the build *today* (M1 ships one drive), but every one of them bites the moment Phase 3 generates the directional pair or Phase 1 folds the appendix in. Fix the spec text and make ~6 founder decisions first; the code work after that is mechanical.
-
-**Go/no-go: build-with-fixes.** Resolve the Blockers in the spec, make the founder decisions, then build phase-by-phase as planned.
-
----
-
-## Blockers
-
-### B1. The "fresh clips per direction" claim is false — both directions collide on the same cache key AND overwrite each other's R2 audio
-> ✅ **DISSOLVED 2026-06-08 by zero-reuse — the prescribed fix was NOT taken.** There is no `poi_content`
-> table and no content cache key under zero-reuse; narration is tour-owned on `tour_stops`, so the two
-> directions narrate the shared POI independently and there is no shared clip to collide. The
-> forward/reverse-marker-in-the-key fix below is therefore **moot**. The analysis stands as the OLD-model
-> problem statement. See docs/decisions/tour-data-model-zero-reuse.md §5 + tour-structure-spec §8 #7.
-
-**What's wrong:** Spec §8 #7 calls the missing direction dimension a "v1 non-issue: each directional drive generates its own clips fresh." It is not. The `poi_content` unique index (`schema.ts:163`) and the R2 clip key (`storage.ts:34-42`, `clips/${persona}/${voice}/${jokeLevel}/${poiId}`) are **both** keyed on `(poiId, persona, voice, jokeLevel)` with **no direction component**, and `pois` dedup on `(source, sourceId)` (`schema.ts:96`) → the same landmark resolves to the **same `poiId`** across both runs. When Phase 3 (spec line 195) runs the studio pipeline a second time over the shared corridor, `upsertPoiContent` (`generate.ts:587`) UPSERTs over direction 1's script row and `uploadAudio` (`generate.ts:566`) overwrites direction 1's R2 object at the identical key. Direction 2 wins for *both* cards — collapsing the "two discrete drives / slight per-direction variation" premise (§1) and wasting the 2× generation cost.
-**Why it matters:** This is the core of the new model. "Generates fresh" is *precisely* what causes the clobber.
-**Fix:** Delete/correct the §8 #7 "non-issue" sentence. Add the pre-decided generic forward/reverse marker to **both** the `poi_content` unique index/`onConflict` target **and** the `clipKey` path, landed **in the same Phase 3 step** as per-direction generation — do **not** defer to M4. (Per §1, shared POIs are the design intent, so "forbid shared-POI directions" is not a real out.)
-
-### B2. Intro/outro brackets have no POI to anchor to — `poiId` is NOT NULL on both `tour_stops` and `poi_content`
-> ✅ **RESOLVED 2026-06-08 by restructuring (NOT by nulling `poiId`).** Two decisions superseded this:
-> (1) **zero-reuse** dropped `poi_content` entirely (narration is tour-owned), removing one of the two
-> NOT-NULL `poiId` constraints; (2) intro/outro are modeled as a **separate `tour_brackets` drive-frame
-> table** (Option B — chosen over folding them into a polymorphic `tour_stops` after a cited DB-modeling
-> review: Fowler STI vs Concrete-Table-Inheritance, Karwin, the Postgres CHECK 3-valued-logic trap).
-> `tour_stops.poiId` therefore **stays NOT NULL**, the geofence engine stays homogeneous, and brackets
-> have no POI *by construction* — so there is nothing to null and no synthetic anchor to invent.
-> The original analysis below stands as the problem statement. See tour-structure-spec §3 +
-> docs/decisions/tour-data-model-zero-reuse.md. (The review's recommended fix — nullable `poiId` shared with the
-> scenic `'curated'` source — was NOT taken; restructuring dissolved the constraint instead, and decoupled
-> the bracket gap from the scenic-anchor gap, which are different problems.)
-
-**What's wrong:** Spec §3 models intro/outro as `start`/`finish` stops that "ride the existing stop machinery; ready-gate requires their audio," but the intro is "position-agnostic, no fact sheet, never 'you are now at Tahoe City'." Every `tour_stops` row requires a non-null `poiId` (`schema.ts:214-216`, `restrict` FK), every `poi_content` row requires a non-null `poiId` (`schema.ts:135`), the R2 `clipKey` embeds `poiId`, and every `pois` row requires a `source` from `['wikipedia','google_places']` (`schema.ts:55,106`). A persona-only bracket that names no place has **no legal POI to point at**. Neither doc decides this (grep for synthetic/nullable/sentinel = 0 hits). The sibling `scenic-stops-spec.md:97-102` flags the *same* gap as "the #1 thing to settle jointly."
-**Why it matters:** You cannot insert a bracket stop or its `poi_content` row without resolving this — it gates Phase 2/3. A naive "fake per-drive POI" would dirty the `(source, sourceId)` dedup invariant and the §7 anchor-coord proximity graph.
-**Fix (decide in the spec, coordinate with the scenic spec):** Prefer making `tour_stops.poiId`/`poi_content.poiId` **nullable for brackets** and carrying the anchor `{name,coord}` on the drive/family (spec §2/§3 already locate end-anchors there), with brackets getting their own clip-key namespace (e.g. `clips/<region>/intro/<tourId>`). Whichever way, specify how a bracket's `poi_content` row is keyed since it has no `poiId`. This is **one shared** synthetic-anchor scheme with the scenic `'curated'` source — not a second parallel one.
-
-### B3. The reverse-direction polyline has no specified source
-**What's wrong:** §1/§2 say each drive carries "its own polyline in its travel direction" and the reverse drive is "the studio pipeline run twice over the same frozen route." But the studio pipeline's only geometry input is `loadCorridor(slug) → corridor.polyline` (`generate.ts:128-129`, `materialize.ts:58-67`), a single one-directional polyline (`corridors.ts:24-25`, origin→destination). Nothing says **where the reversed polyline comes from**: re-call Routes API on reversed waypoints, `polyline.reverse()` in code, or hand-author a second spec. They have different correctness/ToS consequences (a divided highway / one-way reverse is a genuinely different road, and `.reverse()` is the runtime-derived mirror §0/§8 forbid).
-**Why it matters:** It is the literal mechanism the per-direction model rests on, in the immediate Phase 3 path, left blind.
-**Fix:** Specify in §2 + handoff Phase 2/3: author a **reversed `CorridorSpec`** (reversed waypoints) and materialize it **once** via the existing Routes-API step (`materialize.ts`) — a frozen rail, road-correct, not a runtime mirror — then the studio pipeline runs unchanged per polyline. Note that road-correct reversal of *geometry* is fine; it is *content* that must be independently generated.
-
----
-
-## Major gaps & decisions
-
-### M1. The whole `persona → region` migration touches more surfaces than the spec enumerates (merged: findings on `tours.persona`, free-text vs slug, R2 path, host.ts)
-The spec scopes the migration to "the `poi_content` cache-key value + R2 path," but `persona`/`region` is threaded through far more, and `region` is an **overloaded word**:
-- **`tours.persona` is a second column** on the same enum (`schema.ts:181`), read directly by the API host lookup (`index.ts:199,207` → `hostForPersona(tour.persona)`). A safe in-place `ALTER TYPE ... RENAME VALUE` touches both columns atomically, but the spec only mentions `poi_content`.
-- **`corridors.region` is already free text holding the *display* string `'Lake Tahoe'`** (`schema.ts:77`, seed `corridors.ts:31`) and is spoken verbatim in narration (`narrate.ts:159` `REGION: ${req.region}`, licensed by `skipper.ts:59`) **and** is the mobile picker label (`regions.ts:18`). The spec's new `region` pgEnum has the **slug** value `lake-tahoe`. The spec knows slug ≠ display (`§4a:117`) but never says **which field is spoken/displayed (must stay "Lake Tahoe") vs which is the key/R2 path (must be the slug)**. A literal `corridors.region → lake-tahoe` rename would make the narrator say "lake-tahoe" and the picker show "lake-tahoe."
-- **The pgEnum value rename is not expressible via `db:generate`.** drizzle-kit 0.31.10 has a name-level rename resolver but **no value-level** one, so `'skipper'→'lake-tahoe'` is modeled as delete+add → the generated migration **aborts** on the `"persona"::region` cast-back (it does *not* destroy data, but it won't run). Needs a **hand-written SQL migration** (`ALTER TYPE persona RENAME TO region; ALTER TYPE region RENAME VALUE 'skipper' TO 'lake-tahoe';`); `stopType += start,finish` *can* ride plain `db:generate` (`ALTER TYPE ... ADD VALUE`).
-
-**Decision + fix:** Write **one consolidated rekey checklist** into the handoff naming every surface that moves together — the `poi_content` unique index (`schema.ts:163`), the `upsertPoiContent` onConflict target (`persist.ts:101`), `tours.persona`, `clipKey`/R2 prefix, `host.ts Record<Persona>→Record<Region>`, the shared DTOs + `tourRequest.persona.default('skipper')` (`schemas.ts:141`), and the regen — plus the hand-written SQL artifact. **Decide whether `tours` even keeps the dimension** (region is derivable from corridor). And explicitly: `corridors.region`/the family display field keeps the free-text **"Lake Tahoe"**; the new region pgEnum (slug) is a separate **key** column on `poi_content`+`tours`; the narration `REGION:` line and the picker read the **display** name from the registry. (The type checker catches the host.ts/enum/DTO surfaces at build time; the real manual risks are the R2 prefix, the index rename, and the value rename.)
-
-### M2. The table model for the drive/family reframe is explicitly deferred — make it one written decision
-Spec §1/§2 say each drive carries its own polyline + two end-anchors and the corridor "reframes to a drive family" carrying region + headline, but **no table model exists**: today `polyline` lives on `corridors` (`schema.ts:81`), `tours.corridorId → corridors` (`schema.ts:175-177`), and the API serves `corridors.polyline` (`index.ts:171`). Handoff Phase 2 literally says "Decide drive-as-primary vs corridor-as-family per spec §1" — but §1 has no table/FK/column layout (grep of both docs for `drives table`/`familyId`/FK = 0 hits). The *concept* is locked (drive=tour owns geometry; family=region+headline grouping); the *realization* is not.
-**Decision + fix:** Before Phase 2, write the concrete model. Lower-churn option given "drive (= a tour)": add `polyline`, `headline`, `direction`, and start/end `{name,lat,lng}` anchor columns to **`tours`**, reframe `corridors`→a `families` table (region + headline only), and repoint `tours.corridorId → families.id`. Then specify how `tour.corridor.polyline` (the served-geometry read path: `useDrive.ts:182`, `preview/[id].tsx:122`, shared DTO) resolves per direction.
-
-### M3. The catalog restructuring is hand-waved (merged: three-level→two-level hierarchy, composed name DTO field, anchor-name fallback)
-- **The shipped app is strictly three-level** (`index.tsx:248` → `/corridor/[id]` carrying a *corridor* id → `corridor/[id].tsx:64` lists tours by duration bucket + joke level → `/tour/[id]`). §5 makes the drive primary with browse "Region → Drives" and removes duration/notch from cards. The spec never says **what happens to `corridor/[id].tsx`** (the tours list) — does it die, or become the family screen? Its two reasons to exist (duration variants, joke variants) are exactly what §5 removes. Building it wrong rebuilds Shaka's "which one?" page the spec set out to avoid.
-- **The composed name `[Headline], [Start] to [End]` has no DTO field.** `corridorListItem` (`schemas.ts:151-159`) carries no headline/anchors/direction/teaser. Spec line 197 / handoff line 98 lean server-side but never pin the field.
-- **Anchor-name fallback is undefined.** §2 routes anchor names through reverse-geocoding but the seed *already* carries the wanted labels (`corridors.ts:36-43`: "The Y, South Lake Tahoe", "Tahoe City"), and there's no curated-override column for when geocode returns "Unincorporated El Dorado County."
-**Decision + fix:** In §5/Phase 5, write the post-migration route graph: (a) does `/corridor/[id]` survive as the family detail or get deleted; (b) a home card carries a **drive/tour id**, not a corridor id (concrete change to `index.tsx:248-253`); (c) `tour/[id].tsx` becomes the drive-detail screen converging duration chooser + notch + variations link. Pin which DTO field carries the composed name. Specify the anchor-name chain: **curated waypoint label → reverse-geocode gap-fill → road/segment name**, with a curated override column, frozen at generation.
-
-### M4. "Assemble per request" needs a resolver that doesn't exist
-§5 says the played variant is "assembled per request from {drive + duration + notch}," but there is **no assembler and no resolver**: `GET /tours/:id` (`index.ts:165`) fetches one frozen row by UUID; duration/joke are baked columns shown as read-only badges (`tour/[id].tsx:148-149`); the only duration affordance is a `?duration=` *filter* on the corridor's tour list (`index.ts:82-95`). "Assemble per request" can only mean "pick the matching pre-generated row" (frozen rails), but the picking mechanism is undefined — an agent could over-build a live assembler (violating frozen rails) or wire a chooser with nothing to fetch.
-**Fix:** State in §5 that "assembled per request" = "resolve to the already-generated frozen row." Carry the sibling-variant ids (`{duration,notch}→tourId`) in the drive-detail DTO (reuses the family/related set Phase 4 already serves) rather than adding a tuple-resolution endpoint. Note that with notch as a global setting, you don't pre-generate the full cross-product at M1.
-
-### M5. The "both directions?" heuristic governs the 2× cost but is unspecified
-§1/§7 name "is a point-to-point worth both directions?" as the single judgment governing all 2× generation cost, but the only content is the parenthetical "through-road w/ lodging both ends → both; dead-end out-and-back → one." No **default** for an ambiguous through-road, no input definition (how is "dead-end"/"lodging" detected?), no home for the flag. Zero M1 impact (one corridor), but at AI scale this is the difference between a sane catalog and a flood of reverse twins.
-**Decision + fix:** Commit a buildable default: **loop** (start anchor ≈ end anchor within X m) → one looping drive; **out-and-back dead-end** → one; **ambiguous through-road** → default **BOTH** with a human one-way override flag on the family/`CorridorSpec`. For M1, set it explicitly on `emerald-bay-run` rather than assuming.
-
-### M6. The prompt + lint must INVERT, not recalibrate — and the few-shot trains the violation (merged: findings 10, 11, 13, 30, 31, 49)
-This is the largest concrete code-work cluster. The new design bans the kit from stops and caps groaners at 1–2; the live `skipper.ts` does the **opposite** in five places, and the lint **certifies** the banned behavior:
-- **Kit hardcoded in THREE sites, not the two the handoff names:** `lint.ts:54` `KIT`, `generate.ts:293-298` `KIT_BEATS`, **and the prompt prose itself** (`skipper.ts:46` "a cousin named Ray… a mechanic… a cranky old truck… coffee", repeated at :94/:111/:154). The registry already has `promptOverlay`+`kit` slots, but the migration checklist (handoff:87-88, gotcha:123) names only the two regexes — the prose is the biggest kit-bearing surface and the one that *tells* the host to use Ray.
-- **The lint must invert.** `lint.ts:167` allows `floor(n/3)` kit-touching stops + one kit-closer; under a total ban it must FAIL on **any** kit in any stop (budget → 0), retire the kit-closer special case (`lint.ts:166,175`), and **exclude the `start`/`finish` brackets** from `lintScripts` (the kit legitimately lives there). Intro/outro have no `StopType`/lint path today (`enums.ts:16`).
-- **The DADPOCALYPSE rung still says "three or four groaners per stop"** (`skipper.ts:111`) — directly opposite Appendix B's "1–2 best, never a third." Appended beside the cap, the model picks the louder number. Also re-read DAD (`skipper.ts:110`, ~1/stop) so the recalibrated "1–2" still steps **monotonically** above DAD (the ladder promises countable steps).
-- **The flagship few-shot trains chains.** `skipper.ts:104` endorses a "CHAIN of two or three puns," and the Sand Harbor calibration clip (`skipper.ts:188-193`, "granted/granite/boulder/bolder") is framed as "the DENSE pun-CHAIN register at full tilt" — Appendix B bans exactly this. A few-shot exemplar dominates an abstract rule, so **replace** the Sand Harbor clip with a 1–2-groaner version (don't reword the rule to "no chains of 3+", which contradicts the locked "never a third").
-- **The "drop a quick dad joke between facts" exhortations** (`skipper.ts:96,111`) push density; reframe to permission-not-quota (allowed when a stop is thin, not a thing to reach for), preserving the grounding-safety value.
-**Fix:** Phase 1 is generation-only and fully reversible — but it's a policy **inversion** + a few-shot rewrite, not a "fold in." Enumerate all five sites in the handoff. (The good news: handoff:67-69 already flags the CHAIN line, the Sand Harbor example, and the drop-a-joke line for reconciliation — the gap is the lint inversion and the prompt-prose kit site, which it doesn't name.)
-
----
-
-## Minor / polish
-
-- **Intro grounding boundary** (finding 25): handoff:22-23 already binds brackets to "no named place-facts," so the intro is not wholly ungrounded — but App.C's prompt clause only bans the *position* claim ("never 'you are now at Tahoe City'"), not an endpoint *superlative* ("Tahoe City, the oldest town on the lake"). Since the intro is "no fact sheet," confirm `narrateIntro` ships `skipper.ts:59`'s grounding rule and add one line: name endpoints/region descriptively, assert **no** place-fact (size/depth/age/fame/superlative); only the **kit** (host backstory) is grounding-free.
-- **Ready-gate is bracket-blind** (findings 16, 21): the gate is type-agnostic (`generate.ts:627-633` loops `finalStops`, demands `poiContentId`) so it auto-covers brackets once they're in the plan — good, no code change. But it checks "every stop has audio," not "the bracket pair exists." Add a presence assertion (exactly one `start` at seq-min, one `finish` at seq-max, both with audio). Also update CLAUDE.md's ready-gate wording ("every story/scenic stop") when brackets land, and fix the already-stale `enums.ts:14` comment ("break = no audio" — contradicts mandatory break audio).
-- **engine stopType is silently widenable** (finding 17): `PreviewStop.stopType` is a hardcoded `'story'|'scenic'|'break'` union (`preview.ts:28`) and `simulate/trigger` use plain `string` — adding `start`/`finish` mis-types instead of type-erroring, routing brackets into `narrate.ts` buildFactSheet's break **else-branch**. Derive `PreviewStop.stopType` from `@skipper/shared` `StopType`; convert buildFactSheet's if/else to an exhaustive switch (or reject brackets — they use `narrateIntro`/`narrateOutro`).
-- **Bracket trigger mechanics are already specified — sharpen the wording** (findings 24, 29, 37, 45, 46, 47, 48): handoff Phase 5 (`104-105`) already says "prepend `start`, append `finish`; intro plays first regardless of position" and §3:76 locks "stops queue behind the intro" — so the dangerous outcomes (intro over a stop; mid-route joiner missing the intro) are **already foreclosed**, not open. Residual: (a) make `FinalStop`'s `triggerLat/Lng/approachHeadingDeg` nullable for brackets (schema columns already allow null) and special-case `start`/`finish` in **both** the live `TriggerEngine` (exempt from geofence firing — `trigger.ts` fires purely on proximity+heading) and `buildPreviewTimeline` (prepend/append outside the seq+along-route sort); (b) one undefined edge: a stop whose geofence fired *during* a long intro but which the car has since passed — spec should say "coalesce/drop passed stops, don't replay." Amend §8 #6 to "no *traversal* change, but bracket sequencing in the player" so "no change" isn't misread.
-- **Charm judge density drift** (finding 22): `judge-voice.ts:40` rewards "dadpocalypse (dense, proud dad jokes)" and penalizes jokes "absent where the notch calls for them" — after the recalibration this rewards the density the cap suppresses. Update in the same Phase-1 commit. Also `judge-voice.ts:132` still says "SULAFAT VOICE" though the voice is Algenib (`models.ts:101`).
-- **Warmer TTS prompt swap** (finding 34): `models.ts:117` still holds the OLD low-and-slow prompt, not Appendix A — clean one-line swap (only the export identifier is imported, `tts.ts`). But spec lines 7-9 assert the warmer prompt is "already shipped" (it isn't), contradicting spec line 220's own "voice/codec work is in" (which notably does *not* claim the prompt shipped). Reword spec line 8 "sits on top of" → "replaces with"; refresh the `models.ts:107-115` "FOUNDER-BLESSED" comment on swap; fold into Phase 6 re-synth.
-- **End-anchor names baked into frozen outro clips** (finding 35): the outro speaks the end-anchor name → baked into a frozen R2 clip, same Places-ToS lifetime concern as break clips. `patch-clip.ts` is already stop-type-agnostic (operates on any `poi_content` row by id), so a bracket rename is **already covered** — just name `patch-clip` (a script find/replace), NOT `resynth-tour` (a delivery re-render that won't change the spoken name), as the rename surface, and classify whether anchor names are Places business data (ToS-bound) or generic reverse-geocode strings.
-- **R2 prefix sweep is implicit** (finding 36): the regen runs through (extended) `resynth-tour.ts`, which already sweeps the old key via `deleteAudio(oldKey)` when the key moves. Add one sentence so it's explicit. (The presign path serves `poiContent.audioUrl` verbatim — `index.ts:222,235` — never recomputing from the enum, so a standalone enum flip can't strand presign; the only residual is orphaned objects, which the tool already handles.)
-- **§7 "new routing dependency"** (finding 23): "AI route generation adds a routing/maps dependency (Directions API / OSM)" is stale — the Google Routes API is **already** wired (`materialize.ts:22`). Reword: "reuses the existing Routes-API materialize step; what's new is AI selecting the *waypoints*." Drop the OSM implication.
-- **Catalog region display** (finding 18): after the migration the always-visible DRIVES chip would read "lake-tahoe" unless the catalog DTO serves the display name. State in Phase 4 that `corridorListItem.region` keeps serving the display name from the registry, so `deriveRegions`/the chip work unchanged.
-- **Host name is the constant "Skipper"** (finding 19): §4a's "host name decoupled, renaming is a one-line edit" invites a per-region rename the founder already ruled out (memory: "all region skippers are ALWAYS called 'Skipper'"). Record the constraint in §4a + handoff:58-59; keep "renaming is migration-free" only as a structural property.
-- **Cache tuple is implicit** (finding 20): no single place states the full target key `(poi_id, region, voice, joke_level[, direction])` or which dims are pgEnum-guarded (`voice` is free text, stays so even when M3 makes it user-selectable; `direction` enum-status at M4 unstated). State it once.
-- **Kit-regex parity test** (finding 33): the docs already flag both `lint.ts`/`generate.ts` as load-bearing, but stop at "read from the registry." Add a test asserting both consumers resolve to the identical term set from the single registry source, so a future host can't desync them.
-
----
-
-## Spec changes to make before building
-
-- ~~**Delete the §8 #7 "non-issue" sentence**; replace with the forward/reverse marker in the `poi_content` key + clip path (B1).~~ **SUPERSEDED** — zero-reuse removed `poi_content` and the content key entirely, so there's no marker to add; §8 #7 now reads "DISSOLVED by zero-reuse."
-- ~~**Add to §3 the bracket POI/anchor decision** (nullable `poiId` for brackets …), coordinated with the scenic spec's `'curated'` source (B2).~~ **SUPERSEDED** — Option B chosen: intro/outro live in a separate `tour_brackets` table (no `poiId`); `tour_stops.poiId` stays NOT NULL; the bracket gap is DECOUPLED from the scenic `'curated'` anchor. See spec §3.
-- **Add to §2/Phase 3 the reverse-geometry source**: a reversed `CorridorSpec` materialized once via Routes API (B3).
-- **Write the concrete drive/family table model** in §2/handoff Phase 2 (columns, FK direction) (M2).
-- **Write one consolidated `persona→region` rekey checklist** in the handoff naming every surface + the hand-written SQL migration artifact; decide whether `tours` keeps the dimension; state display-name vs slug field roles (M1).
-- **Write the post-migration mobile route graph** in §5/Phase 5 (fate of `corridor/[id].tsx`; home card carries a drive id; which DTO field carries the composed name) (M3).
-- **Clarify "assemble per request" = resolve to a pre-generated row**, sibling ids in the DTO (M4).
-- **Commit the "both directions?" default + flag home**; set it explicitly on `emerald-bay-run` (M5).
-- **Enumerate all five Phase-1 prompt/lint sites** (the prose kit at `skipper.ts:46`, the lint inversion to budget-0 + bracket exclusion, the DADPOCALYPSE rung number, the Sand Harbor few-shot replacement, the drop-a-joke reframe) (M6).
-- **Specify the anchor-name fallback chain** + a curated-override column (M3).
-- **Add the intro place-fact constraint** to App.C (descriptive endpoints, no superlatives) (minor).
-- **Reword §7's routing-dependency line**; **reword spec line 8** (warmer prompt "replaces" not "ships"); **record host.name = constant "Skipper"** (minors).
-
----
-
-## Decisions only the founder can make
-
-1. ~~**Direction marker now vs M4**~~ — **MOOT (decided):** no content key under zero-reuse; directions narrate independently as tour-owned content. (B1)
-2. ~~**Bracket anchor model**~~ — **DECIDED:** Option B — intro/outro in a separate `tour_brackets` table, no `poiId`; `tour_stops.poiId` stays NOT NULL. (B2, spec §3)
-3. **Drive/family table shape** — overload `tours` (add geometry/anchors/direction) + a `families` table (recommended), vs rename `corridors`→`drives` + new `families`. (M2)
-4. **Does `tours` keep a region/persona column** at all, or is it derived from corridor/family? (M1)
-5. **"Both directions?" default** for an ambiguous through-road — propose default BOTH + human one-way override. (M5)
-6. **Fate of the middle browse screen** (`corridor/[id].tsx`) — delete (home cards → drive detail) vs repurpose as the family screen. (M3)
-7. **`region` pgEnum vs a `regions` table** — the recorded memory decided "go straight to a regions table (option B)"; the spec uses a bare pgEnum. These are reconcilable (enum = content key, table = the `corridors.region` FK + `/regions` feed, deferred to the 2nd region) — but confirm the table + `/regions` endpoint are **deferred, not dropped**. (Not a true re-decision; a deferral to confirm.)
-
----
-
-## Completeness note
-
-What this review did and did NOT cover, stated honestly:
-
-- **Verified directly against current code:** every blocker and major (schema enums/FKs, `clipKey`/`upsertPoiContent` collision, `select.ts` greedy walk, `corridors.region` free-text→narration→picker flow, the API host/polyline joins, the three-level mobile hierarchy, all five `skipper.ts`/`lint.ts`/`generate.ts`/`judge-voice.ts`/`models.ts` prompt sites, `patch-clip` stop-type-agnosticism, the engine stopType unions + heading gate). These citations are solid.
-- **NOT independently re-run:** the empirical "~27% of polyline reversals pick a different narrated set" fuzz claim (finding 5) is cited from the verifier, not re-executed here — directionally it is obviously true (greedy order-dependent selection on a reversed traversal will diverge on stop *selection*, not just timing), but the exact percentage is unverified. The substance (the "slight variation" budget is asserted but enforced nowhere, and §1 internally contradicts itself by also permitting "a stop only worth it one way") stands regardless.
-- **drizzle-kit migration behavior** (M1's "the value rename won't generate / aborts on cast-back") is cited from the verifier's read of `drizzle-kit@0.31.10`'s codegen, not reproduced against the live Neon DB. Per CLAUDE.md's "ground tooling decisions in authoritative docs," the founder should confirm the value-rename path against drizzle's current docs before the Phase 2 checkpoint — the safe move (hand-written `ALTER TYPE ... RENAME VALUE`) is robust either way.
-- **Not examined at all:** the **audio/TTS pipeline correctness** (does `narrateIntro`/`narrateOutro` produce valid LINEAR16→MP3 with correct durations for a no-fact-sheet prompt — a new generation path); the **`attribution` array shape** for brackets (spec line 215 says new stop types "must carry the array shape" but brackets have no source — unexamined how an empty/synthetic attribution array validates); **Better Auth / tier-gating interaction** with the new bracket clips and the `/sign` presign tier check; **cost modeling** of the 2× generation against GCP credits. None of these block the design decision, but they are real Phase-3/4 surfaces this critique did not probe.
-- **Charm/quality judgment is out of scope** — whether the warmer prompt + 1–2-groaner cap actually *sounds* better is a by-ear founder call (the docs already gate it that way at Phase 6); this review only checked internal coherence, not taste.
-
-
----
-
-## Appendix — findings REFUTED by verification (recorded for completeness)
-
-These were raised by a reviewer but killed by the skeptic re-read — useful because they show the design already handles a worry:
-
-### R1. catalog-mobile: Zero schema/DTO/API surface exists for headline, drive-family, direction, or end-anchors — the entire catalog data model is greenfield, not a tweak — The CODE half of the claim is accurate: I confirmed corridors (schema.ts:73-95) has only id/region/name/slug/polyline/distanceMeters/durationSeconds/summary/timestamps — no headline/anchors/direction/family; corridorListItem (schemas.ts:151-159) has no such fields; grep for headline|family|direction|anchor across schema/shared returns zero data fields. So "these primitives are absent from current main" is literally true. BUT that is trivially true — the docs explicitly say this is a not-yet-built design ("Status: design... NOT yet built", spec line 3). The SUBSTANTIVE claim — that the design "frames this as a reframe / card rename" and so "invites building the UI before the data" — is refuted by the docs the reviewer is reviewing. (1) The reviewer cited only spec §2/§5 narrative and missed (a) the spec's own Build phases section and (b) the ENTIRE handoff doc, which exists and is one of the two docs under review. (2) The work is plainly scoped as net-new, not a tweak: handoff §1 header reads "Yours to build (none of this exists yet)... Schema: ... headline + end-anchors on the drive/family", and spec §8 reconciliation lists "Still TODO... directional schema (headline/end-anchors/drive-family/direction)". (3) The concrete fields the reviewer asks to be enumerated already are: handoff Phase 2 (lines 80-81) "headline + two end-anchors {name, lat, lng} (start/end)" plus the region pgEnum and start/finish stop-types; handoff Phase 4 (lines 97-102) "tour detail carries the directional name, the family/related set, the bracket stops" and "related-drives (same-family siblings) on the tour/corridor endpoints". (4) The data-before-UI ordering the reviewer recommends is already enforced: Phase 2 (schema) and Phase 4 (DTO/API) precede Phase 5 (mobile cards) in both the spec build-phases list and the handoff. The recommendation is essentially already implemented.
-
-### R2. intro-outro: Outro 'fires on end-anchor OR tour-end' is a double-fire hazard with no debounce across the two triggers — The reviewer's two code citations are individually accurate: TriggerEngine.fired dedups only within update() (trigger.ts:82/97/105), and the tour-end path (handleEnd→reachedEnd→pump→finishDrive, useDrive.ts:281-284,242-251,228-239) is separate from update(). But the causal conclusion — "handleEnd tries to play/finish [the outro] again" → double outro — is contradicted by what the code actually does. finishDrive (useDrive.ts:228-239) plays NOTHING: it pauses the player, drops the lock screen, sets done=true. pump() only plays clips pulled from `queue`, which is populated EXCLUSIVELY by engine.update() events via handleFix (useDrive.ts:275); the reachedEnd branch (line 250) just calls finishDrive() when the queue is empty. There is no second dispatch that PLAYS the outro at tour-end, so the double-fire cannot occur. The spec's "fires on end-anchor OR tour-end" (spec §3 line 76, handoff Appendix C line 165) is an OR of GUARANTEES (outro must play even if the geofence is missed), not an OR of independent dispatchers — the reviewer inverted that. Separately, start/finish stop-types and any tour-end outro dispatch are UNBUILT (engine treats stopType as opaque; handoff §1 says "none of this exists yet"), so there is no implemented double-fire to debounce. The same OR-clause exposes the OPPOSITE, real risk the reviewer missed: with finishDrive playing nothing today, a MISSED finish geofence means the outro never plays and the drive ends silently — a missing-dispatch gap, not a double-fire.
-
-### R3. intro-outro: The off-route drop filter will silently delete a position-agnostic intro before it can play — The code citations are accurate (useDrive.ts:335, simulate.ts:103, simulate.ts:14 all match verbatim; both filter every stop by offRouteM <= 700). But the finding's failure mechanism is built on a misread of spec §2 and ignores the design already in §3 + handoff Phase 5.
-
-(1) Wrong coord. The finding assumes a bracket would be "anchored to the end-anchor TOWN coord" sitting >700m off the polyline. Spec §2 (lines 50-51) says the opposite: anchor NAMES = reverse-geocoded towns, but anchor COORDS = "polyline endpoints." A bracket anchored to the end-anchor coord would have offRouteM ~= 0 (it IS a route vertex) and could never trip the >700m filter. The town is only the spoken/display name; it is never the trigger coordinate. The specific deletion mechanism does not exist.
-
-(2) Already designed as non-geofenced. The reviewer's own recommendation ("confirm brackets bypass snapStopsToRoute + the off-route filter; they are sequence-dispatched, not geofenced") is what the design already states. Spec §3 line 73-76: intro "never geofenced... fires on tour-start," outro "fires on end-anchor OR tour-end," intro "written position-agnostic." Handoff Phase 5 line 104: "prepend `start`, append `finish` segments (intro plays first regardless of position; outro at end)." The preview player drives segments by setTimeout/didJustFinish (useDrive.ts:9-12 comment), not the TriggerEngine. So brackets are not modeled as geofenced stops that snap+filter; the "silent drop" is a mis-implementation the finding invents, not the design.
-
-(3) Scope. start/finish do not exist yet (stopTypeEnum = ['story','scenic','break'], schema.ts:61 / enums.ts:16); useDrive.ts is the current Phase-2 live drive with no bracket concept. Phase 5 wires brackets into app/preview/[id].tsx only. The "ready-gate passed but the stop vanished at runtime" silent-failure narrative requires a stop that snaps+filters, which the design never creates.
-
-The only residual merit: §3/Phase 5 describe trigger SEMANTICS but never literally write "brackets must skip snapStopsToRoute/the off-route filter in the live useDrive.ts path," and Phase 5 names only the preview, leaving the live GPS drive (the real-GPS phase, §6) without an explicit bracket-bypass instruction. That is a minor doc-hardening note, not a blocker.
-
+_The full 38 KB critique (all 50 findings + the per-finding skeptic verification + the methodology
+write-up) is recoverable from git history; it is excised here because every design axis it reviewed no
+longer exists, and append-only history is better served by a pointer than by a wall of dead analysis._

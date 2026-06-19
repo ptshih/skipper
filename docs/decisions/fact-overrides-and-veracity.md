@@ -5,6 +5,16 @@ live-validated end-to-end: `poi_overrides` / `eval_runs` / `eval_scores` tables 
 seeded; corrections confirmed applying on live Wikipedia fetches; `--veracity` confirmed
 catching both known errors PLUS five previously unknown ones on the emerald-bay artifact.
 
+**Addendum (2026-06-19):** the eval-tables design below (§"The durable eval record") was SUPERSEDED
+by `docs/decisions/automated-grounding-gate.md`. `eval_runs`/`eval_scores` were redesigned for V2:
+`eval_runs` keyed by `region` with total/shipped/withheld tallies (no artifact/scorecard blob);
+`eval_scores` keyed by poiId + qid with a `withheld` flag (dropping the `(poi_source, poi_source_id)`/
+seq/stop_type triple) — see `schema.ts` + migration `0021`. Also, the "no automated groundedness gate —
+the human ear instead" doctrine quoted below was REVERSED for GROUNDING (now an automated fail-closed
+gate, same doc); VERACITY stays advisory by doctrine, so this doc's veracity loop (catch → adjudicate →
+`poi_overrides`) is unchanged. The `poi_overrides` `(source, source_id)` keying remains CORRECT
+(fetch-time, before the QID-keyed poi exists).
+
 ## The failure class
 
 The grounding gate verifies **script ↔ sheet** — it is structurally blind to a sheet whose
