@@ -71,6 +71,21 @@ export const auth = betterAuth({
   database: drizzleAdapter(authDb, { provider: 'pg', schema: authSchema }),
   // Allow the mobile app's deep-link scheme for cross-origin auth + OAuth callbacks.
   trustedOrigins: [`${MOBILE_SCHEME}://`],
+  // Brute-force guard on the auth endpoints. Better Auth's built-in limiter is enabled by DEFAULT
+  // ONLY in production; making it explicit (`enabled: true`) turns it on in dev too, so the same
+  // ceiling holds everywhere. Default in-memory "memory" storage — per-instance, same first-cut
+  // tradeoff as ./rate-limit; a shared store is the M4 upgrade. A conservative 100/60s baseline,
+  // with the credential paths (sign-in/sign-up) tightened via customRules to blunt password spraying.
+  // Shape grounded in the installed @better-auth/core 1.6.18 BetterAuthRateLimitOptions type.
+  rateLimit: {
+    enabled: true,
+    window: 60,
+    max: 100,
+    customRules: {
+      '/sign-in/email': { window: 60, max: 10 },
+      '/sign-up/email': { window: 60, max: 10 },
+    },
+  },
   emailAndPassword: { enabled: true },
   socialProviders,
   // Manual freemium tier on the user (no Stripe yet). 'free' | 'paid'.

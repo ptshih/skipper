@@ -21,9 +21,11 @@ import { Hono } from 'hono'
 import { and, asc, between, eq } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { narrations, pois, regions } from '@skipper/db/schema'
+import { radiusForKind } from '@skipper/engine'
 import { auth } from './auth'
 import { driveRoutes } from './drives'
 import type { ApiEnv } from './entitlements'
+import { rateLimit } from './rate-limit'
 import { withRetry } from './retry'
 import { DATA_SOURCES } from './sources'
 import { contentTypeForKey, presignGet } from './storage'
@@ -72,22 +74,14 @@ app.get('/regions', async (c) => {
 // Better Auth owns everything under /api/auth/* (its own handler).
 app.on(['POST', 'GET'], '/api/auth/*', (c) => auth.handler(c.req.raw))
 
+// Rate-limit the paid propose path BEFORE mounting the sub-app: POST /drives/propose fires a paid
+// Anthropic call + 2 Geocoding + 1 Routes call per request and otherwise has no cap, so this is the
+// spend-amplification guard (per-instance in-memory first cut — see ./rate-limit).
+app.use('/drives/propose', rateLimit({ limit: 15, windowSec: 60, label: 'propose' }))
+
 // Create-a-Drive (V2): user-owned, on-demand A→B drives over the shared narration corpus. The
 // whole sub-app is behind a free account (anonymous = roam only) — see ./drives.
 app.route('/drives', driveRoutes)
-
-// Kind-aware roam trigger radius (m). Roam pins are raw POI centroids — never road-snapped
-// (no route exists to snap to) — so an areal place needs a floor that matches its body: a
-// peak's pin is its SUMMIT, a lake's is open water, while a building sits near the curb.
-// Measured on the first live drive: at a flat 250 m only 8 of 77 basin pins were reachable
-// from the highway. The client's speed-adaptive lead still extends these at speed.
-function roamRadiusM(kind: string | null): number {
-  if (!kind) return 600
-  if (/mountain|peak|summit|ridge|hill/.test(kind)) return 1500
-  if (/lake|reservoir|bay|valley|canyon|island|peninsula/.test(kind)) return 1200
-  if (/park|recreation area|beach|cove|meadow|historic district/.test(kind)) return 1000
-  return 600
-}
 
 // Straight-line distance (m) — the same haversine as @skipper/engine's; inlined here
 // because the API's only geo need is this one filter (keep the dep graph flat).
@@ -108,6 +102,7 @@ function haversineMeters(aLat: number, aLng: number, bLat: number, bLng: number)
 // bbox prefilter + haversine beats dragging in PostGIS.
 // ALPHA: OPEN, like ?preview=1 (founder TestFlight toy; no UI links it for anyone else).
 // When roam ships for real it takes the live-drive wall (free account), same as tours.
+app.use('/roam', rateLimit({ limit: 60, windowSec: 60, label: 'roam' }))
 app.get('/roam', async (c) => {
   const lat = Number(c.req.query('lat'))
   const lng = Number(c.req.query('lng'))
@@ -163,7 +158,7 @@ app.get('/roam', async (c) => {
         lat: r.lat,
         lng: r.lng,
         durationMs: r.durationMs,
-        radiusM: roamRadiusM(r.kind),
+        radiusM: radiusForKind(r.kind),
         url: presignGet(r.key),
         contentType: contentTypeForKey(r.key),
       })),

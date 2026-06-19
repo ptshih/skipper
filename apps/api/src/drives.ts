@@ -22,8 +22,16 @@ import { db } from '@skipper/db'
 import { drives, driveDemand, narrations, pois, regions } from '@skipper/db/schema'
 import type { DriveSelection, DriveSelectionItem, Polyline, RouteProvenance } from '@skipper/db/schema'
 import { materializeRoute, type Waypoint } from '@skipper/db/seed/materialize'
-import { buildDrive, OFF_ROUTE_MAX_M, type DriveCandidate } from '@skipper/engine'
 import {
+  buildDrive,
+  DRIVE_MIN_GAP_SEC,
+  driveMaxStops,
+  OFF_ROUTE_MAX_M,
+  radiusForKind,
+  type DriveCandidate,
+} from '@skipper/engine'
+import {
+  CLAUDE_MODELS,
   createDriveRequest,
   driveProposeRequest,
   type DriveClip,
@@ -42,14 +50,10 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // a one-time credit pack is the planned unlock (IAP fast-follow), so 'paid' is uncapped today.
 const FREE_DRIVE_CAP = Number(process.env.FREE_DRIVE_CAP ?? 10)
 
-// Drive pacing — mirrors the generator's "standard" bucket (config.ts PACING.standard): a 3-min
-// floor between stops, with the cap scaled to the route's length (~1 stop / 4 min, capped at 24).
-const DRIVE_MIN_GAP_SEC = 180
-const DRIVE_MAX_STOPS_CAP = 24
-const driveMaxStops = (totalSec: number): number =>
-  Math.max(3, Math.min(DRIVE_MAX_STOPS_CAP, Math.round(totalSec / 240)))
+// Drive pacing (DRIVE_MIN_GAP_SEC / driveMaxStops) is single-sourced in @skipper/engine so the
+// API's selection matches the engine's.
 
-const PROPOSE_MODEL = process.env.DRIVE_PROPOSE_MODEL ?? 'claude-sonnet-4-6'
+const PROPOSE_MODEL = process.env.DRIVE_PROPOSE_MODEL ?? CLAUDE_MODELS.sonnet
 const GEOCODE_URL = 'https://maps.googleapis.com/maps/api/geocode/json'
 
 /* --------------------------------- helpers -------------------------------- */
@@ -71,17 +75,6 @@ function toClipForm(form: string): DriveClipForm {
     default:
       return 'story' // story + the (never-expected) bside
   }
-}
-
-// Kind-aware proximity radius (m) for a snapped drive stop — roam pins are un-snapped POI centroids
-// so an areal place needs a wider trigger floor than a building. Mirrors index.ts roamRadiusM; the
-// client's speed-adaptive lead still extends these at speed.
-function driveRadiusM(kind: string | null): number {
-  if (!kind) return 600
-  if (/mountain|peak|summit|ridge|hill/.test(kind)) return 1500
-  if (/lake|reservoir|bay|valley|canyon|island|peninsula/.test(kind)) return 1200
-  if (/park|recreation area|beach|cove|meadow|historic district/.test(kind)) return 1000
-  return 600
 }
 
 /** Parse a region's "lng_min,lat_min,lng_max,lat_max" discoveryBbox → a geocoding bias viewport
@@ -282,7 +275,7 @@ function manifestClips(selection: DriveSelection, corpusById: Map<string, Narrat
       name: n.name,
       lat: item.triggerLat,
       lng: item.triggerLng,
-      triggerRadiusM: driveRadiusM(n.kind),
+      triggerRadiusM: radiusForKind(n.kind),
       approachHeadingDeg: item.approachHeadingDeg,
       alongSec: item.alongSec,
       durationMs: n.durationMs,
@@ -573,7 +566,9 @@ driveRoutes.get('/', async (c) => {
           endName: drives.endName,
           distanceMeters: drives.distanceMeters,
           durationSeconds: drives.durationSeconds,
-          selection: drives.selection,
+          // Count clips in SQL rather than hauling the full selection jsonb back just to .length it
+          // (selection is jsonb NOT NULL, so no null-handling needed).
+          clipCount: sql<number>`jsonb_array_length(${drives.selection})`,
           createdAt: drives.createdAt,
         })
         .from(drives)
@@ -590,7 +585,7 @@ driveRoutes.get('/', async (c) => {
       endName: r.endName,
       distanceMeters: r.distanceMeters,
       durationSeconds: r.durationSeconds,
-      clipCount: (r.selection ?? []).length,
+      clipCount: r.clipCount,
       createdAt: r.createdAt.toISOString(),
     })),
   })
@@ -610,6 +605,25 @@ async function loadOwnedDrive(c: Context<ApiEnv>) {
         .where(and(eq(drives.id, id), eq(drives.userId, userId), isNull(drives.deletedAt)))
         .limit(1),
     { label: 'drive.load' },
+  )
+  return rows[0] ?? null
+}
+
+/** Lean owner-scoped loader — only { id, selection }, for paths that re-presign but need no geometry
+ *  (POST /:id/assets/sign). Same ownership scoping as loadOwnedDrive (id + userId + not-deleted +
+ *  UUID guard); 404 on any miss. */
+async function loadOwnedSelection(c: Context<ApiEnv>) {
+  const id = c.req.param('id')
+  const userId = c.get('session')?.user.id
+  if (!id || !UUID_RE.test(id) || !userId) return null
+  const rows = await withRetry(
+    () =>
+      db
+        .select({ id: drives.id, selection: drives.selection })
+        .from(drives)
+        .where(and(eq(drives.id, id), eq(drives.userId, userId), isNull(drives.deletedAt)))
+        .limit(1),
+    { label: 'drive.loadSelection' },
   )
   return rows[0] ?? null
 }
@@ -643,7 +657,7 @@ driveRoutes.get('/:id', async (c) => {
 
 /** POST /drives/:id/assets/sign — re-presigned clip URLs (offline refresh), keyed by seq. */
 driveRoutes.post('/:id/assets/sign', async (c) => {
-  const drive = await loadOwnedDrive(c)
+  const drive = await loadOwnedSelection(c)
   if (!drive) return c.json({ error: 'not_found' }, 404)
   const poiIds = (drive.selection ?? []).filter((i) => i.kind === 'narration').map((i) => i.poiId)
   const corpus = poiIds.length ? await loadCorpusByPoiIds(poiIds) : new Map<string, NarrationRow>()
