@@ -108,27 +108,27 @@ async function geocode(address: string, bounds?: string): Promise<{ lat: number;
 const RESOLVE_TOOL: Anthropic.Tool = {
   name: 'resolve_endpoints',
   description:
-    'Resolve the rider\'s vague start/end hints into real, geocodable places WITHIN the named region. ' +
-    'Prefer an evocative landmark, scenic overlook, town, or notable POI over a bare street address — ' +
-    'but stay faithful to the hint. Both endpoints MUST be inside the region.',
+    "Read the rider's one free-text request and resolve the START and END of the drive they want, " +
+    'each to a real, geocodable place WITHIN the named region. Prefer an evocative landmark, scenic ' +
+    'overlook, town, or notable POI over a bare street address. If they describe a LOOP (out and back, ' +
+    'a round trip), set start and end to the same place. Both endpoints MUST be inside the region.',
   input_schema: {
     type: 'object',
     properties: {
       start: { type: 'string', description: 'A real, geocodable place name in the region for the start.' },
-      end: { type: 'string', description: 'A real, geocodable place name in the region for the end.' },
-      inRegion: { type: 'boolean', description: 'False if either hint clearly falls outside the region.' },
+      end: { type: 'string', description: 'A real, geocodable place name in the region for the end (=start for a loop).' },
+      inRegion: { type: 'boolean', description: 'False if the request clearly falls outside the region.' },
     },
     required: ['start', 'end', 'inRegion'],
     additionalProperties: false,
   },
 }
 
-/** LLM endpoint resolution — maps free-text hints to clean in-region place names. The ONLY model
- *  call in the create flow (route + selection are deterministic). Cheap model, tiny output. */
-async function resolveEndpointNames(
+/** LLM endpoint resolution — pulls a clean in-region START + END from the rider's ONE conversational
+ *  prompt. The ONLY model call in the create flow (route + selection are deterministic). Cheap model. */
+async function resolveEndpointsFromPrompt(
   regionName: string,
-  startHint: string,
-  endHint: string,
+  prompt: string,
 ): Promise<{ start: string; end: string; inRegion: boolean }> {
   const client = new Anthropic()
   const response = await client.messages.create({
@@ -141,10 +141,9 @@ async function resolveEndpointNames(
         role: 'user',
         content: [
           `Region: ${regionName}.`,
-          `Start hint: "${startHint}".`,
-          `End hint: "${endHint}".`,
-          'Resolve each hint to the single best real, geocodable place in this region via the',
-          'resolve_endpoints tool. Favor a scenic, recognizable landmark when the hint is vague.',
+          `The rider said: "${prompt}".`,
+          'Resolve the START and END of the drive they want via the resolve_endpoints tool. Favor a',
+          'scenic, recognizable landmark when the request is vague; set start = end for a loop.',
         ].join('\n'),
       },
     ],
@@ -313,8 +312,8 @@ driveRoutes.post('/propose', async (c) => {
     return c.json({ error: 'bad_request', message: 'Invalid JSON body.' }, 400)
   }
   const parsed = driveProposeRequest.safeParse(body)
-  if (!parsed.success) return c.json({ error: 'bad_request', message: 'regionId, start and end are required.' }, 400)
-  const { regionId, start, end } = parsed.data
+  if (!parsed.success) return c.json({ error: 'bad_request', message: 'regionId and a prompt are required.' }, 400)
+  const { regionId, prompt } = parsed.data
   if (!UUID_RE.test(regionId)) return c.json({ error: 'bad_request', message: 'regionId must be a uuid.' }, 400)
 
   const regionRows = await withRetry(
@@ -330,39 +329,31 @@ driveRoutes.post('/propose', async (c) => {
   if (!region) return c.json({ error: 'not_found', message: 'Unknown region.' }, 404)
   const bounds = geocodeBoundsFor(region.bbox)
 
-  // Resolve each endpoint: explicit coords win; otherwise the LLM names an in-region anchor, geocoded.
-  const startHasCoords = start.lat != null && start.lng != null
-  const endHasCoords = end.lat != null && end.lng != null
-  let startName = start.name ?? start.text ?? 'Start'
-  let endName = end.name ?? end.text ?? 'End'
-
-  if (!startHasCoords || !endHasCoords) {
-    try {
-      const resolved = await resolveEndpointNames(region.name, start.text ?? start.name ?? '', end.text ?? end.name ?? '')
-      if (!resolved.inRegion) {
-        return c.json(
-          { error: 'out_of_region', message: `Those points aren't in ${region.name}. Pick a start and end inside the region.` },
-          422,
-        )
-      }
-      if (!startHasCoords) startName = resolved.start
-      if (!endHasCoords) endName = resolved.end
-    } catch (e) {
-      console.error('[api] drive propose LLM failed', e)
-      return c.json({ error: 'propose_failed', message: 'Could not resolve those places. Try a clearer start and end.' }, 502)
-    }
+  // The LLM pulls a START + END from the rider's one conversational prompt.
+  let resolved: { start: string; end: string; inRegion: boolean }
+  try {
+    resolved = await resolveEndpointsFromPrompt(region.name, prompt)
+  } catch (e) {
+    console.error('[api] drive propose LLM failed', e)
+    return c.json({ error: 'propose_failed', message: "Couldn't make sense of that. Try naming where to start and where to end up." }, 502)
+  }
+  if (!resolved.inRegion) {
+    return c.json(
+      { error: 'out_of_region', message: `That's outside ${region.name}. Keep the start and end inside the region.` },
+      422,
+    )
   }
 
-  // Geocode whatever still lacks coords (region-biased so "Inspiration Point" resolves locally).
+  // Geocode the resolved names (region-biased so "Inspiration Point" resolves locally).
   const [startGeo, endGeo] = await Promise.all([
-    startHasCoords ? Promise.resolve({ lat: start.lat!, lng: start.lng! }) : geocode(`${startName}, ${region.name}`, bounds),
-    endHasCoords ? Promise.resolve({ lat: end.lat!, lng: end.lng! }) : geocode(`${endName}, ${region.name}`, bounds),
+    geocode(`${resolved.start}, ${region.name}`, bounds),
+    geocode(`${resolved.end}, ${region.name}`, bounds),
   ])
   if (!startGeo || !endGeo) {
     return c.json({ error: 'unresolved', message: 'Could not locate one of those places. Try a more specific name.' }, 422)
   }
-  const startEp: ResolvedEndpoint = { name: startName, ...startGeo }
-  const endEp: ResolvedEndpoint = { name: endName, ...endGeo }
+  const startEp: ResolvedEndpoint = { name: resolved.start, ...startGeo }
+  const endEp: ResolvedEndpoint = { name: resolved.end, ...endGeo }
 
   let route
   try {

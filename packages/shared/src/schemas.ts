@@ -281,21 +281,13 @@ export type RoamManifest = z.infer<typeof roamManifest>
 /*  Create-a-Drive (V2) — a user-owned, on-demand A→B drive over reused narrations */
 /* -------------------------------------------------------------------------- */
 
-/** A free-text-or-coords endpoint. The propose step's LLM resolves `text` to the best in-region
- *  anchor; explicit `lat`/`lng` skip resolution. */
-export const driveEndpointInput = z.object({
-  text: z.string().optional(),
-  name: z.string().optional(),
-  lat: z.number().optional(),
-  lng: z.number().optional(),
-})
-export type DriveEndpointInput = z.infer<typeof driveEndpointInput>
-
-/** POST /drives/propose — resolve free-text A→B + preview the route. Cheap; persists nothing, no credit. */
+/** POST /drives/propose — resolve a free-text "where to" prompt + preview the route. The rider types
+ *  ONE conversational line ("from the casino district out to Emerald Bay, scenic way"); the LLM pulls
+ *  BOTH endpoints from it. A suggested-drive chip ("Emerald Bay loop") is just a canned prompt. Cheap;
+ *  persists nothing, no credit. */
 export const driveProposeRequest = z.object({
   regionId: z.uuid(),
-  start: driveEndpointInput,
-  end: driveEndpointInput,
+  prompt: z.string().min(1).max(400),
 })
 export type DriveProposeRequest = z.infer<typeof driveProposeRequest>
 
