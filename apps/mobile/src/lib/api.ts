@@ -6,17 +6,27 @@
 // the catalog (one card per drive) and GET /tours/:id returns the drive (route + region
 // + host + intro/outro + stops).
 import {
+  driveList,
+  driveManifest,
+  driveProposal,
   roamManifest,
   signedAudio,
+  signedDriveAudio,
   sourcesResponse,
   tourDetail,
   tourList,
   versionResponse,
 } from '@skipper/shared'
 import type {
+  CreateDriveRequest,
   DataSource,
+  DriveList,
+  DriveManifest,
+  DriveProposal,
+  DriveProposeRequest,
   RoamManifest,
   SignedAudio,
+  SignedDriveAudio,
   TourDetail,
   TourList,
   VersionPolicy,
@@ -185,6 +195,39 @@ export const getRoamManifest = async (
     ),
   )
 
+/* -------------------------------------------------------------------------- */
+/*  Create-a-Drive (V2) — user-owned on-demand A→B drives. All account-gated     */
+/*  (anonymous = roam only), so every call sends the session cookie.             */
+/* -------------------------------------------------------------------------- */
+
+/** Phase 1: resolve free-text A→B → in-region anchors + preview the route. Cheap, persists nothing,
+ *  costs no credit — the confirm-before-spend interstitial. 401 ⇒ needs a free account. */
+export const proposeDrive = async (req: DriveProposeRequest): Promise<DriveProposal> =>
+  parseDto(
+    driveProposal,
+    await fetchJson('/drives/propose', { method: 'POST', body: JSON.stringify(req) }),
+  )
+
+/** Phase 2: generate + persist the confirmed drive (consumes a credit; enforces the free-tier cap).
+ *  A 403 `drive_limit_reached` means the free cap is hit (carry `cap` in the ApiError message). */
+export const createDrive = async (req: CreateDriveRequest): Promise<DriveManifest> =>
+  parseDto(driveManifest, await fetchJson('/drives', { method: 'POST', body: JSON.stringify(req) }))
+
+/** The caller's saved drives (one card each; newest first). */
+export const listDrives = async (): Promise<DriveList> =>
+  parseDto(driveList, await fetchJson('/drives'))
+
+/** Replay a saved drive: frozen structure + LIVE narration content + freshly presigned clips. */
+export const getDrive = async (driveId: string): Promise<DriveManifest> =>
+  parseDto(driveManifest, await fetchJson(`/drives/${encodeURIComponent(driveId)}`))
+
+/** Re-presign a saved drive's clips (offline refresh), keyed by seq. */
+export const signDriveAudio = async (driveId: string): Promise<SignedDriveAudio> =>
+  parseDto(
+    signedDriveAudio,
+    await fetchJson(`/drives/${encodeURIComponent(driveId)}/assets/sign`, { method: 'POST' }),
+  )
+
 /** The app-wide data-source/license catalog (authoritative; the app bundles only a fallback). */
 export const getSources = async (): Promise<DataSource[]> =>
   parseDto(sourcesResponse, await fetchJson('/sources')).sources
@@ -193,4 +236,17 @@ export const getSources = async (): Promise<DataSource[]> =>
 export const getVersion = async (): Promise<VersionPolicy[]> =>
   parseDto(versionResponse, await fetchJson('/version')).policies
 
-export type { DataSource, RoamManifest, SignedAudio, TourDetail, TourList, VersionPolicy }
+export type {
+  CreateDriveRequest,
+  DataSource,
+  DriveList,
+  DriveManifest,
+  DriveProposal,
+  DriveProposeRequest,
+  RoamManifest,
+  SignedAudio,
+  SignedDriveAudio,
+  TourDetail,
+  TourList,
+  VersionPolicy,
+}
