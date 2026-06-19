@@ -20,14 +20,10 @@ const near = (a: number, b: number, tol: number) => expect(Math.abs(a - b)).toBe
 // cardinal cases live in packages/engine/test/geo.test.ts (the source of truth). Only the
 // studio-unique axes/cases are kept here.
 describe('haversineMeters', () => {
+  // The latitude-degree magnitude + cardinal cases are the engine's (re-exported); this keeps only
+  // the studio-unique LONGITUDE axis (different code path: cos(lat) scaling at the equator).
   test('one degree of longitude at the equator ≈ one degree of latitude', () => {
     near(haversineMeters([0, 0], [1, 0]), ONE_DEG_LAT_M, 1)
-  })
-
-  test('SF → LA ≈ 559 km', () => {
-    const sf: LngLat = [-122.4194, 37.7749]
-    const la: LngLat = [-118.2437, 34.0522]
-    near(haversineMeters(sf, la), 559_000, 5_000)
   })
 })
 

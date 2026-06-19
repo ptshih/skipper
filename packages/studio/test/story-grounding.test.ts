@@ -20,7 +20,7 @@ describe('buildStoryFacts — the facts bag shape (sheet + qid are NOT in it)', 
     expect(JSON.stringify(facts)).toBe(JSON.stringify({ extract: 'A.', title: 'T', url: 'u', pageId: 1 }))
   })
 
-  // (the qid-free shape is also locked in build-story-facts.test.ts; qid is the `pois.qid` column now)
+  // (qid is the `pois.qid` column now — it was hoisted out of the facts bag)
 
   test('the bag never carries well/enrichedAt/qid (those are columns)', () => {
     const facts = buildStoryFacts({ extract: 'A.', title: 'T', url: 'u', pageId: 1 })

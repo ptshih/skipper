@@ -26,6 +26,19 @@ const freeGrantKey = (userId: string) => `free:${userId}`
 /** Idempotency key for the consume that pays for a drive (a drive charges exactly one credit). */
 export const driveConsumeKey = (driveId: string) => `drive:${driveId}`
 
+/** The free-tier allotment grant entry — a PURE value builder (mirrors `driveConsumeEntry`) so the
+ *  grant's shape (amount/kind/source/key) is unit-testable instead of buried in the insert. */
+export function freeGrantEntry(userId: string): typeof creditEntries.$inferInsert {
+  return {
+    userId,
+    amount: FREE_DRIVE_CAP,
+    kind: 'grant',
+    source: 'free_tier',
+    reason: 'free allotment',
+    idempotencyKey: freeGrantKey(userId),
+  }
+}
+
 /** Ensure the free-tier allotment grant exists for this user — idempotent (ON CONFLICT DO NOTHING on
  *  the idempotency key), so it's safe to call on every credit-relevant request. Lazy-on-first-touch
  *  avoids coupling to the auth user-creation lifecycle (anonymous → free conversion, account merges). */
@@ -34,14 +47,7 @@ export async function ensureFreeGrant(userId: string): Promise<void> {
     () =>
       db
         .insert(creditEntries)
-        .values({
-          userId,
-          amount: FREE_DRIVE_CAP,
-          kind: 'grant',
-          source: 'free_tier',
-          reason: 'free allotment',
-          idempotencyKey: freeGrantKey(userId),
-        })
+        .values(freeGrantEntry(userId))
         .onConflictDoNothing({ target: creditEntries.idempotencyKey }),
     { label: 'credit.grant.free' },
   )

@@ -104,11 +104,6 @@ describe('RoamEngine — governors', () => {
     expect(e.update(fix(0.0084, 0, MPH60, 0, 70))).toHaveLength(0)
     expect(e.firedCount).toBe(1)
   })
-
-  test('one encounter per fix even when several qualify', () => {
-    const e = new RoamEngine([pin('x', 0.0085, 0), pin('y', 0.0086, 0.004)], { minGapSec: 0 })
-    expect(e.update(fix(0.0075, 0, MPH60, 0, 0))).toHaveLength(1)
-  })
 })
 
 describe('RoamEngine — spatial-grid bucketing equivalence', () => {

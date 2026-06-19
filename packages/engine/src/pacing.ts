@@ -52,24 +52,5 @@ export function buildRouteSnapper(polyline: LngLat[], totalSec: number): (p: Lng
   }
 }
 
-/**
- * Project FIFO-queue playback lag across an ordered set of clips. The player plays clips
- * sequentially — a clip can't start until the previous one ends — so when triggers fire faster
- * than clips play, the audio backs up and drifts behind the car. Given items + accessors for each
- * item's along-route time and clip length (seconds), returns each item (in route order) with the
- * lag: how many seconds AFTER its trigger the clip would actually start. Pure; assumes all items
- * are kept (a DROP guard that removes laggards must re-walk — see buildDrive).
- */
-export function projectQueueLag<T>(
-  items: T[],
-  alongSecOf: (t: T) => number,
-  lengthSecOf: (t: T) => number,
-): { item: T; lagSec: number }[] {
-  const sorted = [...items].sort((a, b) => alongSecOf(a) - alongSecOf(b))
-  let playEnd = 0
-  return sorted.map((item) => {
-    const start = Math.max(alongSecOf(item), playEnd)
-    playEnd = start + lengthSecOf(item)
-    return { item, lagSec: Math.round(start - alongSecOf(item)) }
-  })
-}
+// (projectQueueLag was removed 2026-06-19 — it had no production caller; buildDrive's step-4 FIFO
+//  walk inlines the lag projection because it also DROPS laggards mid-pass, which this could not.)

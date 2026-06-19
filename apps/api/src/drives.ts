@@ -21,6 +21,7 @@ import { and, between, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { creditEntries, drives, driveDemand, narrations, pois, regions } from '@skipper/db/schema'
 import type { DriveSelection, DriveSelectionItem, Polyline, RouteProvenance } from '@skipper/db/schema'
+import { geocodeBoundsFor, polylineBbox } from './drive-geometry'
 import { materializeRoute, type Waypoint } from '@skipper/routing'
 import {
   buildDrive,
@@ -78,15 +79,6 @@ function toClipForm(form: string): DriveClipForm {
   }
 }
 
-/** Parse a region's "lng_min,lat_min,lng_max,lat_max" discoveryBbox → a geocoding bias viewport
- *  "swLat,swLng|neLat,neLng" so an ambiguous in-region name resolves locally. Null when unset/bad. */
-function geocodeBoundsFor(discoveryBbox: string | null): string | undefined {
-  if (!discoveryBbox) return undefined
-  const p = discoveryBbox.split(',').map(Number)
-  if (p.length !== 4 || p.some((n) => !Number.isFinite(n))) return undefined
-  const [lngMin, latMin, lngMax, latMax] = p as [number, number, number, number]
-  return `${latMin},${lngMin}|${latMax},${lngMax}`
-}
 
 async function geocode(address: string, bounds?: string): Promise<{ lat: number; lng: number } | null> {
   const url = new URL(GEOCODE_URL)
@@ -189,21 +181,6 @@ interface NarrationRow {
 /** Load every roam narration whose POI falls within the route's bounding box (padded by the off-route
  *  ceiling) — the candidate set buildDrive snaps + paces. A few hundred rows per region, so a bbox
  *  prefilter beats PostGIS. Keyed by poiId (the buildDrive ⇄ narration join). */
-/** The route's bounding rectangle (min/max lat/lng over the polyline) — the drive's STALE-PROOF
- *  spatial extent (the polyline is frozen). Stored on the drive; also the corpus prefilter below. */
-export function polylineBbox(polyline: Polyline): { minLat: number; minLng: number; maxLat: number; maxLng: number } {
-  let minLat = Infinity
-  let maxLat = -Infinity
-  let minLng = Infinity
-  let maxLng = -Infinity
-  for (const [lng, lat] of polyline) {
-    if (lat < minLat) minLat = lat
-    if (lat > maxLat) maxLat = lat
-    if (lng < minLng) minLng = lng
-    if (lng > maxLng) maxLng = lng
-  }
-  return { minLat, minLng, maxLat, maxLng }
-}
 
 async function loadCorpusForRoute(polyline: Polyline): Promise<Map<string, NarrationRow>> {
   const { minLat, minLng, maxLat, maxLng } = polylineBbox(polyline)

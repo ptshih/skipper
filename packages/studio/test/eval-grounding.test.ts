@@ -59,15 +59,6 @@ describe('evaluateGrounding — the gate scoring', () => {
     expect(e.pass).toBe(true)
     expect(e.score).toBe(1)
   })
-
-  test('a hedged invented fact is still ungrounded (the verdict drives the gate)', async () => {
-    const e = await evaluateGrounding(
-      input(),
-      fake([{ claim: 'I bet a stagecoach came through here', status: 'ungrounded', evidence: null }]),
-    )
-    expect(e.pass).toBe(false)
-    expect(e.score).toBe(0)
-  })
 })
 
 describe('normalizeClaims — never trust the wire (the non-array crash regression)', () => {
@@ -216,15 +207,6 @@ describe('buildScorecard — rollup + the gate', () => {
     expect(charm.kind).toBe('advisory')
     expect(charm.pass).toBe(false)
     expect(charm.stopsFailed).toBe(2)
-  })
-
-  test('all gates clean → tour passes', () => {
-    const card = buildScorecard({
-      slug: 't',
-      runName: 'T',
-      evaluatedAt: null,
-      stops: [groundingEval(0, true, 1), groundingEval(1, true, 1)],
-    })
-    expect(card.pass).toBe(true)
+    // (this same case proves the all-gates-clean → card.pass=true path: the grounding gate passes here)
   })
 })

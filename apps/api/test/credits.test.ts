@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test'
-import { FREE_DRIVE_CAP, driveConsumeEntry, driveConsumeKey } from '../src/credits'
+import { FREE_DRIVE_CAP, driveConsumeEntry, driveConsumeKey, freeGrantEntry } from '../src/credits'
 
 // Pure-surface contract for the credit LEDGER (./src/credits). The DB-bound logic (the idempotent
 // free grant's ON CONFLICT DO NOTHING, the SUM-based balance) lives in SQL and would need a live/test
-// DB harness the repo doesn't have — these tests pin the parts that DON'T touch the DB: the consume
-// entry shape (one drive = exactly −1 credit) and the idempotency key formats.
+// DB harness the repo doesn't have — these tests pin the parts that DON'T touch the DB: the grant +
+// consume entry shapes (the money movements) and the idempotency key formats.
 
 describe('credit ledger — consume contract', () => {
   test('driveConsumeEntry charges exactly one credit, keyed on the drive id', () => {
@@ -27,8 +27,25 @@ describe('credit ledger — consume contract', () => {
     expect(driveConsumeKey('a')).not.toBe(driveConsumeKey('b'))
   })
 
-  test('FREE_DRIVE_CAP is a positive integer (the lifetime free allotment grant amount)', () => {
-    expect(Number.isInteger(FREE_DRIVE_CAP)).toBe(true)
-    expect(FREE_DRIVE_CAP).toBeGreaterThan(0)
+})
+
+describe('credit ledger — free grant contract', () => {
+  test('freeGrantEntry grants exactly FREE_DRIVE_CAP credits, keyed once per user', () => {
+    const g = freeGrantEntry('user_abc')
+    expect(g.userId).toBe('user_abc')
+    expect(g.amount).toBe(FREE_DRIVE_CAP) // the lifetime free allotment
+    expect(g.amount).toBeGreaterThan(0) // a grant is a CREDIT (positive), unlike the -1 consume
+    expect(g.kind).toBe('grant')
+    expect(g.source).toBe('free_tier') // a grant records its funding source
+    // Idempotency: keyed on the user, so the lazy grant mints AT MOST once ever (no double-allotment).
+    expect(g.idempotencyKey).toBe('free:user_abc')
+  })
+
+  test('distinct users get distinct grant keys (no cross-user grant dedupe collision)', () => {
+    expect(freeGrantEntry('a').idempotencyKey).not.toBe(freeGrantEntry('b').idempotencyKey)
+  })
+
+  test('a grant and a consume never share an idempotency key (no cross-kind dedupe collision)', () => {
+    expect(freeGrantEntry('u').idempotencyKey).not.toBe(driveConsumeEntry('u', 'u').idempotencyKey)
   })
 })
