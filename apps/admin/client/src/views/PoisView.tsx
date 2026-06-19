@@ -113,7 +113,7 @@ export function PoisView() {
 
 // A focused Preview+apply dialog (shared JobActionDialog shell): pick a region, then Preview (dry-run)
 // or Discover (apply). FREE — no LLM/TTS, so no confirm gate (spends={false}). bbox comes from the
-// region row's discoveryBbox column — null = use the generator's default.
+// region row's discoveryBbox column — null = use the built-in default.
 function DiscoverDialog({
   open,
   onOpenChange,
@@ -174,7 +174,7 @@ function DiscoverDialog({
 // Region-picker Preview+apply dialog for the corpus `generate_narrations` step: narrates + synthesizes a
 // narration for every enriched, story-grade POI in the region. Run after Discover + Enrich. SPENDS
 // Anthropic + TTS per narration, so it stays gated (JobActionDialog adds confirm:true on apply — the
-// default spends=true). bbox comes from the region row's discoveryBbox; null = the generator default.
+// default spends=true). bbox comes from the region row's discoveryBbox; null = the built-in default.
 function GenerateNarrationDialog({
   open,
   onOpenChange,
@@ -389,7 +389,7 @@ function Corrections({ poiId }: { poiId: string }) {
       </div>
       <div className="rounded-md border bg-background px-3 py-2 text-xs leading-relaxed text-muted-foreground">
         Corrections apply on the <strong className="text-foreground">next generate / regeneration</strong> of a
-        narration (the generator loads these overrides + reads the speakable anchor fresh per run). They do{' '}
+        narration (the studio job loads these overrides + reads the speakable anchor fresh per run). They do{' '}
         <strong className="text-foreground">not</strong> rewrite existing audio.
       </div>
 

@@ -57,7 +57,7 @@ export function RegionsView() {
         <span className="font-medium text-foreground">Discovery bbox</span> — the bounding box passed to{' '}
         <code className="font-mono text-xs">Discover POIs</code> as{' '}
         <code className="font-mono text-xs">--bbox "lng_min,lat_min,lng_max,lat_max"</code>. Leave blank to use the
-        generator's built-in default (Tahoe basin). Set this before running a discovery sweep for any new region.
+        built-in default (Tahoe basin). Set this before running a discovery sweep for any new region.
       </Callout>
 
       <div className="overflow-hidden rounded-xl border">
@@ -189,7 +189,7 @@ function RegionDialog({
               className="font-mono text-sm"
             />
             <p className="text-xs text-muted-foreground">
-              <code className="font-mono">lng_min,lat_min,lng_max,lat_max</code>. Leave blank to use the generator
+              <code className="font-mono">lng_min,lat_min,lng_max,lat_max</code>. Leave blank to use the built-in
               default (Tahoe basin). Use the lookup below to find a bbox.
             </p>
           </div>

@@ -4,7 +4,7 @@
 schema (migration 0009 dropped the legacy `tours`/`segments`/`tracks`/`tour_frames` from the live DB, 459
 paid clips preserved), the `/drives` API (propose → `buildDrive` → persist) + `GET /regions`, the mobile
 Create-a-Drive flow (conversational prompt → map-hero confirm → preview) + Roam-first home, and the
-generator/admin/sim rewires onto narrations. OPEN: simulator verification of the live create→drive runtime;
+studio/admin/sim rewires onto narrations. OPEN: simulator verification of the live create→drive runtime;
 pre-gen aside/bracket library; route-demand cache. Product rationale + the decision journey live in
 [../ideas/roam-first-create-a-drive.md](../ideas/roam-first-create-a-drive.md). Designed via a
 3-architecture × 3-judge-lens workflow + a 4-lens terminology audit, then founder-refined.

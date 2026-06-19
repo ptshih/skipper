@@ -17,7 +17,7 @@ export const SUMMARY_MODEL = CLAUDE_MODELS.haiku
 // ---------------------------------------------------------------------------
 // Lazily build the Anthropic client on first use, so importing this module stays
 // side-effect-free (ANTHROPIC_API_KEY is required only when a model call runs) —
-// mirrors the lazy @skipper/db client. Every generator/eval module shares this one
+// mirrors the lazy @skipper/db client. Every studio/eval module shares this one
 // instance via getAnthropic(); `label` is a per-call-site descriptive parenthetical
 // woven into the missing-key error so the message still names what needed the key.
 let _anthropic: Anthropic | null = null
