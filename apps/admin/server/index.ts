@@ -18,12 +18,12 @@
 //   GET  /admin/jobs/:id          -> one run (reconciled against its Cloud Run execution) + logs URL
 //   POST /admin/jobs              -> trigger an op as a skipper-gen Job  (jobs.ts — Phase 3)
 //   POST /admin/jobs/:id/cancel   -> stop a running execution (gen_job_status='canceled') (§14.8)
-//   GET  /admin/pois              -> POI corpus: sources, roam-clip usage, attribution, region coverage
+//   GET  /admin/pois              -> POI corpus: sources, narration usage, attribution, region coverage
 //   GET  /admin/pois/:id          -> full POI detail: lat/lng, summary, facts JSON, freshness
-//   GET  /admin/roam/sign/:poiId  -> presigned R2 URL + metadata for a POI's roam clip
+//   GET  /admin/pois/:poiId/narration -> presigned R2 URL + metadata for a POI's narration
 //   GET  /admin/pois/:id/corrections  -> a POI's fact-edit overrides + speakable anchor
 //   POST /admin/pois/:id/corrections  -> add/retire a fact-edit, or set/clear the speakable anchor
-//   DELETE /admin/pois/:id        -> hard-delete an orphaned POI (no roam clip)
+//   DELETE /admin/pois/:id        -> hard-delete an orphaned POI (no narration)
 
 import { Hono } from 'hono'
 import { serveStatic } from 'hono/bun'
@@ -466,7 +466,7 @@ app.post('/admin/jobs', async (c) => {
   return c.json({ job: row }, 201)
 })
 
-// POI corpus — sources, roam-clip usage, attribution, and region coverage.
+// POI corpus — sources, narration usage, attribution, and region coverage.
 app.get('/admin/pois', async (c) => {
   const poisRows = await db
     .select({
@@ -506,7 +506,7 @@ app.get('/admin/pois', async (c) => {
   const poiIds = poisRows.map((p) => p.id)
 
   const [clipStats, regionRows] = await Promise.all([
-    // Per-poi: roam clip metadata — a roam encounter is the poi's single `narrations` row (1:1,
+    // Per-poi: narration metadata — the poi's single `narrations` row (1:1,
     // UNIQUE poi_id). Duration + script power anomaly detection; factsHash/attribution/form drive
     // the stale + unattributed axes (story narrations carry CC BY-SA attribution).
     db
@@ -563,9 +563,9 @@ app.get('/admin/pois', async (c) => {
       name: p.name,
       extractChars: Number(p.extractChars ?? 0),
     })
-    // Roam-clip status — does a roam clip exist, and is it grounded on the poi's CURRENT facts
+    // Narration status — does a narration exist, and is it grounded on the poi's CURRENT facts
     // (else a run would regenerate it).
-    const roamClip: 'none' | 'fresh' | 'stale' = !clip
+    const narrationStatus: 'none' | 'fresh' | 'stale' = !clip
       ? 'none'
       : clip.factsHash != null && clip.factsHash === p.factsHash
         ? 'fresh'
@@ -578,15 +578,15 @@ app.get('/admin/pois', async (c) => {
       kind: p.kind,
       factsHash: p.factsHash,
       createdAt: p.createdAt,
-      roamClipCount: clip ? 1 : 0,
+      narrationCount: clip ? 1 : 0,
       storyEligibility,
       enriched: p.enriched,
       sheetDrift: p.sheetDrift,
-      roamClip,
+      narrationStatus,
       suspiciousDuration: clip?.suspiciousDuration ?? false,
-      // Stale = the roam clip grounded on a now-changed facts_hash. roamClip already encodes this;
+      // Stale = the narration grounded on a now-changed facts_hash. narrationStatus already encodes this;
       // surface it on the dedicated axis too (un-clipped pois are never stale).
-      staleFacts: roamClip === 'stale',
+      staleFacts: narrationStatus === 'stale',
       attributed: clip?.attributed ?? true,
       regionSlug: region?.slug ?? null,
       regionName: region?.name ?? null,
@@ -596,12 +596,12 @@ app.get('/admin/pois', async (c) => {
   return c.json({ pois: result })
 })
 
-// Presigned R2 URL + metadata for a single POI's roam clip (founder ear-pass).
-app.get('/admin/roam/sign/:poiId', async (c) => {
+// Presigned R2 URL + metadata for a single POI's narration (founder ear-pass).
+app.get('/admin/pois/:poiId/narration', async (c) => {
   const poiId = c.req.param('poiId')
   if (!UUID_RE.test(poiId)) return c.json({ error: 'not_found' }, 404)
 
-  // A roam clip = the poi's single `narrations` row (1:1, UNIQUE poi_id). The narration id is the
+  // A narration = the poi's single `narrations` row (1:1, UNIQUE poi_id). The narration id is the
   // stable clip id (R2 key is per-narration); the audio R2 key is narrations.audioUrl.
   const clip = (
     await db
@@ -623,7 +623,7 @@ app.get('/admin/roam/sign/:poiId', async (c) => {
 
   try {
     return c.json({
-      clip: {
+      narration: {
         id: clip.id,
         script: clip.script,
         url: presignGet(audioKey),
@@ -634,7 +634,7 @@ app.get('/admin/roam/sign/:poiId', async (c) => {
       },
     })
   } catch (e) {
-    console.error('[admin] roam presign failed', e)
+    console.error('[admin] narration presign failed', e)
     return c.json({ error: 'audio_unavailable', message: 'R2 not configured or presign failed.' }, 503)
   }
 })
@@ -856,9 +856,9 @@ app.post('/admin/pois/:id/corrections', async (c) => {
   )
 })
 
-// Hard-DELETE one POI — ONLY when it is ORPHANED (no roam narration references it). narrations.poiId
+// Hard-DELETE one POI — ONLY when it is ORPHANED (no narration references it). narrations.poiId
 // is onDelete:'cascade', so the DB would happily drop the narration with the poi — but a POI carrying
-// a roam clip is referenced BY DEFINITION, and the fix there is to regenerate or correct it, not
+// a narration is referenced BY DEFINITION, and the fix there is to regenerate or correct it, not
 // delete it; we refuse with a clean 409. An orphaned POI carries no narration, so there are no orphan
 // R2 clips to sweep. poi_overrides are keyed by (source, source_id), survive the row, and re-apply on
 // re-discovery — left intact.
@@ -875,7 +875,7 @@ app.delete('/admin/pois/:id', async (c) => {
     return c.json(
       {
         error: 'conflict',
-        message: `"${poi.name}" has a roam clip — regenerate or correct it instead of deleting.`,
+        message: `"${poi.name}" has a narration — regenerate or correct it instead of deleting.`,
       },
       409,
     )
@@ -891,7 +891,7 @@ app.delete('/admin/pois/:id', async (c) => {
 // in-app gate (only /health is intentionally open, for Cloud Run probes that bypass IAP).
 const WEB_ROOT = process.env.ADMIN_WEB_ROOT ?? './public'
 app.use('/*', serveStatic({ root: WEB_ROOT }))
-// SPA fallback — client-side routes (/runs, /pois, /roam, /regions, /reference) return index.html.
+// SPA fallback — client-side routes (/runs, /pois, /regions, /reference) return index.html.
 app.get('*', serveStatic({ path: `${WEB_ROOT}/index.html` }))
 
 const port = Number(process.env.PORT ?? 8788)

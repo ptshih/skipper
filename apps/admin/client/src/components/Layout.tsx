@@ -1,16 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link, Outlet, useNavigate } from '@tanstack/react-router'
-import { Activity, Anchor, BookOpen, Compass, Layers, MapPin, Menu, Moon, Search, Sun } from 'lucide-react'
+import { Activity, Anchor, BookOpen, Layers, MapPin, Menu, Moon, Search, Sun } from 'lucide-react'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
 
-type AppPath = '/runs' | '/regions' | '/pois' | '/roam' | '/reference'
+type AppPath = '/runs' | '/regions' | '/pois' | '/reference'
 
 const NAV: { to: AppPath; label: string; icon: React.ElementType }[] = [
   { to: '/runs', label: 'Runs', icon: Activity },
   { to: '/regions', label: 'Regions', icon: Layers },
   { to: '/pois', label: 'POIs', icon: MapPin },
-  { to: '/roam', label: 'Roam', icon: Compass },
 ]
 
 const itemBase =
@@ -209,7 +208,6 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
     { group: 'Go to', label: 'Runs', icon: Activity, href: '/runs' },
     { group: 'Go to', label: 'Regions', icon: Layers, href: '/regions' },
     { group: 'Go to', label: 'POIs', icon: MapPin, href: '/pois' },
-    { group: 'Go to', label: 'Roam', icon: Compass, href: '/roam' },
     { group: 'Go to', label: 'Reference', icon: BookOpen, href: '/reference' },
   ]
   const items = q ? all.filter((it) => it.label.toLowerCase().includes(q.toLowerCase())) : all

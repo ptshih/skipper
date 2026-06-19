@@ -35,12 +35,12 @@ const KIND_META: Record<string, { label: string; icon: React.ElementType; desc: 
   generate:        { label: 'Generate',        icon: Sparkles,   desc: 'Legacy: scripted + synthesized a tour from scratch.', spends: 'spend'  },
   resynth:         { label: 'Resynth',          icon: RefreshCw,  desc: 'Legacy: re-voiced every clip of a tour.',            spends: 'spend'  },
   patch_clip:      { label: 'Patch clip',       icon: Scissors,   desc: "Legacy: find/replace a stop or frame's script, then re-synth it.", spends: 'spend'  },
-  resynth_roam_clip: { label: 'Re-synth clip',  icon: RefreshCw,  desc: 'Re-voice one roam clip unchanged.',                  spends: 'spend'  },
+  resynth_roam_clip: { label: 'Re-synth narration',  icon: RefreshCw,  desc: 'Re-voice one narration unchanged.',              spends: 'spend'  },
   refetch_facts:   { label: 'Re-fetch facts',   icon: RefreshCw,  desc: "Re-fetch a POI's upstream facts (Wikipedia extract).", spends: 'free'   },
   sweep_orphans:   { label: 'Sweep orphans',    icon: Trash2,     desc: 'Delete R2 clips that no roam narration references.', spends: 'delete' },
-  sweep_region_pois: { label: 'Discover POIs',     icon: Filter,     desc: "Discover + upsert the region's POI corpus — roam draws from it.", spends: 'free'   },
-  enrich_region:   { label: 'Enrich corpus',    icon: Sparkles,   desc: 'Scout story POIs into verbatim fact sheets (pois.fact_sheet) for roam.', spends: 'spend'  },
-  generate_roam:   { label: 'Generate roam',    icon: Zap,        desc: 'Narrate + synthesize roam clips for the corpus.',    spends: 'spend'  },
+  discover_pois: { label: 'Discover POIs',     icon: Filter,     desc: "Discover + upsert the region's POI corpus — roam draws from it.", spends: 'free'   },
+  enrich_pois:   { label: 'Enrich corpus',    icon: Sparkles,   desc: 'Scout story POIs into verbatim fact sheets (pois.fact_sheet) for roam.', spends: 'spend'  },
+  generate_narrations:   { label: 'Generate Narration', icon: Zap,        desc: 'Narrate + synthesize narrations for the corpus.',  spends: 'spend'  },
 }
 
 const isLive = (s?: JobStatus | null) => s === 'running' || s === 'queued'
@@ -94,7 +94,7 @@ export function RunsView() {
       if (statusFilter === 'ok')      return r.status === 'succeeded' || r.pass === true
     }
     if (q) {
-      const s = `${r.slug ?? ''} ${r.kind} ${r.id}`.toLowerCase()
+      const s = `${r.kind} ${r.id}`.toLowerCase()
       if (!s.includes(q.toLowerCase())) return false
     }
     return true
@@ -164,7 +164,7 @@ export function RunsView() {
         <div className="flex flex-wrap items-center gap-2">
           <SearchInput
             wrapperClassName="min-w-[16rem] max-w-sm flex-1"
-            placeholder="Search slug, kind, id…"
+            placeholder="Search kind, id…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
@@ -201,7 +201,6 @@ export function RunsView() {
             <TableHeader>
               <TableRow>
                 <TableHead>Run</TableHead>
-                <TableHead>Target</TableHead>
                 <TableHead>Result</TableHead>
                 <TableHead>Mode</TableHead>
                 <TableHead>Cost</TableHead>
@@ -210,7 +209,7 @@ export function RunsView() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isPending && <TableSkeletonRows rows={6} cols={7} />}
+              {isPending && <TableSkeletonRows rows={6} cols={6} />}
               {filtered.map((r) => {
                 const km = KIND_META[r.kind]
                 const Icon = km?.icon ?? Activity
@@ -230,13 +229,6 @@ export function RunsView() {
                           <div className="font-mono text-xs text-muted-foreground">{r.id}</div>
                         </div>
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      {r.slug ? (
-                        <span className="font-medium">{r.slug}</span>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
                     </TableCell>
                     <TableCell><RunResultCell r={r} /></TableCell>
                     <TableCell>
@@ -267,7 +259,7 @@ export function RunsView() {
               })}
               {!isPending && filtered.length === 0 && (
                 <TableRow className="hover:bg-transparent">
-                  <TableCell colSpan={7}>
+                  <TableCell colSpan={6}>
                     <EmptyState icon={Search}>No runs match these filters.</EmptyState>
                   </TableCell>
                 </TableRow>
@@ -404,7 +396,6 @@ function RunDrawer({ run, onClose }: { run: RunEvent; onClose: () => void }) {
             <SectionLabel>Details</SectionLabel>
             <dl className="grid grid-cols-[120px_1fr] gap-px overflow-hidden rounded-lg border bg-border">
               <Def label="Kind"><span className="flex items-center gap-1.5"><Icon size={13} /> {km?.label ?? run.kind}</span></Def>
-              {run.slug && <Def label="Target" mono>{run.slug}</Def>}
               <Def label="Mode">
                 {run.dryRun
                   ? <Badge variant="secondary">dry-run</Badge>

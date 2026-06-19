@@ -1,7 +1,7 @@
 import { Fragment, useMemo, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CircleCheck, Compass, Locate, Plus, RefreshCw, Search, Sparkles, Trash2, Wrench, X } from 'lucide-react'
+import { CircleCheck, Compass, Locate, Plus, RefreshCw, Search, Sparkles, Trash2, Wrench, X, Zap } from 'lucide-react'
 import { api, type CorrectionOverride, type PoiDetail, type PoiRow, type StoryEligibility } from '@/lib/api'
 import { errMsg, timeAgo } from '@/lib/format'
 import { PageHeader } from '@/components/PageHeader'
@@ -48,22 +48,23 @@ const STORY_ELIGIBILITY_META: Record<StoryEligibility, { label: string; variant:
   'filtered-stub': { label: 'stub', variant: 'secondary', hint: 'No article text to enrich (empty/disambiguation page)' },
 }
 
-/** The SEPARATE roam-specific axis — shown as a secondary badge only when a roam clip exists. */
-const ROAM_CLIP_META: Record<'fresh' | 'stale', { label: string; variant: BadgeVariant; hint: string }> = {
-  fresh: { label: 'roam clip', variant: 'success', hint: 'Has a roam clip on current facts' },
-  stale: { label: 'roam clip · stale', variant: 'warning', hint: 'Facts moved — a run would regenerate it' },
+/** The SEPARATE narration axis — shown as a secondary badge only when a narration exists. */
+const NARRATION_META: Record<'fresh' | 'stale', { label: string; variant: BadgeVariant; hint: string }> = {
+  fresh: { label: 'narration', variant: 'success', hint: 'Has a narration on current facts' },
+  stale: { label: 'narration · stale', variant: 'warning', hint: 'Facts moved — a run would regenerate it' },
 }
 
 export function PoisView() {
   const navigate = useNavigate()
   const [tab, setTab] = useState<Tab>('corpus')
   const [discoverOpen, setDiscoverOpen] = useState(false)
+  const [generateOpen, setGenerateOpen] = useState(false)
 
-  // Shared with RoamView via the ['pois'] key — both read the same corpus, fetched once + cached.
+  // The shared place corpus, fetched once + cached under the ['pois'] key.
   const { data: pois = [], error: err, isPending } = useQuery({ queryKey: ['pois'], queryFn: async () => (await api.pois()).pois })
 
   const live = pois // no retired field; all pois are live for now
-  const flagged = pois.filter((p) => p.staleFacts || p.suspiciousDuration || (!p.attributed && p.roamClipCount > 0))
+  const flagged = pois.filter((p) => p.staleFacts || p.suspiciousDuration || (!p.attributed && p.narrationCount > 0))
 
   const tabs: { id: Tab; label: string; count: number; alert?: boolean }[] = [
     { id: 'corpus', label: 'Corpus', count: live.length },
@@ -74,11 +75,16 @@ export function PoisView() {
     <div className="space-y-6">
       <PageHeader
         title="POIs"
-        description="The shared place corpus — sources, roam-clip usage, attribution, and fact corrections. Roam selects from here."
+        description="The shared place corpus — sources, narration coverage, attribution, and fact corrections. Roam + drives select from here."
         actions={
-          <Button onClick={() => setDiscoverOpen(true)}>
-            <Compass className="h-4 w-4" /> Discover POIs
-          </Button>
+          <>
+            <Button variant="outline" onClick={() => setDiscoverOpen(true)}>
+              <Compass className="h-4 w-4" /> Discover POIs
+            </Button>
+            <Button onClick={() => setGenerateOpen(true)}>
+              <Zap className="h-4 w-4" /> Generate Narration
+            </Button>
+          </>
         }
       />
 
@@ -98,6 +104,7 @@ export function PoisView() {
       {tab === 'retire' && <RetireTab flagged={flagged} />}
 
       <DiscoverDialog open={discoverOpen} onOpenChange={setDiscoverOpen} onSubmitted={() => navigate({ to: '/runs' })} />
+      <GenerateNarrationDialog open={generateOpen} onOpenChange={setGenerateOpen} onSubmitted={() => navigate({ to: '/runs' })} />
     </div>
   )
 }
@@ -132,7 +139,7 @@ function DiscoverDialog({
       icon={Compass}
       title="Discover POIs"
       description="Discovers every Wikidata-pinned place in the region and upserts the shared POI corpus — roam draws from it. Free — no LLM or TTS spend."
-      buildBody={() => ({ kind: 'sweep_region_pois', ...(bbox ? { bbox } : {}) })}
+      buildBody={() => ({ kind: 'discover_pois', ...(bbox ? { bbox } : {}) })}
       spends={false}
       applyLabel="Discover"
       applyIcon={Compass}
@@ -162,6 +169,67 @@ function DiscoverDialog({
   )
 }
 
+/* ── GENERATE NARRATION (per-region, spends) ── */
+
+// Region-picker Preview+apply dialog for the corpus `generate_narrations` step: narrates + synthesizes a
+// narration for every enriched, story-grade POI in the region. Run after Discover + Enrich. SPENDS
+// Anthropic + TTS per narration, so it stays gated (JobActionDialog adds confirm:true on apply — the
+// default spends=true). bbox comes from the region row's discoveryBbox; null = the generator default.
+function GenerateNarrationDialog({
+  open,
+  onOpenChange,
+  onSubmitted,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onSubmitted: () => void
+}) {
+  const [regionSlug, setRegionSlug] = useState('')
+  const { data: regions = [], error: loadErr } = useQuery({
+    queryKey: ['regions'],
+    queryFn: async () => (await api.regions()).regions,
+    enabled: open,
+  })
+  const bbox = regions.find((r) => r.slug === regionSlug)?.discoveryBbox
+
+  return (
+    <JobActionDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      onSubmitted={onSubmitted}
+      icon={Zap}
+      title="Generate Narration"
+      description="Narrates + synthesizes a narration for every enriched, story-grade POI in the region. Run after Discover, then Enrich. Spends Anthropic + TTS credits per narration."
+      buildBody={() => ({ kind: 'generate_narrations', ...(bbox ? { bbox } : {}) })}
+      applyLabel="Generate Narration"
+      applyIcon={Zap}
+      disabled={!regionSlug}
+      error={loadErr}
+      note={
+        <>
+          <span className="font-medium text-foreground">Preview</span> dry-runs free (no narration or TTS —
+          prints the queue + a cost estimate to the run log);{' '}
+          <span className="font-medium text-foreground">Generate Narration</span> spends.
+        </>
+      }
+    >
+      <div className="space-y-2">
+        <Label htmlFor="generate-region">Region</Label>
+        <Select value={regionSlug || undefined} onValueChange={setRegionSlug}>
+          <SelectTrigger id="generate-region" className="w-full">
+            <SelectValue placeholder={regions.length === 0 ? 'Loading…' : 'Select a region…'} />
+          </SelectTrigger>
+          <SelectContent>
+            {regions.map((r) => (
+              <SelectItem key={r.slug} value={r.slug}>{r.displayName}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </JobActionDialog>
+  )
+}
+
 /* ── ENRICH (the corpus fact-well step) ── */
 
 /** What to enrich, resolved server-side. Either a hand-picked id list, OR a FILTER (the table's
@@ -172,11 +240,11 @@ type EnrichSelection =
   | { kind: 'all'; filter: { bbox?: string; source?: string; query?: string }; excludeIds: string[] }
 
 // A focused Preview+apply dialog (shared JobActionDialog shell) for the corpus `enrich` step
-// (enrich_region): acts on the table SELECTION, then Preview (free dry-run — NO model calls, prints the
+// (enrich_pois): acts on the table SELECTION, then Preview (free dry-run — NO model calls, prints the
 // count + a cost estimate) or Enrich (apply, SPENDS Anthropic; no TTS). THIS dialog is the paid-run gate:
 // it names the scope + cost and needs an explicit Enrich click, so the server's confirm:true (added by
 // JobActionDialog for the apply) is already human-gated — no extra window.confirm. The fact sheet it
-// builds (pois.fact_sheet) is read by roam, so enrich ONCE between Discover and Generate roam.
+// builds (pois.fact_sheet) is read by roam, so enrich ONCE between Discover and Generate Narration.
 // Enrich only acts on ELIGIBLE story POIs (the CLI gates), so the Preview count is authoritative.
 function EnrichDialog({
   open,
@@ -192,7 +260,7 @@ function EnrichDialog({
   onSubmitted: () => void
 }) {
   const buildBody = () => {
-    const body: Record<string, unknown> = { kind: 'enrich_region' }
+    const body: Record<string, unknown> = { kind: 'enrich_pois' }
     if (selection.kind === 'explicit') {
       body.includeIds = selection.ids
     } else {
@@ -302,7 +370,7 @@ function Corrections({ poiId }: { poiId: string }) {
       </div>
       <div className="rounded-md border bg-background px-3 py-2 text-xs leading-relaxed text-muted-foreground">
         Corrections apply on the <strong className="text-foreground">next generate / regeneration</strong> of a
-        roam clip (the generator loads these overrides + reads the speakable anchor fresh per run). They do{' '}
+        narration (the generator loads these overrides + reads the speakable anchor fresh per run). They do{' '}
         <strong className="text-foreground">not</strong> rewrite existing audio.
       </div>
 
@@ -417,17 +485,19 @@ function Corrections({ poiId }: { poiId: string }) {
 
 /* ── POI DETAIL SHEET ── */
 
-function PoiDetailSheet({ poiId, poiName, canDelete, open, onOpenChange }: {
+function PoiDetailSheet({ poiId, poiName, canDelete, hasNarration, open, onOpenChange }: {
   poiId: string
   poiName: string
-  /** Orphan (no roam clip) → a hard delete is allowed. Referenced POIs are guarded server-side. */
+  /** Orphan (no narration) → a hard delete is allowed. Referenced POIs are guarded server-side. */
   canDelete: boolean
+  /** Whether a synthesized narration exists for this POI (drives the player vs empty state). */
+  hasNarration: boolean
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
   const qc = useQueryClient()
   const confirm = useConfirm()
-  const [tab, setTab] = useState<'facts' | 'corrections'>('facts')
+  const [tab, setTab] = useState<'facts' | 'narration' | 'corrections'>('facts')
   const { data: detail, error: err } = useQuery({
     queryKey: ['poi', poiId],
     queryFn: async () => (await api.poi(poiId)).poi,
@@ -441,7 +511,7 @@ function PoiDetailSheet({ poiId, poiName, canDelete, open, onOpenChange }: {
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="flex w-[520px] max-w-full flex-col gap-0 p-0 sm:max-w-[520px]">
+      <SheetContent side="right" className="flex w-[720px] max-w-full flex-col gap-0 p-0 sm:max-w-[720px]">
         <SheetHeader className="justify-between px-6 py-4">
           <SheetTitle className="leading-snug">{poiName}</SheetTitle>
           <button
@@ -454,7 +524,7 @@ function PoiDetailSheet({ poiId, poiName, canDelete, open, onOpenChange }: {
 
         {/* Tab strip */}
         <div className="flex border-b">
-          {(['facts', 'corrections'] as const).map((t) => (
+          {(['facts', 'narration', 'corrections'] as const).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -479,6 +549,8 @@ function PoiDetailSheet({ poiId, poiName, canDelete, open, onOpenChange }: {
             detail ? <FactsTab poi={detail} /> : !err && <div className="text-sm text-muted-foreground">Loading…</div>
           )}
 
+          {tab === 'narration' && <NarrationTab poiId={poiId} hasNarration={hasNarration} />}
+
           {tab === 'corrections' && <Corrections poiId={poiId} />}
         </div>
 
@@ -502,7 +574,7 @@ function PoiDetailSheet({ poiId, poiName, canDelete, open, onOpenChange }: {
               >
                 <Trash2 className="h-4 w-4" /> {deleteMut.isPending ? 'Deleting…' : 'Delete POI'}
               </Button>
-              <span className="text-xs text-muted-foreground">No roam clip references this POI.</span>
+              <span className="text-xs text-muted-foreground">No narration references this POI.</span>
             </div>
             {deleteMut.error && (
               <div className="mt-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
@@ -572,6 +644,86 @@ function FactsTab({ poi }: { poi: PoiDetail }) {
   )
 }
 
+/* ── NARRATION (player + re-synth) ── */
+
+// The POI's one shared telling — audio player + script + a re-synth action. Moved here from the
+// retired /roam page; a narration is 1:1 with its poi (resolves via poiId), so it lives in the POI.
+function NarrationTab({ poiId, hasNarration }: { poiId: string; hasNarration: boolean }) {
+  const navigate = useNavigate()
+  const qc = useQueryClient()
+  const confirm = useConfirm()
+
+  const { data: clip, isLoading, error } = useQuery({
+    queryKey: ['poiNarration', poiId],
+    queryFn: async () => (await api.poiNarration(poiId)).narration,
+    enabled: hasNarration,
+  })
+
+  const resynthMut = useMutation({
+    mutationFn: () => api.createJob({ kind: 'resynth_roam_clip', poiId, apply: true, confirm: true }),
+    onSuccess: ({ job }) => { void qc.invalidateQueries({ queryKey: ['runs'] }); navigate({ to: '/runs', hash: job.id }) },
+  })
+  async function handleResynth() {
+    if (!(await confirm({
+      title: 'Re-synthesize narration?',
+      body: 'Spends ~$0.01 in TTS credits and replaces this POI’s current narration audio.',
+      confirmLabel: 'Re-synth',
+    }))) return
+    resynthMut.mutate()
+  }
+
+  if (!hasNarration) {
+    return (
+      <EmptyState icon={Zap} className="rounded-xl border bg-muted/30">
+        No narration yet — enrich this POI, then Generate Narration for its region.
+      </EmptyState>
+    )
+  }
+  if (isLoading) return <div className="py-2 text-xs text-muted-foreground">Loading…</div>
+  if (error) return <div className="py-2 text-xs text-destructive">{errMsg(error)}</div>
+  if (!clip) return null
+
+  const durationSec = Math.round(clip.audioDurationMs / 1000)
+  const mins = Math.floor(durationSec / 60)
+  const secs = durationSec % 60
+  const durLabel = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`
+
+  const wordCount = clip.script?.trim().split(/\s+/).filter(Boolean).length ?? 0
+  const wpm = wordCount > 0 ? Math.round(wordCount / (clip.audioDurationMs / 1000 / 60)) : 0
+  const suspicious = wpm > 0 && wpm < 90
+
+  return (
+    <div className="flex flex-col gap-2 pt-1">
+      <audio controls preload="none" src={clip.url} className="h-9 w-full" />
+      <div className="flex flex-wrap items-center gap-2.5 text-xs text-muted-foreground">
+        <span className="font-mono">{durLabel}</span>
+        {wpm > 0 && (
+          <span className={cn('font-mono', suspicious && 'text-destructive')}>
+            {wpm} wpm{suspicious ? ' ⚠ suspicious' : ''}
+          </span>
+        )}
+        {clip.factsHash && <code className="font-mono">{clip.factsHash.slice(0, 7)}</code>}
+        <span className="flex-1" />
+        <Button variant="outline" size="sm" onClick={() => void handleResynth()} disabled={resynthMut.isPending}>
+          <RefreshCw className="h-3 w-3" />
+          {resynthMut.isPending ? 'Queuing…' : 'Re-synth'}
+        </Button>
+      </div>
+      {resynthMut.error && (
+        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          Re-synth failed — {errMsg(resynthMut.error)}
+        </div>
+      )}
+      {suspicious && (
+        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          Narration duration ({durLabel} for {wordCount} words) looks like a TTS duplicate-audio defect. Re-synth to fix.
+        </div>
+      )}
+      <div className="whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground">{clip.script}</div>
+    </div>
+  )
+}
+
 /* ── CORPUS ── */
 
 function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
@@ -579,7 +731,7 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
   const [region, setRegion] = useState('all')
   const [source, setSource] = useState('all')
   const [flags, setFlags] = useState('all')
-  const [sheetPoi, setSheetPoi] = useState<{ id: string; name: string; canDelete: boolean } | null>(null)
+  const [sheetPoi, setSheetPoi] = useState<{ id: string; name: string; canDelete: boolean; hasNarration: boolean } | null>(null)
 
   // Gmail-style selection: in 'explicit' mode `selIds` are the CHOSEN rows; in 'all' mode every filtered
   // row is chosen EXCEPT `selIds` (the deselected). Lets "select all matching" send a server-side FILTER
@@ -604,13 +756,13 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
     if (source !== 'all' && p.source !== source) return false
     if (flags === 'defect' && !p.suspiciousDuration) return false
     if (flags === 'stale' && !p.staleFacts) return false
-    if (flags === 'unattrib' && (p.attributed || p.roamClipCount === 0)) return false
+    if (flags === 'unattrib' && (p.attributed || p.narrationCount === 0)) return false
     if (flags === 'story-eligible' && p.storyEligibility !== 'eligible') return false
     if (flags === 'story-filtered' && !p.storyEligibility.startsWith('filtered-')) return false
     if (flags === 'enriched' && !p.enriched) return false
     // The actionable gap: story-grade but no fact well yet — exactly the rows an Enrich run will bill for.
     if (flags === 'needs-enrich' && (p.storyEligibility !== 'eligible' || p.enriched)) return false
-    if (flags === 'roam-clip-stale' && p.roamClip !== 'stale') return false
+    if (flags === 'narration-stale' && p.narrationStatus !== 'stale') return false
     if (flags === 'sheet-drift' && !p.sheetDrift) return false
     if (q) {
       const s = `${p.name} ${p.sourceId}`.toLowerCase()
@@ -680,11 +832,11 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
 
   const totals = {
     total: pois.length,
-    withClips: pois.filter((p) => p.roamClipCount > 0).length,
+    withClips: pois.filter((p) => p.narrationCount > 0).length,
     eligible: pois.filter((p) => p.storyEligibility === 'eligible').length,
     enriched: pois.filter((p) => p.enriched).length,
-    // Attribution applies to roam STORY clips (CC BY-SA): an unattributed clip is one that exists.
-    unattrib: pois.filter((p) => !p.attributed && p.roamClipCount > 0).length,
+    // Attribution applies to STORY narrations (CC BY-SA): an unattributed narration is one that exists.
+    unattrib: pois.filter((p) => !p.attributed && p.narrationCount > 0).length,
     defects: pois.filter((p) => p.suspiciousDuration).length,
   }
 
@@ -692,7 +844,7 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant="secondary">{totals.total} total</Badge>
-        <Badge>{totals.withClips} with roam clips</Badge>
+        <Badge>{totals.withClips} with narrations</Badge>
         {totals.eligible > 0 && (
           <button onClick={() => setFlags('story-eligible')}>
             <Badge variant="default" className="cursor-pointer">{totals.eligible} story-eligible</Badge>
@@ -709,7 +861,7 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
         {totals.defects > 0 && (
           <button onClick={() => setFlags('defect')}>
             <Badge variant="destructive" className="cursor-pointer">
-              {totals.defects} clip defect{totals.defects > 1 ? 's' : ''}
+              {totals.defects} narration defect{totals.defects > 1 ? 's' : ''}
             </Badge>
           </button>
         )}
@@ -746,9 +898,9 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
             <SelectItem value="story-filtered">Story: filtered out</SelectItem>
             <SelectItem value="enriched">Enriched</SelectItem>
             <SelectItem value="needs-enrich">Eligible · un-enriched</SelectItem>
-            <SelectItem value="roam-clip-stale">Roam clip: stale</SelectItem>
+            <SelectItem value="roam-clip-stale">Narration: stale</SelectItem>
             <SelectItem value="sheet-drift">Story: sheet drifted</SelectItem>
-            <SelectItem value="defect">Clip defects</SelectItem>
+            <SelectItem value="defect">Narration defects</SelectItem>
             <SelectItem value="stale">Stale facts</SelectItem>
             <SelectItem value="unattrib">Unattributed</SelectItem>
           </SelectContent>
@@ -798,7 +950,7 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
                 <Fragment key={p.id}>
                   <TableRow
                     className={cn('cursor-pointer', isSelected(p.id) && 'bg-muted/40')}
-                    onClick={() => setSheetPoi({ id: p.id, name: p.name, canDelete: p.roamClipCount === 0 })}
+                    onClick={() => setSheetPoi({ id: p.id, name: p.name, canDelete: p.narrationCount === 0, hasNarration: p.narrationCount > 0 })}
                   >
                     <TableCell className="w-10" onClick={(e) => e.stopPropagation()}>
                       <Checkbox
@@ -812,7 +964,7 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
                       {(p.staleFacts || p.suspiciousDuration) && (
                         <div className="mt-1 flex flex-wrap gap-1">
                           {p.staleFacts && <Badge variant="warning">stale facts</Badge>}
-                          {p.suspiciousDuration && <Badge variant="destructive">clip defect</Badge>}
+                          {p.suspiciousDuration && <Badge variant="destructive">narration defect</Badge>}
                         </div>
                       )}
                     </TableCell>
@@ -841,15 +993,15 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
                             sheet drift
                           </Badge>
                         )}
-                        {p.roamClip !== 'none' && (
-                          <Badge variant={ROAM_CLIP_META[p.roamClip].variant} title={ROAM_CLIP_META[p.roamClip].hint}>
-                            {ROAM_CLIP_META[p.roamClip].label}
+                        {p.narrationStatus !== 'none' && (
+                          <Badge variant={NARRATION_META[p.narrationStatus].variant} title={NARRATION_META[p.narrationStatus].hint}>
+                            {NARRATION_META[p.narrationStatus].label}
                           </Badge>
                         )}
                       </div>
                     </TableCell>
                     <TableCell>
-                      {p.roamClipCount > 0 ? (
+                      {p.narrationCount > 0 ? (
                         <Badge variant={p.attributed ? 'success' : 'destructive'}>{p.attributed ? '✓' : 'missing'}</Badge>
                       ) : (
                         <span className="text-muted-foreground">n/a</span>
@@ -879,6 +1031,7 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
           poiId={sheetPoi.id}
           poiName={sheetPoi.name}
           canDelete={sheetPoi.canDelete}
+          hasNarration={sheetPoi.hasNarration}
           open={!!sheetPoi}
           onOpenChange={(o) => { if (!o) setSheetPoi(null) }}
         />
@@ -909,7 +1062,7 @@ function RetireTab({ flagged }: { flagged: PoiRow[] }) {
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ['runs'] }); navigate({ to: '/runs' }) },
     onError: (e) => setActionErr(errMsg(e)),
   })
-  // Retire is a hard DELETE, allowed ONLY for orphaned POIs (no roam clip) — the server guards it too.
+  // Retire is a hard DELETE, allowed ONLY for orphaned POIs (no narration) — the server guards it too.
   const deleteMut = useMutation({
     mutationFn: (poiId: string) => api.deletePoi(poiId),
     onSuccess: () => { setActionErr(null); void qc.invalidateQueries({ queryKey: ['pois'] }) },
@@ -932,9 +1085,9 @@ function RetireTab({ flagged }: { flagged: PoiRow[] }) {
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
         Flagged POIs. <strong className="text-foreground">Re-fetch</strong> re-pulls facts from Wikipedia (free) — if
-        they change, regenerate the roam clip to clear the staleness. Unattributed story clips violate CC BY-SA and
+        they change, regenerate the narration to clear the staleness. Unattributed story narrations violate CC BY-SA and
         need a regenerate. <strong className="text-foreground">Retire</strong> (hard delete) is allowed only for
-        orphaned POIs with no roam clip, so it's disabled for everything referenced here.
+        orphaned POIs with no narration, so it's disabled for everything referenced here.
       </p>
       {actionErr && (
         <Callout variant="error">
@@ -945,8 +1098,8 @@ function RetireTab({ flagged }: { flagged: PoiRow[] }) {
         {flagged.map((p) => {
           const tone = p.staleFacts ? 'warning' : 'destructive'
           const label = p.staleFacts ? 'Stale facts' : 'Unattributed'
-          const desc = p.staleFacts ? 'factsHash changed — re-fetch, then regenerate the roam clip' : 'story clip missing CC BY-SA attribution'
-          const isOrphan = p.roamClipCount === 0
+          const desc = p.staleFacts ? 'factsHash changed — re-fetch, then regenerate the narration' : 'story narration missing CC BY-SA attribution'
+          const isOrphan = p.narrationCount === 0
           const refetching = refetchMut.isPending && refetchMut.variables === p.id
           const deleting = deleteMut.isPending && deleteMut.variables === p.id
           return (
@@ -967,9 +1120,9 @@ function RetireTab({ flagged }: { flagged: PoiRow[] }) {
                     <code className="font-mono">{p.sourceId}</code>
                     {p.regionName && <span>{p.regionName}</span>}
                     <span>{desc}</span>
-                    {p.roamClipCount > 0 && (
+                    {p.narrationCount > 0 && (
                       <span className="text-warning">
-                        {p.roamClipCount} roam clip{p.roamClipCount > 1 ? 's' : ''}
+                        {p.narrationCount} narration{p.narrationCount > 1 ? 's' : ''}
                       </span>
                     )}
                   </div>
@@ -984,7 +1137,7 @@ function RetireTab({ flagged }: { flagged: PoiRow[] }) {
                     title={
                       isOrphan
                         ? undefined
-                        : 'Has a roam clip — regenerate or correct it instead of deleting.'
+                        : 'Has a narration — regenerate or correct it instead of deleting.'
                     }
                   >
                     <Button

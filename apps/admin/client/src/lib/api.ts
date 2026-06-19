@@ -27,7 +27,7 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 
 // Mirrors the `jobKind` enum in @skipper/shared (the server validates against it; this is the UX-typing
 // view, like StoryEligibility). Keep in sync if a kind is added/renamed there.
-export type JobKind = 'generate' | 'patch_clip' | 'resynth' | 'resynth_roam_clip' | 'sweep_orphans' | 'sweep_region_pois' | 'enrich_region' | 'generate_roam' | 'refetch_facts'
+export type JobKind = 'generate' | 'patch_clip' | 'resynth' | 'resynth_roam_clip' | 'sweep_orphans' | 'discover_pois' | 'enrich_pois' | 'generate_narrations' | 'refetch_facts'
 export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled'
 
 export interface GenJob {
@@ -91,7 +91,7 @@ export interface PoiDetail {
   updatedAt: string
 }
 
-export interface RoamClipDetail {
+export interface NarrationDetail {
   id: string
   script: string
   url: string
@@ -105,8 +105,8 @@ export interface RoamClipDetail {
  *  from it). Mirrors `StoryEligibility` in @skipper/shared (server computes it). */
 export type StoryEligibility = 'eligible' | 'filtered-source' | 'filtered-taste' | 'filtered-stub'
 
-/** Roam-specific axis: does a roam clip exist for this POI, and is it on the POI's current facts. */
-export type RoamClipStatus = 'none' | 'fresh' | 'stale'
+/** Narration axis: does a narration exist for this POI, and is it on the POI's current facts. */
+export type NarrationStatus = 'none' | 'fresh' | 'stale'
 
 export interface PoiRow {
   id: string
@@ -116,14 +116,14 @@ export interface PoiRow {
   kind: string | null
   factsHash: string | null
   createdAt: string
-  roamClipCount: number
+  narrationCount: number
   storyEligibility: StoryEligibility
   /** A non-empty curated fact sheet exists (server checks the `fact_sheet` column) — roam grounds on it. */
   enriched: boolean
   /** ENRICHED, but a curated sheet span no longer appears in the current article — the article drifted;
    *  the place needs a re-enrich (`enrich --force`) to pick up the upstream change. */
   sheetDrift: boolean
-  roamClip: RoamClipStatus
+  narrationStatus: NarrationStatus
   staleFacts: boolean
   attributed: boolean
   suspiciousDuration: boolean
@@ -182,7 +182,7 @@ export const api = {
   pois: () => req<{ pois: PoiRow[] }>('/admin/pois'),
   poi: (id: string) => req<{ poi: PoiDetail }>(`/admin/pois/${id}`),
   deletePoi: (id: string) => req<{ ok: true; id: string }>(`/admin/pois/${id}`, { method: 'DELETE' }),
-  roamSign: (poiId: string) => req<{ clip: RoamClipDetail }>(`/admin/roam/sign/${poiId}`),
+  poiNarration: (poiId: string) => req<{ narration: NarrationDetail }>(`/admin/pois/${poiId}/narration`),
   poiCorrections: (id: string) => req<PoiCorrections>(`/admin/pois/${id}/corrections`),
   saveCorrection: (id: string, body: CorrectionBody) =>
     req<PoiCorrections>(`/admin/pois/${id}/corrections`, { method: 'POST', body: JSON.stringify(body) }),
