@@ -8,7 +8,7 @@ import { SCRIPTS, buildJobArgs } from './jobs'
 // which owns begin → run → finish → exit). A kind that skips it records no status and shows NO
 // logs in the admin console (which no longer reads Cloud Logging). This guard makes "always
 // capture the same way" enforced, not aspirational: add a kind to SCRIPTS without wiring the
-// hook and this fails. (run.ts is the canonical main()+runJob shape to copy.)
+// hook and this fails. (generate-roam.ts is the canonical main()+runJob shape to copy.)
 const repoRoot = join(import.meta.dir, '..', '..', '..')
 
 for (const [kind, scriptPath] of Object.entries(SCRIPTS)) {

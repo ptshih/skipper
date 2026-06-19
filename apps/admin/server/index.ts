@@ -2,9 +2,10 @@
 //
 // v1 BACKEND. Behind Google IAP (requireAdmin asserts the founder's identity); a separate
 // Cloud Run service from the public api.skipper.fm so a routing bug can't leak ops onto the
-// funnel. Reads the same DB + presigns R2 for the ear-pass; triggers the skipper-gen Cloud
-// Run Job for ops (jobs.ts); authors tours via the LLM-propose → human-approve flow
-// (create-tour.ts). Background: docs/specs/admin-ops-console-spec.md §6.
+// funnel. Reads the same DB + presigns R2 for the roam ear-pass; triggers the skipper-gen Cloud
+// Run Job for corpus ops (jobs.ts). V2: authored tours are deferred — the console operates the
+// shared POI corpus + roam narrations; the tour catalog / Create-a-Tour flow is gone.
+// Background: docs/specs/admin-ops-console-spec.md §6.
 //
 //   GET  /health                  -> liveness (OPEN — Cloud Run probes don't pass through IAP)
 //   --- everything below is behind requireAdmin (IAP founder-only) ---
@@ -12,43 +13,33 @@
 //   POST /admin/regions           -> create a new region
 //   PATCH /admin/regions/:slug    -> update displayName / discoveryBbox
 //   POST /admin/regions/bbox-lookup -> LLM + Nominatim parallel bbox lookup by place name
-//   GET  /admin/tours             -> catalog: every tour (incl. drafts) + status + counts
-//   GET  /admin/tours/:id         -> the ear-pass: stops/frames + scripts + latest eval
-//   GET  /admin/tours/:id/sign    -> presigned R2 URLs for every clip (no tier gate)
-//   GET  /admin/evals?slug=       -> eval_runs history for a slug (the trend)
 //   GET  /admin/jobs              -> recent gen_jobs (operational record; powers job polling)
 //   GET  /admin/runs              -> unified Runs timeline: gen_jobs + orphan eval_runs
 //   GET  /admin/jobs/:id          -> one run (reconciled against its Cloud Run execution) + logs URL
 //   POST /admin/jobs              -> trigger an op as a skipper-gen Job  (jobs.ts — Phase 3)
 //   POST /admin/jobs/:id/cancel   -> stop a running execution (gen_job_status='canceled') (§14.8)
-//   GET  /admin/integrity         -> ready tours violating the audio/attribution invariant (§14.9)
-//   GET  /admin/pois              -> POI corpus: sources, tour + roam usage, attribution, region coverage
+//   GET  /admin/pois              -> POI corpus: sources, roam-clip usage, attribution, region coverage
 //   GET  /admin/pois/:id          -> full POI detail: lat/lng, summary, facts JSON, freshness
 //   GET  /admin/roam/sign/:poiId  -> presigned R2 URL + metadata for a POI's roam clip
 //   GET  /admin/pois/:id/corrections  -> a POI's fact-edit overrides + speakable anchor
 //   POST /admin/pois/:id/corrections  -> add/retire a fact-edit, or set/clear the speakable anchor
-//   POST /admin/tours/propose     -> Create Tour, phase 1: LLM + geocode  (create-tour.ts — Phase 4)
-//   POST /admin/tours             -> Create Tour, phase 2: freeze + draft  (create-tour.ts — Phase 4)
+//   DELETE /admin/pois/:id        -> hard-delete an orphaned POI (no roam clip)
 
 import { Hono } from 'hono'
 import { serveStatic } from 'hono/bun'
-import { and, asc, count, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, inArray, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import {
   evalRuns,
-  evalScores,
   genJobs,
+  narrations,
   poiOverrides,
   pois,
   regions,
-  segments,
-  tourFrames,
-  tours,
-  tracks,
 } from '@skipper/db/schema'
 import { classifyStoryEligibility } from '@skipper/shared'
 import { requireAdmin, type AdminEnv } from './auth'
-import { contentTypeForKey, presignGet, signClips } from './storage'
+import { contentTypeForKey, presignGet } from './storage'
 import {
   buildJobArgs,
   cancelExecution,
@@ -60,8 +51,6 @@ import {
   type ExecState,
   type JobKind,
 } from './jobs'
-import { freezeTour, proposeTour, type ProposePrompt } from './create-tour'
-import type { ContentfulStatusCode } from 'hono/utils/http-status'
 
 const app = new Hono<AdminEnv>()
 
@@ -192,329 +181,6 @@ app.post('/admin/regions/bbox-lookup', async (c) => {
   })
 })
 
-// Catalog — EVERY tour (drafts included; the admin operates the whole catalog, unlike the
-// public /tours which only lists ready ones), with stop/frame counts and an authored flag.
-app.get('/admin/tours', async (c) => {
-  const rows = await db
-    .select({
-      id: tours.id,
-      slug: tours.slug,
-      headline: tours.headline,
-      regionSlug: regions.slug,
-      regionName: regions.displayName,
-      status: tours.status,
-      distanceMeters: tours.distanceMeters,
-      durationSeconds: tours.durationSeconds,
-      routeProvenance: tours.routeProvenance,
-      createdAt: tours.createdAt,
-      updatedAt: tours.updatedAt,
-    })
-    .from(tours)
-    .innerJoin(regions, eq(tours.regionId, regions.id))
-    .orderBy(desc(tours.createdAt))
-
-  const ids = rows.map((r) => r.id)
-  const stopCount = new Map<string, number>()
-  const frameCount = new Map<string, number>()
-  if (ids.length) {
-    const [sc, bc] = await Promise.all([
-      // Stops = tour-bound segments (one segment per stop; its single variant-0 track is the
-      // telling). Count segments, not tracks, so the figure stays one-per-stop.
-      db
-        .select({ tourId: segments.tourId, n: count() })
-        .from(segments)
-        .where(inArray(segments.tourId, ids))
-        .groupBy(segments.tourId),
-      db
-        .select({ tourId: tourFrames.tourId, n: count() })
-        .from(tourFrames)
-        .where(inArray(tourFrames.tourId, ids))
-        .groupBy(tourFrames.tourId),
-    ])
-    for (const r of sc) if (r.tourId) stopCount.set(r.tourId, Number(r.n))
-    for (const r of bc) frameCount.set(r.tourId, Number(r.n))
-  }
-
-  return c.json({
-    tours: rows.map(({ routeProvenance, ...r }) => ({
-      ...r,
-      stops: stopCount.get(r.id) ?? 0,
-      frames: frameCount.get(r.id) ?? 0,
-      // 'admin' = LLM-proposed + human-approved at runtime; 'seed' = the committed seed/data route.
-      authored: routeProvenance ? 'admin' : 'seed',
-    })),
-  })
-})
-
-// The ear-pass: a tour's stops/frames WITH scripts + the latest eval scores. Audio URLs
-// come from /sign. Includes drafts (status surfaced) so a freshly-generated tour can be vetted.
-app.get('/admin/tours/:id', async (c) => {
-  const id = c.req.param('id')
-  if (!UUID_RE.test(id)) return c.json({ error: 'not_found' }, 404)
-  const tour = (await db.select().from(tours).where(eq(tours.id, id)).limit(1))[0]
-  if (!tour) return c.json({ error: 'not_found' }, 404)
-
-  const [regionRows, stops, frames, latestRun] = await Promise.all([
-    db
-      .select({ slug: regions.slug, displayName: regions.displayName })
-      .from(regions)
-      .where(eq(regions.id, tour.regionId))
-      .limit(1),
-    // A tour's stops = its tour-bound segments joined to the variant-0 track (the telling) and
-    // the shared place. stopType ← tracks.form (always story|scenic|break for a tour stop);
-    // triggerRadiusM ← segments.radiusM; revision token ← the narration's updatedAt.
-    db
-      .select({
-        seq: segments.seq,
-        // The variant-0 track's id — the patch/re-voice target for the per-stop tuning actions.
-        trackId: tracks.id,
-        stopType: tracks.form,
-        name: pois.name,
-        poiSource: pois.source,
-        poiSourceId: pois.sourceId,
-        script: tracks.script,
-        audioUrl: tracks.audioUrl,
-        audioDurationMs: tracks.audioDurationMs,
-        attribution: tracks.attribution,
-        factsHash: tracks.factsHash,
-        triggerLat: segments.triggerLat,
-        triggerLng: segments.triggerLng,
-        triggerRadiusM: segments.radiusM,
-        revisedAt: tracks.updatedAt,
-      })
-      .from(segments)
-      .innerJoin(tracks, and(eq(tracks.segmentId, segments.id), eq(tracks.variant, 0)))
-      .innerJoin(pois, eq(segments.poiId, pois.id))
-      .where(eq(segments.tourId, id))
-      .orderBy(asc(segments.seq)),
-    db
-      .select({
-        kind: tourFrames.kind,
-        script: tourFrames.script,
-        audioUrl: tourFrames.audioUrl,
-        audioDurationMs: tourFrames.audioDurationMs,
-        revisedAt: tourFrames.updatedAt,
-      })
-      .from(tourFrames)
-      .where(eq(tourFrames.tourId, id)),
-    db
-      .select()
-      .from(evalRuns)
-      .where(eq(evalRuns.slug, tour.slug))
-      .orderBy(desc(evalRuns.createdAt))
-      .limit(1),
-  ])
-
-  const run = latestRun[0]
-  const scores = run
-    ? await db
-        .select({
-          seq: evalScores.seq,
-          stopType: evalScores.stopType,
-          dimension: evalScores.dimension,
-          source: evalScores.source,
-          pass: evalScores.pass,
-          value: evalScores.value,
-          findings: evalScores.findings,
-          // The dimension-specific payload (charm best/sag quotes, ClaimVerdict[], …) — the
-          // judge's actual reasoning, surfaced so prompt-tuning targets the real sag (§14.7).
-          detail: evalScores.detail,
-        })
-        .from(evalScores)
-        .where(eq(evalScores.runId, run.id))
-    : []
-
-  return c.json({
-    tour: {
-      id: tour.id,
-      slug: tour.slug,
-      headline: tour.headline,
-      status: tour.status,
-      summary: tour.summary,
-      distanceMeters: tour.distanceMeters,
-      durationSeconds: tour.durationSeconds,
-      startAnchor: { name: tour.startAnchorName, lat: tour.startAnchorLat, lng: tour.startAnchorLng },
-      endAnchor: { name: tour.endAnchorName, lat: tour.endAnchorLat, lng: tour.endAnchorLng },
-      polyline: tour.polyline,
-      routeProvenance: tour.routeProvenance,
-    },
-    region: regionRows[0] ?? null,
-    stops: stops.map(({ audioUrl, ...s }) => ({ ...s, hasAudio: audioUrl != null })),
-    frames: frames.map(({ audioUrl, ...b }) => ({ ...b, hasAudio: audioUrl != null })),
-    eval: run
-      ? {
-          id: run.id,
-          pass: run.pass,
-          dryRun: run.dryRun,
-          grounding: run.groundingScore,
-          tts: run.ttsScore,
-          diversity: run.diversityScore,
-          charm: run.charmScore,
-          veracity: run.veracityScore,
-          narrationModel: run.narrationModel,
-          createdAt: run.createdAt,
-          scores,
-        }
-      : null,
-  })
-})
-
-// Presigned R2 URLs for every clip — NO tier gate (founder-only behind IAP).
-app.get('/admin/tours/:id/sign', async (c) => {
-  const id = c.req.param('id')
-  if (!UUID_RE.test(id)) return c.json({ error: 'not_found' }, 404)
-
-  const [stopClips, frameClips] = await Promise.all([
-    db
-      .select({ seq: segments.seq, key: tracks.audioUrl, durationMs: tracks.audioDurationMs })
-      .from(segments)
-      .innerJoin(tracks, and(eq(tracks.segmentId, segments.id), eq(tracks.variant, 0)))
-      .where(eq(segments.tourId, id))
-      .orderBy(asc(segments.seq)),
-    db
-      .select({ kind: tourFrames.kind, key: tourFrames.audioUrl, durationMs: tourFrames.audioDurationMs })
-      .from(tourFrames)
-      .where(eq(tourFrames.tourId, id)),
-  ])
-
-  try {
-    return c.json(signClips(stopClips, frameClips))
-  } catch (e) {
-    console.error('[admin] presign failed', e)
-    return c.json({ error: 'audio_unavailable', message: 'R2 not configured or presign failed.' }, 503)
-  }
-})
-
-// ── Create Tour (spec §5b): LLM-proposed → human-approved → frozen ──
-
-// Phase 1 — propose: prompt -> LLM named waypoints -> region-biased geocode. No DB write.
-app.post('/admin/tours/propose', async (c) => {
-  let body: Record<string, unknown>
-  try {
-    body = (await c.req.json()) as Record<string, unknown>
-  } catch {
-    return c.json({ error: 'bad_request', message: 'a JSON body is required' }, 400)
-  }
-  for (const k of ['regionSlug', 'roughStart', 'roughEnd', 'loopOrDirection'] as const) {
-    if (typeof body[k] !== 'string' || !(body[k] as string).trim())
-      return c.json({ error: 'bad_request', message: `${k} is required` }, 400)
-  }
-  try {
-    const proposal = await proposeTour(body as unknown as ProposePrompt)
-    return c.json({ proposal })
-  } catch (e) {
-    if (e instanceof HttpError)
-      return c.json({ error: 'propose_failed', message: e.message }, e.status as ContentfulStatusCode)
-    console.error('[admin] propose failed', e)
-    return c.json({ error: 'propose_failed', message: e instanceof Error ? e.message : String(e) }, 502)
-  }
-})
-
-// Phase 2 — freeze: the human-APPROVED waypoints -> materialize -> draft tour + provenance.
-app.post('/admin/tours', async (c) => {
-  let body: Record<string, unknown>
-  try {
-    body = (await c.req.json()) as Record<string, unknown>
-  } catch {
-    return c.json({ error: 'bad_request', message: 'a JSON body is required' }, 400)
-  }
-  try {
-    const tour = await freezeTour(body)
-    return c.json({ tour }, 201)
-  } catch (e) {
-    if (e instanceof HttpError)
-      return c.json({ error: 'create_failed', message: e.message }, e.status as ContentfulStatusCode)
-    console.error('[admin] create tour failed', e)
-    return c.json({ error: 'create_failed', message: e instanceof Error ? e.message : String(e) }, 502)
-  }
-})
-
-// Eval history for a slug — the run-over-run trend the SPA diffs (latest vs prior).
-app.get('/admin/evals', async (c) => {
-  const slug = c.req.query('slug')
-  if (!slug) return c.json({ error: 'bad_request', message: 'slug is required' }, 400)
-  const runs = await db
-    .select({
-      id: evalRuns.id,
-      kind: evalRuns.kind,
-      dryRun: evalRuns.dryRun,
-      pass: evalRuns.pass,
-      grounding: evalRuns.groundingScore,
-      tts: evalRuns.ttsScore,
-      diversity: evalRuns.diversityScore,
-      charm: evalRuns.charmScore,
-      veracity: evalRuns.veracityScore,
-      narrationModel: evalRuns.narrationModel,
-      gitSha: evalRuns.gitSha,
-      createdAt: evalRuns.createdAt,
-    })
-    .from(evalRuns)
-    .where(eq(evalRuns.slug, slug))
-    .orderBy(desc(evalRuns.createdAt))
-    .limit(50)
-  return c.json({ slug, runs })
-})
-
-// Integrity audit (§14.9). The generator's ready-gate enforces "every stop + frame has
-// audio, every story stop has CC BY-SA attribution" at WRITE time — but nothing audits the
-// LIVE db, so a half-failed resynth or a manual poke could leave a `ready` tour silently
-// broken (the exact way the canonical demo dies). Pure read; flags only violators.
-app.get('/admin/integrity', async (c) => {
-  const ready = await db
-    .select({ id: tours.id, slug: tours.slug, headline: tours.headline })
-    .from(tours)
-    .where(eq(tours.status, 'ready'))
-    .orderBy(asc(tours.slug))
-  const ids = ready.map((r) => r.id)
-  if (!ids.length) return c.json({ checked: 0, tours: [] })
-
-  const [silentStops, silentFrames, unattributed] = await Promise.all([
-    db
-      .select({ tourId: segments.tourId, seq: segments.seq, stopType: tracks.form })
-      .from(segments)
-      .innerJoin(tracks, and(eq(tracks.segmentId, segments.id), eq(tracks.variant, 0)))
-      .where(and(inArray(segments.tourId, ids), isNull(tracks.audioUrl)))
-      .orderBy(asc(segments.seq)),
-    db
-      .select({ tourId: tourFrames.tourId, kind: tourFrames.kind })
-      .from(tourFrames)
-      .where(and(inArray(tourFrames.tourId, ids), isNull(tourFrames.audioUrl))),
-    // Story stops are the wikipedia-grounded ones — attribution is the legal (not optional)
-    // invariant. null OR an empty array both count as missing.
-    db
-      .select({ tourId: segments.tourId, seq: segments.seq })
-      .from(segments)
-      .innerJoin(tracks, and(eq(tracks.segmentId, segments.id), eq(tracks.variant, 0)))
-      .where(
-        and(
-          inArray(segments.tourId, ids),
-          eq(tracks.form, 'story'),
-          sql`(${tracks.attribution} is null or jsonb_array_length(${tracks.attribution}) = 0)`,
-        ),
-      )
-      .orderBy(asc(segments.seq)),
-  ])
-
-  type Violations = { silentStops: number[]; silentFrames: string[]; unattributed: number[] }
-  const byTour = new Map<string, Violations>()
-  const ensure = (id: string): Violations => {
-    let v = byTour.get(id)
-    if (!v) {
-      v = { silentStops: [], silentFrames: [], unattributed: [] }
-      byTour.set(id, v)
-    }
-    return v
-  }
-  // tourId/seq are non-null for tour-bound segments (the CHECK keeps them in lockstep with
-  // tourId), but the columns are nullable for roam — guard to satisfy the types.
-  for (const s of silentStops) if (s.tourId && s.seq != null) ensure(s.tourId).silentStops.push(s.seq)
-  for (const b of silentFrames) ensure(b.tourId).silentFrames.push(b.kind)
-  for (const s of unattributed) if (s.tourId && s.seq != null) ensure(s.tourId).unattributed.push(s.seq)
-
-  const flagged = ready.filter((t) => byTour.has(t.id)).map((t) => ({ ...t, ...byTour.get(t.id)! }))
-  return c.json({ checked: ready.length, tours: flagged })
-})
-
 // The Runs view — recent gen_jobs (operational record).
 app.get('/admin/jobs', async (c) => {
   const jobs = await db.select().from(genJobs).orderBy(desc(genJobs.createdAt)).limit(100)
@@ -533,7 +199,6 @@ app.get('/admin/runs', async (c) => {
         kind: genJobs.kind,
         status: genJobs.status,
         targetSlug: genJobs.targetSlug,
-        tourId: genJobs.tourId,
         dryRun: genJobs.dryRun,
         phase: genJobs.phase,
         costUsd: genJobs.costUsd,
@@ -551,7 +216,6 @@ app.get('/admin/runs', async (c) => {
         id: evalRuns.id,
         kind: evalRuns.kind,
         slug: evalRuns.slug,
-        tourId: evalRuns.tourId,
         pass: evalRuns.pass,
         dryRun: evalRuns.dryRun,
         grounding: evalRuns.groundingScore,
@@ -605,7 +269,6 @@ app.get('/admin/runs', async (c) => {
       narrationModel: null,
       gitSha: null,
       triggeredBy: j.triggeredBy,
-      tourId: j.tourId,
       createdAt: j.createdAt,
     })),
     ...evals
@@ -624,7 +287,6 @@ app.get('/admin/runs', async (c) => {
         narrationModel: e.narrationModel,
         gitSha: e.gitSha,
         triggeredBy: null,
-        tourId: e.tourId,
         createdAt: e.createdAt,
       })),
   ]
@@ -780,7 +442,6 @@ app.post('/admin/jobs', async (c) => {
     status: 'queued',
     dryRun: build.dryRun,
     targetSlug: build.targetSlug ?? null,
-    tourId: build.tourId ?? null,
     targetId: build.targetId ?? null,
     args: build.args,
     triggeredBy,
@@ -805,7 +466,7 @@ app.post('/admin/jobs', async (c) => {
   return c.json({ job: row }, 201)
 })
 
-// POI corpus — sources, tour + roam usage, attribution, and region coverage.
+// POI corpus — sources, roam-clip usage, attribution, and region coverage.
 app.get('/admin/pois', async (c) => {
   const poisRows = await db
     .select({
@@ -844,44 +505,30 @@ app.get('/admin/pois', async (c) => {
 
   const poiIds = poisRows.map((p) => p.id)
 
-  const [stopStats, clipStats, regionRows] = await Promise.all([
-    // Per-poi: tour count, stale-facts count, unattributed story count. Tour stops =
-    // tour-bound segments joined to their variant-0 track (the telling carries
-    // attribution/factsHash) + the shared place (for the live facts_hash to compare against).
+  const [clipStats, regionRows] = await Promise.all([
+    // Per-poi: roam clip metadata — a roam encounter is the poi's single `narrations` row (1:1,
+    // UNIQUE poi_id). Duration + script power anomaly detection; factsHash/attribution/form drive
+    // the stale + unattributed axes (story narrations carry CC BY-SA attribution).
     db
       .select({
-        poiId: segments.poiId,
-        tourCount: sql<string>`count(distinct ${segments.tourId})`,
-        staleCount: sql<string>`count(*) filter (where ${tracks.factsHash} is distinct from ${pois.factsHash})`,
-        unattribCount: sql<string>`count(*) filter (where ${tracks.attribution} is null and ${tracks.form} = 'story')`,
+        poiId: narrations.poiId,
+        audioDurationMs: narrations.audioDurationMs,
+        script: narrations.script,
+        form: narrations.form,
+        attribution: narrations.attribution,
+        factsHash: narrations.factsHash, // the clip's grounding hash — vs pois.factsHash = fresh|stale
       })
-      .from(segments)
-      .innerJoin(tracks, and(eq(tracks.segmentId, segments.id), eq(tracks.variant, 0)))
-      .innerJoin(pois, eq(segments.poiId, pois.id))
-      .where(and(inArray(segments.poiId, poiIds), isNotNull(segments.tourId)))
-      .groupBy(segments.poiId),
-    // Per-poi: roam clip metadata — a roam encounter is a tourId-null segment + its variant-0
-    // track (unique per poi; duration + script for anomaly detection).
-    db
-      .select({
-        poiId: segments.poiId,
-        audioDurationMs: tracks.audioDurationMs,
-        script: tracks.script,
-        factsHash: tracks.factsHash, // the clip's grounding hash — vs pois.factsHash = fresh|stale
-      })
-      .from(segments)
-      .innerJoin(tracks, and(eq(tracks.segmentId, segments.id), eq(tracks.variant, 0)))
-      .where(and(isNull(segments.tourId), inArray(segments.poiId, poiIds))),
+      .from(narrations)
+      .where(inArray(narrations.poiId, poiIds)),
     // All regions + their discovery bbox. POI→region is GEOGRAPHIC (bbox containment), matching
-    // how roam actually selects candidates (region-corpus.ts / generate-roam.ts) — NOT via tours,
-    // which a freshly-swept corpus has none of yet. A region with no bbox can't claim any poi.
+    // how roam actually selects candidates (region-corpus.ts / generate-roam.ts). A region with no
+    // bbox can't claim any poi.
     db
       .select({ slug: regions.slug, displayName: regions.displayName, discoveryBbox: regions.discoveryBbox })
       .from(regions)
       .orderBy(asc(regions.displayName)),
   ])
 
-  const stopMap = new Map(stopStats.map((s) => [s.poiId, s]))
   // Suspicious duration: < 90 WPM indicates TTS returned duplicated audio in a single file.
   // Normal corpus average is ~155 WPM; 90 WPM is a conservative floor well below any legit clip.
   const WPM_FLOOR = 90
@@ -890,7 +537,9 @@ app.get('/admin/pois', async (c) => {
     const wpm = wordCount > 0 && s.audioDurationMs
       ? wordCount / (s.audioDurationMs / 1000 / 60)
       : null
-    return [s.poiId, { hasClip: true, suspiciousDuration: wpm !== null && wpm < WPM_FLOOR, factsHash: s.factsHash }]
+    // A story narration must carry CC BY-SA attribution (legal, not optional); null/empty = missing.
+    const attributed = s.form !== 'story' || (Array.isArray(s.attribution) && s.attribution.length > 0)
+    return [s.poiId, { hasClip: true, suspiciousDuration: wpm !== null && wpm < WPM_FLOOR, factsHash: s.factsHash, attributed }]
   }))
   // Parse each region's "swLng,swLat,neLng,neLat" box once; a poi belongs to the FIRST region
   // (deterministic by displayName) whose box contains its coords. A region with no/invalid bbox
@@ -905,18 +554,17 @@ app.get('/admin/pois', async (c) => {
     regionBoxes.find((b) => lat >= b.swLat && lat <= b.neLat && lng >= b.swLng && lng <= b.neLng) ?? null
 
   const result = poisRows.map((p) => {
-    const s = stopMap.get(p.id)
     const clip = clipMap.get(p.id)
     const region = regionForPoi(p.lat, p.lng)
-    // Story-eligibility — a POI property (tours AND roam draw story-grade POIs from this corpus);
+    // Story-eligibility — a POI property (roam draws story-grade POIs from this corpus);
     // single-sourced with the generator's gate constants (@skipper/shared).
     const storyEligibility = classifyStoryEligibility({
       source: p.source,
       name: p.name,
       extractChars: Number(p.extractChars ?? 0),
     })
-    // Roam-clip status — the SEPARATE roam-specific axis: does a roam clip exist, and is it grounded
-    // on the poi's CURRENT facts (else a run would regenerate it).
+    // Roam-clip status — does a roam clip exist, and is it grounded on the poi's CURRENT facts
+    // (else a run would regenerate it).
     const roamClip: 'none' | 'fresh' | 'stale' = !clip
       ? 'none'
       : clip.factsHash != null && clip.factsHash === p.factsHash
@@ -930,15 +578,16 @@ app.get('/admin/pois', async (c) => {
       kind: p.kind,
       factsHash: p.factsHash,
       createdAt: p.createdAt,
-      tourCount: s ? Number(s.tourCount) : 0,
       roamClipCount: clip ? 1 : 0,
       storyEligibility,
       enriched: p.enriched,
       sheetDrift: p.sheetDrift,
       roamClip,
       suspiciousDuration: clip?.suspiciousDuration ?? false,
-      staleFacts: s ? Number(s.staleCount) > 0 : false,
-      attributed: s ? Number(s.unattribCount) === 0 : true,
+      // Stale = the roam clip grounded on a now-changed facts_hash. roamClip already encodes this;
+      // surface it on the dedicated axis too (un-clipped pois are never stale).
+      staleFacts: roamClip === 'stale',
+      attributed: clip?.attributed ?? true,
       regionSlug: region?.slug ?? null,
       regionName: region?.name ?? null,
     }
@@ -952,21 +601,20 @@ app.get('/admin/roam/sign/:poiId', async (c) => {
   const poiId = c.req.param('poiId')
   if (!UUID_RE.test(poiId)) return c.json({ error: 'not_found' }, 404)
 
-  // A roam clip = the tourId-null segment for this poi + its variant-0 track. The track id is
-  // the stable clip id (R2 key is per-track); the audio R2 key is tracks.audioUrl.
+  // A roam clip = the poi's single `narrations` row (1:1, UNIQUE poi_id). The narration id is the
+  // stable clip id (R2 key is per-narration); the audio R2 key is narrations.audioUrl.
   const clip = (
     await db
       .select({
-        id: tracks.id,
-        script: tracks.script,
-        audioUrl: tracks.audioUrl,
-        audioDurationMs: tracks.audioDurationMs,
-        attribution: tracks.attribution,
-        factsHash: tracks.factsHash,
+        id: narrations.id,
+        script: narrations.script,
+        audioUrl: narrations.audioUrl,
+        audioDurationMs: narrations.audioDurationMs,
+        attribution: narrations.attribution,
+        factsHash: narrations.factsHash,
       })
-      .from(segments)
-      .innerJoin(tracks, and(eq(tracks.segmentId, segments.id), eq(tracks.variant, 0)))
-      .where(and(isNull(segments.tourId), eq(segments.poiId, poiId)))
+      .from(narrations)
+      .where(eq(narrations.poiId, poiId))
       .limit(1)
   )[0]
 
@@ -1208,12 +856,12 @@ app.post('/admin/pois/:id/corrections', async (c) => {
   )
 })
 
-// Hard-DELETE one POI — ONLY when it is ORPHANED (no segments reference it). segments.poiId is
-// onDelete:'restrict', so a referenced POI can't be deleted at the DB anyway; we check first and
-// return a clean 409 instead of a raw FK error. A flagged/stale POI living in a tour or roam is
-// referenced BY DEFINITION — the fix there is to regenerate or correct it, not delete it. POIs
-// with zero references carry no tracks, so there are no orphan R2 clips to sweep. poi_overrides
-// are keyed by (source, source_id), survive the row, and re-apply on re-discovery — left intact.
+// Hard-DELETE one POI — ONLY when it is ORPHANED (no roam narration references it). narrations.poiId
+// is onDelete:'cascade', so the DB would happily drop the narration with the poi — but a POI carrying
+// a roam clip is referenced BY DEFINITION, and the fix there is to regenerate or correct it, not
+// delete it; we refuse with a clean 409. An orphaned POI carries no narration, so there are no orphan
+// R2 clips to sweep. poi_overrides are keyed by (source, source_id), survive the row, and re-apply on
+// re-discovery — left intact.
 app.delete('/admin/pois/:id', async (c) => {
   const id = c.req.param('id')
   if (!UUID_RE.test(id)) return c.json({ error: 'not_found' }, 404)
@@ -1221,13 +869,13 @@ app.delete('/admin/pois/:id', async (c) => {
   const [poi] = await db.select({ id: pois.id, name: pois.name }).from(pois).where(eq(pois.id, id)).limit(1)
   if (!poi) return c.json({ error: 'not_found' }, 404)
 
-  const [refRow] = await db.select({ refs: count() }).from(segments).where(eq(segments.poiId, id))
+  const [refRow] = await db.select({ refs: count() }).from(narrations).where(eq(narrations.poiId, id))
   const refs = Number(refRow?.refs ?? 0)
   if (refs > 0) {
     return c.json(
       {
         error: 'conflict',
-        message: `"${poi.name}" is referenced by ${refs} tour/roam segment(s) — regenerate or correct it instead of deleting.`,
+        message: `"${poi.name}" has a roam clip — regenerate or correct it instead of deleting.`,
       },
       409,
     )
@@ -1243,7 +891,7 @@ app.delete('/admin/pois/:id', async (c) => {
 // in-app gate (only /health is intentionally open, for Cloud Run probes that bypass IAP).
 const WEB_ROOT = process.env.ADMIN_WEB_ROOT ?? './public'
 app.use('/*', serveStatic({ root: WEB_ROOT }))
-// SPA fallback — client-side routes (/runs, /tours/:id, /create) return index.html.
+// SPA fallback — client-side routes (/runs, /pois, /roam, /regions, /reference) return index.html.
 app.get('*', serveStatic({ path: `${WEB_ROOT}/index.html` }))
 
 const port = Number(process.env.PORT ?? 8788)

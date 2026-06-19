@@ -54,13 +54,15 @@ export class HttpError extends Error {
 // beginJob()/finishJob() (packages/generator/src/pipeline/job-progress.ts) — that is HOW a run
 // records status AND captures its own stdout into outputLog/outputSummary/outputData on the row.
 // A script that skips the hook records no status and shows NO logs in the console (the admin no
-// longer reads Cloud Logging). Follow run.ts's main()+begin/finish shape. Enforced by jobs.test.ts.
-// Typed Record<JobKind> so this map stays in lockstep with the single-source `jobKind` enum in
-// @skipper/shared — adding/removing a kind there forces a matching entry here (or a typecheck error).
-export const SCRIPTS: Record<JobKind, string> = {
-  generate: 'packages/generator/src/run.ts',
-  patch_clip: 'packages/generator/src/patch-clip.ts',
-  resynth: 'packages/generator/src/resynth-tour.ts',
+// longer reads Cloud Logging). Follow generate-roam.ts's main()+begin/finish shape. Enforced by
+// jobs.test.ts.
+//
+// V2: authored-tour generation is deferred — the generate / patch_clip / resynth scripts were
+// removed with the tour pipeline. Those `jobKind` enum members survive in @skipper/shared (the
+// wire contract evolves additively — installed clients still know the vocabulary) but have NO
+// dispatchable script here, so buildJobArgs rejects them with "unknown kind". Hence a PARTIAL
+// record (only the live corpus/roam ops); the test only checks the scripts that remain.
+export const SCRIPTS: Partial<Record<JobKind, string>> = {
   resynth_roam_clip: 'packages/generator/src/resynth-roam-clip.ts',
   sweep_orphans: 'packages/generator/src/sweep-orphans.ts',
   sweep_region_pois: 'packages/generator/src/sweep-region-pois.ts',
@@ -77,7 +79,6 @@ export interface BuildResult {
   /** Does this run spend money or delete bytes → a typed confirm is required (spec §8). */
   spends: boolean
   targetSlug?: string
-  tourId?: string
   targetId?: string
 }
 
@@ -89,40 +90,6 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
   const kind = body.kind as JobKind
   const script = SCRIPTS[kind]
   if (!script) throw new HttpError(400, `unknown kind: ${String(body.kind)}`)
-
-  if (kind === 'generate') {
-    const slug = str(body.slug)
-    if (!slug) throw new HttpError(400, 'slug is required for generate')
-    const dryRun = body.dryRun !== false // default dry-run
-    const maxCost = Number(body.maxCostUsd ?? 5)
-    if (!Number.isFinite(maxCost) || maxCost <= 0) throw new HttpError(400, 'maxCostUsd must be > 0')
-    const args = [script, slug, `--max-cost=${maxCost}`]
-    if (body.jokeLevel) args.push(`--joke-level=${str(body.jokeLevel)}`)
-    if (body.duration) args.push(`--duration=${str(body.duration)}`)
-    if (body.noJudgeClosers) args.push('--no-judge-closers')
-    if (dryRun) args.push('--dry-run')
-    return { args, dryRun, spends: !dryRun, targetSlug: slug }
-  }
-
-  if (kind === 'patch_clip') {
-    const id = str(body.targetId)
-    if (!id) throw new HttpError(400, 'patch_clip needs targetId')
-    const apply = body.apply === true
-    // revoice:true re-synthesizes the stored script unchanged (a dud TTS take) — no find/replace.
-    if (body.revoice === true) {
-      const args = [script, id, '--resynth']
-      if (apply) args.push('--apply')
-      return { args, dryRun: !apply, spends: apply, targetId: id }
-    }
-    const find = body.find
-    const replace = body.replace
-    if (typeof find !== 'string' || typeof replace !== 'string' || find === '')
-      throw new HttpError(400, 'patch_clip needs a non-empty find and replace (or revoice:true)')
-    const args = [script, id, `--find=${find}`, `--replace=${replace}`]
-    if (body.all) args.push('--all')
-    if (apply) args.push('--apply')
-    return { args, dryRun: !apply, spends: apply, targetId: id }
-  }
 
   if (kind === 'resynth_roam_clip') {
     const poiId = str(body.poiId)
@@ -141,17 +108,6 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     if (apply) args.push('--apply')
     // Re-fetch is free (MediaWiki only, no LLM/TTS); spends:false so no confirm gate.
     return { args, dryRun: !apply, spends: false, targetId: poiId }
-  }
-
-  if (kind === 'resynth') {
-    const tourId = str(body.tourId)
-    if (!tourId) throw new HttpError(400, 'resynth needs tourId')
-    const apply = body.apply === true
-    const args = [script, tourId]
-    if (apply) args.push('--apply')
-    if (body.keepOld) args.push('--keep-old')
-    if (body.maxCostUsd) args.push(`--max-cost=${Number(body.maxCostUsd)}`)
-    return { args, dryRun: !apply, spends: apply, tourId, targetId: tourId }
   }
 
   if (kind === 'sweep_region_pois') {
@@ -195,21 +151,12 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     return { args, dryRun: !apply, spends: apply, targetId: 'roam-corpus' }
   }
 
-  // sweep_orphans
+  // sweep_orphans — V2 sweeps the whole roam/ R2 prefix (tour-scoped sweeping is gone with the
+  // tours table); the script honors only --apply. targetId 'roam' matches its beginJob target.
   const apply = body.apply === true
-  const allTours = body.allTours === true
   const args: string[] = [script]
-  let tourId: string | undefined
-  if (allTours) {
-    args.push('--all')
-  } else {
-    tourId = str(body.tourId)
-    if (!tourId) throw new HttpError(400, 'sweep_orphans needs tourId or allTours:true')
-    args.push(tourId)
-  }
   if (apply) args.push('--apply')
-  if (allTours && apply) args.push('--yes')
-  return { args, dryRun: !apply, spends: apply, tourId, targetId: allTours ? 'all' : tourId }
+  return { args, dryRun: !apply, spends: apply, targetId: 'roam' }
 }
 
 /** Trigger a skipper-gen execution with per-run arg + env overrides. Returns the execution's

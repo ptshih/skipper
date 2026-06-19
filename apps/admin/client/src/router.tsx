@@ -2,9 +2,6 @@ import { createRootRoute, createRoute, createRouter, redirect } from '@tanstack/
 import { Layout } from './components/Layout'
 import { RunsView } from './views/RunsView'
 import { RegionsView } from './views/RegionsView'
-import { ToursView } from './views/ToursView'
-import { TourDetailView } from './views/TourDetailView'
-import { CreateTourView } from './views/CreateTourView'
 import { ReferenceView } from './views/ReferenceView'
 import { PoisView } from './views/PoisView'
 import { RoamView } from './views/RoamView'
@@ -19,9 +16,6 @@ const toRuns = () => {
 const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', beforeLoad: toRuns })
 const runsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/runs', component: RunsView })
 const regionsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/regions', component: RegionsView })
-const toursRoute = createRoute({ getParentRoute: () => rootRoute, path: '/tours', component: ToursView })
-const tourDetailRoute = createRoute({ getParentRoute: () => rootRoute, path: '/tours/$id', component: TourDetailView })
-const createTourRoute = createRoute({ getParentRoute: () => rootRoute, path: '/create', component: CreateTourView })
 const referenceRoute = createRoute({ getParentRoute: () => rootRoute, path: '/reference', component: ReferenceView })
 const poisRoute = createRoute({ getParentRoute: () => rootRoute, path: '/pois', component: PoisView })
 const roamRoute = createRoute({ getParentRoute: () => rootRoute, path: '/roam', component: RoamView })
@@ -32,9 +26,6 @@ const routeTree = rootRoute.addChildren([
   indexRoute,
   runsRoute,
   regionsRoute,
-  toursRoute,
-  tourDetailRoute,
-  createTourRoute,
   referenceRoute,
   poisRoute,
   roamRoute,

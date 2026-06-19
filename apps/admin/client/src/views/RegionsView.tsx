@@ -39,7 +39,7 @@ export function RegionsView() {
     <div className="space-y-6">
       <PageHeader
         title="Regions"
-        description="Geographic regions — the slug drives POI discovery, tour assignment, and the in-app region picker. The discovery bbox is passed to the POI sweep job."
+        description="Geographic regions — the slug drives POI discovery and the in-app region picker. The discovery bbox is passed to the POI sweep job."
         actions={
           <Button onClick={() => setDialog({ mode: 'create' })}>
             <Plus className="h-4 w-4" /> Add region

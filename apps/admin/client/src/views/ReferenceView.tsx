@@ -3,7 +3,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge'
 import { Callout } from '@/components/ui/callout'
 import { PageHeader } from '@/components/PageHeader'
-import { STOP_TYPE_COLOR } from '@/components/RouteMap'
 import { cn } from '@/lib/utils'
 
 // A static cheat-sheet so the operator remembers what each control does — above all which
@@ -17,23 +16,24 @@ export function ReferenceView() {
       />
 
       <Callout variant="info">
-        <span className="font-medium text-foreground">The loop:</span> generate a tour → ear-pass it on
-        its detail page (listen, read scripts, eyeball the route) → tune (patch a clip / resynth) → repeat.
-        The console defaults to safe — spending and deleting are always opt-in.
+        <span className="font-medium text-foreground">The loop:</span> discover a region's POI corpus →
+        enrich the story POIs into fact sheets → generate roam clips → ear-pass them on the POIs / Roam
+        pages (listen, read scripts) → tune (patch / re-synth) → repeat. The console defaults to safe —
+        spending and deleting are always opt-in.
       </Callout>
 
       <Section title="Pages">
         <Dl
           rows={[
-            ['Runs', 'Every run, newest first — admin-triggered Cloud Run jobs AND historical CLI generations. “New run” triggers a skipper-gen Cloud Run Job.'],
-            ['Tours', 'The full catalog, drafts included. Click a tour to open its detail.'],
-            ['Tour detail', 'The ear-pass: route map, latest-eval scores, run history, and the itinerary (audio + scripts) for every stop.'],
-            ['Create tour', 'Draft a new tour — the skipper proposes a route, you approve it on a map, it freezes into a draft you can then generate.'],
+            ['Runs', 'Every run, newest first — admin-triggered Cloud Run jobs AND historical CLI generations. Click a row for details.'],
+            ['Regions', 'The regions the corpus is keyed to, each with its discovery bbox (the area Discover + Generate roam sweep).'],
+            ['POIs', 'The shared POI corpus — sources, enrichment, roam-clip freshness, and per-POI curation (fact-edits + speakable anchor).'],
+            ['Roam', 'The free-roam corpus: every story-grade POI with a roam clip; ear-pass + re-synth individual clips.'],
           ]}
         />
       </Section>
 
-      <Section title="Run kinds" subtitle="What “New run” can do — and what each one costs.">
+      <Section title="Run kinds" subtitle="What the console can trigger — and what each one costs.">
         <div className="overflow-hidden rounded-xl border">
           <Table>
             <TableHeader>
@@ -57,56 +57,27 @@ export function ReferenceView() {
         </div>
       </Section>
 
-      <Section title="Dry-run, Apply & confirmation" subtitle="Safe by default; spending or deleting is always an explicit opt-in.">
+      <Section title="Preview, Apply & confirmation" subtitle="Safe by default; spending or deleting is always an explicit opt-in.">
         <Dl
           rows={[
-            ['Generate → “Dry-run” (ON by default)', 'Writes scripts + runs the eval, NO TTS audio spend. Heads-up: LLM narration still costs ~$0.30. Turn it OFF for a real run that synthesizes audio.'],
-            ['Patch / Resynth / Sweep → “Apply” (OFF by default)', 'OFF = a dry-run preview (shows what would change, touches nothing). ON = actually re-synthesize or delete.'],
+            ['Preview / Apply (OFF by default)', 'OFF = a dry-run preview (shows what would change, touches nothing). ON = actually narrate, synthesize, re-fetch, or delete.'],
             ['Typed confirmation', 'Any run that spends money or deletes bytes makes you type the target id before the button enables.'],
-            ['Max cost ($) — Generate', 'Aborts a generate before audio if narration would exceed it. PRE-TTS only — LLM spend already incurred is not refunded.'],
+            ['Max cost ($)', 'Aborts a paid run (enrich / generate roam) before it exceeds the cap. PRE-spend only — spend already incurred is not refunded.'],
           ]}
         />
       </Section>
 
-      <Section title="Generate options">
+      <Section title="Eval dimensions" subtitle="Surfaced on historical eval runs in the run drawer (0–1, higher is better).">
         <Dl
+          compact
           rows={[
-            ['Tour slug', 'Which tour to (re)generate, e.g. emerald-bay-run.'],
-            ['Joke level', 'off · mild · dad · dadpocalypse. Default dadpocalypse (today it’s dadpocalypse-only). Baked into the narration — not a playback toggle.'],
-            ['Duration', 'short · standard · long — a longer/shorter drive by keeping more or fewer stops.'],
+            ['grounding', 'Every claim is backed by the fetched facts (anti-hallucination gate).'],
+            ['veracity', 'The facts themselves are correct.'],
+            ['diversity', 'Clips don’t repeat the same shtick.'],
+            ['charm', 'Persona & delivery quality.'],
+            ['tts', 'Synthesis / pronunciation quality.'],
           ]}
         />
-      </Section>
-
-      <Section title="Tour detail — legends">
-        <div className="grid gap-6 sm:grid-cols-2">
-          <div>
-            <SubHead>Stop types (route-map pins)</SubHead>
-            <div className="space-y-1.5 text-sm">
-              <Legend color={STOP_TYPE_COLOR.story} name="story" desc="Fact-grounded narration about a place." />
-              <Legend color={STOP_TYPE_COLOR.scenic} name="scenic" desc="Delivery-only ambient — no facts." />
-              <Legend color={STOP_TYPE_COLOR.break} name="break" desc="A curated side-of-road stop (name only, no volatile data)." />
-              <Legend color="#10b981" name="start" desc="The tour’s start anchor." />
-              <Legend color="#ef4444" name="end" desc="The tour’s end anchor." />
-            </div>
-            <p className="mt-2 text-xs text-muted-foreground">
-              A pin sits at each stop’s trigger point (where the clip fires on the road), inside its trigger-radius circle.
-            </p>
-          </div>
-          <div>
-            <SubHead>Eval dimensions (0–1, higher is better)</SubHead>
-            <Dl
-              compact
-              rows={[
-                ['grounding', 'Every claim is backed by the fetched facts (anti-hallucination gate).'],
-                ['veracity', 'The facts themselves are correct.'],
-                ['diversity', 'Stops don’t repeat the same shtick.'],
-                ['charm', 'Persona & delivery quality.'],
-                ['tts', 'Synthesis / pronunciation quality.'],
-              ]}
-            />
-          </div>
-        </div>
         <div className="mt-5">
           <SubHead>Run source (Runs list)</SubHead>
           <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted-foreground">
@@ -120,32 +91,16 @@ export function ReferenceView() {
         </div>
       </Section>
 
-      <Section title="Create a tour — the flow">
-        <ol className="list-decimal space-y-1.5 pl-5 text-sm text-muted-foreground">
-          <li>
-            <Step>Propose</Step> — pick a region + rough start/end + vibe; the skipper proposes named waypoints, geocoded to coordinates.
-          </li>
-          <li>
-            <Step>Approve</Step> — edit the headline/anchors and drag the waypoint pins on the map. You’re the curator; the LLM only drafts.
-          </li>
-          <li>
-            <Step>Create draft</Step> — freezes the route (a Google Routes polyline) into a <code>draft</code> tour.
-          </li>
-          <li>
-            <Step>Generate</Step> — open the draft → New run → Generate to narrate + synthesize it. The region’s
-            POIs must be discovered first (<Step>Discover POIs</Step> below) — Generate selects from that shared
-            corpus and aborts at $0 if it’s empty.
-          </li>
-        </ol>
-      </Section>
-
-      <Section title="Example: roam corpus for a new region" subtitle="Discover first (free), then generate. Always preview before applying.">
+      <Section title="Example: roam corpus for a new region" subtitle="Discover first (free), then enrich + generate. Always preview before applying.">
         <ol className="list-decimal space-y-1.5 pl-5 text-sm text-muted-foreground">
           <li>
             POIs page → <Step>Discover POIs</Step> — pick the region, hit <Step>Preview</Step> to dry-run → verify the POI list in the job log.
           </li>
           <li>
-            Hit <Step>Discover</Step> — upserts the shared POI corpus that tours + roam both select from. Free; no confirm needed.
+            Hit <Step>Discover</Step> — upserts the shared POI corpus that roam selects from. Free; no confirm needed.
+          </li>
+          <li>
+            Select the eligible story POIs → <Step>Enrich</Step> — scouts each into a verbatim fact sheet (pois.fact_sheet). Preview shows the exact count + cost; Apply spends.
           </li>
           <li>
             New run → <Step>Generate roam</Step> — set <Step>Limit = 3</Step> for a smoke test. Run dry to see the corpus size and cost estimate.
@@ -166,7 +121,7 @@ export function ReferenceView() {
       <Section title="Heads-up">
         <ul className="list-disc space-y-1.5 pl-5 text-sm text-muted-foreground">
           <li>
-            <Step>Generation writes to PROD</Step> and bills real GCP/LLM credits — the dry-run defaults, typed-confirm, and max-cost are the guardrails.
+            <Step>Generation writes to PROD</Step> and bills real GCP/LLM credits — the preview defaults, typed-confirm, and max-cost are the guardrails.
           </li>
           <li>
             <Step>Cost shown is an estimate</Step> of the LLM spend the pipeline self-reports — not the GCP bill (TTS + infra aren’t included).
@@ -181,39 +136,39 @@ export function ReferenceView() {
 const RUN_KINDS: { kind: string; does: string; cost: ReactNode; safe: string }[] = [
   {
     kind: 'Discover POIs',
-    does: 'Discover Wikidata-pinned places in a region, join Wikipedia, tier them, and upsert the shared POI corpus — the foundational first step that BOTH tours and roam select from.',
+    does: 'Discover Wikidata-pinned places in a region, join Wikipedia, tier them, and upsert the shared POI corpus — the foundational first step that roam selects from.',
     cost: 'Free — WDQS + MediaWiki only, no LLM or TTS.',
     safe: 'Apply OFF — previews the POI list, writes nothing.',
   },
   {
-    kind: 'Generate',
-    does: 'Select places from the region corpus → narrate in the skipper voice → eval → (real run) synthesize TTS audio, for one tour slug. Needs the region discovered first — an empty corpus aborts at $0, before any spend.',
-    cost: <span>LLM always (~$0.30+); <span className="text-foreground">TTS</span> only on a real (non-dry) run.</span>,
-    safe: 'Dry-run ON — scripts + eval, no audio.',
-  },
-  {
-    kind: 'Patch clip',
-    does: 'Find/replace text in ONE stop or frame — or re-voice it unchanged — then re-synthesize just that clip.',
-    cost: 'TTS for one clip (when applied).',
-    safe: 'Apply OFF — preview the change.',
-  },
-  {
-    kind: 'Resynth tour',
-    does: 'Re-synthesize EVERY clip of a tour — e.g. after a voice or style-prompt change.',
-    cost: 'TTS for the whole tour (when applied).',
-    safe: 'Apply OFF — preview.',
-  },
-  {
-    kind: 'Sweep orphans',
-    does: 'Delete R2 audio clips that no track or frame references anymore.',
-    cost: 'Deletes bytes (when applied).',
-    safe: 'Apply OFF — lists, deletes nothing.',
+    kind: 'Enrich corpus',
+    does: 'Scout each eligible story POI into a curated verbatim fact sheet (pois.fact_sheet) that roam grounds on. A story telling REQUIRES a sheet.',
+    cost: 'LLM per POI (when applied).',
+    safe: 'Apply OFF — shows the exact count + cost, makes no model calls.',
   },
   {
     kind: 'Generate roam',
     does: 'Narrate + synthesize free-roam encounter clips for every story-grade poi in the corpus bbox.',
     cost: <span>LLM per clip (~$0.10); <span className="text-foreground">TTS</span> per clip (when applied).</span>,
     safe: 'Apply OFF — shows corpus size + cost estimate.',
+  },
+  {
+    kind: 'Re-synth clip',
+    does: 'Re-voice ONE roam clip unchanged — e.g. after a voice or style-prompt change, or a dud TTS take.',
+    cost: 'TTS for one clip (when applied).',
+    safe: 'Apply OFF — preview.',
+  },
+  {
+    kind: 'Re-fetch facts',
+    does: "Re-fetch a POI's upstream facts (Wikipedia extract). Updates facts_hash, which flags any grounded roam clip as stale.",
+    cost: 'Free — MediaWiki only, no LLM or TTS.',
+    safe: 'Apply OFF — previews the diff.',
+  },
+  {
+    kind: 'Sweep orphans',
+    does: 'Delete R2 audio clips that no narration references anymore.',
+    cost: 'Deletes bytes (when applied).',
+    safe: 'Apply OFF — lists, deletes nothing.',
   },
 ]
 
@@ -244,16 +199,6 @@ function Dl({ rows, compact }: { rows: [string, ReactNode][]; compact?: boolean 
         </div>
       ))}
     </dl>
-  )
-}
-
-function Legend({ color, name, desc }: { color: string; name: string; desc: string }) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
-      <span className="font-medium">{name}</span>
-      <span className="text-muted-foreground">— {desc}</span>
-    </div>
   )
 }
 

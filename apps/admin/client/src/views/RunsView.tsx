@@ -1,9 +1,8 @@
 import { useMemo, useState } from 'react'
-import { useNavigate } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Activity, CircleX,
-  ExternalLink, Filter, Map, RefreshCw, Scissors, Search, Sparkles, Trash2, X, Zap,
+  ExternalLink, Filter, RefreshCw, Scissors, Search, Sparkles, Trash2, X, Zap,
 } from 'lucide-react'
 import {
   api,
@@ -31,12 +30,16 @@ import { cn } from '@/lib/utils'
 /* ─── constants ─── */
 
 const KIND_META: Record<string, { label: string; icon: React.ElementType; desc: string; spends: 'spend' | 'delete' | 'free' }> = {
-  generate:        { label: 'Generate',        icon: Sparkles,   desc: 'Script + synthesize a tour from scratch.',           spends: 'spend'  },
-  resynth:         { label: 'Resynth',          icon: RefreshCw,  desc: 'Re-voice every clip of an existing tour.',           spends: 'spend'  },
-  patch_clip:      { label: 'Patch clip',       icon: Scissors,   desc: "Find/replace a stop or frame's script — or re-voice it — then re-synth that clip.", spends: 'spend'  },
-  sweep_orphans:   { label: 'Sweep orphans',    icon: Trash2,     desc: 'Delete R2 clips that no track or frame references.', spends: 'delete' },
-  sweep_region_pois: { label: 'Discover POIs',     icon: Filter,     desc: "Discover + upsert the region's POI corpus — tours and roam both draw from it.", spends: 'free'   },
-  enrich_region:   { label: 'Enrich corpus',    icon: Sparkles,   desc: 'Scout story POIs into verbatim fact sheets (pois.fact_sheet) — shared by tours + roam.', spends: 'spend'  },
+  // generate / resynth / patch_clip are LEGACY tour-generation kinds (deferred in V2) — kept only so
+  // historical run rows still render with a readable label; they are no longer dispatchable here.
+  generate:        { label: 'Generate',        icon: Sparkles,   desc: 'Legacy: scripted + synthesized a tour from scratch.', spends: 'spend'  },
+  resynth:         { label: 'Resynth',          icon: RefreshCw,  desc: 'Legacy: re-voiced every clip of a tour.',            spends: 'spend'  },
+  patch_clip:      { label: 'Patch clip',       icon: Scissors,   desc: "Legacy: find/replace a stop or frame's script, then re-synth it.", spends: 'spend'  },
+  resynth_roam_clip: { label: 'Re-synth clip',  icon: RefreshCw,  desc: 'Re-voice one roam clip unchanged.',                  spends: 'spend'  },
+  refetch_facts:   { label: 'Re-fetch facts',   icon: RefreshCw,  desc: "Re-fetch a POI's upstream facts (Wikipedia extract).", spends: 'free'   },
+  sweep_orphans:   { label: 'Sweep orphans',    icon: Trash2,     desc: 'Delete R2 clips that no roam narration references.', spends: 'delete' },
+  sweep_region_pois: { label: 'Discover POIs',     icon: Filter,     desc: "Discover + upsert the region's POI corpus — roam draws from it.", spends: 'free'   },
+  enrich_region:   { label: 'Enrich corpus',    icon: Sparkles,   desc: 'Scout story POIs into verbatim fact sheets (pois.fact_sheet) for roam.', spends: 'spend'  },
   generate_roam:   { label: 'Generate roam',    icon: Zap,        desc: 'Narrate + synthesize roam clips for the corpus.',    spends: 'spend'  },
 }
 
@@ -49,7 +52,6 @@ function PulseDot() {
 /* ─── main view ─── */
 
 export function RunsView() {
-  const navigate = useNavigate()
   const qc = useQueryClient()
   const confirm = useConfirm()
   const [src, setSrc] = useState<'all' | 'job' | 'eval'>('all')
@@ -68,13 +70,13 @@ export function RunsView() {
   // The one homeless global op: delete R2 clips no track/frame references. Spends nothing
   // but DELETES bytes, so gate behind a confirm; the launched job is watched on the timeline.
   const sweepMut = useMutation({
-    mutationFn: () => api.createJob({ kind: 'sweep_orphans', allTours: true, apply: true, confirm: true }),
+    mutationFn: () => api.createJob({ kind: 'sweep_orphans', apply: true, confirm: true }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['runs'] }),
   })
   async function sweepOrphans() {
     if (!(await confirm({
       title: 'Sweep orphaned clips?',
-      body: 'Permanently DELETES R2 bytes that no track or frame references — across ALL tours.',
+      body: 'Permanently DELETES R2 bytes that no roam narration references — across the whole roam corpus.',
       confirmLabel: 'Sweep',
       tone: 'destructive',
     }))) return
@@ -231,12 +233,7 @@ export function RunsView() {
                     </TableCell>
                     <TableCell>
                       {r.slug ? (
-                        <button
-                          className="font-medium hover:underline"
-                          onClick={(e) => { e.stopPropagation(); if (r.tourId) navigate({ to: '/tours/$id', params: { id: r.tourId } }) }}
-                        >
-                          {r.slug}
-                        </button>
+                        <span className="font-medium">{r.slug}</span>
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}
@@ -332,7 +329,6 @@ function LogBlock({ children, className }: { children: React.ReactNode; classNam
 
 function RunDrawer({ run, onClose }: { run: RunEvent; onClose: () => void }) {
   const qc = useQueryClient()
-  const navigate = useNavigate()
   const isJob = run.source === 'job'
 
   const { data: jobData } = useQuery({
@@ -485,11 +481,6 @@ function RunDrawer({ run, onClose }: { run: RunEvent; onClose: () => void }) {
         </div>
 
         <SheetFooter>
-          {run.tourId && (
-            <Button variant="outline" onClick={() => { onClose(); navigate({ to: '/tours/$id', params: { id: run.tourId! } }) }}>
-              <Map size={14} /> Open tour
-            </Button>
-          )}
           {cancelable && (
             <Button variant="destructive" disabled={cancelMut.isPending} onClick={() => cancelMut.mutate()}>
               <X size={14} /> {cancelMut.isPending ? 'Canceling…' : 'Cancel run'}

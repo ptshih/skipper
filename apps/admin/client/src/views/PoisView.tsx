@@ -39,10 +39,10 @@ const SOURCE_META: Record<string, { label: string; variant: 'default' | 'seconda
 
 type BadgeVariant = 'default' | 'secondary' | 'success' | 'warning' | 'outline'
 
-/** Story-eligibility → badge. A POI property (tours AND roam draw story-grade POIs from the corpus).
+/** Story-eligibility → badge. A POI property (roam draws story-grade POIs from the corpus).
  *  `eligible` is the actionable one; the filtered-* states are intentional exclusions, muted. */
 const STORY_ELIGIBILITY_META: Record<StoryEligibility, { label: string; variant: BadgeVariant; hint: string }> = {
-  eligible: { label: 'eligible', variant: 'default', hint: 'Story-grade — a tour or roam telling can use it' },
+  eligible: { label: 'eligible', variant: 'default', hint: 'Story-grade — a roam telling can use it' },
   'filtered-source': { label: 'scenic pin', variant: 'outline', hint: 'Wikidata pin — not a story source (wave layer later)' },
   'filtered-taste': { label: 'taste-gate', variant: 'outline', hint: 'Title hits the taste denylist' },
   'filtered-stub': { label: 'stub', variant: 'secondary', hint: 'No article text to enrich (empty/disambiguation page)' },
@@ -63,7 +63,7 @@ export function PoisView() {
   const { data: pois = [], error: err, isPending } = useQuery({ queryKey: ['pois'], queryFn: async () => (await api.pois()).pois })
 
   const live = pois // no retired field; all pois are live for now
-  const flagged = pois.filter((p) => p.staleFacts || p.suspiciousDuration || (!p.attributed && p.tourCount > 0))
+  const flagged = pois.filter((p) => p.staleFacts || p.suspiciousDuration || (!p.attributed && p.roamClipCount > 0))
 
   const tabs: { id: Tab; label: string; count: number; alert?: boolean }[] = [
     { id: 'corpus', label: 'Corpus', count: live.length },
@@ -74,7 +74,7 @@ export function PoisView() {
     <div className="space-y-6">
       <PageHeader
         title="POIs"
-        description="The shared place corpus — sources, tour + roam usage, attribution, and fact corrections. Tours and roam both select from here."
+        description="The shared place corpus — sources, roam-clip usage, attribution, and fact corrections. Roam selects from here."
         actions={
           <Button onClick={() => setDiscoverOpen(true)}>
             <Compass className="h-4 w-4" /> Discover POIs
@@ -131,7 +131,7 @@ function DiscoverDialog({
       onSubmitted={onSubmitted}
       icon={Compass}
       title="Discover POIs"
-      description="Discovers every Wikidata-pinned place in the region and upserts the shared POI corpus — tours and roam both draw from it. Free — no LLM or TTS spend."
+      description="Discovers every Wikidata-pinned place in the region and upserts the shared POI corpus — roam draws from it. Free — no LLM or TTS spend."
       buildBody={() => ({ kind: 'sweep_region_pois', ...(bbox ? { bbox } : {}) })}
       spends={false}
       applyLabel="Discover"
@@ -176,7 +176,7 @@ type EnrichSelection =
 // count + a cost estimate) or Enrich (apply, SPENDS Anthropic; no TTS). THIS dialog is the paid-run gate:
 // it names the scope + cost and needs an explicit Enrich click, so the server's confirm:true (added by
 // JobActionDialog for the apply) is already human-gated — no extra window.confirm. The fact sheet it
-// builds (pois.fact_sheet) is read by BOTH tours + roam, so enrich ONCE between Discover and Generate.
+// builds (pois.fact_sheet) is read by roam, so enrich ONCE between Discover and Generate roam.
 // Enrich only acts on ELIGIBLE story POIs (the CLI gates), so the Preview count is authoritative.
 function EnrichDialog({
   open,
@@ -214,7 +214,7 @@ function EnrichDialog({
       description={
         <>
           Scouts each story POI ONCE into a curated, verbatim <strong>fact well</strong> on the shared corpus —
-          tours and roam both narrate from it. Run after Discover, before generating. Spends Anthropic credits
+          roam narrates from it. Run after Discover, before generating. Spends Anthropic credits
           (no TTS). A re-discover now PRESERVES wells; rebuild one with Enrich after a material article change.
         </>
       }
@@ -301,8 +301,8 @@ function Corrections({ poiId }: { poiId: string }) {
         <Wrench className="h-3.5 w-3.5" /> Corrections
       </div>
       <div className="rounded-md border bg-background px-3 py-2 text-xs leading-relaxed text-muted-foreground">
-        Corrections apply on the <strong className="text-foreground">next generate / regeneration</strong> of a tour
-        or roam (the generator loads these overrides + reads the speakable anchor fresh per run). They do{' '}
+        Corrections apply on the <strong className="text-foreground">next generate / regeneration</strong> of a
+        roam clip (the generator loads these overrides + reads the speakable anchor fresh per run). They do{' '}
         <strong className="text-foreground">not</strong> rewrite existing audio.
       </div>
 
@@ -420,7 +420,7 @@ function Corrections({ poiId }: { poiId: string }) {
 function PoiDetailSheet({ poiId, poiName, canDelete, open, onOpenChange }: {
   poiId: string
   poiName: string
-  /** Orphan (no tours/roam clips) → a hard delete is allowed. Referenced POIs are FK-protected. */
+  /** Orphan (no roam clip) → a hard delete is allowed. Referenced POIs are guarded server-side. */
   canDelete: boolean
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -502,7 +502,7 @@ function PoiDetailSheet({ poiId, poiName, canDelete, open, onOpenChange }: {
               >
                 <Trash2 className="h-4 w-4" /> {deleteMut.isPending ? 'Deleting…' : 'Delete POI'}
               </Button>
-              <span className="text-xs text-muted-foreground">No tours or roam clips reference this POI.</span>
+              <span className="text-xs text-muted-foreground">No roam clip references this POI.</span>
             </div>
             {deleteMut.error && (
               <div className="mt-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
@@ -604,7 +604,7 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
     if (source !== 'all' && p.source !== source) return false
     if (flags === 'defect' && !p.suspiciousDuration) return false
     if (flags === 'stale' && !p.staleFacts) return false
-    if (flags === 'unattrib' && (p.attributed || p.tourCount === 0)) return false
+    if (flags === 'unattrib' && (p.attributed || p.roamClipCount === 0)) return false
     if (flags === 'story-eligible' && p.storyEligibility !== 'eligible') return false
     if (flags === 'story-filtered' && !p.storyEligibility.startsWith('filtered-')) return false
     if (flags === 'enriched' && !p.enriched) return false
@@ -683,8 +683,8 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
     withClips: pois.filter((p) => p.roamClipCount > 0).length,
     eligible: pois.filter((p) => p.storyEligibility === 'eligible').length,
     enriched: pois.filter((p) => p.enriched).length,
-    inTours: pois.filter((p) => p.tourCount > 0).length,
-    unattrib: pois.filter((p) => !p.attributed && p.tourCount > 0).length,
+    // Attribution applies to roam STORY clips (CC BY-SA): an unattributed clip is one that exists.
+    unattrib: pois.filter((p) => !p.attributed && p.roamClipCount > 0).length,
     defects: pois.filter((p) => p.suspiciousDuration).length,
   }
 
@@ -705,7 +705,6 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
             </Badge>
           </button>
         )}
-        <Badge variant="success">{totals.inTours} in tours</Badge>
         {totals.unattrib > 0 && <Badge variant="destructive">{totals.unattrib} unattributed</Badge>}
         {totals.defects > 0 && (
           <button onClick={() => setFlags('defect')}>
@@ -784,7 +783,6 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
               <TableHead>Name</TableHead>
               <TableHead>Source</TableHead>
               <TableHead>Region</TableHead>
-              <TableHead className="text-right">Tours</TableHead>
               <TableHead>Story</TableHead>
               <TableHead>Attribution</TableHead>
               <TableHead>Facts hash</TableHead>
@@ -792,7 +790,7 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {loading && <TableSkeletonRows rows={8} cols={9} />}
+            {loading && <TableSkeletonRows rows={8} cols={8} />}
             {filtered.map((p) => {
               const sm = SOURCE_META[p.source]
               const em = STORY_ELIGIBILITY_META[p.storyEligibility]
@@ -800,7 +798,7 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
                 <Fragment key={p.id}>
                   <TableRow
                     className={cn('cursor-pointer', isSelected(p.id) && 'bg-muted/40')}
-                    onClick={() => setSheetPoi({ id: p.id, name: p.name, canDelete: p.tourCount + p.roamClipCount === 0 })}
+                    onClick={() => setSheetPoi({ id: p.id, name: p.name, canDelete: p.roamClipCount === 0 })}
                   >
                     <TableCell className="w-10" onClick={(e) => e.stopPropagation()}>
                       <Checkbox
@@ -827,14 +825,11 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
                     <TableCell className="text-muted-foreground">
                       {p.regionName ?? <span className="text-muted-foreground">—</span>}
                     </TableCell>
-                    <TableCell className="text-right font-mono">
-                      {p.tourCount > 0 ? p.tourCount : <span className="text-muted-foreground">—</span>}
-                    </TableCell>
                     <TableCell>
                       <div className="flex flex-wrap items-center gap-1">
                         <Badge variant={em.variant} title={em.hint}>{em.label}</Badge>
                         {p.enriched && !p.sheetDrift && (
-                          <Badge variant="success" title="Has a curated fact sheet — tours & roam ground on it">
+                          <Badge variant="success" title="Has a curated fact sheet — roam grounds on it">
                             enriched
                           </Badge>
                         )}
@@ -854,7 +849,7 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
                       </div>
                     </TableCell>
                     <TableCell>
-                      {p.tourCount > 0 ? (
+                      {p.roamClipCount > 0 ? (
                         <Badge variant={p.attributed ? 'success' : 'destructive'}>{p.attributed ? '✓' : 'missing'}</Badge>
                       ) : (
                         <span className="text-muted-foreground">n/a</span>
@@ -914,7 +909,7 @@ function RetireTab({ flagged }: { flagged: PoiRow[] }) {
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ['runs'] }); navigate({ to: '/runs' }) },
     onError: (e) => setActionErr(errMsg(e)),
   })
-  // Retire is a hard DELETE, allowed ONLY for orphaned POIs (no segments) — the server guards it too.
+  // Retire is a hard DELETE, allowed ONLY for orphaned POIs (no roam clip) — the server guards it too.
   const deleteMut = useMutation({
     mutationFn: (poiId: string) => api.deletePoi(poiId),
     onSuccess: () => { setActionErr(null); void qc.invalidateQueries({ queryKey: ['pois'] }) },
@@ -937,9 +932,9 @@ function RetireTab({ flagged }: { flagged: PoiRow[] }) {
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
         Flagged POIs. <strong className="text-foreground">Re-fetch</strong> re-pulls facts from Wikipedia (free) — if
-        they change, regenerate the owning tour to clear the staleness. Unattributed story stops violate CC BY-SA and
+        they change, regenerate the roam clip to clear the staleness. Unattributed story clips violate CC BY-SA and
         need a regenerate. <strong className="text-foreground">Retire</strong> (hard delete) is allowed only for
-        orphaned POIs with no tours or roam clips, so it's disabled for everything referenced here.
+        orphaned POIs with no roam clip, so it's disabled for everything referenced here.
       </p>
       {actionErr && (
         <Callout variant="error">
@@ -950,8 +945,8 @@ function RetireTab({ flagged }: { flagged: PoiRow[] }) {
         {flagged.map((p) => {
           const tone = p.staleFacts ? 'warning' : 'destructive'
           const label = p.staleFacts ? 'Stale facts' : 'Unattributed'
-          const desc = p.staleFacts ? 'factsHash changed — re-fetch, then regenerate the tour' : 'story stop missing CC BY-SA attribution'
-          const isOrphan = p.tourCount + p.roamClipCount === 0
+          const desc = p.staleFacts ? 'factsHash changed — re-fetch, then regenerate the roam clip' : 'story clip missing CC BY-SA attribution'
+          const isOrphan = p.roamClipCount === 0
           const refetching = refetchMut.isPending && refetchMut.variables === p.id
           const deleting = deleteMut.isPending && deleteMut.variables === p.id
           return (
@@ -989,7 +984,7 @@ function RetireTab({ flagged }: { flagged: PoiRow[] }) {
                     title={
                       isOrphan
                         ? undefined
-                        : 'Referenced by a tour or roam clip — regenerate or correct it instead of deleting.'
+                        : 'Has a roam clip — regenerate or correct it instead of deleting.'
                     }
                   >
                     <Button
