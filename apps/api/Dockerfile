@@ -6,15 +6,13 @@
 #
 # WHY this shape (verified, not assumed — per CLAUDE.md "ground tooling decisions in
 # docs/empirics"):
-#   - `bun install --filter '@skipper/api'` does NOT prune: it still installs the
-#     WHOLE workspace, including the Expo/React-Native tree that only apps/mobile
-#     needs (verified: 1161 packages, react-native@0.85.3 + expo@56 present). bun
-#     has no `turbo prune --docker` equivalent yet (oven-sh/bun#28600).
-#   - So we TRIM the root `workspaces` to the api's closure (api + @skipper/db +
-#     @skipper/shared + @skipper/storage + @skipper/engine) before installing. That installs
-#     ~90 packages, zero react-native/expo (verified). The api imports @skipper/db, @skipper/shared,
-#     @skipper/storage + @skipper/engine (zero-dep); R2 uses Bun's built-in S3Client (no @aws-sdk). Internal packages export .ts
-#     source, so there is NO build step — bun runs the source directly.
+#   - `bun install --filter '@skipper/api'` does NOT prune: it still installs the WHOLE
+#     workspace, including the Expo/React-Native tree that only apps/mobile needs. bun has
+#     no `turbo prune --docker` equivalent yet (oven-sh/bun#28600).
+#   - So we TRIM the root `workspaces` to the api's closure (the COPY/workspaces lists below)
+#     before installing — that drops the entire react-native/expo tree. R2 uses Bun's built-in
+#     S3Client (no @aws-sdk). Internal packages export .ts source, so there is NO build step —
+#     bun runs the source directly.
 #
 # Secrets: .env.production is committed dotenvx-ENCRYPTED. The host MUST inject
 # DOTENV_PRIVATE_KEY_PRODUCTION (a real secret, never baked into the image) so
@@ -45,16 +43,17 @@ COPY packages/db/package.json packages/db/
 COPY packages/shared/package.json packages/shared/
 COPY packages/storage/package.json packages/storage/
 COPY packages/engine/package.json packages/engine/
-RUN bun -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));p.workspaces=['apps/api','packages/db','packages/shared','packages/storage','packages/engine'];fs.writeFileSync('package.json',JSON.stringify(p,null,2))" \
+COPY packages/routing/package.json packages/routing/
+RUN bun -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));p.workspaces=['apps/api','packages/db','packages/shared','packages/storage','packages/engine','packages/routing'];fs.writeFileSync('package.json',JSON.stringify(p,null,2))" \
  && bun install --production
 
 # 2) The source the API actually runs (bun executes .ts directly — no dist build).
 COPY apps/api/src apps/api/src
 COPY packages/db/src packages/db/src
-COPY packages/db/seed packages/db/seed
 COPY packages/shared/src packages/shared/src
 COPY packages/storage/src packages/storage/src
 COPY packages/engine/src packages/engine/src
+COPY packages/routing/src packages/routing/src
 COPY .env.production ./
 
 ENV NODE_ENV=production

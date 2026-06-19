@@ -1,19 +1,17 @@
-# Cloud Run JOB image for @skipper/studio — runs the tour-ops CLIs in the cloud.
+# Cloud Run JOB image for @skipper/studio — runs the studio CLIs in the cloud.
 #
 # Build from the REPO ROOT (context = whole workspace):
 #   docker build -f packages/studio/Dockerfile -t skipper-studio .
 #
 # This is a Cloud Run *Job* (run-to-completion), NOT a service: no port, no server.
-# ONE image serves all four CLIs — the per-execution override `args` pick the script:
-#   gcloud run jobs execute skipper-studio --args="packages/studio/src/run.ts,<slug>,--dry-run"
-#   ... patch-clip.ts | resynth-tour.ts | sweep-orphans.ts (see the spec §5 args contract).
+# ONE image runs every studio CLI — the per-execution override `args` pick the script + flags
+# (any packages/studio/src/*.ts entrypoint), e.g.:
+#   gcloud run jobs execute skipper-studio --args="packages/studio/src/generate-narrations.ts,--max-cost=3"
 #
-# Shape mirrors apps/api/Dockerfile (verified pattern): bun has no `turbo prune` yet, so
-# `bun install --filter` still pulls the whole RN tree. We TRIM the root `workspaces` to
-# the studio closure — studio + @skipper/{db,engine,shared,storage} (from its
-# package.json) — so the Expo/React-Native tree is never resolved. `engine` is in the
-# closure here (the api image doesn't need it). Internal packages export .ts source: no
-# build step, bun runs the source directly.
+# Shape mirrors apps/api/Dockerfile: bun has no `turbo prune` yet, so `bun install --filter`
+# still pulls the whole RN tree. We TRIM the root `workspaces` to the studio closure (the
+# COPY/workspaces lists below) so the Expo/React-Native tree is never resolved. Internal
+# packages export .ts source: no build step, bun runs the source directly.
 #
 # Secrets: .env.production is committed dotenvx-ENCRYPTED; the Job runtime injects
 # DOTENV_PRIVATE_KEY_PRODUCTION from Secret Manager to decrypt at boot (see cloudbuild.studio.yaml
@@ -56,5 +54,5 @@ ENV NODE_ENV=production
 
 # dotenvx decrypts .env.production (needs DOTENV_PRIVATE_KEY_PRODUCTION in the env), then
 # runs `bun`. The per-execution Cloud Run `args` append the script + flags to this ENTRYPOINT,
-# e.g. args=["packages/studio/src/run.ts","<slug>","--max-cost=3"].
+# e.g. args=["packages/studio/src/generate-narrations.ts","--max-cost=3"].
 ENTRYPOINT ["dotenvx", "run", "-f", ".env.production", "--", "bun"]

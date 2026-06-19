@@ -8,12 +8,12 @@
 #   apps/admin/** (+ db/shared/storage). The Maps browser key is hardcoded in the --build-arg
 #   below (a referrer-restricted, in-the-bundle client key; private repo — not a secret).
 #
-# ONE-TIME setup (NOT here — see docs/specs/admin-ops-console-spec.md §7/§10):
+# ONE-TIME setup (NOT here — see docs/specs/admin-ops-console-spec.md):
 #   - SA `skipper-admin@$PROJECT_ID...`: roles/run.developer on the `skipper-studio` job
 #     (run.jobs.runWithOverrides + run.executions.get) + secretmanager.secretAccessor.
 #   - ADMIN_EMAIL in .env.production (the single allowed IAP principal).
 #   - Enable IAP on the service + grant the founder roles/iap.httpsResourceAccessor. UNDER DRS,
-#     temporarily relax the policy to register the IAP service-agent run.invoker binding (§10).
+#     temporarily relax the policy to register the IAP service-agent run.invoker binding.
 
 steps:
   - name: 'gcr.io/cloud-builders/docker'

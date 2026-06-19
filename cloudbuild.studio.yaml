@@ -1,4 +1,4 @@
-# Cloud Build pipeline for the `skipper-studio` Cloud Run JOB (the tour-ops CLI runner).
+# Cloud Build pipeline for the `skipper-studio` Cloud Run JOB (the studio CLI runner).
 #
 # build (packages/studio/Dockerfile, context = repo root) -> push to Artifact Registry
 #   -> `gcloud run jobs deploy` (create-or-update the Job). Mirrors cloudbuild.yaml (the api
@@ -6,9 +6,9 @@
 #   `run jobs deploy` instead of `run deploy`.
 #
 # Trigger: a 2nd Cloud Build trigger on the existing `skipper-gh` connection, path-filtered to
-#   packages/studio/** (+ db/engine/shared/storage). See docs/specs/admin-ops-console-spec.md §10.
+#   packages/studio/** (+ db/engine/shared/storage). See docs/specs/admin-ops-console-spec.md.
 #
-# ONE-TIME setup (NOT done here — see the spec §10 + docs/guides/gcp-cloud-run-deploy.md):
+# ONE-TIME setup (NOT done here — see docs/guides/gcp-cloud-run-deploy.md):
 #   - create the runtime SA `skipper-studio@$PROJECT_ID.iam.gserviceaccount.com`
 #   - grant it secretmanager.secretAccessor on `dotenv-private-key-production`
 #   - enable texttospeech.googleapis.com (TTS authorizes via the SA's ADC token — no IAM role,

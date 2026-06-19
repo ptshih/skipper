@@ -1,5 +1,5 @@
 # Cloud Run SERVICE image for the admin console — ONE app (apps/admin): the Hono server
-# (server/) + the built Vite SPA (client/), one container behind Google IAP (spec §6/§7).
+# (server/) + the built Vite SPA (client/), one container behind Google IAP.
 # Build from the REPO ROOT:
 #   docker build -f apps/admin/Dockerfile -t skipper-admin .
 #
@@ -44,8 +44,6 @@ RUN bun -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.j
 # The source the server runs (bun executes .ts directly — no dist build).
 COPY apps/admin/server apps/admin/server
 COPY packages/db/src packages/db/src
-# seed/ carries materialize.ts + tour-specs.ts (Create Tour calls materializeRoute).
-COPY packages/db/seed packages/db/seed
 COPY packages/shared/src packages/shared/src
 COPY packages/storage/src packages/storage/src
 COPY .env.production ./
