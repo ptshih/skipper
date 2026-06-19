@@ -54,8 +54,9 @@ export interface GroundingInput {
 
 /**
  * The minimal stop shape the well builder reads — structural, so both the LIVE pipeline
- * (generate.ts, from a StopPlan) and the artifact auditor (eval/run.ts, from result JSON)
- * build the SAME well and can never drift apart on what the narrator was permitted to say.
+ * (the narration core, from a StopPlan) and the artifact auditor (the eval panel, from a
+ * result JSON) build the SAME well and can never drift apart on what the narrator was
+ * permitted to say.
  */
 export interface GroundingWellStop {
   stopType: StopType

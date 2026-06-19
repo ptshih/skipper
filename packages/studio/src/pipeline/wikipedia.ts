@@ -8,7 +8,7 @@
 //
 // Etiquette honored: descriptive User-Agent (required), maxlag=5, formatversion=2,
 // requests in series. License for reuse is CC BY-SA 4.0 — attribution is snapshotted onto
-// the tour_stop at generation time (see generate.ts).
+// the narration (`narrations.attribution`) at generation time.
 
 import type { FactSheetEntry, PoiFacts } from '@skipper/db/schema'
 import { ENRICHER_INPUT_CHARS, EXTRACT_CHARS, WIKIPEDIA_USER_AGENT } from '../config'

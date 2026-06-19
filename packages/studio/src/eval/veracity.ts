@@ -13,8 +13,9 @@
 // entry in pipeline/poi-overrides.ts (the FIX side of this loop), which corrects the sheet
 // at the fetch seam and propagates via facts_hash staleness.
 //
-// Cost: opt-in via eval/run.ts --veracity. Per story stop: one Opus conversation with up
-// to VERACITY_MAX_SEARCHES web searches (web search bills per search on top of tokens).
+// Cost: opt-in (an advisory dimension of the eval panel, not run on every generation).
+// Per story stop: one Opus conversation with up to VERACITY_MAX_SEARCHES web searches
+// (web search bills per search on top of tokens).
 //
 // The model call is INJECTED (like grounding's decomposer), so scoring/aggregation is
 // unit-tested with a deterministic fake and zero API spend (test/eval-veracity.test.ts).

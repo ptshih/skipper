@@ -55,11 +55,11 @@ export function getAnthropic(label = 'a model call needs it'): Anthropic {
 export const NARRATION_MODEL = CLAUDE_MODELS.opus
 
 // JUDGMENT tier — every NON-narration model call: the enrichment scout (pipeline/scout.ts)
-// and the structured-report / spot-check judges (eval/charm.ts, pipeline/judge.ts,
-// eval/grounding.ts, eval/veracity.ts). Opus 4.8. With narration ALSO on Opus 4.8 now
+// and the structured-report / spot-check judges (eval/charm.ts, eval/grounding.ts,
+// eval/veracity.ts). Opus 4.8. With narration ALSO on Opus 4.8 now
 // (Fable 5 unavailable, above), this tier currently COINCIDES with NARRATION_MODEL — but it
 // stays a SEPARATE constant on purpose, for two reasons that outlive the coincidence:
-//   (a) Four of the five FORCE tool use (tool_choice {type:'tool'} or {type:'any'}); Opus 4.8
+//   (a) Most of them FORCE tool use (tool_choice {type:'tool'} or {type:'any'}); Opus 4.8
 //       accepts that, but it's a hard requirement the narration model must also meet if the
 //       two ever diverge again (Fable, e.g., rejected it).
 //   (b) The judge rubrics/score thresholds were calibrated against Opus-tier judging — moving
@@ -166,10 +166,9 @@ export const GEMINI_VOICES = {
 
 export type GeminiVoice = (typeof GEMINI_VOICES)[keyof typeof GEMINI_VOICES]
 
-// The Skipper's voice. Baked into the tour-OWNED narration audio, so changing it
-// after tours exist forces re-synthesis (resynth-tour.ts). No ElevenLabs
-// sunset/quota constraint on this provider. ⚠ The live canonical tours still carry
-// Algenib audio until the next regen/resynth — Charon ships with that run.
+// The Skipper's voice. Baked into the narration audio, so changing it after a
+// narration exists forces re-synthesis (resynth-narration.ts). No ElevenLabs
+// sunset/quota constraint on this provider.
 export const SKIPPER_VOICE_ID: GeminiVoice = GEMINI_VOICES.charon
 
 // Natural-language DELIVERY directive (Cloud TTS input.prompt). The persona's words
@@ -190,9 +189,9 @@ export const SKIPPER_VOICE_ID: GeminiVoice = GEMINI_VOICES.charon
 // "breathe") are gone and an explicit hold-the-level-to-the-last-word rule is in. Founder
 // ear-tested this wording vs the prior one on the Dam clip + outro (no regression). NOTE:
 // takes are stochastic — judge the fix across the next regen's full clip set, not one take.
-// ⚠ NOT yet on the live canonical preview: this only affects NEW synthesis. Taking effect
-// means re-synthesizing the canonical clips at Phase 6 (resynth-tour.ts <canonical> --apply)
-// and the founder re-validating by ear. Do NOT re-tune the wording without a fresh ear test.
+// ⚠ This only affects NEW synthesis. Existing narrations take it on the next regen, or by
+// re-synthesizing a clip in place (resynth-narration.ts) and the founder re-validating by
+// ear. Do NOT re-tune the wording without a fresh ear test.
 export const SKIPPER_TTS_STYLE_PROMPT =
   'Read this as a warm road-trip tour guide letting friends in on jokes you all secretly enjoy — genuinely glad they came, a man who has told these corny jokes a thousand times and quietly loves every one. Keep the narration moving at a natural, easy talking pace, like a man telling you about the view out the window — relaxed but never sleepy, never dragging. Save the slow-down for the jokes: deliver them deadpan and fully committed, but with warmth — close and friendly, never dropping to a murmur — as if you and the riders both know it is corny and that is exactly why it is good. Never laugh at your own setup, never sing-song the punchline; land each one flat and matter-of-fact. Put a small pause right before the pun, and after it lands hold one short beat — not waiting for anything, just letting it sit — then roll on. Let the sincere lines breathe without fading — keep the voice clear, present, and at full conversational volume from the first sentence to the very last; never trail off, drop low, or swallow the closing words. Talking WITH friends, not at a crowd.'
 

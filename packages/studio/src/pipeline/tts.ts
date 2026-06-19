@@ -135,8 +135,8 @@ export type SynthWithTailResult = SynthResult & { tail: TailOutcome | null }
  * single AAC encode. Normalizing once, on the shipped take, AFTER the retake is safe — a
  * linear gain scales tail and body equally, so it can't reintroduce collapse. ffmpeg is
  * REQUIRED here (it's the encoder, not just a QA tool) — normalizeAndEncode throws if it's
- * absent. Both passes run on every SHIP path (generate, generate-narrations, resynth-tour,
- * resynth-narration, patch-clip), which all go through this.
+ * absent. Both passes run on every SHIP path (generate-narrations, resynth-narration),
+ * which all go through this.
  */
 export async function synthesizeWithTailRetake(
   text: string,

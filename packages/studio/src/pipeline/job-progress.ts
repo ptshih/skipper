@@ -1,12 +1,12 @@
-// studio_jobs lifecycle hook — the OPERATIONAL record of a cloud tour-ops run.
+// studio_jobs lifecycle hook — the OPERATIONAL record of a cloud studio-ops run.
 //
 // A NO-OP unless STUDIO_JOB_ID is set, so the laptop CLI is byte-identical (it never sets it).
 // In the cloud the Cloud Run Job receives STUDIO_JOB_ID: the admin-api mints the studio_jobs row
 // (status 'queued') before triggering in v1; a gcloud-triggered v0 run just passes a fresh
 // uuid and beginJob() inserts the row itself. EVERY gen-job entrypoint wraps its body in a
-// main() guarded by beginJob/finishJob (the run.ts shape) — a NEW kind MUST do the same. Never
-// call this from inside generate.ts (keeps the pipeline untouched). Full registry +
-// enforcement: apps/admin/server/jobs.ts SCRIPTS + jobs.test.ts.
+// main() guarded by beginJob/finishJob (the studio-CLI main() shape) — a NEW kind MUST do the
+// same. Never call this from inside the narration-generation core (keeps the pipeline
+// untouched). Full registry + enforcement: apps/admin/server/jobs.ts SCRIPTS + jobs.test.ts.
 //
 // LOG CAPTURE lives here too: beginJob() tees this run's console output; finishJob() persists it
 // + an LLM summary onto the row (outputLog/outputSummary/outputData), atomically with the status

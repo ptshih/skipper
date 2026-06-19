@@ -1,8 +1,9 @@
 // Voice & charm harness — the "is the persona actually charming?" check.
 //
 // "THE PERSONA IS THE PRODUCT," yet the Skipper's CHARM (writing + the Algenib TTS
-// voice) has never been judged. This reads a generate-result JSON (`run.ts --json=...`)
-// and produces ONE markdown report with two verdicts:
+// voice) has never been judged. This reads a narration-run JSON artifact (a dumped
+// generation result — stops with scripts + audioUrls) and produces ONE markdown report
+// with two verdicts:
 //   1. WRITING (automated) — an LLM charm-judge (Opus) scores every stop's SCRIPT for
 //      charm and flags where it sags. Charm only; grounding is a separate gate.
 //   2. VOICE (your ears) — each clip is paired with a playable presigned link + a
