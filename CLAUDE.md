@@ -207,27 +207,32 @@ glanceable/in-car). Screens compose `@/ui` and reference semantic roles
 
 ## Milestones
 
-0. **Content + phone-player spike.** Skipper prompt; ~6–8 Tahoe tours (each a
-   self-contained drive — no separate `corridors` table); stand up the **phone**
-   audio player — that is the MVP target, and its build (Expo SDK 56 / RN 0.85 /
-   new arch) decides the SDK pin. **CarPlay is no longer a hard gate** — it's
-   deferred past the MVP (see Deferred). The MVP plays through the phone (in a
-   mount / over Bluetooth), not CarPlay. You may file the `carplay-audio` Apple
-   entitlement in the background since Apple review is slow, but nothing waits on it.
-1. **Walking skeleton.** ONE tour (one route), `dadpocalypse` only.
-   Generator → narration → TTS → R2 → Neon (no cache/dedup/feedback). Build the
-   **drive simulator**. Player: download offline → simulated drive → correct
-   speed-adaptive triggering + debounce → audio + lock-screen **Now Playing on
-   the phone** (CarPlay deferred). Then drive it once for real. _This is the
-   whole bet._
-2. **`apps/api`:** list tours, fetch tour, signed R2 URLs.
-3. **Breadth:** more tours, joke notches as a per-tour setting (notch = 1-N off a tour),
-   live break-stop Places data. (Duration = skip-stops, interests = a stop filter — both
-   deferred, NOT variant tours.)
-4. **Earn the machinery:** `route_sig` tour-dedup, human-review/feedback, then more
-   regions (Yosemite → Moab; mind seasons). (The old `poi_content` *content* cache is
-   cancelled under zero-reuse — narration is tour-owned; the only "cache" is the `pois`
-   facts TTL + hash-staleness, see `docs/decisions/tour-data-model-zero-reuse.md`.)
+(V2 reframing 2026-06-18: the ladder is now ROAM + user-owned DRIVES, not hand-authored
+tours — those are DEFERRED. The phone-player bet itself is unchanged; the content artifact
+is a region's shared `narrations` corpus, and a drive REUSES it pre-ordered along an A→B route.)
+
+0. **Content + phone-player spike.** Skipper prompt; a Tahoe **roam corpus** (shared
+   `narrations`, one telling per place); stand up the **phone** audio player — that is the
+   MVP target, and its build (Expo SDK 56 / RN 0.85 / new arch) decides the SDK pin.
+   **CarPlay is no longer a hard gate** — it's deferred past the MVP (see Deferred). The
+   MVP plays through the phone (in a mount / over Bluetooth), not CarPlay. You may file the
+   `carplay-audio` Apple entitlement in the background since Apple review is slow, but
+   nothing waits on it.
+1. **Walking skeleton.** ROAM as the anonymous front door + ONE user-created **drive**
+   (A→B → route → reuse roam narrations pre-ordered), `dadpocalypse` only.
+   discover → enrich → generate → TTS → R2 → Neon. Build the **drive simulator**. Player:
+   download offline → simulated drive → correct speed-adaptive triggering + debounce →
+   audio + lock-screen **Now Playing on the phone** (CarPlay deferred). Then drive it once
+   for real. _This is the whole bet._
+2. **`apps/api`:** `/roam` (anonymous), `/drives*` (account-gated create + list + fetch),
+   `/regions`, signed R2 URLs.
+3. **Breadth:** more regions' corpora, joke notches as a per-drive setting (notch = 1-N off
+   a drive), live break-stop Places data. (Duration = skip-stops, interests = a stop filter
+   — both deferred, NOT variant drives.)
+4. **Earn the machinery:** `route_sig`/`drive_demand` drive-dedup + caching,
+   human-review/feedback, then more regions (Yosemite → Moab; mind seasons). (No content
+   cache under zero-reuse — the only "cache" is the `pois` facts TTL + hash-staleness, see
+   `docs/decisions/tour-data-model-zero-reuse.md`; hand-authored tours stay DEFERRED.)
 
 ## Deferred — DO NOT build these in v1
 

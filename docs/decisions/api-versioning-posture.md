@@ -1,9 +1,19 @@
 # API versioning posture
 
-**Status:** ✅ **DECIDED + BUILT 2026-06-09.** The launch-time update gate ships now (pre-submission):
-`GET /version` + the mobile `VersionGate` + the `ContractError` self-defense. This doc is the single
-source of truth for the versioning posture; it closes the `TODO.md` "API contract" item and supersedes
-the CLAUDE.md forward-reference.
+**Status:** ✅ **DECIDED + BUILT 2026-06-09**; the GATE MECHANISM still holds. The launch-time update
+gate ships now (pre-submission): `GET /version` + the mobile `VersionGate` + the `ContractError`
+self-defense. This doc is the single source of truth for the versioning posture; it closes the
+`TODO.md` "API contract" item and supersedes the CLAUDE.md forward-reference.
+
+**Scope addendum (V2, 2026-06-18):** the additive-only **freeze had NOT engaged yet** when V2 landed —
+v1 never shipped to the App Store, so there were zero installed clients to protect, and the V2 migration
+**deliberately broke the wire contract** (`/tours` routes + tour DTOs removed → `/drives*` + `/regions`;
+see `create-a-drive-architecture.md`). This is consistent with §5 below, not an exception to it: "ship the
+gate in v1" means the *gate code* ships before submission (it does), NOT that the contract is frozen
+before then. The additive-only rule (§2) and the freeze it implies **engage at the first App Store
+submission** — until that moment the contract is break-freely (CLAUDE.md's STORAGE doctrine scope-note
+already states this). Everything else in this doc — no URL versioning, the `/version` floor, client
+self-defense — is unchanged and live.
 
 ## Context
 

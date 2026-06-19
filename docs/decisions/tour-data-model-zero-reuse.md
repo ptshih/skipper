@@ -1,6 +1,16 @@
 # Tour data model (canonical)
 
-**Status:** ✅ **BUILT + live-migrated 2026-06-08** (commits `d0f2ba6` schema + cascade, `f1396cf` the
+**Status:** ⚠ **ENTITY MODEL SUPERSEDED by V2 (2026-06-18); the PRINCIPLE survives.** Migration `0009`
+dropped `tours`/`segments`/`tracks`/`tour_frames` (+ `frame_kind`/`tour_status` enums); the live model is
+`pois ─1:1─ narrations` (shared atom) + user-owned `drives`, content resolving live via `poi_id`. So this
+doc's §3 DDL, §6 migration shape, §7 code surfaces, and every addendum below describe a model that **no
+longer exists in `schema.ts`** — read them as HISTORY. What carries forward intact: **zero-reuse itself**
+(§1 — facts shared via `pois` TTL + `facts_hash`, the *telling* owned by its context, **no content cache**)
+and the facts-staleness contract (§4, now riding `narrations.facts_hash`). Current entity model + rationale:
+`docs/decisions/create-a-drive-architecture.md` (✅ BUILT); the hand-authored-tour rung this doc was written
+for is DEFERRED — live artifacts are ROAM + drives.
+
+**Prior status (V1):** ✅ **BUILT + live-migrated 2026-06-08** (commits `d0f2ba6` schema + cascade, `f1396cf` the
 applied migration baseline; the canonical preview was regenerated into this model = tour `9ac50db5`). The
 design below is now the SHIPPED entity model, not a proposal. It remains the **single source of truth** for
 the entity model + migration; `docs/specs/tour-structure-spec.md` is superseded on the data model (it keeps only
