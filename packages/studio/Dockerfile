@@ -16,7 +16,7 @@
 # build step, bun runs the source directly.
 #
 # Secrets: .env.production is committed dotenvx-ENCRYPTED; the Job runtime injects
-# DOTENV_PRIVATE_KEY_PRODUCTION from Secret Manager to decrypt at boot (see cloudbuild.gen.yaml
+# DOTENV_PRIVATE_KEY_PRODUCTION from Secret Manager to decrypt at boot (see cloudbuild.studio.yaml
 # + docs/specs/admin-ops-console-spec.md §10). TTS auth is ADC off the Job's runtime service
 # account (no key file) — no GOOGLE_APPLICATION_CREDENTIALS needed.
 

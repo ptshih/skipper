@@ -329,7 +329,7 @@ A truly minimal first cut can defer step 2's per-phase tick — terminal status 
 
 - `apps/admin/Dockerfile` (v1 admin service) + `packages/studio/Dockerfile` (v0 Job image), each
   pushed to the `skipper` Artifact Registry repo.
-- **`cloudbuild.gen.yaml`** (v0) — build → push → `gcloud run jobs deploy skipper-studio` (create-or-update).
+- **`cloudbuild.studio.yaml`** (v0) — build → push → `gcloud run jobs deploy skipper-studio` (create-or-update).
 - **`cloudbuild.admin.yaml`** (v1) — build → push → `gcloud run deploy skipper-admin` (IAP, not public).
 - Cloud Build triggers on the existing `skipper-gh` connection, path-filtered: `packages/studio/**`
   (+ db/shared/storage) → the gen Job; `apps/admin/**` → admin.

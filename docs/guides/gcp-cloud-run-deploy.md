@@ -226,8 +226,8 @@ bun run db:migrate:prod
 #    (a declared-but-unused substitution fails the default MUST_MATCH check).
 gcloud builds triggers create github --name=skipper-studio-deploy --region=us-east4 \
   --repository=projects/$PROJECT/locations/us-east4/connections/skipper-gh/repositories/skipper \
-  --branch-pattern='^main$' --build-config=cloudbuild.gen.yaml \
-  --included-files='packages/studio/**,packages/db/**,packages/drive-core/**,packages/shared/**,packages/storage/**,cloudbuild.gen.yaml' \
+  --branch-pattern='^main$' --build-config=cloudbuild.studio.yaml \
+  --included-files='packages/studio/**,packages/db/**,packages/drive-core/**,packages/shared/**,packages/storage/**,cloudbuild.studio.yaml' \
   --service-account=projects/$PROJECT/serviceAccounts/$COMPUTE
 
 gcloud builds triggers create github --name=skipper-admin-deploy --region=us-east4 \
@@ -276,7 +276,7 @@ agent). Temporarily relax DRS (needs `roles/orgpolicy.policyAdmin`) to register 
 
 - `cloudbuild.yaml` — the API build → push → deploy pipeline (this is the contract).
 - `cloudbuild.site.yaml` — the apex site build → Firebase Hosting deploy.
-- `cloudbuild.gen.yaml` — the `skipper-studio` Cloud Run **job** build → `jobs deploy`.
+- `cloudbuild.studio.yaml` — the `skipper-studio` Cloud Run **job** build → `jobs deploy`.
 - `cloudbuild.admin.yaml` — the `skipper-admin` service (multi-stage: SPA + Hono) build → deploy.
 - `.gcloudignore` — trims the Cloud Build upload; re-excludes `.env.keys`.
 - `apps/api/Dockerfile` — the lean Bun image (header explains the workspace trim).
