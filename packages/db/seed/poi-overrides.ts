@@ -20,7 +20,7 @@ import { poiOverrides, type NewPoiOverride } from '../src/schema'
 
 // FACT corrections only now — the side-of-road coordinate moved onto `pois.speakable_lat/lng`
 // (a place's stored vantage, written by the generator). The Sugar Pine Point speakable anchor
-// lives as a curated map in packages/generator/src/pipeline/speakable.ts.
+// lives as a curated map in packages/studio/src/pipeline/speakable.ts.
 export const POI_OVERRIDE_SEED: NewPoiOverride[] = [
   {
     source: 'wikipedia',
