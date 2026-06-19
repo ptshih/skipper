@@ -1,10 +1,13 @@
 # Create-a-Drive architecture (V2 roam-first)
 
-**Status:** ✅ DECIDED 2026-06-18, BUILD STARTED (Phase 1). The build-ready engineering record for V2's
-on-demand **Create a Drive** + the roam-first data model. Product rationale + the decision journey live
-in [../ideas/roam-first-create-a-drive.md](../ideas/roam-first-create-a-drive.md); THIS doc is what the
-build follows. Designed via a 3-architecture × 3-judge-lens workflow + a 4-lens terminology audit, then
-founder-refined. Supersedes the workflow-era `user_drives` / `segments` / `beats` names.
+**Status:** ✅ BUILT 2026-06-18. The full V2 migration shipped: the `narrations`/`drives`/`interludes`
+schema (migration 0009 dropped the legacy `tours`/`segments`/`tracks`/`tour_frames` from the live DB, 459
+paid clips preserved), the `/drives` API (propose → `buildDrive` → persist) + `GET /regions`, the mobile
+Create-a-Drive flow (conversational prompt → map-hero confirm → preview) + Roam-first home, and the
+generator/admin/sim rewires onto narrations. OPEN: simulator verification of the live create→drive runtime;
+pre-gen interlude/bracket library; route-demand cache. Product rationale + the decision journey live in
+[../ideas/roam-first-create-a-drive.md](../ideas/roam-first-create-a-drive.md). Designed via a
+3-architecture × 3-judge-lens workflow + a 4-lens terminology audit, then founder-refined.
 
 ## Context
 

@@ -74,69 +74,60 @@ you found so the next agent can re-check it.
 
 ## Two principles that govern the architecture
 
-1. **Assemble per request; fetch FACTS once per place, generate NARRATION per
-   tour.** `pois` is the cache — a place's facts/coords, deduped by
-   `(source, source_id)` and re-fetched on a TTL (`facts_fetched_at` is the staleness
-   clock; refresh is operator-run via `refetch_facts`/re-sweep, not an automated sweep); facts are
-   SHARED by every tour that visits the place. **Narration is NOT cached — it's
-   tour-owned:** a place-anchor `segment` carries its narration `tracks`
-   (`script`/`audio`), so tour 1's Camp Richardson is ALWAYS a different telling from tour
-   2's, even though both point at the same `pois` row. Delivery belongs to the track; facts
-   belong to the place (the "persona lives in DELIVERY, never in FACTS" invariant, mapped
-   onto storage). There is **no content cache and no cross-tour content reuse** — by design.
-   When a re-fetch MATERIALLY changes a poi's facts (detected via `pois.facts_hash`), every
-   `track` that grounded on them is stale and must regenerate. (Zero-reuse 2026-06-08; the
-   three narration owners collapsed into `segments`+`tracks` 2026-06-12 — see
-   `docs/decisions/tour-data-model-zero-reuse.md`.) **The corpus pipeline is `discover` → `enrich`
-   → `generate` (2026-06-15):** a free sweep populates `pois` for a region's bbox ONCE
-   (`sweep-region-pois.ts`); a PAID `enrich` (`enrich-region.ts`) then scouts each story poi ONCE
-   into a curated **verbatim fact sheet** (its own typed `pois.fact_sheet` column + `enriched_at`,
-   NOT in the `facts` bag — `facts_hash` keys on it), and BOTH tours and roam SELECT from that one
-   shared corpus + ground on the fact sheet. A STORY telling REQUIRES a sheet (#1, 2026-06-16) — an
-   un-enriched POI is downgraded to scenic, NEVER narrated from the raw extract ("silence beats a bad
-   telling"); the capped extract head survives only as a defensive fallback. Tours are AUTHORED at runtime (admin Create → `materializeRoute`), never
-   seeded as drafts. See `docs/decisions/region-corpus-discovery.md` + `corpus-enrichment.md`.
-2. **The rails are the route; generation is everything inside the rails.** Routes
-   are hand-curated + frozen, never derived. The failure mode to avoid is letting
-   "curated" creep into the _contents_ — if the model just reads a fixed script,
+1. **Fetch FACTS once per place; the NARRATION is the shared atom; ASSEMBLE per drive.**
+   `pois` is the facts cache — a place's facts/coords, deduped by `(source, source_id)` and
+   re-fetched on a TTL (`facts_fetched_at` is the staleness clock; refresh is operator-run via
+   `refetch_facts`/re-sweep). Each place has ONE shared telling: a `narrations` row (1:1 with its
+   poi — audio/persona baked, region-scoped). **ROAM plays narrations by proximity; a DRIVE REUSES
+   them, pre-ordered along its route** — content resolves LIVE via `poi_id`, so a regenerated telling
+   auto-improves every saved drive. Delivery belongs to the narration; facts belong to the place (the
+   "persona lives in DELIVERY, never in FACTS" invariant, mapped onto storage). When a re-fetch
+   MATERIALLY changes a poi's facts (via `pois.facts_hash`), every narration that grounded on them is
+   stale and must regenerate. (V2 2026-06-18: V1's per-tour `segments`+`tracks` collapsed into the 1:1
+   `narrations` atom; zero-reuse now governs only the DEFERRED authored-tour rung — see
+   `docs/decisions/tour-data-model-zero-reuse.md` + `create-a-drive-architecture.md`.) **The corpus
+   pipeline is `discover` → `enrich` → `generate` (2026-06-15):** a free sweep populates `pois` for a
+   region's bbox ONCE (`sweep-region-pois.ts`); a PAID `enrich` (`enrich-region.ts`) scouts each story
+   poi ONCE into a curated **verbatim fact sheet** (its own typed `pois.fact_sheet` column +
+   `enriched_at`; `facts_hash` keys on it), and roam + drives SELECT from that one shared corpus +
+   ground on the fact sheet. A STORY telling REQUIRES a sheet (#1, 2026-06-16) — an un-enriched POI is
+   downgraded to scenic, NEVER narrated from the raw extract ("silence beats a bad telling"). Drives
+   are user-created at runtime (`POST /drives` → `buildDrive`); hand-authored tours are DEFERRED. See
+   `docs/decisions/region-corpus-discovery.md` + `corpus-enrichment.md`.
+2. **The route is the rails; generation is everything inside.** A drive's route is materialized
+   from the rider's A→B (Google Routes), frozen per drive — the LLM resolves ONLY the endpoints; the
+   SELECTION of which narrations ride the route is deterministic (`buildDrive`). The failure mode to
+   avoid is letting "curated" creep into the _contents_ — if the model just reads a fixed script,
    you've rebuilt Shaka Guide with extra steps.
 
 ## Hard invariants (enforced in code; don't regress them)
 
-- **Tours stay anonymous/shareable — no `createdBy` on `tours`.** Auth now EXISTS
-  (Better Auth, freemium: anonymous → free account → paid `user.tier`) but is
-  layered AROUND tours, not on them (no ownership columns; the `saved_tours`
-  save-for-later join was dropped 2026-06-12). **EVERY tour is previewable anonymously** (hard
-  product requirement): a `?preview=1` fetch/sign is OPEN for any ready tour — the
-  couch preview is the funnel, so the audio is intentionally NOT a server wall
-  (anyone can stream any tour's clips). The wall **moved to the LIVE DRIVE +
-  OFFLINE download**: a request WITHOUT `?preview=1` needs a free account (the
-  existing 401 → `AccountGate`), so the in-car drive + offline stay gated — for
-  EVERY tour now (no anonymous-drivable demo). The `tours.isPreview` column is
-  GONE (dropped 2026-06-09): it was vestigial once preview opened, and the drive
-  gate no longer has a per-tour exception. NOTE: because preview streams the same
-  presigned bytes, the drive/offline wall is server-enforced only on the
-  *unflagged* path — a real byte-level wall would have to gate offline download
-  specifically (future hardening). Audio is still PRIVATE in R2 (presigned, short
-  TTL). (Changed 2026-06-09: "every tour previewable", wall → the drive, isPreview dropped.)
+- **Hand-authored tours are DEFERRED; the first-day artifacts are ROAM + user-owned DRIVES.**
+  Auth EXISTS (Better Auth, freemium: anonymous → free account → paid `user.tier`). ROAM is the
+  anonymous front door (open, no account). A **DRIVE is user-OWNED** — ownership lives on
+  `drives.user_id` (a user-side table), NEVER on a shared content table. **Anonymous = roam only;
+  creating a drive needs a free account** (the create-action wall — the whole `/drives*` sub-app is
+  behind `requireAccount`). Free tier caps at `FREE_DRIVE_CAP` (default 10) drives; beyond → a
+  one-time credit pack (IAP fast-follow). A drive is NOT anonymous-shareable (it's owned), so
+  `/t/:id` serves GENERIC Open Graph. Audio is PRIVATE in R2 (presigned, short TTL, after the tier
+  check). (V2 2026-06-18: the V1 "every tour previewable / wall on the drive" funnel is gone with
+  authored tours.)
 - **`pois` deduped by `(source, source_id)`.** Store `source`/`source_id` for
   attribution — Wikipedia is **CC BY-SA**, keep credit (the attribution snapshot is
-  frozen on the `track` at narration time).
+  frozen on the `narration` at generation time).
 - **The Dad-Joke-O-Meter notch (`off`/`mild`/`dad`/`dadpocalypse`), persona, and
   voice are GENERATION parameters, baked into the narration — never live playback
-  toggles and never a content-cache key** (there is no content cache; narration is
-  tour-owned — see principle #1). Changing any of them = a different telling. Of
-  the three, only the **persona** is a stored `tours` column — an explicit `persona_key`
-  (decoupled from region, default `'skipper'`) the recipe resolves via `personaFromKey` →
-  `PersonaDef`, FROZEN on `segments.persona_id`; its DEFINITION still lives in the first-class
-  `personas` row, never copied onto the tour. **Voice** (no column) derives from the persona, and the **notch** is a
-  generation-time INPUT only (`GenerateOptions.jokeLevel` / `run.ts --joke-level`,
-  default `dadpocalypse`) — it is NOT persisted, because M1 is dadpocalypse-only so a
-  stored notch carries no information. When the 1-N notch ships (M3) the column lands on
-  the NARRATION (`tracks`), never on `tours`: a notch describes a telling, not a
-  route. The `jokeLevel` Zod enum in `@skipper/shared` stays as the narration vocabulary.
-- **A tour may not be `ready` until every stop has non-null audio** (story, scenic,
-  AND break — audio lives on the stop's `track`). Generator enforces; player also defends.
+  toggles** (see principle #1). Changing any of them = a different telling. The
+  **persona** is baked onto the `narrations` row at generation (decoupled from region, default
+  `'skipper'`); the recipe resolves via `personaFromKey` →
+  `PersonaDef` at generation (one host per region in v2); its DEFINITION lives in the first-class
+  `personas` row, never copied onto content. **Voice** (no column) derives from the persona, and the
+  **notch** is a generation-time INPUT only (`run.ts --joke-level`, default `dadpocalypse`) — NOT
+  persisted (M1 is dadpocalypse-only). The `jokeLevel` Zod enum in `@skipper/shared` stays as the
+  narration vocabulary.
+- **A narration is only live once it has non-null audio** (story, scenic, AND break — `audio_url`
+  is NOT NULL on `narrations` at the DB boundary). Generator enforces; the player also defends. A
+  drive can't be `ready` until every selected stop resolves to a narration with audio.
 - **Persona lives in DELIVERY, never in FACTS.** "Make it funny" never loosens
   accuracy. A POI with thin/no Wikipedia is downgraded to scenic/break — silence
   beats a hallucinated battle.
@@ -144,9 +135,9 @@ you found so the next agent can re-check it.
   (hours, rating, "open till 9", popularity, features). The break's `name`/`kind`
   come from the curated Places anchor (a minimal non-volatile field mask) and are
   spoken in the clip like the region is; everything volatile is fetched fresh at
-  tour-load (and "ask the skipper" later). Break audio is **mandatory** — every
-  selected break gets narration + audio on its `track`; the tour can't be `ready`
-  without it. (NOTE: baking the Places name into a frozen R2 clip extends its lifetime
+  drive-load (and "ask the skipper" later). Break audio is **mandatory** — every
+  selected break gets a narration with audio; a silent break never rides a drive.
+  (NOTE: baking the Places name into a frozen R2 clip extends its lifetime
   past the DB anchor — mind Places ToS; `patch-clip` re-synths one stop's clip if a
   place renames.)
 
