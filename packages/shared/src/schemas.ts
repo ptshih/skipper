@@ -44,7 +44,7 @@ export type AttributionList = z.infer<typeof attributionList>
  * A public data-source credit for the app-wide "Sources & Licenses" screen (NOT per-clip —
  * that's `attribution`, frozen on the tour_stop). Served by GET /sources so a NEW fact
  * source (Wikidata, OSM, public-domain texts…) credits correctly with a backend deploy,
- * never an App Store release. Keep in step with the generator's actual sources.
+ * never an App Store release. Keep in step with the studio pipeline's actual sources.
  */
 export const dataSource = z.object({
   /** Display name of the source, e.g. "Wikipedia". */
