@@ -32,7 +32,6 @@ interface VoiceArtifactStop {
   audioUrl?: string
 }
 interface VoiceArtifact {
-  tourId?: string
   runName: string
   region: string
   durationBucket: string
@@ -49,7 +48,6 @@ function buildReport(r: VoiceArtifact, v: CharmVerdict): string {
   const bySeq = new Map(v.stops.map((s) => [s.seq, s]))
   const out: string[] = []
   out.push(`# Voice & charm report — ${r.runName} (${r.region}) · ${r.durationBucket}`)
-  if (r.tourId) out.push(`tour: ${r.tourId}`)
   out.push('')
   out.push('## The bet: is the persona charming enough to build the player on?')
   out.push(`**Judge — the writing (Opus):** ${v.overall}/10 · ${RECO_LABEL[v.recommendation]}`)

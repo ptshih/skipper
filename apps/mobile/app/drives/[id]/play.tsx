@@ -96,7 +96,7 @@ export default function DriveScreen() {
   const { data: session } = useSession()
 
   // Returning from /sign-in lands back on this STILL-MOUNTED screen, but useDrive's load
-  // effect watches only [tourId, reloadKey, mode] — nothing the session — so a rider who just
+  // effect watches only [driveId, reloadKey, mode] — nothing the session — so a rider who just
   // got their free ticket would otherwise sit on the same gate. Re-check ONCE per signed-in
   // user while gated; retry() bumps reloadKey → re-fetches → drops them straight into the drive.
   const sessionUserId = session?.user?.id ?? null

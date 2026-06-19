@@ -142,7 +142,7 @@ export async function finishJob(outcome: FinishOutcome): Promise<void> {
  *  (its fields are computed after arg-parse / validation, or it begins in multiple branches).
  *
  *  On success the row settles from `fn`'s returned outcome (so a richer success payload —
- *  tourId / costUsd / evalRunId — is forwarded), or `{ ok: true }` when it returns void.
+ *  costUsd / evalRunId — is forwarded), or `{ ok: true }` when it returns void.
  *  On throw: settle failed, log the message, and exit non-zero. */
 export async function runJob(
   kind: Kind,

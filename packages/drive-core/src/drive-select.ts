@@ -5,7 +5,7 @@
 // audio; it SELECTS + PACES existing clips. Pure, zero-dep, RN-safe (like the rest of drive-core), so
 // the server assembles a drive at request time AND the device can re-pace one offline.
 //
-// Differs from the generator's selectStops in two ways the design calls out:
+// Two selection choices the design calls out:
 //   - co-located candidates collapse PICK-ONE, never merge (you can't fuse two finished .m4a clips);
 //   - the window prefers a clip that FITS the gap (won't queue-lag) + variety, ranked on the clip's
 //     REAL audioDurationMs, not an extract length (the clip already exists).

@@ -1,4 +1,4 @@
-// Shareable-tour link surface for skipper.fm/t/<tourId> universal links — the couch-preview
+// Shareable link surface for skipper.fm/t/<id> universal links — the couch-preview
 // share funnel's public face. Two server jobs (the iOS app + Expo Router do the rest):
 //   1. APPLE_APP_SITE_ASSOCIATION — the canonical AASA payload (iOS claims /t/* for the app).
 //      NO LONGER served by this API (api.skipper.fm isn't an associated domain): the apex site
@@ -28,7 +28,7 @@ export const APPLE_APP_SITE_ASSOCIATION = {
       {
         appIDs: [IOS_APP_ID],
         // `*` is greedy and crosses '/', so /t/* claims every /t/... path — that's exactly the
-        // tour-link space today. Add an `exclude` component before this one if other /t/ URLs
+        // share-link space today. Add an `exclude` component before this one if other /t/ URLs
         // ever appear. AASA can't express a UUID grammar; the id is validated in-app + by the
         // /t/:id route, not here.
         components: [{ '/': '/t/*', comment: 'Shareable Skipper tour links open in the app.' }],
@@ -47,8 +47,8 @@ const HTML_ESCAPE: Record<string, string> = {
 const escapeHtml = (s: string): string => s.replace(/[&<>"']/g, (ch) => HTML_ESCAPE[ch]!)
 
 /**
- * Branded Open-Graph landing for a shared tour link when no app intercepts it. The OG/Twitter
- * tags make skipper.fm/t/<id> unfurl with the tour's name in iMessage/social — the funnel's
+ * Branded Open-Graph landing for a shared link when no app intercepts it. The OG/Twitter
+ * tags make skipper.fm/t/<id> unfurl with the shared title in iMessage/social — the funnel's
  * first impression. Brand hexes are inlined (this is standalone server HTML, NOT the mobile
  * design-system surface that lint:tokens governs): #14201B dusk / #F2E7CC paper, from the
  * app.json splash palette. No og:image yet — add a share card when one exists.

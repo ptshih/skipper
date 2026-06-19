@@ -1,13 +1,13 @@
 // Story-eligibility — is a POI story-grade NARRATION material? This is a property of the POI, shared
-// by every consumer that narrates it: BOTH tours and roam select story-grade POIs from the same
+// by every consumer that narrates it: BOTH drives and roam select story-grade POIs from the same
 // corpus (roam is one consumer, not the owner). SINGLE SOURCE OF TRUTH for the gates — the admin POIs
 // table classifies with `classifyStoryEligibility`, and `generate-narrations` reads the same constants for
-// its queue. (Whether a roam CLIP exists / is fresh is a SEPARATE, roam-specific axis — computed in
-// /admin/pois as `roamClip`, not here.)
+// its queue. (Whether a narration exists / is fresh is a SEPARATE axis — computed in
+// /admin/pois as `narrationStatus`, not here.)
 
 /** TASTE gate: violent-crime / personal-tragedy articles are never a charming narration target — a
  *  joke-forward persona can't carry them (the sweep is breadth-first, so these slip in). Applies to
- *  ANY telling (tour OR roam). Title-keyed; tuned for MODERN personal/violent crime while preserving
+ *  ANY telling (drive or roam). Title-keyed; tuned for MODERN personal/violent crime while preserving
  *  the historical/civic-tragedy carve-out the persona CAN play straight (a wildfire, a shipwreck, an
  *  earthquake, the Donner Party, a wild-west gunfight) — so it deliberately omits broad words like
  *  "attack"/"fire"/"shootout"/"wreck". Two guards dodge benign POIs: `shooting(?! range)` keeps gun
