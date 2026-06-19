@@ -162,6 +162,20 @@
       "when": 1781900508888,
       "tag": "0022_stormy_doctor_faustus",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1781909095418,
+      "tag": "0023_lame_layla_miller",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1781909200000,
+      "tag": "0024_rename_regions_bbox",
+      "breakpoints": true
     }
   ]
 }

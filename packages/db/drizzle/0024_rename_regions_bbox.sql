@@ -1,0 +1,1 @@
+ALTER TABLE "regions" RENAME COLUMN "discovery_bbox" TO "bbox";
