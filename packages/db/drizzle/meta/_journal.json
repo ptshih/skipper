@@ -78,6 +78,13 @@
       "when": 1781850000000,
       "tag": "0010_rename_narration_form",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1781852020920,
+      "tag": "0011_condemned_energizer",
+      "breakpoints": true
     }
   ]
 }

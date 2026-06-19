@@ -460,6 +460,11 @@ export const drives = pgTable(
       .defaultNow()
       .notNull()
       .$onUpdate(() => new Date()),
+    // Soft-delete tombstone. A free-drive CREDIT is spent at generation and NEVER refunded, so a
+    // deleted drive STAYS as a row and keeps counting toward the lifetime cap — delete is a "remove
+    // from my list" action, not a credit refund. Read paths (list / replay / sign) filter
+    // `deleted_at IS NULL`; the cap counts ALL rows. NULL = live.
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (t) => [index('drives_user_idx').on(t.userId), index('drives_route_sig_idx').on(t.routeSig)],
 )

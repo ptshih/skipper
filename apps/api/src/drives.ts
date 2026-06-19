@@ -5,6 +5,7 @@
 //   GET  /drives                  -> the caller's saved drives (one card each)
 //   GET  /drives/:id              -> replay a saved drive's frozen manifest (narration content resolves LIVE)
 //   POST /drives/:id/assets/sign  -> re-presigned clip URLs (offline refresh), keyed by seq
+//   DELETE /drives/:id            -> soft-delete (remove from list); CAP-NEUTRAL — a spent credit is never refunded
 //
 // A drive is "roam, pre-ordered for your route": the LLM does ONLY endpoint resolution; the route is
 // Google's (materializeRoute) and the SELECTION is deterministic (drive-core buildDrive over the shared
@@ -16,7 +17,7 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import { Hono, type Context } from 'hono'
-import { and, between, desc, eq, inArray, sql } from 'drizzle-orm'
+import { and, between, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { drives, driveDemand, narrations, pois, regions } from '@skipper/db/schema'
 import type { DriveSelection, DriveSelectionItem, Polyline, RouteProvenance } from '@skipper/db/schema'
@@ -35,8 +36,10 @@ import { contentTypeForKey, presignGet } from './storage'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-// Free-tier cap on how many drives an account may own. Admin-tunable via env; beyond it a
-// one-time credit pack is the planned unlock (IAP fast-follow), so 'paid' is uncapped today.
+// Free-tier LIFETIME drive credits: a free account may GENERATE this many drives ever. A credit is
+// spent at generation (POST /drives) and NEVER refunded — deleting a drive does not return it (the
+// row is soft-deleted and keeps counting; see the cap query below). Admin-tunable via env; beyond it
+// a one-time credit pack is the planned unlock (IAP fast-follow), so 'paid' is uncapped today.
 const FREE_DRIVE_CAP = Number(process.env.FREE_DRIVE_CAP ?? 10)
 
 // Drive pacing — mirrors the generator's "standard" bucket (config.ts PACING.standard): a 3-min
@@ -409,17 +412,20 @@ driveRoutes.post('/', async (c) => {
   const { regionId, start, end } = parsed.data
   if (!UUID_RE.test(regionId)) return c.json({ error: 'bad_request', message: 'regionId must be a uuid.' }, 400)
 
-  // Free-tier cap (paid is uncapped; credit IAP is the planned unlock beyond the free cap).
+  // Free-tier LIFETIME credit cap (paid is uncapped; credit IAP is the planned unlock beyond it).
+  // Count ALL of the user's drive rows INCLUDING soft-deleted ones — a spent credit is never
+  // refunded, so deleting a drive must NOT free a slot. DO NOT add `deletedAt IS NULL` here (that
+  // would reintroduce the refund bug); the tombstone is deliberately counted.
   if (c.get('tier') === 'free') {
-    const owned = await withRetry(
+    const generated = await withRetry(
       () => db.select({ n: sql<number>`count(*)::int` }).from(drives).where(eq(drives.userId, userId)),
       { label: 'drive.count' },
     )
-    if ((owned[0]?.n ?? 0) >= FREE_DRIVE_CAP) {
+    if ((generated[0]?.n ?? 0) >= FREE_DRIVE_CAP) {
       return c.json(
         {
           error: 'drive_limit_reached',
-          message: `Free accounts can keep ${FREE_DRIVE_CAP} drives. Delete one or grab a credit pack to make more.`,
+          message: `You've used all ${FREE_DRIVE_CAP} of your free drives. A credit pack to make more is coming soon.`,
           cap: FREE_DRIVE_CAP,
         },
         403,
@@ -549,7 +555,7 @@ driveRoutes.get('/', async (c) => {
           createdAt: drives.createdAt,
         })
         .from(drives)
-        .where(eq(drives.userId, userId))
+        .where(and(eq(drives.userId, userId), isNull(drives.deletedAt)))
         .orderBy(desc(drives.createdAt)),
     { label: 'drive.list' },
   )
@@ -568,13 +574,19 @@ driveRoutes.get('/', async (c) => {
   })
 })
 
-/** Load a drive the caller OWNS (404 on miss-or-not-yours — never reveal another user's drive). */
+/** Load a LIVE drive the caller OWNS (404 on miss-or-not-yours-or-deleted — never reveal another
+ *  user's drive, and a soft-deleted drive reads as gone). */
 async function loadOwnedDrive(c: Context<ApiEnv>) {
   const id = c.req.param('id')
   const userId = c.get('session')?.user.id
   if (!id || !UUID_RE.test(id) || !userId) return null
   const rows = await withRetry(
-    () => db.select().from(drives).where(and(eq(drives.id, id), eq(drives.userId, userId))).limit(1),
+    () =>
+      db
+        .select()
+        .from(drives)
+        .where(and(eq(drives.id, id), eq(drives.userId, userId), isNull(drives.deletedAt)))
+        .limit(1),
     { label: 'drive.load' },
   )
   return rows[0] ?? null
@@ -625,6 +637,29 @@ driveRoutes.post('/:id/assets/sign', async (c) => {
     console.error('[api] drive sign presign failed', e)
     return c.json({ error: 'audio_unavailable', message: 'Audio is warming up. Give it a moment and try again.' }, 503)
   }
+})
+
+/**
+ * DELETE /drives/:id — remove a drive from the caller's list. SOFT-delete (sets deleted_at): the row
+ * stays so it keeps counting toward the lifetime free-drive credit — deleting NEVER refunds a credit
+ * (one is spent at generation). Owner-scoped + idempotent: 404 if it isn't yours or is already gone.
+ * The shared narration audio is untouched — a drive only references it, never owns it.
+ */
+driveRoutes.delete('/:id', async (c) => {
+  const id = c.req.param('id')
+  const userId = c.get('session')?.user.id
+  if (!id || !UUID_RE.test(id) || !userId) return c.json({ error: 'not_found' }, 404)
+  const deleted = await withRetry(
+    () =>
+      db
+        .update(drives)
+        .set({ deletedAt: new Date() })
+        .where(and(eq(drives.id, id), eq(drives.userId, userId), isNull(drives.deletedAt)))
+        .returning({ id: drives.id }),
+    { label: 'drive.delete' },
+  )
+  if (deleted.length === 0) return c.json({ error: 'not_found' }, 404)
+  return c.json({ ok: true })
 })
 
 /** Load narration corpus rows by an explicit poiId set (the GET-replay path — no route bbox). */

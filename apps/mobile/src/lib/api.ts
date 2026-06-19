@@ -2,9 +2,10 @@
 // DTOs (@skipper/shared); auth rides on the Better Auth session cookie, which the Expo
 // client stores in secure-store and hands us via authClient.getCookie().
 //
-// A tour is the whole self-contained drive now (corridors merged in): GET /tours lists
-// the catalog (one card per drive) and GET /tours/:id returns the drive (route + region
-// + host + intro/outro + stops).
+// V2 client (roam-first + Create-a-Drive): drives are user-OWNED. GET /drives lists the
+// caller's saved drives (one card each) and GET /drives/:id replays one (route + region +
+// host + intro/outro + stops); POST /drives/propose (cheap, no credit) then POST /drives
+// create one. Plus the anonymous reads: GET /regions, GET /roam.
 import {
   driveList,
   driveManifest,
@@ -39,7 +40,7 @@ export class ApiError extends Error {
     super(message)
     this.name = 'ApiError'
   }
-  /** 401 from a gated route = a free account is required (e.g. non-preview tour). */
+  /** 401 from a gated route = a free account is required (e.g. a gated /drives* route). */
   get needsAccount(): boolean {
     return this.status === 401
   }
@@ -198,6 +199,12 @@ export const signDriveAudio = async (driveId: string): Promise<SignedDriveAudio>
     signedDriveAudio,
     await fetchJson(`/drives/${encodeURIComponent(driveId)}/assets/sign`, { method: 'POST' }),
   )
+
+/** Remove a saved drive from the caller's list. Soft-delete on the server — it does NOT refund a
+ *  credit (a credit is spent at generation). 404 if it's already gone or not yours. */
+export const deleteDrive = async (driveId: string): Promise<void> => {
+  await fetchJson(`/drives/${encodeURIComponent(driveId)}`, { method: 'DELETE' })
+}
 
 /** The app-wide data-source/license catalog (authoritative; the app bundles only a fallback). */
 export const getSources = async (): Promise<DataSource[]> =>
