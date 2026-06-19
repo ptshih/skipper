@@ -6,6 +6,7 @@ import {
   deleteDriveDownload,
   downloadDrive,
   InsufficientStorageError,
+  isDownloadExpired,
   isDownloadStale,
   isDriveDownloaded,
   loadManifest,
@@ -49,6 +50,9 @@ export default function DriveDetailScreen() {
   const [offline, setOffline] = useState(false)
   // Offline download state — Tahoe has dead zones, so a rider can save the whole drive.
   const [downloaded, setDownloaded] = useState(false)
+  // A saved copy past its freshness TTL (OFFLINE_TTL_DAYS) — a SOFT, offline-safe nudge to re-pull
+  // (fires even in a dead zone, where the content-diff `updatable` can't). Never blocks play.
+  const [expired, setExpired] = useState(false)
   const [downloading, setDownloading] = useState<DownloadProgress | null>(null)
   const [downloadError, setDownloadError] = useState<string | null>(null)
   // True when this drive IS downloaded but the server has re-cut its clips since (a re-synth or
@@ -76,6 +80,7 @@ export default function DriveDetailScreen() {
     try {
       const res = await downloadDrive(id, setDownloading, ctrl.signal)
       setDownloaded(true)
+      setExpired(false) // a fresh pull re-stamps savedAt — no longer past the TTL
       if (res.failedSeqs.length > 0) {
         // PARTIAL (H2): the playable clips are saved, but some didn't come down (thin signal). Record
         // the gap so the chip + ⋯ re-pull can offer to grab the rest; the saved clips play meanwhile.
@@ -109,6 +114,7 @@ export default function DriveDetailScreen() {
     if (!id) return
     deleteDriveDownload(id)
     setDownloaded(false)
+    setExpired(false)
     setPartial(null) // the saved copy (whole or partial) is gone
   }, [id])
 
@@ -179,6 +185,9 @@ export default function DriveDetailScreen() {
       } else if (partial) {
         // A PARTIAL download (H2): re-pull to grab the clips that didn't come down (thin signal).
         actions.push({ label: voice.offline.retryPartial, onPress: () => void startDownload() })
+      } else if (expired) {
+        // Past the freshness TTL — offer a re-pull (soft; the saved copy still plays meanwhile).
+        actions.push({ label: voice.offline.refresh, onPress: () => void startDownload() })
       }
       actions.push({ label: 'Remove download', onPress: removeDownload, destructive: true })
     } else {
@@ -219,6 +228,7 @@ export default function DriveDetailScreen() {
     downloading,
     updatable,
     partial,
+    expired,
     id,
     router,
     startDownload,
@@ -264,7 +274,10 @@ export default function DriveDetailScreen() {
   useFocusEffect(
     useCallback(() => {
       load()
-      if (id) setDownloaded(isDriveDownloaded(id))
+      if (id) {
+        setDownloaded(isDriveDownloaded(id))
+        setExpired(isDownloadExpired(id)) // offline-safe (reads savedAt) — fires even in a dead zone
+      }
     }, [load, id]),
   )
 
@@ -355,6 +368,15 @@ export default function DriveDetailScreen() {
               <Icon name="update" size={14} color="accentWarm" />
               <Text variant="label" color="accentWarm">
                 {`${partial.failed} ${voice.offline.partialSuffix}`}
+              </Text>
+            </View>
+          ) : downloaded && expired ? (
+            // Past the freshness TTL — a warm "saved a while back" nudge toward the ⋯ refresh. Soft:
+            // the copy still plays; this just suggests a re-pull (and fires even offline).
+            <View style={styles.savedChip}>
+              <Icon name="update" size={14} color="accentWarm" />
+              <Text variant="label" color="accentWarm">
+                {voice.offline.expired}
               </Text>
             </View>
           ) : downloaded ? (

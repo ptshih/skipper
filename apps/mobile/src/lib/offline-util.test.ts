@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test'
 import type { DriveClip, SignedDriveAudio } from '@skipper/shared'
 import {
+  daysSinceIso,
   extForContentType,
+  isPastTtl,
   urlMapFromDriveManifest,
   urlMapFromDriveSigned,
 } from './offline-util'
@@ -73,5 +75,32 @@ describe('urlMapFromDriveSigned', () => {
     expect(m.get(0)).toBe('https://r2/c0')
     expect(m.get(3)).toBe('https://r2/c3')
     expect(m.size).toBe(2)
+  })
+})
+
+describe('daysSinceIso / isPastTtl (offline freshness TTL)', () => {
+  const DAY = 24 * 60 * 60 * 1000
+  const NOW = Date.parse('2026-06-19T12:00:00.000Z')
+  const isoDaysAgo = (n: number) => new Date(NOW - n * DAY).toISOString()
+
+  test('daysSinceIso returns the day-age, clamped at 0', () => {
+    expect(daysSinceIso(isoDaysAgo(10), NOW)).toBeCloseTo(10, 6)
+    expect(daysSinceIso(isoDaysAgo(0), NOW)).toBe(0)
+    expect(daysSinceIso(isoDaysAgo(-5), NOW)).toBe(0) // future timestamp (clock skew) → 0, never negative
+  })
+
+  test('daysSinceIso returns null for an unparseable timestamp', () => {
+    expect(daysSinceIso('not-a-date', NOW)).toBeNull()
+    expect(daysSinceIso('', NOW)).toBeNull()
+  })
+
+  test('isPastTtl is strict (> ttl): past expires, the exact boundary does not', () => {
+    expect(isPastTtl(isoDaysAgo(31), NOW, 30)).toBe(true)
+    expect(isPastTtl(isoDaysAgo(29), NOW, 30)).toBe(false)
+    expect(isPastTtl(isoDaysAgo(30), NOW, 30)).toBe(false) // exactly 30 days is not yet past
+  })
+
+  test('isPastTtl fails OPEN on an unparseable timestamp (never nudge on a manifest we cannot date)', () => {
+    expect(isPastTtl('garbage', NOW, 30)).toBe(false)
   })
 })

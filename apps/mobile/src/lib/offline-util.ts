@@ -43,3 +43,24 @@ export function urlMapFromDriveManifest(manifest: { clips: DriveClip[] }): Map<n
 export function urlMapFromDriveSigned(signed: SignedDriveAudio): Map<number, string> {
   return new Map<number, string>(signed.clips.map((c) => [c.seq, c.url]))
 }
+
+/* -------------------------------------------------------------------------- */
+/*  Offline freshness TTL (pure date math; offline.ts wires in savedAt + now)   */
+/* -------------------------------------------------------------------------- */
+
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/** Days between an ISO timestamp and `now` (ms epoch). Null if the timestamp is unparseable.
+ *  Clamped at 0 so a clock skew (a timestamp in the future) never reads as negative age. */
+export function daysSinceIso(iso: string, now: number): number | null {
+  const t = Date.parse(iso)
+  if (!Number.isFinite(t)) return null
+  return Math.max(0, (now - t) / DAY_MS)
+}
+
+/** Is an ISO timestamp strictly older than `ttlDays` relative to `now`? False when unparseable —
+ *  fail-OPEN, since a freshness nudge must never fire on a manifest we can't even date. */
+export function isPastTtl(iso: string, now: number, ttlDays: number): boolean {
+  const age = daysSinceIso(iso, now)
+  return age != null && age > ttlDays
+}

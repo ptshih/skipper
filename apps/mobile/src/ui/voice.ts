@@ -224,6 +224,11 @@ export const voice = {
     // stragglers.
     partialSuffix: 'left to save', // → "3 left to save" (chip)
     retryPartial: 'Finish the download', // ⋯ menu re-pull for a partial
+    // A download past its freshness TTL (OFFLINE_TTL_DAYS, ~30d): the saved bytes still play, but may
+    // carry stale facts / a superseded cut the content-diff never caught (a copy saved once and never
+    // re-opened, or held in a dead zone). SOFT — a nudge, never a block.
+    expired: 'Saved a while back', // chip
+    refresh: 'Refresh the download', // ⋯ menu re-pull for an expired copy
   },
   auth: {
     // "folks" is the skipper's address everywhere else (loading, GPS, drive-complete) — keep

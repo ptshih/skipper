@@ -15,7 +15,7 @@
 import { Directory, File, Paths } from 'expo-file-system'
 import type { DriveClip, DriveManifest, DriveSummary } from '@skipper/shared'
 import { getDrive, signDriveAudio } from './api'
-import { extForContentType, urlMapFromDriveManifest, urlMapFromDriveSigned } from './offline-util'
+import { extForContentType, isPastTtl, urlMapFromDriveManifest, urlMapFromDriveSigned } from './offline-util'
 
 // Manifest schema version — bump on any shape change so a stale-format manifest left by an older
 // app build reads as NOT-downloaded (and re-downloads) instead of crashing the player.
@@ -365,6 +365,27 @@ export function isDownloadStale(driveId: string, fresh: DriveManifest): boolean 
   const m = loadManifest(driveId)
   if (!m) return false
   return contentSignature(m.detail) !== contentSignature(fresh)
+}
+
+// Offline downloads never auto-refresh: the device keeps its saved bytes indefinitely, so a
+// facts_hash move / patch-clip / resynth never reaches an already-downloaded drive UNLESS the rider
+// re-opens the detail screen while online (that's isDownloadStale's content-diff). OFFLINE_TTL_DAYS
+// is the time-based safety net that fires INDEPENDENT of that diff — even on a drive saved once and
+// never re-opened, or held in a dead zone where no fresh fetch is possible. SOFT by design: the copy
+// stays playable past expiry (never strand a rider mid-Tahoe — see CLAUDE.md), it just nudges a
+// re-download. A starting value, ear/usage-tunable like the facts TTL. Secondary benefit: it bounds
+// how long a baked Places break-name persists offline. Decision: docs/decisions/offline-freshness-ttl.md.
+export const OFFLINE_TTL_DAYS = 30
+
+/**
+ * Is a downloaded drive past its freshness TTL (OFFLINE_TTL_DAYS)? Reads ONLY the saved manifest's
+ * `savedAt` (zero network), so unlike isDownloadStale it fires even in a dead zone. SOFT — never
+ * blocks playback; it only powers an "expired — re-download" nudge. False when nothing's downloaded
+ * or the timestamp is unparseable (the date math is offline-util's `isPastTtl`, unit-tested).
+ */
+export function isDownloadExpired(driveId: string): boolean {
+  const m = loadManifest(driveId)
+  return m != null && isPastTtl(m.savedAt, Date.now(), OFFLINE_TTL_DAYS)
 }
 
 /** A downloaded manifest projected to a drive list-card (the home "My Drives" shape). */
