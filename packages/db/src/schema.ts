@@ -143,8 +143,8 @@ export const poiSourceEnum = pgEnum('poi_source', ['wikipedia', 'google_places',
 
 // A NARRATION's treatment/depth — the "what kind of telling" axis. `story`/`scenic`/`break` are
 // the drive-stop forms; `wave` is the roam call-out; `bside` is a deferred "tell me more". Mirror
-// with the Zod `trackForm` enum.
-export const trackFormEnum = pgEnum('track_form', ['story', 'scenic', 'break', 'wave', 'bside'])
+// with the Zod `narrationForm` enum.
+export const narrationFormEnum = pgEnum('narration_form', ['story', 'scenic', 'break', 'wave', 'bside'])
 
 // poi_overrides is now fact-corrections ONLY (the side_anchor coordinate moved onto
 // `pois.speakable_lat/lng`), so the kind discriminator is GONE. `upstream_status` tracks the
@@ -382,7 +382,7 @@ export const narrations = pgTable(
       .notNull()
       .references(() => pois.id, { onDelete: 'cascade' }),
     // story|scenic|break|wave — the telling's treatment (1:1, so no `variant`).
-    form: trackFormEnum('form').notNull(),
+    form: narrationFormEnum('form').notNull(),
     ...narrationColumns,
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true })

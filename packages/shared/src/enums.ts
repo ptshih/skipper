@@ -13,17 +13,16 @@ export const jokeLevel = z.enum(['off', 'mild', 'dad', 'dadpocalypse'])
 export type JokeLevel = z.infer<typeof jokeLevel>
 
 /**
- * A TRACK's treatment/depth — "what kind of telling". The full vocabulary now that narration
- * is a 1:N `tracks` child of a place-anchor `segment` (a place can carry several forms):
+ * A NARRATION's treatment/depth — "what kind of telling" (a `narrations` row's `form`):
  *   story  = fact-grounded telling + audio.
- *   scenic = delivery-only ambient audio, no facts (still needs audio for the ready gate).
- *   break  = food/rest stop; names the curated anchor only; mandatory audio.
+ *   scenic = delivery-only ambient audio, no facts.
+ *   break  = food/rest stop; names the curated anchor only.
  *   wave   = a free-roam passing call-out.
- *   bside  = a "tell me more" alternate telling.
- * Keep in lockstep with the pg `track_form` enum (@skipper/db/schema).
+ *   bside  = a deferred "tell me more" alternate telling.
+ * Keep in lockstep with the pg `narration_form` enum (@skipper/db/schema).
  */
-export const trackForm = z.enum(['story', 'scenic', 'break', 'wave', 'bside'])
-export type TrackForm = z.infer<typeof trackForm>
+export const narrationForm = z.enum(['story', 'scenic', 'break', 'wave', 'bside'])
+export type NarrationForm = z.infer<typeof narrationForm>
 
 /**
  * The WIRE projection of a TOUR stop's track form: a tour track is always one of these three,
