@@ -361,6 +361,9 @@ export default function DriveScreen() {
             accessibilityRole="button"
             accessibilityState={{ selected: on }}
             accessibilityLabel={m === 'map' ? 'Map view' : 'List view'}
+            // The 30×36 segment is below the 48pt in-car tap floor and it's a MID-DRIVE control —
+            // lift the effective target past ~48pt (height 30+24, width 36+12). (M5)
+            hitSlop={{ top: 12, bottom: 12, left: 6, right: 6 }}
             style={[styles.toggleBtn, on && { backgroundColor: theme.colors.accent }]}
           >
             <Icon name={m} size={15} color={on ? 'onPrimary' : 'inkDim'} />
@@ -369,6 +372,22 @@ export default function DriveScreen() {
       })}
     </View>
   )
+
+  // Offline chip (M7): a quiet "playing from download" flag when the drive loaded entirely off the
+  // saved copy (zero network). Same icon + accent tone as the drive-detail "Saved offline" chip, so
+  // the two surfaces read as one idea. Not shown in preview (the couch sim has no GPS/offline stakes).
+  const offlineChip =
+    d.offline && !isPreview ? (
+      <View
+        style={[styles.offlineChip, { backgroundColor: theme.colors.surfaceRaised, borderColor: theme.colors.rule }]}
+        accessibilityLiveRegion="polite"
+      >
+        <Icon name="downloaded" size={14} color="accent" />
+        <Text variant="label" color="accent">
+          {voice.player.offlinePlayback}
+        </Text>
+      </View>
+    ) : null
 
   // The player card — now-playing + scrubber + transport in ONE elevated card. Shared by the
   // List dock and the Map mode's expanded sheet.
@@ -437,15 +456,22 @@ export default function DriveScreen() {
             recenterBottom={96}
           />
 
-          {d.gpsSearching && !d.paused ? (
-            <View
-              style={[styles.mapGps, { backgroundColor: theme.colors.surfaceRaised, borderColor: theme.colors.rule }]}
-              accessibilityLiveRegion="polite"
-            >
-              <ActivityIndicator size="small" color={theme.colors.accent} />
-              <Text variant="dim" color="inkFaint">
-                {voice.player.gpsSearching}
-              </Text>
+          {/* Top-of-map status chips: the offline flag + (when acquiring) the GPS-searching cue,
+              stacked so they don't overlap. */}
+          {(offlineChip || (d.gpsSearching && !d.paused)) ? (
+            <View style={styles.mapChips} pointerEvents="none">
+              {offlineChip}
+              {d.gpsSearching && !d.paused ? (
+                <View
+                  style={[styles.mapGps, { backgroundColor: theme.colors.surfaceRaised, borderColor: theme.colors.rule }]}
+                  accessibilityLiveRegion="polite"
+                >
+                  <ActivityIndicator size="small" color={theme.colors.accent} />
+                  <Text variant="dim" color="inkFaint">
+                    {voice.player.gpsSearching}
+                  </Text>
+                </View>
+              ) : null}
             </View>
           ) : null}
 
@@ -471,7 +497,13 @@ export default function DriveScreen() {
                 accessibilityLabel="Expand player"
                 style={[
                   styles.peekBar,
-                  { backgroundColor: theme.colors.surfaceRaised, borderColor: theme.colors.amberToken, shadowColor: theme.colors.shadowCast },
+                  {
+                    backgroundColor: theme.colors.surfaceRaised,
+                    borderColor: theme.colors.amberToken,
+                    // Cross-platform cast (DESIGN §4) — renders on Android too, not a flat Material
+                    // shadow. The negative offsetY lifts the cast UP toward the map above. (M4)
+                    boxShadow: [{ offsetX: 0, offsetY: -4, blurRadius: 14, color: theme.colors.shadowCast }],
+                  },
                 ]}
               >
                 <Pressable
@@ -579,6 +611,10 @@ export default function DriveScreen() {
           above; the card sizes to its content (no fixed reserve) so it hugs the bottom. */}
       <Divider dashed style={styles.divider} />
 
+      {/* Offline flag (M7): a quiet "playing from download" chip when the drive is running off the
+          saved copy. Centered, just above the card — mirrors the map mode's top chip. */}
+      {offlineChip ? <View style={styles.listChip}>{offlineChip}</View> : null}
+
       {/* GPS acquisition — a missing fix reads as a "still finding you" status, not a
           fault with the current clip. Sits just above the card. */}
       {d.gpsSearching && !d.paused ? (
@@ -639,6 +675,17 @@ const styles = StyleSheet.create({
     marginTop: space.md,
   },
   hint: { paddingHorizontal: space.gutter, paddingTop: space.md, paddingBottom: space.sm }, // preview only
+  // Offline "playing from download" chip (M7) — a quiet pill, shared by both modes' status rows.
+  offlineChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.xs,
+    paddingHorizontal: space.md,
+    paddingVertical: space.xs,
+    borderRadius: radius.pill,
+    borderWidth: border.hair,
+  },
+  listChip: { alignItems: 'center', marginTop: space.md }, // centers the offline chip in list mode
   simRow: { paddingHorizontal: space.gutter, marginTop: space.lg, gap: space.sm },
   simBtns: { flexDirection: 'row', gap: space.sm },
   divider: { marginTop: space.sm, marginBottom: space.sm }, // fence between the list and the player dock
@@ -647,10 +694,9 @@ const styles = StyleSheet.create({
   listCard: { flex: 1, marginHorizontal: space.gutter, marginTop: space.sm },
   // ── Map mode: a full-bleed map with the player floating as a peek/expand sheet ──
   mapFill: { flex: 1 },
+  // Top-of-map status stack (offline flag + GPS-searching cue) — absolutely positioned, centered.
+  mapChips: { position: 'absolute', top: space.md, left: 0, right: 0, alignItems: 'center', gap: space.sm },
   mapGps: {
-    position: 'absolute',
-    top: space.md,
-    alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.sm,
@@ -670,10 +716,7 @@ const styles = StyleSheet.create({
     paddingVertical: space.md,
     borderRadius: radius.lg,
     borderWidth: border.keyline,
-    shadowOpacity: 0.22,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: -4 },
-    elevation: 8,
+    // The cast is a cross-platform boxShadow set inline (it needs the theme's shadowCast color). (M4)
   },
   peekPlay: { width: 50, height: 50, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
   peekText: { flex: 1, minWidth: 0, gap: 3 },

@@ -284,7 +284,12 @@ function DriveMapBase({ polyline, stops, progress, clipActive, hideRecenter, rec
           style={[
             styles.recenter,
             recenterBottom != null ? { bottom: recenterBottom } : null,
-            { backgroundColor: colors.surfaceRaised, borderColor: colors.rule, shadowColor: colors.shadowCast },
+            {
+              backgroundColor: colors.surfaceRaised,
+              borderColor: colors.rule,
+              // Cross-platform cast (DESIGN §4) so it lifts off the map on Android too. (M4)
+              boxShadow: [{ offsetX: 0, offsetY: 2, blurRadius: 8, color: colors.shadowCast }],
+            },
           ]}
         >
           <Icon name="locate" size={18} color="accent" />
@@ -331,9 +336,6 @@ const styles = StyleSheet.create({
     paddingVertical: space.sm,
     borderRadius: radius.pill,
     borderWidth: border.hair,
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
+    // The cast is a cross-platform boxShadow set inline (it needs the theme's shadowCast color). (M4)
   },
 })

@@ -130,6 +130,10 @@ export interface RoamState {
   setChattiness: (level: ChattinessLevel) => void
   gpsSearching: boolean
   start: () => void
+  /** Re-attempt the session after an error (mirrors useDrive.retry). Unlike `start` (which is
+   *  semantically "begin a session" and start-pending-guarded), this clears the error and
+   *  re-runs the begin flow — the dead-end error screen's CTA. */
+  retry: () => void
   /** The pre-permission explainer's single CTA (live, first time): fire the OS location prompt. */
   confirmLocationPrime: () => void
   /** Skip the playing encounter (the sheet's ghost action / scrim tap). */
@@ -140,6 +144,9 @@ export interface RoamState {
   finishSignoff: () => void
 }
 
+/**
+ * @param mode  live | sim
+ */
 export function useRoam(mode: RoamMode): RoamState {
   const [phase, setPhase] = useState<RoamPhase>('idle')
   const [error, setError] = useState<string | null>(null)
@@ -444,6 +451,10 @@ export function useRoam(mode: RoamMode): RoamState {
     const t = setInterval(() => {
       if (mode === 'live') setGpsSearching(Date.now() - lastFixAt.current > GPS_QUIET_MS)
       const pos = lastFixPos.current
+      // nearestM feeds both the (dev/sim/showDiag) diagnostics readout AND the idle RoamMotif's
+      // loop-speed "breathing" (the car token quickens as a pin nears) — charm, so it runs every
+      // tick. Cheap: O(pins) haversines over a few hundred rows / 2s. The per-GPS-fix hot path is
+      // the RoamEngine, which is spatially bucketed (@skipper/engine), not this readout tick.
       let nearestM: number | null = null
       if (pos) {
         for (const p of pinsRef.current) {
@@ -643,6 +654,15 @@ export function useRoam(mode: RoamMode): RoamState {
     })()
   }, [mode, beginRoamSession, startPrimedRoam])
 
+  // Re-attempt after an error (the dead-end error screen's CTA). The fix-source error path runs
+  // teardown(), so a retry must rebuild the WHOLE session — re-run the begin flow. We clear the
+  // pending guard first so a retry never no-ops on a stuck guard (mirrors useDrive.retry, which
+  // re-runs its load effect rather than reusing the "start" action). (audit: roam dead-end)
+  const retry = useCallback(() => {
+    startPending.current = false
+    start()
+  }, [start])
+
   const skip = useCallback(() => {
     if (activePoiId !== null) {
       try {
@@ -757,6 +777,7 @@ export function useRoam(mode: RoamMode): RoamState {
     setChattiness,
     gpsSearching,
     start,
+    retry,
     confirmLocationPrime,
     skip,
     end,

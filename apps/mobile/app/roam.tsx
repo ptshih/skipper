@@ -93,6 +93,8 @@ export default function RoamScreen() {
   // as a one-off (either path → the simulated drive source).
   const { simMode, showDiag } = useSimMode()
   const roamMode = simMode || mode === 'sim' ? 'sim' : 'live'
+  // The drive-test diagnostics line shows on dev builds / sim / the showDiag toggle.
+  const diagEnabled = __DEV__ || roamMode === 'sim' || showDiag
   const r = useRoam(roamMode)
   // Glanceable map toggle — the motif is the eyes-on-road default; the map is an opt-in
   // glance (a stop, a passenger). Resets to the motif each session (local, not persisted).
@@ -221,7 +223,7 @@ export default function RoamScreen() {
         title={title}
         message={r.error ?? voice.error.generic}
         tone="danger"
-        action={{ label: voice.error.retry, onPress: r.start }}
+        action={{ label: voice.error.retry, onPress: r.retry }}
       />
     )
   if (r.phase === 'noCoverage') return <StateView title={title} message={voice.roam.noCoverage} />
@@ -335,7 +337,7 @@ export default function RoamScreen() {
               kept on dev builds + sim so a road test can still self-report (free-roam-mode
               §Idle-canvas — open Q on a TestFlight-live toggle). */}
           <View style={styles.footer}>
-            {(__DEV__ || roamMode === 'sim' || showDiag) && (
+            {diagEnabled && (
               <Text variant="mono" color="inkFaint">
                 {`${r.pinCount} pins · GPS ${r.diag.fixAgeSec ?? '—'}s · nearest ${r.diag.nearestM != null ? `${r.diag.nearestM} m` : '—'}`}
               </Text>
@@ -350,9 +352,17 @@ export default function RoamScreen() {
             onPress={() => setShowMap((v) => !v)}
             accessibilityRole="button"
             accessibilityLabel={showMap ? voice.roam.hideMap : voice.roam.showMap}
+            // 44pt control; hitSlop lifts the effective target past 48pt. (M5)
+            hitSlop={space.sm}
             style={[
               styles.mapToggle,
-              { backgroundColor: colors.surfaceRaised, borderColor: colors.rule, shadowColor: colors.shadowCast },
+              {
+                backgroundColor: colors.surfaceRaised,
+                borderColor: colors.rule,
+                // Cross-platform (boxShadow renders on iOS + Android); the cast role replaces the
+                // iOS-only shadow* + elevation pair. (M4)
+                boxShadow: [{ offsetX: 0, offsetY: 2, blurRadius: 8, color: colors.shadowCast }],
+              },
             ]}
           >
             <Icon name={showMap ? 'eye' : 'map'} size={20} color="accent" />
@@ -379,7 +389,8 @@ export default function RoamScreen() {
                 {
                   backgroundColor: colors.surfaceRaised,
                   borderColor: colors.rule,
-                  shadowColor: colors.shadowCast,
+                  // Cross-platform shadow via the cast role (was iOS-only shadow* + elevation). (M4)
+                  boxShadow: [{ offsetX: 0, offsetY: 6, blurRadius: 16, color: colors.shadowCast }],
                   transform: [
                     {
                       translateY: sheetAnim.interpolate({
@@ -481,10 +492,6 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     padding: space.xl,
     gap: space.md,
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 8,
   },
   handle: {
     alignSelf: 'center',
@@ -505,10 +512,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: StyleSheet.hairlineWidth,
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
   },
   // Skeleton row — spinner + line, roughly the height of the transport it stands in for so
   // the sheet doesn't jump when real audio arrives and the controls replace it.

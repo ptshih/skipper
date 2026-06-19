@@ -54,6 +54,10 @@ export default function DriveDetailScreen() {
   // True when this drive IS downloaded but the server has re-cut its clips since (a re-synth or
   // regen). Detected on the online fetch; offers a re-pull. Never blocks offline play.
   const [updatable, setUpdatable] = useState(false)
+  // A PARTIAL download (H2): the playable clips are saved but some didn't come down (thin signal).
+  // Carries the missing count so the chip + ⋯ re-pull can offer the rest. Cleared by a clean re-pull
+  // or a remove. Distinct from `updatable` (which is a SERVER re-cut, different copy).
+  const [partial, setPartial] = useState<{ failed: number; total: number } | null>(null)
   // The signature rig, parked at the trailhead (~0.06) on the placard's static trail. Created
   // once, never animated — a still motif (the Start CTA owns this screen's one amber glow).
   const parked = useRef(new Animated.Value(0.06)).current
@@ -70,9 +74,18 @@ export default function DriveDetailScreen() {
     const ctrl = new AbortController()
     downloadAbort.current = ctrl
     try {
-      await downloadDrive(id, setDownloading, ctrl.signal)
+      const res = await downloadDrive(id, setDownloading, ctrl.signal)
       setDownloaded(true)
-      setUpdatable(false) // a fresh pull writes the current tokens — no longer behind the server
+      if (res.failedSeqs.length > 0) {
+        // PARTIAL (H2): the playable clips are saved, but some didn't come down (thin signal). Record
+        // the gap so the chip + ⋯ re-pull can offer to grab the rest; the saved clips play meanwhile.
+        setPartial({ failed: res.failedSeqs.length, total: res.total })
+        setDownloadError(null)
+      } else {
+        setPartial(null)
+        setDownloadError(null)
+        setUpdatable(false) // a fresh pull writes the current tokens — no longer behind the server
+      }
     } catch (e) {
       if (e instanceof Error && e.name === 'AbortError') {
         // Canceled (navigated away / Cancel tap) — silent, no error toast.
@@ -96,6 +109,7 @@ export default function DriveDetailScreen() {
     if (!id) return
     deleteDriveDownload(id)
     setDownloaded(false)
+    setPartial(null) // the saved copy (whole or partial) is gone
   }, [id])
 
   const cancelDownload = useCallback(() => {
@@ -162,6 +176,9 @@ export default function DriveDetailScreen() {
       if (updatable) {
         // Re-pull overwrites the saved manifest + clips with the server's fresh cut.
         actions.push({ label: voice.offline.update, onPress: () => void startDownload() })
+      } else if (partial) {
+        // A PARTIAL download (H2): re-pull to grab the clips that didn't come down (thin signal).
+        actions.push({ label: voice.offline.retryPartial, onPress: () => void startDownload() })
       }
       actions.push({ label: 'Remove download', onPress: removeDownload, destructive: true })
     } else {
@@ -201,6 +218,7 @@ export default function DriveDetailScreen() {
     downloaded,
     downloading,
     updatable,
+    partial,
     id,
     router,
     startDownload,
@@ -328,6 +346,15 @@ export default function DriveDetailScreen() {
               <Icon name="update" size={14} color="accentWarm" />
               <Text variant="label" color="accentWarm">
                 {voice.offline.updateReady}
+              </Text>
+            </View>
+          ) : downloaded && partial ? (
+            // PARTIAL (H2): saved + playable, but some clips are still missing — a gentle "N left"
+            // nudge (warm, not alarming) toward the ⋯ re-pull.
+            <View style={styles.savedChip}>
+              <Icon name="update" size={14} color="accentWarm" />
+              <Text variant="label" color="accentWarm">
+                {`${partial.failed} ${voice.offline.partialSuffix}`}
               </Text>
             </View>
           ) : downloaded ? (

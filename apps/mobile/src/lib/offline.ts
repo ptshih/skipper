@@ -71,6 +71,17 @@ export interface DownloadProgress {
   total: number
 }
 
+/** The outcome of a download run — partial-tolerant: a single clip failing leaves the rest saved.
+ *  `failedSeqs` is empty on a complete download. The drive is PLAYABLE (manifest written) as long as
+ *  at least one clip landed; the UI uses these to show "downloaded N of M" + offer a re-pull. */
+export interface DownloadResult {
+  manifest: OfflineManifest
+  downloaded: number
+  total: number
+  /** Player seqs (incl. the INTRO_SEQ/OUTRO_SEQ sentinels) whose clip failed to download/verify. */
+  failedSeqs: number[]
+}
+
 /** Build the flat list of clips to download from a drive manifest (every clip that has audio). */
 function clipsToDownload(detail: DriveManifest): {
   key: string
@@ -137,20 +148,25 @@ async function downloadClip(url: string, dest: File, outer?: AbortSignal): Promi
 // In-flight downloads by driveId — dedupes concurrent downloadDrive calls for the same drive so two
 // taps (a fast double-select before React commits the busy state) can't race on the same files (one
 // run's failure-cleanup wiping the other's bytes). Cleared in finally. (audit #825)
-const inFlight = new Map<string, Promise<OfflineManifest>>()
+const inFlight = new Map<string, Promise<DownloadResult>>()
 
 /**
- * Download a complete drive (manifest + every clip's bytes) to persistent storage and write the
- * manifest. Throws if any clip fails to download/verify (a half-download must never read as "ready");
- * on failure the partial dir is removed. Pass `signal` to cancel (navigation away / a Cancel tap).
- * Concurrent calls for the same drive share one in-flight run. Needs network + a signed-in account
- * (the /drives tier check enforces it — a drive is owned).
+ * Download a drive (manifest + clip bytes) to persistent storage and write the manifest. PARTIAL-
+ * TOLERANT (H2): a single clip's download/verify failure no longer aborts the run or wipes the whole
+ * dir — the failed clip is skipped, the rest stay saved, and the result carries `downloaded`/`total`/
+ * `failedSeqs` so the rider keeps the clips that landed (worst case a dead zone) and can re-pull the
+ * stragglers. The manifest is written covering only the clips that succeeded, so a partial download
+ * plays its saved stops and silently skips the missing ones (the player already no-ops a clip with no
+ * url). Throws ONLY when the run can't start (manifest fetch failed / no audio / no free space) or
+ * EVERY clip failed (a true network-down — nothing to save) or it was canceled. Pass `signal` to
+ * cancel (navigation away / a Cancel tap). Concurrent calls for the same drive share one in-flight
+ * run. Needs network + a signed-in account (the /drives tier check enforces it — a drive is owned).
  */
 export function downloadDrive(
   driveId: string,
   onProgress?: (p: DownloadProgress) => void,
   signal?: AbortSignal,
-): Promise<OfflineManifest> {
+): Promise<DownloadResult> {
   const existing = inFlight.get(driveId)
   if (existing) return existing
   const p = runDownload(driveId, onProgress, signal).finally(() => {
@@ -164,7 +180,7 @@ async function runDownload(
   driveId: string,
   onProgress?: (p: DownloadProgress) => void,
   signal?: AbortSignal,
-): Promise<OfflineManifest> {
+): Promise<DownloadResult> {
   if (signal?.aborted) throw abortError()
   // Fetch the manifest FIRST (network; clips come pre-signed). If offline (a dead-zone "Update"
   // tap), this throws here — BEFORE we touch the existing download, so the saved copy survives a
@@ -203,26 +219,40 @@ async function runDownload(
     }
   }
 
-  let done = 0
-  onProgress?.({ done, total })
+  let attempted = 0
+  onProgress?.({ done: attempted, total })
 
   const results = new Map<string, ClipFile>()
+  const failed = new Map<string, number>() // item.key → player seq, for the partial result
   let next = 0
   const worker = async (): Promise<void> => {
     while (next < items.length) {
+      if (signal?.aborted) throw abortError() // a cancel tap aborts the whole run, not just a clip
       const item = items[next++]!
       const dest = new File(dir, item.name)
-      const out = await downloadClip(item.url, dest, signal)
-      // Integrity is a PRESENCE/nonzero-size check only — no Content-Length/checksum (the manifest
-      // carries no size/hash). iOS URLSession enforces a declared Content-Length (R2 object GETs
-      // always send one), so a mid-body drop normally rejects in downloadClip; a server
-      // short-Content-Length is the only silent-truncation gap. (audit #834)
-      if (!out.exists || !out.size || out.size <= 0) {
-        throw new Error(`Download verify failed for ${item.name} (exists=${out.exists}, size=${out.size}).`)
+      try {
+        const out = await downloadClip(item.url, dest, signal)
+        // Integrity is a PRESENCE/nonzero-size check only — no Content-Length/checksum (the manifest
+        // carries no size/hash). iOS URLSession enforces a declared Content-Length (R2 object GETs
+        // always send one), so a mid-body drop normally rejects in downloadClip; a server
+        // short-Content-Length is the only silent-truncation gap. (audit #834)
+        if (!out.exists || !out.size || out.size <= 0) {
+          throw new Error(`Download verify failed for ${item.name} (exists=${out.exists}, size=${out.size}).`)
+        }
+        results.set(item.key, { name: item.name, contentType: item.contentType, durationMs: item.durationMs })
+      } catch (e) {
+        // A USER CANCEL (or the per-clip timeout firing off the outer signal) aborts the whole run —
+        // re-throw so the catch below sweeps the partial dir. Any OTHER single-clip failure is
+        // PARTIAL-TOLERANT (H2): drop just this clip's (possibly half-written) file, record the seq,
+        // and keep going so one bad clip in a dead zone doesn't cost the rider the whole tour.
+        if ((e instanceof Error && e.name === 'AbortError') || signal?.aborted) throw e
+        try {
+          if (dest.exists) dest.delete() // a truncated/zero-byte file must not read as a saved clip
+        } catch {}
+        failed.set(item.key, Number(item.key))
       }
-      results.set(item.key, { name: item.name, contentType: item.contentType, durationMs: item.durationMs })
-      done += 1
-      onProgress?.({ done, total })
+      attempted += 1
+      onProgress?.({ done: attempted, total })
     }
   }
 
@@ -230,8 +260,18 @@ async function runDownload(
     await Promise.all(
       Array.from({ length: Math.min(DOWNLOAD_CONCURRENCY, items.length) }, () => worker()),
     )
+    // EVERY clip failed → a true network-down, nothing worth saving. Sweep the (empty) dir and throw
+    // so the caller shows the generic download error rather than a hollow "downloaded 0 of N".
+    if (results.size === 0) {
+      try {
+        dir.delete()
+      } catch {}
+      throw new Error('Download failed — no clips could be saved.')
+    }
     // Write the manifest INSIDE the try — a manifest-write failure must also sweep the
-    // (verified-but-orphaned) clip files, or they'd leak with no manifest to find them.
+    // (verified-but-orphaned) clip files, or they'd leak with no manifest to find them. The manifest
+    // covers ONLY the clips that landed; clipsPresentOnDisk validates against this set, so a partial
+    // download still reads as a (smaller) complete one and plays its saved stops.
     const manifest: OfflineManifest = {
       driveId,
       version: MANIFEST_VERSION,
@@ -240,10 +280,16 @@ async function runDownload(
       clips: Object.fromEntries(results),
     }
     manifestFile(driveId).write(JSON.stringify(manifest))
-    return manifest
+    return {
+      manifest,
+      downloaded: results.size,
+      total,
+      failedSeqs: Array.from(failed.values()),
+    }
   } catch (e) {
-    // Partial download / cancel / manifest-write failure — sweep the dir so it can't read as ready
-    // (and no orphaned clips leak), then surface the error.
+    // A cancel / manifest-write failure / total network-down — sweep the dir so it can't read as
+    // ready (and no orphaned clips leak), then surface the error. (A PARTIAL download never reaches
+    // here: single-clip failures are absorbed in the worker above.)
     try {
       dir.delete()
     } catch {}

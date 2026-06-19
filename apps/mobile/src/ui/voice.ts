@@ -87,6 +87,9 @@ export const voice = {
     arrived: 'You’ve arrived', // the done-card title
     restFallback: 'A good spot to stretch', // pit-stop card title when the break carries no name
     previewHint: 'Tap any stop to jump ahead', // above the preview itinerary
+    // A quiet, non-alarming chip in the live player (M7): the drive is running entirely off the saved
+    // download (so a dead zone won't bite). Mirrors the drive-detail "Saved offline" chip's tone.
+    offlinePlayback: 'Playing from download',
   },
   // FREE-ROAM (alpha): no route, no plan — the skipper rides shotgun and pipes up when
   // the road passes something he knows. Silence is the DEFAULT state, so the copy's whole
@@ -216,6 +219,11 @@ export const voice = {
     // re-pull. Never forced — offline play keeps working on the copy you’ve got.
     updateReady: 'Fresh cut ready',
     update: 'Pull the fresh copy',
+    // A PARTIAL download (H2): some clips didn't come down (thin signal), but the rest are saved and
+    // playable. Honest, not alarming — the count is filled in by the caller; the ⋯ re-pull grabs the
+    // stragglers.
+    partialSuffix: 'left to save', // → "3 left to save" (chip)
+    retryPartial: 'Finish the download', // ⋯ menu re-pull for a partial
   },
   auth: {
     // "folks" is the skipper's address everywhere else (loading, GPS, drive-complete) — keep

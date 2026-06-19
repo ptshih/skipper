@@ -179,6 +179,9 @@ export interface UseDrive {
   stallNote: string | null
   /** True while a live drive is getting no usable GPS fixes — show a "searching" cue. (review #6) */
   gpsSearching: boolean
+  /** True when playback is served entirely from the on-disk download (no network) — drives a quiet
+   *  "playing from download" chip so the rider knows a dead zone won't interrupt the drive. (M7) */
+  offline: boolean
   paused: boolean
 
   // In-clip scrub (drive/quiet segments have no timeline).
@@ -232,6 +235,9 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
   const reducedMotion = useReducedMotion() // honor OS "Reduce Motion" for the preview token glide
   const [data, setData] = useState<DriveData | null>(null)
   const [urls, setUrls] = useState<Map<number, string>>(new Map())
+  // True when playback is served entirely from the on-disk download (zero network) — surfaced as a
+  // quiet "playing from download" chip so the rider knows a dead zone won't bite. (M7)
+  const [offline, setOffline] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [needsAccount, setNeedsAccount] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
@@ -318,8 +324,9 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
         // network; otherwise this fetches the manifest (clips pre-signed inline) and streams. The
         // url map keys place narrations by seq and any intro/outro framing under the
         // INTRO_SEQ/OUTRO_SEQ sentinels, either way.
-        const { detail: manifest, urls } = await loadPlayback(driveId)
+        const { detail: manifest, urls, offline: fromDisk } = await loadPlayback(driveId)
         if (cancelled) return
+        setOffline(fromDisk)
         const polyline = manifest.polyline as [number, number][]
         if (polyline.length < 2) throw new Error('This drive has no drivable route.')
         const cum = cumulativeMeters(polyline)
@@ -672,7 +679,9 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
 
   // Deep-link to system Settings (the canAskAgain===false recovery; AppState re-checks on return).
   const openLocationSettings = useCallback(() => {
-    void Linking.openSettings()
+    // .catch parity with the roam screen — if the Settings deep-link rejects, swallow it rather than
+    // letting the tap silently do nothing with an unhandled rejection. (M14)
+    void Linking.openSettings().catch(() => {})
   }, [])
 
   // ---- PREVIEW autostart: no permission gate, no fix source — the simulated drive just rolls.
@@ -1139,6 +1148,7 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
     buffering,
     stallNote,
     gpsSearching,
+    offline,
     paused,
     positionMs,
     durationMs,
