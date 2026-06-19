@@ -11,8 +11,8 @@
 // generate.ts for a bounded re-narration.
 //
 // Detection is DETERMINISTIC (fast, free, predictable) and targets LEXICAL/
-// STRUCTURAL repeats: personal-kit overuse, repeated stock phrases, and duplicate
-// opener/closer signatures. It deliberately does NOT judge SEMANTIC monotony (two
+// STRUCTURAL repeats: repeated stock phrases and duplicate opener/closer
+// signatures. It deliberately does NOT judge SEMANTIC monotony (two
 // DIFFERENT "personify the place" kickers read as samey but share no words) — that
 // needs an LLM judge and is left as a future extension.
 //
@@ -32,7 +32,6 @@
 // This deterministic lint stays the always-on baseline.
 
 import type { StopType } from '@skipper/shared'
-import type { KitBeat } from '../persona/types'
 
 export interface LintInput {
   seq: number
@@ -48,10 +47,6 @@ export interface LintFinding {
   /** Concrete instructions fed verbatim into the stop's re-narration. */
   avoid: string[]
 }
-
-// Personal-kit detectors come from the active persona (passed in), so the lint and the
-// studio pipeline's spent-beat tracking read the SAME source — they can never desync (the bug
-// the per-region registry fixed). See packages/studio/src/persona/.
 
 // HARD-BANNED reveal wind-ups and AI/brochure tics — the persona prompt forbids
 // these outright ("just say the surprising thing plainly"), so flag on the FIRST
@@ -134,10 +129,7 @@ const closerKey = (s: string): string => contentWords(s).slice(-4).join(' ')
  * per flagged stop (each with the reasons and the `avoid` notes to regenerate with).
  * Pass story/scenic stops only — break stops carry no script.
  */
-export function lintScripts(
-  stops: LintInput[],
-  kit: { beats: KitBeat[]; dropNote: string },
-): LintFinding[] {
+export function lintScripts(stops: LintInput[]): LintFinding[] {
   const findings = new Map<number, LintFinding>()
   const flag = (seq: number, reason: string, avoid: string): void => {
     const f = findings.get(seq) ?? { seq, reasons: [], avoid: [] }
@@ -159,19 +151,7 @@ export function lintScripts(
     }
   }
 
-  // 1. Personal kit is BANNED from stops — it lives in the INTRO frame now (the kit's
-  //    only home), so the per-stop budget INVERTS to zero: flag ANY stop that touches
-  //    Ray / the mechanic / the truck / coffee. (Oblique refs — "before my first cup",
-  //    "balance a checkbook" — slip this regex and are caught by ear, not here.) The
-  //    intro/outro frames are never passed to this lint (they are placeless asides,
-  //    not stop narrations), so the kit is free there.
-  for (const s of stops) {
-    if (kit.beats.some((b) => b.match.test(s.script))) {
-      flag(s.seq, 'mentions the personal kit (banned from stops — the kit lives in the intro now)', kit.dropNote)
-    }
-  }
-
-  // 2. Stock-phrase repeats — keep the first use, flag later reuses.
+  // 1. Stock-phrase repeats — keep the first use, flag later reuses.
   for (const phrase of STOCK_PHRASES) {
     const hits = stops.filter((s) => s.script.toLowerCase().includes(phrase))
     for (const s of hits.slice(1)) {
@@ -179,7 +159,7 @@ export function lintScripts(
     }
   }
 
-  // 3. Duplicate opener / closer signatures — keep the first, flag later matches.
+  // 2. Duplicate opener / closer signatures — keep the first, flag later matches.
   const seenOpen = new Map<string, number>()
   const seenClose = new Map<string, number>()
   for (const s of stops) {
@@ -197,7 +177,7 @@ export function lintScripts(
     }
   }
 
-  // 4. Tic STACKING within ONE stop — section 0 flags a stop for ANY banned tic;
+  // 3. Tic STACKING within ONE stop — section 0 flags a stop for ANY banned tic;
   //    at length the model piles several into one telling. Count total occurrences
   //    so the regen note can say "you stacked N," which the per-pattern flag can't.
   for (const s of stops) {
@@ -212,7 +192,7 @@ export function lintScripts(
     }
   }
 
-  // 5. List / inventory SHAPE — a long stop that ENUMERATES facts ("Next... Also...
+  // 4. List / inventory SHAPE — a long stop that ENUMERATES facts ("Next... Also...
   //    Another thing...") instead of weaving them; the persona prompt bans the
   //    encyclopedia shape. Flag ≥2 sentence-initial enumerators in one stop.
   const LIST_MARKER =
@@ -229,7 +209,7 @@ export function lintScripts(
     }
   }
 
-  // 6. Tidy bow / reflective recap CLOSER — the wrap the persona prompt bans ("just
+  // 5. Tidy bow / reflective recap CLOSER — the wrap the persona prompt bans ("just
   //    one of the many stories this place has to tell"). Checked on the LAST sentence
   //    only, so a mid-stop aside doesn't trip it.
   const TIDY_BOW: RegExp[] = [
@@ -254,7 +234,7 @@ export function lintScripts(
     }
   }
 
-  // 7. Within-stop self-repetition — at length a stop can echo its own phrasing. Flag
+  // 6. Within-stop self-repetition — at length a stop can echo its own phrasing. Flag
   //    any CONTENT-word 4-gram repeated in a single script (filler-stripped, so "the
   //    a now" don't count; a repeated 4-word content run is a real echo, not chance,
   //    and 4 words rarely collide with a 2–3-word place name). Long scripts only.

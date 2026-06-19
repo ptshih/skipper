@@ -60,8 +60,6 @@ export interface NarrationRequest {
   recentOpeners?: string[]
   /** How the last few stops CLOSED — so this stop can close differently (each call is independent). */
   recentClosers?: string[]
-  /** Personal-kit beats used in the last few stops (e.g. "the mechanic") — so this stop can avoid repeating them. */
-  recentKitBeats?: string[]
   /** Recurring frames / self-deprecation flavors already used THIS DRIVE (cumulative) — one-time bits, never reuse. */
   recentMotifs?: string[]
   /** Pacing target; honored but never padded past the facts. */
@@ -290,17 +288,9 @@ export function buildFactSheet(req: NarrationRequest): string {
   if (req.recentClosers && req.recentClosers.length > 0) {
     lines.push('')
     lines.push(
-      'YOUR LAST FEW CLOSINGS (do NOT end like any of these — close this stop a different way, and not on the personal kit if these did):',
+      'YOUR LAST FEW CLOSINGS (do NOT end like any of these — close this stop a different way):',
     )
     for (const c of req.recentClosers) lines.push(`- "...${c}"`)
-  }
-
-  if (req.recentKitBeats && req.recentKitBeats.length > 0) {
-    lines.push('')
-    lines.push(
-      'PERSONAL-KIT BEATS USED RECENTLY (spent — do NOT reuse these; the default stop mentions none of the kit at all):',
-    )
-    for (const k of req.recentKitBeats) lines.push(`- ${k}`)
   }
 
   if (req.recentMotifs && req.recentMotifs.length > 0) {

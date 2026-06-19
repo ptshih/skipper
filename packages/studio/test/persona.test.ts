@@ -13,12 +13,11 @@ describe('personaFromKey', () => {
 })
 
 describe('Skipper persona def', () => {
-  test('kit beats stay in lockstep with the kit prose in the prompts (no prose↔regex desync)', () => {
-    // Each kit detector must actually fire on the prompt text that describes that beat —
-    // the load-bearing sync the registry exists to keep (lint + studio share these beats).
-    for (const beat of SKIPPER.kit.beats) {
-      const described = beat.match.test(SKIPPER.systemPrompt) || beat.match.test(SKIPPER.framePrompt)
-      expect(described).toBe(true)
-    }
+  test('no personal-kit backstory creeps back into the stop prompt (V2 cut the intro + the kit)', () => {
+    // V2 deleted the intro/outro frame that once housed a "cousin Ray" personal kit, so the host
+    // invents no backstory. Guard the specific bits the founder flagged from creeping back into the
+    // SPOKEN prompt (file comments may still mention them as history — this checks the prompt string).
+    // The def no longer TYPES a framePrompt/kit (the compiler enforces that); this guards the prose.
+    expect(SKIPPER.systemPrompt).not.toMatch(/cousin ray|getting to it tuesday/i)
   })
 })

@@ -15,4 +15,4 @@ const PERSONAS: Record<string, PersonaDef> = {
 export const personaFromKey = (key: string): PersonaDef => PERSONAS[key] ?? SKIPPER
 
 export { SKIPPER }
-export type { KitBeat, PersonaDef } from './types'
+export type { PersonaDef } from './types'

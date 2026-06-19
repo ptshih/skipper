@@ -1,43 +1,17 @@
 import { describe, expect, test } from 'bun:test'
 import { lintScripts, type LintInput } from '../src/pipeline/lint'
-import { SKIPPER } from '../src/persona/skipper'
 
 const story = (seq: number, script: string): LintInput => ({ seq, stopType: 'story', script })
-// The kit is now per-persona; the kit-detection tests below exercise the Skipper kit.
-const lint = (stops: LintInput[]) => lintScripts(stops, SKIPPER.kit)
+const lint = (stops: LintInput[]) => lintScripts(stops)
 
 describe('lintScripts', () => {
-  test('clean tour: distinct openers/closers, no kit, no stock phrases → no findings', () => {
+  test('clean tour: distinct openers/closers, no stock phrases → no findings', () => {
     const findings = lint([
       story(0, 'The bay opens wide here. Sixty feet of the clearest water you ever saw.'),
       story(1, 'Vikingsholm sits in the trees. A castle somebody hauled across an ocean.'),
       story(2, 'A dam holds the lake. Six feet of it answers to one concrete wall.'),
     ])
     expect(findings).toEqual([])
-  })
-
-  test('flags ANY stop that touches the personal kit (banned from stops)', () => {
-    const findings = lint([
-      story(0, 'The lake runs deep here. Meanwhile my mechanic is still getting to it Tuesday.'),
-      story(1, 'A fine old road climbs up. Even my cousin Ray would have stayed home.'),
-      story(2, 'The pines lean over the water, quiet as anything.'),
-    ])
-    const seqs = findings.map((f) => f.seq)
-    expect(seqs).toContain(0) // kit is banned now — every kit stop flagged, not just the 2nd
-    expect(seqs).toContain(1)
-    expect(seqs).not.toContain(2) // clean stop untouched
-    const f1 = findings.find((f) => f.seq === 1)!
-    expect(f1.avoid.join(' ')).toMatch(/personal kit/i)
-  })
-
-  test('flags EVERY kit-touching stop (zero budget — the kit lives in the intro)', () => {
-    // 3 stops, all touch the kit → all 3 flagged (no budget anymore).
-    const findings = lint([
-      story(0, 'My coffee opinions aside, this water is a remarkable blue today.'),
-      story(1, 'The truck and I disagree, but the cove ahead is worth the trip.'),
-      story(2, 'Ray says hello. The old pier here has stood a hundred winters.'),
-    ])
-    expect(findings.map((f) => f.seq)).toEqual([0, 1, 2])
   })
 
   test('flags a repeated stock phrase, keeping the first use', () => {

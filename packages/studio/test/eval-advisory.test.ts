@@ -1,10 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { evaluateDiversity } from '../src/eval/diversity'
 import { charmEvaluator, charmToStopEvals, type CharmJudge, type CharmVerdict } from '../src/eval/charm'
-import { personaFromKey } from '../src/persona'
 import type { LintInput } from '../src/pipeline/lint'
-
-const KIT = personaFromKey('skipper').kit
 
 describe('evaluateDiversity — deterministic cross-stop lint → advisory evals', () => {
   test('flags a stop with a banned reveal wind-up; passes a clean stop', () => {
@@ -12,7 +9,7 @@ describe('evaluateDiversity — deterministic cross-stop lint → advisory evals
       { seq: 0, stopType: 'story', script: 'The lake sits quiet this morning, smooth as glass off to the right.' },
       { seq: 1, stopType: 'story', script: "Well, here's the thing about this old town, folks." },
     ]
-    const evals = evaluateDiversity(inputs, KIT)
+    const evals = evaluateDiversity(inputs)
     const bySeq = new Map(evals.map((e) => [e.seq, e]))
     expect(bySeq.get(0)!.pass).toBe(true)
     expect(bySeq.get(0)!.dimension).toBe('diversity')
@@ -27,7 +24,7 @@ describe('evaluateDiversity — deterministic cross-stop lint → advisory evals
       { seq: 0, stopType: 'story', script: 'A quiet cove opens up on the left, the water gone glassy and still.' },
       { seq: 1, stopType: 'scenic', script: 'Pines crowd the shoulder here; the light comes down green and easy.' },
     ]
-    const evals = evaluateDiversity(inputs, KIT)
+    const evals = evaluateDiversity(inputs)
     expect(evals).toHaveLength(2)
     expect(evals.every((e) => e.dimension === 'diversity')).toBe(true)
     expect(evals.every((e) => e.pass)).toBe(true)

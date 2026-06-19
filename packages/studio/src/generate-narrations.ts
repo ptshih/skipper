@@ -301,13 +301,13 @@ async function main(): Promise<void> {
     // shared seam, so the auditor's well can never drift from the narrator's sheet).
     const well = buildGroundingWell({ stopType: 'story', name: c.name, kind: c.kind, facts: grounding.facts })
 
-    // The per-clip panel: free dims always (tts-cleanliness + diversity = kit + within-clip tics) +
+    // The per-clip panel: free dims always (tts-cleanliness + diversity = within-clip tics/bows) +
     // laterality (a free grounding backstop); GROUNDING (one Opus call) behind SKIPPER_GROUNDING_EVAL.
     // evaluate() is what optimize() scores each take on; regenerate() is narrateStop with avoid folded in.
     const evaluate = async (script: string): Promise<StopEval[]> => {
       const evals: StopEval[] = [
         evaluateTts({ seq, script }),
-        ...evaluateDiversity([{ seq, stopType: 'story', script }], persona.kit),
+        ...evaluateDiversity([{ seq, stopType: 'story', script }]),
         evaluateLaterality({ seq, script }),
       ]
       if (GROUNDING_EVAL())
