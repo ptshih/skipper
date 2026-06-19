@@ -2,7 +2,7 @@
 //
 // The hand-authored tour pipeline (time-paced stop SELECTION) was removed in the V1→V2
 // migration; what survives here is the SHARED grounding resolver every narration writer
-// reads — roam (generate-roam) and the corpus tools (enrich-region, refetch-poi) — plus the
+// reads — roam (generate-narrations) and the corpus tools (enrich-pois, refetch-poi) — plus the
 // drift detector. The rule (#1, 2026-06-16): a STORY telling REQUIRES a curated fact sheet;
 // an un-enriched POI never grounds on the raw extract. The extract-head branch below is a
 // DEFENSIVE fallback only.

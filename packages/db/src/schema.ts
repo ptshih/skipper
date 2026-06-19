@@ -587,7 +587,7 @@ export const genJobs = pgTable(
     // Plain text — the closed set is the Zod `jobKind` enum in @skipper/shared (see note above).
     kind: text('kind').notNull(),
     status: genJobStatusEnum('status').notNull().default('queued'),
-    /** generate_roam etc: the region slug. */
+    /** generate_narrations etc: the region slug. */
     targetSlug: text('target_slug'),
     /** An ops audit label (e.g. the poi/region id the job acted on). */
     targetId: text('target_id'),

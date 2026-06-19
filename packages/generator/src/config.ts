@@ -248,11 +248,11 @@ export const NARRATION_FALLBACK_CHARS = 4_000
 
 /** Spoken narration pace (~2.5 words/second) — the single base pace every length estimate reads:
  *  narration's target-duration→word hint (narrate.ts), the roam dry-run length print
- *  (generate-roam.ts), and the TTS cost estimate's base (spend.ts, which layers
+ *  (generate-narrations.ts), and the TTS cost estimate's base (spend.ts, which layers
  *  TTS_ESTIMATE_SAFETY on top). */
 export const WORDS_PER_SECOND = 2.5
 
 /** The Tahoe–Reno corridor default bbox — the standalone CLI default when no --bbox is passed
- *  (sweep-region-pois / generate-roam). Matches the `lake-tahoe` region seed's discoveryBbox
+ *  (discover-pois / generate-narrations). Matches the `lake-tahoe` region seed's discoveryBbox
  *  (packages/db/seed/seed.ts); the CLIs stay standalone and do NOT read the DB region row. */
 export const TAHOE_RENO_BBOX = { swLng: -120.25, swLat: 38.86, neLng: -119.55, neLat: 39.65 } as const

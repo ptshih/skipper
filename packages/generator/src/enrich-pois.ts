@@ -1,4 +1,4 @@
-// enrich-region — the corpus ENRICH step. SPENDS $ (Anthropic only — no TTS/R2) + MUTATES DB on --apply.
+// enrich-pois — the corpus ENRICH step. SPENDS $ (Anthropic only — no TTS/R2) + MUTATES DB on --apply.
 //
 // The distinct PAID op between discovery and generation: `discover` (free sweep → pois.facts.extract)
 // → **`enrich` (paid, ONCE per place)** → `generate` (paid, per tour/roam). It scouts each eligible
@@ -17,7 +17,7 @@
 // NO model calls (free). --apply spends.
 //
 // Usage:
-//   dotenvx run -f .env.development -- bun packages/generator/src/enrich-region.ts
+//   dotenvx run -f .env.development -- bun packages/generator/src/enrich-pois.ts
 //   ... --apply                  run it (spends Anthropic; writes pois.fact_sheet + facts_hash)
 //   ... --limit 5                cap how many places to enrich (a smoke run)
 //   ... --force                  re-enrich places that already have a fact sheet
@@ -83,7 +83,7 @@ const excludeIds = new Set(parseIds(flags.value('exclude-ids')))
 // EXPLICIT mode = a hand-picked id list with NO filter; otherwise FILTER mode resolves bbox/source/query.
 const isExplicit = includeIds.length > 0 && !bbox && !sourceFilter && !query
 
-announce({ tool: 'enrich-region', blast: ['SPENDS $', 'MUTATES DB'], apply })
+announce({ tool: 'enrich-pois', blast: ['SPENDS $', 'MUTATES DB'], apply })
 
 interface Candidate {
   poiId: string
@@ -325,4 +325,4 @@ async function main(): Promise<void> {
   console.log(`LLM spend this run: ~$${llmSpentUsd().toFixed(2)}`)
 }
 
-await runJob('enrich_region', { dryRun: !apply, targetId: 'region-corpus' }, main)
+await runJob('enrich_pois', { dryRun: !apply, targetId: 'region-corpus' }, main)

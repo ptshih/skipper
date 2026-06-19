@@ -1,6 +1,6 @@
 // Tour discovery from the REGION CORPUS (the discovery-first reorder, 2026-06-12).
 //
-// Discovery is a region-level step now: sweep-region-pois.ts populates the shared `pois` table
+// Discovery is a region-level step now: discover-pois.ts populates the shared `pois` table
 // for a region's bbox (STORY rows carrying Wikipedia prose, SCENIC named pins), and BOTH tours
 // and roam draw from that one corpus. A tour generate no longer calls WDQS live — it reads its
 // candidates from this pool, scoped to the route's bounding box, and rebuilds the SAME WikiPoi

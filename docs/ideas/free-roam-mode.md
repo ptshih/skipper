@@ -149,7 +149,7 @@ first.** (Aggregate telemetry only — the toy lens has no appetite for surveill
 
 - **`roam_clips`** (poiId, regionId, form wave|story|bside, script, audioUrl, durationS, factsHash,
   attribution, status) — the third narration owner.
-- **`generate-roam` pipeline:** reuse scout/grounding/lint/eval wholesale; NEW form constraints:
+- **`generate-narrations` pipeline:** reuse scout/grounding/lint/eval wholesale; NEW form constraints:
   self-contained, no callbacks/arc, **no baked laterality** (no route → approach side unknowable;
   same rule family as break-stops' no-volatile-data), no volatile data; region-wide cluster-merge
   for co-located POIs (the Emerald Bay bay+castle+island move, applied per-region). Runs as another

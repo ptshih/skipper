@@ -349,7 +349,7 @@ function distToRoute(lat: number, lng: number, sampledVerts: LngLat[]): number {
  * so no corridor filter; offRouteM is 0 by construction). Same spine, prose-join, tiering,
  * and same-place dedup as the route path below. Callers sweeping a large area should split
  * it into modest sub-boxes (WDQS result-size etiquette) and merge by qid before dedupe —
- * see sweep-region-pois.ts.
+ * see discover-pois.ts.
  */
 export async function discoverWikidataBbox(sw: LngLat, ne: LngLat): Promise<WikidataCandidate[]> {
   const raw = await fetchWikidataBox(sw, ne)

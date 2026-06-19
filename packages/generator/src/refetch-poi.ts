@@ -1,7 +1,7 @@
 // refetch-poi — re-pull ONE poi's Wikipedia facts and recompute its facts_hash.
 //
 // Facts are SHARED + cached on `pois` (principle #1); the corpus is normally refreshed in
-// BULK by the region sweep (sweep-region-pois.ts). This is the single-POI version: re-fetch the
+// BULK by the region sweep (discover-pois.ts). This is the single-POI version: re-fetch the
 // lead extract for ONE place by title (the SAME path discovery uses, so an unchanged article
 // hashes identically), apply the curated fact-edit overrides, and rewrite facts / facts_hash /
 // facts_fetched_at / summary. When the re-fetched facts MATERIALLY change (a new facts_hash),
@@ -11,7 +11,7 @@
 // PRESERVES a paid enrichment WELL (2026-06-16): like the sweep, a refetch keeps an existing
 // `fact_sheet` + `enriched_at` (the grounding hash is the SHEET hash, so refreshing the extract
 // alone never marks tracks stale or destroys paid work). A deliberate well rebuild — e.g. to push
-// a fact-edit CORRECTION into a well span — is `enrich-region --include-ids <id> --force --apply`,
+// a fact-edit CORRECTION into a well span — is `enrich-pois --include-ids <id> --force --apply`,
 // not a refetch; the refetch WARNS when it refreshes an enriched poi's extract so that's not missed.
 //
 // FREE — Wikipedia (MediaWiki) only, no LLM/TTS spend. Only WIKIPEDIA-sourced (story) POIs
@@ -88,7 +88,7 @@ async function main() {
   // the extract but LEAVES the `fact_sheet`/`enriched_at` columns untouched (the .update below never
   // sets them), so it never destroys the PAID sheet. The grounding fingerprint is the SHEET hash
   // (storyFactsHash) when enriched, so refreshing the extract alone does NOT mark tracks stale. A
-  // deliberate sheet rebuild is `enrich-region --include-ids <id> --force --apply`, not a refetch.
+  // deliberate sheet rebuild is `enrich-pois --include-ids <id> --force --apply`, not a refetch.
   const existingSheet = Array.isArray(poi.factSheet) ? poi.factSheet : null
   const enriched = existingSheet !== null && existingSheet.length > 0
   const newFacts = buildStoryFacts({
@@ -117,7 +117,7 @@ async function main() {
             (drifted.length > 0
               ? `\n    ⚠ ${drifted.length}/${existingSheet!.length} sheet span(s) NO LONGER appear in the refreshed` +
                 ` article — the sheet has DRIFTED. Re-enrich to rebuild it:\n` +
-                `      \`enrich-region --include-ids ${poi.id} --force --apply\``
+                `      \`enrich-pois --include-ids ${poi.id} --force --apply\``
               : `\n    ✓ all ${existingSheet!.length} sheet spans still appear in the article — no re-enrich needed.`)
         : `  → unchanged: article + sheet identical to what's stored (only facts_fetched_at advances).`,
     )

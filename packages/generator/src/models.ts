@@ -66,7 +66,7 @@ export const JUDGMENT_MODEL = 'claude-opus-4-8' as const
 // The fact-sheet builder SELECTS verbatim spans + grounded bundles; that is an easier call than narration
 // judgment AND it runs corpus-scale (~hundreds of POIs, once per region), so the DEFAULT is Sonnet 4.6 ($3/$15
 // per MTok — half Opus's input, ~⅗ its output) to keep the one-time bill modest. Opus stays available
-// (`enrich-region --model opus`) for an A/B against the calibration tier on a sample. Both ACCEPT a
+// (`enrich-pois --model opus`) for an A/B against the calibration tier on a sample. Both ACCEPT a
 // forced tool_choice {type:'any'} (the fact-sheet builder forces it every turn) — only Fable rejected that,
 // so either is safe. Sources: claude-api skill "Current Models" table (verified 2026-06-15).
 export const ENRICH_MODELS = {

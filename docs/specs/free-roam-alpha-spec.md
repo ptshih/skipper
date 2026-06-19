@@ -18,7 +18,7 @@ a roam clip. Tahoe-basin corpus only; the founder (Zephyr Cove) is the alpha use
 - **Corpus:** `sweep-roam-pois.ts` — bbox Wikidata-spine discovery (3×4 grid over the basin,
   story + scenic tiers upserted through the existing `pois` dedup seam; scenic pins seed the
   future wave layer, unnarrated in v0). First sweep: ~116 story / ~117 scenic.
-- **Generation:** `generate-roam.ts` — ~60s self-contained ENCOUNTERS off the unchanged Skipper
+- **Generation:** `generate-narrations.ts` — ~60s self-contained ENCOUNTERS off the unchanged Skipper
   stop prompt + a new `FREE-ROAM ENCOUNTER` sheet frame (`pipeline/narrate.ts`): route-agnostic,
   no welcome/next-stop/callbacks, **no baked laterality** (no route → side unknowable; the same
   rule family as break-stops' no-volatile). Deep-extract refresh before narrating; Charon voice +
@@ -66,7 +66,7 @@ a roam clip. Tahoe-basin corpus only; the founder (Zephyr Cove) is the alpha use
 ## Ops notes
 
 - Generation runs on the dev env file; **dev and prod share one Neon DB**, and (since the
-  2026-06-10 creds fix) prod serves the same `skipper` R2 bucket — so a local generate-roam run
+  2026-06-10 creds fix) prod serves the same `skipper` R2 bucket — so a local generate-narrations run
   is immediately live on `api.skipper.fm`. Both CLIs preview by default (`--apply` to act).
-- Regen story: facts_hash drift → `generate-roam --apply` re-narrates only stale/missing clips;
+- Regen story: facts_hash drift → `generate-narrations --apply` re-narrates only stale/missing clips;
   `--force` re-tells everything; old R2 objects orphan → `sweep-orphans`.

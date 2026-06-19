@@ -203,9 +203,9 @@ DROP TYPE "poi_override_kind"; DROP TYPE "stop_type"; DROP TYPE "bracket_kind";
    journal/snapshot stay consistent. Add `scripts/lint-enums.ts`-style guard that `tracks` &
    `tour_frames` both spread `trackColumns`. Update `scripts/lint-enums.ts` pairs (track_form/frame_kind
    ⇄ their Zod twins; drop stop_type/bracket_kind). Show the SQL, then apply with `bun run db:migrate`.
-2. **Generator persist.** Rewrite `persist.ts` / `generate.ts` / `generate-roam.ts` to write
+2. **Generator persist.** Rewrite `persist.ts` / `generate.ts` / `generate-narrations.ts` to write
    `segments`+`tracks` (and `tour_frames`); **extract `generateOneTrack(segment, context, persona, {ground?})`**
-   (the atom — already inlined in `generate-roam.ts`; dogfood roam onto it; `{ground?}` is the seam for
+   (the atom — already inlined in `generate-narrations.ts`; dogfood roam onto it; `{ground?}` is the seam for
    a future runtime grounding gate). `patch-clip` / `resynth*` operate on `tracks`. Persona is assigned
    here (tour = one host; roam = the sweep's host) and written to `segment.persona_id`.
 3. **API + admin reads.** Repoint queries to `segments`+`tracks`, **mapping to the EXISTING wire DTOs**

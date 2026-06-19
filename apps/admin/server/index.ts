@@ -521,7 +521,7 @@ app.get('/admin/pois', async (c) => {
       .from(narrations)
       .where(inArray(narrations.poiId, poiIds)),
     // All regions + their discovery bbox. POI→region is GEOGRAPHIC (bbox containment), matching
-    // how roam actually selects candidates (region-corpus.ts / generate-roam.ts). A region with no
+    // how roam actually selects candidates (region-corpus.ts / generate-narrations.ts). A region with no
     // bbox can't claim any poi.
     db
       .select({ slug: regions.slug, displayName: regions.displayName, discoveryBbox: regions.discoveryBbox })

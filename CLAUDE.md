@@ -87,7 +87,7 @@ you found so the next agent can re-check it.
    `narrations` atom; zero-reuse now governs only the DEFERRED authored-tour rung — see
    `docs/decisions/tour-data-model-zero-reuse.md` + `create-a-drive-architecture.md`.) **The corpus
    pipeline is `discover` → `enrich` → `generate` (2026-06-15):** a free sweep populates `pois` for a
-   region's bbox ONCE (`sweep-region-pois.ts`); a PAID `enrich` (`enrich-region.ts`) scouts each story
+   region's bbox ONCE (`discover-pois.ts`); a PAID `enrich` (`enrich-pois.ts`) scouts each story
    poi ONCE into a curated **verbatim fact sheet** (its own typed `pois.fact_sheet` column +
    `enriched_at`; `facts_hash` keys on it), and roam + drives SELECT from that one shared corpus +
    ground on the fact sheet. A STORY telling REQUIRES a sheet (#1, 2026-06-16) — an un-enriched POI is

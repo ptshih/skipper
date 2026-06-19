@@ -1,5 +1,5 @@
 // Curated "where to look" anchors — the SEED defaults for a place's speakable vantage. The
-// region sweep (sweep-region-pois.ts) applies these onto `pois.speakable` when it discovers a place;
+// region sweep (discover-pois.ts) applies these onto `pois.speakable` when it discovers a place;
 // from then on the DB column is the source of truth (an admin edit overrides the seed, and the
 // upsert coalesce keeps the existing value so a re-sweep never clobbers an admin change). select.ts
 // reads the anchor off the corpus candidate (NOT this map) and recomputes the per-segment side

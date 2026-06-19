@@ -335,7 +335,7 @@ export async function scoutStop(
 /*  buildCorpusFactSheet — the CORPUS fact-sheet builder (generalizes the scout) */
 /* -------------------------------------------------------------------------- */
 //
-// The corpus `enrich` step (enrich-region.ts) runs this ONCE per story place to produce the
+// The corpus `enrich` step (enrich-pois.ts) runs this ONCE per story place to produce the
 // shared fact sheet (stored on `pois.fact_sheet`) — the curated narration source tours + roam both
 // ground on (principle #1; docs/specs/corpus-enrichment-spec.md). It is the scout, generalized:
 // instead of only include/exclude-ing fetched bundles, it ALSO selects WHICH verbatim spans of the

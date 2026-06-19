@@ -81,9 +81,9 @@ export const jobKind = z.enum([
   'resynth',
   'resynth_roam_clip',
   'sweep_orphans',
-  'sweep_region_pois',
-  'enrich_region',
-  'generate_roam',
+  'discover_pois',
+  'enrich_pois',
+  'generate_narrations',
   'refetch_facts',
 ])
 export type JobKind = z.infer<typeof jobKind>

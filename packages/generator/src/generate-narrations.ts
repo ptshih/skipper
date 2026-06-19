@@ -1,4 +1,4 @@
-// generate-roam — FREE-ROAM encounter generation: narrate + synthesize the POI corpus.
+// generate-narrations — FREE-ROAM encounter generation: narrate + synthesize the POI corpus.
 // SPENDS $ (Anthropic narration + Cloud TTS) and MUTATES DB + R2 on --apply.
 //
 // Free-roam writes the shared NARRATION layer (V2): pois = shared FACTS, and a poi's ONE
@@ -19,7 +19,7 @@
 // narrates/synthesizes/writes only on --apply.
 //
 // Usage:
-//   dotenvx run -f .env.development -- bun packages/generator/src/generate-roam.ts
+//   dotenvx run -f .env.development -- bun packages/generator/src/generate-narrations.ts
 //   ... --apply                 run it (spends; writes R2 clips + narrations)
 //   ... --apply --limit 3      smoke run (the cheapest real ear-test)
 //   ... --force                regenerate even clips whose facts_hash is still fresh
@@ -75,7 +75,7 @@ const bboxRaw = flags.value('bbox')
 const bbox = bboxRaw ? parseBboxFlag(bboxRaw) : TAHOE_RENO_BBOX
 
 announce({
-  tool: 'generate-roam',
+  tool: 'generate-narrations',
   blast: scriptsOnly ? ['SPENDS $'] : ['SPENDS $', 'MUTATES DB'],
   apply: apply || scriptsOnly, // scripts-only spends narration $, so it's not a free dry run
 })
@@ -390,4 +390,4 @@ async function main(): Promise<void> {
   console.log(`TTS spend (estimated from chars): ~$${ttsActual.usd.toFixed(2)}`)
 }
 
-await runJob('generate_roam', { dryRun: !apply && !scriptsOnly, targetId: 'roam-corpus' }, main)
+await runJob('generate_narrations', { dryRun: !apply && !scriptsOnly, targetId: 'roam-corpus' }, main)

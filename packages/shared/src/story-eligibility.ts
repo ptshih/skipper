@@ -1,7 +1,7 @@
 // Story-eligibility — is a POI story-grade NARRATION material? This is a property of the POI, shared
 // by every consumer that narrates it: BOTH tours and roam select story-grade POIs from the same
 // corpus (roam is one consumer, not the owner). SINGLE SOURCE OF TRUTH for the gates — the admin POIs
-// table classifies with `classifyStoryEligibility`, and `generate-roam` reads the same constants for
+// table classifies with `classifyStoryEligibility`, and `generate-narrations` reads the same constants for
 // its queue. (Whether a roam CLIP exists / is fresh is a SEPARATE, roam-specific axis — computed in
 // /admin/pois as `roamClip`, not here.)
 

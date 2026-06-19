@@ -4,7 +4,7 @@
 // pipeline is `discover` → `enrich` → `generate`, and roam + every drive SELECT from that
 // one shared corpus. The hand-authored tour pipeline (run.ts → segments/tracks/tour_frames)
 // was removed in the V1→V2 migration; only the roam/corpus generators + their pipeline
-// helpers remain. CLI entry points: generate-roam.ts, enrich-region.ts, sweep-region-pois.ts.
+// helpers remain. CLI entry points: generate-narrations.ts, enrich-pois.ts, discover-pois.ts.
 //
 // Invariant: a narration goes live only once its audio is synthesized (audio_url NOT NULL).
 // Persona lives in DELIVERY (the telling), never in FACTS — "make it funny" never loosens

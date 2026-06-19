@@ -8,7 +8,7 @@ import { SCRIPTS, buildJobArgs } from './jobs'
 // which owns begin → run → finish → exit). A kind that skips it records no status and shows NO
 // logs in the admin console (which no longer reads Cloud Logging). This guard makes "always
 // capture the same way" enforced, not aspirational: add a kind to SCRIPTS without wiring the
-// hook and this fails. (generate-roam.ts is the canonical main()+runJob shape to copy.)
+// hook and this fails. (generate-narrations.ts is the canonical main()+runJob shape to copy.)
 const repoRoot = join(import.meta.dir, '..', '..', '..')
 
 for (const [kind, scriptPath] of Object.entries(SCRIPTS)) {
@@ -18,12 +18,12 @@ for (const [kind, scriptPath] of Object.entries(SCRIPTS)) {
   })
 }
 
-describe('buildJobArgs — enrich_region (the corpus enrich op)', () => {
+describe('buildJobArgs — enrich_pois (the corpus enrich op)', () => {
   // NOTE: this asserts the ADMIN labels the run free (dryRun/spends/no --apply) — NOT that the script
-  // makes zero model calls. That guarantee lives in enrich-region.ts's `if (!apply) return` BEFORE the
+  // makes zero model calls. That guarantee lives in enrich-pois.ts's `if (!apply) return` BEFORE the
   // buildCorpusFactSheet loop (the script self-executes on import, so it can't be unit-imported to assert here).
   test('dry run by default: no --apply, spends:false (admin labels it free; script early-returns before any model call)', () => {
-    const r = buildJobArgs({ kind: 'enrich_region' })
+    const r = buildJobArgs({ kind: 'enrich_pois' })
     expect(r.dryRun).toBe(true)
     expect(r.spends).toBe(false)
     expect(r.args).not.toContain('--apply')
@@ -31,7 +31,7 @@ describe('buildJobArgs — enrich_region (the corpus enrich op)', () => {
   })
 
   test('--apply SPENDS (Anthropic) → confirm gate', () => {
-    const r = buildJobArgs({ kind: 'enrich_region', apply: true })
+    const r = buildJobArgs({ kind: 'enrich_pois', apply: true })
     expect(r.dryRun).toBe(false)
     expect(r.spends).toBe(true)
     expect(r.args).toContain('--apply')
@@ -39,7 +39,7 @@ describe('buildJobArgs — enrich_region (the corpus enrich op)', () => {
 
   test('threads model / bbox / limit flags', () => {
     const r = buildJobArgs({
-      kind: 'enrich_region',
+      kind: 'enrich_pois',
       apply: true,
       model: 'opus',
       bbox: '-120,38,-119,39',
@@ -51,14 +51,14 @@ describe('buildJobArgs — enrich_region (the corpus enrich op)', () => {
   })
 
   test('threads an explicit poi-id selection (hand-picked rows)', () => {
-    const r = buildJobArgs({ kind: 'enrich_region', apply: true, includeIds: ['a', 'b', 'c'] })
+    const r = buildJobArgs({ kind: 'enrich_pois', apply: true, includeIds: ['a', 'b', 'c'] })
     expect(r.args).toContain('--include-ids=a,b,c')
     expect(r.args.some((a) => a.startsWith('--exclude-ids'))).toBe(false)
   })
 
   test('threads a filter + exclude-ids selection ("select all matching, minus a few")', () => {
     const r = buildJobArgs({
-      kind: 'enrich_region',
+      kind: 'enrich_pois',
       apply: true,
       bbox: '-120,38,-119,39',
       source: 'wikipedia',

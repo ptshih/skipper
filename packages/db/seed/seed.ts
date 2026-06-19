@@ -3,7 +3,7 @@
 //
 // Tours are NOT seeded. Under the discovery-first reorder (2026-06-12), a tour is AUTHORED at
 // runtime via the admin Create flow over the region POI corpus: (1) discover a region's POIs
-// into the shared `pois` table (sweep-region-pois.ts), (2) author + freeze a route (admin
+// into the shared `pois` table (discover-pois.ts), (2) author + freeze a route (admin
 // Create → materializeRoute), (3) generate the tour (it selects candidates from the corpus).
 // The old seeded draft shells + the committed curated-route artifacts (tour-specs.ts +
 // seed/data/*.json) were dropped — the routes are re-authored through the new system.
@@ -18,11 +18,11 @@ import { seedPoiOverrides } from './poi-overrides'
 import { seedPersonas } from './personas'
 
 /** The regions a tour can belong to — manual (D4). slug → spoken name + discovery bbox.
- *  discoveryBbox ("swLng,swLat,neLng,neLat") scopes POI discovery (sweep-region-pois / generate-roam)
+ *  discoveryBbox ("swLng,swLat,neLng,neLat") scopes POI discovery (discover-pois / generate-narrations)
  *  AND drives the admin Roam coverage view, where POI→region is bbox containment. The admin Regions
  *  view can re-tune it; without one a region claims no POIs and shows empty coverage. */
 const REGION_SEED: { slug: string; displayName: string; discoveryBbox: string }[] = [
-  // The Tahoe–Reno corridor — matches the generator's hardcoded default (sweep-region-pois / generate-roam).
+  // The Tahoe–Reno corridor — matches the generator's hardcoded default (discover-pois / generate-narrations).
   { slug: 'lake-tahoe', displayName: 'Lake Tahoe', discoveryBbox: '-120.25,38.86,-119.55,39.65' },
 ]
 

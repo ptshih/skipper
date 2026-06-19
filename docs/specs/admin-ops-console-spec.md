@@ -136,7 +136,7 @@ Migration: add the table → `bun run db:generate` (emits SQL in `packages/db/dr
   create-or-update; **`--max-retries=0`** so a half-run regen never silently re-fires; 6h
   timeout covers a full-region roam run — the real spend guard is the script's own `--max-cost`;
   the wall-clock cap is just the runaway backstop. Raised from 3600 (it timed out a full-region
-  generate_roam) 2026-06-17 — see §12).
+  generate_narrations) 2026-06-17 — see §12).
 
 ### Override-args contract (admin-api / gcloud builds these per kind)
 
@@ -454,9 +454,9 @@ Bigger bets (past the free first pass):
 
 13. **Free-roam under the same roof (L).** `roam_clips` is the THIRD narration owner, already
     shipping to TestFlight alpha, with ZERO admin presence — no list, no audio vetting, regen
-    is SSH-only, and `generate-roam` ships with FEWER guards than tours (no eval panel). A Roam
+    is SSH-only, and `generate-narrations` ships with FEWER guards than tours (no eval panel). A Roam
     tab (roam_clips ⨝ pois name/kind + inline audio + a `pois LEFT JOIN roam_clips` coverage
-    gap) + promote `generate-roam.ts` (spends) and `sweep-roam-pois.ts` (free) to JobKinds 5 & 6,
+    gap) + promote `generate-narrations.ts` (spends) and `sweep-roam-pois.ts` (free) to JobKinds 5 & 6,
     inheriting dry-run-default + typed-confirm. One-third of the persona is currently un-vetted.
 14. **Trigger-point nudge + re-snap on the map (M, free, no content touch).** Make each numbered
     pin draggable: nudge `triggerLat/Lng`, scrub `triggerRadiusM`, one-click "snap to road" that

@@ -67,7 +67,7 @@ Break-freely (storage). `pois.facts` for a story poi becomes:
 
 Ops sequence becomes: `discover` (free) → **`enrich` (paid, once)** → `generate` (paid).
 
-- New CLI `packages/generator/src/enrich-region.ts` + `jobKind` `enrich_region` (add to the
+- New CLI `packages/generator/src/enrich-pois.ts` + `jobKind` `enrich_pois` (add to the
   `@skipper/shared` `jobKind` enum + `jobs.ts` SCRIPTS + admin button). SOP-safe: previews (with a
   cost estimate) by default; writes only on `--apply`. `--bbox` scopes it (like the sweep).
 - For each eligible story poi WITHOUT a fresh well (or `--force`): run the enricher (§5), build the
@@ -103,7 +103,7 @@ Extend `pipeline/scout.ts` from an enrichment-bundle selector to a full **well b
 
 ## 7. Generation integration + the cap migration
 
-- **Roam** (`generate-roam`): grounds on `pois.facts.well`. No per-clip scout. (The original win.)
+- **Roam** (`generate-narrations`): grounds on `pois.facts.well`. No per-clip scout. (The original win.)
 - **Tours** (`generate-tour.ts`): grounds on the corpus well + the route-level geology (§6); no per-stop
   place-fact scouting.
 - **The 4000 raw-extract cap drops.** `extract` is now the enricher's input (a generous cap remains

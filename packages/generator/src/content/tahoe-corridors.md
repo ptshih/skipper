@@ -17,7 +17,7 @@ The seed-time route path is GONE. `packages/db/seed/seed.ts` now seeds only regi
 overrides; `materialize.ts` keeps just `materializeRoute` (the admin Create flow calls it);
 `tour-specs.ts` + `data/*.json` were deleted. To create a tour:
 
-1. **Discover the region** → `sweep-region-pois.ts --apply` (populates the shared `pois` corpus).
+1. **Discover the region** → `discover-pois.ts --apply` (populates the shared `pois` corpus).
 2. **Author + freeze the route** → admin Create flow (LLM-propose → human-approve → `materializeRoute`).
 3. **Generate** the draft tour → it selects candidates from the corpus (`pipeline/region-corpus.ts`).
 

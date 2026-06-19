@@ -72,7 +72,7 @@ export interface NarrationRequest {
   maxSeconds?: number
   /** Re-narration notes from the diversity lint — concrete things THIS take must avoid. */
   avoid?: string[]
-  /** FREE-ROAM encounter framing (generate-roam.ts): the telling is a one-off roadside
+  /** FREE-ROAM encounter framing (generate-narrations.ts): the telling is a one-off roadside
    *  encounter on an unplanned drive — fully self-contained, route-agnostic, no tour shape.
    *  Adds the encounter block to the sheet; all grounding rules are unchanged. */
   encounterFrame?: boolean

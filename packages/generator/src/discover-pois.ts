@@ -1,4 +1,4 @@
-// sweep-region-pois — region POI corpus discovery. MUTATES DB on --apply.
+// discover-pois — region POI corpus discovery. MUTATES DB on --apply.
 //
 // This populates the SHARED `pois` corpus for a region's bbox — the one place both TOURS and ROAM
 // draw candidates from (POIs are not roam-owned; roam is just one consumer — see CLAUDE.md
@@ -13,8 +13,8 @@
 // Discovery is free (WDQS + MediaWiki, no LLM/TTS spend).
 //
 // Usage:
-//   dotenvx run -f .env.development -- bun packages/generator/src/sweep-region-pois.ts
-//   dotenvx run -f .env.development -- bun packages/generator/src/sweep-region-pois.ts --apply
+//   dotenvx run -f .env.development -- bun packages/generator/src/discover-pois.ts
+//   dotenvx run -f .env.development -- bun packages/generator/src/discover-pois.ts --apply
 //   ... --bbox swLng,swLat,neLng,neLat   (override the basin default)
 
 import {
@@ -73,7 +73,7 @@ const flags = parseFlags(process.argv.slice(2), { valueFlags: ['bbox'] })
 const apply = flags.has('apply')
 const box = parseBbox(flags.value('bbox'))
 
-announce({ tool: 'sweep-region-pois', blast: ['MUTATES DB'], apply })
+announce({ tool: 'discover-pois', blast: ['MUTATES DB'], apply })
 
 async function main(): Promise<void> {
   // Overrides ride every fetch (the fact-edit seam) — load them before any extract lands.
@@ -204,4 +204,4 @@ async function main(): Promise<void> {
   console.log(`\nUpserted ${wrote} pois (${stories.length} story + ${scenics.length} scenic).`)
 }
 
-await runJob('sweep_region_pois', { dryRun: !apply, targetId: 'region-corpus' }, main)
+await runJob('discover_pois', { dryRun: !apply, targetId: 'region-corpus' }, main)

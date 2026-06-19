@@ -54,7 +54,7 @@ export class HttpError extends Error {
 // beginJob()/finishJob() (packages/generator/src/pipeline/job-progress.ts) — that is HOW a run
 // records status AND captures its own stdout into outputLog/outputSummary/outputData on the row.
 // A script that skips the hook records no status and shows NO logs in the console (the admin no
-// longer reads Cloud Logging). Follow generate-roam.ts's main()+begin/finish shape. Enforced by
+// longer reads Cloud Logging). Follow generate-narrations.ts's main()+begin/finish shape. Enforced by
 // jobs.test.ts.
 //
 // V2: authored-tour generation is deferred — the generate / patch_clip / resynth scripts were
@@ -65,9 +65,9 @@ export class HttpError extends Error {
 export const SCRIPTS: Partial<Record<JobKind, string>> = {
   resynth_roam_clip: 'packages/generator/src/resynth-roam-clip.ts',
   sweep_orphans: 'packages/generator/src/sweep-orphans.ts',
-  sweep_region_pois: 'packages/generator/src/sweep-region-pois.ts',
-  enrich_region: 'packages/generator/src/enrich-region.ts',
-  generate_roam: 'packages/generator/src/generate-roam.ts',
+  discover_pois: 'packages/generator/src/discover-pois.ts',
+  enrich_pois: 'packages/generator/src/enrich-pois.ts',
+  generate_narrations: 'packages/generator/src/generate-narrations.ts',
   refetch_facts: 'packages/generator/src/refetch-poi.ts',
 }
 
@@ -110,7 +110,7 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     return { args, dryRun: !apply, spends: false, targetId: poiId }
   }
 
-  if (kind === 'sweep_region_pois') {
+  if (kind === 'discover_pois') {
     const apply = body.apply === true
     const args: string[] = [script]
     if (body.bbox) args.push(`--bbox=${str(body.bbox)}`)
@@ -119,11 +119,11 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     return { args, dryRun: !apply, spends: false, targetId: 'roam-corpus' }
   }
 
-  if (kind === 'enrich_region') {
+  if (kind === 'enrich_pois') {
     const apply = body.apply === true
     const args: string[] = [script]
     // Selection: a FILTER (bbox/source/query) + exclude-ids, XOR an explicit include-ids list — the CLI
-    // resolves it server-side (explicit XOR filter, NOT a union). See the enrich-region.ts selection block.
+    // resolves it server-side (explicit XOR filter, NOT a union). See the enrich-pois.ts selection block.
     const idCsv = (v: unknown): string => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string').join(',') : '')
     if (body.bbox) args.push(`--bbox=${str(body.bbox)}`)
     if (body.source) args.push(`--source=${str(body.source)}`)
@@ -139,7 +139,7 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     return { args, dryRun: !apply, spends: apply, targetId: 'region-corpus' }
   }
 
-  if (kind === 'generate_roam') {
+  if (kind === 'generate_narrations') {
     const apply = body.apply === true
     const args: string[] = [script]
     if (body.bbox) args.push(`--bbox=${str(body.bbox)}`)

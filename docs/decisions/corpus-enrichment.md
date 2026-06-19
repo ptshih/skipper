@@ -53,7 +53,7 @@ was *eligible-but-short*, < 2500 chars). NOTE: `filtered-stub` originally meant 
 2026-06-16 floor removal (above) it means "no article text to enrich" (empty extract).
 
 **Update 2026-06-15 (selection-driven enrich):** the enrich CTA is no longer region-bound — it acts on a
-table **selection**. `enrich-region.ts` resolves the candidate set as an explicit `--include-ids` list
+table **selection**. `enrich-pois.ts` resolves the candidate set as an explicit `--include-ids` list
 **XOR** a filter (`--bbox`/`--source`/`--query`, default = the whole corpus) `\ --exclude-ids`, then the
 eligibility gate. (It is XOR, NOT a union: `isExplicit` requires include-ids with no filter; include-ids
 sent alongside a filter falls to FILTER mode and the ids are ignored — the UI never sends both.) The admin
@@ -78,7 +78,7 @@ on read-back), so the old `JSON.stringify` hash made a writer's `pois.facts_hash
 now PRESERVES wells** (see Migration below — this REVERSES the prior "wipe by design"); (3) **selection
 ranks on the narration-visible head** (`rankLen`), so a free re-discover that re-stores extracts at 12k
 can't reorder which stops a tour picks; (4) **track attribution is deduped** across the well + the route
-geology layer (centroid + trigger commonly share a Macrostrat `map_id`); (5) **enrich-region cost/error
+geology layer (centroid + trigger commonly share a Macrostrat `map_id`); (5) **enrich-pois cost/error
 guards** — a running `--max-cost` cap (not just a pre-spend estimate), an upfront `ANTHROPIC_READY` assert,
 and an all-errored → fail-loud guard so a misconfigured paid run can't report "succeeded" having enriched
 nothing. The verbatim-selection invariant reviewed CLEAN.
@@ -95,10 +95,10 @@ nothing. The verbatim-selection invariant reviewed CLEAN.
 - **The enricher** (`pipeline/scout.ts` `buildWell`): the scout generalized to a well builder. The
   model SELECTS verbatim article spans **by id** + includes/excludes geology(centroid)/Wikidata
   bundles — never text (the §2 verbatim invariant). Bounded like the scout; injectable model call.
-- **The CLI** (`enrich-region.ts`) + `jobKind` `enrich_region` (shared enum + `jobs.ts` SCRIPTS +
+- **The CLI** (`enrich-pois.ts`) + `jobKind` `enrich_pois` (shared enum + `jobs.ts` SCRIPTS +
   `buildJobArgs` + admin RoamView **Enrich** button). SOP-safe: dry run makes NO model calls (free);
   `--apply` spends Anthropic only (no TTS/R2). Flags: `--limit`/`--force`/`--model`/`--bbox`/`--max-cost`.
-- **Generation reads the well.** Roam (`generate-roam.ts`) and tours (`generate-tour.ts`) ground on
+- **Generation reads the well.** Roam (`generate-narrations.ts`) and tours (`generate-tour.ts`) ground on
   `resolveStoryGrounding` — the sheet when enriched. **#1 (2026-06-16):** a STORY telling now REQUIRES a
   sheet — an un-enriched POI is downgraded to scenic (tours) / skipped (roam), NOT narrated from the
   extract head (which survives only as a defensive fallback). Co-located merges fold the member's SHEET too.
@@ -145,7 +145,7 @@ free, idempotent, re-run-encouraged sweep must never destroy the PAID well (the 
 costly footgun). A deliberate well rebuild goes through `refetch_facts` or a re-`enrich --force`, NOT a
 routine re-discover. `refetch_facts` (`refetch-poi.ts`) now PRESERVES the well too (2026-06-16, Option A
 — consistency with the sweep) and WARNS, when it refreshes an enriched poi's extract, that a fact-edit
-correction living in a well span needs `enrich-region --include-ids <id> --force --apply` to reach the
+correction living in a well span needs `enrich-pois --include-ids <id> --force --apply` to reach the
 well. **Caveat:** because neither op auto-invalidates, a re-sweep/refetch whose article changed materially
 keeps the OLD well until you re-`enrich`; there is no automatic "extract changed → re-enrich" signal yet.
 Un-enriched story POIs are downgraded to scenic (tours) / skipped (roam) until enriched (#1) — never
@@ -165,4 +165,4 @@ is awareness — don't be alarmed by a one-time staleness wave after the first p
 
 The PAID `enrich --apply` run + the founder EAR-test (spec §11): roam/tour scripts on the well read
 at least as charming/grounded as on the richer extract, and rescue ≥1 deep fact the positional cap
-missed. Recommended first run: `enrich-region --limit 3` (smoke), then ear-test.
+missed. Recommended first run: `enrich-pois --limit 3` (smoke), then ear-test.

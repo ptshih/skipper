@@ -10,13 +10,13 @@ Wikidata discovery spine (`pipeline/wikidata-discovery.ts`).
 ## The reorder
 
 **Before:** every tour generate called `discoverWikidataPois(routeBox)` live (a WDQS sweep of the
-route's bounding box), while roam separately swept the basin into `pois` via `sweep-region-pois.ts`.
+route's bounding box), while roam separately swept the basin into `pois` via `discover-pois.ts`.
 Two discovery paths over the same Wikidata spine; tours re-discovered on every run; tours were
 pre-seeded as draft shells from committed `tour-specs.ts` + `seed/data/*.json` route artifacts.
 
 **After — one substrate, three steps:**
 
-1. **Discover a region → the shared corpus.** `sweep-region-pois.ts` (the existing bbox sweep) is
+1. **Discover a region → the shared corpus.** `discover-pois.ts` (the existing bbox sweep) is
    the canonical first step: it discovers every Wikidata-pinned place in a region's bbox, tiers
    them, and upserts STORY rows (Wikipedia prose) + SCENIC pins into `pois`, deduped by
    `(source, source_id)`. The bbox is a generation-op PARAMETER / a per-region default in code —
@@ -46,8 +46,8 @@ pre-seeded as draft shells from committed `tour-specs.ts` + `seed/data/*.json` r
 
 ## Operator flow (admin)
 
-Discover region (`sweep_region_pois --apply`) → author a route (Create tour → `materializeRoute`) →
-`generate` the draft → (optionally) `generate_roam` for the corpus. The empty-corpus guard makes
+Discover region (`discover_pois --apply`) → author a route (Create tour → `materializeRoute`) →
+`generate` the draft → (optionally) `generate_narrations` for the corpus. The empty-corpus guard makes
 the ordering self-enforcing.
 
 ## Deferred / open
@@ -71,7 +71,7 @@ the ordering self-enforcing.
 - **Region-keyed bbox.** Today the sweep's bbox is a default/`--bbox`. A `region → bbox` map keyed
   by slug would make "discover region X" one command. Trivial to add when region #2 lands.
 - **Rename — DONE 2026-06-15.** The sweep feeds tours too, so it's no longer roam-named:
-  `sweep-roam-pois.ts` → `sweep-region-pois.ts`, and the gen-job kind moved OFF the pg enum to a
+  `sweep-roam-pois.ts` → `discover-pois.ts`, and the gen-job kind moved OFF the pg enum to a
   plain `text` column (the `jobKind` vocabulary is single-sourced in `@skipper/shared`; migration
   `0005_jobkind_to_text` dropped `gen_job_kind` + renamed the value `sweep_roam_pois` →
   `sweep_region_pois`). Rationale: a churning, observability-only label is the wrong shape for a

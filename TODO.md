@@ -8,7 +8,7 @@ when done** — git history is the archive.
 ## POIs / facts model — decouple from roam + the facts-depth redesign
 
 POIs are the SHARED corpus (tours AND roam select from it); roam is one consumer, not the owner.
-Naming decoupled 2026-06-15: `sweep-roam-pois.ts` → `sweep-region-pois.ts`, and the gen-job kind
+Naming decoupled 2026-06-15: `sweep-roam-pois.ts` → `discover-pois.ts`, and the gen-job kind
 moved OFF a pg enum → a plain `text` column with the vocabulary single-sourced as the Zod `jobKind`
 in `@skipper/shared` (migration `0005_jobkind_to_text` renamed `sweep_roam_pois` → `sweep_region_pois`;
 a rigid pg enum was the wrong shape for a churning, observability-only label). `buildStoryFacts`
@@ -98,11 +98,11 @@ Three items locked from the 2026-06-11 brainstorm (full capture: `docs/ideas/fre
 §Alpha learnings). Order within the pass is free; all three are founder-facing on his daily drive.
 
 - [ ] **Waves: narrate the scenic tier.** ~126 swept scenic pins sit unnarrated (`pois` story/scenic
-      tiers — `sweep-region-pois.ts`). Schema first: `roam_clips` has NO `form` column and a
+      tiers — `discover-pois.ts`). Schema first: `roam_clips` has NO `form` column and a
       `roam_clips_poi_uq` unique index on poiId (one telling per place) — the schema comment
       already names the move: a clean DESTRUCTIVE migration adding `form` ('story'|'wave';
       'bside' later) + uniqueness on (poiId, form). Then the 10–20s WAVE form in
-      `generate-roam.ts` (grammar: one-liner, self-contained, no laterality/volatile; no "ask
+      `generate-narrations.ts` (grammar: one-liner, self-contained, no laterality/volatile; no "ask
       me about it" tease until B-sides exist). Engine + manifest: waves suppressed on quiet
       chattiness, story-over-wave priority on simultaneous candidates. Prompt work is the real
       cost — a wave must sound like HIM, not a gazetteer caption. ⚠ The --apply generation run is
@@ -161,7 +161,7 @@ code — the original framing had gone stale):
 
 Measured 2026-06-10 (ffmpeg volumedetect over all 30 live clips, founder-ear-confirmed):
 Gemini-TTS takes are non-deterministic in LEVEL. The first defect — **tail collapse (the
-"mumble")** — shipped its fix 2026-06-11: every ship path (generate, generate-roam,
+"mumble")** — shipped its fix 2026-06-11: every ship path (generate, generate-narrations,
 resynth-tour, patch-clip) now measures tail(12s)-vs-body after each synth and re-synths
 once on a ≥3 dB drop, keeping the better take; a still-collapsed shipped take fails that
 stop's tts eval row (`pipeline/tail.ts` + `synthesizeWithTailRetake` in `pipeline/tts.ts`;
