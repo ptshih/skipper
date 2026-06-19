@@ -267,7 +267,7 @@ const candidateOf = (r: NarrationRow): DriveCandidate => ({
 })
 
 /** Resolve a frozen `selection` into presigned, playable driveClips (narration content LIVE via the
- *  corpus). Throws if presigning fails (the caller maps it to 503). Interlude items are skipped until
+ *  corpus). Throws if presigning fails (the caller maps it to 503). Aside items are skipped until
  *  the framing library is synthesized (the table is empty in v2 core). */
 function manifestClips(selection: DriveSelection, corpusById: Map<string, NarrationRow>): DriveClip[] {
   const clips: DriveClip[] = []

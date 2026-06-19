@@ -1,6 +1,6 @@
 // Persistence — the SHARED facts + grounding writes for the V2 generator.
 //
-// The DEFERRED hand-authored tour pipeline (the draft-shell load + the atomic narration/interlude
+// The DEFERRED hand-authored tour pipeline (the draft-shell load + the atomic narration/aside
 // ready-gate; its segments/tracks/tour_frames tables were dropped in migration 0009) was removed in
 // the V1→V2 migration; roam writes its 1:1 narration directly
 // (generate-narrations.ts upserts `narrations`). What survives here is the SHARED facts layer every

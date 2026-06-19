@@ -10,7 +10,7 @@
 //   - the window prefers a clip that FITS the gap (won't queue-lag) + variety, ranked on the clip's
 //     REAL audioDurationMs, not an extract length (the clip already exists).
 //
-// Breaks + clock-anchored interludes are layered by the caller in later phases; this is the
+// Breaks + clock-anchored asides are layered by the caller in later phases; this is the
 // narration core.
 
 import { haversineMeters, OFF_ROUTE_MAX_M, type LngLat } from './geo'

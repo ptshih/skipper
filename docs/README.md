@@ -51,7 +51,7 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
 - [create-a-drive-architecture.md](decisions/create-a-drive-architecture.md) — **the V2 build record**
   (decided + build-started 2026-06-18): the roam-first data model (one atom `pois`──1:1──`narrations` +
   sequences; `segments`/`tour_frames` dissolve; roam = a mode; `drives` = user-owned sequences;
-  `interludes` flavor) + the two-phase Create-a-Drive flow, access/credits, and the build phases.
+  `asides` flavor) + the two-phase Create-a-Drive flow, access/credits, and the build phases.
   Product rationale: [roam-first-create-a-drive.md](ideas/roam-first-create-a-drive.md).
 - [tour-structure-design-review.md](decisions/tour-structure-design-review.md) — adversarial
   pre-build review of the tour-structure spec (verdict: build-with-fixes); historical.

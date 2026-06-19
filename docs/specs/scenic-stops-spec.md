@@ -53,7 +53,7 @@ let the existing geology channel light up underneath.*
 |---|---|---|---|
 | **Curated/frozen scenic anchors** | per-drive hand-picked coord + non-naming label (mirror `GEOLOGY_ICONIC_STOPS`) | none (config + geometry) | **Ship first** |
 | **Rotating scenic-mode palette** | — (content layer, §5) | none | **Mandatory, build with #1** |
-| **Gap-fill (auto interlude)** | time-gap between narrated stops > threshold → scenic at a route VERTEX | none | Strong, next |
+| **Gap-fill (auto aside)** | time-gap between narrated stops > threshold → scenic at a route VERTEX | none | Strong, next |
 | **Terrain/elevation-derived** | pass-crests, the lake-reveal, from the elevation profile | USGS 3DEP/EPQS (offline) | Later (expansion) |
 | **OSM/Overpass viewpoints** | external viewpoint/natural features | Overpass (runtime) | **Pass** |
 

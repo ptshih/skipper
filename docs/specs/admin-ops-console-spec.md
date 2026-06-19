@@ -1,6 +1,6 @@
 # Admin ops console — build spec
 
-> **Schema-names note (2026-06-13):** this BUILT spec predates the 2026-06-12 segments/tracks refactor — read `roam_clips`→`segments`+`tracks`, `personaForRegion`→`personaFromKey`, `saved_tours`→dropped. The shipped admin already uses the current names; this is a historical build record. **(V2 2026-06-18):** the segments/tracks model was further collapsed — read `tracks`→`narrations`, `tour_frames`→`interludes`, `tours`→user-owned `drives`, and the `/tours*` routes → `/drives*`; hand-authored tours are deferred.
+> **Schema-names note (2026-06-13):** this BUILT spec predates the 2026-06-12 segments/tracks refactor — read `roam_clips`→`segments`+`tracks`, `personaForRegion`→`personaFromKey`, `saved_tours`→dropped. The shipped admin already uses the current names; this is a historical build record. **(V2 2026-06-18):** the segments/tracks model was further collapsed — read `tracks`→`narrations`, `tour_frames`→`asides`, `tours`→user-owned `drives`, and the `/tours*` routes → `/drives*`; hand-authored tours are deferred.
 
 > **Status:** spec, **BUILT + DEPLOYED 2026-06-11** — the `skipper-admin` service is live on Cloud
 > Run behind Google IAP; greenlit 2026-06-10 (promoted from the `docs/ideas/admin-ops-console.md` brainstorm,

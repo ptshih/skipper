@@ -188,17 +188,17 @@ The conversation collapsed the model to a single atom + sequences over it. **`se
 ```
 ATOM     pois ──1:1── narrations     the ONE shared telling (persona baked, region-scoped;
                                       form = story|scenic|break|wave, NO variant)
-FLAVOR   interludes                   shared, generic, NON-poi: intro/outro + clock-anchored
+FLAVOR   asides                   shared, generic, NON-poi: intro/outro + clock-anchored
                                       "halfway there" beats   ("beat" = the spoken concept)
          authored flavor              DEFERRED, per-tour, zero-reuse — the only per-sequence narration
 
 ROAM  = a MODE (no table): the RoamEngine plays a region's narration atoms by proximity
-DRIVE = a stored USER-OWNED sequence (table `drives`): manifest [narration refs + interlude refs] + per-route geom
+DRIVE = a stored USER-OWNED sequence (table `drives`): manifest [narration refs + aside refs] + per-route geom
 TOUR  = the SAME sequence shape, CURATED (no user_id) + authored flavor.   DEFERRED.
 ```
 
 **Tables built in V2:** `pois` (facts) · `narrations` (1:1, `poi_id` unique; = old `tracks` minus
-segment + variant) · `interludes` (= old `framing_clips`; intro/outro + clock-anchored "beats") · `drives`
+segment + variant) · `asides` (= old `framing_clips`; intro/outro + clock-anchored "beats") · `drives`
 (`user_id` NOT-NULL FK, `route_sig` indexed, `selection` jsonb manifest) · `drive_demand` (route_sig
 counter) · `regions` · `personas` · auth. **Deferred:** `tours` (a SEPARATE table — no `user_id` — +
 authored flavor), the route cache, the credit IAP (the cap ships in core).
@@ -206,17 +206,17 @@ authored flavor), the route cache, the credit IAP (the cap ships in core).
 **Vocabulary — schema (internal) vs UI (shown), per the 2026-06-18 terminology audit:** `drives` keeps
 the word "drive" in code AND UI (founder accepted the ~442-hit `drive`/`Drive` identifier collision in
 favor of the warm, consistent name — do NOT "fix" it to `trips`); schema `narrations` → UI **"stop"** (on
-a drive) / **"story"** (in roam), NEVER "narration"; `interludes` are unlabeled in UI ("beat" = the spoken
+a drive) / **"story"** (in roam), NEVER "narration"; `asides` are unlabeled in UI ("beat" = the spoken
 concept); `poi`/`region`/`persona`/`fact_sheet` stay strictly internal (UI shows the place name / "the
 Skipper"). The dissolved `tour_stops` frees "stop" as pure copy — guard against a `stops` table returning.
 
 **Three narration kinds; zero-reuse governs only #3:** (1) `narrations` 1:1/shared — the atom;
-(2) `interludes` region+persona/shared/generic; (3) authored flavor per-tour/zero-reuse/DEFERRED.
+(2) `asides` region+persona/shared/generic; (3) authored flavor per-tour/zero-reuse/DEFERRED.
 
-**A drive freezes STRUCTURE** (which POIs, order, trigger geometry, interlude slots); **narration CONTENT
+**A drive freezes STRUCTURE** (which POIs, order, trigger geometry, aside slots); **narration CONTENT
 resolves live** via `poi_id` (a regenerated telling auto-improves a saved drive). Only a tour's authored
 flavor is frozen content. **A Tour is the authored-upgrade of a Drive** (strip the owner, swap generic
-interludes for bespoke flavor) — making the popular-drive → tour graduation structural.
+asides for bespoke flavor) — making the popular-drive → tour graduation structural.
 
 ## Provenance
 

@@ -27,7 +27,7 @@ export function extForContentType(contentType: string): string {
  * inline (GET /drives/:id already signs), so online playback maps straight off the manifest —
  * no separate sign call. Place narrations key by their `seq`; the placeless intro/outro framing
  * (by `form`) keys under the INTRO_SEQ/OUTRO_SEQ sentinels the player already understands.
- * (Interludes are EMPTY in v2 core — the framing library isn't synthesized yet — so today this
+ * (Asides are EMPTY in v2 core — the framing library isn't synthesized yet — so today this
  * yields a flat stop map; the form mapping is here so frames slot in without a player change.)
  */
 export function urlMapFromDriveManifest(manifest: { clips: DriveClip[] }): Map<number, string> {

@@ -1,11 +1,11 @@
 # Create-a-Drive architecture (V2 roam-first)
 
-**Status:** ✅ BUILT 2026-06-18. The full V2 migration shipped: the `narrations`/`drives`/`interludes`
+**Status:** ✅ BUILT 2026-06-18. The full V2 migration shipped: the `narrations`/`drives`/`asides`
 schema (migration 0009 dropped the legacy `tours`/`segments`/`tracks`/`tour_frames` from the live DB, 459
 paid clips preserved), the `/drives` API (propose → `buildDrive` → persist) + `GET /regions`, the mobile
 Create-a-Drive flow (conversational prompt → map-hero confirm → preview) + Roam-first home, and the
 generator/admin/sim rewires onto narrations. OPEN: simulator verification of the live create→drive runtime;
-pre-gen interlude/bracket library; route-demand cache. Product rationale + the decision journey live in
+pre-gen aside/bracket library; route-demand cache. Product rationale + the decision journey live in
 [../ideas/roam-first-create-a-drive.md](../ideas/roam-first-create-a-drive.md). Designed via a
 3-architecture × 3-judge-lens workflow + a 4-lens terminology audit, then founder-refined.
 
@@ -25,38 +25,38 @@ scopes DOWN to govern only narration-kind #3 (deferred authored flavor); roam + 
 ```
 ATOM     pois ──1:1── narrations   the ONE shared telling (persona baked, region-scoped;
                                     form = story|scenic|break|wave, NO variant)
-FLAVOR   interludes                 shared, generic, NON-poi: intro/outro + clock-anchored "beats"
+FLAVOR   asides                 shared, generic, NON-poi: intro/outro + clock-anchored "beats"
          authored flavor            DEFERRED, per-tour, zero-reuse — the only per-sequence narration
 ROAM  = a MODE (no table): RoamEngine plays a region's narration atoms by proximity
-DRIVE = a stored USER-OWNED sequence (table `drives`): manifest [narration refs + interlude refs] + per-route geom
+DRIVE = a stored USER-OWNED sequence (table `drives`): manifest [narration refs + aside refs] + per-route geom
 TOUR  = the same sequence shape, CURATED (no owner) + authored flavor.   DEFERRED.
 ```
 
 **Three narration kinds; zero-reuse governs only #3:** (1) `narrations` 1:1/shared (the atom);
-(2) `interludes` region+persona/shared/generic; (3) authored flavor per-tour/zero-reuse/DEFERRED.
+(2) `asides` region+persona/shared/generic; (3) authored flavor per-tour/zero-reuse/DEFERRED.
 
 **DDL (destructive migration — no users):**
 - DROP `segments`, `tracks`, `tour_frames`.
 - `narrations` — `poi_id` PK/unique (1:1), `form` (story|scenic|break|wave), `script`, `audio_url`,
   `audio_duration_ms`, `attribution`, `facts_hash`. (= old `tracks` minus segment + variant.)
-- `interludes` — `id`, `region_id` (nullable = global), `persona_key`, `kind`
+- `asides` — `id`, `region_id` (nullable = global), `persona_key`, `kind`
   (intro|outro|quarter|half|last_stretch|…), `variant`, `script`, `audio_url`, `audio_duration_ms`.
 - `drives` — `id`, `user_id` (text, NOT NULL → auth `user.id`, app-boundary validated), `region_id`,
   `label`, `start_name/lat/lng`, `end_name/lat/lng`, `polyline` jsonb, `distance_meters`,
   `duration_seconds`, `route_provenance` jsonb, `route_sig` (text, INDEXED), `selection` jsonb (the
-  ordered manifest: narration refs + interlude refs + snapped trigger geom + alongSec), `created_at`,
+  ordered manifest: narration refs + aside refs + snapped trigger geom + alongSec), `created_at`,
   `updated_at`. Indexes on `user_id` and `route_sig`.
 - `drive_demand` — `route_sig` PK, `region_id`, `hits`, `distinct_users`, `last_hit_at`, `warmed_at`
   (instrumentation ONLY; the warming job + route cache are deferred behind this histogram).
 
 **Preserves the hard invariant:** no `createdBy` on `tours`. Ownership lives on `drives.user_id` (a
 user-side table), references shared `narrations`, mints nothing. A drive **freezes STRUCTURE** (POIs,
-order, trigger geometry, interlude slots); **narration CONTENT resolves live** via `poi_id` (a
+order, trigger geometry, aside slots); **narration CONTENT resolves live** via `poi_id` (a
 regenerated telling auto-improves a saved drive; a deleted POI → skip).
 
 **Vocabulary (schema vs UI):** `drives` keeps "drive" in code AND UI (founder accepted the ~442-hit
 `drive`/`Drive` identifier collision over `trips`). `narrations` → UI **"stop"** (drive) / **"story"**
-(roam), never "narration". `interludes` unlabeled in UI ("beat" = the spoken concept).
+(roam), never "narration". `asides` unlabeled in UI ("beat" = the spoken concept).
 `poi`/`region`/`persona`/`fact_sheet` strictly internal.
 
 ## The flow (two-phase, credit-aware)
@@ -69,7 +69,7 @@ regenerated telling auto-improves a saved drive; a deleted POI → skip).
    Persists nothing, no credit. (Loops: the LLM resolves "around the lake" → waypoints; `materializeRoute`
    takes a waypoint ARRAY; `route_sig` must be SHAPE-AWARE so loops don't collide on endpoints.)
 3. **Confirm or modify** (re-propose is free).
-4. → **`POST /drives`**: deterministic `buildDrive` over reused narrations + interludes, persist the
+4. → **`POST /drives`**: deterministic `buildDrive` over reused narrations + asides, persist the
    owned `drives` row, bump `drive_demand`. **Consumes 1 credit (refunded on failure).**
 5. Push to **preview** (couch sim via `buildPreviewTimeline`) → **start drive** (live GPS).
 
@@ -97,10 +97,10 @@ core; the credit IAP is a fast-follow.
   pacing (`snapOf`, min-gap windowing, `selectBreaks`, `projectQueueLag`) into `drive-core/pacing.ts`,
   imported by both `selectStops` and `buildDrive`. **Pin `selectStops` behavior with tests BEFORE
   extracting** so the live generator can't regress.
-- **Interludes = pre-generated GENERIC** (intro/outro + clock-anchored beats). Live-gen / name-
+- **Asides = pre-generated GENERIC** (intro/outro + clock-anchored beats). Live-gen / name-
   personalized brackets POSTPONED (measured synth latency too fragile for the mandatory first beat).
   Placed like `selectBreaks` via negative-sentinel seqs (extend `INTRO_SEQ`/`OUTRO_SEQ` in
-  `drive-core/preview.ts` to N interludes).
+  `drive-core/preview.ts` to N asides).
 - **`route_sig` + `drive_demand` ship as instrumentation only**; the route cache-warming /
   authored-graduation infra is deferred behind a real route-concentration histogram (charm-not-scale).
 - **Offline:** reuse `downloadTour`'s byte-freeze (`apps/mobile/src/lib/offline.ts`) — store BYTES, not
@@ -116,13 +116,13 @@ core; the credit IAP is a fast-follow.
   regression green. UNCOMMITTED.)**
 - **P2 — thinnest demoable slice.** `POST /drives/propose` + `POST /drives` + `@skipper/shared` DTOs +
   minimal free-text A→B screen → couch preview. (Needs a free account; persists.)
-- **P3 — interludes library.** Generic intro/outro + clock beats. **ONE founder-gated paid synth run.**
+- **P3 — asides library.** Generic intro/outro + clock beats. **ONE founder-gated paid synth run.**
 - **P4 — ownership + credit cap + offline + live drive.**
 - **Deferred:** credit IAP, route cache-warming, `tours` (authored).
 
 ## Doctrine edits — land WITH the schema-migration phase, NOT before (code is truth)
 
-When the migration (DROP segments/tracks/tour_frames; add narrations/interludes/drives) lands, in the
+When the migration (DROP segments/tracks/tour_frames; add narrations/asides/drives) lands, in the
 SAME commit update: **CLAUDE.md** (principle #1 → the atom/sequence model + zero-reuse scoped to authored
 flavor; the hard invariants → `drives` ownership + the create-action account wall + 1:1 narration; a V2
 milestone; stack notes), **[api-versioning-posture.md](api-versioning-posture.md)** (one-time V2 break

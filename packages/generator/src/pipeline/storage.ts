@@ -1,8 +1,8 @@
 // Audio storage — the generator's R2 keys + uploads. The R2 client + presign live in
-// @skipper/storage (shared with the API); this file adds the generator-only concerns: roam clip
-// key minting + writes. Audio objects are PRIVATE; we persist the R2 object KEY on
+// @skipper/storage (shared with the API); this file adds the generator-only concerns: narration
+// clip key minting + writes. Audio objects are PRIVATE; we persist the R2 object KEY on
 // narrations.audio_url, and the API issues short-lived presigned GET URLs after the tier check
-// (so a shared URL expires and the account wall is real). Keys are roam/<poiId>/<clipId>.
+// (so a shared URL expires and the account wall is real). Keys are narration/<poiId>/<clipId>.
 
 import { getR2Client, presignGet } from '@skipper/storage'
 import { TTS_AUDIO_CONTENT_TYPE, TTS_CLIP_EXTENSION } from '../models'
@@ -11,12 +11,13 @@ import { TTS_AUDIO_CONTENT_TYPE, TTS_CLIP_EXTENSION } from '../models'
 export { presignGet }
 
 /**
- * Roam narration clip key — per-CLIP unique: roam/<poiId>/<clipId>.<ext>. A regen mints a fresh
- * clipId, the narration row repoints its audio_url at the new key, and the superseded object
- * orphans for `sweep-orphans` — never overwriting a live narration's bytes in place.
+ * Narration clip key — per-CLIP unique: narration/<poiId>/<clipId>.<ext> (the atom's bytes under the
+ * atom's name; the roam MODE no longer owns the prefix). A regen mints a fresh clipId, the narration
+ * row repoints its audio_url at the new key, and the superseded object orphans for `sweep-orphans` —
+ * never overwriting a live narration's bytes in place.
  */
-export function roamClipKey(poiId: string, clipId: string): string {
-  return `roam/${poiId}/${clipId}.${TTS_CLIP_EXTENSION}`
+export function narrationClipKey(poiId: string, clipId: string): string {
+  return `narration/${poiId}/${clipId}.${TTS_CLIP_EXTENSION}`
 }
 
 /** Upload an MP3 (private) and return its R2 object KEY to store on the track/frame row. */

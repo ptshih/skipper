@@ -324,7 +324,7 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
         if (polyline.length < 2) throw new Error('This drive has no drivable route.')
         const cum = cumulativeMeters(polyline)
         // A drive's clips are place NARRATIONS (with coords) woven with placeless FRAMING (intro/
-        // outro/interlude, no coords). Stops = the narrations; frames feed the bracket queue by
+        // outro/aside, no coords). Stops = the narrations; frames feed the bracket queue by
         // sentinel. (Framing is empty in v2 core — the library isn't synthesized yet.)
         const narrationClips = manifest.clips.filter(
           (c): c is typeof c & { lat: number; lng: number } => c.lat != null && c.lng != null,

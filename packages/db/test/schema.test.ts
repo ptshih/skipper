@@ -6,7 +6,7 @@
 // to ENFORCE a declared constraint; what these catch is a schema edit that silently DROPS one.
 import { describe, expect, it } from 'bun:test'
 import { getTableConfig, type PgTable } from 'drizzle-orm/pg-core'
-import { drives, interludes, narrations, pois } from '../src/schema'
+import { drives, asides, narrations, pois } from '../src/schema'
 
 function columnByDbName(table: PgTable, dbName: string) {
   const c = getTableConfig(table).columns.find((col) => col.name === dbName)
@@ -45,7 +45,7 @@ describe('pois — the shared-facts dedup invariant', () => {
   })
 })
 
-describe('V2 — narrations / drives / interludes structural invariants', () => {
+describe('V2 — narrations / drives / asides structural invariants', () => {
   it('narrations are 1:1 with a poi (UNIQUE poi_id)', () => {
     expect(uniqueIndexNames(narrations)).toContain('narrations_poi_uq')
   })
@@ -61,10 +61,10 @@ describe('V2 — narrations / drives / interludes structural invariants', () => 
     expect(columnByDbName(narrations, 'audio_url').notNull).toBe(true)
     expect(columnByDbName(narrations, 'audio_duration_ms').notNull).toBe(true)
   })
-  it('interludes always carry audio + are unique per (region, persona, kind, variant)', () => {
-    expect(columnByDbName(interludes, 'audio_url').notNull).toBe(true)
-    expect(columnByDbName(interludes, 'audio_duration_ms').notNull).toBe(true)
-    expect(uniqueConstraintNames(interludes)).toContain('interludes_lookup_uq')
+  it('asides always carry audio + are unique per (region, persona, kind, variant)', () => {
+    expect(columnByDbName(asides, 'audio_url').notNull).toBe(true)
+    expect(columnByDbName(asides, 'audio_duration_ms').notNull).toBe(true)
+    expect(uniqueConstraintNames(asides)).toContain('asides_lookup_uq')
   })
   it('a drive is user-owned (user_id NOT NULL) and carries a route signature', () => {
     expect(columnByDbName(drives, 'user_id').notNull).toBe(true)

@@ -170,15 +170,15 @@ export const createDriveRequest = z.object({
 })
 export type CreateDriveRequest = z.infer<typeof createDriveRequest>
 
-/** One played item in a drive: a place NARRATION or a placeless INTERLUDE, with its presigned clip.
+/** One played item in a drive: a place NARRATION or a placeless ASIDE, with its presigned clip.
  *  A superset of roamPin (a narration) + the framing beats — the player's single clip shape. */
 export const driveClip = z.object({
-  /** ≥0 for a real stop in route order; framing/interludes use negative sentinels the player maps. */
+  /** ≥0 for a real stop in route order; framing/asides use negative sentinels the player maps. */
   seq: z.number().int(),
   form: driveClipForm,
   poiId: z.uuid().nullish(),
   name: z.string().nullish(),
-  /** Trigger point (the narration snapped to THIS route). Null for clock-anchored interludes. */
+  /** Trigger point (the narration snapped to THIS route). Null for clock-anchored asides. */
   lat: z.number().nullish(),
   lng: z.number().nullish(),
   triggerRadiusM: z.number().int().nullish(),

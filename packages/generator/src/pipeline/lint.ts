@@ -165,7 +165,7 @@ export function lintScripts(
   //    only home), so the per-stop budget INVERTS to zero: flag ANY stop that touches
   //    Ray / the mechanic / the truck / coffee. (Oblique refs — "before my first cup",
   //    "balance a checkbook" — slip this regex and are caught by ear, not here.) The
-  //    intro/outro frames are never passed to this lint (they are placeless interludes,
+  //    intro/outro frames are never passed to this lint (they are placeless asides,
   //    not stop narrations), so the kit is free there.
   for (const s of stops) {
     if (kit.beats.some((b) => b.match.test(s.script))) {

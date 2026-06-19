@@ -36,7 +36,7 @@ import { regionLabel } from './pipeline/geo'
 import { narrateStop } from './pipeline/narrate'
 import { resolveStoryGrounding } from './pipeline/select'
 import { synthesizeWithTailRetake } from './pipeline/tts'
-import { roamClipKey, uploadAudio } from './pipeline/storage'
+import { narrationClipKey, uploadAudio } from './pipeline/storage'
 import { storyFactsHash } from './pipeline/persist'
 import { wikiUrlForPageId } from './pipeline/wikipedia'
 import { withRetry } from './pipeline/http'
@@ -309,11 +309,11 @@ async function main(): Promise<void> {
   const results = await mapLimit(queue, TTS_CONCURRENCY(), async (c, i) => {
     const script = scripts[i]!
     try {
-      // The R2 clip key stays poi-scoped with a fresh per-synth id (matching the hoisted
-      // `roam/<poiId>/<id>.m4a` keys); a regen writes a NEW key + repoints audio_url, so the old
+      // The R2 clip key stays poi-scoped with a fresh per-synth id (the
+      // `narration/<poiId>/<id>.m4a` keys); a regen writes a NEW key + repoints audio_url, so the old
       // object orphans for sweep-orphans. The narration row's own id is independent of the clip key.
       const clipId = crypto.randomUUID()
-      // Tail-collapse retake (pipeline/tts.ts): roam clips ship unheard, so a mumbled
+      // Tail-collapse retake (pipeline/tts.ts): narration clips ship unheard, so a mumbled
       // closing sentence would reach riders' ears first — measure + retake here too.
       const { audio, durationMs } = await synthesizeWithTailRetake(
         script,
@@ -321,7 +321,7 @@ async function main(): Promise<void> {
         persona.ttsStyle,
         `"${c.title}"`,
       )
-      const audioUrl = await uploadAudio(roamClipKey(c.poiId, clipId), audio)
+      const audioUrl = await uploadAudio(narrationClipKey(c.poiId, clipId), audio)
       // Well-aware credit: an ENRICHED poi credits the well's distinct sources (wikipedia + any
       // geology/wikidata kept). Same resolver tours use, so attribution can't drift between roam and
       // a drive reusing the clip.

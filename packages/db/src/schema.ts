@@ -107,9 +107,9 @@ export type RouteProvenance = {
 /**
  * A DRIVE's frozen, ordered manifest (the `drives.selection` jsonb). One entry per played item in
  * route order: a place NARRATION (referenced 1:1 via its poi — content resolves LIVE so a regenerated
- * telling auto-improves a saved drive) or a generic INTERLUDE (intro/outro/clock beat). The STRUCTURE
+ * telling auto-improves a saved drive) or a generic ASIDE (intro/outro/clock beat). The STRUCTURE
  * is frozen at create time (which items, order, snapped trigger geometry); only a narration's audio
- * resolves live. buildDrive (drive-core) produces the narration items; the API weaves the interludes.
+ * resolves live. buildDrive (drive-core) produces the narration items; the API weaves the asides.
  */
 export type DriveSelectionItem =
   | {
@@ -122,7 +122,7 @@ export type DriveSelectionItem =
       triggerLng: number
       approachHeadingDeg: number
     }
-  | { kind: 'interlude'; seq: number; interludeId: string; alongSec: number }
+  | { kind: 'aside'; seq: number; asideId: string; alongSec: number }
 export type DriveSelection = DriveSelectionItem[]
 
 /* -------------------------------------------------------------------------- */
@@ -159,7 +159,7 @@ export const upstreamStatusEnum = pgEnum('upstream_status', [
 ])
 
 /* -------------------------------------------------------------------------- */
-/*  Shared narration columns — spread into `narrations` (+ future interlude reuse). */
+/*  Shared narration columns — spread into `narrations` (+ future aside reuse). */
 /* -------------------------------------------------------------------------- */
 
 // The narration payload a player consumes: the script + its synthesized clip + frozen
@@ -361,9 +361,9 @@ export const poiOverrides = pgTable(
 )
 
 /* -------------------------------------------------------------------------- */
-/*  V2 — narrations / interludes / drives / drive_demand                        */
+/*  V2 — narrations / asides / drives / drive_demand                            */
 /*  The roam-first model: pois ──1:1── narrations (the shared telling); roam is  */
-/*  a MODE over them; a `drive` is a user-owned ordered sequence; interludes are */
+/*  a MODE over them; a `drive` is a user-owned ordered sequence; asides are     */
 /*  the generic placeless flavor. (The legacy tour tables — tours/segments/      */
 /*  tracks/tour_frames — were dropped in migration 0009.)                        */
 /* -------------------------------------------------------------------------- */
@@ -397,11 +397,11 @@ export const narrations = pgTable(
 // Generic, region/persona-owned FLAVOR woven BETWEEN place narrations: intro/outro brackets + the
 // clock-anchored "halfway there" beats. Placeless (no poi, no facts → no attribution/factsHash).
 // SHARED + reused across every drive in a region (the inverse of zero-reuse, which governs only the
-// deferred authored rung). `kind` is plain text validated by the Zod `interludeKind` enum at the
+// deferred authored rung). `kind` is plain text validated by the Zod `asideKind` enum at the
 // boundary (the vocabulary churns — the gen_jobs.kind precedent). Starts EMPTY (filled by a
-// founder-gated synth run); region_id null = a GLOBAL interlude.
-export const interludes = pgTable(
-  'interludes',
+// founder-gated synth run); region_id null = a GLOBAL aside.
+export const asides = pgTable(
+  'asides',
   {
     id: uuid('id').defaultRandom().primaryKey(),
     regionId: uuid('region_id').references(() => regions.id, { onDelete: 'cascade' }),
@@ -421,14 +421,14 @@ export const interludes = pgTable(
   (t) => [
     // One row per (region, persona, kind, variant); NULLS NOT DISTINCT so a GLOBAL (null-region)
     // beat is still unique on its (persona, kind, variant).
-    unique('interludes_lookup_uq')
+    unique('asides_lookup_uq')
       .on(t.regionId, t.personaKey, t.kind, t.variant)
       .nullsNotDistinct(),
-    index('interludes_lookup_idx').on(t.regionId, t.personaKey, t.kind),
+    index('asides_lookup_idx').on(t.regionId, t.personaKey, t.kind),
   ],
 )
 
-// A user-owned DRIVE: an ordered sequence of place narrations (+ interludes) along a frozen route.
+// A user-owned DRIVE: an ordered sequence of place narrations (+ asides) along a frozen route.
 // Ownership lives HERE on `user_id` (a user-side table), NEVER on tours — preserving the
 // anonymous/shareable-tour invariant. References shared narrations; mints no narration. The frozen
 // `selection` manifest is replayed verbatim on re-open (structure frozen; narration content live).
@@ -643,8 +643,8 @@ export const narrationsRelations = relations(narrations, ({ one }) => ({
   poi: one(pois, { fields: [narrations.poiId], references: [pois.id] }),
 }))
 
-export const interludesRelations = relations(interludes, ({ one }) => ({
-  region: one(regions, { fields: [interludes.regionId], references: [regions.id] }),
+export const asidesRelations = relations(asides, ({ one }) => ({
+  region: one(regions, { fields: [asides.regionId], references: [regions.id] }),
 }))
 
 export const drivesRelations = relations(drives, ({ one }) => ({
@@ -671,8 +671,8 @@ export type GenJob = typeof genJobs.$inferSelect
 export type NewGenJob = typeof genJobs.$inferInsert
 export type Narration = typeof narrations.$inferSelect
 export type NewNarration = typeof narrations.$inferInsert
-export type Interlude = typeof interludes.$inferSelect
-export type NewInterlude = typeof interludes.$inferInsert
+export type Aside = typeof asides.$inferSelect
+export type NewAside = typeof asides.$inferInsert
 export type Drive = typeof drives.$inferSelect
 export type NewDrive = typeof drives.$inferInsert
 export type DriveDemand = typeof driveDemand.$inferSelect

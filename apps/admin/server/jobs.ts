@@ -151,8 +151,8 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     return { args, dryRun: !apply, spends: apply, targetId: 'roam-corpus' }
   }
 
-  // sweep_orphans — V2 sweeps the whole roam/ R2 prefix (tour-scoped sweeping is gone with the
-  // tours table); the script honors only --apply. targetId 'roam' matches its beginJob target.
+  // sweep_orphans — V2 sweeps the whole narration/ R2 prefix (tour-scoped sweeping is gone with the
+  // tours table); the script honors only --apply. targetId 'narration' matches its beginJob target.
   const apply = body.apply === true
   const args: string[] = [script]
   if (apply) args.push('--apply')
