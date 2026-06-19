@@ -316,10 +316,11 @@ If those pass in the sim, the emergent path is verified before you're ever in a 
    scenarios. No app changes yet.
 2. **Sim perturbations (engine/`gps.ts`).** `baseMph` + `perturbations` + `SIM_MPH→30`.
    Wire the three acceptance scenarios into the sim screen for manual exercise.
-3. **Schema + migration (CHECKPOINT — live DB).** `tour_callouts` + `callout_mood` enum. Clean +
-   destructive (no users; CLAUDE.md). NOT added to `finalizeTourReady`.
+3. **Schema + migration (CHECKPOINT — live DB).** The placeless callout storage (a `mood` on
+   `asides`, or a sibling table — §3) + the `callout_mood` enum. Clean + destructive (no users;
+   CLAUDE.md). Readiness stays per-item non-null `audio_url` — nothing to gate.
 4. **Studio.** `narrateCallouts()` (persona-only pool, mood-tagged, diversity-tracked) + the
-   no-fact lint guard + tour-scoped R2 writes + a regen path in `resynth-tour.ts`. Separate pass.
+   no-fact lint guard + region-scoped R2 writes + a regen path in `resynth-narration.ts`. Separate pass.
 5. **API/DTO + offline.** `CalloutDTO`, `/sign` for callout clips, offline manifest entries.
 6. **Player wiring (`useDrive` + `useDriveMusic`).** Tick the scheduler from `handleFix`; the
    music third-state (duck, no rotation advance); lock-screen handling for the short clip (likely

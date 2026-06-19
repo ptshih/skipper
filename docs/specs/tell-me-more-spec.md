@@ -24,18 +24,21 @@ LLM, no STT, no network — works in the dead zones where dead air is worst.
 ## 0. TL;DR
 
 - After a stop, in the gap, a **"Tell me more"** button plays a **second, deeper telling** of that
-  same stop — built from the leftover grounded material (`DEEP_EXTRACT_CHARS = 4000`) the main
-  ~2-min clip (`TARGET_SECONDS.story = 120`) didn't spend.
-- **It's pre-generated and tour-owned**, like the main clip — *not* live. So it's offline, cheap to
-  play, and grounding-safe (same fact well, same attribution).
-- **No new table:** it's nullable columns *on* `tour_stops` (1:1 with a story stop). **Not** in the
-  ready-gate (optional, like callouts).
+  same place — built from the leftover grounded material (the curated `pois.fact_sheet`, or the
+  un-enriched fallback head capped to `NARRATION_FALLBACK_CHARS = 4000`) the main ~2-min clip
+  (`TARGET_SECONDS.story = 120`) didn't spend.
+- **It's pre-generated and place-owned**, like the main clip — *not* live. So it's offline, cheap to
+  play, and grounding-safe (same fact sheet, same attribution).
+- **A `bside` narration form** (V2) — a second telling of the same poi, shared like the main one;
+  reconcile with the `narrations_poi_uq` 1:1 constraint per §3. **Not** in the ready-gate (optional,
+  like callouts).
 - **In the player it's `replay-last`'s sibling** — same gap surface, same soft-clip preemption rule.
 - The point: it lets the curious **pull** depth without bloating the tight default *everyone* hears.
 
 ## 1. Why a separate clip (not just a longer main clip)
 
-It resolves a contradiction sitting in the competitor reviews (`docs/research/competitor-ux-studies.md`):
+It resolves a contradiction sitting in the competitor reviews
+([competitor-ux-studies](../research/competitor-ux-studies.md)):
 users complain about **both** *"dead air, too little"* **and** *"repetitive / too long / just
 driving"* (GuideAlong's Hana review, Autio's "museum tour"). A longer main clip fixes the first and
 *worsens* the second. The deeper cut is the only move that resolves both:
