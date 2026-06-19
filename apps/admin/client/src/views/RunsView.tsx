@@ -542,8 +542,20 @@ function EvalReport({ runId }: { runId: string }) {
   if (!data) return null
 
   const { run, scores } = data
-  const withheld = groupByPoi(scores).filter((p) => p.withheld)
+  const groups = groupByPoi(scores)
+  const withheld = groups.filter((p) => p.withheld)
+  // Advisory-only flags: a place that cleared the gate but has a failing advisory dim (charm /
+  // veracity / diversity) — invisible in the withheld section, surfaced on its own below.
+  const advisory = groups.filter((p) => !p.withheld && p.dims.some((d) => !d.pass))
   const score = (v: number | null) => (v == null ? '—' : v.toFixed(2))
+  // charm/veracity have no eval_runs rollup column — average their per-clip scores here so the run
+  // summary shows them when present (an offline_audit run with --charm / --veracity).
+  const advMean = (dim: string): number | null => {
+    const rows = scores.filter((s) => s.dimension === dim)
+    return rows.length ? rows.reduce((a, s) => a + s.value, 0) / rows.length : null
+  }
+  const charmMean = advMean('charm')
+  const verMean = advMean('veracity')
 
   return (
     <div className="space-y-4">
@@ -554,35 +566,50 @@ function EvalReport({ runId }: { runId: string }) {
             {run.total} total · {run.shipped} shipped ·{' '}
             <span className={cn(run.withheld > 0 && 'font-medium text-warning')}>{run.withheld} withheld</span>
           </Def>
-          <Def label="Scores" mono>g {score(run.grounding)} · tts {score(run.tts)} · div {score(run.diversity)}</Def>
+          <Def label="Scores" mono>
+            g {score(run.grounding)} · tts {score(run.tts)} · div {score(run.diversity)}
+            {charmMean != null && ` · charm ${score(charmMean)}`}
+            {verMean != null && ` · ver ${score(verMean)}`}
+          </Def>
           {run.judgeModel && <Def label="Judge" mono>{run.judgeModel}</Def>}
         </dl>
       </div>
 
       {scores.length === 0 ? (
         <div className="text-xs text-muted-foreground">No per-clip scores recorded for this run.</div>
-      ) : withheld.length === 0 ? (
-        <div className="text-xs text-muted-foreground">Every clip cleared the gate — nothing withheld.</div>
       ) : (
-        <div className="space-y-2">
-          <SectionLabel className="text-warning">
-            Withheld — {withheld.length} {withheld.length === 1 ? 'place' : 'places'} held back
-          </SectionLabel>
-          <div className="space-y-3">
-            {withheld.map((p) => <PlaceReport key={p.key} place={p} />)}
-          </div>
-        </div>
+        <>
+          {withheld.length > 0 && (
+            <div className="space-y-2">
+              <SectionLabel className="text-warning">
+                Withheld — {withheld.length} {withheld.length === 1 ? 'place' : 'places'} held back (gate)
+              </SectionLabel>
+              <div className="space-y-3">{withheld.map((p) => <PlaceReport key={p.key} place={p} />)}</div>
+            </div>
+          )}
+          {advisory.length > 0 && (
+            <div className="space-y-2">
+              <SectionLabel>
+                Advisory flags — {advisory.length} {advisory.length === 1 ? 'place' : 'places'} (charm / veracity / diversity)
+              </SectionLabel>
+              <div className="space-y-3">{advisory.map((p) => <PlaceReport key={p.key} place={p} advisory />)}</div>
+            </div>
+          )}
+          {withheld.length === 0 && advisory.length === 0 && (
+            <div className="text-xs text-muted-foreground">Every clip cleared every dimension — nothing flagged.</div>
+          )}
+        </>
       )}
     </div>
   )
 }
 
-function PlaceReport({ place }: { place: PoiGroup }) {
+function PlaceReport({ place, advisory = false }: { place: PoiGroup; advisory?: boolean }) {
   const failing = place.dims.filter((d) => !d.pass)
   return (
-    <div className="space-y-2 rounded-lg border border-warning/40 bg-warning/5 p-3">
+    <div className={cn('space-y-2 rounded-lg border p-3', advisory ? 'border-border bg-muted/30' : 'border-warning/40 bg-warning/5')}>
       <div className="flex items-center gap-2">
-        <Badge variant="warning">withheld</Badge>
+        {advisory ? <Badge variant="outline">advisory</Badge> : <Badge variant="warning">withheld</Badge>}
         <span className="font-medium">{place.name ?? place.qid ?? 'unknown place'}</span>
       </div>
       {failing.map((d, i) => (

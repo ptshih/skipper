@@ -19,6 +19,8 @@
 //   ... --region <slug>          a region's story corpus (default: lake-tahoe; → its bbox)
 //   ... --include-ids a,b,c      audit EXACTLY these poi ids
 //   ... --query <substr>         narrow to names/source-ids containing <substr>
+//   ... --charm                  add the advisory charm judge (ONE Opus call over the batch — cheap)
+//   ... --veracity               add the advisory veracity web-check (Opus + web_search, per clip — pricey)
 //   ... --limit N                smoke a cheap N first   ... --max-cost <usd>   hard spend ceiling
 
 import { and, eq, inArray, sql } from 'drizzle-orm'
@@ -37,6 +39,8 @@ import { DEFAULT_REGION_SLUG, NARRATION_CONCURRENCY, NARRATION_FALLBACK_CHARS } 
 import { llmSpendLines, llmSpentUsd } from './pipeline/spend'
 import { JUDGMENT_MODEL } from './models'
 import { buildGroundingWell, evaluateGrounding } from './eval/grounding'
+import { charmEvaluator } from './eval/charm'
+import { evaluateVeracity } from './eval/veracity'
 import { evaluateTts } from './eval/tts'
 import { evaluateDiversity } from './eval/diversity'
 import { buildScorecard } from './eval/scorecard'
@@ -46,14 +50,19 @@ import type { FinishOutcome } from './pipeline/job-progress'
 
 // Same corridor framing the roam generator used (so the grounding carve-out matches). Named, never a fact.
 const FREE_ROAM_CORRIDOR = 'Free roam — an unplanned drive, no route'
-// Rough per-clip grounding cost (ONE forced-tool Opus call) for the preview estimate + the pre-flight
-// cap check. An ESTIMATE, not the bill — the --max-cost cap is the real guard.
+// Rough per-clip cost estimates (ONE forced-tool Opus call each) for the preview + the pre-flight cap
+// check. ESTIMATES, not the bill — the --max-cost cap is the real guard. Veracity also bills per
+// web_search (a few per clip), so it's the priciest and opt-in.
 const GROUNDING_USD_PER_CLIP = 0.06
+const VERACITY_USD_PER_CLIP = 0.15
+const CHARM_USD_FLAT = 0.06 // one batch Opus call over the whole queue
 
 const flags = parseFlags(process.argv.slice(2), {
   valueFlags: ['limit', 'region', 'max-cost', 'query', 'include-ids', 'exclude-ids'],
 })
 const apply = flags.has('apply')
+const doCharm = flags.has('charm')
+const doVeracity = flags.has('veracity')
 const maxCostUsd = maxCostFlag(flags)
 const limit = Number(flags.value('limit') ?? Infinity)
 const parseIds = (v: string | undefined): string[] => (v ? v.split(',').map((s) => s.trim()).filter(Boolean) : [])
@@ -156,69 +165,103 @@ async function main(): Promise<FinishOutcome> {
   const divEvals = evaluateDiversity(queue.map((c, i) => ({ seq: i, stopType: 'story' as const, script: c.script })))
   const ttsBad = ttsEvals.filter((e) => !e.pass).length
   const divBad = divEvals.filter((e) => !e.pass).length
-  const groundingEst = queue.length * GROUNDING_USD_PER_CLIP
+  const spendEst =
+    queue.length * GROUNDING_USD_PER_CLIP +
+    (doVeracity ? queue.length * VERACITY_USD_PER_CLIP : 0) +
+    (doCharm ? CHARM_USD_FLAT : 0)
+  const judgeList = ['grounding', ...(doCharm ? ['charm'] : []), ...(doVeracity ? ['veracity'] : [])].join(' + ')
 
   if (!apply) {
     console.log(`\nFree checks: ${ttsBad} TTS-unsafe, ${divBad} diversity-flagged (of ${queue.length}).`)
     for (const e of divEvals.filter((x) => !x.pass).slice(0, 10))
       console.log(`  diversity · ${queue[e.seq]?.name}: ${e.findings.slice(0, 1).join('')}`)
     console.log(
-      `\nGrounding (Opus): ~${queue.length} call(s) ≈ ~$${groundingEst.toFixed(2)} estimated (rough). ` +
-        `Run with --apply to score grounding + record the audit eval_run.`,
+      `\nPaid judges on --apply: ${judgeList} (Opus${doVeracity ? ' + web_search' : ''}) ≈ ~$${spendEst.toFixed(2)} ` +
+        `estimated (rough) over ${queue.length} clip(s). Add --charm / --veracity for the advisory judges. ` +
+        `Run with --apply to score + record the audit eval_run.`,
     )
     return { ok: true }
   }
 
   // Pre-flight spend guard — abort BEFORE any Opus call if the estimate already exceeds the cap.
-  if (groundingEst > maxCostUsd) {
+  if (spendEst > maxCostUsd) {
     throw new Error(
-      `⛔ Estimated grounding spend (${queue.length} × ~$${GROUNDING_USD_PER_CLIP} ≈ $${groundingEst.toFixed(2)}) ` +
-        `exceeds --max-cost=$${maxCostUsd.toFixed(2)}. Narrow with --limit/--region/--query or raise the cap.`,
+      `⛔ Estimated spend (${judgeList} ≈ $${spendEst.toFixed(2)}) exceeds --max-cost=$${maxCostUsd.toFixed(2)}. ` +
+        `Narrow with --limit/--region/--query, drop --veracity, or raise the cap.`,
     )
   }
 
-  // GROUNDING (one Opus call per clip), fault-isolated so one failure can't abort the paid audit.
-  console.log(`\nScoring grounding on ${queue.length} clip(s) (concurrency ${NARRATION_CONCURRENCY()})...`)
+  // PER-CLIP judges: grounding (always) + veracity (opt-in, web_search) — fault-isolated so one
+  // failure can't abort the paid audit. The well is built once per clip and shared by both.
+  console.log(`\nScoring ${judgeList} on ${queue.length} clip(s) (concurrency ${NARRATION_CONCURRENCY()})...`)
   let done = 0
-  const grounded = await mapLimit(queue, NARRATION_CONCURRENCY(), async (c, i): Promise<StopEval> => {
+  const perClip = await mapLimit(queue, NARRATION_CONCURRENCY(), async (c, i): Promise<StopEval[]> => {
+    const grounding = resolveStoryGrounding(c.facts, c.factSheet, c.enrichedAt, {
+      fallbackChars: NARRATION_FALLBACK_CHARS,
+      retrievedAt: (c.factsFetchedAt ?? new Date()).toISOString(),
+    })
+    const well = buildGroundingWell({ stopType: 'story', name: c.name, kind: c.kind, facts: grounding.facts })
+    const evals: StopEval[] = []
     try {
-      const grounding = resolveStoryGrounding(c.facts, c.factSheet, c.enrichedAt, {
-        fallbackChars: NARRATION_FALLBACK_CHARS,
-        retrievedAt: (c.factsFetchedAt ?? new Date()).toISOString(),
-      })
-      const well = buildGroundingWell({ stopType: 'story', name: c.name, kind: c.kind, facts: grounding.facts })
-      const g = await evaluateGrounding({
-        seq: i,
-        stopType: 'story',
-        placeName: c.name,
-        script: c.script,
-        well,
-        region: regionLabel(c.lat, c.lng),
-        corridor: FREE_ROAM_CORRIDOR,
-      })
-      done++
-      console.log(`  [${done}/${queue.length}] ${c.name} — ${g.pass ? 'grounded' : `${g.findings.length} ungrounded`}`)
-      return g
+      evals.push(
+        await evaluateGrounding({
+          seq: i, stopType: 'story', placeName: c.name, script: c.script, well,
+          region: regionLabel(c.lat, c.lng), corridor: FREE_ROAM_CORRIDOR,
+        }),
+      )
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
-      done++
       console.warn(`  ⚠ ${c.name}: grounding eval failed — ${msg.slice(0, 160)}`)
-      return { seq: i, dimension: 'grounding', pass: false, score: 0, findings: [`audit error: ${msg.slice(0, 200)}`] }
+      evals.push({ seq: i, dimension: 'grounding', pass: false, score: 0, findings: [`audit error: ${msg.slice(0, 200)}`] })
     }
+    if (doVeracity) {
+      // Advisory + pricey — a failure is SKIPPED (not recorded as a fail), never aborts the run.
+      try {
+        evals.push(await evaluateVeracity({ seq: i, name: c.name, script: c.script, well }))
+      } catch (e) {
+        console.warn(`  ⚠ ${c.name}: veracity eval skipped — ${(e instanceof Error ? e.message : String(e)).slice(0, 120)}`)
+      }
+    }
+    done++
+    const g = evals.find((e) => e.dimension === 'grounding')
+    console.log(`  [${done}/${queue.length}] ${c.name} — ${g?.pass ? 'grounded' : `${g?.findings.length ?? 0} ungrounded`}`)
+    return evals
   })
+  const grounded = perClip.flat()
 
-  // A clip is "flagged" (withheld, in the report's terms) when it fails any GATE dimension (grounding
-  // or tts). Diversity is advisory — it never flags. The flagged clip carries its script for the report.
+  // CHARM — ONE batch Opus call over the whole queue (advisory; a failure is non-fatal, skipped).
+  let charmEvals: StopEval[] = []
+  if (doCharm) {
+    try {
+      charmEvals = await charmEvaluator(queue.map((c, i) => ({ seq: i, stopType: 'story', name: c.name, script: c.script })))
+      console.log(`Charm: scored ${charmEvals.length} clip(s), ${charmEvals.filter((e) => !e.pass).length} below the bar.`)
+    } catch (e) {
+      console.warn(`  ⚠ charm judge skipped — ${(e instanceof Error ? e.message : String(e)).slice(0, 120)}`)
+    }
+  }
+
+  // GATE fail = grounding/tts (the audit's "withheld", for run.pass + the report's withheld section).
+  // ADVISORY fail = charm/veracity/diversity — surfaced separately, never counts toward withheld.
+  const allEvals = [...grounded, ...charmEvals, ...ttsEvals, ...divEvals]
   const gateFailedBySeq = new Map<number, boolean>()
-  for (const e of [...grounded, ...ttsEvals]) {
-    if (DIMENSION_KIND[e.dimension] === 'gate' && !e.pass) gateFailedBySeq.set(e.seq, true)
+  const advisoryFailedBySeq = new Map<number, boolean>()
+  for (const e of allEvals) {
+    if (e.pass) continue
+    if (DIMENSION_KIND[e.dimension] === 'gate') gateFailedBySeq.set(e.seq, true)
+    else advisoryFailedBySeq.set(e.seq, true)
   }
   const flagged = [...gateFailedBySeq.values()].filter(Boolean).length
+  const advisoryCount = [...advisoryFailedBySeq.values()].filter(Boolean).length
 
   const identityBySeq = new Map<number, ClipIdentity>(
     queue.map((c, i) => [
       i,
-      { poiId: c.poiId, qid: c.qid, name: c.name, withheld: gateFailedBySeq.get(i) ?? false, script: gateFailedBySeq.get(i) ? c.script : null },
+      {
+        poiId: c.poiId, qid: c.qid, name: c.name,
+        withheld: gateFailedBySeq.get(i) ?? false,
+        // Keep the script for ANY flagged clip (gate OR advisory) so the report can show the telling.
+        script: gateFailedBySeq.get(i) || advisoryFailedBySeq.get(i) ? c.script : null,
+      },
     ]),
   )
 
@@ -226,7 +269,7 @@ async function main(): Promise<FinishOutcome> {
     slug: runRegion,
     runName: 'offline_audit',
     evaluatedAt: new Date().toISOString(),
-    stops: [...grounded, ...ttsEvals, ...divEvals],
+    stops: allEvals,
   })
 
   const evalRunId = await recordEvalRun({
@@ -242,7 +285,7 @@ async function main(): Promise<FinishOutcome> {
     identityBySeq,
   })
 
-  console.log(`\nAudit complete: ${queue.length} scored, ${flagged} flagged (failed a gate dimension).`)
+  console.log(`\nAudit complete: ${queue.length} scored, ${flagged} gate-flagged, ${advisoryCount} advisory-flagged.`)
   for (const line of llmSpendLines()) console.log(line)
   console.log(`LLM spend this audit: ~$${llmSpentUsd().toFixed(2)}`)
   return { ok: true, evalRunId }

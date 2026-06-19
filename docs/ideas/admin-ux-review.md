@@ -3,10 +3,11 @@
 **Status:** idea / partially-built — 2026-06-19. A full visual pass of the admin (Runs/Regions/POIs/
 Reference + dialogs, dark mode, ⌘K) cross-referenced against the admin server routes, the studio
 pipeline, and the DB/public-API surface (5-agent capability-map workflow + direct browser pass).
-**Tier 1 BUILT** (`a01fb47`): per-POI Regenerate + a spend-cap field. **Tier 2 keystone BUILT**: the
-`offline_audit` "Re-score corpus" job (grounding/tts/diversity over existing narrations, no regen).
-Tier 2 ② (charm/veracity dimensions) + ③ (Reference honesty) and Tiers 3–4 remain the backlog below.
-Code wins — line/symbol anchors were true at capture and will drift.
+**Tier 1 BUILT** (`a01fb47`): per-POI Regenerate + a spend-cap field. **Tier 2 BUILT** (`0af9c23` +
+this change): the `offline_audit` "Re-score corpus" job (grounding/tts/diversity over existing
+narrations, no regen) PLUS opt-in charm + veracity advisory judges, the report drawer's advisory-flags
+section, and the Reference-glossary honesty fix. Tiers 3–4 remain the backlog below. Code wins —
+line/symbol anchors were true at capture and will drift.
 
 ## What's strong (don't regress)
 
@@ -41,35 +42,27 @@ Code wins — line/symbol anchors were true at capture and will drift.
   whenever `spends`, forwarded as `maxCostUsd` → the studio's `--max-cost` hard ceiling (aborts before
   billing if the estimate exceeds it; stops mid-run once actual spend crosses it). Blank = no cap.
 
-## Tier 2 — charm / veracity / honesty (NEXT; needs a founder greenlight on the eval-wiring)
+## Tier 2 — charm / veracity / honesty — BUILT 2026-06-19
 
-This tier crosses the written "automated groundedness gate — human ear instead" deferral, so the
-**inline-on-generation** variants need an explicit founder OK; the **on-demand audit** variants do not
-(they don't gate shipping — they just score). Pairs with `docs/ideas/eval-panel-rewire.md`.
+All ON-DEMAND (no generation-gate change → the written "automated groundedness gate — human ear
+instead" deferral is untouched; inline auto-gating on every generate stays deferred). Pairs with
+`docs/ideas/eval-panel-rewire.md`.
 
-- **Wire `charm` as an ADVISORY eval dimension.** CLAUDE.md's north star is charm, yet no run
-  produces a charm score and `ReferenceView` lists one. Two ways: (a) fold `eval/charm.ts` into the
-  generation eval panel advisory-only (scores + per-stop ship/tune/rework, never withholds — like
-  diversity); or (b) cheaper/greenlight-free: expose `judge-voice` (already uses `judgeCharm`, emits
-  presigned playable links + a worksheet) as a dispatchable READ-ONLY job kind. *Effort M.*
-- **Veracity spot-check job.** Grounding proves claims trace to the sheet; it's blind to the sheet
-  being WRONG. `eval/veracity.ts` (Opus + web_search world-check) runs nowhere. Add a dispatchable,
-  read-only, advisory veracity job (region/selection-scoped, writes `eval_scores` dimension=veracity)
-  → a ranked list of suspect facts that flow into the existing Corrections fact-edit flow. *Effort M.*
-- ✅ **"Re-score corpus" (offline_audit) — BUILT 2026-06-19.** `packages/studio/src/audit-corpus.ts`
-  scores EXISTING `narrations.script` (grounding via Opus on `--apply`; tts + cross-clip diversity free)
-  with NO regeneration/TTS, rebuilding each well via the shared `resolveStoryGrounding`→`buildGroundingWell`
+- ✅ **"Re-score corpus" (offline_audit) keystone** (`0af9c23`). `packages/studio/src/audit-corpus.ts`
+  scores EXISTING `narrations.script` (grounding via Opus; tts + cross-clip diversity free) with NO
+  regeneration/TTS, rebuilding each well via the shared `resolveStoryGrounding`→`buildGroundingWell`
   seam so the audit can't drift from generation; records an `eval_run{kind:'offline_audit'}` + scores.
-  Registered as the `offline_audit` job kind (jobKind enum + `jobs.ts` SCRIPTS/buildJobArgs); surfaced
-  as a "Re-score corpus" dialog on the POIs page (Preview = free count+estimate; Apply = Opus + record,
-  with the spend-cap field) and rendered in the Runs report drawer. Dry smoke confirmed it flags
-  corpus-wide sameness (a repeated "here is the/where…" wind-up) for $0. (+charm/veracity plug in next.)
-- **Make the Reference doc honest.** Its glossary lists grounding/veracity/diversity/charm/tts but
-  only grounding/tts/diversity ever appear on a run (`pacing` has no evaluator at all). Either wire
-  the above or annotate the unwired dims as "on-demand audit only." *Effort S.*
-
-Suggested Tier-2 order: **offline_audit first** (the keystone harness), then charm + veracity ride on
-it as dimensions, then the Reference honesty fix lands for free.
+  `offline_audit` job kind + a "Re-score corpus" POIs dialog (Preview free; Apply spends, with the
+  spend-cap field). Dry smoke flagged a corpus-wide repeated "here is the/where…" wind-up for $0.
+- ✅ **charm + veracity as advisory judges.** `charmEvaluator` (one batch Opus call) + `evaluateVeracity`
+  (per-clip Opus + web_search) wired into the audit behind `--charm` / `--veracity` (opt-in checkboxes
+  in the Re-score dialog → forwarded by `jobs.ts`). Both advisory (never gate/withhold); a veracity
+  contradiction carries the correction + source straight into the existing Corrections fact-edit flow.
+- ✅ **Report drawer surfaces advisory findings.** The Runs eval-report drawer showed ONLY withheld
+  (gate) places; now it has an "Advisory flags" section (charm/veracity/diversity failures on
+  otherwise-clean clips) + charm/veracity rollup scores computed client-side (no eval_runs column).
+- ✅ **Reference glossary honest.** Each dimension marked gate-vs-advisory + where it runs; `pacing`
+  annotated "reserved — no evaluator yet"; the Re-score row added to the run-kinds table.
 
 ## Tier 3 — geography & power-operator
 

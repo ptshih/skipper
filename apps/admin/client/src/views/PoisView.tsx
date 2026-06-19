@@ -246,6 +246,8 @@ function ReScoreDialog({
   onSubmitted: () => void
 }) {
   const [regionSlug, setRegionSlug] = useState('')
+  const [charm, setCharm] = useState(false)
+  const [veracity, setVeracity] = useState(false)
   const { data: regions = [], error: loadErr } = useQuery({
     queryKey: ['regions'],
     queryFn: async () => (await api.regions()).regions,
@@ -258,8 +260,8 @@ function ReScoreDialog({
       onSubmitted={onSubmitted}
       icon={Activity}
       title="Re-score corpus"
-      description="Re-scores the region's EXISTING story narrations (grounding, tts-cleanliness, diversity) WITHOUT regenerating or re-synthesizing — a quality read on what's already shipped. Records an offline_audit run, viewable in the Runs report."
-      buildBody={() => ({ kind: 'offline_audit', region: regionSlug })}
+      description="Re-scores the region's EXISTING story narrations (grounding, tts-cleanliness, diversity; charm + veracity opt-in) WITHOUT regenerating or re-synthesizing — a quality read on what's already shipped. Records an offline_audit run, viewable in the Runs report."
+      buildBody={() => ({ kind: 'offline_audit', region: regionSlug, ...(charm ? { charm: true } : {}), ...(veracity ? { veracity: true } : {}) })}
       applyLabel="Re-score"
       applyIcon={Activity}
       disabled={!regionSlug}
@@ -284,6 +286,18 @@ function ReScoreDialog({
             ))}
           </SelectContent>
         </Select>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Advisory judges (Opus, opt-in)</Label>
+        <label className="flex cursor-pointer items-start gap-2 text-sm">
+          <Checkbox checked={charm} onCheckedChange={setCharm} aria-label="Score charm" />
+          <span><span className="font-medium text-foreground">Charm</span> — one Opus call over the batch (cheap). Persona &amp; delivery quality.</span>
+        </label>
+        <label className="flex cursor-pointer items-start gap-2 text-sm">
+          <Checkbox checked={veracity} onCheckedChange={setVeracity} aria-label="Score veracity" />
+          <span><span className="font-medium text-foreground">Veracity</span> — web-checks each story's claims (Opus + search, <span className="text-foreground">per clip — pricier</span>).</span>
+        </label>
       </div>
     </JobActionDialog>
   )

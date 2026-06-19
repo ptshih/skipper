@@ -66,15 +66,16 @@ export function ReferenceView() {
         />
       </Section>
 
-      <Section title="Eval dimensions" subtitle="Surfaced on historical eval runs in the run drawer (0–1, higher is better).">
+      <Section title="Eval dimensions" subtitle="Scored on eval runs (Generate Narration + Re-score corpus), shown in the run drawer (0–1, higher is better).">
         <Dl
           compact
           rows={[
-            ['grounding', 'Every claim is backed by the fetched facts (anti-hallucination gate).'],
-            ['veracity', 'The facts themselves are correct.'],
-            ['diversity', 'Clips don’t repeat the same shtick.'],
-            ['charm', 'Persona & delivery quality.'],
-            ['tts', 'Synthesis / pronunciation quality.'],
+            ['grounding', 'Every claim is backed by the fetched facts — anti-hallucination GATE. Generate + Re-score.'],
+            ['tts', 'The script is synthesis-safe (no markup/emoji) — GATE. Generate + Re-score.'],
+            ['diversity', 'Clips don’t repeat the same shtick — advisory. Generate + Re-score.'],
+            ['charm', 'Persona & delivery quality — advisory (Opus). Opt-in on Re-score corpus.'],
+            ['veracity', 'The facts themselves are correct vs the web — advisory (Opus + search). Opt-in on Re-score corpus.'],
+            ['pacing', 'Reserved — no evaluator yet.'],
           ]}
         />
         <div className="mt-5">
@@ -149,9 +150,9 @@ const RUN_KINDS: { kind: string; does: string; cost: ReactNode; safe: string }[]
   },
   {
     kind: 'Re-score corpus',
-    does: 'Re-score the EXISTING story narrations (grounding / tts-cleanliness / diversity) WITHOUT regenerating or re-synthesizing — a quality read on what is already shipped. Records an offline_audit run, viewable in the Runs report. Read-only on narrations.',
-    cost: <span>LLM grounding per clip (~$0.06, Opus, when applied); the free tts + diversity checks run in Preview.</span>,
-    safe: 'Preview — counts the narrations + estimates the grounding spend, makes no model calls.',
+    does: 'Re-score the EXISTING story narrations (grounding / tts / diversity always; charm + veracity opt-in) WITHOUT regenerating or re-synthesizing — a quality read on what is already shipped. Records an offline_audit run, viewable in the Runs report. Read-only on narrations.',
+    cost: <span>LLM grounding per clip (~$0.06, Opus, when applied); charm = one batch call; veracity web-checks each clip (pricier). Free tts + diversity run in Preview.</span>,
+    safe: 'Preview — counts the narrations + estimates the spend, makes no model calls.',
   },
   {
     kind: 'Re-synth narration',

@@ -169,9 +169,12 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     if (idCsv(body.excludeIds)) args.push(`--exclude-ids=${idCsv(body.excludeIds)}`)
     if (body.limit) args.push(`--limit=${Number(body.limit)}`)
     if (body.maxCostUsd) args.push(`--max-cost=${Number(body.maxCostUsd)}`)
+    if (body.charm) args.push('--charm')
+    if (body.veracity) args.push('--veracity')
     if (apply) args.push('--apply')
-    // Re-score the EXISTING corpus: READ-ONLY on narrations/R2, but --apply runs one Opus grounding
-    // call per clip → spends → confirm gate. The dry preview makes no model calls (free).
+    // Re-score the EXISTING corpus: READ-ONLY on narrations/R2, but --apply runs Opus judges
+    // (grounding always; charm/veracity opt-in, veracity also web-searches) → spends → confirm gate.
+    // The dry preview makes no model calls (free).
     return { args, dryRun: !apply, spends: apply, targetId: 'roam-corpus' }
   }
 
