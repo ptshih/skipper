@@ -81,14 +81,14 @@ The SPA calls `/admin/*` same-origin, so IAP's auth flows naturally.
 |---|---|---|---|
 | 1 | Reuse API image or dedicated? | **Dedicated `skipper-studio` Job image** (own Dockerfile mirroring `apps/api/Dockerfile`, workspace trimmed to `generator+db+shared+storage`) | The generator's install closure (Anthropic SDK, google-auth, eval) differs from the API's |
 | 2 | DB target dev vs prod? | **Prod only.** ENTRYPOINT bakes `-f .env.production`; dev experiments stay on the laptop CLI | Cloud ops exist to operate the *live* prod catalog |
-| 3 | Live phase/cost surfacing? | A no-op-unless-`GEN_JOB_ID` **`pipeline/job-progress.ts`**, wired ONLY at the 4 ops entrypoint boundaries — never inside `generate.ts`. NB: **cost is not persisted anywhere today** (§9), so the hook is the *only* source of `pipeline_jobs.costUsd` | Keeps the CLI byte-identical (laptop has no `GEN_JOB_ID`) and risky edits out of `generate.ts` |
+| 3 | Live phase/cost surfacing? | A no-op-unless-`STUDIO_JOB_ID` **`pipeline/job-progress.ts`**, wired ONLY at the 4 ops entrypoint boundaries — never inside `generate.ts`. NB: **cost is not persisted anywhere today** (§9), so the hook is the *only* source of `pipeline_jobs.costUsd` | Keeps the CLI byte-identical (laptop has no `STUDIO_JOB_ID`) and risky edits out of `generate.ts` |
 | 4 | Light ops same Job or inline? | **All four CLIs through the one `skipper-studio` Job**; override `args` pick the script | Uniform secrets/logging/guardrails + keeps generator deps out of the admin image |
 | 5 | IAM identities | **Dedicated SAs:** `skipper-studio@` (Job runtime) and `skipper-admin@` (admin service) | Scopes the spend + trigger surface |
 
 ## 4. Data model — `pipeline_jobs`
 
 New table in `packages/db/src/schema.ts` on the main **neon-http** client (the `db` proxy;
-no interactive tx needed). `id` doubles as the `GEN_JOB_ID` the Job receives.
+no interactive tx needed). `id` doubles as the `STUDIO_JOB_ID` the Job receives.
 
 > **(2026-06-19) Live schema drifted from the block below** — `kind` is a plain `text`
 > column (NO `gen_job_kind` pgEnum; the closed set is the Zod `jobKind` enum in `@skipper/shared`,
@@ -103,7 +103,7 @@ no interactive tx needed). `id` doubles as the `GEN_JOB_ID` the Job receives.
 export const pipelineJobStatusEnum = pgEnum('pipeline_job_status', ['queued', 'running', 'succeeded', 'failed', 'canceled'])
 
 export const pipelineJobs = pgTable('pipeline_jobs', {
-  id: uuid('id').defaultRandom().primaryKey(),            // == GEN_JOB_ID
+  id: uuid('id').defaultRandom().primaryKey(),            // == STUDIO_JOB_ID
   kind: text('kind').notNull(),                           // Zod `jobKind` enum (@skipper/shared)
   status: pipelineJobStatusEnum('status').notNull().default('queued'),
   targetSlug: text('target_slug'),                        // generate_narrations etc: the region slug
@@ -175,7 +175,7 @@ can (`run.ts`'s own parser already requires `=`):
 ```json
 { "overrides": { "containerOverrides": [
   { "args": ["packages/studio/src/run.ts","emerald-bay","--max-cost=3"],
-    "env": [{ "name": "GEN_JOB_ID", "value": "<pipeline_jobs.id>" }] }
+    "env": [{ "name": "STUDIO_JOB_ID", "value": "<pipeline_jobs.id>" }] }
 ] } }
 ```
 Because this sends an `overrides` body, the caller SA needs `run.jobs.runWithOverrides` — see §10.
@@ -256,7 +256,7 @@ TS) as static assets AND exposes the `/admin/*` JSON API:
 
 | Route | Does |
 |---|---|
-| `POST /admin/jobs` | Validate + guard (§8), insert a `pipeline_jobs` row (`queued`), call `jobs:run` with `GEN_JOB_ID`, store `cloudRunExecution`, return the row |
+| `POST /admin/jobs` | Validate + guard (§8), insert a `pipeline_jobs` row (`queued`), call `jobs:run` with `STUDIO_JOB_ID`, store `cloudRunExecution`, return the row |
 | `GET /admin/jobs` / `GET /admin/jobs/:id` | List/poll runs; on read, reconcile a stale `running` row against the Run execution status (backstop) |
 | `GET /admin/runs` | Unified runs timeline (`pipeline_jobs` + orphan `eval_runs`) |
 | `POST /admin/jobs/:id/cancel` | Cancel a running execution (`executions:cancel`) |
@@ -307,7 +307,7 @@ isolated-linker lesson) — it's a server+SPA, so lower-risk than the RN app.
 
 1. **Trigger** (admin-api in v1; the hook itself in v0) inserts the row (`queued`) + stores
    `cloudRunExecution`.
-2. **Job** (`pipeline/job-progress.ts`, active only when `GEN_JOB_ID` is set): flips `running` +
+2. **Job** (`pipeline/job-progress.ts`, active only when `STUDIO_JOB_ID` is set): flips `running` +
    `startedAt` at entry; on the existing `lap(phase)` calls (`discovery, places, deepenFacts, geology,
    scout, narration, evalPanel, bracketNarration, tts, finalize`), best-effort `UPDATE … SET phase,
    cost_usd = llmSpentUsd()+ttsEst`; on exit sets `succeeded|failed` + `endedAt` + `error` + links
@@ -351,7 +351,7 @@ A truly minimal first cut can defer step 2's per-phase tick — terminal status 
 
 **v0 — cloud execution (ship first, gcloud-triggered):**
 1. `pipeline_jobs` table + migration (additive, no behavior change).
-2. `pipeline/job-progress.ts` + the 4 one-line entrypoint wirings (no-op without `GEN_JOB_ID`);
+2. `pipeline/job-progress.ts` + the 4 one-line entrypoint wirings (no-op without `STUDIO_JOB_ID`);
    verify the laptop CLI is byte-identical.
 3. `skipper-studio` Job: Dockerfile, image, `jobs deploy`, the two SAs/IAM, TTS-via-ADC. Smoke-test a
    `--dry-run` generate via `gcloud run jobs execute`. **← v0 done: execution is in the cloud.**

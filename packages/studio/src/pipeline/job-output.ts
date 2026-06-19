@@ -58,7 +58,7 @@ export interface JobOutputSynthesis {
 }
 
 // Lazy so importing this module never constructs the client — sweep/refetch run without a
-// narration key locally, and local CLI never synthesizes anyway (GEN_JOB_ID unset).
+// narration key locally, and local CLI never synthesizes anyway (STUDIO_JOB_ID unset).
 let _client: Anthropic | undefined
 const client = (): Anthropic => (_client ??= new Anthropic())
 

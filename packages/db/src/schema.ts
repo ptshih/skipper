@@ -535,7 +535,7 @@ export const evalScores = pgTable(
 
 // eval_runs is the QUALITY record (scores + artifact); pipeline_jobs is the EXECUTION record
 // (who/what/when/status/cost) of a tour-ops CLI run as a Cloud Run Job. Written ONLY by
-// pipeline/job-progress.ts when GEN_JOB_ID is set, so the laptop CLI never touches it.
+// pipeline/job-progress.ts when STUDIO_JOB_ID is set, so the laptop CLI never touches it.
 // OBSERVABILITY — nothing in the player/API reads it.
 
 // NO `gen_job_kind` pgEnum: the job-kind vocabulary CHURNS (a new ops script = a new kind) and the
@@ -554,7 +554,7 @@ export const pipelineJobStatusEnum = pgEnum('pipeline_job_status', [
 export const pipelineJobs = pgTable(
   'pipeline_jobs',
   {
-    // The row id IS the GEN_JOB_ID the Job receives: the admin-api mints it in v1; the hook
+    // The row id IS the STUDIO_JOB_ID the Job receives: the admin-api mints it in v1; the hook
     // mints + inserts it for a gcloud-triggered v0 run.
     id: uuid('id').defaultRandom().primaryKey(),
     // Plain text — the closed set is the Zod `jobKind` enum in @skipper/shared (see note above).

@@ -449,7 +449,7 @@ app.post('/admin/jobs', async (c) => {
 
   let execShortName = ''
   try {
-    execShortName = await runJob(build.args, { GEN_JOB_ID: id, GEN_JOB_TRIGGERED_BY: triggeredBy })
+    execShortName = await runJob(build.args, { STUDIO_JOB_ID: id, STUDIO_JOB_TRIGGERED_BY: triggeredBy })
   } catch (e) {
     // The trigger failed — settle the row so it isn't a phantom 'queued'.
     await db

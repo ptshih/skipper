@@ -1,7 +1,7 @@
 // Triggering + reconciling the skipper-studio Cloud Run Job from the admin-api.
 //
 // The admin-api mints a pipeline_jobs row, then calls run.googleapis.com `jobs:run` with the
-// per-execution override args (the spec §5 contract) + GEN_JOB_ID in env, so the Job's
+// per-execution override args (the spec §5 contract) + STUDIO_JOB_ID in env, so the Job's
 // job-progress hook updates that exact row. The caller SA needs roles/run.developer on the
 // job (runWithOverrides + executions.get) — see spec §10. Auth is an OAuth access token off
 // the metadata server (ADC, cloud-platform scope), the same mechanism TTS uses.
@@ -10,8 +10,8 @@ import { GoogleAuth } from 'google-auth-library'
 import { isAbsolute, resolve } from 'node:path'
 import type { JobKind } from '@skipper/shared'
 
-const REGION = process.env.GEN_JOB_REGION ?? 'us-east4'
-const JOB = process.env.GEN_JOB_NAME ?? 'skipper-studio'
+const REGION = process.env.STUDIO_JOB_REGION ?? 'us-east4'
+const JOB = process.env.STUDIO_JOB_NAME ?? 'skipper-studio'
 const SCOPE = 'https://www.googleapis.com/auth/cloud-platform'
 
 // GOOGLE_APPLICATION_CREDENTIALS in .env.development is a key path RELATIVE to the repo root

@@ -1,7 +1,7 @@
 // pipeline_jobs lifecycle hook — the OPERATIONAL record of a cloud tour-ops run.
 //
-// A NO-OP unless GEN_JOB_ID is set, so the laptop CLI is byte-identical (it never sets it).
-// In the cloud the Cloud Run Job receives GEN_JOB_ID: the admin-api mints the pipeline_jobs row
+// A NO-OP unless STUDIO_JOB_ID is set, so the laptop CLI is byte-identical (it never sets it).
+// In the cloud the Cloud Run Job receives STUDIO_JOB_ID: the admin-api mints the pipeline_jobs row
 // (status 'queued') before triggering in v1; a gcloud-triggered v0 run just passes a fresh
 // uuid and beginJob() inserts the row itself. EVERY gen-job entrypoint wraps its body in a
 // main() guarded by beginJob/finishJob (the run.ts shape) — a NEW kind MUST do the same. Never
@@ -54,13 +54,13 @@ export interface FinishOutcome {
 /** Normalize a thrown value to a string message (the begin/run/finish convention everywhere). */
 export const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e))
 
-const jobId = (): string | undefined => process.env.GEN_JOB_ID || undefined
+const jobId = (): string | undefined => process.env.STUDIO_JOB_ID || undefined
 
 const warn = (phase: string, e: unknown): void =>
   console.warn(`[job-progress] ${phase} write failed (non-fatal):`, e instanceof Error ? e.message : e)
 
 /** Flip the pipeline_jobs row to `running`, creating it if a v0 gcloud run didn't pre-create one.
- *  No-op without GEN_JOB_ID. Never throws. */
+ *  No-op without STUDIO_JOB_ID. Never throws. */
 export async function beginJob(kind: Kind, fields: BeginFields): Promise<void> {
   const id = jobId()
   if (!id) return
@@ -74,7 +74,7 @@ export async function beginJob(kind: Kind, fields: BeginFields): Promise<void> {
     targetSlug: fields.targetSlug ?? null,
     targetId: fields.targetId ?? null,
     args: process.argv.slice(2),
-    triggeredBy: process.env.GEN_JOB_TRIGGERED_BY || 'cli',
+    triggeredBy: process.env.STUDIO_JOB_TRIGGERED_BY || 'cli',
     cloudRunExecution: process.env.CLOUD_RUN_EXECUTION || null,
     startedAt: new Date(),
   }
@@ -100,7 +100,7 @@ export async function beginJob(kind: Kind, fields: BeginFields): Promise<void> {
   }
 }
 
-/** Settle the pipeline_jobs row terminal. No-op without GEN_JOB_ID. Never throws. */
+/** Settle the pipeline_jobs row terminal. No-op without STUDIO_JOB_ID. Never throws. */
 export async function finishJob(outcome: FinishOutcome): Promise<void> {
   const id = jobId()
   if (!id) return
