@@ -91,7 +91,7 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   well becomes the narration bound, letting the raw-extract cap drop. Unbuilt, gated on greenlight + ear-test.
 - [admin-ops-console-spec.md](specs/admin-ops-console-spec.md) — **builder infra**: cloud-execute the
   tour-ops CLIs (generate/patch/resynth/sweep) as **Cloud Run Jobs** (v0), then a deployed `apps/admin`
-  (Vite + Hono) behind **Google IAP** with a `gen_jobs` record + ear-pass/eval monitor (v1);
+  (Vite + Hono) behind **Google IAP** with a `pipeline_jobs` record + ear-pass/eval monitor (v1);
   build-ready, unbuilt, greenlit + microscope-hardened 2026-06-10.
 - [segments-tracks-refactor.md](specs/segments-tracks-refactor.md) — **the data-model refactor handoff**:
   collapse tour_stops/tour_brackets/roam_clips → segments + tracks (+ tour_frames, + a personas table,

@@ -30,7 +30,7 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 export type JobKind = 'generate' | 'patch_clip' | 'resynth' | 'resynth_narration' | 'sweep_orphans' | 'discover_pois' | 'enrich_pois' | 'generate_narrations' | 'refetch_facts'
 export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled'
 
-export interface GenJob {
+export interface PipelineJob {
   id: string
   kind: JobKind
   status: JobStatus
@@ -175,10 +175,10 @@ export interface RunEvent {
 
 export const api = {
   regions: () => req<{ regions: Region[] }>('/admin/regions'),
-  jobs: () => req<{ jobs: GenJob[] }>('/admin/jobs'),
+  jobs: () => req<{ jobs: PipelineJob[] }>('/admin/jobs'),
   runs: () => req<{ runs: RunEvent[] }>('/admin/runs'),
-  job: (id: string) => req<{ job: GenJob; logsUrl: string | null }>(`/admin/jobs/${id}`),
-  cancelJob: (id: string) => req<{ job: GenJob }>(`/admin/jobs/${id}/cancel`, { method: 'POST' }),
+  job: (id: string) => req<{ job: PipelineJob; logsUrl: string | null }>(`/admin/jobs/${id}`),
+  cancelJob: (id: string) => req<{ job: PipelineJob }>(`/admin/jobs/${id}/cancel`, { method: 'POST' }),
   pois: () => req<{ pois: PoiRow[] }>('/admin/pois'),
   poi: (id: string) => req<{ poi: PoiDetail }>(`/admin/pois/${id}`),
   deletePoi: (id: string) => req<{ ok: true; id: string }>(`/admin/pois/${id}`, { method: 'DELETE' }),
@@ -193,5 +193,5 @@ export const api = {
   bboxLookup: (query: string) =>
     req<BboxLookupResult>('/admin/regions/bbox-lookup', { method: 'POST', body: JSON.stringify({ query }) }),
   createJob: (body: Record<string, unknown>) =>
-    req<{ job: GenJob }>('/admin/jobs', { method: 'POST', body: JSON.stringify(body) }),
+    req<{ job: PipelineJob }>('/admin/jobs', { method: 'POST', body: JSON.stringify(body) }),
 }

@@ -41,7 +41,7 @@ export type DriveClipForm = z.infer<typeof driveClipForm>
 
 /** The kind of a generic ASIDE (the `asides` table) — a placeless persona beat. `intro`/
  *  `outro` bracket the drive; the rest are clock-anchored progress beats. Plain `text` in the DB
- *  (the vocabulary churns — the gen_jobs.kind precedent); this Zod enum is the boundary-validated set. */
+ *  (the vocabulary churns — the pipeline_jobs.kind precedent); this Zod enum is the boundary-validated set. */
 export const asideKind = z.enum([
   'intro',
   'outro',
@@ -71,7 +71,7 @@ export type AttributionSource = z.infer<typeof attributionSource>
  * Admin gen-job KINDS — the closed vocabulary of cloud-ops scripts the admin can launch, and the
  * SINGLE SOURCE OF TRUTH for it: the admin-api dispatch (`jobs.ts` SCRIPTS, typed `Record<JobKind>`),
  * the generator's `beginJob`, and the admin client's `JobKind` all derive from this. Deliberately
- * NOT a pg enum — `gen_jobs.kind` is an OBSERVABILITY label (nothing reads it for logic) and this
+ * NOT a pg enum — `pipeline_jobs.kind` is an OBSERVABILITY label (nothing reads it for logic) and this
  * set CHURNS as ops scripts are added, so the vocabulary lives in code over a plain `text` column,
  * not a migration-bound DB type. Add a kind here + in `jobs.ts` SCRIPTS; no migration needed.
  */

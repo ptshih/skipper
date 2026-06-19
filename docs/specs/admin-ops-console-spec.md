@@ -10,7 +10,7 @@
 > **Create Tour** (LLM-proposed, human-approved runtime authoring) added to v1 per founder
 > requirement 2026-06-10 — see §5b. Builder infra, not a charm feature. Substrate (**Cloud Run
 > Jobs**) + auth (**Google IAP, founder-only**) are GA and confirmed.
-> **Built:** v0 (`gen_jobs` + migration `0005` + the `job-progress` hook + the `skipper-gen` Job
+> **Built:** v0 (`pipeline_jobs` + migration `0005` + the `job-progress` hook + the `skipper-gen` Job
 > image) and v1 — **one app `apps/admin`**: the Hono server in `server/` (IAP gate, monitor reads,
 > job trigger/reconcile, Create Tour) + the React/Vite/Tailwind/shadcn SPA in `client/` (the
 > Google-Maps Create-Tour flow), served as one container behind IAP, plus the admin Dockerfile/
@@ -38,7 +38,7 @@ deployed, founder-only admin app that both **triggers** ops and **monitors** the
 - **v0 — cloud execution.** The `skipper-gen` Cloud Run **Job** wrapping the four existing CLIs
   (generate / patch-clip / resynth / sweep), triggered with `gcloud run jobs execute …` from the
   laptop or a phone. This alone moves execution off-machine — near-zero new surface, immediate value.
-- **v1 — the admin app.** `apps/admin` (Vite SPA + Hono) behind **IAP**, the `gen_jobs` run
+- **v1 — the admin app.** `apps/admin` (Vite SPA + Hono) behind **IAP**, the `pipeline_jobs` run
   record, the ear-pass/eval monitor, **and Create Tour** (§5b) — the UX + observability + authoring
   layer on top of v0.
 
@@ -59,7 +59,7 @@ the existing committed-seed path stays for the original Tahoe tours.)
   one Cloud Run service (skipper-admin),         │           ENTRYPOINT dotenvx -f .env.production -- bun
   behind Google IAP (founder-only)   ← v1        │           args pick run.ts | patch-clip.ts | resynth | sweep
         │                                          │           writes Neon + R2, spends GCP, ADC→TTS
-        ├── creates/polls gen_jobs ◄──────────────┴── job updates gen_jobs (phase/cost/status)
+        ├── creates/polls pipeline_jobs ◄──────────────┴── job updates pipeline_jobs (phase/cost/status)
         ├── reconciles status from the Run execution (backstop)
         ├── reads eval_runs / eval_scores  (monitor)
         └── presigns R2  (ear-pass audio)
@@ -75,20 +75,20 @@ The SPA calls `/admin/*` same-origin, so IAP's auth flows naturally.
 |---|---|---|---|
 | 1 | Reuse API image or dedicated? | **Dedicated `skipper-gen` Job image** (own Dockerfile mirroring `apps/api/Dockerfile`, workspace trimmed to `generator+db+shared+storage`) | The generator's install closure (Anthropic SDK, google-auth, eval) differs from the API's |
 | 2 | DB target dev vs prod? | **Prod only.** ENTRYPOINT bakes `-f .env.production`; dev experiments stay on the laptop CLI | Cloud ops exist to operate the *live* prod catalog |
-| 3 | Live phase/cost surfacing? | A no-op-unless-`GEN_JOB_ID` **`pipeline/job-progress.ts`**, wired ONLY at the 4 ops entrypoint boundaries — never inside `generate.ts`. NB: **cost is not persisted anywhere today** (§9), so the hook is the *only* source of `gen_jobs.costUsd` | Keeps the CLI byte-identical (laptop has no `GEN_JOB_ID`) and risky edits out of `generate.ts` |
+| 3 | Live phase/cost surfacing? | A no-op-unless-`GEN_JOB_ID` **`pipeline/job-progress.ts`**, wired ONLY at the 4 ops entrypoint boundaries — never inside `generate.ts`. NB: **cost is not persisted anywhere today** (§9), so the hook is the *only* source of `pipeline_jobs.costUsd` | Keeps the CLI byte-identical (laptop has no `GEN_JOB_ID`) and risky edits out of `generate.ts` |
 | 4 | Light ops same Job or inline? | **All four CLIs through the one `skipper-gen` Job**; override `args` pick the script | Uniform secrets/logging/guardrails + keeps generator deps out of the admin image |
 | 5 | IAM identities | **Dedicated SAs:** `skipper-gen@` (Job runtime) and `skipper-admin@` (admin service) | Scopes the spend + trigger surface |
 
-## 4. Data model — `gen_jobs`
+## 4. Data model — `pipeline_jobs`
 
 New table in `packages/db/src/schema.ts` on the main **neon-http** client (the `db` proxy;
 no interactive tx needed). `id` doubles as the `GEN_JOB_ID` the Job receives.
 
 ```ts
 export const genJobKind = pgEnum('gen_job_kind', ['generate', 'patch_clip', 'resynth', 'sweep_orphans'])
-export const genJobStatus = pgEnum('gen_job_status', ['queued', 'running', 'succeeded', 'failed', 'canceled'])
+export const genJobStatus = pgEnum('pipeline_job_status', ['queued', 'running', 'succeeded', 'failed', 'canceled'])
 
-export const genJobs = pgTable('gen_jobs', {
+export const pipelineJobs = pgTable('pipeline_jobs', {
   id: uuid('id').defaultRandom().primaryKey(),            // == GEN_JOB_ID
   kind: genJobKind('kind').notNull(),
   status: genJobStatus('status').notNull().default('queued'),
@@ -113,7 +113,7 @@ export const genJobs = pgTable('gen_jobs', {
 Migration: add the table → `bun run db:generate` (emits SQL in `packages/db/drizzle/`) →
 `bun run db:migrate` (dev) and `bun run db:migrate:prod` (prod). Additive, no destructive change.
 
-> `gen_jobs` is part of **v0** too — even gcloud-triggered runs should record. In v0 the Job's
+> `pipeline_jobs` is part of **v0** too — even gcloud-triggered runs should record. In v0 the Job's
 > `job-progress.ts` hook creates the row itself (no admin-api) and `triggeredBy='cli'`.
 
 ## 5. The `skipper-gen` Cloud Run Job (v0)
@@ -156,7 +156,7 @@ can (`run.ts`'s own parser already requires `=`):
 ```json
 { "overrides": { "containerOverrides": [
   { "args": ["packages/generator/src/run.ts","emerald-bay","--max-cost=3"],
-    "env": [{ "name": "GEN_JOB_ID", "value": "<gen_jobs.id>" }] }
+    "env": [{ "name": "GEN_JOB_ID", "value": "<pipeline_jobs.id>" }] }
 ] } }
 ```
 Because this sends an `overrides` body, the caller SA needs `run.jobs.runWithOverrides` — see §10.
@@ -222,7 +222,7 @@ TS) as static assets AND exposes the `/admin/*` JSON API:
 
 | Route | Does |
 |---|---|
-| `POST /admin/jobs` | Validate + guard (§8), insert a `gen_jobs` row (`queued`), call `jobs:run` with `GEN_JOB_ID`, store `cloudRunExecution`, return the row |
+| `POST /admin/jobs` | Validate + guard (§8), insert a `pipeline_jobs` row (`queued`), call `jobs:run` with `GEN_JOB_ID`, store `cloudRunExecution`, return the row |
 | `GET /admin/jobs` / `GET /admin/jobs/:id` | List/poll runs; on read, reconcile a stale `running` row against the Run execution status (backstop) |
 | `GET /admin/tours` / `GET /admin/tours/:id` | Catalog + full tour (stops/brackets/scripts/eval) for the ear-pass |
 | `GET /admin/tours/:id/sign` | Presigned R2 URLs for inline audio (reuse `@skipper/storage` + the api's sign logic) |
@@ -262,12 +262,12 @@ isolated-linker lesson) — it's a server+SPA, so lower-risk than the RN app.
   invariant) and there is **no special tour** — every tour is treated the same: a typed confirm gates
   *every* prod generate/resynth/patch/sweep spending run. `eval_runs.artifact` already snapshots the
   prior telling for rollback reasoning.
-- **Idempotency:** create the `gen_jobs` row before `jobs:run`; only trigger when
+- **Idempotency:** create the `pipeline_jobs` row before `jobs:run`; only trigger when
   `status='queued' AND cloud_run_execution IS NULL`, and persist the execution name before any
   retry — so neither a UI double-click nor a lost-response retry can double-spend.
 - `--all --apply` (sweep) sends `--yes` only behind the same typed confirm.
 
-## 9. Observability — the `gen_jobs` lifecycle
+## 9. Observability — the `pipeline_jobs` lifecycle
 
 1. **Trigger** (admin-api in v1; the hook itself in v0) inserts the row (`queued`) + stores
    `cloudRunExecution`.
@@ -281,7 +281,7 @@ isolated-linker lesson) — it's a server+SPA, so lower-risk than the RN app.
    fetch the Run execution; if `Failed`/`Cancelled`/`Succeeded`, settle the row.
 
 > **Cost caveat (verified):** the DB persists **no** cost today — `eval_runs` has no cost column and the
-> `spend.ts` tally dies with the process. So `gen_jobs.costUsd` comes *only* from the `finishJob` hook;
+> `spend.ts` tally dies with the process. So `pipeline_jobs.costUsd` comes *only* from the `finishJob` hook;
 > a **hard crash before the hook leaves `costUsd` null** (the reconcile backstop can settle *status*
 > but cannot recover cost). And the TTS half is an **estimate** (`estimateTtsUsd`), not GCP billing
 > truth — only LLM spend is exact. Don't read `costUsd` as authoritative spend.
@@ -314,7 +314,7 @@ A truly minimal first cut can defer step 2's per-phase tick — terminal status 
 ## 11. Build plan
 
 **v0 — cloud execution (ship first, gcloud-triggered):**
-1. `gen_jobs` table + migration (additive, no behavior change).
+1. `pipeline_jobs` table + migration (additive, no behavior change).
 2. `pipeline/job-progress.ts` + the 4 one-line entrypoint wirings (no-op without `GEN_JOB_ID`);
    verify the laptop CLI is byte-identical.
 3. `skipper-gen` Job: Dockerfile, image, `jobs deploy`, the two SAs/IAM, TTS-via-ADC. Smoke-test a
@@ -354,7 +354,7 @@ A truly minimal first cut can defer step 2's per-phase tick — terminal status 
 - `docs/guides/gcp-cloud-run-deploy.md` (project `lithe-window-491818-k8`/us-east4, Compute SA, Dockerfile + cloudbuild + Secret-Manager-dotenvx pattern, the api + site triggers to mirror, the DRS history)
 - `docs/guides/ops-scripts-sop.md` (the safe-by-default contract)
 - `packages/generator/src/{run,patch-clip,resynth-tour,sweep-orphans}.ts`, `pipeline/{ops,spend,generate,persist,tts}.ts` (arg contracts incl. the `=`-form value-flag rule at `ops.ts:40`; the `lap()` phase points; eval/cost recording; the seed requirement at `persist.ts:85`; TTS ADC)
-- `packages/db/src/schema.ts` (`eval_runs`/`eval_scores` — note: no cost column; `gen_jobs` + `tours.routeProvenance` land here), `packages/db/drizzle/` (migrations)
+- `packages/db/src/schema.ts` (`eval_runs`/`eval_scores` — note: no cost column; `pipeline_jobs` + `tours.routeProvenance` land here), `packages/db/drizzle/` (migrations)
 - `packages/db/seed/{tour-specs,materialize,seed}.ts` + `seed/data/*.json` (the today authoring chain Create Tour refactors: `materializeRoute()` extraction, Routes v2 + Geocoding/Places via `GOOGLE_MAPS_API_KEY`, the `draft` upsert, the Tahoe-bbox check to generalize)
 - **GCP docs verified 2026-06-10:** [`jobs:run` overrides](https://docs.cloud.google.com/run/docs/execute/jobs) · [IAP-for-Cloud-Run (GA, direct)](https://docs.cloud.google.com/run/docs/securing/identity-aware-proxy-cloud-run) · [IAP signed-header audience](https://docs.cloud.google.com/iap/docs/signed-headers-howto) · [run IAM roles](https://docs.cloud.google.com/iam/docs/roles-permissions/run) · `run.invoker` lacks `runWithOverrides`: [issuetracker 298810674](https://issuetracker.google.com/issues/298810674) · [TTS auth](https://docs.cloud.google.com/text-to-speech/docs/authentication) · [DRS](https://docs.cloud.google.com/organization-policy/domain-restricted-sharing)
 
@@ -362,7 +362,7 @@ A truly minimal first cut can defer step 2's per-phase tick — terminal status 
 
 Brainstormed 2026-06-10 against the operating loop (generate → ear-pass → tune → drive).
 The console nails *generate* + *inspect*; these close the *ear-pass* and *tune* gaps.
-Ranked by leverage. **Done so far:** unified Runs timeline (gen_jobs + orphan eval_runs),
+Ranked by leverage. **Done so far:** unified Runs timeline (pipeline_jobs + orphan eval_runs),
 the tour-detail rework (eval stat strip + itinerary list), per-tour eval **run history**,
 and the **route map** (frozen polyline + numbered trigger-point pins + radius circles,
 `RouteMap.tsx`; reuses a shared maps loader with the Create-Tour `WaypointMap`).
@@ -373,7 +373,7 @@ and the **route map** (frozen polyline + numbered trigger-point pins + radius ci
    (the M4 review placeholder) and `eval_scores.source = 'human'` + `.comment` (the
    human-adjudication row). Admin writes those. This is the "human ear, not an automated
    gate" doctrine made operational.
-2. **Spend strip on Runs.** A rollup from `gen_jobs.costUsd` (total / this-week /
+2. **Spend strip on Runs.** A rollup from `pipeline_jobs.costUsd` (total / this-week /
    dry-run vs real) at the top of Runs — serves the COST founder-gate. **Label it
    "est. LLM spend":** `costUsd` is the pipeline's self-reported LLM spend, NOT GCP
    billing truth (no TTS/infra; see §9 cost caveat).
@@ -391,7 +391,7 @@ and the **route map** (frozen polyline + numbered trigger-point pins + radius ci
    skipper-prompt iteration — the repo's highest-leverage activity — fast and cheap.
 5. **Script diff across runs.** `eval_runs.artifact` stores full scripts; diff a stop's
    script run-over-run to see exactly how a prompt change moved the narration.
-6. **Cloud Run log deep-link per run.** `gen_jobs.cloudRunExecution` is captured but unused
+6. **Cloud Run log deep-link per run.** `pipeline_jobs.cloudRunExecution` is captured but unused
    in the UI; link to the execution's logs. Cheap, but only useful post-deploy.
 
 ### Net-new (ideated 2026-06-11, 9-agent pass — dedup'd against 1–6, scope-corrected by an adversarial critic)
@@ -403,7 +403,7 @@ almost every one rides on a column the schema already has but the UI throws away
 > **Built in the working tree 2026-06-11 (uncommitted — founder to review/commit/deploy):**
 > **7** (all-dimension judge findings per stop + `eval_scores.detail` charm best/sag),
 > **8 + 6** (cancel a running execution via `executions:cancel` + the Cloud Run logs deep-link;
-> realizes the reserved `gen_job_status='canceled'` path), and **9** (the `/admin/integrity`
+> realizes the reserved `pipeline_job_status='canceled'` path), and **9** (the `/admin/integrity`
 > audit + fleet banner on Tours + per-tour card on detail).
 > Drive-by: `gen_job_kind` enum aligned to the 6 wired job kinds (drift from `287a64a` — the
 > source was 4-valued while `jobs.ts`/client/insert use `sweep_roam_pois`/`generate_roam`; run
@@ -423,7 +423,7 @@ almost every one rides on a column the schema already has but the UI throws away
    **Caveat:** `detail` is nullable — degrade gracefully on older runs.
 8. **Self-explaining Runs timeline + a cancel button (S, free).** `/admin/runs` SELECTs
    `kind/status/phase/costUsd` and DROPS `error`, `args`, `startedAt`, `endedAt` — all present
-   on `gen_jobs`. Add them → inline "failed: max-cost exceeded ($5.02 > $5.00)" + a "stalled
+   on `pipeline_jobs`. Add them → inline "failed: max-cost exceeded ($5.02 > $5.00)" + a "stalled
    22m" badge from `startedAt` vs now. **Extend with the kill switch every lens missed:** a
    cancel action on a running job (`run.googleapis.com …/executions/{name}:cancel` via the
    OAuth/ADC path already in `jobs.ts`). Seeing a runaway $5 generate without stopping it is
@@ -478,7 +478,7 @@ Bigger bets (past the free first pass):
     regen); a single-clip bracket (intro/outro) editor with a cost-previewed one-clip resynth;
     **vista pull-off stops as a 4th `stopTypeEnum` anchor** (the standing founder ask — clean
     destructive migration off story/scenic/break).
-18. **Cost truth (M).** A pre-spend forecast band in the New Run dialog (past `gen_jobs.costUsd`
+18. **Cost truth (M).** A pre-spend forecast band in the New Run dialog (past `pipeline_jobs.costUsd`
     for the kind + a DERIVED TTS line from `audioDurationMs` → Gemini-TTS rate — the cost the
     schema structurally omits, shown BEFORE the spend); a true cost-per-clip ledger incl TTS +
     roam; an R2 orphan-$ preview before `sweep_orphans`.

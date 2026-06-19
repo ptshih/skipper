@@ -217,7 +217,7 @@ gcloud iam service-accounts add-iam-policy-binding $ADMIN --member=serviceAccoun
 # ADMIN_EMAIL = the single allowed IAP principal, into the ENCRYPTED prod env (commit the re-encrypted file).
 dotenvx set ADMIN_EMAIL "ptshih@gmail.com" -f .env.production
 
-# additive migrations to prod (gen_jobs + tours.route_provenance — 0005/0006).
+# additive migrations to prod (pipeline_jobs + tours.route_provenance — 0005/0006).
 bun run db:migrate:prod
 
 # 2) CD triggers (reuse skipper-gh; path-filtered). The browser Maps key is HARDCODED in

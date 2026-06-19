@@ -51,7 +51,7 @@ tour_frames   id, tour_id NOT NULL→tours, kind (frame_kind: intro|outro), ...t
 -- enums: NEW track_form('story','scenic','break','wave','bside'), frame_kind('intro','outro')
 --        DROP stop_type, bracket_kind, poi_override_kind
 -- DROPPED tables: tour_stops, roam_clips, tour_brackets, saved_tours
--- UNCHANGED: eval_runs, eval_scores, gen_jobs, auth tables
+-- UNCHANGED: eval_runs, eval_scores, pipeline_jobs, auth tables
 ```
 
 ## Vocabulary (locked — keep doctrine in lockstep)
@@ -105,7 +105,7 @@ tour_frames   id, tour_id NOT NULL→tours, kind (frame_kind: intro|outro), ...t
 
 ## The migration — `0010_segments_tracks.sql` (data-preserving)
 
-Reuses old row ids as `segment` ids so the R2 keys (`clips/<tourId>/<stopId>`) and `gen_jobs.target_id`
+Reuses old row ids as `segment` ids so the R2 keys (`clips/<tourId>/<stopId>`) and `pipeline_jobs.target_id`
 audit refs stay valid. Hand-authored (drizzle-kit won't generate data-moves) — when wiring in, generate
 the structural diff then merge the COPY block, or author as a custom migration with a matching snapshot.
 

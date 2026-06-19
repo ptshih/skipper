@@ -1,4 +1,4 @@
-// In-job output capture for the gen_jobs operational record.
+// In-job output capture for the pipeline_jobs operational record.
 //
 // The Cloud Run job tees its OWN stdout/stderr into a capped buffer and, at finish, asks
 // Claude (Haiku) for a plain-English summary + structured metrics. job-progress.ts writes

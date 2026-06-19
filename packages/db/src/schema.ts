@@ -398,7 +398,7 @@ export const narrations = pgTable(
 // clock-anchored "halfway there" beats. Placeless (no poi, no facts → no attribution/factsHash).
 // SHARED + reused across every drive in a region (the inverse of zero-reuse, which governs only the
 // deferred authored rung). `kind` is plain text validated by the Zod `asideKind` enum at the
-// boundary (the vocabulary churns — the gen_jobs.kind precedent). Starts EMPTY (filled by a
+// boundary (the vocabulary churns — the pipeline_jobs.kind precedent). Starts EMPTY (filled by a
 // founder-gated synth run); region_id null = a GLOBAL aside.
 export const asides = pgTable(
   'asides',
@@ -562,10 +562,10 @@ export const evalScores = pgTable(
 )
 
 /* -------------------------------------------------------------------------- */
-/*  gen_jobs — the OPERATIONAL record of a cloud tour-ops run (admin console)    */
+/*  pipeline_jobs — the OPERATIONAL record of a cloud tour-ops run (admin console)    */
 /* -------------------------------------------------------------------------- */
 
-// eval_runs is the QUALITY record (scores + artifact); gen_jobs is the EXECUTION record
+// eval_runs is the QUALITY record (scores + artifact); pipeline_jobs is the EXECUTION record
 // (who/what/when/status/cost) of a tour-ops CLI run as a Cloud Run Job. Written ONLY by
 // pipeline/job-progress.ts when GEN_JOB_ID is set, so the laptop CLI never touches it.
 // OBSERVABILITY — nothing in the player/API reads it.
@@ -575,7 +575,7 @@ export const evalScores = pgTable(
 // closed set single-sourced as the Zod `jobKind` enum in @skipper/shared (validated at the admin-api
 // boundary). Adding/renaming a kind is then a code edit — no enum migration. (Was a pgEnum until
 // 2026-06-15; migration 0005 dropped the type + renamed sweep_roam_pois → sweep_region_pois.)
-export const genJobStatusEnum = pgEnum('gen_job_status', [
+export const pipelineJobStatusEnum = pgEnum('pipeline_job_status', [
   'queued', // row created (admin-api in v1), Job not yet running
   'running', // the Job flipped it on entry
   'succeeded', // clean exit
@@ -583,15 +583,15 @@ export const genJobStatusEnum = pgEnum('gen_job_status', [
   'canceled', // operator-stopped (reserved; no cancel path in v0)
 ])
 
-export const genJobs = pgTable(
-  'gen_jobs',
+export const pipelineJobs = pgTable(
+  'pipeline_jobs',
   {
     // The row id IS the GEN_JOB_ID the Job receives: the admin-api mints it in v1; the hook
     // mints + inserts it for a gcloud-triggered v0 run.
     id: uuid('id').defaultRandom().primaryKey(),
     // Plain text — the closed set is the Zod `jobKind` enum in @skipper/shared (see note above).
     kind: text('kind').notNull(),
-    status: genJobStatusEnum('status').notNull().default('queued'),
+    status: pipelineJobStatusEnum('status').notNull().default('queued'),
     /** generate_narrations etc: the region slug. */
     targetSlug: text('target_slug'),
     /** An ops audit label (e.g. the poi/region id the job acted on). */
@@ -626,8 +626,8 @@ export const genJobs = pgTable(
       .$onUpdate(() => new Date()),
   },
   (t) => [
-    index('gen_jobs_created_idx').on(t.createdAt),
-    index('gen_jobs_status_idx').on(t.status),
+    index('pipeline_jobs_created_idx').on(t.createdAt),
+    index('pipeline_jobs_status_idx').on(t.status),
   ],
 )
 
@@ -667,8 +667,8 @@ export type EvalRun = typeof evalRuns.$inferSelect
 export type NewEvalRun = typeof evalRuns.$inferInsert
 export type EvalScore = typeof evalScores.$inferSelect
 export type NewEvalScore = typeof evalScores.$inferInsert
-export type GenJob = typeof genJobs.$inferSelect
-export type NewGenJob = typeof genJobs.$inferInsert
+export type PipelineJob = typeof pipelineJobs.$inferSelect
+export type NewPipelineJob = typeof pipelineJobs.$inferInsert
 export type Narration = typeof narrations.$inferSelect
 export type NewNarration = typeof narrations.$inferInsert
 export type Aside = typeof asides.$inferSelect
