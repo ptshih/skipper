@@ -77,10 +77,11 @@ you found so the next agent can re-check it.
 ## Two principles that govern the architecture
 
 1. **Fetch FACTS once per place; the NARRATION is the shared atom; ASSEMBLE per drive.**
-   `pois` is the facts cache — a place's facts/coords, deduped by `(source, source_id)` and
-   re-fetched on a TTL (`facts_fetched_at` is the staleness clock; refresh is operator-run via
-   `refetch_facts`/re-sweep). Each place has ONE shared telling: a `narrations` row (1:1 with its
-   poi — audio/persona baked, region-scoped). **ROAM plays narrations by proximity; a DRIVE REUSES
+   `pois` is the facts cache — a place's facts/coords, deduped by Wikidata **QID** (`pois_qid_uq`;
+   `(source, source_id)` is a secondary guard, not the arbiter) and re-fetched on a TTL
+   (`facts_fetched_at` is the staleness clock; refresh is operator-run via `refetch_facts`/re-sweep).
+   Each place has ONE shared telling: a `narrations` row (1:1 with its poi — audio/persona
+   baked). **ROAM plays narrations by proximity; a DRIVE REUSES
    them, pre-ordered along its route** — content resolves LIVE via `poi_id`, so a regenerated telling
    auto-improves every saved drive. Delivery belongs to the narration; facts belong to the place (the
    "persona lives in DELIVERY, never in FACTS" invariant, mapped onto storage). When a re-fetch
@@ -109,15 +110,19 @@ you found so the next agent can re-check it.
   anonymous front door (open, no account). A **DRIVE is user-OWNED** — ownership lives on
   `drives.user_id` (a user-side table), NEVER on a shared content table. **Anonymous = roam only;
   creating a drive needs a free account** (the create-action wall — the whole `/drives*` sub-app is
-  behind `requireAccount`). Free tier caps at `FREE_DRIVE_CAP` (default 10) drives; beyond → a
-  one-time credit pack (IAP fast-follow). A drive is NOT anonymous-shareable (it's owned), so
+  behind `requireAccount`). Free-tier credits are an append-only `credit_entries` ledger (a lazy
+  `FREE_DRIVE_CAP`=10 grant, −1 consumed at `POST /drives`); beyond → a purchased pack (provider-
+  agnostic IAP source, deferred). See `docs/decisions/credit-ledger.md`. A drive is NOT
+  anonymous-shareable (it's owned), so
   `/t/:id` serves GENERIC Open Graph. Audio is PRIVATE in R2 (presigned, short TTL, after the tier
   check). (V2 2026-06-18: the V1 "every tour previewable / wall on the drive" funnel is gone with
   authored tours.)
 - **Region is a BBOX, never a stored FK (geometry-first, 2026-06-19).** A POI's region = point-in-bbox; a DRIVE stores its route bbox (stale-proof) + derives region by intersect — NO `region_id` FK anywhere (`docs/decisions/geometry-first-regions.md`).
-- **`pois` deduped by `(source, source_id)`.** Store `source`/`source_id` for
-  attribution — Wikipedia is **CC BY-SA**, keep credit (the attribution snapshot is
-  frozen on the `narration` at generation time).
+- **`pois` deduped by Wikidata QID (`pois_qid_uq`)** — every poi is Wikidata-discovered (`source`
+  ∈ {wikipedia, wikidata}); `(source, source_id)` is a secondary guard, not the arbiter (it survives
+  a scenic↔story tier flip). Keep `source`/`source_id` for attribution — Wikipedia is **CC BY-SA**,
+  keep credit (frozen on the `narration` at generation). Google break anchors are NOT pois — they're
+  the `places` table (`google_places` = attribution-only).
 - **The Dad-Joke-O-Meter notch (`off`/`mild`/`dad`/`dadpocalypse`), persona, and
   voice are GENERATION parameters, baked into the narration — never live playback
   toggles** (see principle #1). Changing any of them = a different telling. The
@@ -129,21 +134,20 @@ you found so the next agent can re-check it.
   **notch** is a generation-time INPUT only, hardcoded to `dadpocalypse` in `generate-narrations.ts`
   (no CLI joke-level flag yet) — NOT persisted (M1 is dadpocalypse-only). The `jokeLevel` Zod enum in
   `@skipper/shared` stays as the narration vocabulary.
-- **A narration is only live once it has non-null audio** (story, scenic, AND break — `audio_url`
-  is NOT NULL on `narrations` at the DB boundary). The studio pipeline enforces; the player also defends. A
-  drive can't be `ready` until every selected stop resolves to a narration with audio.
+- **A narration is only live once it has non-null audio** (story + scenic — `audio_url` is NOT NULL
+  on `narrations` at the DB boundary; break audio is the deferred `detours` table, also `audio_url`
+  NOT NULL). The studio pipeline enforces; the player also defends. A drive can't be `ready` until
+  every selected stop resolves to audio.
 - **Persona lives in DELIVERY, never in FACTS.** "Make it funny" never loosens
   accuracy. A POI with thin/no Wikipedia is downgraded to scenic/break — silence
   beats a hallucinated battle.
 - **Break stops MAY name the place + category, but bake NO VOLATILE data**
-  (hours, rating, "open till 9", popularity, features). The break's `name`/`kind`
-  come from the curated Places anchor (a minimal non-volatile field mask) and are
-  spoken in the clip like the region is; everything volatile is fetched fresh at
-  drive-load (and "ask the skipper" later). Break audio is **mandatory** — every
-  selected break gets a narration with audio; a silent break never rides a drive.
-  (NOTE: baking the Places name into a frozen R2 clip extends its lifetime
-  past the DB anchor — mind Places ToS; `resynth-narration` re-synths one place's clip if a
-  place renames.)
+  (hours, rating, "open till 9", popularity, features). A break anchor lives in the `places` table
+  (Google `place_id`, NOT a poi); its `name`/`primary_type` are a minimal non-volatile mask, spoken
+  in the clip like the region is; everything volatile is fetched fresh at drive-load (and "ask the
+  skipper" later). Break AUDIO is the `detours` table (1:1 per place, `audio_url` NOT NULL, so a
+  silent break never rides a drive) — **DEFERRED/stubbed today** (nothing writes it yet). (NOTE: a
+  baked Places name in a frozen R2 clip outlives the DB anchor — mind Places ToS.)
 
 ## Stack notes
 
