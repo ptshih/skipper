@@ -28,7 +28,8 @@ over a route you pick (any A→B), as phone audio (CarPlay later). First region:
 ## Stack
 
 - **TypeScript 6** everywhere · **bun** (package manager + runtime + workspaces)
-- **Backend:** Hono (served natively by bun) · **DB:** Neon + Drizzle · **Auth:** Better Auth (freemium) · **Audio:** Cloudflare R2 (private; presigned URLs)
+- **Backend:** Hono (served natively by bun) · **DB:** Neon + Drizzle · **Auth:** Better Auth (freemium) · **Audio:** Cloudflare R2 (private; presigned URLs) via `@skipper/storage`
+- **Routing:** Google Routes (A→B route materialization) via `@skipper/routing`
 - **AI:** Anthropic `claude-opus-4-8` (narration) · Google Cloud Text-to-Speech — Gemini-TTS voice "Charon" (OAuth/ADC, no API key; AAC-LC 48 kbps .m4a — LINEAR16 from TTS, then ffmpeg loudnorm + AAC encode)
 - **Mobile (MVP = phone player):** Expo SDK 56, `expo-audio` + `expo-location`; CarPlay (`@g4rb4g3/react-native-carplay`) deferred past the MVP
 
@@ -38,11 +39,15 @@ over a route you pick (any A→B), as phone audio (CarPlay later). First region:
 skipper/
 ├── apps/
 │   ├── api/        @skipper/api       — Hono API (M2). Bun-native serve.
+│   ├── admin/      @skipper/admin     — Vite + Hono ops console (cloud-run the studio CLIs) behind Google IAP.
+│   ├── site/       @skipper/site      — Astro landing page (skipper.fm).
 │   └── mobile/     @skipper/mobile    — Expo app. Phone player is the MVP (CarPlay later).
 ├── packages/
 │   ├── shared/     @skipper/shared    — Zod schemas + types, imported everywhere.
 │   ├── db/         @skipper/db        — Drizzle schema + Neon client.
 │   ├── studio/     @skipper/studio    — server-side narration/corpus generation (discover → enrich → generate).
+│   ├── routing/    @skipper/routing   — Google Routes client (A→B route materialization).
+│   ├── storage/    @skipper/storage   — Cloudflare R2 / S3 client (audio upload + presign).
 │   ├── engine/     @skipper/engine    — pure geo + trigger engine + drive sim + preview timeline (RN-safe; shared by sim & mobile).
 │   └── sim/        @skipper/sim       — DB-backed drive-sim CLI (runs @skipper/engine against a real tour).
 ├── design-system/  — browsable HTML mirror of the "Trailhead 89" design system (open index.html). A specimen book; not a workspace. Canonical source = apps/mobile/DESIGN.md + src/theme + src/ui.

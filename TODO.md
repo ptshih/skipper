@@ -5,43 +5,6 @@ Carry-forward **engineering** items (the near-term layer of the truth system —
 Each item has enough context to action without re-deriving the reasoning. **Delete items
 when done** — git history is the archive.
 
-## POIs / facts model — decouple from roam + the facts-depth redesign
-
-POIs are the SHARED corpus (tours AND roam select from it); roam is one consumer, not the owner.
-Naming decoupled 2026-06-15: `sweep-roam-pois.ts` → `discover-pois.ts`, and the gen-job kind
-moved OFF a pg enum → a plain `text` column with the vocabulary single-sourced as the Zod `jobKind`
-in `@skipper/shared` (migration `0005_jobkind_to_text` renamed `sweep_roam_pois` → `sweep_region_pois`;
-a rigid pg enum was the wrong shape for a churning, observability-only label). `buildStoryFacts`
-shipped 2026-06-15 — all four facts writers (sweep, `refetch-poi`, tour + roam deepen) + the roam
-clip-hash now build `pois.facts` through one pure helper in `persist.ts`, so key order +
-qid-preservation are structural + unit-tested. Also shipped 2026-06-15: eligibility is now framed as
-a POI property — `@skipper/shared/story-eligibility.ts` (`classifyStoryEligibility` + `StoryEligibility`
-+ `STORY_TASTE_DENYLIST`), split from the roam-specific clip status; `/admin/pois`
-returns `storyEligibility` + `roamClip` and the POIs table shows a "Story" column (applies to tours +
-roam) with a separate roam-clip badge. The taste gate is now shared too (2026-06-15): the tour
-candidate loader (`region-corpus.ts::loadCandidatePoisInBox`) drops `STORY_TASTE_DENYLIST` titles from
-the pool, same as roam's queue — so a tour can't narrate a violent-crime POI either.
-
-**Facts-depth redesign — DONE 2026-06-15 (the "real step 1", one-field version).** Resolved simpler
-than "store both": `facts.extract` now IS the full article (no separate lead field) — the **sweep
-deepens at discovery time** (`fetchFullExtracts`), stores the full extract, hashes ONCE. Generation
-reads it: roam's per-run deepen is removed (reads the corpus full, no re-fetch / no mutation / no
-hash churn). Eligibility measured the FULL article via `STORY_MIN_EXTRACT` (retuned 400→800) — but that
-arbitrary char floor was **REMOVED 2026-06-16**: story-grade = "the enricher built a fact sheet," and the
-enricher (not a cutoff) decides if an article is rich enough to narrate (see `docs/decisions/corpus-enrichment.md`).
-The lead survives only transiently for discovery tiering (`tierOf`, `STORY_MIN_FACT_CHARS=140`).
-
-Both follow-ups DONE 2026-06-15:
-- **Tour deepen retired.** `generate.ts` no longer re-fetches/deepens — it grounds on the corpus
-  extract; `loadFreshPoiFacts`/`fetchFullExtracts`/`FACTS_TTL_HOURS` dropped from the tour path. The
-  sweep + `refetch-poi` now store the NORMALIZED extract (`toFacts(...).join(' ')`) so the sweep, tour,
-  and roam hash IDENTICALLY (no recompute drift / no spurious staleness). Override-freshness moved to
-  `refetch_facts` (now fetches the FULL article + re-applies overrides) / a re-sweep — not a per-run
-  fetch. (`loadFreshPoiFacts` + its `isFactsFresh`/`FACTS_TTL_HOURS`/`cachedExtractSuspect` read-through
-  were DROPPED 2026-06-16 as dead code — the retired mechanism is gone; refresh is `refetch_facts`/re-sweep.)
-- **Richer extracts.** `fetchFullExtracts` drops the MediaWiki-clamped `exchars` (hard cap 1200),
-  pulls full plaintext, and self-truncates to `DEEP_EXTRACT_CHARS=4000` at a sentence boundary.
-
 ## Admin local-dev resilience — guard against "just errors out"
 
 The admin in local dev (vite `:5173` client + Hono admin-api `:8788`, `bun run dev:admin`)

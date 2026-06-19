@@ -45,14 +45,27 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
 ## Index
 
 ### decisions/
-- [tour-data-model-zero-reuse.md](decisions/tour-data-model-zero-reuse.md) — **the canonical entity
-  model** (shared facts on `pois`, tour-owned narration on `tour_stops`, zero content reuse); built +
-  live-migrated 2026-06-08.
+- [tour-data-model-zero-reuse.md](decisions/tour-data-model-zero-reuse.md) — shared facts on `pois`,
+  zero content reuse; the PRINCIPLE survives but the **ENTITY MODEL is SUPERSEDED by V2 (2026-06-18)** —
+  the live model is `pois ─1:1─ narrations` (shared atom) + user-owned `drives`, not the old
+  `tour_stops` (migration `0009` dropped `tours`/`segments`/`tracks`/`tour_frames`).
 - [create-a-drive-architecture.md](decisions/create-a-drive-architecture.md) — **the V2 build record**
-  (decided + build-started 2026-06-18): the roam-first data model (one atom `pois`──1:1──`narrations` +
+  (✅ BUILT 2026-06-18): the roam-first data model (one atom `pois`──1:1──`narrations` +
   sequences; `segments`/`tour_frames` dissolve; roam = a mode; `drives` = user-owned sequences;
   `asides` flavor) + the two-phase Create-a-Drive flow, access/credits, and the build phases.
   Product rationale: [roam-first-create-a-drive.md](ideas/roam-first-create-a-drive.md).
+- [api-versioning-posture.md](decisions/api-versioning-posture.md) — no URL versioning; evolve the
+  contract additively, with `GET /version` + the mobile `VersionGate` as the sole hard-break escape
+  hatch; decided + built 2026-06-09.
+- [region-corpus-discovery.md](decisions/region-corpus-discovery.md) — the discovery-first sweep
+  (`discover-pois.ts` → `pois`) that populates a region's shared POI corpus; the SWEEP survives but
+  its original tour-generation consumer is **CONSUMER SUPERSEDED by V2** (migration `0009`).
+- [corpus-enrichment.md](decisions/corpus-enrichment.md) — the paid `enrich` step that scouts story
+  POIs into curated fact wells (`pois.fact_sheet`) shared by roam + drives; ✅ BUILT 2026-06-15, RUN
+  2026-06-16 (315 welled).
+- [t-share-funnel-removed.md](decisions/t-share-funnel-removed.md) — the `/t/<id>` share funnel
+  removed (drives are user-owned, not anonymous-shareable); the iOS universal-link capability kept
+  dormant; decided + done 2026-06-19.
 - [tour-structure-design-review.md](decisions/tour-structure-design-review.md) — adversarial
   pre-build review of the tour-structure spec (verdict: build-with-fixes); historical.
 - [audio-compression-spike.md](decisions/audio-compression-spike.md) — WAV → MP3 32 kbps spike;
@@ -87,12 +100,13 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
 - [scenic-stops-spec.md](specs/scenic-stops-spec.md) — deliberately adding scenic stops; unblocked
   but partially overtaken by the pacing rework — re-ground before building.
 - [corpus-enrichment-spec.md](specs/corpus-enrichment-spec.md) — a paid `enrich` step that scouts the
-  POI facts ONCE at the corpus (verbatim selection → a curated "fact well" tours + roam share); the
-  well becomes the narration bound, letting the raw-extract cap drop. Unbuilt, gated on greenlight + ear-test.
+  POI facts ONCE at the corpus (verbatim selection → a curated "fact well" roam + drives share); the
+  well becomes the narration bound, letting the raw-extract cap drop. ✅ BUILT 2026-06-15, RUN 2026-06-16.
 - [admin-ops-console-spec.md](specs/admin-ops-console-spec.md) — **builder infra**: cloud-execute the
-  tour-ops CLIs (generate/patch/resynth/sweep) as **Cloud Run Jobs** (v0), then a deployed `apps/admin`
-  (Vite + Hono) behind **Google IAP** with a `pipeline_jobs` record + ear-pass/eval monitor (v1);
-  build-ready, unbuilt, greenlit + microscope-hardened 2026-06-10.
+  studio CLIs (discover/enrich/generate/resynth/sweep) as **Cloud Run Jobs** (v0), then a deployed
+  `apps/admin` (Vite + Hono) behind **Google IAP** with a jobs record + ear-pass/eval monitor (v1);
+  ✅ BUILT + DEPLOYED 2026-06-11, **partially superseded 2026-06-19** (the §5b Create-Tour authoring
+  flow was never built — hand-authored tours are V2-deferred).
 - [free-roam-alpha-spec.md](specs/free-roam-alpha-spec.md) — what the free-roam ALPHA actually is
   (roam_clips third owner, basin sweep, ~60s encounters, RoamEngine, duckOthers posture) + its
   deliberate cuts; BUILT 2026-06-10, founder-only TestFlight.
@@ -115,9 +129,6 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   in seconds → roam clips pre-ordered along it, user-owned) are the two first-day experiences;
   the hand-authored tour is DEFERRED. journey-layer rung 2 made buildable on the batch stack via
   clip REUSE; zero-reuse scopes down to the authored rung; V2 may break freely (V1 never shipped).
-- [corpus-enrichment.md](ideas/corpus-enrichment.md) — enrich the POI facts ONCE at the corpus
-  (a paid `enrich` step) instead of per-tour-stop, so tours + roam share it; the curated "fact
-  well" becomes the narration bound, letting the raw-extract cap drop (2026-06-15, pre-spec).
 
 The rest are post-MVP features, gated behind the proven phone player:
 - [drive-complete-moment.md](ideas/drive-complete-moment.md) — the payoff beat as motion + sound
@@ -127,6 +138,8 @@ The rest are post-MVP features, gated behind the proven phone player:
   the toy lens).
 - [region-skippers.md](ideas/region-skippers.md) — a different named host per region (M4).
 - [passport-logbook.md](ideas/passport-logbook.md) — stamps + the skipper's logbook souvenir layer.
+- [signature-canon-bit.md](ideas/signature-canon-bit.md) — a signature recurring beat riders learn to
+  wait for; DEFERRED 2026-06-10 (revisit with region-skippers, M4-ish).
 
 ### research/
 - [competitive-research.md](research/competitive-research.md) — multi-agent cited research across
@@ -141,6 +154,9 @@ The rest are post-MVP features, gated behind the proven phone player:
   comparison/SEO factory), not the app; the comparison table is a trap + caps at niche; "refuse the
   category, win post-install on character + region-depth"; the honest hole = acquisition still unsolved
   (2026-06-12, from their marketing).
+- [jungle-cruise-skipper-craft.md](research/jungle-cruise-skipper-craft.md) — adversarially-verified
+  research digest behind the persona's voice; feeds `packages/studio/src/persona/skipper.ts` +
+  `SKIPPER_TTS_STYLE_PROMPT` (2026-06-09).
 
 ### guides/
 - [eas-setup.md](guides/eas-setup.md) — building + running the Expo app on EAS (dev build).
@@ -150,3 +166,9 @@ The rest are post-MVP features, gated behind the proven phone player:
 - [gcp-cloud-run-deploy.md](guides/gcp-cloud-run-deploy.md) — deploying `@skipper/api` to Cloud Run
   (us-east4, co-located with the Neon DB); push-to-`main` continuous deployment via Cloud Build,
   the dotenvx-secret-from-Secret-Manager model, and the one-time IAM/DRS gotchas.
+- [ops-scripts-sop.md](guides/ops-scripts-sop.md) — the safe-by-default contract for the studio's
+  one-off operational CLIs (preview unless `--apply`); reference impl `sweep-orphans.ts`; adopted
+  2026-06-10.
+- [create-a-drive-verification-runbook.md](guides/create-a-drive-verification-runbook.md) — the
+  one-sitting on-device pass that clears the last V2 gate: the live Create→propose→confirm→generate→
+  preview→drive runtime (needs a dev build + signed-in account + real LLM/Maps spend); written 2026-06-18.
