@@ -6,6 +6,11 @@
 // before bumping.
 
 import Anthropic from '@anthropic-ai/sdk'
+import { CLAUDE_MODELS } from '@skipper/shared'
+
+// Re-export the shared HAIKU id so the in-job summarizer (pipeline/job-output.ts) sources it from
+// studio/models.ts alongside the other model ids, while @skipper/shared stays the single source.
+export const SUMMARY_MODEL = CLAUDE_MODELS.haiku
 
 // ---------------------------------------------------------------------------
 // Shared Anthropic client — ONE lazily-built singleton for every call site.
@@ -45,8 +50,9 @@ export function getAnthropic(label = 'a model call needs it'): Anthropic {
 // COST (a founder-relevant axis, per CLAUDE.md): Opus 4.8 is $5/$25 per MTok — HALF
 // of Fable's $10/$50, so a regen now bills less than the Fable interim did.
 //
-// Source: Anthropic model catalog (claude-api skill — "Current Models" table).
-export const NARRATION_MODEL = 'claude-opus-4-8' as const
+// Source: Anthropic model catalog (claude-api skill — "Current Models" table); the id literal is
+// single-sourced in @skipper/shared (CLAUDE_MODELS).
+export const NARRATION_MODEL = CLAUDE_MODELS.opus
 
 // JUDGMENT tier — every NON-narration model call: the enrichment scout (pipeline/scout.ts)
 // and the structured-report / spot-check judges (eval/charm.ts, pipeline/judge.ts,
@@ -60,7 +66,7 @@ export const NARRATION_MODEL = 'claude-opus-4-8' as const
 //       this would silently shift every score (re-run eval/calibrate.ts after any bump).
 // Upgraded Sonnet→Opus 2026-06-09 at founder request (the old NARRATION_MODEL_ALTERNATES
 // catalog is gone with them).
-export const JUDGMENT_MODEL = 'claude-opus-4-8' as const
+export const JUDGMENT_MODEL = CLAUDE_MODELS.opus
 
 // ENRICH tier — the corpus `enrich` step's fact-sheet builder (pipeline/scout.ts buildCorpusFactSheet).
 // The fact-sheet builder SELECTS verbatim spans + grounded bundles; that is an easier call than narration
@@ -70,8 +76,8 @@ export const JUDGMENT_MODEL = 'claude-opus-4-8' as const
 // forced tool_choice {type:'any'} (the fact-sheet builder forces it every turn) — only Fable rejected that,
 // so either is safe. Sources: claude-api skill "Current Models" table (verified 2026-06-15).
 export const ENRICH_MODELS = {
-  sonnet: 'claude-sonnet-4-6',
-  opus: JUDGMENT_MODEL, // 'claude-opus-4-8'
+  sonnet: CLAUDE_MODELS.sonnet,
+  opus: JUDGMENT_MODEL, // CLAUDE_MODELS.opus ('claude-opus-4-8')
 } as const
 export type EnrichModelChoice = keyof typeof ENRICH_MODELS
 

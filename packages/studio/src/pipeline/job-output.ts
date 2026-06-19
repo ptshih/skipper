@@ -12,6 +12,7 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import { format } from 'node:util'
+import { SUMMARY_MODEL } from '../models'
 
 // Cap the in-memory tail we keep (synth truncates further). Bounds memory on a chatty run;
 // the head of a very long log is the least useful part, so we keep the TAIL.
@@ -83,7 +84,7 @@ export async function synthesizeJobOutput(kind: string, log: string): Promise<Jo
   try {
     const msg = await client().messages.create(
       {
-        model: 'claude-haiku-4-5-20251001',
+        model: SUMMARY_MODEL,
         max_tokens: 1024,
         system: SYSTEM,
         messages: [
