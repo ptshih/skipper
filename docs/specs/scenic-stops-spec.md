@@ -71,7 +71,7 @@ let the existing geology channel light up underneath.*
 
 | Mechanism | Where the scenic stop comes from | Data | Verdict |
 |---|---|---|---|
-| **Curated/frozen scenic anchors** | per-drive hand-picked coord + non-naming label (mirror `GEOLOGY_ICONIC_STOPS`) | none (config + geometry) | **Ship first** |
+| **Curated/frozen scenic anchors** | hand-picked coord + non-naming label, as a config table (the old `GEOLOGY_ICONIC_STOPS` const is gone, but the curated-anchor TABLE pattern is fine) | none (config + geometry) | **Ship first (if §3 keeps it)** |
 | **Rotating scenic-mode palette** | — (content layer, §5) | none | **Mandatory, build with #1** |
 | **Gap-fill (auto aside)** | time-gap between narrated stops > threshold → scenic at a route VERTEX | none | Strong, next |
 | **Terrain/elevation-derived** | pass-crests, the lake-reveal, from the elevation profile | USGS 3DEP/EPQS (offline) | Later (expansion) |
@@ -234,18 +234,23 @@ eyeball grounding — no leaked landmark name) + load into the simulator (trigge
 ---
 
 ## 8. Open founder decisions
-- **Enum name:** `'curated'` vs `'route'` / `'scenic'` (and whether to share it with directionality's
-  `start`/`finish` anchors — see §4).
+- **Is a synthetic anchor even needed?** Decide whether Wikidata-discovered pins + the
+  un-enriched→scenic downgrade (§3) already cover the deliberate-scenic need, or whether a
+  founder-placed-overlook (no POI at all) still warrants re-adding the reverted `'curated'`
+  `poiSourceEnum` value.
 - **Build the full mode palette now, or ship one geology-mode anchor first** as a smoke test, then
   layer modes.
-- **Per-drive vs per-family scenic anchors** once directionality lands (direction-dependent framing).
+- **Direction-neutral shared scenic vs a deferred direction-aware variant axis** — the V2 1:1
+  `narrations` atom forces one shared telling per place reused both ways (§4); decide if the
+  CLIMB/REGION-FRAME mode stays direction-neutral or waits on the deferred multi-telling axis.
 
 ## 9. Invariants to honor
 Persona lives in DELIVERY not FACTS; scenic names no landmark (geology the one exception); frozen
-rails (don't let "curated WHERE" leak into curated WHAT — the words stay generated); every stop has a
-trigger point + audio (ready-gate); keep the geology + Wikidata enrichment channels working unchanged.
+rails (don't let "curated WHERE" leak into curated WHAT — the words stay generated); every telling has
+a trigger point + non-null `audio_url` (the readiness boundary); a SHARED scenic telling stays
+direction-neutral (§4); keep the geology + Wikidata enrichment channels working unchanged.
 
 ---
 
 *Source: 9-agent design workflow + two adversarial lenses (charm/pacing vs engineering/grounding),
-2026-06-08. Memory: `scenic-stops-plan.md`.*
+2026-06-08; V2 re-anchor 2026-06-19. Memory: `scenic-stops-plan.md`.*
