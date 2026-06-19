@@ -17,15 +17,11 @@ import { join, resolve } from 'node:path'
 // files as text. Importing the schema is still side-effect-free (no DB, no env).
 import {
   poiSourceEnum,
-  tourStatusEnum,
-  trackFormEnum,
-  frameKindEnum,
+  narrationFormEnum,
 } from '../packages/db/src/schema'
 import {
   poiSource,
-  tourStatus,
-  trackForm,
-  frameKind,
+  narrationForm,
   attributionSource,
 } from '../packages/shared/src/enums'
 
@@ -35,9 +31,7 @@ const norm = (xs: readonly string[]) => [...xs].sort().join(', ')
 // pgEnum.enumValues (Drizzle) must equal its Zod z.enum.options, member-for-member.
 const PAIRS: { name: string; pg: readonly string[]; zod: readonly string[] }[] = [
   { name: 'poi_source ⇄ poiSource', pg: poiSourceEnum.enumValues, zod: poiSource.options },
-  { name: 'tour_status ⇄ tourStatus', pg: tourStatusEnum.enumValues, zod: tourStatus.options },
-  { name: 'track_form ⇄ trackForm', pg: trackFormEnum.enumValues, zod: trackForm.options },
-  { name: 'frame_kind ⇄ frameKind', pg: frameKindEnum.enumValues, zod: frameKind.options },
+  { name: 'narration_form ⇄ narrationForm', pg: narrationFormEnum.enumValues, zod: narrationForm.options },
 ]
 for (const { name, pg, zod } of PAIRS) {
   if (norm(pg) !== norm(zod)) {
