@@ -3,9 +3,9 @@
 > **Status:** idea, pre-spec — needs breadth to matter (M4, multiple regions); pairs with the region
 > expansion. The generation registry is BUILT (`PersonaDef`, commit `687c885`). Presentation host
 > identity is now resolved in code via `personaFromKey('skipper')` and baked into the audio (the
-> `personas` table is forward-compat scaffolding, UN-CONSUMED in v2 — `apps/api/src/host.ts` was
-> dropped with the legacy tour tables, commit `e5afa38`). Captured 2026-06-08; extracted from
-> CLAUDE.md 2026-06-09.
+> `personas` table was DROPPED in migration 0014; host identity is resolved in code via `personaFromKey`
+> and baked into audio — `apps/api/src/host.ts` was dropped earlier with the legacy tour tables, commit
+> `e5afa38`). Captured 2026-06-08; extracted from CLAUDE.md 2026-06-09.
 
 The Tahoe skipper is not the Yosemite skipper: each region gets a named guide with its own persona,
 backstory, and (optionally) voice — variations on the deadpan pun-machine DNA, not a

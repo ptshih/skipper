@@ -1,11 +1,13 @@
 # V2 — roam-first + Create-a-Drive
 
-> **Status:** IDEA → V2 PRODUCT STRUCTURE, founder-converged in a brainstorm 2026-06-18. Pre-spec:
-> the architecture is being designed (a design-panel workflow) and promotes to `docs/specs/` only on
-> an explicit build-greenlight. This is the larval **rung 2** of [journey-layer.md](journey-layer.md)
-> made buildable on TODAY's batch stack, and the promotion of [roam-first-region-expansion.md](roam-first-region-expansion.md)
-> from a region-opening *tactic* into the **first-day product shape**. **V2 may break freely** — see
-> §Doctrine.
+> **Status:** CONVERGED + BUILT — see [../decisions/create-a-drive-architecture.md](../decisions/create-a-drive-architecture.md)
+> for build truth; this doc retained for the product rationale + the DEFERRED authored-drive (rung 3)
+> vision. (Founder-converged in a brainstorm 2026-06-18; the full V2 migration shipped same day —
+> `narrations`/`drives`/`asides` schema, the `/drives` API, the mobile Create-a-Drive flow + roam-first
+> home.) This is the larval **rung 2** of [journey-layer.md](journey-layer.md) made buildable on TODAY's
+> batch stack, and the promotion of [roam-first-region-expansion.md](roam-first-region-expansion.md)
+> from a region-opening *tactic* into the **first-day product shape**. **V2 broke freely** at the
+> cutover — see §Doctrine.
 
 ## The pivot
 
@@ -117,17 +119,23 @@ A code scout (2026-06-18) confirmed most pieces exist:
 
 ## Design outcome + founder decisions (2026-06-18)
 
+> **SUPERSEDED — now shipped code, not idea.** The resolutions below BUILT; current truth lives in
+> [../decisions/create-a-drive-architecture.md](../decisions/create-a-drive-architecture.md). Kept
+> here as the as-decided record.
+
 A design-panel workflow (3 architectures × 3 adversarial judge lenses) produced a build-ready
-architecture; full detail is in the `v2-roam-create-a-drive-architecture` memory (a `docs/decisions/`
-record is pending a build-greenlight). Workflow resolutions:
+architecture; full detail is in the `v2-roam-create-a-drive-architecture` memory and the now-built
+[../decisions/create-a-drive-architecture.md](../decisions/create-a-drive-architecture.md). Workflow
+resolutions:
 
 - **Persisted, not ephemeral.** A `drives` row holds a FROZEN selection manifest *referencing*
   shared roam tracks (mints nothing; preserves no-`createdBy`-on-`tours`); re-open replays it verbatim
   (resolve-and-skip dangling refs). An OPEN `POST /drives/preview` keeps the anonymous funnel-top
   friction-free; the wall stays at save/download/drive.
-- **Selection** = a NEW `generateDrive()` in `engine` (co-located dedupe inverts to
+- **Selection** = a NEW `buildDrive()` in `engine` (co-located dedupe inverts to
   pick-one — you can't fuse finished `.m4a`s), ranking by along-route fit + real `audioDurationMs`
-  best-fit + variety; runs on both server and device (offline re-pace).
+  best-fit + variety; runs on both server and device (offline re-pace). (As shipped, the selection
+  function is `buildDrive`; engine's `generateDrive` is the unrelated GPS-fix simulator.)
 - **`route_sig` + a `drive_demand` counter** ship as instrumentation ONLY; the cache-warming /
   authored-graduation infra is deferred behind a real route-concentration histogram.
 
@@ -155,13 +163,18 @@ Founder calls (2026-06-18):
    **precomputed + cached per region** (refreshed on corpus change), not live-LLM-per-open. Tapping one
    skips free-text resolution → straight to confirm. Suggestions are the COLD-START; popular `route_sig`s
    augment them once `drive_demand` has data (the steady state).
-6. **Loops (A→A round trips).** `materializeRoute` already takes a waypoint ARRAY and `generateDrive` is
+6. **Loops (A→A round trips).** `materializeRoute` already takes a waypoint ARRAY and `buildDrive` is
    route-shape-agnostic, so a loop (`A → via-points → A`) flows through unchanged. Work is only: a loop UX
    affordance (destination-optional + "around X" / duration hint), the LLM resolving "loop around the
    lake" → the waypoint set, and a **shape-aware `route_sig`** (endpoint-only keys collide when start≈end
    — key on via-points / a polyline hash).
 
 ## Access + monetization (RESOLVED 2026-06-18 — closes the long-open gate)
+
+> **SUPERSEDED — now shipped code, not idea.** The access model below BUILT (`FREE_DRIVE_CAP`
+> default 10, the `requireAccount`-gated `/drives*` sub-app, drive credits lifetime-not-refunded);
+> current truth lives in [../decisions/create-a-drive-architecture.md](../decisions/create-a-drive-architecture.md).
+> Kept here as the as-decided record.
 
 - **Anonymous = Roam ONLY.** Creating a Drive requires a FREE account. The create-action wall sits at
   account-creation — distinct from, and earlier than, the existing play/preview wall (a deliberate
@@ -181,6 +194,13 @@ confirmed generate and REFUNDED on failure; the free-tier CAP ships in core v2 w
 fast-follow; **default free-tier N = 10 drives** (admin-tunable). Design is now fully locked.
 
 ## Settled V2 data model (2026-06-18) — supersedes earlier `user_drives`/`beats` mentions above
+
+> **SUPERSEDED — now shipped schema, not idea.** This model BUILT verbatim (migration 0009 +
+> follow-ups); the live tables are `regions`/`pois`/`poiOverrides`/`narrations`/`asides`/`drives`/
+> `drive_demand` + eval/studio-job tables. NOTE: the `personas` table named below as "built" was
+> later DROPPED (migration 0014) — host identity resolves in code via `personaFromKey`. Current truth:
+> [../decisions/create-a-drive-architecture.md](../decisions/create-a-drive-architecture.md). Kept
+> here as the as-decided record.
 
 The conversation collapsed the model to a single atom + sequences over it. **`segments` and
 `tour_frames` DISSOLVE.**

@@ -39,12 +39,13 @@ and addressed to YOUR drive, not a static unlock.
      milestone trips mid-drive and he just mentions it ("that's your 50th stop
      with me") — Untappd's behavioral badge as spoken narration, not a popup.
 - **Architecture.** Lives on the USER, not the tour — respects the no-`createdBy`
-  invariant (join on the user side, like `saved_tours`). ONE source of truth = a
-  completed-drive event stream (stamps are the rows; stats are the rollup). Needs
-  player telemetry not yet emitted: a drive-completed / payoff-reached event (+
-  listening time, time-of-day). Host/portrait art is served from the regions
-  registry (see [region-skippers.md](region-skippers.md)), so the collection just records
-  met + counts.
+  invariant via a user-side table (the precedent now exists: the shipped `drives` table is
+  user-owned on a NOT-NULL `user_id` FK and references shared narrations; the same seam carries
+  this collection). ONE source of truth = a completed-drive event stream (stamps are the rows;
+  stats are the rollup). Needs player telemetry not yet emitted: a drive-completed / payoff-reached
+  event (+ listening time, time-of-day). Host/portrait art resolves in code via the `PersonaDef`
+  registry (`personaFromKey`; there is no `personas` table — see
+  [region-skippers.md](region-skippers.md)), so the collection just records met + counts.
 - **Open forks (left for revisit).** (a) completion = proof-of-EXPERIENCE
   (finished + heard the payoff) vs proof-of-traversal (dot passed the geofence) →
   leaning experience; (b) meeting a skipper = relationship model (present from
