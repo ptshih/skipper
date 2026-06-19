@@ -24,7 +24,7 @@ function rollupDimension(dimension: EvalDimension, evals: StopEval[]): Dimension
 
 export interface ScorecardInput {
   slug: string
-  tourName: string
+  runName: string
   /** ISO-8601, or null if the caller didn't stamp one. */
   evaluatedAt: string | null
   /** Every per-stop dimension eval produced by the panel (any mix of dimensions). */
@@ -42,7 +42,7 @@ export function buildScorecard(input: ScorecardInput): RunScorecard {
   const pass = dimensions.filter((d) => d.kind === 'gate').every((d) => d.pass)
   return {
     slug: input.slug,
-    tourName: input.tourName,
+    runName: input.runName,
     evaluatedAt: input.evaluatedAt,
     dimensions,
     stops: input.stops,

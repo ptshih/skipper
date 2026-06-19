@@ -192,7 +192,7 @@ describe('buildScorecard — rollup + the gate', () => {
   test('a grounding (GATE) failure fails the whole tour', () => {
     const card = buildScorecard({
       slug: 'emerald-bay-run',
-      tourName: 'Emerald Bay',
+      runName: 'Emerald Bay',
       evaluatedAt: null,
       stops: [groundingEval(0, true, 1), groundingEval(1, false, 0.5), groundingEval(2, true, 1)],
     })
@@ -207,7 +207,7 @@ describe('buildScorecard — rollup + the gate', () => {
   test('an ADVISORY (charm) failure does NOT fail the tour', () => {
     const card = buildScorecard({
       slug: 't',
-      tourName: 'T',
+      runName: 'T',
       evaluatedAt: null,
       stops: [groundingEval(0, true, 1), charmEval(0, false), charmEval(1, false)],
     })
@@ -221,7 +221,7 @@ describe('buildScorecard — rollup + the gate', () => {
   test('all gates clean → tour passes', () => {
     const card = buildScorecard({
       slug: 't',
-      tourName: 'T',
+      runName: 'T',
       evaluatedAt: null,
       stops: [groundingEval(0, true, 1), groundingEval(1, true, 1)],
     })
