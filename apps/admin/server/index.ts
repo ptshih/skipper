@@ -37,7 +37,7 @@ import {
   pois,
   regions,
 } from '@skipper/db/schema'
-import { classifyStoryEligibility } from '@skipper/shared'
+import { CLAUDE_MODELS, classifyStoryEligibility } from '@skipper/shared'
 import { requireAdmin, type AdminEnv } from './auth'
 import { contentTypeForKey, presignGet } from './storage'
 import {
@@ -138,7 +138,7 @@ app.post('/admin/regions/bbox-lookup', async (c) => {
     (async () => {
       const client = new (await import('@anthropic-ai/sdk')).default()
       const msg = await client.messages.create({
-        model: process.env.ADMIN_PROPOSE_MODEL ?? 'claude-opus-4-8',
+        model: process.env.ADMIN_PROPOSE_MODEL ?? CLAUDE_MODELS.opus,
         max_tokens: 512,
         tools: [BBOX_TOOL],
         tool_choice: { type: 'any' },
@@ -298,7 +298,7 @@ app.get('/admin/runs', async (c) => {
 
 const TERMINAL = ['succeeded', 'failed', 'canceled'] as const
 const RECONCILE_AFTER_MS = 30_000
-// Past the Cloud Run task-timeout (cloudbuild.gen.yaml = 3600s) + slack, a non-terminal row can
+// Past the Cloud Run task-timeout (cloudbuild.studio.yaml = 3600s) + slack, a non-terminal row can
 // NOT still be running — the job was killed. Force-fail it with NO API round-trip; this is the
 // backstop for a row the executionState reconcile can't settle (no/expired execution name, or a
 // row already >1h old which the list reconcile skips), so a stuck row stops blocking re-runs.

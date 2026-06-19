@@ -83,8 +83,6 @@ export function RunsView() {
     sweepMut.mutate()
   }
 
-  const err = error ?? sweepMut.error
-
   const filtered = useMemo(() => runs.filter((r) => {
     if (src !== 'all' && r.source !== src) return false
     if (kindFilter !== 'all' && r.kind !== kindFilter) return false
@@ -129,9 +127,15 @@ export function RunsView() {
         }
       />
 
-      {err && (
+      {error && (
         <Callout variant="error">
-          <span className="font-medium">Error loading runs:</span> {errMsg(err)}
+          <span className="font-medium">Error loading runs:</span> {errMsg(error)}
+        </Callout>
+      )}
+
+      {sweepMut.error && (
+        <Callout variant="error">
+          <span className="font-medium">Sweep failed:</span> {errMsg(sweepMut.error)}
         </Callout>
       )}
 
@@ -463,10 +467,16 @@ function RunDrawer({ run, onClose }: { run: RunEvent; onClose: () => void }) {
               <SectionLabel>Eval scores</SectionLabel>
               <dl className="grid grid-cols-[120px_1fr] gap-px overflow-hidden rounded-lg border bg-border">
                 {run.grounding != null && <Def label="Grounding" mono>{run.grounding.toFixed(3)}</Def>}
-                {(run as RunEvent & { diversity?: number | null }).diversity != null && (
-                  <Def label="Diversity" mono>{((run as RunEvent & { diversity?: number | null }).diversity ?? 0).toFixed(3)}</Def>
-                )}
               </dl>
+            </div>
+          )}
+
+          {/* Cancel failure — a cancel of a live (possibly spending) job that errored. Surfaced
+              here so the button doesn't just silently flip back. Matches the run-failed box above. */}
+          {cancelMut.error && (
+            <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+              <div className="flex items-center gap-1.5 font-medium"><CircleX size={15} /> Cancel failed</div>
+              <div className="mt-1 leading-relaxed">{errMsg(cancelMut.error)}</div>
             </div>
           )}
         </div>

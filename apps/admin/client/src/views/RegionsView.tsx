@@ -27,7 +27,7 @@ type DialogMode = { mode: 'create' } | { mode: 'edit'; region: Region }
 const CONFIDENCE_META = {
   high: { label: 'High confidence', className: 'text-success' },
   medium: { label: 'Medium confidence', className: 'text-warning' },
-  low: { label: 'Low confidence', className: 'text-red-500 dark:text-red-400' },
+  low: { label: 'Low confidence', className: 'text-destructive' },
 }
 
 export function RegionsView() {

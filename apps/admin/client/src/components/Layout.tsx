@@ -92,7 +92,7 @@ function SidebarBody({
           <div className="min-w-0 flex-1">
             <div className="text-sm font-medium leading-tight text-foreground">Founder</div>
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-success" />
               IAP-gated
             </div>
           </div>

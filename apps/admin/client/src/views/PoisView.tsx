@@ -16,7 +16,7 @@ import { SearchInput } from '@/components/ui/search-input'
 import { Segmented } from '@/components/ui/segmented'
 import { Checkbox } from '@/components/ui/checkbox'
 import { EmptyState } from '@/components/ui/empty-state'
-import { TableSkeletonRows } from '@/components/ui/skeleton'
+import { Skeleton, TableSkeletonRows } from '@/components/ui/skeleton'
 import {
   Sheet,
   SheetContent,
@@ -333,19 +333,26 @@ function Corrections({ poiId }: { poiId: string }) {
   const saving = saveMut.isPending
   const err = validationErr ?? (loadErr ? errMsg(loadErr) : saveMut.error ? errMsg(saveMut.error) : null)
 
+  // One shared submit path for every correction action. The buttons only disable AFTER the first
+  // mutate re-renders, so guard at the top here — a fast double-tap can't double-submit.
+  const save = (...args: Parameters<typeof saveMut.mutate>) => {
+    if (saving) return
+    saveMut.mutate(...args)
+  }
+
   function addCorrection() {
     if (!find.trim() || !reason.trim()) {
       setValidationErr('A find string and a reason are both required.')
       return
     }
-    saveMut.mutate(
+    save(
       { kind: 'fact_edit', find, replace, reason: reason.trim(), ...(sourceUrl.trim() ? { sourceUrl: sourceUrl.trim() } : {}) },
       { onSuccess: () => { setFind(''); setReplace(''); setReason(''); setSourceUrl('') } },
     )
   }
 
   function retire(f: string) {
-    saveMut.mutate({ kind: 'retire', find: f })
+    save({ kind: 'retire', find: f })
   }
 
   function setSpeakable() {
@@ -354,14 +361,26 @@ function Corrections({ poiId }: { poiId: string }) {
       setValidationErr('Speakable anchor needs two numeric coordinates.')
       return
     }
-    saveMut.mutate({ kind: 'speakable', lat: la, lng: ln }, { onSuccess: () => { setLat(''); setLng('') } })
+    save({ kind: 'speakable', lat: la, lng: ln }, { onSuccess: () => { setLat(''); setLng('') } })
   }
 
   function clearSpeakable() {
-    saveMut.mutate({ kind: 'speakable', lat: null })
+    save({ kind: 'speakable', lat: null })
   }
 
-  if (loading) return <div className="py-2 text-xs text-muted-foreground">Loading corrections…</div>
+  if (loading) {
+    return (
+      <div className="flex flex-col gap-4 pt-3" aria-hidden>
+        <Skeleton className="h-4 w-28" />
+        <Skeleton className="h-12 w-full rounded-md" />
+        <div className="flex flex-col gap-2">
+          <Skeleton className="h-3 w-20" />
+          <Skeleton className="h-14 w-full rounded-md" />
+        </div>
+        <Skeleton className="h-28 w-full rounded-md" />
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col gap-4 pt-3">
@@ -546,7 +565,20 @@ function PoiDetailSheet({ poiId, poiName, canDelete, hasNarration, open, onOpenC
           )}
 
           {tab === 'facts' && (
-            detail ? <FactsTab poi={detail} /> : !err && <div className="text-sm text-muted-foreground">Loading…</div>
+            detail ? <FactsTab poi={detail} /> : !err && (
+              <div className="space-y-4" aria-hidden>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <div key={i} className="space-y-1.5">
+                      <Skeleton className="h-3 w-20" />
+                      <Skeleton className="h-4 w-32" />
+                    </div>
+                  ))}
+                </div>
+                <Skeleton className="h-16 w-full rounded-lg" />
+                <Skeleton className="h-32 w-full rounded-lg" />
+              </div>
+            )
           )}
 
           {tab === 'narration' && <NarrationTab poiId={poiId} hasNarration={hasNarration} />}
@@ -679,7 +711,19 @@ function NarrationTab({ poiId, hasNarration }: { poiId: string; hasNarration: bo
       </EmptyState>
     )
   }
-  if (isLoading) return <div className="py-2 text-xs text-muted-foreground">Loading…</div>
+  if (isLoading) {
+    return (
+      <div className="flex flex-col gap-2 pt-1" aria-hidden>
+        <Skeleton className="h-9 w-full rounded-md" />
+        <div className="flex items-center gap-2.5">
+          <Skeleton className="h-3 w-12" />
+          <Skeleton className="h-3 w-16" />
+          <Skeleton className="h-3 w-14" />
+        </div>
+        <Skeleton className="h-24 w-full rounded-md" />
+      </div>
+    )
+  }
   if (error) return <div className="py-2 text-xs text-destructive">{errMsg(error)}</div>
   if (!clip) return null
 
@@ -898,7 +942,7 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
             <SelectItem value="story-filtered">Story: filtered out</SelectItem>
             <SelectItem value="enriched">Enriched</SelectItem>
             <SelectItem value="needs-enrich">Eligible · un-enriched</SelectItem>
-            <SelectItem value="roam-clip-stale">Narration: stale</SelectItem>
+            <SelectItem value="narration-stale">Narration: stale</SelectItem>
             <SelectItem value="sheet-drift">Story: sheet drifted</SelectItem>
             <SelectItem value="defect">Narration defects</SelectItem>
             <SelectItem value="stale">Stale facts</SelectItem>

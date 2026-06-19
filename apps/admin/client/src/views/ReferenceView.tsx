@@ -17,18 +17,17 @@ export function ReferenceView() {
 
       <Callout variant="info">
         <span className="font-medium text-foreground">The loop:</span> discover a region's POI corpus →
-        enrich the story POIs into fact sheets → generate roam clips → ear-pass them on the POIs / Roam
-        pages (listen, read scripts) → tune (patch / re-synth) → repeat. The console defaults to safe —
-        spending and deleting are always opt-in.
+        enrich the story POIs into fact sheets → generate the narrations → ear-pass them on the POIs page
+        (each POI's Narration tab: listen, read the script) → tune (re-synth) → repeat. The console defaults
+        to safe — spending and deleting are always opt-in.
       </Callout>
 
       <Section title="Pages">
         <Dl
           rows={[
             ['Runs', 'Every run, newest first — admin-triggered Cloud Run jobs AND historical CLI generations. Click a row for details.'],
-            ['Regions', 'The regions the corpus is keyed to, each with its discovery bbox (the area Discover + Generate roam sweep).'],
-            ['POIs', 'The shared POI corpus — sources, enrichment, roam-clip freshness, and per-POI curation (fact-edits + speakable anchor).'],
-            ['Roam', 'The free-roam corpus: every story-grade POI with a roam clip; ear-pass + re-synth individual clips.'],
+            ['Regions', 'The regions the corpus is keyed to, each with its discovery bbox (the area Discover + Generate Narration sweep).'],
+            ['POIs', 'The shared POI corpus — sources, enrichment, narration coverage + freshness, and per-POI curation (fact-edits + speakable anchor). Each POI’s Narration tab plays its one telling and re-synths it.'],
           ]}
         />
       </Section>
@@ -60,9 +59,9 @@ export function ReferenceView() {
       <Section title="Preview, Apply & confirmation" subtitle="Safe by default; spending or deleting is always an explicit opt-in.">
         <Dl
           rows={[
-            ['Preview / Apply (OFF by default)', 'OFF = a dry-run preview (shows what would change, touches nothing). ON = actually narrate, synthesize, re-fetch, or delete.'],
-            ['Typed confirmation', 'Any run that spends money or deletes bytes makes you type the target id before the button enables.'],
-            ['Max cost ($)', 'Aborts a paid run (enrich / generate roam) before it exceeds the cap. PRE-spend only — spend already incurred is not refunded.'],
+            ['Preview', 'The dry-run button in every job dialog: shows what would change (counts, cost estimate, the queue in the run log) and touches nothing.'],
+            ['Apply', 'The primary button: actually narrates, synthesizes, re-fetches, or deletes. A paid or destructive Apply is gated server-side (confirm) before it runs.'],
+            ['Confirm dialog', 'In-page destructive / paid actions (Sweep orphans, Re-synth narration, Delete POI) pop a confirm before they fire — no typing required.'],
           ]}
         />
       </Section>
@@ -91,29 +90,25 @@ export function ReferenceView() {
         </div>
       </Section>
 
-      <Section title="Example: roam corpus for a new region" subtitle="Discover first (free), then enrich + generate. Always preview before applying.">
+      <Section title="Example: corpus for a new region" subtitle="Discover first (free), then enrich + generate. Always preview before applying.">
         <ol className="list-decimal space-y-1.5 pl-5 text-sm text-muted-foreground">
+          <li>
+            Regions page → <Step>Add region</Step> — set the slug + a discovery bbox (the lookup helps find one).
+          </li>
           <li>
             POIs page → <Step>Discover POIs</Step> — pick the region, hit <Step>Preview</Step> to dry-run → verify the POI list in the job log.
           </li>
           <li>
-            Hit <Step>Discover</Step> — upserts the shared POI corpus that roam selects from. Free; no confirm needed.
+            Hit <Step>Discover</Step> — upserts the shared POI corpus that roam + drives select from. Free; no confirm needed.
           </li>
           <li>
             Select the eligible story POIs → <Step>Enrich</Step> — scouts each into a verbatim fact sheet (pois.fact_sheet). Preview shows the exact count + cost; Apply spends.
           </li>
           <li>
-            New run → <Step>Generate roam</Step> — set <Step>Limit = 3</Step> for a smoke test. Run dry to see the corpus size and cost estimate.
+            <Step>Generate Narration</Step> — pick the region, hit <Step>Preview</Step> to see the queue + a cost estimate, then <Step>Generate Narration</Step> to narrate + synthesize a narration for every enriched, story-grade POI.
           </li>
           <li>
-            Run again with <Step>Apply</Step> (Limit = 3) — synthesizes 3 clips. Type <code>roam-corpus</code> to confirm.
-            Ear-test them before the full run.
-          </li>
-          <li>
-            Once clips sound good, run <Step>Generate roam</Step> with Apply and no Limit — narrates + synthesizes the full corpus.
-          </li>
-          <li>
-            Use <Step>Force</Step> only if you need to regenerate clips whose facts haven't changed — e.g. after a persona prompt tweak.
+            Ear-pass on the POIs page — open a POI, the <Step>Narration</Step> tab plays its telling and shows the script; <Step>Re-synth</Step> any dud take.
           </li>
         </ol>
       </Section>
@@ -136,39 +131,39 @@ export function ReferenceView() {
 const RUN_KINDS: { kind: string; does: string; cost: ReactNode; safe: string }[] = [
   {
     kind: 'Discover POIs',
-    does: 'Discover Wikidata-pinned places in a region, join Wikipedia, tier them, and upsert the shared POI corpus — the foundational first step that roam selects from.',
+    does: 'Discover Wikidata-pinned places in a region, join Wikipedia, tier them, and upsert the shared POI corpus — the foundational first step that roam + drives select from.',
     cost: 'Free — WDQS + MediaWiki only, no LLM or TTS.',
-    safe: 'Apply OFF — previews the POI list, writes nothing.',
+    safe: 'Preview — lists the POIs, writes nothing. Free, so no confirm.',
   },
   {
     kind: 'Enrich corpus',
-    does: 'Scout each eligible story POI into a curated verbatim fact sheet (pois.fact_sheet) that roam grounds on. A story telling REQUIRES a sheet.',
+    does: 'Scout each eligible story POI into a curated verbatim fact sheet (pois.fact_sheet) that narrations ground on. A story telling REQUIRES a sheet.',
     cost: 'LLM per POI (when applied).',
-    safe: 'Apply OFF — shows the exact count + cost, makes no model calls.',
+    safe: 'Preview — shows the exact count + cost, makes no model calls.',
   },
   {
-    kind: 'Generate roam',
-    does: 'Narrate + synthesize free-roam encounter clips for every story-grade poi in the corpus bbox.',
-    cost: <span>LLM per clip (~$0.10); <span className="text-foreground">TTS</span> per clip (when applied).</span>,
-    safe: 'Apply OFF — shows corpus size + cost estimate.',
+    kind: 'Generate Narration',
+    does: 'Narrate + synthesize the one shared narration for every enriched, story-grade POI in the region.',
+    cost: <span>LLM per narration (~$0.10); <span className="text-foreground">TTS</span> per narration (when applied).</span>,
+    safe: 'Preview — shows the queue + cost estimate, makes no model calls.',
   },
   {
-    kind: 'Re-synth clip',
-    does: 'Re-voice ONE roam clip unchanged — e.g. after a voice or style-prompt change, or a dud TTS take.',
-    cost: 'TTS for one clip (when applied).',
-    safe: 'Apply OFF — preview.',
+    kind: 'Re-synth narration',
+    does: "Re-voice ONE POI's narration unchanged — e.g. after a voice or style-prompt change, or a dud TTS take. Run from the POI's Narration tab.",
+    cost: 'TTS for one narration (when applied).',
+    safe: 'Confirm before it spends.',
   },
   {
     kind: 'Re-fetch facts',
-    does: "Re-fetch a POI's upstream facts (Wikipedia extract). Updates facts_hash, which flags any grounded roam clip as stale.",
+    does: "Re-fetch a POI's upstream facts (Wikipedia extract). Updates facts_hash, which flags any grounded narration as stale.",
     cost: 'Free — MediaWiki only, no LLM or TTS.',
-    safe: 'Apply OFF — previews the diff.',
+    safe: 'Free — no confirm needed.',
   },
   {
     kind: 'Sweep orphans',
     does: 'Delete R2 audio clips that no narration references anymore.',
     cost: 'Deletes bytes (when applied).',
-    safe: 'Apply OFF — lists, deletes nothing.',
+    safe: 'Confirm before it deletes.',
   },
 ]
 
