@@ -1,7 +1,7 @@
-// pipeline_jobs lifecycle hook — the OPERATIONAL record of a cloud tour-ops run.
+// studio_jobs lifecycle hook — the OPERATIONAL record of a cloud tour-ops run.
 //
 // A NO-OP unless STUDIO_JOB_ID is set, so the laptop CLI is byte-identical (it never sets it).
-// In the cloud the Cloud Run Job receives STUDIO_JOB_ID: the admin-api mints the pipeline_jobs row
+// In the cloud the Cloud Run Job receives STUDIO_JOB_ID: the admin-api mints the studio_jobs row
 // (status 'queued') before triggering in v1; a gcloud-triggered v0 run just passes a fresh
 // uuid and beginJob() inserts the row itself. EVERY gen-job entrypoint wraps its body in a
 // main() guarded by beginJob/finishJob (the run.ts shape) — a NEW kind MUST do the same. Never
@@ -13,7 +13,7 @@
 // flip. The admin READS that — it does NOT fetch Cloud Logging. So a kind that skips this hook
 // records neither status nor logs in the console.
 //
-// Every write is BEST-EFFORT: a pipeline_jobs failure must NEVER fail the actual op — observability
+// Every write is BEST-EFFORT: a studio_jobs failure must NEVER fail the actual op — observability
 // must not break generation. All DB calls swallow errors with a warning.
 //
 // Cloud Run injects CLOUD_RUN_EXECUTION automatically, so the row captures the real execution
@@ -22,13 +22,13 @@
 
 import { eq, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
-import { pipelineJobs } from '@skipper/db/schema'
-import type { NewPipelineJob } from '@skipper/db/schema'
+import { studioJobs } from '@skipper/db/schema'
+import type { NewStudioJob } from '@skipper/db/schema'
 import type { JobKind } from '@skipper/shared'
 import { llmSpentUsd } from './spend'
 import { installLogCapture, capturedLog, synthesizeJobOutput } from './job-output'
 
-// pipeline_jobs.kind is a plain text column now; the closed vocabulary is the Zod `jobKind` in @skipper/shared.
+// studio_jobs.kind is a plain text column now; the closed vocabulary is the Zod `jobKind` in @skipper/shared.
 type Kind = JobKind
 
 // The kind of the run in progress — set at begin, used to flavor the finish-time log summary.
@@ -59,14 +59,14 @@ const jobId = (): string | undefined => process.env.STUDIO_JOB_ID || undefined
 const warn = (phase: string, e: unknown): void =>
   console.warn(`[job-progress] ${phase} write failed (non-fatal):`, e instanceof Error ? e.message : e)
 
-/** Flip the pipeline_jobs row to `running`, creating it if a v0 gcloud run didn't pre-create one.
+/** Flip the studio_jobs row to `running`, creating it if a v0 gcloud run didn't pre-create one.
  *  No-op without STUDIO_JOB_ID. Never throws. */
 export async function beginJob(kind: Kind, fields: BeginFields): Promise<void> {
   const id = jobId()
   if (!id) return
   currentKind = kind
   installLogCapture() // tee this run's stdout/stderr so finishJob can persist it on the row
-  const row: NewPipelineJob = {
+  const row: NewStudioJob = {
     id,
     kind,
     status: 'running',
@@ -80,19 +80,19 @@ export async function beginJob(kind: Kind, fields: BeginFields): Promise<void> {
   }
   try {
     await db
-      .insert(pipelineJobs)
+      .insert(studioJobs)
       .values(row)
       // The admin-api may have pre-created the row ('queued') with richer fields; on conflict
       // flip it running + stamp startedAt, preserving everything it set. Also BACKFILL the
       // execution name from THIS job's own env if the admin couldn't capture it at trigger time
       // (CLOUD_RUN_EXECUTION) — keeps every running row reconcilable. COALESCE keeps the admin's.
       .onConflictDoUpdate({
-        target: pipelineJobs.id,
+        target: studioJobs.id,
         set: {
           status: 'running',
           startedAt: new Date(),
           updatedAt: new Date(),
-          cloudRunExecution: sql`coalesce(${pipelineJobs.cloudRunExecution}, ${row.cloudRunExecution})`,
+          cloudRunExecution: sql`coalesce(${studioJobs.cloudRunExecution}, ${row.cloudRunExecution})`,
         },
       })
   } catch (e) {
@@ -100,11 +100,11 @@ export async function beginJob(kind: Kind, fields: BeginFields): Promise<void> {
   }
 }
 
-/** Settle the pipeline_jobs row terminal. No-op without STUDIO_JOB_ID. Never throws. */
+/** Settle the studio_jobs row terminal. No-op without STUDIO_JOB_ID. Never throws. */
 export async function finishJob(outcome: FinishOutcome): Promise<void> {
   const id = jobId()
   if (!id) return
-  const set: Partial<NewPipelineJob> = {
+  const set: Partial<NewStudioJob> = {
     status: outcome.ok ? 'succeeded' : 'failed',
     endedAt: new Date(),
     costUsd: outcome.costUsd ?? llmSpentUsd(),
@@ -129,7 +129,7 @@ export async function finishJob(outcome: FinishOutcome): Promise<void> {
     }
   }
   try {
-    await db.update(pipelineJobs).set(set).where(eq(pipelineJobs.id, id))
+    await db.update(studioJobs).set(set).where(eq(studioJobs.id, id))
   } catch (e) {
     warn('finish', e)
   }

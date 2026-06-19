@@ -13,11 +13,11 @@
 //   POST /admin/regions           -> create a new region
 //   PATCH /admin/regions/:slug    -> update displayName / discoveryBbox
 //   POST /admin/regions/bbox-lookup -> LLM + Nominatim parallel bbox lookup by place name
-//   GET  /admin/jobs              -> recent pipeline_jobs (operational record; powers job polling)
-//   GET  /admin/runs              -> unified Runs timeline: pipeline_jobs + orphan eval_runs
+//   GET  /admin/jobs              -> recent studio_jobs (operational record; powers job polling)
+//   GET  /admin/runs              -> unified Runs timeline: studio_jobs + orphan eval_runs
 //   GET  /admin/jobs/:id          -> one run (reconciled against its Cloud Run execution) + logs URL
 //   POST /admin/jobs              -> trigger an op as a skipper-studio Job  (jobs.ts — Phase 3)
-//   POST /admin/jobs/:id/cancel   -> stop a running execution (pipeline_job_status='canceled') (§14.8)
+//   POST /admin/jobs/:id/cancel   -> stop a running execution (studio_job_status='canceled') (§14.8)
 //   GET  /admin/pois              -> POI corpus: sources, narration usage, attribution, region coverage
 //   GET  /admin/pois/:id          -> full POI detail: lat/lng, summary, facts JSON, freshness
 //   GET  /admin/pois/:poiId/narration -> presigned R2 URL + metadata for a POI's narration
@@ -31,7 +31,7 @@ import { and, asc, count, desc, eq, inArray, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import {
   evalRuns,
-  pipelineJobs,
+  studioJobs,
   narrations,
   poiOverrides,
   pois,
@@ -181,35 +181,35 @@ app.post('/admin/regions/bbox-lookup', async (c) => {
   })
 })
 
-// The Runs view — recent pipeline_jobs (operational record).
+// The Runs view — recent studio_jobs (operational record).
 app.get('/admin/jobs', async (c) => {
-  const jobs = await db.select().from(pipelineJobs).orderBy(desc(pipelineJobs.createdAt)).limit(100)
+  const jobs = await db.select().from(studioJobs).orderBy(desc(studioJobs.createdAt)).limit(100)
   return c.json({ jobs })
 })
 
-// The Runs view — a unified timeline merging the operational pipeline_jobs with the historical
+// The Runs view — a unified timeline merging the operational studio_jobs with the historical
 // eval_runs (CLI-era generations that never minted a gen_job). A gen_job that produced an
-// eval_run (pipelineJobs.evalRunId) SUPPRESSES that eval_run row, so each run appears exactly once:
+// eval_run (studioJobs.evalRunId) SUPPRESSES that eval_run row, so each run appears exactly once:
 // admin-triggered runs carry status/cost; orphan eval_runs carry pass + the dimension scores.
 app.get('/admin/runs', async (c) => {
   const [jobs, evals] = await Promise.all([
     db
       .select({
-        id: pipelineJobs.id,
-        kind: pipelineJobs.kind,
-        status: pipelineJobs.status,
-        targetSlug: pipelineJobs.targetSlug,
-        dryRun: pipelineJobs.dryRun,
-        phase: pipelineJobs.phase,
-        costUsd: pipelineJobs.costUsd,
-        evalRunId: pipelineJobs.evalRunId,
-        triggeredBy: pipelineJobs.triggeredBy,
-        createdAt: pipelineJobs.createdAt,
-        cloudRunExecution: pipelineJobs.cloudRunExecution,
-        updatedAt: pipelineJobs.updatedAt,
+        id: studioJobs.id,
+        kind: studioJobs.kind,
+        status: studioJobs.status,
+        targetSlug: studioJobs.targetSlug,
+        dryRun: studioJobs.dryRun,
+        phase: studioJobs.phase,
+        costUsd: studioJobs.costUsd,
+        evalRunId: studioJobs.evalRunId,
+        triggeredBy: studioJobs.triggeredBy,
+        createdAt: studioJobs.createdAt,
+        cloudRunExecution: studioJobs.cloudRunExecution,
+        updatedAt: studioJobs.updatedAt,
       })
-      .from(pipelineJobs)
-      .orderBy(desc(pipelineJobs.createdAt))
+      .from(studioJobs)
+      .orderBy(desc(studioJobs.createdAt))
       .limit(100),
     db
       .select({
@@ -304,7 +304,7 @@ const RECONCILE_AFTER_MS = 30_000
 // row already >1h old which the list reconcile skips), so a stuck row stops blocking re-runs.
 const JOB_MAX_AGE_MS = 3_600_000 + 300_000
 
-/** Force-fail a non-terminal pipeline_jobs row that has outlived the task-timeout. Pure age check (no
+/** Force-fail a non-terminal studio_jobs row that has outlived the task-timeout. Pure age check (no
  *  Cloud Run API call), guarded so it never clobbers a concurrently-settled row. Returns true if
  *  it settled the row. */
 async function expireStuckJob(job: { id: string; status: string; updatedAt: Date | string | null }): Promise<boolean> {
@@ -312,13 +312,13 @@ async function expireStuckJob(job: { id: string; status: string; updatedAt: Date
   const updatedMs = job.updatedAt ? new Date(job.updatedAt).getTime() : 0
   if (Date.now() - updatedMs <= JOB_MAX_AGE_MS) return false
   await db
-    .update(pipelineJobs)
+    .update(studioJobs)
     .set({ status: 'failed', endedAt: new Date(), error: 'reconciled: timed out (no live execution past the task-timeout)' })
-    .where(and(eq(pipelineJobs.id, job.id), inArray(pipelineJobs.status, ['queued', 'running'])))
+    .where(and(eq(studioJobs.id, job.id), inArray(studioJobs.status, ['queued', 'running'])))
   return true
 }
 
-/** Settle a non-terminal pipeline_jobs row from its Cloud Run execution (the in-process finishJob
+/** Settle a non-terminal studio_jobs row from its Cloud Run execution (the in-process finishJob
  *  never ran — a hard crash). Queries executionState, and on a definite state flips the row to
  *  match. Returns the new status, or null when the execution is `unknown` (nothing reconciled).
  *  Both callers pre-check non-terminal + stale + a known execution name. */
@@ -329,20 +329,20 @@ async function reconcileJobFromExecution(job: {
   const state = await executionState(job.cloudRunExecution)
   if (state !== 'running' && state !== 'succeeded' && state !== 'failed') return null
   await db
-    .update(pipelineJobs)
+    .update(studioJobs)
     .set({
       status: state,
       ...(state !== 'running' && { endedAt: new Date() }),
       ...(state === 'failed' && { error: 'reconciled: execution failed' }),
     })
-    .where(eq(pipelineJobs.id, job.id))
+    .where(eq(studioJobs.id, job.id))
   return state
 }
 
 app.get('/admin/jobs/:id', async (c) => {
   const id = c.req.param('id')
   if (!UUID_RE.test(id)) return c.json({ error: 'not_found' }, 404)
-  let job = (await db.select().from(pipelineJobs).where(eq(pipelineJobs.id, id)).limit(1))[0]
+  let job = (await db.select().from(studioJobs).where(eq(studioJobs.id, id)).limit(1))[0]
   if (!job) return c.json({ error: 'not_found' }, 404)
 
   // Reconcile backstop: if the in-process finishJob never ran (a hard crash), settle the row
@@ -352,11 +352,11 @@ app.get('/admin/jobs/:id', async (c) => {
   const stale = Date.now() - new Date(job.updatedAt).getTime() > RECONCILE_AFTER_MS
   if (nonTerminal && stale && job.cloudRunExecution) {
     const state = await reconcileJobFromExecution({ id, cloudRunExecution: job.cloudRunExecution })
-    if (state) job = (await db.select().from(pipelineJobs).where(eq(pipelineJobs.id, id)).limit(1))[0]!
+    if (state) job = (await db.select().from(studioJobs).where(eq(studioJobs.id, id)).limit(1))[0]!
   }
   // No-API backstop: a non-terminal row past the task-timeout can't still be running — settle it.
   if (await expireStuckJob(job)) {
-    job = (await db.select().from(pipelineJobs).where(eq(pipelineJobs.id, id)).limit(1))[0]!
+    job = (await db.select().from(studioJobs).where(eq(studioJobs.id, id)).limit(1))[0]!
   }
   // Job output (log/summary/metrics) is written by the JOB itself at finishJob, atomically with
   // the status flip — the admin no longer reconstructs it from Cloud Logging. logsUrl deep-links
@@ -366,12 +366,12 @@ app.get('/admin/jobs/:id', async (c) => {
 })
 
 // Cancel a running/queued execution (§14.8) — the operator stop path the schema reserved on
-// pipeline_job_status='canceled'. Settles the row to 'canceled' after asking Cloud Run to cancel
+// studio_job_status='canceled'. Settles the row to 'canceled' after asking Cloud Run to cancel
 // the execution (404 there = already gone, still fine). A terminal row is a 409.
 app.post('/admin/jobs/:id/cancel', async (c) => {
   const id = c.req.param('id')
   if (!UUID_RE.test(id)) return c.json({ error: 'not_found' }, 404)
-  const job = (await db.select().from(pipelineJobs).where(eq(pipelineJobs.id, id)).limit(1))[0]
+  const job = (await db.select().from(studioJobs).where(eq(studioJobs.id, id)).limit(1))[0]
   if (!job) return c.json({ error: 'not_found' }, 404)
   if (TERMINAL.includes(job.status as (typeof TERMINAL)[number])) {
     return c.json({ error: 'conflict', message: `Run already ${job.status}.` }, 409)
@@ -384,10 +384,10 @@ app.post('/admin/jobs/:id/cancel', async (c) => {
     }
   }
   await db
-    .update(pipelineJobs)
+    .update(studioJobs)
     .set({ status: 'canceled', endedAt: new Date(), error: job.error ?? 'canceled by operator' })
-    .where(eq(pipelineJobs.id, id))
-  const row = (await db.select().from(pipelineJobs).where(eq(pipelineJobs.id, id)).limit(1))[0]
+    .where(eq(studioJobs.id, id))
+  const row = (await db.select().from(studioJobs).where(eq(studioJobs.id, id)).limit(1))[0]
   return c.json({ job: row })
 })
 
@@ -421,14 +421,14 @@ app.post('/admin/jobs', async (c) => {
 
   // Idempotency: one in-flight run per target (a lost-response retry / double-click can't double-spend).
   const targetCond = build.targetSlug
-    ? eq(pipelineJobs.targetSlug, build.targetSlug)
+    ? eq(studioJobs.targetSlug, build.targetSlug)
     : build.targetId
-      ? eq(pipelineJobs.targetId, build.targetId)
+      ? eq(studioJobs.targetId, build.targetId)
       : undefined
   const active = await db
-    .select({ id: pipelineJobs.id })
-    .from(pipelineJobs)
-    .where(and(eq(pipelineJobs.kind, kind), inArray(pipelineJobs.status, ['queued', 'running']), targetCond))
+    .select({ id: studioJobs.id })
+    .from(studioJobs)
+    .where(and(eq(studioJobs.kind, kind), inArray(studioJobs.status, ['queued', 'running']), targetCond))
     .limit(1)
   if (active.length) {
     return c.json({ error: 'conflict', message: 'A run for this target is already in progress.' }, 409)
@@ -436,7 +436,7 @@ app.post('/admin/jobs', async (c) => {
 
   const id = crypto.randomUUID()
   const triggeredBy = c.get('adminEmail')
-  await db.insert(pipelineJobs).values({
+  await db.insert(studioJobs).values({
     id,
     kind,
     status: 'queued',
@@ -453,16 +453,16 @@ app.post('/admin/jobs', async (c) => {
   } catch (e) {
     // The trigger failed — settle the row so it isn't a phantom 'queued'.
     await db
-      .update(pipelineJobs)
+      .update(studioJobs)
       .set({ status: 'failed', error: e instanceof Error ? e.message : String(e), endedAt: new Date() })
-      .where(eq(pipelineJobs.id, id))
+      .where(eq(studioJobs.id, id))
     return c.json({ error: 'trigger_failed', message: e instanceof Error ? e.message : String(e) }, 502)
   }
   if (execShortName) {
-    await db.update(pipelineJobs).set({ cloudRunExecution: execShortName }).where(eq(pipelineJobs.id, id))
+    await db.update(studioJobs).set({ cloudRunExecution: execShortName }).where(eq(studioJobs.id, id))
   }
 
-  const row = (await db.select().from(pipelineJobs).where(eq(pipelineJobs.id, id)).limit(1))[0]
+  const row = (await db.select().from(studioJobs).where(eq(studioJobs.id, id)).limit(1))[0]
   return c.json({ job: row }, 201)
 })
 

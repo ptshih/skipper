@@ -215,7 +215,7 @@ async function main(): Promise<void> {
   }
 
   if (estUsd > maxCostUsd) {
-    // THROW (not return): runJob's catch settles the pipeline_jobs row as FAILED. A bare `return`
+    // THROW (not return): runJob's catch settles the studio_jobs row as FAILED. A bare `return`
     // would let runJob record status 'succeeded' — indistinguishable from a clean run that enriched.
     throw new Error(
       `⛔ Estimated spend ~$${estUsd.toFixed(2)} exceeds --max-cost=$${maxCostUsd.toFixed(2)} — aborting before any spend. Narrow with --limit or raise --max-cost.`,

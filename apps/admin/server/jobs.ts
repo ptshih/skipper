@@ -1,6 +1,6 @@
 // Triggering + reconciling the skipper-studio Cloud Run Job from the admin-api.
 //
-// The admin-api mints a pipeline_jobs row, then calls run.googleapis.com `jobs:run` with the
+// The admin-api mints a studio_jobs row, then calls run.googleapis.com `jobs:run` with the
 // per-execution override args (the spec §5 contract) + STUDIO_JOB_ID in env, so the Job's
 // job-progress hook updates that exact row. The caller SA needs roles/run.developer on the
 // job (runWithOverrides + executions.get) — see spec §10. Auth is an OAuth access token off
@@ -183,7 +183,7 @@ export async function runJob(args: string[], env: Record<string, string>): Promi
 }
 
 /** Cancel a running Cloud Run Job execution by its short name (the operator stop path the
- *  schema reserved on pipeline_job_status='canceled'). 404 is treated as success — the execution
+ *  schema reserved on studio_job_status='canceled'). 404 is treated as success — the execution
  *  is already gone. Throws on any other API error so the route can surface it. */
 export async function cancelExecution(shortName: string): Promise<void> {
   const res = await fetch(`${jobBase()}/executions/${shortName}:cancel`, {
