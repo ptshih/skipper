@@ -252,7 +252,11 @@ export const NARRATION_FALLBACK_CHARS = 4_000
  *  TTS_ESTIMATE_SAFETY on top). */
 export const WORDS_PER_SECOND = 2.5
 
-/** The Tahoe–Reno corridor default bbox — the standalone CLI default when no --bbox is passed
- *  (discover-pois / generate-narrations). Mirrors the `lake-tahoe` region's discoveryBbox (created
- *  via the admin console); the CLIs stay standalone and do NOT read the DB region row. */
+/** The default region the corpus CLIs (discover/enrich/generate) scope to when `--region` is omitted.
+ *  Today the only launch region; the CLIs resolve it to its discovery bbox via `resolveRegion`. */
+export const DEFAULT_REGION_SLUG = 'lake-tahoe' as const
+
+/** The Tahoe–Reno corridor fallback bbox — used ONLY by `discover-pois` when the resolved region has
+ *  no `discoveryBbox` set yet (the sweep needs a box to query WDQS). Mirrors the `lake-tahoe` region's
+ *  seeded bbox; enrich/generate REQUIRE a real region bbox instead (no silent fallback). */
 export const TAHOE_RENO_BBOX = { swLng: -120.25, swLat: 38.86, neLng: -119.55, neLat: 39.65 } as const

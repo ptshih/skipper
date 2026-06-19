@@ -36,7 +36,7 @@ burns GCP credits). So they share one safety contract.
 
 - `parseFlags(argv, { valueFlags })` → `{ positionals, has(name), value(name) }` — supports
   `--flag`, `--flag=val`, `--flag val`; `valueFlags` keeps a value token from being read as a
-  positional (e.g. `generate-narrations`'s `--bbox`/`--limit`/`--max-cost`).
+  positional (e.g. `generate-narrations`'s `--region`/`--limit`/`--max-cost`).
 - `parseBboxFlag(raw)` → `{ swLng, swLat, neLng, neLat }`; `maxCostFlag(flags)` — shared parsers for
   the region/cost flags the discover/enrich/generate CLIs take.
 - `assertReady(['r2' | 'tts'])` — throws a clear, actionable message if an `--apply` run's env is

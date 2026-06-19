@@ -22,7 +22,7 @@
 //   ... --limit 5                cap how many places to enrich (a smoke run)
 //   ... --force                  re-enrich places that already have a fact sheet
 //   ... --model opus             A/B the calibration tier vs the default (sonnet)
-//   ... --bbox swLng,swLat,neLng,neLat   narrow to a bbox (default: the WHOLE corpus, no geo filter)
+//   ... --region <slug>          enrich a region's corpus (default: lake-tahoe; resolves to its bbox)
 //   ... --source wikipedia       narrow to a POI source (faithfully resolves a table 'source' filter)
 //   ... --query "emerald"        substring match on name/source-id (a table search filter)
 //   ... --include-ids a,b,c      enrich EXACTLY these poi ids (a hand-picked selection)
@@ -33,7 +33,8 @@ import { and, eq, inArray, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { pois } from '@skipper/db/schema'
 import type { PoiFacts } from '@skipper/db/schema'
-import { announce, maxCostFlag, parseBboxFlag, parseFlags } from './pipeline/ops'
+import { announce, maxCostFlag, parseFlags } from './pipeline/ops'
+import { resolveRegion, requireRegionBbox } from './pipeline/region'
 import { runJob } from './pipeline/job-progress'
 import { ensurePoiOverridesLoaded } from './pipeline/poi-overrides'
 import { regionLabel } from './pipeline/geo'
@@ -46,7 +47,7 @@ import { wikiUrlForPageId } from './pipeline/wikipedia'
 import { withRetry } from './pipeline/http'
 import { mapLimit } from './pipeline/concurrency'
 import { ENRICH_MODELS, type EnrichModelChoice } from './models'
-import { ANTHROPIC_READY, GEOLOGY_ENRICHMENT, SCOUT_CONCURRENCY, WIKIDATA_ENRICHMENT } from './config'
+import { ANTHROPIC_READY, DEFAULT_REGION_SLUG, GEOLOGY_ENRICHMENT, SCOUT_CONCURRENCY, WIKIDATA_ENRICHMENT } from './config'
 import { llmSpendLines, llmSpentUsd } from './pipeline/spend'
 import { classifyStoryEligibility } from '@skipper/shared'
 
@@ -57,7 +58,7 @@ const ENRICH_TARGET_SECONDS = 150
 const EST_USD_PER_POI: Record<EnrichModelChoice, number> = { sonnet: 0.04, opus: 0.09 }
 
 const flags = parseFlags(process.argv.slice(2), {
-  valueFlags: ['bbox', 'limit', 'model', 'max-cost', 'source', 'query', 'include-ids', 'exclude-ids'],
+  valueFlags: ['region', 'limit', 'model', 'max-cost', 'source', 'query', 'include-ids', 'exclude-ids'],
 })
 const apply = flags.has('apply')
 const force = flags.has('force')
@@ -65,23 +66,22 @@ const limit = Number(flags.value('limit') ?? Infinity)
 const maxCostUsd = maxCostFlag(flags)
 const modelChoice: EnrichModelChoice = flags.value('model') === 'opus' ? 'opus' : 'sonnet'
 const model = ENRICH_MODELS[modelChoice]
-/** Optional geographic narrowing. No --bbox = the WHOLE corpus — enrich is a per-POI op, not
- *  region-bound; a region's bbox is just ONE way to choose the set. */
-const bboxRaw = flags.value('bbox')
-const bbox = bboxRaw ? parseBboxFlag(bboxRaw) : null
 
 // Selection — the corpus subset to enrich, resolved server-side (this CLI IS the job runner). Admin sends
-// EITHER an explicit id list (hand-picked rows) XOR a filter (bbox/source/query) + exclude-ids ("select all
-// matching, minus a few") — the Gmail two-tier model, so server-side pagination never has to enumerate every
-// id client-side. NOTE: it is XOR, not a union — `isExplicit` (below) requires include-ids with NO filter;
+// EITHER an explicit id list (hand-picked rows) XOR a FILTER (region/source/query) + exclude-ids ("select
+// all matching, minus a few") — the Gmail two-tier model, so server-side pagination never has to enumerate
+// every id client-side. NOTE: it is XOR, not a union — `isExplicit` requires include-ids with NO filter;
 // include-ids passed ALONGSIDE a filter falls to FILTER mode and the ids are ignored (the UI never sends both).
+// FILTER mode is REGION-scoped (geometry-first: --region → its discovery bbox → point-in-bbox), defaulting to
+// the launch region. `--bbox` is gone — a region is the only geographic input. The bbox is resolved in main().
 const parseIds = (v: string | undefined): string[] => (v ? v.split(',').map((s) => s.trim()).filter(Boolean) : [])
+const regionRaw = flags.value('region') || null
 const sourceFilter = flags.value('source') || null
 const query = (flags.value('query') ?? '').trim().toLowerCase()
 const includeIds = parseIds(flags.value('include-ids'))
 const excludeIds = new Set(parseIds(flags.value('exclude-ids')))
-// EXPLICIT mode = a hand-picked id list with NO filter; otherwise FILTER mode resolves bbox/source/query.
-const isExplicit = includeIds.length > 0 && !bbox && !sourceFilter && !query
+// EXPLICIT mode = a hand-picked id list with NO filter; otherwise FILTER mode (region/source/query).
+const isExplicit = includeIds.length > 0 && !regionRaw && !sourceFilter && !query
 
 announce({ tool: 'enrich-pois', blast: ['SPENDS $', 'MUTATES DB'], apply })
 
@@ -102,6 +102,11 @@ interface Candidate {
 async function main(): Promise<void> {
   await ensurePoiOverridesLoaded()
 
+  // FILTER mode is region-scoped: resolve --region (default: the launch region) → its discovery bbox →
+  // point-in-bbox (geometry-first; see pipeline/region.ts). EXPLICIT mode (hand-picked ids) needs no bbox.
+  const region = isExplicit ? null : await resolveRegion(regionRaw ?? DEFAULT_REGION_SLUG)
+  const bbox = region ? requireRegionBbox(region) : null
+
   const rows = await withRetry(
     () =>
       db
@@ -121,17 +126,15 @@ async function main(): Promise<void> {
         .where(
           isExplicit
             ? inArray(pois.id, includeIds)
-            : bbox
-              ? and(
-                  // CAST the enum to text before comparing a dynamic (user-supplied) source. `enum = text`
-                  // makes Postgres coerce the string TO the enum and THROW on a non-member value ("invalid
-                  // input value for enum") — which would crash even a free dry-run; `enum::text = text`
-                  // compares as text, so an unknown source simply matches nothing (honest 0, no crash).
-                  sql`${pois.source}::text = ${sourceFilter ?? 'wikipedia'}`,
-                  sql`${pois.lat} between ${bbox.swLat} and ${bbox.neLat}`,
-                  sql`${pois.lng} between ${bbox.swLng} and ${bbox.neLng}`,
-                )
-              : sql`${pois.source}::text = ${sourceFilter ?? 'wikipedia'}`,
+            : and(
+                // CAST the enum to text before comparing a dynamic (user-supplied) source. `enum = text`
+                // makes Postgres coerce the string TO the enum and THROW on a non-member value ("invalid
+                // input value for enum") — which would crash even a free dry-run; `enum::text = text`
+                // compares as text, so an unknown source simply matches nothing (honest 0, no crash).
+                sql`${pois.source}::text = ${sourceFilter ?? 'wikipedia'}`,
+                sql`${pois.lat} between ${bbox!.swLat} and ${bbox!.neLat}`,
+                sql`${pois.lng} between ${bbox!.swLng} and ${bbox!.neLng}`,
+              ),
         ),
     { label: 'load enrich corpus' },
   )
@@ -176,7 +179,7 @@ async function main(): Promise<void> {
   const selectionLabel = isExplicit
     ? `${includeIds.length} hand-picked`
     : [
-        bbox ? 'in bbox' : 'corpus-wide',
+        region ? `region=${region.slug}` : '',
         sourceFilter ? `source=${sourceFilter}` : '',
         query ? `query="${query}"` : '',
         excludeIds.size ? `−${excludeIds.size} excluded` : '',

@@ -111,8 +111,8 @@ export function PoisView() {
 /* ── DISCOVER POIs ── */
 
 // A focused Preview+apply dialog (shared JobActionDialog shell): pick a region, then Preview (dry-run)
-// or Discover (apply). FREE — no LLM/TTS, so no confirm gate (spends={false}). bbox comes from the
-// region row's discoveryBbox column — null = use the built-in default.
+// or Discover (apply). FREE — no LLM/TTS, so no confirm gate (spends={false}). Sends the region SLUG;
+// the CLI resolves it to the region's discovery bbox server-side (geometry-first).
 function DiscoverDialog({
   open,
   onOpenChange,
@@ -128,8 +128,6 @@ function DiscoverDialog({
     queryFn: async () => (await api.regions()).regions,
     enabled: open,
   })
-  const bbox = regions.find((r) => r.slug === regionSlug)?.discoveryBbox
-
   return (
     <JobActionDialog
       open={open}
@@ -138,7 +136,7 @@ function DiscoverDialog({
       icon={Compass}
       title="Discover POIs"
       description="Discovers every Wikidata-pinned place in the region and upserts the shared POI corpus — roam draws from it. Free — no LLM or TTS spend."
-      buildBody={() => ({ kind: 'discover_pois', ...(bbox ? { bbox } : {}) })}
+      buildBody={() => ({ kind: 'discover_pois', region: regionSlug })}
       spends={false}
       applyLabel="Discover"
       applyIcon={Compass}
@@ -173,7 +171,7 @@ function DiscoverDialog({
 // Region-picker Preview+apply dialog for the corpus `generate_narrations` step: narrates + synthesizes a
 // narration for every enriched, story-grade POI in the region. Run after Discover + Enrich. SPENDS
 // Anthropic + TTS per narration, so it stays gated (JobActionDialog adds confirm:true on apply — the
-// default spends=true). bbox comes from the region row's discoveryBbox; null = the built-in default.
+// default spends=true). Sends the region SLUG; the CLI resolves it to the discovery bbox server-side.
 function GenerateNarrationDialog({
   open,
   onOpenChange,
@@ -189,8 +187,6 @@ function GenerateNarrationDialog({
     queryFn: async () => (await api.regions()).regions,
     enabled: open,
   })
-  const bbox = regions.find((r) => r.slug === regionSlug)?.discoveryBbox
-
   return (
     <JobActionDialog
       open={open}
@@ -199,7 +195,7 @@ function GenerateNarrationDialog({
       icon={Zap}
       title="Generate Narration"
       description="Narrates + synthesizes a narration for every enriched, story-grade POI in the region. Run after Discover, then Enrich. Spends Anthropic + TTS credits per narration."
-      buildBody={() => ({ kind: 'generate_narrations', ...(bbox ? { bbox } : {}) })}
+      buildBody={() => ({ kind: 'generate_narrations', region: regionSlug })}
       applyLabel="Generate Narration"
       applyIcon={Zap}
       disabled={!regionSlug}
@@ -236,7 +232,7 @@ function GenerateNarrationDialog({
  *  so server-side pagination never has to enumerate every id client-side. */
 type EnrichSelection =
   | { kind: 'explicit'; ids: string[] }
-  | { kind: 'all'; filter: { bbox?: string; source?: string; query?: string }; excludeIds: string[] }
+  | { kind: 'all'; filter: { region?: string; source?: string; query?: string }; excludeIds: string[] }
 
 // A focused Preview+apply dialog (shared JobActionDialog shell) for the corpus `enrich` step
 // (enrich_pois): acts on the table SELECTION, then Preview (free dry-run — NO model calls, prints the
@@ -263,7 +259,7 @@ function EnrichDialog({
     if (selection.kind === 'explicit') {
       body.includeIds = selection.ids
     } else {
-      if (selection.filter.bbox) body.bbox = selection.filter.bbox
+      if (selection.filter.region) body.region = selection.filter.region
       if (selection.filter.source) body.source = selection.filter.source
       if (selection.filter.query) body.query = selection.filter.query
       if (selection.excludeIds.length) body.excludeIds = selection.excludeIds
@@ -783,8 +779,8 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
   const [selIds, setSelIds] = useState<Set<string>>(new Set())
   const [enrichOpen, setEnrichOpen] = useState(false)
   const navigate = useNavigate()
-  // Region defs carry discoveryBbox, so "select all matching" can send a region as a server-side bbox
-  // filter. Shared ['regions'] cache; the `regions` list below is just slug+name for the filter dropdown.
+  // "Select all matching" sends the region SLUG; the CLI resolves it to a server-side bbox filter
+  // (geometry-first). Shared ['regions'] cache; the `regions` list below is just slug+name for the dropdown.
   const { data: regionDefs = [] } = useQuery({ queryKey: ['regions'], queryFn: async () => (await api.regions()).regions })
 
   const regions = useMemo(() => {
@@ -856,12 +852,19 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
   // falls back to enumerating the visible ids (exact, client-side — fine at today's corpus size).
   function buildSelection(): EnrichSelection {
     if (selMode === 'explicit') return { kind: 'explicit', ids: [...selIds] }
-    const bbox = region !== 'all' ? regionDefs.find((r) => r.slug === region)?.discoveryBbox ?? null : null
-    const resolvable = (flags === 'all' || flags === 'story-eligible') && (region === 'all' || !!bbox)
+    // The server resolves a region SLUG → its discovery bbox, so we send the slug (not a bbox). region='all'
+    // → no region → the CLI defaults to the launch region. Only send a region the server can resolve (has a
+    // bbox); a bbox-less region falls back to enumerating the visible ids.
+    const regionHasBbox = region === 'all' || !!regionDefs.find((r) => r.slug === region)?.discoveryBbox
+    const resolvable = (flags === 'all' || flags === 'story-eligible') && regionHasBbox
     if (resolvable) {
       return {
         kind: 'all',
-        filter: { bbox: bbox ?? undefined, source: source !== 'all' ? source : undefined, query: q || undefined },
+        filter: {
+          region: region !== 'all' ? region : undefined,
+          source: source !== 'all' ? source : undefined,
+          query: q || undefined,
+        },
         excludeIds: [...selIds],
       }
     }

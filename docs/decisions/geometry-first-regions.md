@@ -2,8 +2,10 @@
 
 **Status:** ✅ **ADOPTED 2026-06-19.** Drive slice BUILT (migration `0017`: `drives` drops `region_id`,
 adds the route bbox; `drive_demand` drops `region_id`). Asides-deletion slice BUILT (migration `0019`
-drops the `asides` table + the intro/outro player framing). The corpus-CLI `--region`→bbox slice is
-PENDING (tracked below). Supersedes the abandoned plan to stamp a `region_id` on `pois`.
+drops the `asides` table + the intro/outro player framing). Corpus-CLI slice BUILT:
+`discover`/`enrich`/`generate-narrations` take `--region <slug>`, resolved to the region's discovery bbox
+via `studio/src/pipeline/region.ts` (point-in-bbox selection); `--bbox` is gone as a user input and the
+admin sends the region slug. Supersedes the abandoned plan to stamp a `region_id` on `pois`.
 
 ## The rule
 

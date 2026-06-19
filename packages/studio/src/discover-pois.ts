@@ -15,7 +15,7 @@
 // Usage:
 //   dotenvx run -f .env.development -- bun packages/studio/src/discover-pois.ts
 //   dotenvx run -f .env.development -- bun packages/studio/src/discover-pois.ts --apply
-//   ... --bbox swLng,swLat,neLng,neLat   (override the basin default)
+//   ... --region <slug>                  sweep a region's discovery bbox (default: lake-tahoe)
 
 import {
   discoverWikidataBbox,
@@ -27,10 +27,11 @@ import { ensurePoiOverridesLoaded } from './pipeline/poi-overrides'
 import { fetchFullExtracts } from './pipeline/wikipedia'
 import { toFacts } from './pipeline/select'
 import { buildStoryFacts, hashFacts, summaryFromExtract, upsertPoi } from './pipeline/persist'
-import { announce, parseBboxFlag, parseFlags } from './pipeline/ops'
+import { announce, parseFlags } from './pipeline/ops'
 import { runJob } from './pipeline/job-progress'
 import { sleep } from './pipeline/http'
-import { TAHOE_RENO_BBOX } from './config'
+import { resolveRegion } from './pipeline/region'
+import { DEFAULT_REGION_SLUG, TAHOE_RENO_BBOX } from './config'
 import type { LngLat } from './pipeline/geo'
 
 /** Tahoe–Reno corridor: Meyers/South Lake Tahoe west to Homewood/Sugar Pine Point,
@@ -62,21 +63,28 @@ export function gridBoxes(
   return out
 }
 
-function parseBbox(raw: string | undefined): { sw: LngLat; ne: LngLat } {
-  if (!raw) return TAHOE_RENO_CORRIDOR
-  const b = parseBboxFlag(raw) // shared validation + canonical error string
-  return { sw: [b.swLng, b.swLat], ne: [b.neLng, b.neLat] }
-}
-
-const flags = parseFlags(process.argv.slice(2), { valueFlags: ['bbox'] })
+const flags = parseFlags(process.argv.slice(2), { valueFlags: ['region'] })
 const apply = flags.has('apply')
-const box = parseBbox(flags.value('bbox'))
+const regionKey = flags.value('region') ?? DEFAULT_REGION_SLUG
 
 announce({ tool: 'discover-pois', blast: ['MUTATES DB'], apply })
 
 async function main(): Promise<void> {
   // Overrides ride every fetch (the fact-edit seam) — load them before any extract lands.
   await ensurePoiOverridesLoaded()
+
+  // Resolve --region → its discovery bbox (the geometry-first input; see pipeline/region.ts).
+  // A region with no bbox set yet falls back to the built-in Tahoe basin so a first sweep still
+  // has somewhere to look.
+  const region = await resolveRegion(regionKey)
+  const box: { sw: LngLat; ne: LngLat } = region.bbox
+    ? { sw: [region.bbox.swLng, region.bbox.swLat], ne: [region.bbox.neLng, region.bbox.neLat] }
+    : TAHOE_RENO_CORRIDOR
+  console.log(
+    `Region: ${region.displayName} (${region.slug})` +
+      (region.bbox ? '' : ' — no discovery bbox set, using the Tahoe basin default') +
+      '\n',
+  )
 
   // 5×7 grid over the corridor (~11×11 km cells — WDQS chokes on wide-area boxes; the
   // original 2×3 attempt timed out on a mid-lake cell), merged by qid, then ONE same-place
@@ -201,4 +209,4 @@ async function main(): Promise<void> {
   console.log(`\nUpserted ${wrote} pois (${stories.length} story + ${scenics.length} scenic).`)
 }
 
-await runJob('discover_pois', { dryRun: !apply, targetId: 'region-corpus' }, main)
+await runJob('discover_pois', { dryRun: !apply, targetId: regionKey }, main)

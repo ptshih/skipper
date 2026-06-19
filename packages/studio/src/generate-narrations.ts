@@ -23,13 +23,15 @@
 //   ... --apply                 run it (spends; writes R2 clips + narrations)
 //   ... --apply --limit 3      smoke run (the cheapest real ear-test)
 //   ... --force                regenerate even clips whose facts_hash is still fresh
-//   ... --bbox swLng,swLat,neLng,neLat   constrain the corpus geographically
+//   ... --region <slug>          generate a region's roam corpus (default: lake-tahoe; → its bbox)
+//   ... --include-ids a,b,c      regenerate EXACTLY these poi ids (implies --force)
 
-import { and, eq, sql } from 'drizzle-orm'
+import { and, eq, inArray, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { narrations, pois } from '@skipper/db/schema'
 import type { FactSheetEntry, PoiFacts } from '@skipper/db/schema'
-import { announce, assertReady, maxCostFlag, parseBboxFlag, parseFlags } from './pipeline/ops'
+import { announce, assertReady, maxCostFlag, parseFlags } from './pipeline/ops'
+import { resolveRegion, requireRegionBbox } from './pipeline/region'
 import { runJob } from './pipeline/job-progress'
 import { ensurePoiOverridesLoaded } from './pipeline/poi-overrides'
 import { regionLabel } from './pipeline/geo'
@@ -43,9 +45,9 @@ import { withRetry } from './pipeline/http'
 import { mapLimit } from './pipeline/concurrency'
 import { personaFromKey } from './persona'
 import {
+  DEFAULT_REGION_SLUG,
   NARRATION_CONCURRENCY,
   NARRATION_FALLBACK_CHARS,
-  TAHOE_RENO_BBOX,
   TTS_CONCURRENCY,
   WORDS_PER_SECOND,
 } from './config'
@@ -63,16 +65,25 @@ const ROAM_LENGTH = {
   storyTargetSeconds: 150,
   storyMaxSeconds: 180,
 } as const
-const flags = parseFlags(process.argv.slice(2), { valueFlags: ['limit', 'bbox', 'max-cost'] })
+const flags = parseFlags(process.argv.slice(2), {
+  valueFlags: ['limit', 'region', 'max-cost', 'query', 'include-ids', 'exclude-ids'],
+})
 const apply = flags.has('apply')
 const maxCostUsd = maxCostFlag(flags)
 // Narrate + PRINT the scripts, then stop — NO TTS, NO R2, NO DB writes. The cheapest way to ear-read
 // the writing (e.g. a new length band) before committing to a paid synth + regen. Spends narration $.
 const scriptsOnly = flags.has('scripts-only')
-const force = flags.has('force')
 const limit = Number(flags.value('limit') ?? Infinity)
-const bboxRaw = flags.value('bbox')
-const bbox = bboxRaw ? parseBboxFlag(bboxRaw) : TAHOE_RENO_BBOX
+// Selection mirrors enrich (geometry-first): a region (default: the launch region) → its discovery bbox →
+// point-in-bbox, XOR an explicit hand-picked id list. `--bbox` is gone — a region is the only geo input.
+const parseIds = (v: string | undefined): string[] => (v ? v.split(',').map((s) => s.trim()).filter(Boolean) : [])
+const regionRaw = flags.value('region') || null
+const query = (flags.value('query') ?? '').trim().toLowerCase()
+const includeIds = parseIds(flags.value('include-ids'))
+const excludeIds = new Set(parseIds(flags.value('exclude-ids')))
+const isExplicit = includeIds.length > 0 && !regionRaw && !query
+// `--include-ids` IMPLIES regeneration — you asked for those exact pois, so don't freshness-skip them.
+const force = flags.has('force') || isExplicit
 
 announce({
   tool: 'generate-narrations',
@@ -84,7 +95,12 @@ if (apply) assertReady(['tts', 'r2']) // scripts-only needs neither TTS nor R2
 async function main(): Promise<void> {
   await ensurePoiOverridesLoaded()
 
-  // ── Candidate corpus: wikipedia-sourced pois with story-grade extracts, in the bbox ──
+  // Region-scoped selection (geometry-first; see pipeline/region.ts): --region → discovery bbox →
+  // point-in-bbox, XOR an explicit id list. Generate is wikipedia-only (the story corpus).
+  const region = isExplicit ? null : await resolveRegion(regionRaw ?? DEFAULT_REGION_SLUG)
+  const bbox = region ? requireRegionBbox(region) : null
+
+  // ── Candidate corpus: wikipedia-sourced pois with story-grade extracts, in the region ──
   // The ROAM telling for a poi is its 1:1 narration — left-joined so a poi with no narration yet
   // still appears (and queues).
   const rows = await withRetry(
@@ -109,11 +125,13 @@ async function main(): Promise<void> {
         .from(pois)
         .leftJoin(narrations, eq(narrations.poiId, pois.id))
         .where(
-          and(
-            eq(pois.source, 'wikipedia'),
-            sql`${pois.lat} between ${bbox.swLat} and ${bbox.neLat}`,
-            sql`${pois.lng} between ${bbox.swLng} and ${bbox.neLng}`,
-          ),
+          isExplicit
+            ? inArray(pois.id, includeIds)
+            : and(
+                eq(pois.source, 'wikipedia'),
+                sql`${pois.lat} between ${bbox!.swLat} and ${bbox!.neLat}`,
+                sql`${pois.lng} between ${bbox!.swLng} and ${bbox!.neLng}`,
+              ),
         ),
     { label: 'load roam corpus' },
   )
@@ -142,6 +160,8 @@ async function main(): Promise<void> {
 
   const candidates: Candidate[] = []
   for (const r of rows) {
+    if (excludeIds.has(r.id)) continue // "select all matching, minus a few"
+    if (query && !`${r.name} ${r.sourceId}`.toLowerCase().includes(query)) continue
     const f = r.facts
     // #1: a roam STORY encounter REQUIRES a curated fact sheet — an un-enriched poi is SKIPPED (never a
     // raw-extract telling; the scenic-tier "wave" form will cover named-but-unenriched pins later). The
@@ -176,7 +196,8 @@ async function main(): Promise<void> {
   const queue = candidates.filter((c) => !c.hasFreshClip || force).slice(0, limit)
 
   console.log(
-    `Corpus: ${candidates.length} story-grade pois in bbox (enriched — have a fact sheet) — ` +
+    `Corpus: ${candidates.length} story-grade pois ` +
+      `(${isExplicit ? `${includeIds.length} hand-picked` : `region=${region!.slug}`}, enriched — have a fact sheet) — ` +
       `${skipped.length} already have fresh roam clips (skipped), ${queue.length} to generate.\n`,
   )
   for (const c of queue) console.log(`  ${String(c.extract.length).padStart(5)}  ${c.name}`)
@@ -391,4 +412,8 @@ async function main(): Promise<void> {
   console.log(`TTS spend (estimated from chars): ~$${ttsActual.usd.toFixed(2)}`)
 }
 
-await runJob('generate_narrations', { dryRun: !apply && !scriptsOnly, targetId: 'roam-corpus' }, main)
+await runJob(
+  'generate_narrations',
+  { dryRun: !apply && !scriptsOnly, targetId: isExplicit ? 'roam-corpus' : (regionRaw ?? DEFAULT_REGION_SLUG) },
+  main,
+)

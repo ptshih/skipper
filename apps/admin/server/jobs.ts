@@ -113,7 +113,7 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
   if (kind === 'discover_pois') {
     const apply = body.apply === true
     const args: string[] = [script]
-    if (body.bbox) args.push(`--bbox=${str(body.bbox)}`)
+    if (body.region) args.push(`--region=${str(body.region)}`)
     if (apply) args.push('--apply')
     // sweep is free (WDQS + MediaWiki, no LLM/TTS); spends:false so no confirm gate.
     return { args, dryRun: !apply, spends: false, targetId: 'roam-corpus' }
@@ -122,10 +122,10 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
   if (kind === 'enrich_pois') {
     const apply = body.apply === true
     const args: string[] = [script]
-    // Selection: a FILTER (bbox/source/query) + exclude-ids, XOR an explicit include-ids list — the CLI
+    // Selection: a FILTER (region/source/query) + exclude-ids, XOR an explicit include-ids list — the CLI
     // resolves it server-side (explicit XOR filter, NOT a union). See the enrich-pois.ts selection block.
     const idCsv = (v: unknown): string => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string').join(',') : '')
-    if (body.bbox) args.push(`--bbox=${str(body.bbox)}`)
+    if (body.region) args.push(`--region=${str(body.region)}`)
     if (body.source) args.push(`--source=${str(body.source)}`)
     if (body.query) args.push(`--query=${str(body.query)}`)
     if (idCsv(body.includeIds)) args.push(`--include-ids=${idCsv(body.includeIds)}`)
@@ -142,7 +142,13 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
   if (kind === 'generate_narrations') {
     const apply = body.apply === true
     const args: string[] = [script]
-    if (body.bbox) args.push(`--bbox=${str(body.bbox)}`)
+    // Same selection contract as enrich: a region (default: lake-tahoe) XOR an explicit include-ids list,
+    // narrowable by query/exclude-ids. The CLI resolves --region → its discovery bbox server-side.
+    const idCsv = (v: unknown): string => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string').join(',') : '')
+    if (body.region) args.push(`--region=${str(body.region)}`)
+    if (body.query) args.push(`--query=${str(body.query)}`)
+    if (idCsv(body.includeIds)) args.push(`--include-ids=${idCsv(body.includeIds)}`)
+    if (idCsv(body.excludeIds)) args.push(`--exclude-ids=${idCsv(body.excludeIds)}`)
     if (body.limit) args.push(`--limit=${Number(body.limit)}`)
     if (body.force) args.push('--force')
     // --min-extract removed 2026-06-16: roam story-eligibility is "has a fact sheet" (#1), not a char floor.

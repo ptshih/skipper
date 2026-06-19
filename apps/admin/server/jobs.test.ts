@@ -37,16 +37,16 @@ describe('buildJobArgs — enrich_pois (the corpus enrich op)', () => {
     expect(r.args).toContain('--apply')
   })
 
-  test('threads model / bbox / limit flags', () => {
+  test('threads model / region / limit flags', () => {
     const r = buildJobArgs({
       kind: 'enrich_pois',
       apply: true,
       model: 'opus',
-      bbox: '-120,38,-119,39',
+      region: 'lake-tahoe',
       limit: 5,
     })
     expect(r.args).toContain('--model=opus')
-    expect(r.args).toContain('--bbox=-120,38,-119,39')
+    expect(r.args).toContain('--region=lake-tahoe')
     expect(r.args).toContain('--limit=5')
   })
 
@@ -60,12 +60,12 @@ describe('buildJobArgs — enrich_pois (the corpus enrich op)', () => {
     const r = buildJobArgs({
       kind: 'enrich_pois',
       apply: true,
-      bbox: '-120,38,-119,39',
+      region: 'lake-tahoe',
       source: 'wikipedia',
       query: 'emerald',
       excludeIds: ['x', 'y'],
     })
-    expect(r.args).toContain('--bbox=-120,38,-119,39')
+    expect(r.args).toContain('--region=lake-tahoe')
     expect(r.args).toContain('--source=wikipedia')
     expect(r.args).toContain('--query=emerald')
     expect(r.args).toContain('--exclude-ids=x,y')
