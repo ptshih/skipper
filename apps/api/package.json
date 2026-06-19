@@ -10,9 +10,11 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.104.1",
     "@better-auth/expo": "^1.6.18",
     "@neondatabase/serverless": "^1.1.0",
     "@skipper/db": "workspace:*",
+    "@skipper/drive-core": "workspace:*",
     "@skipper/shared": "workspace:*",
     "@skipper/storage": "workspace:*",
     "better-auth": "^1.6.18",

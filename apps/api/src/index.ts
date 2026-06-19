@@ -7,6 +7,11 @@
 //   GET  /tours                      -> list ready tours, one card per drive (anonymous OK)
 //   GET  /tours/:tourId              -> a ready drive: route + region + host + intro/outro + stops
 //   POST /tours/:tourId/assets/sign  -> presigned R2 URLs for the drive's audio (stops + frames)
+//   POST /drives/propose             -> resolve free-text A→B + preview route (free account; no credit)
+//   POST /drives                     -> generate + persist a user-owned drive (free account; counts a credit)
+//   GET  /drives                     -> the caller's saved drives (one card each)
+//   GET  /drives/:id                 -> replay a saved drive (frozen structure + live narration content)
+//   POST /drives/:id/assets/sign     -> re-presigned clip URLs for offline refresh
 //   GET  /roam                       -> free-roam pins near a point + presigned clips (ALPHA: open)
 //   GET  /t/:tourId                  -> shareable tour link: in-app universal link + OG web fallback
 //
@@ -24,6 +29,7 @@ import { narrations, pois, regions, segments, tracks, tourFrames, tours } from '
 import type { StopType } from '@skipper/shared'
 import type { Tour as TourRow } from '@skipper/db/schema'
 import { auth } from './auth'
+import { driveRoutes } from './drives'
 import { FEATURES, meetsTier, withSession, type ApiEnv } from './entitlements'
 import { hostForRegion } from './host'
 import { withRetry } from './retry'
@@ -98,6 +104,10 @@ app.get('/t/:id', async (c) => {
 
 // Better Auth owns everything under /api/auth/* (its own handler).
 app.on(['POST', 'GET'], '/api/auth/*', (c) => auth.handler(c.req.raw))
+
+// Create-a-Drive (V2): user-owned, on-demand A→B drives over the shared narration corpus. The
+// whole sub-app is behind a free account (anonymous = roam only) — see ./drives.
+app.route('/drives', driveRoutes)
 
 // List READY tours — one card per drive (no polyline; that comes with the tour). A tour
 // carries its own route + region now, so this replaces the old /corridors + per-corridor
