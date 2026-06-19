@@ -109,6 +109,7 @@ async function main(): Promise<void> {
           id: pois.id,
           source: pois.source,
           sourceId: pois.sourceId,
+          qid: pois.qid,
           name: pois.name,
           kind: pois.kind,
           lat: pois.lat,
@@ -164,7 +165,7 @@ async function main(): Promise<void> {
       title: facts?.title ?? r.name,
       url: facts?.url ?? wikiUrlForPageId(r.sourceId),
       pageId: facts?.pageId ?? Number(r.sourceId),
-      qid: facts?.qid ?? null,
+      qid: r.qid,
       hasFactSheet,
     })
   }
@@ -286,7 +287,6 @@ async function main(): Promise<void> {
       title: c.title,
       url: c.url,
       pageId: c.pageId,
-      qid: c.qid,
     })
     await withRetry(
       () =>

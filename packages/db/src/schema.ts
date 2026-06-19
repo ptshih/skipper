@@ -33,7 +33,9 @@ export interface PoiFacts {
   title: string
   url: string
   pageId: number
-  qid?: string
+  // NOTE: the Wikidata QID is NOT here anymore — it was hoisted to the first-class `pois.qid`
+  // column (the canonical identity + dedup key). Discovery rebuilds candidates from that column,
+  // not a jsonb dig. Legacy rows may still carry a vestigial `facts.qid` until their next sweep.
 }
 
 /**
@@ -63,8 +65,10 @@ export type FactSheetEntry = {
  * Lives on the `narrations` row now (narration is drive/roam-owned; there is no shared
  * content cache). `source` is the ATTRIBUTION source, a SUPERSET of `poiSourceEnum`
  * (a POI's discovery source): a clip can blend a Wikipedia POI with enrichment that
- * owns no `pois` row — coordinate-keyed Macrostrat geology, or QID-keyed Wikidata
- * structured facts. `narrations.attribution` is therefore an ARRAY — one entry per
+ * owns no `pois` row — coordinate-keyed Macrostrat geology, QID-keyed Wikidata
+ * structured facts, or a `google_places` break-anchor name (which now lives in its OWN
+ * `places` table, NOT `pois` — so `google_places` is an attribution source only, never a
+ * `poiSourceEnum` member). `narrations.attribution` is therefore an ARRAY — one entry per
  * source the clip drew on — so a multi-source clip credits each (Wikipedia CC BY-SA +
  * Macrostrat CC BY + Wikidata CC0, etc.). Keep this union in lockstep with the Zod
  * `attributionSource` enum in @skipper/shared.
@@ -106,35 +110,35 @@ export type RouteProvenance = {
 
 /**
  * A DRIVE's frozen, ordered manifest (the `drives.selection` jsonb). One entry per played item in
- * route order: a place NARRATION (referenced 1:1 via its poi — content resolves LIVE so a regenerated
- * telling auto-improves a saved drive) or a generic ASIDE (intro/outro/clock beat). The STRUCTURE
- * is frozen at create time (which items, order, snapped trigger geometry); only a narration's audio
- * resolves live. buildDrive (engine) produces the narration items; the API weaves the asides.
+ * route order: a place NARRATION, referenced 1:1 via its poi — content resolves LIVE so a regenerated
+ * telling auto-improves a saved drive. The STRUCTURE is frozen at create time (which items, order,
+ * snapped trigger geometry); only a narration's audio resolves live. buildDrive (engine) produces
+ * the items. (V2: asides — placeless intro/outro framing — were deleted; see geometry-first-regions.md.)
  */
-export type DriveSelectionItem =
-  | {
-      kind: 'narration'
-      seq: number
-      poiId: string
-      narrationId: string
-      alongSec: number
-      triggerLat: number
-      triggerLng: number
-      approachHeadingDeg: number
-    }
-  | { kind: 'aside'; seq: number; asideId: string; alongSec: number }
+export type DriveSelectionItem = {
+  kind: 'narration'
+  seq: number
+  poiId: string
+  narrationId: string
+  alongSec: number
+  triggerLat: number
+  triggerLng: number
+  approachHeadingDeg: number
+}
 export type DriveSelection = DriveSelectionItem[]
 
 /* -------------------------------------------------------------------------- */
 /*  Enums — keep these in lockstep with the Zod enums in @skipper/shared        */
 /* -------------------------------------------------------------------------- */
 
-// Discovery sources for a `pois` row. `wikidata` joined when discovery flipped to the
-// Wikidata spine: a scenic pin (a named bay/beach with no Wikipedia article) is discovered
-// AND owns its `pois` row from Wikidata (CC0 name), so wikidata is now a discovery source,
-// not just an enrichment-attribution one. (Macrostrat stays attribution-only — it never owns
-// a `pois` row — so the AttributionSnapshot union remains a superset of this enum by one.)
-export const poiSourceEnum = pgEnum('poi_source', ['wikipedia', 'google_places', 'wikidata'])
+// Discovery sources for a `pois` row — Wikidata-spine ONLY. Every POI has a Wikidata QID
+// (`pois.qid`, the canonical identity): `wikipedia` = a story place with an article; `wikidata` =
+// a scenic pin (a named bay/beach with no article) discovered + owned from Wikidata (CC0 name).
+// `google_places` is NOT here — Google break anchors are a different identity universe (no QID,
+// keyed by the Google place_id) and live in their OWN `places` table; they're an ATTRIBUTION
+// source only (a break clip credits the Places name → AttributionSnapshot keeps `google_places`,
+// so that union stays a superset of this enum by two: + macrostrat + google_places).
+export const poiSourceEnum = pgEnum('poi_source', ['wikipedia', 'wikidata'])
 
 // NO `joke_level` pgEnum: the Dad-Joke-O-Meter notch is a generation-time INPUT, never a
 // stored column (M1 = dadpocalypse-only — see `tours`). The notch VOCABULARY lives as the
@@ -159,7 +163,7 @@ export const upstreamStatusEnum = pgEnum('upstream_status', [
 ])
 
 /* -------------------------------------------------------------------------- */
-/*  Shared narration columns — spread into `narrations` (+ future aside reuse). */
+/*  Shared narration columns — spread into `narrations`.                        */
 /* -------------------------------------------------------------------------- */
 
 // The narration payload a player consumes: the script + its synthesized clip + frozen
@@ -213,16 +217,25 @@ export const regions = pgTable(
 // point a per-region presentation identity (name/tagline/backstory/portrait) needs a home again.
 
 /* -------------------------------------------------------------------------- */
-/*  pois — a shared PLACE (facts/coords, deduped per external source)           */
+/*  pois — a shared narratable PLACE (Wikidata universe; facts/coords)           */
 /* -------------------------------------------------------------------------- */
 
-// The ONLY cache in the model: a place's facts are SHARED by every drive/roam that visits it.
-// Narration is NOT here — it is drive/roam-owned (see narrations).
+// The shared facts cache for NARRATABLE places: a place's facts are SHARED by every drive/roam
+// that visits it. Narration is NOT here — it is drive/roam-owned (see narrations). Every poi is a
+// Wikidata-discovered place keyed by its QID (`qid`, the canonical identity). Google break anchors
+// are a DIFFERENT universe (no QID) and live in `places`, not here.
 export const pois = pgTable(
   'pois',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    // Attribution: which external source and its native id.
+    // CANONICAL identity — the Wikidata QID. The cross-source dedup key that survives a place's
+    // scenic↔story tier flip across re-sweeps (where `source`/`source_id` change but the place is
+    // the SAME). NOT NULL: every poi is Wikidata-discovered, so a QID always exists. Hoisted out of
+    // `facts` (was `facts.qid`) so discovery + enrichment read it as a column, never a jsonb dig.
+    qid: text('qid').notNull(),
+    // The per-source NATIVE handle (which external source + its native id): `wikipedia` + pageId for
+    // a story place, `wikidata` + QID for a scenic pin. This is attribution/provenance, NOT the dedup
+    // key anymore — a tier flip rewrites it in place on the qid-keyed row.
     source: poiSourceEnum('source').notNull(),
     sourceId: text('source_id').notNull(),
     name: text('name').notNull(),
@@ -258,13 +271,92 @@ export const pois = pgTable(
       .$onUpdate(() => new Date()),
   },
   (t) => [
-    // One row per (source, source_id) — primary dedup invariant.
+    // PRIMARY dedup invariant: one row per Wikidata QID. Catches a scenic↔story tier flip that
+    // (source, source_id) misses (the place keeps its QID while source/source_id change).
+    uniqueIndex('pois_qid_uq').on(t.qid),
+    // SECONDARY: per-source native-id uniqueness (a pageId / a QID is unique within its source).
+    // Still true, kept as a guard; no longer the dedup arbiter.
     uniqueIndex('pois_source_source_id_uq').on(t.source, t.sourceId),
     index('pois_kind_idx').on(t.kind),
     // Bounding-box prefilter for /roam (and any near-a-point query) — bounds the scan instead
     // of loading every roam narration globally before the haversine pass.
     index('pois_lat_lng_idx').on(t.lat, t.lng),
   ],
+)
+
+/* -------------------------------------------------------------------------- */
+/*  places — Google break anchors (a DIFFERENT identity universe from pois)     */
+/* -------------------------------------------------------------------------- */
+
+// Break stops (rest/food/gas pull-offs) are NOT narratable POIs — they have no Wikidata QID, no
+// facts, and no story. They live here, in their OWN table, keyed by the Google `place_id` (this
+// table's QID-equivalent). SINGLE-SOURCE by design: only ever driven by Google Places — do not add
+// other sources here. A break clip credits the Places name via `narrations.attribution`
+// (`google_places`), but break NARRATIONS — when un-deferred — get their OWN `detours` table
+// (place-anchored break audio), NEVER the pois-bound `narrations` (which is 1:1 with a poi). Today
+// this is just the anchor cache; break-stop selection + audio (the `detours` table) are DEFERRED
+// (CLAUDE.md), so nothing references this at runtime yet.
+export const places = pgTable(
+  'places',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    // The Google Places API id (the "PID") — this table's canonical identity + dedup key.
+    placeId: text('place_id').notNull(),
+    name: text('name').notNull(),
+    // Google `primaryType` (e.g. 'american_restaurant') — the raw category; the SPOKEN kind is
+    // derived from it (studio's `spokenKind`) at use, not stored. Nullable: Places may omit it.
+    primaryType: text('primary_type'),
+    lat: doublePrecision('lat').notNull(),
+    lng: doublePrecision('lng').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    // One row per Google place_id — the dedup invariant.
+    uniqueIndex('places_place_id_uq').on(t.placeId),
+    // Bounding-box prefilter for along-route break search.
+    index('places_lat_lng_idx').on(t.lat, t.lng),
+  ],
+)
+
+/* -------------------------------------------------------------------------- */
+/*  detours — place-anchored BREAK audio (the `places` sibling of narrations)   */
+/* -------------------------------------------------------------------------- */
+
+// The ONE break telling for a `places` anchor — 1:1 with its place (UNIQUE place_id), the way
+// `narrations` is 1:1 with a poi. A break clip names the place + category ("a rest spot's coming
+// up") spoken by the region's host; it bakes NO volatile data and NO facts — so there is NO
+// `facts_hash` column here (a break is never fact-stale, unlike a story narration). A row exists
+// only post-synthesis (`audio_url` NOT NULL), so the DB enforces "a silent break never rides a
+// drive". STUB: the schema is here, but break-stop selection + audio generation are DEFERRED
+// (CLAUDE.md) — nothing writes or reads this table yet.
+export const detours = pgTable(
+  'detours',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    placeId: uuid('place_id')
+      .notNull()
+      .references(() => places.id, { onDelete: 'cascade' }),
+    // The break clip script (nullable through generation; a row only goes live once filled).
+    script: text('script'),
+    // R2 object KEY (private). NOT NULL — a row is only inserted post-synthesis, so the DB enforces
+    // the "every break has audio" invariant at the boundary, not just in app code.
+    audioUrl: text('audio_url').notNull(),
+    audioDurationMs: integer('audio_duration_ms').notNull(),
+    // Frozen attribution — credits the Google Places NAME (`google_places`). A break bakes no fact
+    // text, so this is the only credit (and there is deliberately no facts_hash — nothing to stale).
+    attribution: jsonb('attribution').$type<AttributionSnapshot[]>(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull()
+      .$onUpdate(() => new Date()),
+  },
+  // UNIQUE place_id = the 1:1 invariant (and the lookup index for the break join).
+  (t) => [uniqueIndex('detours_place_uq').on(t.placeId)],
 )
 
 /* -------------------------------------------------------------------------- */
@@ -289,7 +381,7 @@ export const pois = pgTable(
 //
 // Discipline: a row is a repair of a VERIFIABLE error, never an editorial rewrite — `reason` is
 // mandatory. `upstream_status` tracks contributing the fix back (agent drafts, human submits).
-// Bootstrap rows: packages/db/seed/poi-overrides.ts.
+// Rows are curated through the admin console (the seed-bootstrap CLI was removed 2026-06-19).
 export const poiOverrides = pgTable(
   'poi_overrides',
   {
@@ -329,11 +421,11 @@ export const poiOverrides = pgTable(
 )
 
 /* -------------------------------------------------------------------------- */
-/*  V2 — narrations / asides / drives / drive_demand                            */
+/*  V2 — narrations / drives / drive_demand                                     */
 /*  The roam-first model: pois ──1:1── narrations (the shared telling); roam is  */
-/*  a MODE over them; a `drive` is a user-owned ordered sequence; asides are     */
-/*  the generic placeless flavor. (The legacy tour tables — tours/segments/      */
-/*  tracks/tour_frames — were dropped in migration 0009.)                        */
+/*  a MODE over them; a `drive` is a user-owned ordered sequence of them. (Tour  */
+/*  tables tours/segments/tracks/tour_frames dropped in 0009; asides — placeless */
+/*  framing — dropped in 0018, see docs/decisions/geometry-first-regions.md.)    */
 /* -------------------------------------------------------------------------- */
 
 // The ONE shared telling of a place — 1:1 with its poi (UNIQUE poi_id). The atom: roam plays these by
@@ -362,41 +454,7 @@ export const narrations = pgTable(
   (t) => [uniqueIndex('narrations_poi_uq').on(t.poiId)],
 )
 
-// Generic, region/persona-owned FLAVOR woven BETWEEN place narrations: intro/outro brackets + the
-// clock-anchored "halfway there" beats. Placeless (no poi, no facts → no attribution/factsHash).
-// SHARED + reused across every drive in a region (the inverse of zero-reuse, which governs only the
-// deferred authored rung). `kind` is plain text validated by the Zod `asideKind` enum at the
-// boundary (the vocabulary churns — the studio_jobs.kind precedent). Starts EMPTY (filled by a
-// founder-gated synth run); region_id null = a GLOBAL aside.
-export const asides = pgTable(
-  'asides',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-    regionId: uuid('region_id').references(() => regions.id, { onDelete: 'cascade' }),
-    personaKey: text('persona_key').notNull(),
-    kind: text('kind').notNull(),
-    /** Distinguishes variants of the same (region, persona, kind) so a beat rarely repeats. */
-    variant: integer('variant').notNull().default(0),
-    script: text('script'),
-    audioUrl: text('audio_url').notNull(),
-    audioDurationMs: integer('audio_duration_ms').notNull(),
-    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-    updatedAt: timestamp('updated_at', { withTimezone: true })
-      .defaultNow()
-      .notNull()
-      .$onUpdate(() => new Date()),
-  },
-  (t) => [
-    // One row per (region, persona, kind, variant); NULLS NOT DISTINCT so a GLOBAL (null-region)
-    // beat is still unique on its (persona, kind, variant).
-    unique('asides_lookup_uq')
-      .on(t.regionId, t.personaKey, t.kind, t.variant)
-      .nullsNotDistinct(),
-    index('asides_lookup_idx').on(t.regionId, t.personaKey, t.kind),
-  ],
-)
-
-// A user-owned DRIVE: an ordered sequence of place narrations (+ asides) along a frozen route.
+// A user-owned DRIVE: an ordered sequence of place narrations along a frozen route.
 // Ownership lives HERE on `user_id` (a user-side table), NEVER on tours — preserving the
 // anonymous/shareable-tour invariant. References shared narrations; mints no narration. The frozen
 // `selection` manifest is replayed verbatim on re-open (structure frozen; narration content live).
@@ -407,7 +465,6 @@ export const drives = pgTable(
     // Soft ref to the auth `user.id` (TEXT) — auth runs on a SEPARATE neon-serverless pool, so a
     // DB-level FK isn't enforceable here; validated at the app boundary.
     userId: text('user_id').notNull(),
-    regionId: uuid('region_id').references(() => regions.id, { onDelete: 'set null' }),
     label: text('label'),
     startName: text('start_name'),
     startLat: doublePrecision('start_lat').notNull(),
@@ -416,6 +473,15 @@ export const drives = pgTable(
     endLat: doublePrecision('end_lat').notNull(),
     endLng: doublePrecision('end_lng').notNull(),
     polyline: jsonb('polyline').$type<Polyline>().notNull(),
+    // The route's bounding rectangle, derived from `polyline` at create — a STALE-PROOF cache (the
+    // polyline is frozen per drive, so this never drifts, unlike a materialized region stamp). The
+    // geometry-first replacement for a region FK: a drive's region(s) are DERIVED by intersecting
+    // this bbox with regions, NEVER stored. Also the spatial prefilter for "POIs along this route."
+    // See docs/decisions/geometry-first-regions.md.
+    bboxMinLat: doublePrecision('bbox_min_lat').notNull(),
+    bboxMinLng: doublePrecision('bbox_min_lng').notNull(),
+    bboxMaxLat: doublePrecision('bbox_max_lat').notNull(),
+    bboxMaxLng: doublePrecision('bbox_max_lng').notNull(),
     distanceMeters: integer('distance_meters'),
     durationSeconds: integer('duration_seconds'),
     routeProvenance: jsonb('route_provenance').$type<RouteProvenance>(),
@@ -428,10 +494,10 @@ export const drives = pgTable(
       .defaultNow()
       .notNull()
       .$onUpdate(() => new Date()),
-    // Soft-delete tombstone. A free-drive CREDIT is spent at generation and NEVER refunded, so a
-    // deleted drive STAYS as a row and keeps counting toward the lifetime cap — delete is a "remove
-    // from my list" action, not a credit refund. Read paths (list / replay / sign) filter
-    // `deleted_at IS NULL`; the cap counts ALL rows. NULL = live.
+    // Soft-delete tombstone — a "remove from my list" action. Read paths (list / replay / sign)
+    // filter `deleted_at IS NULL`. Credits are NO LONGER coupled to this: a credit is consumed via
+    // the `credit_entries` ledger at generation, and delete emits no `reverse`, so a delete never
+    // refunds — without the old "tombstone keeps counting toward the cap" hack. NULL = live.
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (t) => [index('drives_user_idx').on(t.userId), index('drives_route_sig_idx').on(t.routeSig)],
@@ -442,12 +508,60 @@ export const drives = pgTable(
 // per normalized route signature.
 export const driveDemand = pgTable('drive_demand', {
   routeSig: text('route_sig').primaryKey(),
-  regionId: uuid('region_id').references(() => regions.id, { onDelete: 'set null' }),
   hits: integer('hits').notNull().default(0),
   distinctUsers: integer('distinct_users').notNull().default(0),
   lastHitAt: timestamp('last_hit_at', { withTimezone: true }).defaultNow().notNull(),
   warmedAt: timestamp('warmed_at', { withTimezone: true }),
 })
+
+/* -------------------------------------------------------------------------- */
+/*  credit_entries — the user-owned credit LEDGER (append-only; balance = SUM).  */
+/* -------------------------------------------------------------------------- */
+
+// Credits are a USER-OWNED, append-only ledger — NOT a count of `drives` rows. Each row is one
+// immutable credit movement; a user's balance is SUM(amount). This decouples billing from the
+// content table (the old `count(drives incl. tombstones)` was a documented anti-pattern: no audit
+// trail, no idempotency, no refund/grant semantics). See docs/decisions/credit-ledger.md.
+//   kind:   grant (+) | consume (−) | reverse (± compensating: refund clawback / make-good)
+//   source: free_tier (the lifetime free allotment — the only one LIVE today) | apple_iap |
+//           google_play | admin_grant. The provider sources + admin make-goods are RESERVED: the
+//           IAP/Play purchase plumbing is deferred (idempotency keys on the provider txn —
+//           Apple transactionId / Google purchaseToken; see the decision doc).
+export const creditEntryKindEnum = pgEnum('credit_entry_kind', ['grant', 'consume', 'reverse'])
+export const creditSourceEnum = pgEnum('credit_source', [
+  'free_tier',
+  'apple_iap',
+  'google_play',
+  'admin_grant',
+])
+
+export const creditEntries = pgTable(
+  'credit_entries',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    // Soft ref to the auth `user.id` (TEXT) — auth runs on a SEPARATE neon-serverless pool, so a
+    // DB-level FK isn't enforceable here (same as `drives.user_id`); validated at the app boundary.
+    userId: text('user_id').notNull(),
+    // Signed units of "one credit = one drive generation": +N grant, −1 consume, ± reverse.
+    amount: integer('amount').notNull(),
+    kind: creditEntryKindEnum('kind').notNull(),
+    // Where the credits CAME FROM — meaningful only for a `grant`. NULL for consume/reverse (a debit
+    // has no funding source).
+    source: creditSourceEnum('source'),
+    // Human/audit note (e.g. the drive id a consume paid for, or a make-good reason).
+    reason: text('reason'),
+    // Exactly-once key for the movement — the dedupe target. Free grant: `free:<userId>`. Consume:
+    // `drive:<driveId>` (a drive charges exactly one credit). A future purchase grant keys on the
+    // provider txn (`apple_iap:<transactionId>` / `google_play:<purchaseToken>`); a refund reverse on
+    // `reverse:<that key>`. ON CONFLICT DO NOTHING makes grant/consume idempotent under retry.
+    idempotencyKey: text('idempotency_key').notNull().unique(),
+    // Reserved for promo credits with an expiry; NULL = lifetime (the only kind today). The balance
+    // calc IGNORES this until FIFO/expiring-first consumption is built (lifetime-only in v2).
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index('credit_entries_user_idx').on(t.userId)],
+)
 
 /* -------------------------------------------------------------------------- */
 /*  eval_runs / eval_scores — the DURABLE eval record (observability, not state) */
@@ -530,11 +644,11 @@ export const evalScores = pgTable(
 )
 
 /* -------------------------------------------------------------------------- */
-/*  studio_jobs — the OPERATIONAL record of a cloud tour-ops run (admin console)    */
+/*  studio_jobs — the OPERATIONAL record of a cloud studio-ops run (admin console)  */
 /* -------------------------------------------------------------------------- */
 
 // eval_runs is the QUALITY record (scores + artifact); studio_jobs is the EXECUTION record
-// (who/what/when/status/cost) of a tour-ops CLI run as a Cloud Run Job. Written ONLY by
+// (who/what/when/status/cost) of a studio-ops CLI run as a Cloud Run Job. Written ONLY by
 // pipeline/job-progress.ts when STUDIO_JOB_ID is set, so the laptop CLI never touches it.
 // OBSERVABILITY — nothing in the player/API reads it.
 
@@ -611,13 +725,16 @@ export const narrationsRelations = relations(narrations, ({ one }) => ({
   poi: one(pois, { fields: [narrations.poiId], references: [pois.id] }),
 }))
 
-export const asidesRelations = relations(asides, ({ one }) => ({
-  region: one(regions, { fields: [asides.regionId], references: [regions.id] }),
+export const placesRelations = relations(places, ({ one }) => ({
+  detour: one(detours),
 }))
 
-export const drivesRelations = relations(drives, ({ one }) => ({
-  region: one(regions, { fields: [drives.regionId], references: [regions.id] }),
+export const detoursRelations = relations(detours, ({ one }) => ({
+  place: one(places, { fields: [detours.placeId], references: [places.id] }),
 }))
+
+// (No drivesRelations: a drive stores no region FK — region is derived from its bbox geometry.
+//  See docs/decisions/geometry-first-regions.md.)
 
 /* -------------------------------------------------------------------------- */
 /*  Inferred row types (import via the "@skipper/db/schema" subpath, aliased)   */
@@ -627,6 +744,10 @@ export type Region = typeof regions.$inferSelect
 export type NewRegion = typeof regions.$inferInsert
 export type Poi = typeof pois.$inferSelect
 export type NewPoi = typeof pois.$inferInsert
+export type Place = typeof places.$inferSelect
+export type NewPlace = typeof places.$inferInsert
+export type Detour = typeof detours.$inferSelect
+export type NewDetour = typeof detours.$inferInsert
 export type PoiOverride = typeof poiOverrides.$inferSelect
 export type NewPoiOverride = typeof poiOverrides.$inferInsert
 export type EvalRun = typeof evalRuns.$inferSelect
@@ -637,8 +758,6 @@ export type StudioJob = typeof studioJobs.$inferSelect
 export type NewStudioJob = typeof studioJobs.$inferInsert
 export type Narration = typeof narrations.$inferSelect
 export type NewNarration = typeof narrations.$inferInsert
-export type Aside = typeof asides.$inferSelect
-export type NewAside = typeof asides.$inferInsert
 export type Drive = typeof drives.$inferSelect
 export type NewDrive = typeof drives.$inferInsert
 export type DriveDemand = typeof driveDemand.$inferSelect

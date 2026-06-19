@@ -101,7 +101,7 @@ export default function CreateDriveScreen() {
     setError(null)
     setPhase('generating')
     try {
-      const m = await createDrive({ regionId, start: proposal.start, end: proposal.end })
+      const m = await createDrive({ start: proposal.start, end: proposal.end })
       if (m.driveId) {
         // Hand the rider straight into the couch preview of their fresh drive (replace, so Back
         // returns to home, not the spent create flow).

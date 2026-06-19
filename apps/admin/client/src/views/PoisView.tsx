@@ -29,12 +29,11 @@ import { cn } from '@/lib/utils'
 
 type Tab = 'corpus' | 'retire'
 
-// Keyed to the real poi_source pgEnum (wikipedia | google_places | wikidata) — NOT osm/manual,
-// which were never enum members (the corpus is wikipedia + wikidata pins today).
+// Keyed to the real poi_source pgEnum (wikipedia | wikidata) — the corpus is Wikidata-spine ONLY
+// (every poi has a QID). Google break anchors are NOT pois — they live in the `places` table.
 const SOURCE_META: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' }> = {
   wikipedia: { label: 'Wikipedia', variant: 'default' },
   wikidata: { label: 'Wikidata', variant: 'secondary' },
-  google_places: { label: 'Google Places', variant: 'outline' },
 }
 
 type BadgeVariant = 'default' | 'secondary' | 'success' | 'warning' | 'outline'
@@ -931,7 +930,6 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
             <SelectItem value="all">All sources</SelectItem>
             <SelectItem value="wikipedia">Wikipedia</SelectItem>
             <SelectItem value="wikidata">Wikidata</SelectItem>
-            <SelectItem value="google_places">Google Places</SelectItem>
           </SelectContent>
         </Select>
         <Select value={flags} onValueChange={setFlags}>

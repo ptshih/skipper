@@ -27,7 +27,6 @@ import { ensurePoiOverridesLoaded } from './pipeline/poi-overrides'
 import { fetchFullExtracts } from './pipeline/wikipedia'
 import { toFacts } from './pipeline/select'
 import { buildStoryFacts, hashFacts, summaryFromExtract, upsertPoi } from './pipeline/persist'
-import { speakableAnchorFor } from './pipeline/speakable'
 import { announce, parseBboxFlag, parseFlags } from './pipeline/ops'
 import { runJob } from './pipeline/job-progress'
 import { sleep } from './pipeline/http'
@@ -162,20 +161,19 @@ async function main(): Promise<void> {
     // builds a curated fact sheet or defers; #1 downgrades an un-enriched poi to scenic). No char floor
     // here: a guessed cutoff would starve the enricher of borderline articles it might rescue
     // (correctness over cost, CLAUDE.md — the old 800-char demotion was removed 2026-06-16).
-    // FULL facts payload (incl. the linked Wikidata qid) so a tour generate can rebuild the spine
-    // candidate (WikiPoi) losslessly from the pool — see pipeline/region-corpus.ts.
-    const facts = buildStoryFacts({ extract, title: a.title, url: a.url, pageId: a.pageId, qid: s.qid })
-    // Seed the curated "where to look" anchor onto the corpus row (coalesce-kept by upsertPoi, so
-    // an admin edit always wins on a re-sweep). select.ts reads it back off pois.speakable.
-    const sp = speakableAnchorFor('wikipedia', String(a.pageId))
+    // The facts bag is the raw article + provenance; the Wikidata qid is the canonical IDENTITY,
+    // passed separately as the dedup key (region-corpus rebuilds the candidate from pois.qid).
+    const facts = buildStoryFacts({ extract, title: a.title, url: a.url, pageId: a.pageId })
+    // Speakable anchor (a corrected "where to look" vantage for a misleading centroid) is admin-set
+    // on pois.speakable now — the sweep leaves it untouched (coalesce-preserved by upsertPoi).
     await upsertPoi({
+      qid: s.qid,
       source: 'wikipedia',
       sourceId: String(a.pageId),
       name: a.title,
       kind: featureKind(s.types) ?? null,
       lat: s.lat,
       lng: s.lng,
-      ...(sp ? { speakableLat: sp.lat, speakableLng: sp.lng } : {}),
       summary: summaryFromExtract(extract),
       facts,
       factsHash: hashFacts(facts),
@@ -185,15 +183,14 @@ async function main(): Promise<void> {
   }
   if (deepMiss > 0) console.warn(`  ⚠ ${deepMiss} story extract(s) fell back to the lead (deep fetch miss).`)
   for (const s of scenics) {
-    const sp = speakableAnchorFor('wikidata', s.qid)
     await upsertPoi({
+      qid: s.qid,
       source: 'wikidata',
       sourceId: s.qid,
       name: s.name,
       kind: featureKind(s.types) ?? null,
       lat: s.lat,
       lng: s.lng,
-      ...(sp ? { speakableLat: sp.lat, speakableLng: sp.lng } : {}),
       summary: null,
       facts: null,
       factsHash: null,

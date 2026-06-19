@@ -93,6 +93,7 @@ async function main(): Promise<void> {
         .select({
           id: pois.id,
           sourceId: pois.sourceId,
+          qid: pois.qid,
           name: pois.name,
           kind: pois.kind,
           lat: pois.lat,
@@ -130,8 +131,7 @@ async function main(): Promise<void> {
     facts: PoiFacts
     title: string
     url: string
-    /** Wikidata qid from the sweep's facts — preserved through the deepen re-upsert so the
-     *  region-corpus contract (it rebuilds candidates from facts.qid) isn't broken. */
+    /** Wikidata qid — the canonical identity, read from the first-class `pois.qid` column. */
     qid: string | null
     factsFetchedAt: Date | null
     /** The poi's curated fact sheet + its enrich stamp (own columns) — grounding source + fingerprint. */
@@ -163,7 +163,7 @@ async function main(): Promise<void> {
       facts: f,
       title: f.title ?? r.name,
       url: f.url ?? wikiUrlForPageId(r.sourceId),
-      qid: f?.qid ?? null,
+      qid: r.qid,
       factsFetchedAt: r.factsFetchedAt,
       factSheet: r.factSheet,
       enrichedAt: r.enrichedAt,

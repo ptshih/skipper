@@ -14,22 +14,20 @@ const SHEET: FactSheetEntry[] = [
   { text: 'The bedrock is granodiorite.', source: 'macrostrat', sourceId: '99', license: 'CC BY 4.0' },
 ]
 
-describe('buildStoryFacts — the facts bag shape (the sheet is NOT in it)', () => {
-  test('object is byte-identical to the historical shape (hash unchanged)', () => {
-    const facts = buildStoryFacts({ extract: 'A.', title: 'T', url: 'u', pageId: 1, qid: 'Q1' })
-    expect(JSON.stringify(facts)).toBe(JSON.stringify({ extract: 'A.', title: 'T', url: 'u', pageId: 1, qid: 'Q1' }))
-  })
-
-  test('qid omitted when absent', () => {
+describe('buildStoryFacts — the facts bag shape (sheet + qid are NOT in it)', () => {
+  test('object is the canonical 4-key shape', () => {
     const facts = buildStoryFacts({ extract: 'A.', title: 'T', url: 'u', pageId: 1 })
     expect(JSON.stringify(facts)).toBe(JSON.stringify({ extract: 'A.', title: 'T', url: 'u', pageId: 1 }))
   })
 
-  test('the bag never carries well/enrichedAt (those moved to columns)', () => {
-    const facts = buildStoryFacts({ extract: 'A.', title: 'T', url: 'u', pageId: 1, qid: 'Q1' })
+  // (the qid-free shape is also locked in build-story-facts.test.ts; qid is the `pois.qid` column now)
+
+  test('the bag never carries well/enrichedAt/qid (those are columns)', () => {
+    const facts = buildStoryFacts({ extract: 'A.', title: 'T', url: 'u', pageId: 1 })
     expect('well' in facts).toBe(false)
     expect('enrichedAt' in facts).toBe(false)
-    expect(Object.keys(facts)).toEqual(['extract', 'title', 'url', 'pageId', 'qid'])
+    expect('qid' in facts).toBe(false)
+    expect(Object.keys(facts)).toEqual(['extract', 'title', 'url', 'pageId'])
   })
 })
 
@@ -65,8 +63,8 @@ describe('storyFactsHash — the grounding fingerprint switch (facts, factSheet)
 // read-back-hashed clip reads as perpetually stale. The hash is canonicalized to guarantee that.
 describe('hash is INVARIANT to object key order (the jsonb round-trip contract)', () => {
   test('hashFacts: same facts, shuffled top-level keys → same hash', () => {
-    const inMemory = { extract: 'A.', title: 'T', url: 'u', pageId: 1, qid: 'Q1' }
-    const readBack = { qid: 'Q1', url: 'u', pageId: 1, title: 'T', extract: 'A.' } // jsonb order
+    const inMemory = { extract: 'A.', title: 'T', url: 'u', pageId: 1 }
+    const readBack = { url: 'u', pageId: 1, title: 'T', extract: 'A.' } // jsonb order
     expect(hashFacts(readBack)).toBe(hashFacts(inMemory))
   })
 

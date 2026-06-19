@@ -664,7 +664,7 @@ interface CorrectionsPayload {
 // Assemble the corrections payload for one poi: its (source, source_id)-keyed override rows
 // (newest first) + its speakable anchor.
 async function correctionsForPoi(poi: {
-  source: 'wikipedia' | 'google_places' | 'wikidata'
+  source: 'wikipedia' | 'wikidata'
   sourceId: string
   speakableLat: number | null
   speakableLng: number | null

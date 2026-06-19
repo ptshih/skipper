@@ -1,5 +1,4 @@
 import { describe, expect, test } from 'bun:test'
-import { INTRO_SEQ, OUTRO_SEQ } from '@skipper/engine'
 import type { DriveClip, SignedDriveAudio } from '@skipper/shared'
 import {
   extForContentType,
@@ -47,20 +46,18 @@ describe('urlMapFromDriveManifest', () => {
     expect(m.size).toBe(3)
   })
 
-  test('maps intro/outro framing to the player sentinels, skips silent (url-null) beats', () => {
+  test('skips silent (url-null) beats', () => {
     const m = urlMapFromDriveManifest({
       clips: [
-        driveClip(-1, 'intro', 'https://r2/intro'),
         driveClip(0, 'story', 'https://r2/c0'),
         driveClip(1, 'break', null), // a silent rest beat — no audio
-        driveClip(-2, 'outro', 'https://r2/outro'),
+        driveClip(2, 'wave', 'https://r2/c2'),
       ],
     })
-    expect(m.get(INTRO_SEQ)).toBe('https://r2/intro')
-    expect(m.get(OUTRO_SEQ)).toBe('https://r2/outro')
     expect(m.get(0)).toBe('https://r2/c0')
     expect(m.has(1)).toBe(false)
-    expect(m.size).toBe(3)
+    expect(m.get(2)).toBe('https://r2/c2')
+    expect(m.size).toBe(2)
   })
 })
 

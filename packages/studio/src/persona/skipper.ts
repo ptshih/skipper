@@ -242,7 +242,8 @@ Write for the EAR (this is read aloud in a moving car). Short-to-medium sentence
  * tagline, backstory, portrait) is served by the API (apps/api/src/host.ts), never here.
  */
 export const SKIPPER: PersonaDef = {
-  // Bridges to the `personas` row seeded by packages/db/seed/personas.ts (persona_key 'skipper').
+  // The stable code-recipe slug + registry key (the `personas` table + its seed were dropped in v2;
+  // a per-narration persona_key returns with region-skippers, M4).
   personaKey: 'skipper',
   hostName: 'Skipper',
   voice: SKIPPER_VOICE_ID,

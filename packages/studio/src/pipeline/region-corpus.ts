@@ -5,9 +5,10 @@
 // and roam draw from that one corpus. A tour generate no longer calls WDQS live — it reads its
 // candidates from this pool, scoped to the route's bounding box, and rebuilds the SAME WikiPoi
 // shape the Wikidata spine used to emit (candidatesToWikiPois). Lossless: the sweep stores
-// extract/title/url/pageId/qid in pois.facts for STORY rows, so nothing the selector needs is
-// dropped. Selection (select.ts) reads facts straight from `pois` (the per-run facts-deepen
-// read-through was retired — facts refresh is a manual refetch_facts / re-sweep now).
+// extract/title/url/pageId in pois.facts and the Wikidata qid in the first-class `pois.qid`
+// column, so nothing the selector needs is dropped. Selection (select.ts) reads facts straight
+// from `pois` (the per-run facts-deepen read-through was retired — facts refresh is a manual
+// refetch_facts / re-sweep now).
 
 import { and, between, inArray } from 'drizzle-orm'
 import { db } from '@skipper/db'
@@ -36,6 +37,7 @@ export async function loadCandidatePoisInBox(sw: LngLat, ne: LngLat): Promise<Wi
           kind: pois.kind,
           lat: pois.lat,
           lng: pois.lng,
+          qid: pois.qid,
           speakableLat: pois.speakableLat,
           speakableLng: pois.speakableLng,
           facts: pois.facts,
@@ -82,7 +84,8 @@ export async function loadCandidatePoisInBox(sw: LngLat, ne: LngLat): Promise<Wi
         extract: f?.extract ?? '',
         ...(f?.url ? { url: f.url } : {}),
         pageid: f?.pageId ?? Number(r.sourceId),
-        ...(f?.qid ? { qid: f.qid } : {}),
+        // qid is the first-class identity column now (was facts.qid).
+        ...(r.qid ? { qid: r.qid } : {}),
         ...(r.kind ? { kind: r.kind } : {}),
         // Carry the corpus facts (extract + provenance) for the extract-fallback grounding + the
         // un-enriched staleness fingerprint downstream (select → generate-tour). Typed PoiFacts.
@@ -92,7 +95,8 @@ export async function loadCandidatePoisInBox(sw: LngLat, ne: LngLat): Promise<Wi
         ...speakable,
       })
     } else {
-      // wikidata = a named SCENIC pin (no prose); sourceId IS the QID.
+      // wikidata = a named SCENIC pin (no prose); for these source_id == qid, but read the
+      // canonical column (defensive against any not-yet-reswept legacy row).
       out.push({
         source: 'wikidata',
         sourceId: r.sourceId,
@@ -100,7 +104,7 @@ export async function loadCandidatePoisInBox(sw: LngLat, ne: LngLat): Promise<Wi
         lat: r.lat,
         lng: r.lng,
         extract: '',
-        qid: r.sourceId,
+        qid: r.qid ?? r.sourceId,
         ...(r.kind ? { kind: r.kind } : {}),
         ...speakable,
       })

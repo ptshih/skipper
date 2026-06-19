@@ -6,7 +6,7 @@
 // to ENFORCE a declared constraint; what these catch is a schema edit that silently DROPS one.
 import { describe, expect, it } from 'bun:test'
 import { getTableConfig, type PgTable } from 'drizzle-orm/pg-core'
-import { drives, asides, narrations, pois } from '../src/schema'
+import { drives, narrations, pois } from '../src/schema'
 
 function columnByDbName(table: PgTable, dbName: string) {
   const c = getTableConfig(table).columns.find((col) => col.name === dbName)
@@ -19,11 +19,6 @@ function uniqueIndexNames(table: PgTable): string[] {
     .indexes.filter((i) => i.config.unique)
     .map((i) => i.config.name)
     .filter((n): n is string => typeof n === 'string')
-}
-
-/** Names of UNIQUE CONSTRAINTS (vs uniqueIndex) — e.g. a `unique().nullsNotDistinct()`. */
-function uniqueConstraintNames(table: PgTable): string[] {
-  return getTableConfig(table).uniqueConstraints.map((u) => u.name)
 }
 
 /** The ON DELETE action for the FK whose LOCAL column is `localDbName` (e.g. 'segment_id'). */
@@ -45,26 +40,16 @@ describe('pois — the shared-facts dedup invariant', () => {
   })
 })
 
-describe('V2 — narrations / drives / asides structural invariants', () => {
+describe('V2 — narrations / drives structural invariants', () => {
   it('narrations are 1:1 with a poi (UNIQUE poi_id)', () => {
     expect(uniqueIndexNames(narrations)).toContain('narrations_poi_uq')
   })
-  it('a narration cascade-deletes with its poi (the telling dies with the place)', () => {
-    expect(fkOnDelete(narrations, 'poi_id')).toBe('cascade')
-  })
-  it('a poi is RESTRICTed from deletion by NOTHING now (narration cascades, facts shared)', () => {
-    // pois have no inbound RESTRICT FK in V2 (the old segments→poi restrict is gone); narrations
-    // cascade. This documents the V2 delete graph: deleting a poi takes its narration with it.
+  it('a narration cascade-deletes with its poi (deleting a poi takes its narration; pois have no inbound RESTRICT FK in V2)', () => {
     expect(fkOnDelete(narrations, 'poi_id')).toBe('cascade')
   })
   it('a narration always carries audio (audio_url + audio_duration_ms NOT NULL)', () => {
     expect(columnByDbName(narrations, 'audio_url').notNull).toBe(true)
     expect(columnByDbName(narrations, 'audio_duration_ms').notNull).toBe(true)
-  })
-  it('asides always carry audio + are unique per (region, persona, kind, variant)', () => {
-    expect(columnByDbName(asides, 'audio_url').notNull).toBe(true)
-    expect(columnByDbName(asides, 'audio_duration_ms').notNull).toBe(true)
-    expect(uniqueConstraintNames(asides)).toContain('asides_lookup_uq')
   })
   it('a drive is user-owned (user_id NOT NULL) and carries a route signature', () => {
     expect(columnByDbName(drives, 'user_id').notNull).toBe(true)

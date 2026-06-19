@@ -13,7 +13,6 @@
 // `dir.create({intermediates,idempotent})`; `file.write(str)`/`file.textSync()`/`file.delete()`.
 
 import { Directory, File, Paths } from 'expo-file-system'
-import { INTRO_SEQ, OUTRO_SEQ } from '@skipper/engine'
 import type { DriveClip, DriveManifest, DriveSummary } from '@skipper/shared'
 import { getDrive, signDriveAudio } from './api'
 import { extForContentType, urlMapFromDriveManifest, urlMapFromDriveSigned } from './offline-util'
@@ -40,7 +39,7 @@ export interface OfflineManifest {
   /** The full drive manifest (route/clips/geometry) — zero-network playback. The clips' presigned
    *  `url`s are stale on disk (and ignored — offline reads the local file map below). */
   detail: DriveManifest
-  /** Keyed by the player seq (string), including the INTRO_SEQ/OUTRO_SEQ frame sentinels. */
+  /** Keyed by the player seq (string) — one entry per place narration. */
   clips: Record<string, ClipFile>
 }
 
@@ -59,11 +58,11 @@ function clipUri(driveId: string, clip: ClipFile): string {
   return new File(driveDir(driveId), clip.name).uri
 }
 
-/** The player seq a clip maps to: a placeless intro/outro frame keys under the sentinel the player
- *  understands, every place narration under its own seq. Mirrors offline-util's urlMapFromDriveManifest
- *  so the on-disk keys line up with the online url map. */
+/** The player seq a clip maps to — every place narration under its own seq (V2 has no placeless
+ *  framing; see docs/decisions/geometry-first-regions.md). Mirrors offline-util's
+ *  urlMapFromDriveManifest so the on-disk keys line up with the online url map. */
 function clipSeq(c: DriveClip): number {
-  return c.form === 'intro' ? INTRO_SEQ : c.form === 'outro' ? OUTRO_SEQ : c.seq
+  return c.seq
 }
 
 export interface DownloadProgress {
@@ -78,7 +77,7 @@ export interface DownloadResult {
   manifest: OfflineManifest
   downloaded: number
   total: number
-  /** Player seqs (incl. the INTRO_SEQ/OUTRO_SEQ sentinels) whose clip failed to download/verify. */
+  /** Player seqs whose clip failed to download/verify. */
   failedSeqs: number[]
 }
 
@@ -374,7 +373,6 @@ function summaryFromManifest(m: OfflineManifest): DriveSummary {
   return {
     driveId: d.driveId ?? m.driveId,
     label: d.label,
-    regionId: d.regionId ?? null,
     startName: null,
     endName: null,
     distanceMeters: d.distanceMeters ?? null,

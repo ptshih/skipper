@@ -8,9 +8,7 @@
   "exports": {
     ".": "./src/client.ts",
     "./schema": "./src/schema.ts",
-    "./auth-schema": "./src/auth-schema.ts",
-    "./seed/poi-overrides": "./seed/poi-overrides.ts",
-    "./seed/materialize": "./seed/materialize.ts"
+    "./auth-schema": "./src/auth-schema.ts"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate",

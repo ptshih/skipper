@@ -99,23 +99,21 @@ export function factSheetToAttribution(sheet: FactSheetEntry[], retrievedAt: str
 
 /** The canonical `pois.facts` object for a STORY place — the ONE builder every facts writer uses (the
  *  region sweep + refetch-poi) so the stored shape is consistent. The curated narration sheet is NO
- *  LONGER here — it lives in the typed `pois.fact_sheet` column (+ `enriched_at`). Key ORDER no longer
- *  affects the hash (`stableStringify` canonicalizes the jsonb read-back), but key PRESENCE still does
- *  — so `qid` is OMITTED when absent (never stored as null). The Wikidata `qid` linkage (region-corpus
- *  rebuilds tour candidates from it) is preserved BY CONSTRUCTION. */
+ *  LONGER here — it lives in the typed `pois.fact_sheet` column (+ `enriched_at`); the Wikidata `qid`
+ *  is NO LONGER here either — it's the first-class `pois.qid` column (the canonical identity), passed
+ *  separately to `upsertPoi`. So this bag is now just the raw article + provenance. Key ORDER no longer
+ *  affects the hash (`stableStringify` canonicalizes the jsonb read-back). */
 export function buildStoryFacts(input: {
   extract: string
   title: string
   url: string
   pageId: number
-  qid?: string | null
 }): PoiFacts {
   return {
     extract: input.extract,
     title: input.title,
     url: input.url,
     pageId: input.pageId,
-    ...(input.qid ? { qid: input.qid } : {}),
   }
 }
 
@@ -126,15 +124,18 @@ export function summaryFromExtract(extract: string): string | null {
 }
 
 export interface UpsertPoiInput {
+  /** The Wikidata QID — the CANONICAL identity + dedup key (every poi has one). A scenic↔story tier
+   *  flip lands on the SAME row via this key; source/sourceId are rewritten in place. */
+  qid: string
   source: PoiSource
   sourceId: string
   name: string
   kind: string | null
   lat: number
   lng: number
-  /** Curated "where to look" anchor — a place's speakable vantage (off speakableAnchorFor),
-   *  SHARED and surviving a facts re-fetch. Omitted for places that speak from their own pin;
-   *  coalesced on conflict so a curated anchor is never blanked by a later factless write. */
+  /** Curated "where to look" anchor — a place's speakable vantage (admin-set on pois.speakable),
+   *  SHARED and surviving a facts re-fetch. Omitted for places that speak from their own pin (the
+   *  sweep never sets it); coalesced on conflict so a curated anchor is never blanked by a re-sweep. */
   speakableLat?: number | null
   speakableLng?: number | null
   summary: string | null
@@ -156,30 +157,36 @@ export interface UpsertPoiInput {
   enrichedAt?: Date | null
 }
 
-/** Upsert a POI deduped on (source, source_id); stamps facts freshness; returns its id. */
+/** Upsert a POI deduped on its Wikidata QID; stamps facts freshness; returns its id. */
 export async function upsertPoi(input: UpsertPoiInput): Promise<string> {
   const { factsHash, factsFetchedAt: providedStamp, speakableLat, speakableLng, ...rest } = input
   // Only a stop with real facts (a story stop) carries the freshness clock; the stamp
   // itself is caller-owned (see UpsertPoiInput.factsFetchedAt).
   const factsFetchedAt = factsHash ? providedStamp : null
   // Retry-safe: an upsert (onConflictDoUpdate) is idempotent — a retried attempt lands on the
-  // same row by (source, source_id) and writes the same facts (only updatedAt's now() differs).
+  // same row by `qid` and writes the same data (only updatedAt's now() differs).
   const rows = await withRetry(
     () =>
       db
         .insert(pois)
         .values({ ...rest, speakableLat, speakableLng, factsHash, factsFetchedAt })
         .onConflictDoUpdate({
-          target: [pois.source, pois.sourceId],
+          // Dedup on the canonical QID — so a scenic↔story TIER FLIP (same place, different
+          // source/source_id across re-sweeps) lands on the SAME row instead of orphaning a twin.
+          target: pois.qid,
           set: {
+            // The per-source native handle FOLLOWS the latest discovery: a flip rewrites source +
+            // source_id in place on the qid-keyed row (qid itself is the immutable key, never set).
+            source: sql`excluded.source`,
+            sourceId: sql`excluded.source_id`,
             // Location is always current — refresh it.
             name: sql`excluded.name`,
             kind: sql`excluded.kind`,
             lat: sql`excluded.lat`,
             lng: sql`excluded.lng`,
-            // Speakable anchor is SEED-or-admin-owned (not auto-refetched): keep the EXISTING
-            // value, filling from an incoming write only when the row has none. So an admin edit
-            // (or the sweep's seed) is never clobbered by a later generate/sweep pass.
+            // Speakable anchor is ADMIN-owned (not auto-refetched, never sweep-set): keep the
+            // EXISTING value, filling from an incoming write only when the row has none — so an
+            // admin edit is never clobbered by a later generate/sweep pass.
             speakableLat: sql`coalesce(${pois.speakableLat}, excluded.speakable_lat)`,
             speakableLng: sql`coalesce(${pois.speakableLng}, excluded.speakable_lng)`,
             // FACTS are SHARED across tours: the SAME place can be a story stop on one tour and
@@ -206,7 +213,7 @@ export async function upsertPoi(input: UpsertPoiInput): Promise<string> {
           },
         })
         .returning({ id: pois.id }),
-    { label: `upsertPoi(${input.source}:${input.sourceId})` },
+    { label: `upsertPoi(${input.qid} ${input.source}:${input.sourceId})` },
   )
   return rows[0]!.id
 }

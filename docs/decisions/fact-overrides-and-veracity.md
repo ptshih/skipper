@@ -31,7 +31,7 @@ away from the lakeside content the script describes.
   rows. The judge can be wrong (the lighthouse superlative is definitional) — that's why
   this is never automated.
 - **Fix — the `poi_overrides` TABLE** (founder-decided: the registry resides in the DB;
-  bootstrap rows in `packages/db/seed/poi-overrides.ts`, idempotently upserted without
+  rows are curated through the admin console — the seed-bootstrap CLI was removed 2026-06-19 — without
   clobbering workflow state). Each row is ONE documented correction, keyed by the pois
   dedup identity `(source, source_id)` — poiId can't work, the row may predate the place.
   `poi_overrides` is now **fact-corrections ONLY** — a literal find→replace on fetched

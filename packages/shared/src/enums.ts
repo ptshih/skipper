@@ -33,28 +33,17 @@ export type NarrationForm = z.infer<typeof narrationForm>
 export const stopType = z.enum(['story', 'scenic', 'break'])
 export type StopType = z.infer<typeof stopType>
 
-/** The WIRE form of one clip in a DRIVE manifest — a superset of the played narration forms
- *  (story/scenic/break/wave) plus the placeless framing woven between place narrations
- *  (intro/outro brackets + clock-anchored aside beats). The player's icon/treatment switch. */
-export const driveClipForm = z.enum(['story', 'scenic', 'break', 'wave', 'intro', 'outro', 'aside'])
+/** The WIRE form of one clip in a DRIVE manifest — the played narration forms (story/scenic/break/
+ *  wave). The player's icon/treatment switch. (V2: the placeless intro/outro framing was deleted with
+ *  the `asides` concept; see docs/decisions/geometry-first-regions.md. It returns in v3 with guided tours.) */
+export const driveClipForm = z.enum(['story', 'scenic', 'break', 'wave'])
 export type DriveClipForm = z.infer<typeof driveClipForm>
 
-/** The kind of a generic ASIDE (the `asides` table) — a placeless persona beat. `intro`/
- *  `outro` bracket the drive; the rest are clock-anchored progress beats. Plain `text` in the DB
- *  (the vocabulary churns — the studio_jobs.kind precedent); this Zod enum is the boundary-validated set. */
-export const asideKind = z.enum([
-  'intro',
-  'outro',
-  'quarter',
-  'half',
-  'three_quarter',
-  'last_stretch',
-])
-export type AsideKind = z.infer<typeof asideKind>
-
-/** Where a POI came from (its DISCOVERY source). Stored for dedup + attribution (Wikipedia is
- *  CC BY-SA; a named scenic pin is discovered from Wikidata, CC0). */
-export const poiSource = z.enum(['wikipedia', 'google_places', 'wikidata'])
+/** Where a POI came from (its DISCOVERY source) — Wikidata-spine ONLY (every poi has a QID).
+ *  `wikipedia` = a story place with an article; `wikidata` = a named scenic pin (CC0). Google break
+ *  anchors are NOT pois — they have no QID and live in the `places` table; `google_places` is an
+ *  attribution source only (see `attributionSource`), never a discovery source. */
+export const poiSource = z.enum(['wikipedia', 'wikidata'])
 export type PoiSource = z.infer<typeof poiSource>
 
 /**
@@ -116,3 +105,22 @@ export type AccessTier = z.infer<typeof accessTier>
 /** Mobile client platform — keys the per-platform app-version policy served by GET /version. */
 export const platform = z.enum(['ios', 'android'])
 export type Platform = z.infer<typeof platform>
+
+/**
+ * A credit-ledger entry's KIND — one immutable credit movement (the `credit_entries` table):
+ *   grant   = credits added (+): the free allotment, a purchased pack, or an admin make-good.
+ *   consume = credits spent (−1 per drive generation).
+ *   reverse = a compensating entry (±): a platform refund clawback or a corrective reinstatement.
+ * Keep in lockstep with the pg `credit_entry_kind` enum (@skipper/db/schema).
+ */
+export const creditEntryKind = z.enum(['grant', 'consume', 'reverse'])
+export type CreditEntryKind = z.infer<typeof creditEntryKind>
+
+/**
+ * Where a credit came from (a `credit_entries.source`). `free_tier` (the lifetime free allotment)
+ * is the only LIVE source today; `apple_iap`/`google_play` (purchased packs, provider-agnostic) and
+ * `admin_grant` (make-goods) are RESERVED until the purchase plumbing lands. Keep in lockstep with
+ * the pg `credit_source` enum (@skipper/db/schema).
+ */
+export const creditSource = z.enum(['free_tier', 'apple_iap', 'google_play', 'admin_grant'])
+export type CreditSource = z.infer<typeof creditSource>

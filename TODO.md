@@ -246,8 +246,29 @@ removed the dated construction sentence, so there's nothing left to file.
       Wikipedia's neutral register) for the 3 active rows; surface for human review + filing.
 
 Refs: `docs/decisions/fact-overrides-and-veracity.md` ("Contribute back" + the discipline line),
-`packages/db/seed/poi-overrides.ts` (the rows + reasons + source_urls),
+the `poi_overrides` table rows (reasons + source_urls; curated via the admin console),
 `poi_overrides.upstream_status` / `upstream_url` (the workflow columns).
+
+## Speakable anchors: validate the coordinate (no pin-vs-speakable mismatch guard today)
+
+`pois.speakable_lat/lng` is a corrected "where to look" vantage for a misleading pin — it drives the
+side-of-road left/right callout in `select.ts`. It's admin-set only now (the `speakable.ts` bootstrap
+seed was removed 2026-06-19; the value lives in the DB).
+
+GAP (founder-flagged 2026-06-19): the ONE existing anchor — Sugar Pine Point (`wikipedia:41195091`
+→ `39.061266, -120.113971`) — was **LLM-generated during the seed research phase and is UNVERIFIED**.
+Nothing validates a speakable coordinate against the pin, so a hallucinated/typo'd anchor yields a
+confidently-wrong "look to your right." `discover-pois` is NOT the place to check it (it no longer
+sets speakable).
+
+- [ ] Add a sanity guard: reject/warn when `haversine(pin, speakable)` exceeds a reasonable bound
+      (a vantage is "roughly here," not km away) — at the admin write boundary
+      (`POST /admin/pois/:id/corrections`) and/or a corpus audit over all pois with a non-null speakable.
+- [ ] Re-verify the Sugar Pine Point anchor specifically (only one, LLM-sourced) — confirm it points
+      lakeside toward the lighthouse, not into open water.
+
+Refs: `pois.speakable_lat/lng` (`schema.ts`), `select.ts` (side-of-road resolve), `region-corpus.ts`
+(reads speakable onto the StopPlan), admin `/admin/pois/:id/corrections`.
 
 ## Autio competitive borrows (small in-car/UX wins)
 

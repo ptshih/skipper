@@ -59,6 +59,7 @@
         "@neondatabase/serverless": "^1.1.0",
         "@skipper/db": "workspace:*",
         "@skipper/engine": "workspace:*",
+        "@skipper/routing": "workspace:*",
         "@skipper/shared": "workspace:*",
         "@skipper/storage": "workspace:*",
         "better-auth": "^1.6.18",
@@ -130,6 +131,14 @@
     },
     "packages/engine": {
       "name": "@skipper/engine",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@types/bun": "^1.3.14",
+        "@types/node": "^25.9.3",
+      },
+    },
+    "packages/routing": {
+      "name": "@skipper/routing",
       "version": "0.0.0",
       "devDependencies": {
         "@types/bun": "^1.3.14",
@@ -811,6 +820,8 @@
     "@skipper/engine": ["@skipper/engine@workspace:packages/engine"],
 
     "@skipper/mobile": ["@skipper/mobile@workspace:apps/mobile"],
+
+    "@skipper/routing": ["@skipper/routing@workspace:packages/routing"],
 
     "@skipper/shared": ["@skipper/shared@workspace:packages/shared"],
 

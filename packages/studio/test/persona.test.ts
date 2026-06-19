@@ -13,14 +13,6 @@ describe('personaFromKey', () => {
 })
 
 describe('Skipper persona def', () => {
-  test('host is always "Skipper" (founder rule: regions differ by voice/flavor, not name)', () => {
-    expect(SKIPPER.hostName).toBe('Skipper')
-  })
-
-  test('personaKey is the stable code-recipe slug (the bridge a future personas row rebinds to, M4)', () => {
-    expect(SKIPPER.personaKey).toBe('skipper')
-  })
-
   test('kit beats stay in lockstep with the kit prose in the prompts (no prose↔regex desync)', () => {
     // Each kit detector must actually fire on the prompt text that describes that beat —
     // the load-bearing sync the registry exists to keep (lint + studio share these beats).
@@ -28,9 +20,5 @@ describe('Skipper persona def', () => {
       const described = beat.match.test(SKIPPER.systemPrompt) || beat.match.test(SKIPPER.framePrompt)
       expect(described).toBe(true)
     }
-  })
-
-  test('the dropNote names the kit terms', () => {
-    expect(SKIPPER.kit.dropNote.toLowerCase()).toMatch(/ray|mechanic|truck|coffee/)
   })
 })

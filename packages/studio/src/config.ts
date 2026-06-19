@@ -4,7 +4,7 @@
 //
 // Env is injected by dotenvx at the command line (the repo has NO plaintext
 // .env), e.g.:
-//   dotenvx run -f .env.development -- bun packages/studio/src/run.ts emerald-bay-run
+//   dotenvx run -f .env.development -- bun packages/studio/src/generate-narrations.ts
 
 import { existsSync } from 'node:fs'
 
@@ -253,6 +253,6 @@ export const NARRATION_FALLBACK_CHARS = 4_000
 export const WORDS_PER_SECOND = 2.5
 
 /** The Tahoe–Reno corridor default bbox — the standalone CLI default when no --bbox is passed
- *  (discover-pois / generate-narrations). Matches the `lake-tahoe` region seed's discoveryBbox
- *  (packages/db/seed/seed.ts); the CLIs stay standalone and do NOT read the DB region row. */
+ *  (discover-pois / generate-narrations). Mirrors the `lake-tahoe` region's discoveryBbox (created
+ *  via the admin console); the CLIs stay standalone and do NOT read the DB region row. */
 export const TAHOE_RENO_BBOX = { swLng: -120.25, swLat: 38.86, neLng: -119.55, neLat: 39.65 } as const

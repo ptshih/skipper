@@ -18,11 +18,15 @@ import { join, resolve } from 'node:path'
 import {
   poiSourceEnum,
   narrationFormEnum,
+  creditEntryKindEnum,
+  creditSourceEnum,
 } from '../packages/db/src/schema'
 import {
   poiSource,
   narrationForm,
   attributionSource,
+  creditEntryKind,
+  creditSource,
 } from '../packages/shared/src/enums'
 
 const errors: string[] = []
@@ -32,6 +36,8 @@ const norm = (xs: readonly string[]) => [...xs].sort().join(', ')
 const PAIRS: { name: string; pg: readonly string[]; zod: readonly string[] }[] = [
   { name: 'poi_source ⇄ poiSource', pg: poiSourceEnum.enumValues, zod: poiSource.options },
   { name: 'narration_form ⇄ narrationForm', pg: narrationFormEnum.enumValues, zod: narrationForm.options },
+  { name: 'credit_entry_kind ⇄ creditEntryKind', pg: creditEntryKindEnum.enumValues, zod: creditEntryKind.options },
+  { name: 'credit_source ⇄ creditSource', pg: creditSourceEnum.enumValues, zod: creditSource.options },
 ]
 for (const { name, pg, zod } of PAIRS) {
   if (norm(pg) !== norm(zod)) {

@@ -81,7 +81,8 @@ async function main() {
   }
 
   // Normalize to the sweep's stored shape (toFacts(...).join(' ')) so an unchanged article hashes
-  // identically; preserve the existing title/url/qid metadata (the deep fetch returns text only).
+  // identically; preserve the existing title/url metadata (the deep fetch returns text only). The
+  // Wikidata qid lives in the `pois.qid` column (identity, immutable) — refetch never touches it.
   const f = poi.facts
   const extract = toFacts(full).join(' ')
   // PRESERVE a paid fact sheet across a refetch (2026-06-16, Option A) — a single-poi re-fetch refreshes
@@ -96,7 +97,6 @@ async function main() {
     title: f?.title ?? poi.name,
     url: f?.url ?? wikiUrlForPageId(poi.sourceId),
     pageId,
-    qid: f?.qid,
   })
   const newHash = storyFactsHash(newFacts, existingSheet)
 

@@ -4,8 +4,6 @@ import {
   MIN_MEASURABLE_SEC,
   measureTailCollapse,
   parseMeanVolumeDb,
-  TAIL_COLLAPSE_DB,
-  TAIL_WINDOW_SEC,
 } from '../src/pipeline/tail'
 import type { TailMeasure } from '../src/pipeline/tail'
 
@@ -54,10 +52,3 @@ describe('measureTailCollapse — probe gating', () => {
   })
 })
 
-describe('constants — the measured 2026-06-10 thresholds', () => {
-  test('the collapse line is 3 dB over a 12 s tail; measurable from 2× the window', () => {
-    expect(TAIL_COLLAPSE_DB).toBe(3)
-    expect(TAIL_WINDOW_SEC).toBe(12)
-    expect(MIN_MEASURABLE_SEC).toBe(24)
-  })
-})

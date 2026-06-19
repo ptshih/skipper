@@ -1,11 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import {
-  buildPreviewTimeline,
-  frameKindForSeq,
-  INTRO_SEQ,
-  OUTRO_SEQ,
-  type PreviewStop,
-} from '../src/preview'
+import { buildPreviewTimeline, type PreviewStop } from '../src/preview'
 import type { LngLat } from '../src/geo'
 
 // ~11.1 km north-south line (lat 38.000 -> 38.100, ~111 m per 0.001 deg).
@@ -85,66 +79,4 @@ describe('buildPreviewTimeline', () => {
   })
 })
 
-describe('buildPreviewTimeline — intro/outro frames', () => {
-  const tl = buildPreviewTimeline(stops, polyline, {
-    totalDriveSec: 600,
-    intro: { audioDurationMs: 12_000 },
-    outro: { audioDurationMs: 15_000 },
-  })
-
-  test('intro bookends the head and outro the tail; stops/drives unchanged between', () => {
-    expect(tl.segments.map((s) => s.kind)).toEqual([
-      'clip', // intro
-      'clip', // stop 0
-      'drive',
-      'rest',
-      'drive',
-      'clip', // stop 2
-      'clip', // outro
-    ])
-    const first = tl.segments[0]!
-    const last = tl.segments[tl.segments.length - 1]!
-    expect(first.frameKind).toBe('intro')
-    expect(first.seq).toBe(INTRO_SEQ)
-    expect(last.frameKind).toBe('outro')
-    expect(last.seq).toBe(OUTRO_SEQ)
-  })
-
-  test('frames play FULL length (no compression) and sit at the route ends', () => {
-    const intro = tl.segments[0]!
-    const outro = tl.segments[tl.segments.length - 1]!
-    expect(intro.previewMs).toBe(12_000)
-    expect(intro.realMs).toBe(12_000)
-    expect(intro.routeProgress).toBe(0)
-    expect(outro.previewMs).toBe(15_000)
-    expect(outro.routeProgress).toBe(1)
-  })
-
-  test('startMs stays contiguous with frames in the timeline; clipCount includes them', () => {
-    let acc = 0
-    for (const s of tl.segments) {
-      expect(s.startMs).toBe(acc)
-      acc += s.previewMs
-    }
-    expect(tl.totalPreviewMs).toBe(acc)
-    expect(tl.clipCount).toBe(4) // 2 stop clips + intro + outro
-  })
-
-  test('a real stop seq is never mistaken for a frame; sentinels map to their kind', () => {
-    expect(frameKindForSeq(0)).toBeNull()
-    expect(frameKindForSeq(2)).toBeNull()
-    expect(frameKindForSeq(INTRO_SEQ)).toBe('intro')
-    expect(frameKindForSeq(OUTRO_SEQ)).toBe('outro')
-  })
-
-  test('absent/null frames leave the timeline exactly as before', () => {
-    const none = buildPreviewTimeline(stops, polyline, { totalDriveSec: 600 })
-    const withNulls = buildPreviewTimeline(stops, polyline, {
-      totalDriveSec: 600,
-      intro: null,
-      outro: { audioDurationMs: null },
-    })
-    expect(none.segments.map((s) => s.kind)).toEqual(withNulls.segments.map((s) => s.kind))
-    expect(withNulls.segments.some((s) => s.frameKind)).toBe(false)
-  })
-})
+// (Intro/outro frame tests removed — asides/framing deleted in v2; see geometry-first-regions.md.)

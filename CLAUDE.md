@@ -112,6 +112,7 @@ you found so the next agent can re-check it.
   `/t/:id` serves GENERIC Open Graph. Audio is PRIVATE in R2 (presigned, short TTL, after the tier
   check). (V2 2026-06-18: the V1 "every tour previewable / wall on the drive" funnel is gone with
   authored tours.)
+- **Region is a BBOX, never a stored FK (geometry-first, 2026-06-19).** A POI's region = point-in-bbox; a DRIVE stores its route bbox (stale-proof) + derives region by intersect — NO `region_id` FK anywhere (`docs/decisions/geometry-first-regions.md`).
 - **`pois` deduped by `(source, source_id)`.** Store `source`/`source_id` for
   attribution — Wikipedia is **CC BY-SA**, keep credit (the attribution snapshot is
   frozen on the `narration` at generation time).

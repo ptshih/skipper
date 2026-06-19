@@ -5,15 +5,15 @@
 // "grounded" false clip (found live 2026-06-09: "Leonard" for Lennart Palme at Vikingsholm;
 // the Pope Estate's builder/decade). Corrections live in the `poi_overrides` TABLE (the
 // founder-decided source of truth — workflow state like upstream_status lives there too;
-// bootstrap rows in packages/db/seed/poi-overrides.ts) and are applied here at the fetch
+// rows are curated through the admin console) and are applied here at the fetch
 // seam every Wikipedia fact flows through, so the corrected text reaches the narration
 // sheet, mergedFeatures, pois.facts, and facts_hash identically.
 //
 // Scope honesty (review-confirmed): fact edits apply ONLY to Wikipedia-fetched prose —
 // geology (Macrostrat) and Wikidata enrichment lines enter the well through their own
 // fetchers and do NOT pass this seam. (The place's speakable COORDINATE — a corrected
-// vantage for side-of-road content — moved off this table onto pois.speakable_lat/lng; the
-// curated map lives in pipeline/speakable.ts and select.ts resolves the side heading-aware.)
+// vantage for side-of-road content — lives on pois.speakable_lat/lng, admin-set via the
+// /admin/pois/:id/corrections surface; select.ts resolves the side heading-aware.)
 //
 // Failure-mode honesty: an unmatched find-string is "source healed" OR "source reworded,
 // still wrong" — indistinguishable without a human look, so misses are WARNED (once per

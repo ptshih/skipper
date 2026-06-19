@@ -156,7 +156,6 @@ const resolvedEndpoint = z.object({
 
 /** The proposed route to CONFIRM before generating: resolved endpoints + a route preview. */
 export const driveProposal = z.object({
-  regionId: z.uuid(),
   start: resolvedEndpoint,
   end: resolvedEndpoint,
   polyline,
@@ -170,22 +169,21 @@ export type DriveProposal = z.infer<typeof driveProposal>
 
 /** POST /drives — generate + persist the confirmed drive (consumes a credit; account-gated). */
 export const createDriveRequest = z.object({
-  regionId: z.uuid(),
   start: resolvedEndpoint,
   end: resolvedEndpoint,
   jokeLevel: jokeLevel.optional(),
 })
 export type CreateDriveRequest = z.infer<typeof createDriveRequest>
 
-/** One played item in a drive: a place NARRATION or a placeless ASIDE, with its presigned clip.
- *  A superset of roamPin (a narration) + the framing beats — the player's single clip shape. */
+/** One played clip in a drive: a place narration, with its presigned clip — the player's single clip
+ *  shape. (V2: the placeless framing/asides were deleted; see docs/decisions/geometry-first-regions.md.) */
 export const driveClip = z.object({
-  /** ≥0 for a real stop in route order; framing/asides use negative sentinels the player maps. */
+  /** ≥0, in route order. */
   seq: z.number().int(),
   form: driveClipForm,
   poiId: z.uuid().nullish(),
   name: z.string().nullish(),
-  /** Trigger point (the narration snapped to THIS route). Null for clock-anchored asides. */
+  /** Trigger point (the narration snapped to THIS route). */
   lat: z.number().nullish(),
   lng: z.number().nullish(),
   triggerRadiusM: z.number().int().nullish(),
@@ -207,7 +205,6 @@ export const driveManifest = z.object({
   /** Null for an unsaved/ephemeral manifest; set once persisted + owned. */
   driveId: z.uuid().nullable(),
   label: z.string(),
-  regionId: z.uuid().nullish(),
   polyline,
   distanceMeters: z.number().int().nullish(),
   durationSeconds: z.number().int().nullish(),
@@ -219,7 +216,6 @@ export type DriveManifest = z.infer<typeof driveManifest>
 export const driveSummary = z.object({
   driveId: z.uuid(),
   label: z.string(),
-  regionId: z.uuid().nullish(),
   startName: z.string().nullish(),
   endName: z.string().nullish(),
   distanceMeters: z.number().int().nullish(),
@@ -228,7 +224,21 @@ export const driveSummary = z.object({
   createdAt: z.iso.datetime(),
 })
 export type DriveSummary = z.infer<typeof driveSummary>
-export const driveList = z.object({ drives: z.array(driveSummary) })
+/** Free-tier credit balance from the user-owned ledger — for a proactive "N free drives left" hint. */
+export const driveCredits = z.object({
+  /** Spendable balance right now (clamped ≥ 0). */
+  remaining: z.number().int(),
+  /** Lifetime credits granted — for "N of <cap> left" framing. */
+  cap: z.number().int(),
+})
+export type DriveCredits = z.infer<typeof driveCredits>
+
+export const driveList = z.object({
+  drives: z.array(driveSummary),
+  /** Credit balance, or `null`/absent = uncapped (paid) OR an older server without the field — the
+   *  client renders the "N free drives left" hint only when present (nullish = degrade to hidden). */
+  credits: driveCredits.nullish(),
+})
 export type DriveList = z.infer<typeof driveList>
 
 /** POST /drives/:id/assets/sign — re-presigned clip URLs (offline refresh), keyed by seq. */

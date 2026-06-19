@@ -16,14 +16,11 @@ import { Animated, AppState, Image, Linking } from 'react-native'
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake'
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
 import {
-  frameKindForSeq,
   buildPreviewTimeline,
   clampSeekSec,
   cumulativeMeters,
   decideStall,
   OFF_ROUTE_MAX_M,
-  INTRO_SEQ,
-  OUTRO_SEQ,
   POST_START_STALL_MS,
   seekTargetReached,
   snapStopsToRoute,
@@ -43,11 +40,6 @@ import { voice } from '@/ui'
 // Grace before a clip that hasn't started is treated as stalled — same generous window
 // as the preview (32k MP3 clips, 1h presigned URLs → re-sign once on a stall).
 const CLIP_STALL_MS = 12_000
-
-// Title for a frame clip (intro/outro aren't in the stop list). The ONE source for both the
-// lock-screen title here and play.tsx's NOW-card title — exported so they can't diverge.
-export const frameTitle = (kind: 'intro' | 'outro'): string =>
-  kind === 'intro' ? voice.player.frameIntro : voice.player.frameOutro
 
 // V2 drives carry no host on the manifest (persona is decoupled + single in v2), so the lock-screen
 // "artist" is the persona name. The Skipper is the only host today.
@@ -107,10 +99,6 @@ interface DriveData {
   /** Total route length (m) — for projecting a fix's alongM onto a 0..1 progress dot. */
   totalM: number
   stops: DriveStop[]
-  /** PREVIEW only: frame clip lengths captured from the detail response so the preview
-   *  timeline can play intro/outro full-length (live/sim queue them by sentinel, no length needed). */
-  introMs: number | null
-  outroMs: number | null
 }
 
 export type DrivePhase =
@@ -152,11 +140,8 @@ export interface UseDrive {
 
   /** 0..1 route position for `RouteTrack`, driven imperatively by each GPS fix. */
   progress: Animated.Value
-  /** The stop whose clip is currently loaded/playing, or null between stops (ducked-quiet).
-   *  A frame carries its sentinel seq; use `activeFrame` to tell intro/outro apart. */
+  /** The stop whose clip is currently loaded/playing, or null between stops (ducked-quiet). */
   activeSeq: number | null
-  /** Set while the intro/outro frame clip is the active audio (vs a real stop or quiet). */
-  activeFrame: 'intro' | 'outro' | null
   /** Seqs whose trigger has fired (for the stop list's passed/active states). */
   firedSeqs: Set<number>
   /** First not-yet-fired stop, for the "ROLLING · next stop: X" strip. In preview, the
@@ -279,11 +264,6 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
   const subRef = useRef<FixSubscription | null>(null)
   const mountedRef = useRef(true) // false after unmount — guards setState in the async drive flows (review #4)
   const lastFixAt = useRef(0) // ms of the last accepted live fix — feeds the no-GPS watchdog (review #6)
-  // Which frames this tour has (set on load); the intro is queued at start, the outro
-  // (once) at the end. Refs so the queueing reads current values without dep churn.
-  const framesRef = useRef<{ intro: boolean; outro: boolean }>({ intro: false, outro: false })
-  const outroQueued = useRef(false)
-
   // Audio-playback refs (cloned from the preview player).
   const loadedSeq = useRef<number | null>(null) // which clip is loaded in the player
   const sawFresh = useRef(false) // have we seen the LOADED clip actually play yet?
@@ -322,23 +302,18 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
         }).catch(() => {})
         // OFFLINE-FIRST: a downloaded drive loads its manifest + local file:// clips with zero
         // network; otherwise this fetches the manifest (clips pre-signed inline) and streams. The
-        // url map keys place narrations by seq and any intro/outro framing under the
-        // INTRO_SEQ/OUTRO_SEQ sentinels, either way.
+        // url map keys place narrations by seq.
         const { detail: manifest, urls, offline: fromDisk } = await loadPlayback(driveId)
         if (cancelled) return
         setOffline(fromDisk)
         const polyline = manifest.polyline as [number, number][]
         if (polyline.length < 2) throw new Error('This drive has no drivable route.')
         const cum = cumulativeMeters(polyline)
-        // A drive's clips are place NARRATIONS (with coords) woven with placeless FRAMING (intro/
-        // outro/aside, no coords). Stops = the narrations; frames feed the bracket queue by
-        // sentinel. (Framing is empty in v2 core — the library isn't synthesized yet.)
+        // A drive's clips are place NARRATIONS, each with coords (V2 has no placeless framing —
+        // asides were deleted; see docs/decisions/geometry-first-regions.md).
         const narrationClips = manifest.clips.filter(
           (c): c is typeof c & { lat: number; lng: number } => c.lat != null && c.lng != null,
         )
-        framesRef.current = { intro: urls.has(INTRO_SEQ), outro: urls.has(OUTRO_SEQ) }
-        const introMs = manifest.clips.find((c) => c.form === 'intro')?.durationMs ?? null
-        const outroMs = manifest.clips.find((c) => c.form === 'outro')?.durationMs ?? null
         setUrls(urls)
         setData({
           driveName: manifest.label,
@@ -354,8 +329,6 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
             triggerRadiusM: c.triggerRadiusM ?? 120,
             audioDurationMs: c.durationMs,
           })),
-          introMs,
-          outroMs,
         })
         // PREVIEW: build the compressed segment timeline (the preview's clock). Stretch the
         // between-stop drive gaps to 12–20s (vs the engine's short default) so the drive music
@@ -374,8 +347,6 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
             {
               minGapSec: 12,
               maxGapSec: 20,
-              intro: introMs != null ? { audioDurationMs: introMs } : null,
-              outro: outroMs != null ? { audioDurationMs: outroMs } : null,
             },
           )
           setSegments(tl.segments)
@@ -484,13 +455,7 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
 
   const handleEnd = useCallback(() => {
     reachedEnd.current = true
-    // Outro frame — queued LAST (after any pending stops), so the sign-off plays before
-    // the drive actually ends. Queued at most once.
-    if (framesRef.current.outro && !outroQueued.current) {
-      outroQueued.current = true
-      queue.current.push(OUTRO_SEQ)
-    }
-    pump() // plays the outro (or any remaining stop); ends the drive once the queue drains
+    pump() // plays any remaining queued stop; ends the drive once the queue drains
   }, [pump])
 
   // ---- reset all drive state back to the pre-drive "ready" line ----
@@ -514,7 +479,6 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
     sawFresh.current = false
     finishedSeq.current = null
     clipRetried.current.clear()
-    outroQueued.current = false
     seekTarget.current = null
     finishedWhileScrubbing.current = null
     pausedRef.current = false
@@ -572,11 +536,6 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
     // partial opts object that READS as if it were configured. (audit #933)
     engineRef.current = new TriggerEngine(triggerable)
     setDriving(true)
-    // Intro frame — the welcome, played FIRST (before any geofence trigger fires).
-    if (framesRef.current.intro) {
-      queue.current.push(INTRO_SEQ)
-      pump()
-    }
     const source =
       mode === 'live'
         ? liveSource(data.polyline)
@@ -771,10 +730,7 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
         player.pause()
       } catch {}
       player.replace({ uri })
-      const bk = frameKindForSeq(activeSeq)
-      const stopName = bk
-        ? frameTitle(bk)
-        : (data.stops.find((s) => s.seq === activeSeq)?.name ?? data.hostName)
+      const stopName = data.stops.find((s) => s.seq === activeSeq)?.name ?? data.hostName
       try {
         player.setActiveForLockScreen(true, {
           title: stopName,
@@ -1137,7 +1093,6 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
     polyline: data?.polyline ?? [],
     progress: dot,
     activeSeq,
-    activeFrame: activeSeq === null ? null : frameKindForSeq(activeSeq),
     firedSeqs,
     nextSeq,
     currentKind,

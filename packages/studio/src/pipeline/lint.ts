@@ -25,13 +25,11 @@
 // they flag on first occurrence, conservatively (so a valid long stop isn't
 // needlessly regenerated).
 //
-// The SEMANTIC-monotony counterpart now lives in pipeline/judge.ts: an optional
-// LLM-judge pass (gated behind --judge-closers) that scores the assembled CLOSERS
-// for shared rhetorical MOVE — the personification-kicker residual ("the water
-// showing off" / "Tahoe generous to a fault" read samey but share no words, so the
-// deterministic rules here can't catch them). It returns the over-used-move seqs in
-// this module's LintFinding shape, so generate.ts feeds them through the SAME regen
-// hook. This deterministic lint stays the always-on baseline.
+// (A SEMANTIC-monotony counterpart — an optional LLM closer-diversity judge — was
+// removed with the V1→V2 collapse: cross-stop closer monotony assumes an ordered
+// per-tour closer SEQUENCE, which V2's 1:1 shared-narration atom dissolves, so the
+// rhetorical-move residual the deterministic rules can't catch is left unaddressed.)
+// This deterministic lint stays the always-on baseline.
 
 import type { StopType } from '@skipper/shared'
 import type { KitBeat } from '../persona/types'

@@ -1,7 +1,6 @@
 // Pure, native-free offline helpers (no expo-file-system / api / auth imports) so they
 // unit-test under `bun test`. offline.ts (which IS native) re-uses these.
 
-import { INTRO_SEQ, OUTRO_SEQ } from '@skipper/engine'
 import type { DriveClip, SignedDriveAudio } from '@skipper/shared'
 
 /** MIME → on-disk extension. Driven by the sign response's `contentType`, never hardcoded. */
@@ -19,23 +18,20 @@ export function extForContentType(contentType: string): string {
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Drive playback url maps (seq-keyed; intro/outro framing under the sentinels)  */
+/*  Drive playback url maps (seq-keyed)                                          */
 /* -------------------------------------------------------------------------- */
 
 /**
  * The seq → url map for a V2 DRIVE manifest. A driveManifest carries its clips' presigned URLs
  * inline (GET /drives/:id already signs), so online playback maps straight off the manifest —
- * no separate sign call. Place narrations key by their `seq`; the placeless intro/outro framing
- * (by `form`) keys under the INTRO_SEQ/OUTRO_SEQ sentinels the player already understands.
- * (Asides are EMPTY in v2 core — the framing library isn't synthesized yet — so today this
- * yields a flat stop map; the form mapping is here so frames slot in without a player change.)
+ * no separate sign call. Every clip is a place narration keyed by its `seq`. (V2 has no placeless
+ * framing — asides were deleted; see docs/decisions/geometry-first-regions.md.)
  */
 export function urlMapFromDriveManifest(manifest: { clips: DriveClip[] }): Map<number, string> {
   const m = new Map<number, string>()
   for (const c of manifest.clips) {
     if (!c.url) continue // a silent beat (rest) carries no audio
-    const seq = c.form === 'intro' ? INTRO_SEQ : c.form === 'outro' ? OUTRO_SEQ : c.seq
-    m.set(seq, c.url)
+    m.set(c.seq, c.url)
   }
   return m
 }

@@ -186,8 +186,9 @@ Because this sends an `overrides` body, the caller SA needs `run.jobs.runWithOve
 > `apps/admin/server/jobs.ts:60` "authored-tour generation is deferred"), so this Create-Tour
 > propose→freeze flow was **never built** — the admin gained no `/admin/tours*` (or `/admin/drives*`)
 > authoring routes. Two factual corrections to the description below: the committed seed-spec chain it
-> calls "Today" **no longer exists** (`packages/db/seed/` has only `materialize.ts`/`personas.ts`/
-> `poi-overrides.ts`/`seed.ts`; there is no `tour-specs.ts` and no `seed/data/*.json`), and the
+> calls "Today" **no longer exists** (`packages/db/seed/` was removed entirely 2026-06-19 — route
+> materialization moved to `@skipper/routing`, region + poi-override bootstrap moved into the admin
+> console; there is no `tour-specs.ts`, `seed/data/*.json`, `seed.ts`, or `personas.ts`), and the
 > `routeProvenance` column lives on the user-owned **`drives`** table, not `tours` (which is dropped) —
 > `packages/db/src/schema.ts:451`. Kept below as design history.
 

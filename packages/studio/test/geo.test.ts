@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'bun:test'
 import {
-  bearingDeg,
   cumulativeMeters,
   encodePolyline,
   haversineMeters,
@@ -17,15 +16,10 @@ const ONE_DEG_LAT_M = (6_371_008.8 * Math.PI) / 180 // ≈ 111195
 
 const near = (a: number, b: number, tol: number) => expect(Math.abs(a - b)).toBeLessThanOrEqual(tol)
 
+// NOTE: haversineMeters + bearingDeg are RE-EXPORTED from @skipper/engine; their core distance/
+// cardinal cases live in packages/engine/test/geo.test.ts (the source of truth). Only the
+// studio-unique axes/cases are kept here.
 describe('haversineMeters', () => {
-  test('zero distance for identical points', () => {
-    expect(haversineMeters([0, 0], [0, 0])).toBe(0)
-  })
-
-  test('one degree of latitude ≈ 111.2 km', () => {
-    near(haversineMeters([0, 0], [0, 1]), ONE_DEG_LAT_M, 1) // within 1 m
-  })
-
   test('one degree of longitude at the equator ≈ one degree of latitude', () => {
     near(haversineMeters([0, 0], [1, 0]), ONE_DEG_LAT_M, 1)
   })
@@ -114,13 +108,6 @@ describe('nearestOnRoute', () => {
     expect(pos.lng).toBe(0) // snapped onto the route, not the off-route input lng 0.0001
     expect(pos.lat).toBe(1)
   })
-})
-
-describe('bearingDeg', () => {
-  test('due north', () => near(bearingDeg([0, 0], [0, 1]), 0, 1e-6))
-  test('due east at the equator', () => near(bearingDeg([0, 0], [1, 0]), 90, 0.1))
-  test('due south', () => near(bearingDeg([0, 1], [0, 0]), 180, 1e-6))
-  test('due west at the equator', () => near(bearingDeg([1, 0], [0, 0]), 270, 0.1))
 })
 
 describe('routeBearingAt', () => {

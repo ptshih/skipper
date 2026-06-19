@@ -1,11 +1,12 @@
-// Materialize a tour's road-snapped polyline from the Google Routes API.
+// @skipper/routing — server-side route materialization (NOT bundled by mobile).
 //
-// The reusable core (`materializeRoute`) freezes a route from ordered waypoints — no disk,
-// no file write. The admin Create-Tour flow (apps/admin/server/create-tour.ts) calls it to
-// freeze a runtime-authored route into the DB. The old seed-time CLI that wrote frozen
-// seed/data/<slug>.json artifacts was dropped 2026-06-12 with the curated-route seeds — under
-// the discovery-first reorder, tours are AUTHORED at runtime via the admin Create flow over
-// the region POI corpus, not seeded from committed specs.
+// `materializeRoute` freezes an A→B (or multi-waypoint) road-snapped polyline from the Google
+// Routes API — no disk, no file write. apps/api's Create-a-Drive (POST /drives, /drives/propose)
+// calls it to freeze a runtime-authored route into the DB. It lives in its own server-side package
+// (every consumer of @skipper/db imports it server-side; mobile never does) so the DEFERRED admin
+// authored-tour Create flow and the M4 drive-dedup/precompute path can reuse it without a re-extract.
+// (History: this was @skipper/db/seed/materialize — moved out of the seed namespace 2026-06-19 so a
+// runtime path no longer depends on seed tooling, and the api image no longer ships packages/db/seed.)
 //
 // Needs GOOGLE_MAPS_API_KEY (a Routes-API-enabled key on a billed project).
 

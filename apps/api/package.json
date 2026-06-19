@@ -15,6 +15,7 @@
     "@neondatabase/serverless": "^1.1.0",
     "@skipper/db": "workspace:*",
     "@skipper/engine": "workspace:*",
+    "@skipper/routing": "workspace:*",
     "@skipper/shared": "workspace:*",
     "@skipper/storage": "workspace:*",
     "better-auth": "^1.6.18",

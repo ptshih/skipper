@@ -19,9 +19,9 @@ import Anthropic from '@anthropic-ai/sdk'
 import { Hono, type Context } from 'hono'
 import { and, between, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
-import { drives, driveDemand, narrations, pois, regions } from '@skipper/db/schema'
+import { creditEntries, drives, driveDemand, narrations, pois, regions } from '@skipper/db/schema'
 import type { DriveSelection, DriveSelectionItem, Polyline, RouteProvenance } from '@skipper/db/schema'
-import { materializeRoute, type Waypoint } from '@skipper/db/seed/materialize'
+import { materializeRoute, type Waypoint } from '@skipper/routing'
 import {
   buildDrive,
   DRIVE_MIN_GAP_SEC,
@@ -39,16 +39,17 @@ import {
   type DriveManifest,
 } from '@skipper/shared'
 import { requireAccount, withSession, type ApiEnv } from './entitlements'
+import { FREE_DRIVE_CAP, creditSummary, driveConsumeEntry, ensureFreeGrant } from './credits'
 import { withRetry } from './retry'
 import { contentTypeForKey, presignGet } from './storage'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-// Free-tier LIFETIME drive credits: a free account may GENERATE this many drives ever. A credit is
-// spent at generation (POST /drives) and NEVER refunded — deleting a drive does not return it (the
-// row is soft-deleted and keeps counting; see the cap query below). Admin-tunable via env; beyond it
-// a one-time credit pack is the planned unlock (IAP fast-follow), so 'paid' is uncapped today.
-const FREE_DRIVE_CAP = Number(process.env.FREE_DRIVE_CAP ?? 10)
+// Drive credits live in the user-owned `credit_entries` LEDGER (see ./credits + the decision doc), NOT
+// a count of drive rows. A free account is granted FREE_DRIVE_CAP credits once; each generated drive
+// CONSUMES one (atomically, co-committed with the drive insert); a delete never refunds (no reverse is
+// emitted). 'paid' (comped) accounts bypass the gate. Beyond the free allotment, a one-time credit pack
+// is the planned unlock (Apple IAP / Google Play fast-follow).
 
 // Drive pacing (DRIVE_MIN_GAP_SEC / driveMaxStops) is single-sourced in @skipper/engine so the
 // API's selection matches the engine's.
@@ -161,12 +162,13 @@ interface ResolvedEndpoint {
 const qz = (n: number): string => n.toFixed(3)
 
 /** Shape-aware route signature (the demand + future cache-warming key; instrumentation only in v2).
- *  Region + quantized endpoints + a coarse polyline fingerprint, so two routes that share endpoints
- *  but differ in shape (e.g. a loop vs. a there-and-back) don't collide. */
-function routeSigOf(regionId: string | null, start: ResolvedEndpoint, end: ResolvedEndpoint, polyline: Polyline): string {
+ *  Quantized endpoints + a coarse polyline fingerprint, so two routes that share endpoints but differ
+ *  in shape (e.g. a loop vs. a there-and-back) don't collide. No region prefix — a drive stores no
+ *  region; its extent IS its bbox/endpoints. */
+function routeSigOf(start: ResolvedEndpoint, end: ResolvedEndpoint, polyline: Polyline): string {
   const a = `${qz(start.lat)},${qz(start.lng)}`
   const b = `${qz(end.lat)},${qz(end.lng)}`
-  return `${regionId ?? 'none'}|${a}->${b}|${polyline.length}`
+  return `${a}->${b}|${polyline.length}`
 }
 
 /** A narration corpus row mapped for both candidate selection and manifest assembly. */
@@ -187,7 +189,9 @@ interface NarrationRow {
 /** Load every roam narration whose POI falls within the route's bounding box (padded by the off-route
  *  ceiling) — the candidate set buildDrive snaps + paces. A few hundred rows per region, so a bbox
  *  prefilter beats PostGIS. Keyed by poiId (the buildDrive ⇄ narration join). */
-async function loadCorpusForRoute(polyline: Polyline): Promise<Map<string, NarrationRow>> {
+/** The route's bounding rectangle (min/max lat/lng over the polyline) — the drive's STALE-PROOF
+ *  spatial extent (the polyline is frozen). Stored on the drive; also the corpus prefilter below. */
+export function polylineBbox(polyline: Polyline): { minLat: number; minLng: number; maxLat: number; maxLng: number } {
   let minLat = Infinity
   let maxLat = -Infinity
   let minLng = Infinity
@@ -198,6 +202,11 @@ async function loadCorpusForRoute(polyline: Polyline): Promise<Map<string, Narra
     if (lng < minLng) minLng = lng
     if (lng > maxLng) maxLng = lng
   }
+  return { minLat, minLng, maxLat, maxLng }
+}
+
+async function loadCorpusForRoute(polyline: Polyline): Promise<Map<string, NarrationRow>> {
+  const { minLat, minLng, maxLat, maxLng } = polylineBbox(polyline)
   const midLat = (minLat + maxLat) / 2
   const padM = OFF_ROUTE_MAX_M + 200
   const padLat = padM / 111_320
@@ -260,12 +269,11 @@ const candidateOf = (r: NarrationRow): DriveCandidate => ({
 })
 
 /** Resolve a frozen `selection` into presigned, playable driveClips (narration content LIVE via the
- *  corpus). Throws if presigning fails (the caller maps it to 503). Aside items are skipped until
- *  the framing library is synthesized (the table is empty in v2 core). */
+ *  corpus). Throws if presigning fails (the caller maps it to 503). Every selection item is a place
+ *  narration in v2 (asides — the placeless framing — were deleted; see geometry-first-regions.md). */
 function manifestClips(selection: DriveSelection, corpusById: Map<string, NarrationRow>): DriveClip[] {
   const clips: DriveClip[] = []
   for (const item of selection) {
-    if (item.kind !== 'narration') continue
     const n = corpusById.get(item.poiId)
     if (!n) continue // the poi/narration was deleted since freeze — drop the stale stop
     clips.push({
@@ -373,13 +381,12 @@ driveRoutes.post('/propose', async (c) => {
   })
 
   return c.json({
-    regionId,
     start: startEp,
     end: endEp,
     polyline: route.polyline,
     distanceMeters: Math.round(route.distanceMeters),
     durationSeconds: Math.round(route.durationSeconds),
-    routeSig: routeSigOf(regionId, startEp, endEp, route.polyline),
+    routeSig: routeSigOf(startEp, endEp, route.polyline),
     estStopCount: stops.length,
   })
 })
@@ -401,20 +408,18 @@ driveRoutes.post('/', async (c) => {
     return c.json({ error: 'bad_request', message: 'Invalid JSON body.' }, 400)
   }
   const parsed = createDriveRequest.safeParse(body)
-  if (!parsed.success) return c.json({ error: 'bad_request', message: 'regionId, start{name,lat,lng} and end{name,lat,lng} are required.' }, 400)
-  const { regionId, start, end } = parsed.data
-  if (!UUID_RE.test(regionId)) return c.json({ error: 'bad_request', message: 'regionId must be a uuid.' }, 400)
+  if (!parsed.success) return c.json({ error: 'bad_request', message: 'start{name,lat,lng} and end{name,lat,lng} are required.' }, 400)
+  const { start, end } = parsed.data
 
-  // Free-tier LIFETIME credit cap (paid is uncapped; credit IAP is the planned unlock beyond it).
-  // Count ALL of the user's drive rows INCLUDING soft-deleted ones — a spent credit is never
-  // refunded, so deleting a drive must NOT free a slot. DO NOT add `deletedAt IS NULL` here (that
-  // would reintroduce the refund bug); the tombstone is deliberately counted.
+  // Free-tier credit gate (paid is uncapped). The balance is the user-owned ledger (SUM of grants −
+  // consumes), NOT a count of drive rows — a delete never refunds because no `reverse` is emitted, so
+  // there's no tombstone-counting hack to maintain. `ensureFreeGrant` lazily materializes the one-time
+  // free allotment on first touch. This is a pre-check (cheap; avoids the paid route/LLM work for a
+  // user with no credits); the actual consume is co-committed with the drive insert below.
   if (c.get('tier') === 'free') {
-    const generated = await withRetry(
-      () => db.select({ n: sql<number>`count(*)::int` }).from(drives).where(eq(drives.userId, userId)),
-      { label: 'drive.count' },
-    )
-    if ((generated[0]?.n ?? 0) >= FREE_DRIVE_CAP) {
+    await ensureFreeGrant(userId)
+    const { remaining } = await creditSummary(userId)
+    if (remaining < 1) {
       return c.json(
         {
           error: 'drive_limit_reached',
@@ -484,7 +489,8 @@ driveRoutes.post('/', async (c) => {
 
   const startEp: ResolvedEndpoint = { name: start.name, lat: start.lat, lng: start.lng }
   const endEp: ResolvedEndpoint = { name: end.name, lat: end.lat, lng: end.lng }
-  const routeSig = routeSigOf(regionId, startEp, endEp, route.polyline)
+  const routeSig = routeSigOf(startEp, endEp, route.polyline)
+  const bbox = polylineBbox(route.polyline)
   const label = `${start.name} → ${end.name}`
   const provenance: RouteProvenance = {
     source: 'google-routes-v2',
@@ -495,28 +501,44 @@ driveRoutes.post('/', async (c) => {
   }
 
   const id = crypto.randomUUID()
-  await withRetry(
-    () =>
-      db.insert(drives).values({
-        id,
-        userId,
-        regionId,
-        label,
-        startName: start.name,
-        startLat: start.lat,
-        startLng: start.lng,
-        endName: end.name,
-        endLat: end.lat,
-        endLng: end.lng,
-        polyline: route.polyline,
-        distanceMeters: Math.round(route.distanceMeters),
-        durationSeconds: Math.round(route.durationSeconds),
-        routeProvenance: provenance,
-        routeSig,
-        selection,
-      }),
-    { label: 'drive.insert' },
-  )
+  const driveValues: typeof drives.$inferInsert = {
+    id,
+    userId,
+    label,
+    startName: start.name,
+    startLat: start.lat,
+    startLng: start.lng,
+    endName: end.name,
+    endLat: end.lat,
+    endLng: end.lng,
+    polyline: route.polyline,
+    bboxMinLat: bbox.minLat,
+    bboxMinLng: bbox.minLng,
+    bboxMaxLat: bbox.maxLat,
+    bboxMaxLng: bbox.maxLng,
+    distanceMeters: Math.round(route.distanceMeters),
+    durationSeconds: Math.round(route.durationSeconds),
+    routeProvenance: provenance,
+    routeSig,
+    selection,
+  }
+  // Charge the credit ATOMICALLY with the drive insert (db.batch co-commits on neon-http) so we can
+  // never half-commit a charge-without-drive or a drive-without-charge. Free tier only — paid (comped)
+  // accounts insert the drive without a consume. The consume is keyed on the drive id, so a single
+  // drive charges exactly one credit. (The free-tier balance was pre-checked above; a concurrent
+  // double-create could over-spend by 1 — negligible at this scale, same TOCTOU as the old count gate.)
+  if (c.get('tier') === 'free') {
+    await withRetry(
+      () =>
+        db.batch([
+          db.insert(creditEntries).values(driveConsumeEntry(userId, id)),
+          db.insert(drives).values(driveValues),
+        ]),
+      { label: 'drive.insert' },
+    )
+  } else {
+    await withRetry(() => db.insert(drives).values(driveValues), { label: 'drive.insert' })
+  }
 
   // Demand instrumentation (route-concentration signal; the cache-warming job that consumes it is
   // deferred). distinctUsers is a rough lower bound — exact per-user dedup isn't worth a join here.
@@ -524,7 +546,7 @@ driveRoutes.post('/', async (c) => {
     () =>
       db
         .insert(driveDemand)
-        .values({ routeSig, regionId, hits: 1, distinctUsers: 1, lastHitAt: new Date() })
+        .values({ routeSig, hits: 1, distinctUsers: 1, lastHitAt: new Date() })
         .onConflictDoUpdate({
           target: driveDemand.routeSig,
           set: { hits: sql`${driveDemand.hits} + 1`, lastHitAt: new Date() },
@@ -535,7 +557,6 @@ driveRoutes.post('/', async (c) => {
   const manifest: DriveManifest = {
     driveId: id,
     label,
-    regionId,
     polyline: route.polyline,
     distanceMeters: Math.round(route.distanceMeters),
     durationSeconds: Math.round(route.durationSeconds),
@@ -561,7 +582,6 @@ driveRoutes.get('/', async (c) => {
         .select({
           driveId: drives.id,
           label: drives.label,
-          regionId: drives.regionId,
           startName: drives.startName,
           endName: drives.endName,
           distanceMeters: drives.distanceMeters,
@@ -576,11 +596,21 @@ driveRoutes.get('/', async (c) => {
         .orderBy(desc(drives.createdAt)),
     { label: 'drive.list' },
   )
+  // Proactive "N free drives left" hint, from the user-owned credit LEDGER (free tier only). `credits`
+  // is null for paid (uncapped) so the client shows nothing; `remaining` is the spendable balance and
+  // `cap` the lifetime granted (for "N of M" framing). ensureFreeGrant materializes the allotment so a
+  // brand-new free user reads the full balance even before their first drive. `remaining` is clamped at
+  // 0 so a future refund clawback can't surface as a negative count.
+  let credits: { remaining: number; cap: number } | null = null
+  if (c.get('tier') === 'free') {
+    await ensureFreeGrant(userId)
+    const { remaining, granted } = await creditSummary(userId)
+    credits = { remaining: Math.max(0, remaining), cap: granted }
+  }
   return c.json({
     drives: rows.map((r) => ({
       driveId: r.driveId,
       label: r.label ?? `${r.startName ?? 'Start'} → ${r.endName ?? 'End'}`,
-      regionId: r.regionId,
       startName: r.startName,
       endName: r.endName,
       distanceMeters: r.distanceMeters,
@@ -588,6 +618,7 @@ driveRoutes.get('/', async (c) => {
       clipCount: r.clipCount,
       createdAt: r.createdAt.toISOString(),
     })),
+    credits,
   })
 })
 
@@ -640,7 +671,6 @@ driveRoutes.get('/:id', async (c) => {
   const manifest: DriveManifest = {
     driveId: drive.id,
     label: drive.label ?? `${drive.startName ?? 'Start'} → ${drive.endName ?? 'End'}`,
-    regionId: drive.regionId,
     polyline: drive.polyline,
     distanceMeters: drive.distanceMeters,
     durationSeconds: drive.durationSeconds,
