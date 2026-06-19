@@ -13,8 +13,8 @@
 // Discovery is free (WDQS + MediaWiki, no LLM/TTS spend).
 //
 // Usage:
-//   dotenvx run -f .env.development -- bun packages/generator/src/discover-pois.ts
-//   dotenvx run -f .env.development -- bun packages/generator/src/discover-pois.ts --apply
+//   dotenvx run -f .env.development -- bun packages/studio/src/discover-pois.ts
+//   dotenvx run -f .env.development -- bun packages/studio/src/discover-pois.ts --apply
 //   ... --bbox swLng,swLat,neLng,neLat   (override the basin default)
 
 import {

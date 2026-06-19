@@ -27,7 +27,7 @@ key/
 # Not part of the api image closure (the heavy RN tree + unrelated packages)
 apps/mobile
 packages/sim
-packages/generator
+packages/studio
 packages/drive-core
 
 # Build / dev / scratch cruft

@@ -1,4 +1,4 @@
-// Triggering + reconciling the skipper-gen Cloud Run Job from the admin-api.
+// Triggering + reconciling the skipper-studio Cloud Run Job from the admin-api.
 //
 // The admin-api mints a pipeline_jobs row, then calls run.googleapis.com `jobs:run` with the
 // per-execution override args (the spec §5 contract) + GEN_JOB_ID in env, so the Job's
@@ -11,7 +11,7 @@ import { isAbsolute, resolve } from 'node:path'
 import type { JobKind } from '@skipper/shared'
 
 const REGION = process.env.GEN_JOB_REGION ?? 'us-east4'
-const JOB = process.env.GEN_JOB_NAME ?? 'skipper-gen'
+const JOB = process.env.GEN_JOB_NAME ?? 'skipper-studio'
 const SCOPE = 'https://www.googleapis.com/auth/cloud-platform'
 
 // GOOGLE_APPLICATION_CREDENTIALS in .env.development is a key path RELATIVE to the repo root
@@ -51,7 +51,7 @@ export class HttpError extends Error {
 }
 
 // The gen-job entrypoints, keyed by kind. ADDING A KIND? Its script MUST run its body through
-// beginJob()/finishJob() (packages/generator/src/pipeline/job-progress.ts) — that is HOW a run
+// beginJob()/finishJob() (packages/studio/src/pipeline/job-progress.ts) — that is HOW a run
 // records status AND captures its own stdout into outputLog/outputSummary/outputData on the row.
 // A script that skips the hook records no status and shows NO logs in the console (the admin no
 // longer reads Cloud Logging). Follow generate-narrations.ts's main()+begin/finish shape. Enforced by
@@ -63,12 +63,12 @@ export class HttpError extends Error {
 // dispatchable script here, so buildJobArgs rejects them with "unknown kind". Hence a PARTIAL
 // record (only the live corpus/roam ops); the test only checks the scripts that remain.
 export const SCRIPTS: Partial<Record<JobKind, string>> = {
-  resynth_narration: 'packages/generator/src/resynth-narration.ts',
-  sweep_orphans: 'packages/generator/src/sweep-orphans.ts',
-  discover_pois: 'packages/generator/src/discover-pois.ts',
-  enrich_pois: 'packages/generator/src/enrich-pois.ts',
-  generate_narrations: 'packages/generator/src/generate-narrations.ts',
-  refetch_facts: 'packages/generator/src/refetch-poi.ts',
+  resynth_narration: 'packages/studio/src/resynth-narration.ts',
+  sweep_orphans: 'packages/studio/src/sweep-orphans.ts',
+  discover_pois: 'packages/studio/src/discover-pois.ts',
+  enrich_pois: 'packages/studio/src/enrich-pois.ts',
+  generate_narrations: 'packages/studio/src/generate-narrations.ts',
+  refetch_facts: 'packages/studio/src/refetch-poi.ts',
 }
 
 export type { JobKind }
@@ -159,7 +159,7 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
   return { args, dryRun: !apply, spends: apply, targetId: 'roam' }
 }
 
-/** Trigger a skipper-gen execution with per-run arg + env overrides. Returns the execution's
+/** Trigger a skipper-studio execution with per-run arg + env overrides. Returns the execution's
  *  SHORT name (matches the Job's self-reported CLOUD_RUN_EXECUTION), or '' if unparseable. */
 export async function runJob(args: string[], env: Record<string, string>): Promise<string> {
   const res = await fetch(`${jobBase()}:run`, {

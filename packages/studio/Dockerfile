@@ -1,11 +1,11 @@
-# Cloud Run JOB image for @skipper/generator — runs the tour-ops CLIs in the cloud.
+# Cloud Run JOB image for @skipper/studio — runs the tour-ops CLIs in the cloud.
 #
 # Build from the REPO ROOT (context = whole workspace):
-#   docker build -f packages/generator/Dockerfile -t skipper-gen .
+#   docker build -f packages/studio/Dockerfile -t skipper-studio .
 #
 # This is a Cloud Run *Job* (run-to-completion), NOT a service: no port, no server.
 # ONE image serves all four CLIs — the per-execution override `args` pick the script:
-#   gcloud run jobs execute skipper-gen --args="packages/generator/src/run.ts,<slug>,--dry-run"
+#   gcloud run jobs execute skipper-studio --args="packages/studio/src/run.ts,<slug>,--dry-run"
 #   ... patch-clip.ts | resynth-tour.ts | sweep-orphans.ts (see the spec §5 args contract).
 #
 # Shape mirrors apps/api/Dockerfile (verified pattern): bun has no `turbo prune` yet, so
@@ -36,16 +36,16 @@ RUN bun add -g @dotenvx/dotenvx
 # 1) Manifests only, then resolve deps with the workspace TRIMMED to the generator closure
 #    so the RN tree is never resolved or installed. --production drops devDeps.
 COPY package.json ./
-COPY packages/generator/package.json packages/generator/
+COPY packages/studio/package.json packages/studio/
 COPY packages/db/package.json packages/db/
 COPY packages/drive-core/package.json packages/drive-core/
 COPY packages/shared/package.json packages/shared/
 COPY packages/storage/package.json packages/storage/
-RUN bun -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));p.workspaces=['packages/generator','packages/db','packages/drive-core','packages/shared','packages/storage'];fs.writeFileSync('package.json',JSON.stringify(p,null,2))" \
+RUN bun -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));p.workspaces=['packages/studio','packages/db','packages/drive-core','packages/shared','packages/storage'];fs.writeFileSync('package.json',JSON.stringify(p,null,2))" \
  && bun install --production
 
 # 2) The source the CLIs run (bun executes .ts directly — no dist build).
-COPY packages/generator/src packages/generator/src
+COPY packages/studio/src packages/studio/src
 COPY packages/db/src packages/db/src
 COPY packages/drive-core/src packages/drive-core/src
 COPY packages/shared/src packages/shared/src
@@ -56,5 +56,5 @@ ENV NODE_ENV=production
 
 # dotenvx decrypts .env.production (needs DOTENV_PRIVATE_KEY_PRODUCTION in the env), then
 # runs `bun`. The per-execution Cloud Run `args` append the script + flags to this ENTRYPOINT,
-# e.g. args=["packages/generator/src/run.ts","<slug>","--max-cost=3"].
+# e.g. args=["packages/studio/src/run.ts","<slug>","--max-cost=3"].
 ENTRYPOINT ["dotenvx", "run", "-f", ".env.production", "--", "bun"]

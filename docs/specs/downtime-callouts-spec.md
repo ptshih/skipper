@@ -69,7 +69,7 @@ pool — cheaper, but it can't do the thing that matters. The decisions:
 
 ### What the pressure test established (carry these as constraints, not warnings)
 
-Grounded in `packages/generator/src/config.ts`:
+Grounded in `packages/studio/src/config.ts`:
 - `PACING.standard.minGapSec = 180`, `TARGET_SECONDS.story = 120` → the config's own comment:
   *"a ~120s clip with a 180s floor leaves ~60s of quiet."* The generator **deliberately
   densifies to kill silence** (it lowered the floor from 240s to admit more grounded POIs).
@@ -111,7 +111,7 @@ tour_callouts(
 
 ## 4. Generation — `narrateCallouts()`
 
-A new pipeline step (alongside `narrateIntro`/`narrateOutro` in `packages/generator/src/pipeline/narrate.ts`):
+A new pipeline step (alongside `narrateIntro`/`narrateOutro` in `packages/studio/src/pipeline/narrate.ts`):
 - **persona-only, no fact sheet**, notch-parameterized, from the region's `PersonaDef`
   (the per-region persona registry — `personaForRegion`).
 - **quality-gated** like stops (warmer delivery, no-bow, no mini-recap) but scaled to ~1–2
@@ -328,10 +328,10 @@ Designed 2026-06-09. Grounded against, and citing for re-check:
   (`'clip'`/`'drive'` segments).
 - `apps/mobile/src/lib/gps.ts` — `simulatedSource`/`liveSource`/`FixSubscription`.
 - `apps/mobile/src/lib/offline.ts` — `loadPlayback`/`resignPlayback`, the download manifest.
-- `packages/generator/src/config.ts` — `PACING` (standard `minGapSec 180`/`maxNarratedStops 16`),
+- `packages/studio/src/config.ts` — `PACING` (standard `minGapSec 180`/`maxNarratedStops 16`),
   `TARGET_SECONDS` (`story 120`/`scenic 20`), `QUEUE_LAG_WARN_SEC 45`, `TRIGGER_RADIUS_M 120`,
   design speed `13.4 m/s ≈ 30 mph`.
-- `packages/generator/src/pipeline/narrate.ts` — `narrateIntro`/`narrateOutro`/`persistBracket`,
+- `packages/studio/src/pipeline/narrate.ts` — `narrateIntro`/`narrateOutro`/`persistBracket`,
   the `finalizeTourReady` `db.batch` ready-gate.
 - The per-region persona registry (`personaForRegion`, `PersonaDef`, the kit) and the
   `tour_brackets` Option-B precedent (docs/specs/tour-structure-spec.md; the tour-structure handoff doc has since been deleted).

@@ -17,7 +17,7 @@ describe('Skipper persona def', () => {
     expect(SKIPPER.hostName).toBe('Skipper')
   })
 
-  test('personaKey bridges to the seeded personas row (segments.persona_id FK target)', () => {
+  test('personaKey is the stable code-recipe slug (the bridge a future personas row rebinds to, M4)', () => {
     expect(SKIPPER.personaKey).toBe('skipper')
   })
 

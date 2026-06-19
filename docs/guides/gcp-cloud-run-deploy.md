@@ -159,11 +159,11 @@ Custom domain: Hosting console → Add custom domain → `skipper.fm` → add it
 Cloudflare as **DNS-only (grey cloud)**. Manual deploy: `firebase deploy --only hosting`
 from `apps/site` (a `.firebaserc` pins the project).
 
-## The admin console + the skipper-gen job — Cloud Run (admin DEPLOYED 2026-06-11)
+## The admin console + the skipper-studio job — Cloud Run (admin DEPLOYED 2026-06-11)
 
 `apps/admin` (the founder-only ops console: a bun Hono API + the built `apps/admin/client`
 Vite/React SPA, ONE container) → a Cloud Run **service** `skipper-admin` behind **Google
-IAP**. `packages/generator` → a Cloud Run **job** `skipper-gen` (the corpus/roam CLI runner:
+IAP**. `packages/studio` → a Cloud Run **job** `skipper-studio` (the corpus/roam CLI runner:
 discover-pois / enrich-pois / generate-narrations / resynth-narration / sweep-orphans / refetch-poi,
 one image, per-execution `args`). Both reuse the
 SAME `skipper-gh` connection + the `skipper` Artifact Registry repo — CD is two more
@@ -180,7 +180,7 @@ add-iam-policy-binding` (which rejects the role); direct IAP walls the WHOLE ser
 external `curl /health` returns "Invalid IAP credentials: empty token" — that's success, not a
 broken route. **Admin identity = `peter@manoa.health`** (in-domain): a personal-gmail accessor
 needs DRS relaxed, so we switched to the Workspace account and re-enabled DRS. **Gen image
-context:** the root `.dockerignore` (api-tuned) excluded `packages/generator` + `packages/drive-core`,
+context:** the root `.dockerignore` (api-tuned) excluded `packages/studio` + `packages/drive-core`,
 which the gen Dockerfile COPYs → "file does not exist in build context"; it's SHARED across all
 three image builds, so it must only exclude what NO build COPYs (fixed + commented in the file).
 **Prod GCP auth = ADC, not a key file:** `.env.production` carried a dev-local
@@ -191,7 +191,7 @@ exact trap). **Footgun:** `.env.production` lives at the repo ROOT, outside EVER
 `--included-files`, so a prod-env change (`ADMIN_EMAIL`, the ADC vars, …) does NOT auto-deploy AND
 is baked into BOTH the admin service and the gen Job images — push, then manually rebuild **both**:
 `gcloud builds triggers run skipper-admin-deploy --branch=main --region=us-east4` and
-`… skipper-gen-deploy …`. **Smoke-tested 2026-06-11:** New run → Sweep orphans (dry-run) ran the
+`… skipper-studio-deploy …`. **Smoke-tested 2026-06-11:** New run → Sweep orphans (dry-run) ran the
 full IAP→jobs:run→reconcile chain green.
 
 ```bash
@@ -201,9 +201,9 @@ COMPUTE=666110297056-compute@developer.gserviceaccount.com
 # 1) One-time setup (BEFORE the first build — the cloudbuild files reference these).
 gcloud services enable iap.googleapis.com texttospeech.googleapis.com --project $PROJECT
 
-gcloud iam service-accounts create skipper-gen  --project $PROJECT
+gcloud iam service-accounts create skipper-studio  --project $PROJECT
 gcloud iam service-accounts create skipper-admin --project $PROJECT
-GEN=skipper-gen@$PROJECT.iam.gserviceaccount.com
+GEN=skipper-studio@$PROJECT.iam.gserviceaccount.com
 ADMIN=skipper-admin@$PROJECT.iam.gserviceaccount.com
 
 # gen job: read the dotenv secret. TTS authorizes via THIS SA's ADC token — no IAM role, no key.
@@ -224,10 +224,10 @@ bun run db:migrate:prod
 # 2) CD triggers (reuse skipper-gh; path-filtered). The browser Maps key is HARDCODED in
 #    cloudbuild.admin.yaml's --build-arg (public, referrer-restricted) — so NO _VITE_MAPS_KEY sub
 #    (a declared-but-unused substitution fails the default MUST_MATCH check).
-gcloud builds triggers create github --name=skipper-gen-deploy --region=us-east4 \
+gcloud builds triggers create github --name=skipper-studio-deploy --region=us-east4 \
   --repository=projects/$PROJECT/locations/us-east4/connections/skipper-gh/repositories/skipper \
   --branch-pattern='^main$' --build-config=cloudbuild.gen.yaml \
-  --included-files='packages/generator/**,packages/db/**,packages/drive-core/**,packages/shared/**,packages/storage/**,cloudbuild.gen.yaml' \
+  --included-files='packages/studio/**,packages/db/**,packages/drive-core/**,packages/shared/**,packages/storage/**,cloudbuild.gen.yaml' \
   --service-account=projects/$PROJECT/serviceAccounts/$COMPUTE
 
 gcloud builds triggers create github --name=skipper-admin-deploy --region=us-east4 \
@@ -237,11 +237,11 @@ gcloud builds triggers create github --name=skipper-admin-deploy --region=us-eas
   --service-account=projects/$PROJECT/serviceAccounts/$COMPUTE
 
 # 3) First build (after merge) — or `gcloud builds submit --config cloudbuild.<gen|admin>.yaml`.
-# Build the gen JOB FIRST so `skipper-gen` exists, THEN grant admin run.developer on it (deferred
+# Build the gen JOB FIRST so `skipper-studio` exists, THEN grant admin run.developer on it (deferred
 # from step 1; run.developer carries run.jobs.runWithOverrides + run.executions.get — run.invoker
 # is NOT enough because we send an overrides body).
-gcloud builds triggers run skipper-gen-deploy --branch=main --region=us-east4
-gcloud run jobs add-iam-policy-binding skipper-gen --region=us-east4 --member=serviceAccount:$ADMIN --role=roles/run.developer --project $PROJECT
+gcloud builds triggers run skipper-studio-deploy --branch=main --region=us-east4
+gcloud run jobs add-iam-policy-binding skipper-studio --region=us-east4 --member=serviceAccount:$ADMIN --role=roles/run.developer --project $PROJECT
 gcloud builds triggers run skipper-admin-deploy --branch=main --region=us-east4
 
 # 4) Enable IAP on the admin service (AFTER its first deploy creates it), founder-only.
@@ -263,8 +263,8 @@ URL=$(gcloud run services describe skipper-admin --region=us-east4 --format='val
 # the gen job runs out-of-band (not behind IAP). The CLI was split into per-script
 # entry-points in the V1→V2 migration (no single run.ts dispatcher) — name a real script,
 # e.g. sweep-orphans.ts (or discover-pois.ts / enrich-pois.ts / generate-narrations.ts):
-gcloud run jobs execute skipper-gen --region=us-east4 \
-  --args="packages/generator/src/sweep-orphans.ts,--dry-run"
+gcloud run jobs execute skipper-studio --region=us-east4 \
+  --args="packages/studio/src/sweep-orphans.ts,--dry-run"
 ```
 
 ⚠️ **DRS gotcha (same as the api's `--no-invoker-iam-check`):** enabling IAP adds a
@@ -276,10 +276,10 @@ agent). Temporarily relax DRS (needs `roles/orgpolicy.policyAdmin`) to register 
 
 - `cloudbuild.yaml` — the API build → push → deploy pipeline (this is the contract).
 - `cloudbuild.site.yaml` — the apex site build → Firebase Hosting deploy.
-- `cloudbuild.gen.yaml` — the `skipper-gen` Cloud Run **job** build → `jobs deploy`.
+- `cloudbuild.gen.yaml` — the `skipper-studio` Cloud Run **job** build → `jobs deploy`.
 - `cloudbuild.admin.yaml` — the `skipper-admin` service (multi-stage: SPA + Hono) build → deploy.
 - `.gcloudignore` — trims the Cloud Build upload; re-excludes `.env.keys`.
 - `apps/api/Dockerfile` — the lean Bun image (header explains the workspace trim).
-- `packages/generator/Dockerfile` — the `skipper-gen` Job image (one image, all six corpus/roam CLIs).
+- `packages/studio/Dockerfile` — the `skipper-studio` Job image (one image, all six corpus/roam CLIs).
 - `apps/admin/Dockerfile` — the admin service (stage 1 builds `apps/admin/client`, stage 2 serves it).
 - `apps/site/` — the Astro apex site (`firebase.json`, `.firebaserc`, static AASA).

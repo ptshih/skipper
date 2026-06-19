@@ -3,7 +3,7 @@
 > **Status:** research digest, 2026-06-09. Produced by an adversarially-verified deep-research
 > pass (22 sources fetched, 92 claims extracted, 25 put to 3-vote verification, 21 confirmed,
 > 4 refuted) commissioned to ground a tuning pass on the Skipper's voice. Feeds
-> `packages/generator/src/persona/skipper.ts` (writing voice) and `SKIPPER_TTS_STYLE_PROMPT`
+> `packages/studio/src/persona/skipper.ts` (writing voice) and `SKIPPER_TTS_STYLE_PROMPT`
 > in `models.ts` (delivery). The refuted-claims section is load-bearing: those are the
 > plausible myths to keep OUT of the persona.
 

@@ -19,7 +19,7 @@ What it stresses:
   tour-owned (no content cache), a per-region persona/voice/prompt-overlay is just a
   different generation input per tour — each region generates its own content, no schema fight.
 - **A region skipper can SOUND different.** Each `PersonaDef`
-  (`packages/generator/src/persona/`, resolved by `personaFromKey(key)` — keyed by persona key,
+  (`packages/studio/src/persona/`, resolved by `personaFromKey(key)` — keyed by persona key,
   decoupled from region) carries its own `voice` (skipper → Charon), so a Yosemite skipper just
   sets a different Gemini-TTS voice on its def. Tune + ear-judge per region (the voice gate is
   already per-region).

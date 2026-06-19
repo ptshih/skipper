@@ -1,4 +1,4 @@
-// AI model identifiers for @skipper/generator.
+// AI model identifiers for @skipper/studio.
 //
 // Constants only — this file is the single source of truth for model ids so the
 // narration (Anthropic) and TTS (Google Cloud TTS) call sites never hard-code a string.
@@ -113,7 +113,7 @@ export const TTS_MODEL = 'gemini-3.1-flash-tts-preview' as const
 // (pipeline/wav.ts), measured before the encode and preserved through it — no MP3 frame parse.
 //
 // ⚠ ffmpeg is now REQUIRED on every SHIP path (it IS the encoder, not just QA) — Cloud Run
-// carries it (packages/generator/Dockerfile); a bare box without it fails loudly. The
+// carries it (packages/studio/Dockerfile); a bare box without it fails loudly. The
 // player/API are codec-agnostic (they take a presigned URL + a duration; MIME derives from
 // the .m4a key extension), so this was a generator-only flip.
 export const TTS_AUDIO_ENCODING = 'LINEAR16' as const
@@ -191,5 +191,5 @@ export const SKIPPER_TTS_STYLE_PROMPT =
   'Read this as a warm road-trip tour guide letting friends in on jokes you all secretly enjoy — genuinely glad they came, a man who has told these corny jokes a thousand times and quietly loves every one. Keep the narration moving at a natural, easy talking pace, like a man telling you about the view out the window — relaxed but never sleepy, never dragging. Save the slow-down for the jokes: deliver them deadpan and fully committed, but with warmth — close and friendly, never dropping to a murmur — as if you and the riders both know it is corny and that is exactly why it is good. Never laugh at your own setup, never sing-song the punchline; land each one flat and matter-of-fact. Put a small pause right before the pun, and after it lands hold one short beat — not waiting for anything, just letting it sit — then roll on. Let the sincere lines breathe without fading — keep the voice clear, present, and at full conversational volume from the first sentence to the very last; never trail off, drop low, or swallow the closing words. Talking WITH friends, not at a crowd.'
 
 // (The voice↔persona binding now lives in the persona registry — each PersonaDef carries
-// its own `voice`; see packages/generator/src/persona/. `SKIPPER_VOICE_ID` above is the
+// its own `voice`; see packages/studio/src/persona/. `SKIPPER_VOICE_ID` above is the
 // source constant the Skipper def references + the synthesize() default.)

@@ -8,7 +8,7 @@
 // narration/; DRIVES reuse narration clips so they mint no R2 objects, and asides live under a
 // separate prefix — so this single narration/ sweep covers the paid corpus.) Needs R2_* env.
 //
-//   dotenvx run -f .env.development -- bun packages/generator/src/sweep-orphans.ts [--apply]
+//   dotenvx run -f .env.development -- bun packages/studio/src/sweep-orphans.ts [--apply]
 
 import { db } from '@skipper/db'
 import { narrations } from '@skipper/db/schema'

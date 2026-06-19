@@ -158,7 +158,7 @@ lands, Ask is the natural upgrade: swap the *fixed* B-side for a *responsive* gr
 
 - Surfaced from the dead-air thread (`docs/research/competitor-ux-studies.md`: the too-little/too-much
   contradiction) and the pull-ladder framing (`docs/specs/ask-the-skipper-spec.md` §4.6).
-- Generator seams: `packages/generator/src/pipeline/narrate.ts` (the new `narrateDeeperCut`),
+- Generator seams: `packages/studio/src/pipeline/narrate.ts` (the new `narrateDeeperCut`),
   `generate.ts` (within-tour conditioning: `priorStops`/`recentMotifs`), `config.ts`
   (`DEEP_EXTRACT_CHARS=4000`, `TARGET_SECONDS.story=120`), `persist.ts`, the `finalizeTourReady`
   ready-gate (deliberately NOT included), `resynth-tour.ts`.

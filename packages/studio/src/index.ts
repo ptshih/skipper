@@ -1,4 +1,4 @@
-// @skipper/generator — server-side narration generation for the V2 roam-first model.
+// @skipper/studio — server-side narration generation for the V2 roam-first model.
 //
 // pois (shared FACTS) ──1:1── narrations (the shared telling) is the spine: the corpus
 // pipeline is `discover` → `enrich` → `generate`, and roam + every drive SELECT from that

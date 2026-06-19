@@ -5,7 +5,7 @@
 > `packages/db/src/schema.ts`). Mapping for a future build: the user-owned ordered sequence is now
 > the `drives` table (not `tours`); place tellings are 1:1 `narrations` (not `tour_stops`); and the
 > placeless intro/outro "brackets" are now **frames persisted to the `asides` table** (see
-> `packages/generator/src/pipeline/narrate.ts`). Read every `tours.*`/`tour_*` reference below as the
+> `packages/studio/src/pipeline/narrate.ts`). Read every `tours.*`/`tour_*` reference below as the
 > corresponding V2 entity.
 
 > **Status:** SPEC ONLY — unbuilt. Generation-only feature; post-MVP, gated behind the proven phone
@@ -116,7 +116,7 @@ contents-creep; keep it a frame.
   natural), threaded through the within-tour conditioning the generator already runs
   (`narrate.ts`'s `priorStops`/motif window — the thesis becomes one more threaded element). This is
   the **bookends-first** refinement (§9) — ship the frames first, add stop-nods later.
-- Reuses the persona (`packages/generator/src/persona/`) — the thesis is spoken in the skipper's
+- Reuses the persona (`packages/studio/src/persona/`) — the thesis is spoken in the skipper's
   voice; for region skippers it's *his* take (ties the thesis to the region-host identity).
 
 ## 7. Cost
@@ -166,8 +166,8 @@ through-line.
   (`docs/specs/downtime-callouts-spec.md` + the pull ladder) and `docs/specs/skipper-opinions-spec.md`
   (the thesis is taste at drive-altitude). Borrows the **exhaustion gate** from
   `docs/specs/tell-me-more-spec.md`.
-- Generation seams: `packages/generator/src/pipeline/narrate.ts` (intro/outro frame gen + the
-  proposal step + within-tour conditioning), `packages/generator/src/persona/` (`PersonaDef` — the
+- Generation seams: `packages/studio/src/pipeline/narrate.ts` (intro/outro frame gen + the
+  proposal step + within-tour conditioning), `packages/studio/src/persona/` (`PersonaDef` — the
   voice), `packages/db/src/schema.ts` (the drive `thesis` field). Narration stays place-owned
   (`docs/decisions/tour-data-model-zero-reuse.md`); the thesis is a drive-level *input*, not cached
   cross-drive content.

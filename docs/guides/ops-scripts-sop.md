@@ -1,13 +1,13 @@
 # Ops-scripts SOP
 
-**Status:** ✅ **ADOPTED 2026-06-10.** Enforced by reuse via `packages/generator/src/pipeline/ops.ts`;
+**Status:** ✅ **ADOPTED 2026-06-10.** Enforced by reuse via `packages/studio/src/pipeline/ops.ts`;
 reference implementation = `sweep-orphans.ts`; `resynth-narration.ts` (1:1 narration resynth) and
 `rename-roam-prefix.ts` conform to the contract (preview by default, act only on `--apply`). This is
 the contract for the generator's one-off operational CLIs.
 
 ## What this covers
 
-The generator's **one-off ops CLIs** — `packages/generator/src/*.ts` you run by hand via
+The generator's **one-off ops CLIs** — `packages/studio/src/*.ts` you run by hand via
 `dotenvx … bun …` to fix or maintain live data (`sweep-orphans`, `resynth-narration`,
 `rename-roam-prefix`, backfills). NOT the generation pipeline itself, and not app/API code.
 
@@ -27,7 +27,7 @@ burns GCP credits). So they share one safety contract.
 4. **Use `pipeline/ops.ts`.** Don't re-roll arg parsing, tour resolution, env checks, or the
    preamble — the SOP is enforced by reuse, not prose.
 5. **Invocation + env.** Run via `dotenvx run -f .env.development -- bun
-   packages/generator/src/<tool>.ts …` (dev) or `-f .env.production --overload` (prod). Never add
+   packages/studio/src/<tool>.ts …` (dev) or `-f .env.production --overload` (prod). Never add
    a plaintext `.env`. An `--apply` run asserts its env up front (`assertReady`).
 6. **Idempotent + logged + honest exit.** Re-runnable without harm; log per item + a final
    summary; `process.exitCode = 1` on failure (the `main().catch(...)` tail).

@@ -202,10 +202,10 @@ the **schema widening** for positioned/attributed callouts + the **second geofen
 Designed 2026-06-09. Builds on and cites for re-check:
 - `docs/specs/downtime-callouts-spec.md` — the delivery system (scheduler, duck-overlay, sentinel seqs,
   the `tour_callouts` table) and its deferred Phase 2 (grounded spatial callouts) that this concretizes.
-- `packages/generator/src/pipeline/macrostrat.ts` — coordinate-keyed CC-BY geology + the persona-prompt
+- `packages/studio/src/pipeline/macrostrat.ts` — coordinate-keyed CC-BY geology + the persona-prompt
   geology carve-out (already shipped); Wikidata (CC0, QID-join) + OSM (discovery tier) from the
   fact-source-expansion direction.
-- `packages/generator/src/config.ts` — `OFF_ROUTE_MAX_M = 700` (the on-route discovery scope this
+- `packages/studio/src/config.ts` — `OFF_ROUTE_MAX_M = 700` (the on-route discovery scope this
   widens for natural features).
 - The per-region persona registry (`personaForRegion`, `PersonaDef`, the kit) — where the taste
   profile lives; and the region-skipper-identities roadmap ("backstory colors the jokes").

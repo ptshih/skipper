@@ -19,7 +19,7 @@
 // narrates/synthesizes/writes only on --apply.
 //
 // Usage:
-//   dotenvx run -f .env.development -- bun packages/generator/src/generate-narrations.ts
+//   dotenvx run -f .env.development -- bun packages/studio/src/generate-narrations.ts
 //   ... --apply                 run it (spends; writes R2 clips + narrations)
 //   ... --apply --limit 3      smoke run (the cheapest real ear-test)
 //   ... --force                regenerate even clips whose facts_hash is still fresh

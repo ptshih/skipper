@@ -20,7 +20,7 @@
 // to −14 could clip without true-peak limiting.
 //
 // ffmpeg is REQUIRED (it IS the encoder, not just QA): a missing/failed encode THROWS rather
-// than ship a mislabeled clip. The Cloud Run image carries ffmpeg (packages/generator/Dockerfile);
+// than ship a mislabeled clip. The Cloud Run image carries ffmpeg (packages/studio/Dockerfile);
 // a bare local box without it must install it. Only the LEVELING sub-step degrades gracefully —
 // if pass-1 analysis can't be parsed, we still encode to AAC, just without the linear gain.
 

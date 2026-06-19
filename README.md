@@ -39,7 +39,7 @@ skipper/
 ├── packages/
 │   ├── shared/     @skipper/shared    — Zod schemas + types, imported everywhere.
 │   ├── db/         @skipper/db        — Drizzle schema + Neon client.
-│   ├── generator/  @skipper/generator — server-side narration/corpus generation (discover → enrich → generate).
+│   ├── generator/  @skipper/studio — server-side narration/corpus generation (discover → enrich → generate).
 │   ├── drive-core/ @skipper/drive-core — pure geo + trigger engine + drive sim + preview timeline (RN-safe; shared by sim & mobile).
 │   └── sim/        @skipper/sim       — DB-backed drive-sim CLI (runs @skipper/drive-core against a real tour).
 ├── design-system/  — browsable HTML mirror of the "Trailhead 89" design system (open index.html). A specimen book; not a workspace. Canonical source = apps/mobile/DESIGN.md + src/theme + src/ui.

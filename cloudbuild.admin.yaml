@@ -9,7 +9,7 @@
 #   below (a referrer-restricted, in-the-bundle client key; private repo — not a secret).
 #
 # ONE-TIME setup (NOT here — see docs/specs/admin-ops-console-spec.md §7/§10):
-#   - SA `skipper-admin@$PROJECT_ID...`: roles/run.developer on the `skipper-gen` job
+#   - SA `skipper-admin@$PROJECT_ID...`: roles/run.developer on the `skipper-studio` job
 #     (run.jobs.runWithOverrides + run.executions.get) + secretmanager.secretAccessor.
 #   - ADMIN_EMAIL in .env.production (the single allowed IAP principal).
 #   - Enable IAP on the service + grant the founder roles/iap.httpsResourceAccessor. UNDER DRS,

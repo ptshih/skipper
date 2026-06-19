@@ -1,6 +1,6 @@
 # Story-stop enrichment: the scout (judgment) replaces the char-count sparse-gates
 
-**Status (2026-06-09):** built, wired, and MEASURED-IN (`packages/generator/src/pipeline/scout.ts`,
+**Status (2026-06-09):** built, wired, and MEASURED-IN (`packages/studio/src/pipeline/scout.ts`,
 called from `enrich-pois.ts` via `buildCorpusFactSheet`); the old `GEOLOGY_STORY_MAX_FACT_CHARS` / `WIKIDATA_STORY_MAX_FACT_CHARS` /
 `GEOLOGY_ICONIC_STOPS` constants are deleted. Scenic geology is untouched (a contract, not a
 heuristic). The before/after eval on the canonical corridor passed the ship-gate — see "Measured".

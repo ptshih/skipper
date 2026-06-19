@@ -10,7 +10,7 @@
 // dev+prod share ONE bucket (`skipper`) + ONE Neon DB, so this runs exactly ONCE. Conforms to
 // docs/guides/ops-scripts-sop.md.
 //
-//   dotenvx run -f .env.development -- bun packages/generator/src/rename-roam-prefix.ts [--apply]
+//   dotenvx run -f .env.development -- bun packages/studio/src/rename-roam-prefix.ts [--apply]
 
 import { db } from '@skipper/db'
 import { narrations } from '@skipper/db/schema'

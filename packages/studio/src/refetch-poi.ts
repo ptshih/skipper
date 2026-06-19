@@ -20,8 +20,8 @@
 // SOP (docs/guides/ops-scripts-sop.md): PREVIEWS by default; writes only on --apply.
 // Blast radius: MUTATES DB (rewrites one pois row's facts).
 //
-//   dotenvx run -f .env.development -- bun packages/generator/src/refetch-poi.ts <poiId>
-//   dotenvx run -f .env.development -- bun packages/generator/src/refetch-poi.ts <poiId> --apply
+//   dotenvx run -f .env.development -- bun packages/studio/src/refetch-poi.ts <poiId>
+//   dotenvx run -f .env.development -- bun packages/studio/src/refetch-poi.ts <poiId> --apply
 
 import { eq } from 'drizzle-orm'
 import { db } from '@skipper/db'

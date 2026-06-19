@@ -10,7 +10,7 @@
 // periodic calibration check. Exits non-zero if the judge disagrees with any verdict label.
 //
 // Usage (ANTHROPIC_API_KEY via dotenvx):
-//   dotenvx run -f .env.development -- bun packages/generator/src/eval/calibrate.ts
+//   dotenvx run -f .env.development -- bun packages/studio/src/eval/calibrate.ts
 
 import { GROUNDING_CASES, type GroundingCase } from './golden'
 import { evaluateGrounding } from './grounding'

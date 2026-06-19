@@ -1,6 +1,6 @@
 // Geometry for the drive simulator — pure functions, no deps.
 //
-// Mirrors @skipper/generator's geo helpers (kept local so the sim + the eventual
+// Mirrors @skipper/studio's geo helpers (kept local so the sim + the eventual
 // player core stay decoupled from the generator). [lng, lat] axis order throughout,
 // matching drives.polyline.
 

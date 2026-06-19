@@ -293,7 +293,7 @@ From an adversarial review of the scaffold. Verdict: sound foundation. Guardrail
   the `db` proxy build on first query) so importing it never forces
   `DATABASE_URL` to exist — env-free routes like `GET /health` keep booting.
 - **`voice` is a fixed function of persona** (each `PersonaDef.voice` in
-  `packages/generator/src/persona/`, resolved in code by `personaFromKey('skipper')` — one host in v2 —
+  `packages/studio/src/persona/`, resolved in code by `personaFromKey('skipper')` — one host in v2 —
   and baked onto the `narrations` row at generation:
   skipper → the Google Cloud Gemini-TTS voice name "Charon"; `SKIPPER_VOICE_ID` in
   `models.ts` is the source constant the def references). Not a per-request knob (deferred to

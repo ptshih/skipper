@@ -15,7 +15,7 @@
 //
 // Usage (env via dotenvx — ANTHROPIC_API_KEY for the judge, R2_* to presign audio):
 //   # Feed it a narration-run JSON artifact (stops with scripts; audioUrls to presign the voice):
-//   dotenvx run -f .env.development -- bun packages/generator/src/judge-voice.ts /tmp/tour.json --out=/tmp/voice.md
+//   dotenvx run -f .env.development -- bun packages/studio/src/judge-voice.ts /tmp/tour.json --out=/tmp/voice.md
 
 import { presignGet } from './pipeline/storage'
 import { judgeCharm, type CharmVerdict } from './eval/charm'

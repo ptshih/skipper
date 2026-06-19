@@ -165,7 +165,7 @@ Gemini-TTS takes are non-deterministic in LEVEL. The first defect — **tail col
 resynth-tour, patch-clip) now measures tail(12s)-vs-body after each synth and re-synths
 once on a ≥3 dB drop, keeping the better take; a still-collapsed shipped take fails that
 stop's tts eval row (`pipeline/tail.ts` + `synthesizeWithTailRetake` in `pipeline/tts.ts`;
-graceful skip when ffmpeg is absent; the skipper-gen Dockerfile installs ffmpeg so cloud
+graceful skip when ffmpeg is absent; the skipper-studio Dockerfile installs ffmpeg so cloud
 Job runs measure too).
 
 The second defect — **clip-to-clip level spread + overall quiet-vs-Spotify** — shipped its
@@ -187,7 +187,7 @@ REMAINING — **drive music level (separate task).** The 17 bundled tracks (`app
 `licenses.ts`) are NOT in this pipeline — match them with a one-time offline re-encode (or a
 player-side gain) to the SAME target once −14 is locked by the ear-gate above.
 
-Refs: `packages/generator/src/pipeline/loudnorm.ts`, `pipeline/tts.ts`, `pipeline/tail.ts`,
+Refs: `packages/studio/src/pipeline/loudnorm.ts`, `pipeline/tts.ts`, `pipeline/tail.ts`,
 `models.ts` (the LOUDNORM_* constants), `docs/decisions/audio-compression-spike.md`.
 
 ## In-app narration volume trim — DEFERRED pending the −14 ear-gate (founder feedback 2026-06-11)

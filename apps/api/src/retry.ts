@@ -1,7 +1,7 @@
 // Bounded retry for the API's neon-http reads — mask a Neon cold-start blip on the USER's
 // latency path. The public API sits idle between visitors, so the FIRST query after idle wakes
 // a suspended Neon serverless compute and can transiently throw (429/5xx/reset). The generator
-// hit this same DB enough to add its own retry (packages/generator/src/pipeline/http.ts —
+// hit this same DB enough to add its own retry (packages/studio/src/pipeline/http.ts —
 // observed 2026-06-10); the API is even MORE cold-start-prone (it idles between rare anonymous
 // visitors, so every funnel visitor is a cold start), but its reads were bare `db.select`.
 //

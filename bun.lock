@@ -136,23 +136,6 @@
         "@types/node": "^25.9.3",
       },
     },
-    "packages/generator": {
-      "name": "@skipper/generator",
-      "version": "0.0.0",
-      "dependencies": {
-        "@anthropic-ai/sdk": "^0.104.1",
-        "@skipper/db": "workspace:*",
-        "@skipper/drive-core": "workspace:*",
-        "@skipper/shared": "workspace:*",
-        "@skipper/storage": "workspace:*",
-        "drizzle-orm": "^0.45.2",
-        "google-auth-library": "^10.7.0",
-      },
-      "devDependencies": {
-        "@types/bun": "^1.3.14",
-        "@types/node": "^25.9.3",
-      },
-    },
     "packages/shared": {
       "name": "@skipper/shared",
       "version": "0.0.0",
@@ -176,6 +159,23 @@
     "packages/storage": {
       "name": "@skipper/storage",
       "version": "0.0.0",
+      "devDependencies": {
+        "@types/bun": "^1.3.14",
+        "@types/node": "^25.9.3",
+      },
+    },
+    "packages/studio": {
+      "name": "@skipper/studio",
+      "version": "0.0.0",
+      "dependencies": {
+        "@anthropic-ai/sdk": "^0.104.1",
+        "@skipper/db": "workspace:*",
+        "@skipper/drive-core": "workspace:*",
+        "@skipper/shared": "workspace:*",
+        "@skipper/storage": "workspace:*",
+        "drizzle-orm": "^0.45.2",
+        "google-auth-library": "^10.7.0",
+      },
       "devDependencies": {
         "@types/bun": "^1.3.14",
         "@types/node": "^25.9.3",
@@ -810,8 +810,6 @@
 
     "@skipper/drive-core": ["@skipper/drive-core@workspace:packages/drive-core"],
 
-    "@skipper/generator": ["@skipper/generator@workspace:packages/generator"],
-
     "@skipper/mobile": ["@skipper/mobile@workspace:apps/mobile"],
 
     "@skipper/shared": ["@skipper/shared@workspace:packages/shared"],
@@ -821,6 +819,8 @@
     "@skipper/site": ["@skipper/site@workspace:apps/site"],
 
     "@skipper/storage": ["@skipper/storage@workspace:packages/storage"],
+
+    "@skipper/studio": ["@skipper/studio@workspace:packages/studio"],
 
     "@stablelib/base64": ["@stablelib/base64@1.0.1", "", {}, "sha512-1bnPQqSxSuc3Ii6MhBysoWCg58j97aUjuCSZrGSmDxNqtytIi0k8utUenAwTZN4V5mXXYGsVUI9zeBqy+jBOSQ=="],
 

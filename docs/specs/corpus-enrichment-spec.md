@@ -67,7 +67,7 @@ Break-freely (storage). `pois.facts` for a story poi becomes:
 
 Ops sequence becomes: `discover` (free) → **`enrich` (paid, once)** → `generate` (paid).
 
-- New CLI `packages/generator/src/enrich-pois.ts` + `jobKind` `enrich_pois` (add to the
+- New CLI `packages/studio/src/enrich-pois.ts` + `jobKind` `enrich_pois` (add to the
   `@skipper/shared` `jobKind` enum + `jobs.ts` SCRIPTS + admin button). SOP-safe: previews (with a
   cost estimate) by default; writes only on `--apply`. `--bbox` scopes it (like the sweep).
 - For each eligible story poi WITHOUT a fresh well (or `--force`): run the enricher (§5), build the

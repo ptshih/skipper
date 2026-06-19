@@ -6,8 +6,8 @@
 // SOP (docs/guides/ops-scripts-sop.md): PREVIEWS by default; writes only on --apply.
 // Blast radius: SPENDS $ (one TTS synth) + MUTATES DB (updates audioDurationMs).
 //
-//   dotenvx run -f .env.development -- bun packages/generator/src/resynth-narration.ts <poiId>
-//   dotenvx run -f .env.development -- bun packages/generator/src/resynth-narration.ts <poiId> --apply
+//   dotenvx run -f .env.development -- bun packages/studio/src/resynth-narration.ts <poiId>
+//   dotenvx run -f .env.development -- bun packages/studio/src/resynth-narration.ts <poiId> --apply
 
 import { eq } from 'drizzle-orm'
 import { db } from '@skipper/db'

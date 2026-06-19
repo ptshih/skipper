@@ -53,7 +53,7 @@ export interface LintFinding {
 
 // Personal-kit detectors come from the active persona (passed in), so the lint and the
 // generator's spent-beat tracking read the SAME source — they can never desync (the bug
-// the per-region registry fixed). See packages/generator/src/persona/.
+// the per-region registry fixed). See packages/studio/src/persona/.
 
 // HARD-BANNED reveal wind-ups and AI/brochure tics — the persona prompt forbids
 // these outright ("just say the surprising thing plainly"), so flag on the FIRST

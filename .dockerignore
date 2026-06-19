@@ -1,5 +1,5 @@
 # Trims the Docker build context (the repo root). SHARED by the api, admin, and gen image
-# builds (apps/api, apps/admin, packages/generator Dockerfiles) — each COPYs only its own
+# builds (apps/api, apps/admin, packages/studio Dockerfiles) — each COPYs only its own
 # closure, so this just keeps the heavy/irrelevant stuff (above all the mobile React-Native
 # tree + every node_modules) out of the context. Do NOT exclude a package ANY build COPYs.
 
@@ -12,7 +12,7 @@
 .env.example
 
 # not COPYed by any image build. generator + drive-core are DELIBERATELY NOT excluded:
-# the gen image (packages/generator/Dockerfile) COPYs them — excluding 404s its build context.
+# the gen image (packages/studio/Dockerfile) COPYs them — excluding 404s its build context.
 apps/mobile
 packages/sim
 

@@ -17,7 +17,7 @@
 // NO model calls (free). --apply spends.
 //
 // Usage:
-//   dotenvx run -f .env.development -- bun packages/generator/src/enrich-pois.ts
+//   dotenvx run -f .env.development -- bun packages/studio/src/enrich-pois.ts
 //   ... --apply                  run it (spends Anthropic; writes pois.fact_sheet + facts_hash)
 //   ... --limit 5                cap how many places to enrich (a smoke run)
 //   ... --force                  re-enrich places that already have a fact sheet

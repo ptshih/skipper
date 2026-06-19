@@ -17,7 +17,7 @@ modest size bump (~1.6× the 32k MP3; still ~7–8× under the LINEAR16 WAV). iO
 (OGG_OPUS would be smaller but iOS can't decode it — still disqualified). **Trade accepted:** ffmpeg
 is now REQUIRED on every ship path (it IS the encoder) — `normalizeAndEncode` throws if it's absent
 rather than ship a mislabeled clip; only the LEVELING sub-step degrades (encode un-leveled if pass-1
-stats won't parse). Cloud Run carries ffmpeg (`packages/generator/Dockerfile`). Verified by an
+stats won't parse). Cloud Run carries ffmpeg (`packages/studio/Dockerfile`). Verified by an
 end-to-end synth: ffprobe confirms aac / 24 kHz / mono / ~48.8k / m4a, duration exact. No clips to
 migrate — `pois` was freshly swept with no tour/roam audio generated, so this only affects NEW
 generation. Loudnorm target unchanged (−14 LUFS / −1.5 dBTP, `LOUDNORM_*` in `models.ts`); see

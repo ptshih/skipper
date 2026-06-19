@@ -2,7 +2,7 @@
 //
 // v1 BACKEND. Behind Google IAP (requireAdmin asserts the founder's identity); a separate
 // Cloud Run service from the public api.skipper.fm so a routing bug can't leak ops onto the
-// funnel. Reads the same DB + presigns R2 for the roam ear-pass; triggers the skipper-gen Cloud
+// funnel. Reads the same DB + presigns R2 for the roam ear-pass; triggers the skipper-studio Cloud
 // Run Job for corpus ops (jobs.ts). V2: authored tours are deferred — the console operates the
 // shared POI corpus + roam narrations; the tour catalog / Create-a-Tour flow is gone.
 // Background: docs/specs/admin-ops-console-spec.md §6.
@@ -16,7 +16,7 @@
 //   GET  /admin/jobs              -> recent pipeline_jobs (operational record; powers job polling)
 //   GET  /admin/runs              -> unified Runs timeline: pipeline_jobs + orphan eval_runs
 //   GET  /admin/jobs/:id          -> one run (reconciled against its Cloud Run execution) + logs URL
-//   POST /admin/jobs              -> trigger an op as a skipper-gen Job  (jobs.ts — Phase 3)
+//   POST /admin/jobs              -> trigger an op as a skipper-studio Job  (jobs.ts — Phase 3)
 //   POST /admin/jobs/:id/cancel   -> stop a running execution (pipeline_job_status='canceled') (§14.8)
 //   GET  /admin/pois              -> POI corpus: sources, narration usage, attribution, region coverage
 //   GET  /admin/pois/:id          -> full POI detail: lat/lng, summary, facts JSON, freshness
@@ -391,7 +391,7 @@ app.post('/admin/jobs/:id/cancel', async (c) => {
   return c.json({ job: row })
 })
 
-// Trigger an op as a skipper-gen Cloud Run Job. Dry-run by default; a SPENDING run (generate
+// Trigger an op as a skipper-studio Cloud Run Job. Dry-run by default; a SPENDING run (generate
 // non-dry-run, or an op with apply) requires confirm:true (the SPA gates this behind a typed
 // confirm). Idempotent: refuses if a non-terminal run already exists for the same target.
 app.post('/admin/jobs', async (c) => {

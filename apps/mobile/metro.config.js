@@ -16,7 +16,7 @@ const config = getDefaultConfig(projectRoot)
 // @skipper/drive-core); its npm deps are symlinks whose realpath lives under
 // `<root>/node_modules/.bun`, so that store must be watched too. Watching the
 // whole `workspaceRoot` (the old config) made Metro re-crawl / reload on edits to
-// packages/generator, packages/db, packages/sim, docs/, .scratch-audio, apps/api,
+// packages/studio, packages/db, packages/sim, docs/, .scratch-audio, apps/api,
 // and every `.git` operation — none of which are in the app's graph. Keep this an
 // allowlist (add a package's dir here if the app starts importing it); a denylist
 // of noisy dirs would silently rot as new ones appear. (Added 2026-06-09.)

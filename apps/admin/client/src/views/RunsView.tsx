@@ -416,7 +416,7 @@ function RunDrawer({ run, onClose }: { run: RunEvent; onClose: () => void }) {
           {args && args.length > 0 && (
             <div className="space-y-2">
               <SectionLabel>Command</SectionLabel>
-              <LogBlock><span className="text-muted-foreground">$ skipper-gen {run.kind} </span>{args.join(' ')}</LogBlock>
+              <LogBlock><span className="text-muted-foreground">$ skipper-studio {run.kind} </span>{args.join(' ')}</LogBlock>
             </div>
           )}
 

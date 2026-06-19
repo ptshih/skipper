@@ -4,7 +4,7 @@
 //
 // Env is injected by dotenvx at the command line (the repo has NO plaintext
 // .env), e.g.:
-//   dotenvx run -f .env.development -- bun packages/generator/src/run.ts emerald-bay-run
+//   dotenvx run -f .env.development -- bun packages/studio/src/run.ts emerald-bay-run
 
 import { existsSync } from 'node:fs'
 
@@ -14,7 +14,7 @@ export function requireEnv(name: string): string {
   if (!v) {
     throw new Error(
       `${name} is not set. Run via dotenvx, e.g.\n` +
-        `  dotenvx run -f .env.development -- bun packages/generator/src/run.ts <slug>`,
+        `  dotenvx run -f .env.development -- bun packages/studio/src/run.ts <slug>`,
     )
   }
   return v

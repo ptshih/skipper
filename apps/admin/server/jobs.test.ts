@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { SCRIPTS, buildJobArgs } from './jobs'
 
 // Every gen-job entrypoint MUST record its status AND capture its own logs through the
-// job-progress hook (the runJob() wrapper — packages/generator/src/pipeline/job-progress.ts —
+// job-progress hook (the runJob() wrapper — packages/studio/src/pipeline/job-progress.ts —
 // which owns begin → run → finish → exit). A kind that skips it records no status and shows NO
 // logs in the admin console (which no longer reads Cloud Logging). This guard makes "always
 // capture the same way" enforced, not aspirational: add a kind to SCRIPTS without wiring the

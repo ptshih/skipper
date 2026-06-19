@@ -16,14 +16,14 @@
 > **Create Tour** (LLM-proposed, human-approved runtime authoring) added to v1 per founder
 > requirement 2026-06-10 — see §5b. Builder infra, not a charm feature. Substrate (**Cloud Run
 > Jobs**) + auth (**Google IAP, founder-only**) are GA and confirmed.
-> **Built:** v0 (`pipeline_jobs` + migration `0005` + the `job-progress` hook + the `skipper-gen` Job
+> **Built:** v0 (`pipeline_jobs` + migration `0005` + the `job-progress` hook + the `skipper-studio` Job
 > image) and v1 — **one app `apps/admin`**: the Hono server in `server/` (IAP gate, monitor reads,
 > job trigger/reconcile, Create Tour) + the React/Vite/Tailwind/shadcn SPA in `client/` (the
 > Google-Maps Create-Tour flow), served as one container behind IAP, plus the admin Dockerfile/
 > cloudbuild. All packages typecheck/build, 238 generator tests pass.
 > **Deployed + smoke-tested 2026-06-11:** admin service behind IAP, **identity `peter@manoa.health`**
 > (in-domain; a personal-gmail accessor needed DRS relaxed, so we switched + re-enabled DRS); the
-> `skipper-gen` Job is deployed and the full **New run → jobs:run → reconcile** chain ran green (a
+> `skipper-studio` Job is deployed and the full **New run → jobs:run → reconcile** chain ran green (a
 > dry-run Sweep orphans). Deploy gotchas folded into the guide §"admin console" runbook (job-IAM
 > ordering, `iap web` accessor grant, IAP walls `/health`, the shared `.dockerignore`, prod GCP
 > auth via ADC not a baked key file, `.env.production` outside the trigger path filter → manual
@@ -41,7 +41,7 @@ deployed, founder-only admin app that both **triggers** ops and **monitors** the
 
 **Sequenced** (the microscope's highest-leverage finding: the core ask is met by the Job alone):
 
-- **v0 — cloud execution.** The `skipper-gen` Cloud Run **Job** wrapping the four existing CLIs
+- **v0 — cloud execution.** The `skipper-studio` Cloud Run **Job** wrapping the four existing CLIs
   (generate / patch-clip / resynth / sweep), triggered with `gcloud run jobs execute …` from the
   laptop or a phone. This alone moves execution off-machine — near-zero new surface, immediate value.
 - **v1 — the admin app.** `apps/admin` (Vite SPA + Hono) behind **IAP**, the `pipeline_jobs` run
@@ -61,7 +61,7 @@ the existing committed-seed path stays for the original Tahoe tours.)
 ## 2. Architecture
 
 ```
-[Vite SPA] ──/admin/*──> [Hono admin-api]  ── jobs:run ──> [Cloud Run JOB: skipper-gen]   ← v0
+[Vite SPA] ──/admin/*──> [Hono admin-api]  ── jobs:run ──> [Cloud Run JOB: skipper-studio]   ← v0
   one Cloud Run service (skipper-admin),         │           ENTRYPOINT dotenvx -f .env.production -- bun
   behind Google IAP (founder-only)   ← v1        │           args pick run.ts | patch-clip.ts | resynth | sweep
         │                                          │           writes Neon + R2, spends GCP, ADC→TTS
@@ -79,11 +79,11 @@ The SPA calls `/admin/*` same-origin, so IAP's auth flows naturally.
 
 | # | Question | Decision | Why |
 |---|---|---|---|
-| 1 | Reuse API image or dedicated? | **Dedicated `skipper-gen` Job image** (own Dockerfile mirroring `apps/api/Dockerfile`, workspace trimmed to `generator+db+shared+storage`) | The generator's install closure (Anthropic SDK, google-auth, eval) differs from the API's |
+| 1 | Reuse API image or dedicated? | **Dedicated `skipper-studio` Job image** (own Dockerfile mirroring `apps/api/Dockerfile`, workspace trimmed to `generator+db+shared+storage`) | The generator's install closure (Anthropic SDK, google-auth, eval) differs from the API's |
 | 2 | DB target dev vs prod? | **Prod only.** ENTRYPOINT bakes `-f .env.production`; dev experiments stay on the laptop CLI | Cloud ops exist to operate the *live* prod catalog |
 | 3 | Live phase/cost surfacing? | A no-op-unless-`GEN_JOB_ID` **`pipeline/job-progress.ts`**, wired ONLY at the 4 ops entrypoint boundaries — never inside `generate.ts`. NB: **cost is not persisted anywhere today** (§9), so the hook is the *only* source of `pipeline_jobs.costUsd` | Keeps the CLI byte-identical (laptop has no `GEN_JOB_ID`) and risky edits out of `generate.ts` |
-| 4 | Light ops same Job or inline? | **All four CLIs through the one `skipper-gen` Job**; override `args` pick the script | Uniform secrets/logging/guardrails + keeps generator deps out of the admin image |
-| 5 | IAM identities | **Dedicated SAs:** `skipper-gen@` (Job runtime) and `skipper-admin@` (admin service) | Scopes the spend + trigger surface |
+| 4 | Light ops same Job or inline? | **All four CLIs through the one `skipper-studio` Job**; override `args` pick the script | Uniform secrets/logging/guardrails + keeps generator deps out of the admin image |
+| 5 | IAM identities | **Dedicated SAs:** `skipper-studio@` (Job runtime) and `skipper-admin@` (admin service) | Scopes the spend + trigger surface |
 
 ## 4. Data model — `pipeline_jobs`
 
@@ -135,23 +135,23 @@ Migration: the table arrived additively; `kind` started as a `gen_job_kind` pgEn
 > `pipeline_jobs` is part of **v0** too — even gcloud-triggered runs should record. In v0 the Job's
 > `job-progress.ts` hook creates the row itself (no admin-api) and `triggeredBy='cli'`.
 
-## 5. The `skipper-gen` Cloud Run Job (v0)
+## 5. The `skipper-studio` Cloud Run Job (v0)
 
-- **Image:** new `packages/generator/Dockerfile` mirroring `apps/api/Dockerfile`: `FROM oven/bun:1`,
+- **Image:** new `packages/studio/Dockerfile` mirroring `apps/api/Dockerfile`: `FROM oven/bun:1`,
   trim the workspace to `generator+db+shared+storage`, `bun install --production`, COPY src + the
   dotenvx-encrypted `.env.production`. Pushed to
-  `us-east4-docker.pkg.dev/lithe-window-491818-k8/skipper/skipper-gen`.
+  `us-east4-docker.pkg.dev/lithe-window-491818-k8/skipper/skipper-studio`.
 - **ENTRYPOINT:** `["dotenvx","run","-f",".env.production","--","bun"]`. The per-execution
   override `args` supply the script path + flags, so one Job serves all four CLIs.
-- **Runtime SA** `skipper-gen@lithe-window-491818-k8.iam.gserviceaccount.com`:
+- **Runtime SA** `skipper-studio@lithe-window-491818-k8.iam.gserviceaccount.com`:
   `roles/secretmanager.secretAccessor` on `dotenv-private-key-production`. **TTS needs NO extra IAM
   role** — `texttospeech.googleapis.com` enabled + the SA's metadata access token at `cloud-platform`
   scope + billing is sufficient (verified: Cloud TTS has no granular synthesize permission;
   `pipeline/tts.ts` `getAuth()` reads the token off the Cloud Run metadata server — no key file).
   `GOOGLE_CLOUD_PROJECT` + R2 vars come from the decrypted `.env.production`.
-- **Create:** `gcloud run jobs deploy skipper-gen --image=… --region=us-east4
+- **Create:** `gcloud run jobs deploy skipper-studio --image=… --region=us-east4
   --set-secrets=DOTENV_PRIVATE_KEY_PRODUCTION=dotenv-private-key-production:latest
-  --service-account=skipper-gen@… --max-retries=0 --task-timeout=21600` (`jobs deploy` is
+  --service-account=skipper-studio@… --max-retries=0 --task-timeout=21600` (`jobs deploy` is
   create-or-update; **`--max-retries=0`** so a half-run regen never silently re-fires; 6h
   timeout covers a full-region roam run — the real spend guard is the script's own `--max-cost`;
   the wall-clock cap is just the runaway backstop. Raised from 3600 (it timed out a full-region
@@ -165,16 +165,16 @@ can (`run.ts`'s own parser already requires `=`):
 
 | kind | `args` array |
 |---|---|
-| `generate` | `["packages/generator/src/run.ts", "<slug>", "--max-cost=<usd>", "--joke-level=<notch>", "--duration=<bucket>"]` (+ bare `--dry-run`, `--no-judge-closers`) |
-| `patch_clip` | `["packages/generator/src/patch-clip.ts", "<stopOrBracketId>", "--find=<text>", "--replace=<text>"]` (+ bare `--all`, `--apply`) — **`=` form, not space** |
-| `resynth` | `["packages/generator/src/resynth-tour.ts", "<tourId>"]` (+ bare `--apply`, `--keep-old`) |
-| `sweep_orphans` | `["packages/generator/src/sweep-orphans.ts", "<tourId>"]` or `["…/sweep-orphans.ts","--all"]` (+ bare `--apply`, + `--yes` when `--all --apply`) |
+| `generate` | `["packages/studio/src/run.ts", "<slug>", "--max-cost=<usd>", "--joke-level=<notch>", "--duration=<bucket>"]` (+ bare `--dry-run`, `--no-judge-closers`) |
+| `patch_clip` | `["packages/studio/src/patch-clip.ts", "<stopOrBracketId>", "--find=<text>", "--replace=<text>"]` (+ bare `--all`, `--apply`) — **`=` form, not space** |
+| `resynth` | `["packages/studio/src/resynth-tour.ts", "<tourId>"]` (+ bare `--apply`, `--keep-old`) |
+| `sweep_orphans` | `["packages/studio/src/sweep-orphans.ts", "<tourId>"]` or `["…/sweep-orphans.ts","--all"]` (+ bare `--apply`, + `--yes` when `--all --apply`) |
 
 **Trigger call** (admin-api v1, with its SA's metadata **access** token as Bearer):
-`POST https://run.googleapis.com/v2/projects/lithe-window-491818-k8/locations/us-east4/jobs/skipper-gen:run`
+`POST https://run.googleapis.com/v2/projects/lithe-window-491818-k8/locations/us-east4/jobs/skipper-studio:run`
 ```json
 { "overrides": { "containerOverrides": [
-  { "args": ["packages/generator/src/run.ts","emerald-bay","--max-cost=3"],
+  { "args": ["packages/studio/src/run.ts","emerald-bay","--max-cost=3"],
     "env": [{ "name": "GEN_JOB_ID", "value": "<pipeline_jobs.id>" }] }
 ] } }
 ```
@@ -233,7 +233,7 @@ let the route-LLM pick content; that re-tangles the exact separation #2 protects
    seconds, ~sub-cent) → upsert region + insert a `draft` tour with the polyline + **`tours.routeProvenance`
    jsonb** (the *prompt* + the *LLM proposal* + model id + *your edits* + Routes totals — a far richer
    "why this route exists" trail than the old committed JSON) → return the draft.
-5. **Generate** — you hit Generate → the existing `skipper-gen` Job (§5) fills the stops.
+5. **Generate** — you hit Generate → the existing `skipper-studio` Job (§5) fills the stops.
 
 **Schema add:** `routeProvenance: jsonb('route_provenance')` — in the shipped schema this landed on
 the user-owned **`drives`** table (`schema.ts:451`), not `tours` (dropped) (additive; storage break-freely).
@@ -327,15 +327,15 @@ A truly minimal first cut can defer step 2's per-phase tick — terminal status 
 
 ## 10. Deploy / CD (mirrors the existing api + site triggers)
 
-- `apps/admin/Dockerfile` (v1 admin service) + `packages/generator/Dockerfile` (v0 Job image), each
+- `apps/admin/Dockerfile` (v1 admin service) + `packages/studio/Dockerfile` (v0 Job image), each
   pushed to the `skipper` Artifact Registry repo.
-- **`cloudbuild.gen.yaml`** (v0) — build → push → `gcloud run jobs deploy skipper-gen` (create-or-update).
+- **`cloudbuild.gen.yaml`** (v0) — build → push → `gcloud run jobs deploy skipper-studio` (create-or-update).
 - **`cloudbuild.admin.yaml`** (v1) — build → push → `gcloud run deploy skipper-admin` (IAP, not public).
-- Cloud Build triggers on the existing `skipper-gh` connection, path-filtered: `packages/generator/**`
+- Cloud Build triggers on the existing `skipper-gh` connection, path-filtered: `packages/studio/**`
   (+ db/shared/storage) → the gen Job; `apps/admin/**` → admin.
 - **One-time IAM / setup:**
-  - Create the two SAs. `skipper-gen@`: `secretmanager.secretAccessor` on the dotenv key. `skipper-admin@`:
-    **`roles/run.developer` on the `skipper-gen` job** — *not* `run.invoker`: invoker carries
+  - Create the two SAs. `skipper-studio@`: `secretmanager.secretAccessor` on the dotenv key. `skipper-admin@`:
+    **`roles/run.developer` on the `skipper-studio` job** — *not* `run.invoker`: invoker carries
     `run.jobs.run` but **not** `run.jobs.runWithOverrides`, and we always send an overrides body;
     `run.developer` also grants `run.executions.get` for the reconcile backstop. Plus
     `secretmanager.secretAccessor`.
@@ -353,7 +353,7 @@ A truly minimal first cut can defer step 2's per-phase tick — terminal status 
 1. `pipeline_jobs` table + migration (additive, no behavior change).
 2. `pipeline/job-progress.ts` + the 4 one-line entrypoint wirings (no-op without `GEN_JOB_ID`);
    verify the laptop CLI is byte-identical.
-3. `skipper-gen` Job: Dockerfile, image, `jobs deploy`, the two SAs/IAM, TTS-via-ADC. Smoke-test a
+3. `skipper-studio` Job: Dockerfile, image, `jobs deploy`, the two SAs/IAM, TTS-via-ADC. Smoke-test a
    `--dry-run` generate via `gcloud run jobs execute`. **← v0 done: execution is in the cloud.**
 
 **v1 — the admin app (fast-follow):**
@@ -389,7 +389,7 @@ A truly minimal first cut can defer step 2's per-phase tick — terminal status 
 
 - `docs/guides/gcp-cloud-run-deploy.md` (project `lithe-window-491818-k8`/us-east4, Compute SA, Dockerfile + cloudbuild + Secret-Manager-dotenvx pattern, the api + site triggers to mirror, the DRS history)
 - `docs/guides/ops-scripts-sop.md` (the safe-by-default contract)
-- `packages/generator/src/{run,patch-clip,resynth-tour,sweep-orphans}.ts`, `pipeline/{ops,spend,generate,persist,tts}.ts` (arg contracts incl. the `=`-form value-flag rule at `ops.ts:40`; the `lap()` phase points; eval/cost recording; the seed requirement at `persist.ts:85`; TTS ADC)
+- `packages/studio/src/{run,patch-clip,resynth-tour,sweep-orphans}.ts`, `pipeline/{ops,spend,generate,persist,tts}.ts` (arg contracts incl. the `=`-form value-flag rule at `ops.ts:40`; the `lap()` phase points; eval/cost recording; the seed requirement at `persist.ts:85`; TTS ADC)
 - `packages/db/src/schema.ts` (`eval_runs`/`eval_scores` — note: no cost column; `pipeline_jobs` + `tours.routeProvenance` land here), `packages/db/drizzle/` (migrations)
 - `packages/db/seed/{materialize,seed}.ts` (the seed chain; **NB (2026-06-19)** the `tour-specs.ts` + `seed/data/*.json` committed-spec chain this §5b described has since been deleted — authored tours are deferred)
 - **GCP docs verified 2026-06-10:** [`jobs:run` overrides](https://docs.cloud.google.com/run/docs/execute/jobs) · [IAP-for-Cloud-Run (GA, direct)](https://docs.cloud.google.com/run/docs/securing/identity-aware-proxy-cloud-run) · [IAP signed-header audience](https://docs.cloud.google.com/iap/docs/signed-headers-howto) · [run IAM roles](https://docs.cloud.google.com/iam/docs/roles-permissions/run) · `run.invoker` lacks `runWithOverrides`: [issuetracker 298810674](https://issuetracker.google.com/issues/298810674) · [TTS auth](https://docs.cloud.google.com/text-to-speech/docs/authentication) · [DRS](https://docs.cloud.google.com/organization-policy/domain-restricted-sharing)
