@@ -71,9 +71,12 @@ Hit these deliberately; several are unproven and called out as findings below.
 - **OUT-OF-REGION.** Prompt somewhere clearly outside Tahoe (e.g. "downtown San Francisco"). Expect
   the propose `422 out_of_region` message, surfaced inline on the form. Then try an AMBIGUOUS
   in-vs-out name to probe the `inRegion` gate + geocode bias (Finding 3).
-- **FREE CAP.** Create up to `FREE_DRIVE_CAP` (default **10**) drives, then one more → expect the
-  `403 drive_limit_reached` message (names the cap + the credit-pack path). The client surfaces the
-  server message as-is.
+- **FREE CAP.** A free account is granted `FREE_DRIVE_CAP` (default **10**) credits ONCE in the
+  user-owned `credit_entries` ledger; each generated drive spends one (and is NEVER refunded on
+  delete — the cap is lifetime, not a live row count). Spend the balance to zero, then create one
+  more → expect the `403 drive_limit_reached` message (names the cap + the credit-pack path). The
+  client surfaces the server message as-is. (Ledger model: `docs/decisions/credit-ledger.md`; the
+  balance is `SUM(amount)` over `credit_entries`, `apps/api/src/credits.ts`.)
 - **DEAD CLIP / dead zone.** Mid-drive, a clip that won't start gets re-signed ONCE then SKIPPED
   (the drive never hangs) — `useDrive.ts` watchdog + post-start stall recovery. Hard to force on a
   sim; note it for the real drive.
@@ -85,7 +88,7 @@ Hit these deliberately; several are unproven and called out as findings below.
 These came out of reading the full path; none block the happy path on the dense Tahoe corpus, but
 each is a real edge. Severity is "how likely to bite a real rider."
 
-1. **🟠 An empty drive (0 stops) is persistable and burns a cap slot.** `buildDrive` can return `[]`
+1. **🟠 An empty drive (0 stops) is persistable and spends a ledger credit.** `buildDrive` can return `[]`
    (no nearby corpus, all-off-route, or a degenerate route). `POST /drives` does NOT reject an empty
    selection — it inserts the drive, bumps demand, returns `clips: []`
    (`apps/api/src/drives.ts:442-498`), and the client navigates in regardless (`create.tsx:105`).
@@ -102,8 +105,10 @@ each is a real edge. Severity is "how likely to bite a real rider."
    (`drives.ts:86-106`); the `inRegion` LLM flag + a ", Lake Tahoe" suffix are the only guards.
    `POST /drives` re-validates nothing. A same-named place could geocode just outside the region.
    Low impact (auth'd toy), but a cheap hardening is a bbox-containment check on the geocoded coords.
-4. **🟡 Free-cap check is non-atomic (TOCTOU).** Count-then-insert (`drives.ts:413-428` + the insert)
-   races: two concurrent creates at 9 both pass → 11. Negligible for a single user; note only.
+4. **🟡 Free-cap check is non-atomic (TOCTOU).** Balance-check-then-insert (the pre-check in
+   `drives.ts` + the `db.batch` consume+insert) races: two concurrent creates at balance 1 can both
+   pass and over-spend by 1. Negligible for a single user; the code calls it out as the same TOCTOU
+   as the old count gate. Note only. (Credits are the `credit_entries` ledger now, not a `count(drives)`.)
 5. **⚪ RESOLVED (2026-06-19).** The stale V1 doc-comments in `apps/mobile/src/lib/api.ts` are gone:
    the V2 naming pass landed — lines 4-7 now describe the V2 drives client (GET /drives, GET
    /drives/:id, POST /drives/propose, POST /drives; plus GET /regions, GET /roam) with zero

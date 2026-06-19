@@ -9,6 +9,19 @@ pre-gen aside/bracket library; route-demand cache. Product rationale + the decis
 [../ideas/roam-first-create-a-drive.md](../ideas/roam-first-create-a-drive.md). Designed via a
 3-architecture × 3-judge-lens workflow + a 4-lens terminology audit, then founder-refined.
 
+> **Supersession addendum (2026-06-19).** Three pieces of the data model below have since been
+> overtaken; the body is preserved as the V2-cutover record, read these as the current truth:
+> - **`asides` was DELETED, not built as described.** Placeless intro/outro/beat framing was dropped
+>   from V2 (returns in v3); there is no `asides` table or `aside refs` in the `drives` manifest today
+>   (schema; `geometry-first-regions.md`).
+> - **Regions are GEOMETRY-FIRST — no `region_id` FK.** `drives` stores its route bbox and derives
+>   region by intersect; the `region_id` columns named below (on `drives`, `asides`, `drive_demand`)
+>   are gone. See `geometry-first-regions.md`.
+> - **Drive credits are a LEDGER, not a `count(drives)` cap.** Consumption + balance live in the
+>   append-only `credit_entries` table (a credit is spent at `POST /drives`, never refunded on
+>   delete). See `credit-ledger.md`. The "N=10 cap / refunded on failure" wording below is the
+>   pre-ledger framing.
+
 ## Context
 
 V2 inverts the hierarchy: **Roam** (ambient) + **Create a Drive** (on-demand A→B) are the first-day

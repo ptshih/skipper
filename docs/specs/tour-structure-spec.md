@@ -10,12 +10,16 @@ shipped (67e9313/7860b3f). Everything structural in §1/§2/§3/§5/§6/§7 is H
 > 🟥 **SUPERSEDED — STRUCTURE FULLY DISSOLVED IN V2 (updated 2026-06-19).** The canonical entity model is
 > **`docs/decisions/tour-data-model-zero-reuse.md`** §9 + the live [`packages/db/src/schema.ts`](../../packages/db/src/schema.ts) —
 > read those, not this, for the model. The dissolutions, latest first:
-> 1. **(V2 2026-06-18) `tour_brackets`/`tour_frames` are GONE — intro/outro + clock beats are now shared,
->    region-owned `asides`** (the `asides` table, keyed `(region, persona, kind, variant)`, REUSED across
->    every drive — the inverse of per-tour brackets). So **§3's entire `tour_brackets`-as-a-per-tour-table
+> 1. **(V2 2026-06-18, then DELETED 2026-06-19) `tour_brackets`/`tour_frames` are GONE — and so is their
+>    successor.** They first collapsed into shared, region-owned `asides` (the `asides` table), but that
+>    table was then **deleted entirely** (migration `0019`, geometry-first regions) — placeless intro/outro
+>    framing is removed from v2 and returns in v3 with guided tours. Between-story texture is now the PLACED
+>    `break` (Places-anchored) + `scenic` forms, which have real coords (see
+>    `docs/decisions/geometry-first-regions.md`). So **§3's entire `tour_brackets`-as-a-per-tour-table
 >    design — the Concrete-Table-Inheritance vs STI reasoning, the `finalizeTourReady` co-commit seam, the
->    placeless-subtype modeling — is MOOT**: brackets were never a per-tour table in the shipped model, and
->    `tours`/`tour_stops`/`corridors` are all dropped. Keep §3 only as a record of the design thinking.
+>    placeless-subtype modeling — is MOOT**: brackets were never a per-tour table in the shipped model, no
+>    placeless-bracket table survives at all, and `tours`/`tour_stops`/`corridors` are all dropped. Keep §3
+>    only as a record of the design thinking.
 > 2. **(V2 2026-06-18) `tours` → user-owned `drives`; narration → the shared 1:1 `narrations` atom.** A
 >    drive REUSES region narrations pre-ordered along an A→B route; hand-authored tours are DEFERRED.
 > 3. **(2026-06-08) Every tour INDEPENDENT** — no `direction`/reverse/forward, no "drive family." → §1, §2,

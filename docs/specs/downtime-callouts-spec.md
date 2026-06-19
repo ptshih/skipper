@@ -8,25 +8,31 @@
 > the V2 pivot that dropped the entire authored-tour storage (migration 0009) — `tours`,
 > `tour_stops`, `segments`, `tracks`, and `tour_brackets` are ALL gone (see `packages/db/src/schema.ts`).
 > Read every reference as its V2 equivalent. The DELIVERY concept (placeless, persona-only downtime
-> beats, duck-overlaid) survives intact onto V2 — only the storage/seams move:
+> beats, duck-overlaid) survives intact onto V2 — but **the placeless-framing storage this feature
+> assumed no longer exists**:
 > - `tour_stops` → the 1:1 `narrations` atom (one telling per `pois` row).
-> - `tour_brackets` (intro/outro frames) → the placeless `asides` table (region/persona-keyed —
->   the live home for intro/outro + clock-anchored beats).
-> - `tour_callouts` → a **callout is a new placeless beat**; its natural V2 home is the `asides`
->   table (region/persona-keyed, no poi, no facts — exactly a callout's shape), OR a sibling table
->   if the mood-tagging + per-drive selection earns its own. There is NO per-tour FK in v2 — a
->   callout scopes to a **region/persona** (and rides whatever drive plays in that region), not to
->   a `tours` row.
+> - **`tour_brackets` (intro/outro frames) had NO surviving home.** The placeless `asides` table that
+>   briefly carried intro/outro framing in early V2 was itself **DELETED in migration 0019**
+>   (`0019_drop_asides.sql` — `DROP TABLE "asides" CASCADE`; see
+>   [geometry-first-regions](../decisions/geometry-first-regions.md)). Placeless framing **returns in
+>   v3 with guided tours** — there is no v2 substrate for it.
+> - **`tour_callouts` therefore has no v2 storage either.** A callout is a placeless persona-only beat,
+>   and the only table that ever fit that shape (`asides`) is gone. So **this whole feature is now
+>   DEFERRED to v3/guided-tours** alongside the framing it rides — it cannot land on a deleted table,
+>   and v2 deliberately keeps no placeless-content substrate (a v2 drive's `selection` is route-anchored
+>   `narrations` only). The design below stands as the v3 build target; whoever revives it must FIRST
+>   re-introduce a placeless-beat table (callouts' own, or the revived guided-tours framing table).
 > - `personaForRegion` → `personaFromKey('skipper')` (persona keyed by `persona_key`, resolved in
 >   code, decoupled from region).
-> - `finalizeTourReady` is GONE — readiness now derives from non-null `audio_url` on each
->   `narrations`/`asides` row, not a batched status flip. "Optional / never gates ready" still holds:
->   a callout simply never blocks a drive becoming playable.
+> - `finalizeTourReady` is GONE — readiness now derives from non-null `audio_url` on each `narrations`
+>   row, not a batched status flip. "Optional / never gates ready" still holds: a callout simply never
+>   blocks a drive becoming playable.
 
 **Small persona-only audio beats the skipper drops into the quiet stretches so he feels
 *present on this drive*, not like a jukebox that only fires at the curated stops.** A third
-audio content type alongside route-anchored place narrations and the placeless intro/outro/clock
-`asides`.
+audio content type alongside route-anchored place narrations and the (v3) placeless intro/outro/clock
+framing. (Both this feature and that framing are DEFERRED to v3/guided-tours — see the banner: their
+v2 storage substrate, the `asides` table, was deleted in migration 0019.)
 
 ## 0. TL;DR for the next Claude
 
@@ -35,9 +41,10 @@ audio content type alongside route-anchored place narrations and the placeless i
   no facts, so they can't hallucinate and they sidestep the project's hardest invariant
   ("persona in DELIVERY, never FACTS") entirely. Mood/character/drive-state beats only —
   *"long quiet stretch… my favorite kind,"* *"that light right now, huh."*
-- **Own storage (the placeless `asides` table, or a sibling), own scheduler (in `@skipper/engine`).**
-  NOT a narration `form`, NOT placed by the studio pipeline. This keeps the `narrations` atom strict
-  and the geofence engine homogeneous (same reasoning that put intro/outro in the placeless `asides`).
+- **Own placeless storage (a v3 callouts table — see the banner; the early-V2 `asides` table that
+  would have held it was deleted in 0019), own scheduler (in `@skipper/engine`).** NOT a narration
+  `form`, NOT placed by the studio pipeline. This keeps the `narrations` atom strict and the geofence
+  engine homogeneous (the same reasoning that kept intro/outro framing placeless rather than a stop).
 - **The playback path already exists.** `useDrive` is a queue + pump + single audio player, and
   the intro/outro brackets already prove that a non-route item rides that queue under a sentinel
   seq. Callouts reuse it verbatim. **The only genuinely new code is (1) a pure
@@ -54,7 +61,7 @@ audio content type alongside route-anchored place narrations and the placeless i
 
 (V2 names; the banner maps the V1 originals.)
 
-| | place `narrations` (story/scenic/break) | intro/outro `asides` | **callouts** |
+| | place `narrations` (story/scenic/break) | intro/outro framing (v3) | **callouts (v3)** |
 |---|---|---|---|
 | Anchor | route position (geofence) | placeless | **placeless** |
 | Trigger | `TriggerEngine` proximity | lifecycle (start / end-anchor) | **runtime scheduler (downtime)** |
@@ -80,10 +87,11 @@ pool — cheaper, but it can't do the thing that matters. The decisions:
   *"you've been quiet a while," "we've been crawling through this for ten minutes," "take your
   time"* — and emergent downtime is unpredictable at generation time. For a charm-first toy where
   the persona IS the product, responsiveness beats cost-efficiency (polish-over-scale, on brand).
-- **Separate placeless storage (the `asides` table or a sibling) over overloading scenic stops.**
-  Pool + duck + placeless + optional + scheduler-fired is genuinely a different beast; folding it
-  into a place `narrations` row muddies what a stop means (route-anchored, grounded-or-scenic,
-  ready-gated, homogeneous engine). Keep both abstractions sharp — the placeless-`asides` precedent.
+- **Separate placeless storage (a dedicated callouts table — to be created in v3; the early-V2
+  `asides` table that would have held it was deleted in 0019) over overloading scenic stops.** Pool +
+  duck + placeless + optional + scheduler-fired is genuinely a different beast; folding it into a place
+  `narrations` row muddies what a stop means (route-anchored, grounded-or-scenic, ready-gated,
+  homogeneous engine). Keep both abstractions sharp — the same reasoning that kept framing placeless.
 - **The cost is accepted with eyes open.** The pressure test (§ below) found this is the more
   complex path and that on dense corridors callouts fire *mostly on the emergent path*. That is
   the deliberate trade.
@@ -105,14 +113,15 @@ Grounded in `packages/studio/src/config.ts`:
 - **Finding 3 → Requirement B (§7.2).** Emergent downtime is now the primary path, so the
   parked-empty-car case is central, not an edge.
 
-## 3. Data model — a placeless callout (on `asides`, or a sibling)
+## 3. Data model — a placeless callout (a NEW v3 table)
 
-A callout has exactly the `asides` shape (placeless, region/persona-keyed, no poi, no facts) PLUS a
-`mood` tag. The build choice: add a `mood` (+ region-scoped pool) to `asides`, or — if mood-tagging
-and per-drive selection earn isolation — a sibling `callouts` table that mirrors `asides`. Sketch:
+A callout is a placeless, region/persona-keyed beat with no poi and no facts, PLUS a `mood` tag.
+**There is no v2 table to put it on** — the `asides` table that would have fit this shape was deleted
+in migration 0019 ([geometry-first-regions](../decisions/geometry-first-regions.md)), and v2 keeps no
+placeless-content substrate. So the v3 build creates a dedicated `callouts` table. Sketch:
 
 ```
-callout(                          -- shaped like an `asides` row + a mood tag
+callout(                          -- a NEW placeless table (v3); + a mood tag
   id              uuid pk,
   region_id       uuid → regions (cascade, nullable = a GLOBAL callout),
   persona_key     text,           -- resolved in code via personaFromKey('skipper')
@@ -120,13 +129,17 @@ callout(                          -- shaped like an `asides` row + a mood tag
   audio_url       text,           -- region-scoped R2 key: clips/callouts/<region>/<id>
   audio_duration_ms  int,
   mood            callout_mood,    -- the applicability tag the scheduler matches on
-  variant         int default 0    -- so a beat rarely repeats (the `asides` precedent)
+  variant         int default 0    -- so a beat rarely repeats
 )
 -- callout_mood pgEnum: generic | golden_hour | night | crawl | halt | long_gap
 -- NO poi_id, NO lat/lng/trigger_radius (placeless); NO tour_id (v2 has no tours — region/persona scope).
 -- attribution + facts_hash OMITTED (persona-only → nothing to attribute, nothing to go stale).
 -- NOT a place `narrations` row; readiness derives from non-null audio_url, never gating a drive (optional).
 ```
+
+> **v2/v3 note:** the region geometry-first model means a region is a BBOX, NOT a `region_id` FK target
+> in the same sense everywhere; if callouts ship in v3, confirm the region key against the then-current
+> `regions` schema ([geometry-first-regions](../decisions/geometry-first-regions.md)).
 
 `mood` is how a drive-state signal selects a clip at fire time:
 - `generic` — any downtime (the default pool, the bulk of it)
@@ -137,8 +150,9 @@ callout(                          -- shaped like an `asides` row + a mood tag
 
 ## 4. Generation — `narrateCallouts()`
 
-A new pipeline step (alongside `narrateIntro`/`narrateOutro` in `packages/studio/src/pipeline/narrate.ts`,
-which today persist to the placeless `asides` table):
+A new pipeline step (the v3 sibling of the intro/outro framing generators in
+`packages/studio/src/pipeline/narrate.ts` — note that framing itself is currently DEFERRED to v3, since
+its `asides` storage was deleted in 0019):
 - **persona-only, no fact sheet**, notch-parameterized, from the persona's `PersonaDef`
   (the persona registry — `personaFromKey('skipper')`; persona is resolved in code, keyed by
   `persona_key`, decoupled from region).
@@ -148,8 +162,8 @@ which today persist to the placeless `asides` table):
 - **`mood`-tagged**, run through the existing diversity tracker so the pool isn't 12 variants of
   one beat. Over-provision: ~**12–15** per region/persona so the scheduler has variety + drive-state
   matches, and so cross-drive replays don't repeat for ~3 drives (§7.3).
-- TTS → region-scoped R2 (`clips/callouts/<region>/<id>`), then insert the callout rows (the
-  `asides`-shaped storage of §3).
+- TTS → region-scoped R2 (`clips/callouts/<region>/<id>`), then insert the callout rows (the new v3
+  placeless table of §3).
 - **Separate pass:** can run after a drive is already playable (no batch co-commit; readiness is
   per-item non-null `audio_url`). A regen tool (extend `resynth-narration.ts`) can re-author the
   pool independently.
@@ -160,20 +174,23 @@ kit-from-stops ban). A callout that asserts a fact is a bug — that's a story s
 ## 5. API / DTO / offline
 
 - `@skipper/shared`: the drive detail grows `callouts: CalloutDTO[]` ( `{ id, script, mood, audio }` )
-  alongside the intro/outro `asides` + the place narrations.
+  alongside the place narrations (and, when v3 framing returns, the intro/outro frames).
 - `apps/api`: `/sign` serves callout clips (region-scoped R2 keys), same presign path as
-  narrations/asides.
+  narrations.
 - **Offline (`apps/mobile/src/lib/offline.ts`):** add callout clips to the download manifest so a
   downloaded drive carries its whole pool — selection is 100% on-device (Tahoe dead zones; §8).
 
 ## 6. The player — the load-bearing new code
 
-### 6.1 Reuse: callouts ride the existing queue (like brackets)
+### 6.1 Reuse: callouts ride the existing queue (a non-route item on the FIFO)
 
 `apps/mobile/src/lib/useDrive.ts` is a **queue + pump + single audio player**: `queue.current`
 (FIFO of seqs), `pump()` (plays next if `!clipBusy`), the clip-load effect keyed on `activeSeq`,
-lock-screen, stall/re-sign. Brackets already flow through it under sentinel seqs
-(`INTRO_SEQ`/`OUTRO_SEQ`, `frameKindForSeq`). **Callouts do the same:**
+lock-screen, stall/re-sign. (NOTE — stale-since-0019: this spec originally leaned on the intro/outro
+**bracket sentinel seqs** `INTRO_SEQ`/`OUTRO_SEQ`/`frameKindForSeq` as the proof that a non-route item
+can ride that queue. Those were REMOVED when `asides`/placeless framing was deleted — `useDrive` now
+loads only route-anchored place narrations. A v3 build must re-introduce the sentinel-seq mechanism
+itself, for callouts and revived framing alike.) **Callouts ride the queue as a non-route item:**
 - A **sentinel seq range** for callouts (e.g. a `CALLOUT_SEQ_BASE` block in `engine`,
   parallel to the bracket sentinels) + a `calloutForSeq(seq)` lookup.
 - The `urls` map (from `loadPlayback`) carries callout clips under those seqs.
@@ -316,9 +333,10 @@ If those pass in the sim, the emergent path is verified before you're ever in a 
    scenarios. No app changes yet.
 2. **Sim perturbations (engine/`gps.ts`).** `baseMph` + `perturbations` + `SIM_MPH→30`.
    Wire the three acceptance scenarios into the sim screen for manual exercise.
-3. **Schema + migration (CHECKPOINT — live DB).** The placeless callout storage (a `mood` on
-   `asides`, or a sibling table — §3) + the `callout_mood` enum. Clean + destructive (no users;
-   CLAUDE.md). Readiness stays per-item non-null `audio_url` — nothing to gate.
+3. **Schema + migration (CHECKPOINT — live DB).** The NEW placeless callouts table (§3 — there is no
+   v2 table to extend; the early-V2 `asides` table was deleted in 0019) + the `callout_mood` enum.
+   Clean + destructive (no users; CLAUDE.md). Readiness stays per-item non-null `audio_url` — nothing
+   to gate.
 4. **Studio.** `narrateCallouts()` (persona-only pool, mood-tagged, diversity-tracked) + the
    no-fact lint guard + region-scoped R2 writes + a regen path in `resynth-narration.ts`. Separate pass.
 5. **API/DTO + offline.** `CalloutDTO`, `/sign` for callout clips, offline manifest entries.
@@ -355,22 +373,25 @@ Designed 2026-06-09. Grounded against, and citing for re-check:
 - `packages/engine/src/trigger.ts` — `TriggerEngine`, `GpsFix`, `DEFAULT_TRIGGER`
   (`leadSeconds 12`, `headingGateMps 2.2`, `headingConeDeg 90`), `effectiveRadiusM`.
 - `apps/mobile/src/lib/useDrive.ts` — queue/pump/`clipBusy`, `handleFix`/`handleEnd`,
-  `INTRO_SEQ`/`OUTRO_SEQ`/`frameKindForSeq`, `SIM_MPH=60`/`SIM_FAST_SCALE=8`,
-  `DRIVE_INTERRUPTION_MODE` (`'doNotMix'` → `'duckOthers'` is Phase 0), `useDriveMusic`
-  (`'clip'`/`'drive'` segments).
+  `SIM_MPH=60`/`SIM_FAST_SCALE=8`, `DRIVE_INTERRUPTION_MODE` (`'doNotMix'` → `'duckOthers'` is Phase 0),
+  `useDriveMusic` (`'clip'`/`'drive'` segments). (The `INTRO_SEQ`/`OUTRO_SEQ`/`frameKindForSeq` bracket
+  sentinels this spec once cited were REMOVED with `asides` in 0019 — `useDrive` now queues only
+  route-anchored place narrations; the sentinel-seq mechanism must be rebuilt in v3.)
 - `apps/mobile/src/lib/gps.ts` — `simulatedSource`/`liveSource`/`FixSubscription`.
 - `apps/mobile/src/lib/offline.ts` — `loadPlayback`/`resignPlayback`, the download manifest.
 - `packages/studio/src/config.ts` — `PACING` (standard `minGapSec 180`/`maxNarratedStops 16`),
   `TARGET_SECONDS` (`story 120`/`scenic 20`), `QUEUE_LAG_WARN_SEC 45`, `TRIGGER_RADIUS_M 120`,
   design speed `13.4 m/s ≈ 30 mph`.
-- `packages/studio/src/pipeline/narrate.ts` — `narrateIntro`/`narrateOutro` (the frames persist to
-  the placeless `asides` table). Readiness now derives from non-null `audio_url` per item (the
-  V1 `finalizeTourReady` `db.batch` ready-gate is GONE).
-- The persona registry (`personaFromKey`, `PersonaDef`, the kit) and the placeless-`asides`
-  precedent for intro/outro frames (the V2 model — see [tour-data-model-zero-reuse](../decisions/tour-data-model-zero-reuse.md);
-  the V1 `tour_brackets`/`tour-structure-spec` it descends from is superseded).
+- `packages/studio/src/pipeline/narrate.ts` — `narrateIntro`/`narrateOutro` still exist as generators,
+  but their `asides` storage was DELETED in 0019, so intro/outro framing has no v2 home and is itself
+  DEFERRED to v3. Readiness derives from non-null `audio_url` per item (the V1 `finalizeTourReady`
+  `db.batch` ready-gate is GONE).
+- The persona registry (`personaFromKey`, `PersonaDef`, the kit). The placeless-framing precedent this
+  spec leaned on was the early-V2 `asides` table, now DELETED ([geometry-first-regions](../decisions/geometry-first-regions.md));
+  it returns in v3 with guided tours. See also [tour-data-model-zero-reuse](../decisions/tour-data-model-zero-reuse.md).
 
-**Decisions locked this session:** runtime scheduler over the studio-placed "fold"; separate
-placeless callout storage (the `asides` table or a sibling); persona-only v1 (spatial = Phase 2);
-duck-overlay; stops-win-by-construction; the §7 tuned ruleset incl. the parked-car rule (Req B) and
-the sim perturbations (Req A).
+**Decisions locked this session:** runtime scheduler over the studio-placed "fold"; a dedicated
+placeless callout table (now a v3 build — the early-V2 `asides` table that would have held it was
+deleted in 0019); persona-only v1 (spatial = Phase 2); duck-overlay; stops-win-by-construction; the §7
+tuned ruleset incl. the parked-car rule (Req B) and the sim perturbations (Req A). **The whole feature
+is DEFERRED to v3/guided-tours** — see the banner.

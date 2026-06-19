@@ -148,7 +148,10 @@ first.** (Aggregate telemetry only — the toy lens has no appetite for surveill
 ## Shape of the build (sketch, not a spec)
 
 - **`roam_clips`** (poiId, regionId, form wave|story|bside, script, audioUrl, durationS, factsHash,
-  attribution, status) — the third narration owner.
+  attribution, status) — the third narration owner. (Pre-V2 sketch — SUPERSEDED by the built schema:
+  there is no `roam_clips` table; roam is a MODE over the 1:1 `pois`↔`narrations` atom, and there is no
+  `regionId` column at all — regions are GEOMETRY-FIRST, a bbox membership derived at query time, never
+  an FK on a coordinate-bearing row; see [../decisions/geometry-first-regions.md](../decisions/geometry-first-regions.md).)
 - **`generate-narrations` pipeline:** reuse scout/grounding/lint/eval wholesale; NEW form constraints:
   self-contained, no callbacks/arc, **no baked laterality** (no route → approach side unknowable;
   same rule family as break-stops' no-volatile-data), no volatile data; region-wide cluster-merge
@@ -162,7 +165,8 @@ first.** (Aggregate telemetry only — the toy lens has no appetite for surveill
   reuse `offline.ts` seams; ~300 clips ≈ **~70 MB** at MP3 32 kbps — less than a podcast episode),
   minimal ambient chrome, the encounter card.
 - **API:** `/regions/:id/roam` manifest — additive wire contract (fits the no-URL-versioning
-  posture).
+  posture). (As built, roam ships as `GET /roam` with a bbox prefilter + haversine, not a region-id
+  path — consistent with geometry-first regions.)
 - **Density bar (qualitative):** a region qualifies when its main roads offer an encounter within
   ~5 minutes at typical speeds. Never ship roam in a region that can't carry the contract.
 

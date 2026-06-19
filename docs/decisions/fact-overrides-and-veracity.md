@@ -32,8 +32,11 @@ away from the lakeside content the script describes.
   this is never automated.
 - **Fix — the `poi_overrides` TABLE** (founder-decided: the registry resides in the DB;
   rows are curated through the admin console — the seed-bootstrap CLI was removed 2026-06-19 — without
-  clobbering workflow state). Each row is ONE documented correction, keyed by the pois
-  dedup identity `(source, source_id)` — poiId can't work, the row may predate the place.
+  clobbering workflow state). Each row is ONE documented correction, keyed by the source
+  identity `(source, source_id)` — poiId can't work, the row may predate the place. (The
+  override key is `(source, source_id)` because it applies at FETCH time, when only the
+  source identity exists; `pois` itself now dedups on the Wikidata QID, with
+  `(source, source_id)` a secondary guard — see `geometry-first-regions.md`/schema.)
   `poi_overrides` is now **fact-corrections ONLY** — a literal find→replace on fetched
   extract text, applied in `pipeline/wikipedia.ts` (both fetch paths — leads feed
   `mergedFeatures`, deeps feed the story sheet) after a once-per-process load

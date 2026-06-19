@@ -17,14 +17,20 @@ written against storage that no longer exists; read the V2 banner below before b
 >   ("deliberate, not accidental, scenic") is largely met by discovery + the downgrade; what's left
 >   to decide is the **synthetic-anchor / founder-placed-overlook** case (a pretty stretch with no
 >   POI at all — §3).
-> - The V1 `'curated'` `poiSourceEnum` value does NOT exist (live enum: `wikipedia`/`google_places`/
->   `wikidata`) and the factless scenic-anchor approach was built then REVERTED. Don't re-add it
->   without first deciding it's still needed given Wikidata discovery (§3).
-> - `tour_brackets` (intro/outro) → the placeless `asides` table. `poi_content` is GONE (no content
->   cache; narration is place-owned). `finalizeTourReady` is GONE — readiness derives from non-null
->   `audio_url`. `select.ts` lives at `packages/studio/src/pipeline/select.ts`; `generate.ts` →
->   `packages/studio/src/generate-narrations.ts`; `persist.ts` stays. Re-locate every seam by
->   function name, not line number.
+> - The V1 `'curated'` `poiSourceEnum` value does NOT exist (live enum: **`wikipedia`/`wikidata`** —
+>   Wikidata-spine ONLY, deduped by the QID) and the factless scenic-anchor approach was built then
+>   REVERTED. Don't re-add it without first deciding it's still needed given Wikidata discovery (§3).
+>   **`google_places` is NO LONGER a poi/discovery source** — Google break anchors live in their own
+>   `places` table (keyed by `place_id`, no QID); `google_places` survives only as an *attribution*
+>   source. So a scenic stop is **always** a Wikidata-spine `pois` row.
+> - `tour_brackets` (intro/outro) had no surviving home: the placeless `asides` table that briefly
+>   carried intro/outro frames in early V2 was itself **DELETED in migration 0019**
+>   ([geometry-first-regions](../decisions/geometry-first-regions.md)); placeless framing **returns in
+>   v3 with guided tours**. (Scenic stops don't need it — they are route-anchored `narrations`, §4.)
+>   `poi_content` is GONE (no content cache; narration is place-owned). `finalizeTourReady` is GONE —
+>   readiness derives from non-null `audio_url`. `select.ts` lives at
+>   `packages/studio/src/pipeline/select.ts`; `generate.ts` → `packages/studio/src/generate-narrations.ts`;
+>   `persist.ts` stays. Re-locate every seam by function name, not line number.
 > - The V2 zero-reuse + atom model: [tour-data-model-zero-reuse](../decisions/tour-data-model-zero-reuse.md).
 
 Sits on top of: the **geology channel** (committed — `pipeline/macrostrat.ts`, scenic stops are
@@ -106,15 +112,20 @@ hand-picked Wikidata-or-discovered anchor near the overlook may cover it without
 **IF a synthetic anchor is still wanted** (founder-placed overlooks the engine should fire at a
 chosen coord), the V1 sketch transposes to V2 as:
 - A scenic-only POI source. The V1 `'curated'` `poiSourceEnum` value was REVERTED and is NOT in the
-  live enum (`wikipedia`/`google_places`/`wikidata`); re-add it only in **lockstep** across
-  `packages/db/src/schema.ts` `poiSourceEnum` + `packages/shared/src/enums.ts` `poiSource`.
-  **Footgun:** `ALTER TYPE poi_source ADD VALUE 'curated'` can't run inside a transaction on some
-  Postgres — verify the generated migration applies on neon-http. (Per CLAUDE.md the wire contract is
-  no longer break-freely once shipped, but the `pois`/`poiSource` enum is studio-side STORAGE —
-  still destructive-OK.)
-- `sourceId = "${region-or-drive-slug}:${anchorId}"` (e.g. `'lake-tahoe:overlook-1'`). Honors the
-  `(source, source_id)` dedup invariant — regeneration upserts the SAME row. **`anchorId` is
-  immutable** (like a migration key); renaming it orphans the old row.
+  live enum (now **`wikipedia`/`wikidata`** only — Wikidata-spine; `google_places` is no longer a
+  discovery source); re-add `'curated'` only in **lockstep** across `packages/db/src/schema.ts`
+  `poiSourceEnum` + `packages/shared/src/enums.ts` `poiSource`. **Footgun:** `ALTER TYPE poi_source ADD
+  VALUE 'curated'` can't run inside a transaction on some Postgres — verify the generated migration
+  applies on neon-http. (Per CLAUDE.md the wire contract is no longer break-freely once shipped, but
+  the `pois`/`poiSource` enum is studio-side STORAGE — still destructive-OK.)
+- **The bigger schema obstacle (NEW under the QID-spine model):** `pois` now dedups on the Wikidata QID
+  (`pois_qid_uq`, `qid` NOT NULL) — `(source, source_id)` survives only as a secondary guard. A curated
+  overlook has **no QID**, so re-adding `'curated'` means *also* relaxing the NOT-NULL `qid` /
+  `pois_qid_uq` constraint (e.g. a nullable QID for non-Wikidata sources, or a synthetic-QID scheme).
+  Decide this before re-adding the enum — it's a deeper change than V1's `(source, source_id)`-only
+  world implied. If a curated row IS added, `sourceId = "${region-or-drive-slug}:${anchorId}"` (e.g.
+  `'lake-tahoe:overlook-1'`) keys it via the secondary `(source, source_id)` guard so regeneration
+  upserts the SAME row. **`anchorId` is immutable** (like a migration key); renaming it orphans the row.
 - `pois.name` = a **generic, non-landmark label** ("a pull-out high over the bay") — stored (NOT
   NULL) but **never spoken** (the scenic narration omits `place`). **Pin this with a unit test** so
   a future refactor can't leak the label into narration.
@@ -139,8 +150,10 @@ insight survives and gets SHARPER under V2:
   direction-NEUTRAL** (mood / light / region-frame that reads either way), OR the CLIMB/REGION-FRAME
   mode (§5) needs a direction-aware variant axis that V2's 1:1 atom deliberately doesn't have yet
   (the deferred multi-telling axis). For v1, keep shared scenic tellings direction-neutral.
-- **Intro/outro need no scenic anchor.** They are placeless `asides` (no poi) — fully decoupled from
-  scenic anchoring. There is no shared synthetic-anchor scheme to "settle jointly."
+- **Intro/outro need no scenic anchor.** They are placeless framing (no poi) — fully decoupled from
+  scenic anchoring. (That framing is itself v3-deferred: its `asides` storage was deleted in 0019, see
+  the banner. It's irrelevant to scenic stops either way.) There is no shared synthetic-anchor scheme
+  to "settle jointly."
 - **The selection seams moved.** Scenic insertion is now in `packages/studio/src/pipeline/select.ts`
   (`resolveStoryGrounding` + the stop-plan build) and `packages/studio/src/generate-narrations.ts`;
   drive-time ordering is `buildDrive` in `@skipper/engine`. Re-locate every seam by function name,

@@ -1,18 +1,25 @@
 # The drive's thesis — build spec
 
-> **Schema-names note (2026-06-19):** the `tour_brackets`/`tour_frames` and `tours`/`tour_stops`
-> tables this spec references were ALL dropped in migration 0009 (V2 roam-first model — see
-> `packages/db/src/schema.ts`). Mapping for a future build: the user-owned ordered sequence is now
-> the `drives` table (not `tours`); place tellings are 1:1 `narrations` (not `tour_stops`); and the
-> placeless intro/outro "brackets" are now **frames persisted to the `asides` table** (see
-> `packages/studio/src/pipeline/narrate.ts`). Read every `tours.*`/`tour_*` reference below as the
-> corresponding V2 entity.
-
 > **Status:** SPEC ONLY — unbuilt. Generation-only feature; post-MVP, gated behind the proven phone
 > player. Decided 2026-06-09. **The keystone** of the charm layer: it organizes the through-line
 > (`docs/specs/downtime-callouts-spec.md` is the push side; the through-line is its pull cousin) and
 > the skipper's opinions (`docs/specs/skipper-opinions-spec.md`), and it supplies the missing
-> *content* for the drive-complete payoff (`docs/ideas/drive-complete-moment.md`).
+> *content* for the drive-complete payoff (`docs/ideas/drive-complete-moment.md`). **The thesis's
+> *plant → land* arc is DEFERRED to v3** — it rides intro/outro frames whose storage was deleted (see
+> the banner); only the `drives.thesis` input + light stop-nods survive onto v2.
+
+> **Schema-names note (updated 2026-06-19):** the `tour_brackets`/`tour_frames` and `tours`/`tour_stops`
+> tables this spec references were ALL dropped in migration 0009 (V2 roam-first model — see
+> `packages/db/src/schema.ts`). Mapping for a future build: the user-owned ordered sequence is now
+> the `drives` table (not `tours`); place tellings are 1:1 `narrations` (not `tour_stops`).
+> **The intro/outro "brackets" have NO v2 home.** The placeless `asides` table that briefly carried
+> intro/outro frames was itself **DELETED in migration 0019** (see
+> [geometry-first-regions](../decisions/geometry-first-regions.md)); placeless framing **returns in v3
+> with guided tours**. So the thesis's *plant → land* arc (which lives almost entirely in the
+> intro/outro frames — §6) is **DEFERRED to v3** along with that framing. What survives onto v2 is the
+> narrower piece: a nullable `thesis` field on the `drives` row as a generation INPUT (it can thread
+> into the route-anchored stop narrations even without frames). Read every `tours.*`/`tour_*` reference
+> below as the corresponding V2 entity, and every "intro/outro frame" as v3-deferred.
 
 ## 0. TL;DR
 
@@ -110,8 +117,11 @@ contents-creep; keep it a frame.
   null when the exhaustion-gate found none). It's a drive-level *input to generation* (like the
   drive's headline/the route), not narration — so it sits on `drives`, not on the `narrations` atom.
   Persisting it makes regen stable. (No `thesis` column exists yet — schema TBD at build time.)
-- **Intro/outro frames** (the `asides` table, `docs/specs/tour-structure-spec.md`) carry the
-  plant/land — generated *from* the blessed thesis. This is where 90% of the thesis lives.
+- **Intro/outro frames** carry the plant/land — generated *from* the blessed thesis. This is where 90%
+  of the thesis lives — and it is therefore the **v3-deferred** part: the `asides` table that would
+  hold these frames was deleted in migration 0019 (banner; [geometry-first-regions](../decisions/geometry-first-regions.md)),
+  so placeless framing returns only in v3 with guided tours. (The original §0 intro/outro design lives
+  in the superseded [tour-structure-spec](tour-structure-spec.md).)
 - **Light stop conditioning:** each stop's narration is *optionally* told the thesis (a nod when
   natural), threaded through the within-tour conditioning the studio pipeline already runs
   (`narrate.ts`'s `priorStops`/motif window — the thesis becomes one more threaded element). This is
@@ -122,10 +132,10 @@ contents-creep; keep it a frame.
 ## 7. Cost
 
 Generation-only and cheap: a thesis-proposal step (one model call over the collective wells, at
-generation), the bracket generation (already exists), optional light stop conditioning (reuses
-existing threading), one nullable `thesis` field on the drive entity. **No player change, no new audio
-path** (the thesis rides the frames + stops, which already carry audio). Same weight class as the
-through-line.
+generation), the bracket/frame generation (the intro/outro frame path is **v3-deferred** — its
+`asides` storage was deleted in 0019), optional light stop conditioning (reuses existing threading),
+one nullable `thesis` field on the drive entity. **No player change, no new audio path** (the thesis
+rides the v3 frames + the v2 stops, which already carry audio). Same weight class as the through-line.
 
 ## 8. Build phases (file-level)
 
@@ -135,8 +145,9 @@ through-line.
    (validation harness).
 2. **Schema:** the nullable `thesis` column on the `drives` entity (`packages/db/src/schema.ts`).
    Clean/destructive.
-3. **Frames generate from the thesis** (`narrate.ts` intro/outro): plant in intro, land in outro;
-   feeds the drive-complete payoff content. Theme-less fallback when `thesis` is null.
+3. **(v3-deferred) Frames generate from the thesis** (`narrate.ts` intro/outro): plant in intro, land
+   in outro; feeds the drive-complete payoff content. Theme-less fallback when `thesis` is null.
+   *Blocked until v3 re-introduces placeless framing storage — the `asides` table was deleted in 0019.*
 4. **(Refinement) Light stop nods** — thread the drive's `thesis` into stop narration; tune restraint by ear.
 5. **Ear-tune:** is the thesis specific + earned, or generic + forced? Does the payoff land? (Founder
    gate — the highest-leverage iteration, like the narration prompt itself.)
@@ -166,9 +177,10 @@ through-line.
   (`docs/specs/downtime-callouts-spec.md` + the pull ladder) and `docs/specs/skipper-opinions-spec.md`
   (the thesis is taste at drive-altitude). Borrows the **exhaustion gate** from
   `docs/specs/tell-me-more-spec.md`.
-- Generation seams: `packages/studio/src/pipeline/narrate.ts` (intro/outro frame gen + the
-  proposal step + within-tour conditioning), `packages/studio/src/persona/` (`PersonaDef` — the
-  voice), `packages/db/src/schema.ts` (the drive `thesis` field). Narration stays place-owned
+- Generation seams: `packages/studio/src/pipeline/narrate.ts` (intro/outro frame gen — **v3-deferred**,
+  since the `asides` frame storage was deleted in 0019 — + the proposal step + within-tour
+  conditioning), `packages/studio/src/persona/` (`PersonaDef` — the voice), `packages/db/src/schema.ts`
+  (the drive `thesis` field). Narration stays place-owned
   (`docs/decisions/tour-data-model-zero-reuse.md`); the thesis is a drive-level *input*, not cached
   cross-drive content.
 

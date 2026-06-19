@@ -1,15 +1,31 @@
 # The skipper's opinions ("the world off the rails") — build spec / handoff
 
-> **Schema-names note (updated 2026-06-19):** identifiers below predate later refactors. `personaForRegion`→`personaFromKey` (persona is keyed by `persona_key`, decoupled from region). The `tours`/`corridors` tables were dropped — the live schema (`packages/db/src/schema.ts`) is the atom+sequences model: `regions`/`personas`/`pois`/`narrations`/`asides`/`drives`. `persona_key` now lives on `personas` and `asides`, NOT on any `tours` table; a `drive` carries a `selection` JSONB and references its persona via the seeded `personas` row (and `region_id`), not a `tours.persona_key` column.
+> **Status: SPEC ONLY — nothing built.** Future feature, gated behind the proven phone player
+> like the rest of the charm roadmap. **Builds ON `docs/specs/downtime-callouts-spec.md` — read that
+> first**; this reuses its delivery system and gives its deferred Phase 2 (grounded spatial
+> callouts) a content theory + discovery scope. Decided in a design session 2026-06-09. **DEFERRED to
+> v3/guided-tours** — it rides the callout system, whose placeless storage (the `asides` table) was
+> deleted in migration 0019; see the schema-names banner below.
+
+> **Schema-names note (updated 2026-06-19):** identifiers below predate later refactors.
+> `personaForRegion`→`personaFromKey` (persona is keyed by `persona_key`, decoupled from region). The
+> `tours`/`corridors` tables were dropped — the live schema (`packages/db/src/schema.ts`) is the
+> atom+sequences model: `regions`/`personas`/`pois`/`narrations`/`drives` (+ `places`/`detours` for
+> break anchors). `persona_key` lives on `personas`, NOT on any `tours` table; a `drive` carries a
+> `selection` JSONB and references its persona via the seeded `personas` row.
+> **Both delivery tiers this feature needs are now DEFERRED.** This feature rides the callout system
+> (`docs/specs/downtime-callouts-spec.md`): its **taste tier** = v1 placeless callouts, and its
+> **grounded tier** = the deferred Phase-2 positioned callouts. But callouts themselves had no v2
+> storage — the placeless `asides` table that would have held them was **DELETED in migration 0019**
+> ([geometry-first-regions](../decisions/geometry-first-regions.md)), and v2 keeps no placeless-content
+> substrate. So this whole feature is **DEFERRED to v3/guided-tours** along with callouts; the design
+> below is the v3 build target. The one v2-live piece is the persona **taste profile** on `PersonaDef`
+> (§5) — a code-side registry field that can ship independently. References below to `asides` /
+> `tour_callouts` as live storage are stale: read them as "the v3 callouts table (TBD)".
 
 **The skipper has a point of view about the world the drive passes through — the road, the
 landscape, the stuff off the frozen route — surfaced as opinionated asides that make him a
 *character*, not an audioguide.** Feature #4 of the future-features brainstorm.
-
-> **Status: SPEC ONLY — nothing built.** Future feature, gated behind the proven phone player
-> like the rest of the charm roadmap. **Builds ON `docs/specs/downtime-callouts-spec.md` — read that
-> first**; this reuses its delivery system and gives its deferred Phase 2 (grounded spatial
-> callouts) a content theory + discovery scope. Decided in a design session 2026-06-09.
 
 ## 0. TL;DR for the next Claude
 
@@ -129,9 +145,11 @@ content + data:
 - **Generation** produces an *opinionated* aside (opinion + grounded anchor), **attributed**
   (`AttributionSnapshot[]`), positioned where the feature is relevant, **heading-hinted**, and
   passed through the **opinion-required gate** (§7.6 — drop pure facts).
-- **Schema = the Phase-2 widening of `tour_callouts`** (the columns v1 deliberately omitted): add
-  nullable `lat` / `lng` / `approach_heading_deg` / `trigger_radius_m` + `attribution` +
-  `facts_hash`. A callout with coords is **positioned**; without, **placeless**.
+- **Schema = the Phase-2 widening of the v3 callouts table** (the columns the placeless v1 deliberately
+  omitted — and note that even the v1 callouts table does not yet exist; the `asides` table that would
+  have been its base was deleted in 0019): add nullable `lat` / `lng` / `approach_heading_deg` /
+  `trigger_radius_m` + `attribution` + `facts_hash`. A callout with coords is **positioned**; without,
+  **placeless**.
 - **Positioned callouts fire via a GEOFENCE, not the downtime scheduler** — a *second*
   `TriggerEngine` instance fed the positioned callouts (the engine is reused AS-IS, unmodified; just
   a second triggerable set). **Stops win priority** over a co-located grounded aside; the aside also
@@ -179,8 +197,9 @@ the **schema widening** for positioned/attributed callouts + the **second geofen
 2. **Geology asides — ambient first.** Placeless "granite country" beats off the already-keyed
    Macrostrat data (low grounding). Then specific-feature geology as positioned asides (phase 3).
 3. **The grounded positioned layer (the heavy lift, shared with callouts Phase 2).** Schema widening
-   of `tour_callouts` (coords + heading + attribution + facts_hash); off-route discovery for natural
-   features (Macrostrat/Wikidata/OSM); the opinion-required generation gate; the second
+   of the v3 callouts table (coords + heading + attribution + facts_hash — created in v3; there is no
+   v2 callouts/`asides` table to widen, the latter was deleted in 0019); off-route discovery for
+   natural features (Macrostrat/Wikidata/OSM); the opinion-required generation gate; the second
    `TriggerEngine` pass with stop-priority.
 4. **Tune by ear (CHECKPOINT — real drive).** Opinion density, the opinion-required gate's
    strictness, the off-route-tease cadence, whether geology lands as charm or as a lecture.
@@ -201,7 +220,8 @@ the **schema widening** for positioned/attributed callouts + the **second geofen
 
 Designed 2026-06-09. Builds on and cites for re-check:
 - `docs/specs/downtime-callouts-spec.md` — the delivery system (scheduler, duck-overlay, sentinel seqs,
-  the `tour_callouts` table) and its deferred Phase 2 (grounded spatial callouts) that this concretizes.
+  a v3 callouts table) and its deferred Phase 2 (grounded spatial callouts) that this concretizes. NOTE:
+  that whole system is itself DEFERRED to v3 — its placeless `asides` storage was deleted in 0019.
 - `packages/studio/src/pipeline/macrostrat.ts` — coordinate-keyed CC-BY geology + the persona-prompt
   geology carve-out (already shipped); Wikidata (CC0, QID-join) + OSM (discovery tier) from the
   fact-source-expansion direction.

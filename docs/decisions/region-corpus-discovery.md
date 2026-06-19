@@ -9,6 +9,13 @@ truth: the schema (`packages/db/src/schema.ts`) and `docs/decisions/tour-data-mo
 (itself now "ENTITY MODEL SUPERSEDED by V2"). The history below is preserved as written; present-tense
 tour claims are corrected inline.
 
+**Note (2026-06-19):** two discovery-mechanic details below are now superseded by later records —
+(a) `pois` dedups on the **Wikidata QID** (`pois_qid_uq`), not `(source, source_id)` (now a secondary
+guard); the corpus is a Wikidata spine (`docs/decisions/geometry-first-regions.md`, schema). (b) The
+committed `packages/db/seed/` directory is GONE (removed 2026-06-19): regions/poi-overrides/speakable
+are admin-console-curated, and `materializeRoute` moved to `@skipper/routing`. Read the
+"deduped by `(source, source_id)`" and "seed is now just …" lines below as historical.
+
 **Originally BUILT 2026-06-12.** Tour generation no longer discovered POIs live; it selected
 from a shared region corpus that a discovery sweep populates first. Seeded draft shells +
 committed curated-route artifacts are gone. Superseded the
@@ -82,8 +89,9 @@ runtime, see `apps/api/src/drives.ts`.)
   later) — so that idea is now MORE appealing as a future optimization: the eager full-fetch makes the
   sweep heavier (one MediaWiki call per story poi). Revisit lazy/region-scale fetching if a big
   region's sweep gets slow.
-- **Region-keyed bbox.** Today the sweep's bbox is a default/`--bbox`. A `region → bbox` map keyed
-  by slug would make "discover region X" one command. Trivial to add when region #2 lands.
+- **Region-keyed bbox — DONE 2026-06-19.** The CLIs take `--region <slug>` and resolve it to the
+  region's discovery bbox (`studio/src/pipeline/region.ts`); `--bbox` is gone. "Discover region X" is
+  one command (`discover-pois --region x`). See `docs/decisions/geometry-first-regions.md`.
 - **Rename — DONE 2026-06-15.** The sweep feeds tours too, so it's no longer roam-named:
   `sweep-roam-pois.ts` → `discover-pois.ts`, and the gen-job kind moved OFF the pg enum to a
   plain `text` column (the `jobKind` vocabulary is single-sourced in `@skipper/shared`; migration

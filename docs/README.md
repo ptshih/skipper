@@ -51,8 +51,9 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   `tour_stops` (migration `0009` dropped `tours`/`segments`/`tracks`/`tour_frames`).
 - [create-a-drive-architecture.md](decisions/create-a-drive-architecture.md) — **the V2 build record**
   (✅ BUILT 2026-06-18): the roam-first data model (one atom `pois`──1:1──`narrations` +
-  sequences; `segments`/`tour_frames` dissolve; roam = a mode; `drives` = user-owned sequences;
-  `asides` flavor) + the two-phase Create-a-Drive flow, access/credits, and the build phases.
+  sequences; `segments`/`tour_frames` dissolve; roam = a mode; `drives` = user-owned sequences) +
+  the two-phase Create-a-Drive flow, access/credits, and the build phases. Carries a 2026-06-19
+  supersession addendum (asides deleted, regions geometry-first, credits → the ledger).
   Product rationale: [roam-first-create-a-drive.md](ideas/roam-first-create-a-drive.md).
 - [api-versioning-posture.md](decisions/api-versioning-posture.md) — no URL versioning; evolve the
   contract additively, with `GET /version` + the mobile `VersionGate` as the sole hard-break escape

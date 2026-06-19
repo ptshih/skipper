@@ -3,11 +3,22 @@
 > **Status:** CONVERGED + BUILT — see [../decisions/create-a-drive-architecture.md](../decisions/create-a-drive-architecture.md)
 > for build truth; this doc retained for the product rationale + the DEFERRED authored-drive (rung 3)
 > vision. (Founder-converged in a brainstorm 2026-06-18; the full V2 migration shipped same day —
-> `narrations`/`drives`/`asides` schema, the `/drives` API, the mobile Create-a-Drive flow + roam-first
-> home.) This is the larval **rung 2** of [journey-layer.md](journey-layer.md) made buildable on TODAY's
+> `narrations`/`drives` schema, the `/drives` API, the mobile Create-a-Drive flow + roam-first home.)
+> This is the larval **rung 2** of [journey-layer.md](journey-layer.md) made buildable on TODAY's
 > batch stack, and the promotion of [roam-first-region-expansion.md](roam-first-region-expansion.md)
 > from a region-opening *tactic* into the **first-day product shape**. **V2 broke freely** at the
 > cutover — see §Doctrine.
+>
+> **DE-STALE 2026-06-19 (schema moved on; reconcile the as-decided record below against built truth):**
+> the V2 `asides` table that shipped on 2026-06-18 was **DELETED** a day later (placeless intro/outro
+> brackets removed from v2 — return in v3 with guided tours; their drive texture is now the PLACED
+> `break`/`scenic` forms — see [../decisions/geometry-first-regions.md](../decisions/geometry-first-regions.md)).
+> Regions are now **GEOMETRY-FIRST** (a bbox; no `region_id` FK anywhere — same doc), so the
+> "region is picked FIRST" two-phase create persists no region on the drive (only a route bbox); a
+> `regionId` survives solely as a transient geocoding-bias input to `/drives/propose`. And drive
+> **credits are now an append-only `credit_entries` LEDGER**, not a `COUNT(drives)` — the
+> lifetime/no-refund INVARIANT is unchanged, only the mechanism ([../decisions/credit-ledger.md](../decisions/credit-ledger.md)).
+> The as-decided sections below are kept verbatim as the historical record; read them through these three corrections.
 
 ## The pivot
 
@@ -171,10 +182,16 @@ Founder calls (2026-06-18):
 
 ## Access + monetization (RESOLVED 2026-06-18 — closes the long-open gate)
 
-> **SUPERSEDED — now shipped code, not idea.** The access model below BUILT (`FREE_DRIVE_CAP`
-> default 10, the `requireAccount`-gated `/drives*` sub-app, drive credits lifetime-not-refunded);
-> current truth lives in [../decisions/create-a-drive-architecture.md](../decisions/create-a-drive-architecture.md).
-> Kept here as the as-decided record.
+> **SUPERSEDED — now shipped code, not idea.** The access model below BUILT (free allotment of 10,
+> the `requireAccount`-gated `/drives*` sub-app, drive credits lifetime-not-refunded); current truth
+> lives in [../decisions/create-a-drive-architecture.md](../decisions/create-a-drive-architecture.md).
+> Kept here as the as-decided record. **Mechanism update 2026-06-19:** "caps at N" / "a credit is
+> consumed on `POST /drives`" is now implemented as an append-only `credit_entries` LEDGER (balance =
+> SUM of grant/consume/reverse; a lazy `free_tier` `grant(+10)`; an atomic `consume(−1)` co-committed
+> with the drive insert), NOT a `COUNT(drives)` (the old count-incl-tombstones model was retired). The
+> lifetime/no-refund invariant is unchanged; only the mechanism moved — see
+> [../decisions/credit-ledger.md](../decisions/credit-ledger.md), which also carries the
+> provider-agnostic Apple-IAP / Google-Play purchase rails (free slice built; purchase plumbing deferred).
 
 - **Anonymous = Roam ONLY.** Creating a Drive requires a FREE account. The create-action wall sits at
   account-creation — distinct from, and earlier than, the existing play/preview wall (a deliberate
@@ -196,9 +213,16 @@ fast-follow; **default free-tier N = 10 drives** (admin-tunable). Design is now 
 ## Settled V2 data model (2026-06-18) — supersedes earlier `user_drives`/`beats` mentions above
 
 > **SUPERSEDED — now shipped schema, not idea.** This model BUILT verbatim (migration 0009 +
-> follow-ups); the live tables are `regions`/`pois`/`poiOverrides`/`narrations`/`asides`/`drives`/
-> `drive_demand` + eval/studio-job tables. NOTE: the `personas` table named below as "built" was
-> later DROPPED (migration 0014) — host identity resolves in code via `personaFromKey`. Current truth:
+> follow-ups); the live tables are `regions`/`pois`/`poiOverrides`/`narrations`/`drives`/`drive_demand`
+> + the `credit_entries` ledger + eval/studio-job tables. NOTE three later schema moves below the
+> as-decided record kept here: (1) the `personas` table named below as "built" was DROPPED (migration
+> 0014) — host identity resolves in code via `personaFromKey`; (2) the `asides` table (the FLAVOR atom
+> below) was DELETED (placeless intro/outro framing removed; returns v3 with guided tours — drive
+> texture is now the PLACED `break`/`scenic` forms), so a `drives` manifest no longer carries aside
+> refs and the ATOM diagram's FLAVOR row is gone from v2; (3) regions are GEOMETRY-FIRST (a bbox, no
+> `region_id` FK) and drive credits are a `credit_entries` LEDGER (not a `COUNT(drives)`) — see
+> [../decisions/geometry-first-regions.md](../decisions/geometry-first-regions.md) +
+> [../decisions/credit-ledger.md](../decisions/credit-ledger.md). Current truth:
 > [../decisions/create-a-drive-architecture.md](../decisions/create-a-drive-architecture.md). Kept
 > here as the as-decided record.
 

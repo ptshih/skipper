@@ -125,8 +125,10 @@ Same surface, same moment, same mechanics as [replay-last-stop-spec](replay-last
 - **Preemption (the shared rule):** a live GPS trigger **preempts** the deeper cut — it's *soft*
   pull content, and a live geo-stop is time-sensitive. This is the same **soft-clip vs hard-clip**
   concept replay-last introduces: replay, tell-me-more, and callouts are all **soft** (optional,
-  preemptible); stops and the intro/outro `asides` are **hard** (the spine, never preempted). Reuse
-  the one `replayingSeq`-style "soft clip currently playing" flag for all three.
+  preemptible); stops are **hard** (the spine, never preempted — and so are the intro/outro frames if
+  and when they return: that placeless framing was deleted with the `asides` table in migration 0019
+  and is v3-deferred, see [geometry-first-regions](../decisions/geometry-first-regions.md)). Reuse the
+  one `replayingSeq`-style "soft clip currently playing" flag for all three.
 
 ## 6. The pull ladder + the Ask relationship
 
