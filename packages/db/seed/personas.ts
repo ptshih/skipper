@@ -1,10 +1,10 @@
 // Bootstrap rows for `personas` — the first-class host entity (decoupled from region).
 //
-// IDENTITY in the table, RECIPE in code: this seeds the minimal FK target (persona_key + name
-// + the server-only voice_id) so `segments.persona_id` has something to point at. The display
-// identity the client sees (tagline/backstory/portrait/voice-sample) is still served by
-// apps/api `host.ts` (region-keyed) in v1, and the GENERATION recipe (system prompt, kit, TTS
-// style) lives in @skipper/generator's PersonaDef — bridged to this row by `persona_key`.
+// IDENTITY in the table, RECIPE in code: this seeds the host registry (persona_key + name + the
+// server-only voice_id). In v2 it is UN-CONSUMED scaffolding — the old `segments.persona_id` FK was
+// dropped, so nothing reads it yet (one host, resolved in code; playback shows a fixed 'Skipper').
+// The GENERATION recipe (system prompt, kit, TTS style) lives in @skipper/generator's PersonaDef —
+// bridged to this row by `persona_key` when region-skippers (M4) wire it back in.
 //
 // `voice_id` mirrors the generator's SKIPPER_VOICE_ID ('Charon' in packages/generator/models.ts);
 // kept as a literal here so @skipper/db carries no dependency on the generator. Keep them in step.

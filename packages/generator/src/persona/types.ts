@@ -17,8 +17,8 @@ export interface KitBeat {
 }
 
 export interface PersonaDef {
-  /** Stable slug bridging this code recipe to its `personas` row (the FK target). Resolved to
-   *  `personas.id` at generation time (persist.resolvePersonaId) to fill `segments.persona_id`. */
+  /** Stable slug bridging this code recipe to its `personas` row. In v2 it is NOT persisted on a
+   *  narration (one host, resolved in code); it returns to the row when region-skippers ship (M4). */
   personaKey: string
   /** Spoken/display host name. Founder rule: ALWAYS 'Skipper' (regions differ by voice/flavor, not name). */
   hostName: string

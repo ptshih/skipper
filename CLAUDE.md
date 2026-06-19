@@ -118,10 +118,11 @@ you found so the next agent can re-check it.
 - **The Dad-Joke-O-Meter notch (`off`/`mild`/`dad`/`dadpocalypse`), persona, and
   voice are GENERATION parameters, baked into the narration — never live playback
   toggles** (see principle #1). Changing any of them = a different telling. The
-  **persona** is baked onto the `narrations` row at generation (decoupled from region, default
-  `'skipper'`); the recipe resolves via `personaFromKey` →
-  `PersonaDef` at generation (one host per region in v2); its DEFINITION lives in the first-class
-  `personas` row, never copied onto content. **Voice** (no column) derives from the persona, and the
+  **persona** is resolved in CODE at generation (`personaFromKey`, default `'skipper'`, one host per
+  region in v2 → `PersonaDef`) and baked into the narration's AUDIO/delivery — there is NO persona
+  column on `narrations` (one host needs none; a per-narration key returns with region-skippers, M4).
+  The `personas` row holds the host DEFINITION but is un-consumed scaffolding today (v2 playback shows a
+  fixed `'Skipper'`). **Voice** (no column) derives from the persona, and the
   **notch** is a generation-time INPUT only (`run.ts --joke-level`, default `dadpocalypse`) — NOT
   persisted (M1 is dadpocalypse-only). The `jokeLevel` Zod enum in `@skipper/shared` stays as the
   narration vocabulary.
@@ -291,11 +292,11 @@ From an adversarial review of the scaffold. Verdict: sound foundation. Guardrail
 - **`@skipper/db` import is side-effect-free.** The client is lazy (`getDb()` /
   the `db` proxy build on first query) so importing it never forces
   `DATABASE_URL` to exist — env-free routes like `GET /health` keep booting.
-- **`voice` is a fixed function of persona in v1** (each `PersonaDef.voice` in
-  `packages/generator/src/persona/`, resolved per-tour by `personaFromKey(tours.persona_key)`:
+- **`voice` is a fixed function of persona** (each `PersonaDef.voice` in
+  `packages/generator/src/persona/`, resolved in code by `personaFromKey('skipper')` — one host in v2:
   skipper → the Google Cloud Gemini-TTS voice name "Charon"; `SKIPPER_VOICE_ID` in
-  `models.ts` is the source constant the def references). Not a request knob until M3
-  (no `tours.voice` / `tourRequest.voice` yet). (Gemini-TTS voice names are stable
+  `models.ts` is the source constant the def references). Not a per-request knob (deferred to
+  region-skippers, M4). (Gemini-TTS voice names are stable
   identifiers — no ElevenLabs-style sunset to mind.)
 - **The generator MUST populate `tracks.attribution`** for every
   wikipedia-sourced clip (CC BY-SA is legal, not optional) — put it on the

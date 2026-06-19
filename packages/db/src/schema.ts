@@ -210,18 +210,16 @@ export const regions = pgTable(
 /* -------------------------------------------------------------------------- */
 
 // Identity in the TABLE, recipe in CODE (the persona/region split). The display identity
-// (name/tagline/backstory/art/voice-sample) lives here so it can be the `segments.persona_id`
-// FK target and be edited without a deploy; the GENERATION recipe — the system prompt + the
-// personal kit + the TTS style — stays in @skipper/generator's PersonaDef (the highest-leverage
-// file, version-controlled, never shipped to the client), bridged by `persona_key`.
+// (name/tagline/backstory/art/voice-sample) lives here, editable without a deploy; the GENERATION
+// recipe — the system prompt + the personal kit + the TTS style — stays in @skipper/generator's
+// PersonaDef (the highest-leverage file, version-controlled, never shipped to the client), bridged
+// by `persona_key`.
 //
-// Decoupled from region by design (D5): a tour is one host; a roam sweep runs for a region →
-// its host. The persona is ASSIGNED at generation and FROZEN on `segments.persona_id` — never
-// derived from coordinates. Adding region #2 = an INSERT here + a code PersonaDef.
-//
-// NOTE (v1): the client host display is still served by apps/api `host.ts` (region-keyed); this
-// table is the generation-provenance FK target. Wiring `hostIdentity` to read from here is a
-// later step gated on backfilling tagline/backstory/art so the display doesn't regress.
+// ⚠ UN-CONSUMED in v2 (forward-compat scaffolding). The FK that read this table —
+// `segments.persona_id` — was dropped with `segments`; `narrations` carry NO persona column (one host
+// per region, so the persona is resolved in code via `personaFromKey('skipper')` and baked into the
+// audio). v2 playback shows a fixed `'Skipper'` (mobile useDrive), not this row. It returns to use
+// when region-skippers ship (M4): adding region #2 = an INSERT here + a code PersonaDef.
 export const personas = pgTable(
   'personas',
   {
