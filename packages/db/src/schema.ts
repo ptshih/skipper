@@ -205,42 +205,12 @@ export const regions = pgTable(
   (t) => [uniqueIndex('regions_slug_uq').on(t.slug)],
 )
 
-/* -------------------------------------------------------------------------- */
-/*  personas — the HOST, first-class and DECOUPLED from region                  */
-/* -------------------------------------------------------------------------- */
-
-// Identity in the TABLE, recipe in CODE (the persona/region split). The display identity
-// (name/tagline/backstory/art/voice-sample) lives here, editable without a deploy; the GENERATION
-// recipe — the system prompt + the personal kit + the TTS style — stays in @skipper/generator's
-// PersonaDef (the highest-leverage file, version-controlled, never shipped to the client), bridged
-// by `persona_key`.
-//
-// ⚠ UN-CONSUMED in v2 (forward-compat scaffolding). The FK that read this table —
-// `segments.persona_id` — was dropped with `segments`; `narrations` carry NO persona column (one host
-// per region, so the persona is resolved in code via `personaFromKey('skipper')` and baked into the
-// audio). v2 playback shows a fixed `'Skipper'` (mobile useDrive), not this row. It returns to use
-// when region-skippers ship (M4): adding region #2 = an INSERT here + a code PersonaDef.
-export const personas = pgTable(
-  'personas',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-    /** Stable slug bridging to the code PersonaDef recipe (rename-safe; the FK uses `id`). */
-    personaKey: text('persona_key').notNull(),
-    name: text('name').notNull(),
-    tagline: text('tagline'),
-    backstory: text('backstory'),
-    portraitUrl: text('portrait_url'),
-    voiceSampleUrl: text('voice_sample_url'),
-    /** SERVER-ONLY — the TTS voice id (e.g. "Charon"). Never projected to the client. */
-    voiceId: text('voice_id').notNull(),
-    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-    updatedAt: timestamp('updated_at', { withTimezone: true })
-      .defaultNow()
-      .notNull()
-      .$onUpdate(() => new Date()),
-  },
-  (t) => [uniqueIndex('personas_key_uq').on(t.personaKey)],
-)
+// NOTE: the `personas` table was DROPPED 2026-06-19 (migration 0014) — it was un-consumed scaffolding
+// (its only FK reader, `segments.persona_id`, went with `segments` in the V2 collapse; nothing else
+// read it). v2 resolves the one host in CODE via `personaFromKey('skipper')` and bakes it into the
+// audio; playback shows a fixed `'Skipper'`. The host DEFINITION lives in @skipper/studio's
+// PersonaDef (the highest-leverage file). The table REBUILDS when region-skippers ship (M4) — at which
+// point a per-region presentation identity (name/tagline/backstory/portrait) needs a home again.
 
 /* -------------------------------------------------------------------------- */
 /*  pois — a shared PLACE (facts/coords, deduped per external source)           */
@@ -655,8 +625,6 @@ export const drivesRelations = relations(drives, ({ one }) => ({
 
 export type Region = typeof regions.$inferSelect
 export type NewRegion = typeof regions.$inferInsert
-export type Persona = typeof personas.$inferSelect
-export type NewPersona = typeof personas.$inferInsert
 export type Poi = typeof pois.$inferSelect
 export type NewPoi = typeof pois.$inferInsert
 export type PoiOverride = typeof poiOverrides.$inferSelect

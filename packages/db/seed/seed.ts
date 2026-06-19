@@ -1,5 +1,6 @@
-// Seed the curated CONTENT rows: regions, host personas, and the upstream-error fact
-// corrections. Idempotent — re-running refreshes content and never clobbers workflow state.
+// Seed the curated CONTENT rows: regions and the upstream-error fact corrections. Idempotent —
+// re-running refreshes content and never clobbers workflow state. (Host personas are resolved in
+// CODE via @skipper/studio's PersonaDef in v2; the `personas` table was dropped — see schema.ts.)
 //
 // Tours are NOT seeded. Under the discovery-first reorder (2026-06-12), a tour is AUTHORED at
 // runtime via the admin Create flow over the region POI corpus: (1) discover a region's POIs
@@ -15,7 +16,6 @@ import { sql } from 'drizzle-orm'
 import { db } from '../src/client'
 import { regions } from '../src/schema'
 import { seedPoiOverrides } from './poi-overrides'
-import { seedPersonas } from './personas'
 
 /** The regions a tour can belong to — manual (D4). slug → spoken name + discovery bbox.
  *  discoveryBbox ("swLng,swLat,neLng,neLat") scopes POI discovery (discover-pois / generate-narrations)
@@ -43,7 +43,6 @@ async function seedRegions(): Promise<void> {
 
 async function main() {
   await seedRegions()
-  await seedPersonas()
   await seedPoiOverrides()
 }
 
