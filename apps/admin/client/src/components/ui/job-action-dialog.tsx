@@ -1,4 +1,4 @@
-import type { ComponentType, ReactNode } from 'react'
+import { useState, type ComponentType, type ReactNode } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Dialog,
@@ -10,6 +10,8 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Callout } from '@/components/ui/callout'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { api } from '@/lib/api'
 import { errMsg } from '@/lib/format'
 
@@ -67,9 +69,14 @@ export function JobActionDialog({
   previewLabel = 'Preview',
 }: JobActionDialogProps) {
   const qc = useQueryClient()
+  // Optional hard spend ceiling for paid runs (forwarded as --max-cost): the run aborts before billing
+  // if the estimate exceeds it and stops mid-fan-out once actual spend crosses it. Blank = no cap.
+  const [costCap, setCostCap] = useState('')
+  const cap = Number(costCap)
+  const capBody = spends && costCap.trim() && Number.isFinite(cap) && cap > 0 ? { maxCostUsd: cap } : {}
   const submitMut = useMutation({
     mutationFn: (apply: boolean) =>
-      api.createJob({ ...buildBody(), apply, ...(apply && spends ? { confirm: true } : {}) }),
+      api.createJob({ ...buildBody(), ...capBody, apply, ...(apply && spends ? { confirm: true } : {}) }),
     // Refresh Runs so the just-created run shows on navigate (not after the 15s poll).
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ['runs'] }); onSubmitted() },
   })
@@ -87,6 +94,26 @@ export function JobActionDialog({
         </DialogHeader>
 
         {children}
+
+        {spends && (
+          <div className="space-y-1.5">
+            <Label htmlFor="job-cost-cap">Spend cap (USD) — optional</Label>
+            <Input
+              id="job-cost-cap"
+              type="number"
+              inputMode="decimal"
+              min="0"
+              step="0.5"
+              placeholder="e.g. 10"
+              value={costCap}
+              onChange={(e) => setCostCap(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Hard ceiling — the run aborts before billing if the estimate exceeds this, and stops
+              mid-run once actual spend crosses it. Blank = no cap.
+            </p>
+          </div>
+        )}
 
         {note && (
           <Callout variant="info" className="rounded-lg px-3 py-2 text-xs">

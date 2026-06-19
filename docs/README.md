@@ -149,6 +149,10 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   grounding soft-gate via the built `optimize()` flywheel (needs a founder greenlight, crosses the
   "human ear instead" deferral). Brainstorm 2026-06-19; key finding: an upstream sheet-faithfulness
   gate is a no-op (the enricher selects verbatim spans by id).
+- [admin-ux-review.md](ideas/admin-ux-review.md) — a full visual + capability-map review of the admin
+  ops console (vs the studio pipeline + DB surface). Tier 1 BUILT (per-POI Regenerate + a paid-dialog
+  spend cap); Tiers 2–4 backlog (charm/veracity/offline_audit re-score, a map view, a useful ⌘K, and a
+  users/drives/credits surface for when real users arrive). Captured 2026-06-19.
 
 The rest are post-MVP features, gated behind the proven phone player:
 - [drive-complete-moment.md](ideas/drive-complete-moment.md) — the payoff beat as motion + sound

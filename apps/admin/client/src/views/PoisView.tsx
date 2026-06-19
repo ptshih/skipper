@@ -725,6 +725,23 @@ function NarrationTab({ poiId, hasNarration }: { poiId: string; hasNarration: bo
     resynthMut.mutate()
   }
 
+  // Regenerate = re-NARRATE this one POI from its current facts + corrections (a fresh script), then
+  // re-score + re-synthesize — the single-POI form of generate_narrations (include-ids implies --force).
+  // Closes the ear-pass → fix-a-fact → re-hear loop without re-running the whole region. Spends Anthropic + TTS.
+  const regenMut = useMutation({
+    mutationFn: () =>
+      api.createJob({ kind: 'generate_narrations', includeIds: [poiId], force: true, apply: true, confirm: true }),
+    onSuccess: ({ job }) => { void qc.invalidateQueries({ queryKey: ['runs'] }); navigate({ to: '/runs', hash: job.id }) },
+  })
+  async function handleRegenerate() {
+    if (!(await confirm({
+      title: 'Regenerate narration?',
+      body: 'Re-narrates this POI from its CURRENT facts + corrections (a fresh script), then re-scores and re-synthesizes. Spends Anthropic + TTS credits. Use this after a fact-edit; Re-synth only re-voices the existing script.',
+      confirmLabel: 'Regenerate',
+    }))) return
+    regenMut.mutate()
+  }
+
   if (!hasNarration) {
     return (
       <EmptyState icon={Zap} className="rounded-xl border bg-muted/30">
@@ -769,7 +786,11 @@ function NarrationTab({ poiId, hasNarration }: { poiId: string; hasNarration: bo
         )}
         {clip.factsHash && <code className="font-mono">{clip.factsHash.slice(0, 7)}</code>}
         <span className="flex-1" />
-        <Button variant="outline" size="sm" onClick={() => void handleResynth()} disabled={resynthMut.isPending}>
+        <Button variant="outline" size="sm" onClick={() => void handleRegenerate()} disabled={regenMut.isPending || resynthMut.isPending}>
+          <Zap className="h-3 w-3" />
+          {regenMut.isPending ? 'Queuing…' : 'Regenerate'}
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => void handleResynth()} disabled={resynthMut.isPending || regenMut.isPending}>
           <RefreshCw className="h-3 w-3" />
           {resynthMut.isPending ? 'Queuing…' : 'Re-synth'}
         </Button>
@@ -777,6 +798,11 @@ function NarrationTab({ poiId, hasNarration }: { poiId: string; hasNarration: bo
       {resynthMut.error && (
         <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
           Re-synth failed — {errMsg(resynthMut.error)}
+        </div>
+      )}
+      {regenMut.error && (
+        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          Regenerate failed — {errMsg(regenMut.error)}
         </div>
       )}
       {suspicious && (
