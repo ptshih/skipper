@@ -17,7 +17,7 @@ audio content type alongside route-anchored `tour_stops` and lifecycle `tour_bra
   no facts, so they can't hallucinate and they sidestep the project's hardest invariant
   ("persona in DELIVERY, never FACTS") entirely. Mood/character/drive-state beats only —
   *"long quiet stretch… my favorite kind,"* *"that light right now, huh."*
-- **Own table (`tour_callouts`), own scheduler (in `@skipper/drive-core`).** NOT a `stopType`,
+- **Own table (`tour_callouts`), own scheduler (in `@skipper/engine`).** NOT a `stopType`,
   NOT placed by the generator. This keeps `tour_stops` strict and the geofence engine
   homogeneous (same reasoning that put intro/outro in their own `tour_brackets` table).
 - **The playback path already exists.** `useDrive` is a queue + pump + single audio player, and
@@ -143,15 +143,15 @@ kit-from-stops ban). A callout that asserts a fact is a bug — that's a story s
 (FIFO of seqs), `pump()` (plays next if `!clipBusy`), the clip-load effect keyed on `activeSeq`,
 lock-screen, stall/re-sign. Brackets already flow through it under sentinel seqs
 (`INTRO_SEQ`/`OUTRO_SEQ`, `frameKindForSeq`). **Callouts do the same:**
-- A **sentinel seq range** for callouts (e.g. a `CALLOUT_SEQ_BASE` block in `drive-core`,
+- A **sentinel seq range** for callouts (e.g. a `CALLOUT_SEQ_BASE` block in `engine`,
   parallel to the bracket sentinels) + a `calloutForSeq(seq)` lookup.
 - The `urls` map (from `loadPlayback`) carries callout clips under those seqs.
 - Enqueue a callout = push its sentinel seq + `pump()`. Everything downstream is free.
 
-### 6.2 New: the pure scheduler (in `@skipper/drive-core`)
+### 6.2 New: the pure scheduler (in `@skipper/engine`)
 
 ```ts
-// drive-core — pure, no I/O, unit-testable with synthetic fix streams (like TriggerEngine).
+// engine — pure, no I/O, unit-testable with synthetic fix streams (like TriggerEngine).
 class CalloutScheduler {
   constructor(callouts: CalloutRef[], opts?: Partial<CalloutOptions>)
   /** Called each fix while in ducked-quiet. Returns a callout to fire, or null. */
@@ -243,7 +243,7 @@ Hard constraint: the whole tour is downloaded and driven in dead zones → selec
 on-device, no network, no per-callout server call.
 - **golden_hour / night:** device clock + a **pure solar-elevation calc** from the route's
   lat/lng + date (no API). Golden hour ≈ within ~60 min of sunrise/sunset; night ≈ sun below
-  horizon. Bundle the formula in `drive-core`.
+  horizon. Bundle the formula in `engine`.
 - **motion / secStopped:** from the **sanitized** `GpsFix.speedMps`.
 - **elapsed / ETA:** `tSec` deltas + the §6.3 lookahead.
 - **Deferred:** weather, traffic feeds, anything mic-based (network / privacy).
@@ -279,11 +279,11 @@ If those pass in the sim, the emergent path is verified before you're ever in a 
 
 ## 10. Build phases (file-level)
 
-1. **Scheduler core (drive-core, couch-safe, fully testable).**
+1. **Scheduler core (engine, couch-safe, fully testable).**
    `CalloutScheduler` + `etaToNextStopSec(fix)` on `TriggerEngine` + the solar-elevation util +
    `CALLOUT_SEQ_BASE`/`calloutForSeq`/`isCalloutSeq`. Unit tests for §7's gates incl. the §9
    scenarios. No app changes yet.
-2. **Sim perturbations (drive-core/`gps.ts`).** `baseMph` + `perturbations` + `SIM_MPH→30`.
+2. **Sim perturbations (engine/`gps.ts`).** `baseMph` + `perturbations` + `SIM_MPH→30`.
    Wire the three acceptance scenarios into the sim screen for manual exercise.
 3. **Schema + migration (CHECKPOINT — live DB).** `tour_callouts` + `callout_mood` enum. Clean +
    destructive (no users; CLAUDE.md). NOT added to `finalizeTourReady`.
@@ -320,7 +320,7 @@ landing and the proven player. Do not let it leak into v1's persona-only scope.
 ## 13. Provenance
 
 Designed 2026-06-09. Grounded against, and citing for re-check:
-- `packages/drive-core/src/trigger.ts` — `TriggerEngine`, `GpsFix`, `DEFAULT_TRIGGER`
+- `packages/engine/src/trigger.ts` — `TriggerEngine`, `GpsFix`, `DEFAULT_TRIGGER`
   (`leadSeconds 12`, `headingGateMps 2.2`, `headingConeDeg 90`), `effectiveRadiusM`.
 - `apps/mobile/src/lib/useDrive.ts` — queue/pump/`clipBusy`, `handleFix`/`handleEnd`,
   `INTRO_SEQ`/`OUTRO_SEQ`/`frameKindForSeq`, `SIM_MPH=60`/`SIM_FAST_SCALE=8`,

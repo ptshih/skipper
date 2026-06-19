@@ -209,7 +209,7 @@ Designed 2026-06-09. Builds on and cites for re-check:
   widens for natural features).
 - The per-region persona registry (`personaForRegion`, `PersonaDef`, the kit) — where the taste
   profile lives; and the region-skipper-identities roadmap ("backstory colors the jokes").
-- `packages/drive-core/src/trigger.ts` — `TriggerEngine` reused AS-IS for the second (positioned-
+- `packages/engine/src/trigger.ts` — `TriggerEngine` reused AS-IS for the second (positioned-
   callout) geofence pass; `approach_heading_deg` (migration 0003 / backfill-trigger-points) mirrored
   on positioned callouts.
 - Grounding doctrine: "persona lives in DELIVERY, never in FACTS"; the break-stop no-volatile-data

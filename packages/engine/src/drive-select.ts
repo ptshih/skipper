@@ -2,7 +2,7 @@
 //
 // The heart of V2's "Create a Drive": a drive is "roam, pre-ordered for your route." Each narration
 // is a place's ONE shared telling (1:1 with its POI), already synthesized — so this NEVER generates
-// audio; it SELECTS + PACES existing clips. Pure, zero-dep, RN-safe (like the rest of drive-core), so
+// audio; it SELECTS + PACES existing clips. Pure, zero-dep, RN-safe (like the rest of engine), so
 // the server assembles a drive at request time AND the device can re-pace one offline.
 //
 // Two selection choices the design calls out:
@@ -17,7 +17,7 @@ import { haversineMeters, OFF_ROUTE_MAX_M, type LngLat } from './geo'
 import { buildRouteSnapper } from './pacing'
 
 /** A reusable roam narration a drive can include — the place's ONE shared telling (1:1 with the POI).
- *  drive-core stays DB-agnostic, so the caller maps DB rows to this shape. */
+ *  engine stays DB-agnostic, so the caller maps DB rows to this shape. */
 export interface DriveCandidate {
   poiId: string
   /** Stable R2 key of the narration audio (NOT a presigned URL — presign at assemble time). */

@@ -43,7 +43,7 @@ bunx expo install --fix  # align expo/react-native/expo-* to the real SDK 56 pin
 bun run check            # in apps/mobile: lint:tokens + typecheck + test
 ```
 
-It consumes `@skipper/shared` and `@skipper/drive-core` via `workspace:*` (both
+It consumes `@skipper/shared` and `@skipper/engine` via `workspace:*` (both
 export `.ts` source). Metro resolves them through the symlinked layout
 (`metro.config.js` sets `watchFolders`/`nodeModulesPaths` to the monorepo root) —
 verified: `bunx expo export` bundles cleanly through bun's isolated node_modules
@@ -68,7 +68,7 @@ does exactly that and launches the server through dotenvx.
 - [ ] **`expo-location`** + **`expo-task-manager`**: continuous high-rate
       FOREGROUND service (NOT fixed-radius background polling).
 - [ ] **Drive simulator** — replay a tour's polyline at configurable speed.
-      (The trigger core + a headless drive sim live in **`@skipper/drive-core`**,
+      (The trigger core + a headless drive sim live in **`@skipper/engine`**,
       now imported directly by the app; this is the on-device player driving
       against it / live GPS.)
 - [ ] Speed-adaptive trigger lead time, heading gate >~5 mph, debounce/queue.

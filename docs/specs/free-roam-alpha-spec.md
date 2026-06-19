@@ -24,7 +24,7 @@ a roam clip. Tahoe-basin corpus only; the founder (Zephyr Cove) is the alpha use
   no welcome/next-stop/callbacks, **no baked laterality** (no route → side unknowable; the same
   rule family as break-stops' no-volatile). Deep-extract refresh before narrating; Charon voice +
   the blessed style prompt; dadpocalypse.
-- **Trigger:** `RoamEngine` (`packages/drive-core/src/roam.ts`) — proximity + heading-toward with
+- **Trigger:** `RoamEngine` (`packages/engine/src/roam.ts`) — proximity + heading-toward with
   ambient governors: speed-adaptive lead (250 m floor; pins aren't road-snapped), min-gap start
   governor (holds through the playing clip), 4 h session cooldown, window-bounded cluster
   suppression, nearest-first, one fire per fix. Missed encounters are invisible by design — the

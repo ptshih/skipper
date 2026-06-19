@@ -10,8 +10,8 @@
 #
 # Shape mirrors apps/api/Dockerfile (verified pattern): bun has no `turbo prune` yet, so
 # `bun install --filter` still pulls the whole RN tree. We TRIM the root `workspaces` to
-# the generator's closure — generator + @skipper/{db,drive-core,shared,storage} (from its
-# package.json) — so the Expo/React-Native tree is never resolved. `drive-core` is in the
+# the generator's closure — generator + @skipper/{db,engine,shared,storage} (from its
+# package.json) — so the Expo/React-Native tree is never resolved. `engine` is in the
 # closure here (the api image doesn't need it). Internal packages export .ts source: no
 # build step, bun runs the source directly.
 #
@@ -38,16 +38,16 @@ RUN bun add -g @dotenvx/dotenvx
 COPY package.json ./
 COPY packages/studio/package.json packages/studio/
 COPY packages/db/package.json packages/db/
-COPY packages/drive-core/package.json packages/drive-core/
+COPY packages/engine/package.json packages/engine/
 COPY packages/shared/package.json packages/shared/
 COPY packages/storage/package.json packages/storage/
-RUN bun -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));p.workspaces=['packages/studio','packages/db','packages/drive-core','packages/shared','packages/storage'];fs.writeFileSync('package.json',JSON.stringify(p,null,2))" \
+RUN bun -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));p.workspaces=['packages/studio','packages/db','packages/engine','packages/shared','packages/storage'];fs.writeFileSync('package.json',JSON.stringify(p,null,2))" \
  && bun install --production
 
 # 2) The source the CLIs run (bun executes .ts directly — no dist build).
 COPY packages/studio/src packages/studio/src
 COPY packages/db/src packages/db/src
-COPY packages/drive-core/src packages/drive-core/src
+COPY packages/engine/src packages/engine/src
 COPY packages/shared/src packages/shared/src
 COPY packages/storage/src packages/storage/src
 COPY .env.production ./

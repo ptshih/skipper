@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@skipper/db": "workspace:*",
-    "@skipper/drive-core": "workspace:*",
+    "@skipper/engine": "workspace:*",
     "drizzle-orm": "^0.45.2"
   },
   "devDependencies": {

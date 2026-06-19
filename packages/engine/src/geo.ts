@@ -16,6 +16,22 @@ export const METERS_PER_MILE = 1609.344
  *  player all read THIS, so "a stop the generator accepts will trigger" holds by construction. */
 export const OFF_ROUTE_MAX_M = 700
 
+/**
+ * Kind-aware proximity radius (m) for an un-snapped roam/drive pin. Roam pins are raw POI
+ * centroids — never road-snapped (no route to snap to) — so an areal place needs a floor that
+ * matches its body: a peak's pin is its SUMMIT, a lake's is open water, while a building sits
+ * near the curb. Measured on the first live drive: at a flat 250 m only 8 of 77 basin pins were
+ * reachable from the highway. The client's speed-adaptive lead still extends these at speed.
+ * Single-sourced here so the /roam and /drives radii can't drift apart.
+ */
+export function radiusForKind(kind: string | null): number {
+  if (!kind) return 600
+  if (/mountain|peak|summit|ridge|hill/.test(kind)) return 1500
+  if (/lake|reservoir|bay|valley|canyon|island|peninsula/.test(kind)) return 1200
+  if (/park|recreation area|beach|cove|meadow|historic district/.test(kind)) return 1000
+  return 600
+}
+
 const toRad = (deg: number): number => (deg * Math.PI) / 180
 const toDeg = (rad: number): number => (rad * 180) / Math.PI
 
@@ -105,7 +121,7 @@ export function nearestOnRoute(polyline: LngLat[], cumulative: number[], point: 
 
 // --- Route-relative helpers ---------------------------------------------------
 // Pure route geometry shared by the generator's stop selection (re-exported via
-// pipeline/geo.ts) and drive-core's own buildDrive pacing — single-sourced here so
+// pipeline/geo.ts) and engine's own buildDrive pacing — single-sourced here so
 // both place candidates on a route identically.
 
 /** Total polyline length in meters (0 for a degenerate <2-point line). */

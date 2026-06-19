@@ -21,7 +21,7 @@
     "@expo-google-fonts/overpass-mono": "^0.4.2",
     "@expo-google-fonts/zilla-slab": "^0.4.1",
     "@expo/vector-icons": "^15.1.1",
-    "@skipper/drive-core": "workspace:*",
+    "@skipper/engine": "workspace:*",
     "@skipper/shared": "workspace:*",
     "better-auth": "^1.6.14",
     "expo": "~56.0.11",

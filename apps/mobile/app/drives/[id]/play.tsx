@@ -43,7 +43,7 @@ import type { BadgeTone } from '@/ui'
 // Map vs List is a per-rider preference that survives sessions (real-map spec §4).
 const VIEW_KEY = 'skipper.drivePlayerView'
 type PlayerView = 'map' | 'list'
-import { formatMmssMs, METERS_PER_MILE } from '@skipper/drive-core'
+import { formatMmssMs, METERS_PER_MILE } from '@skipper/engine'
 
 export default function DriveScreen() {
   const theme = useTheme()

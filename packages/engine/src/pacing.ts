@@ -1,5 +1,5 @@
 // Route pacing primitives — shared by the generator's stop selection (pipeline/select.ts) and
-// drive-core's own buildDrive (drive-select.ts). Pure, zero-dep, RN-safe: the server paces a
+// engine's own buildDrive (drive-select.ts). Pure, zero-dep, RN-safe: the server paces a
 // drive AND the device can re-pace one offline with the same math.
 
 import {
@@ -10,6 +10,13 @@ import {
   totalMeters,
   type LngLat,
 } from './geo'
+
+// Drive pacing — mirrors the generator's "standard" bucket (config.ts PACING.standard): a 3-min
+// floor between stops, with the cap scaled to the route's length (~1 stop / 4 min, capped at 24).
+export const DRIVE_MIN_GAP_SEC = 180
+export const DRIVE_MAX_STOPS_CAP = 24
+export const driveMaxStops = (totalSec: number): number =>
+  Math.max(3, Math.min(DRIVE_MAX_STOPS_CAP, Math.round(totalSec / 240)))
 
 /** A point snapped to a route: its along-route time, off-route distance, the trigger point it
  *  snaps to, and the route's heading of travel there. */

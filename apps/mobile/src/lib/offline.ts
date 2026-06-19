@@ -13,7 +13,7 @@
 // `dir.create({intermediates,idempotent})`; `file.write(str)`/`file.textSync()`/`file.delete()`.
 
 import { Directory, File, Paths } from 'expo-file-system'
-import { INTRO_SEQ, OUTRO_SEQ } from '@skipper/drive-core'
+import { INTRO_SEQ, OUTRO_SEQ } from '@skipper/engine'
 import type { DriveClip, DriveManifest, DriveSummary } from '@skipper/shared'
 import { getDrive, signDriveAudio } from './api'
 import { extForContentType, urlMapFromDriveManifest, urlMapFromDriveSigned } from './offline-util'

@@ -8,7 +8,7 @@
 //   DELETE /drives/:id            -> soft-delete (remove from list); CAP-NEUTRAL — a spent credit is never refunded
 //
 // A drive is "roam, pre-ordered for your route": the LLM does ONLY endpoint resolution; the route is
-// Google's (materializeRoute) and the SELECTION is deterministic (drive-core buildDrive over the shared
+// Google's (materializeRoute) and the SELECTION is deterministic (engine buildDrive over the shared
 // narration corpus). Nothing here synthesizes audio — it picks + paces existing roam clips. The drive's
 // STRUCTURE freezes into `drives.selection`; each narration's CONTENT resolves live via its poi, so a
 // regenerated telling auto-improves a saved drive. Ownership lives on `drives.user_id` (never on tours),
@@ -22,7 +22,7 @@ import { db } from '@skipper/db'
 import { drives, driveDemand, narrations, pois, regions } from '@skipper/db/schema'
 import type { DriveSelection, DriveSelectionItem, Polyline, RouteProvenance } from '@skipper/db/schema'
 import { materializeRoute, type Waypoint } from '@skipper/db/seed/materialize'
-import { buildDrive, OFF_ROUTE_MAX_M, type DriveCandidate } from '@skipper/drive-core'
+import { buildDrive, OFF_ROUTE_MAX_M, type DriveCandidate } from '@skipper/engine'
 import {
   createDriveRequest,
   driveProposeRequest,

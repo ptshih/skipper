@@ -10,13 +10,13 @@
 //
 // V2: a drive is a frozen `selection` of place NARRATIONS (each 1:1 with its poi) along a route.
 // We resolve each narration's poi coords/name + form/duration live, then run the SAME trigger
-// engine the in-car player uses (drive-core runDrive) over the raw POI coords (it snaps them).
+// engine the in-car player uses (engine runDrive) over the raw POI coords (it snaps them).
 
 import { eq, inArray } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { drives, narrations, pois } from '@skipper/db/schema'
-import { OFF_ROUTE_MAX_M, METERS_PER_MILE, formatMmss, runDrive } from '@skipper/drive-core'
-import type { LngLat, DriveStopRef } from '@skipper/drive-core'
+import { OFF_ROUTE_MAX_M, METERS_PER_MILE, formatMmss, runDrive } from '@skipper/engine'
+import type { LngLat, DriveStopRef } from '@skipper/engine'
 
 function parseArgs(argv: string[]) {
   const args = argv.slice(2)

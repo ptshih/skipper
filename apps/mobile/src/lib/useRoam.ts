@@ -1,6 +1,6 @@
 // useRoam — the FREE-ROAM session hook (alpha). The skipper rides shotgun on the rider's
 // OWN drive: no route, no tour shape — fetch the roam pins near here, feed live GPS fixes
-// to the RoamEngine (proximity + heading + governors; @skipper/drive-core/roam), and play
+// to the RoamEngine (proximity + heading + governors; @skipper/engine/roam), and play
 // each fired encounter through a FIFO queue. State machine per the design handoff:
 //   idle → sessionStart → roaming ⇄ (encounter sheet) ; roaming → signoff → idle
 //
@@ -35,8 +35,8 @@ import {
   POST_START_STALL_MS,
   RoamEngine,
   seekTargetReached,
-} from '@skipper/drive-core'
-import type { LngLat } from '@skipper/drive-core'
+} from '@skipper/engine'
+import type { LngLat } from '@skipper/engine'
 import { errorMessage, getRoamManifest } from './api'
 import type { RoamManifest } from './api'
 import { liveRoamSource, simulatedSource } from './gps'
@@ -68,7 +68,7 @@ const KEEP_AWAKE_TAG = 'skipper-roam'
  *  has no re-sign machinery (alpha); a missed encounter is invisible by design. */
 const CLIP_STALL_MS = 12_000
 // POST_START_STALL_MS (the post-start interruption threshold) + the decideStall ladder live in
-// @skipper/drive-core/player now, single-sourced + unit-tested (shared with useDrive).
+// @skipper/engine/player now, single-sourced + unit-tested (shared with useDrive).
 /** getCurrentPositionAsync has no built-in timeout; a cold/indoor/canyon fix can never resolve, wedging
  *  the session in 'loading' forever (no watchdog runs there). Bound the locate step. (audit #156) */
 const LOCATE_TIMEOUT_MS = 12_000

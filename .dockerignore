@@ -11,7 +11,7 @@
 .env.development
 .env.example
 
-# not COPYed by any image build. generator + drive-core are DELIBERATELY NOT excluded:
+# not COPYed by any image build. generator + engine are DELIBERATELY NOT excluded:
 # the gen image (packages/studio/Dockerfile) COPYs them — excluding 404s its build context.
 apps/mobile
 packages/sim

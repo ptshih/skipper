@@ -1,7 +1,7 @@
 // Pure, native-free offline helpers (no expo-file-system / api / auth imports) so they
 // unit-test under `bun test`. offline.ts (which IS native) re-uses these.
 
-import { INTRO_SEQ, OUTRO_SEQ } from '@skipper/drive-core'
+import { INTRO_SEQ, OUTRO_SEQ } from '@skipper/engine'
 import type { DriveClip, SignedDriveAudio } from '@skipper/shared'
 
 /** MIME → on-disk extension. Driven by the sign response's `contentType`, never hardcoded. */

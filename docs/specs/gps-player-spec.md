@@ -8,7 +8,7 @@
 > real drive), both pending an EAS dev-build session.
 
 > Self-contained handoff for the **live, on-device, GPS-triggered phone player** — the
-> M1 MVP bet. Grounded against the live repo (`packages/drive-core/src/{trigger,simulate,geo,preview}.ts`,
+> M1 MVP bet. Grounded against the live repo (`packages/engine/src/{trigger,simulate,geo,preview}.ts`,
 > `apps/mobile/app/preview/[id].tsx`, `apps/api/src/index.ts`, `packages/shared/src/schemas.ts`,
 > `packages/db/src/schema.ts`) and against Expo SDK 56 / RN 0.85 docs (verified, not from memory —
 > see §8). Written 2026-06-08. **Symbol names are stable; line numbers drift** (the preview player is
@@ -22,13 +22,13 @@
 roads the Skipper's clips fire at the right places (speed-adaptive lead time), ducking their
 music, with lock-screen Now Playing — all offline. CLAUDE.md calls this "the whole bet."
 
-**The one seam:** `TriggerEngine.update(fix)` in `@skipper/drive-core` is a pure, tested function —
+**The one seam:** `TriggerEngine.update(fix)` in `@skipper/engine` is a pure, tested function —
 feed it one `GpsFix {lat,lng,speedMps,headingDeg}` per tick, it returns the stop(s) that should fire.
 Today the **simulated** drive (`generateDrive`) manufactures that fix stream. **Real GPS is the same
 stream from a different source** (`expo-location.watchPositionAsync`). No change to the trigger logic.
 
 **What's already done (don't redo):** the trigger core + sim + geo are an importable, RN-safe leaf
-(`@skipper/drive-core`); `apps/mobile` is in the bun workspace; the preview player already has the
+(`@skipper/engine`); `apps/mobile` is in the bun workspace; the preview player already has the
 audio session, lock-screen Now Playing, clip loading, and seek machinery. See §3.
 
 **Where to start:** **Phase 0** (audio-session spike) then **Phase 2** (build the player driving the
@@ -45,7 +45,7 @@ permission. See §2.
 
 | Phase | What | Status |
 |---|---|---|
-| **1** | Trigger core importable in mobile, no drift | ✅ **Done** — extracted to `@skipper/drive-core`, mobile in the workspace, `app/preview` imports it (commits `e97c453`, `5025827`) |
+| **1** | Trigger core importable in mobile, no drift | ✅ **Done** — extracted to `@skipper/engine`, mobile in the workspace, `app/preview` imports it (commits `e97c453`, `5025827`) |
 | **0** | Audio-session spike: duck music **and** keep lock-screen Now Playing | ❌ not started — riskiest unknown; needs a dev build |
 | **2** | GPS-driven player core, fed by the **simulated** fix source | ✅ **Done** — `src/lib/useDrive.ts` + `app/drive/[id].tsx` + `src/lib/gps.ts`; intro/outro bracket playback added (`ecc78a0`) |
 | **3** | Offline download (clips → disk) | ✅ **Done** — `src/lib/offline.ts`: download to `Paths.document` + offline-first players (`03a52c6`). On-device airplane-mode acceptance pending a dev build |
@@ -87,9 +87,9 @@ Everything ships through the **phone** (mount / Bluetooth). CarPlay is deferred 
 
 ## 3. The architecture — the seam + what's reusable
 
-### 3.1 The trigger core (`@skipper/drive-core`, reusable AS-IS — do not modify)
+### 3.1 The trigger core (`@skipper/engine`, reusable AS-IS — do not modify)
 
-Import everything from `@skipper/drive-core` (the barrel re-exports `geo`/`trigger`/`simulate`/`preview`).
+Import everything from `@skipper/engine` (the barrel re-exports `geo`/`trigger`/`simulate`/`preview`).
 
 `trigger.ts`:
 - `class TriggerEngine` — `new TriggerEngine(stops: DriveStopRef[], opts?: Partial<TriggerOptions>)`;
@@ -116,13 +116,13 @@ Import everything from `@skipper/drive-core` (the barrel re-exports `geo`/`trigg
 `geo.ts`: `haversineMeters`, `bearingDeg`, `angularDiffDeg`, `nearestOnRoute`, `cumulativeMeters`,
 `MPH_TO_MPS`. All `[lng, lat]` axis order.
 
-**Tests:** `packages/drive-core/test/*.test.ts` (21 tests) lock the trigger behavior — run `bun test`
+**Tests:** `packages/engine/test/*.test.ts` (21 tests) lock the trigger behavior — run `bun test`
 in the package after any change near it.
 
 ### 3.2 The load-time setup the player writes
 
 ```ts
-import { TriggerEngine, snapStopsToRoute, type GpsFix } from '@skipper/drive-core'
+import { TriggerEngine, snapStopsToRoute, type GpsFix } from '@skipper/engine'
 
 const snapped = snapStopsToRoute(
   corridor.polyline,
@@ -276,7 +276,7 @@ non-preview tour needs a signed-in (free) account at prep time (the `/tours` + `
 
 1. **Phase 2 against `simulatedSource`** — the whole trigger→play→duck→lock-screen loop runs on the iOS
    Simulator with NO GPS. This proves the entire bet minus real positioning.
-2. **`@skipper/drive-core` tests** (`bun test`) — the trigger math is behavior-locked; don't regress it.
+2. **`@skipper/engine` tests** (`bun test`) — the trigger math is behavior-locked; don't regress it.
 3. **`bun run check`** in `apps/mobile` (lint:tokens + typecheck + test) on every UI change.
 4. **`bunx expo export`** — headless Metro bundle; catches resolution/import breakage without a device.
 5. **Phase 4 bike test (>5 mph)** — `liveSource` fires stops from real device GPS. A *walking* test is below
@@ -384,11 +384,11 @@ Pins (`apps/mobile/package.json`): `expo ~56.0.9`, `react-native 0.85.3`, `expo-
 
 ## 9. File map
 
-- `packages/drive-core/src/trigger.ts` — `TriggerEngine`, `GpsFix`, `DriveStopRef`, `TriggerEvent`,
+- `packages/engine/src/trigger.ts` — `TriggerEngine`, `GpsFix`, `DriveStopRef`, `TriggerEvent`,
   `snapStopsToRoute`, `effectiveRadiusM`, `DEFAULT_TRIGGER`. **Reuse; don't modify.**
-- `packages/drive-core/src/simulate.ts` — `generateDrive` (the sim source), `runDrive`, `DEFAULT_MAX_OFF_ROUTE_M`.
-- `packages/drive-core/src/geo.ts` — geometry helpers.
-- `packages/drive-core/test/*.test.ts` — the behavior lock (21 tests).
+- `packages/engine/src/simulate.ts` — `generateDrive` (the sim source), `runDrive`, `DEFAULT_MAX_OFF_ROUTE_M`.
+- `packages/engine/src/geo.ts` — geometry helpers.
+- `packages/engine/test/*.test.ts` — the behavior lock (21 tests).
 - `apps/mobile/app/preview/[id].tsx` — the couch/sim player to REUSE machinery from (audio session,
   lock-screen, clip load/stall/re-sign, seek). Build the GPS player as a sibling screen/hook.
 - `apps/mobile/src/lib/api.ts` — `getTour`, `signTourAudio`.
@@ -404,7 +404,7 @@ Pins (`apps/mobile/package.json`): `expo ~56.0.9`, `react-native 0.85.3`, `expo-
 ## 10. Provenance
 
 Synthesized 2026-06-08 from a 4-agent research workflow (sim core, preview player, tour data/offline, Expo
-SDK 56 APIs) + the founder-locked scope (foreground-only). The prerequisite refactor (drive-core leaf +
+SDK 56 APIs) + the founder-locked scope (foreground-only). The prerequisite refactor (engine leaf +
 workspace merge + geo dedup) is committed (`e97c453`, `5025827`); this spec covers everything after it.
 **Re-grounded 2026-06-09 (Phase 4 pass):** Phases 2–3 are now ✅ built (§1); re-verified expo-location
 against live SDK 56 docs + issue tracker and corrected the §3.3 adapter (iOS `-1` sanitize + accuracy gate),

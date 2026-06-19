@@ -230,8 +230,8 @@ facts}**. Frozen rails (§0); persona human (§0); everything else generates.
 
 ## 8. OPEN gaps — now mostly closed
 
-- **#6 — drive-core traversal-awareness → DISSOLVED.** Discrete drives are each self-contained +
-  forward (own polyline in travel direction), so drive-core stays direction-naive; no `traversal`
+- **#6 — engine traversal-awareness → DISSOLVED.** Discrete drives are each self-contained +
+  forward (own polyline in travel direction), so engine stays direction-naive; no `traversal`
   param, no reverse-the-polyline.
 - **#7 — shared-POI content key → DISSOLVED by zero-reuse (2026-06-08).** The earlier answer (add
   a forward/reverse marker to the `poi_content` key at M4) is moot: **there is no content cache and
@@ -253,7 +253,7 @@ facts}**. Frozen rails (§0); persona human (§0); everything else generates.
    Persona config object + persona-aware kit guards (§4).
 4. Shared DTO + API: serve the bracket clips; the tour DTO = a drive `{ intro, outro, stops[] }` carrying
    route/anchors/region. (Nearby/proximity recommender deferred to v2.)
-5. Mobile: bracket segments in the preview; **one card per tour**; pre-drive UI. (drive-core needs NO
+5. Mobile: bracket segments in the preview; **one card per tour**; pre-drive UI. (engine needs NO
    traversal change — there is no direction concept.)
 6. Live regen of the canonical preview (needs explicit OK).
 7. Later: nearby/proximity recommender (with the location-filter near-me, v2); dedup guardrail at

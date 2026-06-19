@@ -84,6 +84,16 @@ export const DEFAULT_ROAM_TRIGGER: RoamTriggerOptions = {
   suppressWindowSec: 15 * 60,
 }
 
+/** Coarse spatial-grid cell size in degrees (~5.5 km of latitude). A 3×3 neighborhood is a
+ *  ~16 km window — comfortably larger than the max effective trigger distance (the 1500 m
+ *  areal radius + a speed-adaptive lead), so no in-range pin is ever skipped. */
+const GRID_CELL_DEG = 0.05
+
+/** Grid key for a [lat, lng] — coordinates floored to the cell size. */
+function cellKey(lat: number, lng: number): string {
+  return `${Math.floor(lat / GRID_CELL_DEG)}:${Math.floor(lng / GRID_CELL_DEG)}`
+}
+
 export class RoamEngine {
   private opts: RoamTriggerOptions
   /** poiId → tSec it fired (cooldown clock). */
@@ -95,12 +105,45 @@ export class RoamEngine {
   private gateOpenAtSec = 0
   /** Where + when the LAST encounter fired (cluster suppression anchor; window-bounded). */
   private lastFire: { lat: number; lng: number; tSec: number } | null = null
+  /** Coarse spatial index: cell key → the pins in that ~5.5 km cell. Built ONCE so each fix
+   *  scans only its cell + 8 neighbors instead of every pin (a region can feed hundreds).
+   *  Pins with non-finite coords are kept OUT of the grid and folded into a fallback scan. */
+  private readonly grid = new Map<string, RoamPinRef[]>()
+  /** Pins without usable coords — never indexable, always candidates (never silently dropped). */
+  private readonly ungridded: RoamPinRef[] = []
 
   constructor(
     private readonly pins: RoamPinRef[],
     opts: Partial<RoamTriggerOptions> = {},
   ) {
     this.opts = { ...DEFAULT_ROAM_TRIGGER, ...opts }
+    for (const pin of this.pins) {
+      if (!Number.isFinite(pin.lat) || !Number.isFinite(pin.lng)) {
+        this.ungridded.push(pin)
+        continue
+      }
+      const key = cellKey(pin.lat, pin.lng)
+      const bucket = this.grid.get(key)
+      if (bucket) bucket.push(pin)
+      else this.grid.set(key, [pin])
+    }
+  }
+
+  /** Candidate pins for a fix: the fix's cell + its 8 neighbors, plus any ungridded pins.
+   *  Falls back to ALL pins if the fix coords are non-finite (caller still drops the fix). */
+  private candidatesFor(lat: number, lng: number): RoamPinRef[] {
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return this.pins
+    const baseLat = Math.floor(lat / GRID_CELL_DEG)
+    const baseLng = Math.floor(lng / GRID_CELL_DEG)
+    const out: RoamPinRef[] = []
+    for (let dLat = -1; dLat <= 1; dLat++) {
+      for (let dLng = -1; dLng <= 1; dLng++) {
+        const bucket = this.grid.get(`${baseLat + dLat}:${baseLng + dLng}`)
+        if (bucket) out.push(...bucket)
+      }
+    }
+    if (this.ungridded.length) out.push(...this.ungridded)
+    return out
   }
 
   /** Feed one fix; returns at most ONE encounter that fires on it. */
@@ -112,7 +155,11 @@ export class RoamEngine {
     if (fix.tSec < this.gateOpenAtSec) return [] // governor: a clip is playing / gap not elapsed
     const here: [number, number] = [fix.lng, fix.lat]
     let best: { pin: RoamPinRef; d: number } | null = null
-    for (const pin of this.pins) {
+    // Spatial prune: only pins in the fix's cell + 8 neighbors can be in range (the 3×3
+    // ~16 km window dwarfs the max effective radius). Trigger semantics are unchanged — the
+    // per-pin decision, debounce, and nearest-first below are byte-identical; we only shrink
+    // the candidate set. (A pin missing coords lives in `ungridded` and is always included.)
+    for (const pin of this.candidatesFor(fix.lat, fix.lng)) {
       const fired = this.firedAt.get(pin.poiId)
       if (fired !== undefined && fix.tSec - fired < this.opts.cooldownSec) continue
       if (pin.name) {

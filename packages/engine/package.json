@@ -1,5 +1,5 @@
 {
-  "name": "@skipper/drive-core",
+  "name": "@skipper/engine",
   "version": "0.0.0",
   "private": true,
   "type": "module",

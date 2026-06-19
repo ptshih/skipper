@@ -58,7 +58,7 @@
         "@better-auth/expo": "^1.6.18",
         "@neondatabase/serverless": "^1.1.0",
         "@skipper/db": "workspace:*",
-        "@skipper/drive-core": "workspace:*",
+        "@skipper/engine": "workspace:*",
         "@skipper/shared": "workspace:*",
         "@skipper/storage": "workspace:*",
         "better-auth": "^1.6.18",
@@ -79,7 +79,7 @@
         "@expo-google-fonts/overpass-mono": "^0.4.2",
         "@expo-google-fonts/zilla-slab": "^0.4.1",
         "@expo/vector-icons": "^15.1.1",
-        "@skipper/drive-core": "workspace:*",
+        "@skipper/engine": "workspace:*",
         "@skipper/shared": "workspace:*",
         "better-auth": "^1.6.14",
         "expo": "~56.0.11",
@@ -128,8 +128,8 @@
         "drizzle-kit": "^0.31.10",
       },
     },
-    "packages/drive-core": {
-      "name": "@skipper/drive-core",
+    "packages/engine": {
+      "name": "@skipper/engine",
       "version": "0.0.0",
       "devDependencies": {
         "@types/bun": "^1.3.14",
@@ -148,7 +148,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@skipper/db": "workspace:*",
-        "@skipper/drive-core": "workspace:*",
+        "@skipper/engine": "workspace:*",
         "drizzle-orm": "^0.45.2",
       },
       "devDependencies": {
@@ -170,7 +170,7 @@
       "dependencies": {
         "@anthropic-ai/sdk": "^0.104.1",
         "@skipper/db": "workspace:*",
-        "@skipper/drive-core": "workspace:*",
+        "@skipper/engine": "workspace:*",
         "@skipper/shared": "workspace:*",
         "@skipper/storage": "workspace:*",
         "drizzle-orm": "^0.45.2",
@@ -808,7 +808,7 @@
 
     "@skipper/db": ["@skipper/db@workspace:packages/db"],
 
-    "@skipper/drive-core": ["@skipper/drive-core@workspace:packages/drive-core"],
+    "@skipper/engine": ["@skipper/engine@workspace:packages/engine"],
 
     "@skipper/mobile": ["@skipper/mobile@workspace:apps/mobile"],
 

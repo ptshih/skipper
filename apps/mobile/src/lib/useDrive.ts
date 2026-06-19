@@ -30,7 +30,7 @@ import {
   TriggerEngine,
   type GpsFix,
   type PreviewSegment,
-} from '@skipper/drive-core'
+} from '@skipper/engine'
 import { ApiError, errorMessage } from './api'
 import { cleanPlaceName } from './labels'
 import { loadPlayback, resignPlayback } from './offline'
@@ -60,7 +60,7 @@ const toPreviewStopType = (form: string): 'story' | 'scenic' | 'break' =>
   form === 'scenic' ? 'scenic' : form === 'break' ? 'break' : 'story'
 
 // Real drive speed for the simulator (mph). A FIXED 60 for now; the trigger lead is
-// speed-adaptive in @skipper/drive-core, so this is the only knob that matters here.
+// speed-adaptive in @skipper/engine, so this is the only knob that matters here.
 const SIM_MPH = 60
 // "Fast" sim multiplier: replay the same fixes 8× sooner so a full drive triggers in
 // a couple minutes on the couch (the fix DATA — speeds, headings — is unchanged).
@@ -82,7 +82,7 @@ const KEEP_AWAKE_TAG = 'skipper-drive'
 // frozen screen (covers slow acquisition + persistently poor accuracy). (review #6)
 const GPS_SEARCH_MS = 8_000
 // POST_START_STALL_MS (the post-start interruption threshold) + the decideStall ladder live in
-// @skipper/drive-core/player now, single-sourced + unit-tested (shared with useRoam).
+// @skipper/engine/player now, single-sourced + unit-tested (shared with useRoam).
 
 // Bundled lock-screen / Now Playing artwork so the in-car lock screen isn't a blank thumbnail (the
 // persona is the product — the lock screen is a brand surface). A bundled asset URI works offline. (audit)
@@ -560,7 +560,7 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
       })),
     )
     const triggerable = snapped.filter((s) => s.offRouteM <= OFF_ROUTE_MAX_M)
-    // All trigger params (lead, heading gate, cone) come from DEFAULT_TRIGGER in drive-core — pass
+    // All trigger params (lead, heading gate, cone) come from DEFAULT_TRIGGER in engine — pass
     // nothing so a future change there takes effect here instead of being silently pinned by a
     // partial opts object that READS as if it were configured. (audit #933)
     engineRef.current = new TriggerEngine(triggerable)

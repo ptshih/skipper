@@ -89,18 +89,18 @@ core; the credit IAP is a fast-follow.
 
 ## Key engineering decisions
 
-- **`buildDrive()` is NEW in `drive-core`** (named `buildDrive`, not `generateDrive` — the drive
+- **`buildDrive()` is NEW in `engine`** (named `buildDrive`, not `generateDrive` — the drive
   simulator already owns `generateDrive` for GPS-fix generation; "drive" stays the product verb +
   `POST /drives`. NOT a refactor of `selectStops`): co-located dedupe
   **inverts to pick-one** (can't fuse finished `.m4a`s); ranks by along-route fit + real
   `audioDurationMs` best-fit + variety; runs server-side AND on-device (offline re-pace). Shared
-  pacing (`buildRouteSnapper`, `projectQueueLag`) lives in `drive-core/pacing.ts`, imported by
+  pacing (`buildRouteSnapper`, `projectQueueLag`) lives in `engine/pacing.ts`, imported by
   `buildDrive` (the legacy `selectStops`/`selectBreaks`/`snapOf` tour-generation pipeline was removed in
   the V2 migration this doc documents as shipped).
 - **Asides = pre-generated GENERIC** (intro/outro + clock-anchored beats). Live-gen / name-
   personalized brackets POSTPONED (measured synth latency too fragile for the mandatory first beat).
   Placed like `selectBreaks` via negative-sentinel seqs (extend `INTRO_SEQ`/`OUTRO_SEQ` in
-  `drive-core/preview.ts` to N asides).
+  `engine/preview.ts` to N asides).
 - **`route_sig` + `drive_demand` ship as instrumentation only**; the route cache-warming /
   authored-graduation infra is deferred behind a real route-concentration histogram (charm-not-scale).
 - **Offline:** reuse `downloadDrive`'s byte-freeze (`apps/mobile/src/lib/offline.ts`) — store BYTES, not
@@ -108,11 +108,11 @@ core; the credit IAP is a fast-follow.
 
 ## Build phases
 
-- **P1 — selection core (drive-core).** Pin `selectStops` tests → extract `drive-core/pacing.ts` →
+- **P1 — selection core (engine).** Pin `selectStops` tests → extract `engine/pacing.ts` →
   `buildDrive()` + unit tests. Zero spend, no schema, no UI. **(DONE 2026-06-18: the 4 route-geometry
-  helpers single-sourced into `drive-core/geo.ts` (re-exported via `pipeline/geo.ts`, `selectStops`
-  untouched); new `drive-core/pacing.ts` (`buildRouteSnapper` + `projectQueueLag`) + `drive-core/drive-select.ts`
-  (`buildDrive`); both packages typecheck clean + 63 drive-core tests pass + generator `geo`/`select`
+  helpers single-sourced into `engine/geo.ts` (re-exported via `pipeline/geo.ts`, `selectStops`
+  untouched); new `engine/pacing.ts` (`buildRouteSnapper` + `projectQueueLag`) + `engine/drive-select.ts`
+  (`buildDrive`); both packages typecheck clean + 63 engine tests pass + generator `geo`/`select`
   regression green. UNCOMMITTED.)**
 - **P2 — thinnest demoable slice.** `POST /drives/propose` + `POST /drives` + `@skipper/shared` DTOs +
   minimal free-text A→B screen → couch preview. (Needs a free account; persists.)

@@ -28,7 +28,7 @@ key/
 apps/mobile
 packages/sim
 packages/studio
-packages/drive-core
+packages/engine
 
 # Build / dev / scratch cruft
 dist/

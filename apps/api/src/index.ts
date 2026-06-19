@@ -89,7 +89,7 @@ function roamRadiusM(kind: string | null): number {
   return 600
 }
 
-// Straight-line distance (m) — the same haversine as @skipper/drive-core's; inlined here
+// Straight-line distance (m) — the same haversine as @skipper/engine's; inlined here
 // because the API's only geo need is this one filter (keep the dep graph flat).
 function haversineMeters(aLat: number, aLng: number, bLat: number, bLng: number): number {
   const R = 6_371_000

@@ -338,7 +338,7 @@ Foreground When-In-Use only. Mode resolves to `live` via "Start the drive" (`ind
   heading gate is skipped, proximity-only), and a fix with accuracy `< 0` *or* `> 50m` dropped.
   Watch-for: a stop firing the instant the drive starts while you're far away (a wild low-accuracy
   first fix slipped the gate); a long quiet stretch while driving right past stops (a heading-gate
-  regression). (`apps/mobile/src/lib/gps.ts:135,302`, `packages/drive-core/src/trigger.ts:116`)
+  regression). (`apps/mobile/src/lib/gps.ts:135,302`, `packages/engine/src/trigger.ts:116`)
   **⚠ CONFIRMED IN THE FIELD (2026-06-10, free-roam's first live drive):** the −1→0 coercion DID
   read as a real northbound heading and gated out everything non-north. Roam's fix: `liveRoamSource`
   passes the RAW course and `RoamEngine` skips the gate when `headingDeg < 0` (unknown). **The same
@@ -356,7 +356,7 @@ Foreground When-In-Use only. Mode resolves to `live` via "Start the drive" (`ind
   ducked-quiet and **waits** for the next trigger (never auto-advances). Watch-for: narration firing
   late/on top of the stop at speed (lead not scaling); a behind/abeam stop firing (heading gate off);
   double-/re-fire on a return leg; stops never firing despite driving right past (accuracy gate too
-  tight, or alongM projection broken). (`packages/drive-core/src/trigger.ts:70,99,101`)
+  tight, or alongM projection broken). (`packages/engine/src/trigger.ts:70,99,101`)
 - [ ] **Route dot tracks real position; auto-completes at the end.** Do: drive the full route incl.
   any return leg. Expect: the dot advances **monotonically forward**, never jumping back on a return
   leg; within 25m of the final vertex the outro queues and the drive finishes to the "arrived" done

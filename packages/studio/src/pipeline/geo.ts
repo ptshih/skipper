@@ -2,13 +2,13 @@
 //
 // The shared route-geometry — haversineMeters, bearingDeg, cumulativeMeters, nearestOnRoute,
 // totalMeters, routeBearingAt, timeAtAlong, sideOfApproach (+ LngLat / RoutePosition) — now lives
-// in @skipper/drive-core (the pure, RN-safe driving/trigger core, single-sourced with
+// in @skipper/engine (the pure, RN-safe driving/trigger core, single-sourced with
 // buildDrive's pacing) and is RE-EXPORTED here, so generator call sites keep importing it from
 // './geo' unchanged. This file adds only the GENERATION-specific helpers on top: the sub-region
 // narration label (regionLabel) and polyline encoding for Places search-along-route (encodePolyline).
 // [lng, lat] axis order throughout, matching drives.polyline.
 
-import type { LngLat } from '@skipper/drive-core'
+import type { LngLat } from '@skipper/engine'
 
 export {
   type LngLat,
@@ -18,13 +18,13 @@ export {
   cumulativeMeters,
   nearestOnRoute,
   METERS_PER_MILE,
-  // Route-relative helpers moved DOWN to @skipper/drive-core (single-sourced with buildDrive's
+  // Route-relative helpers moved DOWN to @skipper/engine (single-sourced with buildDrive's
   // pacing); re-exported so generator call sites keep importing them from './geo' unchanged.
   totalMeters,
   routeBearingAt,
   timeAtAlong,
   sideOfApproach,
-} from '@skipper/drive-core'
+} from '@skipper/engine'
 
 /** Rough sub-region label for narration context — tells the model where the driver IS. */
 export function regionLabel(lat: number, lng: number): string {

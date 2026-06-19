@@ -14,7 +14,7 @@
     "@better-auth/expo": "^1.6.18",
     "@neondatabase/serverless": "^1.1.0",
     "@skipper/db": "workspace:*",
-    "@skipper/drive-core": "workspace:*",
+    "@skipper/engine": "workspace:*",
     "@skipper/shared": "workspace:*",
     "@skipper/storage": "workspace:*",
     "better-auth": "^1.6.18",

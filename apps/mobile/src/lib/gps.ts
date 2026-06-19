@@ -14,7 +14,7 @@ import {
   haversineMeters,
   type GpsFix,
   type LngLat,
-} from '@skipper/drive-core'
+} from '@skipper/engine'
 
 /**
  * A controller for an active fix stream. `stop()` ends it for good; `pause()`/`resume()`

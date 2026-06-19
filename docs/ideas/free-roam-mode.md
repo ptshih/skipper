@@ -154,7 +154,7 @@ first.** (Aggregate telemetry only — the toy lens has no appetite for surveill
   same rule family as break-stops' no-volatile-data), no volatile data; region-wide cluster-merge
   for co-located POIs (the Emerald Bay bay+castle+island move, applied per-region). Runs as another
   job type on the ops substrate (`docs/specs/admin-ops-console-spec.md`).
-- **Rail-less trigger mode in `@skipper/drive-core`:** regional proximity index + speed-adaptive
+- **Rail-less trigger mode in `@skipper/engine`:** regional proximity index + speed-adaptive
   lead + heading-toward gate + per-POI cooldown + min-gap pacing/frequency governor + cluster
   suppression + wave/story priority. THE real engineering — tractable because the failure asymmetry
   flips: a missed stop breaks a tour's arc; a missed roam POI is invisible.

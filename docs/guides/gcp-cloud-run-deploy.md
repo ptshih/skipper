@@ -180,7 +180,7 @@ add-iam-policy-binding` (which rejects the role); direct IAP walls the WHOLE ser
 external `curl /health` returns "Invalid IAP credentials: empty token" — that's success, not a
 broken route. **Admin identity = `peter@manoa.health`** (in-domain): a personal-gmail accessor
 needs DRS relaxed, so we switched to the Workspace account and re-enabled DRS. **Gen image
-context:** the root `.dockerignore` (api-tuned) excluded `packages/studio` + `packages/drive-core`,
+context:** the root `.dockerignore` (api-tuned) excluded `packages/studio` + `packages/engine`,
 which the gen Dockerfile COPYs → "file does not exist in build context"; it's SHARED across all
 three image builds, so it must only exclude what NO build COPYs (fixed + commented in the file).
 **Prod GCP auth = ADC, not a key file:** `.env.production` carried a dev-local
@@ -227,7 +227,7 @@ bun run db:migrate:prod
 gcloud builds triggers create github --name=skipper-studio-deploy --region=us-east4 \
   --repository=projects/$PROJECT/locations/us-east4/connections/skipper-gh/repositories/skipper \
   --branch-pattern='^main$' --build-config=cloudbuild.studio.yaml \
-  --included-files='packages/studio/**,packages/db/**,packages/drive-core/**,packages/shared/**,packages/storage/**,cloudbuild.studio.yaml' \
+  --included-files='packages/studio/**,packages/db/**,packages/engine/**,packages/shared/**,packages/storage/**,cloudbuild.studio.yaml' \
   --service-account=projects/$PROJECT/serviceAccounts/$COMPUTE
 
 gcloud builds triggers create github --name=skipper-admin-deploy --region=us-east4 \

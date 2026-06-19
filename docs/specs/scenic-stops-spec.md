@@ -115,7 +115,7 @@ and align with it:
 - **`select.ts` / `generate.ts` will be reworked** for per-direction independent generation. The
   scenic insertion seams (`selectNarrated`, `selectStops`, the `pending[]` merge + along-route sort)
   will move — re-locate them by function name, not line number.
-- **drive-core stays direction-naive** (spec §8) → the scenic plan's "player/sim = zero changes"
+- **engine stays direction-naive** (spec §8) → the scenic plan's "player/sim = zero changes"
   still holds. `TriggerEngine` is `stopType`-agnostic; a curated scenic stop with normal trigger
   geometry fires identically. Only VERIFY short-clip (~20s) overlap in the simulator.
 - **Headline derivation** uses the marquee POI — make sure `'curated'` scenic POIs (generic names)
@@ -175,7 +175,7 @@ In dependency order:
    — **keep the geology scenic-rescue working** (it already enrolls every scenic stop at the trigger
    point). Only add: thread `scenicMode` into the scenic `baseReq` (§5).
 5. **`narrate.ts` + `skipper.ts`** — the scenic-mode palette + directives (§5). No contract change.
-6. **Player / sim / drive-core** — ZERO changes; only verify short-clip overlap in the simulator.
+6. **Player / sim / engine** — ZERO changes; only verify short-clip overlap in the simulator.
 
 ---
 

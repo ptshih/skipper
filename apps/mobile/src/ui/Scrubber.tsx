@@ -18,7 +18,7 @@
 // increment/decrement jog ±15s (mirrors the skip buttons).
 import { useEffect, useRef, useState } from 'react'
 import { PanResponder, StyleSheet, View } from 'react-native'
-import { formatMmssMs } from '@skipper/drive-core'
+import { formatMmssMs } from '@skipper/engine'
 import { IN_CAR_MAX_FONT_SCALE, border, hit, space } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'
 import { Text } from './Text'

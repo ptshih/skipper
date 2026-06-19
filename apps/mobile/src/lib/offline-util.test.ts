@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { INTRO_SEQ, OUTRO_SEQ } from '@skipper/drive-core'
+import { INTRO_SEQ, OUTRO_SEQ } from '@skipper/engine'
 import type { DriveClip, SignedDriveAudio } from '@skipper/shared'
 import {
   extForContentType,

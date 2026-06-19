@@ -16,7 +16,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.1",
     "@skipper/db": "workspace:*",
-    "@skipper/drive-core": "workspace:*",
+    "@skipper/engine": "workspace:*",
     "@skipper/shared": "workspace:*",
     "@skipper/storage": "workspace:*",
     "drizzle-orm": "^0.45.2",

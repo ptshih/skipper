@@ -108,7 +108,7 @@ A code scout (2026-06-18) confirmed most pieces exist:
   no tour-id dependency. The pacing/gap-fill/cluster-merge/break/queue-lag engine is directly reusable
   for an arbitrary route + along-route candidate set.
 - **`materializeRoute` already computes routes** (Google Routes API v2 → frozen polyline + distance +
-  duration), and `nearestOnRoute`/`cumulativeMeters` (drive-core) already snap POIs onto a polyline.
+  duration), and `nearestOnRoute`/`cumulativeMeters` (engine) already snap POIs onto a polyline.
 - **Roam narration is already region-owned/shared** and served open by `GET /roam` (bbox prefilter +
   haversine). Brackets already exist as placeless per-tour `tour_frames` (intro/outro).
 - **Greenfield bits:** `route_sig` does not exist (anticipated as forward-compat tour-dedup — it's the
@@ -125,7 +125,7 @@ record is pending a build-greenlight). Workflow resolutions:
   shared roam tracks (mints nothing; preserves no-`createdBy`-on-`tours`); re-open replays it verbatim
   (resolve-and-skip dangling refs). An OPEN `POST /drives/preview` keeps the anonymous funnel-top
   friction-free; the wall stays at save/download/drive.
-- **Selection** = a NEW `generateDrive()` in `drive-core` (co-located dedupe inverts to
+- **Selection** = a NEW `generateDrive()` in `engine` (co-located dedupe inverts to
   pick-one — you can't fuse finished `.m4a`s), ranking by along-route fit + real `audioDurationMs`
   best-fit + variety; runs on both server and device (offline re-pace).
 - **`route_sig` + a `drive_demand` counter** ship as instrumentation ONLY; the cache-warming /

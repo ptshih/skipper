@@ -6,7 +6,7 @@
 #   `run jobs deploy` instead of `run deploy`.
 #
 # Trigger: a 2nd Cloud Build trigger on the existing `skipper-gh` connection, path-filtered to
-#   packages/studio/** (+ db/drive-core/shared/storage). See docs/specs/admin-ops-console-spec.md §10.
+#   packages/studio/** (+ db/engine/shared/storage). See docs/specs/admin-ops-console-spec.md §10.
 #
 # ONE-TIME setup (NOT done here — see the spec §10 + docs/guides/gcp-cloud-run-deploy.md):
 #   - create the runtime SA `skipper-studio@$PROJECT_ID.iam.gserviceaccount.com`

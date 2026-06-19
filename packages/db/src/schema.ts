@@ -109,7 +109,7 @@ export type RouteProvenance = {
  * route order: a place NARRATION (referenced 1:1 via its poi — content resolves LIVE so a regenerated
  * telling auto-improves a saved drive) or a generic ASIDE (intro/outro/clock beat). The STRUCTURE
  * is frozen at create time (which items, order, snapped trigger geometry); only a narration's audio
- * resolves live. buildDrive (drive-core) produces the narration items; the API weaves the asides.
+ * resolves live. buildDrive (engine) produces the narration items; the API weaves the asides.
  */
 export type DriveSelectionItem =
   | {
