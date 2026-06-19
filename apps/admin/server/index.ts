@@ -549,6 +549,8 @@ app.get('/admin/pois', async (c) => {
       kind: pois.kind,
       lat: pois.lat,
       lng: pois.lng,
+      speakableLat: pois.speakableLat,
+      speakableLng: pois.speakableLng,
       factsHash: pois.factsHash,
       // Full-extract length: just gates empty vs non-empty for story-eligibility now (a scenic pin has
       // facts=null → 0; the 800-char floor was removed 2026-06-16). It's the full swept article, not a lead.
@@ -642,6 +644,14 @@ app.get('/admin/pois', async (c) => {
       : clip.factsHash != null && clip.factsHash === p.factsHash
         ? 'fresh'
         : 'stale'
+    // Speakable DRIFT: a curated "where to look" anchor sitting implausibly far from the poi's pin
+    // (beyond the kind-aware bound) — almost certainly a typo / hallucinated coordinate, the same check
+    // the corpus audit (audit-speakable.ts) + the write boundary apply. Only a poi that carries an
+    // anchor can drift; pins without one are never flagged.
+    const speakableDrift =
+      p.speakableLat != null && p.speakableLng != null
+        ? !checkSpeakableAnchor([p.lng, p.lat], [p.speakableLng, p.speakableLat], p.kind).ok
+        : false
     return {
       id: p.id,
       source: p.source,
@@ -654,6 +664,7 @@ app.get('/admin/pois', async (c) => {
       storyEligibility,
       enriched: p.enriched,
       sheetDrift: p.sheetDrift,
+      speakableDrift,
       narrationStatus,
       suspiciousDuration: clip?.suspiciousDuration ?? false,
       // Stale = the narration grounded on a now-changed facts_hash. narrationStatus already encodes this;

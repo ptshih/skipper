@@ -1,5 +1,5 @@
-import { Fragment, useMemo, useState } from 'react'
-import { useNavigate } from '@tanstack/react-router'
+import { Fragment, useEffect, useMemo, useState } from 'react'
+import { getRouteApi, useNavigate } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Activity, CircleCheck, Compass, Locate, Plus, RefreshCw, Search, Sparkles, Trash2, Wrench, X, Zap } from 'lucide-react'
 import { api, ApiError, type CorrectionOverride, type PoiDetail, type PoiRow, type StoryEligibility } from '@/lib/api'
@@ -53,18 +53,31 @@ const NARRATION_META: Record<'fresh' | 'stale', { label: string; variant: BadgeV
   stale: { label: 'narration · stale', variant: 'warning', hint: 'Facts moved — a run would regenerate it' },
 }
 
+const poisRoute = getRouteApi('/pois')
+
 export function PoisView() {
   const navigate = useNavigate()
+  const search = poisRoute.useSearch()
   const [tab, setTab] = useState<Tab>('corpus')
   const [discoverOpen, setDiscoverOpen] = useState(false)
   const [generateOpen, setGenerateOpen] = useState(false)
   const [rescoreOpen, setRescoreOpen] = useState(false)
 
+  // Deep-link (from ⌘K): ?act=… opens a header dialog once, then strips the param so a refresh/back
+  // doesn't re-open it.
+  useEffect(() => {
+    if (!search.act) return
+    if (search.act === 'discover') setDiscoverOpen(true)
+    else if (search.act === 'generate') setGenerateOpen(true)
+    else if (search.act === 'rescore') setRescoreOpen(true)
+    navigate({ to: '/pois', search: (prev) => ({ ...prev, act: undefined }), replace: true })
+  }, [search.act, navigate])
+
   // The shared place corpus, fetched once + cached under the ['pois'] key.
   const { data: pois = [], error: err, isPending } = useQuery({ queryKey: ['pois'], queryFn: async () => (await api.pois()).pois })
 
   const live = pois // no retired field; all pois are live for now
-  const flagged = pois.filter((p) => p.staleFacts || p.suspiciousDuration || (!p.attributed && p.narrationCount > 0))
+  const flagged = pois.filter((p) => p.staleFacts || p.suspiciousDuration || (!p.attributed && p.narrationCount > 0) || p.speakableDrift)
 
   const tabs: { id: Tab; label: string; count: number; alert?: boolean }[] = [
     { id: 'corpus', label: 'Corpus', count: live.length },
@@ -103,7 +116,7 @@ export function PoisView() {
         options={tabs.map((t) => ({ value: t.id, label: t.label, count: t.count, alert: t.alert }))}
       />
 
-      {tab === 'corpus' && <CorpusTab pois={live} loading={isPending} />}
+      {tab === 'corpus' && <CorpusTab pois={live} loading={isPending} openPoiId={search.poi} />}
       {tab === 'retire' && <RetireTab flagged={flagged} />}
 
       <DiscoverDialog open={discoverOpen} onOpenChange={setDiscoverOpen} onSubmitted={() => navigate({ to: '/runs' })} />
@@ -332,6 +345,12 @@ function EnrichDialog({
   summary: string
   onSubmitted: () => void
 }) {
+  // Advanced (collapsed): the model tier A/B + a smoke-test cap. The studio CLI defaults to sonnet
+  // (only the literal 'opus' selects opus); `limit` caps how many places enrich. Server forwards both.
+  const [advanced, setAdvanced] = useState(false)
+  const [model, setModel] = useState<'sonnet' | 'opus'>('sonnet')
+  const [limit, setLimit] = useState('')
+
   const buildBody = () => {
     const body: Record<string, unknown> = { kind: 'enrich_pois' }
     if (selection.kind === 'explicit') {
@@ -342,6 +361,9 @@ function EnrichDialog({
       if (selection.filter.query) body.query = selection.filter.query
       if (selection.excludeIds.length) body.excludeIds = selection.excludeIds
     }
+    if (model !== 'sonnet') body.model = model // sonnet is the CLI default — only send a non-default override
+    const n = Number(limit)
+    if (limit.trim() && Number.isFinite(n) && n > 0) body.limit = Math.floor(n)
     return body
   }
 
@@ -372,6 +394,45 @@ function EnrichDialog({
       <div className="rounded-lg border bg-muted/30 px-3 py-2 text-sm">
         Enriching <span className="font-medium text-foreground">{summary}</span>.
         <span className="text-muted-foreground"> Only eligible story POIs are enriched — Preview shows the exact count + cost.</span>
+      </div>
+
+      <div className="space-y-2">
+        <button
+          type="button"
+          className="text-xs font-medium text-muted-foreground hover:text-foreground"
+          onClick={() => setAdvanced((v) => !v)}
+        >
+          {advanced ? '▾' : '▸'} Advanced
+        </button>
+        {advanced && (
+          <div className="grid grid-cols-2 gap-3 rounded-lg border border-dashed px-3 py-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="enrich-model" className="text-xs">Model</Label>
+              <Select value={model} onValueChange={(v) => setModel(v as 'sonnet' | 'opus')}>
+                <SelectTrigger id="enrich-model" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="sonnet">Sonnet (default)</SelectItem>
+                  <SelectItem value="opus">Opus (calibration A/B)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="enrich-limit" className="text-xs">Smoke-test first N</Label>
+              <Input
+                id="enrich-limit"
+                type="number"
+                inputMode="numeric"
+                min="1"
+                step="1"
+                placeholder="all eligible"
+                value={limit}
+                onChange={(e) => setLimit(e.target.value)}
+              />
+            </div>
+          </div>
+        )}
       </div>
     </JobActionDialog>
   )
@@ -895,7 +956,7 @@ function NarrationTab({ poiId, hasNarration }: { poiId: string; hasNarration: bo
 
 /* ── CORPUS ── */
 
-function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
+function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loading: boolean; openPoiId?: string }) {
   const [q, setQ] = useState('')
   const [region, setRegion] = useState('all')
   const [source, setSource] = useState('all')
@@ -912,6 +973,15 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
   // "Select all matching" sends the region SLUG; the CLI resolves it to a server-side bbox filter
   // (geometry-first). Shared ['regions'] cache; the `regions` list below is just slug+name for the dropdown.
   const { data: regionDefs = [] } = useQuery({ queryKey: ['regions'], queryFn: async () => (await api.regions()).regions })
+
+  // Deep-link: ?poi=<id> opens that POI's detail sheet once the cached list resolves, then strips the param.
+  useEffect(() => {
+    if (!openPoiId) return
+    const p = pois.find((x) => x.id === openPoiId)
+    if (!p) return // not loaded yet / unknown id — the effect re-runs when `pois` arrives
+    setSheetPoi({ id: p.id, name: p.name, canDelete: p.narrationCount === 0, hasNarration: p.narrationCount > 0 })
+    navigate({ to: '/pois', search: (prev) => ({ ...prev, poi: undefined }), replace: true })
+  }, [openPoiId, pois, navigate])
 
   const regions = useMemo(() => {
     const seen = new Set<string>()
@@ -933,6 +1003,7 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
     if (flags === 'needs-enrich' && (p.storyEligibility !== 'eligible' || p.enriched)) return false
     if (flags === 'narration-stale' && p.narrationStatus !== 'stale') return false
     if (flags === 'sheet-drift' && !p.sheetDrift) return false
+    if (flags === 'speakable-drift' && !p.speakableDrift) return false
     if (q) {
       const s = `${p.name} ${p.sourceId}`.toLowerCase()
       if (!s.includes(q.toLowerCase())) return false
@@ -1075,6 +1146,7 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
             <SelectItem value="needs-enrich">Eligible · un-enriched</SelectItem>
             <SelectItem value="narration-stale">Narration: stale</SelectItem>
             <SelectItem value="sheet-drift">Story: sheet drifted</SelectItem>
+            <SelectItem value="speakable-drift">Speakable: drifted</SelectItem>
             <SelectItem value="defect">Narration defects</SelectItem>
             <SelectItem value="stale">Stale facts</SelectItem>
             <SelectItem value="unattrib">Unattributed</SelectItem>
@@ -1166,6 +1238,14 @@ function CorpusTab({ pois, loading }: { pois: PoiRow[]; loading: boolean }) {
                             title="Article drifted — a curated sheet span no longer appears in the current article. Re-enrich (enrich --force) to pick up the change."
                           >
                             sheet drift
+                          </Badge>
+                        )}
+                        {p.speakableDrift && (
+                          <Badge
+                            variant="warning"
+                            title="Speakable anchor is implausibly far from the pin — likely a typo or hallucinated coordinate. Re-verify + reset it in the POI's Corrections tab."
+                          >
+                            speakable drift
                           </Badge>
                         )}
                         {p.narrationStatus !== 'none' && (
@@ -1271,9 +1351,13 @@ function RetireTab({ flagged }: { flagged: PoiRow[] }) {
       )}
       <div className="space-y-2">
         {flagged.map((p) => {
-          const tone = p.staleFacts ? 'warning' : 'destructive'
-          const label = p.staleFacts ? 'Stale facts' : 'Unattributed'
-          const desc = p.staleFacts ? 'factsHash changed — re-fetch, then regenerate the narration' : 'story narration missing CC BY-SA attribution'
+          const tone = p.staleFacts || p.speakableDrift ? 'warning' : 'destructive'
+          const label = p.staleFacts ? 'Stale facts' : p.speakableDrift ? 'Speakable drift' : 'Unattributed'
+          const desc = p.staleFacts
+            ? 'factsHash changed — re-fetch, then regenerate the narration'
+            : p.speakableDrift
+              ? 'speakable anchor implausibly far from the pin — re-verify + reset it in Corrections'
+              : 'story narration missing CC BY-SA attribution'
           const isOrphan = p.narrationCount === 0
           const refetching = refetchMut.isPending && refetchMut.variables === p.id
           const deleting = deleteMut.isPending && deleteMut.variables === p.id
@@ -1282,7 +1366,7 @@ function RetireTab({ flagged }: { flagged: PoiRow[] }) {
               key={p.id}
               className={cn(
                 'rounded-xl border px-4 py-3',
-                p.staleFacts ? 'border-warning/30 bg-warning/5' : 'border-destructive/30 bg-destructive/5',
+                p.staleFacts || p.speakableDrift ? 'border-warning/30 bg-warning/5' : 'border-destructive/30 bg-destructive/5',
               )}
             >
               <div className="flex items-start justify-between gap-3">

@@ -123,6 +123,10 @@ export interface PoiRow {
   /** ENRICHED, but a curated sheet span no longer appears in the current article — the article drifted;
    *  the place needs a re-enrich (`enrich --force`) to pick up the upstream change. */
   sheetDrift: boolean
+  /** A curated speakable "where to look" anchor sits implausibly far from the POI pin (beyond the
+   *  kind-aware bound) — likely a typo/hallucination; re-verify + reset it in the Corrections tab.
+   *  False when no anchor is set. */
+  speakableDrift: boolean
   narrationStatus: NarrationStatus
   staleFacts: boolean
   attributed: boolean

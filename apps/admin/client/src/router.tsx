@@ -16,7 +16,25 @@ const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', bef
 const runsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/runs', component: RunsView })
 const regionsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/regions', component: RegionsView })
 const referenceRoute = createRoute({ getParentRoute: () => rootRoute, path: '/reference', component: ReferenceView })
-const poisRoute = createRoute({ getParentRoute: () => rootRoute, path: '/pois', component: PoisView })
+export type PoiAction = 'discover' | 'generate' | 'rescore'
+export interface PoisSearch {
+  /** Deep-link (one-shot, stripped after consuming): open this POI's detail sheet on mount. */
+  poi?: string
+  /** Deep-link (one-shot, stripped after consuming): open this header dialog on mount. */
+  act?: PoiAction
+}
+// Plain validator (apps/admin has no zod dep) — coerce + whitelist, drop anything else.
+const poisRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/pois',
+  component: PoisView,
+  validateSearch: (search: Record<string, unknown>): PoisSearch => {
+    const out: PoisSearch = {}
+    if (typeof search.poi === 'string' && search.poi) out.poi = search.poi
+    if (search.act === 'discover' || search.act === 'generate' || search.act === 'rescore') out.act = search.act
+    return out
+  },
+})
 // Catch-all → /runs (replaces react-router's `path="*"` redirect).
 const splatRoute = createRoute({ getParentRoute: () => rootRoute, path: '$', beforeLoad: toRuns })
 

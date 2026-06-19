@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link, Outlet, useNavigate } from '@tanstack/react-router'
-import { Activity, Anchor, BookOpen, Layers, MapPin, Menu, Moon, Search, Sun } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { Activity, Anchor, BookOpen, Compass, Layers, MapPin, Menu, Moon, Search, Sun, Zap } from 'lucide-react'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { HealthBanner } from '@/components/HealthBanner'
+import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
 type AppPath = '/runs' | '/regions' | '/pois' | '/reference'
@@ -206,22 +208,43 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
     return () => window.removeEventListener('keydown', onEsc)
   }, [onEsc])
 
-  const all: { group: string; label: string; icon: React.ElementType; href: AppPath }[] = [
-    { group: 'Go to', label: 'Runs', icon: Activity, href: '/runs' },
-    { group: 'Go to', label: 'Regions', icon: Layers, href: '/regions' },
-    { group: 'Go to', label: 'POIs', icon: MapPin, href: '/pois' },
-    { group: 'Go to', label: 'Reference', icon: BookOpen, href: '/reference' },
+  // POIs warm the shared ['pois'] cache (same key/shape as PoisView) — free when that page loaded it.
+  const { data: pois = [] } = useQuery({ queryKey: ['pois'], queryFn: async () => (await api.pois()).pois })
+
+  type PaletteItem = { group: string; label: string; icon: React.ElementType; hint?: string; onSelect: () => void }
+  const go = (to: AppPath) => () => { navigate({ to }); onClose() }
+  const openPoi = (id: string) => () => { navigate({ to: '/pois', search: { poi: id } }); onClose() }
+  const action = (act: 'discover' | 'generate' | 'rescore') => () => { navigate({ to: '/pois', search: { act } }); onClose() }
+
+  const navItems: PaletteItem[] = [
+    { group: 'Go to', label: 'Runs', icon: Activity, onSelect: go('/runs') },
+    { group: 'Go to', label: 'Regions', icon: Layers, onSelect: go('/regions') },
+    { group: 'Go to', label: 'POIs', icon: MapPin, onSelect: go('/pois') },
+    { group: 'Go to', label: 'Reference', icon: BookOpen, onSelect: go('/reference') },
   ]
-  const items = q ? all.filter((it) => it.label.toLowerCase().includes(q.toLowerCase())) : all
+  const actionItems: PaletteItem[] = [
+    { group: 'Actions', label: 'Discover POIs', icon: Compass, onSelect: action('discover') },
+    { group: 'Actions', label: 'Generate Narration', icon: Zap, onSelect: action('generate') },
+    { group: 'Actions', label: 'Re-score corpus', icon: Activity, onSelect: action('rescore') },
+  ]
+  const ql = q.toLowerCase()
+  const navMatches = q ? navItems.filter((it) => it.label.toLowerCase().includes(ql)) : navItems
+  const actionMatches = q ? actionItems.filter((it) => it.label.toLowerCase().includes(ql)) : actionItems
+  // POIs only when typing (don't dump the whole corpus on open); capped at 8.
+  const poiMatches: PaletteItem[] = q
+    ? pois
+        .filter((p) => p.name.toLowerCase().includes(ql) || p.sourceId.toLowerCase().includes(ql))
+        .slice(0, 8)
+        .map((p) => ({ group: 'POIs', label: p.name, icon: MapPin, hint: p.sourceId, onSelect: openPoi(p.id) }))
+    : []
+  const items = [...navMatches, ...actionMatches, ...poiMatches]
 
   useEffect(() => setActive(0), [q])
-
-  const run = (href: AppPath) => { navigate({ to: href }); onClose() }
 
   const onKey = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') { e.preventDefault(); setActive((a) => Math.min(a + 1, items.length - 1)) }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)) }
-    else if (e.key === 'Enter') { e.preventDefault(); if (items[active]) run(items[active].href) }
+    else if (e.key === 'Enter') { e.preventDefault(); items[active]?.onSelect() }
   }
 
   let lastGroup = ''
@@ -236,7 +259,7 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={onKey}
-            placeholder="Search or jump to…"
+            placeholder="Search POIs, actions, or jump to…"
             className="w-full bg-transparent text-[15px] text-foreground outline-none placeholder:text-muted-foreground"
           />
           <kbd className="rounded border bg-background px-1.5 font-mono text-[10px] leading-relaxed">esc</kbd>
@@ -258,11 +281,11 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
                     i === active && 'bg-accent',
                   )}
                   onMouseEnter={() => setActive(i)}
-                  onClick={() => run(it.href)}
+                  onClick={() => it.onSelect()}
                 >
                   <it.icon size={16} className="text-muted-foreground" />
                   <span>{it.label}</span>
-                  <span className="ml-auto font-mono text-xs text-muted-foreground">{it.group}</span>
+                  <span className="ml-auto font-mono text-xs text-muted-foreground">{it.hint ?? it.group}</span>
                 </div>
               </div>
             )

@@ -64,17 +64,24 @@ instead" deferral is untouched; inline auto-gating on every generate stays defer
 - ✅ **Reference glossary honest.** Each dimension marked gate-vs-advisory + where it runs; `pacing`
   annotated "reserved — no evaluator yet"; the Re-score row added to the run-kinds table.
 
-## Tier 3 — geography & power-operator
+## Tier 3 — geography & power-operator (code-only items BUILT 2026-06-19; map pending)
 
 - **Map view** (Leaflet + OSM, no key): draw-the-bbox in the Regions dialog; pin + draggable
   speakable-anchor in the POI Corrections tab. The `bbox-lookup` helper + the too-far anchor guard are
-  textual compensations for this missing map. *Effort L.*
-- **Make ⌘K useful** — today it's navigation-only. The 850-POI corpus is already client-cached; let
-  it search POIs by name and run actions (Discover/Generate/Re-score). *Effort M.*
-- **`audit-speakable` as a corpus-health flag** — the corpus-wide anchor-drift check is shell-only;
-  surface it like the existing `sheet-drift` flag (badge + Retire-tab filter). *Effort M.*
-- **Enrich "Advanced": model A/B + smoke-limit** — `--model` and `--limit` are server-forwarded but
-  have no field; add an Advanced disclosure (pairs with the new spend cap). *Effort S.*
+  textual compensations for this missing map. *Effort L.* — **PENDING**: needs a `bun add`
+  (react-leaflet@5 + leaflet) which rewrites the shared root `bun.lock`; deferred to a quiet-tree
+  moment to avoid lockfile collisions with the other agents' in-flight dep churn.
+- ✅ **⌘K is useful** — BUILT. The palette now searches the POI corpus by name (shared `['pois']`
+  cache, capped at 8) + has action commands (Discover / Generate Narration / Re-score corpus). Deep-link
+  via typed `/pois?poi=<id>` / `?act=<discover|generate|rescore>` search params (`validateSearch`, no
+  zod dep; consumed via `getRouteApi('/pois')`, one-shot then stripped). Verified: action deep-link
+  opens the dialog + strips the param.
+- ✅ **`audit-speakable` as a corpus-health flag** — BUILT. `GET /admin/pois` computes `speakableDrift`
+  per row via `checkSpeakableAnchor` (only for pois carrying an anchor); surfaced as a `speakable drift`
+  badge, a "Speakable: drifted" flag facet, and inclusion in the Retire tab (its own label/tone/desc).
+- ✅ **Enrich "Advanced": model A/B + smoke-limit** — BUILT. An Advanced disclosure on the Enrich
+  dialog with a model toggle (Sonnet default / Opus) + a "Smoke-test first N" field, threaded into the
+  job body (server already forwarded `--model`/`--limit`).
 
 ## Tier 4 — when real users arrive (stage behind a flag)
 
