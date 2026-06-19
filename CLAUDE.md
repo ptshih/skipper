@@ -68,6 +68,14 @@ you found so the next agent can re-check it.
   `git diff --stat path/a path/b`. A blanket or premature add sweeps in someone else's
   half-finished work — the exact failure this repo's multi-agent setup invites.
 
+- **The working tree + index are SHARED — never run a command that touches another agent's work.**
+  NO destructive or whole-tree git: `git stash` / `reset --hard` / `checkout -- .` / `restore .` /
+  `clean` / `rebase` each hit the WHOLE shared tree/index and silently eat others' uncommitted work
+  (one `git stash` pockets everyone's) — use path-scoped variants only. Re-check a file is still
+  SOLELY yours right before committing (`git diff --stat path/a path/b`); if it now carries another
+  agent's hunk, leave it UNCOMMITTED for its owner — never sweep or clobber. No repo-wide auto-fixers
+  (`prettier --write .`, `eslint --fix`, codemods) — scope formatters to your own files.
+
 - **Docs ride along with the change.** If your work ships, supersedes, or invalidates
   anything described in `docs/` (or in this file), update that doc's status line in the
   SAME commit — statuses flip in place; files never move on a state change. The structure
