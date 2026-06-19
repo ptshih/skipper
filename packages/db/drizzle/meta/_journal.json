@@ -148,6 +148,13 @@
       "when": 1781895983783,
       "tag": "0020_condemned_pixie",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1781900133900,
+      "tag": "0021_eval_tables_v2",
+      "breakpoints": true
     }
   ]
 }
