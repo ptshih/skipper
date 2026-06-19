@@ -132,7 +132,7 @@ build, otherwise the app loads but gets no data.
   `eas.json` / EAS secrets, not the decryption key.
 
 - **Slimming the upload (optional).** A repo-root `.easignore` excluding
-  `apps/api` + `packages/{db,generator,sim}` would shrink the upload. **Must not**
+  `apps/api` + `packages/{db,studio,sim}` would shrink the upload. **Must not**
   exclude `packages/shared` — the build needs it. Left out for now to avoid that
   footgun.
 

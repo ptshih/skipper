@@ -79,7 +79,7 @@ The SPA calls `/admin/*` same-origin, so IAP's auth flows naturally.
 
 | # | Question | Decision | Why |
 |---|---|---|---|
-| 1 | Reuse API image or dedicated? | **Dedicated `skipper-studio` Job image** (own Dockerfile mirroring `apps/api/Dockerfile`, workspace trimmed to `generator+db+shared+storage`) | The generator's install closure (Anthropic SDK, google-auth, eval) differs from the API's |
+| 1 | Reuse API image or dedicated? | **Dedicated `skipper-studio` Job image** (own Dockerfile mirroring `apps/api/Dockerfile`, workspace trimmed to `studio+db+shared+storage`) | The generator's install closure (Anthropic SDK, google-auth, eval) differs from the API's |
 | 2 | DB target dev vs prod? | **Prod only.** ENTRYPOINT bakes `-f .env.production`; dev experiments stay on the laptop CLI | Cloud ops exist to operate the *live* prod catalog |
 | 3 | Live phase/cost surfacing? | A no-op-unless-`STUDIO_JOB_ID` **`pipeline/job-progress.ts`**, wired ONLY at the 4 ops entrypoint boundaries — never inside `generate.ts`. NB: **cost is not persisted anywhere today** (§9), so the hook is the *only* source of `pipeline_jobs.costUsd` | Keeps the CLI byte-identical (laptop has no `STUDIO_JOB_ID`) and risky edits out of `generate.ts` |
 | 4 | Light ops same Job or inline? | **All four CLIs through the one `skipper-studio` Job**; override `args` pick the script | Uniform secrets/logging/guardrails + keeps generator deps out of the admin image |
@@ -138,7 +138,7 @@ Migration: the table arrived additively; `kind` started as a `gen_job_kind` pgEn
 ## 5. The `skipper-studio` Cloud Run Job (v0)
 
 - **Image:** new `packages/studio/Dockerfile` mirroring `apps/api/Dockerfile`: `FROM oven/bun:1`,
-  trim the workspace to `generator+db+shared+storage`, `bun install --production`, COPY src + the
+  trim the workspace to `studio+db+shared+storage`, `bun install --production`, COPY src + the
   dotenvx-encrypted `.env.production`. Pushed to
   `us-east4-docker.pkg.dev/lithe-window-491818-k8/skipper/skipper-studio`.
 - **ENTRYPOINT:** `["dotenvx","run","-f",".env.production","--","bun"]`. The per-execution

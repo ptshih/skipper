@@ -10,7 +10,7 @@
 #
 # Shape mirrors apps/api/Dockerfile (verified pattern): bun has no `turbo prune` yet, so
 # `bun install --filter` still pulls the whole RN tree. We TRIM the root `workspaces` to
-# the generator's closure — generator + @skipper/{db,engine,shared,storage} (from its
+# the studio closure — studio + @skipper/{db,engine,shared,storage} (from its
 # package.json) — so the Expo/React-Native tree is never resolved. `engine` is in the
 # closure here (the api image doesn't need it). Internal packages export .ts source: no
 # build step, bun runs the source directly.
@@ -33,7 +33,7 @@ RUN apt-get update \
 # dotenvx for deploy-time secret decryption (a ROOT devDependency, dropped by --production).
 RUN bun add -g @dotenvx/dotenvx
 
-# 1) Manifests only, then resolve deps with the workspace TRIMMED to the generator closure
+# 1) Manifests only, then resolve deps with the workspace TRIMMED to the studio closure
 #    so the RN tree is never resolved or installed. --production drops devDeps.
 COPY package.json ./
 COPY packages/studio/package.json packages/studio/

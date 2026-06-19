@@ -1,4 +1,4 @@
-// Generator configuration — env access, provider readiness, and the tuning knobs
+// Studio configuration — env access, provider readiness, and the tuning knobs
 // for M1 generation. Centralized so the founder has one place to turn the dials
 // and one place to see which API keys a full run needs.
 //
