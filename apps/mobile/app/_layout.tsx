@@ -3,7 +3,6 @@ import { Stack, useRouter, type ErrorBoundaryProps } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import * as SplashScreen from 'expo-splash-screen'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
-import { DrivesFilterProvider } from '@/lib/drives-filter'
 import { SimModeProvider, readStoredSimMode } from '@/lib/sim-mode'
 import { ThemeProvider, readStoredThemeMode, useAppFonts, useTheme, type ThemeMode } from '@/theme'
 import { fonts } from '@/theme/tokens'
@@ -72,9 +71,7 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <ThemeProvider initialMode={initialMode ?? 'system'}>
         <SimModeProvider initialSimMode={initialSimMode ?? false}>
-          <DrivesFilterProvider>
-            <ThemedStack />
-          </DrivesFilterProvider>
+          <ThemedStack />
         </SimModeProvider>
         {/* Launch-time update gate — floats above the whole navigator. Renders nothing
             unless the server /version floor says this build must nudge or force-update. */}
