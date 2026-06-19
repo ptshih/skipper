@@ -23,12 +23,20 @@ export const OFF_ROUTE_MAX_M = 700
  * near the curb. Measured on the first live drive: at a flat 250 m only 8 of 77 basin pins were
  * reachable from the highway. The client's speed-adaptive lead still extends these at speed.
  * Single-sourced here so the /roam and /drives radii can't drift apart.
+ *
+ * The patterns track the discovery vocabulary (`featureKind` in the studio pipeline): an extended
+ * landform (peninsula/point/cape) gets the areal tier, a high mountain feature (incl. a pass) the
+ * widest, scenic viewpoints (vista/overlook/waterfall) the park tier. A `spring` stays at the
+ * compact default — it is a point-source feature, not an areal body. Matched case-insensitively so a
+ * capitalized kind never silently falls through to the default (which would under-trigger it).
  */
 export function radiusForKind(kind: string | null): number {
   if (!kind) return 600
-  if (/mountain|peak|summit|ridge|hill/.test(kind)) return 1500
-  if (/lake|reservoir|bay|valley|canyon|island|peninsula/.test(kind)) return 1200
-  if (/park|recreation area|beach|cove|meadow|historic district/.test(kind)) return 1000
+  const k = kind.toLowerCase()
+  if (/mountain|peak|summit|ridge|hill|pass/.test(k)) return 1500
+  // `\bpoint\b` so the standalone landform matches but "viewpoint" (a park-tier scenic stop) doesn't.
+  if (/lake|reservoir|bay|valley|canyon|island|peninsula|\bpoint\b|cape/.test(k)) return 1200
+  if (/park|recreation area|beach|cove|meadow|historic district|waterfall|vista|viewpoint|overlook/.test(k)) return 1000
   return 600
 }
 
@@ -163,4 +171,47 @@ export function sideOfApproach(headingDeg: number, from: LngLat, to: LngLat): 'l
   const mag = Math.abs(rel)
   if (mag < 10 || mag > 170) return null // ~collinear with travel — no clear side
   return rel > 0 ? 'right' : 'left'
+}
+
+/**
+ * How far the "where to look" anchor sits from the pin before the guard rejects it, relative to the
+ * kind-aware bound — a multiplier so the ceiling reflects EDGE-to-edge, not centroid-to-edge.
+ * `radiusForKind` is a centroid→road trigger floor (~a feature's radius); a speakable vantage is a
+ * centroid→vantage distance, which for an elongated or off-centroid feature (a long valley, a
+ * point/cape, exactly the misleading-pin case a speakable anchor exists to fix) honestly runs past
+ * the bare radius. 1.5× widens the band to clear an honest edge vantage while still failing the
+ * km-scale typo/hallucination this guard exists to catch.
+ */
+export const SPEAKABLE_ANCHOR_RADIUS_MULT = 1.5
+
+/**
+ * The ceiling (m) a curated "where to look" speakable anchor may sit from its poi's pin before the
+ * coordinate is suspect. The anchor corrects a MISLEADING centroid, but a vantage is still "roughly
+ * here," inside the feature's own body, never km away — so the ceiling scales with the feature's
+ * kind (`radiusForKind`) times `SPEAKABLE_ANCHOR_RADIUS_MULT`. Single-sourced so the admin write
+ * boundary and the corpus audit judge anchors identically.
+ */
+export function speakableAnchorMaxM(kind: string | null): number {
+  return Math.round(SPEAKABLE_ANCHOR_RADIUS_MULT * radiusForKind(kind))
+}
+
+export interface SpeakableAnchorCheck {
+  /** Great-circle pin→anchor distance, meters. */
+  distanceM: number
+  /** The kind-aware ceiling `distanceM` is judged against (`speakableAnchorMaxM`). */
+  maxM: number
+  /** False when the anchor is implausibly far from the pin (reject the write / flag in an audit). */
+  ok: boolean
+}
+
+/**
+ * Sanity-check a speakable "where to look" anchor against its poi's pin. `ok:false` ⇒ the anchor is
+ * implausibly far (beyond the feature's own body) and is almost certainly a typo or a hallucinated
+ * coordinate — the admin write boundary REJECTS it (overridable) and the corpus audit FLAGS it. Pure;
+ * both callers single-source the bound here so they can never drift. `pin`/`anchor` are [lng, lat].
+ */
+export function checkSpeakableAnchor(pin: LngLat, anchor: LngLat, kind: string | null): SpeakableAnchorCheck {
+  const distanceM = haversineMeters(pin, anchor)
+  const maxM = speakableAnchorMaxM(kind)
+  return { distanceM, maxM, ok: distanceM <= maxM }
 }
