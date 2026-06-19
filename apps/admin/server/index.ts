@@ -31,6 +31,7 @@ import { and, asc, count, desc, eq, inArray, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import {
   evalRuns,
+  evalScores,
   studioJobs,
   narrations,
   poiOverrides,
@@ -215,10 +216,12 @@ app.get('/admin/runs', async (c) => {
       .select({
         id: evalRuns.id,
         kind: evalRuns.kind,
-        slug: evalRuns.slug,
+        region: evalRuns.region,
         pass: evalRuns.pass,
         dryRun: evalRuns.dryRun,
         grounding: evalRuns.groundingScore,
+        withheld: evalRuns.withheld,
+        total: evalRuns.total,
         narrationModel: evalRuns.narrationModel,
         gitSha: evalRuns.gitSha,
         createdAt: evalRuns.createdAt,
@@ -266,6 +269,7 @@ app.get('/admin/runs', async (c) => {
       phase: j.phase,
       costUsd: j.costUsd,
       grounding: null,
+      withheld: null,
       narrationModel: null,
       gitSha: null,
       triggeredBy: j.triggeredBy,
@@ -277,13 +281,14 @@ app.get('/admin/runs', async (c) => {
         source: 'eval' as const,
         id: e.id,
         kind: e.kind,
-        slug: e.slug,
+        slug: e.region,
         status: null,
         pass: e.pass,
         dryRun: e.dryRun,
         phase: null,
         costUsd: null,
         grounding: e.grounding,
+        withheld: e.withheld,
         narrationModel: e.narrationModel,
         gitSha: e.gitSha,
         triggeredBy: null,
@@ -294,6 +299,53 @@ app.get('/admin/runs', async (c) => {
     .slice(0, 150)
 
   return c.json({ runs })
+})
+
+// One eval run's per-(poi × dimension) verdicts — the report behind a run: which places the gate
+// held back (withheld=true) and why (findings), worst-first. Read-only observability.
+app.get('/admin/runs/:id/scores', async (c) => {
+  const runId = c.req.param('id')
+  const [run] = await db
+    .select({
+      id: evalRuns.id,
+      region: evalRuns.region,
+      kind: evalRuns.kind,
+      pass: evalRuns.pass,
+      dryRun: evalRuns.dryRun,
+      total: evalRuns.total,
+      shipped: evalRuns.shipped,
+      withheld: evalRuns.withheld,
+      grounding: evalRuns.groundingScore,
+      tts: evalRuns.ttsScore,
+      diversity: evalRuns.diversityScore,
+      narrationModel: evalRuns.narrationModel,
+      judgeModel: evalRuns.judgeModel,
+      gitSha: evalRuns.gitSha,
+      createdAt: evalRuns.createdAt,
+    })
+    .from(evalRuns)
+    .where(eq(evalRuns.id, runId))
+  if (!run) return c.json({ error: 'run not found' }, 404)
+
+  const scores = await db
+    .select({
+      poiId: evalScores.poiId,
+      qid: evalScores.qid,
+      name: evalScores.name,
+      dimension: evalScores.dimension,
+      pass: evalScores.pass,
+      value: evalScores.value,
+      withheld: evalScores.withheld,
+      findings: evalScores.findings,
+      detail: evalScores.detail,
+    })
+    .from(evalScores)
+    .where(eq(evalScores.runId, runId))
+  // Worst-first: withheld places, then failures, then the rest.
+  scores.sort(
+    (a, b) => Number(b.withheld) - Number(a.withheld) || Number(a.pass) - Number(b.pass),
+  )
+  return c.json({ run, scores })
 })
 
 const TERMINAL = ['succeeded', 'failed', 'canceled'] as const

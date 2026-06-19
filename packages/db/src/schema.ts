@@ -567,17 +567,21 @@ export const creditEntries = pgTable(
 /*  eval_runs / eval_scores — the DURABLE eval record (observability, not state) */
 /* -------------------------------------------------------------------------- */
 
-// The eval loop's system of record: every eval platform converges on "the run is a DB record
-// keyed to a pinned artifact; local files are dev transport". Two tables, Langfuse-style: a run
-// row (with the full GenerateResult artifact as jsonb) + one score row per (run × stop ×
-// dimension), with judge and HUMAN verdicts as the same primitive distinguished by `source`.
+// The automated quality gate's system of record (V2, 2026-06-19). A RUN is one
+// generate-narrations pass over a region's corpus; a SCORE is one (poi × dimension) verdict
+// from the inline panel. Keyed to the V2 atom — the poi (id + qid) — not a tour. The gate is
+// FAIL-CLOSED: a clip whose GATE dimension (grounding/tts) can't come clean after the bounded
+// optimize() retakes is WITHHELD (no narration persisted) and recorded here with withheld=true,
+// so the admin sees exactly which places were held back and why.
 //
-// OBSERVABILITY, never product state: nothing in the player/API reads them, and a dry-run
-// generation MAY write here (recording the eval is the point) while writing no tour state.
+// OBSERVABILITY, never product state: nothing in the player/API reads these; a dry run MAY
+// write here (recording the eval is the point) while persisting no narration. Simplified from
+// the V1 design (dropped the 100KB artifact blob + the redundant scorecard jsonb + the
+// charm/veracity columns the automated gate never runs).
 
 export const evalRunKindEnum = pgEnum('eval_run_kind', [
-  'generation', // the in-pipeline panel that runs inside generateTour (live or dry)
-  'offline_audit', // the eval CLI scoring an artifact after the fact
+  'generation', // the inline panel inside generate-narrations (live or dry)
+  'offline_audit', // a CLI scoring the existing corpus after the fact
 ])
 export const evalScoreSourceEnum = pgEnum('eval_score_source', ['judge', 'human'])
 
@@ -585,29 +589,28 @@ export const evalRuns = pgTable(
   'eval_runs',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    /** The artifact's identity slug (the run is keyed to a pinned artifact, not a tour row). */
-    slug: text('slug').notNull(),
+    /** The region slug whose corpus this run covered. */
+    region: text('region').notNull(),
     kind: evalRunKindEnum('kind').notNull(),
     dryRun: boolean('dry_run').notNull().default(false),
-    /** Best-effort provenance pins for run-over-run comparison. */
+    /** Provenance pins for run-over-run comparison. */
     gitSha: text('git_sha'),
     narrationModel: text('narration_model'),
     judgeModel: text('judge_model'),
-    /** The scorecard's gate verdict (AND of gate dimensions). */
+    /** Gate verdict: every SHIPPED clip cleared every GATE dimension. */
     pass: boolean('pass').notNull(),
-    /** Per-dimension rollup scores (0..1; null = dimension not run) — the trend columns. */
+    /** Run tallies — the at-a-glance summary. */
+    total: integer('total').notNull(),
+    shipped: integer('shipped').notNull(),
+    withheld: integer('withheld').notNull(),
+    /** Per-dimension mean score (0..1; null = not run). Only the dims the automated gate
+     *  runs: grounding/tts (gates) + diversity (advisory). */
     groundingScore: doublePrecision('grounding_score'),
     ttsScore: doublePrecision('tts_score'),
     diversityScore: doublePrecision('diversity_score'),
-    charmScore: doublePrecision('charm_score'),
-    veracityScore: doublePrecision('veracity_score'),
-    /** The full GenerateResult artifact (scripts + fact wells + embedded scorecard). */
-    artifact: jsonb('artifact').$type<Record<string, unknown>>().notNull(),
-    /** The RunScorecard this run produced (the offline CLI's may differ from the embedded one). */
-    scorecard: jsonb('scorecard').$type<Record<string, unknown>>().notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
-  (t) => [index('eval_runs_slug_idx').on(t.slug, t.createdAt)],
+  (t) => [index('eval_runs_region_idx').on(t.region, t.createdAt)],
 )
 
 export const evalScores = pgTable(
@@ -617,20 +620,23 @@ export const evalScores = pgTable(
     runId: uuid('run_id')
       .notNull()
       .references(() => evalRuns.id, { onDelete: 'cascade' }),
-    /** Stable cross-run case identity (the pois dedup key); null for pre-identity artifacts. */
-    poiSource: text('poi_source'),
-    poiSourceId: text('poi_source_id'),
-    seq: integer('seq').notNull(),
-    /** The track form being scored, as TEXT (observability, not the pgEnum). */
-    stopType: text('stop_type').$type<'story' | 'scenic' | 'break'>(),
+    /** The V2 case identity — the poi row (nullable: a poi may be pruned later). */
+    poiId: uuid('poi_id').references(() => pois.id, { onDelete: 'set null' }),
+    /** Canonical cross-source key, denormalized for the regression join across runs. */
+    qid: text('qid'),
+    /** Place name at eval time, denormalized for a readable admin report. */
+    name: text('name'),
     dimension: text('dimension').notNull(),
-    /** judge = an automated evaluator; human = an adjudication row added later. */
+    /** judge = an automated evaluator; human = an adjudication added later (calibration). */
     source: evalScoreSourceEnum('source').notNull().default('judge'),
     pass: boolean('pass').notNull(),
     /** 0..1 (1 = clean) — the StopEval score. */
     value: doublePrecision('value').notNull(),
+    /** True when this clip was WITHHELD (a GATE dim stayed dirty after the retakes).
+     *  Denormalized onto every one of the poi's rows so "show held-back places" is a flat filter. */
+    withheld: boolean('withheld').notNull().default(false),
     findings: jsonb('findings').$type<string[]>().notNull(),
-    /** Dimension-specific payload (ClaimVerdict[] / VeracityVerdict[] / …). */
+    /** Dimension payload (grounding → ClaimVerdict[]) — the actual report content. */
     detail: jsonb('detail'),
     /** Free-text annotation (human rows). */
     comment: text('comment'),
@@ -639,7 +645,7 @@ export const evalScores = pgTable(
   (t) => [
     index('eval_scores_run_idx').on(t.runId),
     // The regression join: same place + dimension across runs.
-    index('eval_scores_case_idx').on(t.poiSource, t.poiSourceId, t.dimension),
+    index('eval_scores_case_idx').on(t.qid, t.dimension),
   ],
 )
 

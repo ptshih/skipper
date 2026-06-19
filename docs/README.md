@@ -64,6 +64,11 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
 - [geometry-first-regions.md](decisions/geometry-first-regions.md) — a region is a BBOX, never a
   stored FK: a POI's region = point-in-bbox; a drive stores its route bbox + derives region by
   intersect — no `region_id` FK anywhere (2026-06-19).
+- [automated-grounding-gate.md](decisions/automated-grounding-gate.md) — the founder reversed "human
+  ear instead": `generate-narrations.ts` now scores every clip through the eval panel and is
+  FAIL-CLOSED (a clip whose grounding/tts gate stays dirty after the bounded `optimize()` retakes is
+  WITHHELD + flagged in `eval_scores`, never shipped). Replaces the two cheap guards; eval tables
+  redesigned for V2; admin surfaces the runs + per-poi report. DECIDED + BUILT 2026-06-19.
 - [corpus-enrichment.md](decisions/corpus-enrichment.md) — the paid `enrich` step that scouts story
   POIs into curated fact wells (`pois.fact_sheet`) shared by roam + drives; ✅ BUILT 2026-06-15, RUN
   2026-06-16 (315 welled).
@@ -133,6 +138,12 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   in seconds → roam clips pre-ordered along it, user-owned) are the two first-day experiences;
   the hand-authored tour is DEFERRED. journey-layer rung 2 made buildable on the batch stack via
   clip REUSE; zero-reuse scopes down to the authored rung; V2 may break freely (V1 never shipped).
+- [eval-panel-rewire.md](ideas/eval-panel-rewire.md) — re-wiring the BUILT-but-unwired eval panel
+  as one instrument over everything the LLM/TTS touches, re-keyed to V2 pois/places; STAGED — a $0
+  out-of-band corpus audit + folding the two cheap inline guards in (ships now), then an inline
+  grounding soft-gate via the built `optimize()` flywheel (needs a founder greenlight, crosses the
+  "human ear instead" deferral). Brainstorm 2026-06-19; key finding: an upstream sheet-faithfulness
+  gate is a no-op (the enricher selects verbatim spans by id).
 
 The rest are post-MVP features, gated behind the proven phone player:
 - [drive-complete-moment.md](ideas/drive-complete-moment.md) — the payoff beat as motion + sound

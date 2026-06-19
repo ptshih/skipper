@@ -176,10 +176,16 @@ unchanged — the content artifact is a region's shared `narrations` corpus, REU
 
 ## Deferred — DO NOT build in v1
 
-Segment trimming / arbitrary start points; the cache-variant + dedup machinery (until M4); any automated
-groundedness gate (human ear instead); **CarPlay entirely** (both the audio Now-Playing + map templates,
-revisited only after the phone player proves the bet); Android Auto; multilingual; the live conversational
-agent + on-device fallback (spec: `docs/specs/ask-the-skipper-spec.md`).
+Segment trimming / arbitrary start points; the cache-variant + dedup machinery (until M4); **CarPlay
+entirely** (both the audio Now-Playing + map templates, revisited only after the phone player proves the
+bet); Android Auto; multilingual; the live conversational agent + on-device fallback (spec:
+`docs/specs/ask-the-skipper-spec.md`).
+
+The **automated grounding gate** is no longer deferred — the founder reversed "human ear instead"
+(2026-06-19). `generate-narrations.ts` now scores every clip through the eval panel and is FAIL-CLOSED:
+a clip whose grounding/tts gate stays dirty after the bounded `optimize()` retakes is WITHHELD (never
+synthesized/persisted) and flagged in `eval_scores`. Veracity stays advisory (no auto-judge for
+world-truth). See `docs/decisions/automated-grounding-gate.md`.
 
 ## Future ideas (post-MVP, not scheduled)
 

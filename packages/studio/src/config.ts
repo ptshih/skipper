@@ -159,14 +159,14 @@ export const PANEL_REGEN_CONCURRENCY = (): number =>
 
 // --- Eval panel + evaluator-optimizer (the in-pipeline flywheel) -------------
 
-// generate.ts runs the eval panel (src/eval/) DURING generation and feeds findings back
-// through the evaluator-optimizer (eval/optimize.ts). Cost shape (deliberate): the per-pass
-// loop is driven ONLY by the FREE deterministic dims (tts + diversity); GROUNDING (one
-// Opus call per story/scenic stop) runs ONCE as a final pass, and only a stop that FAILS
-// it gets a bounded targeted re-narration. Grounding findings drive regen + are recorded on
-// the scorecard but NEVER block `ready` — the human ear stays the ship decision (CLAUDE.md:
-// "Deferred — DO NOT build: any automated groundedness gate").
-/** Grounding eval is on by default; set SKIPPER_GROUNDING_EVAL=off to skip the Opus pass. */
+// generate-narrations.ts runs the eval panel (src/eval/) DURING generation per clip and feeds
+// findings back through the evaluator-optimizer (eval/optimize.ts). V2 (2026-06-19) the gate is
+// AUTOMATED + FAIL-CLOSED: every clip is scored on grounding (Opus) + tts + laterality (gates) +
+// diversity (advisory); a failing clip is auto-retaken (bounded, accept-if-not-worse), and one
+// that still fails a GATE dimension is WITHHELD — never synthesized, never persisted — with the
+// verdict written to eval_scores. The founder reversed the old "human ear instead" deferral
+// (docs/decisions/automated-grounding-gate.md); grounding now blocks shipping, not just informs.
+/** Grounding eval (the Opus gate) is on by default; set SKIPPER_GROUNDING_EVAL=off to skip it. */
 export const GROUNDING_EVAL = (): boolean => process.env.SKIPPER_GROUNDING_EVAL !== 'off'
 /** Tour-level passes of the FREE panel (tts + diversity) → regen loop. Each pass re-lints the
  * assembled set (fixing stop A can clear or create a cross-stop finding on stop B) and is a

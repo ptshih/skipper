@@ -1,0 +1,114 @@
+// Persist eval runs durably — eval_runs/eval_scores are the automated gate's SYSTEM OF RECORD.
+//
+// V2 (2026-06-19): a RUN is one generate-narrations pass over a region's corpus; a SCORE is one
+// (poi × dimension) verdict from the inline panel, keyed to the V2 atom (poi id + qid), with the
+// WITHHELD flag denormalized so the admin can flat-filter the places the fail-closed gate held
+// back. judge and HUMAN verdicts share the `source` primitive (human rows added later for
+// calibration). OBSERVABILITY, never product state — failures are warned + swallowed by callers,
+// and a DRY run MAY write here while persisting no narration.
+
+import { db } from '@skipper/db'
+import { evalRuns, evalScores } from '@skipper/db/schema'
+import type { NewEvalScore } from '@skipper/db/schema'
+import type { RunScorecard } from './types'
+
+/** A clip's stable V2 identity, threaded onto its score rows + the withheld flag. */
+export interface ClipIdentity {
+  poiId: string
+  qid: string | null
+  name: string
+  /** True when this clip was WITHHELD (a GATE dim stayed dirty after the retakes). */
+  withheld: boolean
+}
+
+export interface EvalRunInput {
+  /** The region slug the corpus run covered. */
+  region: string
+  kind: 'generation' | 'offline_audit'
+  dryRun: boolean
+  narrationModel?: string | null
+  judgeModel?: string | null
+  /** The scorecard rolled up over every evaluated clip (shipped AND withheld). */
+  scorecard: RunScorecard
+  total: number
+  shipped: number
+  withheld: number
+  /** seq → the clip's stable identity, for the per-(poi × dimension) score rows. */
+  identityBySeq?: Map<number, ClipIdentity>
+}
+
+/** A dimension's rollup score, or null when it wasn't run (no vacuous 1s in the trend columns). */
+export function dimensionRollupScore(card: RunScorecard, dimension: string): number | null {
+  const d = card.dimensions.find((x) => x.dimension === dimension)
+  return d && d.stopsEvaluated > 0 ? d.score : null
+}
+
+/** Pure scorecard → score-row mapping (exported for tests; no I/O). */
+export function buildScoreRows(
+  runId: string,
+  card: RunScorecard,
+  identityBySeq?: Map<number, ClipIdentity>,
+): NewEvalScore[] {
+  return card.stops.map((s) => {
+    const id = identityBySeq?.get(s.seq)
+    return {
+      runId,
+      poiId: id?.poiId ?? null,
+      qid: id?.qid ?? null,
+      name: id?.name ?? null,
+      dimension: s.dimension,
+      source: 'judge' as const,
+      pass: s.pass,
+      value: s.score,
+      withheld: id?.withheld ?? false,
+      findings: s.findings,
+      detail: (s.detail ?? null) as NewEvalScore['detail'],
+    }
+  })
+}
+
+function gitShaBestEffort(): string | null {
+  try {
+    const p = Bun.spawnSync(['git', 'rev-parse', '--short', 'HEAD'], { cwd: import.meta.dir })
+    return p.success ? new TextDecoder().decode(p.stdout).trim() : null
+  } catch {
+    return null
+  }
+}
+
+/** Insert one run + its score rows ATOMICALLY. Returns the run id.
+ *
+ *  The run id is generated CLIENT-side so both inserts ride one `db.batch` — neon-http runs a
+ *  batch as a single non-interactive transaction, so a run row can never land without its score
+ *  rows (and no interactive-transaction driver is needed). Run `pass` = nothing had to be
+ *  withheld (every gate dimension was clean on every clip that shipped). */
+export async function recordEvalRun(input: EvalRunInput): Promise<string> {
+  const card = input.scorecard
+  const runId = crypto.randomUUID()
+  const insertRun = db.insert(evalRuns).values({
+    id: runId,
+    region: input.region,
+    kind: input.kind,
+    dryRun: input.dryRun,
+    gitSha: gitShaBestEffort(),
+    narrationModel: input.narrationModel ?? null,
+    judgeModel: input.judgeModel ?? null,
+    pass: input.withheld === 0,
+    total: input.total,
+    shipped: input.shipped,
+    withheld: input.withheld,
+    groundingScore: dimensionRollupScore(card, 'grounding'),
+    ttsScore: dimensionRollupScore(card, 'tts'),
+    diversityScore: dimensionRollupScore(card, 'diversity'),
+  })
+  const scoreRows = buildScoreRows(runId, card, input.identityBySeq)
+  if (scoreRows.length > 0) {
+    await db.batch([insertRun, db.insert(evalScores).values(scoreRows)])
+  } else {
+    await insertRun
+  }
+  console.log(
+    `Eval run recorded → eval_runs ${runId} (${scoreRows.length} score rows, ${input.withheld} withheld).`,
+  )
+  return runId
+}

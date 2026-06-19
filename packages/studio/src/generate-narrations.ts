@@ -10,10 +10,13 @@
 // narration is placeless: form='story', no segment, no route geometry (a drive snaps a trigger point
 // onto its route at assemble time; roam triggers on the poi's own location).
 //
-// ALPHA CUTS (deliberate, founder-eared instead): no eval panel / grounding audit pass,
-// no diversity lint across clips (encounters play minutes apart on different drives) —
-// the two cheap guards that DO run are the kit ban and the no-laterality rule (each gets
-// ONE retake with an avoid note, then ships with a loud warn).
+// AUTOMATED QUALITY GATE (2026-06-19): every clip is scored by the eval panel (grounding via Opus
+// + laterality + tts-cleanliness as GATES, diversity as advisory), auto-retaken via optimize() when
+// it fails, and FAIL-CLOSED — a clip that still fails a gate after the bounded retakes is WITHHELD
+// (never synthesized, never persisted) and recorded in eval_scores with withheld=true, so the admin
+// sees which places were held and why. This REPLACES the old two cheap guards (kit + laterality):
+// one loop, one gate, one scorecard. The founder reversed the "human ear instead" deferral
+// (docs/decisions/automated-grounding-gate.md); silence (a withheld clip) beats a bad telling.
 //
 // SOP (docs/guides/ops-scripts-sop.md): PREVIEWS (with a cost estimate) by default;
 // narrates/synthesizes/writes only on --apply.
@@ -46,6 +49,8 @@ import { mapLimit } from './pipeline/concurrency'
 import { personaFromKey } from './persona'
 import {
   DEFAULT_REGION_SLUG,
+  GROUNDING_EVAL,
+  GROUNDING_REGEN_MAX_ROUNDS,
   NARRATION_CONCURRENCY,
   NARRATION_FALLBACK_CHARS,
   TTS_CONCURRENCY,
@@ -53,6 +58,15 @@ import {
 } from './config'
 import { estimateTtsUsd, llmSpendLines, llmSpentUsd } from './pipeline/spend'
 import { STORY_TASTE_DENYLIST } from '@skipper/shared'
+import { NARRATION_MODEL, JUDGMENT_MODEL } from './models'
+import { buildGroundingWell, evaluateGrounding } from './eval/grounding'
+import { evaluateTts } from './eval/tts'
+import { evaluateDiversity } from './eval/diversity'
+import { evaluateLaterality } from './eval/laterality'
+import { optimize } from './eval/optimize'
+import { buildScorecard } from './eval/scorecard'
+import { DIMENSION_KIND, type StopEval } from './eval/types'
+import { recordEvalRun, type ClipIdentity } from './eval/record'
 
 /** Roam encounter length band (Autio-register long-form, founder 2026-06-13).
  *  storyTargetSeconds = the AIM; storyMaxSeconds = a HARD cap so a fact-rich place doesn't sprawl
@@ -65,6 +79,8 @@ const ROAM_LENGTH = {
   storyTargetSeconds: 150,
   storyMaxSeconds: 180,
 } as const
+/** The corridor framing for a free-roam encounter (no planned route). Named + framed, never a fact. */
+const FREE_ROAM_CORRIDOR = 'Free roam — an unplanned drive, no route'
 const flags = parseFlags(process.argv.slice(2), {
   valueFlags: ['limit', 'region', 'max-cost', 'query', 'include-ids', 'exclude-ids'],
 })
@@ -208,11 +224,13 @@ async function main(): Promise<void> {
   }
 
   // Cost preview: narration ≈ system+sheet in / ~1k thinking+output out per clip (Opus 4.8
-  // $5/$25 per MTok → very roughly $0.03–0.08 per clip). TTS cost is DOMINATED by audio tokens,
-  // which estimateTtsUsd derives from the WORD count (estSeconds = words / WORDS_PER_SECOND) — so
-  // the dummy clip must contain that many real WORDS. A space-less char blob ('x'.repeat(n)) reads
-  // as ONE word and collapses the audio estimate ~100× (it under-quoted a full-region run by ~$28
-  // and silently defeated the --max-cost gate). Model a target-length clip's word budget.
+  // $5/$25 per MTok → very roughly $0.03–0.08 per clip). The automated gate adds ~1 Opus GROUNDING
+  // call/clip (~$0.04) plus the odd bounded retake, so model ~$0.15/clip of LLM spend when the gate
+  // is on. TTS cost is DOMINATED by audio tokens, which estimateTtsUsd derives from the WORD count
+  // (estSeconds = words / WORDS_PER_SECOND) — so the dummy clip must contain that many real WORDS. A
+  // space-less char blob ('x'.repeat(n)) reads as ONE word and collapses the audio estimate ~100× (it
+  // under-quoted a full-region run by ~$28 and silently defeated --max-cost). Model a target-length clip.
+  const llmUsdPerClip = GROUNDING_EVAL() ? 0.15 : 0.1
   const estWordsPerClip = Math.round(ROAM_LENGTH.storyTargetSeconds * WORDS_PER_SECOND)
   const dummyClip = Array(estWordsPerClip).fill('word').join(' ')
   const tts = estimateTtsUsd(
@@ -220,8 +238,9 @@ async function main(): Promise<void> {
     personaFromKey('skipper').ttsStyle.length,
   )
   console.log(
-    `\nEstimated spend: narration ~$${(queue.length * 0.1).toFixed(2)} ± half ` +
-      `+ TTS ~$${tts.usd.toFixed(2)} (${queue.length} clips ≈ ${Math.round((queue.length * ROAM_LENGTH.storyTargetSeconds) / 60)} min of audio)`,
+    `\nEstimated spend: narration+gate ~$${(queue.length * llmUsdPerClip).toFixed(2)} ± half ` +
+      `+ TTS ~$${tts.usd.toFixed(2)} (${queue.length} clips ≈ ${Math.round((queue.length * ROAM_LENGTH.storyTargetSeconds) / 60)} min of audio` +
+      `${GROUNDING_EVAL() ? '' : '; grounding gate OFF'})`,
   )
 
   if (!apply && !scriptsOnly) {
@@ -233,7 +252,7 @@ async function main(): Promise<void> {
 
   // Cost ceiling: abort BEFORE any narration/TTS if the estimate exceeds --max-cost. A roam run
   // covers a whole corpus, so an unbounded run (no --limit) can balloon — this is the hard stop.
-  const estSpendUsd = (scriptsOnly ? 0 : tts.usd) + queue.length * 0.1
+  const estSpendUsd = (scriptsOnly ? 0 : tts.usd) + queue.length * llmUsdPerClip
   if (estSpendUsd > maxCostUsd) {
     // THROW (not return): runJob's catch settles the studio_jobs row as FAILED. A bare `return`
     // would let runJob record status 'succeeded' — indistinguishable from a clean run that did the work.
@@ -249,21 +268,27 @@ async function main(): Promise<void> {
   // per-run re-fetch and NO fact mutation. (Override-freshness now lands via a re-sweep / refetch_facts,
   // not a per-run fetch.) `c.extract` carries the full article from the corpus query above.
 
-  // ── Narrate (parallel, blind drafts) with the two cheap guards ──
-  const LATERALITY =
-    /\b(?:on|to|off to) (?:your|the) (?:left|right)\b|\b(?:left|right)(?:-hand)? side\b/i
+  // ── Narrate + GATE each clip through the eval panel (parallel) ──
+  interface GatedClip {
+    c: Candidate
+    seq: number
+    /** The best take found, or null if narrate/eval threw (fault-isolated → withheld). */
+    script: string | null
+    evals: StopEval[]
+    /** Cleared every GATE dimension → eligible to synthesize + persist. */
+    shipped: boolean
+  }
 
-  async function narrateEncounter(c: Candidate): Promise<string> {
-    // Ground on the curated WELL when the place is enriched, else the positional extract head (the
-    // un-enriched fallback — byte-for-byte today's behavior for existing 4k rows, a strict verbatim
-    // superset once re-swept to 12k). Same resolver tours use.
+  async function gateClip(c: Candidate, seq: number): Promise<GatedClip> {
+    // Ground on the curated WELL when the place is enriched, else the positional extract head — the
+    // SAME resolver tours + drives use, so the well the auditor builds matches the narrator's sheet.
     const grounding = resolveStoryGrounding(c.facts, c.factSheet, c.enrichedAt, {
       fallbackChars: NARRATION_FALLBACK_CHARS,
       retrievedAt: (c.factsFetchedAt ?? new Date()).toISOString(),
     })
     const base = {
       region: regionLabel(c.lat, c.lng),
-      corridor: 'Free roam — an unplanned drive, no route',
+      corridor: FREE_ROAM_CORRIDOR,
       stopType: 'story' as const,
       jokeLevel: 'dadpocalypse' as const,
       place: { name: c.name, ...(c.kind ? { kind: c.kind } : {}) },
@@ -272,64 +297,155 @@ async function main(): Promise<void> {
       maxSeconds: ROAM_LENGTH.storyMaxSeconds,
       encounterFrame: true,
     }
-    let { script } = await narrateStop(base, persona.systemPrompt)
-    const avoid: string[] = []
-    if (LATERALITY.test(script))
-      avoid.push(
-        'Do NOT name a side of the road (no "on your left/right") — the direction of travel is unknown on a free-roam drive; say "just out there" or "right about here" instead.',
-      )
-    const kitHits = persona.kit.beats.filter((b) => b.match.test(script))
-    if (kitHits.length > 0) avoid.push(persona.kit.dropNote)
-    if (avoid.length > 0) {
-      console.log(
-        `  retake (${c.name}): ${kitHits.length > 0 ? 'kit ' : ''}${LATERALITY.test(script) ? 'laterality' : ''}`,
-      )
-      ;({ script } = await narrateStop({ ...base, avoid }, persona.systemPrompt))
-      if (LATERALITY.test(script) || persona.kit.beats.some((b) => b.match.test(script)))
-        console.warn(
-          `  ⚠ ${c.name}: guard still dirty after one retake — ships for the founder ear.`,
+    // The permitted well, built from the SAME facts the narrator saw (buildGroundingWell is the
+    // shared seam, so the auditor's well can never drift from the narrator's sheet).
+    const well = buildGroundingWell({ stopType: 'story', name: c.name, kind: c.kind, facts: grounding.facts })
+
+    // The per-clip panel: free dims always (tts-cleanliness + diversity = kit + within-clip tics) +
+    // laterality (a free grounding backstop); GROUNDING (one Opus call) behind SKIPPER_GROUNDING_EVAL.
+    // evaluate() is what optimize() scores each take on; regenerate() is narrateStop with avoid folded in.
+    const evaluate = async (script: string): Promise<StopEval[]> => {
+      const evals: StopEval[] = [
+        evaluateTts({ seq, script }),
+        ...evaluateDiversity([{ seq, stopType: 'story', script }], persona.kit),
+        evaluateLaterality({ seq, script }),
+      ]
+      if (GROUNDING_EVAL())
+        evals.push(
+          await evaluateGrounding({
+            seq,
+            stopType: 'story',
+            placeName: c.name,
+            script,
+            well,
+            region: base.region,
+            corridor: base.corridor,
+          }),
         )
+      return evals
     }
-    return script
+    const regenerate = async (avoid: string[]): Promise<string> =>
+      (await narrateStop({ ...base, avoid }, persona.systemPrompt)).script
+
+    const { script: initial } = await narrateStop(base, persona.systemPrompt)
+    const result = await optimize(initial, { evaluate, regenerate, maxRounds: GROUNDING_REGEN_MAX_ROUNDS })
+    // SHIP gate = every GATE dimension clean (grounding + tts; a laterality slip rides grounding).
+    // Diversity is advisory — it drives the retake but never withholds an otherwise-clean clip.
+    const shipped = result.evals.filter((e) => DIMENSION_KIND[e.dimension] === 'gate').every((e) => e.pass)
+    return { c, seq, script: result.item, evals: result.evals, shipped }
   }
 
-  console.log(`\nNarrating ${queue.length} encounters (concurrency ${NARRATION_CONCURRENCY()})...`)
+  console.log(`\nNarrating + gating ${queue.length} encounters (concurrency ${NARRATION_CONCURRENCY()})...`)
   let done = 0
-  const scripts = await mapLimit(queue, NARRATION_CONCURRENCY(), async (c) => {
-    const script = await narrateEncounter(c)
-    done++
-    console.log(`  [${done}/${queue.length}] ${c.name} (${script.split(/\s+/).length} words)`)
-    return script
+  const gated = await mapLimit(queue, NARRATION_CONCURRENCY(), async (c, i): Promise<GatedClip> => {
+    try {
+      const g = await gateClip(c, i)
+      done++
+      console.log(
+        `  [${done}/${queue.length}] ${c.name} — ${g.shipped ? `${g.script!.split(/\s+/).length} words` : 'WITHHELD (gate)'}`,
+      )
+      return g
+    } catch (e) {
+      // Fault isolation: a narrate/eval throw on ONE clip must not abort the paid run (mapLimit fails
+      // fast on a throw). Treat it as withheld, record the error as a gate finding, and continue.
+      const msg = e instanceof Error ? e.message : String(e)
+      done++
+      console.warn(`  ⚠ ${c.name}: narrate/eval failed — WITHHELD. ${msg.slice(0, 160)}`)
+      return {
+        c,
+        seq: i,
+        script: null,
+        shipped: false,
+        evals: [{ seq: i, dimension: 'grounding', pass: false, score: 0, findings: [`gate error: ${msg.slice(0, 200)}`] }],
+      }
+    }
   })
 
-  if (scriptsOnly) {
-    console.log('\n════════ SCRIPTS — scripts-only: no TTS, no R2, no DB writes ════════')
-    queue.forEach((c, i) => {
-      const script = scripts[i]!
-      const words = script.trim().split(/\s+/).filter(Boolean).length
-      console.log(
-        `\n──── ${c.name} · ${words} words ≈ ${Math.round(words / WORDS_PER_SECOND)}s · ${c.extract.length} chars source ────\n${script}`,
-      )
+  // ── Shared eval record (written on BOTH the scripts-only dry pass and the live --apply pass) ──
+  const shippedClips = gated.filter(
+    (g): g is GatedClip & { script: string } => g.shipped && g.script !== null,
+  )
+  const withheldClips = gated.filter((g) => !g.shipped)
+  const runRegion = region ? region.slug : 'roam-corpus'
+  const identityBySeq = new Map<number, ClipIdentity>(
+    gated.map((g) => [g.seq, { poiId: g.c.poiId, qid: g.c.qid, name: g.c.name, withheld: !g.shipped }]),
+  )
+  const scorecard = buildScorecard({
+    slug: runRegion,
+    runName: 'generate_narrations',
+    evaluatedAt: new Date().toISOString(),
+    stops: gated.flatMap((g) => g.evals),
+  })
+  const recordRun = (dryRun: boolean): Promise<unknown> =>
+    recordEvalRun({
+      region: runRegion,
+      kind: 'generation',
+      dryRun,
+      narrationModel: NARRATION_MODEL,
+      judgeModel: GROUNDING_EVAL() ? JUDGMENT_MODEL : null,
+      scorecard,
+      total: gated.length,
+      shipped: shippedClips.length,
+      withheld: withheldClips.length,
+      identityBySeq,
+    }).catch((e) => {
+      // Observability, never product state — a record failure must not fail the run.
+      console.warn(`  ⚠ eval-run record failed (non-fatal): ${e instanceof Error ? e.message : String(e)}`)
     })
-    console.log(
-      `\n(band: aim ${ROAM_LENGTH.storyTargetSeconds}s, cap ${ROAM_LENGTH.storyMaxSeconds}s)`,
+
+  if (withheldClips.length > 0) {
+    console.warn(
+      `\n⚠ ${withheldClips.length}/${gated.length} clip(s) WITHHELD by the gate — not shipped (flagged in eval_scores):`,
     )
+    for (const g of withheldClips) {
+      const why = g.evals
+        .filter((e) => DIMENSION_KIND[e.dimension] === 'gate' && !e.pass)
+        .flatMap((e) => e.findings)
+      console.warn(`  • ${g.c.name}: ${why.slice(0, 2).join('; ') || 'gate failed'}`)
+    }
+  }
+
+  if (scriptsOnly) {
+    console.log('\n════════ SCRIPTS — scripts-only: no TTS, no R2, no narration writes ════════')
+    for (const g of gated) {
+      if (!g.script) {
+        console.log(`\n──── ${g.c.name} · WITHHELD (narrate/eval error) ────`)
+        continue
+      }
+      const words = g.script.trim().split(/\s+/).filter(Boolean).length
+      console.log(
+        `\n──── ${g.c.name} · ${g.shipped ? 'SHIP' : 'WITHHELD'} · ${words} words ≈ ${Math.round(words / WORDS_PER_SECOND)}s ────\n${g.script}`,
+      )
+    }
+    console.log(`\n(band: aim ${ROAM_LENGTH.storyTargetSeconds}s, cap ${ROAM_LENGTH.storyMaxSeconds}s)`)
+    await recordRun(true) // a DRY eval run — observability without synth/persist
+    for (const line of llmSpendLines()) console.log(line)
+    console.log(`LLM spend this run: ~$${llmSpentUsd().toFixed(2)}`)
     return
   }
 
-  // ── Synthesize + upload + upsert narrations (a row only lands COMPLETE) ──
+  // Runtime spend guard: the gate's retakes can overrun the pre-flight estimate. Abort BEFORE the
+  // (dominant) TTS spend if narration + grounding already blew the ceiling. The eval is recorded first.
+  const ttsEstNow = estimateTtsUsd(shippedClips.map((g) => g.script), persona.ttsStyle.length)
+  if (llmSpentUsd() + ttsEstNow.usd > maxCostUsd) {
+    await recordRun(true)
+    throw new Error(
+      `⛔ Spend after narrate+gate ($${llmSpentUsd().toFixed(2)}) + est TTS ($${ttsEstNow.usd.toFixed(2)}) exceeds --max-cost=$${maxCostUsd.toFixed(2)} — aborting before synthesis. Eval recorded.`,
+    )
+  }
+
+  // ── Synthesize + upload + upsert narrations — ONLY the gate-passing clips ──
   // RESILIENT batch: a single clip's HARD failure (e.g. a Cloud TTS 400 on an over-length script)
-  // must NOT abort the whole run — roam clips are independent and land individually, so we skip +
-  // warn + continue ("ship the rest with a loud warn", the alpha posture) and report the casualties
-  // at the end. A skipped poi simply gets no narration (it won't be encountered) — silence beats
-  // letting one bad clip drop the rest. Re-run to retry the skips (narration is non-deterministic,
-  // so an over-length outlier usually narrates within limits next time). mapLimit fails fast on a
-  // throw, so the try/catch — not mapLimit — is what keeps the batch going.
-  console.log(`\nSynthesizing ${queue.length} clips (concurrency ${TTS_CONCURRENCY()})...`)
+  // must NOT abort the whole run — clips are independent and land individually, so we skip + warn +
+  // continue and report the casualties at the end. A WITHHELD clip never reaches here (the gate held
+  // it); a synth failure leaves that poi without a narration (re-run to retry). mapLimit fails fast on
+  // a throw, so the try/catch — not mapLimit — is what keeps the batch going.
+  console.log(`\nSynthesizing ${shippedClips.length} gate-passing clips (concurrency ${TTS_CONCURRENCY()})...`)
   let synthDone = 0
   const failures: { name: string; error: string }[] = []
-  const results = await mapLimit(queue, TTS_CONCURRENCY(), async (c, i) => {
-    const script = scripts[i]!
+  const results = await mapLimit(shippedClips, TTS_CONCURRENCY(), async (g) => {
+    const c = g.c
+    const script = g.script
     try {
       // The R2 clip key stays poi-scoped with a fresh per-synth id (the
       // `narration/<poiId>/<id>.m4a` keys); a regen writes a NEW key + repoints audio_url, so the old
@@ -384,7 +500,7 @@ async function main(): Promise<void> {
         { label: `upsert narration(${c.name})` },
       )
       synthDone++
-      console.log(`  [${synthDone}/${queue.length}] ${c.name} (${(durationMs / 1000).toFixed(0)}s)`)
+      console.log(`  [${synthDone}/${shippedClips.length}] ${c.name} (${(durationMs / 1000).toFixed(0)}s)`)
       return { name: c.name, durationMs }
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e)
@@ -397,8 +513,8 @@ async function main(): Promise<void> {
   const ok = results.filter((r): r is { name: string; durationMs: number } => r !== null)
   const totalSec = ok.reduce((a, r) => a + r.durationMs, 0) / 1000
   console.log(
-    `\nDone: ${ok.length}/${queue.length} roam clips, ${(totalSec / 60).toFixed(1)} min of audio total ` +
-      `(avg ${ok.length ? (totalSec / ok.length).toFixed(0) : '0'}s).`,
+    `\nDone: ${ok.length}/${shippedClips.length} clips synthesized, ${withheldClips.length} withheld by the gate, ` +
+      `${(totalSec / 60).toFixed(1)} min of audio total (avg ${ok.length ? (totalSec / ok.length).toFixed(0) : '0'}s).`,
   )
   if (failures.length > 0) {
     console.warn(
@@ -406,9 +522,13 @@ async function main(): Promise<void> {
     )
     for (const f of failures) console.warn(`  • ${f.name}: ${f.error.slice(0, 200)}`)
   }
+  await recordRun(false)
   for (const line of llmSpendLines()) console.log(line)
   console.log(`LLM spend this run: ~$${llmSpentUsd().toFixed(2)}`)
-  const ttsActual = estimateTtsUsd(scripts, persona.ttsStyle.length)
+  const ttsActual = estimateTtsUsd(
+    shippedClips.map((g) => g.script),
+    persona.ttsStyle.length,
+  )
   console.log(`TTS spend (estimated from chars): ~$${ttsActual.usd.toFixed(2)}`)
 }
 
