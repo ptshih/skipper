@@ -6,4 +6,4 @@ The one text primitive — pick a type-scale `variant` and a semantic `color` ro
 <Text variant="mono" color="inkDim">02:18 / 06:45</Text>
 ```
 
-Variants: `wordmark` `display` `placardTitle` (Alfa Slab, large only) · `titleXL` `title` `heading` `body` `bodyStrong` `label` `dim` (Bitter) · `mono` `monoStrong` (Space Mono). Colors are any semantic role. Use `as` to emit a real heading/paragraph tag.
+Variants: `wordmark` `display` `placardTitle` (Zilla Slab, large only) · `titleXL` `title` `heading` `body` `bodyStrong` `label` `dim` (Lora) · `mono` `monoStrong` (Overpass Mono). Colors are any semantic role. Use `as` to emit a real heading/paragraph tag.

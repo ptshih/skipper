@@ -218,7 +218,9 @@ gcloud iam service-accounts add-iam-policy-binding $ADMIN --member=serviceAccoun
 # ADMIN_EMAIL = the single allowed IAP principal, into the ENCRYPTED prod env (commit the re-encrypted file).
 dotenvx set ADMIN_EMAIL "ptshih@gmail.com" -f .env.production
 
-# additive migrations to prod (pipeline_jobs + tours.route_provenance — 0005/0006).
+# additive migrations to prod (the jobs table + drives.route_provenance — 0005/0006). NOTE: the
+# jobs table is now `studio_jobs` (gen_jobs → pipeline_jobs → studio_jobs, renamed in 0013/0015),
+# and route_provenance lives on `drives` — the `tours` table was dropped in the V2 pivot (0009).
 bun run db:migrate:prod
 
 # 2) CD triggers (reuse skipper-gh; path-filtered). The browser Maps key is HARDCODED in
@@ -280,6 +282,10 @@ agent). Temporarily relax DRS (needs `roles/orgpolicy.policyAdmin`) to register 
 - `cloudbuild.admin.yaml` — the `skipper-admin` service (multi-stage: SPA + Hono) build → deploy.
 - `.gcloudignore` — trims the Cloud Build upload; re-excludes `.env.keys`.
 - `apps/api/Dockerfile` — the lean Bun image (header explains the workspace trim).
-- `packages/studio/Dockerfile` — the `skipper-studio` Job image (one image, all six corpus/roam CLIs).
+- `packages/studio/Dockerfile` — the `skipper-studio` Job image (one image; pass a per-script entry-point
+  as the first arg — the real CLIs are `discover-pois.ts` / `enrich-pois.ts` / `generate-narrations.ts` /
+  `resynth-narration.ts` / `sweep-orphans.ts` / `refetch-poi.ts`, NOT a single `run.ts` dispatcher).
+  TODO (separate code follow-up): the Dockerfile's own header comment still lists removed scripts
+  (`run.ts` / `patch-clip.ts` / `resynth-tour.ts`) — don't trust it; it's stale, not authoritative.
 - `apps/admin/Dockerfile` — the admin service (stage 1 builds `apps/admin/client`, stage 2 serves it).
 - `apps/site/` — the Astro apex site (`firebase.json`, `.firebaserc`, static AASA).

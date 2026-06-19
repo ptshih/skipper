@@ -136,5 +136,3 @@ honestly is the point; acquisition is the thing still to actually solve.
   rented-vs-owned voice), [competitive-research.md](competitive-research.md) (Detour distribution
   post-mortem), [../ideas/journey-layer.md](../ideas/journey-layer.md) (continuum + character-as-moat +
   passenger mode), [../ideas/free-roam-mode.md](../ideas/free-roam-mode.md) (the audio-posture thread).
-</content>
-</invoke>

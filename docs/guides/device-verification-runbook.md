@@ -96,11 +96,11 @@ verified — they share the build, so do them together.
 
 - [ ] **Signed build installs & launches.** Do: build & install via `expo run:ios --device <udid>`
   (or the EAS dev-build). Expect: the Skipper icon appears, launches past the splash to the home
-  tour list; bundle `fm.skipper.app`. Watch-for: signing failure (no membership / UDID not
+  drive list; bundle `fm.skipper.app`. Watch-for: signing failure (no membership / UDID not
   registered); iOS blocking launch until the dev profile is trusted. (`app.json:11-13,71-78`)
 - [ ] **API is reachable (the #1 setup failure).** Do: with the Mac API (+ Metro) running, open the
-  home screen. Expect: the tour catalogue loads real drive cards within a couple seconds; opening a
-  tour shows its route + stops. Watch-for: empty list or the in-voice error wall →
+  home screen. Expect: the drive catalogue loads real drive cards within a couple seconds; opening a
+  drive shows its route + stops. Watch-for: empty list or the in-voice error wall →
   `EXPO_PUBLIC_API_URL` still pointing at `localhost:8787`; **or** a Release build over a LAN-IP URL
   getting no data while Safari can reach it → the ts.net ATS exception doesn't cover a LAN IP.
   (`apps/mobile/src/lib/auth.ts:8`, `app.json:16-23`)
@@ -121,7 +121,7 @@ verified — they share the build, so do them together.
   Watch-for: white/black default splash (asset not bundled / stale build); cream instead of pine in
   dark (dark override not applied); stretched or off-centre mark. (`app.json` `expo-splash-screen`)
 
-## §2 — Tour detail: trailhead placard, summary, place names, offline chip
+## §2 — Drive detail: trailhead placard, summary, place names, offline chip
 
 - [ ] **Trailhead placard composition.** Do: tap a drive from home; the placard is the first card.
   Expect: a carved ranger-sign card — faint inner keyline ~5pt in, two ~4pt screw-dots (TL/BR),
@@ -131,7 +131,7 @@ verified — they share the build, so do them together.
   Watch-for: the rig showing an amber halo (only the Start CTA owns this screen's one glow) or the
   rig animating (it's static); the headline falling back to plain bold (Alfa Slab not loaded); the
   dashed trail rendering solid on iOS. (`apps/mobile/app/drives/[id]/index.tsx:213-245`)
-- [ ] **Headline + summary wrap, never truncate.** Do: open a tour with a long name (or bump
+- [ ] **Headline + summary wrap, never truncate.** Do: open a drive with a long name (or bump
   Dynamic Type larger). Expect: the slab headline grows onto 2–3 lines fully visible; the static
   explainer string `voice.drive.blurb` ("The skipper talks as you reach each stop on the real roads.")
   sits under the Start CTA and wraps in full — no `…` anywhere, nothing cut at the gutter. Note: there
@@ -156,7 +156,7 @@ verified — they share the build, so do them together.
 
 Preview is the open funnel; the wall is the **live drive + offline download** for an anonymous user.
 
-- [ ] **Every tour previews with no account.** Do: signed out, open any tour → tap "Take the
+- [ ] **Every drive previews with no account.** Do: signed out, open any drive → tap "Take the
   simulated drive". Expect: detail renders fully (placard + summary + itinerary) anonymously; the
   preview player opens and autostarts; header "Preview drive". **No gate, ever, on this path.**
   Watch-for: a 401 gate appearing on detail or preview (preview must never 401).
@@ -168,9 +168,9 @@ Preview is the open funnel; the wall is the **live drive + offline download** fo
   into the open couch preview** (`?mode=preview`), no bounce back. Watch-for: the ghost being a
   no-op `back()` (the exact regression `6ee056c` fixed); gate body + note both saying "needs a free
   ticket" (stutter). (`apps/mobile/app/drives/[id]/play.tsx:150-163`, `src/ui/AccountGate.tsx:43-47`)
-- [ ] **Download gate "Keep browsing" restores the tour.** Do: signed out, `⋯` → "Download for
+- [ ] **Download gate "Keep browsing" restores the drive.** Do: signed out, `⋯` → "Download for
   offline"; the 401 swaps detail for the AccountGate. Tap the ghost "Keep browsing". Expect: it
-  returns to the fully-rendered tour-detail **in place** (`setNeedsAccount(false)`) — it does NOT pop
+  returns to the fully-rendered drive-detail **in place** (`setNeedsAccount(false)`) — it does NOT pop
   to home. Watch-for: wrong ghost label, or it popping the stack to the drives list.
   (`apps/mobile/app/drives/[id]/index.tsx:51-67,150-157`)
 - [ ] **Signed-in user never sees the gate.** Do: sign in (free account), tap "Start the drive" and
@@ -412,12 +412,6 @@ Foreground When-In-Use only. Mode resolves to `live` via "Start the drive" (`ind
   `docs/specs/gps-player-spec.md` (Phase 0).
 - **No `UIBackgroundModes:['audio']` (§7).** Locked-screen audio during a live drive is unverified
   and may require this native entry + a rebuild. Decide before the build if you want to test it.
-- **Stale EAS projectId in the build guide.** `docs/guides/eas-setup.md` cites projectId
-  `5dded9ce-af00-4c5f-957d-52644d7ab155`; the live value in `app.json` is
-  `dd556bd3-5c16-430e-8b1f-cfdeb410f26d` (owner `manoa-inc`, correct in both) after the `13f6f52` EAS
-  org migration. That guide's "Real device" section also predates the `ts.net` ATS fix (now in
-  `app.json:16-23`). Prefer the local `expo run:ios --device` path, which sidesteps EAS project
-  resolution entirely; a one-line fix to that guide's projectId is worth doing.
 
 ## Map notes for the tester / next agent (current code, not stale memory)
 
