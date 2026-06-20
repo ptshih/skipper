@@ -23,16 +23,37 @@ const errors: string[] = []
 //    both — same shape, harmless) and DB-only types (NewTour, PoiOverride, …). Deriving it (vs a
 //    hardcoded list) keeps the guard correct as the schema/DTOs grow.
 const dbSrc = readFileSync(join(ROOT, 'packages/db/src/schema.ts'), 'utf8')
-const dbRowTypes = new Set(
-  [...dbSrc.matchAll(/export\s+type\s+(\w+)\s*=\s*typeof\s+\w+\.\$inferSelect/g)].map((m) => m[1]!),
-)
+// Every exported TYPE name from the schema — the Drizzle row types (`= typeof t.$inferSelect`) AND
+// hand-written `export type X = {…}` / `export interface X` (RouteProvenance, DriveSelection,
+// AttributionSnapshot, …). A hand-written shape collides just as silently as a row type, so both must
+// be on the radar (was a gap: only $inferSelect was derived, so a future shared DTO named e.g.
+// `DriveSelection` with a divergent shape slipped past).
+const dbExportedTypes = new Set<string>([
+  ...[...dbSrc.matchAll(/export\s+type\s+(\w+)/g)].map((m) => m[1]!),
+  ...[...dbSrc.matchAll(/export\s+interface\s+(\w+)/g)].map((m) => m[1]!),
+])
+// Exported by BOTH packages but DELIBERATELY the same shape (a plain structural alias), so aliasing
+// would be pointless noise. Keep this list tiny + documented. `Polyline` = `[number, number][]` in
+// the schema, `z.infer` of the same tuple in shared.
+const SAME_SHAPE = new Set(['Polyline'])
+// The shared public surface = index.ts + every module it `export *`s. Parse the barrel so a
+// newly-added module (e.g. audio.ts) is covered automatically — a hardcoded file list silently drops
+// it (audio.ts was added and immediately fell outside the old list).
+const sharedDir = join(ROOT, 'packages/shared/src')
+const barrelSrc = readFileSync(join(sharedDir, 'index.ts'), 'utf8')
+const sharedFiles = [
+  'index.ts',
+  ...[...barrelSrc.matchAll(/export\s+\*\s+from\s+['"]\.\/([\w-]+)['"]/g)].map((m) => `${m[1]}.ts`),
+]
 const sharedExports = new Set<string>()
-for (const f of ['index.ts', 'schemas.ts', 'enums.ts', 'version.ts']) {
-  const p = join(ROOT, 'packages/shared/src', f)
+for (const f of sharedFiles) {
+  const p = join(sharedDir, f)
   if (!existsSync(p)) continue
   for (const m of readFileSync(p, 'utf8').matchAll(/export\s+type\s+(\w+)/g)) sharedExports.add(m[1]!)
 }
-const COLLISION = new Set([...dbRowTypes].filter((n) => sharedExports.has(n)))
+const COLLISION = new Set(
+  [...dbExportedTypes].filter((n) => sharedExports.has(n) && !SAME_SHAPE.has(n)),
+)
 if (COLLISION.size === 0) {
   // Not a violation, but a sign the derivation broke (renamed schema export form, moved files) —
   // fail loudly rather than silently pass and stop guarding.

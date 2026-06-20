@@ -500,21 +500,30 @@ driveRoutes.post('/', async (c) => {
     selection,
   }
   // Charge the credit ATOMICALLY with the drive insert (db.batch co-commits on neon-http) so we can
-  // never half-commit a charge-without-drive or a drive-without-charge. Free tier only — paid (comped)
-  // accounts insert the drive without a consume. The consume is keyed on the drive id, so a single
-  // drive charges exactly one credit. (The free-tier balance was pre-checked above; a concurrent
-  // double-create could over-spend by 1 — negligible at this scale, same TOCTOU as the old count gate.)
+  // never half-commit a charge-without-drive or a drive-without-charge. Both inserts are ON CONFLICT
+  // DO NOTHING (idempotency_key for the consume, the PK for the drive), so a lost-ack retry of an
+  // already-committed batch cleanly no-ops instead of erroring on the unique violation — the consume
+  // is keyed on the drive id, so a drive charges exactly one credit even under retry. Free tier only —
+  // paid (comped) accounts insert the drive without a consume. (The free-tier balance was pre-checked
+  // above; a concurrent double-create could over-spend by 1 — negligible at this scale, same TOCTOU as
+  // the old count gate.)
   if (c.get('tier') === 'free') {
     await withRetry(
       () =>
         db.batch([
-          db.insert(creditEntries).values(driveConsumeEntry(userId, id)),
-          db.insert(drives).values(driveValues),
+          db
+            .insert(creditEntries)
+            .values(driveConsumeEntry(userId, id))
+            .onConflictDoNothing({ target: creditEntries.idempotencyKey }),
+          db.insert(drives).values(driveValues).onConflictDoNothing({ target: drives.id }),
         ]),
       { label: 'drive.insert' },
     )
   } else {
-    await withRetry(() => db.insert(drives).values(driveValues), { label: 'drive.insert' })
+    await withRetry(
+      () => db.insert(drives).values(driveValues).onConflictDoNothing({ target: drives.id }),
+      { label: 'drive.insert' },
+    )
   }
 
   // Demand instrumentation (route-concentration signal; the cache-warming job that consumes it is
