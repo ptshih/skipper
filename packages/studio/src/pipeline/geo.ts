@@ -26,11 +26,19 @@ export {
   sideOfApproach,
 } from '@skipper/engine'
 
-/** Rough sub-region label for narration context — tells the model where the driver IS. */
+/**
+ * The NARRATION region — the BROAD area the Skipper may name as "where you are" without the fact
+ * sheet. Deliberately coarse and ALWAYS-TRUE for its zone: from lat/lng we can place a POI in a
+ * broad area, never a precise town, so we never return a city — "Reno, Nevada" would be a false
+ * pinpoint for a foothills POI, and the grounding gate can't catch it (naming the region is the one
+ * thing it's allowed to do without a sheet fact). The Carson Range crest (~-119.88 lng) splits the
+ * greater Lake Tahoe basin (the lake + its high country: Desolation, Fallen Leaf, Squaw, Truckee,
+ * the west shore — all west of the crest) from the eastern Reno/Carson valleys. A geometry-first
+ * point-in-bbox lookup against real sub-regions can replace this when more regions exist.
+ */
 export function regionLabel(lat: number, lng: number): string {
-  if (lat > 39.35 && lng > -119.9) return 'Reno, Nevada'
-  if (lat > 39.0 && lng > -119.85) return 'Carson City, Nevada'
-  return 'Lake Tahoe'
+  if (lng <= -119.88) return 'Lake Tahoe'
+  return lat >= 39.4 ? 'the Reno area' : 'the Carson Valley'
 }
 
 /**
