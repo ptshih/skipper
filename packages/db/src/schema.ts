@@ -23,7 +23,7 @@ import { relations, sql } from 'drizzle-orm'
 export type Polyline = [number, number][]
 
 /** The raw fetched Wikipedia article + its provenance for a STORY poi (built by `buildStoryFacts`);
- *  null for scenic/break rows. The curated narration sheet is NOT here — it's the separate typed
+ *  null for scenic pois (wikidata pins with no Wikipedia article). The curated narration sheet is NOT here — it's the separate typed
  *  `pois.fact_sheet` column (+ `enriched_at`; see `FactSheetEntry`). `extract` = the full article (the
  *  enricher's input + audit source + the un-enriched grounding fallback). A real interface now (was
  *  `Record<string,unknown>`): the bag's shape is STABLE — the extensible/curated part moved to
@@ -83,10 +83,10 @@ export type AttributionSnapshot = {
 }
 
 /**
- * How a tour's frozen route was authored — set by the admin (Create Tour) flow, the only way
- * tours are created now (seeded shells + committed route artifacts are gone). Always records the
- * final frozen waypoints + Routes totals; `authoring` is present when the route was LLM-proposed
- * + human-approved in the admin console (the "why this route exists" trail).
+ * How a DRIVE's frozen route was authored — recorded on `drives.routeProvenance`. Always records the
+ * final frozen waypoints + Google Routes totals; `authoring` is present when the endpoints were
+ * LLM-proposed (Create-a-Drive resolves the A→B anchors, then materializes + freezes the route) —
+ * the "why this route exists" trail.
  */
 export type RouteProvenance = {
   source: 'google-routes-v2'
@@ -442,8 +442,9 @@ export const poiOverrides = pgTable(
 // The ONE shared telling of a place — 1:1 with its poi (UNIQUE poi_id). The atom: roam plays these by
 // proximity and every drive REFERENCES them (narration content resolves live via poi_id; nothing else
 // owns it). The old roam `tracks` hoisted to hang directly off the poi — no segment, no `variant` (one
-// telling per place; multi-telling axes — authored tours, region-skippers, joke notches — are deferred
-// and re-expand storage then). Persona is baked into the single telling (one host per region in v2). A
+// telling per place; multi-telling axes — authored tours, region-skippers — are deferred and re-expand
+// storage then; the joke notch was CUT, not deferred). Persona is baked into the single telling (one
+// host per region in v2). A
 // row goes live only post-synthesis (audio_url NOT NULL, via narrationColumns).
 export const narrations = pgTable(
   'narrations',
@@ -452,7 +453,8 @@ export const narrations = pgTable(
     poiId: uuid('poi_id')
       .notNull()
       .references(() => pois.id, { onDelete: 'cascade' }),
-    // story|scenic|break|wave — the telling's treatment (1:1, so no `variant`).
+    // story|scenic|wave|bside — the telling's treatment (1:1, so no `variant`). 'break' is enum-
+    // valid (wire lockstep) but CHECK-excluded here: breaks live in `detours`, not narrations.
     form: narrationFormEnum('form').notNull(),
     ...narrationColumns,
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -474,12 +476,16 @@ export const narrations = pgTable(
       'narrations_story_attribution',
       sql`${t.form} <> 'story' OR (${t.attribution} IS NOT NULL AND jsonb_array_length(${t.attribution}) > 0)`,
     ),
+    // Hard invariant: a BREAK is NOT a narration row — break audio lives place-anchored in `detours`.
+    // `'break'` stays in the pg enum only to keep `narration_form` in lockstep with the wire
+    // `narrationForm`/`driveClipForm` projection; this CHECK makes "never stored here" structural.
+    check('narrations_form_not_break', sql`${t.form} <> 'break'`),
   ],
 )
 
 // A user-owned DRIVE: an ordered sequence of place narrations along a frozen route.
-// Ownership lives HERE on `user_id` (a user-side table), NEVER on tours — preserving the
-// anonymous/shareable-tour invariant. References shared narrations; mints no narration. The frozen
+// Ownership lives HERE on `user_id` (a drive is user-owned, never a shared content table); anonymous
+// callers get roam only. References shared narrations; mints no narration. The frozen
 // `selection` manifest is replayed verbatim on re-open (structure frozen; narration content live).
 export const drives = pgTable(
   'drives',

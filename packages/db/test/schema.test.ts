@@ -110,7 +110,7 @@ describe('V2 — narrations / drives structural invariants', () => {
     expect(columnByDbName(narrations, 'audio_url').notNull).toBe(true)
     expect(columnByDbName(narrations, 'audio_duration_ms').notNull).toBe(true)
   })
-  it('facts_hash is NULLABLE — only story grounds on facts; scenic/break carry none and are never fact-stale', () => {
+  it('facts_hash is NULLABLE — only story grounds on facts; scenic/wave carry none and are never fact-stale', () => {
     expect(columnByDbName(narrations, 'facts_hash').notNull).toBe(false)
   })
   it('carries NO persona/voice/joke/delivery column — the one host resolves in CODE and is baked into audio (joke notch CUT)', () => {
@@ -122,6 +122,9 @@ describe('V2 — narrations / drives structural invariants', () => {
   })
   it('a STORY clip must carry frozen attribution — the CC BY-SA legal floor (form-conditional CHECK)', () => {
     expect(checkNames(narrations)).toContain('narrations_story_attribution')
+  })
+  it('a narration can never have form=break — a break is NOT a narration row (break audio lives in detours)', () => {
+    expect(checkNames(narrations)).toContain('narrations_form_not_break')
   })
   it('a drive is user-owned (user_id NOT NULL) and carries a route signature', () => {
     expect(columnByDbName(drives, 'user_id').notNull).toBe(true)
