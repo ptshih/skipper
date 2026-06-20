@@ -183,6 +183,13 @@
       "when": 1781932855263,
       "tag": "0025_giant_shinobi_shaw",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1781937564843,
+      "tag": "0026_tearful_miracleman",
+      "breakpoints": true
     }
   ]
 }

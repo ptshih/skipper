@@ -63,6 +63,14 @@ app.onError((err, c) => {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
+/** True for a Postgres unique_violation (SQLSTATE 23505) — how neon-http surfaces a partial-unique-index
+ *  conflict. Lets the spend trigger turn a lost idempotency race into a clean 409 instead of a 500. (audit #1) */
+function isUniqueViolation(e: unknown): boolean {
+  const code = (e as { code?: unknown } | null)?.code
+  if (code === '23505') return true
+  return /duplicate key value|unique constraint|\b23505\b/i.test(String((e as { message?: unknown } | null)?.message ?? ''))
+}
+
 // Liveness — OPEN (Cloud Run startup/liveness probes hit the container directly, not via IAP).
 // Plain GET /health stays DB-free and cheap so a DB blip can never restart the Cloud Run container.
 // GET /health?deep=1 is the admin client's readiness probe (HealthBanner): it also pings the DB so
@@ -514,6 +522,9 @@ app.post('/admin/jobs', async (c) => {
   const kind = body.kind as JobKind // buildJobArgs validated it against the same vocabulary
 
   // Idempotency: one in-flight run per target (a lost-response retry / double-click can't double-spend).
+  // This SELECT is the fast-path 409; the DB partial-unique index `studio_jobs_active_target_uq`
+  // (migration 0026) is the ATOMIC backstop for a concurrent submit that races PAST this check — caught
+  // at the insert below. (audit #1)
   const targetCond = build.targetSlug
     ? eq(studioJobs.targetSlug, build.targetSlug)
     : build.targetId
@@ -530,16 +541,26 @@ app.post('/admin/jobs', async (c) => {
 
   const id = crypto.randomUUID()
   const triggeredBy = c.get('adminEmail')
-  await db.insert(studioJobs).values({
-    id,
-    kind,
-    status: 'queued',
-    dryRun: build.dryRun,
-    targetSlug: build.targetSlug ?? null,
-    targetId: build.targetId ?? null,
-    args: build.args,
-    triggeredBy,
-  })
+  try {
+    await db.insert(studioJobs).values({
+      id,
+      kind,
+      status: 'queued',
+      dryRun: build.dryRun,
+      targetSlug: build.targetSlug ?? null,
+      targetId: build.targetId ?? null,
+      args: build.args,
+      triggeredBy,
+    })
+  } catch (e) {
+    // A concurrent submit that slipped past the SELECT above loses the unique-index race here → the
+    // same 409, no double-spend. (Before migration 0026 is APPLIED the index doesn't exist, so this
+    // branch never fires and the SELECT-409 stays the sole guard — deploy-safe either way.) (audit #1)
+    if (isUniqueViolation(e)) {
+      return c.json({ error: 'conflict', message: 'A run for this target is already in progress.' }, 409)
+    }
+    throw e
+  }
 
   let execShortName = ''
   try {
