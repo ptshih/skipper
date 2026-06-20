@@ -16,6 +16,11 @@
 > the 2026-06-09 status — the Phase-0 duck flip + a polished Phase 5 real drive — is folded into the live
 > V2 `drives/[id]/play.tsx` player. The phases/§3/§4/§9 below are kept as the build record; read them
 > through the V2 API/DTO/screen map in the banner above.
+>
+> **Audio mode RESOLVED (2026-06-19):** the "Phase-0 duck flip" is settled — the drive uses `'doNotMix'`
+> (exclusive focus) BY DESIGN, NOT `'duckOthers'`; the drive IS the audio (curated soundtrack + narration),
+> so the body's `duck`/`duckOthers` references below are historical. See
+> [`../decisions/drive-audio-exclusive-focus.md`](../decisions/drive-audio-exclusive-focus.md).
 
 > Self-contained handoff for the **live, on-device, GPS-triggered phone player** — the
 > M1 MVP bet. Grounded against the live repo (`packages/engine/src/{trigger,simulate,geo,preview}.ts`,

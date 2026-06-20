@@ -200,8 +200,10 @@ Captured so they aren't lost; NONE are v1, all gated behind the phone-player bet
 - **Triggering:** do NOT rely on fixed-radius background polling — the OS throttles background GPS and a car
   sails through a 350 m geofence at 60 mph. Use a continuous high-rate foreground service + speed-adaptive
   lead time; `trigger_radius_m` is a floor. Heading gate only above ~5 mph.
-- **Audio:** `expo-audio` (NOT `expo-av`, removed in SDK 55); background playback via config plugin. Duck
-  (don't stop) the user's music at a trigger.
+- **Audio:** `expo-audio` (NOT `expo-av`, removed in SDK 55); background playback via config plugin. The
+  drive takes EXCLUSIVE focus (`doNotMix`) — it IS the audio (curated soundtrack + narration), NOT a
+  voice-over that ducks the rider's music; roam hands focus back between clips. Don't "flip" it to
+  `duckOthers`. See `docs/decisions/drive-audio-exclusive-focus.md`.
 - **Offline-first:** download a complete drive before driving (Tahoe dead zones).
 
 ## Where truth lives

@@ -58,12 +58,11 @@ const SIM_MPH = 60
 // a couple minutes on the couch (the fix DATA — speeds, headings — is unchanged).
 const SIM_FAST_SCALE = 8
 
-// The audio interruption mode for the drive. KEPT as 'doNotMix' (the proven-safe default that
-// keeps lock-screen Now Playing working on the simulator). Phase 0 — the audio-duck spike —
-// flips this ONE line to 'duckOthers' and verifies on a device that ducking the rider's music
-// and lock-screen Now Playing coexist (the spec's riskiest assumption). Since Phase 4 forces a
-// dev build anyway, do the flip + Spotify test in that same session. The flip is JS-only
-// (hot-reloadable, no native rebuild). See spec §3.5 / §7 (Phase 0).
+// The audio interruption mode for the drive. 'doNotMix' BY DESIGN (founder-decided 2026-06-19) — the
+// drive takes EXCLUSIVE focus: it IS the audio experience (the Skipper's curated soundtrack owns the
+// drive, the voice owns the stops — see driveMusic.ts), NOT a narration that ducks the rider's own music.
+// Do NOT "flip" this to 'duckOthers' — ducking leaves the rider's playlist competing under the Skipper
+// (rejected in roam too) and breaks lock-screen Now Playing. See docs/decisions/drive-audio-exclusive-focus.md.
 const DRIVE_INTERRUPTION_MODE = 'doNotMix' as const
 
 // Keep-awake lock tag — the foreground GPS watch dies on screen-lock, so hold the screen on

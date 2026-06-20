@@ -84,6 +84,9 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
 - [audio-compression-spike.md](decisions/audio-compression-spike.md) — get clips off uncompressed
   WAV: MP3 32k shipped 2026-06-08, then switched to LINEAR16 → AAC-LC 48k `.m4a` (one ffmpeg
   loudnorm+encode pass) 2026-06-14; the MP3 body is historical.
+- [drive-audio-exclusive-focus.md](decisions/drive-audio-exclusive-focus.md) — the drive uses
+  `doNotMix` (exclusive focus) BY DESIGN: it IS the audio (curated soundtrack + narration), not a
+  voice-over that ducks the rider's music; settles the old "Phase-0 duck flip". Decided 2026-06-19.
 - [enrichment-scout.md](decisions/enrichment-scout.md) — story-stop enrichment decided by a
   bounded tool-using scout (judgment) instead of char-count sparse-gates; built 2026-06-09.
 - [location-permission-priming.md](decisions/location-permission-priming.md) — a pre-permission
@@ -97,8 +100,8 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
 ### specs/
 - [ask-the-skipper-spec.md](specs/ask-the-skipper-spec.md) — live, grounded voice Q&A mid-drive (the
   north-star delighter); build-ready, unbuilt, post-MVP.
-- [gps-player-spec.md](specs/gps-player-spec.md) — the M1 live GPS phone player; mostly built
-  (remaining: duck flip + the real drive).
+- [gps-player-spec.md](specs/gps-player-spec.md) — the M1 live GPS phone player; mostly built (the
+  duck flip is resolved → `doNotMix` by design; the real drive has since landed).
 - [tour-structure-spec.md](specs/tour-structure-spec.md) — intro/outro brackets + quality-gated
   narration; §3/§4 built, data-model half superseded by zero-reuse.
 - [downtime-callouts-spec.md](specs/downtime-callouts-spec.md) — persona-only beats in the quiet
