@@ -58,13 +58,14 @@ import {
 } from './config'
 import { estimateTtsUsd, llmSpendLines, llmSpentUsd, unpricedModels, TTS_ESTIMATE_SAFETY } from './pipeline/spend'
 import { STORY_TASTE_DENYLIST, type DeliveryRegister } from '@skipper/shared'
-import { NARRATION_MODEL, JUDGMENT_MODEL, ttsStyleFor, lengthForRegister } from './models'
+import { NARRATION_MODEL, JUDGMENT_MODEL, ttsStyleFor, lengthForRegister, getAnthropic } from './models'
 import { buildGroundingWell, evaluateGrounding } from './eval/grounding'
 import { applyTailOutcomes, evaluateTts } from './eval/tts'
 import { evaluateDiversity } from './eval/diversity'
 import { evaluateLaterality } from './eval/laterality'
 import { evaluatePacing } from './eval/pacing'
 import { optimize } from './eval/optimize'
+import { exciseUngrounded, makeExciseCall } from './eval/excise'
 import { buildScorecard } from './eval/scorecard'
 import { DIMENSION_KIND, type StopEval } from './eval/types'
 import { recordEvalRun, type ClipIdentity } from './eval/record'
@@ -330,8 +331,19 @@ async function main(): Promise<void> {
         )
       return evals
     }
-    const regenerate = async (avoid: string[]): Promise<string> =>
-      (await narrateStop({ ...base, avoid }, persona.systemPrompt)).script
+    // Grounding retake = targeted EXCISION (eval/excise.ts), not re-narration: when the gate flags
+    // ungrounded place-claims, trim exactly those lines from the prior take and keep the rest, instead
+    // of re-rolling the whole clip (which just reaches for a different flourish). Non-grounding findings
+    // (tts/diversity/pacing) still re-narrate. `prev` is the prior best take, supplied by optimize().
+    const exciseCall = makeExciseCall(() => getAnthropic('grounding excision'))
+    const regenerate = async (avoid: string[], prev: string): Promise<string> => {
+      const ungrounded = avoid.filter((a) => a.startsWith('ungrounded place-claim'))
+      if (ungrounded.length > 0) {
+        console.log(`  ✂ ${c.name}: excising ${ungrounded.length} ungrounded claim(s)`)
+        return exciseUngrounded(prev, ungrounded, exciseCall)
+      }
+      return (await narrateStop({ ...base, avoid }, persona.systemPrompt)).script
+    }
 
     const { script: initial } = await narrateStop(base, persona.systemPrompt)
     const result = await optimize(initial, { evaluate, regenerate, maxRounds: GROUNDING_REGEN_MAX_ROUNDS })

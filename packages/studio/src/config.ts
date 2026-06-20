@@ -177,7 +177,9 @@ export const GROUNDING_EVAL = (): boolean => process.env.SKIPPER_GROUNDING_EVAL 
  * `--max-cost` gate ARE the cost guardrail. (The old run-wide EVAL_MAX_PASSES / EVAL_REGEN_BUDGET /
  * GROUNDING_REGEN_BUDGET constants were removed 2026-06-20 — dead, zero consumers, leftover from the
  * retired tour-level lint-rounds design; they claimed to be "the guardrail" but bounded nothing.) */
-export const GROUNDING_REGEN_MAX_ROUNDS = 2
+export const GROUNDING_REGEN_MAX_ROUNDS = 3 // raised 2→3 (2026-06-20) — grounding retakes now EXCISE
+// (eval/excise.ts: trim the flagged lines) instead of re-narrating, so each round is a cheap, reliable
+// edit; the extra round is headroom for the rare case where smoothing a cut leaves a new claim to trim.
 
 // --- POI discovery ----------------------------------------------------------
 
