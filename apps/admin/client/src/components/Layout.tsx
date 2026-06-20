@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link, Outlet, useNavigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
-import { Activity, Anchor, BookOpen, Compass, Layers, MapPin, Menu, Moon, Search, Sun, Zap } from 'lucide-react'
+import { Activity, Anchor, BookOpen, Compass, Layers, MapPin, Menu, Moon, Search, Sun } from 'lucide-react'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { HealthBanner } from '@/components/HealthBanner'
 import { api } from '@/lib/api'
@@ -214,7 +214,6 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
   type PaletteItem = { group: string; label: string; icon: React.ElementType; hint?: string; onSelect: () => void }
   const go = (to: AppPath) => () => { navigate({ to }); onClose() }
   const openPoi = (id: string) => () => { navigate({ to: '/pois', search: { poi: id } }); onClose() }
-  const action = (act: 'discover' | 'generate' | 'rescore') => () => { navigate({ to: '/pois', search: { act } }); onClose() }
 
   const navItems: PaletteItem[] = [
     { group: 'Go to', label: 'Runs', icon: Activity, onSelect: go('/runs') },
@@ -223,9 +222,7 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
     { group: 'Go to', label: 'Reference', icon: BookOpen, onSelect: go('/reference') },
   ]
   const actionItems: PaletteItem[] = [
-    { group: 'Actions', label: 'Discover POIs', icon: Compass, onSelect: action('discover') },
-    { group: 'Actions', label: 'Generate Narration', icon: Zap, onSelect: action('generate') },
-    { group: 'Actions', label: 'Re-score corpus', icon: Activity, onSelect: action('rescore') },
+    { group: 'Actions', label: 'Discover POIs', icon: Compass, onSelect: go('/regions') },
   ]
   const ql = q.toLowerCase()
   const navMatches = q ? navItems.filter((it) => it.label.toLowerCase().includes(ql)) : navItems

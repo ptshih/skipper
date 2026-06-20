@@ -56,6 +56,8 @@ export interface Region {
   slug: string
   displayName: string
   bbox: string | null
+  /** region-release-gate: null = DRAFT (POIs not public), ISO string = RELEASED (open). Monotonic. */
+  releasedAt: string | null
 }
 
 export interface BboxLlmResult {
@@ -99,6 +101,8 @@ export interface NarrationDetail {
   audioDurationMs: number
   attribution: unknown
   factsHash: string | null
+  /** region-release-gate: null = STAGED (not public), ISO string = RELEASED. */
+  releasedAt: string | null
 }
 
 /** Story-eligibility — whether a POI is story-grade narration material (a POI property; roam draws
@@ -131,6 +135,8 @@ export interface PoiRow {
   staleFacts: boolean
   attributed: boolean
   suspiciousDuration: boolean
+  /** region-release-gate: a clip exists but is STAGED (not public) until released. false when no clip. */
+  released: boolean
   regionSlug: string | null
   regionName: string | null
 }
@@ -251,6 +257,18 @@ export const api = {
     req<{ region: Region }>('/admin/regions', { method: 'POST', body: JSON.stringify(body) }),
   updateRegion: (slug: string, body: { displayName?: string; bbox?: string | null }) =>
     req<{ region: Region }>(`/admin/regions/${slug}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  // region-release-gate (IRREVERSIBLE): release a region + auto-release every staged clip in its bbox.
+  releaseRegion: (slug: string) =>
+    req<{ region: { slug: string; releasedAt: string }; releasedClips: number; alreadyReleased: boolean }>(
+      `/admin/regions/${slug}/release`,
+      { method: 'POST' },
+    ),
+  // region-release-gate (IRREVERSIBLE): release a single staged clip (the trickle case).
+  releaseNarration: (poiId: string) =>
+    req<{ releasedAt: string | null; alreadyReleased?: boolean }>(
+      `/admin/pois/${poiId}/narration/release`,
+      { method: 'POST' },
+    ),
   bboxLookup: (query: string) =>
     req<BboxLookupResult>('/admin/regions/bbox-lookup', { method: 'POST', body: JSON.stringify({ query }) }),
   createJob: (body: Record<string, unknown>) =>

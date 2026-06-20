@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { getRouteApi, useNavigate } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Activity, CircleCheck, Compass, Locate, Plus, RefreshCw, Search, Sparkles, Trash2, Wrench, X, Zap } from 'lucide-react'
+import { Activity, CircleCheck, Locate, Plus, RefreshCw, Rocket, Search, Sparkles, Trash2, Wrench, X, Zap } from 'lucide-react'
 import { api, ApiError, type CorrectionOverride, type PoiDetail, type PoiRow, type StoryEligibility } from '@/lib/api'
 import { errMsg, timeAgo } from '@/lib/format'
 import { PageHeader } from '@/components/PageHeader'
@@ -57,22 +57,8 @@ const NARRATION_META: Record<'fresh' | 'stale', { label: string; variant: BadgeV
 const poisRoute = getRouteApi('/pois')
 
 export function PoisView() {
-  const navigate = useNavigate()
   const search = poisRoute.useSearch()
   const [tab, setTab] = useState<Tab>('corpus')
-  const [discoverOpen, setDiscoverOpen] = useState(false)
-  const [generateOpen, setGenerateOpen] = useState(false)
-  const [rescoreOpen, setRescoreOpen] = useState(false)
-
-  // Deep-link (from ⌘K): ?act=… opens a header dialog once, then strips the param so a refresh/back
-  // doesn't re-open it.
-  useEffect(() => {
-    if (!search.act) return
-    if (search.act === 'discover') setDiscoverOpen(true)
-    else if (search.act === 'generate') setGenerateOpen(true)
-    else if (search.act === 'rescore') setRescoreOpen(true)
-    navigate({ to: '/pois', search: (prev) => ({ ...prev, act: undefined }), replace: true })
-  }, [search.act, navigate])
 
   // The shared place corpus, fetched once + cached under the ['pois'] key.
   const { data: pois = [], error: err, isPending } = useQuery({ queryKey: ['pois'], queryFn: async () => (await api.pois()).pois })
@@ -89,20 +75,7 @@ export function PoisView() {
     <div className="space-y-6">
       <PageHeader
         title="POIs"
-        description="The shared place corpus — sources, narration coverage, attribution, and fact corrections. Roam + drives select from here."
-        actions={
-          <>
-            <Button variant="outline" onClick={() => setDiscoverOpen(true)}>
-              <Compass className="h-4 w-4" /> Discover POIs
-            </Button>
-            <Button variant="outline" onClick={() => setRescoreOpen(true)}>
-              <Activity className="h-4 w-4" /> Re-score corpus
-            </Button>
-            <Button onClick={() => setGenerateOpen(true)}>
-              <Zap className="h-4 w-4" /> Generate Narration
-            </Button>
-          </>
-        }
+        description="The shared place corpus — sources, narration coverage, attribution, and fact corrections. Roam + drives select from here. Discover new POIs from the Regions page."
       />
 
       {err && (
@@ -119,127 +92,88 @@ export function PoisView() {
 
       {tab === 'corpus' && <CorpusTab pois={live} loading={isPending} openPoiId={search.poi} />}
       {tab === 'retire' && <RetireTab flagged={flagged} />}
-
-      <DiscoverDialog open={discoverOpen} onOpenChange={setDiscoverOpen} onSubmitted={() => navigate({ to: '/runs' })} />
-      <ReScoreDialog open={rescoreOpen} onOpenChange={setRescoreOpen} onSubmitted={() => navigate({ to: '/runs' })} />
-      <GenerateNarrationDialog open={generateOpen} onOpenChange={setGenerateOpen} onSubmitted={() => navigate({ to: '/runs' })} />
     </div>
   )
 }
 
-/* ── DISCOVER POIs ── */
+/* ── Shared corpus-action scope (the table selection + active filters) ── */
 
-// A focused Preview+apply dialog (shared JobActionDialog shell): pick a region, then Preview (dry-run)
-// or Discover (apply). FREE — no LLM/TTS, so no confirm gate (spends={false}). Sends the region SLUG;
-// the CLI resolves it to the region's discovery bbox server-side (geometry-first).
-function DiscoverDialog({
-  open,
-  onOpenChange,
-  onSubmitted,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  onSubmitted: () => void
-}) {
-  const [regionSlug, setRegionSlug] = useState('')
-  const { data: regions = [], error: loadErr } = useQuery({
-    queryKey: ['regions'],
-    queryFn: async () => (await api.regions()).regions,
-    enabled: open,
-  })
+/** The resolved selection + the active filters, for the confirm dialog's "exactly what will run" readout
+ *  and the createJob body. `selection` is the EnrichSelection union (defined below). */
+interface ScopeDescriptor {
+  selection: EnrichSelection
+  summary: string
+  chips: { label: string; value: string }[]
+}
+
+// The confirm-dialog scope readout: WHAT a run targets — the selection headline + the active filter
+// chips — so a spend can never run on a scope the operator can't see. Shown atop every action dialog.
+function ScopeSummary({ scope }: { scope: ScopeDescriptor }) {
   return (
-    <JobActionDialog
-      open={open}
-      onOpenChange={onOpenChange}
-      onSubmitted={onSubmitted}
-      icon={Compass}
-      title="Discover POIs"
-      description="Discovers every Wikidata-pinned place in the region and upserts the shared POI corpus — roam draws from it. Free — no LLM or TTS spend."
-      buildBody={() => ({ kind: 'discover_pois', region: regionSlug })}
-      spends={false}
-      applyLabel="Discover"
-      applyIcon={Compass}
-      disabled={!regionSlug}
-      error={loadErr}
-      note={
-        <>
-          Free preview — no spend, no deletion. <span className="font-medium text-foreground">Preview</span> dry-runs
-          the discovery; <span className="font-medium text-foreground">Discover</span> upserts the corpus.
-        </>
-      }
-    >
-      <div className="space-y-2">
-        <Label htmlFor="discover-region">Region</Label>
-        <Select value={regionSlug || undefined} onValueChange={setRegionSlug}>
-          <SelectTrigger id="discover-region" className="w-full">
-            <SelectValue placeholder={regions.length === 0 ? 'Loading…' : 'Select a region…'} />
-          </SelectTrigger>
-          <SelectContent>
-            {regions.map((r) => (
-              <SelectItem key={r.slug} value={r.slug}>{r.displayName}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-    </JobActionDialog>
+    <div className="space-y-2 rounded-lg border bg-muted/30 px-3 py-2.5 text-sm">
+      <div className="font-medium text-foreground">{scope.summary}</div>
+      {scope.chips.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {scope.chips.map((c) => (
+            <Badge key={c.label} variant="secondary" className="font-normal">
+              <span className="text-muted-foreground">{c.label}:</span>&nbsp;{c.value}
+            </Badge>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
-/* ── GENERATE NARRATION (per-region, spends) ── */
+/** Map a selection onto the createJob body fields a kind that takes region/query/includeIds/excludeIds
+ *  understands (generate_narrations, offline_audit). enrich also takes `source`, added by its builder. */
+function scopeBody(sel: EnrichSelection): Record<string, unknown> {
+  if (sel.kind === 'explicit') return { includeIds: sel.ids }
+  const body: Record<string, unknown> = {}
+  if (sel.filter.region) body.region = sel.filter.region
+  if (sel.filter.query) body.query = sel.filter.query
+  if (sel.excludeIds.length) body.excludeIds = sel.excludeIds
+  return body
+}
 
-// Region-picker Preview+apply dialog for the corpus `generate_narrations` step: narrates + synthesizes a
-// narration for every enriched, story-grade POI in the region. Run after Discover + Enrich. SPENDS
-// Anthropic + TTS per narration, so it stays gated (JobActionDialog adds confirm:true on apply — the
-// default spends=true). Sends the region SLUG; the CLI resolves it to the discovery bbox server-side.
-function GenerateNarrationDialog({
-  open,
-  onOpenChange,
-  onSubmitted,
-}: {
+/* ── NARRATE (generate_narrations — re-script + re-synth, spends) ── */
+
+// Narrates + synthesizes a narration for every enriched, story-grade POI in the SELECTION. SPENDS
+// Anthropic + TTS per narration (gated — JobActionDialog adds confirm:true on apply). `force` re-generates
+// places that already have a narration (e.g. to fix a defect); without it, already-narrated places skip.
+function NarrateDialog({ open, onOpenChange, scope, onSubmitted }: {
   open: boolean
   onOpenChange: (open: boolean) => void
+  scope: ScopeDescriptor
   onSubmitted: () => void
 }) {
-  const [regionSlug, setRegionSlug] = useState('')
-  const { data: regions = [], error: loadErr } = useQuery({
-    queryKey: ['regions'],
-    queryFn: async () => (await api.regions()).regions,
-    enabled: open,
-  })
+  const [force, setForce] = useState(false)
   return (
     <JobActionDialog
       open={open}
       onOpenChange={onOpenChange}
       onSubmitted={onSubmitted}
       icon={Zap}
-      title="Generate Narration"
-      description="Narrates + synthesizes a narration for every enriched, story-grade POI in the region. Run after Discover, then Enrich. Spends Anthropic + TTS credits per narration."
-      buildBody={() => ({ kind: 'generate_narrations', region: regionSlug })}
-      applyLabel="Generate Narration"
+      title="Generate narration"
+      description="Narrates + synthesizes a narration for every enriched, story-grade POI in the selection. Run after Discover, then Enrich. Spends Anthropic + TTS credits per narration."
+      buildBody={() => ({ kind: 'generate_narrations', ...scopeBody(scope.selection), ...(force ? { force: true } : {}) })}
+      applyLabel="Generate"
       applyIcon={Zap}
-      disabled={!regionSlug}
-      error={loadErr}
       note={
         <>
           <span className="font-medium text-foreground">Preview</span> dry-runs free (no narration or TTS —
-          prints the queue + a cost estimate to the run log);{' '}
-          <span className="font-medium text-foreground">Generate Narration</span> spends.
+          prints the queue + a cost estimate); <span className="font-medium text-foreground">Generate</span> spends.
         </>
       }
     >
-      <div className="space-y-2">
-        <Label htmlFor="generate-region">Region</Label>
-        <Select value={regionSlug || undefined} onValueChange={setRegionSlug}>
-          <SelectTrigger id="generate-region" className="w-full">
-            <SelectValue placeholder={regions.length === 0 ? 'Loading…' : 'Select a region…'} />
-          </SelectTrigger>
-          <SelectContent>
-            {regions.map((r) => (
-              <SelectItem key={r.slug} value={r.slug}>{r.displayName}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      <ScopeSummary scope={scope} />
+      <label className="flex cursor-pointer items-start gap-2 text-sm">
+        <Checkbox checked={force} onCheckedChange={setForce} aria-label="Re-generate existing narrations" />
+        <span>
+          <span className="font-medium text-foreground">Re-generate existing</span> — overwrite places that
+          already have a narration (use this to fix a defect). Off = skip already-narrated places.
+        </span>
+      </label>
     </JobActionDialog>
   )
 }
@@ -250,23 +184,14 @@ function GenerateNarrationDialog({
 // stored script for grounding (Opus) + tts + diversity and records an offline_audit eval_run, viewable
 // in the Runs report drawer. READ-ONLY on narrations/R2; --apply spends one Opus grounding call per clip
 // (gated like the other paid dialogs); the Preview is a free count + estimate.
-function ReScoreDialog({
-  open,
-  onOpenChange,
-  onSubmitted,
-}: {
+function RescoreDialog({ open, onOpenChange, scope, onSubmitted }: {
   open: boolean
   onOpenChange: (open: boolean) => void
+  scope: ScopeDescriptor
   onSubmitted: () => void
 }) {
-  const [regionSlug, setRegionSlug] = useState('')
   const [charm, setCharm] = useState(false)
   const [veracity, setVeracity] = useState(false)
-  const { data: regions = [], error: loadErr } = useQuery({
-    queryKey: ['regions'],
-    queryFn: async () => (await api.regions()).regions,
-    enabled: open,
-  })
   return (
     <JobActionDialog
       open={open}
@@ -274,12 +199,10 @@ function ReScoreDialog({
       onSubmitted={onSubmitted}
       icon={Activity}
       title="Re-score corpus"
-      description="Re-scores the region's EXISTING story narrations (grounding, tts-cleanliness, diversity; charm + veracity opt-in) WITHOUT regenerating or re-synthesizing — a quality read on what's already shipped. Records an offline_audit run, viewable in the Runs report."
-      buildBody={() => ({ kind: 'offline_audit', region: regionSlug, ...(charm ? { charm: true } : {}), ...(veracity ? { veracity: true } : {}) })}
+      description="Re-scores the selection's EXISTING story narrations (grounding, tts-cleanliness, diversity; charm + veracity opt-in) WITHOUT regenerating or re-synthesizing — a quality read on what's already shipped. Records an offline_audit run, viewable in the Runs report."
+      buildBody={() => ({ kind: 'offline_audit', ...scopeBody(scope.selection), ...(charm ? { charm: true } : {}), ...(veracity ? { veracity: true } : {}) })}
       applyLabel="Re-score"
       applyIcon={Activity}
-      disabled={!regionSlug}
-      error={loadErr}
       note={
         <>
           <span className="font-medium text-foreground">Preview</span> is free (counts the narrations +
@@ -288,19 +211,7 @@ function ReScoreDialog({
         </>
       }
     >
-      <div className="space-y-2">
-        <Label htmlFor="rescore-region">Region</Label>
-        <Select value={regionSlug || undefined} onValueChange={setRegionSlug}>
-          <SelectTrigger id="rescore-region" className="w-full">
-            <SelectValue placeholder={regions.length === 0 ? 'Loading…' : 'Select a region…'} />
-          </SelectTrigger>
-          <SelectContent>
-            {regions.map((r) => (
-              <SelectItem key={r.slug} value={r.slug}>{r.displayName}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      <ScopeSummary scope={scope} />
 
       <div className="space-y-2">
         <Label>Advisory judges (Opus, opt-in)</Label>
@@ -333,17 +244,10 @@ type EnrichSelection =
 // JobActionDialog for the apply) is already human-gated — no extra window.confirm. The fact sheet it
 // builds (pois.fact_sheet) is read by roam, so enrich ONCE between Discover and Generate Narration.
 // Enrich only acts on ELIGIBLE story POIs (the CLI gates), so the Preview count is authoritative.
-function EnrichDialog({
-  open,
-  onOpenChange,
-  selection,
-  summary,
-  onSubmitted,
-}: {
+function EnrichDialog({ open, onOpenChange, scope, onSubmitted }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  selection: EnrichSelection
-  summary: string
+  scope: ScopeDescriptor
   onSubmitted: () => void
 }) {
   // Advanced (collapsed): the model tier A/B + a smoke-test cap. The studio CLI defaults to sonnet
@@ -353,15 +257,10 @@ function EnrichDialog({
   const [limit, setLimit] = useState('')
 
   const buildBody = () => {
-    const body: Record<string, unknown> = { kind: 'enrich_pois' }
-    if (selection.kind === 'explicit') {
-      body.includeIds = selection.ids
-    } else {
-      if (selection.filter.region) body.region = selection.filter.region
-      if (selection.filter.source) body.source = selection.filter.source
-      if (selection.filter.query) body.query = selection.filter.query
-      if (selection.excludeIds.length) body.excludeIds = selection.excludeIds
-    }
+    const sel = scope.selection
+    const body: Record<string, unknown> = { kind: 'enrich_pois', ...scopeBody(sel) }
+    // enrich is the one kind that also filters by source (story is wikipedia-only anyway).
+    if (sel.kind === 'all' && sel.filter.source) body.source = sel.filter.source
     if (model !== 'sonnet') body.model = model // sonnet is the CLI default — only send a non-default override
     const n = Number(limit)
     if (limit.trim() && Number.isFinite(n) && n > 0) body.limit = Math.floor(n)
@@ -392,10 +291,8 @@ function EnrichDialog({
         </>
       }
     >
-      <div className="rounded-lg border bg-muted/30 px-3 py-2 text-sm">
-        Enriching <span className="font-medium text-foreground">{summary}</span>.
-        <span className="text-muted-foreground"> Only eligible story POIs are enriched — Preview shows the exact count + cost.</span>
-      </div>
+      <ScopeSummary scope={scope} />
+      <p className="text-xs text-muted-foreground">Only eligible story POIs are enriched — Preview shows the exact count + cost.</p>
 
       <div className="space-y-2">
         <button
@@ -890,6 +787,25 @@ function NarrationTab({ poiId, hasNarration }: { poiId: string; hasNarration: bo
     regenMut.mutate()
   }
 
+  // region-release-gate: release THIS staged clip to the public (the trickle case — a freshly
+  // ear-checked clip inside an already-open region). IRREVERSIBLE; never un-releases.
+  const releaseMut = useMutation({
+    mutationFn: () => api.releaseNarration(poiId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['poiNarration', poiId] })
+      void qc.invalidateQueries({ queryKey: ['pois'] })
+    },
+  })
+  async function handleRelease() {
+    if (!(await confirm({
+      title: 'Release this clip to the public?',
+      body: 'Makes this narration publicly playable in roam + drives. Releasing is permanent — a clip can never be un-released (it would orphan saved drives and break offline downloads). Make sure you’ve heard it.',
+      confirmLabel: 'Release clip',
+      tone: 'destructive',
+    }))) return
+    releaseMut.mutate()
+  }
+
   if (!hasNarration) {
     return (
       <EmptyState icon={Zap} className="rounded-xl border bg-muted/30">
@@ -933,7 +849,22 @@ function NarrationTab({ poiId, hasNarration }: { poiId: string; hasNarration: bo
           </span>
         )}
         {clip.factsHash && <code className="font-mono">{clip.factsHash.slice(0, 7)}</code>}
+        {clip.releasedAt ? (
+          <Badge variant="success" title={`Released ${new Date(clip.releasedAt).toLocaleString()}`}>
+            <CircleCheck className="h-3 w-3" /> Released
+          </Badge>
+        ) : (
+          <Badge variant="warning" title="Staged — heard by testers in-app, not yet public. Release to publish.">
+            Staged
+          </Badge>
+        )}
         <span className="flex-1" />
+        {!clip.releasedAt && (
+          <Button variant="default" size="sm" onClick={() => void handleRelease()} disabled={releaseMut.isPending}>
+            <Rocket className="h-3 w-3" />
+            {releaseMut.isPending ? 'Releasing…' : 'Release'}
+          </Button>
+        )}
         <Button variant="outline" size="sm" onClick={() => void handleRegenerate()} disabled={regenMut.isPending || resynthMut.isPending}>
           <Zap className="h-3 w-3" />
           {regenMut.isPending ? 'Queuing…' : 'Regenerate'}
@@ -943,6 +874,11 @@ function NarrationTab({ poiId, hasNarration }: { poiId: string; hasNarration: bo
           {resynthMut.isPending ? 'Queuing…' : 'Re-synth'}
         </Button>
       </div>
+      {releaseMut.error && (
+        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          Release failed — {errMsg(releaseMut.error)}
+        </div>
+      )}
       {resynthMut.error && (
         <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
           Re-synth failed — {errMsg(resynthMut.error)}
@@ -978,6 +914,8 @@ function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loading: bool
   const [selMode, setSelMode] = useState<'explicit' | 'all'>('explicit')
   const [selIds, setSelIds] = useState<Set<string>>(new Set())
   const [enrichOpen, setEnrichOpen] = useState(false)
+  const [narrateOpen, setNarrateOpen] = useState(false)
+  const [rescoreOpen, setRescoreOpen] = useState(false)
   const navigate = useNavigate()
   // "Select all matching" sends the region SLUG; the CLI resolves it to a server-side bbox filter
   // (geometry-first). Shared ['regions'] cache; the `regions` list below is just slug+name for the dropdown.
@@ -1011,6 +949,8 @@ function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loading: bool
     // The actionable gap: story-grade but no fact well yet — exactly the rows an Enrich run will bill for.
     if (flags === 'needs-enrich' && (p.storyEligibility !== 'eligible' || p.enriched)) return false
     if (flags === 'narration-stale' && p.narrationStatus !== 'stale') return false
+    // region-release-gate: a narrated-but-not-yet-public clip waiting on a release.
+    if (flags === 'staged' && (p.narrationStatus === 'none' || p.released)) return false
     if (flags === 'sheet-drift' && !p.sheetDrift) return false
     if (flags === 'speakable-drift' && !p.speakableDrift) return false
     if (q) {
@@ -1033,6 +973,16 @@ function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loading: bool
         (n, p) => n + ((selMode === 'all' ? !selIds.has(p.id) : selIds.has(p.id)) && p.storyEligibility === 'eligible' ? 1 : 0),
         0,
       ),
+    [filtered, selMode, selIds],
+  )
+  // Narrate bills for enriched story POIs (un-enriched → scenic, skipped); Re-score acts on places that
+  // already HAVE a narration. Per-action counts so each button's number reflects what it will touch.
+  const numNarratableSelected = useMemo(
+    () => filtered.reduce((n, p) => n + (isSelected(p.id) && p.storyEligibility === 'eligible' && p.enriched ? 1 : 0), 0),
+    [filtered, selMode, selIds],
+  )
+  const numWithNarrationSelected = useMemo(
+    () => filtered.reduce((n, p) => n + (isSelected(p.id) && p.narrationCount > 0 ? 1 : 0), 0),
     [filtered, selMode, selIds],
   )
   const headerChecked = filtered.length > 0 && numSelected === filtered.length
@@ -1085,6 +1035,20 @@ function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loading: bool
       ? `${selIds.size} hand-picked POI${selIds.size === 1 ? '' : 's'}`
       : `all ${numSelected} POIs matching this filter${selIds.size ? ` (minus ${selIds.size} deselected)` : ''}`) +
     ` — ${numEligibleSelected} story-eligible`
+
+  // The active filters, surfaced in every action's confirm dialog so a spend can't run on an unseen scope.
+  const FLAG_LABELS: Record<string, string> = {
+    'story-eligible': 'Story: eligible', 'story-filtered': 'Story: filtered out', enriched: 'Enriched',
+    'needs-enrich': 'Eligible · un-enriched', 'narration-stale': 'Narration: stale', staged: 'Narration: staged',
+    'sheet-drift': 'Story: sheet drifted', 'speakable-drift': 'Speakable: drifted', defect: 'Narration defects',
+    stale: 'Stale facts', unattrib: 'Unattributed',
+  }
+  const scopeChips: { label: string; value: string }[] = []
+  if (region !== 'all') scopeChips.push({ label: 'Region', value: regions.find((r) => r.slug === region)?.name ?? region })
+  if (source !== 'all') scopeChips.push({ label: 'Source', value: source })
+  if (flags !== 'all') scopeChips.push({ label: 'Flag', value: FLAG_LABELS[flags] ?? flags })
+  if (q) scopeChips.push({ label: 'Search', value: q })
+  const scope: ScopeDescriptor = { selection: buildSelection(), summary: selectionSummary, chips: scopeChips }
 
   const totals = {
     total: pois.length,
@@ -1154,6 +1118,7 @@ function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loading: bool
             <SelectItem value="enriched">Enriched</SelectItem>
             <SelectItem value="needs-enrich">Eligible · un-enriched</SelectItem>
             <SelectItem value="narration-stale">Narration: stale</SelectItem>
+            <SelectItem value="staged">Narration: staged (unreleased)</SelectItem>
             <SelectItem value="sheet-drift">Story: sheet drifted</SelectItem>
             <SelectItem value="speakable-drift">Speakable: drifted</SelectItem>
             <SelectItem value="defect">Narration defects</SelectItem>
@@ -1165,10 +1130,16 @@ function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loading: bool
       </div>
 
       {numSelected > 0 && (
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/40 px-3 py-2 text-sm">
-          <span className="font-medium">{selectionSummary}</span>
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-sm">
+          <span className="mr-1 font-medium">{selectionSummary}</span>
           <Button size="sm" onClick={() => setEnrichOpen(true)}>
             <Sparkles className="h-4 w-4" /> Enrich {numEligibleSelected}
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setNarrateOpen(true)}>
+            <Zap className="h-4 w-4" /> Narrate {numNarratableSelected}
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setRescoreOpen(true)}>
+            <Activity className="h-4 w-4" /> Re-score {numWithNarrationSelected}
           </Button>
           <button className="text-xs text-muted-foreground hover:text-foreground" onClick={clearSel}>
             Clear
@@ -1262,6 +1233,11 @@ function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loading: bool
                             {NARRATION_META[p.narrationStatus].label}
                           </Badge>
                         )}
+                        {p.narrationStatus !== 'none' && !p.released && (
+                          <Badge variant="warning" title="Staged — not yet public (release the region or the clip)">
+                            staged
+                          </Badge>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -1304,8 +1280,19 @@ function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loading: bool
       <EnrichDialog
         open={enrichOpen}
         onOpenChange={setEnrichOpen}
-        selection={buildSelection()}
-        summary={selectionSummary}
+        scope={scope}
+        onSubmitted={() => { clearSel(); navigate({ to: '/runs' }) }}
+      />
+      <NarrateDialog
+        open={narrateOpen}
+        onOpenChange={setNarrateOpen}
+        scope={scope}
+        onSubmitted={() => { clearSel(); navigate({ to: '/runs' }) }}
+      />
+      <RescoreDialog
+        open={rescoreOpen}
+        onOpenChange={setRescoreOpen}
+        scope={scope}
         onSubmitted={() => { clearSel(); navigate({ to: '/runs' }) }}
       />
     </div>

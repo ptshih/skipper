@@ -26,7 +26,7 @@
 
 import { Hono } from 'hono'
 import { serveStatic } from 'hono/bun'
-import { and, asc, count, desc, eq, inArray, sql } from 'drizzle-orm'
+import { and, asc, between, count, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import {
   evalRuns,
@@ -40,7 +40,7 @@ import {
 import { CLAUDE_MODELS, classifyStoryEligibility } from '@skipper/shared'
 import { checkSpeakableAnchor } from '@skipper/engine'
 import { requireAdmin, type AdminEnv } from './auth'
-import { bboxError } from './bbox'
+import { bboxError, parseBbox } from './bbox'
 import { contentTypeForKey, presignGet } from './storage'
 import {
   buildJobArgs,
@@ -109,7 +109,12 @@ app.use('/admin/*', requireAdmin)
 
 app.get('/admin/regions', async (c) => {
   const rows = await db
-    .select({ slug: regions.slug, displayName: regions.displayName, bbox: regions.bbox })
+    .select({
+      slug: regions.slug,
+      displayName: regions.displayName,
+      bbox: regions.bbox,
+      releasedAt: regions.releasedAt,
+    })
     .from(regions)
     .orderBy(asc(regions.displayName))
   return c.json({ regions: rows })
@@ -155,6 +160,51 @@ app.patch('/admin/regions/:slug', async (c) => {
     .returning({ slug: regions.slug, displayName: regions.displayName, bbox: regions.bbox })
   if (!row) return c.json({ error: 'not_found' }, 404)
   return c.json({ region: row })
+})
+
+// Release a region (region-release-gate): flip it DRAFT → RELEASED and bulk-stamp `released_at` on
+// every still-STAGED narration in its bbox (auto-release-all). IRREVERSIBLE by design — never
+// un-release (the read paths serve released clips forever; un-release would orphan saved drives +
+// invalidate offline downloads). Idempotent + re-runnable: a second call keeps the region's original
+// release date but stamps any clips that staged since (the "push new clips public" path).
+// See docs/decisions/region-release-gate.md.
+app.post('/admin/regions/:slug/release', async (c) => {
+  const slug = c.req.param('slug')
+  const region = (
+    await db
+      .select({ slug: regions.slug, bbox: regions.bbox, releasedAt: regions.releasedAt })
+      .from(regions)
+      .where(eq(regions.slug, slug))
+      .limit(1)
+  )[0]
+  if (!region) return c.json({ error: 'not_found' }, 404)
+  const box = parseBbox(region.bbox)
+  if (!box) {
+    return c.json({ error: 'bbox_required', message: 'Set a valid region bbox before releasing.' }, 400)
+  }
+
+  const releasedAt = new Date()
+  const inBboxPoi = db
+    .select({ id: pois.id })
+    .from(pois)
+    .where(and(between(pois.lat, box.swLat, box.neLat), between(pois.lng, box.swLng, box.neLng)))
+
+  const [, stamped] = await db.batch([
+    // Region row: set ONLY while still draft, so a re-run preserves the first release timestamp.
+    db.update(regions).set({ releasedAt }).where(and(eq(regions.slug, slug), isNull(regions.releasedAt))),
+    // Every staged clip in the bbox → released. Re-runnable: only touches released_at IS NULL rows.
+    db
+      .update(narrations)
+      .set({ releasedAt })
+      .where(and(isNull(narrations.releasedAt), inArray(narrations.poiId, inBboxPoi)))
+      .returning({ id: narrations.id }),
+  ])
+
+  return c.json({
+    region: { slug: region.slug, releasedAt: region.releasedAt ?? releasedAt },
+    releasedClips: stamped.length,
+    alreadyReleased: region.releasedAt != null,
+  })
 })
 
 // Bbox lookup — LLM estimate + Nominatim OSM cross-check, run in parallel.
@@ -665,6 +715,7 @@ app.get('/admin/pois', async (c) => {
         form: narrations.form,
         attribution: narrations.attribution,
         factsHash: narrations.factsHash, // the clip's grounding hash — vs pois.factsHash = fresh|stale
+        releasedAt: narrations.releasedAt, // region-release-gate: NULL = staged, non-null = public
       })
       .from(narrations)
       .where(inArray(narrations.poiId, poiIds)),
@@ -687,7 +738,7 @@ app.get('/admin/pois', async (c) => {
       : null
     // A story narration must carry CC BY-SA attribution (legal, not optional); null/empty = missing.
     const attributed = s.form !== 'story' || (Array.isArray(s.attribution) && s.attribution.length > 0)
-    return [s.poiId, { hasClip: true, suspiciousDuration: wpm !== null && wpm < WPM_FLOOR, factsHash: s.factsHash, attributed }]
+    return [s.poiId, { hasClip: true, suspiciousDuration: wpm !== null && wpm < WPM_FLOOR, factsHash: s.factsHash, attributed, released: s.releasedAt != null }]
   }))
   // Parse each region's "swLng,swLat,neLng,neLat" box once; a poi belongs to the FIRST region
   // (deterministic by displayName) whose box contains its coords. A region with no/invalid bbox
@@ -745,6 +796,9 @@ app.get('/admin/pois', async (c) => {
       // surface it on the dedicated axis too (un-clipped pois are never stale).
       staleFacts: narrationStatus === 'stale',
       attributed: clip?.attributed ?? true,
+      // region-release-gate: a clip exists but is STAGED (not yet public) until released. Only
+      // meaningful when a clip exists (narrationStatus !== 'none').
+      released: clip?.released ?? false,
       regionSlug: region?.slug ?? null,
       regionName: region?.name ?? null,
     }
@@ -769,6 +823,7 @@ app.get('/admin/pois/:poiId/narration', async (c) => {
         audioDurationMs: narrations.audioDurationMs,
         attribution: narrations.attribution,
         factsHash: narrations.factsHash,
+        releasedAt: narrations.releasedAt,
       })
       .from(narrations)
       .where(eq(narrations.poiId, poiId))
@@ -788,12 +843,40 @@ app.get('/admin/pois/:poiId/narration', async (c) => {
         audioDurationMs: clip.audioDurationMs,
         attribution: clip.attribution,
         factsHash: clip.factsHash,
+        // region-release-gate: NULL = staged (not public), non-null = released. Drives the badge +
+        // the per-clip Release action in the admin narration tab.
+        releasedAt: clip.releasedAt,
       },
     })
   } catch (e) {
     console.error('[admin] narration presign failed', e)
     return c.json({ error: 'audio_unavailable', message: 'R2 not configured or presign failed.' }, 503)
   }
+})
+
+// Per-clip release (region-release-gate): stamp ONE narration released — the trickle case (release a
+// freshly ear-checked clip inside an already-open region, without re-releasing the whole region).
+// Release-only + monotonic: never clears released_at. See docs/decisions/region-release-gate.md.
+app.post('/admin/pois/:poiId/narration/release', async (c) => {
+  const poiId = c.req.param('poiId')
+  if (!UUID_RE.test(poiId)) return c.json({ error: 'not_found' }, 404)
+  const [row] = await db
+    .update(narrations)
+    .set({ releasedAt: new Date() })
+    .where(and(eq(narrations.poiId, poiId), isNull(narrations.releasedAt)))
+    .returning({ releasedAt: narrations.releasedAt })
+  if (row) return c.json({ releasedAt: row.releasedAt })
+  // No row updated → either no narration for this poi, or it's already released. Distinguish so the
+  // client shows the right state (an already-released clip is a no-op success, not a 404).
+  const existing = (
+    await db
+      .select({ releasedAt: narrations.releasedAt })
+      .from(narrations)
+      .where(eq(narrations.poiId, poiId))
+      .limit(1)
+  )[0]
+  if (!existing) return c.json({ error: 'not_found' }, 404)
+  return c.json({ releasedAt: existing.releasedAt, alreadyReleased: true })
 })
 
 /* -------------------------------------------------------------------------- */

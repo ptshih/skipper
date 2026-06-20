@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, Layers, Loader2, Pencil, Plus, Search, TriangleAlert } from 'lucide-react'
+import { CheckCircle2, Compass, Layers, Loader2, Pencil, Plus, Rocket, Search, TriangleAlert } from 'lucide-react'
 import { api, type Region } from '@/lib/api'
 import { errMsg } from '@/lib/format'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { PageHeader } from '@/components/PageHeader'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Callout } from '@/components/ui/callout'
@@ -33,8 +36,57 @@ const CONFIDENCE_META = {
 
 export function RegionsView() {
   const qc = useQueryClient()
+  const confirm = useConfirm()
   const [dialog, setDialog] = useState<DialogMode | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [sel, setSel] = useState<Set<string>>(new Set())
+  const [discoverOpen, setDiscoverOpen] = useState(false)
+  const navigate = useNavigate()
   const { data: regions = [], error: err, isPending } = useQuery({ queryKey: ['regions'], queryFn: async () => (await api.regions()).regions })
+
+  // Row selection drives Discover: pick region row(s) → sweep their bbox(es). Mirrors the POIs scope model.
+  const numSelected = sel.size
+  const selectedRegions = regions.filter((r) => sel.has(r.slug)).map((r) => ({ slug: r.slug, displayName: r.displayName }))
+  const allChecked = regions.length > 0 && numSelected === regions.length
+  const someChecked = numSelected > 0 && numSelected < regions.length
+  function toggleRow(slug: string) {
+    setSel((prev) => {
+      const next = new Set(prev)
+      if (next.has(slug)) next.delete(slug)
+      else next.add(slug)
+      return next
+    })
+  }
+  function toggleAll() { setSel(numSelected > 0 ? new Set() : new Set(regions.map((r) => r.slug))) }
+  function clearSel() { setSel(new Set()) }
+
+  // region-release-gate: releasing is IRREVERSIBLE + auto-releases every staged clip in the bbox.
+  // Re-running on an already-released region pushes any newly-staged clips public (idempotent).
+  const releaseMut = useMutation({
+    mutationFn: (slug: string) => api.releaseRegion(slug),
+    onSuccess: (res) => {
+      setNotice(
+        res.releasedClips > 0
+          ? `Released ${res.releasedClips} clip${res.releasedClips === 1 ? '' : 's'} in ${res.region.slug}.`
+          : `${res.region.slug} is released — no staged clips were waiting.`,
+      )
+      qc.invalidateQueries({ queryKey: ['regions'] })
+      qc.invalidateQueries({ queryKey: ['pois'] })
+    },
+  })
+
+  async function onRelease(r: Region) {
+    const draft = r.releasedAt == null
+    const ok = await confirm({
+      title: draft ? `Release ${r.displayName} to the public?` : `Release new clips in ${r.displayName}?`,
+      body: draft
+        ? 'This opens the region to everyone and releases every staged clip inside its bbox. Releasing is permanent — a region can never be un-released (it would orphan saved drives and break offline downloads). Tweak POIs first; testers can preview staged clips in-app.'
+        : 'This region is already public. Re-running release pushes any clips that have staged since (new POIs, fresh regens) to the public. This is permanent and cannot be undone.',
+      confirmLabel: draft ? 'Release region' : 'Release new clips',
+      tone: 'destructive',
+    })
+    if (ok) releaseMut.mutate(r.slug)
+  }
 
   return (
     <div className="space-y-6">
@@ -54,6 +106,14 @@ export function RegionsView() {
         </Callout>
       )}
 
+      {releaseMut.error && (
+        <Callout variant="error">
+          <span className="font-medium">Release failed:</span> {errMsg(releaseMut.error)}
+        </Callout>
+      )}
+
+      {notice && <Callout variant="info">{notice}</Callout>}
+
       <Callout variant="info">
         <span className="font-medium text-foreground">Discovery bbox</span> — the bounding box passed to{' '}
         <code className="font-mono text-xs">Discover POIs</code> as{' '}
@@ -61,20 +121,52 @@ export function RegionsView() {
         built-in default (Tahoe basin). Set this before running a discovery sweep for any new region.
       </Callout>
 
+      {numSelected > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-sm">
+          <span className="mr-1 font-medium">
+            {numSelected} region{numSelected === 1 ? '' : 's'} selected
+          </span>
+          <Button size="sm" onClick={() => setDiscoverOpen(true)}>
+            <Compass className="h-4 w-4" /> Discover {numSelected}
+          </Button>
+          <button className="text-xs text-muted-foreground hover:text-foreground" onClick={clearSel}>
+            Clear
+          </button>
+        </div>
+      )}
+
       <div className="overflow-hidden rounded-xl border">
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-10">
+                <Checkbox
+                  checked={allChecked}
+                  indeterminate={someChecked}
+                  onCheckedChange={toggleAll}
+                  aria-label="Select all regions"
+                />
+              </TableHead>
               <TableHead>Slug</TableHead>
               <TableHead>Display name</TableHead>
               <TableHead>Discovery bbox</TableHead>
-              <TableHead className="w-16" />
+              <TableHead>Status</TableHead>
+              <TableHead className="w-44" />
             </TableRow>
           </TableHeader>
           <TableBody>
-            {isPending && <TableSkeletonRows rows={4} cols={4} />}
-            {regions.map((r) => (
-              <TableRow key={r.slug}>
+            {isPending && <TableSkeletonRows rows={4} cols={6} />}
+            {regions.map((r) => {
+              const released = r.releasedAt != null
+              return (
+              <TableRow key={r.slug} className={cn(sel.has(r.slug) && 'bg-muted/40')}>
+                <TableCell className="w-10">
+                  <Checkbox
+                    checked={sel.has(r.slug)}
+                    onCheckedChange={() => toggleRow(r.slug)}
+                    aria-label={`Select ${r.displayName}`}
+                  />
+                </TableCell>
                 <TableCell className="font-mono text-sm">{r.slug}</TableCell>
                 <TableCell className="font-medium">{r.displayName}</TableCell>
                 <TableCell>
@@ -85,19 +177,41 @@ export function RegionsView() {
                   )}
                 </TableCell>
                 <TableCell>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setDialog({ mode: 'edit', region: r })}
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </Button>
+                  {released ? (
+                    <Badge variant="success" title={`Released ${new Date(r.releasedAt!).toLocaleString()}`}>
+                      <CheckCircle2 className="h-3 w-3" /> Released
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary">Draft</Badge>
+                  )}
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center justify-end gap-1">
+                    <Button
+                      variant={released ? 'ghost' : 'default'}
+                      size="sm"
+                      disabled={releaseMut.isPending}
+                      onClick={() => void onRelease(r)}
+                      title={released ? 'Release any clips staged since' : 'Open this region to the public (permanent)'}
+                    >
+                      <Rocket className="h-3.5 w-3.5" />
+                      {released ? 'Release new' : 'Release'}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setDialog({ mode: 'edit', region: r })}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
-            ))}
+              )
+            })}
             {!isPending && regions.length === 0 && !err && (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={4}>
+                <TableCell colSpan={6}>
                   <EmptyState icon={Layers}>No regions yet — add one to get started.</EmptyState>
                 </TableCell>
               </TableRow>
@@ -113,7 +227,78 @@ export function RegionsView() {
           onSaved={() => { setDialog(null); qc.invalidateQueries({ queryKey: ['regions'] }) }}
         />
       )}
+
+      <DiscoverDialog
+        regions={selectedRegions}
+        open={discoverOpen}
+        onOpenChange={setDiscoverOpen}
+        onSubmitted={() => { setDiscoverOpen(false); clearSel(); navigate({ to: '/runs' }) }}
+      />
     </div>
+  )
+}
+
+/* ── DISCOVER POIs (per selected region; FREE — no LLM/TTS spend) ── */
+
+// Sweeps every Wikidata-pinned place in each selected region's bbox and upserts the shared POI corpus.
+// Free (no model/TTS), so no confirm gate. Launches one discover_pois run PER region — each lands on the
+// Runs timeline. Preview dry-runs the sweep (counts candidates); Discover upserts.
+function DiscoverDialog({ regions, open, onOpenChange, onSubmitted }: {
+  regions: { slug: string; displayName: string }[]
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onSubmitted: () => void
+}) {
+  const qc = useQueryClient()
+  const submitMut = useMutation({
+    mutationFn: (apply: boolean) =>
+      Promise.all(regions.map((r) => api.createJob({ kind: 'discover_pois', region: r.slug, apply }))),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['runs'] }); onSubmitted() },
+  })
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!submitMut.isPending) onOpenChange(o) }}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><Compass className="h-4 w-4" /> Discover POIs</DialogTitle>
+          <DialogDescription>
+            Discovers every Wikidata-pinned place in each region's bbox and upserts the shared POI corpus —
+            roam draws from it. Free — no LLM or TTS spend.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div className="space-y-2 rounded-lg border bg-muted/30 px-3 py-2.5 text-sm">
+            <div className="font-medium text-foreground">
+              Discovering {regions.length} region{regions.length === 1 ? '' : 's'}
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {regions.map((r) => (
+                <Badge key={r.slug} variant="secondary" className="font-normal">{r.displayName}</Badge>
+              ))}
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Free — no spend, no deletion. <span className="font-medium text-foreground">Preview</span> dry-runs the
+            sweep (counts candidates); <span className="font-medium text-foreground">Discover</span> upserts the corpus.
+            One run per region lands on the Runs timeline.
+          </p>
+        </div>
+
+        {submitMut.error && (
+          <Callout variant="error" className="rounded-lg px-3 py-2">{errMsg(submitMut.error)}</Callout>
+        )}
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={submitMut.isPending}>Cancel</Button>
+          <Button variant="outline" onClick={() => submitMut.mutate(false)} disabled={submitMut.isPending || regions.length === 0}>
+            Preview
+          </Button>
+          <Button onClick={() => submitMut.mutate(true)} disabled={submitMut.isPending || regions.length === 0}>
+            <Compass className="h-4 w-4" /> {submitMut.isPending ? 'Queuing…' : 'Discover'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
