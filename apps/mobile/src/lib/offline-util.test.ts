@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { DriveClip, SignedDriveAudio } from '@skipper/shared'
 import {
+  contentSignature,
   daysSinceIso,
   expectedAudioSeqs,
   extForContentType,
@@ -130,26 +131,60 @@ describe('offline completeness (hasDownloadableAudio / expectedAudioSeqs / missi
     expect(expectedAudioSeqs(clips)).toEqual([0, 2])
   })
 
-  test('missingAudioSeqs is empty for a COMPLETE download (every expected clip saved)', () => {
-    const clips = [clip(0, 'https://r2/c0'), clip(1, 'https://r2/c1')]
-    expect(missingAudioSeqs(clips, [0, 1])).toEqual([])
+  test('missingAudioSeqs is empty for a COMPLETE download (every expected seq saved)', () => {
+    expect(missingAudioSeqs([0, 1], [0, 1])).toEqual([])
   })
 
   test('missingAudioSeqs reports the gap for a PARTIAL download (audit #1 — the restart-safe predicate)', () => {
-    const clips = [clip(0, 'https://r2/c0'), clip(1, 'https://r2/c1'), clip(2, 'https://r2/c2')]
-    // Only seqs 0 and 2 landed — seq 1 never downloaded, so it must surface as missing.
-    expect(missingAudioSeqs(clips, [0, 2])).toEqual([1])
+    // Expected 0,1,2 but only 0 and 2 landed — seq 1 must surface as missing.
+    expect(missingAudioSeqs([0, 1, 2], [0, 2])).toEqual([1])
   })
 
-  test('a silent beat (no audio) is never counted missing, even when absent from the saved set', () => {
-    const clips = [clip(0, 'https://r2/c0'), clip(1, null)]
-    // seq 1 is a silent beat — nothing to download, so a saved set of just [0] is COMPLETE.
-    expect(missingAudioSeqs(clips, [0])).toEqual([])
+  test('missingAudioSeqs: an empty saved set marks every expected seq missing; a stray extra saved seq is harmless', () => {
+    expect(missingAudioSeqs([0, 2], [])).toEqual([0, 2])
+    expect(missingAudioSeqs([0, 2], [0, 2, 99])).toEqual([])
   })
 
-  test('an empty saved set marks every audio clip missing; a stray extra saved seq is harmless', () => {
-    const clips = [clip(0, 'https://r2/c0'), clip(2, 'https://r2/c2')]
-    expect(missingAudioSeqs(clips, [])).toEqual([0, 2])
-    expect(missingAudioSeqs(clips, [0, 2, 99])).toEqual([])
+  test('composed: a silent beat is never EXPECTED, so a partial with only silent gaps reads COMPLETE', () => {
+    const clips = [clip(0, 'https://r2/c0'), clip(1, null), clip(2, 'https://r2/c2')]
+    const expected = expectedAudioSeqs(clips) // [0, 2] — seq 1 (silent beat) excluded
+    expect(missingAudioSeqs(expected, [0, 2])).toEqual([]) // both audio clips saved → complete
+    expect(missingAudioSeqs(expected, [0])).toEqual([2]) // an AUDIO clip missing → partial
+  })
+})
+
+describe('contentSignature (offline staleness diff — audit #8)', () => {
+  const clip = (seq: number, revisedAt: string | null): DriveClip => ({
+    seq,
+    form: 'story',
+    alongSec: seq * 60,
+    url: `https://r2/c${seq}`,
+    contentType: 'audio/mp4',
+    durationMs: 90_000,
+    revisedAt,
+  })
+
+  test('is STABLE regardless of clip order (sorted by seq — a reorder is not a false "stale" nag)', () => {
+    const a = contentSignature({ clips: [clip(0, 't0'), clip(1, 't1'), clip(2, 't2')] })
+    const b = contentSignature({ clips: [clip(2, 't2'), clip(0, 't0'), clip(1, 't1')] })
+    expect(a).toBe(b)
+  })
+
+  test('CHANGES when a clip is re-cut (its revisedAt token bumps)', () => {
+    const before = contentSignature({ clips: [clip(0, 't0'), clip(1, 't1')] })
+    const after = contentSignature({ clips: [clip(0, 't0'), clip(1, 't1-NEW')] })
+    expect(after).not.toBe(before)
+  })
+
+  test('CHANGES when a clip is added or removed (the seq set changes)', () => {
+    const two = contentSignature({ clips: [clip(0, 't0'), clip(1, 't1')] })
+    const three = contentSignature({ clips: [clip(0, 't0'), clip(1, 't1'), clip(2, 't2')] })
+    expect(three).not.toBe(two)
+  })
+
+  test('null/absent revisedAt is stable, but ADDING a token still registers as changed', () => {
+    const a = contentSignature({ clips: [clip(0, null), clip(1, null)] })
+    expect(contentSignature({ clips: [clip(0, null), clip(1, null)] })).toBe(a)
+    expect(contentSignature({ clips: [clip(0, 't0'), clip(1, null)] })).not.toBe(a)
   })
 })

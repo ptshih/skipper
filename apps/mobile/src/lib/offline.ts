@@ -16,6 +16,7 @@ import { Directory, File, Paths } from 'expo-file-system'
 import type { DriveClip, DriveManifest, DriveSummary } from '@skipper/shared'
 import { getDrive, signDriveAudio } from './api'
 import {
+  contentSignature,
   expectedAudioSeqs,
   extForContentType,
   hasDownloadableAudio,
@@ -29,7 +30,10 @@ import {
 // app build reads as NOT-downloaded (and re-downloads) instead of crashing the player.
 // v3: V2 reshape — the embedded `detail` is now a DRIVE manifest (flat clips[] keyed by seq, with
 // per-clip `revisedAt`), not a tour detail; a v2 download is a different shape → invalidated.
-const MANIFEST_VERSION = 3
+// v4: + `audioSeqs` (the expected downloadable seqs, so completeness survives the strip below) AND the
+// detail's presigned clip `url`s are NULLED on disk — a short-TTL credential never belongs in a
+// backed-up manifest (audit #9). Both are shape changes → a v3 download re-downloads.
+const MANIFEST_VERSION = 4
 
 /** A downloaded clip — a RELATIVE filename within the drive dir (NOT an absolute uri). */
 interface ClipFile {
@@ -45,9 +49,14 @@ export interface OfflineManifest {
   /** When this download was captured (ISO). */
   savedAt: string
   /** The full drive manifest (route/clips/geometry) — zero-network playback. The clips' presigned
-   *  `url`s are stale on disk (and ignored — offline reads the local file map below). */
+   *  `url`s are STRIPPED (nulled) on disk — a short-TTL credential never belongs in a backed-up file, and
+   *  offline playback reads the local file map below, never these. (audit #9) */
   detail: DriveManifest
-  /** Keyed by the player seq (string) — one entry per place narration. */
+  /** The player seqs this drive SHOULD have audio for (captured at download time, BEFORE the url strip),
+   *  so completeness survives a restart even though `detail`'s urls are gone. `audioSeqs` minus the
+   *  `clips` keys = the missing set. (audit #1 / #9) */
+  audioSeqs: number[]
+  /** Keyed by the player seq (string) — one entry per place narration that LANDED. */
   clips: Record<string, ClipFile>
 }
 
@@ -346,13 +355,19 @@ async function runDownload(
     // Write the manifest INSIDE the try — a manifest-write failure must also sweep the
     // (verified-but-orphaned) clip files, or they'd leak with no manifest to find them. The manifest
     // covers ONLY the clips that landed; `clipsPresentOnDisk` confirms those SAVED clips still play,
-    // while `offlineStatus`/`missingAudioSeqs` derive the partial gap from `detail` (which lists EVERY
-    // expected clip) — so a partial download stays playable AND surfaces as partial after a restart.
+    // while `offlineStatus`/`missingAudioSeqs` diff `audioSeqs` (the expected set) against them — so a
+    // partial download stays playable AND surfaces as partial after a restart.
+    //
+    // Capture `audioSeqs` from the FRESH detail (urls intact) BEFORE stripping, then NULL the detail's
+    // presigned clip URLs for disk — a short-TTL credential must not sit in a backed-up manifest, and
+    // offline playback uses the local file map, never these. (audit #1 / #9)
+    const audioSeqs = expectedAudioSeqs(detail.clips)
     const manifest: OfflineManifest = {
       driveId,
       version: MANIFEST_VERSION,
       savedAt: new Date().toISOString(),
-      detail,
+      detail: { ...detail, clips: detail.clips.map((c) => ({ ...c, url: null })) },
+      audioSeqs,
       clips: Object.fromEntries(results),
     }
     manifestFile(driveId).write(JSON.stringify(manifest))
@@ -380,8 +395,15 @@ export function loadManifest(driveId: string): OfflineManifest | null {
   try {
     const m = JSON.parse(f.textSync()) as OfflineManifest
     // Reject a malformed or stale-format manifest → treat as not-downloaded (re-download)
-    // rather than return a half-shape the player would crash on (e.g. a missing `detail`).
-    if (!m || m.version !== MANIFEST_VERSION || !m.detail || !Array.isArray(m.detail.clips) || typeof m.clips !== 'object') {
+    // rather than return a half-shape the player would crash on (e.g. a missing `detail`/`audioSeqs`).
+    if (
+      !m ||
+      m.version !== MANIFEST_VERSION ||
+      !m.detail ||
+      !Array.isArray(m.detail.clips) ||
+      !Array.isArray(m.audioSeqs) ||
+      typeof m.clips !== 'object'
+    ) {
       return null
     }
     return m
@@ -417,8 +439,8 @@ export interface OfflineStatus {
    *  PARTIAL download (it plays the stops it has) — read `missingSeqs` to tell partial from complete. */
   downloaded: boolean
   /** Expected-but-missing clip seqs — EMPTY means a COMPLETE download. Derived from the SAVED manifest
-   *  (`detail.clips` lists every expected clip; `clips` holds only those that landed), so it survives an
-   *  app restart, unlike the in-memory DownloadResult.failedSeqs. (audit #1) */
+   *  (`audioSeqs` lists every expected clip; `clips` holds only those that landed), so it survives an app
+   *  restart, unlike the in-memory DownloadResult.failedSeqs. (audit #1) */
   missingSeqs: number[]
   /** Total clips this drive should have audio for. */
   expectedCount: number
@@ -436,23 +458,9 @@ export function offlineStatus(driveId: string): OfflineStatus | null {
   const savedSeqs = Object.keys(m.clips).map(Number).filter(Number.isFinite)
   return {
     downloaded: true,
-    missingSeqs: missingAudioSeqs(m.detail.clips, savedSeqs),
-    expectedCount: expectedAudioSeqs(m.detail.clips).length,
+    missingSeqs: missingAudioSeqs(m.audioSeqs, savedSeqs),
+    expectedCount: m.audioSeqs.length,
   }
-}
-
-/**
- * Fold a manifest's per-clip content tokens (`revisedAt`) + clip set into one comparable string.
- * Any drift changes it: a clip re-synth (token bumps), a regen (fresh narration → fresh token), a
- * clip added/removed (seq set changes).
- */
-function contentSignature(d: DriveManifest): string {
-  const clips = d.clips
-    .slice()
-    .sort((a, b) => a.seq - b.seq)
-    .map((c) => `${c.seq}:${c.revisedAt ?? ''}`)
-    .join(',')
-  return `clips[${clips}]`
 }
 
 /**

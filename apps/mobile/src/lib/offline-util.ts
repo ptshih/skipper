@@ -68,14 +68,36 @@ export function expectedAudioSeqs(clips: DriveClip[]): number[] {
 }
 
 /**
- * The expected audio seqs MISSING from the saved set — the offline-completeness predicate. Empty means
- * a COMPLETE download. Pure (no filesystem): `clips` is the saved manifest's full `detail.clips` (lists
- * EVERY expected clip), `savedSeqs` is the subset that actually landed — so a partial download surfaces
- * as partial even after a restart, when the in-memory download result is long gone. (audit #1)
+ * The expected audio seqs MISSING from the saved set — the offline-completeness predicate. Empty means a
+ * COMPLETE download. Pure set difference: `expectedSeqs` is the list the manifest PERSISTS (the seqs that
+ * had audio at download time — OfflineManifest.audioSeqs), `savedSeqs` is the subset that actually landed.
+ * Persisting the expected list (rather than re-deriving it from the saved detail) is what lets the detail's
+ * presigned clip URLs be stripped on disk (audit #9) without losing the partial-vs-complete signal after a
+ * restart. (audit #1)
  */
-export function missingAudioSeqs(clips: DriveClip[], savedSeqs: Iterable<number>): number[] {
+export function missingAudioSeqs(expectedSeqs: number[], savedSeqs: Iterable<number>): number[] {
   const saved = new Set(savedSeqs)
-  return expectedAudioSeqs(clips).filter((seq) => !saved.has(seq))
+  return expectedSeqs.filter((seq) => !saved.has(seq))
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Offline content signature (staleness diff vs the server's current cut)      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Fold a drive's per-clip content tokens (`revisedAt`) + clip set into one comparable string. Any drift
+ * changes it: a clip re-synth (token bumps), a regen (fresh narration → fresh token), or a clip
+ * added/removed (the seq set changes). SORTED by seq, so a reordered-but-identical clip list compares
+ * EQUAL (never a false "stale" nag). Pure — offline.ts diffs the saved manifest's detail against the fresh
+ * one with it; it reads only seq + revisedAt, so it is unaffected by the on-disk url strip (audit #9).
+ */
+export function contentSignature(d: { clips: DriveClip[] }): string {
+  const clips = d.clips
+    .slice()
+    .sort((a, b) => a.seq - b.seq)
+    .map((c) => `${c.seq}:${c.revisedAt ?? ''}`)
+    .join(',')
+  return `clips[${clips}]`
 }
 
 /* -------------------------------------------------------------------------- */
