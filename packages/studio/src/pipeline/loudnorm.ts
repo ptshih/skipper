@@ -9,14 +9,14 @@
 // 30 live clips (founder-ear-confirmed): body means ranged −26.7 → −19.5 dB (a 7.2 dB
 // stop-to-stop jump), and the whole mix read ~20–25% quiet vs a Spotify reference. So every
 // shipped take runs an ffmpeg two-pass LINEAR loudnorm to the EBU R128 target in models.ts
-// (−14 LUFS integrated, −1.5 dBTP ceiling):
+// (−14 LUFS integrated, −1.0 dBTP ceiling):
 //   pass 1 MEASURES the take's integrated loudness / true-peak / range,
 //   pass 2 applies a single LINEAR gain (linear=true) to hit the target exactly, fused with
 //          the AAC encode.
 // Linear (not dynamic) is the point: it scales the whole clip uniformly, so every clip lands at
 // the same integrated level (killing the spread) WITHOUT touching speech dynamics — and because
 // it scales tail and body equally, it can never reintroduce the tail-collapse the retake just
-// fixed. The −1.5 dBTP ceiling is why this isn't a flat `volume=+NdB`: bringing a −26 dB clip up
+// fixed. The −1.0 dBTP ceiling is why this isn't a flat `volume=+NdB`: bringing a −26 dB clip up
 // to −14 could clip without true-peak limiting.
 //
 // ffmpeg is REQUIRED (it IS the encoder, not just QA): a missing/failed encode THROWS rather

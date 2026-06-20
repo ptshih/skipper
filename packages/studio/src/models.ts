@@ -135,14 +135,17 @@ export const TTS_LANGUAGE_CODE = 'en-US' as const
 // on every shipped take (pipeline/loudnorm.ts), targeting these EBU R128 values:
 //   I  (integrated loudness) = −14 LUFS — Spotify's normalization target; brings the quiet
 //      clips up and lands every clip at the SAME integrated level, collapsing the spread.
-//   TP (true-peak ceiling)   = −1.5 dBTP — headroom so the gain-up can't clip (why we use
-//      loudnorm, not a flat `volume=+NdB`).
-// TUNABLE: these are the single knobs. The −14 start is verified by a founder on-device A/B
-// vs Spotify before the first paid full run — if the real playback level still reads low,
-// nudge TARGET up (−13/−12) here; no other code changes. (The 17 bundled drive-music tracks
-// are NOT in this pipeline — matching them is a separate one-time re-encode once −14 locks.)
+//   TP (true-peak ceiling)   = −1.0 dBTP — headroom so the gain-up can't clip (why we use
+//      loudnorm, not a flat `volume=+NdB`). Raised from −1.5 (founder, 2026-06-19) to fix "still
+//      a bit too quiet": at −1.5 the ceiling BOUND and the linear gain undershot the −14 target —
+//      a measured clip landed −14.9 LUFS (peaks already −0.77 dBTP post-AAC), shipping ~1 dB shy.
+//      −1.0 is a standard streaming TP ceiling and recovers that headroom so loudnorm reaches −14.
+// TUNABLE: these are the single knobs. The −14 target is verified by a founder on-device A/B vs
+// Spotify; if the real playback level still reads low, nudge TARGET up (−13/−12) or the TP ceiling
+// further toward 0 here — no other code changes. (The 17 bundled drive-music tracks are NOT in
+// this pipeline — matching them is a separate one-time re-encode once the level locks.)
 export const LOUDNORM_TARGET_LUFS = -14 as const
-export const LOUDNORM_TRUE_PEAK_DB = -1.5 as const
+export const LOUDNORM_TRUE_PEAK_DB = -1.0 as const
 // LRA (loudness range) is held at the loudnorm default — speech is already low-dynamic, so
 // this rarely binds; it stays a constant rather than a knob.
 export const LOUDNORM_RANGE_LU = 11 as const

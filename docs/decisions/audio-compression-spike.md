@@ -20,7 +20,8 @@ rather than ship a mislabeled clip; only the LEVELING sub-step degrades (encode 
 stats won't parse). Cloud Run carries ffmpeg (`packages/studio/Dockerfile`). Verified by an
 end-to-end synth: ffprobe confirms aac / 24 kHz / mono / ~48.8k / m4a, duration exact. No clips to
 migrate — `pois` was freshly swept with no tour/roam audio generated, so this only affects NEW
-generation. Loudnorm target unchanged (−14 LUFS / −1.5 dBTP, `LOUDNORM_*` in `models.ts`); see
+generation. Loudnorm target unchanged (−14 LUFS / −1.0 dBTP — TP ceiling raised from −1.5 on
+2026-06-19 to stop it undershooting the −14 target; `LOUDNORM_*` in `models.ts`); see
 `TODO.md` "TTS audio QA" for the founder ear-gate on the −14 target.
 
 ## 1. Why

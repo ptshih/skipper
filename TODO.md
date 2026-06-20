@@ -65,7 +65,7 @@ Three items locked from the 2026-06-11 brainstorm (full capture: `docs/ideas/fre
 
 The mechanism shipped 2026-06-11: every ship path (`generate-narrations`, `resynth-narration`)
 re-synths once on a ≥3 dB tail-collapse drop (the "mumble"), then linear-loudnorms the winning take
-to `LOUDNORM_TARGET_LUFS = −14` / `LOUDNORM_TRUE_PEAK_DB = −1.5` (`pipeline/tail.ts` +
+to `LOUDNORM_TARGET_LUFS = −14` / `LOUDNORM_TRUE_PEAK_DB = −1.0` (`pipeline/tail.ts` +
 `pipeline/loudnorm.ts`; constants in `models.ts`; ffmpeg-optional). Kills the clip-to-clip spread +
 the quiet-vs-Spotify gap.
 
