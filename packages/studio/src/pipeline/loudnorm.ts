@@ -1,26 +1,28 @@
 // Mastering — loudness-normalize + AAC-encode the shipped TTS take in ONE ffmpeg pass.
 //
 // This is the ONLY lossy encode on the audio path: synthesize() returns a LOSSLESS LINEAR16
-// WAV take, and this step (a) levels it and (b) encodes it to AAC-LC 48 kbps in an .m4a.
+// WAV take, and this step (a) levels it and (b) encodes it to AAC-LC 64 kbps in an .m4a.
 // Encoding here (rather than requesting Cloud TTS's fixed 32k MP3) avoids a SECOND lossy
 // generation and lets us choose codec/bitrate — see docs/decisions/audio-compression-spike.md.
 //
-// LEVELING — a true-peak LIMITER, then a single-pass dynamic LOUDNORM (the MASTERING_CHAIN):
-//   Gemini-TTS takes are quiet (~−19 to −22 LUFS) but PEAK-BOUND — they already crest at ~0 dBFS,
-//   so there's no headroom to gain up. A plain loudnorm to −14 therefore UNDERSHOOTS, inconsistently
-//   (measured −14.7 … −15.5 across clips). The fix (validated on 3 clips spanning LRA 4→10, 2026-06-20)
-//   is the broadcast move: an `alimiter` pushes the body up and brick-walls the transient peaks,
-//   creating the headroom; then `loudnorm` normalizes to −14 LUFS. It lands a CONSISTENT ~−14.1…−14.5.
+// LEVELING — a true-peak LIMITER, then a single-pass dynamic LOUDNORM (the masteringChain):
+//   Gemini-TTS takes are quiet (~−19 to −22 LUFS) but PEAK-BOUND — they already crest at ~0 dBFS, so
+//   there's no headroom to gain up. A plain loudnorm therefore UNDERSHOOTS the target, inconsistently
+//   (−14.7 … −15.5). The fix is the broadcast move: an `alimiter` pushes the body up and brick-walls the
+//   transient peaks, creating the headroom; then `loudnorm` normalizes to the NARRATION target (−13 LUFS,
+//   Spotify-"Loud"-ish — the voice is the product). Validated 2026-06-20 on the 6-clip Reno corpus →
+//   consistent −13.0…−13.4, clean peaks (−1.6…−2.1).
 //
-//   SINGLE-PASS (dynamic loudnorm), not the old two-pass linear: with a stateful filter (the limiter)
-//   in front, the two-pass design breaks — pass 1 measures a different signal than pass 2 gains, so its
-//   true-peak limit is computed against the wrong peaks and the AAC encode overshoots into CLIPPING
-//   (that bug shipped once, 2026-06-19→20, then was reverted). A single pass has no measure/apply gap.
+//   SINGLE-PASS (dynamic loudnorm), not two-pass linear: with a stateful filter (the limiter) in front,
+//   the two-pass design breaks — pass 1 measures a different signal than pass 2 gains, so its true-peak
+//   limit is computed against the wrong peaks and the AAC encode overshoots into CLIPPING (that bug
+//   shipped once, 2026-06-19→20, then was reverted). A single pass has no measure/apply gap.
 //
-//   PRE-ENCODE TP = −2 dBTP, not −1: the 48 kbps AAC encoder adds inter-sample overshoot (up to ~+2 dB),
-//   so a −1 pre-encode ceiling clips post-encode. −2 leaves the headroom; the final .m4a lands ~−1.5 dBTP,
-//   under the AUDIO_LOUDNESS −1.0 delivery ceiling. The limiter only touches transient peaks, so it does
-//   not reintroduce tail-collapse (the quiet tail sits far below the brick-wall). See docs/decisions/
+//   PRE-ENCODE TP = −3 dBTP (not the −1 delivery ceiling): the AAC encoder adds inter-sample overshoot,
+//   so the pre-encode ceiling must leave room for it — final clips land ~−1.6…−2.1. −13 is at the EDGE
+//   of what AAC can hold clean: at 48 kbps it overshot some clips to +1.4 dBTP (clipping), so the bitrate
+//   was raised to 64k (less overshoot). The limiter only touches transient peaks, so it does not
+//   reintroduce tail-collapse (the quiet tail sits far below the brick-wall). See docs/decisions/
 //   audio-loudness-spec.md.
 //
 // ffmpeg is REQUIRED (it IS the encoder, not just QA): a missing/failed encode THROWS rather than ship
@@ -30,32 +32,42 @@
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { readFile, unlink, writeFile } from 'node:fs/promises'
-import { LOUDNORM_RANGE_LU, LOUDNORM_TARGET_LUFS } from '../models'
+import { LOUDNORM_RANGE_LU } from '../models'
 
-/** Output AAC bitrate — AAC-LC@48k: ~8× smaller than the LINEAR16 WAV, clearly better than
- *  MP3@32k at ~the same size, and iOS AVPlayer (expo-audio) plays it. */
-const AAC_BITRATE = '48k'
+/** NARRATION integrated target (LUFS) — the VOICE is the product, so it runs hotter than the shared
+ *  AUDIO_LOUDNESS −14 (which still governs the drive-music bed). −13 (founder, 2026-06-20) = Spotify
+ *  "Loud"-ish; the limiter makes the headroom for it. The voice/bed are decoupled by 1 dB on hand-off
+ *  (music ducks to silence UNDER the voice, so the gap only shows when music swells back) — flagged
+ *  for on-device check in docs/decisions/audio-loudness-spec.md. */
+const NARRATION_TARGET_LUFS = -13
+
+/** Output AAC bitrate — AAC-LC@64k: raised from 48k (2026-06-20) so the louder −13 master survives the
+ *  encoder's inter-sample overshoot (48k overshot some clips to +1.4 dBTP = clipping; 64k lands ~−1.6).
+ *  Still ~6× smaller than the LINEAR16 WAV; iOS AVPlayer (expo-audio) plays it. */
+const AAC_BITRATE = '64k'
 /** Output sample rate — pinned to the TTS native 24 kHz (loudnorm runs at 192 kHz internally,
  *  so without this the muxed file would inherit 192 kHz). */
 const OUT_SAMPLE_RATE = '24000'
 
-// --- The mastering chain: true-peak limiter (makes headroom) → single-pass dynamic loudnorm (hits −14).
-/** `alimiter` input gain — ~+9.5 dB pushed into the brick-wall. This is what makes the clip LOUDER:
+// --- The mastering chain: true-peak limiter (makes headroom) → single-pass dynamic loudnorm (hits −13).
+/** `alimiter` input gain — ~+12 dB pushed into the brick-wall. This is what makes the clip LOUDER:
  *  it raises the body while the limiter holds the peaks. Higher = louder + denser; tuned (2026-06-20)
- *  so −14 lands consistently across clips without crushing dynamics (LRA cost ~1 LU). */
-const LIMITER_INPUT_GAIN = 3
-/** `alimiter` true-peak ceiling (linear, ≈ −2.25 dBFS) — the brick-wall the input gain limits into. */
-const LIMITER_CEILING = 0.794
-/** loudnorm PRE-ENCODE true-peak ceiling (dBTP). −2 (not the −1 delivery ceiling) leaves headroom for
- *  AAC inter-sample overshoot so the final .m4a lands ~−1.5 dBTP — under AUDIO_LOUDNESS's −1.0. */
-const PRE_ENCODE_TP_DBTP = -2.0
+ *  so −13 lands across clips with clean peaks. (−13 is at the edge of what 48 kbps AAC overshoot can
+ *  hold — peaks are non-monotonic in this gain — so the ceilings below are deliberately conservative.) */
+const LIMITER_INPUT_GAIN = 6
+/** `alimiter` true-peak ceiling (linear, ≈ −3.0 dBFS) — the brick-wall the input gain limits into;
+ *  kept equal to the loudnorm TP so loudnorm never has to re-attenuate the limited signal. */
+const LIMITER_CEILING = 0.707
+/** loudnorm PRE-ENCODE true-peak ceiling (dBTP). −3 (not the −1 delivery ceiling) leaves headroom for
+ *  AAC inter-sample overshoot (~+2 dB on hot speech) so the final .m4a lands ~−1 dBTP at the louder −13. */
+const PRE_ENCODE_TP_DBTP = -3.0
 
-/** The full `-af` mastering filter: limiter, then single-pass dynamic loudnorm to the spec.
+/** The full `-af` mastering filter: limiter, then single-pass dynamic loudnorm to the narration target.
  *  Exported for tests (guards the limiter-before-loudnorm order + the params). */
 export function masteringChain(): string {
   return (
     `alimiter=level_in=${LIMITER_INPUT_GAIN}:limit=${LIMITER_CEILING},` +
-    `loudnorm=I=${LOUDNORM_TARGET_LUFS}:TP=${PRE_ENCODE_TP_DBTP}:LRA=${LOUDNORM_RANGE_LU}`
+    `loudnorm=I=${NARRATION_TARGET_LUFS}:TP=${PRE_ENCODE_TP_DBTP}:LRA=${LOUDNORM_RANGE_LU}`
   )
 }
 

@@ -128,22 +128,16 @@ export const TTS_AUDIO_CONTENT_TYPE = 'audio/mp4' as const
 export const TTS_CLIP_EXTENSION = 'm4a' as const
 export const TTS_LANGUAGE_CODE = 'en-US' as const
 
-// LOUDNESS NORMALIZATION (TODO.md "TTS audio QA" #2 — clip-to-clip level spread + overall
-// level vs Spotify). Gemini-TTS takes are non-deterministic in LEVEL: measured body means
-// ranged −26.7 → −19.5 dB across 30 live clips (a 7.2 dB stop-to-stop jump), and the whole
-// mix read ~20–25% quiet vs a Spotify reference. They're also PEAK-BOUND (crest at ~0 dBFS),
-// so a plain loudnorm UNDERSHOOTS the target. Fix = a true-peak limiter → single-pass loudnorm
-// MASTERING CHAIN on every shipped take (pipeline/loudnorm.ts — that file owns the limiter +
-// pre-encode-TP params; this constant supplies the shared integrated target):
-//   I  (integrated loudness) = −14 LUFS — Spotify's normalization target; the limiter makes the
-//      headroom so loudnorm lands every clip at a CONSISTENT ~−14 (the spread + undershoot fix).
-// Single-sourced in AUDIO_LOUDNESS (@skipper/shared), applied to narration AND the drive-music bed.
-// The true-peak ceiling is NO LONGER a single shared number: the narration master uses a −2 dBTP
-// PRE-ENCODE ceiling (AAC-overshoot headroom; final ~−1.5) — see loudnorm.ts + docs/decisions/
-// audio-loudness-spec.md (full history incl. the reverted compressor-before-two-pass clip bug).
-export const LOUDNORM_TARGET_LUFS = AUDIO_LOUDNESS.integratedLufs
-// LRA (loudness range) is held at the loudnorm default — speech is already low-dynamic, so
-// this rarely binds; it stays a constant rather than a knob.
+// LOUDNESS NORMALIZATION (TODO.md "TTS audio QA" #2 — clip-to-clip level spread + overall level vs
+// Spotify). Gemini-TTS takes are non-deterministic in LEVEL (measured body means −26.7 → −19.5 dB
+// across 30 live clips) and PEAK-BOUND (crest at ~0 dBFS), so a plain loudnorm undershoots
+// inconsistently. Fix = a true-peak limiter → single-pass loudnorm MASTERING CHAIN
+// (pipeline/loudnorm.ts — it owns the limiter, the NARRATION target, and the pre-encode TP). The VOICE
+// runs louder than the music: the narration master targets −13 LUFS (the voice is the product), while
+// the shared AUDIO_LOUDNESS −14 still governs the offline drive-music bed. Only the LRA is shared here —
+// the −13 target + limiter params + −3 dBTP pre-encode ceiling + the 48k→64k bitrate raise live in
+// loudnorm.ts; full history (incl. the reverted clip bug) in docs/decisions/audio-loudness-spec.md.
+// LRA (loudness range) is held at the loudnorm default — speech is low-dynamic, so it rarely binds.
 export const LOUDNORM_RANGE_LU = AUDIO_LOUDNESS.rangeLu
 
 // Gemini-TTS prebuilt voices (each carries a one-word timbre descriptor). The
