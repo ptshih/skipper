@@ -59,6 +59,12 @@ export default function CreateDriveScreen() {
   // The confirm map's puck sits at the start (static) — DriveMap wants a progress Animated.Value.
   const mapProgress = useRef(new Animated.Value(0)).current
 
+  // Synchronous in-flight guard for the credit-spending create. setPhase('generating') is async, so
+  // a fast double-tap on "Make this drive" would fire two POST /drives before React unmounts the
+  // confirm view — each mints a fresh driveId, so the server's per-drive idempotency key can't dedupe
+  // them and the rider over-spends a lifetime free credit. Mirrors home's navigatingRef. (audit #4)
+  const creatingRef = useRef(false)
+
   // Load the pickable regions once; auto-select when there's only one (the Tahoe-launch case).
   useEffect(() => {
     let cancelled = false
@@ -98,6 +104,8 @@ export default function CreateDriveScreen() {
 
   const doCreate = useCallback(async () => {
     if (!proposal || !regionId) return
+    if (creatingRef.current) return // a double-tap must not double-POST /drives (double-charge). (audit #4)
+    creatingRef.current = true
     setError(null)
     setPhase('generating')
     try {
@@ -116,6 +124,10 @@ export default function CreateDriveScreen() {
       else if (e instanceof ApiError && e.status === 403) setError(e.message)
       else setError(errorMessage(e, voice_create.generateFail))
       setPhase('confirm')
+    } finally {
+      // Clear on every exit — a FAILED create returns to confirm, where a sequential retry is allowed
+      // (the guard only blocks a CONCURRENT double-tap); a success has already navigated away.
+      creatingRef.current = false
     }
   }, [proposal, regionId, router])
 
