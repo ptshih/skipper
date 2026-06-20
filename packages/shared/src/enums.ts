@@ -4,7 +4,9 @@ import { z } from 'zod'
  * A NARRATION's treatment/depth — "what kind of telling" (a `narrations` row's `form`):
  *   story  = fact-grounded telling + audio.
  *   scenic = delivery-only ambient audio, no facts.
- *   break  = food/rest stop; names the curated anchor only.
+ *   break  = food/rest stop; names the curated anchor only. NOTE: the break CLIP is stored
+ *            place-anchored in the `detours` table, NOT as a poi-bound `narrations` row — this value
+ *            is the played-form/treatment projection (see `driveClipForm`/`stopType`), not break storage.
  *   wave   = a free-roam passing call-out.
  *   bside  = a deferred "tell me more" alternate telling.
  * Keep in lockstep with the pg `narration_form` enum (@skipper/db/schema).

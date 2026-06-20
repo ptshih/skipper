@@ -34,9 +34,11 @@ export const withSession: MiddlewareHandler<ApiEnv> = async (c, next) => {
 
 /**
  * Free-account wall: reject anonymous callers. (Requires withSession upstream.)
- * Pre-placed gate for the planned `POST /drives/:id/ask` route — kept intentionally
- * UNMOUNTED until Ask ships (its first real caller). The 401 shape + message mirror the
- * live drive/offline wall in `loadOwnedDrive` (drives.ts) so the two gates stay aligned.
+ * This is the LIVE account wall for the whole `/drives*` sub-app — mounted at
+ * `driveRoutes.use('*', withSession, requireAccount)` (drives.ts), so anonymous = roam only.
+ * (The planned `POST /drives/:id/ask` route will be a future ADDITIONAL caller, not the first.)
+ * The 401 shape + message mirror the per-drive wall in `loadOwnedDrive` (drives.ts) so the two
+ * gates stay aligned. Do NOT "remove the unused gate" — it is load-bearing.
  */
 export const requireAccount: MiddlewareHandler<ApiEnv> = async (c, next) => {
   if (c.get('tier') === 'anonymous') {

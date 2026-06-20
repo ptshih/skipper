@@ -176,10 +176,10 @@ export const upstreamStatusEnum = pgEnum('upstream_status', [
 const narrationColumns = {
   // The narration text. Nullable through generation; a row only goes live once filled.
   script: text('script'),
-  // R2 object KEY (private). Stops/roam: clips are keyed per-track; the API presigns it
-  // after the freemium tier check. NOT NULL — a track/frame row is only ever inserted
-  // post-synthesis (finalizeTourReady's atomic batch; the roam upsert), so the DB enforces
-  // the "every stop/frame has audio" invariant at the boundary, not just in app code.
+  // R2 object KEY (private). The API presigns it after the freemium tier check. NOT NULL — a
+  // narration row is only ever inserted post-synthesis (the studio pipeline's narration insert,
+  // `generate-narrations.ts`), so the DB enforces the "every live narration has audio" invariant
+  // at the boundary, not just in app code.
   audioUrl: text('audio_url').notNull(),
   audioDurationMs: integer('audio_duration_ms').notNull(),
   // Frozen attribution — an ARRAY, one entry per source this clip drew on (Wikipedia

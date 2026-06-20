@@ -77,25 +77,24 @@ reads 20% quiet" measure suggests −14 may want to nudge to −13/−12). One-l
 Refs: `pipeline/loudnorm.ts`, `pipeline/tts.ts`, `pipeline/tail.ts`, `models.ts` (LOUDNORM_*),
 `docs/decisions/audio-compression-spike.md`.
 
-## TTS delivery: differentiate the style prompt by stop-type / notch — DEFERRED 2026-06-19
+## TTS delivery: differentiate the style prompt by narration FORM — DEFERRED 2026-06-19
 
-`SKIPPER_TTS_STYLE_PROMPT` (`models.ts`) is ONE static delivery directive applied to every clip via
-`synthesizeWithTailRetake(script, persona.voice, persona.ttsStyle, …)`. It's written for the
-joke-forward read ("save the slow-down for the jokes"), which is **inert on stops with no jokes**
-(scenic/OFF) and one-note across registers. The win: a `ttsStyleFor({ form, jokeLevel })` that keeps
-the universal **base** (persona + the load-bearing **anti-fade** clause) and appends a tailored suffix
-— story+dad/dadpocalypse = current joke clause; story+off/mild = "play it straight, favorite-uncle
-sincere"; scenic = "slow a touch, leave air, wonder not performance"; break = "quick light aside, no
-ceremony". One-line swap at the call site.
+The per-REGISTER half of this already shipped: `ttsStyleFor(baseStyle, register)` (`models.ts`) appends
+a landscape/story/town/civic suffix onto the shared base (called at `generate-narrations.ts`), so the
+one host already modulates his read by place type. What's still open is differentiating by narration
+**form**: `SKIPPER_TTS_STYLE_PROMPT` is one static directive and the corpus is generated `form:'story'`
+today, so the non-story forms have no tailored read. The win when they land: extend the suffix by form —
+scenic = "slow a touch, leave air, wonder not performance"; break = "quick light aside, no ceremony";
+wave = "brief passing call-out" — keeping the universal **base** (persona + the load-bearing
+**anti-fade** clause) and appending a per-form suffix. One-line swap at the call site.
 
-**Why DEFERRED (founder, 2026-06-19):** the entire corpus is generated `form:'story'` +
-`jokeLevel:'dadpocalypse'` today. Scenic (the deferred "waves"), break (`detours`), and every notch
-but dadpocalypse are all themselves deferred — so the variants have **no output to act on and nothing
-to ear-test** until those land. Revisit when waves / breaks / notches ship (it rides ALONGSIDE that
-work — each new form/notch wants its delivery tuned by ear in the same paid run). The base+suffix
-design above is the build-ready answer; until then the single story+dadpocalypse read stands and is
-only touched on a specific founder ear-complaint (and never re-tuned blind — see the `models.ts`
-warning).
+**Why DEFERRED (founder, 2026-06-19):** scenic (the deferred "waves"), break (`detours`), and wave are
+all themselves deferred — so the form variants have **no output to act on and nothing to ear-test**
+until those forms ship. Revisit when waves / breaks ship (it rides ALONGSIDE that work — each new form
+wants its delivery tuned by ear in the same paid run). The single Skipper story read stands until then,
+and is only touched on a specific founder ear-complaint (never re-tuned blind — see the `models.ts`
+warning). NOTE: there is NO per-joke "notch" axis here — the joke notch was CUT
+(`docs/decisions/cut-joke-notch.md`); delivery variety returns later as different NARRATORS, not a notch.
 
 ## De-stale the deferred specs that still assume the intro frame + personal kit
 

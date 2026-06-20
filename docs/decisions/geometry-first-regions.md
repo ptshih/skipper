@@ -15,10 +15,12 @@ geometry at query time**, never stored as a foreign key on anything that has its
 - **A POI's region = point-in-bbox.** `pois` carries NO `region_id`. "POIs in region X" =
   `lat/lng BETWEEN X.bbox`. The corpus CLIs (`discover`/`enrich`/`generate-narrations`) take
   `--region <slug>` and resolve it to that bbox internally — bbox is never a user-facing input.
-- **A DRIVE's region = bbox-intersect.** `drives` carries NO `region_id`. A drive stores its own route
-  **bbox** (`bbox_min/max_lat/lng`), derived from the frozen polyline at create time; a drive's
-  region(s) are derived by intersecting that bbox with `regions`. The bbox is also the spatial prefilter
-  for "POIs along this route."
+- **A DRIVE's region = bbox, not a stored FK.** `drives` carries NO `region_id`. A drive stores its own
+  route **bbox** (`bbox_min/max_lat/lng`), derived from the frozen polyline at create time. That bbox is
+  the spatial prefilter for "POIs along this route" — and the create path resolves its corpus DIRECTLY by
+  point-in-bbox over `pois` (`loadCorpusForRoute`, drives.ts), never by joining `regions`. (A drive's
+  region(s) CAN be derived by intersecting its bbox with `regions` where a label is wanted; the `regions`
+  table itself is read only at propose-time, for geocode bias.)
 - **No `region_id` FK exists in the schema.** `drive_demand.region_id` is dropped too (its `route_sig`
   already encodes location). The previously-debated `asides.region_id` is mooted by deleting the
   `asides` concept entirely (see below).

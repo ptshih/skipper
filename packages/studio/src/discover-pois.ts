@@ -6,8 +6,9 @@
 // place in a raw bbox (the whole Tahoe–Reno corridor by default), prose-joins Wikipedia, tiers
 // them, and upserts the STORY + SCENIC tiers into `pois` (facts for story, bare typed pins for
 // scenic — the story tier is what a long-form telling needs; scenic pins seed the future wave
-// layer). Dedup by (source, source_id) is the existing upsertPoi seam, so re-running is idempotent
-// and a place a tour already visits is the SAME row (facts shared; principle #1).
+// layer). Dedup by the Wikidata QID is the existing upsertPoi seam (it conflicts on `pois.qid`;
+// source/source_id are the secondary guard, rewritten in place on a tier flip), so re-running is
+// idempotent and a place a tour already visits is the SAME row (facts shared; principle #1).
 //
 // SOP (docs/guides/ops-scripts-sop.md): PREVIEWS by default; writes only on --apply.
 // Discovery is free (WDQS + MediaWiki, no LLM/TTS spend).

@@ -6,7 +6,17 @@
 // to ENFORCE a declared constraint; what these catch is a schema edit that silently DROPS one.
 import { describe, expect, it } from 'bun:test'
 import { getTableConfig, type PgTable } from 'drizzle-orm/pg-core'
-import { creditEntries, detours, drives, narrations, places, pois } from '../src/schema'
+import {
+  creditEntries,
+  detours,
+  driveDemand,
+  drives,
+  narrations,
+  places,
+  poiOverrides,
+  poiSourceEnum,
+  pois,
+} from '../src/schema'
 
 function columnByDbName(table: PgTable, dbName: string) {
   const c = getTableConfig(table).columns.find((col) => col.name === dbName)
@@ -45,6 +55,26 @@ function fkTargetColumns(table: PgTable, localDbName: string): string[] {
   return fk.reference().foreignColumns.map((c) => c.name)
 }
 
+/** Every column's DB name on a table — for asserting the ABSENCE of a column (a negative invariant). */
+function columnNames(table: PgTable): string[] {
+  return getTableConfig(table).columns.map((c) => c.name)
+}
+
+/** The TARGET table name of every FK on a table — for asserting no FK points at a forbidden table. */
+function fkTargetTables(table: PgTable): string[] {
+  return getTableConfig(table).foreignKeys.map((fk) =>
+    getTableConfig(fk.reference().foreignTable as PgTable).name,
+  )
+}
+
+/** A named table-level UNIQUE CONSTRAINT (drizzle `unique(name).on(...)`) — these live in
+ *  `.uniqueConstraints`, NOT `.indexes`, so `uniqueIndexNames` misses them. */
+function uniqueConstraint(table: PgTable, name: string) {
+  const u = getTableConfig(table).uniqueConstraints.find((c) => c.name === name)
+  if (!u) throw new Error(`no unique constraint "${name}" on ${getTableConfig(table).name}`)
+  return u
+}
+
 describe('pois — the shared-facts dedup invariant', () => {
   it('PRIMARY dedup key is the Wikidata QID (UNIQUE qid, NOT NULL) — catches a scenic↔story flip', () => {
     expect(uniqueIndexNames(pois)).toContain('pois_qid_uq')
@@ -56,6 +86,11 @@ describe('pois — the shared-facts dedup invariant', () => {
   it('keeps source + source_id NOT NULL (attribution + dedup both need them)', () => {
     expect(columnByDbName(pois, 'source').notNull).toBe(true)
     expect(columnByDbName(pois, 'source_id').notNull).toBe(true)
+  })
+  it('pins poi_source membership to EXACTLY {wikipedia, wikidata} — google_places is attribution-only, NEVER a poi source', () => {
+    // lint:enums only checks the pgEnum ⇄ Zod twin stay EQUAL to each other; a coordinated re-add of
+    // 'google_places' to both would pass it. This pins the SET so that re-add fails the gate.
+    expect([...poiSourceEnum.enumValues].sort()).toEqual(['wikidata', 'wikipedia'])
   })
 })
 
@@ -69,6 +104,16 @@ describe('V2 — narrations / drives structural invariants', () => {
   it('a narration always carries audio (audio_url + audio_duration_ms NOT NULL)', () => {
     expect(columnByDbName(narrations, 'audio_url').notNull).toBe(true)
     expect(columnByDbName(narrations, 'audio_duration_ms').notNull).toBe(true)
+  })
+  it('facts_hash is NULLABLE — only story grounds on facts; scenic/break carry none and are never fact-stale', () => {
+    expect(columnByDbName(narrations, 'facts_hash').notNull).toBe(false)
+  })
+  it('carries NO persona/voice/joke/delivery column — the one host resolves in CODE and is baked into audio (joke notch CUT)', () => {
+    // Persona/voice/delivery are GENERATION params baked into the clip, never a narration column or a
+    // live playback toggle. A future persona_key/voice_id/jokeLevel column would silently regress this.
+    for (const name of columnNames(narrations)) {
+      expect(name).not.toMatch(/persona|voice|joke|delivery/)
+    }
   })
   it('a drive is user-owned (user_id NOT NULL) and carries a route signature', () => {
     expect(columnByDbName(drives, 'user_id').notNull).toBe(true)
@@ -109,5 +154,33 @@ describe('places / detours — break-anchor structural invariants', () => {
   it('a detour always carries audio (audio_url + audio_duration_ms NOT NULL — a silent break never rides)', () => {
     expect(columnByDbName(detours, 'audio_url').notNull).toBe(true)
     expect(columnByDbName(detours, 'audio_duration_ms').notNull).toBe(true)
+  })
+  it('a detour carries NO facts_hash — a break bakes no fact text, so it is never fact-stale', () => {
+    expect(() => columnByDbName(detours, 'facts_hash')).toThrow()
+  })
+})
+
+describe('geometry-first regions — region is a BBOX, never a stored FK', () => {
+  it('no coordinate-bearing table carries a region_id column (membership = point-in-bbox, derived)', () => {
+    for (const t of [pois, drives, driveDemand]) {
+      expect(columnNames(t)).not.toContain('region_id')
+    }
+  })
+  it('neither pois nor drives has a foreign key into regions (the explicitly-warned-against re-stamp)', () => {
+    expect(fkTargetTables(pois)).not.toContain('regions')
+    expect(fkTargetTables(drives)).not.toContain('regions')
+  })
+})
+
+describe('poi_overrides — curated-correction identity invariant', () => {
+  it('one row per (source, source_id, find) via a NULLS NOT DISTINCT unique constraint (the admin upsert ON CONFLICT target)', () => {
+    const u = uniqueConstraint(poiOverrides, 'poi_overrides_identity_uq')
+    expect(u.columns.map((c) => c.name)).toEqual(['source', 'source_id', 'find'])
+    expect(u.nullsNotDistinct).toBe(true)
+  })
+  it('keeps source / source_id / reason NOT NULL (identity + self-documentation)', () => {
+    for (const col of ['source', 'source_id', 'reason']) {
+      expect(columnByDbName(poiOverrides, col).notNull).toBe(true)
+    }
   })
 })
