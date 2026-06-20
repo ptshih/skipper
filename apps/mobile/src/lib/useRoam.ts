@@ -1,10 +1,10 @@
 // useRoam — the FREE-ROAM session hook (alpha). The skipper rides shotgun on the rider's
-// OWN drive: no route, no tour shape — fetch the roam pins near here, feed live GPS fixes
+// OWN drive: no route, no plan — fetch the roam pins near here, feed live GPS fixes
 // to the RoamEngine (proximity + heading + governors; @skipper/engine/roam), and play
 // each fired encounter through a FIFO queue. State machine per the design handoff:
 //   idle → sessionStart → roaming ⇄ (encounter sheet) ; roaming → signoff → idle
 //
-// Deliberate differences from useDrive (the tour player):
+// Deliberate differences from useDrive (the drive player):
 //   - AUDIO SESSION = PAUSE+RESUME, not duck (founder 2026-06-11): roam takes EXCLUSIVE focus
 //     (`doNotMix` — pauses the rider's podcast/music) ONLY while a clip is actually sounding,
 //     and HANDS IT BACK (`mixWithOthers` — the rider's audio resumes) the instant the clip
@@ -14,14 +14,15 @@
 //     (alpha cut; the flip moots the old doNotMix-vs-lock-screen note). ⚠ Whether iOS RESUMES
 //     Spotify/podcasts when we relinquish to mixWithOthers is DEVICE-ONLY — verify on a real
 //     device (resume after a 60s encounter, re-pause on the next) before relying on it.
-//   - CHATTINESS (quiet/normal/talkative) retunes the engine's min-gap governor live — a
-//     SELECTION knob (which/how-many encounters fire), never a generation knob.
+//   - The engine's min-gap governor is fixed at ROAM_MIN_GAP_SEC — a SELECTION knob (how
+//     often encounters fire), never a generation knob. (The quiet/normal/talkative UI toggle
+//     was cut 2026-06-20 — not useful in practice; see MEMORY "Roam chattiness toggles".)
 //   - No offline pack (alpha streams presigned URLs), no re-sign-on-stall (a stalled clip
 //     just skips — a missed encounter is invisible by design), no music bed (the rider's
 //     own audio IS the bed), no end-of-route (the session ends when the rider ends it).
 //
-// Sim mode (couch/dev): replays the first ready tour's polyline through the SAME engine —
-// same fix data a real drive would produce, so triggers behave exactly as on the road.
+// Sim mode (couch/dev): replays a FIXED demo polyline through the SAME engine — same fix
+// data a real drive would produce, so triggers behave exactly as on the road (no drive needed).
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AppState } from 'react-native'
@@ -42,7 +43,6 @@ import type { RoamManifest } from './api'
 import { liveRoamSource, simulatedSource } from './gps'
 import type { FixSubscription } from './gps'
 import { useLocationPriming } from './useLocationPriming'
-import type { ChattinessLevel } from '@/ui'
 import { voice } from '@/ui/voice'
 
 export type RoamMode = 'live' | 'sim'
@@ -81,12 +81,9 @@ const CLIP_SKELETON_MS = 3_000
 const GPS_QUIET_MS = 8_000
 /** The session-start card settles into the quiet idle on its own. */
 const SESSION_START_MS = 2_500
-/** Chattiness → the engine's min-gap governor (seconds between encounter STARTS). */
-const CHATTINESS_GAP_SEC: Record<ChattinessLevel, number> = {
-  quiet: 240,
-  normal: 75,
-  talkative: 30,
-}
+/** The engine's min-gap governor — seconds between encounter STARTS. Fixed at the former
+ *  'normal' setting now that the quiet/normal/talkative toggle is cut (audit 2026-06-20). */
+const ROAM_MIN_GAP_SEC = 75
 
 export interface RoamState {
   phase: RoamPhase
@@ -126,8 +123,6 @@ export interface RoamState {
   mapPins: { poiId: string; name: string; lat: number; lng: number }[]
   /** The session-start opener line (rotates per session). */
   openerLine: string
-  chattiness: ChattinessLevel
-  setChattiness: (level: ChattinessLevel) => void
   gpsSearching: boolean
   start: () => void
   /** Re-attempt the session after an error (mirrors useDrive.retry). Unlike `start` (which is
@@ -157,7 +152,6 @@ export function useRoam(mode: RoamMode): RoamState {
   const [clipReady, setClipReady] = useState(false) // real audio has started for the sheet's clip
   const [toldCount, setToldCount] = useState(0)
   const [openerLine, setOpenerLine] = useState<string>(voice.roam.sessionStart[0]!)
-  const [chattiness, setChattinessState] = useState<ChattinessLevel>('normal')
   const [gpsSearching, setGpsSearching] = useState(false)
   const [clipPaused, setClipPaused] = useState(false) // encounter held by hand (music un-ducks)
   const [position, setPosition] = useState<{ lat: number; lng: number } | null>(null) // roam-map puck
@@ -492,11 +486,6 @@ export function useRoam(mode: RoamMode): RoamState {
     return () => sub.remove()
   }, [phase, setExclusiveAudio])
 
-  const setChattiness = useCallback((level: ChattinessLevel) => {
-    setChattinessState(level)
-    engineRef.current?.setMinGap(CHATTINESS_GAP_SEC[level])
-  }, [])
-
   // The session body AFTER permission is settled (live) or for sim: locate → manifest → engine →
   // subscribe the source → opener. Shared by start()'s already-granted path and the explainer CTA.
   const beginRoamSession = useCallback(async () => {
@@ -567,7 +556,7 @@ export function useRoam(mode: RoamMode): RoamState {
           ...(p.radiusM != null ? { radiusM: p.radiusM } : {}),
           name: p.name,
         })),
-        { minGapSec: CHATTINESS_GAP_SEC[chattiness] },
+        { minGapSec: ROAM_MIN_GAP_SEC },
       )
 
       const source =
@@ -606,7 +595,7 @@ export function useRoam(mode: RoamMode): RoamState {
       setError(errorMessage(e, voice.error.generic))
       setPhase('error')
     }
-  }, [mode, chattiness, pump, teardown])
+  }, [mode, pump, teardown])
 
   // ---- location-permission priming (live mode) — the prime → prompt → result SHELL, shared with
   // useDrive via useLocationPriming. The hook owns the double-tap guard, the no-prompt status read →
@@ -777,8 +766,6 @@ export function useRoam(mode: RoamMode): RoamState {
     position,
     mapPins,
     openerLine,
-    chattiness,
-    setChattiness,
     gpsSearching,
     start,
     retry,

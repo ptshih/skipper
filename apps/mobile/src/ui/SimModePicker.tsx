@@ -1,8 +1,8 @@
 // The sim-mode control — Real GPS / Simulated, the DEVELOPER toggle that swaps every
 // real-GPS path in the app (free-roam + the live drive) for the simulated drive source.
-// Same visual family as ThemeModePicker/Chattiness: a sunken track, raised selected
-// segment, no border-swap layout nudge. Prop-driven (like Chattiness) — Settings wires it
-// to the persisted useSimMode() context.
+// Same visual family as ThemeModePicker: a sunken track, raised selected segment, no
+// border-swap layout nudge. Prop-driven — Settings wires it to the persisted
+// useSimMode() context.
 import { Pressable, StyleSheet, View } from 'react-native'
 import { hit, radius, space } from '../theme/tokens'
 import { useTheme } from '../theme'

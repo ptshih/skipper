@@ -309,7 +309,7 @@ export default function DriveDetailScreen() {
     return (
       <StateView
         title="Drive"
-        message={voice.empty.tour}
+        message={voice.empty.drive}
         action={{ label: 'Back', onPress: () => router.back() }}
       />
     )
@@ -446,7 +446,7 @@ function DriveDetailSkeleton() {
   return (
     <Screen scroll padded edges={['bottom']}>
       <Stack.Screen options={{ title: 'Drive' }} />
-      <SkeletonGroup accessibilityLabel={voice.loading.tour} style={styles.body}>
+      <SkeletonGroup accessibilityLabel={voice.loading.drive} style={styles.body}>
         <Card framed style={styles.placard}>
           <Skeleton width="40%" height={12} />
           <Skeleton width="80%" height={28} />

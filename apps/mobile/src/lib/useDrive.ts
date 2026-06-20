@@ -208,8 +208,8 @@ export interface UseDriveOptions {
    *  no GPS, no permission gate) — a compressed segment-timeline clock instead of a fix source. */
   mode?: 'sim' | 'live' | 'preview'
   /** Seed the sim fast-replay (8×) ON. Used when the GLOBAL Settings→Developer sim toggle
-   *  forced this drive into sim — couch-testing a full tour at real 1× is impractical (a
-   *  30-min tour takes 30 real min), so default to fast there; the pre-drive knob still
+   *  forced this drive into sim — couch-testing a full drive at real 1× is impractical (a
+   *  30-min drive takes 30 real min), so default to fast there; the pre-drive knob still
    *  lets the rider switch back to real-time for trigger-timing tests. (Ignored unless sim.) */
   defaultFast?: boolean
 }
@@ -643,7 +643,7 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
   }, [])
 
   // ---- PREVIEW autostart: no permission gate, no fix source — the simulated drive just rolls.
-  // Seat the segment clock at 0 and go to driving as soon as the tour (and its timeline) loads.
+  // Seat the segment clock at 0 and go to driving as soon as the drive (and its timeline) loads.
   useEffect(() => {
     if (mode !== 'preview') return
     if (!data || driving || done) return

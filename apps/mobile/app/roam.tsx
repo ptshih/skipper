@@ -1,11 +1,11 @@
-// FREE-ROAM (alpha) — the skipper rides shotgun on YOUR drive. No route, no tour shape:
-// fetch the roam pins near here, watch live GPS, and pipe up (over the rider's own audio —
-// duckOthers) when the road passes a place he knows.
+// FREE-ROAM (alpha) — the skipper rides shotgun on YOUR drive. No route, no plan:
+// fetch the roam pins near here, watch live GPS, and pipe up (pausing the rider's own
+// audio while he talks — pause+resume, not ducking) when the road passes a place he knows.
 // Flow: tapping "Roam" on home IS the start action — no separate entry screen. Returning
 // users auto-start on mount; first-timers see the ambient contract first (shown immediately,
 // not gated behind a redundant entry card). Silence is the DEFAULT state — the idle base
 // must feel alive (the RoamMotif is the one moving thing), never like a spinner.
-// `?mode=sim` replays a ready tour's polyline through the same engine for couch testing.
+// `?mode=sim` replays a fixed demo polyline through the same engine for couch testing.
 // The encounter sheet reuses the EXACT story-player transport (Scrubber + play/pause + ±15s)
 // so both players feel identical (founder call, superseding the alpha's read-only bar).
 // Alpha cuts vs the full design: the encounter PATTER line (grounded, from the roam track), waves
@@ -25,7 +25,6 @@ import {
   Badge,
   Button,
   Card,
-  Chattiness,
   Divider,
   Duck,
   Icon,
@@ -332,18 +331,16 @@ export default function RoamScreen() {
             )}
           </View>
           <View style={styles.flexSpace} />
-          {/* Footer: the set-once chattiness knob and — DEV/SIM ONLY — the drive-test
-              diagnostics. Hidden for shipped live riders so the idle reads as a clean vista;
-              kept on dev builds + sim so a road test can still self-report (free-roam-mode
-              §Idle-canvas — open Q on a TestFlight-live toggle). */}
-          <View style={styles.footer}>
-            {diagEnabled && (
+          {/* Footer: DEV/SIM ONLY — the drive-test diagnostics. Hidden for shipped live riders
+              so the idle reads as a clean vista; kept on dev builds + sim so a road test can
+              still self-report (free-roam-mode §Idle-canvas — open Q on a TestFlight-live toggle). */}
+          {diagEnabled && (
+            <View style={styles.footer}>
               <Text variant="mono" color="inkFaint">
                 {`${r.pinCount} pins · GPS ${r.diag.fixAgeSec ?? '—'}s · nearest ${r.diag.nearestM != null ? `${r.diag.nearestM} m` : '—'}`}
               </Text>
-            )}
-            <Chattiness value={r.chattiness} onChange={r.setChattiness} />
-          </View>
+            </View>
+          )}
             </>
           )}
 

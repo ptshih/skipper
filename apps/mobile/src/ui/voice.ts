@@ -4,12 +4,12 @@
 export const voice = {
   loading: {
     drives: 'Charting the good roads…',
-    tour: 'Pulling the logbook…',
+    drive: 'Pulling the logbook…',
   },
   empty: {
     drives:
       'No drives charted here yet. We’re still out mapping the good roads — check back soon.',
-    tour: 'This tour took a wrong turn. Head back and pick another.',
+    drive: 'This drive took a wrong turn. Head back and pick another.',
   },
   error: {
     generic: 'Well, that’s a kink in the hose. Give her another pull?',
@@ -30,10 +30,10 @@ export const voice = {
   },
   gate: {
     title: 'Grab your ticket',
-    body: 'The full-length tour needs a (free) ticket — ten seconds, and the skipper never stops talking.',
+    body: 'The full drive needs a (free) ticket — ten seconds, and the skipper never stops talking.',
     action: 'Get my free ticket',
     secondary: 'Just take the sample ride', // the play-screen gate → routes to the open preview
-    keepBrowsing: 'Keep browsing', // the detail download-gate → dismiss back to the tour
+    keepBrowsing: 'Keep browsing', // the detail download-gate → dismiss back to the drive
     // Context line for the live-drive gate — carries ONLY what the body lacks (the body
     // already makes the ticket ask), so the two don't stutter "needs a (free) ticket" twice.
     driveNote: 'This is the live, on-the-road drive.',
@@ -43,7 +43,7 @@ export const voice = {
   drive: {
     ready: 'READY TO ROLL', // pre-drive placard kicker
     readyBody: 'Mount up and start when you’re on the road. I’ll pipe up when we reach the good stuff.',
-    blurb: 'The skipper talks as you reach each stop on the real roads.', // tour-detail explainer under the Start CTA
+    blurb: 'The skipper talks as you reach each stop on the real roads.', // drive-detail explainer under the Start CTA
     sim: 'SIMULATED DRIVE', // the on-device sim setup — no real GPS yet
     live: 'LIVE DRIVE', // real device GPS (Phase 4)
     nextStop: 'next stop', // "ROLLING · next stop: <name>"
@@ -66,7 +66,7 @@ export const voice = {
     locationPrimeTitle: 'I steer by your GPS',
     locationPrimeBody:
       'I call out each stop the moment we roll up to it — so I need your location while we’re on the drive. Your phone will ask next; let me know it’s a yes.',
-    locationPrimeReassure: 'Only while you’re driving a tour. Parked, I’m off the clock — no tracking.',
+    locationPrimeReassure: 'Only while you’re on a drive. Parked, I’m off the clock — no tracking.',
     locationPrimeCta: 'Switch on location',
   },
   player: {
@@ -95,7 +95,7 @@ export const voice = {
   // the road passes something he knows. Silence is the DEFAULT state, so the copy's whole
   // job is making quiet feel companionable (the ambient contract, set IN COPY up front).
   // Strings follow the design handoff (design_handoff_roam); encounter NAMES + tellings
-  // come from the roam track (grounded) — never from here.
+  // come from the roam pin (grounded) — never from here.
   roam: {
     entry: 'Roam', // the mode's display title (home card + screen header)
     entryKicker: 'NEW · RIDE ALONG', // home card kicker (label face uppercases anyway)
@@ -107,7 +107,7 @@ export const voice = {
     contract:
       'Here’s the deal: I talk when there’s something worth saying. The rest of the time I’m enjoying the view. It’s not awkward unless you make it awkward.',
     contractReassure:
-      'You can change how chatty I am anytime — and a quiet drive is a perfectly good drive.',
+      'A quiet drive is a perfectly good drive — I only pipe up when there’s something worth saying.',
     contractCta: 'Got it — let’s ride',
     // Session start — one line from a small placeless rotating pool, then settle into idle.
     sessionKicker: 'NOW ROLLING',
@@ -159,13 +159,6 @@ export const voice = {
     // ducking; the label must say so honestly. (audit #251)
     musicPaused: 'Your music · paused',
     musicHeld: 'Held · music back up', // encounter PAUSED — the rider's audio resumes
-    // Chattiness — a SELECTION knob (which/how-many encounters fire), never a generation one.
-    chattiness: {
-      quiet: 'Quiet',
-      normal: 'Normal',
-      talkative: 'Talkative',
-      a11y: 'How chatty the skipper is',
-    },
     storyBadge: 'STORY', // encounter sheet badge (waves/B-sides arrive with their clips)
     skip: 'Skip',
     // Pre-buffer skeleton: the sheet now waits for the clip to be ready before sliding up, so
@@ -186,8 +179,8 @@ export const voice = {
   greeting: 'Hop in. I’ll do the talking.',
   // The cold-open descriptor: a newcomer should know WHAT this is before any audio
   // plays. Clear first, persona second — the deadpan stays, just aimed.
-  // Names BOTH modes now that roam is co-equal with tours on home (founder 2026-06-11) —
-  // not a tours-only line. (Wording is a quick founder tweak if the voice wants nudging.)
+  // Names BOTH modes now that roam is co-equal with drives on home (founder 2026-06-11) —
+  // not a drives-only line. (Wording is a quick founder tweak if the voice wants nudging.)
   tagline: 'Narrated road trips — take a guided drive, or just ride along. One corny guide either way.',
   // The home hero's enamel flourishes: a departures-board kicker ABOVE the headline
   // (deliberately NOT repeating the tagline) + the section seam that turns the corridor

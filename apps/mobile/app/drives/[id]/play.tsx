@@ -251,7 +251,7 @@ export default function DriveScreen() {
         action={{ label: voice.error.retry, onPress: d.retry }}
       />
     )
-  if (d.phase === 'loading') return <StateView title="Drive" loading message={voice.loading.tour} />
+  if (d.phase === 'loading') return <StateView title="Drive" loading message={voice.loading.drive} />
 
   const activeStop = d.activeSeq != null ? d.stops.find((s) => s.seq === d.activeSeq) : undefined
   const nowTitle = activeStop?.name ?? d.hostName

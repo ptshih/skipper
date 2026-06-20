@@ -33,7 +33,7 @@ export const FALLBACK_DATA_SOURCES: DataSource[] = [
   },
   {
     name: 'Macrostrat',
-    use: 'The ground — the bedrock type and age under each stop, for the geology asides.',
+    use: 'The ground — the bedrock type and age under each stop, for the geology notes.',
     license: 'CC BY 4.0',
     licenseUrl: 'https://creativecommons.org/licenses/by/4.0/',
     sourceUrl: 'https://macrostrat.org',

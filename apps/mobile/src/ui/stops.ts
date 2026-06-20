@@ -1,4 +1,4 @@
-// Stop-type vocabulary shared by the tour-detail and player screens, so a stop
+// Stop-type vocabulary shared by the drive-detail and player screens, so a stop
 // always reads with the same icon + tone. Icons are vector (Ionicons via Icon);
 // the SVG enamel-badge set (DESIGN §9) can re-skin them later.
 import type { BadgeTone } from './Badge'

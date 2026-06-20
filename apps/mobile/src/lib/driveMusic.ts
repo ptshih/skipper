@@ -1,4 +1,4 @@
-// Tour background music for the preview/drive player — a SHUFFLED ROTATION.
+// Drive background music for the preview/drive player — a SHUFFLED ROTATION.
 //
 // The skipper's VOICE owns the stops; the MUSIC owns the drive. A rotation of
 // road-trip tracks (assets/audio/*.mp3 — see assets/audio/SOURCE.md) plays between
@@ -71,7 +71,7 @@ function shuffled<T>(input: readonly T[]): T[] {
 
 /**
  * @param active       music should be audible now (driving/resting + playing, not at a clip)
- * @param ended        the tour has finished (fade the rotation out)
+ * @param ended        the drive has finished (fade the rotation out)
  * @param segmentKind  the current timeline segment's kind ('drive' | 'rest' | 'clip' | null).
  *                     Leg rotation keys off this (a 'clip' ending → a driving leg begins),
  *                     not off play state, so pausing mid-drive never rotates the track.

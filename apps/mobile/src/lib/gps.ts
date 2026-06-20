@@ -199,7 +199,7 @@ export async function getDrivePermission(): Promise<{
  * NO polyline — roam has no route, so there is no along-route projection (`alongM` stays 0;
  * the RoamEngine works from raw proximity + heading) and no end-of-route signal (a roam
  * session ends only when the rider ends it). Same accuracy gate, -1 sanitization, and
- * teardown-leak guard as the tour source.
+ * teardown-leak guard as the drive source.
  */
 export function liveRoamSource(): GpsFixSource {
   return (onFix, _onEnd, onError) => {

@@ -12,7 +12,7 @@ import { Text } from './Text'
 
 export interface DuckProps {
   label: string
-  /** True while an encounter clip is playing (the rider's audio is ducked). */
+  /** True while an encounter clip is playing (the rider's audio is paused). */
   active?: boolean
 }
 
