@@ -7,14 +7,14 @@
 // implements the SAME `GpsFixSource` shape; the driving hook swaps which one it
 // subscribes and nothing else changes. See docs/specs/gps-player-spec.md §3.4 / §7.
 import * as Location from 'expo-location'
+import { cumulativeMeters, generateDrive, haversineMeters, type GpsFix, type LngLat } from '@skipper/engine'
 import {
-  cumulativeMeters,
-  DEFAULT_TRIGGER,
-  generateDrive,
-  haversineMeters,
-  type GpsFix,
-  type LngLat,
-} from '@skipper/engine'
+  accuracyOk,
+  isReducedAccuracy,
+  projectForwardIndex,
+  reachedRouteEnd,
+  saneNonNeg,
+} from './gps-util'
 
 /**
  * A controller for an active fix stream. `stop()` ends it for good; `pause()`/`resume()`
@@ -125,24 +125,9 @@ export function simulatedSource(polyline: LngLat[], opts: SimSourceOptions = {})
   }
 }
 
-// Drop a fix whose horizontal accuracy is worse than this (m) when stationary/slow. A just-acquired
-// GPS fix can carry 1000 m+ accuracy, and a wild fix landing near a stop would false-fire it. Driving
-// fixes are normally well under 10 m, so this only rejects the unsettled ones. (spec §3.3)
-const MAX_FIX_ACCURACY_M = 50
-
-// Speed-aware loosening of the accuracy gate: at speed the effective trigger radius is large
-// (~161 m at 30 mph, ~322 m at 60 mph via DEFAULT_TRIGGER.leadSeconds), so a usefully-noisy fix (a
-// granite canyon's ~120 m) should still DRIVE triggering rather than fail CLOSED and silently never
-// fire a stop — while an unsettled ~1000 m acquisition fix is still rejected. Ceiling = a fraction of
-// the effective radius (speed * leadSeconds), floored at MAX_FIX_ACCURACY_M. (audit #9 — field-test
-// against a real Tahoe canyon drive before GA.)
-const ACCURACY_LEAD_FRACTION = 0.5
-const accuracyOk = (acc: number | null | undefined, speedMps: number): boolean => {
-  if (acc == null) return true // unknown accuracy — don't reject (rare; iOS always reports it)
-  if (acc < 0) return false // iOS -1 = invalid accuracy → reject
-  const ceiling = Math.max(MAX_FIX_ACCURACY_M, speedMps * DEFAULT_TRIGGER.leadSeconds * ACCURACY_LEAD_FRACTION)
-  return acc <= ceiling
-}
+// The accuracy gate (accuracyOk), the iOS -1 sentinel sanitize (saneNonNeg), the monotonic forward
+// projection (projectForwardIndex), and the end-of-route predicate (reachedRouteEnd) are the pure,
+// safety-critical cores — extracted to gps-util.ts so they unit-test without mocking expo-location.
 
 // Fire onEnd once the projected position is within this of the final route vertex (m). (review #1)
 const ROUTE_END_EPSILON_M = 25
@@ -151,20 +136,12 @@ const ROUTE_END_EPSILON_M = 25
 // Big enough to span a multi-second GPS gap without an O(n) full-polyline scan per fix. (review #10/#12)
 const PROJECT_WINDOW_VERTS = 400
 
-// iOS (CLLocation) returns -1, NOT null, for invalid speed/heading (expo/expo#5401, sim AND
-// device). The type says `number | null` but the runtime yields -1 — so `?? 0` is not enough.
-// SPEED ONLY: 0 is a sane "unknown speed", but 0 heading is due-north — heading passes RAW
-// (-1 = unknown) and the engines skip their heading gate on a negative (the sentinel contract).
-const sane = (v: number | null | undefined): number => (v != null && v >= 0 ? v : 0)
-
 // True when iOS granted location but only at REDUCED (approximate) accuracy — the Precise Location
-// toggle is off. Such fixes land ~1–3 km wide, so the watch's accuracy gate (MAX_FIX_ACCURACY_M)
-// would reject EVERY fix → the drive silently never triggers a stop. SDK 56 has no
-// `requestTemporaryFullAccuracyAsync`, so there's no in-app upgrade — we must send the rider to
-// Settings. `res.ios?.accuracy` is undefined off iOS, so this is false there (never blocks sim/Android).
-// Verified against expo-location SDK 56 (Location.types `ios.accuracy: 'full' | 'reduced'`) — the
-// value set, not just the key; a value-set change would make this silently return false. (audit #499)
-const isReduced = (res: Location.LocationPermissionResponse): boolean => res.ios?.accuracy === 'reduced'
+// toggle is off. Such fixes land ~1–3 km wide, so the accuracy gate would reject EVERY fix → the drive
+// silently never triggers a stop. SDK 56 has no `requestTemporaryFullAccuracyAsync`, so there's no in-app
+// upgrade — we send the rider to Settings. `res.ios?.accuracy` is undefined off iOS → false (never blocks
+// sim/Android). The pure core (isReducedAccuracy) is tested in gps-util. (audit #499)
+const isReduced = (res: Location.LocationPermissionResponse): boolean => isReducedAccuracy(res.ios?.accuracy)
 
 /**
  * Request foreground (When-In-Use) location permission — the live drive needs it before the
@@ -234,14 +211,14 @@ export function liveRoamSource(): GpsFixSource {
 
     const onLocation = (loc: Location.LocationObject) => {
       if (stopped || paused) return // teardown-leak guard (#35925/#35926) + pause guard
-      if (!accuracyOk(loc.coords.accuracy, sane(loc.coords.speed))) return // speed-aware gate (audit #9)
+      if (!accuracyOk(loc.coords.accuracy, saneNonNeg(loc.coords.speed))) return // speed-aware gate (audit #9)
       if (startMs === null) startMs = loc.timestamp
       onFix({
         lat: loc.coords.latitude,
         lng: loc.coords.longitude,
-        speedMps: sane(loc.coords.speed),
-        // RAW course, NOT sane(): iOS uses -1 for "unknown", and the RoamEngine treats a
-        // negative heading as unknown → skips the heading gate (proximity-only). sane()'s
+        speedMps: saneNonNeg(loc.coords.speed),
+        // RAW course, NOT saneNonNeg(): iOS uses -1 for "unknown", and the RoamEngine treats a
+        // negative heading as unknown → skips the heading gate (proximity-only). saneNonNeg()'s
         // -1→0 would read as a REAL northbound heading and gate out every other direction
         // — the first live drive's zero-fire bug. (The tour path now shares this sentinel
         // contract: liveSource passes raw course and TriggerEngine skips the gate on it.)
@@ -312,33 +289,23 @@ export function liveSource(polyline: LngLat[]): GpsFixSource {
     let cursor = 0
 
     const projectAlongM = (lng: number, lat: number): number => {
-      const end = Math.min(polyline.length, cursor + PROJECT_WINDOW_VERTS)
-      let bestIdx = cursor
-      let bestDist = haversineMeters(polyline[cursor]!, [lng, lat])
-      for (let i = cursor + 1; i < end; i++) {
-        const d = haversineMeters(polyline[i]!, [lng, lat])
-        if (d < bestDist) {
-          bestDist = d
-          bestIdx = i
-        }
-      }
-      cursor = bestIdx // never decreases → monotonic
-      return cumulative[bestIdx] ?? 0
+      cursor = projectForwardIndex(polyline, cursor, lng, lat, PROJECT_WINDOW_VERTS) // monotonic
+      return cumulative[cursor] ?? 0
     }
 
     const onLocation = (loc: Location.LocationObject) => {
       if (stopped || paused) return // teardown-leak guard (#35925/#35926) + pause guard
       // Speed-aware accuracy gate: reject the iOS -1 sentinel + unsettled ~1000 m acquisition fixes,
       // but admit usefully-noisy fixes when the effective trigger radius is large at speed. (audit #9, review #2)
-      if (!accuracyOk(loc.coords.accuracy, sane(loc.coords.speed))) return
+      if (!accuracyOk(loc.coords.accuracy, saneNonNeg(loc.coords.speed))) return
       if (startMs === null) startMs = loc.timestamp
       const alongM = projectAlongM(loc.coords.longitude, loc.coords.latitude)
       onFix({
         lat: loc.coords.latitude,
         lng: loc.coords.longitude,
-        speedMps: sane(loc.coords.speed),
+        speedMps: saneNonNeg(loc.coords.speed),
         // RAW course (same sentinel contract as liveRoamSource above): -1 = unknown, and
-        // the TriggerEngine skips the heading gate on a negative heading. sane()'s -1→0
+        // the TriggerEngine skips the heading gate on a negative heading. saneNonNeg()'s -1→0
         // would read as due-north and gate out every non-north stop — roam's field-confirmed
         // zero-fire bug, ported here rather than re-learned on a tour drive.
         headingDeg: loc.coords.heading ?? -1,
@@ -356,11 +323,17 @@ export function liveSource(polyline: LngLat[]): GpsFixSource {
         [loc.coords.longitude, loc.coords.latitude],
         polyline[polyline.length - 1]!,
       )
-      const reachedEnd =
-        alongM >= routeEndM - ROUTE_END_EPSILON_M ||
-        cursor >= polyline.length - 2 ||
-        (rawToEndM <= ROUTE_END_EPSILON_M && alongM >= routeEndM * 0.5)
-      if (!ended && routeEndM > 0 && reachedEnd) {
+      if (
+        !ended &&
+        reachedRouteEnd({
+          alongM,
+          routeEndM,
+          cursor,
+          polylineLen: polyline.length,
+          rawToEndM,
+          epsilonM: ROUTE_END_EPSILON_M,
+        })
+      ) {
         ended = true
         onEnd?.()
       }
