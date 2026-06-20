@@ -163,6 +163,12 @@ Verified against the live parsers. **Value flags MUST use the `=` form** — `op
 (`!next.startsWith('--')`) makes the space form drop any value beginning with `--`, which patch text
 can (`run.ts`'s own parser already requires `=`):
 
+> ⚠️ **(2026-06-19) HISTORICAL — V1 tour-pipeline kinds.** All four rows below are DEFERRED in V2:
+> `generate`/`patch_clip`/`resynth` went with the `tours` table + `run.ts`, `--joke-level` was CUT
+> ([cut-joke-notch](../decisions/cut-joke-notch.md)), and `sweep_orphans` no longer takes a `<tourId>`
+> (it sweeps the whole `narration/` prefix). The LIVE dispatch contract is
+> `apps/admin/server/jobs.ts` (`buildJobArgs` / the `SCRIPTS` map); `RunsView.tsx` labels these "Legacy".
+
 | kind | `args` array |
 |---|---|
 | `generate` | `["packages/studio/src/run.ts", "<slug>", "--max-cost=<usd>", "--joke-level=<notch>", "--duration=<bucket>"]` (+ bare `--dry-run`, `--no-judge-closers`) |

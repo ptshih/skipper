@@ -105,7 +105,7 @@ Card: PLACE — the Roadrunner Diner; KIND — a diner; live details resolved la
 </example>`
 
 /**
- * The Tahoe Skipper — the v1 generation persona. Bundles the stop prompt, voice, and delivery
+ * The Tahoe Skipper — the single-host V2 generation persona. Bundles the stop prompt, voice, and delivery
  * style into one def so generate-narrations.ts reads a SINGLE source (resolved by region slug via
  * ./index.ts) instead of scattered constants. The per-region PRESENTATION identity (display name,
  * tagline, backstory, portrait) is served by the API (apps/api/src/host.ts), never here.

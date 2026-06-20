@@ -41,7 +41,7 @@ a roam clip. Tahoe-basin corpus only; the founder (Zephyr Cove) is the alpha use
   `Duck` music indicator), a **`Chattiness`** segmented control (quiet/normal/talkative → the
   engine's min-gap governor live — a SELECTION knob), a slide-up encounter sheet (STORY badge,
   read-only progress bar, Skip; scrim tap skips; Reduce Motion appears instead of sliding),
-  and a hand-ended sign-off card with the session tally. `?mode=sim` replays a ready tour's
+  and a hand-ended sign-off card with the session tally. `?mode=sim` replays a fixed demo
   polyline through the same engine for couch testing. Design-states deliberately NOT built
   (no backend yet): waves, the B-side "Tell me more", the offline-pack line, the logbook.
 - **Audio posture (deliberate, differs from tours):** session is **`duckOthers`** — piping up

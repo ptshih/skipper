@@ -15,10 +15,10 @@ export const narrationForm = z.enum(['story', 'scenic', 'break', 'wave', 'bside'
 export type NarrationForm = z.infer<typeof narrationForm>
 
 /**
- * The WIRE projection of a TOUR stop's track form: a tour track is always one of these three,
- * so `tourStopView.stopType` stays a 3-value field (the player's icon/treatment switch). This is
- * a read-DTO vocabulary, no longer backed by its own pg enum — `narrations.form` (a superset) is the
- * storage truth, projected down by the API.
+ * The WIRE projection of a stop's narration form down to the three the player renders as a
+ * "stop" (story/scenic/break) — the icon/treatment switch. A read-DTO vocabulary, no longer
+ * backed by its own pg enum: `narrations.form` (a superset) is the storage truth, projected
+ * down by the API.
  */
 export const stopType = z.enum(['story', 'scenic', 'break'])
 export type StopType = z.infer<typeof stopType>

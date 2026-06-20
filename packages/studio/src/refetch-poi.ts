@@ -113,7 +113,7 @@ async function main() {
     const drifted = sheetDriftSpans(existingSheet, extract)
     console.log(
       extractChanged
-        ? `  → extract refreshed; fact sheet preserved → grounding hash unchanged, tracks stay fresh.` +
+        ? `  → extract refreshed; fact sheet preserved → grounding hash unchanged, narrations stay fresh.` +
             (drifted.length > 0
               ? `\n    ⚠ ${drifted.length}/${existingSheet!.length} sheet span(s) NO LONGER appear in the refreshed` +
                 ` article — the sheet has DRIFTED. Re-enrich to rebuild it:\n` +
@@ -124,7 +124,7 @@ async function main() {
   } else {
     console.log(
       hashChanged
-        ? `  → CHANGED: any track grounded on the old facts is now STALE → regenerate the owning tour/roam.`
+        ? `  → CHANGED: any narration grounded on the old facts is now STALE → regenerate it (roam + every drive reusing it).`
         : `  → unchanged: facts identical to what's stored (only facts_fetched_at would advance).`,
     )
   }
@@ -146,7 +146,7 @@ async function main() {
       (enriched
         ? ` (well preserved${extractChanged ? '; extract refreshed — re-enrich to rebuild the well if a corrected fact lives in it' : ''})`
         : hashChanged
-          ? ' (facts CHANGED — tracks now stale)'
+          ? ' (facts CHANGED — narrations now stale)'
           : ' (no change)') +
       '.',
   )

@@ -43,7 +43,7 @@ export const withSession: MiddlewareHandler<ApiEnv> = async (c, next) => {
 export const requireAccount: MiddlewareHandler<ApiEnv> = async (c, next) => {
   if (c.get('tier') === 'anonymous') {
     return c.json(
-      { error: 'account_required', message: 'Create a free account to play this tour.' },
+      { error: 'account_required', message: 'Create a free account to make a drive.' },
       401,
     )
   }

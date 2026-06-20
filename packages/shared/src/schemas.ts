@@ -42,7 +42,7 @@ export type AttributionList = z.infer<typeof attributionList>
 
 /**
  * A public data-source credit for the app-wide "Sources & Licenses" screen (NOT per-clip —
- * that's `attribution`, frozen on the tour_stop). Served by GET /sources so a NEW fact
+ * that's `attribution`, frozen on the `narrations` row). Served by GET /sources so a NEW fact
  * source (Wikidata, OSM, public-domain texts…) credits correctly with a backend deploy,
  * never an App Store release. Keep in step with the studio pipeline's actual sources.
  */
@@ -199,7 +199,7 @@ export const driveClip = z.object({
   url: z.url().nullish(),
   contentType: z.string().nullish(),
   attribution: attributionList.optional(),
-  /** Offline-staleness token — see tourStopView.revisedAt. */
+  /** Offline-staleness token — the narration's `updatedAt`, propagated to flag a stale offline clip. */
   revisedAt: z.iso.datetime().nullish(),
 })
 export type DriveClip = z.infer<typeof driveClip>

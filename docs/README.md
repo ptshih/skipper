@@ -72,6 +72,11 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   FAIL-CLOSED (a clip whose grounding/tts gate stays dirty after the bounded `optimize()` retakes is
   WITHHELD + flagged in `eval_scores`, never shipped). Replaces the two cheap guards; eval tables
   redesigned for V2; admin surfaces the runs + per-poi report. DECIDED + BUILT 2026-06-19.
+- [region-release-gate.md](decisions/region-release-gate.md) — a one-way release latch so regions roll
+  out slowly: `regions.released_at` + `narrations.released_at` (monotonic, never un-released = no drive
+  orphans / no yanked downloads), a `user.tester` preview flag (founder + allowlist hear staged content
+  in-app), releasing a region auto-releases all its clips. The *human* gate downstream of the automated
+  eval gate. DESIGNED 2026-06-20, NOT YET BUILT.
 - [corpus-enrichment.md](decisions/corpus-enrichment.md) — the paid `enrich` step that scouts story
   POIs into curated fact wells (`pois.fact_sheet`) shared by roam + drives; ✅ BUILT 2026-06-15, RUN
   2026-06-16 (315 welled).
@@ -95,7 +100,8 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
 - [fact-overrides-and-veracity.md](decisions/fact-overrides-and-veracity.md) — the
   upstream-source-error loop (`poi_overrides` corrections + the web-checking `--veracity`
   eval) and the durable eval record (`eval_runs`/`eval_scores`); built 2026-06-09.
-  (Zero-reuse gained a §9 addendum 2026-06-10: `roam_clips` as the THIRD narration owner.)
+  (Zero-reuse gained a §9 addendum 2026-06-10 — itself superseded; V2 collapsed roam to a MODE over
+  the 1:1 `pois`↔`narrations` atom, no `roam_clips` table.)
 
 ### specs/
 - [ask-the-skipper-spec.md](specs/ask-the-skipper-spec.md) — live, grounded voice Q&A mid-drive (the
@@ -125,7 +131,7 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   ✅ BUILT + DEPLOYED 2026-06-11, **partially superseded 2026-06-19** (the §5b Create-Tour authoring
   flow was never built — hand-authored tours are V2-deferred).
 - [free-roam-alpha-spec.md](specs/free-roam-alpha-spec.md) — what the free-roam ALPHA actually is
-  (roam_clips third owner, basin sweep, ~60s encounters, RoamEngine, duckOthers posture) + its
+  (roam as a MODE over the 1:1 `narrations` atom, basin sweep, ~60s encounters, RoamEngine, pause+resume) + its
   deliberate cuts; BUILT 2026-06-10, founder-only TestFlight.
 
 ### ideas/

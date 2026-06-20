@@ -11,8 +11,8 @@
 // Google's (materializeRoute) and the SELECTION is deterministic (engine buildDrive over the shared
 // narration corpus). Nothing here synthesizes audio — it picks + paces existing roam clips. The drive's
 // STRUCTURE freezes into `drives.selection`; each narration's CONTENT resolves live via its poi, so a
-// regenerated telling auto-improves a saved drive. Ownership lives on `drives.user_id` (never on tours),
-// preserving the anonymous/shareable-tour invariant. Anonymous callers get roam only — the whole module
+// regenerated telling auto-improves a saved drive. Ownership lives on `drives.user_id` (a drive is
+// user-owned, never shared content). Anonymous callers get roam only — the whole module
 // is behind requireAccount.
 
 import Anthropic from '@anthropic-ai/sdk'

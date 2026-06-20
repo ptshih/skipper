@@ -19,7 +19,7 @@ export interface Waypoint {
   lng: number
 }
 
-/** Provenance for a frozen route — the tours.routeProvenance core (the admin adds `authoring`). */
+/** Provenance for a frozen route — the `drives.routeProvenance` core (Create-a-Drive adds `authoring`). */
 export interface RouteProvenanceCore {
   source: 'google-routes-v2'
   waypoints: Waypoint[]

@@ -5,8 +5,9 @@
 //
 // Blast radius: DELETES BYTES (R2). Reads the DB. DEFAULT DRY RUN — pass --apply to delete.
 // (V2: tour-scoped sweeping is gone with the tours table. `narrations` is the only clip owner under
-// narration/; DRIVES reuse narration clips so they mint no R2 objects, and asides live under a
-// separate prefix — so this single narration/ sweep covers the paid corpus.) Needs R2_* env.
+// narration/; DRIVES reuse narration clips so they mint no R2 objects — so this single narration/
+// sweep covers the paid corpus. When `detours` (break audio) un-defers, add a second sweep for its
+// prefix.) Needs R2_* env.
 //
 //   dotenvx run -f .env.development -- bun packages/studio/src/sweep-orphans.ts [--apply]
 

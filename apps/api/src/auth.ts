@@ -1,7 +1,7 @@
 // Better Auth instance — the freemium auth foundation (M2).
 //
 // Tiers: anonymous (no/guest session) -> free (signed-in) -> paid (tier='paid').
-// Tours stay anonymous/shareable; auth is layered AROUND them. Email/password is
+// Roam is open/anonymous; drives are user-owned. Auth layers around both. Email/password is
 // enabled now; Google/Apple are registered only when their creds are present
 // (placeholders otherwise) so the server boots without them. The anonymous plugin
 // gives guests a session that links to a real account on sign-up.
@@ -99,8 +99,8 @@ export const auth = betterAuth({
     expo(),
     anonymous({
       onLinkAccount: async () => {
-        // Nothing to migrate on sign-up: tours are anonymous/shareable, so there is no
-        // per-user tour state to move from the anonymous user to the new account.
+        // Nothing to migrate on sign-up: roam state is anonymous and drives are created
+        // (and owned) only by a signed-in account — there is no anonymous per-user state to move.
       },
     }),
   ],

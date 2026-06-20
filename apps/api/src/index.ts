@@ -109,7 +109,7 @@ function haversineMeters(aLat: number, aLng: number, bLat: number, bLng: number)
 // playable. Geo filter runs in JS — the corpus is a few hundred rows per region at most, so a
 // bbox prefilter + haversine beats dragging in PostGIS.
 // ALPHA: OPEN, like ?preview=1 (founder TestFlight toy; no UI links it for anyone else).
-// When roam ships for real it takes the live-drive wall (free account), same as tours.
+// When roam ships for real it takes the live-drive wall (free account), same as /drives.
 app.use('/roam', rateLimit({ limit: 60, windowSec: 60, label: 'roam' }))
 app.get('/roam', async (c) => {
   const lat = Number(c.req.query('lat'))
@@ -121,7 +121,7 @@ app.get('/roam', async (c) => {
   }
 
   // Bound the query to a lat/lng box (a cheap pois_lat_lng_idx prefilter) so we don't scan
-  // every roam track globally; the exact haversine pass below still trims the box's corners.
+  // every roam narration globally; the exact haversine pass below still trims the box's corners.
   const dLat = radiusKm / 111.32
   const cosLat = Math.cos((lat * Math.PI) / 180)
   const dLng = Math.abs(cosLat) > 1e-6 ? radiusKm / (111.32 * cosLat) : 180
@@ -149,8 +149,8 @@ app.get('/roam', async (c) => {
     { label: 'roam.pins' },
   )
 
-  // A track only goes live with script + audio filled, but audioUrl is nullable through
-  // generation — drop any keyless row so a half-baked roam track never surfaces a bad pin.
+  // A narration only goes live with script + audio filled, but audioUrl is nullable through
+  // generation — drop any keyless row so a half-baked roam narration never surfaces a bad pin.
   const near = rows.filter(
     (r): r is typeof r & { key: string; durationMs: number } =>
       r.key != null &&

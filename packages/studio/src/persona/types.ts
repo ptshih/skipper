@@ -9,8 +9,8 @@
 import type { GeminiVoice } from '../models'
 
 export interface PersonaDef {
-  /** Stable slug bridging this code recipe to its `personas` row. In v2 it is NOT persisted on a
-   *  narration (one host, resolved in code); it returns to the row when region-skippers ship (M4). */
+  /** Stable slug for this code recipe. In v2 it is NOT persisted (the `personas` table was dropped,
+   *  migration 0014; one host, resolved in code); it returns as a column when region-skippers ship (M4). */
   personaKey: string
   /** Spoken/display host name. Founder rule: ALWAYS 'Skipper' (regions differ by voice/flavor, not name). */
   hostName: string
