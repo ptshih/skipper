@@ -56,7 +56,7 @@ import {
   TTS_CONCURRENCY,
   WORDS_PER_SECOND,
 } from './config'
-import { estimateTtsUsd, llmSpendLines, llmSpentUsd, TTS_ESTIMATE_SAFETY } from './pipeline/spend'
+import { estimateTtsUsd, llmSpendLines, llmSpentUsd, unpricedModels, TTS_ESTIMATE_SAFETY } from './pipeline/spend'
 import { STORY_TASTE_DENYLIST, type DeliveryRegister } from '@skipper/shared'
 import { NARRATION_MODEL, JUDGMENT_MODEL, ttsStyleFor, lengthForRegister } from './models'
 import { buildGroundingWell, evaluateGrounding } from './eval/grounding'
@@ -446,6 +446,17 @@ async function main(): Promise<void> {
     return
   }
 
+  // Fail-safe the cap on an UNPRICED model: a model we called with no MODEL_PRICING entry tallies its
+  // tokens but reads $0, so llmSpentUsd() silently under-counts and --max-cost can't bind. Abort loudly
+  // rather than spend TTS under a defeated cap. (No-op when --max-cost is unset, or all models priced.)
+  const unpriced = unpricedModels()
+  if (maxCostUsd !== Infinity && unpriced.length > 0) {
+    await recordRun(true)
+    throw new Error(
+      `⛔ --max-cost is set but these models are UNPRICED (their spend reads $0, defeating the cap): ${unpriced.join(', ')}. Add them to MODEL_PRICING (pipeline/spend.ts) or re-run without --max-cost.`,
+    )
+  }
+
   // Runtime spend guard: the gate's retakes can overrun the pre-flight estimate. Abort BEFORE the
   // (dominant) TTS spend if narration + grounding already blew the ceiling. The eval is recorded first.
   const ttsEstNow = estimateTtsUsd(shippedClips.map((g) => g.script), persona.ttsStyle.length)
@@ -466,10 +477,27 @@ async function main(): Promise<void> {
   console.log(`\nSynthesizing ${shippedClips.length} gate-passing clips (concurrency ${TTS_CONCURRENCY()})...`)
   let synthDone = 0
   const failures: { name: string; error: string }[] = []
+  // Running TTS-spend guard (mirrors enrich's): the pre-synth cap above is a point estimate and ~1-in-4
+  // clips re-synthesize (the tail-collapse retake), so a collapse-heavy region can overrun. Tally the
+  // actual TTS spend as clips land and STOP launching synths once it crosses --max-cost; the overshoot is
+  // bounded to ~one in-flight batch (TTS_CONCURRENCY), not the whole queue. No-op when --max-cost is unset.
+  let ttsSpentUsd = 0
+  let costCapped = false
   const results = await mapLimit(shippedClips, TTS_CONCURRENCY(), async (g) => {
     const c = g.c
     const script = g.script
     try {
+      // Running cost cap: skip the rest once actual spend crosses --max-cost (re-run to finish). Checked
+      // here, not via a mapLimit throw, so it skips cleanly without aborting the resilient batch.
+      if (maxCostUsd !== Infinity && llmSpentUsd() + ttsSpentUsd >= maxCostUsd) {
+        if (!costCapped) {
+          costCapped = true
+          console.warn(
+            `  ⛔ --max-cost=$${maxCostUsd.toFixed(2)} reached (~$${(llmSpentUsd() + ttsSpentUsd).toFixed(2)} spent) — skipping the remaining clips.`,
+          )
+        }
+        return null
+      }
       // The R2 clip key stays poi-scoped with a fresh per-synth id (the
       // `narration/<poiId>/<id>.m4a` keys); a regen writes a NEW key + repoints audio_url, so the old
       // object orphans for sweep-orphans. The narration row's own id is independent of the clip key.
@@ -483,7 +511,13 @@ async function main(): Promise<void> {
         ttsStyleFor(persona.ttsStyle, c.deliveryRegister ?? 'story'),
         `"${c.title}"`,
       )
-      const audioUrl = await uploadAudio(narrationClipKey(c.poiId, clipId), audio)
+      // The TTS is now paid — count it toward the running cap even if the upload/upsert below fails.
+      ttsSpentUsd += estimateTtsUsd([script], persona.ttsStyle.length).usd
+      // Idempotent (same key + bytes), so a transient R2 blip after a paid synth retries instead of
+      // wasting the synth.
+      const audioUrl = await withRetry(() => uploadAudio(narrationClipKey(c.poiId, clipId), audio), {
+        label: `upload(${c.name})`,
+      })
       // Well-aware credit: an ENRICHED poi credits the well's distinct sources (wikipedia + any
       // geology/wikidata kept). Same resolver tours use, so attribution can't drift between roam and
       // a drive reusing the clip.
@@ -548,6 +582,12 @@ async function main(): Promise<void> {
       `\n⚠ ${failures.length} clip(s) FAILED synthesis and were SKIPPED — re-run to retry (or patch individually):`,
     )
     for (const f of failures) console.warn(`  • ${f.name}: ${f.error.slice(0, 200)}`)
+  }
+  if (costCapped) {
+    const capped = shippedClips.length - ok.length - failures.length
+    console.warn(
+      `\n⛔ ${capped} clip(s) SKIPPED — --max-cost=$${maxCostUsd.toFixed(2)} reached mid-synthesis. Re-run (with a higher cap if needed) to finish the rest.`,
+    )
   }
   await recordRun(false)
   for (const line of llmSpendLines()) console.log(line)

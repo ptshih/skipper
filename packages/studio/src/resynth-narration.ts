@@ -1,7 +1,9 @@
 // Re-synthesize ONE narration from its STORED script — for fixing a malformed audio
 // file (e.g. TTS returned duplicated audio) without changing the narration or the
-// poi's facts. Writes to the same R2 key (overwrites in place) and updates the roam
-// narration's audioDurationMs. A narration is the poi's 1:1 `narrations` row.
+// poi's facts. Reads the poi's delivery register so the re-read matches the original.
+// Writes a FRESH R2 key + repoints audio_url + duration in ONE write (the superseded
+// object orphans for sweep-orphans — never an in-place overwrite that could serve new
+// audio under the old duration on a crash). A narration is the poi's 1:1 `narrations` row.
 //
 // SOP (docs/guides/ops-scripts-sop.md): PREVIEWS by default; writes only on --apply.
 // Blast radius: SPENDS $ (one TTS synth) + MUTATES DB (updates audioDurationMs).
@@ -15,8 +17,10 @@ import { narrations, pois } from '@skipper/db/schema'
 import { announce, assertReady, parseFlags } from './pipeline/ops'
 import { runJob } from './pipeline/job-progress'
 import { personaFromKey } from './persona'
+import { ttsStyleFor } from './models'
 import { synthesizeWithTailRetake } from './pipeline/tts'
-import { uploadAudio } from './pipeline/storage'
+import { narrationClipKey, uploadAudio } from './pipeline/storage'
+import { withRetry } from './pipeline/http'
 
 const flags = parseFlags(process.argv.slice(2))
 const poiId = flags.positionals[0]
@@ -40,6 +44,7 @@ async function main(poiId: string): Promise<void> {
       poiName: pois.name,
       poiLat: pois.lat,
       poiLng: pois.lng,
+      register: pois.deliveryRegister,
     })
     .from(narrations)
     .innerJoin(pois, eq(narrations.poiId, pois.id))
@@ -66,7 +71,7 @@ async function main(poiId: string): Promise<void> {
   const { audio, durationMs, tail } = await synthesizeWithTailRetake(
     row.script!,
     persona.voice,
-    persona.ttsStyle,
+    ttsStyleFor(persona.ttsStyle, row.register ?? 'story'),
     `"${row.poiName}"`,
   )
 
@@ -79,12 +84,20 @@ async function main(poiId: string): Promise<void> {
     }
   }
 
-  // Overwrite the same R2 key so the DB audioUrl never changes.
-  await uploadAudio(row.audioUrl!, audio)
-  await db
-    .update(narrations)
-    .set({ audioDurationMs: durationMs, updatedAt: new Date() })
-    .where(eq(narrations.id, row.narrationId))
+  // Fresh key + atomic repoint: upload to a NEW key, then repoint audio_url + duration in one write
+  // (the old object orphans for sweep-orphans). Avoids the in-place-overwrite window where a crash
+  // between the PUT and the duration update would serve new audio under the stale duration.
+  const audioUrl = await withRetry(() => uploadAudio(narrationClipKey(poiId, crypto.randomUUID()), audio), {
+    label: `upload(${row.poiName})`,
+  })
+  await withRetry(
+    () =>
+      db
+        .update(narrations)
+        .set({ audioUrl, audioDurationMs: durationMs, updatedAt: new Date() })
+        .where(eq(narrations.id, row.narrationId)),
+    { label: `repoint narration(${row.poiName})` },
+  )
 
   console.log(`\nDone: replaced clip for "${row.poiName}" (${(row.audioDurationMs! / 1000).toFixed(1)}s → ${(durationMs / 1000).toFixed(1)}s).`)
 }
