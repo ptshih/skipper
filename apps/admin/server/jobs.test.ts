@@ -114,3 +114,28 @@ describe('buildJobArgs — spend classification across ALL kinds (the confirm-ga
     expect(() => buildJobArgs({ kind: 'refetch_facts' })).toThrow()
   })
 })
+
+describe('buildJobArgs — numeric flag validation (the server is the trust boundary — audit #7)', () => {
+  test('a valid positive limit / max-cost is threaded', () => {
+    const r = buildJobArgs({ kind: 'enrich_pois', limit: 5, maxCostUsd: 12.5 })
+    expect(r.args).toContain('--limit=5')
+    expect(r.args).toContain('--max-cost=12.5')
+  })
+
+  test('REJECTS a non-numeric max-cost instead of emitting --max-cost=NaN (which would disable the cap)', () => {
+    expect(() => buildJobArgs({ kind: 'enrich_pois', maxCostUsd: 'abc' })).toThrow()
+    expect(() => buildJobArgs({ kind: 'generate_narrations', maxCostUsd: 'lots' })).toThrow()
+  })
+
+  test('REJECTS a negative / zero-or-less limit or max-cost', () => {
+    expect(() => buildJobArgs({ kind: 'enrich_pois', maxCostUsd: -5 })).toThrow()
+    expect(() => buildJobArgs({ kind: 'offline_audit', limit: -1 })).toThrow()
+  })
+
+  test('an absent (falsy/0) numeric flag stays a no-op — no flag emitted, no throw', () => {
+    const r = buildJobArgs({ kind: 'enrich_pois' })
+    expect(r.args.some((a) => a.startsWith('--limit'))).toBe(false)
+    expect(r.args.some((a) => a.startsWith('--max-cost'))).toBe(false)
+    expect(() => buildJobArgs({ kind: 'enrich_pois', limit: 0, maxCostUsd: 0 })).not.toThrow()
+  })
+})

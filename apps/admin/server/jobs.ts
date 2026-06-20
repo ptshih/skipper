@@ -85,6 +85,17 @@ export interface BuildResult {
 
 const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
 
+/** Append a `--flag=N` only when the body carries a POSITIVE-number value; REJECT a present-but-invalid
+ *  one (NaN / negative / non-numeric). The server is the trust boundary (the SPA isn't): without this a
+ *  `maxCostUsd:"abc"` would emit `--max-cost=NaN`, which the CLI's maxCostFlag reads as Infinity →
+ *  silently NO cost cap on a paid run. A falsy value (absent / 0) stays a no-op, as before. (audit #7) */
+function pushPosNum(args: string[], flag: string, value: unknown, name: string): void {
+  if (!value) return
+  const n = Number(value)
+  if (!Number.isFinite(n) || n <= 0) throw new HttpError(400, `${name} must be a positive number`)
+  args.push(`${flag}=${n}`)
+}
+
 /** Build the per-execution override args from a request body (the spec §5 contract). Value
  *  flags use the `=` form — the parser drops a space-form value that begins with `--`. */
 export function buildJobArgs(body: Record<string, unknown>): BuildResult {
@@ -131,10 +142,10 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     if (body.query) args.push(`--query=${str(body.query)}`)
     if (idCsv(body.includeIds)) args.push(`--include-ids=${idCsv(body.includeIds)}`)
     if (idCsv(body.excludeIds)) args.push(`--exclude-ids=${idCsv(body.excludeIds)}`)
-    if (body.limit) args.push(`--limit=${Number(body.limit)}`)
+    pushPosNum(args, '--limit', body.limit, 'limit')
     if (body.force) args.push('--force')
     if (body.model) args.push(`--model=${str(body.model)}`)
-    if (body.maxCostUsd) args.push(`--max-cost=${Number(body.maxCostUsd)}`)
+    pushPosNum(args, '--max-cost', body.maxCostUsd, 'maxCostUsd')
     if (apply) args.push('--apply')
     // enrich SPENDS (Anthropic) on --apply → confirm gate; the dry run makes no model calls (free).
     return { args, dryRun: !apply, spends: apply, targetId: 'region-corpus' }
@@ -150,10 +161,10 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     if (body.query) args.push(`--query=${str(body.query)}`)
     if (idCsv(body.includeIds)) args.push(`--include-ids=${idCsv(body.includeIds)}`)
     if (idCsv(body.excludeIds)) args.push(`--exclude-ids=${idCsv(body.excludeIds)}`)
-    if (body.limit) args.push(`--limit=${Number(body.limit)}`)
+    pushPosNum(args, '--limit', body.limit, 'limit')
     if (body.force) args.push('--force')
     // --min-extract removed 2026-06-16: roam story-eligibility is "has a fact sheet" (#1), not a char floor.
-    if (body.maxCostUsd) args.push(`--max-cost=${Number(body.maxCostUsd)}`)
+    pushPosNum(args, '--max-cost', body.maxCostUsd, 'maxCostUsd')
     if (apply) args.push('--apply')
     return { args, dryRun: !apply, spends: apply, targetId: 'roam-corpus' }
   }
@@ -167,8 +178,8 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     if (body.query) args.push(`--query=${str(body.query)}`)
     if (idCsv(body.includeIds)) args.push(`--include-ids=${idCsv(body.includeIds)}`)
     if (idCsv(body.excludeIds)) args.push(`--exclude-ids=${idCsv(body.excludeIds)}`)
-    if (body.limit) args.push(`--limit=${Number(body.limit)}`)
-    if (body.maxCostUsd) args.push(`--max-cost=${Number(body.maxCostUsd)}`)
+    pushPosNum(args, '--limit', body.limit, 'limit')
+    pushPosNum(args, '--max-cost', body.maxCostUsd, 'maxCostUsd')
     if (body.charm) args.push('--charm')
     if (body.veracity) args.push('--veracity')
     if (apply) args.push('--apply')
