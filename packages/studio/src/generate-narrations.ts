@@ -340,7 +340,7 @@ async function main(): Promise<void> {
       const ungrounded = avoid.filter((a) => a.startsWith('ungrounded place-claim'))
       if (ungrounded.length > 0) {
         console.log(`  ✂ ${c.name}: excising ${ungrounded.length} ungrounded claim(s)`)
-        return exciseUngrounded(prev, ungrounded, exciseCall)
+        return exciseUngrounded(prev, ungrounded, well, exciseCall)
       }
       return (await narrateStop({ ...base, avoid }, persona.systemPrompt)).script
     }

@@ -45,6 +45,7 @@ export interface DiversityCase {
   why: string
 }
 const LT = { region: 'Lake Tahoe', corridor: 'Emerald Bay Run' }
+const NV = { region: 'Northern Nevada', corridor: 'US 395' }
 
 export const GROUNDING_CASES: GroundingCase[] = [
   {
@@ -267,6 +268,84 @@ export const GROUNDING_CASES: GroundingCase[] = [
     },
     expect: { pass: true, ungrounded: [] },
     why: 'naming the corridor town + plain world-knowledge (mountain mornings are cold) are the sanctioned carve-outs.',
+  },
+  {
+    id: 'grounding-type-knowledge-ambient',
+    dimension: 'grounding',
+    input: {
+      seq: 10,
+      stopType: 'story',
+      placeName: 'Brougher Mansion',
+      script:
+        "It's a Queen Anne — the only one in Carson City. A Queen Anne is the fancy kind, all turrets and trim and porches that go nowhere in particular.",
+      well: [
+        'Brougher Mansion is a Queen Anne house.',
+        'Brougher Mansion is the only Queen Anne in Carson City.',
+      ],
+      ...NV,
+    },
+    expect: { pass: true, ungrounded: [] },
+    why: 'general knowledge about the Queen Anne STYLE (turrets/trim/porches) is a category trait true everywhere — ambient, not a place-fact; the only-one-in-the-city claim is on the sheet. A real withhold false-positive (2026-06-20).',
+  },
+  {
+    id: 'grounding-definition-ambient',
+    dimension: 'grounding',
+    input: {
+      seq: 11,
+      stopType: 'story',
+      placeName: 'U.S. Route 395 in Nevada',
+      script: "This stretch started life as a toll road — Boyd's Toll Road. Used to be you paid to use it.",
+      well: ["US 395 here began as a toll road called Boyd's Toll Road."],
+      ...NV,
+    },
+    expect: { pass: true, ungrounded: [] },
+    why: 'that you PAY to use a "toll road" is the definition of the term the sheet supplies — definitional, ambient. (A toll AMOUNT, or who personally collected, would be ungrounded.)',
+  },
+  {
+    id: 'grounding-external-frame-ambient',
+    dimension: 'grounding',
+    input: {
+      seq: 12,
+      stopType: 'story',
+      placeName: 'Tahoe Vista',
+      script:
+        'Tahoe Vista sits up here at about six thousand two hundred feet, and yet it counts in with the Sacramento metro — a valley city way down low.',
+      well: [
+        'Tahoe Vista is at an elevation of 6,230 feet.',
+        'Tahoe Vista is part of the Sacramento metropolitan area.',
+      ],
+      ...LT,
+    },
+    expect: { pass: true, ungrounded: [] },
+    why: 'that Sacramento (a different, well-known place named only as a frame) is a low valley city is basic common knowledge — ambient; the elevation + metro membership are on the sheet.',
+  },
+  {
+    id: 'grounding-general-knowledge-not-a-loophole',
+    dimension: 'grounding',
+    input: {
+      seq: 13,
+      stopType: 'story',
+      placeName: 'Brougher Mansion',
+      script: 'A Queen Anne has turrets and trim — and this one has the tallest turret in the whole state.',
+      well: ['Brougher Mansion is a Queen Anne house.'],
+      ...NV,
+    },
+    expect: { pass: false, ungrounded: ['tallest'] },
+    why: 'the boundary: general STYLE knowledge is ambient, but a superlative about THIS place ("tallest turret in the state") is a checkable place-fact not on the sheet — the carve-out must never become a hallucination loophole.',
+  },
+  {
+    id: 'grounding-naming-origin-ungrounded',
+    dimension: 'grounding',
+    input: {
+      seq: 14,
+      stopType: 'story',
+      placeName: 'Tahoe Vista',
+      script: 'Tahoe Vista — a fine name for a place named for its view.',
+      well: ['Tahoe Vista is a census-designated place on the north shore.'],
+      ...LT,
+    },
+    expect: { pass: false, ungrounded: ['view'] },
+    why: 'a NAMING ORIGIN ("named for its view") is a specific historical claim about THIS place, not definition or category knowledge — stays ungrounded even though "vista" means view. Conservative boundary (2026-06-20).',
   },
 ]
 
