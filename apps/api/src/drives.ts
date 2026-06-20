@@ -386,7 +386,29 @@ driveRoutes.post('/', async (c) => {
   }
   const parsed = createDriveRequest.safeParse(body)
   if (!parsed.success) return c.json({ error: 'bad_request', message: 'start{name,lat,lng} and end{name,lat,lng} are required.' }, 400)
-  const { start, end } = parsed.data
+  const { start, end, idempotencyKey } = parsed.data
+
+  // The drive id is the client's idempotencyKey when supplied (a v4 UUID, stable across retries),
+  // else server-minted. Using it AS the id makes a lost-ACK network retry hit the existing PK + the
+  // `drive:<id>` consume key (in the co-committed batch below) and no-op — exactly-once create + charge.
+  const id = idempotencyKey ?? crypto.randomUUID()
+
+  // Idempotent replay: if that drive already exists for this user, return it WITHOUT re-running Routes,
+  // re-charging, or hitting the credit gate. Without this, a lost-ACK retry on the user's LAST credit
+  // would 403 (`drive_limit_reached`) even though the original request already committed their drive.
+  // Falls through to a normal create when nothing exists yet (first attempt, or a prior attempt that
+  // died before the co-committed insert).
+  if (idempotencyKey) {
+    const existing = await loadOwnedDriveById(userId, id)
+    if (existing) {
+      try {
+        return c.json(await manifestForStoredDrive(existing))
+      } catch (e) {
+        console.error('[api] drive create idempotent-replay presign failed', e)
+        return c.json({ error: 'audio_unavailable', message: 'Audio is warming up. Give it a moment and try again.' }, 503)
+      }
+    }
+  }
 
   // Free-tier credit gate (paid is uncapped). The balance is the user-owned ledger (SUM of grants −
   // consumes), NOT a count of drive rows — a delete never refunds because no `reverse` is emitted, so
@@ -477,7 +499,6 @@ driveRoutes.post('/', async (c) => {
     materializedAt: route.provenance.materializedAt,
   }
 
-  const id = crypto.randomUUID()
   const driveValues: typeof drives.$inferInsert = {
     id,
     userId,
@@ -501,12 +522,12 @@ driveRoutes.post('/', async (c) => {
   }
   // Charge the credit ATOMICALLY with the drive insert (db.batch co-commits on neon-http) so we can
   // never half-commit a charge-without-drive or a drive-without-charge. Both inserts are ON CONFLICT
-  // DO NOTHING (idempotency_key for the consume, the PK for the drive), so a lost-ack retry of an
-  // already-committed batch cleanly no-ops instead of erroring on the unique violation — the consume
-  // is keyed on the drive id, so a drive charges exactly one credit even under retry. Free tier only —
+  // DO NOTHING (idempotency_key for the consume, the PK for the drive), so a retry that reuses the same
+  // (now client-stable) id cleanly no-ops instead of erroring on the unique violation — the consume is
+  // keyed on the drive id, so a drive charges exactly one credit even under retry. Free tier only —
   // paid (comped) accounts insert the drive without a consume. (The free-tier balance was pre-checked
-  // above; a concurrent double-create could over-spend by 1 — negligible at this scale, same TOCTOU as
-  // the old count gate.)
+  // above; with a client-stable id even a concurrent resubmit shares the consume key, so the only
+  // residual TOCTOU is two GENUINELY-DISTINCT creates racing the pre-check — bounded to 1, negligible.)
   if (c.get('tier') === 'free') {
     await withRetry(
       () =>
@@ -608,12 +629,10 @@ driveRoutes.get('/', async (c) => {
   })
 })
 
-/** Load a LIVE drive the caller OWNS (404 on miss-or-not-yours-or-deleted — never reveal another
- *  user's drive, and a soft-deleted drive reads as gone). */
-async function loadOwnedDrive(c: Context<ApiEnv>) {
-  const id = c.req.param('id')
-  const userId = c.get('session')?.user.id
-  if (!id || !UUID_RE.test(id) || !userId) return null
+/** Owner-scoped drive load by EXPLICIT id — the shared core of loadOwnedDrive (URL param) and the
+ *  POST /drives idempotent replay (body idempotencyKey). null on miss-or-not-yours-or-deleted, so we
+ *  never reveal another user's drive and a soft-deleted drive reads as gone. */
+async function loadOwnedDriveById(userId: string, id: string) {
   const rows = await withRetry(
     () =>
       db
@@ -624,6 +643,31 @@ async function loadOwnedDrive(c: Context<ApiEnv>) {
     { label: 'drive.load' },
   )
   return rows[0] ?? null
+}
+
+/** Build a replay manifest from a STORED drive row: frozen structure + LIVE narration content (a
+ *  regenerated telling auto-improves it), freshly presigned. Throws if presign fails — the caller maps
+ *  that to a 503. Shared by GET /:id and the POST /drives idempotent replay. */
+async function manifestForStoredDrive(drive: NonNullable<Awaited<ReturnType<typeof loadOwnedDriveById>>>): Promise<DriveManifest> {
+  const poiIds = (drive.selection ?? []).filter((i) => i.kind === 'narration').map((i) => i.poiId)
+  const corpus = poiIds.length ? await loadCorpusByPoiIds(poiIds) : new Map<string, NarrationRow>()
+  return {
+    driveId: drive.id,
+    label: drive.label ?? `${drive.startName ?? 'Start'} → ${drive.endName ?? 'End'}`,
+    polyline: drive.polyline,
+    distanceMeters: drive.distanceMeters,
+    durationSeconds: drive.durationSeconds,
+    clips: manifestClips(drive.selection ?? [], corpus),
+  }
+}
+
+/** Load a LIVE drive the caller OWNS (404 on miss-or-not-yours-or-deleted — never reveal another
+ *  user's drive, and a soft-deleted drive reads as gone). */
+async function loadOwnedDrive(c: Context<ApiEnv>) {
+  const id = c.req.param('id')
+  const userId = c.get('session')?.user.id
+  if (!id || !UUID_RE.test(id) || !userId) return null
+  return loadOwnedDriveById(userId, id)
 }
 
 /** Lean owner-scoped loader — only { id, selection }, for paths that re-presign but need no geometry
@@ -650,25 +694,12 @@ async function loadOwnedSelection(c: Context<ApiEnv>) {
 driveRoutes.get('/:id', async (c) => {
   const drive = await loadOwnedDrive(c)
   if (!drive) return c.json({ error: 'not_found' }, 404)
-
-  const poiIds = (drive.selection ?? []).filter((i) => i.kind === 'narration').map((i) => i.poiId)
-  const corpus = poiIds.length ? await loadCorpusByPoiIds(poiIds) : new Map<string, NarrationRow>()
-
-  const manifest: DriveManifest = {
-    driveId: drive.id,
-    label: drive.label ?? `${drive.startName ?? 'Start'} → ${drive.endName ?? 'End'}`,
-    polyline: drive.polyline,
-    distanceMeters: drive.distanceMeters,
-    durationSeconds: drive.durationSeconds,
-    clips: [],
-  }
   try {
-    manifest.clips = manifestClips(drive.selection ?? [], corpus)
+    return c.json(await manifestForStoredDrive(drive))
   } catch (e) {
     console.error('[api] drive replay presign failed', e)
     return c.json({ error: 'audio_unavailable', message: 'Audio is warming up. Give it a moment and try again.' }, 503)
   }
-  return c.json(manifest)
 })
 
 /** POST /drives/:id/assets/sign — re-presigned clip URLs (offline refresh), keyed by seq. */

@@ -42,6 +42,18 @@ const GENERATING_LINES = [
 // Canned suggested prompts ("OR TRY ONE") — each is just a prompt through the same propose path.
 const SUGGESTIONS = ['Emerald Bay loop', 'The whole West Shore', 'Tahoe City to Kings Beach']
 
+// A v4 UUID for the create idempotency key (sent as createDrive.idempotencyKey, stable across retries
+// of one logical create). Uses the platform crypto when present, else a Math.random v4 — this key
+// needs UNIQUENESS to dedupe a retry, not unguessability, and Hermes ships no guaranteed crypto global.
+function uuidV4(): string {
+  const cr = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto
+  if (cr?.randomUUID) return cr.randomUUID()
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (ch) => {
+    const r = (Math.random() * 16) | 0
+    return (ch === 'x' ? r : (r & 0x3) | 0x8).toString(16)
+  })
+}
+
 export default function CreateDriveScreen() {
   const router = useRouter()
   const theme = useTheme()
@@ -61,9 +73,12 @@ export default function CreateDriveScreen() {
 
   // Synchronous in-flight guard for the credit-spending create. setPhase('generating') is async, so
   // a fast double-tap on "Make this drive" would fire two POST /drives before React unmounts the
-  // confirm view — each mints a fresh driveId, so the server's per-drive idempotency key can't dedupe
-  // them and the rider over-spends a lifetime free credit. Mirrors home's navigatingRef. (audit #4)
+  // confirm view, and the rider over-spends a lifetime free credit. Mirrors home's navigatingRef. (audit #4)
   const creatingRef = useRef(false)
+  // Stable idempotency key for one logical create: minted once per proposal, REUSED across retries so a
+  // lost-ACK network retry dedupes server-side (the server uses it as the drive id → no second drive, no
+  // second charged credit). Reset to null on each new proposal (a new route is a new logical create).
+  const idempotencyKeyRef = useRef<string | null>(null)
 
   // Load the pickable regions once; auto-select when there's only one (the Tahoe-launch case).
   useEffect(() => {
@@ -92,6 +107,7 @@ export default function CreateDriveScreen() {
       try {
         const p = await proposeDrive({ regionId, prompt: q })
         setProposal(p)
+        idempotencyKeyRef.current = null // fresh proposal = a new logical create; key is minted on confirm
         setPhase('confirm')
       } catch (e) {
         if (e instanceof ApiError && e.needsAccount) setNeedsAccount(true)
@@ -106,10 +122,17 @@ export default function CreateDriveScreen() {
     if (!proposal || !regionId) return
     if (creatingRef.current) return // a double-tap must not double-POST /drives (double-charge). (audit #4)
     creatingRef.current = true
+    // Mint the key once for this logical create; a sequential retry (below) reuses it so the server
+    // dedupes a create whose first attempt may have committed but whose response was lost.
+    if (!idempotencyKeyRef.current) idempotencyKeyRef.current = uuidV4()
     setError(null)
     setPhase('generating')
     try {
-      const m = await createDrive({ start: proposal.start, end: proposal.end })
+      const m = await createDrive({
+        start: proposal.start,
+        end: proposal.end,
+        idempotencyKey: idempotencyKeyRef.current,
+      })
       if (m.driveId) {
         // Hand the rider straight into the couch preview of their fresh drive (replace, so Back
         // returns to home, not the spent create flow).

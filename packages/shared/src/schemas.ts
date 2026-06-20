@@ -171,6 +171,11 @@ export type DriveProposal = z.infer<typeof driveProposal>
 export const createDriveRequest = z.object({
   start: resolvedEndpoint,
   end: resolvedEndpoint,
+  /** Client-minted v4 UUID, STABLE across retries of one logical create. The server uses it AS the
+   *  drive id, so a lost-ACK network retry hits the existing drive PK + the `drive:<id>` consume
+   *  idempotency key and no-ops — exactly-once create + charge of a non-refundable credit. Optional:
+   *  an older client omits it → the server mints the id → no cross-request dedupe (today's behavior). */
+  idempotencyKey: z.uuid().optional(),
 })
 export type CreateDriveRequest = z.infer<typeof createDriveRequest>
 
