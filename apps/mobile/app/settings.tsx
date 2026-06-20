@@ -9,7 +9,7 @@ import { Button, DiagnosticsPicker, Input, Screen, SimModePicker, Text, ThemeMod
 // Settings — the deliberate, parked-context home for preferences + account. The home
 // body stays 100% drive-focused, so identity ("Riding as …") and the rare/destructive
 // Sign out live HERE, behind the home's gear, not in the front-door chrome. Appearance
-// (Auto / Day / Dusk) follows. Room to grow (joke level, voice) as M3 lands.
+// (Auto / Day / Dusk) follows. Room to grow (different narrators) as M4 lands.
 export default function SettingsScreen() {
   const router = useRouter()
   const { data: session } = useSession()
