@@ -1,8 +1,8 @@
 # Audio loudness master spec — Spotify-aligned targets for Skipper audio
 
-**Status:** ACTIVE — the narration master is a true-peak LIMITER → single-pass loudnorm with TWO parked
-presets in `loudnorm.ts` (`MASTERS`): **`normal14` (−14, ACTIVE)** and **`loud13` (−13, Spotify-"Loud" —
-validated 2026-06-20 but OFF)**. At −14 the voice matches the **−14** drive-music bed (`AUDIO_LOUDNESS` in
+**Status:** LOCKED 2026-06-20 (founder): −14 (`normal14`) active, −13 parked. The narration master is a
+true-peak LIMITER → single-pass loudnorm with TWO parked presets in `loudnorm.ts` (`MASTERS`):
+**`normal14` (−14, ACTIVE)** and **`loud13` (−13, Spotify-"Loud" — validated 2026-06-20 but OFF)**. At −14 the voice matches the **−14** drive-music bed (`AUDIO_LOUDNESS` in
 `@skipper/shared`); flipping `MASTER` to `loud13` puts the voice 1 dB above it. Shared: **11 LU range**,
 EBU R128, −1.0 dBTP delivery ceiling. Flip the preset in `loudnorm.ts` + regen — see §1 + History 2026-06-20.
 
