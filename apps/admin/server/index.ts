@@ -71,6 +71,22 @@ function isUniqueViolation(e: unknown): boolean {
   return /duplicate key value|unique constraint|\b23505\b/i.test(String((e as { message?: unknown } | null)?.message ?? ''))
 }
 
+// Bounds on a fact_edit override (audit #10): its find/replace rides EVERY future extract fetch into the
+// grounded facts of every regeneration, so an unbounded/garbage write silently corrupts the corpus. A
+// real correction is a phrase or sentence — these caps are generous but catch a paste/fat-finger.
+const MAX_OVERRIDE_LEN = 2000
+const MAX_REASON_LEN = 1000
+/** A valid, length-bounded http(s) URL — the override's sourceUrl is operator-supplied provenance. */
+function isHttpUrl(s: string): boolean {
+  if (s.length > 2048) return false
+  try {
+    const u = new URL(s)
+    return u.protocol === 'http:' || u.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
 // Liveness — OPEN (Cloud Run startup/liveness probes hit the container directly, not via IAP).
 // Plain GET /health stays DB-free and cheap so a DB blip can never restart the Cloud Run container.
 // GET /health?deep=1 is the admin client's readiness probe (HealthBanner): it also pings the DB so
@@ -919,6 +935,16 @@ app.post('/admin/pois/:id/corrections', async (c) => {
     if (!find) return c.json({ error: 'bad_request', message: '`find` must be a non-empty string.' }, 400)
     if (replace === null) return c.json({ error: 'bad_request', message: '`replace` must be a string (may be empty).' }, 400)
     if (!reason) return c.json({ error: 'bad_request', message: '`reason` is required — a correction documents itself.' }, 400)
+    // Bound the strings — this override rides every future extract fetch into the grounded corpus. (audit #10)
+    if (find.length > MAX_OVERRIDE_LEN || replace.length > MAX_OVERRIDE_LEN) {
+      return c.json({ error: 'bad_request', message: `\`find\`/\`replace\` must each be ≤ ${MAX_OVERRIDE_LEN} chars.` }, 400)
+    }
+    if (reason.length > MAX_REASON_LEN) {
+      return c.json({ error: 'bad_request', message: `\`reason\` must be ≤ ${MAX_REASON_LEN} chars.` }, 400)
+    }
+    if (sourceUrl && !isHttpUrl(sourceUrl)) {
+      return c.json({ error: 'bad_request', message: '`sourceUrl` must be a valid http(s) URL.' }, 400)
+    }
 
     console.log(`[admin] ${operator} fact_edit override on ${poi.source}:${poi.sourceId} (${poi.name}) find=${JSON.stringify(find)}`)
     await db
