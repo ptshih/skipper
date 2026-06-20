@@ -71,3 +71,46 @@ describe('buildJobArgs — enrich_pois (the corpus enrich op)', () => {
     expect(r.args).toContain('--exclude-ids=x,y')
   })
 })
+
+describe('buildJobArgs — spend classification across ALL kinds (the confirm-gate input)', () => {
+  // build.spends is exactly what index.ts gates the confirm:true requirement on (`if build.spends &&
+  // body.confirm !== true → 412`). A kind mislabeled spends:false would skip the gate on a real paid
+  // run, so pin every kind's classification — incl. the two deliberate free exceptions. (audit #6)
+  test('FREE kinds never spend (no confirm gate), with or without --apply', () => {
+    for (const apply of [false, true]) {
+      expect(buildJobArgs({ kind: 'discover_pois', apply }).spends).toBe(false)
+      expect(buildJobArgs({ kind: 'refetch_facts', poiId: 'p1', apply }).spends).toBe(false)
+    }
+  })
+
+  test('PAID kinds spend IFF --apply (dry run = free preview; apply = confirm-gated spend)', () => {
+    const paid = [
+      { kind: 'enrich_pois' },
+      { kind: 'generate_narrations' },
+      { kind: 'offline_audit' },
+      { kind: 'sweep_orphans' },
+      { kind: 'resynth_narration', poiId: 'p1' },
+    ]
+    for (const body of paid) {
+      const dry = buildJobArgs({ ...body, apply: false })
+      expect(dry.spends).toBe(false)
+      expect(dry.dryRun).toBe(true)
+      expect(dry.args).not.toContain('--apply')
+
+      const applied = buildJobArgs({ ...body, apply: true })
+      expect(applied.spends).toBe(true)
+      expect(applied.dryRun).toBe(false)
+      expect(applied.args).toContain('--apply')
+    }
+  })
+
+  test('an unknown / removed-legacy kind is rejected, never dispatched', () => {
+    expect(() => buildJobArgs({ kind: 'nope' })).toThrow()
+    expect(() => buildJobArgs({ kind: 'generate' })).toThrow() // legacy enum member, no dispatchable script
+  })
+
+  test('poi-targeted kinds require a poiId', () => {
+    expect(() => buildJobArgs({ kind: 'resynth_narration' })).toThrow()
+    expect(() => buildJobArgs({ kind: 'refetch_facts' })).toThrow()
+  })
+})
