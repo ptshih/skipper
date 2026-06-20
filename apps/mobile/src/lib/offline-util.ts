@@ -45,6 +45,40 @@ export function urlMapFromDriveSigned(signed: SignedDriveAudio): Map<number, str
 }
 
 /* -------------------------------------------------------------------------- */
+/*  Offline completeness (pure set math; offline.ts wires in the on-disk set)   */
+/* -------------------------------------------------------------------------- */
+
+/** A clip has downloadable audio iff it carries BOTH a url and a contentType — a silent beat (rest)
+ *  has neither and is never fetched. A TYPE GUARD (narrows url/contentType to non-null), so the download
+ *  list AND the completeness check share ONE predicate and "what we should have" can't drift between them.
+ *  Intentionally STRICTER than online playback (`urlMapFromDriveManifest` streams on a url ALONE): the
+ *  downloader needs the contentType for the on-disk extension, so a clip with no contentType is genuinely
+ *  un-downloadable and is correctly NOT "expected" offline (re-pulling could never land it). The two
+ *  predicates only diverge on a url-without-contentType clip, which the API never emits (it signs the url
+ *  and sets the contentType together) — so completeness never under-counts a downloadable stop. */
+export function hasDownloadableAudio<T extends { url?: string | null; contentType?: string | null }>(
+  c: T,
+): c is T & { url: string; contentType: string } {
+  return Boolean(c.url) && Boolean(c.contentType)
+}
+
+/** The player seqs a drive SHOULD have downloadable audio for (every clip past `hasDownloadableAudio`). */
+export function expectedAudioSeqs(clips: DriveClip[]): number[] {
+  return clips.filter(hasDownloadableAudio).map((c) => c.seq)
+}
+
+/**
+ * The expected audio seqs MISSING from the saved set — the offline-completeness predicate. Empty means
+ * a COMPLETE download. Pure (no filesystem): `clips` is the saved manifest's full `detail.clips` (lists
+ * EVERY expected clip), `savedSeqs` is the subset that actually landed — so a partial download surfaces
+ * as partial even after a restart, when the in-memory download result is long gone. (audit #1)
+ */
+export function missingAudioSeqs(clips: DriveClip[], savedSeqs: Iterable<number>): number[] {
+  const saved = new Set(savedSeqs)
+  return expectedAudioSeqs(clips).filter((seq) => !saved.has(seq))
+}
+
+/* -------------------------------------------------------------------------- */
 /*  Offline freshness TTL (pure date math; offline.ts wires in savedAt + now)   */
 /* -------------------------------------------------------------------------- */
 

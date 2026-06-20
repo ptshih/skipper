@@ -8,8 +8,8 @@ import {
   InsufficientStorageError,
   isDownloadExpired,
   isDownloadStale,
-  isDriveDownloaded,
   loadManifest,
+  offlineStatus,
   type DownloadProgress,
 } from '@/lib/offline'
 import { cleanPlaceName } from '@/lib/labels'
@@ -275,7 +275,15 @@ export default function DriveDetailScreen() {
     useCallback(() => {
       load()
       if (id) {
-        setDownloaded(isDriveDownloaded(id))
+        const status = offlineStatus(id)
+        setDownloaded(status != null)
+        // Re-derive PARTIAL from disk so a half-download surfaces as partial after an app restart
+        // (when the in-memory download result is gone) instead of as a clean "Saved offline". (audit #1)
+        setPartial(
+          status && status.missingSeqs.length > 0
+            ? { failed: status.missingSeqs.length, total: status.expectedCount }
+            : null,
+        )
         setExpired(isDownloadExpired(id)) // offline-safe (reads savedAt) — fires even in a dead zone
       }
     }, [load, id]),

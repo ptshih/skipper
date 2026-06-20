@@ -2,8 +2,11 @@ import { describe, expect, test } from 'bun:test'
 import type { DriveClip, SignedDriveAudio } from '@skipper/shared'
 import {
   daysSinceIso,
+  expectedAudioSeqs,
   extForContentType,
+  hasDownloadableAudio,
   isPastTtl,
+  missingAudioSeqs,
   urlMapFromDriveManifest,
   urlMapFromDriveSigned,
 } from './offline-util'
@@ -102,5 +105,51 @@ describe('daysSinceIso / isPastTtl (offline freshness TTL)', () => {
 
   test('isPastTtl fails OPEN on an unparseable timestamp (never nudge on a manifest we cannot date)', () => {
     expect(isPastTtl('garbage', NOW, 30)).toBe(false)
+  })
+})
+
+describe('offline completeness (hasDownloadableAudio / expectedAudioSeqs / missingAudioSeqs)', () => {
+  const clip = (seq: number, url: string | null): DriveClip => ({
+    seq,
+    form: 'story',
+    alongSec: seq * 60,
+    url,
+    contentType: url ? 'audio/mp4' : null,
+    durationMs: 90_000,
+  })
+
+  test('hasDownloadableAudio needs BOTH a url and a contentType', () => {
+    expect(hasDownloadableAudio({ url: 'https://r2/c', contentType: 'audio/mp4' })).toBe(true)
+    expect(hasDownloadableAudio({ url: null, contentType: 'audio/mp4' })).toBe(false)
+    expect(hasDownloadableAudio({ url: 'https://r2/c', contentType: null })).toBe(false)
+    expect(hasDownloadableAudio({ url: null, contentType: null })).toBe(false)
+  })
+
+  test('expectedAudioSeqs lists only clips with audio (silent beats excluded)', () => {
+    const clips = [clip(0, 'https://r2/c0'), clip(1, null), clip(2, 'https://r2/c2')]
+    expect(expectedAudioSeqs(clips)).toEqual([0, 2])
+  })
+
+  test('missingAudioSeqs is empty for a COMPLETE download (every expected clip saved)', () => {
+    const clips = [clip(0, 'https://r2/c0'), clip(1, 'https://r2/c1')]
+    expect(missingAudioSeqs(clips, [0, 1])).toEqual([])
+  })
+
+  test('missingAudioSeqs reports the gap for a PARTIAL download (audit #1 — the restart-safe predicate)', () => {
+    const clips = [clip(0, 'https://r2/c0'), clip(1, 'https://r2/c1'), clip(2, 'https://r2/c2')]
+    // Only seqs 0 and 2 landed — seq 1 never downloaded, so it must surface as missing.
+    expect(missingAudioSeqs(clips, [0, 2])).toEqual([1])
+  })
+
+  test('a silent beat (no audio) is never counted missing, even when absent from the saved set', () => {
+    const clips = [clip(0, 'https://r2/c0'), clip(1, null)]
+    // seq 1 is a silent beat — nothing to download, so a saved set of just [0] is COMPLETE.
+    expect(missingAudioSeqs(clips, [0])).toEqual([])
+  })
+
+  test('an empty saved set marks every audio clip missing; a stray extra saved seq is harmless', () => {
+    const clips = [clip(0, 'https://r2/c0'), clip(2, 'https://r2/c2')]
+    expect(missingAudioSeqs(clips, [])).toEqual([0, 2])
+    expect(missingAudioSeqs(clips, [0, 2, 99])).toEqual([])
   })
 })

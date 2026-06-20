@@ -15,7 +15,15 @@
 import { Directory, File, Paths } from 'expo-file-system'
 import type { DriveClip, DriveManifest, DriveSummary } from '@skipper/shared'
 import { getDrive, signDriveAudio } from './api'
-import { extForContentType, isPastTtl, urlMapFromDriveManifest, urlMapFromDriveSigned } from './offline-util'
+import {
+  expectedAudioSeqs,
+  extForContentType,
+  hasDownloadableAudio,
+  isPastTtl,
+  missingAudioSeqs,
+  urlMapFromDriveManifest,
+  urlMapFromDriveSigned,
+} from './offline-util'
 
 // Manifest schema version — bump on any shape change so a stale-format manifest left by an older
 // app build reads as NOT-downloaded (and re-downloads) instead of crashing the player.
@@ -91,7 +99,7 @@ function clipsToDownload(detail: DriveManifest): {
 }[] {
   const out: { key: string; url: string; contentType: string; durationMs: number | null; name: string }[] = []
   for (const c of detail.clips) {
-    if (!c.url || !c.contentType) continue // a silent beat (rest) carries no audio — nothing to fetch
+    if (!hasDownloadableAudio(c)) continue // a silent beat (rest) carries no audio — nothing to fetch
     const seq = clipSeq(c)
     out.push({
       key: String(seq),
@@ -110,6 +118,14 @@ const DOWNLOAD_CONCURRENCY = 4
 // bytes were not — a half-open / slow-drip dead-zone connection would hang forever. Bound each clip
 // with an AbortController so a stuck transfer rejects instead of wedging downloadDrive. (audit #2)
 const CLIP_DOWNLOAD_TIMEOUT_MS = 30_000
+
+// A TRANSIENT per-clip failure (a 5xx, a momentary dead-zone drop, a slow-drip timeout, a zero-byte
+// landing) is RETRIED with backoff before the clip is given up — one network blip must not permanently
+// drop a clip from an otherwise-good copy (which, combined with the partial-tolerant manifest, would
+// then read as a COMPLETE download after a restart). A real CANCEL (the outer signal) is never retried.
+// (audit #1 / #3)
+const CLIP_DOWNLOAD_ATTEMPTS = 3
+const RETRY_BASE_DELAY_MS = 400
 
 // Rough bytes/sec for the 32 kbps MP3 clips (32 kbit/s ÷ 8), for the pre-flight free-space estimate.
 const APPROX_BYTES_PER_SEC = 4_000
@@ -142,6 +158,69 @@ async function downloadClip(url: string, dest: File, outer?: AbortSignal): Promi
     clearTimeout(timer)
     outer?.removeEventListener?.('abort', onAbort)
   }
+}
+
+/** Sleep `ms`, rejecting immediately (with an AbortError) if the optional cancel signal fires — so a
+ *  retry backoff doesn't keep a canceled download alive for the delay. */
+function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(abortError())
+      return
+    }
+    const onAbort = () => {
+      clearTimeout(timer)
+      signal?.removeEventListener?.('abort', onAbort)
+      reject(abortError())
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener?.('abort', onAbort)
+      resolve()
+    }, ms)
+    signal?.addEventListener?.('abort', onAbort)
+  })
+}
+
+/**
+ * Download one clip with bounded retries + exponential backoff. Each attempt is the timeout-bounded
+ * downloadClip PLUS a nonzero-size verify (the manifest carries no size/hash, so presence + bytes>0 is
+ * the only integrity signal — audit #834); a transient failure (timeout, 5xx, dropped connection,
+ * zero-byte landing) is retried up to CLIP_DOWNLOAD_ATTEMPTS, deleting the half-written file between
+ * tries (downloadFileAsync rejects on an existing dest). A real CANCEL — the OUTER signal aborting —
+ * is terminal and propagates so the worker aborts the whole run (a per-clip TIMEOUT, in contrast, aborts
+ * only the INNER controller, so it stays retryable). Throws the last error once attempts are exhausted.
+ * (audit #1 / #3)
+ */
+async function downloadClipWithRetry(
+  url: string,
+  dest: File,
+  name: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  let lastErr: unknown
+  for (let attempt = 1; attempt <= CLIP_DOWNLOAD_ATTEMPTS; attempt++) {
+    if (signal?.aborted) throw abortError()
+    try {
+      const out = await downloadClip(url, dest, signal)
+      if (!out.exists || !out.size || out.size <= 0) {
+        throw new Error(`Download verify failed for ${name} (exists=${out.exists}, size=${out.size}).`)
+      }
+      return
+    } catch (e) {
+      // A user CANCEL (the outer signal) is terminal — never retry it; let the worker abort the run.
+      if (signal?.aborted) throw e
+      lastErr = e
+      // Drop the (possibly half-written / zero-byte) file before the next attempt — a truncated file
+      // must not read as a saved clip, and downloadFileAsync rejects on an existing dest.
+      try {
+        if (dest.exists) dest.delete()
+      } catch {}
+      if (attempt < CLIP_DOWNLOAD_ATTEMPTS) {
+        await abortableDelay(RETRY_BASE_DELAY_MS * 2 ** (attempt - 1), signal)
+      }
+    }
+  }
+  throw lastErr ?? new Error(`Download failed for ${name}.`)
 }
 
 // In-flight downloads by driveId — dedupes concurrent downloadDrive calls for the same drive so two
@@ -230,21 +309,18 @@ async function runDownload(
       const item = items[next++]!
       const dest = new File(dir, item.name)
       try {
-        const out = await downloadClip(item.url, dest, signal)
-        // Integrity is a PRESENCE/nonzero-size check only — no Content-Length/checksum (the manifest
-        // carries no size/hash). iOS URLSession enforces a declared Content-Length (R2 object GETs
-        // always send one), so a mid-body drop normally rejects in downloadClip; a server
-        // short-Content-Length is the only silent-truncation gap. (audit #834)
-        if (!out.exists || !out.size || out.size <= 0) {
-          throw new Error(`Download verify failed for ${item.name} (exists=${out.exists}, size=${out.size}).`)
-        }
+        // Retries a transient blip (timeout/5xx/dropped/zero-byte) with backoff + a nonzero-size verify
+        // before giving up — so one flaky moment doesn't permanently drop a clip. (audit #1 / #3)
+        await downloadClipWithRetry(item.url, dest, item.name, signal)
         results.set(item.key, { name: item.name, contentType: item.contentType, durationMs: item.durationMs })
-      } catch (e) {
-        // A USER CANCEL (or the per-clip timeout firing off the outer signal) aborts the whole run —
-        // re-throw so the catch below sweeps the partial dir. Any OTHER single-clip failure is
-        // PARTIAL-TOLERANT (H2): drop just this clip's (possibly half-written) file, record the seq,
-        // and keep going so one bad clip in a dead zone doesn't cost the rider the whole tour.
-        if ((e instanceof Error && e.name === 'AbortError') || signal?.aborted) throw e
+      } catch {
+        // The OUTER signal is the ONLY terminal failure: a USER CANCEL aborts the whole run — re-throw
+        // so the catch below sweeps the partial dir. Any OTHER failure means the retries were exhausted
+        // (a persistent timeout/5xx), which is PARTIAL-TOLERANT (H2): drop just this clip's file, record
+        // the seq, and keep going so one bad clip in a dead zone doesn't cost the rider the whole tour.
+        // The gap is NOT silent — the saved manifest's `detail` still lists the failed clip, so
+        // offlineStatus() re-derives it after a restart (audit #1).
+        if (signal?.aborted) throw abortError()
         try {
           if (dest.exists) dest.delete() // a truncated/zero-byte file must not read as a saved clip
         } catch {}
@@ -269,8 +345,9 @@ async function runDownload(
     }
     // Write the manifest INSIDE the try — a manifest-write failure must also sweep the
     // (verified-but-orphaned) clip files, or they'd leak with no manifest to find them. The manifest
-    // covers ONLY the clips that landed; clipsPresentOnDisk validates against this set, so a partial
-    // download still reads as a (smaller) complete one and plays its saved stops.
+    // covers ONLY the clips that landed; `clipsPresentOnDisk` confirms those SAVED clips still play,
+    // while `offlineStatus`/`missingAudioSeqs` derive the partial gap from `detail` (which lists EVERY
+    // expected clip) — so a partial download stays playable AND surfaces as partial after a restart.
     const manifest: OfflineManifest = {
       driveId,
       version: MANIFEST_VERSION,
@@ -334,10 +411,34 @@ function localUrlMap(driveId: string, m: OfflineManifest): Map<number, string> {
   return urls
 }
 
-/** True iff a complete, verified download exists (valid manifest + every clip on disk, nonzero). */
-export function isDriveDownloaded(driveId: string): boolean {
+/** Whether a drive has a usable offline copy AND, for a PARTIAL download, which clips never landed. */
+export interface OfflineStatus {
+  /** A playable copy exists: a valid manifest with its SAVED clips present on disk. True even for a
+   *  PARTIAL download (it plays the stops it has) — read `missingSeqs` to tell partial from complete. */
+  downloaded: boolean
+  /** Expected-but-missing clip seqs — EMPTY means a COMPLETE download. Derived from the SAVED manifest
+   *  (`detail.clips` lists every expected clip; `clips` holds only those that landed), so it survives an
+   *  app restart, unlike the in-memory DownloadResult.failedSeqs. (audit #1) */
+  missingSeqs: number[]
+  /** Total clips this drive should have audio for. */
+  expectedCount: number
+}
+
+/**
+ * The on-disk offline status for a drive (ZERO network): whether a playable copy exists and, for a
+ * partial download, the gap. null when nothing playable is on disk. This is the restart-safe successor
+ * to a bare downloaded? boolean — a half-downloaded drive used to read as a clean "Saved offline" once
+ * the in-memory download result was gone (audit #1); now the gap is re-derived from the manifest itself.
+ */
+export function offlineStatus(driveId: string): OfflineStatus | null {
   const m = loadManifest(driveId)
-  return m != null && clipsPresentOnDisk(driveId, m)
+  if (!m || !clipsPresentOnDisk(driveId, m)) return null
+  const savedSeqs = Object.keys(m.clips).map(Number).filter(Number.isFinite)
+  return {
+    downloaded: true,
+    missingSeqs: missingAudioSeqs(m.detail.clips, savedSeqs),
+    expectedCount: expectedAudioSeqs(m.detail.clips).length,
+  }
 }
 
 /**
@@ -455,7 +556,7 @@ export interface Playback {
  * stream online.
  */
 export async function loadPlayback(driveId: string): Promise<Playback> {
-  const m = loadManifest(driveId) // load ONCE (don't isDriveDownloaded() then loadManifest() again)
+  const m = loadManifest(driveId) // load ONCE (don't check-then-reload the manifest)
   if (m && clipsPresentOnDisk(driveId, m)) {
     return { detail: m.detail, urls: localUrlMap(driveId, m), offline: true }
   }
