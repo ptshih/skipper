@@ -52,7 +52,7 @@
           "locationWhenInUsePermission": "Skipper uses your location to play each stop as you reach it on the drive.",
           "locationAlwaysAndWhenInUsePermission": false,
           "locationAlwaysPermission": false,
-          "motionUsagePermission": false,
+          "motionUsagePermission": "Skipper uses motion to gauge your speed and heading so each stop plays at the right moment as you drive.",
           "isIosBackgroundLocationEnabled": false,
           "isAndroidBackgroundLocationEnabled": false
         }
