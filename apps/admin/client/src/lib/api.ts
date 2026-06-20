@@ -171,8 +171,13 @@ export interface RunEvent {
   phase: string | null
   costUsd: number | null
   grounding: number | null
+  tts: number | null
+  diversity: number | null
   /** Clips the fail-closed gate held back (eval runs only). */
   withheld: number | null
+  /** Run tallies (eval runs only) — total evaluated, and how many SHIPPED (total − withheld). */
+  total: number | null
+  shipped: number | null
   /** The eval run behind this row (a job's produced run, or an eval row's own id) — keys the report. */
   evalRunId: string | null
   narrationModel: string | null

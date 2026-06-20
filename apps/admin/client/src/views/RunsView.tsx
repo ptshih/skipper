@@ -57,11 +57,31 @@ const TARGET_SENTINELS: Record<string, string> = {
 
 const isLive = (s?: JobStatus | null) => s === 'running' || s === 'queued'
 
+// An eval run's `pass` is just `withheld === 0`, so a run that gated a few clips but SHIPPED the rest
+// is a PARTIAL success, not a failure. A TRUE failure = a job that errored, or an eval run that
+// shipped nothing at all (every evaluated clip held back).
+const isPartial  = (r: RunEvent) => r.source === 'eval' && r.pass === false && (r.shipped ?? 0) > 0
+const isTrueFail = (r: RunEvent) =>
+  r.status === 'failed' || (r.source === 'eval' && r.pass === false && (r.shipped ?? 0) === 0 && (r.total ?? 0) > 0)
+
 function RunTarget({ slug }: { slug: string | null }) {
   if (!slug) return <span className="italic text-muted-foreground">All</span>
   const sentinel = TARGET_SENTINELS[slug]
   if (sentinel) return <span className="italic text-muted-foreground">{sentinel}</span>
   return <>{slug}</>
+}
+
+// The eval score triple (eval rows only) — grounding/tts/diversity; grounding turns red below the gate.
+function RunScores({ r }: { r: RunEvent }) {
+  if (r.source !== 'eval') return <span className="text-muted-foreground">—</span>
+  const fmt = (v: number | null) => (v == null ? '—' : v.toFixed(2))
+  return (
+    <span className="flex gap-2 font-mono text-xs text-muted-foreground">
+      <span className={cn(r.grounding != null && r.grounding < 0.75 && 'text-destructive')}>g {fmt(r.grounding)}</span>
+      <span>tts {fmt(r.tts)}</span>
+      <span>div {fmt(r.diversity)}</span>
+    </span>
+  )
 }
 
 function PulseDot() {
@@ -121,7 +141,7 @@ export function RunsView() {
     if (kindFilter !== 'all' && r.kind !== kindFilter) return false
     if (statusFilter !== 'all') {
       if (statusFilter === 'running') return r.status === 'running' || r.status === 'queued'
-      if (statusFilter === 'failed')  return r.status === 'failed' || r.pass === false
+      if (statusFilter === 'failed')  return isTrueFail(r)
       if (statusFilter === 'ok')      return r.status === 'succeeded' || r.pass === true
     }
     if (q) {
@@ -132,7 +152,7 @@ export function RunsView() {
   }), [runs, src, kindFilter, statusFilter, q])
 
   const runningN    = runs.filter((r) => r.status === 'running').length
-  const failedN     = runs.filter((r) => r.status === 'failed' || r.pass === false).length
+  const failedN     = runs.filter(isTrueFail).length
   const todaySpend  = runs
     .filter((r) => r.createdAt?.slice(0, 10) === new Date().toISOString().slice(0, 10))
     .reduce((a, r) => a + (r.costUsd ?? 0), 0)
@@ -240,13 +260,14 @@ export function RunsView() {
                 <TableHead>Run</TableHead>
                 <TableHead>Target</TableHead>
                 <TableHead>Result</TableHead>
+                <TableHead>Scores</TableHead>
                 <TableHead>Mode</TableHead>
-                <TableHead>Detail</TableHead>
+                <TableHead>Triggered by</TableHead>
                 <TableHead className="text-right">When</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isPending && <TableSkeletonRows rows={6} cols={6} />}
+              {isPending && <TableSkeletonRows rows={6} cols={7} />}
               {filtered.map((r) => {
                 const km = KIND_META[r.kind]
                 const Icon = km?.icon ?? Activity
@@ -263,7 +284,16 @@ export function RunsView() {
                         </span>
                         <div className="min-w-0">
                           <div className="font-medium">{km?.label ?? r.kind}</div>
-                          <div className="font-mono text-xs text-muted-foreground">{r.id}</div>
+                          {r.source === 'eval' ? (
+                            <div className="flex items-center gap-1.5 font-mono text-xs text-muted-foreground">
+                              <span className="truncate">{r.narrationModel ?? r.id}</span>
+                              {r.gitSha && (
+                                <span className="shrink-0 rounded border bg-muted px-1 py-0.5 text-[11px]">{r.gitSha.slice(0, 7)}</span>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="font-mono text-xs text-muted-foreground">{r.id}</div>
+                          )}
                         </div>
                       </div>
                     </TableCell>
@@ -271,6 +301,7 @@ export function RunsView() {
                       <RunTarget slug={r.slug} />
                     </TableCell>
                     <TableCell><RunResultCell r={r} /></TableCell>
+                    <TableCell><RunScores r={r} /></TableCell>
                     <TableCell>
                       {r.dryRun
                         ? <Badge variant="secondary">dry-run</Badge>
@@ -279,16 +310,7 @@ export function RunsView() {
                           : <Badge variant="warning">spend</Badge>}
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
-                      {r.source === 'job'
-                        ? (r.triggeredBy ?? '—')
-                        : (
-                          <span className="flex items-center gap-1.5">
-                            {r.narrationModel}
-                            {r.gitSha && (
-                              <span className="rounded border bg-muted px-1.5 py-0.5 font-mono text-[11px]">{r.gitSha.slice(0, 7)}</span>
-                            )}
-                          </span>
-                        )}
+                      {r.source === 'job' ? (r.triggeredBy ?? '—') : <span className="text-muted-foreground">—</span>}
                     </TableCell>
                     <TableCell className="text-right text-xs text-muted-foreground" title={fmtDate(r.createdAt)}>
                       {timeAgo(r.createdAt)}
@@ -298,7 +320,7 @@ export function RunsView() {
               })}
               {!isPending && filtered.length === 0 && (
                 <TableRow className="hover:bg-transparent">
-                  <TableCell colSpan={6}>
+                  <TableCell colSpan={7}>
                     <EmptyState icon={Search}>No runs match these filters.</EmptyState>
                   </TableCell>
                 </TableRow>
@@ -327,17 +349,17 @@ function RunResultCell({ r }: { r: RunEvent }) {
       </Badge>
     )
   }
+  // eval: `pass` is just `withheld === 0`. A run that gated some clips but SHIPPED the rest is a
+  // PARTIAL success (amber), not a failure — only a run that shipped NOTHING is a true fail (red).
+  const withheld = r.withheld ?? 0
+  if (withheld === 0) return <Badge variant="success">pass</Badge>
+  const partial = isPartial(r)
   return (
     <span className="flex items-center gap-2">
-      <Badge variant={r.pass ? 'success' : 'destructive'}>{r.pass ? 'pass' : 'fail'}</Badge>
-      {r.grounding != null && (
-        <span className={cn('font-mono text-xs', r.grounding < 0.75 ? 'text-destructive' : 'text-muted-foreground')}>
-          g {r.grounding.toFixed(2)}
-        </span>
-      )}
-      {r.withheld != null && r.withheld > 0 && (
-        <Badge variant="warning">{r.withheld} withheld</Badge>
-      )}
+      <Badge variant={partial ? 'warning' : 'destructive'}>{partial ? 'partial' : 'fail'}</Badge>
+      <span className="font-mono text-xs text-muted-foreground">
+        {r.shipped != null && r.total != null ? `${r.shipped}/${r.total} · ` : ''}{withheld} withheld
+      </span>
     </span>
   )
 }
