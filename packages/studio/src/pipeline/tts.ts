@@ -23,6 +23,7 @@ import {
 import { GEMINI_PCM, toWavWithDuration } from './wav'
 import { keepFirstTake, measureTailCollapse, TAIL_COLLAPSE_DB } from './tail'
 import { normalizeAndEncode } from './loudnorm'
+import { pronunciationClause } from './pronunciation'
 
 const SYNTHESIZE_URL = 'https://texttospeech.googleapis.com/v1/text:synthesize'
 const CLOUD_PLATFORM_SCOPE = 'https://www.googleapis.com/auth/cloud-platform'
@@ -48,8 +49,11 @@ export function buildSynthesisRequest(
   style: string = SKIPPER_TTS_STYLE_PROMPT,
 ) {
   return {
-    // input.prompt sets DELIVERY (the persona's words are already in input.text).
-    input: { text, prompt: style },
+    // input.prompt sets DELIVERY (the persona's words are already in input.text). A per-clip
+    // pronunciation guide rides here too — Gemini-TTS has no SSML/<phoneme>, so a name the voice
+    // mis-says is fixed via the prompt (pronunciation.ts); '' when the clip says no lexicon name,
+    // so the prompt stays byte-identical for the common case.
+    input: { text, prompt: style + pronunciationClause(text) },
     voice: { languageCode: TTS_LANGUAGE_CODE, name: voiceName, modelName: TTS_MODEL },
     audioConfig: { audioEncoding: TTS_AUDIO_ENCODING, sampleRateHertz: TTS_SAMPLE_RATE_HZ },
   }
