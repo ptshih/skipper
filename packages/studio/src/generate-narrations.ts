@@ -63,6 +63,7 @@ import { buildGroundingWell, evaluateGrounding } from './eval/grounding'
 import { evaluateTts } from './eval/tts'
 import { evaluateDiversity } from './eval/diversity'
 import { evaluateLaterality } from './eval/laterality'
+import { evaluatePacing } from './eval/pacing'
 import { optimize } from './eval/optimize'
 import { buildScorecard } from './eval/scorecard'
 import { DIMENSION_KIND, type StopEval } from './eval/types'
@@ -314,6 +315,7 @@ async function main(): Promise<void> {
         evaluateTts({ seq, script }),
         ...evaluateDiversity([{ seq, stopType: 'story', script }]),
         evaluateLaterality({ seq, script }),
+        evaluatePacing({ seq, script, targetSeconds: band.targetSeconds, maxSeconds: band.maxSeconds }),
       ]
       if (GROUNDING_EVAL())
         evals.push(
