@@ -5,29 +5,32 @@
 // Encoding here (rather than requesting Cloud TTS's fixed 32k MP3) avoids a SECOND lossy
 // generation and lets us choose codec/bitrate — see docs/decisions/audio-compression-spike.md.
 //
-// LEVELING: Gemini-TTS takes are non-deterministic in LOUDNESS — measured 2026-06-10 over all
-// 30 live clips (founder-ear-confirmed): body means ranged −26.7 → −19.5 dB (a 7.2 dB
-// stop-to-stop jump), and the whole mix read ~20–25% quiet vs a Spotify reference. So every
-// shipped take runs an ffmpeg two-pass LINEAR loudnorm to the EBU R128 target in models.ts
-// (−14 LUFS integrated, −1.0 dBTP ceiling):
-//   pass 1 MEASURES the take's integrated loudness / true-peak / range,
-//   pass 2 applies a single LINEAR gain (linear=true) to hit the target exactly, fused with
-//          the AAC encode.
-// Linear (not dynamic) is the point: it scales the whole clip uniformly, so every clip lands at
-// the same integrated level (killing the spread) WITHOUT touching speech dynamics — and because
-// it scales tail and body equally, it can never reintroduce the tail-collapse the retake just
-// fixed. The −1.0 dBTP ceiling is why this isn't a flat `volume=+NdB`: bringing a −26 dB clip up
-// to −14 could clip without true-peak limiting.
+// LEVELING — a true-peak LIMITER, then a single-pass dynamic LOUDNORM (the MASTERING_CHAIN):
+//   Gemini-TTS takes are quiet (~−19 to −22 LUFS) but PEAK-BOUND — they already crest at ~0 dBFS,
+//   so there's no headroom to gain up. A plain loudnorm to −14 therefore UNDERSHOOTS, inconsistently
+//   (measured −14.7 … −15.5 across clips). The fix (validated on 3 clips spanning LRA 4→10, 2026-06-20)
+//   is the broadcast move: an `alimiter` pushes the body up and brick-walls the transient peaks,
+//   creating the headroom; then `loudnorm` normalizes to −14 LUFS. It lands a CONSISTENT ~−14.1…−14.5.
 //
-// ffmpeg is REQUIRED (it IS the encoder, not just QA): a missing/failed encode THROWS rather
-// than ship a mislabeled clip. The Cloud Run image carries ffmpeg (packages/studio/Dockerfile);
-// a bare local box without it must install it. Only the LEVELING sub-step degrades gracefully —
-// if pass-1 analysis can't be parsed, we still encode to AAC, just without the linear gain.
+//   SINGLE-PASS (dynamic loudnorm), not the old two-pass linear: with a stateful filter (the limiter)
+//   in front, the two-pass design breaks — pass 1 measures a different signal than pass 2 gains, so its
+//   true-peak limit is computed against the wrong peaks and the AAC encode overshoots into CLIPPING
+//   (that bug shipped once, 2026-06-19→20, then was reverted). A single pass has no measure/apply gap.
+//
+//   PRE-ENCODE TP = −2 dBTP, not −1: the 48 kbps AAC encoder adds inter-sample overshoot (up to ~+2 dB),
+//   so a −1 pre-encode ceiling clips post-encode. −2 leaves the headroom; the final .m4a lands ~−1.5 dBTP,
+//   under the AUDIO_LOUDNESS −1.0 delivery ceiling. The limiter only touches transient peaks, so it does
+//   not reintroduce tail-collapse (the quiet tail sits far below the brick-wall). See docs/decisions/
+//   audio-loudness-spec.md.
+//
+// ffmpeg is REQUIRED (it IS the encoder, not just QA): a missing/failed encode THROWS rather than ship
+// a mislabeled clip. The Cloud Run image carries ffmpeg (packages/studio/Dockerfile); a bare local box
+// without it must install it. Leveling is part of the single encode pass — not a separable, skippable step.
 
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { readFile, unlink, writeFile } from 'node:fs/promises'
-import { LOUDNORM_RANGE_LU, LOUDNORM_TARGET_LUFS, LOUDNORM_TRUE_PEAK_DB } from '../models'
+import { LOUDNORM_RANGE_LU, LOUDNORM_TARGET_LUFS } from '../models'
 
 /** Output AAC bitrate — AAC-LC@48k: ~8× smaller than the LINEAR16 WAV, clearly better than
  *  MP3@32k at ~the same size, and iOS AVPlayer (expo-audio) plays it. */
@@ -36,80 +39,34 @@ const AAC_BITRATE = '48k'
  *  so without this the muxed file would inherit 192 kHz). */
 const OUT_SAMPLE_RATE = '24000'
 
-/** The first-pass measurements loudnorm prints as JSON (the fields pass 2 feeds back). */
-interface LoudnormStats {
-  input_i: string
-  input_tp: string
-  input_lra: string
-  input_thresh: string
-  target_offset: string
-}
+// --- The mastering chain: true-peak limiter (makes headroom) → single-pass dynamic loudnorm (hits −14).
+/** `alimiter` input gain — ~+9.5 dB pushed into the brick-wall. This is what makes the clip LOUDER:
+ *  it raises the body while the limiter holds the peaks. Higher = louder + denser; tuned (2026-06-20)
+ *  so −14 lands consistently across clips without crushing dynamics (LRA cost ~1 LU). */
+const LIMITER_INPUT_GAIN = 3
+/** `alimiter` true-peak ceiling (linear, ≈ −2.25 dBFS) — the brick-wall the input gain limits into. */
+const LIMITER_CEILING = 0.794
+/** loudnorm PRE-ENCODE true-peak ceiling (dBTP). −2 (not the −1 delivery ceiling) leaves headroom for
+ *  AAC inter-sample overshoot so the final .m4a lands ~−1.5 dBTP — under AUDIO_LOUDNESS's −1.0. */
+const PRE_ENCODE_TP_DBTP = -2.0
 
-/** The shared filter spec — same target both passes; pass 1 adds print_format=json. */
-function loudnormFilter(measured?: LoudnormStats): string {
-  const base = `loudnorm=I=${LOUDNORM_TARGET_LUFS}:TP=${LOUDNORM_TRUE_PEAK_DB}:LRA=${LOUDNORM_RANGE_LU}`
-  if (!measured) return `${base}:print_format=json`
+/** The full `-af` mastering filter: limiter, then single-pass dynamic loudnorm to the spec.
+ *  Exported for tests (guards the limiter-before-loudnorm order + the params). */
+export function masteringChain(): string {
   return (
-    `${base}:measured_I=${measured.input_i}:measured_TP=${measured.input_tp}` +
-    `:measured_LRA=${measured.input_lra}:measured_thresh=${measured.input_thresh}` +
-    `:offset=${measured.target_offset}:linear=true:print_format=summary`
+    `alimiter=level_in=${LIMITER_INPUT_GAIN}:limit=${LIMITER_CEILING},` +
+    `loudnorm=I=${LOUDNORM_TARGET_LUFS}:TP=${PRE_ENCODE_TP_DBTP}:LRA=${LOUDNORM_RANGE_LU}`
   )
 }
 
-/** Pull loudnorm's JSON block out of ffmpeg stderr. It's the only JSON ffmpeg emits, so a
- *  greedy brace match is safe. Returns null if absent/unparseable. Exported for tests. */
-export function parseLoudnormStats(ffmpegStderr: string): LoudnormStats | null {
-  const m = /\{[\s\S]*\}/.exec(ffmpegStderr)
-  if (!m) return null
-  try {
-    const j = JSON.parse(m[0]) as Partial<LoudnormStats>
-    if (
-      j.input_i == null ||
-      j.input_tp == null ||
-      j.input_lra == null ||
-      j.input_thresh == null ||
-      j.target_offset == null
-    )
-      return null
-    return j as LoudnormStats
-  } catch {
-    return null
-  }
-}
-
-// Warn ONCE per process when the loudnorm ANALYSIS can't be parsed (clips still encode, just
-// un-leveled) — a full run masters dozens of clips and a per-clip warning would drown the log.
-let warnedNoStats = false
-const warnNoStatsOnce = (reason: string): void => {
-  if (warnedNoStats) return
-  warnedNoStats = true
-  console.warn(`  loudnorm analysis skipped (${reason}) — clips encode to AAC un-leveled this run.`)
-}
-
-/** Pass 1: measure. Reads the clip, runs loudnorm in analysis mode, returns the stats JSON
- *  (null when ffmpeg is absent, a pass fails, or the JSON can't be parsed). */
-async function measure(file: string): Promise<LoudnormStats | null> {
-  try {
-    const proc = Bun.spawn(
-      ['ffmpeg', '-hide_banner', '-nostats', '-i', file, '-af', loudnormFilter(), '-f', 'null', '-'],
-      { stdout: 'ignore', stderr: 'pipe' },
-    )
-    const stderr = await new Response(proc.stderr).text()
-    if ((await proc.exited) !== 0) return null
-    return parseLoudnormStats(stderr)
-  } catch {
-    return null // ffmpeg absent — the mandatory encode below will throw the clear error
-  }
-}
-
-/** Pass 2: encode to AAC@48k .m4a, applying the measured linear loudnorm gain when available
- *  (un-leveled encode when `stats` is null). Returns false on any ffmpeg failure/absence. */
-async function encode(file: string, out: string, stats: LoudnormStats | null): Promise<boolean> {
+/** Master + encode in ONE ffmpeg pass: the limiter→loudnorm chain fused with the AAC encode.
+ *  Returns false on any ffmpeg failure/absence (the caller turns that into a hard throw). */
+async function encode(file: string, out: string): Promise<boolean> {
   try {
     const proc = Bun.spawn(
       [
         'ffmpeg', '-hide_banner', '-nostats', '-y', '-i', file,
-        ...(stats ? ['-af', loudnormFilter(stats)] : []),
+        '-af', masteringChain(),
         '-ar', OUT_SAMPLE_RATE, '-ac', '1', '-c:a', 'aac', '-b:a', AAC_BITRATE,
         '-movflags', '+faststart', out,
       ],
@@ -123,14 +80,13 @@ async function encode(file: string, out: string, stats: LoudnormStats | null): P
 }
 
 /**
- * Master one shipped take (lossless WAV) to the final AAC `.m4a` clip: a two-pass linear
- * loudnorm to LOUDNORM_TARGET_LUFS fused with the single AAC encode. Returns the .m4a bytes;
- * the caller keeps the take's EXACT PCM duration (a linear gain + AAC encode preserve content
- * length, and the .m4a edit list skips encoder priming, so perceived duration matches).
+ * Master one shipped take (lossless WAV) to the final AAC `.m4a` clip: the limiter→loudnorm
+ * mastering chain (MASTERING_CHAIN) fused with the single AAC encode. Returns the .m4a bytes.
+ * The take's PCM duration is preserved to within the encoder's edit-list priming, so the caller's
+ * stored duration still matches.
  *
- * THROWS if ffmpeg can't produce the clip (absent or failed encode) — ffmpeg is the encoder on
- * this path, not optional QA. Only the LEVELING degrades: if pass-1 stats can't be parsed we
- * still encode, just un-leveled (warned once).
+ * THROWS if ffmpeg can't produce the clip (absent or failed encode) — ffmpeg is the encoder on this
+ * path, not optional QA. Leveling is part of the same pass, so it is not separately skippable.
  */
 export async function normalizeAndEncode(audio: Uint8Array): Promise<Uint8Array> {
   const id = crypto.randomUUID()
@@ -138,9 +94,7 @@ export async function normalizeAndEncode(audio: Uint8Array): Promise<Uint8Array>
   const outFile = join(tmpdir(), `skipper-master-out-${id}.m4a`)
   try {
     await writeFile(inFile, audio)
-    const stats = await measure(inFile)
-    if (!stats) warnNoStatsOnce('ffmpeg analysis failed or produced no loudnorm JSON')
-    if (!(await encode(inFile, outFile, stats))) {
+    if (!(await encode(inFile, outFile))) {
       throw new Error(
         'ffmpeg AAC encode failed — ffmpeg is REQUIRED for the LINEAR16→AAC clip path. ' +
           'Install ffmpeg (the Cloud Run image already carries it).',

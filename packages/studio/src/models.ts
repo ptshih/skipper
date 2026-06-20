@@ -131,21 +131,17 @@ export const TTS_LANGUAGE_CODE = 'en-US' as const
 // LOUDNESS NORMALIZATION (TODO.md "TTS audio QA" #2 — clip-to-clip level spread + overall
 // level vs Spotify). Gemini-TTS takes are non-deterministic in LEVEL: measured body means
 // ranged −26.7 → −19.5 dB across 30 live clips (a 7.2 dB stop-to-stop jump), and the whole
-// mix read ~20–25% quiet vs a Spotify reference. Fix = an ffmpeg two-pass LINEAR loudnorm
-// on every shipped take (pipeline/loudnorm.ts), targeting the shared AUDIO_LOUDNESS spec
-// (@skipper/shared — the SINGLE source of truth, applied to narration AND the drive-music bed):
-//   I  (integrated loudness) = −14 LUFS — Spotify's normalization target; brings the quiet
-//      clips up and lands every clip at the SAME integrated level, collapsing the spread.
-//   TP (true-peak ceiling)   = −1.0 dBTP — headroom so the gain-up can't clip (why we use
-//      loudnorm, not a flat `volume=+NdB`). Raised from −1.5 (founder, 2026-06-19) to fix "still
-//      a bit too quiet": at −1.5 the ceiling BOUND and the linear gain undershot the −14 target —
-//      a measured clip landed −14.9 LUFS (peaks already −0.77 dBTP post-AAC), shipping ~1 dB shy.
-//      −1.0 is a standard streaming TP ceiling and recovers that headroom so loudnorm reaches −14.
-// TUNABLE in ONE place: edit AUDIO_LOUDNESS in @skipper/shared and re-master BOTH surfaces (this
-// pipeline regenerates; the drive-music bed re-encodes per apps/mobile/assets/audio/SOURCE.md).
-// Spec + history: docs/decisions/audio-loudness-spec.md.
+// mix read ~20–25% quiet vs a Spotify reference. They're also PEAK-BOUND (crest at ~0 dBFS),
+// so a plain loudnorm UNDERSHOOTS the target. Fix = a true-peak limiter → single-pass loudnorm
+// MASTERING CHAIN on every shipped take (pipeline/loudnorm.ts — that file owns the limiter +
+// pre-encode-TP params; this constant supplies the shared integrated target):
+//   I  (integrated loudness) = −14 LUFS — Spotify's normalization target; the limiter makes the
+//      headroom so loudnorm lands every clip at a CONSISTENT ~−14 (the spread + undershoot fix).
+// Single-sourced in AUDIO_LOUDNESS (@skipper/shared), applied to narration AND the drive-music bed.
+// The true-peak ceiling is NO LONGER a single shared number: the narration master uses a −2 dBTP
+// PRE-ENCODE ceiling (AAC-overshoot headroom; final ~−1.5) — see loudnorm.ts + docs/decisions/
+// audio-loudness-spec.md (full history incl. the reverted compressor-before-two-pass clip bug).
 export const LOUDNORM_TARGET_LUFS = AUDIO_LOUDNESS.integratedLufs
-export const LOUDNORM_TRUE_PEAK_DB = AUDIO_LOUDNESS.truePeakDbtp
 // LRA (loudness range) is held at the loudnorm default — speech is already low-dynamic, so
 // this rarely binds; it stays a constant rather than a knob.
 export const LOUDNORM_RANGE_LU = AUDIO_LOUDNESS.rangeLu

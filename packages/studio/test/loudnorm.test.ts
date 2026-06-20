@@ -1,47 +1,34 @@
 import { describe, expect, test } from 'bun:test'
-import { parseLoudnormStats } from '../src/pipeline/loudnorm'
+import { masteringChain } from '../src/pipeline/loudnorm'
 
-// A representative loudnorm pass-1 JSON block, as ffmpeg prints it on stderr amid banner
-// and progress noise (print_format=json). The five fields pass 2 feeds back are input_i /
-// input_tp / input_lra / input_thresh / target_offset.
-const REAL_STDERR =
-  'ffmpeg version 8.1.1 Copyright (c) 2000-2026\n' +
-  '[Parsed_loudnorm_0 @ 0x600003a8] \n' +
-  '{\n' +
-  '\t"input_i" : "-48.55",\n' +
-  '\t"input_tp" : "-44.36",\n' +
-  '\t"input_lra" : "0.00",\n' +
-  '\t"input_thresh" : "-58.71",\n' +
-  '\t"output_i" : "-14.45",\n' +
-  '\t"output_tp" : "-10.27",\n' +
-  '\t"output_lra" : "0.00",\n' +
-  '\t"output_thresh" : "-24.61",\n' +
-  '\t"normalization_type" : "dynamic",\n' +
-  '\t"target_offset" : "0.45"\n' +
-  '}\n'
-
-describe('parseLoudnormStats — ffmpeg loudnorm JSON', () => {
-  test('extracts the five measured fields from noisy stderr', () => {
-    const stats = parseLoudnormStats(REAL_STDERR)
-    expect(stats).not.toBeNull()
-    expect(stats!.input_i).toBe('-48.55')
-    expect(stats!.input_tp).toBe('-44.36')
-    expect(stats!.input_lra).toBe('0.00')
-    expect(stats!.input_thresh).toBe('-58.71')
-    expect(stats!.target_offset).toBe('0.45')
+// The mastering chain is a true-peak LIMITER (which makes the headroom) followed by a SINGLE-PASS
+// dynamic loudnorm (which hits −14). These guard the shape that matters — the limiter must come
+// FIRST, and there must be no two-pass measured_* handoff (the stateful-filter-before-two-pass bug
+// that shipped a clipping clip, 2026-06-19→20, then was reverted).
+describe('masteringChain — limiter → single-pass loudnorm to the spec', () => {
+  test('the true-peak limiter precedes loudnorm (headroom must be made before the gain)', () => {
+    const c = masteringChain()
+    expect(c).toContain('alimiter')
+    expect(c).toContain('loudnorm')
+    expect(c.indexOf('alimiter')).toBeLessThan(c.indexOf('loudnorm'))
   })
 
-  test('returns null when no JSON block is present', () => {
-    expect(parseLoudnormStats('ffmpeg error: no such file\n')).toBeNull()
+  test('the limiter pushes gain into a brick-wall ceiling (that is what makes it louder)', () => {
+    const c = masteringChain()
+    expect(c).toMatch(/alimiter=level_in=\d/) // input gain into the limiter
+    expect(c).toMatch(/limit=0?\.\d/) // a true-peak ceiling below 0 dBFS
   })
 
-  test('returns null when a required field is missing', () => {
-    const missing =
-      '{\n\t"input_i" : "-20.0",\n\t"input_tp" : "-3.0",\n\t"target_offset" : "0.1"\n}\n'
-    expect(parseLoudnormStats(missing)).toBeNull()
+  test('loudnorm targets −14 LUFS with a −2 dBTP PRE-ENCODE ceiling (AAC-overshoot headroom)', () => {
+    const c = masteringChain()
+    expect(c).toContain('I=-14')
+    expect(c).toContain('TP=-2')
   })
 
-  test('returns null on malformed JSON', () => {
-    expect(parseLoudnormStats('{ "input_i": not-valid }')).toBeNull()
+  test('SINGLE-PASS — no two-pass measured_* / linear handoff (the clip bug it replaced)', () => {
+    const c = masteringChain()
+    expect(c).not.toContain('measured_I')
+    expect(c).not.toContain('linear=true')
+    expect(c).not.toContain('print_format')
   })
 })
