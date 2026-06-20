@@ -862,7 +862,7 @@ function NarrationTab({ poiId, hasNarration }: { poiId: string; hasNarration: bo
 
   const resynthMut = useMutation({
     mutationFn: () => api.createJob({ kind: 'resynth_narration', poiId, apply: true, confirm: true }),
-    onSuccess: ({ job }) => { void qc.invalidateQueries({ queryKey: ['runs'] }); navigate({ to: '/runs', hash: job.id }) },
+    onSuccess: ({ job }) => { void qc.invalidateQueries({ queryKey: ['runs'] }); navigate({ to: '/runs', search: { run: job.id } }) },
   })
   async function handleResynth() {
     if (!(await confirm({
@@ -879,7 +879,7 @@ function NarrationTab({ poiId, hasNarration }: { poiId: string; hasNarration: bo
   const regenMut = useMutation({
     mutationFn: () =>
       api.createJob({ kind: 'generate_narrations', includeIds: [poiId], force: true, apply: true, confirm: true }),
-    onSuccess: ({ job }) => { void qc.invalidateQueries({ queryKey: ['runs'] }); navigate({ to: '/runs', hash: job.id }) },
+    onSuccess: ({ job }) => { void qc.invalidateQueries({ queryKey: ['runs'] }); navigate({ to: '/runs', search: { run: job.id } }) },
   })
   async function handleRegenerate() {
     if (!(await confirm({

@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { getRouteApi, useNavigate } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Activity, CircleX,
@@ -52,9 +53,13 @@ function PulseDot() {
 
 /* ─── main view ─── */
 
+const runsRoute = getRouteApi('/runs')
+
 export function RunsView() {
   const qc = useQueryClient()
   const confirm = useConfirm()
+  const navigate = useNavigate()
+  const search = runsRoute.useSearch()
   const [src, setSrc] = useState<'all' | 'job' | 'eval'>('all')
   const [kindFilter, setKindFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<string>('all')
@@ -67,6 +72,16 @@ export function RunsView() {
     queryFn: async () => (await api.runs()).runs,
     refetchInterval: 15000,
   })
+
+  // Deep-link: ?run=<id> opens that run's drawer once the list resolves, then strips the param —
+  // so re-synth/regenerate's "jump to the run" works, and a run is shareable/bookmarkable.
+  useEffect(() => {
+    if (!search.run) return
+    const r = runs.find((x) => x.id === search.run)
+    if (!r) return
+    setDrawerRun(r)
+    navigate({ to: '/runs', search: (prev) => ({ ...prev, run: undefined }), replace: true })
+  }, [search.run, runs, navigate])
 
   // The one homeless global op: delete R2 clips no track/frame references. Spends nothing
   // but DELETES bytes, so gate behind a confirm; the launched job is watched on the timeline.

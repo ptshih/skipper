@@ -13,7 +13,17 @@ const toRuns = () => {
 }
 
 const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', beforeLoad: toRuns })
-const runsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/runs', component: RunsView })
+export interface RunsSearch {
+  /** Deep-link (one-shot, stripped after consuming): open this run's drawer on mount. */
+  run?: string
+}
+const runsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/runs',
+  component: RunsView,
+  validateSearch: (search: Record<string, unknown>): RunsSearch =>
+    typeof search.run === 'string' && search.run ? { run: search.run } : {},
+})
 const regionsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/regions', component: RegionsView })
 const referenceRoute = createRoute({ getParentRoute: () => rootRoute, path: '/reference', component: ReferenceView })
 export type PoiAction = 'discover' | 'generate' | 'rescore'

@@ -13,7 +13,6 @@
 //   POST /admin/regions           -> create a new region
 //   PATCH /admin/regions/:slug    -> update displayName / bbox
 //   POST /admin/regions/bbox-lookup -> LLM + Nominatim parallel bbox lookup by place name
-//   GET  /admin/jobs              -> recent studio_jobs (operational record; powers job polling)
 //   GET  /admin/runs              -> unified Runs timeline: studio_jobs + orphan eval_runs
 //   GET  /admin/jobs/:id          -> one run (reconciled against its Cloud Run execution) + logs URL
 //   POST /admin/jobs              -> trigger an op as a skipper-studio Job  (jobs.ts — Phase 3)
@@ -195,12 +194,6 @@ app.post('/admin/regions/bbox-lookup', async (c) => {
     osm: osmResult.status === 'fulfilled' ? osmResult.value : null,
     osmError: osmResult.status === 'rejected' ? String(osmResult.reason) : null,
   })
-})
-
-// The Runs view — recent studio_jobs (operational record).
-app.get('/admin/jobs', async (c) => {
-  const jobs = await db.select().from(studioJobs).orderBy(desc(studioJobs.createdAt)).limit(100)
-  return c.json({ jobs })
 })
 
 // The Runs view — a unified timeline merging the operational studio_jobs with the historical

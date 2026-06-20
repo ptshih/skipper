@@ -231,7 +231,6 @@ export const api = {
   // OPEN route (not under /admin) — the boot/interval health probe. `?deep=1` adds a DB ping.
   health: () => req<HealthStatus>('/health?deep=1'),
   regions: () => req<{ regions: Region[] }>('/admin/regions'),
-  jobs: () => req<{ jobs: StudioJob[] }>('/admin/jobs'),
   runs: () => req<{ runs: RunEvent[] }>('/admin/runs'),
   runScores: (id: string) => req<EvalRunReport>(`/admin/runs/${id}/scores`),
   job: (id: string) => req<{ job: StudioJob; logsUrl: string | null }>(`/admin/jobs/${id}`),

@@ -260,6 +260,10 @@ function BboxLookup({ defaultQuery, onUse }: { defaultQuery: string; onUse: (bbo
         </Button>
       </div>
 
+      <p className="mt-1.5 text-[11px] text-muted-foreground">
+        Search runs a Claude estimate (a small paid AI call) alongside a free OpenStreetMap lookup.
+      </p>
+
       {lookupMut.error && (
         <div className="mt-2 text-xs text-destructive">{errMsg(lookupMut.error)}</div>
       )}
