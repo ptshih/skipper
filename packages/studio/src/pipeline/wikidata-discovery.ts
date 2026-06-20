@@ -111,7 +111,7 @@ export function corridorGateM(types: string[]): number {
  * stripped — a bare "...Park" is usually the real name (Tahoe Park, William B Layton Park) and a
  * leading word that is part of the name ("Kings Beach" State Rec Area) must survive, so it is left
  * intact to avoid over-collapse. (Co-located twins like the Sand-Harbor bay vs its rec-area are
- * caught by the spatial dedup in select.ts instead.)
+ * caught by the spatial dedup at SELECTION time — drive-select / roam in @skipper/engine — not here.)
  */
 export function normName(label: string): string {
   return label

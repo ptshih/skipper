@@ -4,7 +4,7 @@
 // ready-gate; its segments/tracks/tour_frames tables were dropped in migration 0009) was removed in
 // the V1→V2 migration; roam writes its 1:1 narration directly
 // (generate-narrations.ts upserts `narrations`). What survives here is the SHARED facts layer every
-// writer reads: the `pois` upsert (deduped on (source, source_id); stamps facts_hash/
+// writer reads: the `pois` upsert (deduped on the Wikidata QID `pois.qid`; stamps facts_hash/
 // facts_fetched_at) + the grounding fingerprint helpers (storyFactsHash / hashFacts) that key the
 // staleness contract, used by the corpus tools (discover-pois / enrich-pois / refetch-poi)
 // and the roam studio pipeline.

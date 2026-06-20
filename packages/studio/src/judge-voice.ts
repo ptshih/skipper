@@ -1,6 +1,10 @@
 // Voice & charm harness — the "is the persona actually charming?" check.
 //
-// "THE PERSONA IS THE PRODUCT," yet the Skipper's CHARM (writing + the Algenib TTS
+// SPEND NOTE: this is an analysis-only report CLI (NOT in the admin job registry; touches no live
+// data/R2/corpus) — but it DOES spend one Opus charm-judge call per stop whenever run, so it has no
+// --apply gate by design (running it IS the request). Don't fold it into the gated SOP CLIs.
+//
+// "THE PERSONA IS THE PRODUCT," yet the Skipper's CHARM (writing + the Charon TTS
 // voice) has never been judged. This reads a narration-run JSON artifact (a dumped
 // generation result — stops with scripts + audioUrls) and produces ONE markdown report
 // with two verdicts:
@@ -58,7 +62,7 @@ function buildReport(r: VoiceArtifact, v: CharmVerdict): string {
   out.push('')
   out.push('**Your call — the VOICE (your ears):**  ⬜ ship  ⬜ tune  ⬜ rework')
   out.push(
-    '> The judge graded the WORDS. You grade the Algenib VOICE: play each clip and ask — warm corny human, or an AI reading Wikipedia with a tour-guide badge pinned on? Do the jokes get room to breathe? Where does it sound robotic / rushed / flat? Rate each clip 1-5 and fill the overall above.',
+    '> The judge graded the WORDS. You grade the Charon VOICE: play each clip and ask — warm corny human, or an AI reading Wikipedia with a tour-guide badge pinned on? Do the jokes get room to breathe? Where does it sound robotic / rushed / flat? Rate each clip 1-5 and fill the overall above.',
   )
   out.push('')
   out.push('## Stops')

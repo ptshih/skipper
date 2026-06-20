@@ -171,27 +171,13 @@ export const PANEL_REGEN_CONCURRENCY = (): number =>
 // (docs/decisions/automated-grounding-gate.md); grounding now blocks shipping, not just informs.
 /** Grounding eval (the Opus gate) is on by default; set SKIPPER_GROUNDING_EVAL=off to skip it. */
 export const GROUNDING_EVAL = (): boolean => process.env.SKIPPER_GROUNDING_EVAL !== 'off'
-/** Tour-level passes of the FREE panel (tts + diversity) → regen loop. Each pass re-lints the
- * assembled set (fixing stop A can clear or create a cross-stop finding on stop B) and is a
- * no-op once clean. 4 matches the old LINT_ROUNDS budget — long-form stops can take several
- * regens to clear stacked findings. */
-export const EVAL_MAX_PASSES = 4
 /** Max targeted re-narrations for ONE stop that failed the grounding pass. Kept small: each
  * round costs an Opus regen + an Opus re-audit, and the ungrounded-claim avoid-notes land
- * the fix in round 1 almost always. */
+ * the fix in round 1 almost always. This per-clip bound (via `optimize(maxRounds)`) PLUS the
+ * `--max-cost` gate ARE the cost guardrail. (The old run-wide EVAL_MAX_PASSES / EVAL_REGEN_BUDGET /
+ * GROUNDING_REGEN_BUDGET constants were removed 2026-06-20 — dead, zero consumers, leftover from the
+ * retired tour-level lint-rounds design; they claimed to be "the guardrail" but bounded nothing.) */
 export const GROUNDING_REGEN_MAX_ROUNDS = 2
-/** HARD cap on re-narration ATTEMPTS per tour for the FREE-dim passes + the closer judge.
- * The cost guardrail the eval loop is required to carry (see TODO.md): without it, worst-case
- * spend is passes × stops Opus calls. When exhausted, every stop keeps its best take so far
- * (the accept-if-not-worse guarantee makes that safe) and the cap is logged. Typical observed
- * regen counts are 1–5 per tour; 24 is roomy, not open-ended. */
-export const EVAL_REGEN_BUDGET = 24
-/** SEPARATE hard cap on re-narration attempts for the GROUNDING pass, so a tic-heavy tour
- * that burns the panel budget above can never starve the crown-jewel dimension to zero
- * regens. Each attempt also costs one Opus re-audit. 12 = six failing stops at the full
- * GROUNDING_REGEN_MAX_ROUNDS (the first live audit of a 14-stop tour flagged EIGHT, so 8
- * proved tight); beyond the cap the verdicts just land on the scorecard for human review. */
-export const GROUNDING_REGEN_BUDGET = 12
 
 // --- POI discovery ----------------------------------------------------------
 

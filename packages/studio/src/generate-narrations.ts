@@ -40,7 +40,7 @@ import { ensurePoiOverridesLoaded } from './pipeline/poi-overrides'
 import { regionLabel } from './pipeline/geo'
 import { narrateStop } from './pipeline/narrate'
 import { resolveStoryGrounding } from './pipeline/select'
-import { synthesizeWithTailRetake } from './pipeline/tts'
+import { synthesizeWithTailRetake, type TailOutcome } from './pipeline/tts'
 import { narrationClipKey, uploadAudio } from './pipeline/storage'
 import { storyFactsHash } from './pipeline/persist'
 import { wikiUrlForPageId } from './pipeline/wikipedia'
@@ -56,11 +56,11 @@ import {
   TTS_CONCURRENCY,
   WORDS_PER_SECOND,
 } from './config'
-import { estimateTtsUsd, llmSpendLines, llmSpentUsd } from './pipeline/spend'
+import { estimateTtsUsd, llmSpendLines, llmSpentUsd, TTS_ESTIMATE_SAFETY } from './pipeline/spend'
 import { STORY_TASTE_DENYLIST, type DeliveryRegister } from '@skipper/shared'
 import { NARRATION_MODEL, JUDGMENT_MODEL, ttsStyleFor, lengthForRegister } from './models'
 import { buildGroundingWell, evaluateGrounding } from './eval/grounding'
-import { evaluateTts } from './eval/tts'
+import { applyTailOutcomes, evaluateTts } from './eval/tts'
 import { evaluateDiversity } from './eval/diversity'
 import { evaluateLaterality } from './eval/laterality'
 import { evaluatePacing } from './eval/pacing'
@@ -254,7 +254,7 @@ async function main(): Promise<void> {
 
   // Cost ceiling: abort BEFORE any narration/TTS if the estimate exceeds --max-cost. A roam run
   // covers a whole corpus, so an unbounded run (no --limit) can balloon — this is the hard stop.
-  const estSpendUsd = (scriptsOnly ? 0 : tts.usd) + queue.length * llmUsdPerClip
+  const estSpendUsd = (scriptsOnly ? 0 : tts.usd * TTS_ESTIMATE_SAFETY) + queue.length * llmUsdPerClip
   if (estSpendUsd > maxCostUsd) {
     // THROW (not return): runJob's catch settles the studio_jobs row as FAILED. A bare `return`
     // would let runJob record status 'succeeded' — indistinguishable from a clean run that did the work.
@@ -381,12 +381,12 @@ async function main(): Promise<void> {
       { poiId: g.c.poiId, qid: g.c.qid, name: g.c.name, withheld: !g.shipped, script: g.shipped ? null : g.script },
     ]),
   )
-  const scorecard = buildScorecard({
-    slug: runRegion,
-    runName: 'generate_narrations',
-    evaluatedAt: new Date().toISOString(),
-    stops: gated.flatMap((g) => g.evals),
-  })
+  const baseStops = gated.flatMap((g) => g.evals)
+  // The shipped clips' tail-collapse outcomes (seq → outcome), filled by the synth loop below. Folded
+  // into the tts dimension at record time so a clip that ships a STILL-collapsed closer records as a
+  // FAILED tts row (the human-review flag) instead of a silent pass. Empty on the dry/abort paths (no
+  // synthesis ran — the pre-synth script verdict stands), where applyTailOutcomes is a no-op.
+  const tailBySeq = new Map<number, TailOutcome | null>()
   const recordRun = (dryRun: boolean): Promise<unknown> =>
     recordEvalRun({
       region: runRegion,
@@ -394,7 +394,12 @@ async function main(): Promise<void> {
       dryRun,
       narrationModel: NARRATION_MODEL,
       judgeModel: GROUNDING_EVAL() ? JUDGMENT_MODEL : null,
-      scorecard,
+      scorecard: buildScorecard({
+        slug: runRegion,
+        runName: 'generate_narrations',
+        evaluatedAt: new Date().toISOString(),
+        stops: applyTailOutcomes(baseStops, tailBySeq),
+      }),
       total: gated.length,
       shipped: shippedClips.length,
       withheld: withheldClips.length,
@@ -444,10 +449,11 @@ async function main(): Promise<void> {
   // Runtime spend guard: the gate's retakes can overrun the pre-flight estimate. Abort BEFORE the
   // (dominant) TTS spend if narration + grounding already blew the ceiling. The eval is recorded first.
   const ttsEstNow = estimateTtsUsd(shippedClips.map((g) => g.script), persona.ttsStyle.length)
-  if (llmSpentUsd() + ttsEstNow.usd > maxCostUsd) {
+  const ttsCapEst = ttsEstNow.usd * TTS_ESTIMATE_SAFETY // the cap is honored against the upper bound (the point estimate under-counts ~5–15%)
+  if (llmSpentUsd() + ttsCapEst > maxCostUsd) {
     await recordRun(true)
     throw new Error(
-      `⛔ Spend after narrate+gate ($${llmSpentUsd().toFixed(2)}) + est TTS ($${ttsEstNow.usd.toFixed(2)}) exceeds --max-cost=$${maxCostUsd.toFixed(2)} — aborting before synthesis. Eval recorded.`,
+      `⛔ Spend after narrate+gate ($${llmSpentUsd().toFixed(2)}) + est TTS ($${ttsCapEst.toFixed(2)}, incl. safety margin) exceeds --max-cost=$${maxCostUsd.toFixed(2)} — aborting before synthesis. Eval recorded.`,
     )
   }
 
@@ -471,7 +477,7 @@ async function main(): Promise<void> {
       // Tail-collapse retake (pipeline/tts.ts): narration clips ship unheard, so a mumbled
       // closing sentence would reach riders' ears first — measure + retake here too.
       // The poi's register modulates the READ (pace/space/energy) on the shared base; null → story base.
-      const { audio, durationMs } = await synthesizeWithTailRetake(
+      const { audio, durationMs, tail } = await synthesizeWithTailRetake(
         script,
         persona.voice,
         ttsStyleFor(persona.ttsStyle, c.deliveryRegister ?? 'story'),
@@ -517,6 +523,9 @@ async function main(): Promise<void> {
             }),
         { label: `upsert narration(${c.name})` },
       )
+      // Record this shipped clip's tail-collapse outcome so a still-collapsed closer lands as a FAILED
+      // tts row in the eval record (the human-review flag) rather than a silent pass.
+      tailBySeq.set(g.seq, tail)
       synthDone++
       console.log(`  [${synthDone}/${shippedClips.length}] ${c.name} (${(durationMs / 1000).toFixed(0)}s)`)
       return { name: c.name, durationMs }

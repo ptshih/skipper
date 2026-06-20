@@ -4,8 +4,8 @@
 // the input array), concurrency never exceeds `limit`, and the pool FAILS FAST — the
 // first rejection stops workers from pulling new items and propagates to the caller
 // (in-flight siblings settle in the background; their results are dropped). That
-// matches the pipeline's abort semantics: any clip/synth failure aborts the run via
-// the existing catch (restoreAfterFailedRun), it just no longer wastes a serial tail.
+// the caller owns fault isolation: the generate loops wrap each item in try/catch (skip + warn +
+// continue), so mapLimit fails fast ONLY on an uncaught throw — it just no longer wastes a serial tail.
 
 export async function mapLimit<T, R>(
   items: readonly T[],
