@@ -22,6 +22,7 @@
 
 export const PRONUNCIATIONS: Record<string, string> = {
   // Local-pronunciation TRAPS — the obvious reading is WRONG; the TTS will almost certainly miss these.
+  Nevada: 'nuh-VAD-uh', // the flat "a" (rhymes with "had") — locals are particular; NOT "nuh-VAH-duh"
   Genoa: 'juh-NOH-uh', // the Nevada town — NOT the Italian "JEN-oh-ah"
   Verdi: 'VER-dye', // the Nevada town — NOT the composer "VAIR-dee"
   // Indigenous / regional names a TTS voice tends to mangle (verify + extend by ear).

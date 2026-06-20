@@ -31,7 +31,8 @@ describe('pronunciationClause — only the names this clip actually says', () =>
     expect(c).toContain(';') // joined
   })
 
-  test('the live lexicon carries the two local-pronunciation traps', () => {
+  test('the live lexicon carries the local-pronunciation traps (incl. Nevada — the flat "a")', () => {
+    expect(PRONUNCIATIONS.Nevada).toBe('nuh-VAD-uh')
     expect(PRONUNCIATIONS.Genoa).toBe('juh-NOH-uh')
     expect(PRONUNCIATIONS.Verdi).toBe('VER-dye')
   })
