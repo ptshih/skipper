@@ -65,16 +65,17 @@ Three items locked from the 2026-06-11 brainstorm (full capture: `docs/ideas/fre
 
 The mechanism shipped 2026-06-11: every ship path (`generate-narrations`, `resynth-narration`)
 re-synths once on a ≥3 dB tail-collapse drop (the "mumble"), then linear-loudnorms the winning take
-to `LOUDNORM_TARGET_LUFS = −14` / `LOUDNORM_TRUE_PEAK_DB = −1.0` (`pipeline/tail.ts` +
-`pipeline/loudnorm.ts`; constants in `models.ts`; ffmpeg-optional). Kills the clip-to-clip spread +
-the quiet-vs-Spotify gap.
+to the **master spec** (−14 LUFS / −1.0 dBTP — `AUDIO_LOUDNESS` in `@skipper/shared`; studio's
+`LOUDNORM_*` derive from it) via `pipeline/tail.ts` + `pipeline/loudnorm.ts`. Kills the clip-to-clip
+spread + the quiet-vs-Spotify gap. The drive-music rotation is now mastered to the SAME spec
+(2026-06-19), so voice + music match. Spec + history: `docs/decisions/audio-loudness-spec.md`.
 
-REMAINING — **founder ear-gate on the −14 target.** A single tunable constant; before the first paid
-full regen, A/B the smoke clips on-device against a Spotify reference (the old "music at −13 still
-reads 20% quiet" measure suggests −14 may want to nudge to −13/−12). One-line change in `models.ts`.
-(Drive-music level is tracked under "Drive music bed" below — blocked on this same ear-gate.)
+REMAINING — **founder on-device A/B vs Spotify** of the −14 / −1.0 level (narration + music together),
+before the first paid full regen. If it still reads low, nudge `AUDIO_LOUDNESS.integratedLufs`
+(−13/−12) or the TP ceiling further toward 0 — one edit, re-master both surfaces.
 
 Refs: `pipeline/loudnorm.ts`, `pipeline/tts.ts`, `pipeline/tail.ts`, `models.ts` (LOUDNORM_*),
+`packages/shared/src/audio.ts`, `docs/decisions/audio-loudness-spec.md`,
 `docs/decisions/audio-compression-spike.md`.
 
 ## TTS delivery: differentiate the style prompt by narration FORM — DEFERRED 2026-06-19
@@ -161,8 +162,9 @@ sim audio isn't capturable anyway. So one box remains — a human ear (or instru
       focus — iOS's session model says they mix within one app, but it's the one thing a trace can't
       guarantee. (Definitive non-ear proof if wanted: temporarily log `useAudioPlaylistStatus(playlist)
       .playing` in the hook and watch it flip true between stops.)
-- [ ] Once confirmed audible, fold in the deferred **drive-music level** task from the loudness
-      section above (match the 17 tracks to the −14 LUFS narration target after the ear-gate locks).
+
+(The drive-music **level** task is DONE 2026-06-19 — the 17 tracks were re-mastered to the −14 / −1.0
+master spec; only the *audible-under-V2-drives* confirm above remains. See `audio-loudness-spec.md`.)
 
 Refs: `apps/mobile/src/lib/driveMusic.ts` (`useDriveMusic` + the `TRACKS` rotation),
 `apps/mobile/src/lib/useDrive.ts` (~L888 the soundtrack effect; `onClipDone`/`pump` at ~L397-429),

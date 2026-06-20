@@ -26,7 +26,9 @@ import { useAudioPlaylist } from 'expo-audio'
 // The drive soundtrack rotation, shuffled per hook instance so repeat drives don't
 // always open on the same song. Per-track sources + licenses live in SOURCE.md; the
 // CC-BY credits also surface in-app on the Sources & Licenses screen (app/legal.tsx).
-// All tracks are loudness-matched (~-13 LUFS) so the rotation never jumps in volume.
+// All tracks are loudness-matched to the Skipper audio master spec (−14 LUFS / −1.0 dBTP, same as
+// the narration — `AUDIO_LOUDNESS` in @skipper/shared) so the rotation never jumps in volume and
+// never overpowers the voice. See assets/audio/SOURCE.md + docs/decisions/audio-loudness-spec.md.
 const TRACKS = [
   // Seamless Pixabay bed — Pixabay Content License (commercial OK, no attribution).
   require('../../assets/audio/drive_loop.mp3'),

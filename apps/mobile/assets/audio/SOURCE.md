@@ -2,7 +2,9 @@
 
 The drive soundtrack is a **shuffled rotation** (`src/lib/driveMusic.ts`): a fresh track
 fades in for each leg between stops, ducking out under narration. All tracks below are
-loudness-matched (~-13 LUFS integrated) so the rotation never jumps in volume.
+loudness-matched to the **Skipper audio master spec — −14 LUFS / −1.0 dBTP** (the same target the
+TTS narration uses, so voice and music never jump in level; `AUDIO_LOUDNESS` in `@skipper/shared`,
+`docs/decisions/audio-loudness-spec.md`).
 
 The rotation is **fully cleanly-licensed royalty-free** — Pixabay Content License (no
 attribution) + Creative Commons BY 4.0 (attribution carried in-app). The four original
@@ -30,10 +32,11 @@ covered the rotation, so there's no longer any license ambiguity in the bundle.
 | `landras_dream.mp3` | *Landra's Dream* — Jason Shaw (Audionautix) | CC BY 4.0 | ✅ |
 | `intro.mp3` / `outro.mp3` | tour-start / tour-end sting (Pixabay) | Pixabay Content License | Staged, not wired |
 
-> **Loudness:** each added track was normalized with
-> `ffmpeg -af loudnorm=I=-13:TP=-1.5:LRA=11` and re-encoded to 192 kbps stereo MP3,
-> metadata stripped. Only `drive_loop.mp3` is un-normalized (it sits ~-15 LUFS, within
-> band).
+> **Loudness:** the whole rotation (all 17, incl. `drive_loop.mp3`) was re-mastered 2026-06-19 to the
+> master spec with a two-pass `ffmpeg -af loudnorm=I=-14:TP=-1.0:LRA=11` (measure → linear gain),
+> re-encoded to 192 kbps stereo MP3, metadata stripped. Verified: every track lands ≈−14 LUFS
+> (the prior −11.7…−15.0 spread collapsed). To re-master after an `AUDIO_LOUDNESS` change, redo this
+> two-pass on the source tracks at the new numbers — see `docs/decisions/audio-loudness-spec.md`.
 
 ## Source & license
 

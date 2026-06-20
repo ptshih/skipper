@@ -6,7 +6,7 @@
 // before bumping.
 
 import Anthropic from '@anthropic-ai/sdk'
-import { CLAUDE_MODELS, type DeliveryRegister } from '@skipper/shared'
+import { AUDIO_LOUDNESS, CLAUDE_MODELS, type DeliveryRegister } from '@skipper/shared'
 
 // Re-export the shared HAIKU id so the in-job summarizer (pipeline/job-output.ts) sources it from
 // studio/models.ts alongside the other model ids, while @skipper/shared stays the single source.
@@ -132,7 +132,8 @@ export const TTS_LANGUAGE_CODE = 'en-US' as const
 // level vs Spotify). Gemini-TTS takes are non-deterministic in LEVEL: measured body means
 // ranged −26.7 → −19.5 dB across 30 live clips (a 7.2 dB stop-to-stop jump), and the whole
 // mix read ~20–25% quiet vs a Spotify reference. Fix = an ffmpeg two-pass LINEAR loudnorm
-// on every shipped take (pipeline/loudnorm.ts), targeting these EBU R128 values:
+// on every shipped take (pipeline/loudnorm.ts), targeting the shared AUDIO_LOUDNESS spec
+// (@skipper/shared — the SINGLE source of truth, applied to narration AND the drive-music bed):
 //   I  (integrated loudness) = −14 LUFS — Spotify's normalization target; brings the quiet
 //      clips up and lands every clip at the SAME integrated level, collapsing the spread.
 //   TP (true-peak ceiling)   = −1.0 dBTP — headroom so the gain-up can't clip (why we use
@@ -140,15 +141,14 @@ export const TTS_LANGUAGE_CODE = 'en-US' as const
 //      a bit too quiet": at −1.5 the ceiling BOUND and the linear gain undershot the −14 target —
 //      a measured clip landed −14.9 LUFS (peaks already −0.77 dBTP post-AAC), shipping ~1 dB shy.
 //      −1.0 is a standard streaming TP ceiling and recovers that headroom so loudnorm reaches −14.
-// TUNABLE: these are the single knobs. The −14 target is verified by a founder on-device A/B vs
-// Spotify; if the real playback level still reads low, nudge TARGET up (−13/−12) or the TP ceiling
-// further toward 0 here — no other code changes. (The 17 bundled drive-music tracks are NOT in
-// this pipeline — matching them is a separate one-time re-encode once the level locks.)
-export const LOUDNORM_TARGET_LUFS = -14 as const
-export const LOUDNORM_TRUE_PEAK_DB = -1.0 as const
+// TUNABLE in ONE place: edit AUDIO_LOUDNESS in @skipper/shared and re-master BOTH surfaces (this
+// pipeline regenerates; the drive-music bed re-encodes per apps/mobile/assets/audio/SOURCE.md).
+// Spec + history: docs/decisions/audio-loudness-spec.md.
+export const LOUDNORM_TARGET_LUFS = AUDIO_LOUDNESS.integratedLufs
+export const LOUDNORM_TRUE_PEAK_DB = AUDIO_LOUDNESS.truePeakDbtp
 // LRA (loudness range) is held at the loudnorm default — speech is already low-dynamic, so
 // this rarely binds; it stays a constant rather than a knob.
-export const LOUDNORM_RANGE_LU = 11 as const
+export const LOUDNORM_RANGE_LU = AUDIO_LOUDNESS.rangeLu
 
 // Gemini-TTS prebuilt voices (each carries a one-word timbre descriptor). The
 // ACTIVE pick is `charon` ("Informative" — the tour-guide register), chosen by ear
