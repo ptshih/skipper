@@ -51,6 +51,11 @@ export const REGISTER_ANCHORS: Record<DeliveryRegister, { qid: string; label: st
     { qid: 'Q839954', label: 'archaeological site' },
     { qid: 'Q1370598', label: 'place of worship' },
     { qid: 'Q570116', label: 'tourist attraction' },
+    // An EVENT that happened at a place is a human story (a battle, a festival, the 1960 Winter
+    // Olympics). The LLM fallback occasionally tipped these to civic ("infrastructure AND historic")
+    // — `event` (P279* super of battle/festival/sporting event) routes them structurally to story.
+    // None of our natural/built/settlement/civic anchors subclass `event`, so this never conflicts.
+    { qid: 'Q1656682', label: 'event' },
   ],
   civic: [
     // NB: `reservoir` is deliberately NOT here — a reservoir reads as a lake (landscape); only the

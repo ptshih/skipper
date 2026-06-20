@@ -34,6 +34,12 @@ describe('register anchors — the live-preview fixes are guarded', () => {
     expect(REGISTER_BY_ANCHOR['Q23397']).toBe('landscape') // lake
     expect(REGISTER_BY_ANCHOR['Q486972']).toBe('town') // human settlement
   })
+
+  test('an event (Q9634 "1960 Winter Olympics" walks P279* → event) is story, not civic', () => {
+    expect(REGISTER_BY_ANCHOR['Q1656682']).toBe('story') // event
+    // the same anchor caught the misroute deterministically instead of the LLM tipping it to civic
+    expect(classifyFromMatches(['story']).register).toBe('story')
+  })
 })
 
 describe('classifyRegisterLLM — fallback over the fact sheet (injected call)', () => {
