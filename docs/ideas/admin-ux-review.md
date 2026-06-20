@@ -93,9 +93,14 @@ instead" deferral is untouched; inline auto-gating on every generate stays defer
   `admin_grant` make-good button (the ledger source is reserved but has no writer); a comp-to-`paid`
   toggle on `user.tier`; a `drive_demand` leaderboard (top route_sigs by hits/distinct_users). *L.*
 
-## Small consistency fixes
+## Small consistency fixes — BUILT 2026-06-19 (`efc095e`)
 
-- Detail-by-modal: no `/pois/:id` or `/runs/:id` routes → can't bookmark/share a POI or run.
-- `bbox-lookup` spends outside the confirm gate — debounce the Search button + disclose "uses a small AI call".
-- Dead `GET /admin/jobs` endpoint (+ `api.jobs()`) has zero UI callers; legacy `generate`/`patch_clip`/
-  `resynth` job kinds remain in the enum but are un-dispatchable (display-only in the Runs labels).
+- ✅ **Deep-linkable detail** — search-param deep-links (not path routes): `/pois?poi=<id>` opens a
+  POI's detail sheet, `/runs?run=<id>` opens a run's drawer (both `validateSearch`, one-shot then
+  stripped). The `/runs?run=` link also fixed the dead `hash: job.id` navs (re-synth/regenerate now
+  open the run).
+- ✅ **bbox-lookup spend disclosed** — a "Search runs a Claude estimate (a small paid AI call)" note;
+  the Search button was already disabled-while-pending (no double-fire).
+- ✅ **Dead `GET /admin/jobs` removed** (route + `api.jobs()` wrapper — zero callers). The legacy
+  `generate`/`patch_clip`/`resynth` job kinds are KEPT in the enum on purpose — display-only labels so
+  historical Runs rows render readably (not dispatchable).
