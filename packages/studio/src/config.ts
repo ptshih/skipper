@@ -130,15 +130,18 @@ function intKnob(raw: string | undefined, fallback: number): number {
  * generate.ts), so the draft phase is bounded by its SLOWEST stop instead of the sum. This is
  * the rate-limit dial: narration runs in its own phase with full TPM headroom, but it's the
  * largest-output Anthropic call, so drop it if a fan-out spikes 429s (the SDK retries them).
+ * Default 12 (raised from 6, 2026-06-20): a full-region regen at 6 hit ZERO 429s, and 12 is
+ * ~24–30 Opus RPM — still far under even Tier-1's 50 RPM / 500K ITPM (cache reads are free).
  * Override: SKIPPER_NARRATION_CONCURRENCY. */
-export const NARRATION_CONCURRENCY = (): number => intKnob(process.env.SKIPPER_NARRATION_CONCURRENCY, 6)
+export const NARRATION_CONCURRENCY = (): number => intKnob(process.env.SKIPPER_NARRATION_CONCURRENCY, 12)
 /** Concurrent TTS synth+upload calls on a full run. The clips are independent (scripts
  * frozen, per-run keys), so the phase is bounded by its LONGEST clip instead of the sum —
  * measured 2026-06-09: a 27-min tour spent ~10 min synthesizing serially at ~0.38× audio
  * length per clip. Gemini-TTS 3.1-preview has NO fixed QPM quota (dynamic Standard-PayGo
  * throughput); Google's guidance is steady traffic + exponential backoff on 429, which
- * fetchWithRetry already provides. 6 keeps the fan-out modest (no second-level spikes). */
-export const TTS_CONCURRENCY = (): number => intKnob(process.env.SKIPPER_TTS_CONCURRENCY, 6)
+ * fetchWithRetry already provides. Default 12 (raised from 6, 2026-06-20): ~16 QPM at 12, well
+ * under the 125–150 QPM of the fixed-quota Gemini-TTS siblings; drop it if 429s appear. */
+export const TTS_CONCURRENCY = (): number => intKnob(process.env.SKIPPER_TTS_CONCURRENCY, 12)
 /** Concurrent scout agent runs — independent per stop (each reads only its OWN sheet and
  * stop-keyed tools). No prompt-cache interplay: scout calls carry no cache_control and
  * their prefix is under the Opus cacheable minimum. */
