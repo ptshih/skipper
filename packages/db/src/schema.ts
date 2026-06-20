@@ -461,8 +461,20 @@ export const narrations = pgTable(
       .notNull()
       .$onUpdate(() => new Date()),
   },
-  // UNIQUE poi_id = the 1:1 invariant (and the lookup index for roam/drive joins).
-  (t) => [uniqueIndex('narrations_poi_uq').on(t.poiId)],
+  (t) => [
+    // UNIQUE poi_id = the 1:1 invariant (and the lookup index for roam/drive joins).
+    uniqueIndex('narrations_poi_uq').on(t.poiId),
+    // CC BY-SA legal floor. A STORY clip is fact-grounded (Wikipedia, etc.), so it MUST freeze its
+    // attribution — shipping Wikipedia-derived audio with no credit is a license violation. Other
+    // forms (scenic/break/wave) ground on no facts and carry none, hence a form-CONDITIONAL CHECK
+    // rather than a NOT NULL column. Today only the write-chain (resolveStoryGrounding →
+    // factSheetToAttribution) guarantees this; the constraint makes it structural. Widen the form
+    // exemption if a fact-grounded scenic/bside ever ships.
+    check(
+      'narrations_story_attribution',
+      sql`${t.form} <> 'story' OR (${t.attribution} IS NOT NULL AND jsonb_array_length(${t.attribution}) > 0)`,
+    ),
+  ],
 )
 
 // A user-owned DRIVE: an ordered sequence of place narrations along a frozen route.
@@ -571,7 +583,17 @@ export const creditEntries = pgTable(
     expiresAt: timestamp('expires_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
-  (t) => [index('credit_entries_user_idx').on(t.userId)],
+  (t) => [
+    index('credit_entries_user_idx').on(t.userId),
+    // Sign floor for the SUM(amount) balance. The balance trusts the kind→sign convention; a
+    // wrong-sign movement (a +1 "consume", a negative "grant") would silently corrupt every
+    // balance and hand out free drives. grant > 0, consume < 0, reverse non-zero (± by design).
+    // Every live row (+N grants, −1 consumes) already satisfies it — pure defense-in-depth.
+    check(
+      'credit_entries_amount_sign',
+      sql`(${t.kind} = 'grant' AND ${t.amount} > 0) OR (${t.kind} = 'consume' AND ${t.amount} < 0) OR (${t.kind} = 'reverse' AND ${t.amount} <> 0)`,
+    ),
+  ],
 )
 
 /* -------------------------------------------------------------------------- */

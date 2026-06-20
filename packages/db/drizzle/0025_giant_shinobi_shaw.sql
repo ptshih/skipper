@@ -1,0 +1,2 @@
+ALTER TABLE "credit_entries" ADD CONSTRAINT "credit_entries_amount_sign" CHECK (("credit_entries"."kind" = 'grant' AND "credit_entries"."amount" > 0) OR ("credit_entries"."kind" = 'consume' AND "credit_entries"."amount" < 0) OR ("credit_entries"."kind" = 'reverse' AND "credit_entries"."amount" <> 0));--> statement-breakpoint
+ALTER TABLE "narrations" ADD CONSTRAINT "narrations_story_attribution" CHECK ("narrations"."form" <> 'story' OR ("narrations"."attribution" IS NOT NULL AND jsonb_array_length("narrations"."attribution") > 0));

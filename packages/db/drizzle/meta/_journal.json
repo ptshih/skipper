@@ -176,6 +176,13 @@
       "when": 1781909200000,
       "tag": "0024_rename_regions_bbox",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1781932855263,
+      "tag": "0025_giant_shinobi_shaw",
+      "breakpoints": true
     }
   ]
 }

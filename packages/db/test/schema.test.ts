@@ -75,6 +75,11 @@ function uniqueConstraint(table: PgTable, name: string) {
   return u
 }
 
+/** Named CHECK constraints on a table (drizzle `check(name, sql)`) — they live in `.checks`. */
+function checkNames(table: PgTable): string[] {
+  return getTableConfig(table).checks.map((c) => c.name)
+}
+
 describe('pois — the shared-facts dedup invariant', () => {
   it('PRIMARY dedup key is the Wikidata QID (UNIQUE qid, NOT NULL) — catches a scenic↔story flip', () => {
     expect(uniqueIndexNames(pois)).toContain('pois_qid_uq')
@@ -115,6 +120,9 @@ describe('V2 — narrations / drives structural invariants', () => {
       expect(name).not.toMatch(/persona|voice|joke|delivery/)
     }
   })
+  it('a STORY clip must carry frozen attribution — the CC BY-SA legal floor (form-conditional CHECK)', () => {
+    expect(checkNames(narrations)).toContain('narrations_story_attribution')
+  })
   it('a drive is user-owned (user_id NOT NULL) and carries a route signature', () => {
     expect(columnByDbName(drives, 'user_id').notNull).toBe(true)
     expect(columnByDbName(drives, 'route_sig').notNull).toBe(true)
@@ -134,6 +142,9 @@ describe('credit_entries — the money / double-charge invariants', () => {
     expect(columnByDbName(creditEntries, 'kind').notNull).toBe(true)
     expect(columnByDbName(creditEntries, 'user_id').notNull).toBe(true)
     expect(columnByDbName(creditEntries, 'idempotency_key').notNull).toBe(true)
+  })
+  it('pins the kind→amount SIGN — a wrong-sign movement cannot silently corrupt the SUM balance', () => {
+    expect(checkNames(creditEntries)).toContain('credit_entries_amount_sign')
   })
 })
 
