@@ -271,9 +271,13 @@ export function useRoam(mode: RoamMode): RoamState {
       if (sawFresh.current) setToldCount((n) => n + 1)
       setExclusiveAudio(false) // clip over → hand focus back so the rider's audio resumes
       setActivePoiId((cur) => (cur === poiId ? null : cur))
-      // Keep the sheet UP if another encounter is queued (it cross-updates to the next on its sawFresh)
-      // instead of sliding down then back up between back-to-back encounters. (audit #1023)
-      if (queueRef.current.length === 0) setSheetPoiId((cur) => (cur === poiId ? null : cur))
+      // Keep the sheet UP if another encounter is queued (don't slide down then back up between
+      // back-to-back encounters) — but ADVANCE it to the next queued poi NOW so the buffering sheet
+      // shows the UPCOMING story's name, not the finished one's (which would flash the wrong title until
+      // the next clip's audio starts). pump() shifts this same head; sawFresh re-confirms it. (audit #1023 / #11)
+      const nextQueued = queueRef.current[0]
+      if (nextQueued !== undefined) setSheetPoiId(nextQueued)
+      else setSheetPoiId((cur) => (cur === poiId ? null : cur))
       setClipReady(false)
       clipBusy.current = false
       pump()
