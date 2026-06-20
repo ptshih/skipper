@@ -19,6 +19,7 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import { CLAUDE_MODELS, type DeliveryRegister } from '@skipper/shared'
+import { recordModelUsage } from './spend'
 
 /** Wikidata anchor classes per register. A POI is in a register if its P31 is that class OR any
  *  P279* subclass of it. Small + top-level on purpose — the subclass walk (in WDQS) does the rest.
@@ -179,8 +180,8 @@ export async function classifyRegisterLLM(
 
 /** The real Haiku call backing classifyRegisterLLM (forced tool_choice so every reply classifies). */
 export function makeRegisterCall(getAnthropic: () => Anthropic): RegisterModelCall {
-  return async ({ system, tools, messages }) =>
-    getAnthropic().messages.create({
+  return async ({ system, tools, messages }) => {
+    const response = await getAnthropic().messages.create({
       model: CLAUDE_MODELS.haiku,
       max_tokens: 256,
       system,
@@ -188,4 +189,8 @@ export function makeRegisterCall(getAnthropic: () => Anthropic): RegisterModelCa
       tool_choice: { type: 'tool', name: 'register' },
       messages,
     })
+    // Tally the Haiku spend so a paid classify run reports its cost like enrich/generate do.
+    recordModelUsage(CLAUDE_MODELS.haiku, response.usage)
+    return response
+  }
 }

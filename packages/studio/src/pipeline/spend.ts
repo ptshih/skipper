@@ -21,6 +21,8 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   'claude-opus-4-8': { inputPerMTok: 5, outputPerMTok: 25 },
   // Sonnet 4.6 — the default corpus `enrich` model (claude-api skill, verified 2026-06-15).
   'claude-sonnet-4-6': { inputPerMTok: 3, outputPerMTok: 15 },
+  // Haiku 4.5 — the delivery-register classifier fallback (claude-api skill, verified 2026-06-20).
+  'claude-haiku-4-5-20251001': { inputPerMTok: 1, outputPerMTok: 5 },
 }
 const CACHE_READ_MULT = 0.1
 const CACHE_WRITE_MULT = 1.25

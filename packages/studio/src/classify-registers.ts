@@ -18,8 +18,10 @@ import { db } from '@skipper/db'
 import { pois } from '@skipper/db/schema'
 import type { FactSheetEntry } from '@skipper/db/schema'
 import type { DeliveryRegister } from '@skipper/shared'
-import { parseFlags } from './pipeline/ops'
+import { announce, maxCostFlag, parseFlags } from './pipeline/ops'
 import { mapLimit } from './pipeline/concurrency'
+import { withRetry } from './pipeline/http'
+import { llmSpendLines, llmSpentUsd } from './pipeline/spend'
 import { getAnthropic } from './models'
 import {
   classifyFromMatches,
@@ -53,7 +55,9 @@ async function main(): Promise<void> {
   const flags = parseFlags(process.argv.slice(2))
   const apply = flags.has('apply')
   const force = flags.has('force')
-  console.log(`\n[classify-registers] ${apply ? 'APPLY (writes + paid LLM tail)' : 'PREVIEW (no writes, no LLM)'}${force ? ' · force re-classify' : ''}\n`)
+  const maxCostUsd = maxCostFlag(flags)
+  announce({ tool: 'classify-registers', blast: ['SPENDS $', 'MUTATES DB'], apply })
+  if (force) console.log('(force: re-classifying POIs that already carry a register)\n')
 
   // The narratable corpus = enriched POIs with a QID. Skip already-classified unless --force, so a
   // re-run only spends the LLM on the still-unclassified tail.
@@ -101,30 +105,47 @@ async function main(): Promise<void> {
     return
   }
 
-  // 2. LLM FALLBACK (paid): classify each abstain from its fact sheet. Haiku, forced tool_choice.
-  if (abstains.length > 0) {
-    console.log(`\nClassifying ${abstains.length} abstains via Haiku (concurrency 8)...`)
-    const call = makeRegisterCall(() => getAnthropic('delivery-register fallback'))
-    let done = 0
-    await mapLimit(abstains, 8, async (p) => {
-      const factSheet = (p.factSheet ?? []).map((e) => e.text).join('\n').slice(0, 2000) || `${p.name}${p.kind ? ` (${p.kind})` : ''}`
-      p.register = await classifyRegisterLLM({ name: p.name, kind: p.kind, factSheet }, call)
-      if (++done % 25 === 0) console.log(`  …${done}/${abstains.length}`)
-    })
+  // --max-cost ceiling: abort before any spend if the estimate exceeds the cap. The Haiku tail is the
+  // only paid step (~$0.001/abstain) — tiny, but keeps this CLI consistent with enrich/generate.
+  const estUsd = abstains.length * 0.001
+  if (estUsd > maxCostUsd) {
+    throw new Error(
+      `⛔ Estimated Haiku spend ~$${estUsd.toFixed(2)} exceeds --max-cost=$${maxCostUsd.toFixed(2)} — aborting. Raise --max-cost or narrow the corpus.`,
+    )
   }
 
-  // 3. WRITE the register onto each POI.
-  console.log(`\nWriting ${pending.length} registers...`)
+  // 2+3. CLASSIFY (the paid Haiku tail, abstains only) + WRITE, per-POI in ONE pass. Classifying and
+  // writing the SAME poi together means a crash never loses already-paid Haiku work between a classify
+  // pass and a separate write pass — each register lands the instant it's resolved. Structural (free)
+  // registers write too. withRetry wraps the DB write like every other pipeline write.
+  const call = makeRegisterCall(() => getAnthropic('delivery-register fallback'))
+  console.log(
+    `\nClassifying ${abstains.length} abstains via Haiku + writing ${pending.length} registers (concurrency 8)...`,
+  )
   let written = 0
-  await mapLimit(pending, 10, async (p) => {
+  let llmDone = 0
+  await mapLimit(pending, 8, async (p) => {
+    if (p.viaLLM) {
+      const factSheet =
+        (p.factSheet ?? []).map((e) => e.text).join('\n').slice(0, 2000) ||
+        `${p.name}${p.kind ? ` (${p.kind})` : ''}`
+      p.register = await classifyRegisterLLM({ name: p.name, kind: p.kind, factSheet }, call)
+      if (++llmDone % 25 === 0) console.log(`  …${llmDone}/${abstains.length} classified`)
+    }
     if (!p.register) return
-    await db.update(pois).set({ deliveryRegister: p.register }).where(eq(pois.id, p.id))
+    await withRetry(
+      () => db.update(pois).set({ deliveryRegister: p.register }).where(eq(pois.id, p.id)),
+      { label: `register(${p.name})` },
+    )
     written++
   })
 
   console.log('\nFinal distribution:')
   printDist(distribution(pending))
-  console.log(`\nDone: ${written} POIs written (${abstains.length} via the LLM fallback).`)
+  for (const line of llmSpendLines()) console.log(line)
+  console.log(
+    `\nDone: ${written} POIs written (${abstains.length} via the LLM fallback, ~$${llmSpentUsd().toFixed(2)} spent).`,
+  )
 }
 
 main()
