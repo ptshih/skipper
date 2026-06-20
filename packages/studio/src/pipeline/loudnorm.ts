@@ -9,8 +9,8 @@
 // 30 live clips (founder-ear-confirmed): body means ranged −26.7 → −19.5 dB (a 7.2 dB
 // stop-to-stop jump), and the whole mix read ~20–25% quiet vs a Spotify reference. So every
 // shipped take runs an ffmpeg two-pass LINEAR loudnorm to the EBU R128 target in models.ts
-// (−14 LUFS integrated, −1.0 dBTP ceiling), behind a transparent PEAK LIMITER (PEAK_LIMITER):
-//   pass 1 MEASURES the (post-limiter) take's integrated loudness / true-peak / range,
+// (−14 LUFS integrated, −1.0 dBTP ceiling):
+//   pass 1 MEASURES the take's integrated loudness / true-peak / range,
 //   pass 2 applies a single LINEAR gain (linear=true) to hit the target exactly, fused with
 //          the AAC encode.
 // Linear (not dynamic) is the point: it scales the whole clip uniformly, so every clip lands at
@@ -18,15 +18,6 @@
 // it scales tail and body equally, it can never reintroduce the tail-collapse the retake just
 // fixed. The −1.0 dBTP ceiling is why this isn't a flat `volume=+NdB`: bringing a −26 dB clip up
 // to −14 could clip without true-peak limiting.
-//
-// Why the PEAK LIMITER (added 2026-06-20, founder-approved): un-limited TTS is PEAK-BOUND — its
-// transient spikes (plosives/sibilants) hit the −1.0 dBTP ceiling before the linear gain reaches
-// −14, so loudnorm gives up early and the clip lands ~−15 LUFS (the shipped corpus measured −14.7
-// … −15.5, ~1 LU UNDER spec; raising the target number does nothing while peak-bound). A 20:1 squeeze
-// above −3 dBFS shaves ONLY those top transients — the body/tail sit far below threshold, so speech
-// dynamics and the tail-collapse guarantee are untouched — which frees the headroom for the linear
-// gain to reach a TRUE −14. It runs in BOTH passes so the measured stats describe the post-limiter
-// signal the gain is computed from. See docs/decisions/audio-loudness-spec.md.
 //
 // ffmpeg is REQUIRED (it IS the encoder, not just QA): a missing/failed encode THROWS rather
 // than ship a mislabeled clip. The Cloud Run image carries ffmpeg (packages/studio/Dockerfile);
@@ -44,12 +35,6 @@ const AAC_BITRATE = '48k'
 /** Output sample rate — pinned to the TTS native 24 kHz (loudnorm runs at 192 kHz internally,
  *  so without this the muxed file would inherit 192 kHz). */
 const OUT_SAMPLE_RATE = '24000'
-
-/** Transparent peak limiter, applied BEFORE loudnorm in BOTH passes (see the header for the why).
- *  20:1 above −3 dBFS = a brick-wall on transient spikes only; the body/tail are far below the
- *  threshold and pass through untouched, so it shaves the peaks that were pinning TTS at ~−15
- *  without altering speech dynamics or reintroducing tail-collapse. Validated 2026-06-20. */
-const PEAK_LIMITER = 'acompressor=threshold=-3dB:ratio=20:attack=1:release=60'
 
 /** The first-pass measurements loudnorm prints as JSON (the fields pass 2 feeds back). */
 interface LoudnormStats {
@@ -69,12 +54,6 @@ function loudnormFilter(measured?: LoudnormStats): string {
     `:measured_LRA=${measured.input_lra}:measured_thresh=${measured.input_thresh}` +
     `:offset=${measured.target_offset}:linear=true:print_format=summary`
   )
-}
-
-/** The full `-af` chain for a leveled pass: PEAK_LIMITER, then loudnorm. Same limiter both passes
- *  (pass 1 measures the limited signal; pass 2 applies the gain to it). Exported for tests. */
-export function masteringFilter(measured?: LoudnormStats): string {
-  return `${PEAK_LIMITER},${loudnormFilter(measured)}`
 }
 
 /** Pull loudnorm's JSON block out of ffmpeg stderr. It's the only JSON ffmpeg emits, so a
@@ -112,7 +91,7 @@ const warnNoStatsOnce = (reason: string): void => {
 async function measure(file: string): Promise<LoudnormStats | null> {
   try {
     const proc = Bun.spawn(
-      ['ffmpeg', '-hide_banner', '-nostats', '-i', file, '-af', masteringFilter(), '-f', 'null', '-'],
+      ['ffmpeg', '-hide_banner', '-nostats', '-i', file, '-af', loudnormFilter(), '-f', 'null', '-'],
       { stdout: 'ignore', stderr: 'pipe' },
     )
     const stderr = await new Response(proc.stderr).text()
@@ -130,7 +109,7 @@ async function encode(file: string, out: string, stats: LoudnormStats | null): P
     const proc = Bun.spawn(
       [
         'ffmpeg', '-hide_banner', '-nostats', '-y', '-i', file,
-        ...(stats ? ['-af', masteringFilter(stats)] : []),
+        ...(stats ? ['-af', loudnormFilter(stats)] : []),
         '-ar', OUT_SAMPLE_RATE, '-ac', '1', '-c:a', 'aac', '-b:a', AAC_BITRATE,
         '-movflags', '+faststart', out,
       ],
