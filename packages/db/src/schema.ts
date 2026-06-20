@@ -140,10 +140,9 @@ export type DriveSelection = DriveSelectionItem[]
 // so that union stays a superset of this enum by two: + macrostrat + google_places).
 export const poiSourceEnum = pgEnum('poi_source', ['wikipedia', 'wikidata'])
 
-// NO `joke_level` pgEnum: the Dad-Joke-O-Meter notch is a generation-time INPUT, never a
-// stored column (M1 = dadpocalypse-only — see `tours`). The notch VOCABULARY lives as the
-// `jokeLevel` Zod enum in @skipper/shared; re-add a pgEnum here only when a notch column lands
-// on the narration at M3.
+// NO `joke_level` pgEnum: v2 CUT the joke notch — there is ONE delivery voice (the corny
+// telling). Delivery variation returns later as DIFFERENT NARRATORS (a per-narration persona
+// key), not a corniness notch column. See docs/decisions/cut-joke-notch.md.
 
 // A NARRATION's treatment/depth — the "what kind of telling" axis. `story`/`scenic`/`break` are
 // the drive-stop forms; `wave` is the roam call-out; `bside` is a deferred "tell me more". Mirror

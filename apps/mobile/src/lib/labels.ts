@@ -4,9 +4,9 @@
 //
 // (Glyphs + badge tones for stop types live in `@/ui` `stops.ts`; this is the text.)
 //
-// NOTE: there's no jokeLabel — the Dad-Joke-O-Meter notch is a generation input, not
-// stored/surfaced state (M1 = dadpocalypse-only), so no screen renders it. Re-add a notch
-// label here when the 1-N notch ships and a tour actually varies its corniness.
+// NOTE: there's no jokeLabel — v2 cut the joke notch entirely (one delivery voice). If
+// delivery ever varies, it returns as different NARRATORS (a host/persona label), not a
+// corniness notch — surface THAT here then.
 
 const STOP_LABEL: Record<string, string> = {
   story: 'Tale from the trail',

@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { attributionSource, driveClipForm, jokeLevel, platform } from './enums'
+import { attributionSource, driveClipForm, platform } from './enums'
 
 /** A single [lng, lat] pair (GeoJSON axis order). */
 export const coordinate = z.tuple([z.number(), z.number()])
@@ -171,7 +171,6 @@ export type DriveProposal = z.infer<typeof driveProposal>
 export const createDriveRequest = z.object({
   start: resolvedEndpoint,
   end: resolvedEndpoint,
-  jokeLevel: jokeLevel.optional(),
 })
 export type CreateDriveRequest = z.infer<typeof createDriveRequest>
 

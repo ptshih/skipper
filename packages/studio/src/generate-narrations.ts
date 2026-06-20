@@ -296,7 +296,6 @@ async function main(): Promise<void> {
       // No corridor: the shared atom plays on its own (roam) OR on any route (a drive reusing it), so
       // it names only the stable REGION, never a specific stretch.
       stopType: 'story' as const,
-      jokeLevel: 'dadpocalypse' as const,
       place: { name: c.name, ...(c.kind ? { kind: c.kind } : {}) },
       facts: grounding.facts,
       targetSeconds: band.targetSeconds,

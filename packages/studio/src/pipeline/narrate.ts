@@ -1,8 +1,8 @@
 // Skipper narration — the Anthropic (claude-opus-4-8) call.
 //
 // The SYSTEM message is the static, hardened SKIPPER_SYSTEM_PROMPT. For each stop
-// we send ONE user message: the grounded FACT SHEET plus the region/corridor,
-// stop type, and joke notch. The model returns ONLY the words the Skipper says.
+// we send ONE user message: the grounded FACT SHEET plus the region/corridor
+// and stop type. The model returns ONLY the words the Skipper says.
 //
 // Grounding is the cardinal invariant: persona lives in DELIVERY, never in FACTS.
 // So the only place-facts that reach the model are the ones we put on the sheet
@@ -18,7 +18,7 @@
 // truncated or empty script (quality invariant), so size for the worst case.
 
 import Anthropic from '@anthropic-ai/sdk'
-import type { JokeLevel, StopType } from '@skipper/shared'
+import type { StopType } from '@skipper/shared'
 import { getAnthropic, NARRATION_MODEL } from '../models'
 import { recordModelUsage } from './spend'
 import { WORDS_PER_SECOND } from '../config'
@@ -39,7 +39,6 @@ export interface NarrationRequest {
    *  authored-tour path may pass one; naming a GIVEN corridor is allowed without the sheet. */
   corridor?: string
   stopType: StopType
-  jokeLevel: JokeLevel
   /** Required for STORY and BREAK (the curated, stable name + kind). OPTIONAL for SCENIC: a
    *  NAMED natural feature (a bay/beach) — its name + kind are sayable like a break's, no facts. */
   place?: { name: string; kind?: string | null }
@@ -182,7 +181,6 @@ export function buildFactSheet(req: NarrationRequest): string {
   // same telling plays on its own or on any route, so it must not name a specific corridor/drive.
   if (req.corridor) lines.push(`CORRIDOR: ${req.corridor}`)
   lines.push(`STOP TYPE: ${req.stopType.toUpperCase()}`)
-  lines.push(`JOKE NOTCH: ${req.jokeLevel.toUpperCase()}`)
   lines.push('')
 
   if (req.stopType === 'story') {

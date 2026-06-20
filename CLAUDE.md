@@ -52,12 +52,13 @@ product.** When a choice trades polish-for-the-builder against scale-for-a-marke
   not optional). Google break anchors are NOT pois — they're the `places` table (`google_places` =
   attribution-only).
 - **Persona lives in DELIVERY, never in FACTS.** "Make it funny" never loosens accuracy; a POI with thin/no
-  Wikipedia is downgraded to scenic — **silence beats a hallucinated battle**. The notch
-  (`off`/`mild`/`dad`/`dadpocalypse`), persona, and voice are GENERATION parameters baked into the
-  narration audio — never live playback toggles (changing any = a different telling). Persona resolves in
-  CODE (`personaFromKey`, default `'skipper'`) — there is NO persona/voice column on `narrations`; v2 is one
-  host (`'Skipper'`, the Charon voice) at the hardcoded `dadpocalypse` notch (the `jokeLevel` Zod enum stays
-  the vocabulary; a per-narration key + notch return with region-skippers, M4).
+  Wikipedia is downgraded to scenic — **silence beats a hallucinated battle**. Persona, voice, and the one
+  corny delivery are GENERATION parameters baked into the narration audio — never live playback toggles
+  (changing any = a different telling). Persona resolves in CODE (`personaFromKey`, default `'skipper'`) —
+  there is NO persona/voice column on `narrations`; v2 is one host (`'Skipper'`, the Charon voice) at one
+  fixed delivery. The **joke notch is CUT** — `jokeLevel` is gone everywhere (no enum, no wire field);
+  delivery variation returns later as DIFFERENT NARRATORS (a per-narration persona key, region-skippers, M4),
+  never a corniness notch. See `docs/decisions/cut-joke-notch.md`.
 - **A narration is only live once it has non-null audio.** `narrations` is 1:1 with a poi
   (`narrations_poi_uq`); `audio_url` is NOT NULL at the DB boundary — story + scenic today. **Break audio is
   a SEPARATE place-anchored `detours` table** (1:1 per place, `audio_url` NOT NULL there too), **DEFERRED/
@@ -166,11 +167,12 @@ unchanged — the content artifact is a region's shared `narrations` corpus, REU
    — the MVP target, whose build (Expo SDK 56 / RN 0.85 / new arch) sets the SDK pin. CarPlay is deferred past
    the MVP (the phone plays via mount / Bluetooth).
 1. **Walking skeleton.** ROAM front door + ONE user-created **drive** (A→B → route → reuse roam narrations),
-   `dadpocalypse` only: discover → enrich → generate → TTS → R2 → Neon, the drive simulator, and the player
+   one fixed corny delivery: discover → enrich → generate → TTS → R2 → Neon, the drive simulator, and the player
    (offline download → simulated drive → speed-adaptive triggering + debounce → audio + lock-screen Now
    Playing). Then drive it once for real. _This is the whole bet._
 2. **`apps/api`:** `/roam` (anonymous), `/drives*` (account-gated), `/regions`, signed R2 URLs.
-3. **Breadth:** more regions' corpora; joke notches as a per-drive setting; live break-stop Places data.
+3. **Breadth:** more regions' corpora; live break-stop Places data. (The joke notch was CUT — delivery
+   variety comes from different NARRATORS at M4, not a per-drive notch.)
 4. **Earn the machinery:** `route_sig`/`drive_demand` dedup + caching, human-review/feedback, more regions
    (Yosemite → Moab; mind seasons).
 

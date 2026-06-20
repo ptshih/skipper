@@ -1,6 +1,6 @@
 // The chattiness control — Quiet / Normal / Talkative, the free-roam SELECTION knob:
 // it changes which/how-many encounters fire (the RoamEngine's min-gap governor), never
-// what a telling says (the Dad-Joke-O-Meter invariant is untouched — nothing here
+// what a telling says (delivery is baked at generation time — nothing here
 // re-generates at playback). Same visual family as ThemeModePicker: a sunken track,
 // raised selected segment, no border-swap layout nudge.
 import { Pressable, StyleSheet, View } from 'react-native'

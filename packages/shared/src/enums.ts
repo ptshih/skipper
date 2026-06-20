@@ -1,18 +1,6 @@
 import { z } from 'zod'
 
 /**
- * The Dad-Joke-O-Meter notches — the narration VOCABULARY. A generation-time INPUT
- * (baked into the narration audio at generation time), NOT stored tour STATE: there is
- * no `joke_level` column and the notch is absent from every read DTO and the API. M1 is
- * `dadpocalypse`-only, so a stored notch would carry no information. When the 1-N notch
- * ships (M3) the column lands on the NARRATION (narrations) — a notch describes a telling,
- * not a route. This enum stays because the studio pipeline's narration is parameterized by it
- * (the persona prompt's whole notch ladder) and `tourRequest` carries it as the run input.
- */
-export const jokeLevel = z.enum(['off', 'mild', 'dad', 'dadpocalypse'])
-export type JokeLevel = z.infer<typeof jokeLevel>
-
-/**
  * A NARRATION's treatment/depth — "what kind of telling" (a `narrations` row's `form`):
  *   story  = fact-grounded telling + audio.
  *   scenic = delivery-only ambient audio, no facts.
@@ -41,7 +29,7 @@ export type DriveClipForm = z.infer<typeof driveClipForm>
 
 /**
  * A place's DELIVERY REGISTER — how the TTS voice should READ this stop, derived from the place's
- * TYPE (not its facts, and not the joke notch). A stable property of the PLACE, stored once on the
+ * TYPE (not its facts, and not the corniness of the telling). A stable property of the PLACE, stored once on the
  * POI (like `kind`), classified primarily from the Wikidata P31 "instance of" type (structural,
  * free) with an LLM fallback for the ambiguous tail. It picks a TTS style SUFFIX (`ttsStyleFor`)
  * on the shared persona base — the persona/voice/anti-fade base is unchanged; only pace/space/energy
