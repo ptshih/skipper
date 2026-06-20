@@ -1,0 +1,1 @@
+ALTER TABLE "narrations" ADD CONSTRAINT "narrations_form_not_break" CHECK ("narrations"."form" <> 'break');
