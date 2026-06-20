@@ -1,39 +1,45 @@
 # Audio loudness master spec — Spotify-aligned targets for Skipper audio
 
-**Status:** ACTIVE — narration MASTER rebuilt + pushed to −13 on 2026-06-20 (founder). The VOICE and the
-MUSIC now have DIFFERENT targets: narration **−13 LUFS** (the voice is the product — Spotify-"Loud"-ish),
-the drive-music bed **−14 LUFS** (`AUDIO_LOUDNESS` in `@skipper/shared`). Shared: **11 LU range**, EBU
-R128. The narration master reaches a consistent −13 via a true-peak LIMITER → single-pass loudnorm at
-64 kbps AAC (peaky TTS is otherwise peak-bound, and −13 overshoots 48k) — see §1 + History 2026-06-20.
+**Status:** ACTIVE — the narration master is a true-peak LIMITER → single-pass loudnorm with TWO parked
+presets in `loudnorm.ts` (`MASTERS`): **`normal14` (−14, ACTIVE)** and **`loud13` (−13, Spotify-"Loud" —
+validated 2026-06-20 but OFF)**. At −14 the voice matches the **−14** drive-music bed (`AUDIO_LOUDNESS` in
+`@skipper/shared`); flipping `MASTER` to `loud13` puts the voice 1 dB above it. Shared: **11 LU range**,
+EBU R128, −1.0 dBTP delivery ceiling. Flip the preset in `loudnorm.ts` + regen — see §1 + History 2026-06-20.
 
 ## The spec
 
-| Knob | Narration | Music bed | Why |
-|---|---|---|---|
-| Integrated loudness (I) | **−13 LUFS** | **−14 LUFS** | Spotify-"Loud" for the voice (the product); the bed sits 1 dB under (Spotify-"Normal"). |
-| True-peak ceiling | **−3 dBTP** pre-encode | −1.0 dBTP | The narration master limits to −3 pre-encode so 64k AAC overshoot lands the final ≈−1.6…−2.1; the offline MP3 bed has little overshoot, so −1.0. |
-| AAC bitrate | **64 kbps** | n/a (MP3 bed) | Raised from 48k so the louder −13 survives encoder overshoot (48k clipped some clips to +1.4). |
-| Loudness range (LRA) | **11 LU** | **11 LU** | The loudnorm default; speech + the quiet bed are low-dynamic, so it rarely binds. |
+The narration presets (`loudnorm.ts` `MASTERS`) + the music bed (`AUDIO_LOUDNESS`):
 
-The voice target + limiter params live in `loudnorm.ts`; the bed target (`AUDIO_LOUDNESS`) in `@skipper/shared`.
+| Knob | `normal14` (ACTIVE) | `loud13` (parked) | Music bed |
+|---|---|---|---|
+| Integrated loudness (I) | **−14 LUFS** | −13 LUFS | −14 LUFS |
+| Pre-encode TP ceiling | −2 dBTP | −3 dBTP | −1.0 dBTP |
+| Limiter gain (`level_in`) | 3 | 6 | n/a |
+| AAC bitrate | 48 kbps | 64 kbps | n/a (offline MP3) |
+| Loudness range (LRA) | 11 LU | 11 LU | 11 LU |
+
+Final clips land ≈−1.5…−2 dBTP on either preset (AAC overshoot eats the pre-encode headroom). The voice
+presets live in `loudnorm.ts` (flip `MASTER`); the bed target in `AUDIO_LOUDNESS` (`@skipper/shared`).
 
 ## Where it applies
 
-1. **Studio TTS narration → −13.** Every shipped take is mastered by the `masteringChain` in
+1. **Studio TTS narration.** Every shipped take is mastered by the `masteringChain` in
    `packages/studio/src/pipeline/loudnorm.ts` — a true-peak **`alimiter`** (pushes the body up +
-   brick-walls the peaks, making the headroom peaky TTS lacks) → **single-pass dynamic `loudnorm`** to
-   **−13 LUFS**, fused with the 64 kbps AAC encode. The narration target (−13), limiter params, and the
-   **−3 dBTP pre-encode ceiling** all live in `loudnorm.ts` (only the LRA is shared from `AUDIO_LOUDNESS`).
-   Validated 2026-06-20 on the 6-clip Reno corpus (resynthed + measured through the REAL path): consistent
-   −13.0…−13.4, clean peaks (−1.6…−2.1). Applies on the next (re)synthesis — existing clips take it on regen.
+   brick-walls the peaks, making the headroom peaky TTS lacks) → **single-pass dynamic `loudnorm`** to the
+   ACTIVE preset's target, fused with the AAC encode. Active = **`normal14` (−14, 48k)**; the parked
+   **`loud13` (−13, 64k)** is one `MASTER =` line away. Targets, limiter params, pre-encode ceilings +
+   bitrates all live in `loudnorm.ts` (only the LRA is shared from `AUDIO_LOUDNESS`). `loud13` was validated
+   2026-06-20 on the 6-clip Reno corpus through the REAL resynth path (−13.0…−13.4, clean −1.6…−2.1).
+   Applies on the next (re)synthesis — existing clips take the active preset on regen.
 
 2. **Bundled drive-music rotation → −14.** The 17 tracks in `apps/mobile/assets/audio/*.mp3`
    (`src/lib/driveMusic.ts`) are mastered OFFLINE to `AUDIO_LOUDNESS` (−14 / −1.0) — a one-time ffmpeg
    re-encode, NOT a runtime path. Recipe + per-track sources/licenses: `apps/mobile/assets/audio/SOURCE.md`.
 
-The voice now sits ~1 dB ABOVE the bed (−13 vs −14). The bed plays foreground between stops and ducks to
-SILENCE under a narration (it doesn't play under the voice), so the gap only shows when music swells back
-after a clip — a subordinate-bed feel, intended. Flagged for the on-device A/B (Open).
+At the active −14 the voice MATCHES the bed (no hand-off jump — the original intent). Flipping to `loud13`
+puts the voice ~1 dB ABOVE the bed; since the bed ducks to SILENCE under a narration (it doesn't play under
+the voice), that gap only shows when music swells back after a clip — a subordinate-bed feel. Either way,
+verify on the on-device A/B (Open).
 
 ## History
 
@@ -68,13 +74,17 @@ after a clip — a subordinate-bed feel, intended. Flagged for the on-device A/B
   others were clean — 48k's overshoot is the wall. Raised AAC 48k→64k (overshoot −3 dB → US-395 −1.58) and
   resynthed all 6: consistent −13.0…−13.4, clean −1.6…−2.1. `LOUDNORM_TARGET_LUFS` retired (narration owns
   its −13 in `loudnorm.ts`; `AUDIO_LOUDNESS` −14 now governs only the music bed).
+- **2026-06-20 — reverted ACTIVE preset to −14, parked −13.** Founder: keep −13's tuning but ship −14 for
+  now. Refactored the two recipes into `MASTERS` presets in `loudnorm.ts` (`normal14` ACTIVE, `loud13`
+  OFF) so neither is lost — flipping is one `MASTER =` line + a regen. The 6 Reno clips were resynthed
+  back to −14. `loud13` stays fully validated, ready when wanted.
 
 ## Open
 
-- **On-device A/B vs Spotify** of the −13 voice over the −14 bed on the real drive — confirm the 1 dB
-  voice/bed gap reads right (voice dominant, bed subordinate on swell-back) and the −13 density is good.
-- **Full-corpus regen** carries the −13 / 64k master; only the 6 Reno clips have it so far.
-- **Louder than −13?** Don't — −13 is already at the EDGE of clean AAC (per-clip overshoot); past it you
-  clip or crush the voice. Push the *bed* DOWN instead if more voice/bed separation is wanted.
+- **On-device A/B vs Spotify** of the active −14 voice + bed on the real drive — and, if revisiting
+  loudness, A/B `loud13` (−13) against it (flip the preset + regen the 6 Reno clips).
+- **Full-corpus regen** still pending — only the 6 Reno clips carry the new limiter master (at −14).
+- **Louder?** `loud13` (−13) is the parked, validated answer — flip `MASTER` in `loudnorm.ts`. Don't go
+  past −13 (already the edge of clean AAC overshoot); drop the *bed* instead for more separation.
 - **Drive-music bed** stays plain offline loudnorm at −14 / −1.0 (pre-mastered, low-overshoot MP3 — no
   limiter needed).

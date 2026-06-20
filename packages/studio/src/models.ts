@@ -132,11 +132,11 @@ export const TTS_LANGUAGE_CODE = 'en-US' as const
 // Spotify). Gemini-TTS takes are non-deterministic in LEVEL (measured body means −26.7 → −19.5 dB
 // across 30 live clips) and PEAK-BOUND (crest at ~0 dBFS), so a plain loudnorm undershoots
 // inconsistently. Fix = a true-peak limiter → single-pass loudnorm MASTERING CHAIN
-// (pipeline/loudnorm.ts — it owns the limiter, the NARRATION target, and the pre-encode TP). The VOICE
-// runs louder than the music: the narration master targets −13 LUFS (the voice is the product), while
-// the shared AUDIO_LOUDNESS −14 still governs the offline drive-music bed. Only the LRA is shared here —
-// the −13 target + limiter params + −3 dBTP pre-encode ceiling + the 48k→64k bitrate raise live in
-// loudnorm.ts; full history (incl. the reverted clip bug) in docs/decisions/audio-loudness-spec.md.
+// (pipeline/loudnorm.ts — it owns the limiter, the NARRATION target, and the pre-encode TP, as two
+// parked presets: `normal14` (−14, ACTIVE) and `loud13` (−13, Spotify-"Loud", validated-but-off). With
+// the −14 default the narration matches the shared AUDIO_LOUDNESS −14 that governs the drive-music bed;
+// flipping to loud13 puts the voice 1 dB above it. Only the LRA is shared here — targets, limiter params,
+// pre-encode ceilings + bitrates live in loudnorm.ts; history in docs/decisions/audio-loudness-spec.md.
 // LRA (loudness range) is held at the loudnorm default — speech is low-dynamic, so it rarely binds.
 export const LOUDNORM_RANGE_LU = AUDIO_LOUDNESS.rangeLu
 
