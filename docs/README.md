@@ -76,7 +76,7 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   out slowly: `regions.released_at` + `narrations.released_at` (monotonic, never un-released = no drive
   orphans / no yanked downloads), a `user.tester` preview flag (founder + allowlist hear staged content
   in-app), releasing a region auto-releases all its clips. The *human* gate downstream of the automated
-  eval gate. DESIGNED 2026-06-20, NOT YET BUILT.
+  eval gate. ✅ BUILT 2026-06-20 (migration `0029`; not yet applied to the shared DB).
 - [corpus-enrichment.md](decisions/corpus-enrichment.md) — the paid `enrich` step that scouts story
   POIs into curated fact wells (`pois.fact_sheet`) shared by roam + drives; ✅ BUILT 2026-06-15, RUN
   2026-06-16 (315 welled).

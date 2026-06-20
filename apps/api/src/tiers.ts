@@ -6,9 +6,9 @@
 
 import type { AccessTier } from '@skipper/shared'
 
-/** The only session fields tierOf needs — structurally satisfied by Better Auth's session. */
+/** The only session fields tierOf/isTester need — structurally satisfied by Better Auth's session. */
 export interface TierSession {
-  user?: { isAnonymous?: boolean | null; tier?: string | null } | null
+  user?: { isAnonymous?: boolean | null; tier?: string | null; tester?: boolean | null } | null
 }
 
 /** Derive the access tier from a session (null/guest → anonymous). */
@@ -16,6 +16,14 @@ export function tierOf(session: TierSession | null | undefined): AccessTier {
   const user = session?.user
   if (!user || user.isAnonymous) return 'anonymous'
   return user.tier === 'paid' ? 'paid' : 'free'
+}
+
+/** Region-release-gate preview check: a tester hears STAGED (not-yet-released) content. Anonymous/guest
+ *  sessions are never testers (the bit lives on a real account). The read paths skip the released_at
+ *  filter when this is true. See docs/decisions/region-release-gate.md. */
+export function isTester(session: TierSession | null | undefined): boolean {
+  const user = session?.user
+  return !!user && !user.isAnonymous && user.tester === true
 }
 
 const TIER_RANK: Record<AccessTier, number> = { anonymous: 0, free: 1, paid: 2 }

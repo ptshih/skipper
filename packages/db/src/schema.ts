@@ -206,6 +206,13 @@ export const regions = pgTable(
     // the geometry-first point-in-bbox region test. Null = use the studio pipeline's built-in
     // default (currently the Tahoe basin).
     bbox: text('bbox'),
+    // Region rollout latch (region-release-gate). NULL = DRAFT: the region is still being tuned and
+    // NONE of its POIs are public. Non-null = RELEASED: the region is open. This is the operator-facing
+    // control surface — releasing a region (admin POST /admin/regions/:slug/release) stamps this AND
+    // bulk-stamps `released_at` on every still-staged narration in the region bbox (auto-release-all).
+    // MONOTONIC — only ever set, never cleared (irreversible by design; un-release would orphan saved
+    // drives + invalidate offline downloads). See docs/decisions/region-release-gate.md.
+    releasedAt: timestamp('released_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .defaultNow()
@@ -457,6 +464,15 @@ export const narrations = pgTable(
     // valid (wire lockstep) but CHECK-excluded here: breaks live in `detours`, not narrations.
     form: narrationFormEnum('form').notNull(),
     ...narrationColumns,
+    // The release latch (region-release-gate). NULL = STAGED (auto-gate passed + persisted, but not
+    // public): generation always writes NULL, so a fresh/regenerated telling lands staged. Non-null =
+    // RELEASED: the public read paths (GET /roam, buildDrive corpus) serve a clip ONLY when this is set;
+    // a `tester` user bypasses the filter and hears staged clips in-app. MONOTONIC by invariant — only
+    // ever set (via a region release or a per-clip release), NEVER cleared — so nothing public ever
+    // disappears (no drive orphans / no yanked downloads). The regen upsert deliberately omits this from
+    // its `set` clause, so re-telling a clip preserves its release state. See
+    // docs/decisions/region-release-gate.md.
+    releasedAt: timestamp('released_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .defaultNow()

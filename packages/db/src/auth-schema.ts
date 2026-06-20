@@ -14,6 +14,12 @@ export const user = pgTable("user", {
     .notNull(),
   isAnonymous: boolean("is_anonymous").default(false),
   tier: text("tier").default("free"),
+  // Preview allowlist (region-release-gate): a tester hears STAGED (not-yet-released) content in the
+  // real app — the public read paths (GET /roam, buildDrive corpus) skip the released_at filter for
+  // these users. Orthogonal to `tier` (the payment axis); server-set only (Better Auth input:false),
+  // toggled by hand for the founder + a small TestFlight allowlist. See
+  // docs/decisions/region-release-gate.md.
+  tester: boolean("tester").default(false),
 });
 
 export const session = pgTable(

@@ -17,7 +17,7 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import { Hono, type Context } from 'hono'
-import { and, between, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
+import { and, between, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { creditEntries, drives, driveDemand, narrations, pois, regions } from '@skipper/db/schema'
 import type { DriveSelection, DriveSelectionItem, Polyline, RouteProvenance } from '@skipper/db/schema'
@@ -39,7 +39,7 @@ import {
   type DriveClipForm,
   type DriveManifest,
 } from '@skipper/shared'
-import { requireAccount, withSession, type ApiEnv } from './entitlements'
+import { isTester, requireAccount, withSession, type ApiEnv } from './entitlements'
 import { FREE_DRIVE_CAP, creditSummary, driveConsumeEntry, ensureFreeGrant } from './credits'
 import { withRetry } from './retry'
 import { contentTypeForKey, presignGet } from './storage'
@@ -180,9 +180,17 @@ interface NarrationRow {
 
 /** Load every roam narration whose POI falls within the route's bounding box (padded by the off-route
  *  ceiling) — the candidate set buildDrive snaps + paces. A few hundred rows per region, so a bbox
- *  prefilter beats PostGIS. Keyed by poiId (the buildDrive ⇄ narration join). */
+ *  prefilter beats PostGIS. Keyed by poiId (the buildDrive ⇄ narration join).
+ *
+ *  Release gate (region-release-gate): by default only RELEASED clips (released_at NOT NULL) are
+ *  eligible, so a non-tester's drive can never pick up a staged clip. `includeStaged` (a tester) lifts
+ *  the filter. The build-time filter is sufficient — drives are owner-only and release is monotonic, so
+ *  a built drive's clips stay valid forever; the drive-load resolve path needs no further filter. */
 
-async function loadCorpusForRoute(polyline: Polyline): Promise<Map<string, NarrationRow>> {
+async function loadCorpusForRoute(
+  polyline: Polyline,
+  includeStaged = false,
+): Promise<Map<string, NarrationRow>> {
   const { minLat, minLng, maxLat, maxLng } = polylineBbox(polyline)
   const midLat = (minLat + maxLat) / 2
   const padM = OFF_ROUTE_MAX_M + 200
@@ -212,6 +220,7 @@ async function loadCorpusForRoute(polyline: Polyline): Promise<Map<string, Narra
           and(
             between(pois.lat, minLat - padLat, maxLat + padLat),
             between(pois.lng, minLng - padLng, maxLng + padLng),
+            includeStaged ? undefined : isNotNull(narrations.releasedAt),
           ),
         ),
     { label: 'drive.corpus' },
@@ -348,7 +357,8 @@ driveRoutes.post('/propose', async (c) => {
   }
 
   // Accurate est. stop count: run the real selection (pure, free) so the confirm screen matches.
-  const corpus = await loadCorpusForRoute(route.polyline)
+  // A tester previews over staged clips too, so the proposed count matches what they'll build.
+  const corpus = await loadCorpusForRoute(route.polyline, isTester(c.get('session')))
   const stops = buildDrive({
     polyline: route.polyline,
     totalSec: route.durationSeconds,
@@ -441,7 +451,9 @@ driveRoutes.post('/', async (c) => {
     return c.json({ error: 'no_route', message: "Couldn't find a drivable route between those points." }, 422)
   }
 
-  const corpus = await loadCorpusForRoute(route.polyline)
+  // Release gate: a tester builds over staged clips too; everyone else gets released-only. The frozen
+  // selection then references whatever was eligible at build time (monotonic → stays valid). (region-release-gate)
+  const corpus = await loadCorpusForRoute(route.polyline, isTester(c.get('session')))
   const stops = buildDrive({
     polyline: route.polyline,
     totalSec: route.durationSeconds,

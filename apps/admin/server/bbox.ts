@@ -33,3 +33,20 @@ export function bboxError(raw: string): string | null {
   }
   return null
 }
+
+export interface BboxCorners {
+  swLng: number
+  swLat: number
+  neLng: number
+  neLat: number
+}
+
+/** Parse a "swLng,swLat,neLng,neLat" region bbox into corners; null if absent/malformed. Pair with
+ *  bboxError at a write boundary; this is the read-side parse for point-in-bbox queries (e.g. the
+ *  region-release stamp, which selects in-bbox pois). */
+export function parseBbox(raw: string | null | undefined): BboxCorners | null {
+  if (!raw) return null
+  const p = raw.split(',').map((s) => Number(s.trim()))
+  if (p.length !== 4 || p.some((n) => !Number.isFinite(n))) return null
+  return { swLng: p[0]!, swLat: p[1]!, neLng: p[2]!, neLat: p[3]! }
+}

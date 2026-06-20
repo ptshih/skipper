@@ -89,9 +89,12 @@ export const auth = betterAuth({
   emailAndPassword: { enabled: true },
   socialProviders,
   // Manual freemium tier on the user (no Stripe yet). 'free' | 'paid'.
+  // `tester` = the region-release-gate preview allowlist (hears staged content in-app); orthogonal to
+  // tier, server-set only (input:false). See docs/decisions/region-release-gate.md.
   user: {
     additionalFields: {
       tier: { type: 'string', required: false, defaultValue: 'free', input: false },
+      tester: { type: 'boolean', required: false, defaultValue: false, input: false },
     },
   },
   plugins: [
