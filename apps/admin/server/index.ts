@@ -40,6 +40,7 @@ import {
 import { CLAUDE_MODELS, classifyStoryEligibility } from '@skipper/shared'
 import { checkSpeakableAnchor } from '@skipper/engine'
 import { requireAdmin, type AdminEnv } from './auth'
+import { bboxError } from './bbox'
 import { contentTypeForKey, presignGet } from './storage'
 import {
   buildJobArgs,
@@ -95,10 +96,17 @@ app.post('/admin/regions', async (c) => {
   if (!body.slug?.trim() || !body.displayName?.trim()) {
     return c.json({ error: 'slug and displayName are required' }, 400)
   }
+  const bbox = body.bbox?.trim() || null
+  // Validate the bbox at the write boundary — a swapped-corner/oversized box silently scopes a later
+  // SPENDING enrich/generate over a huge candidate set (point-in-bbox selection). (audit #5)
+  if (bbox) {
+    const err = bboxError(bbox)
+    if (err) return c.json({ error: err }, 400)
+  }
   const [row] = await db.insert(regions).values({
     slug: body.slug.trim(),
     displayName: body.displayName.trim(),
-    bbox: body.bbox?.trim() || null,
+    bbox,
   }).returning({ slug: regions.slug, displayName: regions.displayName, bbox: regions.bbox })
   return c.json({ region: row }, 201)
 })
@@ -108,7 +116,14 @@ app.patch('/admin/regions/:slug', async (c) => {
   const body = await c.req.json<{ displayName?: string; bbox?: string | null }>()
   const update: Record<string, unknown> = {}
   if (body.displayName !== undefined) update.displayName = body.displayName.trim()
-  if (body.bbox !== undefined) update.bbox = body.bbox?.trim() || null
+  if (body.bbox !== undefined) {
+    const bbox = body.bbox?.trim() || null
+    if (bbox) {
+      const err = bboxError(bbox) // same write-boundary guard as POST (audit #5)
+      if (err) return c.json({ error: err }, 400)
+    }
+    update.bbox = bbox
+  }
   if (!Object.keys(update).length) return c.json({ error: 'nothing to update' }, 400)
   const [row] = await db.update(regions)
     .set(update)
@@ -254,7 +269,16 @@ app.get('/admin/runs', async (c) => {
     await Promise.all(
       staleNonTerminal.map(async (j) => {
         const state = await reconcileJobFromExecution({ id: j.id, cloudRunExecution: j.cloudRunExecution! })
-        if (state) j.status = state
+        // reconcile's UPDATE is guarded (audit #3): a row another path settled terminal DURING the
+        // executionState round-trip is a no-op, so re-read the authoritative status rather than the
+        // attempted one — else the list (and the expireStuckJob check below) would act on a phantom
+        // status for one poll. The detail route already re-reads the same way.
+        if (state) {
+          const fresh = (
+            await db.select({ status: studioJobs.status }).from(studioJobs).where(eq(studioJobs.id, j.id)).limit(1)
+          )[0]
+          if (fresh) j.status = fresh.status
+        }
       }),
     )
   }
@@ -400,7 +424,10 @@ async function reconcileJobFromExecution(job: {
       ...(state !== 'running' && { endedAt: new Date() }),
       ...(state === 'failed' && { error: 'reconciled: execution failed' }),
     })
-    .where(eq(studioJobs.id, job.id))
+    // Guard non-terminal (like expireStuckJob) so a row another path settled DURING the executionState
+    // round-trip — e.g. an operator cancel — is never clobbered (and a stale 'running' can't un-cancel
+    // it). A terminal status is a one-way latch. (audit #3)
+    .where(and(eq(studioJobs.id, job.id), inArray(studioJobs.status, ['queued', 'running'])))
   return state
 }
 
@@ -451,7 +478,9 @@ app.post('/admin/jobs/:id/cancel', async (c) => {
   await db
     .update(studioJobs)
     .set({ status: 'canceled', endedAt: new Date(), error: job.error ?? 'canceled by operator' })
-    .where(eq(studioJobs.id, id))
+    // Guard non-terminal: if the run settled (e.g. succeeded) between the read above and this write,
+    // don't overwrite that terminal status with 'canceled'. The re-read returns the real row. (audit #3)
+    .where(and(eq(studioJobs.id, id), inArray(studioJobs.status, ['queued', 'running'])))
   const row = (await db.select().from(studioJobs).where(eq(studioJobs.id, id)).limit(1))[0]
   return c.json({ job: row })
 })
