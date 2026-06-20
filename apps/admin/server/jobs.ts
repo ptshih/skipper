@@ -85,10 +85,12 @@ export interface BuildResult {
 
 const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
 
-// = studio's DEFAULT_REGION_SLUG (packages/studio/src/config.ts). buildJobArgs sets each run's targetId
-// to MATCH the studio script's beginJob (per-region for a region run, a generic bucket for an explicit-id
-// run), so the in-flight lock + the studio_jobs_active_target_uq unique index scope per-region — two
-// regions can run concurrently, and an admin- vs CLI-triggered run of the same target agree. (audit #9 / #1)
+// = studio's DEFAULT_REGION_SLUG (packages/studio/src/config.ts). buildJobArgs sets each region run's
+// targetSlug+targetId to MATCH the studio script's beginJob (per-region), so the in-flight lock + the
+// studio_jobs_active_target_uq unique index scope per-region — two regions run concurrently, and an
+// admin- vs CLI-triggered run of the same target agree. A whole-corpus explicit-id run leaves both NULL
+// (no fake-region sentinel); the both-null path in POST /admin/jobs over-blocks the kind, which errs
+// safe (it can't double-trigger a paid run). (audit #9 / #1)
 const DEFAULT_REGION_SLUG = 'lake-tahoe'
 
 /** Append a `--flag=N` only when the body carries a POSITIVE-number value; REJECT a present-but-invalid
@@ -172,7 +174,10 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     // --min-extract removed 2026-06-16: roam story-eligibility is "has a fact sheet" (#1), not a char floor.
     pushPosNum(args, '--max-cost', body.maxCostUsd, 'maxCostUsd')
     if (apply) args.push('--apply')
-    return { args, dryRun: !apply, spends: apply, targetId: idCsv(body.includeIds) ? 'roam-corpus' : str(body.region) || DEFAULT_REGION_SLUG }
+    // A region run keys both the display slug and the lock on its region; a whole-corpus explicit-id
+    // run leaves them undefined → stored NULL (no 'roam-corpus' sentinel), surfaced as "All".
+    const genRegion = idCsv(body.includeIds) ? undefined : str(body.region) || DEFAULT_REGION_SLUG
+    return { args, dryRun: !apply, spends: apply, targetSlug: genRegion, targetId: genRegion }
   }
 
   if (kind === 'offline_audit') {
@@ -192,7 +197,9 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     // Re-score the EXISTING corpus: READ-ONLY on narrations/R2, but --apply runs Opus judges
     // (grounding always; charm/veracity opt-in, veracity also web-searches) → spends → confirm gate.
     // The dry preview makes no model calls (free).
-    return { args, dryRun: !apply, spends: apply, targetId: idCsv(body.includeIds) ? 'roam-corpus' : str(body.region) || DEFAULT_REGION_SLUG }
+    // Region run keys slug + lock on its region; a whole-corpus explicit-id run leaves them NULL ("All").
+    const auditRegion = idCsv(body.includeIds) ? undefined : str(body.region) || DEFAULT_REGION_SLUG
+    return { args, dryRun: !apply, spends: apply, targetSlug: auditRegion, targetId: auditRegion }
   }
 
   // sweep_orphans — V2 sweeps the whole narration/ R2 prefix (tour-scoped sweeping is gone with the

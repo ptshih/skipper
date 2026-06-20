@@ -1,0 +1,1 @@
+ALTER TABLE "eval_runs" ALTER COLUMN "region" DROP NOT NULL;

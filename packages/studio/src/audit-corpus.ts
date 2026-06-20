@@ -91,7 +91,8 @@ interface Audited {
 async function main(): Promise<FinishOutcome> {
   const region = isExplicit ? null : await resolveRegion(regionRaw ?? DEFAULT_REGION_SLUG)
   const bbox = region ? requireRegionBbox(region) : null
-  const runRegion = region ? region.slug : 'roam-corpus'
+  // NULL (not a sentinel) when the run spans no single region; the admin shows it as "All".
+  const runRegion = region ? region.slug : null
 
   // EXISTING story narrations only (the grounding-critical form): inner-join narrations so we score
   // shipped tellings, not candidates. Scoped to the region bbox (wikipedia source) XOR an id list.
@@ -291,8 +292,11 @@ async function main(): Promise<FinishOutcome> {
   return { ok: true, evalRunId }
 }
 
+// A region run keys the lock on its slug; a whole-corpus explicit-id run leaves slug+target NULL
+// (no fake-region sentinel) — the admin shows it as "All".
+const auditTargetRegion = isExplicit ? undefined : (regionRaw ?? DEFAULT_REGION_SLUG)
 await runJob(
   'offline_audit',
-  { dryRun: !apply, targetId: isExplicit ? 'roam-corpus' : (regionRaw ?? DEFAULT_REGION_SLUG) },
+  { dryRun: !apply, targetSlug: auditTargetRegion, targetId: auditTargetRegion },
   main,
 )

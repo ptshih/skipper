@@ -144,8 +144,10 @@ describe('buildJobArgs — targetId is per-region, aligned with the studio begin
   // The in-flight lock + the studio_jobs_active_target_uq unique index key on targetId. A constant
   // per-kind targetId would over-block two REGIONS (a spurious 409); region-specific keying lets them
   // run concurrently AND matches the studio script's beginJob so admin/CLI runs of the same target agree.
-  test('generate_narrations / offline_audit key on the region', () => {
-    expect(buildJobArgs({ kind: 'generate_narrations', region: 'lake-tahoe' }).targetId).toBe('lake-tahoe')
+  test('generate_narrations / offline_audit key on the region (slug + lock)', () => {
+    const r = buildJobArgs({ kind: 'generate_narrations', region: 'lake-tahoe' })
+    expect(r.targetId).toBe('lake-tahoe')
+    expect(r.targetSlug).toBe('lake-tahoe') // the display region == the lock target for a region run
     expect(buildJobArgs({ kind: 'generate_narrations', region: 'yosemite' }).targetId).toBe('yosemite')
     expect(buildJobArgs({ kind: 'offline_audit', region: 'yosemite' }).targetId).toBe('yosemite')
   })
@@ -156,8 +158,10 @@ describe('buildJobArgs — targetId is per-region, aligned with the studio begin
     expect(a).not.toBe(b)
   })
 
-  test('an explicit-id generate run uses the generic bucket (matches studio isExplicit)', () => {
-    expect(buildJobArgs({ kind: 'generate_narrations', includeIds: ['a', 'b'] }).targetId).toBe('roam-corpus')
+  test('an explicit-id generate run spans no single region — slug + target are NULL (shown as "All")', () => {
+    const r = buildJobArgs({ kind: 'generate_narrations', includeIds: ['a', 'b'] })
+    expect(r.targetId).toBeUndefined() // → stored NULL, never the old 'roam-corpus' sentinel
+    expect(r.targetSlug).toBeUndefined()
   })
 
   test('a region-less run falls back to the default region slug (= studio DEFAULT_REGION_SLUG)', () => {

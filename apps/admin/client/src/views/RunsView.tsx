@@ -45,7 +45,24 @@ const KIND_META: Record<string, { label: string; icon: React.ElementType; desc: 
   offline_audit:   { label: 'Re-score corpus',  icon: Activity,   desc: 'Re-score EXISTING narrations (grounding/tts/diversity) — no regen, no TTS.', spends: 'spend'  },
 }
 
+// A run usually targets a region (e.g. 'lake-tahoe'). A whole-corpus generate/audit (explicit POI
+// id-list, no region) now leaves its target NULL → shown as "All". Some ops kinds still carry a
+// non-region target sentinel — render those as a friendly label, not a raw slug. 'roam-corpus' is the
+// LEGACY whole-corpus sentinel (no longer written; mapped here so old rows read "All"). See jobs.ts.
+const TARGET_SENTINELS: Record<string, string> = {
+  'roam-corpus': 'All',
+  'region-corpus': 'whole corpus',
+  narration: 'all clips',
+}
+
 const isLive = (s?: JobStatus | null) => s === 'running' || s === 'queued'
+
+function RunTarget({ slug }: { slug: string | null }) {
+  if (!slug) return <span className="italic text-muted-foreground">All</span>
+  const sentinel = TARGET_SENTINELS[slug]
+  if (sentinel) return <span className="italic text-muted-foreground">{sentinel}</span>
+  return <>{slug}</>
+}
 
 function PulseDot() {
   return <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-current" />
@@ -221,9 +238,9 @@ export function RunsView() {
             <TableHeader>
               <TableRow>
                 <TableHead>Run</TableHead>
+                <TableHead>Target</TableHead>
                 <TableHead>Result</TableHead>
                 <TableHead>Mode</TableHead>
-                <TableHead>Cost</TableHead>
                 <TableHead>Detail</TableHead>
                 <TableHead className="text-right">When</TableHead>
               </TableRow>
@@ -250,6 +267,9 @@ export function RunsView() {
                         </div>
                       </div>
                     </TableCell>
+                    <TableCell className="text-xs">
+                      <RunTarget slug={r.slug} />
+                    </TableCell>
                     <TableCell><RunResultCell r={r} /></TableCell>
                     <TableCell>
                       {r.dryRun
@@ -258,7 +278,6 @@ export function RunsView() {
                           ? <span className="text-muted-foreground">—</span>
                           : <Badge variant="warning">spend</Badge>}
                     </TableCell>
-                    <TableCell className="font-mono text-xs">{fmtCost(r.costUsd)}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {r.source === 'job'
                         ? (r.triggeredBy ?? '—')
@@ -398,7 +417,7 @@ function RunDrawer({ run, onClose }: { run: RunEvent; onClose: () => void }) {
                 <Badge variant={run.pass ? 'success' : 'destructive'}>{run.pass ? 'pass' : 'fail'}</Badge>
               )}
             </div>
-            <SheetDescription className="mt-0.5">{run.slug ?? run.id}</SheetDescription>
+            <SheetDescription className="mt-0.5">{run.slug ? (TARGET_SENTINELS[run.slug] ?? run.slug) : 'All'}</SheetDescription>
           </div>
           <SheetClose asChild>
             <Button variant="ghost" size="icon" className="-mr-1.5 -mt-1 shrink-0" aria-label="Close">

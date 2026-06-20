@@ -384,7 +384,9 @@ async function main(): Promise<void> {
     (g): g is GatedClip & { script: string } => g.shipped && g.script !== null,
   )
   const withheldClips = gated.filter((g) => !g.shipped)
-  const runRegion = region ? region.slug : 'roam-corpus'
+  // NULL (not a sentinel) when the run spans no single region — an explicit-id run over the whole
+  // corpus. The admin surfaces a null region/target as "All".
+  const runRegion = region ? region.slug : null
   const identityBySeq = new Map<number, ClipIdentity>(
     gated.map((g) => [
       g.seq,
@@ -611,8 +613,11 @@ async function main(): Promise<void> {
   console.log(`TTS spend (estimated from chars): ~$${ttsActual.usd.toFixed(2)}`)
 }
 
+// A region run keys the lock on its slug; a whole-corpus explicit-id run leaves slug+target NULL
+// (no fake-region sentinel) — the admin shows it as "All".
+const genTargetRegion = isExplicit ? undefined : (regionRaw ?? DEFAULT_REGION_SLUG)
 await runJob(
   'generate_narrations',
-  { dryRun: !apply && !scriptsOnly, targetId: isExplicit ? 'roam-corpus' : (regionRaw ?? DEFAULT_REGION_SLUG) },
+  { dryRun: !apply && !scriptsOnly, targetSlug: genTargetRegion, targetId: genTargetRegion },
   main,
 )

@@ -199,7 +199,7 @@ export interface EvalScoreRow {
 export interface EvalRunReport {
   run: {
     id: string
-    region: string
+    region: string | null
     kind: string
     pass: boolean
     dryRun: boolean

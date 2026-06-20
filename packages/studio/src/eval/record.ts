@@ -25,8 +25,9 @@ export interface ClipIdentity {
 }
 
 export interface EvalRunInput {
-  /** The region slug the corpus run covered. */
-  region: string
+  /** The region slug the corpus run covered — NULL for a whole-corpus (explicit-id) run that
+   *  spans no single region. */
+  region: string | null
   kind: 'generation' | 'offline_audit'
   dryRun: boolean
   narrationModel?: string | null

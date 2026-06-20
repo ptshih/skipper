@@ -247,6 +247,10 @@ app.get('/admin/runs', async (c) => {
         kind: studioJobs.kind,
         status: studioJobs.status,
         targetSlug: studioJobs.targetSlug,
+        // The Runs "Target" column reads targetSlug (the display region) and falls back to targetId
+        // (the lock label) so legacy rows — which only set targetId — still show their region.
+        // A whole-corpus run leaves both NULL, surfaced as "All".
+        targetId: studioJobs.targetId,
         dryRun: studioJobs.dryRun,
         phase: studioJobs.phase,
         costUsd: studioJobs.costUsd,
@@ -318,7 +322,7 @@ app.get('/admin/runs', async (c) => {
       source: 'job' as const,
       id: j.id,
       kind: j.kind,
-      slug: j.targetSlug,
+      slug: j.targetSlug ?? j.targetId,
       status: j.status,
       pass: null,
       dryRun: j.dryRun,

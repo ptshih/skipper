@@ -23,7 +23,8 @@ function rollupDimension(dimension: EvalDimension, evals: StopEval[]): Dimension
 }
 
 export interface ScorecardInput {
-  slug: string
+  /** The region slug this run covered — NULL for a whole-corpus run that spans no single region. */
+  slug: string | null
   runName: string
   /** ISO-8601, or null if the caller didn't stamp one. */
   evaluatedAt: string | null

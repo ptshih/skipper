@@ -622,8 +622,9 @@ export const evalRuns = pgTable(
   'eval_runs',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    /** The region slug whose corpus this run covered. */
-    region: text('region').notNull(),
+    /** The region slug whose corpus this run covered — NULL for a whole-corpus (explicit-id) run
+     *  that spans no single region (the admin surfaces NULL as "All"). */
+    region: text('region'),
     kind: evalRunKindEnum('kind').notNull(),
     dryRun: boolean('dry_run').notNull().default(false),
     /** Provenance pins for run-over-run comparison. */
