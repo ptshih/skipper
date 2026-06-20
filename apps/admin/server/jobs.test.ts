@@ -139,3 +139,34 @@ describe('buildJobArgs — numeric flag validation (the server is the trust boun
     expect(() => buildJobArgs({ kind: 'enrich_pois', limit: 0, maxCostUsd: 0 })).not.toThrow()
   })
 })
+
+describe('buildJobArgs — targetId is per-region, aligned with the studio beginJob (audit #9 / #11)', () => {
+  // The in-flight lock + the studio_jobs_active_target_uq unique index key on targetId. A constant
+  // per-kind targetId would over-block two REGIONS (a spurious 409); region-specific keying lets them
+  // run concurrently AND matches the studio script's beginJob so admin/CLI runs of the same target agree.
+  test('generate_narrations / offline_audit key on the region', () => {
+    expect(buildJobArgs({ kind: 'generate_narrations', region: 'lake-tahoe' }).targetId).toBe('lake-tahoe')
+    expect(buildJobArgs({ kind: 'generate_narrations', region: 'yosemite' }).targetId).toBe('yosemite')
+    expect(buildJobArgs({ kind: 'offline_audit', region: 'yosemite' }).targetId).toBe('yosemite')
+  })
+
+  test('two different regions get DISTINCT targetIds (no spurious cross-region 409)', () => {
+    const a = buildJobArgs({ kind: 'generate_narrations', region: 'lake-tahoe' }).targetId
+    const b = buildJobArgs({ kind: 'generate_narrations', region: 'yosemite' }).targetId
+    expect(a).not.toBe(b)
+  })
+
+  test('an explicit-id generate run uses the generic bucket (matches studio isExplicit)', () => {
+    expect(buildJobArgs({ kind: 'generate_narrations', includeIds: ['a', 'b'] }).targetId).toBe('roam-corpus')
+  })
+
+  test('a region-less run falls back to the default region slug (= studio DEFAULT_REGION_SLUG)', () => {
+    expect(buildJobArgs({ kind: 'generate_narrations' }).targetId).toBe('lake-tahoe')
+    expect(buildJobArgs({ kind: 'discover_pois' }).targetId).toBe('lake-tahoe')
+  })
+
+  test('discover_pois keys on the region; sweep_orphans matches its script target', () => {
+    expect(buildJobArgs({ kind: 'discover_pois', region: 'yosemite' }).targetId).toBe('yosemite')
+    expect(buildJobArgs({ kind: 'sweep_orphans' }).targetId).toBe('narration') // audit #11 (was 'roam')
+  })
+})

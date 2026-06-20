@@ -756,9 +756,9 @@ export const studioJobs = pgTable(
     // At most ONE active (queued/running) run per (kind, target) — the DB-enforced ATOMIC backstop for
     // the SELECT-then-insert idempotency guard in POST /admin/jobs, so a concurrent double-submit / retry
     // can't double-trigger a paid Cloud Run run. PARTIAL (active rows only) so a settled run frees the
-    // target for a re-run. Keys on the target_id the ADMIN sets (buildJobArgs) — authoritative for an
-    // admin-triggered run; a CLI/v0 run's beginJob may set a region-specific target_id, so align the two
-    // if CLI runs become common. (audit #1)
+    // target for a re-run. Keys on target_id, which buildJobArgs sets to MATCH the studio script's
+    // beginJob (per-region for a region run) — so admin- and CLI-triggered runs of the same target agree
+    // and two regions can run concurrently. (audit #1 / #9)
     uniqueIndex('studio_jobs_active_target_uq')
       .on(t.kind, t.targetId)
       .where(sql`${t.status} in ('queued', 'running')`),

@@ -85,6 +85,12 @@ export interface BuildResult {
 
 const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
 
+// = studio's DEFAULT_REGION_SLUG (packages/studio/src/config.ts). buildJobArgs sets each run's targetId
+// to MATCH the studio script's beginJob (per-region for a region run, a generic bucket for an explicit-id
+// run), so the in-flight lock + the studio_jobs_active_target_uq unique index scope per-region — two
+// regions can run concurrently, and an admin- vs CLI-triggered run of the same target agree. (audit #9 / #1)
+const DEFAULT_REGION_SLUG = 'lake-tahoe'
+
 /** Append a `--flag=N` only when the body carries a POSITIVE-number value; REJECT a present-but-invalid
  *  one (NaN / negative / non-numeric). The server is the trust boundary (the SPA isn't): without this a
  *  `maxCostUsd:"abc"` would emit `--max-cost=NaN`, which the CLI's maxCostFlag reads as Infinity →
@@ -128,7 +134,7 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     if (body.region) args.push(`--region=${str(body.region)}`)
     if (apply) args.push('--apply')
     // sweep is free (WDQS + MediaWiki, no LLM/TTS); spends:false so no confirm gate.
-    return { args, dryRun: !apply, spends: false, targetId: 'roam-corpus' }
+    return { args, dryRun: !apply, spends: false, targetId: str(body.region) || DEFAULT_REGION_SLUG }
   }
 
   if (kind === 'enrich_pois') {
@@ -166,7 +172,7 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     // --min-extract removed 2026-06-16: roam story-eligibility is "has a fact sheet" (#1), not a char floor.
     pushPosNum(args, '--max-cost', body.maxCostUsd, 'maxCostUsd')
     if (apply) args.push('--apply')
-    return { args, dryRun: !apply, spends: apply, targetId: 'roam-corpus' }
+    return { args, dryRun: !apply, spends: apply, targetId: idCsv(body.includeIds) ? 'roam-corpus' : str(body.region) || DEFAULT_REGION_SLUG }
   }
 
   if (kind === 'offline_audit') {
@@ -186,7 +192,7 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     // Re-score the EXISTING corpus: READ-ONLY on narrations/R2, but --apply runs Opus judges
     // (grounding always; charm/veracity opt-in, veracity also web-searches) → spends → confirm gate.
     // The dry preview makes no model calls (free).
-    return { args, dryRun: !apply, spends: apply, targetId: 'roam-corpus' }
+    return { args, dryRun: !apply, spends: apply, targetId: idCsv(body.includeIds) ? 'roam-corpus' : str(body.region) || DEFAULT_REGION_SLUG }
   }
 
   // sweep_orphans — V2 sweeps the whole narration/ R2 prefix (tour-scoped sweeping is gone with the
@@ -194,7 +200,7 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
   const apply = body.apply === true
   const args: string[] = [script]
   if (apply) args.push('--apply')
-  return { args, dryRun: !apply, spends: apply, targetId: 'roam' }
+  return { args, dryRun: !apply, spends: apply, targetId: 'narration' }
 }
 
 /** Trigger a skipper-studio execution with per-run arg + env overrides. Returns the execution's
