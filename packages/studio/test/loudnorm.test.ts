@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { parseLoudnormStats } from '../src/pipeline/loudnorm'
+import { masteringFilter, parseLoudnormStats } from '../src/pipeline/loudnorm'
 
 // A representative loudnorm pass-1 JSON block, as ffmpeg prints it on stderr amid banner
 // and progress noise (print_format=json). The five fields pass 2 feeds back are input_i /
@@ -43,5 +43,36 @@ describe('parseLoudnormStats — ffmpeg loudnorm JSON', () => {
 
   test('returns null on malformed JSON', () => {
     expect(parseLoudnormStats('{ "input_i": not-valid }')).toBeNull()
+  })
+})
+
+describe('masteringFilter — the peak limiter rides ahead of loudnorm in BOTH passes', () => {
+  // A representative pass-1 stats object (the five fields pass 2 feeds back).
+  const stats = {
+    input_i: '-20.0',
+    input_tp: '-2.0',
+    input_lra: '5.0',
+    input_thresh: '-30.0',
+    target_offset: '0.1',
+  }
+
+  test('measure pass: the limiter precedes the loudnorm ANALYSIS (so stats describe the limited signal)', () => {
+    const f = masteringFilter()
+    expect(f).toContain('acompressor') // the peak limiter
+    expect(f.indexOf('acompressor')).toBeLessThan(f.indexOf('loudnorm')) // limiter FIRST
+    expect(f).toContain('print_format=json') // analysis mode
+    expect(f).not.toContain('linear=true') // no gain applied on the measure pass
+  })
+
+  test('encode pass: the same limiter precedes the LINEAR loudnorm built from the measured stats', () => {
+    const f = masteringFilter(stats)
+    expect(f.indexOf('acompressor')).toBeLessThan(f.indexOf('loudnorm'))
+    expect(f).toContain('linear=true')
+    expect(f).toContain('measured_I=-20.0')
+  })
+
+  test('the limiter is byte-identical across passes — the gain must match the signal it measured', () => {
+    const limiterOf = (s: string) => s.slice(0, s.indexOf(',loudnorm'))
+    expect(limiterOf(masteringFilter())).toBe(limiterOf(masteringFilter(stats)))
   })
 })

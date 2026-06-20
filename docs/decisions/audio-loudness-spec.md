@@ -17,8 +17,10 @@ Tune in ONE place — `AUDIO_LOUDNESS` — then re-master both surfaces below.
 ## Where it applies
 
 1. **Studio TTS narration.** Every shipped take is linear-loudnormed to the spec at synthesis
-   (`packages/studio/src/pipeline/loudnorm.ts`, two-pass `loudnorm` fused with the AAC encode). The
-   `LOUDNORM_TARGET_LUFS` / `LOUDNORM_TRUE_PEAK_DB` / `LOUDNORM_RANGE_LU` constants in
+   (`packages/studio/src/pipeline/loudnorm.ts`, two-pass `loudnorm` fused with the AAC encode),
+   behind a **transparent peak limiter** (`PEAK_LIMITER`, 20:1 above −3 dBFS, in BOTH passes) that
+   shaves the transient spikes which would otherwise pin peaky TTS short of the target — see History
+   2026-06-20. The `LOUDNORM_TARGET_LUFS` / `LOUDNORM_TRUE_PEAK_DB` / `LOUDNORM_RANGE_LU` constants in
    `packages/studio/src/models.ts` are **derived from** `AUDIO_LOUDNESS` (not redefined). Applies on
    the next (re)synthesis — existing clips take it on regen.
 
@@ -43,9 +45,21 @@ ducks to silence under a narration, so a mismatched bed would jump in level on e
 - **2026-06-19 — spec centralized** into `AUDIO_LOUDNESS` (`@skipper/shared`) so narration and music
   reference one definition instead of scattered magic numbers (founder: "make sure these are defined
   somewhere for future").
+- **2026-06-20 — peak limiter added to the narration master; target stays −14.** Diagnosed that the
+  shipped corpus reads **−14.7 … −15.5 LUFS** (≈1 LU UNDER spec): TTS is **peak-bound** — plosive/
+  sibilant transients hit the −1.0 dBTP ceiling before the linear gain reaches −14, so loudnorm gives
+  up early. Proved (founder A/B, 2026-06-20) that **raising the target number is a no-op while peak-
+  bound** (−13/−12/−11 all land at the same ~−15), and that raising the TP ceiling instead would clip
+  (the 48 kbps AAC already overshoots to ~0 dBTP). Fix: a transparent `acompressor` limiter (20:1 above
+  −3 dBFS) ahead of loudnorm in both passes shaves ONLY the top transients (body/tail untouched →
+  dynamics + tail-collapse guarantee intact), freeing the headroom for the gain to reach a TRUE −14
+  (the Vikingsholm test clip moved −15.3 → −14.5). Music was NOT re-mastered — it already sits at
+  ≈−14.3 (dense, not peak-bound), so lifting narration to a true −14 *closes* the voice/bed gap.
+  Code: `PEAK_LIMITER` in `loudnorm.ts`. Takes effect on the next (paid) narration regen.
 
 ## Open
 
 - **On-device A/B vs Spotify** of the −14 / −1.0 level (narration + music together) on the real drive,
-  before the first paid full-corpus regen. If it still reads low, nudge `AUDIO_LOUDNESS.integratedLufs`
-  (−13/−12) or the TP ceiling further toward 0 — one edit, re-master both surfaces.
+  after the first regen carrying the peak limiter. If it STILL reads low, the lever is now the limiter
+  threshold/ratio (more peak-shaving = more reachable loudness) or the TP ceiling, NOT the target
+  number — see the 2026-06-20 note on why a bare target bump does nothing while peak-bound.
