@@ -20,7 +20,7 @@
 // name for the admin-api's reconcile backstop without anyone passing it in.
 // Background: docs/specs/admin-ops-console-spec.md §9.
 
-import { eq, sql } from 'drizzle-orm'
+import { and, eq, inArray, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { studioJobs } from '@skipper/db/schema'
 import type { NewStudioJob } from '@skipper/db/schema'
@@ -129,7 +129,13 @@ export async function finishJob(outcome: FinishOutcome): Promise<void> {
     }
   }
   try {
-    await db.update(studioJobs).set(set).where(eq(studioJobs.id, id))
+    // Guard non-terminal (like the admin's expireStuckJob/reconcile): cancellation isn't instant, so an
+    // operator cancel can settle this row 'canceled' WHILE the container is finishing. Don't let finishJob
+    // overwrite that terminal status — a terminal status is a one-way latch. (audit #4)
+    await db
+      .update(studioJobs)
+      .set(set)
+      .where(and(eq(studioJobs.id, id), inArray(studioJobs.status, ['queued', 'running'])))
   } catch (e) {
     warn('finish', e)
   }
