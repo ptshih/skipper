@@ -77,6 +77,40 @@ reads 20% quiet" measure suggests −14 may want to nudge to −13/−12). One-l
 Refs: `pipeline/loudnorm.ts`, `pipeline/tts.ts`, `pipeline/tail.ts`, `models.ts` (LOUDNORM_*),
 `docs/decisions/audio-compression-spike.md`.
 
+## TTS delivery: differentiate the style prompt by stop-type / notch — DEFERRED 2026-06-19
+
+`SKIPPER_TTS_STYLE_PROMPT` (`models.ts`) is ONE static delivery directive applied to every clip via
+`synthesizeWithTailRetake(script, persona.voice, persona.ttsStyle, …)`. It's written for the
+joke-forward read ("save the slow-down for the jokes"), which is **inert on stops with no jokes**
+(scenic/OFF) and one-note across registers. The win: a `ttsStyleFor({ form, jokeLevel })` that keeps
+the universal **base** (persona + the load-bearing **anti-fade** clause) and appends a tailored suffix
+— story+dad/dadpocalypse = current joke clause; story+off/mild = "play it straight, favorite-uncle
+sincere"; scenic = "slow a touch, leave air, wonder not performance"; break = "quick light aside, no
+ceremony". One-line swap at the call site.
+
+**Why DEFERRED (founder, 2026-06-19):** the entire corpus is generated `form:'story'` +
+`jokeLevel:'dadpocalypse'` today. Scenic (the deferred "waves"), break (`detours`), and every notch
+but dadpocalypse are all themselves deferred — so the variants have **no output to act on and nothing
+to ear-test** until those land. Revisit when waves / breaks / notches ship (it rides ALONGSIDE that
+work — each new form/notch wants its delivery tuned by ear in the same paid run). The base+suffix
+design above is the build-ready answer; until then the single story+dadpocalypse read stands and is
+only touched on a specific founder ear-complaint (and never re-tuned blind — see the `models.ts`
+warning).
+
+## De-stale the deferred specs that still assume the intro frame + personal kit
+
+The intro/outro frame + the "cousin Ray" personal kit were KILLED 2026-06-19 (founder call): V2 had
+already deleted asides (placeless framing), so the frame prompt + `PersonaDef.kit` + the kit
+diversity-lint were dead code, and the kit only ever leaked weird jokes into stops. All removed; the
+stop prompt now tells the host he invents NO backstory (`persona/skipper.ts`). Several DEFERRED specs
+still describe an intro/outro frame and/or the personal kit as if they exist:
+`docs/specs/{tell-me-more,downtime-callouts,drive-thesis,scenic-stops,ask-the-skipper,tour-structure}-spec.md`.
+
+- [ ] When each of those specs is next picked up (they're DEFERRED, not active), reconcile it with
+      "no intro/outro frame, no personal kit" — OR, if a "welcome aboard" intro is wanted as a real
+      feature, spec it fresh (it could be a charm win — meeting the host). Don't bulk-rewrite them now;
+      flag-on-touch is enough since none are being built.
+
 ## In-app narration volume trim — DEFERRED pending the −14 ear-gate (founder feedback 2026-06-11)
 
 Founder ask: an in-app control to make NARRATION slightly louder/quieter, INDEPENDENT of device
@@ -151,30 +185,17 @@ Refs: `apps/mobile/src/lib/offline.ts`, `apps/mobile/app/drives/[id]/index.tsx`,
 
 ## Offline downloads: expiration / forced freshness re-check (TTL)
 
-Founder ask 2026-06-16: an offline-downloaded tour should EXPIRE after a while (~**30 days**, a
-starting value — usage/ear-tunable like the facts TTL) and force a freshness re-check / re-download.
-WHY: offline clips never auto-refresh — the device keeps its cached bytes indefinitely. The existing
-content-diff (`isDownloadStale` + the "Fresh cut ready" chip — see the section above) only catches
-drift IF the rider re-opens the tour-detail screen AND a fresh fetch is reachable; a tour downloaded
-once and never re-opened (or held in a dead zone) can carry STALE facts / a superseded clip forever.
-This is the maintenance gap made concrete: a `facts_hash` move or a `resynth-narration`
-never reaches an already-downloaded device. A time-based TTL is the safety net INDEPENDENT of the
-content-diff — it fires even when the device never got to compare. Secondary benefit: it bounds how
-long a baked Places break-name persists offline (CLAUDE.md notes the frozen-clip-outlives-the-DB-anchor
-Places-ToS concern).
-
-- [ ] Stamp `downloadedAt` in the offline manifest (or reuse its existing timestamp); on tour-open,
-      if `now − downloadedAt > OFFLINE_TTL_DAYS` (30), surface an "expired — re-download to refresh"
-      state.
-- [ ] **Soft vs hard — DECIDE.** Lean SOFT (still playable offline, but a more insistent prompt than
-      the content-diff chip) to honor the never-strand-a-rider-in-a-dead-zone posture; go HARD (refuse
-      offline play past TTL) only if licensing / Places-ToS demands a guaranteed-fresh ceiling.
-- [ ] Bump the manifest version if the shape changes (a pre-TTL download lacks `downloadedAt` → treat
-      as expired / re-pull, same pattern as the v1→v2 `revisedAt`-token migration).
-
-Refs: `apps/mobile/src/lib/offline.ts` (manifest + `isDownloadStale`),
-`apps/mobile/app/drives/[id]/index.tsx` (the chip/⋯ action this rides alongside). Pairs with the
-"Offline downloads: full re-pull only" section above (the time-based complement to its content-diff).
+✅ **BUILT 2026-06-19 (section DONE, safe to delete).** Founder ask 2026-06-16: an offline download
+should EXPIRE (~30d) and nudge a re-check — offline clips never auto-refresh, and the content-diff
+(`isDownloadStale`) only catches drift if the rider re-opens the screen WHILE ONLINE, so a copy saved
+once and never re-opened (or held in a dead zone) can carry stale facts / a superseded clip forever.
+Shipped: `OFFLINE_TTL_DAYS = 30` + `isDownloadExpired` in `apps/mobile/src/lib/offline.ts` (pure date
+math in offline-util `isPastTtl`, unit-tested; reads only the existing `savedAt`, ZERO-network — so it
+fires even in a dead zone, unlike the content-diff); the drive-detail screen shows a "Saved a while back" chip + a
+"Refresh the download" ⋯ action past the TTL. **SOFT** (never blocks playback — decided per the
+never-strand-a-rider posture); **no manifest-version bump** (reuses `savedAt`, no shape change).
+Decision: `docs/decisions/offline-freshness-ttl.md`. (The per-clip-diff re-pull stays post-MVP — see
+"Offline downloads: full re-pull only" above.)
 
 ## Upstream-contribution drafts for the active poi_overrides (agent drafts, human submits)
 
