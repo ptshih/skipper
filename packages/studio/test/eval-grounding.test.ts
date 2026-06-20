@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   buildGroundingWell,
   evaluateGrounding,
+  makeVotingDecomposer,
   normalizeClaims,
   type ClaimDecomposer,
   type GroundingInput,
@@ -58,6 +59,75 @@ describe('evaluateGrounding — the gate scoring', () => {
     const e = await evaluateGrounding(input({ stopType: 'scenic', placeName: undefined }), fake([]))
     expect(e.pass).toBe(true)
     expect(e.score).toBe(1)
+  })
+})
+
+/** A base decomposer that returns a different verdict-set on each successive call (simulating the
+ *  judge's run-to-run noise), and counts how many times it was called. */
+const sequenceFake = (sets: ClaimVerdict[][]) => {
+  let calls = 0
+  const decompose: ClaimDecomposer = async () => sets[Math.min(calls++, sets.length - 1)] ?? []
+  return { decompose, calls: () => calls }
+}
+const ungrounded = (claim: string): ClaimVerdict => ({ claim, status: 'ungrounded', evidence: null })
+const grounded = (claim: string): ClaimVerdict => ({ claim, status: 'grounded', evidence: 'sheet' })
+
+describe('makeVotingDecomposer — union k samples for fail-closed recall', () => {
+  test('k ≤ 1 returns the base decomposer unchanged (identity)', () => {
+    const base: ClaimDecomposer = async () => []
+    expect(makeVotingDecomposer(base, 1)).toBe(base)
+    expect(makeVotingDecomposer(base, 0)).toBe(base)
+  })
+
+  test('a claim flagged by ANY sample is ungrounded (union — the recall win)', async () => {
+    // Sample 1 clean, sample 2 catches "tallest", sample 3 clean — exactly the noise calibration saw.
+    const { decompose } = sequenceFake([
+      [grounded('a Queen Anne')],
+      [grounded('a Queen Anne'), ungrounded('tallest turret in the state')],
+      [grounded('a Queen Anne')],
+    ])
+    const out = await makeVotingDecomposer(decompose, 3)(input())
+    expect(out.filter((c) => c.status === 'ungrounded').map((c) => c.claim)).toContain(
+      'tallest turret in the state',
+    )
+  })
+
+  test('calls the base exactly k times', async () => {
+    const sf = sequenceFake([[grounded('x')]])
+    await makeVotingDecomposer(sf.decompose, 3)(input())
+    expect(sf.calls()).toBe(3)
+  })
+
+  test('the same violation across samples is deduped to one finding (case-insensitive)', async () => {
+    const { decompose } = sequenceFake([
+      [ungrounded('three hundred feet deep')],
+      [ungrounded('Three Hundred Feet Deep')],
+      [ungrounded('three hundred feet deep')],
+    ])
+    const out = await makeVotingDecomposer(decompose, 3)(input())
+    expect(out.filter((c) => c.status === 'ungrounded')).toHaveLength(1)
+  })
+
+  test('all samples clean → passes through evaluateGrounding clean', async () => {
+    const { decompose } = sequenceFake([
+      [grounded('a'), { claim: 'b', status: 'ambient', evidence: 'region' }],
+    ])
+    const e = await evaluateGrounding(input(), makeVotingDecomposer(decompose, 3))
+    expect(e.pass).toBe(true)
+    expect(e.findings).toHaveLength(0)
+  })
+
+  test('a claim grounded in sample 0 but flagged by another → kept ONCE as ungrounded (fail-closed, no dupe)', async () => {
+    const { decompose } = sequenceFake([
+      [grounded('the span'), grounded('safe fact')],
+      [grounded('the span'), grounded('safe fact')],
+      [ungrounded('the span'), grounded('safe fact')],
+    ])
+    const out = await makeVotingDecomposer(decompose, 3)(input())
+    const theSpan = out.filter((c) => c.claim.toLowerCase() === 'the span')
+    expect(theSpan).toHaveLength(1)
+    expect(theSpan[0]!.status).toBe('ungrounded')
+    expect(out.some((c) => c.claim === 'safe fact' && c.status === 'grounded')).toBe(true)
   })
 })
 

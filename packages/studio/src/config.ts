@@ -180,6 +180,14 @@ export const GROUNDING_EVAL = (): boolean => process.env.SKIPPER_GROUNDING_EVAL 
 export const GROUNDING_REGEN_MAX_ROUNDS = 3 // raised 2→3 (2026-06-20) — grounding retakes now EXCISE
 // (eval/excise.ts: trim the flagged lines) instead of re-narrating, so each round is a cheap, reliable
 // edit; the extra round is headroom for the rare case where smoothing a cut leaves a new claim to trim.
+/** Independent grounding-judge samples UNION-voted per clip (eval/grounding.ts makeVotingDecomposer):
+ * a claim flagged ungrounded by ANY sample is ungrounded. Opus 4.8 rejects `temperature` (400), so the
+ * gate is irreducibly stochastic at single-sample — calibration (2026-06-20) measured per-clip recall
+ * swing to 5/8 on a bad draw, letting a blatant superlative slip. Union voting drives the miss rate
+ * toward the k-th power (a violation caught ~70% per sample clears ~97% at k=3), at k× the gate's Opus
+ * cost. Fail-closed trade: a lone sample's over-flag becomes a finding (excision recovers many; the
+ * founder ear backstops the rest). 1 = the old single-sample gate. Override: SKIPPER_GROUNDING_VOTES. */
+export const GROUNDING_VOTE_SAMPLES = (): number => intKnob(process.env.SKIPPER_GROUNDING_VOTES, 3)
 
 // --- POI discovery ----------------------------------------------------------
 

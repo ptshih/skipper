@@ -18,6 +18,7 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import type { StopType } from '@skipper/shared'
+import { GROUNDING_VOTE_SAMPLES } from '../config'
 import { getAnthropic, JUDGMENT_MODEL } from '../models'
 import { recordModelUsage } from '../pipeline/spend'
 import type { ClaimStatus, ClaimVerdict, StopEval } from './types'
@@ -226,13 +227,46 @@ export const anthropicDecomposer: ClaimDecomposer = async (input) => {
 }
 
 /**
+ * UNION-vote k independent decompositions into ONE fail-closed verdict: a claim flagged ungrounded
+ * by ANY sample is ungrounded (deduped by claim text). Recall climbs toward 100% as k rises — the
+ * only reliability lever left, since Opus 4.8 rejects `temperature` (400), so a single sample is
+ * irreducibly stochastic (calibration 2026-06-20 saw recall swing 8/8 → 5/8 run-to-run, a blatant
+ * superlative slipping on the bad draw). The first sample's grounded/ambient claims are kept for a
+ * coherent score + detail (minus any the union flagged). Cost is k× Opus calls + a precision hit (a
+ * lone sample's over-flag becomes a finding) — the deliberate fail-closed trade: silence beats a
+ * shipped hallucination, and excision recovers many over-flags. k ≤ 1 → the base decomposer, unchanged.
+ */
+export function makeVotingDecomposer(base: ClaimDecomposer, samples: number): ClaimDecomposer {
+  if (samples <= 1) return base
+  return async (input) => {
+    const runs = await Promise.all(Array.from({ length: samples }, () => base(input)))
+    const ungrounded = new Map<string, ClaimVerdict>()
+    for (const run of runs)
+      for (const c of run)
+        if (c.status === 'ungrounded') {
+          const key = c.claim.trim().toLowerCase()
+          if (!ungrounded.has(key)) ungrounded.set(key, c)
+        }
+    const nonUngrounded = (runs[0] ?? []).filter(
+      (c) => c.status !== 'ungrounded' && !ungrounded.has(c.claim.trim().toLowerCase()),
+    )
+    return [...ungrounded.values(), ...nonUngrounded]
+  }
+}
+
+/** The production decomposer: anthropicDecomposer UNION-voted GROUNDING_VOTE_SAMPLES times. */
+export const votingDecomposer: ClaimDecomposer = (input) =>
+  makeVotingDecomposer(anthropicDecomposer, GROUNDING_VOTE_SAMPLES())(input)
+
+/**
  * Score one stop's grounding. PASS = zero ungrounded claims (the hard gate). The score is
  * the share of claims that are grounded-or-ambient, so a stop with one slip among many
- * still reads as "mostly grounded" while still FAILING the gate.
+ * still reads as "mostly grounded" while still FAILING the gate. Default decomposer UNION-votes
+ * k independent samples (votingDecomposer) — the single-sample gate is too noisy to trust.
  */
 export async function evaluateGrounding(
   input: GroundingInput,
-  decompose: ClaimDecomposer = anthropicDecomposer,
+  decompose: ClaimDecomposer = votingDecomposer,
 ): Promise<StopEval> {
   const claims = await decompose(input)
   const ungrounded = claims.filter((c) => c.status === 'ungrounded')
