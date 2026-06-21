@@ -102,14 +102,14 @@ function DrawRectangle({ active, onBbox, onDone }: { active: boolean; onBbox: (b
 
 /** A draw-a-rectangle bbox picker. Shows the current bbox, and a "Draw bbox" toggle: while on, drag a
  *  box (the map won't pan); on release it fills the field and exits draw mode. Normal drag = pan. */
-export function BboxMap({ bbox, onBbox }: { bbox: string; onBbox: (bbox: string) => void }) {
+export function BboxMap({ bbox, onBbox, className }: { bbox: string; onBbox: (bbox: string) => void; className?: string }) {
   const [drawing, setDrawing] = useState(false)
   const bounds = bboxToBounds(bbox)
   const center: [number, number] = bounds
     ? [(bounds[0][0] + bounds[1][0]) / 2, (bounds[0][1] + bounds[1][1]) / 2]
     : DEFAULT_CENTER
   return (
-    <div className="relative h-72 w-full overflow-hidden rounded-lg border">
+    <div className={`relative w-full overflow-hidden rounded-lg border ${className ?? 'h-72'}`}>
       <button
         type="button"
         onClick={(e) => {
