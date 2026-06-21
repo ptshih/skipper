@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { geocodeBoundsFor, polylineBbox } from '../src/drive-geometry'
+import { geocodeBoundsFor, polylineBbox, resolveAnchorChoice, type RegionAnchor } from '../src/drive-geometry'
 
 // Pure geometry helpers behind the geometry-first drive model. polylineBbox freezes a drive's stored
 // region extent (drives.bbox_*) AND bounds the corpus spatial prefilter; geocodeBoundsFor biases
@@ -48,5 +48,39 @@ describe('geocodeBoundsFor', () => {
     expect(geocodeBoundsFor(null)).toBeUndefined()
     expect(geocodeBoundsFor('-120.25,38.86,-119.55')).toBeUndefined() // only 3 parts
     expect(geocodeBoundsFor('a,b,c,d')).toBeUndefined() // non-numeric
+  })
+})
+
+// The grounded resolver's pick-vs-fallback decision. A valid in-range index resolves to the anchor's
+// EXACT coords (the whole point — no geocode hop, which had mislocated "Tahoe City" to South Lake
+// Tahoe); an out-of-range/negative index falls back to a geocodable name; neither => null.
+describe('resolveAnchorChoice', () => {
+  const anchors: RegionAnchor[] = [
+    { name: 'Tahoe City', kind: null, lat: 39.1722, lng: -120.1389 },
+    { name: 'Kings Beach', kind: null, lat: 39.2411, lng: -120.0231 },
+  ]
+
+  test('a valid index picks that anchor (exact coords, no geocode)', () => {
+    expect(resolveAnchorChoice(0, 'ignored', anchors)).toEqual({ kind: 'anchor', anchor: anchors[0]! })
+    expect(resolveAnchorChoice(1, '', anchors)).toEqual({ kind: 'anchor', anchor: anchors[1]! })
+  })
+
+  test('index -1 falls back to the (trimmed) name to geocode', () => {
+    expect(resolveAnchorChoice(-1, '  Sand Harbor  ', anchors)).toEqual({ kind: 'geocode', name: 'Sand Harbor' })
+  })
+
+  test('an out-of-range index falls back to the name (never indexes past the list)', () => {
+    expect(resolveAnchorChoice(99, 'Zephyr Cove', anchors)).toEqual({ kind: 'geocode', name: 'Zephyr Cove' })
+    expect(resolveAnchorChoice(2, 'Zephyr Cove', anchors)).toEqual({ kind: 'geocode', name: 'Zephyr Cove' }) // length === 2
+  })
+
+  test('a non-integer index is not a valid pick', () => {
+    expect(resolveAnchorChoice(1.5, 'Emerald Bay', anchors)).toEqual({ kind: 'geocode', name: 'Emerald Bay' })
+  })
+
+  test('null when there is neither a valid index nor a usable name', () => {
+    expect(resolveAnchorChoice(-1, '   ', anchors)).toBeNull()
+    expect(resolveAnchorChoice(-1, undefined, anchors)).toBeNull()
+    expect(resolveAnchorChoice(0, '', [])).toBeNull() // empty anchor list, no fallback name
   })
 })

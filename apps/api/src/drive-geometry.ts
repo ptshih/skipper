@@ -33,3 +33,28 @@ export function polylineBbox(polyline: Polyline): {
   }
   return { minLat, minLng, maxLat, maxLng }
 }
+
+/** A grounded endpoint candidate: a real, narratable place in the region with EXACT coords. The
+ *  drive resolver picks start/end from these instead of free-typing a name to geocode. */
+export interface RegionAnchor {
+  name: string
+  kind: string | null
+  lat: number
+  lng: number
+}
+
+/** Resolve ONE grounded endpoint choice from the model into either a fixed anchor (use its exact
+ *  coords — no geocode, so no drift) or a fallback place name to geocode. A valid in-range index
+ *  wins; otherwise the trimmed fallback name; null when neither yields anything. Pure (no network)
+ *  so the pick-vs-fallback logic is unit-tested without the geocode hop. */
+export function resolveAnchorChoice(
+  index: number,
+  name: string | undefined,
+  anchors: readonly RegionAnchor[],
+): { kind: 'anchor'; anchor: RegionAnchor } | { kind: 'geocode'; name: string } | null {
+  if (Number.isInteger(index) && index >= 0 && index < anchors.length) {
+    return { kind: 'anchor', anchor: anchors[index]! }
+  }
+  const q = (name ?? '').trim()
+  return q ? { kind: 'geocode', name: q } : null
+}
