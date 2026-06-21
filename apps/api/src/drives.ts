@@ -1,27 +1,28 @@
 // Create-a-Drive (V2) — a user-owned, on-demand A→B drive assembled from REUSED roam narrations.
 //
-//   POST /drives/propose          -> resolve free-text A→B + preview the route (cheap; no persist, no credit)
+//   GET  /drives/anchors          -> a region's pickable START/END anchors (real places, exact coords)
+//   POST /drives/propose          -> preview the route for a picked A→B (cheap; no persist, no credit)
 //   POST /drives                  -> generate + persist the confirmed drive (free-account gated; counts a credit)
 //   GET  /drives                  -> the caller's saved drives (one card each)
 //   GET  /drives/:id              -> replay a saved drive's frozen manifest (narration content resolves LIVE)
 //   POST /drives/:id/assets/sign  -> re-presigned clip URLs (offline refresh), keyed by seq
 //   DELETE /drives/:id            -> soft-delete (remove from list); CAP-NEUTRAL — a spent credit is never refunded
 //
-// A drive is "roam, pre-ordered for your route": the LLM does ONLY endpoint resolution; the route is
-// Google's (materializeRoute) and the SELECTION is deterministic (engine buildDrive over the shared
-// narration corpus). Nothing here synthesizes audio — it picks + paces existing roam clips. The drive's
+// A drive is "roam, pre-ordered for your route": the rider PICKS the endpoints from the region's real
+// anchors; the route is Google's (materializeRoute) and the SELECTION is deterministic (engine
+// buildDrive over the shared narration corpus). Nothing here synthesizes audio — it picks + paces
+// existing roam clips. The drive's
 // STRUCTURE freezes into `drives.selection`; each narration's CONTENT resolves live via its poi, so a
 // regenerated telling auto-improves a saved drive. Ownership lives on `drives.user_id` (a drive is
 // user-owned, never shared content). Anonymous callers get roam only — the whole module
 // is behind requireAccount.
 
-import Anthropic from '@anthropic-ai/sdk'
 import { Hono, type Context } from 'hono'
 import { and, between, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { creditEntries, drives, driveDemand, narrations, pois, regions } from '@skipper/db/schema'
 import type { DriveSelection, DriveSelectionItem, Polyline, RouteProvenance } from '@skipper/db/schema'
-import { geocodeBoundsFor, polylineBbox, resolveAnchorChoice, type RegionAnchor } from './drive-geometry'
+import { polylineBbox } from './drive-geometry'
 import { materializeRoute, type Waypoint } from '@skipper/routing'
 import {
   buildDrive,
@@ -32,12 +33,12 @@ import {
   type DriveCandidate,
 } from '@skipper/engine'
 import {
-  CLAUDE_MODELS,
   createDriveRequest,
   driveProposeRequest,
   type DriveClip,
   type DriveClipForm,
   type DriveManifest,
+  type RegionAnchor,
 } from '@skipper/shared'
 import { isAdmin, requireAccount, withSession, type ApiEnv } from './entitlements'
 import { FREE_DRIVE_CAP, creditSummary, driveConsumeEntry, ensureFreeGrant } from './credits'
@@ -55,16 +56,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // Drive pacing (DRIVE_MIN_GAP_SEC / driveMaxStops) is single-sourced in @skipper/engine so the
 // API's selection matches the engine's.
 
-const PROPOSE_MODEL = process.env.DRIVE_PROPOSE_MODEL ?? CLAUDE_MODELS.sonnet
-const GEOCODE_URL = 'https://maps.googleapis.com/maps/api/geocode/json'
-
 /* --------------------------------- helpers -------------------------------- */
-
-function mapsKey(): string {
-  const k = process.env.GOOGLE_MAPS_API_KEY
-  if (!k) throw new Error('GOOGLE_MAPS_API_KEY is not set')
-  return k
-}
 
 /** A clip's wire form. Roam narrations are story|scenic|break|wave; `bside` never reaches a drive,
  *  but coerce it to `story` so the manifest always validates against the driveClipForm enum. */
@@ -79,59 +71,11 @@ function toClipForm(form: string): DriveClipForm {
   }
 }
 
-
-async function geocode(address: string, bounds?: string): Promise<{ lat: number; lng: number } | null> {
-  const url = new URL(GEOCODE_URL)
-  url.searchParams.set('address', address)
-  url.searchParams.set('key', mapsKey())
-  if (bounds) url.searchParams.set('bounds', bounds)
-  const res = await fetch(url)
-  if (!res.ok) return null
-  const json = (await res.json()) as {
-    results?: { geometry?: { location?: { lat: number; lng: number } } }[]
-  }
-  const loc = json.results?.[0]?.geometry?.location
-  return loc ? { lat: loc.lat, lng: loc.lng } : null
-}
-
-const RESOLVE_TOOL: Anthropic.Tool = {
-  name: 'resolve_endpoints',
-  description:
-    "Resolve the START and END of the drive the rider wants. You are given a numbered list of known, " +
-    'narratable places in the region, each with exact coordinates. STRONGLY PREFER picking from that ' +
-    'list (return startIndex / endIndex): those endpoints are real, in-region, and sit on actual ' +
-    'narration content, and we use their exact coords — no geocoding, so no mislocation. Choose ' +
-    'recognizable towns or landmarks as the bookends; for a vague directional span (e.g. "the whole ' +
-    'west shore") pick the two listed anchors that best BOUND that span. For a loop or round trip, ' +
-    'pick a start and a DISTINCT farthest turnaround as the end — never the same place, a loop still ' +
-    'needs a real out-and-back span. ONLY if the rider clearly names a place that is NOT in the list, ' +
-    'set that side\'s index to -1 and put a geocodable place name in startName / endName instead.',
-  input_schema: {
-    type: 'object',
-    properties: {
-      startIndex: { type: 'integer', description: 'Index of the START place in the list, or -1 to use startName.' },
-      startName: { type: 'string', description: 'Geocodable place name for the START — used only when startIndex is -1.' },
-      endIndex: { type: 'integer', description: 'Index of the END place in the list, or -1 to use endName.' },
-      endName: { type: 'string', description: 'Geocodable place name for the END — used only when endIndex is -1.' },
-      inRegion: { type: 'boolean', description: 'False if the request clearly falls outside the region.' },
-    },
-    required: ['startIndex', 'startName', 'endIndex', 'endName', 'inRegion'],
-    additionalProperties: false,
-  },
-}
-
-interface ResolvedEndpoints {
-  startIndex: number
-  startName: string
-  endIndex: number
-  endName: string
-  inRegion: boolean
-}
-
-/** Narratable anchors in a region's bbox — the GROUNDED endpoint candidates for the resolver. Each
- *  is a real, recognizable place with exact coords + live narration content; picking from these (vs.
- *  free-typing a name to geocode) is what stops the geocode hop from mislocating endpoints. Admins
- *  see staged anchors too, mirroring loadCorpusForRoute. */
+/** Narratable anchors in a region's bbox — the pickable START/END candidates served to the client
+ *  (GET /drives/anchors). Each is a real, recognizable place with exact coords + live narration
+ *  content; the rider picks FROM/TO from these, so endpoints are grounded by construction (no
+ *  free-text, no geocode hop to mislocate them). Admins see staged anchors too, mirroring
+ *  loadCorpusForRoute. */
 async function loadRegionAnchors(bbox: string | null, includeStaged: boolean): Promise<RegionAnchor[]> {
   const p = (bbox ?? '').split(',').map(Number)
   if (p.length !== 4 || p.some((n) => !Number.isFinite(n))) return []
@@ -139,7 +83,7 @@ async function loadRegionAnchors(bbox: string | null, includeStaged: boolean): P
   return withRetry(
     () =>
       db
-        .select({ name: pois.name, kind: pois.kind, lat: pois.lat, lng: pois.lng })
+        .select({ name: pois.name, lat: pois.lat, lng: pois.lng, kind: pois.kind })
         .from(narrations)
         .innerJoin(pois, eq(pois.id, narrations.poiId))
         .where(
@@ -153,70 +97,7 @@ async function loadRegionAnchors(bbox: string | null, includeStaged: boolean): P
   )
 }
 
-/** LLM endpoint resolution — GROUNDED: the model PICKS a START + END from the region's real anchors
- *  (or names a place to geocode when none fits). The ONLY model call in the create flow (route +
- *  selection are deterministic). Cheap model. */
-async function resolveEndpointsFromPrompt(
-  regionName: string,
-  prompt: string,
-  anchors: readonly RegionAnchor[],
-): Promise<ResolvedEndpoints> {
-  const client = new Anthropic()
-  const list = anchors.length
-    ? anchors
-        .map((a, i) => `[${i}] ${a.name}${a.kind ? ` (${a.kind})` : ''} ${a.lat.toFixed(4)},${a.lng.toFixed(4)}`)
-        .join('\n')
-    : '(none — provide geocodable place names instead)'
-  const response = await client.messages.create({
-    model: PROPOSE_MODEL,
-    max_tokens: 512,
-    tools: [RESOLVE_TOOL],
-    tool_choice: { type: 'tool', name: 'resolve_endpoints' },
-    messages: [
-      {
-        role: 'user',
-        content: [
-          `Region: ${regionName}.`,
-          'Known narratable places (index, name, coords):',
-          list,
-          '',
-          `The rider said: "${prompt}".`,
-          'Resolve the START and END via the resolve_endpoints tool — prefer picking from the list above.',
-        ].join('\n'),
-      },
-    ],
-  })
-  const call = response.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
-  if (!call) throw new Error('the model returned no endpoint resolution')
-  const out = call.input as Partial<ResolvedEndpoints>
-  return {
-    startIndex: Number.isInteger(out.startIndex) ? (out.startIndex as number) : -1,
-    startName: out.startName ?? '',
-    endIndex: Number.isInteger(out.endIndex) ? (out.endIndex as number) : -1,
-    endName: out.endName ?? '',
-    inRegion: out.inRegion !== false,
-  }
-}
-
-/** Resolve one grounded choice to a coordinate endpoint: a picked anchor uses its EXACT coords (no
- *  geocode); a fallback name (a place not in the corpus) is geocoded with the region bias. */
-async function endpointFor(
-  index: number,
-  name: string,
-  anchors: readonly RegionAnchor[],
-  regionName: string,
-  bounds: string | undefined,
-): Promise<ResolvedEndpoint | null> {
-  const choice = resolveAnchorChoice(index, name, anchors)
-  if (!choice) return null
-  if (choice.kind === 'anchor') {
-    return { name: choice.anchor.name, lat: choice.anchor.lat, lng: choice.anchor.lng }
-  }
-  const geo = await geocode(`${choice.name}, ${regionName}`, bounds)
-  return geo ? { name: choice.name, ...geo } : null
-}
-
-/** A resolved, geocoded endpoint. */
+/** A resolved endpoint (a picked anchor). */
 interface ResolvedEndpoint {
   name: string
   lat: number
@@ -363,9 +244,28 @@ export const driveRoutes = new Hono<ApiEnv>()
 driveRoutes.use('*', withSession, requireAccount)
 
 /**
- * POST /drives/propose — resolve free-text A→B into in-region anchors + preview the route. Cheap:
- * one small LLM call (only when a hint lacks coords) + geocoding + ONE Routes call. Persists nothing,
- * counts no credit — the confirm-before-spend interstitial so we never generate a wrong drive.
+ * GET /drives/anchors?regionId= — the pickable START/END anchors for a region: real, narratable
+ * places with exact coordinates. The Create-a-Drive form populates its FROM/TO pickers from this, so
+ * the rider always chooses endpoints that are grounded by construction — no free text, no geocode hop.
+ */
+driveRoutes.get('/anchors', async (c) => {
+  const regionId = c.req.query('regionId') ?? ''
+  if (!UUID_RE.test(regionId)) return c.json({ error: 'bad_request', message: 'regionId (uuid) is required.' }, 400)
+  const regionRows = await withRetry(
+    () => db.select({ bbox: regions.bbox }).from(regions).where(eq(regions.id, regionId)).limit(1),
+    { label: 'drive.anchors.region' },
+  )
+  const region = regionRows[0]
+  if (!region) return c.json({ error: 'not_found', message: 'Unknown region.' }, 404)
+  const anchors = await loadRegionAnchors(region.bbox, isAdmin(c.get('session')))
+  return c.json({ anchors } satisfies { anchors: RegionAnchor[] })
+})
+
+/**
+ * POST /drives/propose — preview the route for a rider-PICKED START→END before spending a credit.
+ * Both endpoints come from the region's anchors (GET /drives/anchors) with exact coords, so this just
+ * materializes the route + counts narratable stops. Persists nothing, no credit — the
+ * confirm-before-spend interstitial. (No LLM/geocoding: endpoints are grounded by construction.)
  */
 driveRoutes.post('/propose', async (c) => {
   let body: unknown
@@ -375,51 +275,11 @@ driveRoutes.post('/propose', async (c) => {
     return c.json({ error: 'bad_request', message: 'Invalid JSON body.' }, 400)
   }
   const parsed = driveProposeRequest.safeParse(body)
-  if (!parsed.success) return c.json({ error: 'bad_request', message: 'regionId and a prompt are required.' }, 400)
-  const { regionId, prompt } = parsed.data
-  if (!UUID_RE.test(regionId)) return c.json({ error: 'bad_request', message: 'regionId must be a uuid.' }, 400)
-
-  const regionRows = await withRetry(
-    () =>
-      db
-        .select({ slug: regions.slug, name: regions.displayName, bbox: regions.bbox })
-        .from(regions)
-        .where(eq(regions.id, regionId))
-        .limit(1),
-    { label: 'drive.region' },
-  )
-  const region = regionRows[0]
-  if (!region) return c.json({ error: 'not_found', message: 'Unknown region.' }, 404)
-  const bounds = geocodeBoundsFor(region.bbox)
-
-  // Ground the resolver in the region's REAL narratable anchors so the model PICKS endpoints (exact
-  // coords) rather than free-typing names that get geocoded — the geocode hop mislocated endpoints
-  // (e.g. "Tahoe City, California, Lake Tahoe" resolved to South Lake Tahoe, ~28 km off).
-  const anchors = await loadRegionAnchors(region.bbox, isAdmin(c.get('session')))
-
-  // The LLM picks a START + END from the anchors (or names a place to geocode when none fits).
-  let resolved: ResolvedEndpoints
-  try {
-    resolved = await resolveEndpointsFromPrompt(region.name, prompt, anchors)
-  } catch (e) {
-    console.error('[api] drive propose LLM failed', e)
-    return c.json({ error: 'propose_failed', message: "Couldn't make sense of that. Try naming where to start and where to end up." }, 502)
+  if (!parsed.success) {
+    return c.json({ error: 'bad_request', message: 'start{name,lat,lng} and end{name,lat,lng} are required.' }, 400)
   }
-  if (!resolved.inRegion) {
-    return c.json(
-      { error: 'out_of_region', message: `That's outside ${region.name}. Keep the start and end inside the region.` },
-      422,
-    )
-  }
-
-  // A picked anchor uses its exact coords; a fallback name is geocoded (region-biased).
-  const [startEp, endEp] = await Promise.all([
-    endpointFor(resolved.startIndex, resolved.startName, anchors, region.name, bounds),
-    endpointFor(resolved.endIndex, resolved.endName, anchors, region.name, bounds),
-  ])
-  if (!startEp || !endEp) {
-    return c.json({ error: 'unresolved', message: 'Could not locate one of those places. Try a more specific name.' }, 422)
-  }
+  const startEp: ResolvedEndpoint = parsed.data.start
+  const endEp: ResolvedEndpoint = parsed.data.end
 
   let route
   try {

@@ -10,6 +10,7 @@ import {
   driveList,
   driveManifest,
   driveProposal,
+  regionAnchorList,
   regionList,
   roamManifest,
   signedDriveAudio,
@@ -25,6 +26,7 @@ import type {
   DriveProposeRequest,
   DriveSummary,
   Region,
+  RegionAnchor,
   RoamManifest,
   SignedDriveAudio,
   VersionPolicy,
@@ -172,8 +174,13 @@ export const getRoamManifest = async (
 export const listRegions = async (): Promise<Region[]> =>
   parseDto(regionList, await fetchJson('/regions')).regions
 
-/** Phase 1: resolve the rider's free-text prompt → in-region anchors + preview the route. Cheap,
- *  persists nothing, costs no credit — the confirm-before-spend interstitial. 401 ⇒ needs an account. */
+/** A region's pickable START/END anchors (real, narratable places with exact coords). The create
+ *  form's FROM/TO pickers choose from these, so endpoints are grounded — no free text, no geocode. */
+export const listAnchors = async (regionId: string): Promise<RegionAnchor[]> =>
+  parseDto(regionAnchorList, await fetchJson(`/drives/anchors?regionId=${encodeURIComponent(regionId)}`)).anchors
+
+/** Phase 1: preview the route for a rider-picked START→END. Cheap, persists nothing, costs no credit
+ *  — the confirm-before-spend interstitial. 401 ⇒ needs an account. */
 export const proposeDrive = async (req: DriveProposeRequest): Promise<DriveProposal> =>
   parseDto(
     driveProposal,
@@ -223,6 +230,7 @@ export type {
   DriveProposeRequest,
   DriveSummary,
   Region,
+  RegionAnchor,
   RoamManifest,
   SignedDriveAudio,
   VersionPolicy,

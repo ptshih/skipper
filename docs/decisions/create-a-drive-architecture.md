@@ -22,6 +22,17 @@ pre-gen aside/bracket library; route-demand cache. Product rationale + the decis
 >   delete). See `credit-ledger.md`. The "N=10 cap / refunded on failure" wording below is the
 >   pre-ledger framing.
 
+> **Supersession addendum (2026-06-20).** The endpoint INPUT model changed: free-text → **structured
+> pickers**. The "conversational prompt → LLM resolves each endpoint to an in-region anchor + geocode"
+> flow (steps 1–2 below) is GONE — it opened too many edge cases (a "loop" prompt resolved start==end →
+> a zero-distance route that crashed the proposal; the name→geocode hop mislocated endpoints, e.g.
+> "Tahoe City" → South Lake Tahoe ~28 km off; vague spans were ambiguous). The rider now **PICKS** a
+> start + end from the region's real narratable anchors (exact coords, on-content, in-region by
+> construction): new `GET /drives/anchors?regionId=` serves the pickable list, and `POST /drives/propose`
+> now takes the chosen `{start,end}` and only materializes the route + counts stories (no LLM, no
+> geocoding). The mobile create screen is FROM/TO pickers, not a text box. "LLM does ONLY endpoint
+> resolution" is now "the rider picks the endpoints; the route + selection stay deterministic."
+
 ## Context
 
 V2 inverts the hierarchy: **Roam** (ambient) + **Create a Drive** (on-demand A→B) are the first-day

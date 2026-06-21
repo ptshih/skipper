@@ -2,11 +2,20 @@
 
 > **Status:** guide (written 2026-06-18) — the one-sitting pass that clears the last V2 gate: the
 > live **Create→propose→confirm→generate→preview→drive** runtime, which `bun run check` cannot judge
-> (it needs a dev build + a signed-in account + a real LLM/Maps spend). Code-anchored to the tree as
+> (it needs a dev build + a signed-in account + a real Maps spend). Code-anchored to the tree as
 > of 2026-06-18 — re-verify anchors against the current files before trusting a line number. Pairs
 > with `docs/guides/device-verification-runbook.md` (the M1 phone-player pass this builds on),
 > `docs/guides/eas-setup.md` (how to build/install the dev build), and
 > `docs/decisions/create-a-drive-architecture.md` (the design this reports against).
+>
+> **Update (2026-06-20) — INPUT MODEL CHANGED: free-text → structured pickers.** The create screen is
+> now FROM/TO **anchor pickers**, not a text box: the rider picks a start + end from the region's real
+> narratable anchors (`GET /drives/anchors`), and `POST /drives/propose` takes the chosen `{start,end}`
+> (no LLM, no geocoding). So the prompt-specific steps below — step 2 "Prompt → propose", the 🟠 LOOP
+> (canned "Emerald Bay loop" → `start==end`) and 🟠 AMBIGUOUS/out-of-region cases — are SUPERSEDED.
+> Re-read them as: pick FROM, pick TO, "Plan the drive" → confirm. Loops/zero-distance can't arise
+> (two distinct anchors); out-of-region can't arise (anchors are in-bbox by construction). See the
+> 2026-06-20 addendum in `create-a-drive-architecture.md`.
 
 ## Why this exists
 
@@ -16,10 +25,11 @@ sane in-region A→B, does Google route it, does `buildDrive` pick a charming se
 does the preview/live player trigger + pace them, and does it degrade gracefully (offline, dead
 clip, cap hit). This is the single 🔴 gate left before the founder ear-pass + real drive.
 
-**Spend note (founder-gated).** Each `propose` spends a small LLM call + 2 geocodes + 1 Routes call;
-each `create` spends 1 Routes call + a DB write. **No TTS, no generation** — drives REUSE the
-existing 459 roam clips. So a full pass is a few cents of Google/Anthropic, not a paid regen. Still,
-per CLAUDE.md the *spend* needs an explicit founder OK before firing.
+**Spend note (founder-gated).** Each `propose` now spends just 1 Google Routes call (+ a corpus read);
+each `create` spends 1 Routes call + a DB write. **No LLM, no geocoding, no TTS, no generation** —
+endpoints are picked (not resolved) and drives REUSE the existing 459 roam clips. So a full pass is a
+few cents of Google Maps, not a paid regen. Still, per CLAUDE.md the *spend* needs an explicit founder
+OK before firing.
 
 ## Preconditions
 
@@ -71,7 +81,7 @@ Hit these deliberately; several are unproven and called out as findings below.
 - **OUT-OF-REGION.** Prompt somewhere clearly outside Tahoe (e.g. "downtown San Francisco"). Expect
   the propose `422 out_of_region` message, surfaced inline on the form. Then try an AMBIGUOUS
   in-vs-out name to probe the `inRegion` gate + geocode bias (Finding 3).
-- **FREE CAP.** A free account is granted `FREE_DRIVE_CAP` (default **10**) credits ONCE in the
+- **FREE CAP.** A free account is granted `FREE_DRIVE_CAP` (default **100**) credits ONCE in the
   user-owned `credit_entries` ledger; each generated drive spends one (and is NEVER refunded on
   delete — the cap is lifetime, not a live row count). Spend the balance to zero, then create one
   more → expect the `403 drive_limit_reached` message (names the cap + the credit-pack path). The

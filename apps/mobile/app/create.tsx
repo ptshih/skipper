@@ -1,27 +1,29 @@
-// Create a Drive (V2) — the rider talks to the skipper in ONE free-text line; the LLM resolves a
-// start + end, Google routes it, and we preview the road-snapped route on a map BEFORE spending a
-// credit to generate. Four states behind one screen: FORM (region + prompt + suggestions) →
-// PROPOSING (persona "thinking") → CONFIRM (map-hero) → GENERATING → the new drive's preview.
+// Create a Drive (V2) — the rider PICKS a start + end from the region's real narratable anchors (no
+// free text, no geocoding), we preview the road-snapped route on a map BEFORE spending a credit, then
+// generate. States behind one screen: FORM (region + FROM/TO pickers) → [anchor PICKER overlay] →
+// PROPOSING ("thinking") → CONFIRM (map-hero) → GENERATING → the new drive's preview.
 //
-// The LLM does ONLY endpoint resolution; the route + the (reused roam) narration selection are
-// deterministic server-side. Account-gated: the first action (propose) 401s an anonymous rider into
-// the AccountGate — the create wall lands here, not at the front door (roam stays open).
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { ActivityIndicator, Animated, StyleSheet, View } from 'react-native'
+// Endpoints are grounded by construction (a picked anchor carries exact coords), so the create flow
+// has NO endpoint-guessing: the route + the (reused roam) narration selection are deterministic
+// server-side. Account-gated: the first action 401s an anonymous rider into the AccountGate.
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ActivityIndicator, Animated, FlatList, Pressable, StyleSheet, View } from 'react-native'
 import { Stack, useRouter } from 'expo-router'
 import {
   ApiError,
   createDrive,
   errorMessage,
+  listAnchors,
   listRegions,
   proposeDrive,
   type DriveProposal,
   type Region,
+  type RegionAnchor,
 } from '@/lib/api'
 import { cleanPlaceName } from '@/lib/labels'
 import { useTheme } from '@/theme'
 import { border, radius, space } from '@/theme/tokens'
-import { AccountGate, Badge, Button, Card, FilterChip, Icon, Input, Screen, StateView, Text } from '@/ui'
+import { AccountGate, Badge, Button, Divider, FilterChip, Icon, Input, Screen, StateView, Text } from '@/ui'
 import { DriveMap, type DriveMapStop } from '@/ui/DriveMap'
 
 type Phase = 'form' | 'proposing' | 'confirm' | 'generating'
@@ -38,9 +40,6 @@ const GENERATING_LINES = [
   'Cueing up the skipper…',
   'Almost ready to roll…',
 ]
-
-// Canned suggested prompts ("OR TRY ONE") — each is just a prompt through the same propose path.
-const SUGGESTIONS = ['Emerald Bay loop', 'The whole West Shore', 'Tahoe City to Kings Beach']
 
 // A v4 UUID for the create idempotency key (sent as createDrive.idempotencyKey, stable across retries
 // of one logical create). Uses the platform crypto when present, else a Math.random v4 — this key
@@ -61,7 +60,14 @@ export default function CreateDriveScreen() {
   const [regions, setRegions] = useState<Region[] | null>(null)
   const [regionsError, setRegionsError] = useState(false)
   const [regionId, setRegionId] = useState<string | null>(null)
-  const [prompt, setPrompt] = useState('')
+
+  // The region's pickable anchors (real places + exact coords) and the rider's two picks.
+  const [anchors, setAnchors] = useState<RegionAnchor[] | null>(null)
+  const [anchorsError, setAnchorsError] = useState(false)
+  const [start, setStart] = useState<RegionAnchor | null>(null)
+  const [end, setEnd] = useState<RegionAnchor | null>(null)
+  const [picking, setPicking] = useState<'start' | 'end' | null>(null)
+  const [query, setQuery] = useState('')
 
   const [phase, setPhase] = useState<Phase>('form')
   const [proposal, setProposal] = useState<DriveProposal | null>(null)
@@ -73,7 +79,7 @@ export default function CreateDriveScreen() {
 
   // Synchronous in-flight guard for the credit-spending create. setPhase('generating') is async, so
   // a fast double-tap on "Make this drive" would fire two POST /drives before React unmounts the
-  // confirm view, and the rider over-spends a lifetime free credit. Mirrors home's navigatingRef. (audit #4)
+  // confirm view, and the rider over-spends a credit. Mirrors home's navigatingRef. (audit #4)
   const creatingRef = useRef(false)
   // Stable idempotency key for one logical create: minted once per proposal, REUSED across retries so a
   // lost-ACK network retry dedupes server-side (the server uses it as the drive id → no second drive, no
@@ -97,29 +103,51 @@ export default function CreateDriveScreen() {
     }
   }, [])
 
-  const doPropose = useCallback(
-    async (text: string) => {
-      const q = text.trim()
-      if (!regionId || !q) return
-      setError(null)
-      setNeedsAccount(false)
-      setPhase('proposing')
-      try {
-        const p = await proposeDrive({ regionId, prompt: q })
-        setProposal(p)
-        idempotencyKeyRef.current = null // fresh proposal = a new logical create; key is minted on confirm
-        setPhase('confirm')
-      } catch (e) {
+  // Load the chosen region's anchors (resets the picks when the region changes). A 401 here means an
+  // anonymous rider hit the account wall — surface the gate, same as propose/create.
+  useEffect(() => {
+    if (!regionId) return
+    let cancelled = false
+    setAnchors(null)
+    setAnchorsError(false)
+    setStart(null)
+    setEnd(null)
+    listAnchors(regionId)
+      .then((a) => {
+        if (!cancelled) setAnchors(a)
+      })
+      .catch((e) => {
+        if (cancelled) return
         if (e instanceof ApiError && e.needsAccount) setNeedsAccount(true)
-        else setError(errorMessage(e, voice_create.proposeFail))
-        setPhase('form')
-      }
-    },
-    [regionId],
-  )
+        else setAnchorsError(true)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [regionId])
+
+  const doPropose = useCallback(async () => {
+    if (!start || !end) return
+    setError(null)
+    setNeedsAccount(false)
+    setPhase('proposing')
+    try {
+      const p = await proposeDrive({
+        start: { name: start.name, lat: start.lat, lng: start.lng },
+        end: { name: end.name, lat: end.lat, lng: end.lng },
+      })
+      setProposal(p)
+      idempotencyKeyRef.current = null // fresh proposal = a new logical create; key is minted on confirm
+      setPhase('confirm')
+    } catch (e) {
+      if (e instanceof ApiError && e.needsAccount) setNeedsAccount(true)
+      else setError(errorMessage(e, voice_create.proposeFail))
+      setPhase('form')
+    }
+  }, [start, end])
 
   const doCreate = useCallback(async () => {
-    if (!proposal || !regionId) return
+    if (!proposal) return
     if (creatingRef.current) return // a double-tap must not double-POST /drives (double-charge). (audit #4)
     creatingRef.current = true
     // Mint the key once for this logical create; a sequential retry (below) reuses it so the server
@@ -152,7 +180,22 @@ export default function CreateDriveScreen() {
       // (the guard only blocks a CONCURRENT double-tap); a success has already navigated away.
       creatingRef.current = false
     }
-  }, [proposal, regionId, router])
+  }, [proposal, router])
+
+  // Anchors filtered by the picker search (case-insensitive substring), sorted A→Z for browsability.
+  const filtered = useMemo(() => {
+    const all = anchors ?? []
+    const q = query.trim().toLowerCase()
+    const list = q ? all.filter((a) => a.name.toLowerCase().includes(q)) : all
+    return [...list].sort((a, b) => a.name.localeCompare(b.name))
+  }, [anchors, query])
+
+  const choose = (a: RegionAnchor) => {
+    if (picking === 'start') setStart(a)
+    else if (picking === 'end') setEnd(a)
+    setPicking(null)
+    setQuery('')
+  }
 
   if (needsAccount)
     return (
@@ -238,8 +281,70 @@ export default function CreateDriveScreen() {
     )
   }
 
-  // FORM (default): region (auto/selectable) + the one conversational prompt + suggestions.
-  const ready = !!regionId && prompt.trim().length > 0
+  // ANCHOR PICKER (overlay): search + a scroll list of the region's real places. Tap to choose.
+  if (picking) {
+    return (
+      <Screen padded edges={['bottom']}>
+        <Stack.Screen options={{ title: picking === 'start' ? 'Set the start' : 'Set the destination' }} />
+        <View style={styles.pickerHead}>
+          <Input
+            autoFocus
+            placeholder="Search places"
+            value={query}
+            onChangeText={setQuery}
+            style={styles.search}
+            accessibilityLabel="Search places"
+          />
+          <Pressable
+            onPress={() => {
+              setPicking(null)
+              setQuery('')
+            }}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="Cancel"
+          >
+            <Text variant="body" color="accent">
+              Cancel
+            </Text>
+          </Pressable>
+        </View>
+        <FlatList
+          data={filtered}
+          keyExtractor={(a) => `${a.name}:${a.lat.toFixed(5)},${a.lng.toFixed(5)}`}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          ItemSeparatorComponent={() => <Divider />}
+          ListEmptyComponent={
+            <Text variant="dim" color="inkFaint" style={styles.pickerEmpty}>
+              No matching places.
+            </Text>
+          }
+          renderItem={({ item }) => (
+            <Pressable
+              onPress={() => choose(item)}
+              style={styles.anchorRow}
+              accessibilityRole="button"
+              accessibilityLabel={cleanPlaceName(item.name)}
+            >
+              <Text variant="body" color="ink">
+                {cleanPlaceName(item.name)}
+              </Text>
+              {item.kind ? (
+                <Text variant="dim" color="inkFaint">
+                  {item.kind}
+                </Text>
+              ) : null}
+            </Pressable>
+          )}
+        />
+      </Screen>
+    )
+  }
+
+  // FORM (default): region (auto/selectable) + the FROM/TO pickers.
+  const anchorsReady = !!anchors
+  const ready = !!start && !!end
   return (
     <Screen scroll padded edges={['bottom']} contentContainerStyle={styles.body}>
       <Stack.Screen options={{ title: 'Create a Drive' }} />
@@ -269,45 +374,83 @@ export default function CreateDriveScreen() {
       ) : null}
 
       <Text variant="title" color="ink">
-        Tell the skipper where to go
+        Where to?
       </Text>
-      <Input
-        multiline
-        value={prompt}
-        onChangeText={setPrompt}
-        placeholder="e.g. from the casino district out to Emerald Bay, the scenic way"
-        style={styles.promptInput}
-        accessibilityLabel="Where to"
+
+      <PickerField
+        label="START"
+        value={start ? cleanPlaceName(start.name) : null}
+        placeholder="Choose a start"
+        onPress={() => {
+          setQuery('')
+          setPicking('start')
+        }}
+        disabled={!anchorsReady}
+      />
+      <PickerField
+        label="END"
+        value={end ? cleanPlaceName(end.name) : null}
+        placeholder="Choose where to end"
+        onPress={() => {
+          setQuery('')
+          setPicking('end')
+        }}
+        disabled={!anchorsReady}
       />
 
+      {anchorsError ? (
+        <Text variant="dim" color="danger">
+          {voice_create.anchorsFail}
+        </Text>
+      ) : null}
       {error ? (
         <Text variant="dim" color="danger">
           {error}
         </Text>
       ) : null}
 
-      <Button title="Plan the drive" onPress={() => void doPropose(prompt)} disabled={!ready} />
-
-      <View style={styles.suggestWrap}>
-        <Text variant="label" color="inkFaint">
-          OR TRY ONE
-        </Text>
-        <View style={styles.chips}>
-          {SUGGESTIONS.map((s) => (
-            <FilterChip
-              key={s}
-              label={s}
-              active={false}
-              onPress={() => {
-                setPrompt(s)
-                void doPropose(s)
-              }}
-              accessibilityLabel={`Try: ${s}`}
-            />
-          ))}
-        </View>
-      </View>
+      <Button title="Plan the drive" onPress={() => void doPropose()} disabled={!ready} />
     </Screen>
+  )
+}
+
+// A tappable FROM/TO field: a label + the picked place (or a placeholder) + a chevron, opening the
+// anchor picker. Looks like an Input but is a button (the value is chosen, never typed).
+function PickerField({
+  label,
+  value,
+  placeholder,
+  onPress,
+  disabled,
+}: {
+  label: string
+  value: string | null
+  placeholder: string
+  onPress: () => void
+  disabled?: boolean
+}) {
+  const theme = useTheme()
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={`${label}: ${value ?? placeholder}`}
+      style={[
+        styles.field,
+        { borderColor: theme.colors.rule, backgroundColor: theme.colors.surfaceRaised, opacity: disabled ? 0.5 : 1 },
+      ]}
+    >
+      <View style={styles.fieldText}>
+        <Text variant="label" color="inkFaint">
+          {label}
+        </Text>
+        <Text variant="body" color={value ? 'ink' : 'inkFaint'}>
+          {value ?? placeholder}
+        </Text>
+      </View>
+      <Icon name="expand" size={16} color="inkFaint" />
+    </Pressable>
   )
 }
 
@@ -332,9 +475,10 @@ function Thinking({ lines }: { lines: string[] }) {
 // Local copy for this screen (kept terse + warm). Lives here rather than the shared `voice` until
 // the Create flow's wording settles.
 const voice_create = {
-  proposeFail: "Couldn't make sense of that. Try naming where to start and where to end up.",
+  proposeFail: "Couldn't plot that route. Try a different start or end.",
   generateFail: 'The skipper hit a snag building that drive. Give it another go.',
   regionsFail: "Couldn't load the regions. Check your connection and try again.",
+  anchorsFail: "Couldn't load places for this region. Check your connection and try again.",
   gateNote: 'Create a free account to plan your own drives.',
 }
 
@@ -342,8 +486,23 @@ const styles = StyleSheet.create({
   body: { gap: space.md },
   regionRow: { gap: space.sm },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
-  promptInput: { minHeight: 104, textAlignVertical: 'top' },
-  suggestWrap: { gap: space.sm, marginTop: space.sm },
+  // FROM/TO picker fields
+  field: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    minHeight: 60,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    borderRadius: radius.lg,
+    borderWidth: border.hair,
+  },
+  fieldText: { flex: 1, gap: space.xs },
+  // Anchor picker overlay
+  pickerHead: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginBottom: space.sm },
+  search: { flex: 1 },
+  anchorRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm, paddingVertical: space.md },
+  pickerEmpty: { paddingVertical: space.lg },
   // Confirm
   mapFrame: { height: 240, borderRadius: radius.lg, borderWidth: border.hair, overflow: 'hidden' },
   routeLine: { gap: space.xs },

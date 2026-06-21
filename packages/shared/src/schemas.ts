@@ -135,24 +135,36 @@ export type RoamManifest = z.infer<typeof roamManifest>
 /*  Create-a-Drive (V2) — a user-owned, on-demand A→B drive over reused narrations */
 /* -------------------------------------------------------------------------- */
 
-/** POST /drives/propose — resolve a free-text "where to" prompt + preview the route. The rider types
- *  ONE conversational line ("from the casino district out to Emerald Bay, scenic way"); the LLM pulls
- *  BOTH endpoints from it. A suggested-drive chip ("Emerald Bay loop") is just a canned prompt. Cheap;
- *  persists nothing, no credit. */
-export const driveProposeRequest = z.object({
-  regionId: z.uuid(),
-  prompt: z.string().min(1).max(400),
-})
-export type DriveProposeRequest = z.infer<typeof driveProposeRequest>
-
 // lat/lng are bounded to valid WGS84 ranges (which also excludes ±Infinity); z.number() already
-// rejects NaN. `start`/`end` are CLIENT-supplied on POST /drives and flow straight into the route
-// materialization + bbox math, so the bounds are boundary hardening, not just typing.
+// rejects NaN. `start`/`end` are CLIENT-supplied (the rider picks them from the region's real anchors)
+// and flow straight into the route materialization + bbox math, so the bounds are boundary hardening.
 const resolvedEndpoint = z.object({
   name: z.string().min(1).max(200),
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),
 })
+
+/** GET /drives/anchors?regionId= — the pickable START/END anchors for a region: real, narratable
+ *  places with exact coordinates. The rider picks FROM / TO from these (no free text, no geocoding),
+ *  so endpoints are grounded by construction — there is no name→geocode hop left to mislocate them. */
+export const regionAnchor = z.object({
+  name: z.string(),
+  lat: z.number(),
+  lng: z.number(),
+  kind: z.string().nullable(),
+})
+export type RegionAnchor = z.infer<typeof regionAnchor>
+export const regionAnchorList = z.object({ anchors: z.array(regionAnchor) })
+export type RegionAnchorList = z.infer<typeof regionAnchorList>
+
+/** POST /drives/propose — preview the route for a picked START→END before spending a credit. Both
+ *  endpoints were chosen from the region's anchors (GET /drives/anchors), so we just materialize the
+ *  route + count stories. Persists nothing, no credit — the confirm-before-spend interstitial. */
+export const driveProposeRequest = z.object({
+  start: resolvedEndpoint,
+  end: resolvedEndpoint,
+})
+export type DriveProposeRequest = z.infer<typeof driveProposeRequest>
 
 /** The proposed route to CONFIRM before generating: resolved endpoints + a route preview. */
 export const driveProposal = z.object({

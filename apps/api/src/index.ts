@@ -82,9 +82,9 @@ app.get('/regions', async (c) => {
 // Better Auth owns everything under /api/auth/* (its own handler).
 app.on(['POST', 'GET'], '/api/auth/*', (c) => auth.handler(c.req.raw))
 
-// Rate-limit the paid propose path BEFORE mounting the sub-app: POST /drives/propose fires a paid
-// Anthropic call + 2 Geocoding + 1 Routes call per request and otherwise has no cap, so this is the
-// spend-amplification guard (per-instance in-memory first cut — see ./rate-limit).
+// Rate-limit the propose path BEFORE mounting the sub-app: POST /drives/propose fires ONE Google
+// Routes call (+ a corpus read) per request and otherwise has no cap, so this is the spend/DB-load
+// guard (per-instance in-memory first cut — see ./rate-limit).
 app.use('/drives/propose', rateLimit({ limit: 15, windowSec: 60, label: 'propose' }))
 
 // Create-a-Drive (V2): user-owned, on-demand A→B drives over the shared narration corpus. The
