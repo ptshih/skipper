@@ -9,7 +9,7 @@ import {
   api,
   type EvalScoreRow, type JobStatus, type RunEvent,
 } from '@/lib/api'
-import { errMsg, fmtCost, fmtDate, timeAgo } from '@/lib/format'
+import { errMsg, fmtDate, timeAgo } from '@/lib/format'
 import { JOB_STATUS_VARIANT } from '@/lib/status'
 import { PageHeader } from '@/components/PageHeader'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -30,19 +30,19 @@ import { cn } from '@/lib/utils'
 
 /* ─── constants ─── */
 
-const KIND_META: Record<string, { label: string; icon: React.ElementType; desc: string; spends: 'spend' | 'delete' | 'free' }> = {
+const KIND_META: Record<string, { label: string; icon: React.ElementType; desc: string }> = {
   // generate / resynth / patch_clip are LEGACY tour-generation kinds (deferred in V2) — kept only so
   // historical run rows still render with a readable label; they are no longer dispatchable here.
-  generate:        { label: 'Generate',        icon: Sparkles,   desc: 'Legacy: scripted + synthesized a tour from scratch.', spends: 'spend'  },
-  resynth:         { label: 'Resynth',          icon: RefreshCw,  desc: 'Legacy: re-voiced every clip of a tour.',            spends: 'spend'  },
-  patch_clip:      { label: 'Patch clip',       icon: Scissors,   desc: "Legacy: find/replace a stop or frame's script, then re-synth it.", spends: 'spend'  },
-  resynth_narration: { label: 'Re-synth narration',  icon: RefreshCw,  desc: 'Re-voice one narration unchanged.',              spends: 'spend'  },
-  refetch_facts:   { label: 'Re-fetch facts',   icon: RefreshCw,  desc: "Re-fetch a POI's upstream facts (Wikipedia extract).", spends: 'free'   },
-  sweep_orphans:   { label: 'Sweep orphans',    icon: Trash2,     desc: 'Delete R2 clips that no roam narration references.', spends: 'delete' },
-  discover_pois: { label: 'Discover POIs',     icon: Filter,     desc: "Discover + upsert the region's POI corpus — roam draws from it.", spends: 'free'   },
-  enrich_pois:   { label: 'Enrich corpus',    icon: Sparkles,   desc: 'Scout story POIs into verbatim fact sheets (pois.fact_sheet) for roam.', spends: 'spend'  },
-  generate_narrations:   { label: 'Generate Narration', icon: Zap,        desc: 'Narrate + synthesize narrations for the corpus.',  spends: 'spend'  },
-  offline_audit:   { label: 'Re-score corpus',  icon: Activity,   desc: 'Re-score EXISTING narrations (grounding/tts/diversity) — no regen, no TTS.', spends: 'spend'  },
+  generate:        { label: 'Generate',        icon: Sparkles,   desc: 'Legacy: scripted + synthesized a tour from scratch.' },
+  resynth:         { label: 'Resynth',          icon: RefreshCw,  desc: 'Legacy: re-voiced every clip of a tour.' },
+  patch_clip:      { label: 'Patch clip',       icon: Scissors,   desc: "Legacy: find/replace a stop or frame's script, then re-synth it." },
+  resynth_narration: { label: 'Re-synth narration',  icon: RefreshCw,  desc: 'Re-voice one narration unchanged.' },
+  refetch_facts:   { label: 'Re-fetch facts',   icon: RefreshCw,  desc: "Re-fetch a POI's upstream facts (Wikipedia extract)." },
+  sweep_orphans:   { label: 'Sweep orphans',    icon: Trash2,     desc: 'Delete R2 clips that no narration references.' },
+  discover_pois: { label: 'Discover POIs',     icon: Filter,     desc: "Discover + upsert the region's POI corpus — roam draws from it." },
+  enrich_pois:   { label: 'Enrich corpus',    icon: Sparkles,   desc: 'Scout story POIs into verbatim fact sheets (pois.fact_sheet) for roam.' },
+  generate_narrations:   { label: 'Generate Narration', icon: Zap,        desc: 'Narrate + synthesize narrations for the corpus.' },
+  offline_audit:   { label: 'Re-score corpus',  icon: Activity,   desc: 'Re-score EXISTING narrations (grounding/tts/diversity) — no regen, no TTS.' },
 }
 
 // A run usually targets a region (e.g. 'lake-tahoe'). A whole-corpus generate/audit (explicit POI
@@ -104,7 +104,7 @@ export function RunsView() {
   const [drawerRun, setDrawerRun] = useState<RunEvent | null>(null)
 
   // Auto-refreshing list — the setInterval poll is now a TanStack Query refetchInterval.
-  const { data: runs = [], error, isPending } = useQuery({
+  const { data: runs = [], error, isPending, isFetching, refetch } = useQuery({
     queryKey: ['runs'],
     queryFn: async () => (await api.runs()).runs,
     refetchInterval: 15000,
@@ -129,7 +129,7 @@ export function RunsView() {
   async function sweepOrphans() {
     if (!(await confirm({
       title: 'Sweep orphaned clips?',
-      body: 'Permanently DELETES R2 bytes that no roam narration references — across the whole roam corpus.',
+      body: 'Permanently DELETES R2 bytes that no narration references — across the whole corpus.',
       confirmLabel: 'Sweep',
       tone: 'destructive',
     }))) return
@@ -153,9 +153,6 @@ export function RunsView() {
 
   const runningN    = runs.filter((r) => r.status === 'running').length
   const failedN     = runs.filter(isTrueFail).length
-  const todaySpend  = runs
-    .filter((r) => r.createdAt?.slice(0, 10) === new Date().toISOString().slice(0, 10))
-    .reduce((a, r) => a + (r.costUsd ?? 0), 0)
 
   const srcCounts = {
     all:  runs.length,
@@ -192,7 +189,7 @@ export function RunsView() {
         </Callout>
       )}
 
-      {/* Clickable status filters (left) + readouts (right). Filters are pills; spend is a KPI. */}
+      {/* Clickable status filters (left) + auto-refresh + manual refresh (right). */}
       <div className="flex flex-wrap items-center gap-2.5">
         <Badge asChild variant={runningN ? 'info' : 'secondary'} className="cursor-pointer">
           <button onClick={() => { setSrc('all'); setStatusFilter('running') }}>
@@ -203,17 +200,18 @@ export function RunsView() {
         <Badge asChild variant={failedN ? 'destructive' : 'secondary'} className="cursor-pointer">
           <button onClick={() => { setSrc('all'); setStatusFilter('failed') }}>{failedN} failed</button>
         </Badge>
-        <div className="ml-auto flex items-center gap-4">
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-xs text-muted-foreground">Spent today</span>
-            <span className={cn(
-              'font-mono text-sm font-semibold tabular-nums',
-              todaySpend > 0 ? 'text-warning' : 'text-foreground',
-            )}>
-              {fmtCost(todaySpend)}
-            </span>
-          </div>
+        <div className="ml-auto flex items-center gap-2">
           <span className="text-xs text-muted-foreground">auto-refresh · 15s</span>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 shrink-0 text-muted-foreground"
+            onClick={() => void refetch()}
+            title="Refresh now"
+            aria-label="Refresh runs"
+          >
+            <RefreshCw className={cn('h-3.5 w-3.5', isFetching && 'animate-spin')} />
+          </Button>
         </div>
       </div>
 
@@ -307,7 +305,7 @@ export function RunsView() {
                         ? <Badge variant="secondary">dry-run</Badge>
                         : r.source === 'eval'
                           ? <span className="text-muted-foreground">—</span>
-                          : <Badge variant="warning">spend</Badge>}
+                          : <Badge variant="outline">applied</Badge>}
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {r.source === 'job' ? (r.triggeredBy ?? '—') : <span className="text-muted-foreground">—</span>}
@@ -464,10 +462,9 @@ function RunDrawer({ run, onClose }: { run: RunEvent; onClose: () => void }) {
                 {run.dryRun
                   ? <Badge variant="secondary">dry-run</Badge>
                   : isJob
-                    ? <Badge variant="warning">spend</Badge>
+                    ? <Badge variant="outline">applied</Badge>
                     : '—'}
               </Def>
-              <Def label="Cost" mono>{fmtCost(run.costUsd)}</Def>
               {isJob && <Def label="Triggered by" mono>{run.triggeredBy ?? '—'}</Def>}
               {!isJob && <Def label="Model" mono>{run.narrationModel ?? '—'}</Def>}
               {job?.cloudRunExecution && <Def label="Execution" mono breakAll>{job.cloudRunExecution}</Def>}
