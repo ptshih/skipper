@@ -108,9 +108,10 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   the 1:1 `pois`↔`narrations` atom, no `roam_clips` table.)
 
 ### specs/
-- [places-endpoints-spec.md](specs/places-endpoints-spec.md) — Google Places as the drive's
-  start/end/midpoint picker (and, later, break/pitstop) layer; reuses the `places` table; build-ready,
-  unbuilt, spike-validated; supersedes the interim corpus-anchor picker.
+- [places-endpoints-spec.md](specs/places-endpoints-spec.md) — a per-region CURATED set of Google
+  Places feeds the drive's start/end/midpoint picker (and break/pitstops); reuses the `places` table,
+  zero runtime Google cost; build-ready, unbuilt, spike-validated; supersedes the interim
+  corpus-anchor picker.
 - [ask-the-skipper-spec.md](specs/ask-the-skipper-spec.md) — live, grounded voice Q&A mid-drive (the
   north-star delighter); build-ready, unbuilt, post-MVP.
 - [gps-player-spec.md](specs/gps-player-spec.md) — the M1 live GPS phone player; mostly built (the
