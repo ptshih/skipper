@@ -66,6 +66,11 @@ const MASTERS: Record<'normal14' | 'loud13', NarrationMaster> = {
  *  for the founder-validated Spotify-"Loud" −13 (parked, not active). */
 const MASTER: NarrationMaster = MASTERS.normal14
 
+/** The active master's integrated-loudness target (LUFS) — exported so read-only QA tooling (e.g.
+ *  audit-loudness.ts) labels its distribution against the SAME target the judge uses, following a
+ *  `loud13` flip automatically instead of hardcoding −14. */
+export const ACTIVE_MASTER_TARGET_LUFS = MASTER.targetLufs
+
 /** Output AAC bitrate (from the active master). iOS AVPlayer (expo-audio) plays AAC-LC. */
 const AAC_BITRATE = MASTER.bitrate
 /** Output sample rate — pinned to the TTS native 24 kHz (loudnorm runs at 192 kHz internally,
