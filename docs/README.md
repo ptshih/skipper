@@ -67,6 +67,9 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
 - [credit-ledger.md](decisions/credit-ledger.md) — drive credits are a user-owned, append-only
   `credit_entries` ledger (balance = SUM), NOT a `count(drives)`; free-tier lifetime grant + per-drive
   consume live (migration `0016`), Apple IAP / Google Play purchase plumbing deferred; built 2026-06-19.
+- [cut-tiers.md](decisions/cut-tiers.md) — removed `user.tier` ('free'|'paid'): credits govern premium,
+  so `accessTier` collapses to `anonymous`|`free`, every account spends the ledger, and a comp is a
+  large admin grant (2026-06-20).
 - [automated-grounding-gate.md](decisions/automated-grounding-gate.md) — the founder reversed "human
   ear instead": `generate-narrations.ts` now scores every clip through the eval panel and is
   FAIL-CLOSED (a clip whose grounding/tts gate stays dirty after the bounded `optimize()` retakes is
@@ -105,6 +108,9 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   the 1:1 `pois`↔`narrations` atom, no `roam_clips` table.)
 
 ### specs/
+- [places-endpoints-spec.md](specs/places-endpoints-spec.md) — Google Places as the drive's
+  start/end/midpoint picker (and, later, break/pitstop) layer; reuses the `places` table; build-ready,
+  unbuilt, spike-validated; supersedes the interim corpus-anchor picker.
 - [ask-the-skipper-spec.md](specs/ask-the-skipper-spec.md) — live, grounded voice Q&A mid-drive (the
   north-star delighter); build-ready, unbuilt, post-MVP.
 - [gps-player-spec.md](specs/gps-player-spec.md) — the M1 live GPS phone player; mostly built (the
