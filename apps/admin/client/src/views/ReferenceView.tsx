@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { DataTable, type Column } from '@/components/ui/data-table'
+import { SectionLabel } from '@/components/ui/section-label'
 import { Badge } from '@/components/ui/badge'
 import { Callout } from '@/components/ui/callout'
 import { PageHeader } from '@/components/PageHeader'
@@ -33,27 +34,7 @@ export function ReferenceView() {
       </Section>
 
       <Section title="Run kinds" subtitle="What the console can trigger — and what each one costs.">
-        <div className="overflow-hidden rounded-xl border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                {['Kind', 'What it does', 'Spends / deletes', 'Safe default'].map((h) => (
-                  <TableHead key={h}>{h}</TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {RUN_KINDS.map((k) => (
-                <TableRow key={k.kind}>
-                  <TableCell className="whitespace-nowrap align-top font-medium">{k.kind}</TableCell>
-                  <TableCell className="align-top text-muted-foreground">{k.does}</TableCell>
-                  <TableCell className="align-top">{k.cost}</TableCell>
-                  <TableCell className="align-top text-muted-foreground">{k.safe}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+        <DataTable columns={RUN_KIND_COLUMNS} rows={RUN_KINDS} rowKey={(k) => k.kind} />
       </Section>
 
       <Section title="Preview, Apply & confirmation" subtitle="Safe by default; spending or deleting is always an explicit opt-in.">
@@ -85,7 +66,7 @@ export function ReferenceView() {
           on the Evals page. Silence beats a bad telling.
         </Callout>
         <div className="mt-5">
-          <SubHead>Two pages: Jobs and Evals</SubHead>
+          <SectionLabel className="mb-2">Two pages: Jobs and Evals</SectionLabel>
           <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted-foreground">
             <span className="flex items-center gap-2">
               <Badge>Jobs</Badge> Admin-triggered Cloud Run jobs — status, cost, who triggered them.
@@ -169,7 +150,9 @@ export function ReferenceView() {
   )
 }
 
-const RUN_KINDS: { kind: string; does: string; cost: ReactNode; safe: string }[] = [
+type RunKind = { kind: string; does: string; cost: ReactNode; safe: string }
+
+const RUN_KINDS: RunKind[] = [
   {
     kind: 'Discover POIs',
     does: 'Discover Wikidata-pinned places in a region, join Wikipedia, tier them, and upsert the shared POI corpus — the foundational first step that roam + drives select from.',
@@ -220,6 +203,13 @@ const RUN_KINDS: { kind: string; does: string; cost: ReactNode; safe: string }[]
   },
 ]
 
+const RUN_KIND_COLUMNS: Column<RunKind>[] = [
+  { header: 'Kind', cellClassName: 'whitespace-nowrap align-top font-medium', cell: (k) => k.kind },
+  { header: 'What it does', cellClassName: 'align-top text-muted-foreground', cell: (k) => k.does },
+  { header: 'Spends / deletes', cellClassName: 'align-top', cell: (k) => k.cost },
+  { header: 'Safe default', cellClassName: 'align-top text-muted-foreground', cell: (k) => k.safe },
+]
+
 function Section({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
   return (
     <section>
@@ -230,34 +220,14 @@ function Section({ title, subtitle, children }: { title: string; subtitle?: stri
   )
 }
 
-function SubHead({ children }: { children: ReactNode }) {
-  return <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">{children}</h3>
-}
-
-// A two-column key/value table, styled identically to the "Run kinds" table above (same border, header,
-// and cell treatment) so every section on the page reads as one consistent table style.
+// A two-column key/value table — same `DataTable` scaffold as the "Run kinds" table above, so every
+// section on the page reads as one consistent table style (and shares the one border/header/cell treatment).
 function Dl({ cols, rows }: { cols: [string, string]; rows: [string, ReactNode][] }) {
-  return (
-    <div className="overflow-hidden rounded-xl border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            {cols.map((h) => (
-              <TableHead key={h}>{h}</TableHead>
-            ))}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map(([term, desc]) => (
-            <TableRow key={term}>
-              <TableCell className="whitespace-nowrap align-top font-medium">{term}</TableCell>
-              <TableCell className="align-top text-muted-foreground">{desc}</TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
-  )
+  const columns: Column<[string, ReactNode]>[] = [
+    { header: cols[0], cellClassName: 'whitespace-nowrap align-top font-medium', cell: ([term]) => term },
+    { header: cols[1], cellClassName: 'align-top text-muted-foreground', cell: ([, desc]) => desc },
+  ]
+  return <DataTable columns={columns} rows={rows} rowKey={([term]) => term} />
 }
 
 function Step({ children }: { children: ReactNode }) {

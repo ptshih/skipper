@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link, Outlet, useNavigate } from '@tanstack/react-router'
-import { useQuery } from '@tanstack/react-query'
+import { useAdminList } from '@/lib/useAdminList'
 import { Activity, Anchor, BookOpen, Compass, Gauge, Layers, MapPin, Menu, Moon, Search, Sun, Users } from 'lucide-react'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { HealthBanner } from '@/components/HealthBanner'
 import { api } from '@/lib/api'
+import { qk } from '@/lib/queryKeys'
 import { cn } from '@/lib/utils'
 
 type AppPath = '/jobs' | '/evals' | '/regions' | '/pois' | '/places' | '/users' | '/reference'
@@ -216,7 +217,7 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
   }, [onEsc])
 
   // POIs warm the shared ['pois'] cache (same key/shape as PoisView) — free when that page loaded it.
-  const { data: pois = [] } = useQuery({ queryKey: ['pois'], queryFn: async () => (await api.pois()).pois })
+  const { data: pois } = useAdminList(qk.pois(), async () => (await api.pois()).pois)
 
   type PaletteItem = { group: string; label: string; icon: React.ElementType; hint?: string; onSelect: () => void }
   const go = (to: AppPath) => () => { navigate({ to }); onClose() }

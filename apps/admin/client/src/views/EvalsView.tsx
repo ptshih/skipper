@@ -6,6 +6,8 @@ import { api, type EvalScoreRow, type RunEvent } from '@/lib/api'
 import { errMsg, fmtDate, timeAgo } from '@/lib/format'
 import { KIND_META, TARGET_SENTINELS, RunTarget, RUNS_REFETCH_MS } from '@/lib/runs'
 import { VERDICT_VARIANT, verdictOf, isPartial, isTrueFail } from '@/lib/status'
+import { qk } from '@/lib/queryKeys'
+import { useAdminList } from '@/lib/useAdminList'
 import { PageHeader } from '@/components/PageHeader'
 import { DataTable, type Column } from '@/components/ui/data-table'
 import { Badge } from '@/components/ui/badge'
@@ -65,11 +67,11 @@ export function EvalsView() {
   const [q, setQ] = useState('')
   const [drawerRunId, setDrawerRunId] = useState<string | null>(null)
 
-  const { data: runs = [], error, isPending, isFetching, refetch } = useQuery({
-    queryKey: ['runs'],
-    queryFn: async () => (await api.runs()).runs,
-    refetchInterval: RUNS_REFETCH_MS,
-  })
+  const { data: runs, error, isPending, isFetching, refetch } = useAdminList(
+    qk.runs(),
+    async () => (await api.runs()).runs,
+    { refetchInterval: RUNS_REFETCH_MS },
+  )
   const rows = useMemo(() => runs.filter((r) => r.source === 'eval'), [runs])
 
   // Deep-link: ?run=<id> opens that eval's drawer, then strips the param. The id need not be in the
@@ -200,7 +202,7 @@ export function EvalsView() {
 // The drawer resolves the run BY ID (api.runScores) rather than from the list row — so a job's
 // suppressed eval, linked here from JobsView, opens just the same. The report body lives below.
 function EvalDrawer({ runId, onClose }: { runId: string; onClose: () => void }) {
-  const { data } = useQuery({ queryKey: ['runScores', runId], queryFn: () => api.runScores(runId) })
+  const { data } = useQuery({ queryKey: qk.runScores(runId), queryFn: () => api.runScores(runId) })
   const run = data?.run ?? null
   const km = run ? KIND_META[run.kind] : undefined
   const Icon = km?.icon ?? Activity
@@ -277,7 +279,7 @@ function groupByPoi(scores: EvalScoreRow[]): PoiGroup[] {
 
 function EvalReport({ runId }: { runId: string }) {
   const { data, isPending, error } = useQuery({
-    queryKey: ['runScores', runId],
+    queryKey: qk.runScores(runId),
     queryFn: () => api.runScores(runId),
   })
   if (isPending) return <div className="text-xs text-muted-foreground">Loading eval report…</div>

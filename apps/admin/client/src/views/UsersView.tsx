@@ -1,8 +1,10 @@
 import { useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Coins, Users } from 'lucide-react'
 import { api, type UserRow } from '@/lib/api'
 import { errMsg, fmtDate, timeAgo } from '@/lib/format'
+import { qk } from '@/lib/queryKeys'
+import { useAdminList } from '@/lib/useAdminList'
 import { PageHeader } from '@/components/PageHeader'
 import { DataTable, type Column } from '@/components/ui/data-table'
 import { Badge } from '@/components/ui/badge'
@@ -26,10 +28,7 @@ const userLabel = (u: UserRow) => u.name?.trim() || u.email?.trim() || `${u.id.s
 
 export function UsersView() {
   const [granting, setGranting] = useState<UserRow | null>(null)
-  const { data: users = [], error: err, isPending } = useQuery({
-    queryKey: ['users'],
-    queryFn: async () => (await api.users()).users,
-  })
+  const { data: users, error: err, isPending } = useAdminList(qk.users(), async () => (await api.users()).users)
 
   const columns: Column<UserRow>[] = [
     {
@@ -125,7 +124,7 @@ function GrantCreditsDialog({ user, onClose }: { user: UserRow; onClose: () => v
 
   const grantMut = useMutation({
     mutationFn: () => api.grantCredits(user.id, { amount: n, reason: reason.trim() || undefined }),
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['users'] }); onClose() },
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: qk.users() }); onClose() },
   })
 
   return (

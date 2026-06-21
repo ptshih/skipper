@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, Compass, Layers, Loader2, Pencil, Plus, Rocket, Search, Sparkles, TriangleAlert } from 'lucide-react'
 import { api, type BboxLlmResult, type BboxRefinement, type Region } from '@/lib/api'
 import { errMsg } from '@/lib/format'
+import { qk } from '@/lib/queryKeys'
+import { useAdminList } from '@/lib/useAdminList'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { PageHeader } from '@/components/PageHeader'
 import { DataTable, type Column } from '@/components/ui/data-table'
@@ -49,7 +51,7 @@ export function RegionsView() {
   const [sel, setSel] = useState<Set<string>>(new Set())
   const [discoverOpen, setDiscoverOpen] = useState(false)
   const navigate = useNavigate()
-  const { data: regions = [], error: err, isPending } = useQuery({ queryKey: ['regions'], queryFn: async () => (await api.regions()).regions })
+  const { data: regions, error: err, isPending } = useAdminList(qk.regions(), async () => (await api.regions()).regions)
 
   // Row selection drives Discover: pick region row(s) → sweep their bbox(es). Mirrors the POIs scope model.
   const numSelected = sel.size
@@ -77,8 +79,8 @@ export function RegionsView() {
           ? `Released ${res.releasedClips} clip${res.releasedClips === 1 ? '' : 's'} in ${res.region.slug}.`
           : `${res.region.slug} is released — no staged clips were waiting.`,
       )
-      qc.invalidateQueries({ queryKey: ['regions'] })
-      qc.invalidateQueries({ queryKey: ['pois'] })
+      qc.invalidateQueries({ queryKey: qk.regions() })
+      qc.invalidateQueries({ queryKey: qk.pois() })
     },
   })
 
@@ -234,7 +236,7 @@ export function RegionsView() {
         <RegionDialog
           mode={dialog}
           onClose={() => setDialog(null)}
-          onSaved={() => { setDialog(null); qc.invalidateQueries({ queryKey: ['regions'] }) }}
+          onSaved={() => { setDialog(null); qc.invalidateQueries({ queryKey: qk.regions() }) }}
         />
       )}
 
@@ -263,7 +265,7 @@ function DiscoverDialog({ regions, open, onOpenChange, onSubmitted }: {
   const submitMut = useMutation({
     mutationFn: (apply: boolean) =>
       Promise.all(regions.map((r) => api.createJob({ kind: 'discover_pois', region: r.slug, apply }))),
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['runs'] }); onSubmitted() },
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: qk.runs() }); onSubmitted() },
   })
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!submitMut.isPending) onOpenChange(o) }}>

@@ -10,6 +10,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { MapPin, Plus, Search, Sparkles, Star, Trash2 } from 'lucide-react'
 import { api, type PlaceRow, type ResolvedPlace } from '@/lib/api'
 import { errMsg } from '@/lib/format'
+import { qk } from '@/lib/queryKeys'
+import { useAdminList } from '@/lib/useAdminList'
 import { PageHeader } from '@/components/PageHeader'
 import { DataTable, type Column } from '@/components/ui/data-table'
 import { Badge } from '@/components/ui/badge'
@@ -38,7 +40,7 @@ const kindLabel = (t: string | null): string => (t ? t.replace(/_/g, ' ') : '—
 export function PlacesView() {
   // Shared ['regions'] cache — MUST store the unwrapped array (like RegionsView/PoisView), not the
   // `{ regions }` wrapper: a shape mismatch under the same key crashes whichever view reads it next.
-  const { data: regions = [] } = useQuery({ queryKey: ['regions'], queryFn: async () => (await api.regions()).regions })
+  const { data: regions } = useAdminList(qk.regions(), async () => (await api.regions()).regions)
   const [region, setRegion] = useState<string | null>(null)
   // Default to the first region once they load (the Tahoe-launch case → auto-selected).
   useEffect(() => {
@@ -50,7 +52,7 @@ export function PlacesView() {
   const navigate = useNavigate()
 
   const qc = useQueryClient()
-  const queryKey = ['places', region] as const
+  const queryKey = qk.places(region)
   const {
     data,
     error,

@@ -5,6 +5,8 @@ import { Activity, CircleCheck, Locate, Plus, RefreshCw, Rocket, Search, Sparkle
 import { api, ApiError, type CorrectionOverride, type PoiDetail, type PoiRow } from '@/lib/api'
 import { errMsg, timeAgo } from '@/lib/format'
 import { SOURCE_META, STORY_ELIGIBILITY_META, NARRATION_META } from '@/lib/poiMeta'
+import { qk } from '@/lib/queryKeys'
+import { useAdminList } from '@/lib/useAdminList'
 import { PageHeader } from '@/components/PageHeader'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
@@ -35,7 +37,7 @@ export function PoisView() {
   const search = poisRoute.useSearch()
 
   // The shared place corpus, fetched once + cached under the ['pois'] key.
-  const { data: pois = [], error: err, isPending } = useQuery({ queryKey: ['pois'], queryFn: async () => (await api.pois()).pois })
+  const { data: pois, error: err, isPending } = useAdminList(qk.pois(), async () => (await api.pois()).pois)
 
   return (
     <div className="space-y-6">
@@ -314,13 +316,13 @@ function Corrections({ poiId, poiLat, poiLng }: { poiId: string; poiLat?: number
   const [lng, setLng] = useState('')
 
   const { data, isLoading: loading, error: loadErr } = useQuery({
-    queryKey: ['poiCorrections', poiId],
+    queryKey: qk.poiCorrections(poiId),
     queryFn: () => api.poiCorrections(poiId),
   })
   // A save returns the updated corrections — write it straight into the cache.
   const saveMut = useMutation({
     mutationFn: (input: Parameters<typeof api.saveCorrection>[1]) => api.saveCorrection(poiId, input),
-    onSuccess: (updated) => { qc.setQueryData(['poiCorrections', poiId], updated); setValidationErr(null) },
+    onSuccess: (updated) => { qc.setQueryData(qk.poiCorrections(poiId), updated); setValidationErr(null) },
   })
   const saving = saveMut.isPending
   const err = validationErr ?? (loadErr ? errMsg(loadErr) : saveMut.error ? errMsg(saveMut.error) : null)
@@ -565,14 +567,14 @@ function PoiDetailSheet({ poiId, poiName, canDelete, hasNarration, open, onOpenC
   const confirm = useConfirm()
   const [tab, setTab] = useState<'facts' | 'narration' | 'corrections'>('facts')
   const { data: detail, error: err } = useQuery({
-    queryKey: ['poi', poiId],
+    queryKey: qk.poi(poiId),
     queryFn: async () => (await api.poi(poiId)).poi,
     enabled: open,
   })
   // Hard delete — only surfaced for orphans (canDelete). Closes the sheet + refreshes the corpus.
   const deleteMut = useMutation({
     mutationFn: () => api.deletePoi(poiId),
-    onSuccess: () => { onOpenChange(false); void qc.invalidateQueries({ queryKey: ['pois'] }) },
+    onSuccess: () => { onOpenChange(false); void qc.invalidateQueries({ queryKey: qk.pois() }) },
   })
 
   return (
@@ -670,7 +672,7 @@ function FactsTab({ poi }: { poi: PoiDetail }) {
   // as a row flag + the corpus "Needs attention" filter, which points the operator here.
   const refetchMut = useMutation({
     mutationFn: () => api.createJob({ kind: 'refetch_facts', poiId: poi.id, apply: true }),
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['runs'] }); navigate({ to: '/jobs' }) },
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: qk.runs() }); navigate({ to: '/jobs' }) },
   })
 
   return (
@@ -756,14 +758,14 @@ function NarrationTab({ poiId, hasNarration }: { poiId: string; hasNarration: bo
   const confirm = useConfirm()
 
   const { data: clip, isLoading, error } = useQuery({
-    queryKey: ['poiNarration', poiId],
+    queryKey: qk.poiNarration(poiId),
     queryFn: async () => (await api.poiNarration(poiId)).narration,
     enabled: hasNarration,
   })
 
   const resynthMut = useMutation({
     mutationFn: () => api.createJob({ kind: 'resynth_narration', poiId, apply: true, confirm: true }),
-    onSuccess: ({ job }) => { void qc.invalidateQueries({ queryKey: ['runs'] }); navigate({ to: '/jobs', search: { run: job.id } }) },
+    onSuccess: ({ job }) => { void qc.invalidateQueries({ queryKey: qk.runs() }); navigate({ to: '/jobs', search: { run: job.id } }) },
   })
   async function handleResynth() {
     if (!(await confirm({
@@ -780,7 +782,7 @@ function NarrationTab({ poiId, hasNarration }: { poiId: string; hasNarration: bo
   const regenMut = useMutation({
     mutationFn: () =>
       api.createJob({ kind: 'generate_narrations', includeIds: [poiId], force: true, apply: true, confirm: true }),
-    onSuccess: ({ job }) => { void qc.invalidateQueries({ queryKey: ['runs'] }); navigate({ to: '/jobs', search: { run: job.id } }) },
+    onSuccess: ({ job }) => { void qc.invalidateQueries({ queryKey: qk.runs() }); navigate({ to: '/jobs', search: { run: job.id } }) },
   })
   async function handleRegenerate() {
     if (!(await confirm({
@@ -796,8 +798,8 @@ function NarrationTab({ poiId, hasNarration }: { poiId: string; hasNarration: bo
   const releaseMut = useMutation({
     mutationFn: () => api.releaseNarration(poiId),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['poiNarration', poiId] })
-      void qc.invalidateQueries({ queryKey: ['pois'] })
+      void qc.invalidateQueries({ queryKey: qk.poiNarration(poiId) })
+      void qc.invalidateQueries({ queryKey: qk.pois() })
     },
   })
   async function handleRelease() {
@@ -911,7 +913,7 @@ function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loading: bool
   const navigate = useNavigate()
   // "Select all matching" sends the region SLUG; the CLI resolves it to a server-side bbox filter
   // (geometry-first). Shared ['regions'] cache; the `regions` list below is just slug+name for the dropdown.
-  const { data: regionDefs = [] } = useQuery({ queryKey: ['regions'], queryFn: async () => (await api.regions()).regions })
+  const { data: regionDefs } = useAdminList(qk.regions(), async () => (await api.regions()).regions)
 
   // Deep-link: ?poi=<id> opens that POI's detail sheet once the cached list resolves, then strips the param.
   useEffect(() => {

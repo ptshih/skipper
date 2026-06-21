@@ -13,6 +13,7 @@ import { Callout } from '@/components/ui/callout'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { api } from '@/lib/api'
+import { qk } from '@/lib/queryKeys'
 import { errMsg } from '@/lib/format'
 
 type IconType = ComponentType<{ className?: string }>
@@ -78,7 +79,7 @@ export function JobActionDialog({
     mutationFn: (apply: boolean) =>
       api.createJob({ ...buildBody(), ...capBody, apply, ...(apply && spends ? { confirm: true } : {}) }),
     // Refresh the runs cache so the just-created job shows on the Jobs page (not after the 15s poll).
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['runs'] }); onSubmitted() },
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: qk.runs() }); onSubmitted() },
   })
   const busy = submitMut.isPending
   const shownError = submitMut.error ?? error

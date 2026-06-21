@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api'
+import { qk } from '@/lib/queryKeys'
 import { Callout } from '@/components/ui/callout'
 
 // A top-of-page banner that makes an unhealthy admin-api VISIBLE instead of letting every view
@@ -9,7 +10,7 @@ import { Callout } from '@/components/ui/callout'
 // but unable to reach the DB (DATABASE_URL unset / DB unreachable — `db: false` in the body).
 export function HealthBanner() {
   const { data, isError } = useQuery({
-    queryKey: ['health'],
+    queryKey: qk.health(),
     queryFn: api.health,
     refetchInterval: 15_000,
     refetchOnWindowFocus: true,

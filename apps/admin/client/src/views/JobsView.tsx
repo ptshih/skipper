@@ -6,6 +6,8 @@ import { api, type JobStatus, type RunEvent } from '@/lib/api'
 import { errMsg, fmtDate, timeAgo } from '@/lib/format'
 import { JOB_STATUS_VARIANT } from '@/lib/status'
 import { KIND_META, TARGET_SENTINELS, RunTarget, RUNS_REFETCH_MS } from '@/lib/runs'
+import { qk } from '@/lib/queryKeys'
+import { useAdminList } from '@/lib/useAdminList'
 import { PageHeader } from '@/components/PageHeader'
 import { DataTable, type Column } from '@/components/ui/data-table'
 import { Badge } from '@/components/ui/badge'
@@ -61,11 +63,11 @@ export function JobsView() {
   const [q, setQ] = useState('')
   const [drawerRun, setDrawerRun] = useState<RunEvent | null>(null)
 
-  const { data: runs = [], error, isPending, isFetching, refetch } = useQuery({
-    queryKey: ['runs'],
-    queryFn: async () => (await api.runs()).runs,
-    refetchInterval: RUNS_REFETCH_MS,
-  })
+  const { data: runs, error, isPending, isFetching, refetch } = useAdminList(
+    qk.runs(),
+    async () => (await api.runs()).runs,
+    { refetchInterval: RUNS_REFETCH_MS },
+  )
   const rows = useMemo(() => runs.filter((r) => r.source === 'job'), [runs])
 
   // Deep-link: ?run=<id> opens that job's drawer once the list resolves, then strips the param —
@@ -82,7 +84,7 @@ export function JobsView() {
   // a confirm; the launched job lands on this same timeline.
   const sweepMut = useMutation({
     mutationFn: () => api.createJob({ kind: 'sweep_orphans', apply: true, confirm: true }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['runs'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.runs() }),
   })
   async function sweepOrphans() {
     if (!(await confirm({
@@ -227,7 +229,7 @@ function JobDrawer({ run, onClose }: { run: RunEvent; onClose: () => void }) {
   const qc = useQueryClient()
 
   const { data: jobData } = useQuery({
-    queryKey: ['job', run.id],
+    queryKey: qk.job(run.id),
     queryFn: () => api.job(run.id),
     // Poll 5s only while the run is LIVE (running/queued). The job writes its own log/summary/metrics
     // at finishJob, atomically with the status flip — so a terminal row is already complete.
@@ -245,8 +247,8 @@ function JobDrawer({ run, onClose }: { run: RunEvent; onClose: () => void }) {
   const cancelMut = useMutation({
     mutationFn: () => api.cancelJob(run.id),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['job', run.id] })
-      qc.invalidateQueries({ queryKey: ['runs'] })
+      qc.invalidateQueries({ queryKey: qk.job(run.id) })
+      qc.invalidateQueries({ queryKey: qk.runs() })
     },
   })
 
