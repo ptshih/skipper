@@ -306,7 +306,7 @@ app.post('/admin/regions/bbox-lookup', async (c) => {
   }
 })
 
-// The Runs view — a unified timeline merging the operational studio_jobs with the historical
+// GET /admin/runs — a unified feed merging the operational studio_jobs with the historical
 // eval_runs (CLI-era generations that never minted a gen_job). A gen_job that produced an
 // eval_run (studioJobs.evalRunId) SUPPRESSES that eval_run row, so each run appears exactly once:
 // admin-triggered runs carry status/cost; orphan eval_runs carry pass + the dimension scores.
@@ -318,7 +318,7 @@ app.get('/admin/runs', async (c) => {
         kind: studioJobs.kind,
         status: studioJobs.status,
         targetSlug: studioJobs.targetSlug,
-        // The Runs "Target" column reads targetSlug (the display region) and falls back to targetId
+        // The Target column reads targetSlug (the display region) and falls back to targetId
         // (the lock label) so legacy rows — which only set targetId — still show their region.
         // A whole-corpus run leaves both NULL, surfaced as "All".
         targetId: studioJobs.targetId,
@@ -1305,7 +1305,7 @@ app.post('/admin/users/:id/credits', async (c) => {
 // in-app gate (only /health is intentionally open, for Cloud Run probes that bypass IAP).
 const WEB_ROOT = process.env.ADMIN_WEB_ROOT ?? './public'
 app.use('/*', serveStatic({ root: WEB_ROOT }))
-// SPA fallback — client-side routes (/runs, /pois, /regions, /reference) return index.html.
+// SPA fallback — client-side routes (/jobs, /evals, /pois, /regions, /reference) return index.html.
 app.get('*', serveStatic({ path: `${WEB_ROOT}/index.html` }))
 
 const port = Number(process.env.PORT ?? 8788)

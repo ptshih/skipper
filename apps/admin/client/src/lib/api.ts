@@ -169,7 +169,8 @@ export type CorrectionBody =
   | { kind: 'speakable'; lat: number; lng: number; force?: boolean }
   | { kind: 'speakable'; lat: null }
 
-// A unified Runs-timeline row: either an operational gen_job or a historical eval_run.
+// A run row from GET /admin/runs: either an operational gen_job or a historical eval_run. The Jobs
+// and Evals pages each render one source (job vs eval).
 export interface RunEvent {
   source: 'job' | 'eval'
   id: string
