@@ -1,19 +1,20 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link, Outlet, useNavigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
-import { Activity, Anchor, BookOpen, Compass, Gauge, Layers, MapPin, Menu, Moon, Search, Sun } from 'lucide-react'
+import { Activity, Anchor, BookOpen, Compass, Gauge, Layers, MapPin, Menu, Moon, Search, Sun, Users } from 'lucide-react'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { HealthBanner } from '@/components/HealthBanner'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
-type AppPath = '/jobs' | '/evals' | '/regions' | '/pois' | '/reference'
+type AppPath = '/jobs' | '/evals' | '/regions' | '/pois' | '/users' | '/reference'
 
 const NAV: { to: AppPath; label: string; icon: React.ElementType }[] = [
   { to: '/jobs', label: 'Jobs', icon: Activity },
   { to: '/evals', label: 'Evals', icon: Gauge },
   { to: '/regions', label: 'Regions', icon: Layers },
   { to: '/pois', label: 'POIs', icon: MapPin },
+  { to: '/users', label: 'Users', icon: Users },
 ]
 
 const itemBase =
@@ -221,6 +222,7 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
     { group: 'Go to', label: 'Evals', icon: Gauge, onSelect: go('/evals') },
     { group: 'Go to', label: 'Regions', icon: Layers, onSelect: go('/regions') },
     { group: 'Go to', label: 'POIs', icon: MapPin, onSelect: go('/pois') },
+    { group: 'Go to', label: 'Users', icon: Users, onSelect: go('/users') },
     { group: 'Go to', label: 'Reference', icon: BookOpen, onSelect: go('/reference') },
   ]
   const actionItems: PaletteItem[] = [

@@ -23,12 +23,15 @@
 //   GET  /admin/pois/:id/corrections  -> a POI's fact-edit overrides + speakable anchor
 //   POST /admin/pois/:id/corrections  -> add/retire a fact-edit, or set/clear the speakable anchor
 //   DELETE /admin/pois/:id        -> hard-delete an orphaned POI (no narration)
+//   GET  /admin/users             -> account list with per-user credit ledger summary (granted/used/remaining)
+//   POST /admin/users/:id/credits -> grant credits to a user (an admin_grant ledger entry)
 
 import { Hono } from 'hono'
 import { serveStatic } from 'hono/bun'
 import { and, asc, between, count, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import {
+  creditEntries,
   evalRuns,
   evalScores,
   studioJobs,
@@ -37,6 +40,7 @@ import {
   pois,
   regions,
 } from '@skipper/db/schema'
+import { user } from '@skipper/db/auth-schema'
 import { CLAUDE_MODELS, classifyStoryEligibility } from '@skipper/shared'
 import { checkSpeakableAnchor } from '@skipper/engine'
 import { requireAdmin, type AdminEnv } from './auth'
@@ -1175,6 +1179,126 @@ app.delete('/admin/pois/:id', async (c) => {
 
   await db.delete(pois).where(eq(pois.id, id))
   return c.json({ ok: true, id })
+})
+
+/* ── USERS + CREDITS ── */
+
+// Sanity cap on a single admin grant — generous (covers a whole IAP-pack make-good) but catches a
+// fat-finger before it writes an absurd balance. A grant is append-only and there's no reverse UI, so
+// the cheap guard is worth it. Tune freely; not a product limit.
+const MAX_ADMIN_GRANT = 1000
+
+// Account list + each user's credit-ledger summary (granted/used/remaining), one row per `user`.
+// The `user` table (Better Auth) and `credit_entries` ledger live in the SAME Neon DB, so the admin's
+// neon-http `db` reads both. Credits are aggregated in ONE grouped pass and joined in JS (mirrors the
+// POIs view's per-id stats join). A user with no ledger rows hasn't been granted/touched yet → all 0.
+app.get('/admin/users', async (c) => {
+  const [users, credits] = await Promise.all([
+    db
+      .select({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        tier: user.tier,
+        role: user.role,
+        isAnonymous: user.isAnonymous,
+        banned: user.banned,
+        createdAt: user.createdAt,
+      })
+      .from(user)
+      .orderBy(desc(user.createdAt)),
+    db
+      .select({
+        userId: creditEntries.userId,
+        // remaining = SUM(amount) (the live balance); granted = SUM of grant amounts (lifetime cap);
+        // used = the consumed magnitude (consumes are stored negative — negate the sum to a count).
+        remaining: sql<number>`coalesce(sum(${creditEntries.amount}), 0)::int`,
+        granted: sql<number>`coalesce(sum(${creditEntries.amount}) filter (where ${creditEntries.kind} = 'grant'), 0)::int`,
+        used: sql<number>`coalesce(-sum(${creditEntries.amount}) filter (where ${creditEntries.kind} = 'consume'), 0)::int`,
+      })
+      .from(creditEntries)
+      .groupBy(creditEntries.userId),
+  ])
+
+  const creditByUser = new Map(credits.map((r) => [r.userId, r]))
+  const rows = users.map((u) => {
+    const cr = creditByUser.get(u.id)
+    return {
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      tier: (u.tier ?? 'free') as 'free' | 'paid',
+      role: u.role,
+      isAnonymous: u.isAnonymous ?? false,
+      banned: u.banned ?? false,
+      createdAt: u.createdAt,
+      granted: cr?.granted ?? 0,
+      used: cr?.used ?? 0,
+      remaining: cr?.remaining ?? 0,
+    }
+  })
+  return c.json({ users: rows })
+})
+
+// Grant credits to a user — appends a positive `admin_grant` entry to the ledger (lifts both their
+// balance AND their lifetime cap). NOT a GCP spend (it hands the USER free drive generations), so no
+// founder-go gate; it IS an append-only mutation, so the client confirms. Each grant is a distinct
+// event with a fresh idempotency key (mirrors freeGrantEntry's shape; source 'admin_grant' already in
+// the enum). The amount>0 + kind:'grant' satisfies the ledger's sign check.
+app.post('/admin/users/:id/credits', async (c) => {
+  const id = c.req.param('id')
+
+  let body: Record<string, unknown>
+  try {
+    body = (await c.req.json()) as Record<string, unknown>
+  } catch {
+    return c.json({ error: 'bad_request', message: 'a JSON body is required' }, 400)
+  }
+
+  const amount = typeof body.amount === 'number' ? body.amount : NaN
+  const note = typeof body.reason === 'string' ? body.reason.trim() : ''
+  if (!Number.isInteger(amount) || amount <= 0) {
+    return c.json({ error: 'bad_request', message: '`amount` must be a positive integer.' }, 400)
+  }
+  if (amount > MAX_ADMIN_GRANT) {
+    return c.json({ error: 'bad_request', message: `\`amount\` must be ≤ ${MAX_ADMIN_GRANT}.` }, 400)
+  }
+  if (note.length > MAX_REASON_LEN) {
+    return c.json({ error: 'bad_request', message: `\`reason\` must be ≤ ${MAX_REASON_LEN} chars.` }, 400)
+  }
+
+  // credit_entries.userId is a soft (un-FK'd) ref to user.id — validate the account exists here.
+  const [account] = await db.select({ id: user.id, email: user.email }).from(user).where(eq(user.id, id)).limit(1)
+  if (!account) return c.json({ error: 'not_found' }, 404)
+
+  const operator = c.get('adminEmail')
+  const reason = note ? `admin grant by ${operator}: ${note}` : `admin grant by ${operator}`
+  console.log(`[admin] ${operator} granted ${amount} credit(s) to ${account.email} (${id})`)
+
+  await db.insert(creditEntries).values({
+    userId: id,
+    amount,
+    kind: 'grant',
+    source: 'admin_grant',
+    reason,
+    idempotencyKey: `admin_grant:${crypto.randomUUID()}`,
+  })
+
+  // Return the refreshed credit summary so the row updates in place without a full refetch race.
+  const [summary] = await db
+    .select({
+      remaining: sql<number>`coalesce(sum(${creditEntries.amount}), 0)::int`,
+      granted: sql<number>`coalesce(sum(${creditEntries.amount}) filter (where ${creditEntries.kind} = 'grant'), 0)::int`,
+      used: sql<number>`coalesce(-sum(${creditEntries.amount}) filter (where ${creditEntries.kind} = 'consume'), 0)::int`,
+    })
+    .from(creditEntries)
+    .where(eq(creditEntries.userId, id))
+  return c.json({
+    id,
+    granted: summary?.granted ?? amount,
+    used: summary?.used ?? 0,
+    remaining: summary?.remaining ?? amount,
+  })
 })
 
 // Serve the built SPA. In prod the Hono service serves it (one Cloud Run service behind IAP);
