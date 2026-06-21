@@ -250,3 +250,25 @@ over-broad trigger radius (all anti-charm or anti-doctrine).
 
 Validated-already (no action): our anonymous couch preview = Autio's
 tap-a-pin preview; the M3 notch/interests-as-setting = their interest-ordered queue.
+
+## Admin POIs: what is the "Retire" tab for? (rename / fold / keep — founder question 2026-06-20)
+
+The POIs page (`apps/admin/client/src/views/PoisView.tsx`) has a two-tab `Segmented`: **Corpus** (the
+full table) + **Retire**. Despite the name, the Retire tab is really a **flagged-POIs health/triage
+queue** — it lists POIs matching `staleFacts || suspiciousDuration || (!attributed && narrationCount
+> 0) || speakableDrift` (`PoisView.tsx:67`) and offers **Re-fetch** (free Wikipedia re-pull for stale
+ones) plus a pointer to regenerate/correct elsewhere. The actual **Retire** action (hard DELETE) is
+allowed ONLY for orphan POIs with no narration (`RetireTab`, ~L1342/1427; server-guarded too) — but
+three of the four flag predicates imply a narration EXISTS (unattributed needs `narrationCount > 0`;
+stale/suspicious-duration come from a clip), so Retire is disabled for nearly everything that lands
+there. So the tab named "Retire" almost never retires — it's a QA inbox.
+
+The open question: does this tab earn its place, and is "Retire" the wrong label?
+
+- [ ] Decide one of: **(a) rename** it to what it does ("Flagged" / "Health" / "Needs attention",
+      keeping the alert-dot count); **(b) fold** it into the Corpus tab as a saved filter/chip (one
+      table, a "flagged only" toggle) so there's no second surface; or **(c) keep** as-is if the
+      separate triage inbox is deliberately valuable. If kept/renamed, also reconsider whether hard
+      "Retire" (orphan-only delete) even belongs in a *flagged* list, or should move to a row action in
+      Corpus. Cheap, UX-only — no schema/wire change. Refs: `PoisView.tsx` `flagged`/`tabs`
+      (L67-72), `RetireTab` (L1328-1442).

@@ -108,16 +108,34 @@ app.get('/health', async (c) => {
 app.use('/admin/*', requireAdmin)
 
 app.get('/admin/regions', async (c) => {
-  const rows = await db
-    .select({
-      slug: regions.slug,
-      displayName: regions.displayName,
-      bbox: regions.bbox,
-      releasedAt: regions.releasedAt,
-    })
-    .from(regions)
-    .orderBy(asc(regions.displayName))
-  return c.json({ regions: rows })
+  const [rows, poiCoords] = await Promise.all([
+    db
+      .select({
+        slug: regions.slug,
+        displayName: regions.displayName,
+        bbox: regions.bbox,
+        releasedAt: regions.releasedAt,
+      })
+      .from(regions)
+      .orderBy(asc(regions.displayName)),
+    // POI→region is geometry-first (point-in-bbox; there's NO region_id to GROUP BY), so load every
+    // poi's coords once and tally per region in JS. Cheap — the corpus is a few hundred rows.
+    db.select({ lat: pois.lat, lng: pois.lng }).from(pois),
+  ])
+
+  // Each poi belongs to the FIRST region (rows are displayName-ordered) whose bbox contains it — the
+  // same single-assignment coverage the POIs view shows, so the two counts always agree. A region with
+  // no/invalid bbox claims nothing → poiCount stays null ("no bbox set", distinct from a genuine 0).
+  const boxed = rows.map((r) => ({ slug: r.slug, box: parseBbox(r.bbox) }))
+  const counts = new Map<string, number>(boxed.flatMap((b) => (b.box ? [[b.slug, 0]] : [])))
+  for (const { lat, lng } of poiCoords) {
+    const hit = boxed.find(
+      ({ box }) => box && lat >= box.swLat && lat <= box.neLat && lng >= box.swLng && lng <= box.neLng,
+    )
+    if (hit) counts.set(hit.slug, counts.get(hit.slug)! + 1)
+  }
+
+  return c.json({ regions: rows.map((r) => ({ ...r, poiCount: counts.get(r.slug) ?? null })) })
 })
 
 app.post('/admin/regions', async (c) => {
@@ -207,11 +225,17 @@ app.post('/admin/regions/:slug/release', async (c) => {
   })
 })
 
-// Bbox lookup — LLM estimate + Nominatim OSM cross-check, run in parallel.
-// Used by the admin Regions dialog so the operator never has to hand-key coordinates.
+// Bbox lookup — a Claude estimate the operator can refine conversationally (founder 2026-06-20:
+// dropped the Nominatim/OSM cross-check; Claude-only). Each refine round replays Claude's OWN prior
+// estimate + the new instruction, so it EDITS the last box instead of starting over. Used by the
+// admin Regions drawer so the operator never has to hand-key coordinates.
 app.post('/admin/regions/bbox-lookup', async (c) => {
-  const { query } = await c.req.json<{ query: string }>()
-  if (!query?.trim()) return c.json({ error: 'query is required' }, 400)
+  const body = await c.req
+    .json<{ query?: string; refinements?: { priorBbox?: string; priorReasoning?: string; instruction?: string }[] }>()
+    .catch(() => ({}) as { query?: string; refinements?: never })
+  const query = body.query?.trim()
+  if (!query) return c.json({ error: 'query is required' }, 400)
+  const refinements = Array.isArray(body.refinements) ? body.refinements : []
 
   const BBOX_TOOL: import('@anthropic-ai/sdk').Anthropic.Tool = {
     name: 'bbox',
@@ -237,52 +261,45 @@ app.post('/admin/regions/bbox-lookup', async (c) => {
     },
   }
 
-  const [llmResult, osmResult] = await Promise.allSettled([
-    // LLM: forced tool call → structured bbox + reasoning
-    (async () => {
-      const client = new (await import('@anthropic-ai/sdk')).default()
-      const msg = await client.messages.create({
-        model: process.env.ADMIN_PROPOSE_MODEL ?? CLAUDE_MODELS.opus,
-        max_tokens: 512,
-        tools: [BBOX_TOOL],
-        tool_choice: { type: 'any' },
-        messages: [{
-          role: 'user',
-          content: `What is the bounding box for "${query.trim()}"? Return as lng_min,lat_min,lng_max,lat_max. Prefer the tight boundary of the named feature (e.g. a national park boundary, not the broader county). For a drive corridor or road trip region, add ~20 km of buffer on each side.`,
-        }],
-      })
-      const tool = msg.content.find((b) => b.type === 'tool_use')
-      if (!tool || tool.type !== 'tool_use') throw new Error('no tool call')
-      const inp = tool.input as { bbox: string; reasoning: string; confidence: string }
-      return { bbox: inp.bbox.trim(), reasoning: inp.reasoning, confidence: inp.confidence as 'high' | 'medium' | 'low' }
-    })(),
+  // Build the conversation: the base ask, then alternating (assistant prior-estimate / user refinement)
+  // turns. The forced tool only shapes the FINAL answer; historical assistant turns are plain text.
+  const messages: import('@anthropic-ai/sdk').Anthropic.MessageParam[] = [
+    {
+      role: 'user',
+      content: `What is the bounding box for "${query}"? Return as lng_min,lat_min,lng_max,lat_max. Prefer the tight boundary of the named feature (e.g. a national park boundary, not the broader county). For a drive corridor or road trip region, add ~20 km of buffer on each side.`,
+    },
+  ]
+  for (const ref of refinements) {
+    const prior = (ref?.priorBbox ?? '').trim()
+    messages.push({
+      role: 'assistant',
+      content: prior ? `Bounding box: ${prior}. ${ref?.priorReasoning ?? ''}`.trim() : 'Bounding box estimated.',
+    })
+    messages.push({
+      role: 'user',
+      content: `Refine that bounding box: ${(ref?.instruction ?? '').trim()}. Return the full updated lng_min,lat_min,lng_max,lat_max.`,
+    })
+  }
 
-    // OSM Nominatim: top 3 results for the query
-    (async () => {
-      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query.trim())}&format=json&limit=3&featuretype=settlement,natural,boundary`
-      const res = await fetch(url, { headers: { 'User-Agent': 'skipper-admin/1.0 (admin ops tool)' } })
-      if (!res.ok) throw new Error(`Nominatim ${res.status}`)
-      const data = await res.json() as Array<{
-        display_name: string
-        type: string
-        class: string
-        boundingbox: [string, string, string, string] // lat_min, lat_max, lng_min, lng_max
-      }>
-      // Reorder Nominatim's [lat_min,lat_max,lng_min,lng_max] → lng_min,lat_min,lng_max,lat_max
-      return data.map((r) => ({
-        name: r.display_name,
-        type: `${r.class}/${r.type}`,
-        bbox: `${r.boundingbox[2]},${r.boundingbox[0]},${r.boundingbox[3]},${r.boundingbox[1]}`,
-      }))
-    })(),
-  ])
-
-  return c.json({
-    llm: llmResult.status === 'fulfilled' ? llmResult.value : null,
-    llmError: llmResult.status === 'rejected' ? String(llmResult.reason) : null,
-    osm: osmResult.status === 'fulfilled' ? osmResult.value : null,
-    osmError: osmResult.status === 'rejected' ? String(osmResult.reason) : null,
-  })
+  try {
+    const client = new (await import('@anthropic-ai/sdk')).default()
+    const msg = await client.messages.create({
+      model: process.env.ADMIN_PROPOSE_MODEL ?? CLAUDE_MODELS.opus,
+      max_tokens: 512,
+      tools: [BBOX_TOOL],
+      tool_choice: { type: 'any' },
+      messages,
+    })
+    const tool = msg.content.find((b) => b.type === 'tool_use')
+    if (!tool || tool.type !== 'tool_use') return c.json({ llm: null, llmError: 'no tool call' })
+    const inp = tool.input as { bbox: string; reasoning: string; confidence: string }
+    return c.json({
+      llm: { bbox: inp.bbox.trim(), reasoning: inp.reasoning, confidence: inp.confidence as 'high' | 'medium' | 'low' },
+      llmError: null,
+    })
+  } catch (e) {
+    return c.json({ llm: null, llmError: String(e) })
+  }
 })
 
 // The Runs view — a unified timeline merging the operational studio_jobs with the historical

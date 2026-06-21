@@ -58,6 +58,9 @@ export interface Region {
   bbox: string | null
   /** region-release-gate: null = DRAFT (POIs not public), ISO string = RELEASED (open). Monotonic. */
   releasedAt: string | null
+  /** POIs whose coords fall in this region's bbox (geometry-first, single-assignment — matches the POIs
+   *  view's region coverage). null = no/invalid bbox set (can't count), distinct from a genuine 0. */
+  poiCount: number | null
 }
 
 export interface BboxLlmResult {
@@ -65,16 +68,17 @@ export interface BboxLlmResult {
   reasoning: string
   confidence: 'high' | 'medium' | 'low'
 }
-export interface BboxOsmResult {
-  name: string
-  type: string
-  bbox: string
+/** One prior round of the conversational bbox refine loop: the estimate that was on screen plus the
+ *  instruction the operator then gave. Sent back so Claude EDITS its own last box, not starts over. */
+export interface BboxRefinement {
+  priorBbox: string
+  priorReasoning: string
+  instruction: string
 }
+/** Claude-only now — the Nominatim/OSM cross-check was dropped (founder 2026-06-20). */
 export interface BboxLookupResult {
   llm: BboxLlmResult | null
   llmError: string | null
-  osm: BboxOsmResult[] | null
-  osmError: string | null
 }
 
 export interface PoiDetail {
@@ -269,8 +273,8 @@ export const api = {
       `/admin/pois/${poiId}/narration/release`,
       { method: 'POST' },
     ),
-  bboxLookup: (query: string) =>
-    req<BboxLookupResult>('/admin/regions/bbox-lookup', { method: 'POST', body: JSON.stringify({ query }) }),
+  bboxLookup: (body: { query: string; refinements?: BboxRefinement[] }) =>
+    req<BboxLookupResult>('/admin/regions/bbox-lookup', { method: 'POST', body: JSON.stringify(body) }),
   createJob: (body: Record<string, unknown>) =>
     req<{ job: StudioJob }>('/admin/jobs', { method: 'POST', body: JSON.stringify(body) }),
 }

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, Compass, Layers, Loader2, Pencil, Plus, Rocket, Search, TriangleAlert } from 'lucide-react'
-import { api, type Region } from '@/lib/api'
+import { CheckCircle2, Compass, Layers, Loader2, Pencil, Plus, Rocket, Search, Sparkles, TriangleAlert } from 'lucide-react'
+import { api, type BboxLlmResult, type BboxRefinement, type Region } from '@/lib/api'
 import { errMsg } from '@/lib/format'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { PageHeader } from '@/components/PageHeader'
@@ -24,6 +24,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
 
 type DialogMode = { mode: 'create' } | { mode: 'edit'; region: Region }
@@ -150,12 +158,13 @@ export function RegionsView() {
               <TableHead>Slug</TableHead>
               <TableHead>Display name</TableHead>
               <TableHead>Discovery bbox</TableHead>
+              <TableHead title="POIs whose coords fall in this region's discovery bbox">POIs</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="w-44" />
             </TableRow>
           </TableHeader>
           <TableBody>
-            {isPending && <TableSkeletonRows rows={4} cols={6} />}
+            {isPending && <TableSkeletonRows rows={4} cols={7} />}
             {regions.map((r) => {
               const released = r.releasedAt != null
               return (
@@ -174,6 +183,13 @@ export function RegionsView() {
                     <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{r.bbox}</code>
                   ) : (
                     <Badge variant="secondary">default (Tahoe)</Badge>
+                  )}
+                </TableCell>
+                <TableCell className="font-mono text-sm tabular-nums">
+                  {r.poiCount == null ? (
+                    <span className="text-muted-foreground" title="No discovery bbox set">—</span>
+                  ) : (
+                    r.poiCount.toLocaleString()
                   )}
                 </TableCell>
                 <TableCell>
@@ -211,7 +227,7 @@ export function RegionsView() {
             })}
             {!isPending && regions.length === 0 && !err && (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={6}>
+                <TableCell colSpan={7}>
                   <EmptyState icon={Layers}>No regions yet — add one to get started.</EmptyState>
                 </TableCell>
               </TableRow>
@@ -330,18 +346,19 @@ function RegionDialog({
   })
 
   return (
-    <Dialog open onOpenChange={(o) => { if (!o) onClose() }}>
-      <DialogContent className="sm:max-w-xl">
-        <DialogHeader>
-          <DialogTitle>{mode.mode === 'create' ? 'Add region' : `Edit ${existing?.displayName}`}</DialogTitle>
-          <DialogDescription>
+    <Sheet open onOpenChange={(o) => { if (!o && !saveMut.isPending) onClose() }}>
+      {/* A large right-side drawer (was a modal) — room for the map + the conversational bbox lookup. */}
+      <SheetContent side="right" className="max-w-2xl">
+        <SheetHeader className="flex-col items-stretch gap-1">
+          <SheetTitle>{mode.mode === 'create' ? 'Add region' : `Edit ${existing?.displayName}`}</SheetTitle>
+          <SheetDescription>
             {mode.mode === 'create'
               ? 'Create a new region. The slug is permanent and used as the DB key — choose carefully.'
               : 'Update the display name or discovery bbox.'}
-          </DialogDescription>
-        </DialogHeader>
+          </SheetDescription>
+        </SheetHeader>
 
-        <div className="space-y-4">
+        <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
           {mode.mode === 'create' && (
             <div className="space-y-1.5">
               <Label htmlFor="region-slug">Slug *</Label>
@@ -387,13 +404,13 @@ function RegionDialog({
             defaultQuery={displayName}
             onUse={(b) => setBbox(b)}
           />
+
+          {saveMut.error && (
+            <Callout variant="error" className="rounded-lg px-3 py-2">{errMsg(saveMut.error)}</Callout>
+          )}
         </div>
 
-        {saveMut.error && (
-          <Callout variant="error" className="rounded-lg px-3 py-2">{errMsg(saveMut.error)}</Callout>
-        )}
-
-        <DialogFooter>
+        <SheetFooter className="justify-end">
           <Button variant="ghost" onClick={onClose} disabled={saveMut.isPending}>Cancel</Button>
           <Button
             disabled={saveMut.isPending || !displayName.trim() || (mode.mode === 'create' && !slug.trim())}
@@ -401,28 +418,61 @@ function RegionDialog({
           >
             {saveMut.isPending ? 'Saving…' : mode.mode === 'create' ? 'Create region' : 'Save changes'}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   )
 }
 
-/* ── BBOX LOOKUP ── */
+/* ── BBOX LOOKUP (Claude-only, conversational) ── */
+
+type BboxRound = { instruction: string; estimate: BboxLlmResult }
 
 function BboxLookup({ defaultQuery, onUse }: { defaultQuery: string; onUse: (bbox: string) => void }) {
   const [q, setQ] = useState('')
-  // An imperative read (triggered by the Search button / Enter), so a mutation fits better than a query.
-  const lookupMut = useMutation({ mutationFn: () => api.bboxLookup(q.trim()) })
-  const result = lookupMut.data ?? null
+  const [rounds, setRounds] = useState<BboxRound[]>([]) // the conversation: each instruction + Claude's estimate
+  const [refineText, setRefineText] = useState('')
 
-  // When the display name changes and we haven't searched yet, keep q in sync as a hint.
+  // Imperative (Search / Enter / Refine), so a mutation fits. `instruction` is the base query on the
+  // first search, or the refinement text after; `refinements` carries Claude's prior estimates so it
+  // EDITS its last box rather than starting over.
+  const lookupMut = useMutation({
+    mutationFn: (vars: { instruction: string; refinements: BboxRefinement[] }) =>
+      api.bboxLookup({ query: q.trim(), refinements: vars.refinements }),
+    onSuccess: (res, vars) => {
+      if (!res.llm) return // an LLM-side failure surfaces via res.llmError below
+      const round: BboxRound = { instruction: vars.instruction, estimate: res.llm }
+      // A fresh search (no refinements) replaces the conversation; a refine appends to it.
+      setRounds((rs) => (vars.refinements.length === 0 ? [round] : [...rs, round]))
+      setRefineText('')
+    },
+  })
+
+  // Keep q seeded from the display name until the operator runs a search.
   useEffect(() => {
-    if (!lookupMut.data && !lookupMut.isPending) setQ(defaultQuery)
+    if (rounds.length === 0 && !lookupMut.isPending) setQ(defaultQuery)
   }, [defaultQuery]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  function lookup() {
+  const current = rounds.length > 0 ? rounds[rounds.length - 1] : null
+  const llmError = lookupMut.data?.llmError ?? null
+  const searching = lookupMut.isPending
+
+  function search() {
     if (!q.trim()) return
-    lookupMut.mutate()
+    setRounds([]) // a fresh search resets the conversation; the call carries no refinements
+    lookupMut.mutate({ instruction: q.trim(), refinements: [] })
+  }
+  function refine() {
+    const text = refineText.trim()
+    if (!text || !current) return
+    // Pair each prior estimate with the instruction that FOLLOWS it (the next round's, or — for the most
+    // recent estimate — this new instruction). That linear history is what Claude refines against.
+    const refinements: BboxRefinement[] = rounds.map((r, i) => ({
+      priorBbox: r.estimate.bbox,
+      priorReasoning: r.estimate.reasoning,
+      instruction: rounds[i + 1]?.instruction ?? text,
+    }))
+    lookupMut.mutate({ instruction: text, refinements })
   }
 
   return (
@@ -435,74 +485,68 @@ function BboxLookup({ defaultQuery, onUse }: { defaultQuery: string; onUse: (bbo
         <Input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') void lookup() }}
+          onKeyDown={(e) => { if (e.key === 'Enter') void search() }}
           placeholder="Yosemite National Park"
           className="text-sm"
+          disabled={searching}
         />
-        <Button variant="outline" size="sm" disabled={lookupMut.isPending || !q.trim()} onClick={lookup} className="shrink-0">
-          {lookupMut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
-          {lookupMut.isPending ? 'Searching…' : 'Search'}
+        <Button variant="outline" size="sm" disabled={searching || !q.trim()} onClick={search} className="shrink-0">
+          {searching && !current ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+          {searching && !current ? 'Searching…' : current ? 'New search' : 'Search'}
         </Button>
       </div>
 
       <p className="mt-1.5 text-[11px] text-muted-foreground">
-        Search runs a Claude estimate (a small paid AI call) alongside a free OpenStreetMap lookup.
+        Runs a Claude estimate (a small paid AI call). Refine it with follow-up instructions below.
       </p>
 
-      {lookupMut.error && (
-        <div className="mt-2 text-xs text-destructive">{errMsg(lookupMut.error)}</div>
+      {/* The conversation — the base estimate, then each refinement, oldest → newest. Any version's
+          "Use" applies it to the bbox field, so the operator can keep whichever box reads best. */}
+      {rounds.length > 0 && (
+        <div className="mt-3 space-y-2.5">
+          {rounds.map((round, i) => (
+            <div key={i}>
+              <div className="mb-1 flex flex-wrap items-center gap-x-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <span>{i === 0 ? 'Claude estimate' : 'Refined'}</span>
+                <span className={cn('normal-case font-normal', CONFIDENCE_META[round.estimate.confidence].className)}>
+                  · {CONFIDENCE_META[round.estimate.confidence].label}
+                </span>
+                {i > 0 && (
+                  <span className="normal-case font-normal text-muted-foreground/80">· “{round.instruction}”</span>
+                )}
+              </div>
+              <BboxCard bbox={round.estimate.bbox} label={round.estimate.reasoning} onUse={onUse} />
+            </div>
+          ))}
+        </div>
       )}
 
-      {result && (
-        <div className="mt-3 space-y-3">
-          {/* LLM result */}
-          <div>
-            <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              <span>Claude estimate</span>
-              {result.llm && (
-                <span className={cn('normal-case font-normal', CONFIDENCE_META[result.llm.confidence].className)}>
-                  · {CONFIDENCE_META[result.llm.confidence].label}
-                </span>
-              )}
-            </div>
-            {result.llm ? (
-              <BboxCard
-                bbox={result.llm.bbox}
-                label={result.llm.reasoning}
-                onUse={onUse}
-              />
-            ) : (
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <TriangleAlert className="h-3.5 w-3.5 text-warning" />
-                {result.llmError ?? 'No result'}
-              </div>
-            )}
-          </div>
+      {llmError && (
+        <div className="mt-2 flex items-center gap-1.5 text-xs text-destructive">
+          <TriangleAlert className="h-3.5 w-3.5" /> {llmError}
+        </div>
+      )}
+      {lookupMut.error && (
+        <div className="mt-2 flex items-center gap-1.5 text-xs text-destructive">
+          <TriangleAlert className="h-3.5 w-3.5" /> {errMsg(lookupMut.error)}
+        </div>
+      )}
 
-          {/* OSM results */}
-          <div>
-            <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              OpenStreetMap
-            </div>
-            {result.osm && result.osm.length > 0 ? (
-              <div className="space-y-1.5">
-                {result.osm.map((r, i) => (
-                  <BboxCard
-                    key={i}
-                    bbox={r.bbox}
-                    label={r.name}
-                    sublabel={r.type}
-                    onUse={onUse}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <TriangleAlert className="h-3.5 w-3.5 text-warning" />
-                {result.osmError ?? 'No results from Nominatim'}
-              </div>
-            )}
-          </div>
+      {/* Follow-up refinement — only once there's an estimate to refine. */}
+      {current && (
+        <div className="mt-3 flex gap-2">
+          <Input
+            value={refineText}
+            onChange={(e) => setRefineText(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') void refine() }}
+            placeholder="Refine — e.g. “tighter to the lake, drop the forest”"
+            className="text-sm"
+            disabled={searching}
+          />
+          <Button variant="outline" size="sm" disabled={searching || !refineText.trim()} onClick={refine} className="shrink-0">
+            {searching && current ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+            {searching && current ? 'Refining…' : 'Refine'}
+          </Button>
         </div>
       )}
     </div>
@@ -512,12 +556,10 @@ function BboxLookup({ defaultQuery, onUse }: { defaultQuery: string; onUse: (bbo
 function BboxCard({
   bbox,
   label,
-  sublabel,
   onUse,
 }: {
   bbox: string
   label: string
-  sublabel?: string
   onUse: (bbox: string) => void
 }) {
   const [used, setUsed] = useState(false)
@@ -532,8 +574,7 @@ function BboxCard({
     <div className="flex items-start gap-2 rounded-md border bg-background px-3 py-2">
       <div className="min-w-0 flex-1">
         <code className="block font-mono text-xs">{bbox}</code>
-        <p className="mt-0.5 truncate text-xs text-muted-foreground" title={label}>{label}</p>
-        {sublabel && <p className="text-[11px] text-muted-foreground/70">{sublabel}</p>}
+        <p className="mt-0.5 text-xs leading-snug text-muted-foreground">{label}</p>
       </div>
       <Button
         variant={used ? 'default' : 'outline'}

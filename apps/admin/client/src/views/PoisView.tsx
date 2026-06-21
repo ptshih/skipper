@@ -13,7 +13,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label'
 import { Callout } from '@/components/ui/callout'
 import { SearchInput } from '@/components/ui/search-input'
-import { Segmented } from '@/components/ui/segmented'
 import { Checkbox } from '@/components/ui/checkbox'
 import { AnchorMap } from '@/components/ui/leaflet-map'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -27,8 +26,6 @@ import {
 import { JobActionDialog } from '@/components/ui/job-action-dialog'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { cn } from '@/lib/utils'
-
-type Tab = 'corpus' | 'retire'
 
 // Keyed to the real poi_source pgEnum (wikipedia | wikidata) — the corpus is Wikidata-spine ONLY
 // (every poi has a QID). Google break anchors are NOT pois — they live in the `places` table.
@@ -58,18 +55,9 @@ const poisRoute = getRouteApi('/pois')
 
 export function PoisView() {
   const search = poisRoute.useSearch()
-  const [tab, setTab] = useState<Tab>('corpus')
 
   // The shared place corpus, fetched once + cached under the ['pois'] key.
   const { data: pois = [], error: err, isPending } = useQuery({ queryKey: ['pois'], queryFn: async () => (await api.pois()).pois })
-
-  const live = pois // no retired field; all pois are live for now
-  const flagged = pois.filter((p) => p.staleFacts || p.suspiciousDuration || (!p.attributed && p.narrationCount > 0) || p.speakableDrift)
-
-  const tabs: { id: Tab; label: string; count: number; alert?: boolean }[] = [
-    { id: 'corpus', label: 'Corpus', count: live.length },
-    { id: 'retire', label: 'Retire', count: flagged.length, alert: flagged.length > 0 },
-  ]
 
   return (
     <div className="space-y-6">
@@ -84,14 +72,7 @@ export function PoisView() {
         </Callout>
       )}
 
-      <Segmented
-        value={tab}
-        onChange={setTab}
-        options={tabs.map((t) => ({ value: t.id, label: t.label, count: t.count, alert: t.alert }))}
-      />
-
-      {tab === 'corpus' && <CorpusTab pois={live} loading={isPending} openPoiId={search.poi} />}
-      {tab === 'retire' && <RetireTab flagged={flagged} />}
+      <CorpusTab pois={pois} loading={isPending} openPoiId={search.poi} />
     </div>
   )
 }
@@ -713,8 +694,41 @@ function PoiDetailSheet({ poiId, poiName, canDelete, hasNarration, open, onOpenC
 }
 
 function FactsTab({ poi }: { poi: PoiDetail }) {
+  const qc = useQueryClient()
+  const navigate = useNavigate()
+  // Re-fetch facts = a FREE cloud job (MediaWiki only, no LLM/TTS) — re-pulls the article, then jumps to
+  // Runs to watch. If the article moved, the facts hash changes + any narration goes stale (clear it from
+  // the Narration tab). This is the per-POI home of what the old Retire tab did; staleness still surfaces
+  // as a row flag + the corpus "Needs attention" filter, which points the operator here.
+  const refetchMut = useMutation({
+    mutationFn: () => api.createJob({ kind: 'refetch_facts', poiId: poi.id, apply: true }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['runs'] }); navigate({ to: '/runs' }) },
+  })
+
   return (
     <div className="space-y-4">
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          Re-pulls this POI’s facts from Wikipedia — <span className="font-medium text-foreground">free</span> (no AI or
+          TTS). If the article moved, the facts hash changes and any narration goes stale; regenerate it from the
+          Narration tab to clear that.
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={refetchMut.isPending}
+          onClick={() => refetchMut.mutate()}
+          className="shrink-0"
+        >
+          <RefreshCw className="h-3 w-3" /> {refetchMut.isPending ? 'Re-fetching…' : 'Re-fetch facts'}
+        </Button>
+      </div>
+      {refetchMut.error && (
+        <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          Re-fetch failed — {errMsg(refetchMut.error)}
+        </div>
+      )}
+
       {/* Metadata grid */}
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
         <div>
@@ -966,6 +980,10 @@ function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loading: bool
   const filtered = useMemo(() => pois.filter((p) => {
     if (region !== 'all' && p.regionSlug !== region) return false
     if (source !== 'all' && p.source !== source) return false
+    // The combined remediation queue (the old "Retire" tab): any POI needing attention — stale facts, a
+    // narration defect, an unattributed story clip, or a drifted speakable anchor. Fix each from its row's
+    // detail sheet (Re-fetch facts / Regenerate / Corrections / Delete).
+    if (flags === 'flagged' && !(p.staleFacts || p.suspiciousDuration || (!p.attributed && p.narrationCount > 0) || p.speakableDrift)) return false
     if (flags === 'defect' && !p.suspiciousDuration) return false
     if (flags === 'stale' && !p.staleFacts) return false
     if (flags === 'unattrib' && (p.attributed || p.narrationCount === 0)) return false
@@ -974,6 +992,7 @@ function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loading: bool
     if (flags === 'enriched' && !p.enriched) return false
     // The actionable gap: story-grade but no fact well yet — exactly the rows an Enrich run will bill for.
     if (flags === 'needs-enrich' && (p.storyEligibility !== 'eligible' || p.enriched)) return false
+    if (flags === 'narrated' && p.narrationCount === 0) return false
     if (flags === 'narration-stale' && p.narrationStatus !== 'stale') return false
     // region-release-gate: a narrated-but-not-yet-public clip waiting on a release.
     if (flags === 'staged' && (p.narrationStatus === 'none' || p.released)) return false
@@ -1032,6 +1051,23 @@ function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loading: bool
     setSelIds(new Set())
   }
 
+  // The table-filter axes (search/region/source/flags) are independent of the row SELECTION above.
+  const filtersActive = q !== '' || region !== 'all' || source !== 'all' || flags !== 'all'
+  function clearFilters() {
+    setQ('')
+    setRegion('all')
+    setSource('all')
+    setFlags('all')
+  }
+  // The header stat badges are QUICK FILTERS — reset the other axes first so the badge's count always
+  // matches what lands in the table (a stale region/source/search would otherwise silently narrow it).
+  function applyQuickFilter(flag: string) {
+    setQ('')
+    setRegion('all')
+    setSource('all')
+    setFlags(flag)
+  }
+
   // Resolve the selection into the enrich job's contract. 'all' mode prefers a server-side FILTER
   // (pagination-proof) when the active table filter is faithfully resolvable (region→bbox, source,
   // query); a hygiene `flags` view or a region without a bbox can't be reproduced server-side, so it
@@ -1064,8 +1100,9 @@ function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loading: bool
 
   // The active filters, surfaced in every action's confirm dialog so a spend can't run on an unseen scope.
   const FLAG_LABELS: Record<string, string> = {
+    flagged: 'Needs attention',
     'story-eligible': 'Story: eligible', 'story-filtered': 'Story: filtered out', enriched: 'Enriched',
-    'needs-enrich': 'Eligible · un-enriched', 'narration-stale': 'Narration: stale', staged: 'Narration: staged',
+    'needs-enrich': 'Eligible · un-enriched', narrated: 'Has narration', 'narration-stale': 'Narration: stale', staged: 'Narration: staged',
     'sheet-drift': 'Story: sheet drifted', 'speakable-drift': 'Speakable: drifted', defect: 'Narration defects',
     stale: 'Stale facts', unattrib: 'Unattributed',
   }
@@ -1077,27 +1114,31 @@ function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loading: bool
   const scope: ScopeDescriptor = { selection: buildSelection(), summary: selectionSummary, chips: scopeChips }
 
   const totals = {
-    total: pois.length,
     withClips: pois.filter((p) => p.narrationCount > 0).length,
     eligible: pois.filter((p) => p.storyEligibility === 'eligible').length,
     enriched: pois.filter((p) => p.enriched).length,
     // Attribution applies to STORY narrations (CC BY-SA): an unattributed narration is one that exists.
     unattrib: pois.filter((p) => !p.attributed && p.narrationCount > 0).length,
     defects: pois.filter((p) => p.suspiciousDuration).length,
+    // The combined remediation queue (the folded-in "Retire" tab) — anything needing attention.
+    flagged: pois.filter((p) => p.staleFacts || p.suspiciousDuration || (!p.attributed && p.narrationCount > 0) || p.speakableDrift).length,
   }
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <Badge variant="secondary">{totals.total} total</Badge>
-        <Badge>{totals.withClips} with narrations</Badge>
+        {totals.withClips > 0 && (
+          <button onClick={() => applyQuickFilter('narrated')}>
+            <Badge className="cursor-pointer">{totals.withClips} with narrations</Badge>
+          </button>
+        )}
         {totals.eligible > 0 && (
-          <button onClick={() => setFlags('story-eligible')}>
+          <button onClick={() => applyQuickFilter('story-eligible')}>
             <Badge variant="default" className="cursor-pointer">{totals.eligible} story-eligible</Badge>
           </button>
         )}
         {totals.eligible > 0 && (
-          <button onClick={() => setFlags(totals.enriched < totals.eligible ? 'needs-enrich' : 'enriched')}>
+          <button onClick={() => applyQuickFilter(totals.enriched < totals.eligible ? 'needs-enrich' : 'enriched')}>
             <Badge variant={totals.enriched > 0 ? 'success' : 'outline'} className="cursor-pointer">
               {totals.enriched}/{totals.eligible} enriched
             </Badge>
@@ -1105,12 +1146,18 @@ function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loading: bool
         )}
         {totals.unattrib > 0 && <Badge variant="destructive">{totals.unattrib} unattributed</Badge>}
         {totals.defects > 0 && (
-          <button onClick={() => setFlags('defect')}>
+          <button onClick={() => applyQuickFilter('defect')}>
             <Badge variant="destructive" className="cursor-pointer">
               {totals.defects} narration defect{totals.defects > 1 ? 's' : ''}
             </Badge>
           </button>
         )}
+        {totals.flagged > 0 && (
+          <button onClick={() => applyQuickFilter('flagged')} title="Stale facts, narration defects, unattributed clips, or drifted speakable anchors">
+            <Badge variant="warning" className="cursor-pointer">{totals.flagged} need attention</Badge>
+          </button>
+        )}
+        <span className="ml-auto text-sm text-muted-foreground">{filtered.length} of {pois.length}</span>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -1139,10 +1186,12 @@ function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loading: bool
           <SelectTrigger><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All flags</SelectItem>
+            <SelectItem value="flagged">Needs attention (any flag)</SelectItem>
             <SelectItem value="story-eligible">Story: eligible</SelectItem>
             <SelectItem value="story-filtered">Story: filtered out</SelectItem>
             <SelectItem value="enriched">Enriched</SelectItem>
             <SelectItem value="needs-enrich">Eligible · un-enriched</SelectItem>
+            <SelectItem value="narrated">Narration: any</SelectItem>
             <SelectItem value="narration-stale">Narration: stale</SelectItem>
             <SelectItem value="staged">Narration: staged (unreleased)</SelectItem>
             <SelectItem value="sheet-drift">Story: sheet drifted</SelectItem>
@@ -1152,7 +1201,13 @@ function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loading: bool
             <SelectItem value="unattrib">Unattributed</SelectItem>
           </SelectContent>
         </Select>
-        <span className="ml-auto text-sm text-muted-foreground">{filtered.length} of {pois.length}</span>
+        <div className="ml-auto flex items-center gap-3">
+          {filtersActive && (
+            <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={clearFilters}>
+              <X className="h-3.5 w-3.5" /> Clear filters
+            </Button>
+          )}
+        </div>
       </div>
 
       {numSelected > 0 && (
@@ -1321,129 +1376,6 @@ function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loading: bool
         scope={scope}
         onSubmitted={() => { clearSel(); navigate({ to: '/runs' }) }}
       />
-    </div>
-  )
-}
-
-/* ── RETIRE ── */
-
-function RetireTab({ flagged }: { flagged: PoiRow[] }) {
-  const navigate = useNavigate()
-  const qc = useQueryClient()
-  const confirm = useConfirm()
-  const [actionErr, setActionErr] = useState<string | null>(null)
-
-  // Re-fetch is a FREE cloud job (MediaWiki only, no LLM/TTS) — fire it, then jump to Runs to watch.
-  const refetchMut = useMutation({
-    mutationFn: (poiId: string) => api.createJob({ kind: 'refetch_facts', poiId, apply: true }),
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['runs'] }); navigate({ to: '/runs' }) },
-    onError: (e) => setActionErr(errMsg(e)),
-  })
-  // Retire is a hard DELETE, allowed ONLY for orphaned POIs (no narration) — the server guards it too.
-  const deleteMut = useMutation({
-    mutationFn: (poiId: string) => api.deletePoi(poiId),
-    onSuccess: () => { setActionErr(null); void qc.invalidateQueries({ queryKey: ['pois'] }) },
-    onError: (e) => setActionErr(errMsg(e)),
-  })
-
-  if (flagged.length === 0) {
-    return (
-      <EmptyState
-        icon={CircleCheck}
-        iconClassName="text-success"
-        className="rounded-xl border bg-muted/30"
-      >
-        No flagged POIs — corpus is clean.
-      </EmptyState>
-    )
-  }
-
-  return (
-    <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">
-        Flagged POIs. <strong className="text-foreground">Re-fetch</strong> re-pulls facts from Wikipedia (free) — if
-        they change, regenerate the narration to clear the staleness. Unattributed story narrations violate CC BY-SA and
-        need a regenerate. <strong className="text-foreground">Retire</strong> (hard delete) is allowed only for
-        orphaned POIs with no narration, so it's disabled for everything referenced here.
-      </p>
-      {actionErr && (
-        <Callout variant="error">
-          <span className="font-medium">Action failed:</span> {actionErr}
-        </Callout>
-      )}
-      <div className="space-y-2">
-        {flagged.map((p) => {
-          const tone = p.staleFacts || p.speakableDrift ? 'warning' : 'destructive'
-          const label = p.staleFacts ? 'Stale facts' : p.speakableDrift ? 'Speakable drift' : 'Unattributed'
-          const desc = p.staleFacts
-            ? 'factsHash changed — re-fetch, then regenerate the narration'
-            : p.speakableDrift
-              ? 'speakable anchor implausibly far from the pin — re-verify + reset it in Corrections'
-              : 'story narration missing CC BY-SA attribution'
-          const isOrphan = p.narrationCount === 0
-          const refetching = refetchMut.isPending && refetchMut.variables === p.id
-          const deleting = deleteMut.isPending && deleteMut.variables === p.id
-          return (
-            <div
-              key={p.id}
-              className={cn(
-                'rounded-xl border px-4 py-3',
-                p.staleFacts || p.speakableDrift ? 'border-warning/30 bg-warning/5' : 'border-destructive/30 bg-destructive/5',
-              )}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="mb-1 flex flex-wrap items-center gap-2">
-                    <span className="font-medium">{p.name}</span>
-                    <Badge variant={tone}>{label}</Badge>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                    <code className="font-mono">{p.sourceId}</code>
-                    {p.regionName && <span>{p.regionName}</span>}
-                    <span>{desc}</span>
-                    {p.narrationCount > 0 && (
-                      <span className="text-warning">
-                        {p.narrationCount} narration{p.narrationCount > 1 ? 's' : ''}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {p.staleFacts && (
-                    <Button variant="outline" size="sm" disabled={refetching} onClick={() => refetchMut.mutate(p.id)}>
-                      <RefreshCw className="h-3 w-3" /> {refetching ? 'Re-fetching…' : 'Re-fetch'}
-                    </Button>
-                  )}
-                  <span
-                    title={
-                      isOrphan
-                        ? undefined
-                        : 'Has a narration — regenerate or correct it instead of deleting.'
-                    }
-                  >
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={!isOrphan || deleting}
-                      onClick={async () => {
-                        if (!(await confirm({
-                          title: 'Retire POI?',
-                          body: `Permanently delete “${p.name}”. This removes the POI record.`,
-                          confirmLabel: 'Retire',
-                          tone: 'destructive',
-                        }))) return
-                        deleteMut.mutate(p.id)
-                      }}
-                    >
-                      <Trash2 className="h-3 w-3" /> {deleting ? 'Retiring…' : 'Retire'}
-                    </Button>
-                  </span>
-                </div>
-              </div>
-            </div>
-          )
-        })}
-      </div>
     </div>
   )
 }
