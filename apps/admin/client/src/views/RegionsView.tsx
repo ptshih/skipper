@@ -347,8 +347,8 @@ function RegionDialog({
 
   return (
     <Sheet open onOpenChange={(o) => { if (!o && !saveMut.isPending) onClose() }}>
-      {/* A wide right-side drawer — the inputs + conversational bbox lookup sit side-by-side, with a tall
-          full-width map below. */}
+      {/* A wide right-side drawer: a fixed left rail holds the form (name, bbox, conversational bbox
+          lookup — stacked + scrollable); the map fills the rest as a tall, full-height canvas. */}
       <SheetContent side="right" className="max-w-5xl">
         <SheetHeader className="flex-col items-stretch gap-1">
           <SheetTitle>{mode.mode === 'create' ? 'Add region' : `Edit ${existing?.displayName}`}</SheetTitle>
@@ -359,62 +359,63 @@ function RegionDialog({
           </SheetDescription>
         </SheetHeader>
 
-        <div className="flex-1 space-y-5 overflow-y-auto px-5 py-4">
-          {/* Inputs on the left, the conversational bbox lookup to their right. */}
-          <div className="grid items-start gap-6 md:grid-cols-2">
-            <div className="space-y-4">
-              {mode.mode === 'create' && (
-                <div className="space-y-1.5">
-                  <Label htmlFor="region-slug">Slug *</Label>
-                  <Input
-                    id="region-slug"
-                    value={slug}
-                    onChange={(e) => setSlug(e.target.value)}
-                    placeholder="yosemite-valley"
-                  />
-                  <p className="text-xs text-muted-foreground">Lowercase kebab-case. Permanent DB key.</p>
-                </div>
-              )}
-
+        <div className="flex min-h-0 flex-1 gap-5 px-5 py-4">
+          {/* Left rail — the form: identity + bbox + the conversational lookup, stacked. Scrolls on its
+              own so the map beside it always fills the drawer height. */}
+          <div className="flex w-[24rem] shrink-0 flex-col gap-4 overflow-y-auto pr-1">
+            {mode.mode === 'create' && (
               <div className="space-y-1.5">
-                <Label htmlFor="region-name">Display name *</Label>
+                <Label htmlFor="region-slug">Slug *</Label>
                 <Input
-                  id="region-name"
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                  placeholder="Yosemite Valley"
+                  id="region-slug"
+                  value={slug}
+                  onChange={(e) => setSlug(e.target.value)}
+                  placeholder="yosemite-valley"
                 />
+                <p className="text-xs text-muted-foreground">Lowercase kebab-case. Permanent DB key.</p>
               </div>
+            )}
 
-              <div className="space-y-1.5">
-                <Label htmlFor="region-bbox">Discovery bbox</Label>
-                <Input
-                  id="region-bbox"
-                  value={bbox}
-                  onChange={(e) => setBbox(e.target.value)}
-                  placeholder="-119.6,37.6,-119.4,37.8"
-                  className="font-mono text-sm"
-                />
-                <p className="text-xs text-muted-foreground">
-                  <code className="font-mono">lng_min,lat_min,lng_max,lat_max</code>. Leave blank to use the built-in
-                  default (Tahoe basin). Use the lookup, or draw a box on the map.
-                </p>
-              </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="region-name">Display name *</Label>
+              <Input
+                id="region-name"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder="Yosemite Valley"
+              />
             </div>
 
-            {/* ── Bbox lookup (beside the inputs) ── */}
+            <div className="space-y-1.5">
+              <Label htmlFor="region-bbox">Discovery bbox</Label>
+              <Input
+                id="region-bbox"
+                value={bbox}
+                onChange={(e) => setBbox(e.target.value)}
+                placeholder="-119.6,37.6,-119.4,37.8"
+                className="font-mono text-sm"
+              />
+              <p className="text-xs text-muted-foreground">
+                <code className="font-mono">lng_min,lat_min,lng_max,lat_max</code>. Leave blank to use the built-in
+                default (Tahoe basin). Use the lookup, or draw a box on the map.
+              </p>
+            </div>
+
             <BboxLookup
               defaultQuery={displayName}
               onUse={(b) => setBbox(b)}
             />
           </div>
 
-          <BboxMap bbox={bbox} onBbox={setBbox} className="h-[28rem]" />
-
-          {saveMut.error && (
-            <Callout variant="error" className="rounded-lg px-3 py-2">{errMsg(saveMut.error)}</Callout>
-          )}
+          {/* Map canvas — fills the remaining width + full drawer height. */}
+          <BboxMap bbox={bbox} onBbox={setBbox} className="h-full min-w-0 flex-1" />
         </div>
+
+        {saveMut.error && (
+          <div className="px-5 pb-1">
+            <Callout variant="error" className="rounded-lg px-3 py-2">{errMsg(saveMut.error)}</Callout>
+          </div>
+        )}
 
         <SheetFooter className="justify-end">
           <Button variant="ghost" onClick={onClose} disabled={saveMut.isPending}>Cancel</Button>
