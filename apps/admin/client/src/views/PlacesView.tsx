@@ -16,6 +16,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { DataTable, type Column } from '@/components/ui/data-table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { PendingButton } from '@/components/ui/pending-button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -346,9 +347,15 @@ function AddPlaceDialog({ open, onOpenChange, region, onAdded }: {
             onChange={(e) => { setQuery(e.target.value); setNoMatch(false) }}
           />
         </div>
-        <Button type="submit" variant="outline" disabled={!query.trim() || resolveMut.isPending}>
-          <Search className="h-4 w-4" /> {resolveMut.isPending ? 'Searching…' : 'Search'}
-        </Button>
+        <PendingButton
+          type="submit"
+          variant="outline"
+          pending={resolveMut.isPending}
+          disabled={!query.trim()}
+          icon={<Search className="h-4 w-4" />}
+          idleLabel="Search"
+          pendingLabel="Searching…"
+        />
       </form>
 
       {noMatch && !resolveError && (

@@ -4,7 +4,7 @@ import { Trash2, X } from 'lucide-react'
 import { api } from '@/lib/api'
 import { qk } from '@/lib/queryKeys'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { Button } from '@/components/ui/button'
+import { PendingButton } from '@/components/ui/pending-button'
 import { ErrorCallout } from '@/components/ui/error-callout'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Segmented, type SegmentedOption } from '@/components/ui/segmented'
@@ -90,11 +90,11 @@ export function PoiDetailSheet({ poiId, poiName, canDelete, hasNarration, open, 
         {canDelete && (
           <div className="border-t px-6 py-3">
             <div className="flex flex-wrap items-center gap-2">
-              <Button
+              <PendingButton
                 variant="ghost"
                 size="sm"
                 className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                disabled={deleteMut.isPending}
+                pending={deleteMut.isPending}
                 onClick={async () => {
                   if (!(await confirm({
                     title: 'Delete POI?',
@@ -104,9 +104,10 @@ export function PoiDetailSheet({ poiId, poiName, canDelete, hasNarration, open, 
                   }))) return
                   deleteMut.mutate()
                 }}
-              >
-                <Trash2 className="h-4 w-4" /> {deleteMut.isPending ? 'Deleting…' : 'Delete POI'}
-              </Button>
+                icon={<Trash2 className="h-4 w-4" />}
+                idleLabel="Delete POI"
+                pendingLabel="Deleting…"
+              />
               <span className="text-xs text-muted-foreground">No narration references this POI.</span>
             </div>
             {deleteMut.error && <ErrorCallout error={deleteMut.error} className="mt-2 rounded-lg px-3 py-2 text-xs" />}

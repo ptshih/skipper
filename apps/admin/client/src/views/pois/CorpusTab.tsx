@@ -13,6 +13,7 @@ import { SearchInput } from '@/components/ui/search-input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { DataTable, type Column } from '@/components/ui/data-table'
 import { EmptyState } from '@/components/ui/empty-state'
+import { SelectionBar } from '@/components/ui/selection-bar'
 import type { EnrichSelection, ScopeDescriptor } from './types'
 import { EnrichDialog, NarrateDialog, RescoreDialog } from './dialogs'
 import { PoiDetailSheet } from './PoiDetailSheet'
@@ -368,7 +369,7 @@ export function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loadin
       </div>
 
       {numSelected > 0 && (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-sm">
+        <SelectionBar>
           <span className="mr-1 font-medium">{selectionSummary}</span>
           <Button size="sm" onClick={() => setEnrichOpen(true)}>
             <Sparkles className="h-4 w-4" /> Enrich {numEligibleSelected}
@@ -382,7 +383,7 @@ export function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loadin
           <button className="text-xs text-muted-foreground hover:text-foreground" onClick={clearSel}>
             Clear
           </button>
-        </div>
+        </SelectionBar>
       )}
 
       <DataTable

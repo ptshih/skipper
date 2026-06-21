@@ -4,7 +4,7 @@ import { RefreshCw } from 'lucide-react'
 import { api, type PoiDetail } from '@/lib/api'
 import { errMsg, timeAgo } from '@/lib/format'
 import { qk } from '@/lib/queryKeys'
-import { Button } from '@/components/ui/button'
+import { PendingButton } from '@/components/ui/pending-button'
 import { ErrorCallout } from '@/components/ui/error-callout'
 
 export function FactsTab({ poi }: { poi: PoiDetail }) {
@@ -27,15 +27,16 @@ export function FactsTab({ poi }: { poi: PoiDetail }) {
           TTS). If the article moved, the facts hash changes and any narration goes stale; regenerate it from the
           Narration tab to clear that.
         </p>
-        <Button
+        <PendingButton
           variant="outline"
           size="sm"
-          disabled={refetchMut.isPending}
+          pending={refetchMut.isPending}
           onClick={() => refetchMut.mutate()}
           className="shrink-0"
-        >
-          <RefreshCw className="h-3 w-3" /> {refetchMut.isPending ? 'Re-fetching…' : 'Re-fetch facts'}
-        </Button>
+          icon={<RefreshCw className="h-3 w-3" />}
+          idleLabel="Re-fetch facts"
+          pendingLabel="Re-fetching…"
+        />
       </div>
       {refetchMut.error && <ErrorCallout error={`Re-fetch failed — ${errMsg(refetchMut.error)}`} className="rounded-lg px-3 py-2 text-xs" />}
 

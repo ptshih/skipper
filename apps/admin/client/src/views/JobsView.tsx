@@ -12,6 +12,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { DataTable, type Column } from '@/components/ui/data-table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { PendingButton } from '@/components/ui/pending-button'
 import { Callout } from '@/components/ui/callout'
 import { EmptyState } from '@/components/ui/empty-state'
 import { SectionLabel } from '@/components/ui/section-label'
@@ -152,14 +153,15 @@ export function JobsView() {
         title="Jobs"
         description="Admin-triggered Cloud Run jobs, newest first. Click a row for run details."
         actions={
-          <Button
+          <PendingButton
             variant="outline"
-            disabled={sweepMut.isPending}
+            pending={sweepMut.isPending}
             onClick={() => void sweepOrphans()}
             title="Maintenance — delete R2 clips no narration references"
-          >
-            <Trash2 className="h-4 w-4" /> {sweepMut.isPending ? 'Sweeping…' : 'Sweep orphans'}
-          </Button>
+            icon={<Trash2 className="h-4 w-4" />}
+            idleLabel="Sweep orphans"
+            pendingLabel="Sweeping…"
+          />
         }
       />
 
@@ -363,9 +365,14 @@ function JobDrawer({ run, onClose }: { run: RunEvent; onClose: () => void }) {
 
         <SheetFooter>
           {cancelable && (
-            <Button variant="destructive" disabled={cancelMut.isPending} onClick={() => cancelMut.mutate()}>
-              <X size={14} /> {cancelMut.isPending ? 'Canceling…' : 'Cancel run'}
-            </Button>
+            <PendingButton
+              variant="destructive"
+              pending={cancelMut.isPending}
+              onClick={() => cancelMut.mutate()}
+              icon={<X size={14} />}
+              idleLabel="Cancel run"
+              pendingLabel="Canceling…"
+            />
           )}
           {logsUrl && (
             <a

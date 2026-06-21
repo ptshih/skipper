@@ -5,7 +5,7 @@ import { api } from '@/lib/api'
 import { errMsg } from '@/lib/format'
 import { qk } from '@/lib/queryKeys'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { PendingButton } from '@/components/ui/pending-button'
 import { Callout } from '@/components/ui/callout'
 import { ErrorCallout } from '@/components/ui/error-callout'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -129,19 +129,36 @@ export function NarrationTab({ poiId, hasNarration }: { poiId: string; hasNarrat
         )}
         <span className="flex-1" />
         {!clip.releasedAt && (
-          <Button variant="default" size="sm" onClick={() => void handleRelease()} disabled={releaseMut.isPending}>
-            <Rocket className="h-3 w-3" />
-            {releaseMut.isPending ? 'Releasing…' : 'Release'}
-          </Button>
+          <PendingButton
+            variant="default"
+            size="sm"
+            onClick={() => void handleRelease()}
+            pending={releaseMut.isPending}
+            icon={<Rocket className="h-3 w-3" />}
+            idleLabel="Release"
+            pendingLabel="Releasing…"
+          />
         )}
-        <Button variant="outline" size="sm" onClick={() => void handleRegenerate()} disabled={regenMut.isPending || resynthMut.isPending}>
-          <Zap className="h-3 w-3" />
-          {regenMut.isPending ? 'Queuing…' : 'Regenerate'}
-        </Button>
-        <Button variant="outline" size="sm" onClick={() => void handleResynth()} disabled={resynthMut.isPending || regenMut.isPending}>
-          <RefreshCw className="h-3 w-3" />
-          {resynthMut.isPending ? 'Queuing…' : 'Re-synth'}
-        </Button>
+        <PendingButton
+          variant="outline"
+          size="sm"
+          onClick={() => void handleRegenerate()}
+          pending={regenMut.isPending}
+          disabled={resynthMut.isPending}
+          icon={<Zap className="h-3 w-3" />}
+          idleLabel="Regenerate"
+          pendingLabel="Queuing…"
+        />
+        <PendingButton
+          variant="outline"
+          size="sm"
+          onClick={() => void handleResynth()}
+          pending={resynthMut.isPending}
+          disabled={regenMut.isPending}
+          icon={<RefreshCw className="h-3 w-3" />}
+          idleLabel="Re-synth"
+          pendingLabel="Queuing…"
+        />
       </div>
       {releaseMut.error && <ErrorCallout error={`Release failed — ${errMsg(releaseMut.error)}`} className="rounded-lg px-3 py-2 text-xs" />}
       {resynthMut.error && <ErrorCallout error={`Re-synth failed — ${errMsg(resynthMut.error)}`} className="rounded-lg px-3 py-2 text-xs" />}

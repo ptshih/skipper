@@ -9,8 +9,10 @@ import { useAdminList } from '@/lib/useAdminList'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { PageHeader } from '@/components/PageHeader'
 import { DataTable, type Column } from '@/components/ui/data-table'
+import { SelectionBar } from '@/components/ui/selection-bar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { PendingButton } from '@/components/ui/pending-button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -209,7 +211,7 @@ export function RegionsView() {
       </Callout>
 
       {numSelected > 0 && (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-sm">
+        <SelectionBar>
           <span className="mr-1 font-medium">
             {numSelected} region{numSelected === 1 ? '' : 's'} selected
           </span>
@@ -219,7 +221,7 @@ export function RegionsView() {
           <button className="text-xs text-muted-foreground hover:text-foreground" onClick={clearSel}>
             Clear
           </button>
-        </div>
+        </SelectionBar>
       )}
 
       <DataTable
@@ -305,9 +307,14 @@ function DiscoverDialog({ regions, open, onOpenChange, onSubmitted }: {
           <Button variant="outline" onClick={() => submitMut.mutate(false)} disabled={submitMut.isPending || regions.length === 0}>
             Preview
           </Button>
-          <Button onClick={() => submitMut.mutate(true)} disabled={submitMut.isPending || regions.length === 0}>
-            <Compass className="h-4 w-4" /> {submitMut.isPending ? 'Queuing…' : 'Discover'}
-          </Button>
+          <PendingButton
+            onClick={() => submitMut.mutate(true)}
+            pending={submitMut.isPending}
+            disabled={regions.length === 0}
+            icon={<Compass className="h-4 w-4" />}
+            idleLabel="Discover"
+            pendingLabel="Queuing…"
+          />
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -415,12 +422,13 @@ function RegionDialog({
 
         <SheetFooter className="justify-end">
           <Button variant="ghost" onClick={onClose} disabled={saveMut.isPending}>Cancel</Button>
-          <Button
-            disabled={saveMut.isPending || !displayName.trim() || (mode.mode === 'create' && !slug.trim())}
+          <PendingButton
+            pending={saveMut.isPending}
+            disabled={!displayName.trim() || (mode.mode === 'create' && !slug.trim())}
             onClick={() => saveMut.mutate()}
-          >
-            {saveMut.isPending ? 'Saving…' : mode.mode === 'create' ? 'Create region' : 'Save changes'}
-          </Button>
+            idleLabel={mode.mode === 'create' ? 'Create region' : 'Save changes'}
+            pendingLabel="Saving…"
+          />
         </SheetFooter>
       </SheetContent>
     </Sheet>
