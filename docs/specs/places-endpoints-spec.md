@@ -106,6 +106,14 @@ is dual-purpose and the per-search cost is normal maps-app traffic.)
    most-picked `places`) — polish, post-launch.
 5. **Off-content routes.** Region-bound autocomplete + the existing "no stories along that route"
    confirm guard (blocks an empty drive before a credit is spent).
+6. **Curated set vs. open autocomplete (founder, 2026-06-20 — REVISIT before build).** Instead of live
+   open-ended autocomplete, PRE-CURATE a set of popular places per region — ones that serve as good
+   START / END / MIDPOINT *and* BREAK/PITSTOP anchors — store them, and constrain the picker to ONLY
+   those. This would collapse several questions above: endpoints become pre-stored `places` rows (Q1),
+   no runtime type-biasing needed (Q2), the curated set IS the featured list (Q4), and there's no
+   runtime autocomplete cost at all. Trade-off: per-region curation effort + bounded coverage (a rider
+   can't pick an arbitrary address) vs. zero-curation + infinite coverage. Middle path: a curated set
+   as the default/featured picks with open autocomplete as a fallthrough. DECISION DEFERRED.
 
 ## Build steps
 
