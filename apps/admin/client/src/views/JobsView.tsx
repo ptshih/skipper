@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearch } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Activity, ArrowRight, CircleX, ExternalLink, Filter, RefreshCw, Scissors, Search, Sparkles, Trash2, X, Zap,
+  Activity, ArrowRight, CircleX, ExternalLink, Filter, MapPin, RefreshCw, Scissors, Search, Sparkles, Trash2, X, Zap,
 } from 'lucide-react'
 import { api, type JobStatus, type RunEvent } from '@/lib/api'
 import { errMsg, fmtDate, timeAgo } from '@/lib/format'
@@ -37,6 +37,7 @@ const KIND_META: Record<string, { label: string; icon: React.ElementType }> = {
   discover_pois:   { label: 'Discover POIs',     icon: Filter },
   enrich_pois:     { label: 'Enrich corpus',     icon: Sparkles },
   generate_narrations: { label: 'Generate Narration', icon: Zap },
+  curate_places:   { label: 'Curate places',     icon: MapPin },
   offline_audit:   { label: 'Re-score corpus',   icon: Activity },
 }
 
