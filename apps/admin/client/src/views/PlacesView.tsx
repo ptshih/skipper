@@ -25,14 +25,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { PlacesMap, PLACE_PIN_COLORS } from '@/components/ui/leaflet-map'
 import { JobActionDialog } from '@/components/ui/job-action-dialog'
 import { useConfirm } from '@/components/ui/confirm-dialog'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { FormDialog } from '@/components/ui/form-dialog'
 
 /** Humanize a raw Google primaryType for display ('scenic_spot' → 'scenic spot'). */
 const kindLabel = (t: string | null): string => (t ? t.replace(/_/g, ' ') : '—')
@@ -326,79 +319,74 @@ function AddPlaceDialog({ open, onOpenChange, region, onAdded }: {
   const roleMissing = !endpoint && !brk
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2"><Plus className="h-4 w-4" /> Add a place</DialogTitle>
-          <DialogDescription>
-            Search Google Places for a specific hub or pitstop in this region. The match is resolved + stored
-            once — no live Places calls at drive time.
-          </DialogDescription>
-        </DialogHeader>
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      icon={Plus}
+      title="Add a place"
+      description="Search Google Places for a specific hub or pitstop in this region. The match is resolved + stored once — no live Places calls at drive time."
+      onSubmit={() => addMut.mutate()}
+      submitIcon={Plus}
+      submitLabel="Add place"
+      submitPendingLabel="Adding…"
+      submitDisabled={!candidate || roleMissing}
+      pending={addMut.isPending}
+    >
+      <form
+        className="flex items-end gap-2"
+        onSubmit={(e) => { e.preventDefault(); if (query.trim()) resolveMut.mutate() }}
+      >
+        <div className="flex-1 space-y-1.5">
+          <Label htmlFor="place-query">Place name</Label>
+          <Input
+            id="place-query"
+            autoFocus
+            placeholder='e.g. "Tahoe City" or "Emerald Bay State Park"'
+            value={query}
+            onChange={(e) => { setQuery(e.target.value); setNoMatch(false) }}
+          />
+        </div>
+        <Button type="submit" variant="outline" disabled={!query.trim() || resolveMut.isPending}>
+          <Search className="h-4 w-4" /> {resolveMut.isPending ? 'Searching…' : 'Search'}
+        </Button>
+      </form>
 
-        <form
-          className="flex items-end gap-2"
-          onSubmit={(e) => { e.preventDefault(); if (query.trim()) resolveMut.mutate() }}
-        >
-          <div className="flex-1 space-y-1.5">
-            <Label htmlFor="place-query">Place name</Label>
-            <Input
-              id="place-query"
-              autoFocus
-              placeholder='e.g. "Tahoe City" or "Emerald Bay State Park"'
-              value={query}
-              onChange={(e) => { setQuery(e.target.value); setNoMatch(false) }}
-            />
-          </div>
-          <Button type="submit" variant="outline" disabled={!query.trim() || resolveMut.isPending}>
-            <Search className="h-4 w-4" /> {resolveMut.isPending ? 'Searching…' : 'Search'}
-          </Button>
-        </form>
+      {noMatch && !resolveError && (
+        <Callout variant="info" className="rounded-lg px-3 py-2 text-xs">No in-region match — try a more specific name (add the town/state).</Callout>
+      )}
+      {resolveError != null && (
+        <Callout variant="error" className="rounded-lg px-3 py-2">{errMsg(resolveError)}</Callout>
+      )}
 
-        {noMatch && !resolveError && (
-          <Callout variant="info" className="rounded-lg px-3 py-2 text-xs">No in-region match — try a more specific name (add the town/state).</Callout>
-        )}
-        {resolveError != null && (
-          <Callout variant="error" className="rounded-lg px-3 py-2">{errMsg(resolveError)}</Callout>
-        )}
-
-        {candidate && (
-          <div className="space-y-3 rounded-lg border p-3">
-            <div>
-              <div className="font-medium">{candidate.name}</div>
-              <div className="text-xs text-muted-foreground">
-                {kindLabel(candidate.primaryType ?? null)} · {candidate.lat.toFixed(4)}, {candidate.lng.toFixed(4)}
-              </div>
+      {candidate && (
+        <div className="space-y-3 rounded-lg border p-3">
+          <div>
+            <div className="font-medium">{candidate.name}</div>
+            <div className="text-xs text-muted-foreground">
+              {kindLabel(candidate.primaryType ?? null)} · {candidate.lat.toFixed(4)}, {candidate.lng.toFixed(4)}
             </div>
-            <div className="flex flex-wrap gap-4">
-              <label className="flex cursor-pointer items-center gap-2 text-sm">
-                <Checkbox checked={endpoint} onCheckedChange={(v) => setEndpoint(v === true)} aria-label="Endpoint-eligible" />
-                <span>Endpoint (start / end / midpoint)</span>
-              </label>
-              <label className="flex cursor-pointer items-center gap-2 text-sm">
-                <Checkbox checked={brk} onCheckedChange={(v) => setBrk(v === true)} aria-label="Break-eligible" />
-                <span>Break (pitstop)</span>
-              </label>
-              <label className="flex cursor-pointer items-center gap-2 text-sm">
-                <Checkbox checked={featured} onCheckedChange={(v) => setFeatured(v === true)} aria-label="Featured" />
-                <span>Featured</span>
-              </label>
-            </div>
-            {roleMissing && <p className="text-xs text-muted-foreground">Pick at least one role.</p>}
           </div>
-        )}
+          <div className="flex flex-wrap gap-4">
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <Checkbox checked={endpoint} onCheckedChange={(v) => setEndpoint(v === true)} aria-label="Endpoint-eligible" />
+              <span>Endpoint (start / end / midpoint)</span>
+            </label>
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <Checkbox checked={brk} onCheckedChange={(v) => setBrk(v === true)} aria-label="Break-eligible" />
+              <span>Break (pitstop)</span>
+            </label>
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <Checkbox checked={featured} onCheckedChange={(v) => setFeatured(v === true)} aria-label="Featured" />
+              <span>Featured</span>
+            </label>
+          </div>
+          {roleMissing && <p className="text-xs text-muted-foreground">Pick at least one role.</p>}
+        </div>
+      )}
 
-        {addError != null && (
-          <Callout variant="error" className="rounded-lg px-3 py-2">{errMsg(addError)}</Callout>
-        )}
-
-        <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={addMut.isPending}>Cancel</Button>
-          <Button disabled={!candidate || roleMissing || addMut.isPending} onClick={() => addMut.mutate()}>
-            <Plus className="h-4 w-4" /> {addMut.isPending ? 'Adding…' : 'Add place'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      {addError != null && (
+        <Callout variant="error" className="rounded-lg px-3 py-2">{errMsg(addError)}</Callout>
+      )}
+    </FormDialog>
   )
 }

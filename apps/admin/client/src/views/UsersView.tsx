@@ -14,14 +14,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Callout } from '@/components/ui/callout'
 import { EmptyState } from '@/components/ui/empty-state'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { FormDialog } from '@/components/ui/form-dialog'
 
 // A readable label for a row: the name, or email, or a truncated id for an un-named anonymous account.
 const userLabel = (u: UserRow) => u.name?.trim() || u.email?.trim() || `${u.id.slice(0, 8)}…`
@@ -128,68 +121,68 @@ function GrantCreditsDialog({ user, onClose }: { user: UserRow; onClose: () => v
   })
 
   return (
-    <Dialog open onOpenChange={(o) => { if (!o && !grantMut.isPending) onClose() }}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2"><Coins className="h-4 w-4" /> Grant credits</DialogTitle>
-          <DialogDescription>
-            Add drive credits to <span className="font-medium text-foreground">{userLabel(user)}</span>. This lifts
-            their balance and lifetime cap. It’s free (it grants the user generations, not GCP spend) and can’t be
-            undone here.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4">
-          <div className="rounded-lg border bg-muted/30 px-3 py-2.5 text-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Current balance</span>
-              <span className="font-mono font-medium tabular-nums">{user.remaining.toLocaleString()}</span>
-            </div>
-            <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
-              <span>granted {user.granted.toLocaleString()} · used {user.used.toLocaleString()}</span>
-              {valid && <span>→ {(user.remaining + n).toLocaleString()} after</span>}
-            </div>
+    <FormDialog
+      open
+      onOpenChange={(o) => { if (!o && !grantMut.isPending) onClose() }}
+      icon={Coins}
+      title="Grant credits"
+      description={
+        <>
+          Add drive credits to <span className="font-medium text-foreground">{userLabel(user)}</span>. This lifts
+          their balance and lifetime cap. It’s free (it grants the user generations, not GCP spend) and can’t be
+          undone here.
+        </>
+      }
+      contentClassName="sm:max-w-md"
+      onSubmit={() => grantMut.mutate()}
+      submitIcon={Coins}
+      submitLabel={`Grant ${valid ? n : ''} credit${n === 1 ? '' : 's'}`}
+      submitPendingLabel="Granting…"
+      submitDisabled={!valid}
+      pending={grantMut.isPending}
+    >
+      <div className="space-y-4">
+        <div className="rounded-lg border bg-muted/30 px-3 py-2.5 text-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">Current balance</span>
+            <span className="font-mono font-medium tabular-nums">{user.remaining.toLocaleString()}</span>
           </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="grant-amount">Amount *</Label>
-            <Input
-              id="grant-amount"
-              type="number"
-              min={1}
-              max={1000}
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              className="font-mono"
-            />
-            <p className="text-xs text-muted-foreground">A positive whole number, 1–1000.</p>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="grant-reason">Reason</Label>
-            <Textarea
-              id="grant-reason"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder="e.g. make-good for a failed generation"
-              rows={2}
-            />
-            <p className="text-xs text-muted-foreground">Optional audit note (recorded on the ledger entry alongside your email).</p>
+          <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
+            <span>granted {user.granted.toLocaleString()} · used {user.used.toLocaleString()}</span>
+            {valid && <span>→ {(user.remaining + n).toLocaleString()} after</span>}
           </div>
         </div>
 
-        {grantMut.error && (
-          <Callout variant="error" className="rounded-lg px-3 py-2">{errMsg(grantMut.error)}</Callout>
-        )}
+        <div className="space-y-1.5">
+          <Label htmlFor="grant-amount">Amount *</Label>
+          <Input
+            id="grant-amount"
+            type="number"
+            min={1}
+            max={1000}
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            className="font-mono"
+          />
+          <p className="text-xs text-muted-foreground">A positive whole number, 1–1000.</p>
+        </div>
 
-        <DialogFooter>
-          <Button variant="ghost" onClick={onClose} disabled={grantMut.isPending}>Cancel</Button>
-          <Button onClick={() => grantMut.mutate()} disabled={!valid || grantMut.isPending}>
-            <Coins className="h-4 w-4" />
-            {grantMut.isPending ? 'Granting…' : `Grant ${valid ? n : ''} credit${n === 1 ? '' : 's'}`}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        <div className="space-y-1.5">
+          <Label htmlFor="grant-reason">Reason</Label>
+          <Textarea
+            id="grant-reason"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="e.g. make-good for a failed generation"
+            rows={2}
+          />
+          <p className="text-xs text-muted-foreground">Optional audit note (recorded on the ledger entry alongside your email).</p>
+        </div>
+      </div>
+
+      {grantMut.error && (
+        <Callout variant="error" className="rounded-lg px-3 py-2">{errMsg(grantMut.error)}</Callout>
+      )}
+    </FormDialog>
   )
 }
