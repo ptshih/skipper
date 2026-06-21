@@ -161,6 +161,11 @@ export const voice = {
     musicHeld: 'Held · music back up', // encounter PAUSED — the rider's audio resumes
     storyBadge: 'STORY', // encounter sheet badge (waves/B-sides arrive with their clips)
     skip: 'Skip',
+    // Tuck the encounter player away WITHOUT stopping the story — the handle drag-down / a scrim tap.
+    // (Skip is the only thing that stops it.) The peek bar brings it back, so audio never plays with
+    // no reachable controls (the "couldn't get the player back" fix).
+    minimize: 'Tuck the player away',
+    expand: 'Show the story player', // the peek bar's a11y label — one tap back to the full controls
     // Pre-buffer skeleton: the sheet now waits for the clip to be ready before sliding up, so
     // it opens on real audio (not a frozen 0:00). On a slow/dead-zone buffer (>~3s) it appears
     // anyway in this loading state rather than leave the rider with nothing.

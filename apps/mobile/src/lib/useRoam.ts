@@ -94,6 +94,18 @@ export interface RoamState {
   pinCount: number
   /** The encounter currently PLAYING (null = companionable silence). */
   activeName: string | null
+  /** The active clip's name keyed on the LOADING/playing clip (not the sheet latch) — survives a
+   *  minimize / any sheet-vs-audio desync, so the peek bar always has a title. */
+  clipName: string | null
+  /** Real audio has started for the active clip (sawFresh). True = a clip is actually SOUNDING — the
+   *  peek bar shows whenever this is true but the full sheet isn't, so audio never plays with no control. */
+  clipSounding: boolean
+  /** The full sheet is tucked away by hand; the clip plays on. The peek bar brings it back. */
+  minimized: boolean
+  /** Tuck the sheet away WITHOUT stopping the clip (handle drag-down / scrim tap). */
+  minimizeSheet: () => void
+  /** Bring the full sheet back (the peek-bar tap). */
+  expandSheet: () => void
   /** The encounter clip's transport — roam reuses the EXACT tour-player controls
    *  (Scrubber + play/pause + ±15s jogs) so both players feel identical (founder call,
    *  superseding the alpha's read-only progress bar). */
@@ -154,6 +166,8 @@ export function useRoam(mode: RoamMode): RoamState {
   const [openerLine, setOpenerLine] = useState<string>(voice.roam.sessionStart[0]!)
   const [gpsSearching, setGpsSearching] = useState(false)
   const [clipPaused, setClipPaused] = useState(false) // encounter held by hand (music un-ducks)
+  const [minimized, setMinimized] = useState(false) // sheet tucked away by hand; the clip plays on (peek bar offers it back)
+  const [clipSounding, setClipSounding] = useState(false) // sawFresh mirror — real audio has started (the peek-bar safety-net truth)
   const [position, setPosition] = useState<{ lat: number; lng: number } | null>(null) // roam-map puck
   const [mapPins, setMapPins] = useState<{ poiId: string; name: string; lat: number; lng: number }[]>([])
   const [diag, setDiag] = useState<{ fixAgeSec: number | null; nearestM: number | null }>({
@@ -273,6 +287,8 @@ export function useRoam(mode: RoamMode): RoamState {
       if (nextQueued !== undefined) setSheetPoiId(nextQueued)
       else setSheetPoiId((cur) => (cur === poiId ? null : cur))
       setClipReady(false)
+      setClipSounding(false) // this clip is no longer sounding (a queued next re-arms it on its sawFresh edge)
+      setMinimized(false) // a finished clip drops any minimize — the next encounter opens on the full sheet
       clipBusy.current = false
       pump()
     },
@@ -314,6 +330,7 @@ export function useRoam(mode: RoamMode): RoamState {
     }
     sawFresh.current = false
     setClipReady(false)
+    setClipSounding(false)
     finishedPoi.current = null
     // Reset post-start progress trackers for the interruption/stall recovery below. (audit #1)
     lastProgressAt.current = Date.now()
@@ -374,6 +391,7 @@ export function useRoam(mode: RoamMode): RoamState {
       // at clip-load, so a silent pre-buffer / dead-zone skip never interrupts it. Present the
       // sheet on a live clip (not a frozen 0:00), upgrading any skeleton the grace showed first.
       sawFresh.current = true
+      setClipSounding(true) // the clip is now actually SOUNDING — the peek bar is reachable from here on
       setExclusiveAudio(true)
       setClipReady(true)
       setSheetPoiId(activePoiId)
@@ -665,11 +683,21 @@ export function useRoam(mode: RoamMode): RoamState {
     }
   }, [activePoiId, player, onClipDone])
 
+  // Tuck the sheet away WITHOUT stopping the clip (handle drag-down / scrim tap). The clip plays
+  // on; the peek bar (driven by clipSounding) is the one-tap way back, so a hidden sheet is never a
+  // dead end. No-op when no clip is active (nothing to tuck). The expand undoes it.
+  const minimizeSheet = useCallback(() => {
+    if (activePoiId !== null) setMinimized(true)
+  }, [activePoiId])
+  const expandSheet = useCallback(() => setMinimized(false), [])
+
   const end = useCallback(() => {
     teardown()
     setActivePoiId(null)
     setSheetPoiId(null)
     setClipReady(false)
+    setClipSounding(false)
+    setMinimized(false)
     setGpsSearching(false)
     setPosition(null) // drop the map puck; mapPins reset on the next start
     setPhase('signoff') // toldCount survives for the tally; finishSignoff resets
@@ -685,6 +713,12 @@ export function useRoam(mode: RoamMode): RoamState {
     sheetPoiId === null
       ? null
       : (pinsRef.current.find((p) => p.poiId === sheetPoiId)?.name ?? null)
+  // Keyed on the LOADING/playing clip, not the sheet latch — so the peek bar keeps its title through
+  // a minimize and through any sheet-vs-audio desync (the case where the controls went missing).
+  const clipName =
+    activePoiId === null
+      ? null
+      : (pinsRef.current.find((p) => p.poiId === activePoiId)?.name ?? null)
   const activeDurationMs =
     sheetPoiId === null
       ? 0
@@ -752,6 +786,11 @@ export function useRoam(mode: RoamMode): RoamState {
     gate,
     pinCount,
     activeName,
+    clipName,
+    clipSounding,
+    minimized,
+    minimizeSheet,
+    expandSheet,
     clipPositionMs: (status.currentTime ?? 0) * 1000,
     clipDurationMs: clipDurSec * 1000,
     clipPlaying: !clipPaused,

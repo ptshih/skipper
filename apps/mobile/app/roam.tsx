@@ -12,7 +12,7 @@
 // + B-sides ("Tell me more"), and the offline region pack + logbook wait on their backends —
 // honest UI shows none of them.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Animated, Linking, Pressable, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, Animated, Linking, PanResponder, Pressable, StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import * as SecureStore from 'expo-secure-store'
@@ -20,7 +20,7 @@ import { useRoam } from '@/lib/useRoam'
 import { RoamMap } from '@/ui/RoamMap'
 import { useSimMode } from '@/lib/sim-mode'
 import { useReducedMotion, useTheme } from '@/theme'
-import { duration, radius, space } from '@/theme/tokens'
+import { border, duration, radius, space } from '@/theme/tokens'
 import {
   Badge,
   Button,
@@ -40,6 +40,12 @@ import {
 } from '@/ui'
 
 const CONTRACT_SEEN_KEY = 'skipper.roamContractSeen'
+/** The sheet's hidden offset (slid fully below the screen). Shared by the show/hide animation AND
+ *  the handle drag-to-minimize, so a drag continues the same travel the open animation uses. */
+const SHEET_HIDDEN_Y = 320
+/** Drag the handle past this distance — or flick faster than this velocity — to minimize. */
+const SHEET_DISMISS_DY = 64
+const SHEET_DISMISS_VY = 0.5
 
 /** Map nearest-pin distance to a motif loop duration — three calm buckets with wide
  *  dead-zones so routine GPS jitter never flips the speed between renders.
@@ -126,10 +132,24 @@ export default function RoamScreen() {
     setContractSeen(true)
   }, [])
 
-  // The encounter sheet slides up over the idle base while a clip plays.
-  const sheetVisible = r.activeName !== null
+  // The encounter sheet slides up over the idle base while a clip plays. It hides when the rider
+  // MINIMIZES it (handle drag-down / scrim tap) — the clip plays on, and the peek bar (below) is the
+  // one-tap way back. So `sheetVisible` = "a clip is up AND not tucked away".
+  const sheetVisible = r.activeName !== null && !r.minimized
+  // Safety net: a clip is SOUNDING but the full sheet isn't up (minimized, or any sheet-vs-audio
+  // desync) — show the peek bar so audio is NEVER playing with no reachable controls.
+  const peekVisible = r.clipSounding && !sheetVisible
+  // The rider's own audio is paused only while the skipper is actually talking (a sounding, unheld
+  // clip) — so the idle Duck reads that truth even when the sheet is tucked away.
+  const musicDucked = r.clipSounding && r.clipPlaying
+  const peekPct =
+    r.clipDurationMs > 0 ? Math.min(100, (r.clipPositionMs / r.clipDurationMs) * 100) : 0
   const sheetAnim = useRef(new Animated.Value(0)).current
+  // A live handle drag adds to the sheet's translateY, combined with the base show/hide travel so a
+  // drag continues from where the sheet rests. Both are JS-driven (Animated.add can't mix drivers).
+  const dragY = useRef(new Animated.Value(0)).current
   useEffect(() => {
+    if (sheetVisible) dragY.setValue(0) // a fresh open ignores any leftover drag offset
     if (reducedMotion) {
       sheetAnim.setValue(sheetVisible ? 1 : 0) // appear, don't slide
       return
@@ -137,9 +157,43 @@ export default function RoamScreen() {
     Animated.timing(sheetAnim, {
       toValue: sheetVisible ? 1 : 0,
       duration: duration.base,
-      useNativeDriver: true,
+      useNativeDriver: false,
     }).start()
-  }, [sheetVisible, reducedMotion, sheetAnim])
+  }, [sheetVisible, reducedMotion, sheetAnim, dragY])
+  // The handle's drag-to-minimize gesture — built ONCE (lazy ref), reading the latest minimizeSheet
+  // through a live ref so it never rebuilds mid-drag (the Scrubber's pattern). A deliberate downward
+  // drag past the threshold — or a tap on the grip — tucks the sheet away; a short drag snaps back.
+  const minimizeLive = useRef(r.minimizeSheet)
+  minimizeLive.current = r.minimizeSheet
+  const handleResponder = useRef<ReturnType<typeof PanResponder.create> | null>(null)
+  if (!handleResponder.current) {
+    const tuckAway = () =>
+      // Slide the rest of the way down, THEN flip minimized (which unmounts the sheet off-screen —
+      // no upward flash). dragY is re-zeroed by the effect above on the next open.
+      Animated.timing(dragY, {
+        toValue: SHEET_HIDDEN_Y,
+        duration: duration.fast,
+        useNativeDriver: false,
+      }).start(() => minimizeLive.current())
+    const snapBack = () =>
+      Animated.timing(dragY, { toValue: 0, duration: duration.fast, useNativeDriver: false }).start()
+    handleResponder.current = PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_e, g) => g.dy > 4 && g.dy > Math.abs(g.dx),
+      // Hold the gesture — never yield to the screen's swipe-back recognizer (the Scrubber note).
+      onPanResponderTerminationRequest: () => false,
+      onShouldBlockNativeResponder: () => true,
+      onPanResponderMove: (_e, g) => {
+        if (g.dy > 0) dragY.setValue(g.dy) // follow the finger downward only
+      },
+      onPanResponderRelease: (_e, g) => {
+        const tapped = Math.abs(g.dx) < 6 && Math.abs(g.dy) < 6
+        if (tapped || g.dy > SHEET_DISMISS_DY || g.vy > SHEET_DISMISS_VY) tuckAway()
+        else snapBack()
+      },
+      onPanResponderTerminate: snapBack,
+    })
+  }
 
   // The idle "wandering thought": under the fixed idleTitle, a placeless murmur from a
   // time-of-day pool slow-crossfades every ~26s — so the quiet reads as a companion enjoying
@@ -153,7 +207,7 @@ export default function RoamScreen() {
   const [murmurIdx, setMurmurIdx] = useState(() => Math.floor(Math.random() * murmurPool.length))
   const murmurOpacity = useRef(new Animated.Value(1)).current
   useEffect(() => {
-    if (r.phase !== 'roaming' || sheetVisible) return
+    if (r.phase !== 'roaming' || sheetVisible || r.clipSounding) return
     const id = setInterval(() => {
       if (reducedMotion) {
         setMurmurIdx((i) => (i + 1) % murmurPool.length)
@@ -175,7 +229,7 @@ export default function RoamScreen() {
       })
     }, 26_000)
     return () => clearInterval(id)
-  }, [r.phase, sheetVisible, reducedMotion, murmurPool.length, murmurOpacity])
+  }, [r.phase, sheetVisible, r.clipSounding, reducedMotion, murmurPool.length, murmurOpacity])
 
   const title = voice.roam.entry
 
@@ -284,8 +338,8 @@ export default function RoamScreen() {
               <RoamMap
                 position={r.position}
                 pins={r.mapPins}
-                clipActive={sheetVisible}
-                recenterBottom={sheetVisible ? 360 : undefined}
+                clipActive={sheetVisible || peekVisible}
+                recenterBottom={sheetVisible ? 360 : peekVisible ? 120 : undefined}
               />
             </View>
           ) : (
@@ -302,7 +356,7 @@ export default function RoamScreen() {
               {roamMode === 'sim' && <Badge tone="teal" label={voice.roam.simBadge} />}
             </View>
             <View style={styles.motif}>
-              <RoamMotif glow={!sheetVisible} nearestM={r.diag.nearestM} />
+              <RoamMotif glow={!sheetVisible && !peekVisible} nearestM={r.diag.nearestM} />
             </View>
             <Text variant="heading" color="ink">
               {voice.roam.idleTitle}
@@ -322,7 +376,7 @@ export default function RoamScreen() {
                     : `${r.toldCount} ${voice.roam.storiesTold}`}
                 </Text>
               </View>
-              <Duck label={sheetVisible ? voice.roam.musicPaused : voice.roam.musicPlaying} active={sheetVisible} />
+              <Duck label={musicDucked ? voice.roam.musicPaused : voice.roam.musicPlaying} active={musicDucked} />
             </View>
             {r.gpsSearching && (
               <Text variant="dim" color="inkDim">
@@ -366,9 +420,10 @@ export default function RoamScreen() {
           </Pressable>
         </View>
 
-        {/* The encounter sheet — slides up over the idle base; the base stays visible.
-            Glanceable, never required, dismissable (Skip / scrim). Carries the full story-
-            player transport so seeking + pause feel identical across the two players. */}
+        {/* The encounter sheet — slides up over the idle base; the base stays visible. Glanceable,
+            never required. Tuck it away with the handle (drag down / tap) or a scrim tap — the clip
+            plays ON and the peek bar offers it back; only Skip stops the story. Carries the full
+            story-player transport so seeking + pause feel identical across the two players. */}
         {sheetVisible && (
           <>
             <Pressable
@@ -377,8 +432,8 @@ export default function RoamScreen() {
               // padding and leaves a bare `surface` strip bordering the very bottom (a lighter bar
               // under the dimmed screen). -insets.bottom pulls the scrim down to the true edge.
               style={[StyleSheet.absoluteFill, { bottom: -insets.bottom, backgroundColor: colors.scrim }]}
-              onPress={r.skip}
-              accessibilityLabel={voice.roam.skip}
+              onPress={r.minimizeSheet}
+              accessibilityLabel={voice.roam.minimize}
             />
             <Animated.View
               style={[
@@ -390,16 +445,26 @@ export default function RoamScreen() {
                   boxShadow: [{ offsetX: 0, offsetY: 6, blurRadius: 16, color: colors.shadowCast }],
                   transform: [
                     {
-                      translateY: sheetAnim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [320, 0],
-                      }),
+                      // Base show/hide travel + the live handle-drag offset (both JS-driven).
+                      translateY: Animated.add(
+                        sheetAnim.interpolate({ inputRange: [0, 1], outputRange: [SHEET_HIDDEN_Y, 0] }),
+                        dragY,
+                      ),
                     },
                   ],
                 },
               ]}
             >
-              <View style={[styles.handle, { backgroundColor: colors.trackInactive }]} />
+              {/* The grip is a real drag target now (was a decorative View): drag down — or tap — to
+                  tuck the player away. A fat hit area wraps the thin bar. */}
+              <View
+                style={styles.handleHit}
+                accessibilityRole="button"
+                accessibilityLabel={voice.roam.minimize}
+                {...handleResponder.current.panHandlers}
+              >
+                <View style={[styles.handle, { backgroundColor: colors.trackInactive }]} />
+              </View>
               <View style={styles.sheetTop}>
                 <Badge tone="pine" label={voice.roam.storyBadge} />
                 {/* Paused while he talks; resumes (music back up) when held. */}
@@ -444,6 +509,52 @@ export default function RoamScreen() {
               )}
             </Animated.View>
           </>
+        )}
+
+        {/* Peek bar — the safety net. A clip is SOUNDING but the full sheet is tucked away
+            (minimized, or any state desync): one tap brings the player back, so audio is never
+            playing with no reachable controls (the "couldn't get it back" fix). Mirrors the
+            drive player's peek bar so the two players feel identical. */}
+        {peekVisible && (
+          <Pressable
+            onPress={r.expandSheet}
+            accessibilityRole="button"
+            accessibilityLabel={voice.roam.expand}
+            style={[
+              styles.peekBar,
+              {
+                backgroundColor: colors.surfaceRaised,
+                borderColor: colors.amberToken,
+                // Cross-platform cast; the negative offsetY lifts it toward the screen above. (M4)
+                boxShadow: [{ offsetX: 0, offsetY: -4, blurRadius: 14, color: colors.shadowCast }],
+              },
+            ]}
+          >
+            <Pressable
+              onPress={r.toggleClipPlay}
+              accessibilityRole="button"
+              accessibilityLabel={r.clipPlaying ? voice.cta.pause : voice.cta.resume}
+              style={[styles.peekPlay, { backgroundColor: colors.primaryFill }]}
+            >
+              <Icon name={r.clipPlaying ? 'pause' : 'play'} size={22} color="onPrimary" />
+            </Pressable>
+            <View style={styles.peekText}>
+              <Text variant="label" color="accentWarm">
+                {voice.player.nowPlaying}
+              </Text>
+              <Text variant="bodyStrong" color="ink" numberOfLines={1}>
+                {r.clipName}
+              </Text>
+              {r.clipDurationMs > 0 && (
+                <View style={[styles.peekTrack, { backgroundColor: colors.surfaceSunken }]}>
+                  <View
+                    style={[styles.peekFill, { backgroundColor: colors.trackActive, width: `${peekPct}%` }]}
+                  />
+                </View>
+              )}
+            </View>
+            <Icon name="chevronUp" size={20} color="inkFaint" />
+          </Pressable>
         )}
       </Screen>
     )
@@ -496,6 +607,32 @@ const styles = StyleSheet.create({
     height: 4,
     borderRadius: radius.pill,
   },
+  // Fat, in-car grab area around the thin grip bar so the drag-to-minimize is easy to catch.
+  handleHit: {
+    alignSelf: 'center',
+    alignItems: 'center',
+    paddingVertical: space.sm,
+    paddingHorizontal: space.xl,
+  },
+  // The minimized "now playing" peek bar — mirrors the drive player's peek bar (play · title ·
+  // progress · expand chevron), pinned to the same bottom slot the full sheet uses.
+  peekBar: {
+    position: 'absolute',
+    left: space.sm,
+    right: space.sm,
+    bottom: space.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.md,
+    borderRadius: radius.lg,
+    borderWidth: border.keyline,
+  },
+  peekPlay: { width: 50, height: 50, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  peekText: { flex: 1, minWidth: 0, gap: 3 },
+  peekTrack: { height: 4, borderRadius: 2, overflow: 'hidden', marginTop: 2 },
+  peekFill: { height: '100%' },
   sheetTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   // Map mode: a rounded full-bleed map card filling the padded base, + the floating toggle.
   mapCard: { flex: 1, borderRadius: radius.lg, overflow: 'hidden' },
