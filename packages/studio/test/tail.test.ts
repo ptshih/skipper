@@ -4,6 +4,7 @@ import {
   MIN_MEASURABLE_SEC,
   measureTailCollapse,
   parseMeanVolumeDb,
+  retakeStalled,
   tailDropDb,
 } from '../src/pipeline/tail'
 import type { TailMeasure } from '../src/pipeline/tail'
@@ -59,6 +60,30 @@ describe('keepFirstTake — which take ships after a retake', () => {
 
   test('an unmeasurable retake ships anyway — the first take is KNOWN collapsed', () => {
     expect(keepFirstTake(m(6), null)).toBe(false)
+  })
+})
+
+describe('retakeStalled — stop the retake loop when the collapse is STRUCTURAL', () => {
+  test('a fresh take that re-collapsed at the same level is structural → stop', () => {
+    expect(retakeStalled(3.5, 3.4)).toBe(true) // the documented West-Shore deadpan coda
+    expect(retakeStalled(4.0, 3.9)).toBe(true)
+  })
+
+  test('a retake that materially improved the best drop keeps going (worth another take)', () => {
+    expect(retakeStalled(8.0, 3.4)).toBe(false) // 8 → 3.4 is real movement, not a re-collapse
+  })
+
+  test('a retake that came back clean (below the gate) is not structural', () => {
+    expect(retakeStalled(3.5, 2.0)).toBe(false) // exits via the loop's own gate, not this
+  })
+
+  test('a high-variance WORSE take is not "the same level" → allow another retry', () => {
+    expect(retakeStalled(3.4, 9.0)).toBe(false)
+  })
+
+  test('the epsilon band is inclusive at exactly 1.0 dB', () => {
+    expect(retakeStalled(4.0, 3.0)).toBe(true) // |3.0 − 4.0| = 1.0
+    expect(retakeStalled(4.05, 3.0)).toBe(false) // 1.05 > 1.0
   })
 })
 

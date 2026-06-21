@@ -26,6 +26,12 @@ export const TAIL_WINDOW_SEC = 12
 export const TERMINAL_WINDOW_SEC = 4
 /** Tail-vs-body mean-volume drop (dB) that marks a take collapsed (the measured 8/30 line). */
 export const TAIL_COLLAPSE_DB = 3
+/** A SMALL "did the retake actually help" band (dB). The best-of-N retake exists to escape a STOCHASTIC
+ *  collapse (a fresh take of the same script comes back clean — the original Dam-class finding). But a
+ *  documented residual is STRUCTURAL: the script itself cues a soft landing (the Skipper's deadpan button),
+ *  so every fresh take re-collapses at the SAME level and the extra synths are pure waste. When a retake
+ *  re-collapses within this band of the prior best, treat it as structural and stop spending. */
+export const STRUCTURAL_RETAKE_EPSILON_DB = 1.0
 /** Below this duration there's no body meaningfully longer than the tail — skip the probe
  *  (15 s break clips skip; ~60 s roam encounters and ~2 min story stops measure). */
 export const MIN_MEASURABLE_SEC = TAIL_WINDOW_SEC * 2
@@ -60,6 +66,16 @@ export function parseMeanVolumeDb(ffmpegStderr: string): number | null {
  *  clean on the measured odds — better an unknown than a known mumble). Exported for tests. */
 export function keepFirstTake(first: TailMeasure, retake: TailMeasure | null): boolean {
   return retake !== null && first.dropDb <= retake.dropDb
+}
+
+/** Should the best-of-N retake loop STOP early (the collapse is STRUCTURAL, not stochastic)? True when the
+ *  latest fresh take is STILL collapsed AND landed at essentially the same level as the prior best (within
+ *  STRUCTURAL_RETAKE_EPSILON_DB) — evidence the script cues the soft landing, so more takes can't escape it.
+ *  False when the latest take comes back clean (below the gate → the loop's own condition exits) OR
+ *  materially improves the best drop (worth another try) OR is just a high-variance worse take (allow a
+ *  retry). Pure; tested. (Saves the final, futile synth on the documented structural West-Shore codas.) */
+export function retakeStalled(prevBestDrop: number, latestDrop: number): boolean {
+  return latestDrop >= TAIL_COLLAPSE_DB && Math.abs(latestDrop - prevBestDrop) <= STRUCTURAL_RETAKE_EPSILON_DB
 }
 
 // Warn ONCE per process when ffmpeg is unavailable — a full run synthesizes dozens of

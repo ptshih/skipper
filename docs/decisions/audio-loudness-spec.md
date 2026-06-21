@@ -101,12 +101,29 @@ tail-collapse retake + the 4 s last-words probe (`tts.ts`/`tail.ts`).
   ceiling 0.794→0.707, TP −2→−3, 48k→64k). 64k ≈ +33% download size — justified by the clipping data.
   Validated on the 12 worst clippers, then the master-fixable residual was re-resynthed.
 
+- **2026-06-21 — the tail retake is structural-collapse-aware.** The best-of-N retake fired up to
+  `RETAKE_LIMIT` extra PAID synths on every collapsed take — including the ~16 STRUCTURAL West-Shore codas,
+  where the script cues a soft landing so a fresh take re-collapses at the same level and the extra synths
+  can't escape it. `retakeStalled` (`tail.ts`, pure + tested) now stops the loop once a retake re-collapses
+  within `STRUCTURAL_RETAKE_EPSILON_DB` (1 dB) of the prior best; the STOCHASTIC Dam-class catch (a fresh
+  take comes back clean and exits via the loop's own gate) is untouched, as is the advisory
+  `TAIL_COLLAPSE_DB`=3 audit/flag threshold. Code-only, no regen — applies on the next (re)synthesis. A
+  separate paid-retake THRESHOLD split (decouple the audit flag from the retake trigger) is deferred to the
+  founder ear-pass, which must set the number — drop-dB anti-correlates with defect-suspicion (the candidate
+  swallowed-clause clips drop LESS than the clear keep-buttons), so a blind raise would protect the wrong
+  clips.
+
 ## Open
 
 - **On-device A/B vs Spotify** of the active −14 voice + bed on the real drive — and, if revisiting
   loudness, A/B `loud13` (−13) against it (flip the preset + regen).
-- **Tail-collapse residual (~48 clips)** survives best-of-3 — STRUCTURAL (a fresh take still mumbles the
-  close), so it needs a script/prompt fix, not a re-TTS. Surfaced by `audit-loudness.ts`.
+- **Tail-collapse residual (16 clips)** survives best-of-3 — STRUCTURAL (a fresh take re-collapses at the
+  same level), mostly the Skipper's signature deadpan button, not a defect. The synth-time retake now
+  DETECTS this (`retakeStalled`, `tail.ts`) and skips the futile remaining take(s) once a fresh retake
+  re-collapses within 1 dB of the prior best; the audit (`audit-loudness.ts`) still surfaces all of them at
+  the unchanged 3 dB flag. The genuine-defect subset (a swallowed substantive clause vs a dry coda) awaits
+  a founder in-car ear-pass — only the ear can split it, and any per-clip fix or paid-retake threshold
+  split is gated on it.
 - **Louder?** `loud13` (−13) is the parked, validated answer — flip `MASTER` in `loudnorm.ts`. Don't go
   past −13 (already the edge of clean AAC overshoot); drop the *bed* instead for more separation.
 - **Drive-music bed** stays plain offline loudnorm at −14 / −1.0 (pre-mastered, low-overshoot MP3 — no

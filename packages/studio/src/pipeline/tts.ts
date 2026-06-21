@@ -21,7 +21,7 @@ import {
   TTS_SAMPLE_RATE_HZ,
 } from '../models'
 import { GEMINI_PCM, toWavWithDuration } from './wav'
-import { keepFirstTake, measureTailCollapse, TAIL_COLLAPSE_DB, TERMINAL_WINDOW_SEC } from './tail'
+import { keepFirstTake, measureTailCollapse, retakeStalled, TAIL_COLLAPSE_DB, TERMINAL_WINDOW_SEC } from './tail'
 import { normalizeAndEncode, verifyMasteredLoudness, type LoudnessOutcome } from './loudnorm'
 import { pronunciationClause } from './pronunciation'
 
@@ -183,6 +183,7 @@ export async function synthesizeWithTailRetake(
     let bestMeasure = m1
     let unknownFallback: SynthResult | null = null
     let retakes = 0
+    let structural = false
     while (retakes < RETAKE_LIMIT && bestMeasure.dropDb >= TAIL_COLLAPSE_DB) {
       retakes++
       const next = await synthesize(text, voiceId, style)
@@ -191,9 +192,18 @@ export async function synthesizeWithTailRetake(
         unknownFallback = next // probe failed on this take — keep it as an unmeasured last resort
         continue
       }
+      const prevBestDrop = bestMeasure.dropDb
       if (!keepFirstTake(bestMeasure, mNext)) {
         bestTake = next // mNext's drop is smaller → it becomes the take to beat
         bestMeasure = mNext
+      }
+      // Structural-collapse early-out: a fresh take that re-collapsed at the SAME level (within the epsilon
+      // band of the prior best) is evidence the close is structural — the script cues the soft landing — so
+      // further retakes can't escape it. Stop spending the remaining synth(s). A STOCHASTIC collapse instead
+      // cleans up on a retake and exits via the while-condition above; a materially-improving take keeps going.
+      if (retakeStalled(prevBestDrop, mNext.dropDb)) {
+        structural = true
+        break
       }
     }
     // Ship the least-collapsed measured take; if it STILL collapses but a fresh unmeasured take exists,
@@ -209,7 +219,11 @@ export async function synthesizeWithTailRetake(
     const shippedCollapsed = keptDropDb !== null && keptDropDb >= TAIL_COLLAPSE_DB
     console.warn(
       shippedCollapsed
-        ? `  ⚠ ${label}: all ${retakes + 1} takes collapsed — shipping the best (drop ${keptDropDb!.toFixed(1)} dB), flagged for the human pass.`
+        ? `  ⚠ ${label}: ${
+            structural
+              ? 'structural collapse — a fresh retake re-collapsed at the same level, so further retakes were skipped'
+              : `all ${retakes + 1} takes collapsed`
+          } (drop ${keptDropDb!.toFixed(1)} dB); shipping the best, flagged for the human pass.`
         : `  ✓ ${label}: ${keptDropDb === null ? 'shipped a fresh unmeasured retake on the odds' : `clean after ${retakes} retake(s) (drop ${keptDropDb.toFixed(1)} dB)`}.`,
     )
     tail = { firstDropDb: m1.dropDb, keptDropDb, retook: true, shippedCollapsed }
