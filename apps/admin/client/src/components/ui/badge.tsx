@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 
 // Catalyst-style soft badges: a low-opacity tinted fill with colored text (not solid fills).
 const badgeVariants = cva(
-  'inline-flex items-center gap-1 whitespace-nowrap rounded-md px-1.5 py-0.5 text-xs font-medium outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] [&>svg]:pointer-events-none',
+  'inline-flex w-fit shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-md px-1.5 py-0.5 text-xs font-medium outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] [&>svg]:pointer-events-none [&>svg]:size-3',
   {
     variants: {
       variant: {

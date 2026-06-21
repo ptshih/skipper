@@ -22,6 +22,7 @@ export function Checkbox({
     <button
       type="button"
       role="checkbox"
+      data-slot="checkbox"
       aria-checked={indeterminate ? 'mixed' : checked}
       aria-label={ariaLabel}
       onClick={(e) => {
@@ -29,8 +30,9 @@ export function Checkbox({
         onCheckedChange(!checked)
       }}
       className={cn(
-        'flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border outline-none transition-colors',
+        'flex size-4 shrink-0 items-center justify-center rounded-[4px] border outline-none transition-colors',
         'focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50',
+        'aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 disabled:cursor-not-allowed disabled:opacity-50',
         active
           ? 'border-primary bg-primary text-primary-foreground'
           : 'border-input bg-background hover:border-primary/60',
@@ -38,9 +40,9 @@ export function Checkbox({
       )}
     >
       {indeterminate ? (
-        <Minus className="h-3 w-3" strokeWidth={3} />
+        <Minus data-slot="checkbox-indicator" className="h-3 w-3" strokeWidth={3} />
       ) : checked ? (
-        <Check className="h-3 w-3" strokeWidth={3} />
+        <Check data-slot="checkbox-indicator" className="h-3 w-3" strokeWidth={3} />
       ) : null}
     </button>
   )
