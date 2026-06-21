@@ -248,7 +248,7 @@ export function RegionsView() {
         regions={selectedRegions}
         open={discoverOpen}
         onOpenChange={setDiscoverOpen}
-        onSubmitted={() => { setDiscoverOpen(false); clearSel(); navigate({ to: '/runs' }) }}
+        onSubmitted={() => { setDiscoverOpen(false); clearSel(); navigate({ to: '/jobs' }) }}
       />
     </div>
   )

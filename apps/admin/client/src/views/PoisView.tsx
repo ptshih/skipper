@@ -702,7 +702,7 @@ function FactsTab({ poi }: { poi: PoiDetail }) {
   // as a row flag + the corpus "Needs attention" filter, which points the operator here.
   const refetchMut = useMutation({
     mutationFn: () => api.createJob({ kind: 'refetch_facts', poiId: poi.id, apply: true }),
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['runs'] }); navigate({ to: '/runs' }) },
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['runs'] }); navigate({ to: '/jobs' }) },
   })
 
   return (
@@ -799,7 +799,7 @@ function NarrationTab({ poiId, hasNarration }: { poiId: string; hasNarration: bo
 
   const resynthMut = useMutation({
     mutationFn: () => api.createJob({ kind: 'resynth_narration', poiId, apply: true, confirm: true }),
-    onSuccess: ({ job }) => { void qc.invalidateQueries({ queryKey: ['runs'] }); navigate({ to: '/runs', search: { run: job.id } }) },
+    onSuccess: ({ job }) => { void qc.invalidateQueries({ queryKey: ['runs'] }); navigate({ to: '/jobs', search: { run: job.id } }) },
   })
   async function handleResynth() {
     if (!(await confirm({
@@ -816,7 +816,7 @@ function NarrationTab({ poiId, hasNarration }: { poiId: string; hasNarration: bo
   const regenMut = useMutation({
     mutationFn: () =>
       api.createJob({ kind: 'generate_narrations', includeIds: [poiId], force: true, apply: true, confirm: true }),
-    onSuccess: ({ job }) => { void qc.invalidateQueries({ queryKey: ['runs'] }); navigate({ to: '/runs', search: { run: job.id } }) },
+    onSuccess: ({ job }) => { void qc.invalidateQueries({ queryKey: ['runs'] }); navigate({ to: '/jobs', search: { run: job.id } }) },
   })
   async function handleRegenerate() {
     if (!(await confirm({
@@ -1360,19 +1360,19 @@ function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loading: bool
         open={enrichOpen}
         onOpenChange={setEnrichOpen}
         scope={scope}
-        onSubmitted={() => { clearSel(); navigate({ to: '/runs' }) }}
+        onSubmitted={() => { clearSel(); navigate({ to: '/jobs' }) }}
       />
       <NarrateDialog
         open={narrateOpen}
         onOpenChange={setNarrateOpen}
         scope={scope}
-        onSubmitted={() => { clearSel(); navigate({ to: '/runs' }) }}
+        onSubmitted={() => { clearSel(); navigate({ to: '/jobs' }) }}
       />
       <RescoreDialog
         open={rescoreOpen}
         onOpenChange={setRescoreOpen}
         scope={scope}
-        onSubmitted={() => { clearSel(); navigate({ to: '/runs' }) }}
+        onSubmitted={() => { clearSel(); navigate({ to: '/jobs' }) }}
       />
     </div>
   )

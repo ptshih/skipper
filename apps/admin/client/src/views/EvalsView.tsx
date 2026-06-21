@@ -1,0 +1,460 @@
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate, useSearch } from '@tanstack/react-router'
+import { useQuery } from '@tanstack/react-query'
+import { Activity, Filter, RefreshCw, Scissors, Search, Sparkles, Trash2, X, Zap } from 'lucide-react'
+import { api, type EvalScoreRow, type RunEvent } from '@/lib/api'
+import { errMsg, fmtDate, timeAgo } from '@/lib/format'
+import { PageHeader } from '@/components/PageHeader'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Callout } from '@/components/ui/callout'
+import { SearchInput } from '@/components/ui/search-input'
+import { EmptyState } from '@/components/ui/empty-state'
+import { TableSkeletonRows } from '@/components/ui/skeleton'
+import { SectionLabel } from '@/components/ui/section-label'
+import {
+  Sheet, SheetClose, SheetContent, SheetDescription, SheetHeader, SheetTitle,
+} from '@/components/ui/sheet'
+import { cn } from '@/lib/utils'
+
+/* ─── run kinds + helpers ─── */
+
+// Kind → label/icon. Evals are kind 'generation' today (the raw kind shows through when absent here),
+// but historical eval kinds still resolve to a friendly label/icon.
+const KIND_META: Record<string, { label: string; icon: React.ElementType }> = {
+  generate:        { label: 'Generate',          icon: Sparkles },
+  resynth:         { label: 'Resynth',           icon: RefreshCw },
+  patch_clip:      { label: 'Patch clip',        icon: Scissors },
+  resynth_narration: { label: 'Re-synth narration', icon: RefreshCw },
+  refetch_facts:   { label: 'Re-fetch facts',    icon: RefreshCw },
+  sweep_orphans:   { label: 'Sweep orphans',     icon: Trash2 },
+  discover_pois:   { label: 'Discover POIs',     icon: Filter },
+  enrich_pois:     { label: 'Enrich corpus',     icon: Sparkles },
+  generate_narrations: { label: 'Generate Narration', icon: Zap },
+  offline_audit:   { label: 'Re-score corpus',   icon: Activity },
+}
+
+// A run targeting no region (whole-corpus) leaves its slug NULL → "All". Legacy sentinels map to a
+// friendly label rather than a raw slug.
+const TARGET_SENTINELS: Record<string, string> = {
+  'roam-corpus': 'All',
+  'region-corpus': 'whole corpus',
+  narration: 'all clips',
+}
+
+// An eval's `pass` is just `withheld === 0`. A run that gated some clips but SHIPPED the rest is a
+// PARTIAL success (amber), not a failure; a TRUE fail shipped nothing at all (red).
+const isPartial  = (r: RunEvent) => r.pass === false && (r.shipped ?? 0) > 0
+const isTrueFail = (r: RunEvent) => r.pass === false && (r.shipped ?? 0) === 0 && (r.total ?? 0) > 0
+
+// pass / partial / fail from a run's tallies — the single source of truth for both the row badge and
+// the drawer header.
+function verdictOf(t: { withheld: number | null; shipped: number | null }): 'pass' | 'partial' | 'fail' {
+  if ((t.withheld ?? 0) === 0) return 'pass'
+  return (t.shipped ?? 0) > 0 ? 'partial' : 'fail'
+}
+const VERDICT_VARIANT = { pass: 'success', partial: 'warning', fail: 'destructive' } as const
+
+function RunTarget({ slug }: { slug: string | null }) {
+  if (!slug) return <span className="italic text-muted-foreground">All</span>
+  const sentinel = TARGET_SENTINELS[slug]
+  if (sentinel) return <span className="italic text-muted-foreground">{sentinel}</span>
+  return <>{slug}</>
+}
+
+// grounding/tts/diversity; grounding turns red below the gate.
+function RunScores({ r }: { r: RunEvent }) {
+  const fmt = (v: number | null) => (v == null ? '—' : v.toFixed(2))
+  return (
+    <span className="flex gap-2 font-mono text-xs text-muted-foreground">
+      <span className={cn(r.grounding != null && r.grounding < 0.75 && 'text-destructive')}>g {fmt(r.grounding)}</span>
+      <span>tts {fmt(r.tts)}</span>
+      <span>div {fmt(r.diversity)}</span>
+    </span>
+  )
+}
+
+function EvalResultCell({ r }: { r: RunEvent }) {
+  const withheld = r.withheld ?? 0
+  if (withheld === 0) return <Badge variant="success">pass</Badge>
+  const verdict = verdictOf(r)
+  return (
+    <span className="flex items-center gap-2">
+      <Badge variant={VERDICT_VARIANT[verdict]}>{verdict}</Badge>
+      <span className="font-mono text-xs text-muted-foreground">
+        {r.shipped != null && r.total != null ? `${r.shipped}/${r.total} · ` : ''}{withheld} withheld
+      </span>
+    </span>
+  )
+}
+
+function Def({ label, children, mono }: { label: string; children: React.ReactNode; mono?: boolean }) {
+  return (
+    <>
+      <dt className="bg-muted/40 px-3 py-2 text-xs text-muted-foreground">{label}</dt>
+      <dd className={cn('bg-card px-3 py-2 text-xs', mono && 'font-mono')}>{children}</dd>
+    </>
+  )
+}
+
+function LogBlock({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={cn('overflow-x-auto whitespace-pre-wrap break-words rounded-lg border bg-muted px-3 py-2.5 font-mono text-xs leading-relaxed', className)}>
+      {children}
+    </div>
+  )
+}
+
+/* ─── main view ─── */
+
+// The /evals page — grounding/TTS/diversity scores behind generated clips. Shares the ['runs'] cache
+// with JobsView and filters to source === 'eval'. Standalone evals appear as rows here; a JOB-parented
+// eval is suppressed from the list (it rides its job row) but JobsView links to it by id, so the
+// drawer fetches its report by id rather than looking it up in the list.
+export function EvalsView() {
+  const navigate = useNavigate()
+  const search = useSearch({ strict: false }) as { run?: string }
+  const [kindFilter, setKindFilter] = useState<string>('all')
+  const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [q, setQ] = useState('')
+  const [drawerRunId, setDrawerRunId] = useState<string | null>(null)
+
+  const { data: runs = [], error, isPending, isFetching, refetch } = useQuery({
+    queryKey: ['runs'],
+    queryFn: async () => (await api.runs()).runs,
+    refetchInterval: 15000,
+  })
+  const rows = useMemo(() => runs.filter((r) => r.source === 'eval'), [runs])
+
+  // Deep-link: ?run=<id> opens that eval's drawer, then strips the param. The id need not be in the
+  // list — a job links here for its (suppressed) eval, and the drawer resolves it by id.
+  useEffect(() => {
+    if (!search.run) return
+    setDrawerRunId(search.run)
+    navigate({ to: '/evals', search: (prev) => ({ ...prev, run: undefined }), replace: true })
+  }, [search.run, navigate])
+
+  const filtered = useMemo(() => rows.filter((r) => {
+    if (kindFilter !== 'all' && r.kind !== kindFilter) return false
+    if (statusFilter !== 'all') {
+      if (statusFilter === 'failed')  return isTrueFail(r)
+      if (statusFilter === 'partial') return isPartial(r)
+      if (statusFilter === 'ok')      return r.pass === true
+    }
+    if (q) {
+      const s = `${r.kind} ${r.id} ${r.narrationModel ?? ''} ${r.gitSha ?? ''}`.toLowerCase()
+      if (!s.includes(q.toLowerCase())) return false
+    }
+    return true
+  }), [rows, kindFilter, statusFilter, q])
+
+  const partialN = rows.filter(isPartial).length
+  const failedN  = rows.filter(isTrueFail).length
+
+  // Kind options scoped to the rows actually on screen (every eval row is kind 'generation' today).
+  const kindsInView = useMemo(() => [...new Set(rows.map((r) => r.kind))].sort(), [rows])
+
+  return (
+    <div className="space-y-4">
+      <PageHeader
+        title="Evals"
+        description="Grounding / TTS / diversity scores behind generated clips, newest first. Click a row for the per-place gate report."
+      />
+
+      {error && (
+        <Callout variant="error">
+          <span className="font-medium">Error loading evals:</span> {errMsg(error)}
+        </Callout>
+      )}
+
+      {/* Clickable status KPIs (left) + auto-refresh + manual refresh (right). */}
+      <div className="flex flex-wrap items-center gap-2.5">
+        <Badge asChild variant={partialN ? 'warning' : 'secondary'} className="cursor-pointer">
+          <button onClick={() => setStatusFilter('partial')}>{partialN} partial</button>
+        </Badge>
+        <Badge asChild variant={failedN ? 'destructive' : 'secondary'} className="cursor-pointer">
+          <button onClick={() => setStatusFilter('failed')}>{failedN} failed</button>
+        </Badge>
+        <div className="ml-auto flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">auto-refresh · 15s</span>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 shrink-0 text-muted-foreground"
+            onClick={() => void refetch()}
+            title="Refresh now"
+            aria-label="Refresh"
+          >
+            <RefreshCw className={cn('h-3.5 w-3.5', isFetching && 'animate-spin')} />
+          </Button>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <SearchInput
+            wrapperClassName="min-w-[16rem] max-w-sm flex-1"
+            placeholder="Search model, commit, id…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
+          <Select value={kindFilter} onValueChange={setKindFilter}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All kinds</SelectItem>
+              {kindsInView.map((k) => <SelectItem key={k} value={k}>{KIND_META[k]?.label ?? k}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Any result</SelectItem>
+              <SelectItem value="ok">Pass</SelectItem>
+              <SelectItem value="partial">Partial</SelectItem>
+              <SelectItem value="failed">Failed</SelectItem>
+            </SelectContent>
+          </Select>
+          <span className="ml-auto text-sm text-muted-foreground">{filtered.length} of {rows.length}</span>
+        </div>
+
+        <div className="overflow-hidden rounded-xl border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Run</TableHead>
+                <TableHead>Target</TableHead>
+                <TableHead>Result</TableHead>
+                <TableHead>Scores</TableHead>
+                <TableHead className="text-right">When</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isPending && <TableSkeletonRows rows={6} cols={5} />}
+              {filtered.map((r) => {
+                const km = KIND_META[r.kind]
+                const Icon = km?.icon ?? Activity
+                return (
+                  <TableRow key={r.id} onClick={() => setDrawerRunId(r.id)} className="cursor-pointer">
+                    <TableCell>
+                      <div className="flex items-center gap-2.5">
+                        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md border bg-muted text-muted-foreground">
+                          <Icon size={13} />
+                        </span>
+                        <div className="min-w-0">
+                          <div className="font-medium">{km?.label ?? r.kind}</div>
+                          <div className="flex items-center gap-1.5 font-mono text-xs text-muted-foreground">
+                            <span className="truncate">{r.narrationModel ?? r.id}</span>
+                            {r.gitSha && (
+                              <span className="shrink-0 rounded border bg-muted px-1 py-0.5 text-[11px]">{r.gitSha.slice(0, 7)}</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      <RunTarget slug={r.slug} />
+                    </TableCell>
+                    <TableCell><EvalResultCell r={r} /></TableCell>
+                    <TableCell><RunScores r={r} /></TableCell>
+                    <TableCell className="text-right text-xs text-muted-foreground" title={fmtDate(r.createdAt)}>
+                      {timeAgo(r.createdAt)}
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+              {!isPending && filtered.length === 0 && (
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={5}>
+                    <EmptyState icon={Search}>No evals match these filters.</EmptyState>
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+
+      {drawerRunId && <EvalDrawer runId={drawerRunId} onClose={() => setDrawerRunId(null)} />}
+    </div>
+  )
+}
+
+// The drawer resolves the run BY ID (api.runScores) rather than from the list row — so a job's
+// suppressed eval, linked here from JobsView, opens just the same. The report body lives below.
+function EvalDrawer({ runId, onClose }: { runId: string; onClose: () => void }) {
+  const { data } = useQuery({ queryKey: ['runScores', runId], queryFn: () => api.runScores(runId) })
+  const run = data?.run ?? null
+  const km = run ? KIND_META[run.kind] : undefined
+  const Icon = km?.icon ?? Activity
+  const verdict = run ? verdictOf(run) : null
+
+  return (
+    <Sheet open onOpenChange={(o) => { if (!o) onClose() }}>
+      <SheetContent>
+        <SheetHeader>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <SheetTitle>{km?.label ?? run?.kind ?? 'Eval run'}</SheetTitle>
+              {verdict && <Badge variant={VERDICT_VARIANT[verdict]}>{verdict}</Badge>}
+            </div>
+            <SheetDescription className="mt-0.5">{run?.region ? (TARGET_SENTINELS[run.region] ?? run.region) : 'All'}</SheetDescription>
+          </div>
+          <SheetClose asChild>
+            <Button variant="ghost" size="icon" className="-mr-1.5 -mt-1 shrink-0" aria-label="Close">
+              <X size={16} />
+            </Button>
+          </SheetClose>
+        </SheetHeader>
+
+        <div className="flex-1 space-y-5 overflow-y-auto px-5 py-5">
+          {run && (
+            <div className="space-y-2">
+              <SectionLabel>Details</SectionLabel>
+              <dl className="grid grid-cols-[120px_1fr] gap-px overflow-hidden rounded-lg border bg-border">
+                <Def label="Kind"><span className="flex items-center gap-1.5"><Icon size={13} /> {km?.label ?? run.kind}</span></Def>
+                <Def label="Model" mono>{run.narrationModel ?? '—'}</Def>
+                {run.gitSha && <Def label="Commit" mono>{run.gitSha.slice(0, 7)}</Def>}
+                <Def label="Started" mono>{fmtDate(run.createdAt)}</Def>
+              </dl>
+            </div>
+          )}
+
+          <EvalReport runId={runId} />
+        </div>
+      </SheetContent>
+    </Sheet>
+  )
+}
+
+/* ─── Eval report (per-poi gate verdicts + the held-back tellings) ─── */
+
+type PoiGroup = {
+  key: string
+  name: string | null
+  qid: string | null
+  withheld: boolean
+  script: string | null
+  dims: EvalScoreRow[]
+}
+
+/** Collapse the per-(poi × dimension) rows into one entry per place, worst-first. */
+function groupByPoi(scores: EvalScoreRow[]): PoiGroup[] {
+  const map = new Map<string, PoiGroup>()
+  for (const s of scores) {
+    const key = s.poiId ?? s.qid ?? s.name ?? s.dimension
+    let g = map.get(key)
+    if (!g) {
+      g = { key, name: s.name, qid: s.qid, withheld: false, script: null, dims: [] }
+      map.set(key, g)
+    }
+    g.dims.push(s)
+    if (s.withheld) g.withheld = true
+    if (s.script) g.script = s.script
+  }
+  const failing = (g: PoiGroup) => g.dims.some((d) => !d.pass)
+  return [...map.values()].sort(
+    (a, b) => Number(b.withheld) - Number(a.withheld) || Number(failing(b)) - Number(failing(a)),
+  )
+}
+
+function EvalReport({ runId }: { runId: string }) {
+  const { data, isPending, error } = useQuery({
+    queryKey: ['runScores', runId],
+    queryFn: () => api.runScores(runId),
+  })
+  if (isPending) return <div className="text-xs text-muted-foreground">Loading eval report…</div>
+  if (error) return <Callout variant="error">{errMsg(error)}</Callout>
+  if (!data) return null
+
+  const { run, scores } = data
+  const groups = groupByPoi(scores)
+  const withheld = groups.filter((p) => p.withheld)
+  // Advisory-only flags: a place that cleared the gate but has a failing advisory dim (charm /
+  // veracity / diversity) — invisible in the withheld section, surfaced on its own below.
+  const advisory = groups.filter((p) => !p.withheld && p.dims.some((d) => !d.pass))
+  const score = (v: number | null) => (v == null ? '—' : v.toFixed(2))
+  // charm/veracity have no eval_runs rollup column — average their per-clip scores here so the run
+  // summary shows them when present (an offline_audit run with --charm / --veracity).
+  const advMean = (dim: string): number | null => {
+    const rows = scores.filter((s) => s.dimension === dim)
+    return rows.length ? rows.reduce((a, s) => a + s.value, 0) / rows.length : null
+  }
+  const charmMean = advMean('charm')
+  const verMean = advMean('veracity')
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <SectionLabel>Eval report</SectionLabel>
+        <dl className="grid grid-cols-[120px_1fr] gap-px overflow-hidden rounded-lg border bg-border">
+          <Def label="Clips">
+            {run.total} total · {run.shipped} shipped ·{' '}
+            <span className={cn(run.withheld > 0 && 'font-medium text-warning')}>{run.withheld} withheld</span>
+          </Def>
+          <Def label="Scores" mono>
+            g {score(run.grounding)} · tts {score(run.tts)} · div {score(run.diversity)}
+            {charmMean != null && ` · charm ${score(charmMean)}`}
+            {verMean != null && ` · ver ${score(verMean)}`}
+          </Def>
+          {run.judgeModel && <Def label="Judge" mono>{run.judgeModel}</Def>}
+        </dl>
+      </div>
+
+      {scores.length === 0 ? (
+        <div className="text-xs text-muted-foreground">No per-clip scores recorded for this run.</div>
+      ) : (
+        <>
+          {withheld.length > 0 && (
+            <div className="space-y-2">
+              <SectionLabel className="text-warning">
+                Withheld — {withheld.length} {withheld.length === 1 ? 'place' : 'places'} held back (gate)
+              </SectionLabel>
+              <div className="space-y-3">{withheld.map((p) => <PlaceReport key={p.key} place={p} />)}</div>
+            </div>
+          )}
+          {advisory.length > 0 && (
+            <div className="space-y-2">
+              <SectionLabel>
+                Advisory flags — {advisory.length} {advisory.length === 1 ? 'place' : 'places'} (charm / veracity / diversity)
+              </SectionLabel>
+              <div className="space-y-3">{advisory.map((p) => <PlaceReport key={p.key} place={p} advisory />)}</div>
+            </div>
+          )}
+          {withheld.length === 0 && advisory.length === 0 && (
+            <div className="text-xs text-muted-foreground">Every clip cleared every dimension — nothing flagged.</div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+function PlaceReport({ place, advisory = false }: { place: PoiGroup; advisory?: boolean }) {
+  const failing = place.dims.filter((d) => !d.pass)
+  return (
+    <div className={cn('space-y-2 rounded-lg border p-3', advisory ? 'border-border bg-muted/30' : 'border-warning/40 bg-warning/5')}>
+      <div className="flex items-center gap-2">
+        {advisory ? <Badge variant="outline">advisory</Badge> : <Badge variant="warning">withheld</Badge>}
+        <span className="font-medium">{place.name ?? place.qid ?? 'unknown place'}</span>
+      </div>
+      {failing.map((d, i) => (
+        <div key={i} className="space-y-1">
+          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{d.dimension}</div>
+          <ul className="space-y-0.5 text-xs text-foreground">
+            {d.findings.map((f, j) => <li key={j}>• {f}</li>)}
+          </ul>
+        </div>
+      ))}
+      {place.script && (
+        <details>
+          <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+            Show the held-back telling ({place.script.trim().split(/\s+/).filter(Boolean).length} words)
+          </summary>
+          <LogBlock className="mt-1.5 max-h-64 overflow-y-auto whitespace-pre-wrap">{place.script}</LogBlock>
+        </details>
+      )}
+    </div>
+  )
+}
