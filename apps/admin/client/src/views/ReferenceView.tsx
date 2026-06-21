@@ -3,7 +3,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge'
 import { Callout } from '@/components/ui/callout'
 import { PageHeader } from '@/components/PageHeader'
-import { cn } from '@/lib/utils'
 
 // A static cheat-sheet so the operator remembers what each control does — above all which
 // actions spend money or delete bytes. Pure presentation, no data fetch.
@@ -16,18 +15,19 @@ export function ReferenceView() {
       />
 
       <Callout variant="info">
-        <span className="font-medium text-foreground">The loop:</span> discover a region's POI corpus →
-        enrich the story POIs into fact sheets → generate the narrations → ear-pass them on the POIs page
-        (each POI's Narration tab: listen, read the script) → tune (re-synth) → repeat. The console defaults
-        to safe — spending and deleting are always opt-in.
+        <span className="font-medium text-foreground">The loop:</span> discover a region's POI corpus (from the
+        Regions page) → enrich the story POIs into fact sheets → generate the narrations → ear-pass them on the
+        POIs page (each POI's Narration tab: listen, read the script) → tune (re-synth / regenerate) → release to
+        the public. The console defaults to safe — spending, deleting, and releasing are always opt-in.
       </Callout>
 
       <Section title="Pages">
         <Dl
+          cols={['Page', 'What it does']}
           rows={[
-            ['Runs', 'Every run, newest first — admin-triggered Cloud Run jobs AND historical CLI generations. Click a row for details.'],
-            ['Regions', 'The regions the corpus is keyed to, each with its discovery bbox (the area Discover + Generate Narration sweep).'],
-            ['POIs', 'The shared POI corpus — sources, enrichment, narration coverage + freshness, and per-POI curation (fact-edits + speakable anchor). Each POI’s Narration tab plays its one telling and re-synths it.'],
+            ['Runs', 'Every run, newest first — admin-triggered Cloud Run jobs AND historical CLI generations. Each row shows its inline eval Scores (g / tts / div — grounding reddens below the 0.75 gate) and who triggered it; click for details + logs.'],
+            ['Regions', 'The regions the corpus is keyed to — each with its discovery bbox (the area Discover + Generate sweep), a live POI count, and a Draft / Released status. Discover POIs and Release both launch here (select region row(s) → Discover / Release).'],
+            ['POIs', 'The shared POI corpus — sources, enrichment, narration coverage + freshness, and per-POI curation. Quick-filters across the top triage it — “Needs attention” is the combined remediation queue (stale facts, defects, unattributed or drifted clips). Open a POI for its detail sheet: Facts (with Re-fetch facts), Narration (play the telling; Regenerate / Re-synth / Release), and Corrections (fact-edits + speakable anchor). New POIs are discovered from the Regions page.'],
           ]}
         />
       </Section>
@@ -58,26 +58,32 @@ export function ReferenceView() {
 
       <Section title="Preview, Apply & confirmation" subtitle="Safe by default; spending or deleting is always an explicit opt-in.">
         <Dl
+          cols={['Control', 'What it does']}
           rows={[
             ['Preview', 'The dry-run button in every job dialog: shows what would change (counts, cost estimate, the queue in the run log) and touches nothing.'],
             ['Apply', 'The primary button: actually narrates, synthesizes, re-fetches, or deletes. A paid or destructive Apply is gated server-side (confirm) before it runs.'],
-            ['Confirm dialog', 'In-page destructive / paid actions (Sweep orphans, Re-synth narration, Delete POI) pop a confirm before they fire — no typing required.'],
+            ['Confirm dialog', 'In-page destructive / paid actions (Sweep orphans, Delete POI, Re-synth, Regenerate) pop a confirm before they fire — no typing required. Releasing a clip or region is confirm-gated too, and is IRREVERSIBLE — it can never be undone.'],
           ]}
         />
       </Section>
 
       <Section title="Eval dimensions" subtitle="Scored on eval runs (Generate Narration + Re-score corpus), shown in the run drawer (0–1, higher is better).">
         <Dl
-          compact
+          cols={['Dimension', 'What it measures']}
           rows={[
             ['grounding', 'Every claim is backed by the fetched facts — anti-hallucination GATE. Generate + Re-score.'],
             ['tts', 'The script is synthesis-safe (no markup/emoji) — GATE. Generate + Re-score.'],
             ['diversity', 'Clips don’t repeat the same shtick — advisory. Generate + Re-score.'],
             ['charm', 'Persona & delivery quality — advisory (Opus). Opt-in on Re-score corpus.'],
             ['veracity', 'The facts themselves are correct vs the web — advisory (Opus + search). Opt-in on Re-score corpus.'],
-            ['pacing', 'Reserved — no evaluator yet.'],
+            ['pacing', 'Estimated clip runs over-long — advisory (free, deterministic; flags overshoot). Generate.'],
           ]}
         />
+        <Callout variant="warning" className="mt-4">
+          <span className="font-medium text-foreground">grounding + tts are a fail-closed gate.</span> On Generate, a
+          clip that still fails after bounded auto-retakes is WITHHELD — never synthesized, never shipped — and flagged
+          in the run drawer. Silence beats a bad telling.
+        </Callout>
         <div className="mt-5">
           <SubHead>Run source (Runs list)</SubHead>
           <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted-foreground">
@@ -91,25 +97,56 @@ export function ReferenceView() {
         </div>
       </Section>
 
+      <Section title="Release gate" subtitle="A second, HUMAN gate after the automated eval gate: every clip is born staged, and going public is a one-way latch.">
+        <Callout variant="warning">
+          <span className="font-medium text-foreground">Releasing is permanent.</span> A clip or region can never be
+          un-released — that would orphan saved drives and break offline downloads. Ear-check first; testers can hear
+          staged clips in the app before anyone else.
+        </Callout>
+        <div className="mt-3">
+          <Dl
+            cols={['Term', 'What it means']}
+            rows={[
+              ['Staged', 'A generated narration that is NOT yet public — testers (and you) hear it in the real app, nobody else. Every clip is born staged.'],
+              ['Released', 'Public — playable in roam + drives for everyone. The read paths gate on this bit alone.'],
+              ['Release a region', 'Regions page → Release. Opens the region AND auto-releases every staged clip in its bbox at once. Re-run (“Release new”) to push clips that staged since (new POIs, fresh regens). Permanent.'],
+              ['Release a clip', "A POI's Narration tab → Release. The trickle case: publish one freshly ear-checked clip inside an already-open region. Permanent."],
+              ['Regenerating a public clip', 'Updates the audio in place and stays live — a released clip is never yanked back to staged; the automated eval gate is the safety net.'],
+            ]}
+          />
+        </div>
+        <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted-foreground">
+          <span className="flex items-center gap-2">
+            <Badge variant="warning">staged</Badge> Not public yet — testers only.
+          </span>
+          <span className="flex items-center gap-2">
+            <Badge variant="success">Released</Badge> Public. (Shown on each POI row + its Narration tab.)
+          </span>
+        </div>
+      </Section>
+
       <Section title="Example: corpus for a new region" subtitle="Discover first (free), then enrich + generate. Always preview before applying.">
         <ol className="list-decimal space-y-1.5 pl-5 text-sm text-muted-foreground">
           <li>
             Regions page → <Step>Add region</Step> — set the slug + a discovery bbox (the lookup helps find one).
           </li>
           <li>
-            POIs page → <Step>Discover POIs</Step> — pick the region, hit <Step>Preview</Step> to dry-run → verify the POI list in the job log.
+            Regions page → select the region row(s) → <Step>Discover</Step> — hit <Step>Preview</Step> to dry-run the sweep (counts candidates) → verify the POI list in the job log.
           </li>
           <li>
-            Hit <Step>Discover</Step> — upserts the shared POI corpus that roam + drives select from. Free; no confirm needed.
+            Hit <Step>Discover</Step> — upserts the shared POI corpus that roam + drives draw from (one run per selected region, each on the Runs timeline). Free; no confirm needed.
           </li>
           <li>
             Select the eligible story POIs → <Step>Enrich</Step> — scouts each into a verbatim fact sheet (pois.fact_sheet). Preview shows the exact count + cost; Apply spends.
           </li>
           <li>
-            <Step>Generate Narration</Step> — pick the region, hit <Step>Preview</Step> to see the queue + a cost estimate, then <Step>Generate Narration</Step> to narrate + synthesize a narration for every enriched, story-grade POI.
+            Select the enriched story POIs (or filter by region) → <Step>Narrate</Step> — hit <Step>Preview</Step> to see the queue + a cost estimate, then <Step>Generate</Step> to narrate + synthesize a narration for every enriched, story-grade POI in the selection.
           </li>
           <li>
-            Ear-pass on the POIs page — open a POI, the <Step>Narration</Step> tab plays its telling and shows the script; <Step>Re-synth</Step> any dud take.
+            Ear-pass on the POIs page — open a POI, the <Step>Narration</Step> tab plays its telling and shows the script; <Step>Re-synth</Step> any dud take (or <Step>Regenerate</Step> after a fact-edit).
+          </li>
+          <li>
+            <Step>Release</Step> when it sounds right — one clip from its Narration tab, or the whole region from the Regions page once you've checked them. Permanent (see Release gate above).
           </li>
         </ol>
       </Section>
@@ -117,12 +154,15 @@ export function ReferenceView() {
       <Section title="Heads-up">
         <ul className="list-disc space-y-1.5 pl-5 text-sm text-muted-foreground">
           <li>
-            <Step>Generation writes to PROD</Step> and bills real GCP/LLM credits — the preview defaults, typed-confirm, and max-cost are the guardrails.
+            <Step>Generation writes to PROD</Step> and bills real GCP/LLM credits — the preview defaults, the explicit confirm dialog, and the optional spend cap (max-cost) are the guardrails.
           </li>
           <li>
             <Step>Cost shown is an estimate</Step> of the LLM spend the pipeline self-reports — not the GCP bill (TTS + infra aren’t included).
           </li>
           <li>A failed run that hangs in “running” settles itself once you open it (a reconcile against its Cloud Run execution).</li>
+          <li>
+            <Step>Cancel a live run</Step> from its drawer (Cancel run) to halt a spending job mid-flight — it settles as “canceled”.
+          </li>
         </ul>
       </Section>
     </div>
@@ -147,6 +187,12 @@ const RUN_KINDS: { kind: string; does: string; cost: ReactNode; safe: string }[]
     does: 'Narrate + synthesize the one shared narration for every enriched, story-grade POI in the region.',
     cost: <span>LLM per narration (~$0.10); <span className="text-foreground">TTS</span> per narration (when applied).</span>,
     safe: 'Preview — shows the queue + cost estimate, makes no model calls.',
+  },
+  {
+    kind: 'Regenerate narration',
+    does: "Re-narrate ONE POI from its CURRENT facts + corrections (a fresh script), then re-score + re-synthesize — the single-POI form of Generate Narration. Run from the POI's Narration tab after a fact-edit. (Re-synth, below, only re-voices the existing script.)",
+    cost: <span>LLM + <span className="text-foreground">TTS</span> for one narration (when applied).</span>,
+    safe: 'Confirm before it spends.',
   },
   {
     kind: 'Re-score corpus',
@@ -188,19 +234,29 @@ function SubHead({ children }: { children: ReactNode }) {
   return <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">{children}</h3>
 }
 
-function Dl({ rows, compact }: { rows: [string, ReactNode][]; compact?: boolean }) {
+// A two-column key/value table, styled identically to the "Run kinds" table above (same border, header,
+// and cell treatment) so every section on the page reads as one consistent table style.
+function Dl({ cols, rows }: { cols: [string, string]; rows: [string, ReactNode][] }) {
   return (
-    <dl className="divide-y overflow-hidden rounded-xl border">
-      {rows.map(([term, desc]) => (
-        <div
-          key={term}
-          className={cn('grid gap-1 px-4 sm:grid-cols-[minmax(0,18rem)_1fr] sm:gap-4', compact ? 'py-2' : 'py-3')}
-        >
-          <dt className="text-sm font-medium">{term}</dt>
-          <dd className="text-sm text-muted-foreground">{desc}</dd>
-        </div>
-      ))}
-    </dl>
+    <div className="overflow-hidden rounded-xl border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            {cols.map((h) => (
+              <TableHead key={h}>{h}</TableHead>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map(([term, desc]) => (
+            <TableRow key={term}>
+              <TableCell className="whitespace-nowrap align-top font-medium">{term}</TableCell>
+              <TableCell className="align-top text-muted-foreground">{desc}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   )
 }
 
