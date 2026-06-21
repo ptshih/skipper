@@ -4,7 +4,7 @@
 > auto-release every clip in a region on release. **Preview gate UPDATED 2026-06-20:** the per-user
 > preview flag moved from a bespoke `user.tester` boolean → the **Better Auth `admin` plugin role**
 > (`role === 'admin'`), so "preview staged content" is now one facet of being an admin (migration `0030`
-> drops `tester`, adds `role`/`banned`/`ban_*` + `session.impersonated_by`). Adds a *human* release gate
+> adds `role`/`banned`/`ban_*` + `session.impersonated_by`; `0031` drops `tester`). Adds a *human* release gate
 > downstream of the automated eval gate (`docs/decisions/automated-grounding-gate.md`): the eval gate
 > decides "safe to persist," this gate decides "ready for the public." Schema (`regions.released_at`,
 > `narrations.released_at`, `user.role`) + the backfill, the roam/drive read filters + the `isAdmin`

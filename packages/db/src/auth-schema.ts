@@ -13,11 +13,12 @@ export const user = pgTable("user", {
     .$onUpdate(() => /* @__PURE__ */ new Date())
     .notNull(),
   isAnonymous: boolean("is_anonymous").default(false),
-  // Better Auth `admin` plugin fields (server-set, input:false). `role` is the access role
-  // ('user' default, 'admin' for the founder/allowlist); role==='admin' ALSO doubles as the
-  // region-release-gate preview check (an admin hears STAGED content in-app — see `isAdmin` in
-  // apps/api/src/tiers.ts + docs/decisions/region-release-gate.md). ban* are the plugin's
-  // account-ban columns (unused today, part of the plugin's schema).
+  // Better Auth `admin` plugin fields (server-set, input:false). `role` is the access role: the
+  // plugin sets 'user' on signup, 'admin' is set by hand for the founder/allowlist. The COLUMN is
+  // nullable with NO DB default — legacy / out-of-band rows read NULL, which `isAdmin` treats as
+  // non-admin (role==='admin' only). role==='admin' ALSO doubles as the region-release-gate preview
+  // check (an admin hears STAGED content in-app — see `isAdmin` in apps/api/src/tiers.ts +
+  // docs/decisions/region-release-gate.md). ban* are the plugin's account-ban columns (unused today).
   role: text("role"),
   banned: boolean("banned").default(false),
   banReason: text("ban_reason"),

@@ -1,7 +1,7 @@
 // Better Auth client for Expo — sessions stored in expo-secure-store, deep-link
 // scheme `skipper` (must match app.json `scheme` and the server's trustedOrigins).
 import { createAuthClient } from 'better-auth/react'
-import { adminClient, inferAdditionalFields } from 'better-auth/client/plugins'
+import { adminClient } from 'better-auth/client/plugins'
 import { expoClient } from '@better-auth/expo/client'
 import * as SecureStore from 'expo-secure-store'
 
@@ -24,14 +24,6 @@ const secureStorage = {
 export const authClient = createAuthClient({
   baseURL: API_URL,
   plugins: [
-    // `tier` is a custom additionalField on the server (apps/api/src/auth.ts) — it's serialized into
-    // the session at runtime but absent from the useSession() type without this. `input: false` keeps
-    // it server-set (no client write via updateUser), matching the server.
-    inferAdditionalFields({
-      user: {
-        tier: { type: 'string', required: false, defaultValue: 'free', input: false },
-      },
-    }),
     // Admin plugin client — mirrors the server `admin()` plugin so `session.user.role` (+ ban fields)
     // is typed. `role === 'admin'` gates the dev-tools screen (and is the server's staged-content
     // preview role, isAdmin). Also exposes admin methods (set-role, ban, …) for a future admin surface.
@@ -45,3 +37,12 @@ export const authClient = createAuthClient({
 })
 
 export const { signIn, signUp, signOut, useSession, updateUser } = authClient
+
+/** Admin gate — `role === 'admin'` (Better Auth admin plugin, server-set). The ONE client-side
+ *  definition of "is this user an admin?", mirroring the API's isAdmin() in apps/api/src/tiers.ts.
+ *  Pass the session from useSession(); structurally typed so it also accepts a null/loading session. */
+export function isAdmin(
+  session: { user?: { role?: string | null } | null } | null | undefined,
+): boolean {
+  return session?.user?.role === 'admin'
+}

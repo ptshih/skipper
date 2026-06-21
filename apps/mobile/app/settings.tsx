@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { StyleSheet, View } from 'react-native'
 import { Stack, useRouter } from 'expo-router'
-import { signOut, updateUser, useSession } from '@/lib/auth'
+import { isAdmin, signOut, updateUser, useSession } from '@/lib/auth'
 import { space } from '@/theme/tokens'
 import { Button, Input, Screen, Text, ThemeModePicker, voice } from '@/ui'
 
@@ -12,9 +12,9 @@ import { Button, Input, Screen, Text, ThemeModePicker, voice } from '@/ui'
 export default function SettingsScreen() {
   const router = useRouter()
   const { data: session } = useSession()
-  // Developer tools are admin-only. `role` is server-set (Better Auth admin plugin) and only
-  // 'admin' on the founder/allowlist, so this excludes anonymous + plain free riders on its own.
-  const isAdmin = session?.user?.role === 'admin'
+  // Developer tools are admin-only (isAdmin = role === 'admin', server-set). Shared with
+  // developer.tsx's self-guard so the gate has exactly one definition.
+  const showDeveloper = isAdmin(session)
 
   // Name is optional and lives HERE, not at sign-up. Seed the field from the saved
   // name and re-sync whenever it changes — a successful save pings $sessionSignal,
@@ -135,7 +135,7 @@ export default function SettingsScreen() {
         />
       </View>
 
-      {isAdmin ? (
+      {showDeveloper ? (
         <View style={styles.section}>
           <Text variant="label" color="inkFaint">
             {voice.settings.developer}

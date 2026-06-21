@@ -8,7 +8,7 @@ import { auth } from './auth'
 import { resolveSessionSafely } from './session'
 import { FEATURES, isAdmin, meetsTier, tierOf } from './tiers'
 
-/** Better Auth's inferred session shape ({ session, user }), incl. tier + isAnonymous. */
+/** Better Auth's inferred session shape ({ session, user }), incl. role + isAnonymous (admin plugin). */
 export type AuthSession = typeof auth.$Infer.Session
 
 export type ApiEnv = {
