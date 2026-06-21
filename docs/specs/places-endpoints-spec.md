@@ -1,7 +1,9 @@
 # Google Places for drive endpoints (and pitstops) — Build Spec
 
-> **Status:** build-ready spec (2026-06-20), UNBUILT. Validated by a live spike: Places API (New) is
-> enabled on the project, and region-bounded autocomplete returns clean Tahoe hubs + pitstops. This
+> **Status:** build-ready spec (2026-06-20), UNBUILT. Design walked through + settled with the founder
+> (2026-06-20) — see Decisions below; one fork stays open (curated set vs. open autocomplete) to settle
+> before building. Validated by a live spike: Places API (New) is enabled on the project, and
+> region-bounded autocomplete returns clean Tahoe hubs + pitstops. This
 > SUPERSEDES the interim corpus-anchor picker (`loadRegionAnchors` / `GET /drives/anchors` /
 > `regionAnchor` DTOs, shipped 2026-06-20 in `feat: pick drive endpoints from real anchors` +
 > `loop mode`) — that step proved the picker UX + grounding and is retired when this lands. Pairs with
@@ -76,6 +78,9 @@ and ToS-compliant persistence.
   search, regenerated on selection): type → `GET /drives/autocomplete` → tap a prediction → hold
   `{ placeId, name }`. propose sends the placeIds + the session token. Loop mode is unchanged (start +
   midpoint placeIds; end = start).
+- **Featured quick-picks:** above the search, ~5 hand-picked hubs per region as tap-to-pick shortcuts
+  (in-car-friendly; less typing), with open search as the fallthrough. (Later: usage-derived from the
+  most-picked `places`.)
 
 ### Billing / cost
 
@@ -90,30 +95,36 @@ is dual-purpose and the per-search cost is normal maps-app traffic.)
   interim corpus-anchor picker). Retire once autocomplete lands. `loadCorpusForRoute` (the narration
   corpus, the story layer) is **unchanged**.
 
-## Open questions
+## Decisions (settled in the 2026-06-20 walkthrough)
 
-1. **Endpoint persistence.** Reference `places` rows from the drive, or just freeze `placeId` + coords
-   in the route provenance the drive already stores? (Inline is simplest + ToS-fine; a `places` row is
-   nicer for dedup + break reuse. Leaning: upsert `places` for the anchor AND freeze coords in
-   provenance.)
-2. **Type biasing.** Constrain endpoint autocomplete to hub `includedPrimaryTypes`
-   (`locality`, `tourist_attraction`, `natural_feature`, …), or leave open + rank? The spike's open
-   results were already good; a soft bias is polish.
-3. **bbox tightness.** The Tahoe region bbox extends to Reno/Truckee edges — `"coffee"` pulled Reno
-   results (correctly inside the bbox). Tighten the endpoint restriction or type-bias if hub results
-   bleed.
-4. **Featured shortcuts.** A few default hubs above the search box (hand-picked, or usage-derived from
-   most-picked `places`) — polish, post-launch.
-5. **Off-content routes.** Region-bound autocomplete + the existing "no stories along that route"
-   confirm guard (blocks an empty drive before a credit is spent).
-6. **Curated set vs. open autocomplete (founder, 2026-06-20 — REVISIT before build).** Instead of live
-   open-ended autocomplete, PRE-CURATE a set of popular places per region — ones that serve as good
-   START / END / MIDPOINT *and* BREAK/PITSTOP anchors — store them, and constrain the picker to ONLY
-   those. This would collapse several questions above: endpoints become pre-stored `places` rows (Q1),
-   no runtime type-biasing needed (Q2), the curated set IS the featured list (Q4), and there's no
-   runtime autocomplete cost at all. Trade-off: per-region curation effort + bounded coverage (a rider
-   can't pick an arbitrary address) vs. zero-curation + infinite coverage. Middle path: a curated set
-   as the default/featured picks with open autocomplete as a fallthrough. DECISION DEFERRED.
+1. **Server-owned Places** — the app never calls Google directly; the API proxies (key + session token
+   + persistence server-side). [Approach.]
+2. **Resolve-at-propose** — Place Details (placeId → coords) runs once in `propose`, closing the billing
+   session; `create` reuses the proposal's coords (no second lookup). [Approach.]
+3. **Save endpoints as `places` rows** (upsert by `place_id`; place_id stored indefinitely + a minimal
+   name/coords snapshot) AND freeze the coords in the drive's route provenance. Endpoints + breaks share
+   the one `places` table.
+4. **Endpoint search stays wide open** — no `includedPrimaryTypes` filter; Google already ranks the
+   obvious hub first. Breaks LATER filter toward amenity types (coffee/gas/viewpoint).
+5. **Keep the region bbox** as the search bound (Reno/Truckee fringe is acceptable; the no-stories guard
+   catches dead routes). Breaks search near the route, not the region.
+6. **Featured quick-picks** — ~5 hand-picked hubs per region as tap-to-pick shortcuts (in-car-friendly),
+   open search as the fallthrough. (Later: usage-derived.)
+7. **Off-content routes: block-and-nudge** — the existing "no stories along that route" confirm guard
+   stands (no credit spent); a "suggest a better route" nicety is deferred.
+
+## Still open — revisit before build
+
+- **Curated set vs. open autocomplete (founder, 2026-06-20).** Instead of live open-ended autocomplete,
+  PRE-CURATE a set of popular places per region — ones that serve as good START / END / MIDPOINT *and*
+  BREAK/PITSTOP anchors — store them, and constrain the picker to ONLY those. This would collapse much
+  of the above: endpoints become pre-stored `places` rows (already decided in #3), no live search to
+  type-bias or bbox-bound (#4/#5 moot), the curated set IS the featured list (#6 becomes the whole
+  list), and there's **no runtime autocomplete cost at all**. Trade-off: per-region curation effort +
+  bounded coverage (a rider can't pick an arbitrary address) vs. zero-curation + infinite coverage.
+  Middle path (and the natural bridge): the featured quick-picks in #6 ARE a small curated set —
+  open-autocomplete ships with curation already half-present, and going full-curated just means growing
+  that set and dropping the open fallthrough. **DECISION DEFERRED** — settle before building the picker.
 
 ## Build steps
 
