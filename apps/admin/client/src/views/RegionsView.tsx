@@ -258,7 +258,7 @@ export function RegionsView() {
 
 // Sweeps every Wikidata-pinned place in each selected region's bbox and upserts the shared POI corpus.
 // Free (no model/TTS), so no confirm gate. Launches one discover_pois run PER region — each lands on the
-// Runs timeline. Preview dry-runs the sweep (counts candidates); Discover upserts.
+// Jobs page. Preview dry-runs the sweep (counts candidates); Discover upserts.
 function DiscoverDialog({ regions, open, onOpenChange, onSubmitted }: {
   regions: { slug: string; displayName: string }[]
   open: boolean
@@ -296,7 +296,7 @@ function DiscoverDialog({ regions, open, onOpenChange, onSubmitted }: {
           <p className="text-xs text-muted-foreground">
             Free — no spend, no deletion. <span className="font-medium text-foreground">Preview</span> dry-runs the
             sweep (counts candidates); <span className="font-medium text-foreground">Discover</span> upserts the corpus.
-            One run per region lands on the Runs timeline.
+            One job per region lands on the Jobs page.
           </p>
         </div>
 

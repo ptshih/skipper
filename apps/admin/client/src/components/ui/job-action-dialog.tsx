@@ -77,7 +77,7 @@ export function JobActionDialog({
   const submitMut = useMutation({
     mutationFn: (apply: boolean) =>
       api.createJob({ ...buildBody(), ...capBody, apply, ...(apply && spends ? { confirm: true } : {}) }),
-    // Refresh Runs so the just-created run shows on navigate (not after the 15s poll).
+    // Refresh the runs cache so the just-created job shows on the Jobs page (not after the 15s poll).
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ['runs'] }); onSubmitted() },
   })
   const busy = submitMut.isPending

@@ -163,7 +163,7 @@ function NarrateDialog({ open, onOpenChange, scope, onSubmitted }: {
 
 // Re-score the EXISTING narration corpus without regenerating: scores each region story narration's
 // stored script for grounding (Opus) + tts + diversity and records an offline_audit eval_run, viewable
-// in the Runs report drawer. READ-ONLY on narrations/R2; --apply spends one Opus grounding call per clip
+// on the Evals page. READ-ONLY on narrations/R2; --apply spends one Opus grounding call per clip
 // (gated like the other paid dialogs); the Preview is a free count + estimate.
 function RescoreDialog({ open, onOpenChange, scope, onSubmitted }: {
   open: boolean
@@ -180,7 +180,7 @@ function RescoreDialog({ open, onOpenChange, scope, onSubmitted }: {
       onSubmitted={onSubmitted}
       icon={Activity}
       title="Re-score corpus"
-      description="Re-scores the selection's EXISTING story narrations (grounding, tts-cleanliness, diversity; charm + veracity opt-in) WITHOUT regenerating or re-synthesizing — a quality read on what's already shipped. Records an offline_audit run, viewable in the Runs report."
+      description="Re-scores the selection's EXISTING story narrations (grounding, tts-cleanliness, diversity; charm + veracity opt-in) WITHOUT regenerating or re-synthesizing — a quality read on what's already shipped. Records an offline_audit run, viewable on the Evals page."
       buildBody={() => ({ kind: 'offline_audit', ...scopeBody(scope.selection), ...(charm ? { charm: true } : {}), ...(veracity ? { veracity: true } : {}) })}
       applyLabel="Re-score"
       applyIcon={Activity}

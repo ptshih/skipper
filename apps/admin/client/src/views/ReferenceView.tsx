@@ -67,7 +67,7 @@ export function ReferenceView() {
         />
       </Section>
 
-      <Section title="Eval dimensions" subtitle="Scored on eval runs (Generate Narration + Re-score corpus), shown in the run drawer (0–1, higher is better).">
+      <Section title="Eval dimensions" subtitle="Scored on eval runs (Generate Narration + Re-score corpus), shown on the Evals page (0–1, higher is better).">
         <Dl
           cols={['Dimension', 'What it measures']}
           rows={[
@@ -82,16 +82,16 @@ export function ReferenceView() {
         <Callout variant="warning" className="mt-4">
           <span className="font-medium text-foreground">grounding + tts are a fail-closed gate.</span> On Generate, a
           clip that still fails after bounded auto-retakes is WITHHELD — never synthesized, never shipped — and flagged
-          in the run drawer. Silence beats a bad telling.
+          on the Evals page. Silence beats a bad telling.
         </Callout>
         <div className="mt-5">
-          <SubHead>Run source (Runs list)</SubHead>
+          <SubHead>Two pages: Jobs and Evals</SubHead>
           <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted-foreground">
             <span className="flex items-center gap-2">
-              <Badge>job</Badge> Admin-triggered Cloud Run job — has status, cost, who triggered it.
+              <Badge>Jobs</Badge> Admin-triggered Cloud Run jobs — status, cost, who triggered them.
             </span>
             <span className="flex items-center gap-2">
-              <Badge variant="outline">eval</Badge> A historical CLI generation — has pass + dimension scores.
+              <Badge variant="outline">Evals</Badge> Generation runs with pass + dimension scores (the gate report).
             </span>
           </div>
         </div>
@@ -134,7 +134,7 @@ export function ReferenceView() {
             Regions page → select the region row(s) → <Step>Discover</Step> — hit <Step>Preview</Step> to dry-run the sweep (counts candidates) → verify the POI list in the job log.
           </li>
           <li>
-            Hit <Step>Discover</Step> — upserts the shared POI corpus that roam + drives draw from (one run per selected region, each on the Runs timeline). Free; no confirm needed.
+            Hit <Step>Discover</Step> — upserts the shared POI corpus that roam + drives draw from (one job per selected region, each on the Jobs page). Free; no confirm needed.
           </li>
           <li>
             Select the eligible story POIs → <Step>Enrich</Step> — scouts each into a verbatim fact sheet (pois.fact_sheet). Preview shows the exact count + cost; Apply spends.
@@ -196,7 +196,7 @@ const RUN_KINDS: { kind: string; does: string; cost: ReactNode; safe: string }[]
   },
   {
     kind: 'Re-score corpus',
-    does: 'Re-score the EXISTING story narrations (grounding / tts / diversity always; charm + veracity opt-in) WITHOUT regenerating or re-synthesizing — a quality read on what is already shipped. Records an offline_audit run, viewable in the Runs report. Read-only on narrations.',
+    does: 'Re-score the EXISTING story narrations (grounding / tts / diversity always; charm + veracity opt-in) WITHOUT regenerating or re-synthesizing — a quality read on what is already shipped. Records an offline_audit run; its scores show on the Evals page. Read-only on narrations.',
     cost: <span>LLM grounding per clip (~$0.06, Opus, when applied); charm = one batch call; veracity web-checks each clip (pricier). Free tts + diversity run in Preview.</span>,
     safe: 'Preview — counts the narrations + estimates the spend, makes no model calls.',
   },

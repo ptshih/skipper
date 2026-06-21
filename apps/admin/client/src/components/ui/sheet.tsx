@@ -2,7 +2,7 @@ import * as React from 'react'
 import * as SheetPrimitive from '@radix-ui/react-dialog'
 import { cn } from '@/lib/utils'
 
-// shadcn Sheet — a side drawer built on radix Dialog. Used for the Runs run-detail panel.
+// shadcn Sheet — a side drawer built on radix Dialog. Used for the job / eval detail drawers and other side panels.
 function Sheet(props: React.ComponentProps<typeof SheetPrimitive.Root>) {
   return <SheetPrimitive.Root data-slot="sheet" {...props} />
 }
