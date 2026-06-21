@@ -52,6 +52,17 @@ function placePinIcon(p: PlacePin): L.DivIcon {
   return p.endpointEligible ? ENDPOINT_PIN : BREAK_PIN
 }
 
+// The region bbox is always drawn green — echoing the draw-rectangle stroke. One source for the hex
+// (markers render outside the token system) and one rectangle style, so the region drawer (BboxMap)
+// and the /places map render the box IDENTICALLY.
+const BBOX_GREEN = '#16a34a'
+const BBOX_RECT_STYLE: L.PathOptions = { color: BBOX_GREEN, weight: 2, dashArray: '4' }
+
+/** The committed-bbox outline, shared by every map that shows a region box. */
+function BboxRectangle({ bounds }: { bounds: L.LatLngBoundsLiteral }) {
+  return <Rectangle bounds={bounds} pathOptions={BBOX_RECT_STYLE} />
+}
+
 /** Parse "lng_min,lat_min,lng_max,lat_max" → leaflet bounds [[swLat,swLng],[neLat,neLng]], or null. */
 function bboxToBounds(bbox: string): L.LatLngBoundsLiteral | null {
   const p = bbox.split(',').map(Number)
@@ -119,7 +130,7 @@ function DrawRectangle({ active, onBbox, onDone }: { active: boolean; onBbox: (b
     }
   }, [active, map])
   return active && start && current ? (
-    <Rectangle bounds={[[start.lat, start.lng], [current.lat, current.lng]]} pathOptions={{ color: '#16a34a', weight: 2 }} />
+    <Rectangle bounds={[[start.lat, start.lng], [current.lat, current.lng]]} pathOptions={{ color: BBOX_GREEN, weight: 2 }} />
   ) : null
 }
 
@@ -147,7 +158,7 @@ export function BboxMap({ bbox, onBbox, className }: { bbox: string; onBbox: (bb
         <TileLayer attribution={OSM_ATTRIBUTION} url={OSM_URL} />
         <InvalidateOnMount />
         <FitBounds bbox={bbox} />
-        {bounds && !drawing && <Rectangle bounds={bounds} pathOptions={{ color: '#16a34a', weight: 2, dashArray: '4' }} />}
+        {bounds && !drawing && <BboxRectangle bounds={bounds} />}
         <DrawRectangle active={drawing} onBbox={onBbox} onDone={() => setDrawing(false)} />
       </MapContainer>
     </div>
@@ -177,7 +188,7 @@ export function PlacesMap({
         <TileLayer attribution={OSM_ATTRIBUTION} url={OSM_URL} />
         <InvalidateOnMount />
         {bbox && <FitBounds bbox={bbox} />}
-        {bounds && <Rectangle bounds={bounds} pathOptions={{ color: '#16a34a', weight: 1, dashArray: '4', fillOpacity: 0 }} />}
+        {bounds && <BboxRectangle bounds={bounds} />}
         {places.map((p, i) => (
           <Marker key={`${p.lat},${p.lng},${i}`} position={[p.lat, p.lng]} icon={placePinIcon(p)}>
             <Tooltip>{p.name}</Tooltip>
