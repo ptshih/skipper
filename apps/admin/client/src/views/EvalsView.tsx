@@ -7,12 +7,11 @@ import { errMsg, fmtDate, timeAgo } from '@/lib/format'
 import { KIND_META, TARGET_SENTINELS, RunTarget, RUNS_REFETCH_MS } from '@/lib/runs'
 import { VERDICT_VARIANT, verdictOf, isPartial, isTrueFail } from '@/lib/status'
 import { PageHeader } from '@/components/PageHeader'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { DataTable, type Column } from '@/components/ui/data-table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Callout } from '@/components/ui/callout'
 import { EmptyState } from '@/components/ui/empty-state'
-import { TableSkeletonRows } from '@/components/ui/skeleton'
 import { SectionLabel } from '@/components/ui/section-label'
 import { DetailList, DetailRow } from '@/components/ui/detail-list'
 import { CodeBlock } from '@/components/ui/code-block'
@@ -101,6 +100,41 @@ export function EvalsView() {
   // Kind options scoped to the rows actually on screen (every eval row is kind 'generation' today).
   const kindsInView = useMemo(() => [...new Set(rows.map((r) => r.kind))].sort(), [rows])
 
+  const columns: Column<RunEvent>[] = [
+    {
+      header: 'Run',
+      cell: (r) => {
+        const km = KIND_META[r.kind]
+        const Icon = km?.icon ?? Activity
+        return (
+          <div className="flex items-center gap-2.5">
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md border bg-muted text-muted-foreground">
+              <Icon size={13} />
+            </span>
+            <div className="min-w-0">
+              <div className="font-medium">{km?.label ?? r.kind}</div>
+              <div className="flex items-center gap-1.5 font-mono text-xs text-muted-foreground">
+                <span className="truncate">{r.narrationModel ?? r.id}</span>
+                {r.gitSha && (
+                  <span className="shrink-0 rounded border bg-muted px-1 py-0.5 text-[11px]">{r.gitSha.slice(0, 7)}</span>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      },
+    },
+    { header: 'Target', cellClassName: 'text-xs', cell: (r) => <RunTarget slug={r.slug} /> },
+    { header: 'Result', cell: (r) => <EvalResultCell r={r} /> },
+    { header: 'Scores', cell: (r) => <RunScores r={r} /> },
+    {
+      header: 'When',
+      headClassName: 'text-right',
+      cellClassName: 'text-right text-xs text-muted-foreground',
+      cell: (r) => <span title={fmtDate(r.createdAt)}>{timeAgo(r.createdAt)}</span>,
+    },
+  ]
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -148,61 +182,14 @@ export function EvalsView() {
           />
         </FilterToolbar>
 
-        <div className="overflow-hidden rounded-xl border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Run</TableHead>
-                <TableHead>Target</TableHead>
-                <TableHead>Result</TableHead>
-                <TableHead>Scores</TableHead>
-                <TableHead className="text-right">When</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isPending && <TableSkeletonRows rows={6} cols={5} />}
-              {filtered.map((r) => {
-                const km = KIND_META[r.kind]
-                const Icon = km?.icon ?? Activity
-                return (
-                  <TableRow key={r.id} onClick={() => setDrawerRunId(r.id)} className="cursor-pointer">
-                    <TableCell>
-                      <div className="flex items-center gap-2.5">
-                        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md border bg-muted text-muted-foreground">
-                          <Icon size={13} />
-                        </span>
-                        <div className="min-w-0">
-                          <div className="font-medium">{km?.label ?? r.kind}</div>
-                          <div className="flex items-center gap-1.5 font-mono text-xs text-muted-foreground">
-                            <span className="truncate">{r.narrationModel ?? r.id}</span>
-                            {r.gitSha && (
-                              <span className="shrink-0 rounded border bg-muted px-1 py-0.5 text-[11px]">{r.gitSha.slice(0, 7)}</span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-xs">
-                      <RunTarget slug={r.slug} />
-                    </TableCell>
-                    <TableCell><EvalResultCell r={r} /></TableCell>
-                    <TableCell><RunScores r={r} /></TableCell>
-                    <TableCell className="text-right text-xs text-muted-foreground" title={fmtDate(r.createdAt)}>
-                      {timeAgo(r.createdAt)}
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-              {!isPending && filtered.length === 0 && (
-                <TableRow className="hover:bg-transparent">
-                  <TableCell colSpan={5}>
-                    <EmptyState icon={Search}>No evals match these filters.</EmptyState>
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
+        <DataTable
+          columns={columns}
+          rows={filtered}
+          rowKey={(r) => r.id}
+          loading={isPending}
+          onRowClick={(r) => setDrawerRunId(r.id)}
+          empty={<EmptyState icon={Search}>No evals match these filters.</EmptyState>}
+        />
       </div>
 
       {drawerRunId && <EvalDrawer runId={drawerRunId} onClose={() => setDrawerRunId(null)} />}

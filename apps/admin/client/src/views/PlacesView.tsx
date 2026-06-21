@@ -11,7 +11,7 @@ import { MapPin, Plus, Search, Sparkles, Star, Trash2 } from 'lucide-react'
 import { api, type PlaceRow, type Region, type ResolvedPlace } from '@/lib/api'
 import { errMsg } from '@/lib/format'
 import { PageHeader } from '@/components/PageHeader'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { DataTable, type Column } from '@/components/ui/data-table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -20,7 +20,6 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Callout } from '@/components/ui/callout'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { EmptyState } from '@/components/ui/empty-state'
-import { TableSkeletonRows } from '@/components/ui/skeleton'
 import { PlacesMap, PLACE_PIN_COLORS } from '@/components/ui/leaflet-map'
 import { JobActionDialog } from '@/components/ui/job-action-dialog'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -100,6 +99,68 @@ export function PlacesView() {
   const endpointCount = places.filter((p) => p.endpointEligible).length
   const breakCount = places.filter((p) => p.breakEligible).length
 
+  const columns: Column<PlaceRow>[] = [
+    {
+      header: 'Place',
+      cellClassName: 'font-medium',
+      cell: (p) => (
+        <>
+          <div className="flex items-center gap-2">
+            {p.featured && <Star className="h-3.5 w-3.5" style={{ color: PLACE_PIN_COLORS.featured, fill: PLACE_PIN_COLORS.featured }} />}
+            {p.name}
+          </div>
+          <div className="text-xs text-muted-foreground">{p.lat.toFixed(4)}, {p.lng.toFixed(4)}</div>
+        </>
+      ),
+    },
+    { header: 'Kind', cellClassName: 'text-muted-foreground', cell: (p) => kindLabel(p.primaryType) },
+    {
+      header: 'Endpoint',
+      headClassName: 'text-center',
+      cellClassName: 'text-center',
+      cell: (p) => (
+        <Checkbox
+          checked={p.endpointEligible}
+          onCheckedChange={(v) => toggleMut.mutate({ id: p.id, patch: { endpointEligible: v === true } })}
+          aria-label={`${p.name} endpoint-eligible`}
+        />
+      ),
+    },
+    {
+      header: 'Break',
+      headClassName: 'text-center',
+      cellClassName: 'text-center',
+      cell: (p) => (
+        <Checkbox
+          checked={p.breakEligible}
+          onCheckedChange={(v) => toggleMut.mutate({ id: p.id, patch: { breakEligible: v === true } })}
+          aria-label={`${p.name} break-eligible`}
+        />
+      ),
+    },
+    {
+      header: 'Featured',
+      headClassName: 'text-center',
+      cellClassName: 'text-center',
+      cell: (p) => (
+        <Checkbox
+          checked={p.featured}
+          onCheckedChange={(v) => toggleMut.mutate({ id: p.id, patch: { featured: v === true } })}
+          aria-label={`${p.name} featured`}
+        />
+      ),
+    },
+    {
+      header: '',
+      headClassName: 'w-10',
+      cell: (p) => (
+        <Button variant="ghost" size="icon" aria-label={`Remove ${p.name}`} onClick={() => void onDelete(p)}>
+          <Trash2 className="h-4 w-4 text-muted-foreground" />
+        </Button>
+      ),
+    },
+  ]
+
   return (
     <div>
       <PageHeader
@@ -149,73 +210,19 @@ export function PlacesView() {
         </div>
       )}
 
-      <div className="overflow-hidden rounded-xl border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Place</TableHead>
-              <TableHead>Kind</TableHead>
-              <TableHead className="text-center">Endpoint</TableHead>
-              <TableHead className="text-center">Break</TableHead>
-              <TableHead className="text-center">Featured</TableHead>
-              <TableHead className="w-10" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isPending && region ? (
-              <TableSkeletonRows rows={5} cols={6} />
-            ) : places.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={6}>
-                  <EmptyState icon={MapPin}>
-                    <div className="font-medium text-foreground">No curated places yet</div>
-                    <div>Run Curate to draft this region’s hubs + pitstops, or add a place by name.</div>
-                  </EmptyState>
-                </TableCell>
-              </TableRow>
-            ) : (
-              places.map((p) => (
-                <TableRow key={p.id}>
-                  <TableCell className="font-medium">
-                    <div className="flex items-center gap-2">
-                      {p.featured && <Star className="h-3.5 w-3.5" style={{ color: PLACE_PIN_COLORS.featured, fill: PLACE_PIN_COLORS.featured }} />}
-                      {p.name}
-                    </div>
-                    <div className="text-xs text-muted-foreground">{p.lat.toFixed(4)}, {p.lng.toFixed(4)}</div>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{kindLabel(p.primaryType)}</TableCell>
-                  <TableCell className="text-center">
-                    <Checkbox
-                      checked={p.endpointEligible}
-                      onCheckedChange={(v) => toggleMut.mutate({ id: p.id, patch: { endpointEligible: v === true } })}
-                      aria-label={`${p.name} endpoint-eligible`}
-                    />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Checkbox
-                      checked={p.breakEligible}
-                      onCheckedChange={(v) => toggleMut.mutate({ id: p.id, patch: { breakEligible: v === true } })}
-                      aria-label={`${p.name} break-eligible`}
-                    />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Checkbox
-                      checked={p.featured}
-                      onCheckedChange={(v) => toggleMut.mutate({ id: p.id, patch: { featured: v === true } })}
-                      aria-label={`${p.name} featured`}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Button variant="ghost" size="icon" aria-label={`Remove ${p.name}`} onClick={() => void onDelete(p)}>
-                      <Trash2 className="h-4 w-4 text-muted-foreground" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+      <DataTable
+        columns={columns}
+        rows={places}
+        rowKey={(p) => p.id}
+        loading={isPending && !!region}
+        skeletonRows={5}
+        empty={
+          <EmptyState icon={MapPin}>
+            <div className="font-medium text-foreground">No curated places yet</div>
+            <div>Run Curate to draft this region’s hubs + pitstops, or add a place by name.</div>
+          </EmptyState>
+        }
+      />
 
       {region && (
         <CurateDialog

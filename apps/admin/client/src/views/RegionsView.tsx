@@ -6,7 +6,7 @@ import { api, type BboxLlmResult, type BboxRefinement, type Region } from '@/lib
 import { errMsg } from '@/lib/format'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { PageHeader } from '@/components/PageHeader'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { DataTable, type Column } from '@/components/ui/data-table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -14,7 +14,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Callout } from '@/components/ui/callout'
 import { EmptyState } from '@/components/ui/empty-state'
-import { TableSkeletonRows } from '@/components/ui/skeleton'
 import { BboxMap } from '@/components/ui/leaflet-map'
 import {
   Dialog,
@@ -96,6 +95,84 @@ export function RegionsView() {
     if (ok) releaseMut.mutate(r.slug)
   }
 
+  const columns: Column<Region>[] = [
+    {
+      header: (
+        <Checkbox
+          checked={allChecked}
+          indeterminate={someChecked}
+          onCheckedChange={toggleAll}
+          aria-label="Select all regions"
+        />
+      ),
+      headClassName: 'w-10',
+      cellClassName: 'w-10',
+      cell: (r) => (
+        <Checkbox
+          checked={sel.has(r.slug)}
+          onCheckedChange={() => toggleRow(r.slug)}
+          aria-label={`Select ${r.displayName}`}
+        />
+      ),
+    },
+    { header: 'Slug', cellClassName: 'font-mono text-sm', cell: (r) => r.slug },
+    { header: 'Display name', cellClassName: 'font-medium', cell: (r) => r.displayName },
+    {
+      header: 'Discovery bbox',
+      cell: (r) =>
+        r.bbox ? (
+          <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{r.bbox}</code>
+        ) : (
+          <Badge variant="secondary">default (Tahoe)</Badge>
+        ),
+    },
+    {
+      header: <span title="POIs whose coords fall in this region's discovery bbox">POIs</span>,
+      cellClassName: 'font-mono text-sm tabular-nums',
+      cell: (r) =>
+        r.poiCount == null ? (
+          <span className="text-muted-foreground" title="No discovery bbox set">—</span>
+        ) : (
+          r.poiCount.toLocaleString()
+        ),
+    },
+    {
+      header: 'Status',
+      cell: (r) =>
+        r.releasedAt != null ? (
+          <Badge variant="success" title={`Released ${new Date(r.releasedAt).toLocaleString()}`}>
+            <CheckCircle2 className="h-3 w-3" /> Released
+          </Badge>
+        ) : (
+          <Badge variant="secondary">Draft</Badge>
+        ),
+    },
+    {
+      header: '',
+      headClassName: 'w-44',
+      cell: (r) => {
+        const released = r.releasedAt != null
+        return (
+          <div className="flex items-center justify-end gap-1">
+            <Button
+              variant={released ? 'ghost' : 'default'}
+              size="sm"
+              disabled={releaseMut.isPending}
+              onClick={() => void onRelease(r)}
+              title={released ? 'Release any clips staged since' : 'Open this region to the public (permanent)'}
+            >
+              <Rocket className="h-3.5 w-3.5" />
+              {released ? 'Release new' : 'Release'}
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setDialog({ mode: 'edit', region: r })}>
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        )
+      },
+    },
+  ]
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -143,98 +220,15 @@ export function RegionsView() {
         </div>
       )}
 
-      <div className="overflow-hidden rounded-xl border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-10">
-                <Checkbox
-                  checked={allChecked}
-                  indeterminate={someChecked}
-                  onCheckedChange={toggleAll}
-                  aria-label="Select all regions"
-                />
-              </TableHead>
-              <TableHead>Slug</TableHead>
-              <TableHead>Display name</TableHead>
-              <TableHead>Discovery bbox</TableHead>
-              <TableHead title="POIs whose coords fall in this region's discovery bbox">POIs</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="w-44" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isPending && <TableSkeletonRows rows={4} cols={7} />}
-            {regions.map((r) => {
-              const released = r.releasedAt != null
-              return (
-              <TableRow key={r.slug} className={cn(sel.has(r.slug) && 'bg-muted/40')}>
-                <TableCell className="w-10">
-                  <Checkbox
-                    checked={sel.has(r.slug)}
-                    onCheckedChange={() => toggleRow(r.slug)}
-                    aria-label={`Select ${r.displayName}`}
-                  />
-                </TableCell>
-                <TableCell className="font-mono text-sm">{r.slug}</TableCell>
-                <TableCell className="font-medium">{r.displayName}</TableCell>
-                <TableCell>
-                  {r.bbox ? (
-                    <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{r.bbox}</code>
-                  ) : (
-                    <Badge variant="secondary">default (Tahoe)</Badge>
-                  )}
-                </TableCell>
-                <TableCell className="font-mono text-sm tabular-nums">
-                  {r.poiCount == null ? (
-                    <span className="text-muted-foreground" title="No discovery bbox set">—</span>
-                  ) : (
-                    r.poiCount.toLocaleString()
-                  )}
-                </TableCell>
-                <TableCell>
-                  {released ? (
-                    <Badge variant="success" title={`Released ${new Date(r.releasedAt!).toLocaleString()}`}>
-                      <CheckCircle2 className="h-3 w-3" /> Released
-                    </Badge>
-                  ) : (
-                    <Badge variant="secondary">Draft</Badge>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center justify-end gap-1">
-                    <Button
-                      variant={released ? 'ghost' : 'default'}
-                      size="sm"
-                      disabled={releaseMut.isPending}
-                      onClick={() => void onRelease(r)}
-                      title={released ? 'Release any clips staged since' : 'Open this region to the public (permanent)'}
-                    >
-                      <Rocket className="h-3.5 w-3.5" />
-                      {released ? 'Release new' : 'Release'}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setDialog({ mode: 'edit', region: r })}
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-              )
-            })}
-            {!isPending && regions.length === 0 && !err && (
-              <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={7}>
-                  <EmptyState icon={Layers}>No regions yet — add one to get started.</EmptyState>
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
+      <DataTable
+        columns={columns}
+        rows={regions}
+        rowKey={(r) => r.slug}
+        loading={isPending}
+        skeletonRows={4}
+        rowClassName={(r) => (sel.has(r.slug) ? 'bg-muted/40' : undefined)}
+        empty={!err ? <EmptyState icon={Layers}>No regions yet — add one to get started.</EmptyState> : undefined}
+      />
 
       {dialog && (
         <RegionDialog

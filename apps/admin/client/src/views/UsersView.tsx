@@ -4,7 +4,7 @@ import { Coins, Users } from 'lucide-react'
 import { api, type UserRow } from '@/lib/api'
 import { errMsg, fmtDate, timeAgo } from '@/lib/format'
 import { PageHeader } from '@/components/PageHeader'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { DataTable, type Column } from '@/components/ui/data-table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,7 +12,6 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Callout } from '@/components/ui/callout'
 import { EmptyState } from '@/components/ui/empty-state'
-import { TableSkeletonRows } from '@/components/ui/skeleton'
 import {
   Dialog,
   DialogContent,
@@ -32,6 +31,59 @@ export function UsersView() {
     queryFn: async () => (await api.users()).users,
   })
 
+  const columns: Column<UserRow>[] = [
+    {
+      header: 'User',
+      cell: (u) => (
+        <div className="flex items-center gap-2">
+          <div className="min-w-0">
+            <div className="truncate font-medium">{userLabel(u)}</div>
+            {u.name?.trim() && u.email?.trim() && (
+              <div className="truncate text-xs text-muted-foreground">{u.email}</div>
+            )}
+          </div>
+          {u.role === 'admin' && <Badge variant="outline">admin</Badge>}
+          {u.isAnonymous && <Badge variant="secondary">anon</Badge>}
+          {u.banned && <Badge variant="destructive">banned</Badge>}
+        </div>
+      ),
+    },
+    {
+      header: <span title="Lifetime credits granted (free cap + any grants)">Granted</span>,
+      headClassName: 'text-right',
+      cellClassName: 'text-right font-mono text-sm tabular-nums',
+      cell: (u) => u.granted.toLocaleString(),
+    },
+    {
+      header: <span title="Credits consumed — drives generated">Used</span>,
+      headClassName: 'text-right',
+      cellClassName: 'text-right font-mono text-sm tabular-nums',
+      cell: (u) => u.used.toLocaleString(),
+    },
+    {
+      header: <span title="Live balance = granted − used">Remaining</span>,
+      headClassName: 'text-right',
+      cellClassName: 'text-right font-mono text-sm font-medium tabular-nums',
+      cell: (u) => u.remaining.toLocaleString(),
+    },
+    {
+      header: 'Joined',
+      cellClassName: 'text-muted-foreground',
+      cell: (u) => <span title={fmtDate(u.createdAt)}>{timeAgo(u.createdAt)}</span>,
+    },
+    {
+      header: '',
+      headClassName: 'w-36',
+      cell: (u) => (
+        <div className="flex justify-end">
+          <Button variant="ghost" size="sm" onClick={() => setGranting(u)}>
+            <Coins className="h-3.5 w-3.5" /> Grant credits
+          </Button>
+        </div>
+      ),
+    },
+  ]
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -45,58 +97,13 @@ export function UsersView() {
         </Callout>
       )}
 
-      <div className="overflow-hidden rounded-xl border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>User</TableHead>
-              <TableHead className="text-right" title="Lifetime credits granted (free cap + any grants)">Granted</TableHead>
-              <TableHead className="text-right" title="Credits consumed — drives generated">Used</TableHead>
-              <TableHead className="text-right" title="Live balance = granted − used">Remaining</TableHead>
-              <TableHead>Joined</TableHead>
-              <TableHead className="w-36" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isPending && <TableSkeletonRows rows={6} cols={6} />}
-            {users.map((u) => (
-              <TableRow key={u.id}>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <div className="min-w-0">
-                      <div className="truncate font-medium">{userLabel(u)}</div>
-                      {u.name?.trim() && u.email?.trim() && (
-                        <div className="truncate text-xs text-muted-foreground">{u.email}</div>
-                      )}
-                    </div>
-                    {u.role === 'admin' && <Badge variant="outline">admin</Badge>}
-                    {u.isAnonymous && <Badge variant="secondary">anon</Badge>}
-                    {u.banned && <Badge variant="destructive">banned</Badge>}
-                  </div>
-                </TableCell>
-                <TableCell className="text-right font-mono text-sm tabular-nums">{u.granted.toLocaleString()}</TableCell>
-                <TableCell className="text-right font-mono text-sm tabular-nums">{u.used.toLocaleString()}</TableCell>
-                <TableCell className="text-right font-mono text-sm font-medium tabular-nums">{u.remaining.toLocaleString()}</TableCell>
-                <TableCell className="text-muted-foreground" title={fmtDate(u.createdAt)}>{timeAgo(u.createdAt)}</TableCell>
-                <TableCell>
-                  <div className="flex justify-end">
-                    <Button variant="ghost" size="sm" onClick={() => setGranting(u)}>
-                      <Coins className="h-3.5 w-3.5" /> Grant credits
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-            {!isPending && users.length === 0 && !err && (
-              <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={6}>
-                  <EmptyState icon={Users}>No accounts yet.</EmptyState>
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
+      <DataTable
+        columns={columns}
+        rows={users}
+        rowKey={(u) => u.id}
+        loading={isPending}
+        empty={!err ? <EmptyState icon={Users}>No accounts yet.</EmptyState> : undefined}
+      />
 
       {granting && <GrantCreditsDialog user={granting} onClose={() => setGranting(null)} />}
     </div>
