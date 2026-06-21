@@ -196,12 +196,13 @@ export default function CreateDriveScreen() {
     }
   }, [proposal, router])
 
-  // Anchors filtered by the picker search (case-insensitive substring), sorted A→Z for browsability.
+  // Anchors filtered by the picker search (case-insensitive substring). FEATURED (the curated popular
+  // subset) float to the top, then A→Z for browsability — the short curated list is mostly tapping.
   const filtered = useMemo(() => {
     const all = anchors ?? []
     const q = query.trim().toLowerCase()
     const list = q ? all.filter((a) => a.name.toLowerCase().includes(q)) : all
-    return [...list].sort((a, b) => a.name.localeCompare(b.name))
+    return [...list].sort((a, b) => Number(b.featured) - Number(a.featured) || a.name.localeCompare(b.name))
   }, [anchors, query])
 
   const choose = (a: RegionAnchor) => {
@@ -373,9 +374,12 @@ export default function CreateDriveScreen() {
               accessibilityRole="button"
               accessibilityLabel={cleanPlaceName(item.name)}
             >
-              <Text variant="body" color="ink">
-                {cleanPlaceName(item.name)}
-              </Text>
+              <View style={styles.anchorName}>
+                <Text variant="body" color="ink">
+                  {cleanPlaceName(item.name)}
+                </Text>
+                {item.featured ? <Badge tone="amber" label="POPULAR" /> : null}
+              </View>
               {item.kind ? (
                 <Text variant="dim" color="inkFaint">
                   {item.kind}
@@ -574,6 +578,7 @@ const styles = StyleSheet.create({
   pickerHead: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginBottom: space.sm },
   search: { flex: 1 },
   anchorRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm, paddingVertical: space.md },
+  anchorName: { flexDirection: 'row', alignItems: 'center', gap: space.sm, flexShrink: 1 },
   pickerEmpty: { paddingVertical: space.lg },
   // Confirm
   mapFrame: { height: 240, borderRadius: radius.lg, borderWidth: border.hair, overflow: 'hidden' },

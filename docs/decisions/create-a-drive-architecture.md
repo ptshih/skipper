@@ -38,6 +38,18 @@ pre-gen aside/bracket library; route-demand cache. Product rationale + the decis
 > midpoint → the route materializes as start→midpoint→start (a real out-and-back, not a degenerate
 > zero-distance route). One-way mode disables "Plan the drive" when start == end.
 
+> **Curated-Places picker addendum (2026-06-20).** The pickable anchor SOURCE changed: the interim
+> picker read the 459-POI corpus (`loadRegionAnchors` over `narrations`⋈`pois`) — noisy, and it let an
+> endpoint land off any natural gateway. It now reads a per-region **CURATED set of Google Places**
+> (towns, marinas, lookouts) — the `places` table, role-tagged `endpoint_eligible`/`break_eligible`
+> + `featured`, coords RESOLVED + STORED once at curation, so the runtime picker makes ZERO live Places
+> calls. A new safe-by-default `curate-places` studio step (LLM draft → Places Autocomplete+Details
+> resolve, bbox-restricted → role-tagged upsert) builds the set; the founder prunes in admin. Region
+> membership stays point-in-bbox (geometry-first, no `region_id`). The wire shape is unchanged but for
+> `regionAnchor.featured` (the popular subset, floated to the top of the picker). `loadCorpusForRoute`
+> (the story layer that rides the route) is untouched. Full spec + the go-sequence:
+> [../specs/places-endpoints-spec.md](../specs/places-endpoints-spec.md).
+
 ## Context
 
 V2 inverts the hierarchy: **Roam** (ambient) + **Create a Drive** (on-demand A→B) are the first-day

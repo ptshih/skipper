@@ -1,12 +1,19 @@
 # Drive endpoints + pitstops from a curated Places set — Build Spec
 
-> **Status:** build-ready spec (2026-06-20), UNBUILT. Design walked through + settled with the founder
-> (2026-06-20): a **per-region CURATED set of Google Places** serves a drive's start / end / midpoint
-> AND its break/pitstops; the picker offers ONLY that set (Q6 resolved → curated, not open
-> autocomplete). Spike-validated (Places API (New) is enabled and returns clean Tahoe hubs — now used
-> at *curation* time, not runtime). SUPERSEDES the interim corpus-anchor picker (`loadRegionAnchors`
-> over the POI corpus / `GET /drives/anchors` / `regionAnchor` DTOs, shipped 2026-06-20). Pairs with
+> **Status:** CODE BUILT 2026-06-20 (steps 1, 2, 4, 5); the **Tahoe curation run (step 3) is
+> FOUNDER-GATED / PAID and still PENDING** — until it runs, `GET /drives/anchors` returns an empty set
+> (no curated `places` yet). Built: the `places` role markers + `featured` (migration 0033, NOT YET
+> applied to the shared DB), the safe-by-default `curate-places` studio CLI, the `GET /drives/anchors`
+> repoint to curated endpoint-eligible `places`, the `regionAnchor.featured` DTO field, and the mobile
+> featured-first picker. Design walked through + settled with the founder (2026-06-20): a **per-region
+> CURATED set of Google Places** serves a drive's start / end / midpoint AND its break/pitstops; the
+> picker offers ONLY that set (Q6 resolved → curated, not open autocomplete). Spike-validated (Places
+> API (New) is enabled and returns clean Tahoe hubs — used at *curation* time, not runtime). SUPERSEDES
+> the interim corpus-anchor picker (`loadRegionAnchors` over the POI corpus). Pairs with
 > `../decisions/create-a-drive-architecture.md` and the `places` / `detours` tables.
+>
+> **Go-sequence to finish (founder):** `bun run db:migrate` (apply 0033) → `curate-places --apply`
+> (paid; drafts + resolves the Tahoe set) → review/prune in admin → deploy. Mobile is already wired.
 
 ## Why
 

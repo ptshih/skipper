@@ -31,6 +31,13 @@ function uniqueIndexNames(table: PgTable): string[] {
     .filter((n): n is string => typeof n === 'string')
 }
 
+/** Every index name on a table (unique or not) — for asserting a (partial) index exists. */
+function indexNames(table: PgTable): string[] {
+  return getTableConfig(table)
+    .indexes.map((i) => i.config.name)
+    .filter((n): n is string => typeof n === 'string')
+}
+
 /** True if `dbName` carries a COLUMN-LEVEL `.unique()` (e.g. credit_entries.idempotency_key). These
  *  do NOT appear in `.indexes`, so `uniqueIndexNames` would miss them — this reads `column.isUnique`. */
 function columnIsUnique(table: PgTable, dbName: string): boolean {
@@ -157,6 +164,20 @@ describe('places / detours — break-anchor structural invariants', () => {
     for (const col of ['place_id', 'name', 'lat', 'lng']) {
       expect(columnByDbName(places, col).notNull).toBe(true)
     }
+  })
+  it('a place carries independent role flags (endpoint/break) + featured, all NOT NULL default false', () => {
+    // Two INDEPENDENT booleans (not a tri-value enum) so a place can be BOTH and the admin can prune
+    // one role without touching the other. NOT NULL + a default keeps the curate upsert + the picker
+    // query total (no null-role rows). See docs/specs/places-endpoints-spec.md.
+    for (const col of ['endpoint_eligible', 'break_eligible', 'featured']) {
+      const c = columnByDbName(places, col)
+      expect(c.notNull).toBe(true)
+      expect(c.hasDefault).toBe(true)
+      expect((c as { default?: unknown }).default).toBe(false)
+    }
+  })
+  it('the endpoint picker has a partial bbox index (places_endpoint_idx) for GET /drives/anchors', () => {
+    expect(indexNames(places)).toContain('places_endpoint_idx')
   })
   it('a detour is 1:1 with its place (UNIQUE place_id) and cascade-deletes with it', () => {
     expect(uniqueIndexNames(detours)).toContain('detours_place_uq')

@@ -50,8 +50,8 @@ product.** When a choice trades polish-for-the-builder against scale-for-a-marke
   {wikipedia, wikidata}); `(source, source_id)` is a secondary guard, not the arbiter (it survives a
   scenic↔story tier flip). Keep `source`/`source_id` for attribution — Wikipedia is **CC BY-SA**, so the
   studio pipeline MUST freeze credit in `narrations.attribution` for every wikipedia-sourced clip (legal,
-  not optional). Google break anchors are NOT pois — they're the `places` table (`google_places` =
-  attribution-only).
+  not optional). Google break anchors AND curated drive endpoints are NOT pois — they're the role-tagged
+  `places` table (`endpoint_eligible`/`break_eligible`; `google_places` = attribution-only).
 - **Persona lives in DELIVERY, never in FACTS.** "Make it funny" never loosens accuracy; a POI with thin/no
   Wikipedia is downgraded to scenic — **silence beats a hallucinated battle**. Persona, voice, and the one
   corny delivery are GENERATION parameters baked into the narration audio — never live playback toggles

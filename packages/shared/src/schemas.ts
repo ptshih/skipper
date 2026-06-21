@@ -144,14 +144,19 @@ const resolvedEndpoint = z.object({
   lng: z.number().min(-180).max(180),
 })
 
-/** GET /drives/anchors?regionId= — the pickable START/END anchors for a region: real, narratable
- *  places with exact coordinates. The rider picks FROM / TO from these (no free text, no geocoding),
- *  so endpoints are grounded by construction — there is no name→geocode hop left to mislocate them. */
+/** GET /drives/anchors?regionId= — the pickable START/END/MIDPOINT anchors for a region: a CURATED set
+ *  of recognizable Google Places (towns, marinas, lookouts) with coords RESOLVED + STORED at curation,
+ *  so the rider picks FROM / TO from a stored short list — no free text, no live geocoding/Places call,
+ *  endpoints grounded by construction. `kind` is the humanized Google `primary_type` (display only);
+ *  `featured` floats the popular subset to the top of the (short) picker. */
 export const regionAnchor = z.object({
   name: z.string(),
   lat: z.number(),
   lng: z.number(),
   kind: z.string().nullable(),
+  /** The curator-flagged popular subset, sorted to the top of the picker. `.default(false)` so an
+   *  older server (pre-curated-Places) still parses — the client just renders no featured section. */
+  featured: z.boolean().default(false),
 })
 export type RegionAnchor = z.infer<typeof regionAnchor>
 export const regionAnchorList = z.object({ anchors: z.array(regionAnchor) })

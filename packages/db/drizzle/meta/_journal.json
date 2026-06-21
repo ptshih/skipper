@@ -232,6 +232,13 @@
       "when": 1782016013674,
       "tag": "0032_adorable_diamondback",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1782020419814,
+      "tag": "0033_majestic_dark_beast",
+      "breakpoints": true
     }
   ]
 }

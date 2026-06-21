@@ -306,14 +306,18 @@ export const pois = pgTable(
 /*  places — Google break anchors (a DIFFERENT identity universe from pois)     */
 /* -------------------------------------------------------------------------- */
 
-// Break stops (rest/food/gas pull-offs) are NOT narratable POIs — they have no Wikidata QID, no
-// facts, and no story. They live here, in their OWN table, keyed by the Google `place_id` (this
-// table's QID-equivalent). SINGLE-SOURCE by design: only ever driven by Google Places — do not add
-// other sources here. A break clip credits the Places name via `narrations.attribution`
-// (`google_places`), but break NARRATIONS — when un-deferred — get their OWN `detours` table
-// (place-anchored break audio), NEVER the pois-bound `narrations` (which is 1:1 with a poi). Today
-// this is just the anchor cache; break-stop selection + audio (the `detours` table) are DEFERRED
-// (CLAUDE.md), so nothing references this at runtime yet.
+// The curated "real-world location" layer: recognizable Google Places — towns, marinas, scenic
+// lookouts, the known-good coffee/gas/rest stops — that anchor a drive's START / END / MIDPOINT
+// (ROLE = endpoint) AND its break/pitstops (ROLE = break). They are NOT narratable POIs: no Wikidata
+// QID, no facts, no story (POIs/`narrations` stay the separate Wikidata story layer). They live here,
+// keyed by the Google `place_id` (this table's QID-equivalent). SINGLE-SOURCE by design: only ever
+// driven by Google Places — do not add other sources here. Coords + `name`/`primary_type` are RESOLVED
+// + STORED ONCE at curation (the `curate-places` studio step), so the runtime picker reads a stored
+// list with ZERO live Places calls (no autocomplete/Details/session tokens). A break clip credits the
+// Places name via `narrations.attribution` (`google_places`); break NARRATIONS — when un-deferred — get
+// their OWN `detours` table (place-anchored break audio), NEVER the pois-bound `narrations` (1:1 with a
+// poi). A curated place belongs to a region by POINT-IN-BBOX (geometry-first; no region_id FK,
+// consistent with `pois`). See docs/specs/places-endpoints-spec.md + decisions/create-a-drive-architecture.md.
 export const places = pgTable(
   'places',
   {
@@ -321,11 +325,21 @@ export const places = pgTable(
     // The Google Places API id (the "PID") — this table's canonical identity + dedup key.
     placeId: text('place_id').notNull(),
     name: text('name').notNull(),
-    // Google `primaryType` (e.g. 'american_restaurant') — the raw category; the SPOKEN kind is
-    // derived from it (studio's `spokenKind`) at use, not stored. Nullable: Places may omit it.
+    // Google `primaryType` (e.g. 'american_restaurant', 'locality', 'marina') — the raw category; the
+    // SPOKEN break kind is derived from it (studio's `spokenKind`) at use, not stored. Nullable: Places may omit it.
     primaryType: text('primary_type'),
     lat: doublePrecision('lat').notNull(),
     lng: doublePrecision('lng').notNull(),
+    // ROLE markers — two INDEPENDENT eligibility flags rather than one tri-value, so a place can be
+    // BOTH (a marina that's a start hub AND a pitstop) and the admin can prune one role without
+    // touching the other. `endpoint_eligible` = pickable as a drive START/END/MIDPOINT; `break_eligible`
+    // = a curated break/pitstop anchor (deferred consumer). The `curate-places` step sets these; a
+    // freshly-resolved row defaults to neither until the curator tags it.
+    endpointEligible: boolean('endpoint_eligible').notNull().default(false),
+    breakEligible: boolean('break_eligible').notNull().default(false),
+    // The popular subset floated to the TOP of the (short) curated picker — a curator judgment today
+    // (usage-derived "most-picked floats up" is deferred; see the spec). Surfaced on the anchor DTO.
+    featured: boolean('featured').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .defaultNow()
@@ -337,6 +351,11 @@ export const places = pgTable(
     uniqueIndex('places_place_id_uq').on(t.placeId),
     // Bounding-box prefilter for along-route break search.
     index('places_lat_lng_idx').on(t.lat, t.lng),
+    // PARTIAL bbox index over endpoint-eligible rows — the GET /drives/anchors query (endpoint picker
+    // in a region bbox). Mirrors the partial-index idiom used on studio_jobs.
+    index('places_endpoint_idx')
+      .on(t.lat, t.lng)
+      .where(sql`${t.endpointEligible}`),
   ],
 )
 

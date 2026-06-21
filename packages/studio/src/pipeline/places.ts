@@ -18,6 +18,8 @@
 import { fetchWithRetry } from './http'
 
 const SEARCH_TEXT_URL = 'https://places.googleapis.com/v1/places:searchText'
+const AUTOCOMPLETE_URL = 'https://places.googleapis.com/v1/places:autocomplete'
+const PLACE_DETAILS_URL = 'https://places.googleapis.com/v1/places'
 /** Per-attempt timeout (ms). Break-anchor search is non-fatal, but a HUNG call never throws —
  *  so generate.ts's try/catch can't skip past it; only a finite timeout can. Small payloads. */
 const REQUEST_TIMEOUT_MS = 15_000
@@ -117,6 +119,124 @@ export async function searchBreakStops(
     }
   }
   return [...byId.values()]
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Curation-time resolution — name → a stored, coord-bearing curated Place      */
+/* -------------------------------------------------------------------------- */
+//
+// The `curate-places` studio step resolves an LLM-drafted place NAME into a canonical Google
+// Place ONCE, offline, and stores the result (place_id + name + coords + primaryType). At runtime
+// the picker reads those stored rows with ZERO Places calls — so this whole module is curation-only.
+// Two calls per name: Autocomplete (New) bbox-restricted → the best place_id, then Place Details
+// (id,location,displayName,primaryType field mask) → canonical coords + name + type. The spike
+// (2026-06-20) validated both against the Tahoe bbox.
+
+/** A region bounding box as Places rectangle corners (the studio RegionBbox shape, kept local so
+ *  this pure-HTTP module stays decoupled from the db-backed region resolver). */
+export interface PlacesBbox {
+  swLng: number
+  swLat: number
+  neLng: number
+  neLat: number
+}
+
+/** A resolved, storable curated place — the `curate-places` upsert payload (no volatile fields). */
+export interface CuratedPlace {
+  placeId: string
+  name: string
+  lat: number
+  lng: number
+  primaryType?: string
+}
+
+/** Best place_id for a query, restricted to the region bbox (so "tahoe city" can't resolve to a
+ *  Tahoe City elsewhere). Returns null when Autocomplete yields no prediction. */
+async function autocompletePlaceId(input: string, bbox: PlacesBbox, apiKey: string): Promise<string | null> {
+  const res = await fetchWithRetry(
+    AUTOCOMPLETE_URL,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': apiKey },
+      body: JSON.stringify({
+        input,
+        // Hard-restrict to the region rectangle (not just bias) — a curated set is region-scoped.
+        locationRestriction: {
+          rectangle: {
+            low: { latitude: bbox.swLat, longitude: bbox.swLng },
+            high: { latitude: bbox.neLat, longitude: bbox.neLng },
+          },
+        },
+        includeQueryPredictions: false,
+      }),
+    },
+    { timeoutMs: REQUEST_TIMEOUT_MS },
+  )
+  const json = (await res.json()) as {
+    error?: { status: string; message: string }
+    suggestions?: { placePrediction?: { placeId?: string } }[]
+  }
+  if (!res.ok || json.error) {
+    const e = json.error
+    throw new Error(`Places autocomplete ${res.status}: ${e ? `${e.status} — ${e.message}` : 'unknown error'}`)
+  }
+  for (const s of json.suggestions ?? []) {
+    if (s.placePrediction?.placeId) return s.placePrediction.placeId
+  }
+  return null
+}
+
+/** Canonical coords + name + primaryType for a place_id (Essentials/Pro field mask; `place_id` is
+ *  storable indefinitely per the Places policy). Returns null if Details omits a location. */
+async function placeDetails(placeId: string, apiKey: string): Promise<CuratedPlace | null> {
+  const res = await fetchWithRetry(
+    `${PLACE_DETAILS_URL}/${encodeURIComponent(placeId)}`,
+    {
+      method: 'GET',
+      headers: {
+        'X-Goog-Api-Key': apiKey,
+        'X-Goog-FieldMask': 'id,location,displayName,primaryType',
+      },
+    },
+    { timeoutMs: REQUEST_TIMEOUT_MS },
+  )
+  const json = (await res.json()) as {
+    error?: { status: string; message: string }
+    id?: string
+    location?: { latitude: number; longitude: number }
+    displayName?: { text: string }
+    primaryType?: string
+  }
+  if (!res.ok || json.error) {
+    const e = json.error
+    throw new Error(`Places details ${res.status}: ${e ? `${e.status} — ${e.message}` : 'unknown error'}`)
+  }
+  if (!json.id || !json.location || !json.displayName?.text) return null
+  return {
+    placeId: json.id,
+    name: json.displayName.text,
+    lat: json.location.latitude,
+    lng: json.location.longitude,
+    primaryType: json.primaryType,
+  }
+}
+
+/** Resolve an LLM-drafted place NAME to a stored CuratedPlace within the region bbox, or null if it
+ *  can't be pinned in-region (no prediction, missing details, or — a Details-coords guard — the
+ *  canonical point lands OUTSIDE the bbox even though Autocomplete biased toward it). Non-fatal:
+ *  the caller logs + drops an unresolved draft. */
+export async function resolveCuratedPlace(
+  query: string,
+  bbox: PlacesBbox,
+  apiKey: string,
+): Promise<CuratedPlace | null> {
+  const placeId = await autocompletePlaceId(query, bbox, apiKey)
+  if (!placeId) return null
+  const place = await placeDetails(placeId, apiKey)
+  if (!place) return null
+  const inBbox =
+    place.lat >= bbox.swLat && place.lat <= bbox.neLat && place.lng >= bbox.swLng && place.lng <= bbox.neLng
+  return inBbox ? place : null
 }
 
 /**

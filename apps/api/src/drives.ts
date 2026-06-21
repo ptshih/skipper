@@ -20,7 +20,7 @@
 import { Hono, type Context } from 'hono'
 import { and, between, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
-import { creditEntries, drives, driveDemand, narrations, pois, regions } from '@skipper/db/schema'
+import { creditEntries, drives, driveDemand, narrations, places, pois, regions } from '@skipper/db/schema'
 import type { DriveSelection, DriveSelectionItem, Polyline, RouteProvenance } from '@skipper/db/schema'
 import { polylineBbox } from './drive-geometry'
 import { materializeRoute, type Waypoint } from '@skipper/routing'
@@ -71,30 +71,34 @@ function toClipForm(form: string): DriveClipForm {
   }
 }
 
-/** Narratable anchors in a region's bbox — the pickable START/END candidates served to the client
- *  (GET /drives/anchors). Each is a real, recognizable place with exact coords + live narration
- *  content; the rider picks FROM/TO from these, so endpoints are grounded by construction (no
- *  free-text, no geocode hop to mislocate them). Admins see staged anchors too, mirroring
- *  loadCorpusForRoute. */
-async function loadRegionAnchors(bbox: string | null, includeStaged: boolean): Promise<RegionAnchor[]> {
+/** The pickable START/END/MIDPOINT anchors in a region's bbox — served to the client (GET
+ *  /drives/anchors). These are the region's CURATED set of endpoint-eligible `places` (real,
+ *  recognizable Google hubs — towns, marinas, lookouts — curated offline by `curate-places`), with
+ *  coords RESOLVED + STORED at curation. So the rider picks FROM/TO from a stored short list with NO
+ *  runtime Places call and NO geocode hop — endpoints are grounded by construction. Region membership
+ *  is point-in-bbox (geometry-first; `places` carries no region_id). `kind` is the humanized Google
+ *  `primary_type` (display only); `featured` floats the popular subset to the top of the picker.
+ *  (SUPERSEDES the interim POI-corpus join — see docs/specs/places-endpoints-spec.md.) */
+async function loadRegionAnchors(bbox: string | null): Promise<RegionAnchor[]> {
   const p = (bbox ?? '').split(',').map(Number)
   if (p.length !== 4 || p.some((n) => !Number.isFinite(n))) return []
   const [lngMin, latMin, lngMax, latMax] = p as [number, number, number, number]
-  return withRetry(
+  const rows = await withRetry(
     () =>
       db
-        .select({ name: pois.name, lat: pois.lat, lng: pois.lng, kind: pois.kind })
-        .from(narrations)
-        .innerJoin(pois, eq(pois.id, narrations.poiId))
-        .where(
-          and(
-            between(pois.lat, latMin, latMax),
-            between(pois.lng, lngMin, lngMax),
-            includeStaged ? undefined : isNotNull(narrations.releasedAt),
-          ),
-        ),
+        .select({ name: places.name, lat: places.lat, lng: places.lng, primaryType: places.primaryType, featured: places.featured })
+        .from(places)
+        .where(and(eq(places.endpointEligible, true), between(places.lat, latMin, latMax), between(places.lng, lngMin, lngMax))),
     { label: 'drive.anchors' },
   )
+  return rows.map((r) => ({
+    name: r.name,
+    lat: r.lat,
+    lng: r.lng,
+    // Humanize the raw Google primaryType for the picker subtitle (e.g. 'scenic_spot' → 'scenic spot'); null when absent.
+    kind: r.primaryType ? r.primaryType.replace(/_/g, ' ') : null,
+    featured: r.featured,
+  }))
 }
 
 /** A resolved endpoint (a picked anchor). */
@@ -264,7 +268,9 @@ driveRoutes.get('/anchors', async (c) => {
   )
   const region = regionRows[0]
   if (!region) return c.json({ error: 'not_found', message: 'Unknown region.' }, 404)
-  const anchors = await loadRegionAnchors(region.bbox, isAdmin(c.get('session')))
+  // Curated endpoints have no staging concept (they're admin-curated, not generated) — no admin/staged
+  // branch here, unlike loadCorpusForRoute.
+  const anchors = await loadRegionAnchors(region.bbox)
   return c.json({ anchors } satisfies { anchors: RegionAnchor[] })
 })
 
