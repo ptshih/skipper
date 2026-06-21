@@ -19,7 +19,7 @@ import { withRetry } from './retry'
 // a one-time credit pack is the planned unlock (IAP/Play fast-follow); 'paid' is uncapped today.
 // Admin-tunable via env. NOTE: a grant's amount is frozen when it's written (the ledger is immutable),
 // so raising this only affects users not yet granted.
-export const FREE_DRIVE_CAP = Number(process.env.FREE_DRIVE_CAP ?? 10)
+export const FREE_DRIVE_CAP = Number(process.env.FREE_DRIVE_CAP ?? 100)
 
 /** Idempotency key for a user's one free-tier grant (so the lazy grant is exactly-once). */
 const freeGrantKey = (userId: string) => `free:${userId}`

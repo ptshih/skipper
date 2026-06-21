@@ -39,7 +39,7 @@ product.** When a choice trades polish-for-the-builder against scale-for-a-marke
   Better Auth (freemium: anonymous → free → paid `user.tier`). ROAM is the open anonymous front door. A
   **DRIVE is user-OWNED** (`drives.user_id`, never a shared content table); **creating one needs a free
   account** — the whole `/drives*` sub-app is behind `requireAccount` (anonymous = roam only). Free credits
-  are an append-only `credit_entries` ledger (a lazy `FREE_DRIVE_CAP`=10 grant, −1 at `POST /drives`
+  are an append-only `credit_entries` ledger (a lazy `FREE_DRIVE_CAP`=100 grant, −1 at `POST /drives`
   co-committed with the drive via `db.batch`; `idempotency_key` UNIQUE = exactly-once; **delete never
   refunds**); beyond the cap → a purchased pack (provider-agnostic IAP, deferred). Audio is PRIVATE in R2
   (presigned, short TTL, after the tier check). See `docs/decisions/credit-ledger.md`.
