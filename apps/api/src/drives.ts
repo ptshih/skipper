@@ -39,7 +39,7 @@ import {
   type DriveClipForm,
   type DriveManifest,
 } from '@skipper/shared'
-import { isTester, requireAccount, withSession, type ApiEnv } from './entitlements'
+import { isAdmin, requireAccount, withSession, type ApiEnv } from './entitlements'
 import { FREE_DRIVE_CAP, creditSummary, driveConsumeEntry, ensureFreeGrant } from './credits'
 import { withRetry } from './retry'
 import { contentTypeForKey, presignGet } from './storage'
@@ -183,7 +183,7 @@ interface NarrationRow {
  *  prefilter beats PostGIS. Keyed by poiId (the buildDrive ⇄ narration join).
  *
  *  Release gate (region-release-gate): by default only RELEASED clips (released_at NOT NULL) are
- *  eligible, so a non-tester's drive can never pick up a staged clip. `includeStaged` (a tester) lifts
+ *  eligible, so a non-admin's drive can never pick up a staged clip. `includeStaged` (an admin) lifts
  *  the filter. The build-time filter is sufficient — drives are owner-only and release is monotonic, so
  *  a built drive's clips stay valid forever; the drive-load resolve path needs no further filter. */
 
@@ -357,8 +357,8 @@ driveRoutes.post('/propose', async (c) => {
   }
 
   // Accurate est. stop count: run the real selection (pure, free) so the confirm screen matches.
-  // A tester previews over staged clips too, so the proposed count matches what they'll build.
-  const corpus = await loadCorpusForRoute(route.polyline, isTester(c.get('session')))
+  // An admin previews over staged clips too, so the proposed count matches what they'll build.
+  const corpus = await loadCorpusForRoute(route.polyline, isAdmin(c.get('session')))
   const stops = buildDrive({
     polyline: route.polyline,
     totalSec: route.durationSeconds,
@@ -451,9 +451,9 @@ driveRoutes.post('/', async (c) => {
     return c.json({ error: 'no_route', message: "Couldn't find a drivable route between those points." }, 422)
   }
 
-  // Release gate: a tester builds over staged clips too; everyone else gets released-only. The frozen
+  // Release gate: an admin builds over staged clips too; everyone else gets released-only. The frozen
   // selection then references whatever was eligible at build time (monotonic → stays valid). (region-release-gate)
-  const corpus = await loadCorpusForRoute(route.polyline, isTester(c.get('session')))
+  const corpus = await loadCorpusForRoute(route.polyline, isAdmin(c.get('session')))
   const stops = buildDrive({
     polyline: route.polyline,
     totalSec: route.durationSeconds,

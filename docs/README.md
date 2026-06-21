@@ -74,9 +74,10 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   redesigned for V2; admin surfaces the runs + per-poi report. DECIDED + BUILT 2026-06-19.
 - [region-release-gate.md](decisions/region-release-gate.md) — a one-way release latch so regions roll
   out slowly: `regions.released_at` + `narrations.released_at` (monotonic, never un-released = no drive
-  orphans / no yanked downloads), a `user.tester` preview flag (founder + allowlist hear staged content
-  in-app), releasing a region auto-releases all its clips. The *human* gate downstream of the automated
-  eval gate. ✅ BUILT 2026-06-20 (migration `0029`; not yet applied to the shared DB).
+  orphans / no yanked downloads), the admin `role` as the preview gate (founder + allowlist hear staged
+  content in-app), releasing a region auto-releases all its clips. The *human* gate downstream of the
+  automated eval gate. ✅ BUILT 2026-06-20; preview gate moved from `user.tester` → the Better Auth
+  `admin` plugin role 2026-06-20 (migration `0030`).
 - [corpus-enrichment.md](decisions/corpus-enrichment.md) — the paid `enrich` step that scouts story
   POIs into curated fact wells (`pois.fact_sheet`) shared by roam + drives; ✅ BUILT 2026-06-15, RUN
   2026-06-16 (315 welled).

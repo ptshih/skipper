@@ -245,9 +245,19 @@ export const voice = {
       'Auto rides with your phone — dusk-dark when the sun clocks out, bright by day. Pin Day or Dusk to hold one mood.',
     credits: 'CREDITS',
     creditsAction: 'Sources & licenses', // → /legal
-    // Developer section: the sim-mode toggle (Settings → Developer). Visible on every
-    // build for now (zero real users) — gate before GA if it ever needs hiding.
+    // Developer: an admin-only sub-screen (Settings → Developer → /developer), gated on the
+    // server-set user.role (Better Auth admin plugin) === 'admin'. `developer` labels the entry
+    // row; the controls (sim GPS + diagnostics) live on the sub-screen. They used to sit inline
+    // on Settings for everyone — they moved behind the gate once the admin role existed.
     developer: 'DEVELOPER',
+    developerAction: 'Developer tools', // → /developer (admin-only)
+    developerTitle: 'Developer',
+    developerIntro:
+      'Admin-only tools. These ride along with you on field drives — leave them off unless you’re testing.',
+    developerLoading: 'Checking your credentials…',
+    developerLocked: 'These tools are for admins only.',
+    simModeLabel: 'SIMULATED GPS',
+    diagnosticsLabel: 'DIAGNOSTICS',
     developerHint:
       'Simulated GPS replays a recorded Tahoe drive through the real engine — test free-roam and the live drive from the couch, no car required. Takes effect next time you start one.',
     simModeReal: 'Real GPS',

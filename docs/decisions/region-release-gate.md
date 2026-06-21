@@ -1,13 +1,15 @@
 # Region release gate — staged content + a one-way release latch
 
-> **Status:** ✅ BUILT 2026-06-20 (migration `0029`, **NOT yet applied to the shared DB** — `db:migrate`
-> is a deliberate operator step). Founder-approved model: auto-release every clip in a region on
-> release; `user.tester` as the preview flag. Adds a *human* release gate downstream of the automated
-> eval gate (`docs/decisions/automated-grounding-gate.md`): the eval gate decides "safe to persist,"
-> this gate decides "ready for the public." Schema (`regions.released_at`, `narrations.released_at`,
-> `user.tester`) + the backfill, the roam/drive read filters + the `isTester` plumbing, and the admin
-> Release actions (region + per-clip) are all in. Build refinement vs. the original design: the drive
-> read filter is applied at BUILD time only — see Read-path changes.
+> **Status:** ✅ BUILT 2026-06-20 (migration `0029`, applied to the shared DB). Founder-approved model:
+> auto-release every clip in a region on release. **Preview gate UPDATED 2026-06-20:** the per-user
+> preview flag moved from a bespoke `user.tester` boolean → the **Better Auth `admin` plugin role**
+> (`role === 'admin'`), so "preview staged content" is now one facet of being an admin (migration `0030`
+> drops `tester`, adds `role`/`banned`/`ban_*` + `session.impersonated_by`). Adds a *human* release gate
+> downstream of the automated eval gate (`docs/decisions/automated-grounding-gate.md`): the eval gate
+> decides "safe to persist," this gate decides "ready for the public." Schema (`regions.released_at`,
+> `narrations.released_at`, `user.role`) + the backfill, the roam/drive read filters + the `isAdmin`
+> plumbing, and the admin Release actions (region + per-clip) are all in. Build refinement vs. the
+> original design: the drive read filter is applied at BUILD time only — see Read-path changes.
 
 ## The problem
 
@@ -39,11 +41,12 @@ Two write-once timestamps carry the whole thing:
   (`released_at IS NOT NULL`) — so the geometry-first region model (`docs/decisions/geometry-first-regions.md`)
   stays untouched: no `region_id`, no region-bbox intersection at read time.
 
-Plus one orthogonal user flag for who gets to preview:
+Plus one role for who gets to preview:
 
-- **`user.tester`** (`boolean`, default `false`, server-set `input:false` like `tier`) — orthogonal to
-  the payment tier (anonymous/free/paid). A previewer (founder + a small TestFlight allowlist) skips the
-  `released_at` filter and hears staged content **in the real app**.
+- **`user.role === 'admin'`** (Better Auth `admin` plugin; `role` is server-set `input:false` like
+  `tier`) — orthogonal to the payment tier (anonymous/free/paid). An admin (founder + a small allowlist)
+  skips the `released_at` filter and hears staged content **in the real app**. (Originally a bespoke
+  `user.tester` boolean; folded into the admin role 2026-06-20 — preview is now an admin capability.)
 
 `regions.released_at` is the *control surface*; `narrations.released_at` is the *enforced bit*. They
 connect through one action: **releasing a region stamps `regions.released_at` AND bulk-stamps
@@ -55,7 +58,7 @@ release (or a deliberate per-clip release within an already-released region) —
 ## The lifecycle
 
 1. **Draft region.** Create the region (`released_at` NULL), discover/enrich/generate, tweak POIs. Every
-   clip is staged → invisible to the public. The founder + `tester` users hear *all* of it in the app.
+   clip is staged → invisible to the public. The founder + admin (`role==='admin'`) users hear *all* of it in the app.
 2. **Release the region.** One admin action latches `regions.released_at` and bulk-stamps every staged
    clip's `released_at` — the whole ear-checked corpus goes public at once.
 3. **After release** — two sub-cases, and the split is the orphan guard:
@@ -77,16 +80,16 @@ The release filter is applied **everywhere a narration is resolved for playback*
 it uniformly:
 
 - **`GET /roam`** (`apps/api/src/index.ts`) — add `isNotNull(narrations.releasedAt)` to the WHERE. Roam
-  is currently open/anonymous, so add an *optional* session read: a logged-in `tester` skips the filter;
-  anonymous + non-tester users get released-only.
+  is currently open/anonymous, so add an *optional* session read: a logged-in admin skips the filter;
+  anonymous + non-admin users get released-only.
 - **`buildDrive` corpus load** (`loadCorpusForRoute`, `apps/api/src/drives.ts`) — same
-  `isNotNull(narrations.releasedAt)` unless the caller is a `tester` (threaded as `includeStaged`).
+  `isNotNull(narrations.releasedAt)` unless the caller is an admin (threaded as `includeStaged`).
   Applied to BOTH `/drives/propose` (so the estimate matches) and `POST /drives`. **The build-time filter
-  is sufficient — the drive-load resolve path is left unfiltered.** Why that's safe: a non-tester can
+  is sufficient — the drive-load resolve path is left unfiltered.** Why that's safe: a non-admin can
   never get a staged clip into a drive (the corpus excludes them), drives are owner-only, and release is
   monotonic (a built drive's clips only ever move forward to public, never vanish). So nothing the load
-  path resolves is ever a leaked/orphaned staged clip. The one edge — *removing* the `tester` flag from a
-  user who saved a staged-clip drive — is acceptable and admin-only.
+  path resolves is ever a leaked/orphaned staged clip. The one edge — *demoting* an admin (clearing the
+  role) who saved a staged-clip drive — is acceptable and admin-only.
 - **Admin** (`apps/admin`, behind IAP) — no change; the console always sees staged content (it's the
   audition surface today via `GET /admin/pois/:poiId/narration`).
 
@@ -112,7 +115,7 @@ public, a staged clip stays staged. (`audio_url`, `script`, `facts_hash`, `attri
 
 `released_at` defaults `NULL`, so a naive add would instantly un-publish the currently-live Tahoe corpus
 (~459 clips, live on TestFlight). The migration **must backfill**: stamp `regions.released_at = now()` for
-`lake-tahoe` and `narrations.released_at = now()` for every existing row, so nothing the public/testers
+`lake-tahoe` and `narrations.released_at = now()` for every existing row, so nothing the public/admins
 already have gets yanked (the monotonic invariant, applied to the migration itself). New regions created
 after this ship begin in draft. ("No users yet — break storage freely" still applies to the *shape*; the
 backfill is about not regressing what's already shipped, not back-compat.)
@@ -126,7 +129,7 @@ Two gates, in series, with clean responsibilities:
 2. **Release gate** (this doc) — *"ready for the public?"* A persisted clip is **staged** until a human
    releases it (or its region is released).
 
-Pipeline: **auto-gate → staged → (founder/tester ear) → released.** The eval gate is automatic and
+Pipeline: **auto-gate → staged → (founder/admin ear) → released.** The eval gate is automatic and
 per-clip; the release gate is human and region-first.
 
 ## Deferred (not in v1)

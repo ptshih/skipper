@@ -14,12 +14,15 @@ export const user = pgTable("user", {
     .notNull(),
   isAnonymous: boolean("is_anonymous").default(false),
   tier: text("tier").default("free"),
-  // Preview allowlist (region-release-gate): a tester hears STAGED (not-yet-released) content in the
-  // real app — the public read paths (GET /roam, buildDrive corpus) skip the released_at filter for
-  // these users. Orthogonal to `tier` (the payment axis); server-set only (Better Auth input:false),
-  // toggled by hand for the founder + a small TestFlight allowlist. See
-  // docs/decisions/region-release-gate.md.
-  tester: boolean("tester").default(false),
+  // Better Auth `admin` plugin fields (server-set, input:false). `role` is the access role
+  // ('user' default, 'admin' for the founder/allowlist); role==='admin' ALSO doubles as the
+  // region-release-gate preview check (an admin hears STAGED content in-app — see `isAdmin` in
+  // apps/api/src/tiers.ts + docs/decisions/region-release-gate.md). ban* are the plugin's
+  // account-ban columns (unused today, part of the plugin's schema).
+  role: text("role"),
+  banned: boolean("banned").default(false),
+  banReason: text("ban_reason"),
+  banExpires: timestamp("ban_expires"),
 });
 
 export const session = pgTable(
@@ -37,6 +40,8 @@ export const session = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
+    // Better Auth `admin` plugin: set while an admin is impersonating this user's session.
+    impersonatedBy: text("impersonated_by"),
   },
   (table) => [index("session_userId_idx").on(table.userId)],
 );

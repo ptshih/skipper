@@ -24,7 +24,7 @@ import { narrations, pois, regions } from '@skipper/db/schema'
 import { radiusForKind } from '@skipper/engine'
 import { auth } from './auth'
 import { driveRoutes } from './drives'
-import { isTester, withSession, type ApiEnv } from './entitlements'
+import { isAdmin, withSession, type ApiEnv } from './entitlements'
 import { rateLimit } from './rate-limit'
 import { withRetry } from './retry'
 import { DATA_SOURCES } from './sources'
@@ -110,7 +110,7 @@ function haversineMeters(aLat: number, aLng: number, bLat: number, bLng: number)
 // bbox prefilter + haversine beats dragging in PostGIS.
 // ALPHA: OPEN, like ?preview=1 (founder TestFlight toy; no UI links it for anyone else).
 // When roam ships for real it takes the live-drive wall (free account), same as /drives.
-// withSession runs (fail-open) so a logged-in `tester` is recognized — testers hear STAGED clips,
+// withSession runs (fail-open) so a logged-in admin is recognized — admins hear STAGED clips,
 // everyone else gets released-only (the released_at filter below). See region-release-gate.
 app.use('/roam', rateLimit({ limit: 60, windowSec: 60, label: 'roam' }), withSession)
 app.get('/roam', async (c) => {
@@ -128,9 +128,9 @@ app.get('/roam', async (c) => {
   const cosLat = Math.cos((lat * Math.PI) / 180)
   const dLng = Math.abs(cosLat) > 1e-6 ? radiusKm / (111.32 * cosLat) : 180
 
-  // Release gate: serve only RELEASED clips (released_at NOT NULL) to the public; a `tester` bypasses
+  // Release gate: serve only RELEASED clips (released_at NOT NULL) to the public; an admin bypasses
   // it and hears staged content in-app. (region-release-gate)
-  const canPreview = isTester(c.get('session'))
+  const canPreview = isAdmin(c.get('session'))
 
   const rows = await withRetry(
     () =>

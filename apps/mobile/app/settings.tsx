@@ -2,9 +2,8 @@ import { useEffect, useState } from 'react'
 import { StyleSheet, View } from 'react-native'
 import { Stack, useRouter } from 'expo-router'
 import { signOut, updateUser, useSession } from '@/lib/auth'
-import { useSimMode } from '@/lib/sim-mode'
 import { space } from '@/theme/tokens'
-import { Button, DiagnosticsPicker, Input, Screen, SimModePicker, Text, ThemeModePicker, voice } from '@/ui'
+import { Button, Input, Screen, Text, ThemeModePicker, voice } from '@/ui'
 
 // Settings — the deliberate, parked-context home for preferences + account. The home
 // body stays 100% drive-focused, so identity ("Riding as …") and the rare/destructive
@@ -13,7 +12,9 @@ import { Button, DiagnosticsPicker, Input, Screen, SimModePicker, Text, ThemeMod
 export default function SettingsScreen() {
   const router = useRouter()
   const { data: session } = useSession()
-  const { simMode, setSimMode, showDiag, setShowDiag } = useSimMode()
+  // Developer tools are admin-only. `role` is server-set (Better Auth admin plugin) and only
+  // 'admin' on the founder/allowlist, so this excludes anonymous + plain free riders on its own.
+  const isAdmin = session?.user?.role === 'admin'
 
   // Name is optional and lives HERE, not at sign-up. Seed the field from the saved
   // name and re-sync whenever it changes — a successful save pings $sessionSignal,
@@ -134,19 +135,18 @@ export default function SettingsScreen() {
         />
       </View>
 
-      <View style={styles.section}>
-        <Text variant="label" color="inkFaint">
-          {voice.settings.developer}
-        </Text>
-        <SimModePicker value={simMode} onChange={setSimMode} />
-        <Text variant="dim" color="inkFaint">
-          {voice.settings.developerHint}
-        </Text>
-        <DiagnosticsPicker value={showDiag} onChange={setShowDiag} />
-        <Text variant="dim" color="inkFaint">
-          {voice.settings.showDiagHint}
-        </Text>
-      </View>
+      {isAdmin ? (
+        <View style={styles.section}>
+          <Text variant="label" color="inkFaint">
+            {voice.settings.developer}
+          </Text>
+          <Button
+            variant="secondary"
+            title={voice.settings.developerAction}
+            onPress={() => router.push('/developer')}
+          />
+        </View>
+      ) : null}
     </Screen>
   )
 }

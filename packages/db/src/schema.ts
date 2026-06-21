@@ -467,7 +467,7 @@ export const narrations = pgTable(
     // The release latch (region-release-gate). NULL = STAGED (auto-gate passed + persisted, but not
     // public): generation always writes NULL, so a fresh/regenerated telling lands staged. Non-null =
     // RELEASED: the public read paths (GET /roam, buildDrive corpus) serve a clip ONLY when this is set;
-    // a `tester` user bypasses the filter and hears staged clips in-app. MONOTONIC by invariant — only
+    // an admin user bypasses the filter and hears staged clips in-app. MONOTONIC by invariant — only
     // ever set (via a region release or a per-clip release), NEVER cleared — so nothing public ever
     // disappears (no drive orphans / no yanked downloads). The regen upsert deliberately omits this from
     // its `set` clause, so re-telling a clip preserves its release state. See

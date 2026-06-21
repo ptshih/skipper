@@ -11,7 +11,7 @@
 
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
-import { anonymous } from 'better-auth/plugins'
+import { admin, anonymous } from 'better-auth/plugins'
 import { expo } from '@better-auth/expo'
 import * as authSchema from '@skipper/db/auth-schema'
 import { authDb } from './auth-db'
@@ -88,13 +88,12 @@ export const auth = betterAuth({
   },
   emailAndPassword: { enabled: true },
   socialProviders,
-  // Manual freemium tier on the user (no Stripe yet). 'free' | 'paid'.
-  // `tester` = the region-release-gate preview allowlist (hears staged content in-app); orthogonal to
-  // tier, server-set only (input:false). See docs/decisions/region-release-gate.md.
+  // Manual freemium tier on the user (no Stripe yet). 'free' | 'paid'. Server-set only (input:false).
+  // (The region-release-gate preview role — who hears staged content — is the admin plugin's `role`,
+  // NOT a tier and NOT a separate flag; see the admin() plugin below + docs/decisions/region-release-gate.md.)
   user: {
     additionalFields: {
       tier: { type: 'string', required: false, defaultValue: 'free', input: false },
-      tester: { type: 'boolean', required: false, defaultValue: false, input: false },
     },
   },
   plugins: [
@@ -106,5 +105,11 @@ export const auth = betterAuth({
         // (and owned) only by a signed-in account — there is no anonymous per-user state to move.
       },
     }),
+    // Admin roles. Adds user.role (default 'user'; server-set input:false) + ban/impersonate columns
+    // and the /admin/* management endpoints (guarded — only an admin role can call them). `role==='admin'`
+    // is ALSO the region-release-gate preview check (an admin hears staged content in-app — `isAdmin` in
+    // ./tiers). Defaults: defaultRole='user', adminRoles=['admin']. The first admin is bootstrapped by
+    // setting role='admin' directly in the DB (no admin exists yet to call set-role). See region-release-gate.
+    admin(),
   ],
 })

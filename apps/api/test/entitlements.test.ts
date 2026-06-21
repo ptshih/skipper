@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test'
-import { isTester, meetsTier, tierOf, type TierSession } from '../src/tiers'
+import { isAdmin, meetsTier, tierOf, type TierSession } from '../src/tiers'
 
-// Minimal session shape — the tier helpers read user.isAnonymous + user.tier (+ user.tester).
+// Minimal session shape — the tier helpers read user.isAnonymous + user.tier (+ user.role).
 const session = (
-  user: Partial<{ isAnonymous: boolean | null; tier: string | null; tester: boolean | null }>,
+  user: Partial<{ isAnonymous: boolean | null; tier: string | null; role: string | null }>,
 ): TierSession => ({
   user: { isAnonymous: false, tier: 'free', ...user },
 })
@@ -26,23 +26,23 @@ describe('tierOf', () => {
   })
 })
 
-// region-release-gate: a tester sees STAGED (not-yet-released) content. A wrong answer either leaks
-// unreleased clips to the public or hides released clips from testers — so pin the truth table.
-describe('isTester', () => {
-  test('no session → not a tester', () => {
-    expect(isTester(null)).toBe(false)
+// region-release-gate: an admin sees STAGED (not-yet-released) content. A wrong answer either leaks
+// unreleased clips to the public or hides released clips from admins — so pin the truth table.
+describe('isAdmin', () => {
+  test('no session → not an admin', () => {
+    expect(isAdmin(null)).toBe(false)
   })
-  test('anonymous guest is never a tester (the bit lives on a real account)', () => {
-    expect(isTester(session({ isAnonymous: true, tester: true }))).toBe(false)
+  test('anonymous guest is never an admin (the role lives on a real account)', () => {
+    expect(isAdmin(session({ isAnonymous: true, role: 'admin' }))).toBe(false)
   })
-  test('signed-in account without the flag → not a tester', () => {
-    expect(isTester(session({ tester: false }))).toBe(false)
-    expect(isTester(session({ tester: null }))).toBe(false)
-    expect(isTester(session({}))).toBe(false)
+  test('signed-in account without the admin role → not an admin', () => {
+    expect(isAdmin(session({ role: 'user' }))).toBe(false)
+    expect(isAdmin(session({ role: null }))).toBe(false)
+    expect(isAdmin(session({}))).toBe(false)
   })
-  test('signed-in account with tester=true → tester (any paying tier)', () => {
-    expect(isTester(session({ tier: 'free', tester: true }))).toBe(true)
-    expect(isTester(session({ tier: 'paid', tester: true }))).toBe(true)
+  test('signed-in account with role=admin → admin (any paying tier)', () => {
+    expect(isAdmin(session({ tier: 'free', role: 'admin' }))).toBe(true)
+    expect(isAdmin(session({ tier: 'paid', role: 'admin' }))).toBe(true)
   })
 })
 
