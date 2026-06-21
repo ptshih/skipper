@@ -1336,7 +1336,7 @@ function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loading: bool
             })}
             {!loading && filtered.length === 0 && (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={9}>
+                <TableCell colSpan={8}>
                   <EmptyState icon={Search}>No POIs match these filters.</EmptyState>
                 </TableCell>
               </TableRow>

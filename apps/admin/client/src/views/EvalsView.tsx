@@ -1,68 +1,30 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
-import { Activity, Filter, RefreshCw, Scissors, Search, Sparkles, Trash2, X, Zap } from 'lucide-react'
+import { Activity, Search, X } from 'lucide-react'
 import { api, type EvalScoreRow, type RunEvent } from '@/lib/api'
 import { errMsg, fmtDate, timeAgo } from '@/lib/format'
+import { KIND_META, TARGET_SENTINELS, RunTarget, RUNS_REFETCH_MS } from '@/lib/runs'
+import { VERDICT_VARIANT, verdictOf, isPartial, isTrueFail } from '@/lib/status'
 import { PageHeader } from '@/components/PageHeader'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Callout } from '@/components/ui/callout'
-import { SearchInput } from '@/components/ui/search-input'
 import { EmptyState } from '@/components/ui/empty-state'
 import { TableSkeletonRows } from '@/components/ui/skeleton'
 import { SectionLabel } from '@/components/ui/section-label'
+import { DetailList, DetailRow } from '@/components/ui/detail-list'
+import { CodeBlock } from '@/components/ui/code-block'
+import { StatChip, StatChipRow } from '@/components/ui/stat-chip'
+import { AutoRefreshControl } from '@/components/ui/auto-refresh-control'
+import { FilterToolbar, FilterSelect } from '@/components/ui/filter-toolbar'
 import {
   Sheet, SheetClose, SheetContent, SheetDescription, SheetHeader, SheetTitle,
 } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
 
 /* ─── run kinds + helpers ─── */
-
-// Kind → label/icon. Evals are kind 'generation' today (the raw kind shows through when absent here),
-// but historical eval kinds still resolve to a friendly label/icon.
-const KIND_META: Record<string, { label: string; icon: React.ElementType }> = {
-  generate:        { label: 'Generate',          icon: Sparkles },
-  resynth:         { label: 'Resynth',           icon: RefreshCw },
-  patch_clip:      { label: 'Patch clip',        icon: Scissors },
-  resynth_narration: { label: 'Re-synth narration', icon: RefreshCw },
-  refetch_facts:   { label: 'Re-fetch facts',    icon: RefreshCw },
-  sweep_orphans:   { label: 'Sweep orphans',     icon: Trash2 },
-  discover_pois:   { label: 'Discover POIs',     icon: Filter },
-  enrich_pois:     { label: 'Enrich corpus',     icon: Sparkles },
-  generate_narrations: { label: 'Generate Narration', icon: Zap },
-  offline_audit:   { label: 'Re-score corpus',   icon: Activity },
-}
-
-// A run targeting no region (whole-corpus) leaves its slug NULL → "All". Legacy sentinels map to a
-// friendly label rather than a raw slug.
-const TARGET_SENTINELS: Record<string, string> = {
-  'roam-corpus': 'All',
-  'region-corpus': 'whole corpus',
-  narration: 'all clips',
-}
-
-// An eval's `pass` is just `withheld === 0`. A run that gated some clips but SHIPPED the rest is a
-// PARTIAL success (amber), not a failure; a TRUE fail shipped nothing at all (red).
-const isPartial  = (r: RunEvent) => r.pass === false && (r.shipped ?? 0) > 0
-const isTrueFail = (r: RunEvent) => r.pass === false && (r.shipped ?? 0) === 0 && (r.total ?? 0) > 0
-
-// pass / partial / fail from a run's tallies — the single source of truth for both the row badge and
-// the drawer header.
-function verdictOf(t: { withheld: number | null; shipped: number | null }): 'pass' | 'partial' | 'fail' {
-  if ((t.withheld ?? 0) === 0) return 'pass'
-  return (t.shipped ?? 0) > 0 ? 'partial' : 'fail'
-}
-const VERDICT_VARIANT = { pass: 'success', partial: 'warning', fail: 'destructive' } as const
-
-function RunTarget({ slug }: { slug: string | null }) {
-  if (!slug) return <span className="italic text-muted-foreground">All</span>
-  const sentinel = TARGET_SENTINELS[slug]
-  if (sentinel) return <span className="italic text-muted-foreground">{sentinel}</span>
-  return <>{slug}</>
-}
 
 // grounding/tts/diversity; grounding turns red below the gate.
 function RunScores({ r }: { r: RunEvent }) {
@@ -90,23 +52,6 @@ function EvalResultCell({ r }: { r: RunEvent }) {
   )
 }
 
-function Def({ label, children, mono }: { label: string; children: React.ReactNode; mono?: boolean }) {
-  return (
-    <>
-      <dt className="bg-muted/40 px-3 py-2 text-xs text-muted-foreground">{label}</dt>
-      <dd className={cn('bg-card px-3 py-2 text-xs', mono && 'font-mono')}>{children}</dd>
-    </>
-  )
-}
-
-function LogBlock({ children, className }: { children: React.ReactNode; className?: string }) {
-  return (
-    <div className={cn('overflow-x-auto whitespace-pre-wrap break-words rounded-lg border bg-muted px-3 py-2.5 font-mono text-xs leading-relaxed', className)}>
-      {children}
-    </div>
-  )
-}
-
 /* ─── main view ─── */
 
 // The /evals page — grounding/TTS/diversity scores behind generated clips. Shares the ['runs'] cache
@@ -124,7 +69,7 @@ export function EvalsView() {
   const { data: runs = [], error, isPending, isFetching, refetch } = useQuery({
     queryKey: ['runs'],
     queryFn: async () => (await api.runs()).runs,
-    refetchInterval: 15000,
+    refetchInterval: RUNS_REFETCH_MS,
   })
   const rows = useMemo(() => runs.filter((r) => r.source === 'eval'), [runs])
 
@@ -170,54 +115,38 @@ export function EvalsView() {
       )}
 
       {/* Clickable status KPIs (left) + auto-refresh + manual refresh (right). */}
-      <div className="flex flex-wrap items-center gap-2.5">
-        <Badge asChild variant={partialN ? 'warning' : 'secondary'} className="cursor-pointer">
-          <button onClick={() => setStatusFilter('partial')}>{partialN} partial</button>
-        </Badge>
-        <Badge asChild variant={failedN ? 'destructive' : 'secondary'} className="cursor-pointer">
-          <button onClick={() => setStatusFilter('failed')}>{failedN} failed</button>
-        </Badge>
-        <div className="ml-auto flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">auto-refresh · 15s</span>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 shrink-0 text-muted-foreground"
-            onClick={() => void refetch()}
-            title="Refresh now"
-            aria-label="Refresh"
-          >
-            <RefreshCw className={cn('h-3.5 w-3.5', isFetching && 'animate-spin')} />
-          </Button>
-        </div>
-      </div>
+      <StatChipRow
+        aside={<AutoRefreshControl intervalMs={RUNS_REFETCH_MS} isFetching={isFetching} onRefresh={() => void refetch()} />}
+      >
+        <StatChip count={partialN} label="partial" variant="warning" onClick={() => setStatusFilter('partial')} />
+        <StatChip count={failedN} label="failed" variant="destructive" onClick={() => setStatusFilter('failed')} />
+      </StatChipRow>
 
       <div className="space-y-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <SearchInput
-            wrapperClassName="min-w-[16rem] max-w-sm flex-1"
-            placeholder="Search model, commit, id…"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
+        <FilterToolbar
+          search={q}
+          onSearch={setQ}
+          searchPlaceholder="Search model, commit, id…"
+          shown={filtered.length}
+          total={rows.length}
+        >
+          <FilterSelect
+            value={kindFilter}
+            onChange={setKindFilter}
+            allLabel="All kinds"
+            options={kindsInView.map((k) => ({ value: k, label: KIND_META[k]?.label ?? k }))}
           />
-          <Select value={kindFilter} onValueChange={setKindFilter}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All kinds</SelectItem>
-              {kindsInView.map((k) => <SelectItem key={k} value={k}>{KIND_META[k]?.label ?? k}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Any result</SelectItem>
-              <SelectItem value="ok">Pass</SelectItem>
-              <SelectItem value="partial">Partial</SelectItem>
-              <SelectItem value="failed">Failed</SelectItem>
-            </SelectContent>
-          </Select>
-          <span className="ml-auto text-sm text-muted-foreground">{filtered.length} of {rows.length}</span>
-        </div>
+          <FilterSelect
+            value={statusFilter}
+            onChange={setStatusFilter}
+            allLabel="Any result"
+            options={[
+              { value: 'ok', label: 'Pass' },
+              { value: 'partial', label: 'Partial' },
+              { value: 'failed', label: 'Failed' },
+            ]}
+          />
+        </FilterToolbar>
 
         <div className="overflow-hidden rounded-xl border">
           <Table>
@@ -312,12 +241,12 @@ function EvalDrawer({ runId, onClose }: { runId: string; onClose: () => void }) 
           {run && (
             <div className="space-y-2">
               <SectionLabel>Details</SectionLabel>
-              <dl className="grid grid-cols-[120px_1fr] gap-px overflow-hidden rounded-lg border bg-border">
-                <Def label="Kind"><span className="flex items-center gap-1.5"><Icon size={13} /> {km?.label ?? run.kind}</span></Def>
-                <Def label="Model" mono>{run.narrationModel ?? '—'}</Def>
-                {run.gitSha && <Def label="Commit" mono>{run.gitSha.slice(0, 7)}</Def>}
-                <Def label="Started" mono>{fmtDate(run.createdAt)}</Def>
-              </dl>
+              <DetailList>
+                <DetailRow label="Kind"><span className="flex items-center gap-1.5"><Icon size={13} /> {km?.label ?? run.kind}</span></DetailRow>
+                <DetailRow label="Model" mono>{run.narrationModel ?? '—'}</DetailRow>
+                {run.gitSha && <DetailRow label="Commit" mono>{run.gitSha.slice(0, 7)}</DetailRow>}
+                <DetailRow label="Started" mono>{fmtDate(run.createdAt)}</DetailRow>
+              </DetailList>
             </div>
           )}
 
@@ -388,18 +317,18 @@ function EvalReport({ runId }: { runId: string }) {
     <div className="space-y-4">
       <div className="space-y-2">
         <SectionLabel>Eval report</SectionLabel>
-        <dl className="grid grid-cols-[120px_1fr] gap-px overflow-hidden rounded-lg border bg-border">
-          <Def label="Clips">
+        <DetailList>
+          <DetailRow label="Clips">
             {run.total} total · {run.shipped} shipped ·{' '}
             <span className={cn(run.withheld > 0 && 'font-medium text-warning')}>{run.withheld} withheld</span>
-          </Def>
-          <Def label="Scores" mono>
+          </DetailRow>
+          <DetailRow label="Scores" mono>
             g {score(run.grounding)} · tts {score(run.tts)} · div {score(run.diversity)}
             {charmMean != null && ` · charm ${score(charmMean)}`}
             {verMean != null && ` · ver ${score(verMean)}`}
-          </Def>
-          {run.judgeModel && <Def label="Judge" mono>{run.judgeModel}</Def>}
-        </dl>
+          </DetailRow>
+          {run.judgeModel && <DetailRow label="Judge" mono>{run.judgeModel}</DetailRow>}
+        </DetailList>
       </div>
 
       {scores.length === 0 ? (
@@ -452,7 +381,7 @@ function PlaceReport({ place, advisory = false }: { place: PoiGroup; advisory?: 
           <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
             Show the held-back telling ({place.script.trim().split(/\s+/).filter(Boolean).length} words)
           </summary>
-          <LogBlock className="mt-1.5 max-h-64 overflow-y-auto whitespace-pre-wrap">{place.script}</LogBlock>
+          <CodeBlock className="mt-1.5 max-h-64 overflow-y-auto whitespace-pre-wrap">{place.script}</CodeBlock>
         </details>
       )}
     </div>

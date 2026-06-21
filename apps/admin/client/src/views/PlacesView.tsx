@@ -21,7 +21,7 @@ import { Callout } from '@/components/ui/callout'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { EmptyState } from '@/components/ui/empty-state'
 import { TableSkeletonRows } from '@/components/ui/skeleton'
-import { PlacesMap } from '@/components/ui/leaflet-map'
+import { PlacesMap, PLACE_PIN_COLORS } from '@/components/ui/leaflet-map'
 import { JobActionDialog } from '@/components/ui/job-action-dialog'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import {
@@ -142,13 +142,14 @@ export function PlacesView() {
         <div className="mb-5">
           <PlacesMap places={pins} bbox={bbox} className="h-72" />
           <p className="mt-1.5 text-xs text-muted-foreground">
-            <span className="text-amber-600">●</span> featured · <span className="text-teal-700">●</span> endpoint ·{' '}
-            <span className="text-slate-500">●</span> break
+            <span style={{ color: PLACE_PIN_COLORS.featured }}>●</span> featured ·{' '}
+            <span style={{ color: PLACE_PIN_COLORS.endpoint }}>●</span> endpoint ·{' '}
+            <span style={{ color: PLACE_PIN_COLORS.break }}>●</span> break
           </p>
         </div>
       )}
 
-      <div className="rounded-lg border">
+      <div className="overflow-hidden rounded-xl border">
         <Table>
           <TableHeader>
             <TableRow>
@@ -177,7 +178,7 @@ export function PlacesView() {
                 <TableRow key={p.id}>
                   <TableCell className="font-medium">
                     <div className="flex items-center gap-2">
-                      {p.featured && <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500" />}
+                      {p.featured && <Star className="h-3.5 w-3.5" style={{ color: PLACE_PIN_COLORS.featured, fill: PLACE_PIN_COLORS.featured }} />}
                       {p.name}
                     </div>
                     <div className="text-xs text-muted-foreground">{p.lat.toFixed(4)}, {p.lng.toFixed(4)}</div>

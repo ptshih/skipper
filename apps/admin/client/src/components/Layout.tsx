@@ -18,6 +18,10 @@ const NAV: { to: AppPath; label: string; icon: React.ElementType }[] = [
   { to: '/users', label: 'Users', icon: Users },
 ]
 
+// Reference sits apart in the sidebar (pinned to the bottom) but is a first-class jump target in the
+// command palette — kept here as the single source so the palette can't list a stale/partial nav.
+const REFERENCE_NAV = { to: '/reference' as AppPath, label: 'Reference', icon: BookOpen }
+
 const itemBase =
   'relative flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-left text-sm font-medium transition-colors'
 const itemInactive = 'text-muted-foreground hover:bg-foreground/5 hover:text-foreground'
@@ -89,7 +93,7 @@ function SidebarBody({
       <div className="flex-1" />
 
       <nav className="flex flex-col gap-0.5 px-3 py-3">
-        <NavItem to="/reference" label="Reference" icon={BookOpen} onClick={onNavigate} />
+        <NavItem to={REFERENCE_NAV.to} label={REFERENCE_NAV.label} icon={REFERENCE_NAV.icon} onClick={onNavigate} />
       </nav>
 
       <div className="border-t border-border px-3 py-3.5">
@@ -218,15 +222,13 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
   const go = (to: AppPath) => () => { navigate({ to }); onClose() }
   const openPoi = (id: string) => () => { navigate({ to: '/pois', search: { poi: id } }); onClose() }
 
-  const navItems: PaletteItem[] = [
-    { group: 'Go to', label: 'Jobs', icon: Activity, onSelect: go('/jobs') },
-    { group: 'Go to', label: 'Evals', icon: Gauge, onSelect: go('/evals') },
-    { group: 'Go to', label: 'Regions', icon: Layers, onSelect: go('/regions') },
-    { group: 'Go to', label: 'POIs', icon: MapPin, onSelect: go('/pois') },
-    { group: 'Go to', label: 'Places', icon: Anchor, onSelect: go('/places') },
-    { group: 'Go to', label: 'Users', icon: Users, onSelect: go('/users') },
-    { group: 'Go to', label: 'Reference', icon: BookOpen, onSelect: go('/reference') },
-  ]
+  // Derived from the sidebar NAV (+ Reference) so adding a route never desyncs the palette.
+  const navItems: PaletteItem[] = [...NAV, REFERENCE_NAV].map((n) => ({
+    group: 'Go to',
+    label: n.label,
+    icon: n.icon,
+    onSelect: go(n.to),
+  }))
   const actionItems: PaletteItem[] = [
     { group: 'Actions', label: 'Discover POIs', icon: Compass, onSelect: go('/regions') },
   ]

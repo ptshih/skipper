@@ -1,23 +1,27 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearch } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import {
-  Activity, ArrowRight, CircleX, ExternalLink, Filter, MapPin, RefreshCw, Scissors, Search, Sparkles, Trash2, X, Zap,
-} from 'lucide-react'
+import { Activity, ArrowRight, ExternalLink, Search, Trash2, X } from 'lucide-react'
 import { api, type JobStatus, type RunEvent } from '@/lib/api'
 import { errMsg, fmtDate, timeAgo } from '@/lib/format'
 import { JOB_STATUS_VARIANT } from '@/lib/status'
+import { KIND_META, TARGET_SENTINELS, RunTarget, RUNS_REFETCH_MS } from '@/lib/runs'
 import { PageHeader } from '@/components/PageHeader'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Callout } from '@/components/ui/callout'
-import { SearchInput } from '@/components/ui/search-input'
 import { EmptyState } from '@/components/ui/empty-state'
 import { TableSkeletonRows } from '@/components/ui/skeleton'
 import { SectionLabel } from '@/components/ui/section-label'
 import { useConfirm } from '@/components/ui/confirm-dialog'
+import { DetailList, DetailRow } from '@/components/ui/detail-list'
+import { CodeBlock } from '@/components/ui/code-block'
+import { ErrorCallout } from '@/components/ui/error-callout'
+import { PulseDot } from '@/components/ui/pulse-dot'
+import { StatChip, StatChipRow } from '@/components/ui/stat-chip'
+import { AutoRefreshControl } from '@/components/ui/auto-refresh-control'
+import { FilterToolbar, FilterSelect } from '@/components/ui/filter-toolbar'
 import {
   Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle,
 } from '@/components/ui/sheet'
@@ -25,43 +29,8 @@ import { cn } from '@/lib/utils'
 
 /* ─── run kinds + helpers ─── */
 
-// Kind → label/icon. generate / resynth / patch_clip are LEGACY (deferred in V2) — kept so historical
-// job rows render with a readable label; they are no longer dispatchable here.
-const KIND_META: Record<string, { label: string; icon: React.ElementType }> = {
-  generate:        { label: 'Generate',          icon: Sparkles },
-  resynth:         { label: 'Resynth',           icon: RefreshCw },
-  patch_clip:      { label: 'Patch clip',        icon: Scissors },
-  resynth_narration: { label: 'Re-synth narration', icon: RefreshCw },
-  refetch_facts:   { label: 'Re-fetch facts',    icon: RefreshCw },
-  sweep_orphans:   { label: 'Sweep orphans',     icon: Trash2 },
-  discover_pois:   { label: 'Discover POIs',     icon: Filter },
-  enrich_pois:     { label: 'Enrich corpus',     icon: Sparkles },
-  generate_narrations: { label: 'Generate Narration', icon: Zap },
-  curate_places:   { label: 'Curate places',     icon: MapPin },
-  offline_audit:   { label: 'Re-score corpus',   icon: Activity },
-}
-
-// A job targeting no region (whole-corpus) leaves its slug NULL → "All". Legacy sentinels map to a
-// friendly label rather than a raw slug.
-const TARGET_SENTINELS: Record<string, string> = {
-  'roam-corpus': 'All',
-  'region-corpus': 'whole corpus',
-  narration: 'all clips',
-}
-
 const isLive = (s?: JobStatus | null) => s === 'running' || s === 'queued'
 const isFailed = (r: RunEvent) => r.status === 'failed'
-
-function PulseDot() {
-  return <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-current" />
-}
-
-function RunTarget({ slug }: { slug: string | null }) {
-  if (!slug) return <span className="italic text-muted-foreground">All</span>
-  const sentinel = TARGET_SENTINELS[slug]
-  if (sentinel) return <span className="italic text-muted-foreground">{sentinel}</span>
-  return <>{slug}</>
-}
 
 function JobResultCell({ r }: { r: RunEvent }) {
   if (!r.status) return <span className="text-muted-foreground">—</span>
@@ -77,23 +46,6 @@ function JobResultCell({ r }: { r: RunEvent }) {
       </Badge>
       {r.dryRun && <Badge variant="secondary">dry-run</Badge>}
     </span>
-  )
-}
-
-function Def({ label, children, mono, breakAll }: { label: string; children: React.ReactNode; mono?: boolean; breakAll?: boolean }) {
-  return (
-    <>
-      <dt className="bg-muted/40 px-3 py-2 text-xs text-muted-foreground">{label}</dt>
-      <dd className={cn('bg-card px-3 py-2 text-xs', mono && 'font-mono', breakAll && 'break-all')}>{children}</dd>
-    </>
-  )
-}
-
-function LogBlock({ children, className }: { children: React.ReactNode; className?: string }) {
-  return (
-    <div className={cn('overflow-x-auto whitespace-pre-wrap break-words rounded-lg border bg-muted px-3 py-2.5 font-mono text-xs leading-relaxed', className)}>
-      {children}
-    </div>
   )
 }
 
@@ -114,7 +66,7 @@ export function JobsView() {
   const { data: runs = [], error, isPending, isFetching, refetch } = useQuery({
     queryKey: ['runs'],
     queryFn: async () => (await api.runs()).runs,
-    refetchInterval: 15000,
+    refetchInterval: RUNS_REFETCH_MS,
   })
   const rows = useMemo(() => runs.filter((r) => r.source === 'job'), [runs])
 
@@ -194,57 +146,38 @@ export function JobsView() {
       )}
 
       {/* Clickable status KPIs (left) + auto-refresh + manual refresh (right). */}
-      <div className="flex flex-wrap items-center gap-2.5">
-        <Badge asChild variant={runningN ? 'info' : 'secondary'} className="cursor-pointer">
-          <button onClick={() => setStatusFilter('running')}>
-            {runningN > 0 && <PulseDot />}
-            {runningN} running
-          </button>
-        </Badge>
-        <Badge asChild variant={failedN ? 'destructive' : 'secondary'} className="cursor-pointer">
-          <button onClick={() => setStatusFilter('failed')}>{failedN} failed</button>
-        </Badge>
-        <div className="ml-auto flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">auto-refresh · 15s</span>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 shrink-0 text-muted-foreground"
-            onClick={() => void refetch()}
-            title="Refresh now"
-            aria-label="Refresh"
-          >
-            <RefreshCw className={cn('h-3.5 w-3.5', isFetching && 'animate-spin')} />
-          </Button>
-        </div>
-      </div>
+      <StatChipRow
+        aside={<AutoRefreshControl intervalMs={RUNS_REFETCH_MS} isFetching={isFetching} onRefresh={() => void refetch()} />}
+      >
+        <StatChip count={runningN} label="running" variant="info" pulse onClick={() => setStatusFilter('running')} />
+        <StatChip count={failedN} label="failed" variant="destructive" onClick={() => setStatusFilter('failed')} />
+      </StatChipRow>
 
       <div className="space-y-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <SearchInput
-            wrapperClassName="min-w-[16rem] max-w-sm flex-1"
-            placeholder="Search kind, id…"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
+        <FilterToolbar
+          search={q}
+          onSearch={setQ}
+          searchPlaceholder="Search kind, id…"
+          shown={filtered.length}
+          total={rows.length}
+        >
+          <FilterSelect
+            value={kindFilter}
+            onChange={setKindFilter}
+            allLabel="All kinds"
+            options={kindsInView.map((k) => ({ value: k, label: KIND_META[k]?.label ?? k }))}
           />
-          <Select value={kindFilter} onValueChange={setKindFilter}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All kinds</SelectItem>
-              {kindsInView.map((k) => <SelectItem key={k} value={k}>{KIND_META[k]?.label ?? k}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Any result</SelectItem>
-              <SelectItem value="running">Running / queued</SelectItem>
-              <SelectItem value="ok">Succeeded</SelectItem>
-              <SelectItem value="failed">Failed</SelectItem>
-            </SelectContent>
-          </Select>
-          <span className="ml-auto text-sm text-muted-foreground">{filtered.length} of {rows.length}</span>
-        </div>
+          <FilterSelect
+            value={statusFilter}
+            onChange={setStatusFilter}
+            allLabel="Any result"
+            options={[
+              { value: 'running', label: 'Running / queued' },
+              { value: 'ok', label: 'Succeeded' },
+              { value: 'failed', label: 'Failed' },
+            ]}
+          />
+        </FilterToolbar>
 
         <div className="overflow-hidden rounded-xl border">
           <Table>
@@ -367,31 +300,26 @@ function JobDrawer({ run, onClose }: { run: RunEvent; onClose: () => void }) {
         </SheetHeader>
 
         <div className="flex-1 space-y-5 overflow-y-auto px-5 py-5">
-          {error && (
-            <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
-              <div className="flex items-center gap-1.5 font-medium"><CircleX size={15} /> Run failed</div>
-              <div className="mt-1 leading-relaxed">{error}</div>
-            </div>
-          )}
+          {error && <ErrorCallout title="Run failed" error={error} />}
 
           <div className="space-y-2">
             <SectionLabel>Details</SectionLabel>
-            <dl className="grid grid-cols-[120px_1fr] gap-px overflow-hidden rounded-lg border bg-border">
-              <Def label="Kind"><span className="flex items-center gap-1.5"><Icon size={13} /> {km?.label ?? run.kind}</span></Def>
-              <Def label="Mode">
+            <DetailList>
+              <DetailRow label="Kind"><span className="flex items-center gap-1.5"><Icon size={13} /> {km?.label ?? run.kind}</span></DetailRow>
+              <DetailRow label="Mode">
                 {run.dryRun ? <Badge variant="secondary">dry-run</Badge> : <Badge variant="outline">applied</Badge>}
-              </Def>
-              <Def label="Triggered by" mono>{run.triggeredBy ?? '—'}</Def>
-              {job?.cloudRunExecution && <Def label="Execution" mono breakAll>{job.cloudRunExecution}</Def>}
-              <Def label="Started" mono>{fmtDate(run.createdAt)}</Def>
-              {job?.startedAt && <Def label="Ended" mono>{fmtDate(job.endedAt)}</Def>}
-            </dl>
+              </DetailRow>
+              <DetailRow label="Triggered by" mono>{run.triggeredBy ?? '—'}</DetailRow>
+              {job?.cloudRunExecution && <DetailRow label="Execution" mono breakAll>{job.cloudRunExecution}</DetailRow>}
+              <DetailRow label="Started" mono>{fmtDate(run.createdAt)}</DetailRow>
+              {job?.startedAt && <DetailRow label="Ended" mono>{fmtDate(job.endedAt)}</DetailRow>}
+            </DetailList>
           </div>
 
           {args && args.length > 0 && (
             <div className="space-y-2">
               <SectionLabel>Command</SectionLabel>
-              <LogBlock><span className="text-muted-foreground">$ skipper-studio {run.kind} </span>{args.join(' ')}</LogBlock>
+              <CodeBlock><span className="text-muted-foreground">$ skipper-studio {run.kind} </span>{args.join(' ')}</CodeBlock>
             </div>
           )}
 
@@ -408,11 +336,11 @@ function JobDrawer({ run, onClose }: { run: RunEvent; onClose: () => void }) {
           </div>
           <div className="space-y-2">
             <SectionLabel>Metrics</SectionLabel>
-            <LogBlock>
+            <CodeBlock>
               {job?.outputData && Object.keys(job.outputData).length > 0
                 ? JSON.stringify(job.outputData, null, 2)
                 : <span className="text-muted-foreground">—</span>}
-            </LogBlock>
+            </CodeBlock>
           </div>
           <div className="space-y-2">
             <SectionLabel className="flex items-center gap-1.5">
@@ -423,9 +351,9 @@ function JobDrawer({ run, onClose }: { run: RunEvent; onClose: () => void }) {
                 </span>
               )}
             </SectionLabel>
-            <LogBlock className="max-h-80 overflow-y-auto whitespace-pre">
+            <CodeBlock className="max-h-80 overflow-y-auto whitespace-pre">
               {job?.outputLog ?? <span className="text-muted-foreground">—</span>}
-            </LogBlock>
+            </CodeBlock>
           </div>
 
           {/* A generate_narrations job produced an eval run — link to its per-place gate report on the
@@ -445,12 +373,7 @@ function JobDrawer({ run, onClose }: { run: RunEvent; onClose: () => void }) {
 
           {/* Cancel failure — a cancel of a live job that errored. Surfaced so the button doesn't just
               silently flip back. Matches the run-failed box above. */}
-          {cancelMut.error && (
-            <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
-              <div className="flex items-center gap-1.5 font-medium"><CircleX size={15} /> Cancel failed</div>
-              <div className="mt-1 leading-relaxed">{errMsg(cancelMut.error)}</div>
-            </div>
-          )}
+          {cancelMut.error && <ErrorCallout title="Cancel failed" error={cancelMut.error} />}
         </div>
 
         <SheetFooter>

@@ -34,9 +34,11 @@ const ANCHOR_ICON = L.divIcon({
 // pitstop. Hardcoded colors (leaflet renders outside the token system), echoing POI_ICON's teal.
 const pinSvg = (fill: string): string =>
   `<svg width="22" height="22" viewBox="0 0 24 24" fill="${fill}" stroke="white" stroke-width="1.5"><path d="M12 22s-7-6.2-7-11a7 7 0 1 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="11" r="2.4" fill="white"/></svg>`
-const FEATURED_PIN = L.divIcon({ className: '', html: pinSvg('#d97706'), iconSize: [22, 22], iconAnchor: [11, 22] })
-const ENDPOINT_PIN = L.divIcon({ className: '', html: pinSvg('#0f766e'), iconSize: [22, 22], iconAnchor: [11, 22] })
-const BREAK_PIN = L.divIcon({ className: '', html: pinSvg('#64748b'), iconSize: [22, 22], iconAnchor: [11, 22] })
+// Role pin colors, EXPORTED so the /places legend keys the EXACT pin hex (no by-eye palette drift).
+export const PLACE_PIN_COLORS = { featured: '#d97706', endpoint: '#0f766e', break: '#64748b' } as const
+const FEATURED_PIN = L.divIcon({ className: '', html: pinSvg(PLACE_PIN_COLORS.featured), iconSize: [22, 22], iconAnchor: [11, 22] })
+const ENDPOINT_PIN = L.divIcon({ className: '', html: pinSvg(PLACE_PIN_COLORS.endpoint), iconSize: [22, 22], iconAnchor: [11, 22] })
+const BREAK_PIN = L.divIcon({ className: '', html: pinSvg(PLACE_PIN_COLORS.break), iconSize: [22, 22], iconAnchor: [11, 22] })
 
 interface PlacePin {
   lat: number
