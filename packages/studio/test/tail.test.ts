@@ -4,10 +4,11 @@ import {
   MIN_MEASURABLE_SEC,
   measureTailCollapse,
   parseMeanVolumeDb,
+  tailDropDb,
 } from '../src/pipeline/tail'
 import type { TailMeasure } from '../src/pipeline/tail'
 
-const m = (dropDb: number): TailMeasure => ({ bodyDb: -20, tailDb: -20 - dropDb, dropDb })
+const m = (dropDb: number): TailMeasure => ({ bodyDb: -20, tailDb: -20 - dropDb, terminalDb: -20 - dropDb, dropDb })
 
 describe('parseMeanVolumeDb — ffmpeg volumedetect stderr', () => {
   test('parses the mean_volume line (negative, fractional)', () => {
@@ -26,6 +27,23 @@ describe('parseMeanVolumeDb — ffmpeg volumedetect stderr', () => {
   test('null when the line is absent (a failed/odd ffmpeg run)', () => {
     expect(parseMeanVolumeDb('ffmpeg: error opening input')).toBeNull()
     expect(parseMeanVolumeDb('')).toBeNull()
+  })
+})
+
+describe('tailDropDb — collapse severity = body minus the QUIETER tail window', () => {
+  test('takes the worse of the 12 s tail and the 4 s terminal window', () => {
+    // tail (12 s) holds level but the final 4 s dies → the terminal window drives the drop
+    expect(tailDropDb(-20, -21, -27)).toBe(7) // max(1, 7)
+    // the whole tail is quiet but the very end recovers → the 12 s window drives it
+    expect(tailDropDb(-20, -28, -22)).toBe(8) // max(8, 2)
+  })
+
+  test('a clip that holds full level to the last word has ~no drop (passes the gate)', () => {
+    expect(tailDropDb(-20, -20.2, -20.1)).toBeCloseTo(0.2, 5)
+  })
+
+  test('a louder-than-body tail yields a negative (non-collapse) drop', () => {
+    expect(tailDropDb(-20, -19, -18)).toBe(-1) // max(-1, -2)
   })
 })
 

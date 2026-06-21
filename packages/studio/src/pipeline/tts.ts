@@ -21,8 +21,8 @@ import {
   TTS_SAMPLE_RATE_HZ,
 } from '../models'
 import { GEMINI_PCM, toWavWithDuration } from './wav'
-import { keepFirstTake, measureTailCollapse, TAIL_COLLAPSE_DB } from './tail'
-import { normalizeAndEncode } from './loudnorm'
+import { keepFirstTake, measureTailCollapse, TAIL_COLLAPSE_DB, TERMINAL_WINDOW_SEC } from './tail'
+import { normalizeAndEncode, verifyMasteredLoudness, type LoudnessOutcome } from './loudnorm'
 import { pronunciationClause } from './pronunciation'
 
 const SYNTHESIZE_URL = 'https://texttospeech.googleapis.com/v1/text:synthesize'
@@ -127,20 +127,31 @@ export interface TailOutcome {
   shippedCollapsed: boolean
 }
 
-export type SynthWithTailResult = SynthResult & { tail: TailOutcome | null }
+export type SynthWithTailResult = SynthResult & {
+  tail: TailOutcome | null
+  /** The post-encode loudness/true-peak verdict for the shipped .m4a (null = meter skipped, ffmpeg miss). */
+  loudness: LoudnessOutcome | null
+}
+
+/** Best-of-N tail retakes: on a collapsed first take, synthesize up to this many MORE takes and keep the
+ *  least-collapsed one, stopping early as soon as one comes back clean. At the ~1-in-4 collapse rate a
+ *  single retake still ships ~1/16 collapsed; a second retake drops that to ~1/64, and the extra synth
+ *  only fires on the ~6% that already failed twice. The running TTS cost cap bounds the overrun. */
+const RETAKE_LIMIT = 2
 
 /**
  * Synthesize with the tail-collapse retake (TODO.md audio-QA #1): Gemini-TTS takes are
  * non-deterministic in level and ~1 in 4 collapses over the closing sentence(s) — the
- * "mumble". Measure tail-vs-body after the synth; on a drop ≥ TAIL_COLLAPSE_DB re-synth
- * ONCE and keep the better take, so a Dam-class take can never ship silently again.
- * Then master the WINNER (TODO.md audio-QA #2): a two-pass linear loudnorm to a fixed LUFS
- * target (killing the clip-to-clip level spread + the quiet-vs-Spotify gap) fused with the
- * single AAC encode. Normalizing once, on the shipped take, AFTER the retake is safe — a
- * linear gain scales tail and body equally, so it can't reintroduce collapse. ffmpeg is
- * REQUIRED here (it's the encoder, not just a QA tool) — normalizeAndEncode throws if it's
- * absent. Both passes run on every SHIP path (generate-narrations, resynth-narration),
- * which all go through this.
+ * "mumble". Measure tail-vs-body after the synth (12 s tail AND a 4 s last-words window);
+ * on a drop ≥ TAIL_COLLAPSE_DB re-synth up to RETAKE_LIMIT more times (best of RETAKE_LIMIT+1)
+ * and keep the least-collapsed take, so a Dam-class take can never ship silently again.
+ * Then master the WINNER (TODO.md audio-QA #2): the limiter→single-pass-loudnorm chain fused
+ * with the single AAC encode (loudnorm.ts), killing the clip-to-clip level spread + the
+ * quiet-vs-Spotify gap. ffmpeg is REQUIRED here (it's the encoder, not just a QA tool) —
+ * normalizeAndEncode throws if it's absent. Finally an ADVISORY post-encode meter
+ * (verifyMasteredLoudness) re-reads the shipped .m4a so a clip that lands off-target or over
+ * the true-peak ceiling is flagged (never withheld). Every SHIP path (generate-narrations,
+ * resynth-narration) goes through this.
  */
 export async function synthesizeWithTailRetake(
   text: string,
@@ -159,29 +170,61 @@ export async function synthesizeWithTailRetake(
   } else if (m1.dropDb < TAIL_COLLAPSE_DB) {
     tail = { firstDropDb: m1.dropDb, keptDropDb: m1.dropDb, retook: false, shippedCollapsed: false }
   } else {
+    // Collapsed — retake up to RETAKE_LIMIT more times (best of RETAKE_LIMIT+1) and keep the
+    // least-collapsed MEASURED take, stopping early as soon as one comes back clean. The first take is
+    // measured + collapsed, so there's always a measured baseline; an UNMEASURED fresh retake (probe
+    // failed) is held only as a last-resort unknown — a fresh take of a collapsed script usually comes
+    // out clean, so an unknown still beats a KNOWN mumble.
     console.warn(
-      `  ⚠ tail collapse on ${label}: tail ${m1.tailDb.toFixed(1)} dB vs body ${m1.bodyDb.toFixed(1)} dB ` +
-        `(drop ${m1.dropDb.toFixed(1)} dB ≥ ${TAIL_COLLAPSE_DB}) — re-synthesizing once...`,
+      `  ⚠ tail collapse on ${label}: tail ${m1.tailDb.toFixed(1)} dB / last-${TERMINAL_WINDOW_SEC}s ${m1.terminalDb.toFixed(1)} dB ` +
+        `vs body ${m1.bodyDb.toFixed(1)} dB (drop ${m1.dropDb.toFixed(1)} dB ≥ ${TAIL_COLLAPSE_DB}) — re-synthesizing (best of ${RETAKE_LIMIT + 1})...`,
     )
-    const second = await synthesize(text, voiceId, style)
-    const m2 = await measureTailCollapse(second.audio, second.durationMs)
-    const keepFirst = keepFirstTake(m1, m2)
-    shipped = keepFirst ? first : second
-    const keptDropDb = keepFirst ? m1.dropDb : (m2?.dropDb ?? null)
+    let bestTake = first
+    let bestMeasure = m1
+    let unknownFallback: SynthResult | null = null
+    let retakes = 0
+    while (retakes < RETAKE_LIMIT && bestMeasure.dropDb >= TAIL_COLLAPSE_DB) {
+      retakes++
+      const next = await synthesize(text, voiceId, style)
+      const mNext = await measureTailCollapse(next.audio, next.durationMs)
+      if (mNext === null) {
+        unknownFallback = next // probe failed on this take — keep it as an unmeasured last resort
+        continue
+      }
+      if (!keepFirstTake(bestMeasure, mNext)) {
+        bestTake = next // mNext's drop is smaller → it becomes the take to beat
+        bestMeasure = mNext
+      }
+    }
+    // Ship the least-collapsed measured take; if it STILL collapses but a fresh unmeasured take exists,
+    // ship the unknown over the known mumble.
+    let keptDropDb: number | null
+    if (bestMeasure.dropDb >= TAIL_COLLAPSE_DB && unknownFallback) {
+      shipped = unknownFallback
+      keptDropDb = null
+    } else {
+      shipped = bestTake
+      keptDropDb = bestMeasure.dropDb
+    }
     const shippedCollapsed = keptDropDb !== null && keptDropDb >= TAIL_COLLAPSE_DB
     console.warn(
       shippedCollapsed
-        ? `  ⚠ ${label}: BOTH takes collapsed — shipping the better one (drop ${keptDropDb!.toFixed(1)} dB), flagged for the human pass.`
-        : `  ✓ ${label}: retake ${keptDropDb === null ? 'unmeasured, shipped on the odds' : `clean (drop ${keptDropDb.toFixed(1)} dB)`}.`,
+        ? `  ⚠ ${label}: all ${retakes + 1} takes collapsed — shipping the best (drop ${keptDropDb!.toFixed(1)} dB), flagged for the human pass.`
+        : `  ✓ ${label}: ${keptDropDb === null ? 'shipped a fresh unmeasured retake on the odds' : `clean after ${retakes} retake(s) (drop ${keptDropDb.toFixed(1)} dB)`}.`,
     )
     tail = { firstDropDb: m1.dropDb, keptDropDb, retook: true, shippedCollapsed }
   }
 
-  // ── Master the shipped take: linear loudnorm + the single AAC encode (loudnorm.ts). This is
-  //    the ONLY lossy pass (the take above is lossless WAV), and ffmpeg is REQUIRED here — it
-  //    IS the encoder, so it throws loudly if absent rather than ship a mislabeled clip. The
-  //    PCM duration is exact and content-preserving, so it carries through the encode. ──
+  // ── Master the shipped take: the limiter→single-pass-loudnorm chain fused with the single AAC encode
+  //    (loudnorm.ts). This is the ONLY lossy pass (the take above is lossless WAV), and ffmpeg is REQUIRED
+  //    here — it IS the encoder, so it throws loudly if absent rather than ship a mislabeled clip. The PCM
+  //    duration is exact and content-preserving, so it carries through the encode. ──
   const audio = await normalizeAndEncode(shipped.audio)
 
-  return { audio, durationMs: shipped.durationMs, tail }
+  // ── Post-encode QA meter (loudnorm.ts): re-decode the shipped .m4a and check it actually landed at the
+  //    master target + under the −1 dBTP delivery ceiling. ADVISORY (mark-and-flag) — null on an ffmpeg
+  //    miss, never fails synthesis; the caller records the verdict for the human-review pass. ──
+  const loudness = await verifyMasteredLoudness(audio)
+
+  return { audio, durationMs: shipped.durationMs, tail, loudness }
 }

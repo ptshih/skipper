@@ -68,7 +68,7 @@ async function main(poiId: string): Promise<void> {
 
   const persona = personaFromKey('skipper')
   console.log('\nSynthesizing...')
-  const { audio, durationMs, tail } = await synthesizeWithTailRetake(
+  const { audio, durationMs, tail, loudness } = await synthesizeWithTailRetake(
     row.script!,
     persona.voice,
     ttsStyleFor(persona.ttsStyle, row.register ?? 'story'),
@@ -82,6 +82,17 @@ async function main(poiId: string): Promise<void> {
     } else if (tail.retook) {
       console.log(`  Retake used (tail clean).`)
     }
+  }
+  if (loudness) {
+    const flags = [
+      loudness.loudnessOk ? null : `${loudness.integratedLufs.toFixed(1)} LUFS off target`,
+      loudness.truePeakOk ? null : `${loudness.truePeakDb.toFixed(1)} dBTP over the −1.0 ceiling`,
+    ].filter(Boolean)
+    console.log(
+      flags.length
+        ? `  ⚠ loudness: ${flags.join(', ')} — flag for ear review.`
+        : `  Loudness OK: ${loudness.integratedLufs.toFixed(1)} LUFS, peak ${loudness.truePeakDb.toFixed(1)} dBTP.`,
+    )
   }
 
   // Fresh key + atomic repoint: upload to a NEW key, then repoint audio_url + duration in one write

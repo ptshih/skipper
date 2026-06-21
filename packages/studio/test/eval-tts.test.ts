@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import { applyTailOutcomes, evaluateTts } from '../src/eval/tts'
-import type { TailOutcomeLike } from '../src/eval/tts'
+import { applyLoudnessOutcomes, applyTailOutcomes, evaluateTts } from '../src/eval/tts'
+import type { LoudnessOutcomeLike, TailOutcomeLike } from '../src/eval/tts'
 
 const ev = (script: string) => evaluateTts({ seq: 0, script })
 
@@ -92,6 +92,66 @@ describe('applyTailOutcomes — fold the TTS-phase tail verdicts into the tts di
       [grounding],
       new Map([[5, outcome({ shippedCollapsed: true, keptDropDb: 9 })]]),
     )
+    expect(g).toBe(grounding)
+  })
+})
+
+describe('applyLoudnessOutcomes — fold the post-encode loudness verdicts into the tts dim', () => {
+  const cleanEval = (seq: number) => evaluateTts({ seq, script: 'a clean spoken line' })
+  const loud = (over: Partial<LoudnessOutcomeLike> = {}): LoudnessOutcomeLike => ({
+    integratedLufs: -14.2,
+    truePeakDb: -1.7,
+    loudnessOk: true,
+    truePeakOk: true,
+    ...over,
+  })
+
+  test('unmeasured (ffmpeg miss) → the row stands untouched', () => {
+    const evals = [cleanEval(1)]
+    const folded = applyLoudnessOutcomes(evals, new Map<number, LoudnessOutcomeLike | null>([[1, null]]))
+    expect(folded[0]).toBe(evals[0]!)
+  })
+
+  test('an in-spec clip rides along as detail, pass unchanged', () => {
+    const [e] = applyLoudnessOutcomes([cleanEval(2)], new Map([[2, loud()]]))
+    expect(e!.pass).toBe(true)
+    expect(e!.findings).toHaveLength(0)
+    expect((e!.detail as { loudness: LoudnessOutcomeLike }).loudness.integratedLufs).toBe(-14.2)
+  })
+
+  test('an off-target integrated loudness fails the tts row with a finding', () => {
+    const [e] = applyLoudnessOutcomes([cleanEval(3)], new Map([[3, loud({ integratedLufs: -15.6, loudnessOk: false })]]))
+    expect(e!.pass).toBe(false)
+    expect(e!.score).toBe(0)
+    expect(e!.findings.some((f) => f.includes('loudness') && f.includes('-15.6'))).toBe(true)
+  })
+
+  test('a true-peak ceiling breach (AAC overshoot) fails the row — the +1.4 dBTP defect', () => {
+    const [e] = applyLoudnessOutcomes([cleanEval(4)], new Map([[4, loud({ truePeakDb: 1.4, truePeakOk: false })]]))
+    expect(e!.pass).toBe(false)
+    expect(e!.findings.some((f) => f.includes('true-peak') && f.includes('1.4'))).toBe(true)
+  })
+
+  test('both off-target AND clipping → both findings accumulate', () => {
+    const [e] = applyLoudnessOutcomes(
+      [cleanEval(5)],
+      new Map([[5, loud({ integratedLufs: -16, loudnessOk: false, truePeakDb: 0.5, truePeakOk: false })]]),
+    )
+    expect(e!.findings.filter((f) => f.includes('loudness') || f.includes('true-peak'))).toHaveLength(2)
+  })
+
+  test('composes after applyTailOutcomes — a tail finding and a loudness finding stack on one row', () => {
+    const collapsed: TailOutcomeLike = { firstDropDb: 6, keptDropDb: 4.4, retook: true, shippedCollapsed: true }
+    const tailFolded = applyTailOutcomes([cleanEval(6)], new Map<number, TailOutcomeLike | null>([[6, collapsed]]))
+    const [e] = applyLoudnessOutcomes(tailFolded, new Map([[6, loud({ truePeakDb: 0.2, truePeakOk: false })]]))
+    expect(e!.pass).toBe(false)
+    expect(e!.findings.some((f) => f.includes('tail-collapse'))).toBe(true)
+    expect(e!.findings.some((f) => f.includes('true-peak'))).toBe(true)
+  })
+
+  test('non-tts dimensions pass through untouched', () => {
+    const grounding = { seq: 7, dimension: 'grounding' as const, pass: true, score: 1, findings: [] }
+    const [g] = applyLoudnessOutcomes([grounding], new Map([[7, loud({ loudnessOk: false })]]))
     expect(g).toBe(grounding)
   })
 })

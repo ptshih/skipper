@@ -41,6 +41,17 @@ puts the voice ~1 dB ABOVE the bed; since the bed ducks to SILENCE under a narra
 the voice), that gap only shows when music swells back after a clip — a subordinate-bed feel. Either way,
 verify on the on-device A/B (Open).
 
+## Post-encode verification (the QA meter)
+
+The target used to be **asserted by construction and never read back** — the −14.7…−15.5 undershoot spread
+and the +1.4/+2.4 dBTP overshoot were both found BY HAND. `verifyMasteredLoudness` (`loudnorm.ts`) now
+re-decodes every shipped `.m4a` with `ffmpeg ebur128=peak=true` and checks the measured integrated loudness
+(within ±1 LU of the active master target) + the **decoded-AAC true peak** (the inter-sample overshoot the
+pre-encode PCM ceiling is blind to) against the −1.0 dBTP delivery ceiling. **ADVISORY (mark-and-flag):** an
+off-spec clip fails its `tts` eval row for the human-review pass (`applyLoudnessOutcomes`) but is **never
+withheld** — promote to fail-closed only after the gate has run a corpus clean. Pairs with the best-of-3
+tail-collapse retake + the 4 s last-words probe (`tts.ts`/`tail.ts`).
+
 ## History
 
 - Narration shipped at −14 LUFS / **−1.5 dBTP** 2026-06-11 (the loudnorm mechanism;

@@ -80,8 +80,48 @@ export function applyTailOutcomes(
       ...e,
       pass: false,
       score: 0,
-      findings: [...e.findings, `tail-collapse: shipped take still drops ${drop} dB tail-vs-body after one retake`],
+      findings: [...e.findings, `tail-collapse: shipped take still drops ${drop} dB tail-vs-body after retakes`],
       detail,
     }
+  })
+}
+
+/** The post-encode loudness/true-peak verdict the TTS phase hands back per clip (structurally =
+ *  pipeline/loudnorm.ts `LoudnessOutcome` — kept structural so eval/ stays pipeline-free). */
+export interface LoudnessOutcomeLike {
+  integratedLufs: number
+  truePeakDb: number
+  loudnessOk: boolean
+  truePeakOk: boolean
+}
+
+/**
+ * Fold the TTS phase's POST-ENCODE loudness measurements into the tts dimension (ADVISORY mark-and-flag).
+ * The masteringChain targets −14 LUFS / −1 dBTP but nothing read the shipped clip back until now; this
+ * records whether the master actually landed in spec. A clip whose measured integrated loudness drifts
+ * past tolerance, OR whose decoded-AAC true peak breached the −1 dBTP delivery ceiling (the inter-sample
+ * overshoot the pre-encode PCM ceiling can't see), fails its tts row so the human-review pass sees it — it
+ * is NEVER withheld here (the gate ran pre-synthesis; the clip already shipped). A measured-clean clip
+ * rides along as `detail`; an unmeasured clip (ffmpeg miss) passes through untouched. Compose AFTER
+ * applyTailOutcomes — both can flag the same tts row, and the findings accumulate.
+ */
+export function applyLoudnessOutcomes(
+  evals: StopEval[],
+  loudnessBySeq: ReadonlyMap<number, LoudnessOutcomeLike | null | undefined>,
+): StopEval[] {
+  return evals.map((e) => {
+    if (e.dimension !== 'tts') return e
+    const l = loudnessBySeq.get(e.seq)
+    if (!l) return e // unmeasured (ffmpeg miss) — nothing to add
+    const detail = { ...(e.detail as Record<string, unknown> | undefined), loudness: l }
+    if (l.loudnessOk && l.truePeakOk) return { ...e, detail }
+    const findings = [...e.findings]
+    if (!l.loudnessOk)
+      findings.push(`loudness: shipped clip measured ${l.integratedLufs.toFixed(1)} LUFS (off the master target)`)
+    if (!l.truePeakOk)
+      findings.push(
+        `true-peak: shipped clip peaks ${l.truePeakDb.toFixed(1)} dBTP (above the −1.0 dBTP delivery ceiling — AAC overshoot)`,
+      )
+    return { ...e, pass: false, score: 0, findings, detail }
   })
 }

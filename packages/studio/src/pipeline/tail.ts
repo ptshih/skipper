@@ -20,6 +20,10 @@ import { unlink, writeFile } from 'node:fs/promises'
 
 /** The tail window (s) — long enough to span a collapsed closing sentence or two. */
 export const TAIL_WINDOW_SEC = 12
+/** A SHORT terminal window (s) INSIDE the tail. `mean_volume` is RMS over the whole window, so a take that
+ *  holds level across the 12 s tail but dies only over the final words averages out and slips the gate; a
+ *  4 s window catches that "last-words mumble" (the documented residual West-Shore collapses). */
+export const TERMINAL_WINDOW_SEC = 4
 /** Tail-vs-body mean-volume drop (dB) that marks a take collapsed (the measured 8/30 line). */
 export const TAIL_COLLAPSE_DB = 3
 /** Below this duration there's no body meaningfully longer than the tail — skip the probe
@@ -31,8 +35,18 @@ export interface TailMeasure {
   bodyDb: number
   /** Mean volume (dB) of the final TAIL_WINDOW_SEC. */
   tailDb: number
-  /** body − tail: positive = the tail is QUIETER than the body. */
+  /** Mean volume (dB) of the final TERMINAL_WINDOW_SEC (the last-words window). */
+  terminalDb: number
+  /** Collapse severity (dB): body minus the QUIETER of the two tail windows. Positive = the tail (or just
+   *  its final words) is quieter than the body. This is the value the gate + the best-of-N retake compare. */
   dropDb: number
+}
+
+/** Collapse severity = body minus the QUIETER of the two tail windows (the 12 s tail and the 4 s terminal),
+ *  so a tail that dies only over the closing words is caught even when the 12 s RMS average hides it.
+ *  Exported (pure) for tests. */
+export function tailDropDb(bodyDb: number, tailDb: number, terminalDb: number): number {
+  return Math.max(bodyDb - tailDb, bodyDb - terminalDb)
 }
 
 /** Pull `mean_volume: -23.4 dB` out of ffmpeg's volumedetect stderr. Exported for tests. */
@@ -85,15 +99,16 @@ export async function measureTailCollapse(
   try {
     await writeFile(file, audio)
     const bodySec = durationSec - TAIL_WINDOW_SEC
-    const [bodyDb, tailDb] = await Promise.all([
+    const [bodyDb, tailDb, terminalDb] = await Promise.all([
       meanVolumeDb(file, ['-t', bodySec.toFixed(2)]),
       meanVolumeDb(file, ['-sseof', `-${TAIL_WINDOW_SEC}`]),
+      meanVolumeDb(file, ['-sseof', `-${TERMINAL_WINDOW_SEC}`]),
     ])
-    if (bodyDb === null || tailDb === null) {
+    if (bodyDb === null || tailDb === null || terminalDb === null) {
       warnUnavailableOnce('ffmpeg pass failed or produced no mean_volume')
       return null
     }
-    return { bodyDb, tailDb, dropDb: bodyDb - tailDb }
+    return { bodyDb, tailDb, terminalDb, dropDb: tailDropDb(bodyDb, tailDb, terminalDb) }
   } catch (e) {
     warnUnavailableOnce(`ffmpeg unavailable: ${(e as Error).message}`)
     return null

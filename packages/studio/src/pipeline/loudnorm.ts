@@ -30,6 +30,7 @@
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { readFile, unlink, writeFile } from 'node:fs/promises'
+import { AUDIO_LOUDNESS } from '@skipper/shared'
 import { LOUDNORM_RANGE_LU } from '../models'
 
 /** One narration master = the limiter→single-pass-loudnorm chain at a chosen loudness. */
@@ -127,5 +128,95 @@ export async function normalizeAndEncode(audio: Uint8Array): Promise<Uint8Array>
   } finally {
     await unlink(inFile).catch(() => {})
     await unlink(outFile).catch(() => {})
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST-ENCODE QA METER — close the loop the master never verified.
+//
+// The masteringChain TARGETS −14 LUFS / −1 dBTP, but until now nothing read the SHIPPED .m4a back, so
+// the −14.7…−15.5 undershoot spread (old linear loudnorm) and the +1.4/+2.4 dBTP AAC overshoot (the −13
+// work) were both found BY HAND. This re-decodes the encoded clip with ffmpeg `ebur128=peak=true` and
+// judges its integrated loudness + true peak. The true peak here is the DECODED-AAC true peak — the
+// inter-sample overshoot the pre-encode TP ceiling (a PCM ceiling) is blind to. ADVISORY (mark-and-flag):
+// the caller records the verdict, it never withholds a clip and never fails synthesis.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Post-encode QA tolerance: |measured integrated − the active master target| beyond this many LU is
+ *  FLAGGED. The limiter→loudnorm master lands ~−14.1…−14.5 on −14 (and −13.0…−13.4 on loud13), so ±1 LU
+ *  never trips a healthy clip but catches the −14.7…−15.5 undershoot spread the old linear loudnorm left. */
+const LOUDNESS_TOLERANCE_LU = 1.0
+
+/** The post-encode loudness/true-peak verdict for one shipped .m4a. */
+export interface LoudnessOutcome {
+  /** Measured integrated loudness of the ENCODED clip (LUFS). */
+  integratedLufs: number
+  /** Measured true peak of the DECODED AAC (dBTP) — includes the inter-sample overshoot the pre-encode
+   *  PCM ceiling can't see (the defect that clipped clips to +1.4/+2.4 dBTP). */
+  truePeakDb: number
+  /** Integrated loudness within ±LOUDNESS_TOLERANCE_LU of the active master target. */
+  loudnessOk: boolean
+  /** True peak within the shared −1 dBTP delivery ceiling (no AAC overshoot into clipping). */
+  truePeakOk: boolean
+}
+
+/** Parse ffmpeg `ebur128`'s end-of-stream Summary block (PURE — unit-tested against the real 8.x format).
+ *  Anchors on the "Summary:" marker because the per-frame log lines carry `I:` / `TPK:` too; inside the
+ *  Summary the labels are `I:` (Integrated loudness) + `Peak:` (True peak). Returns null when the block or
+ *  a field is absent / non-finite (e.g. `-inf` on digital silence) — the QA meter then ships unmeasured. */
+export function parseEbur128Summary(stderr: string): { integratedLufs: number; truePeakDb: number } | null {
+  const at = stderr.lastIndexOf('Summary:')
+  if (at < 0) return null
+  const tail = stderr.slice(at)
+  const i = /\bI:\s*(-?\d+(?:\.\d+)?)\s*LUFS/.exec(tail)
+  const p = /\bPeak:\s*(-?\d+(?:\.\d+)?)\s*dBFS/.exec(tail)
+  if (!i || !p) return null
+  return { integratedLufs: Number(i[1]), truePeakDb: Number(p[1]) }
+}
+
+/** Judge a measured (integrated, true-peak) pair against the ACTIVE master target + the shared −1 dBTP
+ *  delivery ceiling. PURE (no ffmpeg) so the thresholds are unit-tested; the target follows `MASTER`, so
+ *  flipping to `loud13` (−13) re-aims the loudness check automatically. */
+export function judgeMasteredLoudness(m: { integratedLufs: number; truePeakDb: number }): LoudnessOutcome {
+  return {
+    integratedLufs: m.integratedLufs,
+    truePeakDb: m.truePeakDb,
+    loudnessOk: Math.abs(m.integratedLufs - MASTER.targetLufs) <= LOUDNESS_TOLERANCE_LU,
+    truePeakOk: m.truePeakDb <= AUDIO_LOUDNESS.truePeakDbtp,
+  }
+}
+
+/** One read-only `ebur128=peak=true` pass over a file; null on any failure (no throw). */
+async function ebur128Summary(file: string): Promise<{ integratedLufs: number; truePeakDb: number } | null> {
+  try {
+    // -f null - decodes (read-only) without writing; ebur128 reports its Summary on stderr at stream end.
+    const proc = Bun.spawn(
+      ['ffmpeg', '-hide_banner', '-nostats', '-i', file, '-af', 'ebur128=peak=true', '-f', 'null', '-'],
+      { stdout: 'ignore', stderr: 'pipe' },
+    )
+    const stderr = await new Response(proc.stderr).text()
+    if ((await proc.exited) !== 0) return null
+    return parseEbur128Summary(stderr)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Post-encode QA: measure the SHIPPED .m4a's integrated loudness + decoded-AAC true peak and judge them
+ * against the active master target + the −1 dBTP delivery ceiling. ADVISORY — returns null (never throws)
+ * when ffmpeg is absent or the read/parse fails, so a meter miss can't fail synthesis. ffmpeg's ebur128
+ * is already on the ship path (the encoder is ffmpeg), so on a real run this always measures.
+ */
+export async function verifyMasteredLoudness(m4a: Uint8Array): Promise<LoudnessOutcome | null> {
+  const file = join(tmpdir(), `skipper-meter-${crypto.randomUUID()}.m4a`)
+  try {
+    await writeFile(file, m4a)
+    const m = await ebur128Summary(file)
+    return m ? judgeMasteredLoudness(m) : null
+  } catch {
+    return null
+  } finally {
+    await unlink(file).catch(() => {})
   }
 }

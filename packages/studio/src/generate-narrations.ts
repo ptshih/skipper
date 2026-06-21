@@ -41,6 +41,7 @@ import { regionLabel } from './pipeline/geo'
 import { narrateStop } from './pipeline/narrate'
 import { resolveStoryGrounding } from './pipeline/select'
 import { synthesizeWithTailRetake, type TailOutcome } from './pipeline/tts'
+import type { LoudnessOutcome } from './pipeline/loudnorm'
 import { narrationClipKey, uploadAudio } from './pipeline/storage'
 import { storyFactsHash } from './pipeline/persist'
 import { wikiUrlForPageId } from './pipeline/wikipedia'
@@ -60,7 +61,7 @@ import { estimateTtsUsd, llmSpendLines, llmSpentUsd, unpricedModels, TTS_ESTIMAT
 import { STORY_TASTE_DENYLIST, type DeliveryRegister } from '@skipper/shared'
 import { NARRATION_MODEL, JUDGMENT_MODEL, ttsStyleFor, lengthForRegister, getAnthropic } from './models'
 import { buildGroundingWell, evaluateGrounding } from './eval/grounding'
-import { applyTailOutcomes, evaluateTts } from './eval/tts'
+import { applyLoudnessOutcomes, applyTailOutcomes, evaluateTts } from './eval/tts'
 import { evaluateDiversity } from './eval/diversity'
 import { evaluateLaterality } from './eval/laterality'
 import { evaluatePacing } from './eval/pacing'
@@ -401,6 +402,10 @@ async function main(): Promise<void> {
   // FAILED tts row (the human-review flag) instead of a silent pass. Empty on the dry/abort paths (no
   // synthesis ran — the pre-synth script verdict stands), where applyTailOutcomes is a no-op.
   const tailBySeq = new Map<number, TailOutcome | null>()
+  // The shipped clips' POST-ENCODE loudness/true-peak verdicts (seq → outcome), filled by the synth loop
+  // alongside tailBySeq. Folded into the tts dimension at record time (advisory) so a clip that landed
+  // off-target or over the true-peak ceiling records as a FAILED tts row for the human pass — never withheld.
+  const loudnessBySeq = new Map<number, LoudnessOutcome | null>()
   const recordRun = (dryRun: boolean): Promise<unknown> =>
     recordEvalRun({
       region: runRegion,
@@ -412,7 +417,7 @@ async function main(): Promise<void> {
         slug: runRegion,
         runName: 'generate_narrations',
         evaluatedAt: new Date().toISOString(),
-        stops: applyTailOutcomes(baseStops, tailBySeq),
+        stops: applyLoudnessOutcomes(applyTailOutcomes(baseStops, tailBySeq), loudnessBySeq),
       }),
       total: gated.length,
       shipped: shippedClips.length,
@@ -519,7 +524,7 @@ async function main(): Promise<void> {
       // Tail-collapse retake (pipeline/tts.ts): narration clips ship unheard, so a mumbled
       // closing sentence would reach riders' ears first — measure + retake here too.
       // The poi's register modulates the READ (pace/space/energy) on the shared base; null → story base.
-      const { audio, durationMs, tail } = await synthesizeWithTailRetake(
+      const { audio, durationMs, tail, loudness } = await synthesizeWithTailRetake(
         script,
         persona.voice,
         ttsStyleFor(persona.ttsStyle, c.deliveryRegister ?? 'story'),
@@ -571,9 +576,11 @@ async function main(): Promise<void> {
             }),
         { label: `upsert narration(${c.name})` },
       )
-      // Record this shipped clip's tail-collapse outcome so a still-collapsed closer lands as a FAILED
-      // tts row in the eval record (the human-review flag) rather than a silent pass.
+      // Record this shipped clip's tail-collapse + post-encode loudness outcomes so a still-collapsed
+      // closer OR an off-spec master lands as a FAILED tts row in the eval record (the human-review
+      // flag) rather than a silent pass.
       tailBySeq.set(g.seq, tail)
+      loudnessBySeq.set(g.seq, loudness)
       synthDone++
       console.log(`  [${synthDone}/${shippedClips.length}] ${c.name} (${(durationMs / 1000).toFixed(0)}s)`)
       return { name: c.name, durationMs }
