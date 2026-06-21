@@ -7,7 +7,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
-import { MapContainer, Marker, Rectangle, TileLayer, useMap, useMapEvents } from 'react-leaflet'
+import { MapContainer, Marker, Rectangle, TileLayer, Tooltip, useMap, useMapEvents } from 'react-leaflet'
 
 // Tahoe basin center — a sane default so a blank "create region" map isn't staring at open ocean.
 const DEFAULT_CENTER: [number, number] = [39.0968, -120.0324]
@@ -28,6 +28,27 @@ const ANCHOR_ICON = L.divIcon({
   iconSize: [22, 22],
   iconAnchor: [11, 11],
 })
+
+// Curated-place pins (the /places map). Color codes the role at a glance: amber = featured (the
+// popular subset floated to the top of the picker), teal = an endpoint hub, slate = a break-only
+// pitstop. Hardcoded colors (leaflet renders outside the token system), echoing POI_ICON's teal.
+const pinSvg = (fill: string): string =>
+  `<svg width="22" height="22" viewBox="0 0 24 24" fill="${fill}" stroke="white" stroke-width="1.5"><path d="M12 22s-7-6.2-7-11a7 7 0 1 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="11" r="2.4" fill="white"/></svg>`
+const FEATURED_PIN = L.divIcon({ className: '', html: pinSvg('#d97706'), iconSize: [22, 22], iconAnchor: [11, 22] })
+const ENDPOINT_PIN = L.divIcon({ className: '', html: pinSvg('#0f766e'), iconSize: [22, 22], iconAnchor: [11, 22] })
+const BREAK_PIN = L.divIcon({ className: '', html: pinSvg('#64748b'), iconSize: [22, 22], iconAnchor: [11, 22] })
+
+interface PlacePin {
+  lat: number
+  lng: number
+  name: string
+  featured: boolean
+  endpointEligible: boolean
+}
+function placePinIcon(p: PlacePin): L.DivIcon {
+  if (p.featured) return FEATURED_PIN
+  return p.endpointEligible ? ENDPOINT_PIN : BREAK_PIN
+}
 
 /** Parse "lng_min,lat_min,lng_max,lat_max" → leaflet bounds [[swLat,swLng],[neLat,neLng]], or null. */
 function bboxToBounds(bbox: string): L.LatLngBoundsLiteral | null {
@@ -126,6 +147,40 @@ export function BboxMap({ bbox, onBbox, className }: { bbox: string; onBbox: (bb
         <FitBounds bbox={bbox} />
         {bounds && !drawing && <Rectangle bounds={bounds} pathOptions={{ color: '#16a34a', weight: 2, dashArray: '4' }} />}
         <DrawRectangle active={drawing} onBbox={onBbox} onDone={() => setDrawing(false)} />
+      </MapContainer>
+    </div>
+  )
+}
+
+/** A read-only multi-pin map of a region's CURATED places, fit to the region bbox. Pins are
+ *  color-coded by role (amber=featured, teal=endpoint, slate=break) with a hover tooltip of the name —
+ *  so the curator can eyeball whether hubs are spread sensibly or clustered. Empty `places` just shows
+ *  the bboxed region. */
+export function PlacesMap({
+  places,
+  bbox,
+  className,
+}: {
+  places: PlacePin[]
+  bbox: string | null
+  className?: string
+}) {
+  const bounds = bbox ? bboxToBounds(bbox) : null
+  const center: [number, number] = bounds
+    ? [(bounds[0][0] + bounds[1][0]) / 2, (bounds[0][1] + bounds[1][1]) / 2]
+    : DEFAULT_CENTER
+  return (
+    <div className={`relative w-full overflow-hidden rounded-lg border ${className ?? 'h-72'}`}>
+      <MapContainer center={center} zoom={bounds ? 9 : 8} scrollWheelZoom={false} style={{ height: '100%', width: '100%' }}>
+        <TileLayer attribution={OSM_ATTRIBUTION} url={OSM_URL} />
+        <InvalidateOnMount />
+        {bbox && <FitBounds bbox={bbox} />}
+        {bounds && <Rectangle bounds={bounds} pathOptions={{ color: '#16a34a', weight: 1, dashArray: '4', fillOpacity: 0 }} />}
+        {places.map((p, i) => (
+          <Marker key={`${p.lat},${p.lng},${i}`} position={[p.lat, p.lng]} icon={placePinIcon(p)}>
+            <Tooltip>{p.name}</Tooltip>
+          </Marker>
+        ))}
       </MapContainer>
     </div>
   )

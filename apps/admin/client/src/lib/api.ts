@@ -27,7 +27,7 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 
 // Mirrors the `jobKind` enum in @skipper/shared (the server validates against it; this is the UX-typing
 // view, like StoryEligibility). Keep in sync if a kind is added/renamed there.
-export type JobKind = 'generate' | 'patch_clip' | 'resynth' | 'resynth_narration' | 'sweep_orphans' | 'discover_pois' | 'enrich_pois' | 'generate_narrations' | 'refetch_facts' | 'offline_audit'
+export type JobKind = 'generate' | 'patch_clip' | 'resynth' | 'resynth_narration' | 'sweep_orphans' | 'discover_pois' | 'enrich_pois' | 'generate_narrations' | 'curate_places' | 'refetch_facts' | 'offline_audit'
 export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled'
 
 export interface StudioJob {
@@ -261,6 +261,30 @@ export interface HealthStatus {
 
 /* ------------------------------- client ------------------------------ */
 
+// One curated place row from GET /admin/places — the /places curation table + map. Role flags are
+// independent (a place can be both an endpoint hub and a break pitstop); `featured` floats it to the
+// top of the rider's picker.
+export interface PlaceRow {
+  id: string
+  placeId: string
+  name: string
+  primaryType: string | null
+  lat: number
+  lng: number
+  endpointEligible: boolean
+  breakEligible: boolean
+  featured: boolean
+}
+
+// A live Google Places resolution (POST /admin/places/resolve) — the manual-add candidate before insert.
+export interface ResolvedPlace {
+  placeId: string
+  name: string
+  lat: number
+  lng: number
+  primaryType?: string
+}
+
 export const api = {
   // OPEN route (not under /admin) — the boot/interval health probe. `?deep=1` adds a DB ping.
   health: () => req<HealthStatus>('/health?deep=1'),
@@ -296,6 +320,24 @@ export const api = {
     req<BboxLookupResult>('/admin/regions/bbox-lookup', { method: 'POST', body: JSON.stringify(body) }),
   createJob: (body: Record<string, unknown>) =>
     req<{ job: StudioJob }>('/admin/jobs', { method: 'POST', body: JSON.stringify(body) }),
+  // Curated places (the /places surface). `places` returns the region's set + its bbox (for the map).
+  places: (region: string) =>
+    req<{ places: PlaceRow[]; bbox: string | null }>(`/admin/places?region=${encodeURIComponent(region)}`),
+  patchPlace: (id: string, body: { endpointEligible?: boolean; breakEligible?: boolean; featured?: boolean }) =>
+    req<{ place: PlaceRow }>(`/admin/places/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deletePlace: (id: string) => req<{ ok: true }>(`/admin/places/${id}`, { method: 'DELETE' }),
+  resolvePlace: (body: { region: string; query: string }) =>
+    req<{ place: ResolvedPlace | null }>('/admin/places/resolve', { method: 'POST', body: JSON.stringify(body) }),
+  addPlace: (body: {
+    placeId: string
+    name: string
+    lat: number
+    lng: number
+    primaryType?: string | null
+    endpointEligible?: boolean
+    breakEligible?: boolean
+    featured?: boolean
+  }) => req<{ place: PlaceRow }>('/admin/places', { method: 'POST', body: JSON.stringify(body) }),
   users: () => req<{ users: UserRow[] }>('/admin/users'),
   // Append an admin_grant ledger entry; returns the refreshed credit summary for the row.
   grantCredits: (id: string, body: { amount: number; reason?: string }) =>

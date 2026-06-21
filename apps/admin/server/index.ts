@@ -25,6 +25,11 @@
 //   DELETE /admin/pois/:id        -> hard-delete an orphaned POI (no narration)
 //   GET  /admin/users             -> account list with per-user credit ledger summary (granted/used/remaining)
 //   POST /admin/users/:id/credits -> grant credits to a user (an admin_grant ledger entry)
+//   GET  /admin/places            -> a region's curated places (point-in-bbox) for the /places curation surface
+//   PATCH  /admin/places/:id      -> toggle a place's role (endpoint/break) or featured flag (prune+promote)
+//   DELETE /admin/places/:id      -> remove a curated place
+//   POST /admin/places/resolve    -> live Google Places resolve of a typed name (manual-add candidate)
+//   POST /admin/places            -> add a manually-resolved place (upsert by place_id, role-tagged)
 
 import { Hono } from 'hono'
 import { serveStatic } from 'hono/bun'
@@ -36,6 +41,7 @@ import {
   evalScores,
   studioJobs,
   narrations,
+  places,
   poiOverrides,
   pois,
   regions,
@@ -45,6 +51,7 @@ import { CLAUDE_MODELS, classifyStoryEligibility } from '@skipper/shared'
 import { checkSpeakableAnchor } from '@skipper/engine'
 import { requireAdmin, type AdminEnv } from './auth'
 import { bboxError, parseBbox } from './bbox'
+import { resolvePlaceInBbox } from './places'
 import { contentTypeForKey, presignGet } from './storage'
 import {
   buildJobArgs,
@@ -304,6 +311,152 @@ app.post('/admin/regions/bbox-lookup', async (c) => {
   } catch (e) {
     return c.json({ llm: null, llmError: String(e) })
   }
+})
+
+/* -------------------------------------------------------------------------- */
+/*  Curated places — the /places curation surface (drive endpoints + breaks)    */
+/* -------------------------------------------------------------------------- */
+// The `places` table is the curated real-world-location layer (towns/marinas/lookouts as drive
+// endpoints; coffee/gas/rest as break pitstops), role-tagged. Coords are resolved + STORED here so the
+// runtime picker (GET /drives/anchors) makes zero live Places calls. Region membership is point-in-bbox
+// (geometry-first; no region_id). The bulk seed is the `curate_places` studio job; these endpoints are
+// the review/prune/promote + manual-add surface. See docs/specs/places-endpoints-spec.md.
+
+/** Columns returned for a curated place row (the table + map). */
+const placeCols = {
+  id: places.id,
+  placeId: places.placeId,
+  name: places.name,
+  primaryType: places.primaryType,
+  lat: places.lat,
+  lng: places.lng,
+  endpointEligible: places.endpointEligible,
+  breakEligible: places.breakEligible,
+  featured: places.featured,
+}
+
+// GET /admin/places?region=<slug> — the region's curated places (point-in-bbox), all role flags, plus
+// the region bbox (for the map). featured first, then A→Z — the same order the picker floats.
+app.get('/admin/places', async (c) => {
+  const slug = (c.req.query('region') ?? '').trim()
+  if (!slug) return c.json({ error: 'region (slug) is required' }, 400)
+  const region = (
+    await db.select({ bbox: regions.bbox }).from(regions).where(eq(regions.slug, slug)).limit(1)
+  )[0]
+  if (!region) return c.json({ error: 'not_found' }, 404)
+  const box = parseBbox(region.bbox)
+  if (!box) return c.json({ places: [], bbox: null }) // no bbox set → nothing to scope yet
+  const rows = await db
+    .select(placeCols)
+    .from(places)
+    .where(and(between(places.lat, box.swLat, box.neLat), between(places.lng, box.swLng, box.neLng)))
+    .orderBy(desc(places.featured), asc(places.name))
+  return c.json({ places: rows, bbox: region.bbox })
+})
+
+// PATCH /admin/places/:id — toggle a role / featured (the prune+promote loop). Only the booleans sent
+// are changed; an empty body is a 400. Independent flags so a place can be pruned from one role only.
+app.patch('/admin/places/:id', async (c) => {
+  const id = c.req.param('id')
+  if (!UUID_RE.test(id)) return c.json({ error: 'bad_request' }, 400)
+  const body = await c.req
+    .json<{ endpointEligible?: boolean; breakEligible?: boolean; featured?: boolean }>()
+    .catch(() => ({}) as Record<string, never>)
+  const update: Record<string, unknown> = {}
+  if (typeof body.endpointEligible === 'boolean') update.endpointEligible = body.endpointEligible
+  if (typeof body.breakEligible === 'boolean') update.breakEligible = body.breakEligible
+  if (typeof body.featured === 'boolean') update.featured = body.featured
+  if (!Object.keys(update).length) return c.json({ error: 'nothing to update' }, 400)
+  update.updatedAt = new Date()
+  const [row] = await db.update(places).set(update).where(eq(places.id, id)).returning(placeCols)
+  if (!row) return c.json({ error: 'not_found' }, 404)
+  return c.json({ place: row })
+})
+
+// DELETE /admin/places/:id — remove a curated place (a stub detour, if any, cascades via the FK).
+app.delete('/admin/places/:id', async (c) => {
+  const id = c.req.param('id')
+  if (!UUID_RE.test(id)) return c.json({ error: 'bad_request' }, 400)
+  const [row] = await db.delete(places).where(eq(places.id, id)).returning({ id: places.id })
+  if (!row) return c.json({ error: 'not_found' }, 404)
+  return c.json({ ok: true })
+})
+
+// POST /admin/places/resolve { region, query } — live Google Places resolve of a typed name, bbox-bound
+// to the region, for the manual-add flow. Returns { place: null } when nothing matches in-region.
+app.post('/admin/places/resolve', async (c) => {
+  const body = await c.req.json<{ region?: string; query?: string }>().catch(() => ({}) as Record<string, never>)
+  const slug = (body.region ?? '').trim()
+  const query = (body.query ?? '').trim()
+  if (!slug || !query) return c.json({ error: 'region and query are required' }, 400)
+  const region = (
+    await db.select({ bbox: regions.bbox }).from(regions).where(eq(regions.slug, slug)).limit(1)
+  )[0]
+  if (!region) return c.json({ error: 'not_found' }, 404)
+  const box = parseBbox(region.bbox)
+  if (!box) return c.json({ error: 'bbox_required', message: 'Set a valid region bbox before adding places.' }, 400)
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY
+  if (!apiKey) return c.json({ error: 'places_unconfigured', message: 'GOOGLE_MAPS_API_KEY is not set.' }, 503)
+  try {
+    const place = await resolvePlaceInBbox(query, box, apiKey)
+    return c.json({ place }) // place may be null (no in-region match)
+  } catch (e) {
+    return c.json({ error: 'places_error', message: e instanceof Error ? e.message : String(e) }, 502)
+  }
+})
+
+// POST /admin/places — add a manually-resolved place (upsert by place_id). OR-merges role flags so a
+// re-add never clears a role the curate job set; name/coords/primaryType/featured are last-write-wins.
+app.post('/admin/places', async (c) => {
+  const body = await c.req
+    .json<{
+      placeId?: string
+      name?: string
+      lat?: number
+      lng?: number
+      primaryType?: string | null
+      endpointEligible?: boolean
+      breakEligible?: boolean
+      featured?: boolean
+    }>()
+    .catch(() => ({}) as Record<string, never>)
+  const placeId = (body.placeId ?? '').trim()
+  const name = (body.name ?? '').trim()
+  if (!placeId || !name || typeof body.lat !== 'number' || typeof body.lng !== 'number') {
+    return c.json({ error: 'placeId, name, lat, lng are required' }, 400)
+  }
+  const endpointEligible = body.endpointEligible === true
+  const breakEligible = body.breakEligible === true
+  if (!endpointEligible && !breakEligible) {
+    return c.json({ error: 'pick at least one role (endpoint or break)' }, 400)
+  }
+  const [row] = await db
+    .insert(places)
+    .values({
+      placeId,
+      name,
+      primaryType: body.primaryType ?? null,
+      lat: body.lat,
+      lng: body.lng,
+      endpointEligible,
+      breakEligible,
+      featured: body.featured === true,
+    })
+    .onConflictDoUpdate({
+      target: places.placeId,
+      set: {
+        name: sql`excluded.name`,
+        primaryType: sql`excluded.primary_type`,
+        lat: sql`excluded.lat`,
+        lng: sql`excluded.lng`,
+        endpointEligible: sql`${places.endpointEligible} OR excluded.endpoint_eligible`,
+        breakEligible: sql`${places.breakEligible} OR excluded.break_eligible`,
+        featured: sql`excluded.featured`,
+        updatedAt: new Date(),
+      },
+    })
+    .returning(placeCols)
+  return c.json({ place: row }, 201)
 })
 
 // GET /admin/runs — a unified feed merging the operational studio_jobs with the historical

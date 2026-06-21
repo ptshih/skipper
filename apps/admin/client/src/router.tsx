@@ -5,6 +5,7 @@ import { EvalsView } from './views/EvalsView'
 import { RegionsView } from './views/RegionsView'
 import { ReferenceView } from './views/ReferenceView'
 import { PoisView } from './views/PoisView'
+import { PlacesView } from './views/PlacesView'
 import { UsersView } from './views/UsersView'
 
 // Code-based route tree (no file-based codegen) — the admin has a flat, fixed set of routes.
@@ -35,6 +36,7 @@ const evalsRoute = createRoute({
   validateSearch: validateRunSearch,
 })
 const regionsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/regions', component: RegionsView })
+const placesRoute = createRoute({ getParentRoute: () => rootRoute, path: '/places', component: PlacesView })
 const usersRoute = createRoute({ getParentRoute: () => rootRoute, path: '/users', component: UsersView })
 const referenceRoute = createRoute({ getParentRoute: () => rootRoute, path: '/reference', component: ReferenceView })
 export type PoiAction = 'discover' | 'generate' | 'rescore'
@@ -61,6 +63,7 @@ const routeTree = rootRoute.addChildren([
   jobsRoute,
   evalsRoute,
   regionsRoute,
+  placesRoute,
   usersRoute,
   referenceRoute,
   poisRoute,

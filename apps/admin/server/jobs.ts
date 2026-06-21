@@ -68,6 +68,7 @@ export const SCRIPTS: Partial<Record<JobKind, string>> = {
   discover_pois: 'packages/studio/src/discover-pois.ts',
   enrich_pois: 'packages/studio/src/enrich-pois.ts',
   generate_narrations: 'packages/studio/src/generate-narrations.ts',
+  curate_places: 'packages/studio/src/curate-places.ts',
   refetch_facts: 'packages/studio/src/refetch-poi.ts',
   offline_audit: 'packages/studio/src/audit-corpus.ts',
 }
@@ -200,6 +201,20 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     // Region run keys slug + lock on its region; a whole-corpus explicit-id run leaves them NULL ("All").
     const auditRegion = idCsv(body.includeIds) ? undefined : str(body.region) || DEFAULT_REGION_SLUG
     return { args, dryRun: !apply, spends: apply, targetSlug: auditRegion, targetId: auditRegion }
+  }
+
+  if (kind === 'curate_places') {
+    const apply = body.apply === true
+    const args: string[] = [script]
+    // Region-scoped (geometry-first: --region → its bbox). Optional model/target tweak the LLM draft.
+    if (body.region) args.push(`--region=${str(body.region)}`)
+    if (body.model) args.push(`--model=${str(body.model)}`)
+    pushPosNum(args, '--target', body.target, 'target')
+    pushPosNum(args, '--max-cost', body.maxCostUsd, 'maxCostUsd')
+    if (apply) args.push('--apply')
+    // curate SPENDS (Anthropic draft + Google Places resolve) on --apply → confirm gate; the dry run
+    // makes no paid calls (free preview). Keys the lock per-region (matches the studio beginJob target).
+    return { args, dryRun: !apply, spends: apply, targetId: str(body.region) || DEFAULT_REGION_SLUG }
   }
 
   // sweep_orphans — V2 sweeps the whole narration/ R2 prefix (tour-scoped sweeping is gone with the

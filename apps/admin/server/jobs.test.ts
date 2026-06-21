@@ -87,6 +87,7 @@ describe('buildJobArgs — spend classification across ALL kinds (the confirm-ga
     const paid = [
       { kind: 'enrich_pois' },
       { kind: 'generate_narrations' },
+      { kind: 'curate_places' },
       { kind: 'offline_audit' },
       { kind: 'sweep_orphans' },
       { kind: 'resynth_narration', poiId: 'p1' },
@@ -172,5 +173,16 @@ describe('buildJobArgs — targetId is per-region, aligned with the studio begin
   test('discover_pois keys on the region; sweep_orphans matches its script target', () => {
     expect(buildJobArgs({ kind: 'discover_pois', region: 'yosemite' }).targetId).toBe('yosemite')
     expect(buildJobArgs({ kind: 'sweep_orphans' }).targetId).toBe('narration') // audit #11 (was 'roam')
+  })
+
+  test('curate_places keys on the region (default lake-tahoe) and threads model/target/max-cost', () => {
+    expect(buildJobArgs({ kind: 'curate_places' }).targetId).toBe('lake-tahoe')
+    expect(buildJobArgs({ kind: 'curate_places', region: 'yosemite' }).targetId).toBe('yosemite')
+    const r = buildJobArgs({ kind: 'curate_places', apply: true, region: 'lake-tahoe', model: 'opus', target: 24, maxCostUsd: 2 })
+    expect(r.args).toContain('--region=lake-tahoe')
+    expect(r.args).toContain('--model=opus')
+    expect(r.args).toContain('--target=24')
+    expect(r.args).toContain('--max-cost=2')
+    expect(r.args).toContain('--apply')
   })
 })

@@ -7,13 +7,14 @@ import { HealthBanner } from '@/components/HealthBanner'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
-type AppPath = '/jobs' | '/evals' | '/regions' | '/pois' | '/users' | '/reference'
+type AppPath = '/jobs' | '/evals' | '/regions' | '/pois' | '/places' | '/users' | '/reference'
 
 const NAV: { to: AppPath; label: string; icon: React.ElementType }[] = [
   { to: '/jobs', label: 'Jobs', icon: Activity },
   { to: '/evals', label: 'Evals', icon: Gauge },
   { to: '/regions', label: 'Regions', icon: Layers },
   { to: '/pois', label: 'POIs', icon: MapPin },
+  { to: '/places', label: 'Places', icon: Anchor },
   { to: '/users', label: 'Users', icon: Users },
 ]
 
@@ -222,6 +223,7 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
     { group: 'Go to', label: 'Evals', icon: Gauge, onSelect: go('/evals') },
     { group: 'Go to', label: 'Regions', icon: Layers, onSelect: go('/regions') },
     { group: 'Go to', label: 'POIs', icon: MapPin, onSelect: go('/pois') },
+    { group: 'Go to', label: 'Places', icon: Anchor, onSelect: go('/places') },
     { group: 'Go to', label: 'Users', icon: Users, onSelect: go('/users') },
     { group: 'Go to', label: 'Reference', icon: BookOpen, onSelect: go('/reference') },
   ]
