@@ -2,8 +2,9 @@ import { Fragment, useEffect, useMemo, useState } from 'react'
 import { getRouteApi, useNavigate } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Activity, CircleCheck, Locate, Plus, RefreshCw, Rocket, Search, Sparkles, Trash2, Wrench, X, Zap } from 'lucide-react'
-import { api, ApiError, type CorrectionOverride, type PoiDetail, type PoiRow, type StoryEligibility } from '@/lib/api'
+import { api, ApiError, type CorrectionOverride, type PoiDetail, type PoiRow } from '@/lib/api'
 import { errMsg, timeAgo } from '@/lib/format'
+import { SOURCE_META, STORY_ELIGIBILITY_META, NARRATION_META } from '@/lib/poiMeta'
 import { PageHeader } from '@/components/PageHeader'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
@@ -12,6 +13,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
 import { Callout } from '@/components/ui/callout'
+import { ErrorCallout } from '@/components/ui/error-callout'
 import { SearchInput } from '@/components/ui/search-input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { AnchorMap } from '@/components/ui/leaflet-map'
@@ -26,30 +28,6 @@ import {
 import { JobActionDialog } from '@/components/ui/job-action-dialog'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { cn } from '@/lib/utils'
-
-// Keyed to the real poi_source pgEnum (wikipedia | wikidata) — the corpus is Wikidata-spine ONLY
-// (every poi has a QID). Google break anchors are NOT pois — they live in the `places` table.
-const SOURCE_META: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' }> = {
-  wikipedia: { label: 'Wikipedia', variant: 'default' },
-  wikidata: { label: 'Wikidata', variant: 'secondary' },
-}
-
-type BadgeVariant = 'default' | 'secondary' | 'success' | 'warning' | 'outline'
-
-/** Story-eligibility → badge. A POI property (roam draws story-grade POIs from the corpus).
- *  `eligible` is the actionable one; the filtered-* states are intentional exclusions, muted. */
-const STORY_ELIGIBILITY_META: Record<StoryEligibility, { label: string; variant: BadgeVariant; hint: string }> = {
-  eligible: { label: 'eligible', variant: 'default', hint: 'Story-grade — a roam telling can use it' },
-  'filtered-source': { label: 'scenic pin', variant: 'outline', hint: 'Wikidata pin — not a story source (wave layer later)' },
-  'filtered-taste': { label: 'taste-gate', variant: 'outline', hint: 'Title hits the taste denylist' },
-  'filtered-stub': { label: 'stub', variant: 'secondary', hint: 'No article text to enrich (empty/disambiguation page)' },
-}
-
-/** The SEPARATE narration axis — shown as a secondary badge only when a narration exists. */
-const NARRATION_META: Record<'fresh' | 'stale', { label: string; variant: BadgeVariant; hint: string }> = {
-  fresh: { label: 'narration', variant: 'success', hint: 'Has a narration on current facts' },
-  stale: { label: 'narration · stale', variant: 'warning', hint: 'Facts moved — a run would regenerate it' },
-}
 
 const poisRoute = getRouteApi('/pois')
 
@@ -450,11 +428,7 @@ function Corrections({ poiId, poiLat, poiLng }: { poiId: string; poiLat?: number
         <strong className="text-foreground">not</strong> rewrite existing audio.
       </div>
 
-      {err && (
-        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-          {err}
-        </div>
-      )}
+      {err && <ErrorCallout error={err} className="rounded-lg px-3 py-2 text-xs" />}
 
       {/* Existing fact-edits */}
       <div className="flex flex-col gap-2">
@@ -633,9 +607,7 @@ function PoiDetailSheet({ poiId, poiName, canDelete, hasNarration, open, onOpenC
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 py-4">
-          {err && (
-            <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{errMsg(err)}</div>
-          )}
+          {err && <ErrorCallout error={err} className="rounded-lg px-3 py-2" />}
 
           {tab === 'facts' && (
             detail ? <FactsTab poi={detail} /> : !err && (
@@ -681,11 +653,7 @@ function PoiDetailSheet({ poiId, poiName, canDelete, hasNarration, open, onOpenC
               </Button>
               <span className="text-xs text-muted-foreground">No narration references this POI.</span>
             </div>
-            {deleteMut.error && (
-              <div className="mt-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-                {errMsg(deleteMut.error)}
-              </div>
-            )}
+            {deleteMut.error && <ErrorCallout error={deleteMut.error} className="mt-2 rounded-lg px-3 py-2 text-xs" />}
           </div>
         )}
       </SheetContent>
@@ -723,11 +691,7 @@ function FactsTab({ poi }: { poi: PoiDetail }) {
           <RefreshCw className="h-3 w-3" /> {refetchMut.isPending ? 'Re-fetching…' : 'Re-fetch facts'}
         </Button>
       </div>
-      {refetchMut.error && (
-        <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-          Re-fetch failed — {errMsg(refetchMut.error)}
-        </div>
-      )}
+      {refetchMut.error && <ErrorCallout error={`Re-fetch failed — ${errMsg(refetchMut.error)}`} className="rounded-lg px-3 py-2 text-xs" />}
 
       {/* Metadata grid */}
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
@@ -914,25 +878,13 @@ function NarrationTab({ poiId, hasNarration }: { poiId: string; hasNarration: bo
           {resynthMut.isPending ? 'Queuing…' : 'Re-synth'}
         </Button>
       </div>
-      {releaseMut.error && (
-        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-          Release failed — {errMsg(releaseMut.error)}
-        </div>
-      )}
-      {resynthMut.error && (
-        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-          Re-synth failed — {errMsg(resynthMut.error)}
-        </div>
-      )}
-      {regenMut.error && (
-        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-          Regenerate failed — {errMsg(regenMut.error)}
-        </div>
-      )}
+      {releaseMut.error && <ErrorCallout error={`Release failed — ${errMsg(releaseMut.error)}`} className="rounded-lg px-3 py-2 text-xs" />}
+      {resynthMut.error && <ErrorCallout error={`Re-synth failed — ${errMsg(resynthMut.error)}`} className="rounded-lg px-3 py-2 text-xs" />}
+      {regenMut.error && <ErrorCallout error={`Regenerate failed — ${errMsg(regenMut.error)}`} className="rounded-lg px-3 py-2 text-xs" />}
       {suspicious && (
-        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+        <Callout variant="error" className="rounded-lg px-3 py-2 text-xs">
           Narration duration ({durLabel} for {wordCount} words) looks like a TTS duplicate-audio defect. Re-synth to fix.
-        </div>
+        </Callout>
       )}
       <div className="whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground">{clip.script}</div>
     </div>
