@@ -89,7 +89,7 @@ async function computeRoute(waypoints: readonly Waypoint[], apiKey: string) {
   })
   const json = (await res.json()) as {
     error?: { code: number; status: string; message: string }
-    routes?: { distanceMeters: number; duration: string; polyline: { encodedPolyline: string } }[]
+    routes?: { distanceMeters?: number; duration: string; polyline: { encodedPolyline: string } }[]
   }
   if (!res.ok || json.error) {
     const e = json.error
@@ -120,14 +120,20 @@ export async function materializeRoute(
   const polyline = decodePolyline(route.polyline.encodedPolyline)
   // duration comes back like "786s".
   const durationSeconds = Number.parseInt(route.duration.replace(/s$/, ''), 10)
+  // Routes uses proto3 JSON, which OMITS a zero-value field rather than sending `0`. A degenerate
+  // A→A route — a "loop" prompt resolves start == end — has distanceMeters 0, so the field is
+  // absent. Coalesce to 0 (the honest distance): otherwise `undefined` flows into Math.round() →
+  // NaN → JSON `null`, which fails the driveProposal `number` DTO and surfaces to the rider as a
+  // bogus "please update Skipper" (a real bug: a loop is a degenerate route, not a stale client).
+  const distanceMeters = route.distanceMeters ?? 0
   return {
     polyline,
-    distanceMeters: route.distanceMeters,
+    distanceMeters,
     durationSeconds,
     provenance: {
       source: 'google-routes-v2',
       waypoints: [...waypoints],
-      distanceMeters: route.distanceMeters,
+      distanceMeters,
       durationSeconds,
       pointCount: polyline.length,
       materializedAt: new Date().toISOString(),
