@@ -366,6 +366,16 @@ function Corrections({ poiId, poiLat, poiLng }: { poiId: string; poiLat?: number
   const saving = saveMut.isPending
   const err = validationErr ?? (loadErr ? errMsg(loadErr) : saveMut.error ? errMsg(saveMut.error) : null)
 
+  // The draggable marker must reflect the PENDING edit (the lat/lng inputs), not the saved anchor —
+  // otherwise dragging it fires onAnchor (which only fills the inputs) while the controlled marker
+  // snaps back to the unchanged saved position. Drag → fills inputs → inputs drive the marker. Empty
+  // or non-numeric inputs fall back to the saved speakable anchor, then to the POI pin.
+  const latNum = Number(lat), lngNum = Number(lng)
+  const pendingAnchor =
+    lat.trim() !== '' && lng.trim() !== '' && Number.isFinite(latNum) && Number.isFinite(lngNum)
+      ? { lat: latNum, lng: lngNum }
+      : null
+
   // One shared submit path for every correction action. The buttons only disable AFTER the first
   // mutate re-renders, so guard at the top here — a fast double-tap can't double-submit.
   const save = (...args: Parameters<typeof saveMut.mutate>) => {
@@ -424,6 +434,14 @@ function Corrections({ poiId, poiLat, poiLng }: { poiId: string; poiLat?: number
 
   function clearSpeakable() {
     save({ kind: 'speakable', lat: null })
+  }
+
+  // Discard the in-progress edit (a drag or typed coords) and revert the marker to the saved anchor
+  // (or the POI pin if none) — does NOT touch the saved speakable anchor. "Clear" above removes that.
+  function resetAnchor() {
+    setLat('')
+    setLng('')
+    setValidationErr(null)
   }
 
   if (loading) {
@@ -533,7 +551,7 @@ function Corrections({ poiId, poiLat, poiLng }: { poiId: string; poiLat?: number
         {poiLat != null && poiLng != null && (
           <AnchorMap
             poi={{ lat: poiLat, lng: poiLng }}
-            anchor={data?.speakable ?? null}
+            anchor={pendingAnchor ?? data?.speakable ?? null}
             onAnchor={({ lat: a, lng: o }) => { setLat(a.toFixed(6)); setLng(o.toFixed(6)) }}
           />
         )}
@@ -561,6 +579,14 @@ function Corrections({ poiId, poiLat, poiLng }: { poiId: string; poiLat?: number
           </div>
           <Button variant="outline" size="sm" disabled={saving} onClick={setSpeakable}>
             {saving ? 'Saving…' : 'Set anchor'}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={saving || (lat.trim() === '' && lng.trim() === '')}
+            onClick={resetAnchor}
+          >
+            <RefreshCw className="h-3 w-3" /> Reset
           </Button>
         </div>
       </div>
