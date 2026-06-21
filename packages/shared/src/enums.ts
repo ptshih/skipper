@@ -100,13 +100,14 @@ export const interest = z.enum(['history', 'nature', 'geology', 'culture', 'food
 export type Interest = z.infer<typeof interest>
 
 /**
- * Freemium access tier (DERIVED per request, not a column):
- *  - `anonymous` = no/guest session (basic free use + the preview tour)
- *  - `free`      = signed-in account
- *  - `paid`      = subscriber (user.tier = 'paid'; no Stripe wired yet)
- * `user.tier` only stores `free`/`paid`; `anonymous` is the absence of an account.
+ * Access level (DERIVED per request, not a column):
+ *  - `anonymous` = no/guest session (roam + the preview tour)
+ *  - `free`      = a signed-in account
+ * There is NO paid tier — premium is bought as CREDITS, not a plan flag, so every account is `free`
+ * and the credit ledger governs what it can do (a comp = a big admin grant). `anonymous` is simply
+ * the absence of an account. See docs/decisions/cut-tiers.md + credit-ledger.md.
  */
-export const accessTier = z.enum(['anonymous', 'free', 'paid'])
+export const accessTier = z.enum(['anonymous', 'free'])
 export type AccessTier = z.infer<typeof accessTier>
 
 /** Mobile client platform — keys the per-platform app-version policy served by GET /version. */

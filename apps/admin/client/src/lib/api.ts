@@ -232,14 +232,11 @@ export interface EvalRunReport {
   scores: EvalScoreRow[]
 }
 
-// Readiness probe result (GET /health?deep=1). `db === false` = api up but the DB is unreachable
 // One account row from GET /admin/users — Better Auth `user` joined to its credit-ledger summary.
 export interface UserRow {
   id: string
   name: string
   email: string
-  /** Manual freemium flag: 'paid' bypasses the credit gate (uncapped); 'free' spends the ledger. */
-  tier: 'free' | 'paid'
   /** Better Auth admin plugin role — 'admin' for the founder/allowlist, else null/'user'. */
   role: string | null
   isAnonymous: boolean
@@ -253,6 +250,7 @@ export interface UserRow {
   remaining: number
 }
 
+// Readiness probe result (GET /health?deep=1). `db === false` = api up but the DB is unreachable
 // (e.g. DATABASE_URL unset); a request rejection/502 instead means the api itself is down.
 export interface HealthStatus {
   ok: boolean
@@ -297,7 +295,6 @@ export const api = {
     req<BboxLookupResult>('/admin/regions/bbox-lookup', { method: 'POST', body: JSON.stringify(body) }),
   createJob: (body: Record<string, unknown>) =>
     req<{ job: StudioJob }>('/admin/jobs', { method: 'POST', body: JSON.stringify(body) }),
-}
   users: () => req<{ users: UserRow[] }>('/admin/users'),
   // Append an admin_grant ledger entry; returns the refreshed credit summary for the row.
   grantCredits: (id: string, body: { amount: number; reason?: string }) =>
@@ -305,3 +302,4 @@ export const api = {
       `/admin/users/${id}/credits`,
       { method: 'POST', body: JSON.stringify(body) },
     ),
+}

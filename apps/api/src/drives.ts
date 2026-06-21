@@ -48,10 +48,10 @@ import { contentTypeForKey, presignGet } from './storage'
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 // Drive credits live in the user-owned `credit_entries` LEDGER (see ./credits + the decision doc), NOT
-// a count of drive rows. A free account is granted FREE_DRIVE_CAP credits once; each generated drive
+// a count of drive rows. Every account is granted FREE_DRIVE_CAP credits once; each generated drive
 // CONSUMES one (atomically, co-committed with the drive insert); a delete never refunds (no reverse is
-// emitted). 'paid' (comped) accounts bypass the gate. Beyond the free allotment, a one-time credit pack
-// is the planned unlock (Apple IAP / Google Play fast-follow).
+// emitted). There is no uncapped tier — a comp is a large admin grant. Beyond the free allotment, a
+// one-time credit pack is the planned unlock (Apple IAP / Google Play fast-follow).
 
 // Drive pacing (DRIVE_MIN_GAP_SEC / driveMaxStops) is single-sourced in @skipper/engine so the
 // API's selection matches the engine's.
@@ -363,24 +363,22 @@ driveRoutes.post('/', async (c) => {
     }
   }
 
-  // Free-tier credit gate (paid is uncapped). The balance is the user-owned ledger (SUM of grants −
-  // consumes), NOT a count of drive rows — a delete never refunds because no `reverse` is emitted, so
-  // there's no tombstone-counting hack to maintain. `ensureFreeGrant` lazily materializes the one-time
-  // free allotment on first touch. This is a pre-check (cheap; avoids the paid route/LLM work for a
-  // user with no credits); the actual consume is co-committed with the drive insert below.
-  if (c.get('tier') === 'free') {
-    await ensureFreeGrant(userId)
-    const { remaining } = await creditSummary(userId)
-    if (remaining < 1) {
-      return c.json(
-        {
-          error: 'drive_limit_reached',
-          message: `You've used all ${FREE_DRIVE_CAP} of your free drives. A credit pack to make more is coming soon.`,
-          cap: FREE_DRIVE_CAP,
-        },
-        403,
-      )
-    }
+  // Credit gate — EVERY account spends from the user-owned ledger (there is no uncapped tier; a comp is
+  // a large admin grant). The balance is SUM(grants − consumes), NOT a count of drive rows — a delete
+  // never refunds because no `reverse` is emitted, so there's no tombstone-counting hack to maintain.
+  // `ensureFreeGrant` lazily materializes the one-time allotment on first touch. This is a pre-check
+  // (cheap; avoids the route/LLM work for a user with no credits); the consume is co-committed below.
+  await ensureFreeGrant(userId)
+  const { remaining } = await creditSummary(userId)
+  if (remaining < 1) {
+    return c.json(
+      {
+        error: 'drive_limit_reached',
+        message: `You've used all ${FREE_DRIVE_CAP} of your free drives. A credit pack to make more is coming soon.`,
+        cap: FREE_DRIVE_CAP,
+      },
+      403,
+    )
   }
 
   let route
@@ -476,28 +474,21 @@ driveRoutes.post('/', async (c) => {
   // never half-commit a charge-without-drive or a drive-without-charge. Both inserts are ON CONFLICT
   // DO NOTHING (idempotency_key for the consume, the PK for the drive), so a retry that reuses the same
   // (now client-stable) id cleanly no-ops instead of erroring on the unique violation — the consume is
-  // keyed on the drive id, so a drive charges exactly one credit even under retry. Free tier only —
-  // paid (comped) accounts insert the drive without a consume. (The free-tier balance was pre-checked
-  // above; with a client-stable id even a concurrent resubmit shares the consume key, so the only
-  // residual TOCTOU is two GENUINELY-DISTINCT creates racing the pre-check — bounded to 1, negligible.)
-  if (c.get('tier') === 'free') {
-    await withRetry(
-      () =>
-        db.batch([
-          db
-            .insert(creditEntries)
-            .values(driveConsumeEntry(userId, id))
-            .onConflictDoNothing({ target: creditEntries.idempotencyKey }),
-          db.insert(drives).values(driveValues).onConflictDoNothing({ target: drives.id }),
-        ]),
-      { label: 'drive.insert' },
-    )
-  } else {
-    await withRetry(
-      () => db.insert(drives).values(driveValues).onConflictDoNothing({ target: drives.id }),
-      { label: 'drive.insert' },
-    )
-  }
+  // keyed on the drive id, so a drive charges exactly one credit even under retry. Every account
+  // consumes (no uncapped tier). (The balance was pre-checked above; with a client-stable id even a
+  // concurrent resubmit shares the consume key, so the only residual TOCTOU is two GENUINELY-DISTINCT
+  // creates racing the pre-check — bounded to 1, negligible.)
+  await withRetry(
+    () =>
+      db.batch([
+        db
+          .insert(creditEntries)
+          .values(driveConsumeEntry(userId, id))
+          .onConflictDoNothing({ target: creditEntries.idempotencyKey }),
+        db.insert(drives).values(driveValues).onConflictDoNothing({ target: drives.id }),
+      ]),
+    { label: 'drive.insert' },
+  )
 
   // Demand instrumentation (route-concentration signal; the cache-warming job that consumes it is
   // deferred). distinctUsers is a rough lower bound — exact per-user dedup isn't worth a join here.
@@ -555,14 +546,13 @@ driveRoutes.get('/', async (c) => {
         .orderBy(desc(drives.createdAt)),
     { label: 'drive.list' },
   )
-  // Proactive "N free drives left" hint, from the user-owned credit LEDGER (free tier only). `credits`
-  // is null for paid (uncapped) so the client shows nothing; `remaining` is the spendable balance and
-  // `cap` the lifetime granted (for "N of M" framing). ensureFreeGrant materializes the allotment so a
-  // brand-new free user reads the full balance even before their first drive. `remaining` is clamped at
-  // 0 so a future refund clawback can't surface as a negative count.
+  // Proactive "N drives left" hint, from the user-owned credit LEDGER (every account has a balance).
+  // `remaining` is the spendable balance and `cap` the lifetime granted (for "N of M" framing).
+  // ensureFreeGrant materializes the allotment so a brand-new user reads the full balance even before
+  // their first drive. `remaining` is clamped at 0 so a future refund clawback can't surface negative.
   let credits: { remaining: number; cap: number } | null = null
-  if (c.get('tier') === 'free') {
-    await ensureFreeGrant(userId)
+  await ensureFreeGrant(userId)
+  {
     const { remaining, granted } = await creditSummary(userId)
     credits = { remaining: Math.max(0, remaining), cap: granted }
   }

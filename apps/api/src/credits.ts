@@ -4,19 +4,19 @@
 // immutable movement (+grant / −consume / ±reverse) and a user's balance is SUM(amount). This is the
 // billing source of truth, decoupled from the content table. See docs/decisions/credit-ledger.md.
 //
-// LIVE today: the free-tier lifetime allotment (a single `grant` of FREE_DRIVE_CAP, lazily ensured on
+// LIVE today: the lifetime free allotment (a single `grant` of FREE_DRIVE_CAP, lazily ensured on
 // first touch) + a `consume` per generated drive. DEFERRED: purchase grants (Apple IAP / Google Play,
-// idempotent on the provider txn id) + refund clawbacks (a `reverse`). Paid (comped) accounts bypass
-// the gate entirely — the ledger governs FREE accounts.
+// idempotent on the provider txn id) + refund clawbacks (a `reverse`). There is NO paid tier — the
+// ledger governs EVERY account; a comp/unlimited account is just a large admin grant.
 
 import { eq, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { creditEntries } from '@skipper/db/schema'
 import { withRetry } from './retry'
 
-// Free-tier LIFETIME allotment: a free account is granted this many credits, once, ever. A credit is
-// spent at generation (POST /drives) and never refunded on delete (no `reverse` is emitted). Beyond it
-// a one-time credit pack is the planned unlock (IAP/Play fast-follow); 'paid' is uncapped today.
+// LIFETIME free allotment: every account is granted this many credits, once, ever. A credit is spent
+// at generation (POST /drives) and never refunded on delete (no `reverse` is emitted). Beyond it a
+// one-time credit pack is the planned unlock (IAP/Play fast-follow); a comp = a large admin grant.
 // Admin-tunable via env. NOTE: a grant's amount is frozen when it's written (the ledger is immutable),
 // so raising this only affects users not yet granted.
 export const FREE_DRIVE_CAP = Number(process.env.FREE_DRIVE_CAP ?? 100)

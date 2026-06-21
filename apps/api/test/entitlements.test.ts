@@ -1,11 +1,12 @@
 import { describe, expect, test } from 'bun:test'
 import { isAdmin, meetsTier, tierOf, type TierSession } from '../src/tiers'
 
-// Minimal session shape — the tier helpers read user.isAnonymous + user.tier (+ user.role).
+// Minimal session shape — the access helpers read user.isAnonymous (+ user.role). There is no tier
+// column anymore (premium = credits); any real account is `free`.
 const session = (
-  user: Partial<{ isAnonymous: boolean | null; tier: string | null; role: string | null }>,
+  user: Partial<{ isAnonymous: boolean | null; role: string | null }>,
 ): TierSession => ({
-  user: { isAnonymous: false, tier: 'free', ...user },
+  user: { isAnonymous: false, ...user },
 })
 
 describe('tierOf', () => {
@@ -15,14 +16,9 @@ describe('tierOf', () => {
   test('anonymous-plugin guest → anonymous', () => {
     expect(tierOf(session({ isAnonymous: true }))).toBe('anonymous')
   })
-  test('signed-in account → free', () => {
-    expect(tierOf(session({ tier: 'free' }))).toBe('free')
-  })
-  test('subscriber → paid', () => {
-    expect(tierOf(session({ tier: 'paid' }))).toBe('paid')
-  })
-  test('missing/unknown tier on a real user falls back to free', () => {
-    expect(tierOf(session({ tier: null }))).toBe('free')
+  test('any signed-in account → free', () => {
+    expect(tierOf(session({}))).toBe('free')
+    expect(tierOf(session({ role: 'admin' }))).toBe('free')
   })
 })
 
@@ -40,18 +36,16 @@ describe('isAdmin', () => {
     expect(isAdmin(session({ role: null }))).toBe(false)
     expect(isAdmin(session({}))).toBe(false)
   })
-  test('signed-in account with role=admin → admin (any paying tier)', () => {
-    expect(isAdmin(session({ tier: 'free', role: 'admin' }))).toBe(true)
-    expect(isAdmin(session({ tier: 'paid', role: 'admin' }))).toBe(true)
+  test('signed-in account with role=admin → admin', () => {
+    expect(isAdmin(session({ role: 'admin' }))).toBe(true)
   })
 })
 
 describe('meetsTier', () => {
-  test('ranks anonymous < free < paid', () => {
+  test('ranks anonymous < free', () => {
     expect(meetsTier('anonymous', 'free')).toBe(false)
     expect(meetsTier('free', 'free')).toBe(true)
-    expect(meetsTier('free', 'paid')).toBe(false)
-    expect(meetsTier('paid', 'free')).toBe(true)
+    expect(meetsTier('free', 'anonymous')).toBe(true)
     expect(meetsTier('anonymous', 'anonymous')).toBe(true)
   })
 })

@@ -13,7 +13,6 @@ export const user = pgTable("user", {
     .$onUpdate(() => /* @__PURE__ */ new Date())
     .notNull(),
   isAnonymous: boolean("is_anonymous").default(false),
-  tier: text("tier").default("free"),
   // Better Auth `admin` plugin fields (server-set, input:false). `role` is the access role
   // ('user' default, 'admin' for the founder/allowlist); role==='admin' ALSO doubles as the
   // region-release-gate preview check (an admin hears STAGED content in-app — see `isAdmin` in

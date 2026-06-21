@@ -50,7 +50,6 @@ export function UsersView() {
           <TableHeader>
             <TableRow>
               <TableHead>User</TableHead>
-              <TableHead>Tier</TableHead>
               <TableHead className="text-right" title="Lifetime credits granted (free cap + any grants)">Granted</TableHead>
               <TableHead className="text-right" title="Credits consumed — drives generated">Used</TableHead>
               <TableHead className="text-right" title="Live balance = granted − used">Remaining</TableHead>
@@ -59,7 +58,7 @@ export function UsersView() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {isPending && <TableSkeletonRows rows={6} cols={7} />}
+            {isPending && <TableSkeletonRows rows={6} cols={6} />}
             {users.map((u) => (
               <TableRow key={u.id}>
                 <TableCell>
@@ -74,13 +73,6 @@ export function UsersView() {
                     {u.isAnonymous && <Badge variant="secondary">anon</Badge>}
                     {u.banned && <Badge variant="destructive">banned</Badge>}
                   </div>
-                </TableCell>
-                <TableCell>
-                  {u.tier === 'paid' ? (
-                    <Badge variant="success">paid</Badge>
-                  ) : (
-                    <Badge variant="secondary">free</Badge>
-                  )}
                 </TableCell>
                 <TableCell className="text-right font-mono text-sm tabular-nums">{u.granted.toLocaleString()}</TableCell>
                 <TableCell className="text-right font-mono text-sm tabular-nums">{u.used.toLocaleString()}</TableCell>
@@ -97,7 +89,7 @@ export function UsersView() {
             ))}
             {!isPending && users.length === 0 && !err && (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={7}>
+                <TableCell colSpan={6}>
                   <EmptyState icon={Users}>No accounts yet.</EmptyState>
                 </TableCell>
               </TableRow>

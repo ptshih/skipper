@@ -36,7 +36,8 @@ product.** When a choice trades polish-for-the-builder against scale-for-a-marke
 ## Hard invariants (enforced in code; don't regress them)
 
 - **Hand-authored tours are DEFERRED; the first-day artifacts are ROAM + user-owned DRIVES.** Auth is
-  Better Auth (freemium: anonymous → free → paid `user.tier`). ROAM is the open anonymous front door. A
+  Better Auth (anonymous → free account; there is NO paid tier — premium is bought as CREDITS, a comp
+  is a large admin grant; see `docs/decisions/cut-tiers.md`). ROAM is the open anonymous front door. A
   **DRIVE is user-OWNED** (`drives.user_id`, never a shared content table); **creating one needs a free
   account** — the whole `/drives*` sub-app is behind `requireAccount` (anonymous = roam only). Free credits
   are an append-only `credit_entries` ledger (a lazy `FREE_DRIVE_CAP`=100 grant, −1 at `POST /drives`
@@ -111,8 +112,9 @@ product.** When a choice trades polish-for-the-builder against scale-for-a-marke
 - **Auth = Better Auth** (`apps/api/src/auth.ts`). It needs interactive transactions, so it runs on its OWN
   `drizzle-orm/neon-serverless` Pool client (`apps/api/src/auth-db.ts`) while the rest stays on neon-http.
   Tables live in the `@skipper/db/auth-schema` subpath (CLI-generated: `bunx @better-auth/cli generate`, then
-  `db:generate` + `db:migrate`). `user.tier` ('free'|'paid') is the manual freemium flag (no Stripe);
-  `accessTier` ('anonymous'|'free'|'paid') is the derived per-request tier in `@skipper/shared`.
+  `db:generate` + `db:migrate`). There is NO `user.tier` column — premium is CREDITS, not a plan
+  (`docs/decisions/cut-tiers.md`); `accessTier` ('anonymous'|'free') is the derived per-request access
+  level in `@skipper/shared` (`free` = any signed-in account).
 - **Secrets via dotenvx.** `.env.development`/`.env.production` are committed ENCRYPTED; private keys live
   only in gitignored `.env.keys` (onboarding = get it from a teammate — if `dotenvx` can't decrypt, you're
   missing it; stop and ask). Root scripts wrap commands with `dotenvx run -f .env.development`; edit a value

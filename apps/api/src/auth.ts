@@ -1,6 +1,7 @@
 // Better Auth instance — the freemium auth foundation (M2).
 //
-// Tiers: anonymous (no/guest session) -> free (signed-in) -> paid (tier='paid').
+// Access: anonymous (no/guest session) -> free (a signed-in account). There is no paid tier —
+// premium is bought as CREDITS, not a plan (docs/decisions/cut-tiers.md).
 // Roam is open/anonymous; drives are user-owned. Auth layers around both. Email/password is
 // enabled now; Google/Apple are registered only when their creds are present
 // (placeholders otherwise) so the server boots without them. The anonymous plugin
@@ -88,14 +89,10 @@ export const auth = betterAuth({
   },
   emailAndPassword: { enabled: true },
   socialProviders,
-  // Manual freemium tier on the user (no Stripe yet). 'free' | 'paid'. Server-set only (input:false).
-  // (The region-release-gate preview role — who hears staged content — is the admin plugin's `role`,
-  // NOT a tier and NOT a separate flag; see the admin() plugin below + docs/decisions/region-release-gate.md.)
-  user: {
-    additionalFields: {
-      tier: { type: 'string', required: false, defaultValue: 'free', input: false },
-    },
-  },
+  // No freemium tier column — premium is bought as CREDITS, governed by the credit_entries ledger
+  // (docs/decisions/cut-tiers.md). (The region-release-gate preview role — who hears staged content —
+  // is the admin plugin's `role`, a SEPARATE concern; see the admin() plugin below +
+  // docs/decisions/region-release-gate.md.)
   plugins: [
     // Expo integration: secure-store session handling + deep-link OAuth for the app.
     expo(),
