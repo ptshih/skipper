@@ -112,11 +112,9 @@ function ThemedStack() {
           // every screen. The mood follows the phone by default (Auto); the explicit
           // Auto/Day/Dusk picker lives on Settings, reached from a gear on the home header.
         }}
-      >
-        {/* The "Where to?" location picker is a modal sheet (chosen over an inline expand).
-            Declared here so it gets the iOS modal presentation/animation. */}
-        <Stack.Screen name="regions" options={{ presentation: 'modal' }} />
-      </Stack>
+      />
+      {/* No explicit <Stack.Screen> children: every screen is file-based (app/*). The old
+          "regions" modal picker was removed with the V1 region-filter catalog (429d328). */}
     </>
   )
 }
