@@ -15,9 +15,14 @@ const buttonVariants = cva(
         ghost: 'hover:bg-accent hover:text-accent-foreground',
         link: 'text-primary underline-offset-4 hover:underline',
       },
+      // h-9 is the shared control height across the admin — Input, SelectTrigger, and the default
+      // Button all use it, so buttons line up with the fields they sit beside. `sm` keeps the tighter
+      // padding/text but stays h-9 for that alignment (don't drop it back to h-8); `lg` is the one
+      // deliberately taller control. A genuinely shorter button overrides height per-instance (see
+      // segmented.tsx's h-7), which twMerge lets win over the variant.
       size: {
         default: 'h-9 px-4 py-2',
-        sm: 'h-8 rounded-md px-3 text-xs',
+        sm: 'h-9 rounded-md px-3 text-xs',
         lg: 'h-10 rounded-md px-8',
         icon: 'h-9 w-9',
       },
