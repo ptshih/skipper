@@ -19,10 +19,10 @@ describe('masteringChain — limiter → single-pass loudnorm to the spec', () =
     expect(c).toMatch(/limit=0?\.\d/) // a true-peak ceiling below 0 dBFS
   })
 
-  test('the ACTIVE master targets −14 with a −2 dBTP PRE-ENCODE ceiling (the parked −13 preset is off)', () => {
+  test('the ACTIVE master targets −14 with a −3 dBTP PRE-ENCODE ceiling (re-tuned for true-peak headroom)', () => {
     const c = masteringChain()
     expect(c).toContain('I=-14')
-    expect(c).toContain('TP=-2')
+    expect(c).toContain('TP=-3') // deepened −2 → −3 after the full-corpus resynth showed −2/48k ran hot
   })
 
   test('SINGLE-PASS — no two-pass measured_* / linear handoff (the clip bug it replaced)', () => {

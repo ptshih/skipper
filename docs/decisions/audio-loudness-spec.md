@@ -13,13 +13,15 @@ The narration presets (`loudnorm.ts` `MASTERS`) + the music bed (`AUDIO_LOUDNESS
 | Knob | `normal14` (ACTIVE) | `loud13` (parked) | Music bed |
 |---|---|---|---|
 | Integrated loudness (I) | **−14 LUFS** | −13 LUFS | −14 LUFS |
-| Pre-encode TP ceiling | −2 dBTP | −3 dBTP | −1.0 dBTP |
-| Limiter gain (`level_in`) | 3 | 6 | n/a |
-| AAC bitrate | 48 kbps | 64 kbps | n/a (offline MP3) |
+| Pre-encode TP ceiling | −3 dBTP | −3 dBTP | −1.0 dBTP |
+| Limiter gain (`level_in`) | 6 | 6 | n/a |
+| Limiter ceiling | 0.707 | 0.707 | n/a |
+| AAC bitrate | 64 kbps | 64 kbps | n/a (offline MP3) |
 | Loudness range (LRA) | 11 LU | 11 LU | 11 LU |
 
-Final clips land ≈−1.5…−2 dBTP on either preset (AAC overshoot eats the pre-encode headroom). The voice
-presets live in `loudnorm.ts` (flip `MASTER`); the bed target in `AUDIO_LOUDNESS` (`@skipper/shared`).
+The two presets now share ONE peak discipline and differ ONLY in the loudness target (−14 vs −13) — see
+History 2026-06-20 (re-tune). Final clips land ≈−1.5…−2 dBTP (AAC overshoot eats the pre-encode headroom).
+The voice presets live in `loudnorm.ts` (flip `MASTER`); the bed target in `AUDIO_LOUDNESS` (`@skipper/shared`).
 
 ## Where it applies
 
@@ -89,12 +91,22 @@ tail-collapse retake + the 4 s last-words probe (`tts.ts`/`tail.ts`).
   now. Refactored the two recipes into `MASTERS` presets in `loudnorm.ts` (`normal14` ACTIVE, `loud13`
   OFF) so neither is lost — flipping is one `MASTER =` line + a regen. The 6 Reno clips were resynthed
   back to −14. `loud13` stays fully validated, ready when wanted.
+- **2026-06-20 — full-corpus resynth → `normal14` RE-TUNED to loud13's peak discipline.** Ran the new
+  limiter master across the whole corpus (306 off-spec clips → `resynth-narration --include-ids`; corpus
+  defects fell 306→98). A read-only `audit-loudness.ts` sweep then proved the original GENTLE `normal14`
+  (gain 3 / ceiling 0.794 / TP −2 / 48k) **ran hot**: single-pass dynamic loudnorm doesn't hard-cap
+  true-peak, so peaky register-varied (town/landscape) takes overshot — **41/460 clipped, worst +4.7 dBTP**
+  (worse than un-mastered). The original gentle params had been validated only on 3 story-register clips,
+  missing the peakier registers. Fix = give `normal14` loud13's headroom at the −14 target (gain 3→6,
+  ceiling 0.794→0.707, TP −2→−3, 48k→64k). 64k ≈ +33% download size — justified by the clipping data.
+  Validated on the 12 worst clippers, then the master-fixable residual was re-resynthed.
 
 ## Open
 
 - **On-device A/B vs Spotify** of the active −14 voice + bed on the real drive — and, if revisiting
-  loudness, A/B `loud13` (−13) against it (flip the preset + regen the 6 Reno clips).
-- **Full-corpus regen** still pending — only the 6 Reno clips carry the new limiter master (at −14).
+  loudness, A/B `loud13` (−13) against it (flip the preset + regen).
+- **Tail-collapse residual (~48 clips)** survives best-of-3 — STRUCTURAL (a fresh take still mumbles the
+  close), so it needs a script/prompt fix, not a re-TTS. Surfaced by `audit-loudness.ts`.
 - **Louder?** `loud13` (−13) is the parked, validated answer — flip `MASTER` in `loudnorm.ts`. Don't go
   past −13 (already the edge of clean AAC overshoot); drop the *bed* instead for more separation.
 - **Drive-music bed** stays plain offline loudnorm at −14 / −1.0 (pre-mastered, low-overshoot MP3 — no

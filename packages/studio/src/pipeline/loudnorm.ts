@@ -48,17 +48,21 @@ interface NarrationMaster {
 }
 
 /**
- * Two VALIDATED narration masters (2026-06-20) — flip `MASTER` to switch; BOTH stay in code so the
- * tuning work is never lost:
- *   - normal14 (−14): the SAFE default — natural dynamics, gentle limiter, 48k AAC. Validated on 3 clips.
- *   - loud13  (−13): Spotify-"Loud" — ~1 dB louder + denser. Needs MORE limiter gain AND 64k AAC (at 48k
- *     the inter-sample overshoot clipped some clips to +1.4 dBTP). Validated on the 6-clip Reno corpus
- *     through the REAL resynth path. −13 is at the EDGE of clean AAC overshoot — don't push past it.
- * When loud13 is active the VOICE diverges from the −14 music bed (AUDIO_LOUDNESS). docs/decisions/
- * audio-loudness-spec.md has the full history (incl. the reverted clip bug + the 48k→64k raise).
+ * Two VALIDATED narration masters — flip `MASTER` to switch; BOTH stay in code so the tuning work is
+ * never lost. They now share ONE peak discipline (limiter gain 6 → ceiling 0.707 → pre-encode TP −3 →
+ * 64k AAC) and differ ONLY in the loudness target:
+ *   - normal14 (−14): the ACTIVE default. RE-TUNED 2026-06-20 from the original GENTLE params (gain 3 /
+ *     ceiling 0.794 / TP −2 / 48k) after a full-corpus resynth proved they ran HOT: single-pass dynamic
+ *     loudnorm does NOT hard-cap true-peak, so peaky register-varied (town/landscape) takes overshot —
+ *     41/460 clips clipped, the worst at +4.7 dBTP (worse than the un-mastered corpus). loud13's headroom
+ *     discipline holds where the gentle params didn't, so normal14 borrows it at the −14 target.
+ *   - loud13  (−13): Spotify-"Loud" — ~1 dB louder; when active the VOICE sits 1 dB above the −14 music
+ *     bed (AUDIO_LOUDNESS). −13 is the EDGE of clean AAC overshoot — don't push past it.
+ * 64k AAC (vs the old 48k) is the price of clean peaks at low bitrate — ~33% bigger downloads, justified
+ * by the clipping data. docs/decisions/audio-loudness-spec.md has the full history.
  */
 const MASTERS: Record<'normal14' | 'loud13', NarrationMaster> = {
-  normal14: { targetLufs: -14, limiterGain: 3, limiterCeiling: 0.794, preEncodeTp: -2.0, bitrate: '48k' },
+  normal14: { targetLufs: -14, limiterGain: 6, limiterCeiling: 0.707, preEncodeTp: -3.0, bitrate: '64k' },
   loud13: { targetLufs: -13, limiterGain: 6, limiterCeiling: 0.707, preEncodeTp: -3.0, bitrate: '64k' },
 }
 
