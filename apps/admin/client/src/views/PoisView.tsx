@@ -1201,13 +1201,11 @@ function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loading: bool
             <SelectItem value="unattrib">Unattributed</SelectItem>
           </SelectContent>
         </Select>
-        <div className="ml-auto flex items-center gap-3">
-          {filtersActive && (
-            <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={clearFilters}>
-              <X className="h-3.5 w-3.5" /> Clear filters
-            </Button>
-          )}
-        </div>
+        {filtersActive && (
+          <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={clearFilters}>
+            <X className="h-3.5 w-3.5" /> Clear filters
+          </Button>
+        )}
       </div>
 
       {numSelected > 0 && (
