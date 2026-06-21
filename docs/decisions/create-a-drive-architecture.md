@@ -32,6 +32,11 @@ pre-gen aside/bracket library; route-demand cache. Product rationale + the decis
 > now takes the chosen `{start,end}` and only materializes the route + counts stories (no LLM, no
 > geocoding). The mobile create screen is FROM/TO pickers, not a text box. "LLM does ONLY endpoint
 > resolution" is now "the rider picks the endpoints; the route + selection stay deterministic."
+>
+> **Loops.** A round trip is a "Round trip" toggle that swaps the END picker for a MIDPOINT picker:
+> the DTOs carry an optional ordered `via` waypoint list, and a loop is `end === start` with one `via`
+> midpoint → the route materializes as start→midpoint→start (a real out-and-back, not a degenerate
+> zero-distance route). One-way mode disables "Plan the drive" when start == end.
 
 ## Context
 

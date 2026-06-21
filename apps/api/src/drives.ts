@@ -104,6 +104,13 @@ interface ResolvedEndpoint {
   lng: number
 }
 
+/** Build the ordered Routes waypoints for a drive: [start, ...via, end]. A LOOP is end===start with a
+ *  single `via` midpoint, so it materializes as a real out-and-back (start==end alone is a degenerate
+ *  zero-distance route). materializeRoute routes through the middle waypoints as Routes intermediates. */
+function routeWaypoints(start: ResolvedEndpoint, end: ResolvedEndpoint, via?: ResolvedEndpoint[]): Waypoint[] {
+  return [start, ...(via ?? []), end].map((p) => ({ label: p.name, lat: p.lat, lng: p.lng }))
+}
+
 /** Quantize a coordinate to ~110 m for the route signature. */
 const qz = (n: number): string => n.toFixed(3)
 
@@ -280,13 +287,11 @@ driveRoutes.post('/propose', async (c) => {
   }
   const startEp: ResolvedEndpoint = parsed.data.start
   const endEp: ResolvedEndpoint = parsed.data.end
+  const via = parsed.data.via
 
   let route
   try {
-    route = await materializeRoute([
-      { label: startEp.name, lat: startEp.lat, lng: startEp.lng },
-      { label: endEp.name, lat: endEp.lat, lng: endEp.lng },
-    ] satisfies Waypoint[])
+    route = await materializeRoute(routeWaypoints(startEp, endEp, via))
   } catch (e) {
     console.error('[api] drive propose route failed', e)
     return c.json({ error: 'no_route', message: "Couldn't find a drivable route between those points." }, 422)
@@ -303,9 +308,11 @@ driveRoutes.post('/propose', async (c) => {
     maxStops: driveMaxStops(route.durationSeconds),
   })
 
+  // Echo `via` so the confirm screen can mark the midpoint(s) + render a loop as a round trip.
   return c.json({
     start: startEp,
     end: endEp,
+    ...(via && via.length ? { via } : {}),
     polyline: route.polyline,
     distanceMeters: Math.round(route.distanceMeters),
     durationSeconds: Math.round(route.durationSeconds),
@@ -332,7 +339,7 @@ driveRoutes.post('/', async (c) => {
   }
   const parsed = createDriveRequest.safeParse(body)
   if (!parsed.success) return c.json({ error: 'bad_request', message: 'start{name,lat,lng} and end{name,lat,lng} are required.' }, 400)
-  const { start, end, idempotencyKey } = parsed.data
+  const { start, end, via, idempotencyKey } = parsed.data
 
   // The drive id is the client's idempotencyKey when supplied (a v4 UUID, stable across retries),
   // else server-minted. Using it AS the id makes a lost-ACK network retry hit the existing PK + the
@@ -378,10 +385,7 @@ driveRoutes.post('/', async (c) => {
 
   let route
   try {
-    route = await materializeRoute([
-      { label: start.name, lat: start.lat, lng: start.lng },
-      { label: end.name, lat: end.lat, lng: end.lng },
-    ] satisfies Waypoint[])
+    route = await materializeRoute(routeWaypoints(start, end, via))
   } catch (e) {
     console.error('[api] drive create route failed', e)
     return c.json({ error: 'no_route', message: "Couldn't find a drivable route between those points." }, 422)

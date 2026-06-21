@@ -11,11 +11,13 @@
 > **Update (2026-06-20) — INPUT MODEL CHANGED: free-text → structured pickers.** The create screen is
 > now FROM/TO **anchor pickers**, not a text box: the rider picks a start + end from the region's real
 > narratable anchors (`GET /drives/anchors`), and `POST /drives/propose` takes the chosen `{start,end}`
-> (no LLM, no geocoding). So the prompt-specific steps below — step 2 "Prompt → propose", the 🟠 LOOP
-> (canned "Emerald Bay loop" → `start==end`) and 🟠 AMBIGUOUS/out-of-region cases — are SUPERSEDED.
-> Re-read them as: pick FROM, pick TO, "Plan the drive" → confirm. Loops/zero-distance can't arise
-> (two distinct anchors); out-of-region can't arise (anchors are in-bbox by construction). See the
-> 2026-06-20 addendum in `create-a-drive-architecture.md`.
+> (+ optional `via` midpoints), no LLM, no geocoding. So the prompt-specific steps below — step 2
+> "Prompt → propose", the 🟠 LOOP (canned "Emerald Bay loop" → `start==end`) and 🟠 AMBIGUOUS/out-of-region
+> cases — are SUPERSEDED. Re-read them as: pick FROM, pick TO, "Plan the drive" → confirm. **Loops are a
+> "Round trip" toggle** that swaps END for a MIDPOINT picker → start→midpoint→start (a real out-and-back,
+> never a degenerate zero-distance route); one-way mode disables Plan when start == end. Out-of-region
+> can't arise (anchors are in-bbox by construction). See the 2026-06-20 addendum in
+> `create-a-drive-architecture.md`.
 
 ## Why this exists
 

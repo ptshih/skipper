@@ -157,19 +157,27 @@ export type RegionAnchor = z.infer<typeof regionAnchor>
 export const regionAnchorList = z.object({ anchors: z.array(regionAnchor) })
 export type RegionAnchorList = z.infer<typeof regionAnchorList>
 
-/** POST /drives/propose — preview the route for a picked START→END before spending a credit. Both
- *  endpoints were chosen from the region's anchors (GET /drives/anchors), so we just materialize the
- *  route + count stories. Persists nothing, no credit — the confirm-before-spend interstitial. */
+/** Ordered intermediate waypoints between start and end — the route is materialized as
+ *  [start, ...via, end]. A LOOP is `end === start` with one `via` midpoint (a turnaround), so a
+ *  round trip is a real out-and-back (start==end alone is a degenerate zero-distance route). Capped
+ *  to bound the single Routes call. */
+const via = z.array(resolvedEndpoint).max(8).optional()
+
+/** POST /drives/propose — preview the route for a picked START→END (+ optional via midpoints) before
+ *  spending a credit. The endpoints were chosen from the region's anchors (GET /drives/anchors), so we
+ *  just materialize the route + count stories. Persists nothing, no credit — the confirm interstitial. */
 export const driveProposeRequest = z.object({
   start: resolvedEndpoint,
   end: resolvedEndpoint,
+  via,
 })
 export type DriveProposeRequest = z.infer<typeof driveProposeRequest>
 
-/** The proposed route to CONFIRM before generating: resolved endpoints + a route preview. */
+/** The proposed route to CONFIRM before generating: resolved endpoints (+ via) + a route preview. */
 export const driveProposal = z.object({
   start: resolvedEndpoint,
   end: resolvedEndpoint,
+  via,
   polyline,
   distanceMeters: z.number().int(),
   durationSeconds: z.number().int(),
@@ -183,6 +191,7 @@ export type DriveProposal = z.infer<typeof driveProposal>
 export const createDriveRequest = z.object({
   start: resolvedEndpoint,
   end: resolvedEndpoint,
+  via,
   /** Client-minted v4 UUID, STABLE across retries of one logical create. The server uses it AS the
    *  drive id, so a lost-ACK network retry hits the existing drive PK + the `drive:<id>` consume
    *  idempotency key and no-ops — exactly-once create + charge of a non-refundable credit. Optional:

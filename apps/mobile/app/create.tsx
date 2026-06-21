@@ -53,6 +53,12 @@ function uuidV4(): string {
   })
 }
 
+// An anchor → the wire endpoint shape (drops `kind`).
+const coordOf = (a: RegionAnchor) => ({ name: a.name, lat: a.lat, lng: a.lng })
+// Two picks are the same place (a degenerate one-way route → nudge to a round trip).
+const samePlace = (a: RegionAnchor | null, b: RegionAnchor | null): boolean =>
+  !!a && !!b && a.lat === b.lat && a.lng === b.lng
+
 export default function CreateDriveScreen() {
   const router = useRouter()
   const theme = useTheme()
@@ -61,12 +67,16 @@ export default function CreateDriveScreen() {
   const [regionsError, setRegionsError] = useState(false)
   const [regionId, setRegionId] = useState<string | null>(null)
 
-  // The region's pickable anchors (real places + exact coords) and the rider's two picks.
+  // The region's pickable anchors (real places + exact coords) and the rider's picks. A round-trip
+  // (loop) uses start + a distinct MIDPOINT (turnaround); a one-way uses start + end. A bare
+  // start==end is a degenerate zero-distance route, so loops route start→midpoint→start instead.
   const [anchors, setAnchors] = useState<RegionAnchor[] | null>(null)
   const [anchorsError, setAnchorsError] = useState(false)
   const [start, setStart] = useState<RegionAnchor | null>(null)
   const [end, setEnd] = useState<RegionAnchor | null>(null)
-  const [picking, setPicking] = useState<'start' | 'end' | null>(null)
+  const [mid, setMid] = useState<RegionAnchor | null>(null)
+  const [loop, setLoop] = useState(false)
+  const [picking, setPicking] = useState<'start' | 'end' | 'mid' | null>(null)
   const [query, setQuery] = useState('')
 
   const [phase, setPhase] = useState<Phase>('form')
@@ -112,6 +122,7 @@ export default function CreateDriveScreen() {
     setAnchorsError(false)
     setStart(null)
     setEnd(null)
+    setMid(null)
     listAnchors(regionId)
       .then((a) => {
         if (!cancelled) setAnchors(a)
@@ -127,15 +138,17 @@ export default function CreateDriveScreen() {
   }, [regionId])
 
   const doPropose = useCallback(async () => {
-    if (!start || !end) return
+    if (!start) return
+    if (loop ? !mid : !end) return
     setError(null)
     setNeedsAccount(false)
     setPhase('proposing')
     try {
-      const p = await proposeDrive({
-        start: { name: start.name, lat: start.lat, lng: start.lng },
-        end: { name: end.name, lat: end.lat, lng: end.lng },
-      })
+      // A loop is end===start with one `via` midpoint (a real out-and-back); one-way is start→end.
+      const req = loop
+        ? { start: coordOf(start), end: coordOf(start), via: [coordOf(mid!)] }
+        : { start: coordOf(start), end: coordOf(end!) }
+      const p = await proposeDrive(req)
       setProposal(p)
       idempotencyKeyRef.current = null // fresh proposal = a new logical create; key is minted on confirm
       setPhase('confirm')
@@ -144,7 +157,7 @@ export default function CreateDriveScreen() {
       else setError(errorMessage(e, voice_create.proposeFail))
       setPhase('form')
     }
-  }, [start, end])
+  }, [start, end, mid, loop])
 
   const doCreate = useCallback(async () => {
     if (!proposal) return
@@ -159,6 +172,7 @@ export default function CreateDriveScreen() {
       const m = await createDrive({
         start: proposal.start,
         end: proposal.end,
+        ...(proposal.via && proposal.via.length ? { via: proposal.via } : {}),
         idempotencyKey: idempotencyKeyRef.current,
       })
       if (m.driveId) {
@@ -193,6 +207,7 @@ export default function CreateDriveScreen() {
   const choose = (a: RegionAnchor) => {
     if (picking === 'start') setStart(a)
     else if (picking === 'end') setEnd(a)
+    else if (picking === 'mid') setMid(a)
     setPicking(null)
     setQuery('')
   }
@@ -228,10 +243,23 @@ export default function CreateDriveScreen() {
     // No stories along the route → block generation (the server also 422s, but don't let the rider
     // spend a credit on an unplayable drive). estStopCount runs the REAL selection in propose.
     const noStories = proposal.estStopCount === 0
-    const endpoints: DriveMapStop[] = [
-      { seq: 0, name: cleanPlaceName(proposal.start.name), lat: proposal.start.lat, lng: proposal.start.lng, state: 'upcoming' },
-      { seq: 1, name: cleanPlaceName(proposal.end.name), lat: proposal.end.lat, lng: proposal.end.lng, state: 'active' },
-    ]
+    // A loop echoes back `via` (end === start); mark the start + each midpoint instead of start→end.
+    const isLoop = !!(proposal.via && proposal.via.length)
+    const endpoints: DriveMapStop[] = isLoop
+      ? [
+          { seq: 0, name: cleanPlaceName(proposal.start.name), lat: proposal.start.lat, lng: proposal.start.lng, state: 'upcoming' },
+          ...proposal.via!.map((v, i) => ({
+            seq: i + 1,
+            name: cleanPlaceName(v.name),
+            lat: v.lat,
+            lng: v.lng,
+            state: 'active' as const,
+          })),
+        ]
+      : [
+          { seq: 0, name: cleanPlaceName(proposal.start.name), lat: proposal.start.lat, lng: proposal.start.lng, state: 'upcoming' },
+          { seq: 1, name: cleanPlaceName(proposal.end.name), lat: proposal.end.lat, lng: proposal.end.lng, state: 'active' },
+        ]
     return (
       <Screen scroll padded edges={['bottom']} contentContainerStyle={styles.body}>
         <Stack.Screen options={{ title: 'Does this look right?' }} />
@@ -240,18 +268,34 @@ export default function CreateDriveScreen() {
         </View>
 
         <View style={styles.routeLine}>
-          <Text variant="title" color="ink">
-            {cleanPlaceName(proposal.start.name)}
-          </Text>
-          <View style={styles.arrowRow}>
-            <Icon name="car" size={14} color="inkFaint" />
-            <Text variant="dim" color="inkFaint">
-              the scenic way
-            </Text>
-          </View>
-          <Text variant="title" color="ink">
-            {cleanPlaceName(proposal.end.name)}
-          </Text>
+          {isLoop ? (
+            <>
+              <Text variant="title" color="ink">
+                Round trip from {cleanPlaceName(proposal.start.name)}
+              </Text>
+              <View style={styles.arrowRow}>
+                <Icon name="car" size={14} color="inkFaint" />
+                <Text variant="dim" color="inkFaint">
+                  via {cleanPlaceName(proposal.via![0]!.name)}
+                </Text>
+              </View>
+            </>
+          ) : (
+            <>
+              <Text variant="title" color="ink">
+                {cleanPlaceName(proposal.start.name)}
+              </Text>
+              <View style={styles.arrowRow}>
+                <Icon name="car" size={14} color="inkFaint" />
+                <Text variant="dim" color="inkFaint">
+                  the scenic way
+                </Text>
+              </View>
+              <Text variant="title" color="ink">
+                {cleanPlaceName(proposal.end.name)}
+              </Text>
+            </>
+          )}
         </View>
 
         <View style={styles.statRow}>
@@ -275,7 +319,7 @@ export default function CreateDriveScreen() {
 
         <View style={styles.ctaGroup}>
           <Button icon="car" title="Make this drive" onPress={() => void doCreate()} disabled={noStories} />
-          <Button variant="ghost" title="Adjust the start & end" fullWidth={false} onPress={() => setPhase('form')} />
+          <Button variant="ghost" title="Adjust the route" fullWidth={false} onPress={() => setPhase('form')} />
         </View>
       </Screen>
     )
@@ -285,7 +329,9 @@ export default function CreateDriveScreen() {
   if (picking) {
     return (
       <Screen padded edges={['bottom']}>
-        <Stack.Screen options={{ title: picking === 'start' ? 'Set the start' : 'Set the destination' }} />
+        <Stack.Screen
+          options={{ title: picking === 'start' ? 'Set the start' : picking === 'mid' ? 'Set the midpoint' : 'Set the destination' }}
+        />
         <View style={styles.pickerHead}>
           <Input
             autoFocus
@@ -342,9 +388,10 @@ export default function CreateDriveScreen() {
     )
   }
 
-  // FORM (default): region (auto/selectable) + the FROM/TO pickers.
+  // FORM (default): region (auto/selectable) + a one-way/round-trip toggle + the pickers.
   const anchorsReady = !!anchors
-  const ready = !!start && !!end
+  const sameEndpoints = !loop && samePlace(start, end)
+  const ready = loop ? !!(start && mid) : !!(start && end) && !sameEndpoints
   return (
     <Screen scroll padded edges={['bottom']} contentContainerStyle={styles.body}>
       <Stack.Screen options={{ title: 'Create a Drive' }} />
@@ -377,6 +424,13 @@ export default function CreateDriveScreen() {
         Where to?
       </Text>
 
+      {/* One-way vs round trip. A round trip routes start → midpoint → start (a bare start==end is a
+          degenerate zero-distance route), so loop mode swaps the END picker for a MIDPOINT picker. */}
+      <View style={styles.chips}>
+        <FilterChip label="One way" active={!loop} onPress={() => setLoop(false)} accessibilityLabel="One way" />
+        <FilterChip label="Round trip" active={loop} onPress={() => setLoop(true)} accessibilityLabel="Round trip" />
+      </View>
+
       <PickerField
         label="START"
         value={start ? cleanPlaceName(start.name) : null}
@@ -387,17 +441,35 @@ export default function CreateDriveScreen() {
         }}
         disabled={!anchorsReady}
       />
-      <PickerField
-        label="END"
-        value={end ? cleanPlaceName(end.name) : null}
-        placeholder="Choose where to end"
-        onPress={() => {
-          setQuery('')
-          setPicking('end')
-        }}
-        disabled={!anchorsReady}
-      />
+      {loop ? (
+        <PickerField
+          label="MIDPOINT"
+          value={mid ? cleanPlaceName(mid.name) : null}
+          placeholder="Choose a turnaround point"
+          onPress={() => {
+            setQuery('')
+            setPicking('mid')
+          }}
+          disabled={!anchorsReady}
+        />
+      ) : (
+        <PickerField
+          label="END"
+          value={end ? cleanPlaceName(end.name) : null}
+          placeholder="Choose where to end"
+          onPress={() => {
+            setQuery('')
+            setPicking('end')
+          }}
+          disabled={!anchorsReady}
+        />
+      )}
 
+      {sameEndpoints ? (
+        <Text variant="dim" color="inkFaint">
+          Same start and end? Switch to Round trip and pick a midpoint.
+        </Text>
+      ) : null}
       {anchorsError ? (
         <Text variant="dim" color="danger">
           {voice_create.anchorsFail}
