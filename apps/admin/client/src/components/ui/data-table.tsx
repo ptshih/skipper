@@ -8,6 +8,9 @@ export type Column<T> = {
   cell: (row: T) => ReactNode
   headClassName?: string
   cellClassName?: string
+  /** Stop this cell's clicks from bubbling to `onRowClick` — for an interactive cell (a checkbox, a
+   *  button) inside a row that is itself clickable, so toggling the control never also triggers the row. */
+  cellStopPropagation?: boolean
 }
 
 // A column-config list table that owns the whole scaffold + lifecycle: the bordered wrapper, the header
@@ -55,7 +58,11 @@ export function DataTable<T>({
                 className={cn(onRowClick && 'cursor-pointer', rowClassName?.(row))}
               >
                 {columns.map((c, i) => (
-                  <TableCell key={i} className={c.cellClassName}>
+                  <TableCell
+                    key={i}
+                    className={c.cellClassName}
+                    onClick={c.cellStopPropagation ? (e) => e.stopPropagation() : undefined}
+                  >
                     {c.cell(row)}
                   </TableCell>
                 ))}
