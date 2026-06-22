@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, Compass, Layers, Loader2, Pencil, Plus, Rocket, Search, Sparkles, TriangleAlert } from 'lucide-react'
+import { CheckCircle2, Compass, Layers, Loader2, Plus, Rocket, Search, Sparkles, TriangleAlert } from 'lucide-react'
 import { api, type BboxLlmResult, type BboxRefinement, type Region } from '@/lib/api'
 import { errMsg } from '@/lib/format'
 import { qk } from '@/lib/queryKeys'
@@ -111,6 +111,7 @@ export function RegionsView() {
       ),
       headClassName: 'w-10',
       cellClassName: 'w-10',
+      cellStopPropagation: true,
       cell: (r) => (
         <Checkbox
           checked={sel.has(r.slug)}
@@ -154,6 +155,7 @@ export function RegionsView() {
     {
       header: '',
       headClassName: 'w-44',
+      cellStopPropagation: true,
       cell: (r) => {
         const released = r.releasedAt != null
         return (
@@ -167,9 +169,6 @@ export function RegionsView() {
             >
               <Rocket className="h-3.5 w-3.5" />
               {released ? 'Release new' : 'Release'}
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => setDialog({ mode: 'edit', region: r })}>
-              <Pencil className="h-3.5 w-3.5" />
             </Button>
           </div>
         )
@@ -230,6 +229,7 @@ export function RegionsView() {
         rowKey={(r) => r.slug}
         loading={isPending}
         skeletonRows={4}
+        onRowClick={(r) => setDialog({ mode: 'edit', region: r })}
         rowClassName={(r) => (sel.has(r.slug) ? 'bg-muted/40' : undefined)}
         empty={!err ? <EmptyState icon={Layers}>No regions yet — add one to get started.</EmptyState> : undefined}
       />
