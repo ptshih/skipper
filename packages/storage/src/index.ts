@@ -8,7 +8,7 @@
 import { S3Client } from 'bun'
 
 /** Default presign TTL — 1 hour, enough to download a whole tour offline. */
-export const DEFAULT_TTL_SECONDS = 60 * 60
+const DEFAULT_TTL_SECONDS = 60 * 60
 
 function requireEnv(name: string): string {
   const v = process.env[name]

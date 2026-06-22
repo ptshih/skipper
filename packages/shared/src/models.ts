@@ -12,5 +12,3 @@ export const CLAUDE_MODELS = {
   opus: 'claude-opus-4-8',
   haiku: 'claude-haiku-4-5-20251001',
 } as const
-
-export type ClaudeModelId = (typeof CLAUDE_MODELS)[keyof typeof CLAUDE_MODELS]

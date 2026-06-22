@@ -51,15 +51,6 @@ export function parseFlags(argv: string[], opts: { valueFlags?: string[] } = {})
   return { positionals, has, value }
 }
 
-/** Parse a `--bbox swLng,swLat,neLng,neLat` value to a typed corner object. The shared
- *  split + length + finite check + canonical error string; callers adapt the shape/default. */
-export function parseBboxFlag(raw: string): { swLng: number; swLat: number; neLng: number; neLat: number } {
-  const p = raw.split(',').map(Number)
-  if (p.length !== 4 || p.some((n) => !Number.isFinite(n)))
-    throw new Error(`--bbox must be swLng,swLat,neLng,neLat (got "${raw}")`)
-  return { swLng: p[0]!, swLat: p[1]!, neLng: p[2]!, neLat: p[3]! }
-}
-
 /** Resolve `--max-cost <usd>` to a positive cap, or Infinity when unset/invalid (no cap). */
 export function maxCostFlag(flags: Flags): number {
   const v = Number(flags.value('max-cost'))
@@ -81,10 +72,4 @@ export type Blast = 'READ-ONLY' | 'MUTATES DB' | 'DELETES BYTES' | 'SPENDS $'
 export function announce(opts: { tool: string; blast: Blast[]; apply: boolean }): void {
   const mode = opts.apply ? '⚠ APPLYING (live)' : 'DRY RUN — pass --apply to execute'
   console.log(`\n[${opts.tool}] ${opts.blast.join(' + ')} — ${mode}\n`)
-}
-
-/** Guard a fan-out: refuse `--all --apply` unless `--yes` is also passed (fat-finger guard). */
-export function guardFanout(opts: { all: boolean; apply: boolean; yes: boolean }): void {
-  if (opts.all && opts.apply && !opts.yes)
-    throw new Error('Refusing --all --apply without --yes (mass-mutation guard). Add --yes to confirm.')
 }

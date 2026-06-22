@@ -18,9 +18,10 @@
 //
 // Provenance: Wikidata is CC0 (the scenic NAME needs no attribution); a story stop still
 // carries its Wikipedia CC BY-SA credit (joined here). This module only DISCOVERS + tiers;
-// it does not narrate or persist — generate.ts adapts these candidates (via candidatesToWikiPois)
-// into the selection pipeline. Pure helpers (tierOf/isAreal/normName/dedupeByName) are exported
-// for unit tests; the network calls are isolated and non-fatal by contract.
+// it does not narrate or persist — the live consumer is discover-pois.ts, which sweeps a region
+// bbox via discoverWikidataBbox and upserts the tiered candidates into `pois`. Pure helpers
+// (tierOf/isAreal/normName/dedupeByName) are exported for unit tests; the network calls are
+// isolated and non-fatal by contract.
 
 import {
   STORY_MIN_FACT_CHARS,
@@ -29,9 +30,9 @@ import {
   WDQS_ENDPOINT,
   WDQS_USER_AGENT,
 } from '../config'
-import { haversineMeters, type LngLat } from './geo'
+import type { LngLat } from './geo'
 import { fetchWithRetry } from './http'
-import { fetchExtractsByTitle, type WikiPoi } from './wikipedia'
+import { fetchExtractsByTitle } from './wikipedia'
 
 const REQUEST_TIMEOUT_MS = 30_000
 
@@ -189,46 +190,8 @@ export function featureKind(types: string[]): string | undefined {
   return undefined
 }
 
-/**
- * Adapt spine candidates into selection candidates (WikiPoi). Only STORY + SCENIC flow into
- * selection: a STORY carries its Wikipedia prose (source 'wikipedia', pageid + extract); a
- * SCENIC is a named Wikidata feature with no prose (source 'wikidata', extract '', a KIND).
- * BREAK is the Google Places layer's job and DROP is discarded, so neither is emitted.
- */
-export function candidatesToWikiPois(cands: WikidataCandidate[]): WikiPoi[] {
-  const out: WikiPoi[] = []
-  for (const c of cands) {
-    if (c.tier === 'story' && c.article) {
-      out.push({
-        source: 'wikipedia',
-        sourceId: String(c.article.pageId),
-        title: c.article.title,
-        lat: c.lat,
-        lng: c.lng,
-        extract: c.article.extract,
-        url: c.article.url,
-        pageid: c.article.pageId,
-        ...(c.qid ? { qid: c.qid } : {}),
-      })
-    } else if (c.tier === 'scenic') {
-      const kind = featureKind(c.types)
-      out.push({
-        source: 'wikidata',
-        sourceId: c.qid,
-        title: c.name,
-        lat: c.lat,
-        lng: c.lng,
-        extract: '',
-        qid: c.qid,
-        ...(kind ? { kind } : {}),
-      })
-    }
-  }
-  return out
-}
-
 /* -------------------------------------------------------------------------- */
-/*  Network — WDQS bbox query + corridor filter + prose join                   */
+/*  Network — WDQS bbox query + prose join                                     */
 /* -------------------------------------------------------------------------- */
 
 interface RawItem {
@@ -321,35 +284,17 @@ async function fetchWikidataBox(sw: LngLat, ne: LngLat): Promise<RawItem[]> {
   return [...items.values()]
 }
 
-/** Nearest distance (m) from a point to the route — vertex-sampled (dense polyline ⇒ exact enough). */
-function distToRoute(lat: number, lng: number, sampledVerts: LngLat[]): number {
-  let min = Infinity
-  for (const v of sampledVerts) {
-    const d = haversineMeters([lng, lat], v)
-    if (d < min) min = d
-  }
-  return min
-}
-
 /**
- * Discover + tier Wikidata POIs along a route. SPARQL bbox → corridor filter (areal-aware)
- * → prose-join story candidates via Wikipedia sitelink → tier → same-place dedup. Network
- * (WDQS + MediaWiki).
+ * Discover + tier Wikidata POIs in a raw BBOX — the region sweep's discovery (no route, so no
+ * corridor filter; offRouteM is 0 by construction). SPARQL bbox → prose-join story candidates
+ * via Wikipedia sitelink → tier → same-place dedup. Network (WDQS + MediaWiki).
  *
  * Discovery is a HARD dependency with NO fallback — the Wikidata spine replaced the old
  * Wikipedia-geosearch path wholesale (see the wikidata-discovery-spine decision), so there is
  * no second discovery source to fall back to. A hard WDQS failure (after fetchWithRetry's
- * retries) throws an actionable error and aborts the run — cheaply: discovery runs BEFORE any
- * paid LLM/TTS call, so the run fails at $0 with the seeded tour shell untouched, and "retry
- * later" is the whole recovery. (An EMPTY result is not an error here — it surfaces downstream
- * as generate.ts's "No narratable stops found" once selection yields nothing.)
- */
-/**
- * Discover + tier Wikidata POIs in a raw BBOX — the FREE-ROAM sweep's discovery (no route,
- * so no corridor filter; offRouteM is 0 by construction). Same spine, prose-join, tiering,
- * and same-place dedup as the route path below. Callers sweeping a large area should split
- * it into modest sub-boxes (WDQS result-size etiquette) and merge by qid before dedupe —
- * see discover-pois.ts.
+ * retries) throws an actionable error and aborts the run — cheaply, before any paid call, so
+ * "retry later" is the whole recovery. Callers sweeping a large area should split it into modest
+ * sub-boxes (WDQS result-size etiquette) and merge by qid before dedupe — see discover-pois.ts.
  */
 export async function discoverWikidataBbox(sw: LngLat, ne: LngLat): Promise<WikidataCandidate[]> {
   const raw = await fetchWikidataBox(sw, ne)
@@ -377,46 +322,5 @@ export async function discoverWikidataBbox(sw: LngLat, ne: LngLat): Promise<Wiki
         : {}),
     }
   })
-  return dedupeByName(candidates)
-}
-
-export async function discoverWikidataPois(polyline: LngLat[]): Promise<WikidataCandidate[]> {
-  const { sw, ne } = boundingBox(polyline)
-  const raw = await fetchWikidataBox(sw, ne)
-
-  // Corridor filter (sample every 8th vertex for speed; ~tens of metres apart on our dense lines).
-  const verts = polyline.filter((_, i) => i % 8 === 0)
-  const inCorridor = raw
-    .map((it) => ({ it, offRouteM: distToRoute(it.lat, it.lng, verts) }))
-    .filter(({ it, offRouteM }) => offRouteM <= corridorGateM([...it.types]))
-
-  // Prose-join: fetch lead extracts only for corridor items that COULD be a story (have an
-  // article and aren't an outright non-place) — never for drop/scenic-only pins.
-  const storyCandidates = inCorridor.filter(
-    ({ it }) => it.articleTitle && !TRUE_NONPLACE.test([...it.types].join(' ; ')),
-  )
-  const extracts = storyCandidates.length
-    ? await fetchExtractsByTitle([...new Set(storyCandidates.map(({ it }) => it.articleTitle!))])
-    : []
-  const extractByTitle = new Map(extracts.map((e) => [e.title.toLowerCase(), e]))
-
-  const candidates: WikidataCandidate[] = inCorridor.map(({ it, offRouteM }) => {
-    const ex = it.articleTitle ? extractByTitle.get(it.articleTitle.toLowerCase()) : undefined
-    const types = [...it.types]
-    const tier = tierOf(types, !!ex, ex?.extract.length ?? 0)
-    return {
-      qid: it.qid,
-      name: it.name,
-      lat: it.lat,
-      lng: it.lng,
-      types,
-      tier,
-      offRouteM: Math.round(offRouteM),
-      ...(tier === 'story' && ex
-        ? { article: { title: ex.title, url: ex.url, pageId: ex.pageId, extract: ex.extract } }
-        : {}),
-    }
-  })
-
   return dedupeByName(candidates)
 }

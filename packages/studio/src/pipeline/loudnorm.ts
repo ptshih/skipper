@@ -112,7 +112,7 @@ async function encode(file: string, out: string): Promise<boolean> {
 
 /**
  * Master one shipped take (lossless WAV) to the final AAC `.m4a` clip: the limiter→loudnorm
- * mastering chain (MASTERING_CHAIN) fused with the single AAC encode. Returns the .m4a bytes.
+ * mastering chain (masteringChain) fused with the single AAC encode. Returns the .m4a bytes.
  * The take's PCM duration is preserved to within the encoder's edit-list priming, so the caller's
  * stored duration still matches.
  *

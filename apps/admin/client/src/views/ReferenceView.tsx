@@ -26,7 +26,8 @@ export function ReferenceView() {
         <Dl
           cols={['Page', 'What it does']}
           rows={[
-            ['Runs', 'Every run, newest first — admin-triggered Cloud Run jobs AND historical CLI generations. Each row shows its inline eval Scores (g / tts / div — grounding reddens below the 0.75 gate) and who triggered it; click for details + logs.'],
+            ['Jobs', 'Admin-triggered Cloud Run jobs, newest first — status, cost, who triggered them; click a row for run details + Cloud Run logs.'],
+            ['Evals', 'Generation + Re-score runs with their pass verdict and dimension scores (g / tts / div — grounding reddens below the 0.75 gate); click a row for the per-place gate report.'],
             ['Regions', 'The regions the corpus is keyed to — each with its discovery bbox (the area Discover + Generate sweep), a live POI count, and a Draft / Released status. Discover POIs and Release both launch here (select region row(s) → Discover / Release).'],
             ['POIs', 'The shared POI corpus — sources, enrichment, narration coverage + freshness, and per-POI curation. Quick-filters across the top triage it — “Needs attention” is the combined remediation queue (stale facts, defects, unattributed or drifted clips). Open a POI for its detail sheet: Facts (with Re-fetch facts), Narration (play the telling; Regenerate / Re-synth / Release), and Corrections (fact-edits + speakable anchor). New POIs are discovered from the Regions page.'],
           ]}

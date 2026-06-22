@@ -39,8 +39,9 @@ pre-seeded as draft shells from committed `tour-specs.ts` + `seed/data/*.json` r
    `regions` stays geometry-free (D4 of the segments/tracks refactor holds).
 2a. **Generate.** _(V2: tours are deferred; the live generate step is `generate-narrations.ts`,
    which narrates the `pois` corpus 1:1 into `narrations`.)_ Historically `generate-tour.ts` read
-   candidates from the corpus (`pipeline/region-corpus.ts::loadCandidatePoisInBox` — now dead code,
-   no live importer), scoped to the route's bounding box, and rebuilt the SAME `WikiPoi` shape the
+   candidates from the corpus (via `pipeline/region-corpus.ts::loadCandidatePoisInBox` — that module
+   was DELETED once the V2 collapse left it with no importer), scoped to the route's bounding box, and
+   rebuilt the SAME `WikiPoi` shape the
    spine emitted — no live WDQS. An empty corpus throws at `$0` ("discover the region first") before
    any paid call. Selection (`select.ts`) and the facts deepen (`loadFreshPoiFacts`) downstream are
    unchanged.
@@ -53,7 +54,7 @@ pre-seeded as draft shells from committed `tour-specs.ts` + `seed/data/*.json` r
   is no duplicated sweep. Tour generates get faster + deterministic (no live WDQS latency/etiquette
   mid-run).
 - **Lossless from the pool.** The sweep stores the full discovery payload in `pois.facts` for STORY
-  rows — `{extract, title, url, pageId, qid}` — so `loadCandidatePoisInBox` reconstructs the
+  rows — `{extract, title, url, pageId, qid}` — so the (now-deleted) corpus loader could reconstruct the
   `WikiPoi` (incl. the Wikidata `qid` enrichment join) without calling WDQS. SCENIC rows
   (`source 'wikidata'`) carry no prose, exactly as before.
 - **No seeded shells.** The seed is now just `regions` + `personas` + `poi_overrides`. _(V2: tours

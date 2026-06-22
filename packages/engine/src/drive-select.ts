@@ -68,11 +68,11 @@ export interface BuildDriveParams {
   maxLagSec?: number
 }
 
-/** Two narrations closer than this on the ground are the same physical stop — collapse to one.
- *  Mirrors the studio pipeline's MIN_STOP_SEPARATION_M. */
+/** Two narrations closer than this on the ground are the same physical stop — collapse to one
+ *  (1 km; the spatial dedupe now lives only here in the engine, not in the studio pipeline). */
 export const DRIVE_MIN_SEPARATION_M = 1_000
 /** A clip that would start more than this many seconds after its trigger (FIFO queue lag) is
- *  DROPPED — silence beats a clip playing far behind the car. Mirrors QUEUE_LAG_WARN_SEC. */
+ *  DROPPED — silence beats a clip playing far behind the car. */
 export const DRIVE_MAX_LAG_SEC = 45
 
 interface Snapped {

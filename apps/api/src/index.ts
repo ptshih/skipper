@@ -5,7 +5,7 @@
 //   GET  /version                    -> per-platform app-version policy (anonymous; env-free)
 //   *    /api/auth/*                  -> Better Auth (sign-up/in/out, session, OAuth)
 //   GET  /regions                    -> pickable regions for the Create-a-Drive picker (anonymous)
-//   POST /drives/propose             -> resolve a free-text prompt + preview route (free account; no credit)
+//   POST /drives/propose             -> preview the route for a picked A→B (free account; no credit)
 //   POST /drives                     -> generate + persist a user-owned drive (free account; counts a credit)
 //   GET  /drives                     -> the caller's saved drives (one card each)
 //   GET  /drives/:id                 -> replay a saved drive (frozen structure + live narration content)

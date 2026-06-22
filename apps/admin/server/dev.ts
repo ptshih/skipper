@@ -1,7 +1,7 @@
 // Dev-only supervisor for the admin-api. `bun --watch server/index.ts` hot-reloads on file edits,
 // but a fatal boot error (a bad import, an unset env var) can exit the whole watcher — leaving the
-// vite proxy 502-ing with NO terminal signal (the "dev:server just errors out" failure mode in
-// TODO "Admin local-dev resilience"). This wraps the watcher: it respawns on exit with a short
+// vite proxy 502-ing with NO terminal signal (the "dev:server just errors out" failure mode). This
+// wraps the watcher: it respawns on exit with a short
 // backoff and a loud log so a crash is visible and self-heals, and forwards Ctrl-C so shutdown
 // doesn't orphan the child. Used only by `dev:server`; prod runs `bun server/index.ts` directly.
 const RESTART_DELAY_MS = 1000

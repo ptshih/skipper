@@ -14,7 +14,7 @@
 //
 // The model call (decompose) is INJECTED, so the scoring/aggregation logic is unit-tested
 // with a deterministic fake and zero API spend (see test/eval-grounding.test.ts). The real
-// implementation mirrors judge.ts: lazy client + tool-use structured output.
+// implementation mirrors the sibling eval judges (e.g. ./charm.ts): lazy getAnthropic() client + forced tool-use structured output.
 
 import Anthropic from '@anthropic-ai/sdk'
 import type { StopType } from '@skipper/shared'

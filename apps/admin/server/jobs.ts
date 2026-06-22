@@ -27,7 +27,7 @@ function keyFilename(): string | undefined {
 }
 
 let auth: GoogleAuth | undefined
-export async function accessToken(): Promise<string> {
+async function accessToken(): Promise<string> {
   auth ??= new GoogleAuth({ scopes: SCOPE, keyFilename: keyFilename() })
   const t = await auth.getAccessToken()
   if (!t) throw new Error('Could not obtain a Google access token (ADC / runtime service account).')

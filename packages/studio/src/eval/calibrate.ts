@@ -5,9 +5,9 @@
 // each known-answer pass/fail verdict right, and did it catch each expected violation (recall)?
 // Run it after a model or prompt change to confirm the judge still tracks the founder's ear.
 //
-// Costs one grounding (Opus) call per case — ON DEMAND, not CI. The deterministic golden
-// cases (tts/diversity) are the always-on gate (test/eval-golden.test.ts); this is the
-// periodic calibration check. Exits non-zero if the judge disagrees with any verdict label.
+// Costs one grounding (Opus) call per case — ON DEMAND, not CI. The deterministic evaluators
+// (tts/diversity) have their own always-on unit tests (test/eval-tts.test.ts, test/eval-advisory.test.ts);
+// this is the periodic calibration check. Exits non-zero if the judge disagrees with any verdict label.
 //
 // Usage (ANTHROPIC_API_KEY via dotenvx):
 //   dotenvx run -f .env.development -- bun packages/studio/src/eval/calibrate.ts

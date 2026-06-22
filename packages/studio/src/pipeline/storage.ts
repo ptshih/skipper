@@ -20,7 +20,7 @@ export function narrationClipKey(poiId: string, clipId: string): string {
   return `narration/${poiId}/${clipId}.${TTS_CLIP_EXTENSION}`
 }
 
-/** Upload an MP3 (private) and return its R2 object KEY to store on the track/frame row. */
+/** Upload a clip (private AAC .m4a) and return its R2 object KEY to store on narrations.audio_url. */
 export async function uploadAudio(key: string, bytes: Uint8Array): Promise<string> {
   // content-type goes in `type` (a BlobPropertyBag field), NOT `contentType`.
   await getR2Client().file(key).write(bytes, { type: TTS_AUDIO_CONTENT_TYPE })

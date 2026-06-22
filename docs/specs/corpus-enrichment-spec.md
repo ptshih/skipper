@@ -94,8 +94,8 @@ Extend `pipeline/scout.ts` from an enrichment-bundle selector to a full **well b
    the pipeline, never free-form (the safety invariant).
 2. The model SELECTS: (a) which verbatim article spans to keep, (b) which fetched bundles
    (`fetch_wikidata` by QID, `fetch_geology` at the **centroid** — §6) to include. Same include/
-   exclude agency it has today, now also over article spans. Bounded by `SCOUT_MAX_TOOL_TURNS` /
-   `SCOUT_MAX_TOKENS`; the model emits span ids / bundle choices, NOT text.
+   exclude agency it has today, now also over article spans. Bounded by `ENRICH_MAX_TOOL_TURNS` /
+   `ENRICH_MAX_TOKENS`; the model emits span ids / bundle choices, NOT text.
 3. Output: the `well` array (§3) — verbatim spans + provenance. On any cap/error: fall back to the
    positional head of the extract (today's behavior) so a poi is never well-less.
 4. Restraint stays a feature (its current prompt rule): a rich article wants few/no enrichment

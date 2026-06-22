@@ -1,11 +1,10 @@
 // The swappable GPS fix source — the one seam between the simulated drive and the
-// real one. The driving player consumes a `GpsFixSource`; today only the *simulated*
-// source exists (it replays `generateDrive` on a wall-clock timer, no device GPS), so
-// the whole trigger→play→duck→lock-screen loop is couch-testable on the iOS Simulator.
-//
-// Phase 4 adds a `liveSource()` (expo-location `watchPositionAsync` → GpsFix) that
-// implements the SAME `GpsFixSource` shape; the driving hook swaps which one it
-// subscribes and nothing else changes. See docs/specs/gps-player-spec.md §3.4 / §7.
+// real one. The driving player consumes a `GpsFixSource`. Two implementations exist:
+// the *simulated* source (replays `generateDrive` on a wall-clock timer, no device GPS),
+// so the whole trigger→play→duck→lock-screen loop is couch-testable on the iOS Simulator;
+// and the live `liveSource()` / `liveRoamSource()` (expo-location `watchPositionAsync` →
+// GpsFix), which implement the SAME `GpsFixSource` shape — the hooks swap which one they
+// subscribe and nothing else changes. See docs/specs/gps-player-spec.md §3.4 / §7.
 import * as Location from 'expo-location'
 import { cumulativeMeters, generateDrive, haversineMeters, type GpsFix, type LngLat } from '@skipper/engine'
 import {
@@ -180,21 +179,6 @@ export async function getDrivePermission(): Promise<{
 }
 
 /**
- * The live `GpsFixSource`: wraps expo-location `watchPositionAsync` into the SAME
- * `FixSubscription` the simulated source returns, so the driving hook swaps one for the other
- * and nothing else changes. Maps each `LocationObject → GpsFix` (spec §3.3): sanitizes the iOS
- * -1, gates on accuracy, projects the fix onto `polyline` so the route dot's `alongM` tracks the
- * real position (a live fix has no intrinsic along-route distance), and derives `tSec` from the
- * first fix's timestamp.
- *
- * ASSUMES foreground permission is already granted — call `ensureDrivePermission()` first.
- *
- * ⚠️ `watchPositionAsync`'s `.remove()` can fail to stop updates (expo/expo #35925/#35926, both
- * platforms). A `stopped` guard drops any fix arriving after `stop()`, so a leaked native watch
- * is harmless to the engine + UI — but it still drains battery, so verify GPS actually stops on
- * unmount during the on-device test. (spec §5)
- */
-/**
  * The FREE-ROAM live `GpsFixSource`: the same expo-location watch as `liveSource`, with
  * NO polyline — roam has no route, so there is no along-route projection (`alongM` stays 0;
  * the RoamEngine works from raw proximity + heading) and no end-of-route signal (a roam
@@ -272,6 +256,21 @@ export function liveRoamSource(): GpsFixSource {
   }
 }
 
+/**
+ * The live `GpsFixSource`: wraps expo-location `watchPositionAsync` into the SAME
+ * `FixSubscription` the simulated source returns, so the driving hook swaps one for the other
+ * and nothing else changes. Maps each `LocationObject → GpsFix` (spec §3.3): sanitizes the iOS
+ * -1, gates on accuracy, projects the fix onto `polyline` so the route dot's `alongM` tracks the
+ * real position (a live fix has no intrinsic along-route distance), and derives `tSec` from the
+ * first fix's timestamp.
+ *
+ * ASSUMES foreground permission is already granted — call `ensureDrivePermission()` first.
+ *
+ * ⚠️ `watchPositionAsync`'s `.remove()` can fail to stop updates (expo/expo #35925/#35926, both
+ * platforms). A `stopped` guard drops any fix arriving after `stop()`, so a leaked native watch
+ * is harmless to the engine + UI — but it still drains battery, so verify GPS actually stops on
+ * unmount during the on-device test. (spec §5)
+ */
 export function liveSource(polyline: LngLat[]): GpsFixSource {
   const cumulative = cumulativeMeters(polyline)
   const routeEndM = cumulative[cumulative.length - 1] ?? 0

@@ -104,7 +104,7 @@ function ThemedStack() {
           // with a washed-out glyph. hidesSharedBackground strips that capsule so we can
           // draw our OWN theme-controlled circle (HeaderIconButton) instead — and it dodges
           // the "double oval" of a self-drawn ring nested inside the native one. `unstable_`
-          // = iOS-only + experimental (pinned rn-screens 4.25.2 / expo-router 56.2.9 —
+          // = iOS-only + experimental (pinned rn-screens 4.25.2 / expo-router 56.2.10 —
           // re-check names on upgrade); no-op on Android + iOS<26.
           unstable_headerLeftItems: ({ canGoBack }) =>
             canGoBack ? [{ type: 'custom', hidesSharedBackground: true, element: <HeaderBack /> }] : [],

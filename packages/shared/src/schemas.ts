@@ -19,7 +19,6 @@ export type Region = z.infer<typeof region>
 
 /** GET /regions — the pickable regions (for the Create-a-Drive region selector). Anonymous. */
 export const regionList = z.object({ regions: z.array(region) })
-export type RegionList = z.infer<typeof regionList>
 
 /** Attribution snapshot frozen at generation time (keeps CC BY-SA / CC BY credit correct). */
 export const attribution = z.object({
@@ -38,7 +37,6 @@ export type Attribution = z.infer<typeof attribution>
  * single-object shape to tolerate (zero-reuse, no users → clean array contract).
  */
 export const attributionList = z.array(attribution)
-export type AttributionList = z.infer<typeof attributionList>
 
 /**
  * A public data-source credit for the app-wide "Sources & Licenses" screen (NOT per-clip —
@@ -64,7 +62,6 @@ export type DataSource = z.infer<typeof dataSource>
 
 /** GET /sources — the app-wide data-source/license catalog (anonymous; public legal info). */
 export const sourcesResponse = z.object({ sources: z.array(dataSource) })
-export type SourcesResponse = z.infer<typeof sourcesResponse>
 
 /**
  * The per-platform app-version policy. The client reads its OWN version, compares against
@@ -85,7 +82,6 @@ export type VersionPolicy = z.infer<typeof versionPolicy>
 
 /** GET /version — the per-platform update policy (anonymous; env-free). */
 export const versionResponse = z.object({ policies: z.array(versionPolicy) })
-export type VersionResponse = z.infer<typeof versionResponse>
 
 /* -------------------------------------------------------------------------- */
 /*  API response DTOs (apps/api ⇄ clients). Lightweight, no internal columns.   */
@@ -100,11 +96,9 @@ export const signedClip = z.object({
   contentType: z.string(),
   durationMs: z.number().int().nullish(),
 })
-export type SignedClip = z.infer<typeof signedClip>
 
 /** A presigned stop clip, keyed by the stop's seq. */
 export const signedStopClip = signedClip.extend({ seq: z.number().int() })
-export type SignedStopClip = z.infer<typeof signedStopClip>
 
 /* -------------------------------------------------------------------------- */
 /*  Free-roam (ALPHA surface — docs/ideas/free-roam-mode.md)                    */
@@ -125,7 +119,6 @@ export const roamPin = z.object({
   /** MIME type derived server-side from the R2 key (see signedClip.contentType). */
   contentType: z.string(),
 })
-export type RoamPin = z.infer<typeof roamPin>
 
 /** GET /roam?lat=&lng=&radiusKm= — every roam-narratable place near a point. */
 export const roamManifest = z.object({ pins: z.array(roamPin) })
@@ -160,7 +153,6 @@ export const regionAnchor = z.object({
 })
 export type RegionAnchor = z.infer<typeof regionAnchor>
 export const regionAnchorList = z.object({ anchors: z.array(regionAnchor) })
-export type RegionAnchorList = z.infer<typeof regionAnchorList>
 
 /** Ordered intermediate waypoints between start and end — the route is materialized as
  *  [start, ...via, end]. A LOOP is `end === start` with one `via` midpoint (a turnaround), so a
@@ -261,7 +253,6 @@ export const driveCredits = z.object({
   /** Lifetime credits granted — for "N of <cap> left" framing. */
   cap: z.number().int(),
 })
-export type DriveCredits = z.infer<typeof driveCredits>
 
 export const driveList = z.object({
   drives: z.array(driveSummary),

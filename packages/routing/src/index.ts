@@ -110,8 +110,8 @@ export interface MaterializedRoute {
   provenance: RouteProvenanceCore
 }
 
-/** Freeze a road-snapped route from ordered waypoints via the Google Routes API. The admin
- *  (Create Tour) calls it to freeze a runtime-authored route into the DB. No file write. */
+/** Freeze a road-snapped route from ordered waypoints via the Google Routes API. apps/api's
+ *  Create-a-Drive flow (POST /drives, /drives/propose) calls it to freeze a route into the DB. No file write. */
 export async function materializeRoute(
   waypoints: readonly Waypoint[],
   apiKey: string = requireApiKey(),

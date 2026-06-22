@@ -49,7 +49,7 @@ export const auth = betterAuth({
   // Base URL Better Auth uses to build callback / redirect / password-reset links
   // (it appends its own /api/auth basePath — do NOT put a path here). Resolved
   // PER-REQUEST from the validated Host header, so dev, the prod service, AND
-  // ephemeral Render PR-preview URLs all work with NO env var to manage (no
+  // ephemeral Cloud Run revision/preview URLs all work with NO env var to manage (no
   // BETTER_AUTH_URL). `allowedHosts` is the security allowlist that blocks
   // Host-header injection of reset/OAuth links and seeds `trustedOrigins`;
   // `fallback` covers any non-matching host and serves as the init-time base URL

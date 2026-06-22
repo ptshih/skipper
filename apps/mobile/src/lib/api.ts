@@ -3,8 +3,8 @@
 // client stores in secure-store and hands us via authClient.getCookie().
 //
 // V2 client (roam-first + Create-a-Drive): drives are user-OWNED. GET /drives lists the
-// caller's saved drives (one card each) and GET /drives/:id replays one (route + region +
-// host + intro/outro + stops); POST /drives/propose (cheap, no credit) then POST /drives
+// caller's saved drives (one card each) and GET /drives/:id replays one (route + ordered
+// place-narration clips); POST /drives/propose (cheap, no credit) then POST /drives
 // create one. Plus the anonymous reads: GET /regions, GET /roam.
 import {
   driveList,

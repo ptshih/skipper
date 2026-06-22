@@ -21,7 +21,7 @@ type IconType = ComponentType<{ className?: string }>
 interface JobActionDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  /** Fired after a job is queued (Preview OR apply) — usually navigate to /runs. */
+  /** Fired after a job is queued (Preview OR apply) — usually navigate to /jobs. */
   onSubmitted: () => void
   icon: IconType
   title: string

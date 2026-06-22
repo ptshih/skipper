@@ -37,7 +37,7 @@ import {
 const SUPPORT_EMAIL = process.env.EXPO_PUBLIC_SUPPORT_EMAIL ?? 'feedback@skipper.fm'
 
 // A saved drive (the rider's own, account-gated): route + stops + the live GPS drive (the M1
-// phone player, fed by a simulated fix source) + the couch preview + offline download. Reached
+// phone player, fed by real device GPS) + the couch preview + offline download. Reached
 // from "My Drives" or straight after creating one (Create-a-Drive → preview → here).
 export default function DriveDetailScreen() {
   const router = useRouter()

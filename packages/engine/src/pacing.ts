@@ -11,8 +11,7 @@ import {
   type LngLat,
 } from './geo'
 
-// Drive pacing — mirrors the studio pipeline's "standard" bucket (config.ts PACING.standard): a 3-min
-// floor between stops, with the cap scaled to the route's length (~1 stop / 4 min, capped at 24).
+// Drive pacing — a 3-min floor between stops, with the cap scaled to the route's length (~1 stop / 4 min, capped at 24).
 export const DRIVE_MIN_GAP_SEC = 180
 export const DRIVE_MAX_STOPS_CAP = 24
 export const driveMaxStops = (totalSec: number): number =>

@@ -108,7 +108,10 @@ Card: PLACE — the Roadrunner Diner; KIND — a diner; live details resolved la
  * The Tahoe Skipper — the single-host V2 generation persona. Bundles the stop prompt, voice, and delivery
  * style into one def so generate-narrations.ts reads a SINGLE source (resolved by region slug via
  * ./index.ts) instead of scattered constants. The per-region PRESENTATION identity (display name,
- * tagline, backstory, portrait) is served by the API (apps/api/src/host.ts), never here.
+ * tagline, backstory, portrait) never lives here regardless — this is the GENERATION half. It has no
+ * home in v2 (the `personas` table was dropped, migration 0014; playback shows a fixed 'Skipper') and
+ * gets one again only when region-skippers ship at M4 — see ../../../db/src/schema.ts, the
+ * dropped-`personas` note.
  * (V2 deleted the intro/outro frame + the "cousin Ray" personal kit — see the header note; the host
  * now invents no backstory, so there is no framePrompt/kit here.)
  */
@@ -116,7 +119,6 @@ export const SKIPPER: PersonaDef = {
   // The stable code-recipe slug + registry key (the `personas` table + its seed were dropped in v2;
   // a per-narration persona_key returns with region-skippers, M4).
   personaKey: 'skipper',
-  hostName: 'Skipper',
   voice: SKIPPER_VOICE_ID,
   ttsStyle: SKIPPER_TTS_STYLE_PROMPT,
   systemPrompt: SKIPPER_SYSTEM_PROMPT,

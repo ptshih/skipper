@@ -627,15 +627,15 @@ app.get('/admin/runs', async (c) => {
   ])
 
   // Reconcile stale non-terminal jobs so the list reflects reality without requiring a
-  // detail-drawer click. Limit to jobs updated within the last hour to avoid hammering
-  // the Cloud Run API on every poll for ancient rows.
+  // detail-drawer click. Limit to jobs created within the 6h task-timeout window (cloudbuild.studio.yaml
+  // = 21600s) to avoid hammering the Cloud Run API on every poll for ancient rows past the timeout.
   const staleNonTerminal = jobs.filter(
     (j) =>
       !TERMINAL.includes(j.status as (typeof TERMINAL)[number]) &&
       j.cloudRunExecution &&
       j.updatedAt &&
       Date.now() - new Date(j.updatedAt).getTime() > RECONCILE_AFTER_MS &&
-      Date.now() - new Date(j.createdAt).getTime() < 60 * 60 * 1000,
+      Date.now() - new Date(j.createdAt).getTime() < 6 * 60 * 60 * 1000,
   )
   if (staleNonTerminal.length > 0) {
     await Promise.all(
@@ -656,7 +656,7 @@ app.get('/admin/runs', async (c) => {
   }
 
   // No-API backstop: force-fail any row that outlived the task-timeout. The reconcile above skips
-  // rows >1h old to spare the Cloud Run API, so this is what finally settles an ancient stuck row
+  // rows >6h old to spare the Cloud Run API, so this is what finally settles an ancient stuck row
   // (and frees its target for re-runs).
   await Promise.all(jobs.map(async (j) => { if (await expireStuckJob(j)) j.status = 'failed' }))
 
@@ -767,11 +767,11 @@ app.get('/admin/runs/:id/scores', async (c) => {
 
 const TERMINAL = ['succeeded', 'failed', 'canceled'] as const
 const RECONCILE_AFTER_MS = 30_000
-// Past the Cloud Run task-timeout (cloudbuild.studio.yaml = 3600s) + slack, a non-terminal row can
-// NOT still be running — the job was killed. Force-fail it with NO API round-trip; this is the
+// Past the Cloud Run task-timeout (cloudbuild.studio.yaml = 21600s / 6h) + slack, a non-terminal row
+// can NOT still be running — the job was killed. Force-fail it with NO API round-trip; this is the
 // backstop for a row the executionState reconcile can't settle (no/expired execution name, or a
-// row already >1h old which the list reconcile skips), so a stuck row stops blocking re-runs.
-const JOB_MAX_AGE_MS = 3_600_000 + 300_000
+// row already >6h old which the list reconcile skips), so a stuck row stops blocking re-runs.
+const JOB_MAX_AGE_MS = 21_600_000 + 300_000
 
 /** Force-fail a non-terminal studio_jobs row that has outlived the task-timeout. Pure age check (no
  *  Cloud Run API call), guarded so it never clobbers a concurrently-settled row. Returns true if

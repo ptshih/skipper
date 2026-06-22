@@ -1,10 +1,17 @@
 // Break-stop anchors — Google Places API (New) "search along route".
 //
+// DEFERRED-FEATURE FEED — DO NOT delete as "dead": searchBreakStops (+ its BreakAnchor /
+// BREAK_CATEGORIES / searchOneCategory helpers) and the spokenKind deriver have NO caller
+// today because break audio (the `detours` table) is stubbed and nothing writes it yet
+// (CLAUDE.md break-audio deferral). This is the planned feed for when detours un-defers.
+// The CURATION half (resolveCuratedPlace / CuratedPlace / PlacesBbox / autocompletePlaceId /
+// placeDetails) IS live via curate-places.ts.
+//
 // Only Text Search supports searchAlongRouteParameters, and it accepts ONLY the
 // encoded polyline string. We request a MINIMAL, non-volatile field mask
 // (id, name, location, type) — no hours/rating/price — so nothing volatile is
 // ever baked onto a break stop (the invariant). The live spot details are
-// fetched fresh at tour-load. includedType is singular, so we fan out one
+// fetched fresh at drive-load. includedType is singular, so we fan out one
 // request per category and dedup by place id.
 //
 // Needs Places API (New) enabled on GOOGLE_MAPS_API_KEY (Routes enablement alone
@@ -13,7 +20,7 @@
 //
 // Places API (New) is ENABLED on the project (verified 2026-06-07). If a request ever
 // 403s with PERMISSION_DENIED, re-check that enablement first (Routes enablement alone
-// is not enough); generate.ts catches the error and skips break stops in the meantime.
+// is not enough).
 
 import { fetchWithRetry } from './http'
 

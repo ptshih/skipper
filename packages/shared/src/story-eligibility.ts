@@ -12,8 +12,8 @@
  *  earthquake, the Donner Party, a wild-west gunfight) — so it deliberately omits broad words like
  *  "attack"/"fire"/"shootout"/"wreck". Two guards dodge benign POIs: `shooting(?! range)` keeps gun
  *  ranges, `\brape\b` keeps "Grapevine"/"grape". Cheap to over-filter (a skipped POI is just silence,
- *  visible in the admin); a leak gets the founder ear. (NOTE: enforced in roam's queue today; tours
- *  should adopt it too — tracked in TODO.) */
+ *  visible in the admin); a leak gets the founder ear. Enforced once in the shared narration pipeline
+ *  (generate-narrations.ts), so BOTH roam and drives inherit it via the one `narrations` corpus. */
 export const STORY_TASTE_DENYLIST =
   /kidnap|abduction|murder|manslaughter|homicide|killing of|mass killing|massacre|lynching|shooting(?! range)|stabbing|gunman|hostage|\brape\b|sexual assault|assault|suicide|death of|serial killer|execution of|terrorism|terrorist|genocide|torture/i
 

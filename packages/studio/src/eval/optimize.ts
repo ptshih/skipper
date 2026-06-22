@@ -145,15 +145,9 @@ export async function optimize<T>(initial: T, opts: OptimizeOptions<T>): Promise
   return { item: best, evals: bestEvals, rounds: round, stop, history }
 }
 
-// ── HOW generate.ts WIRES THIS ──────────────────────────────────────────────────────────
-// generate.ts drives both the free-dim panel loop and the grounding pass through optimize():
-//   - The FREE-dim + diversity loop calls optimize() per flagged stop (optimizeFlagged, the
-//     call at generate.ts ~L703): evaluate = evaluateTts + the stop's evaluateDiversity finding,
-//     regenerate = narrateStop with the seed avoid-note.
-//   - The grounding pass calls optimize() per failing stop (~L837): evaluate = evaluateGrounding,
-//     regenerate = the same narrateStop hook.
-// Per-stop dimensions (grounding, tts, charm) fit this loop directly. DIVERSITY is CROSS-stop
-// (it lints the assembled set), so it stays a tour-level pass: evaluateDiversity runs over all
-// final scripts, then each flagged stop goes back through optimize() with its finding as the
-// seed avoid-note. generate.ts's per-stop context (recentOpeners/closers/kit/motifs) flows into
-// regenerate() — the loop only owns the accept/stop logic, not the prompt.
+// ── HOW generate-narrations.ts WIRES THIS ──────────────────────────────────────────────────
+// gateClip() (generate-narrations.ts ~L350) makes ONE optimize() call per clip. Its evaluate()
+// runs the whole per-clip panel together — evaluateTts + evaluateDiversity + evaluateLaterality
+// + evaluatePacing, plus evaluateGrounding behind SKIPPER_GROUNDING_EVAL. Its regenerate()
+// excises the ungrounded claims for a grounding failure (eval/excise.ts) and otherwise
+// re-narrates via narrateStop with the avoid notes folded in. The loop owns only accept/stop.

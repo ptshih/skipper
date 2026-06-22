@@ -79,10 +79,6 @@ export const voice = {
     pitStop: 'PIT STOP', // a rest stop
     gpsSearching: 'Looking for the satellites — hang tight.', // live drive, no usable fix yet
     gpsError: 'Lost the GPS signal, folks. Pull over and give her another go.', // live watch failed
-    // The intro/outro frame clips aren't stops — these title them on BOTH the NOW card and
-    // the lock-screen Now Playing (single source, so the two can't silently diverge).
-    frameIntro: 'Welcome aboard',
-    frameOutro: 'One for the road',
     driveCompleteKicker: 'DRIVE COMPLETE', // the done-card kicker
     arrived: 'You’ve arrived', // the done-card title
     restFallback: 'A good spot to stretch', // pit-stop card title when the break carries no name
@@ -177,7 +173,6 @@ export const voice = {
     signoff: 'That’s me out, friend. Holler when you want company.',
     signoffTally: 'stories this drive',
     done: 'Done',
-    locating: 'Getting my bearings…',
     loading: 'Checking which stories live out here…',
     noCoverage: 'I don’t know these roads yet, folks. Get me near Lake Tahoe and I’ve got stories.',
   },

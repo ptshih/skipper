@@ -43,10 +43,10 @@ The scout chooses what to **gather**, never what is **true**:
 
 ## Bounds + failure shape
 
-`SCOUT_MAX_TOOL_TURNS` (5) model turns and `SCOUT_MAX_TOKENS` (1000) output per turn; a hit
+`ENRICH_MAX_TOOL_TURNS` (5) model turns and `ENRICH_MAX_TOKENS` (2000) output per turn; a hit
 cap or any error yields **no enrichment for that stop** — logged, non-fatal, the same blast
-radius as a fetcher failure under the old gates. `SKIPPER_SCOUT=off` skips the pass;
-`SKIPPER_GEOLOGY=off` / `SKIPPER_WIKIDATA=off` withhold the corresponding tool.
+radius as a fetcher failure under the old gates. `SKIPPER_GEOLOGY=off` / `SKIPPER_WIKIDATA=off`
+withhold the corresponding tool.
 
 ## Deliberately NOT scout tools
 

@@ -1,12 +1,13 @@
 // The GOLDEN SET — known-answer eval cases (the eval flywheel's substrate).
 //
-// Two jobs:
-//   1. REGRESSION GATE for the deterministic evaluators (tts, diversity): every case has a
-//      human-labeled expected verdict, run as bun-test assertions (free, CI-able) so a prompt
-//      or rule change that breaks a locked-in failure mode trips immediately.
-//   2. CALIBRATION SUBSTRATE for the LLM evaluators (grounding, charm): the same labeled cases
+//   1. CALIBRATION SUBSTRATE for the LLM evaluators (grounding, charm): the human-labeled cases
 //      let calibrate.ts measure judge↔human AGREEMENT — an LLM judge is only worth anything if
-//      it predicts the founder's ear, so we MEASURE that rather than assume it.
+//      it predicts the founder's ear, so we MEASURE that rather than assume it. Only GROUNDING_CASES
+//      is wired in today (calibrate.ts).
+//   2. LABELED FIXTURES for the deterministic evaluators (tts, diversity): every case has a
+//      human-labeled expected verdict. NOTE: the eval-golden.test.ts regression gate that asserted
+//      TTS_CASES/DIVERSITY_CASES was removed in 5ca12d3 — they are retained as labeled fixtures but
+//      are not currently run as a test (the live tts/diversity tests use their own inline cases).
 //
 // TYPED, not loose JSON: a case references the evaluator input shapes directly, so if
 // GroundingInput / TtsInput / LintInput change, the corpus stops compiling (drift-proof —

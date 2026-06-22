@@ -89,18 +89,6 @@ export const WIKIDATA_ENRICHMENT = (): boolean => process.env.SKIPPER_WIKIDATA !
 // SCOUT's call (pipeline/scout.ts) — the old WIKIDATA_STORY_MAX_FACT_CHARS=700 sparse-gate
 // was replaced by per-stop judgment 2026-06-09 (docs/decisions/enrichment-scout.md).
 
-// --- The enrichment scout (pipeline/scout.ts) --------------------------------
-
-/** The scout is on by default; set SKIPPER_SCOUT=off to skip story-stop enrichment
- * entirely (scenic geology is unaffected — it's a contract, not a scout decision). */
-export const SCOUT_ENRICHMENT = (): boolean => process.env.SKIPPER_SCOUT !== 'off'
-/** Max model turns per stop — the ReAct loop's hard bound. A turn is one Opus call that
- * either fetches (possibly several tools at once) or finalizes; 5 covers look-then-decide
- * with a re-fetch, and a loop that hits the cap yields NO enrichment (logged, non-fatal). */
-export const SCOUT_MAX_TOOL_TURNS = 5
-/** Max output tokens per scout turn (it emits tool calls + a sentence of reason, never prose). */
-export const SCOUT_MAX_TOKENS = 1_000
-
 // --- The corpus enrich step's fact-sheet builder (pipeline/scout.ts buildCorpusFactSheet) ------
 // Generalizes the per-stop scout to the CORPUS: it selects verbatim article spans (by id) +
 // includes/excludes grounded bundles (geology@centroid, Wikidata), ONCE per place — the shared
@@ -146,19 +134,6 @@ export const TTS_CONCURRENCY = (): number => intKnob(process.env.SKIPPER_TTS_CON
  * stop-keyed tools). No prompt-cache interplay: scout calls carry no cache_control and
  * their prefix is under the Opus cacheable minimum. */
 export const SCOUT_CONCURRENCY = (): number => intKnob(process.env.SKIPPER_SCOUT_CONCURRENCY, 4)
-/** Concurrent grounding-REGEN optimize() loops — independent per stop (per-stop memo, the
- * shared budget spends synchronously, the advisory panel judges against a frozen snapshot;
- * see generate.ts). Override: SKIPPER_GROUNDING_REGEN_CONCURRENCY. */
-export const GROUNDING_REGEN_CONCURRENCY = (): number =>
-  intKnob(process.env.SKIPPER_GROUNDING_REGEN_CONCURRENCY, 4)
-/** Concurrent FREE-DIM (tts+diversity) PANEL + closer-judge regen narrations — the same
- * parallel-safe shape as the grounding regens above: each candidate is judged against a
- * FROZEN snapshot of the assembled set taken at pass start (so a concurrent retake can't read
- * a sibling mid-mutation), the shared panel budget is spent with a synchronous check+decrement
- * (no over-spend race), and the OUTER pass loop re-lints the LIVE set between passes so
- * convergence is unharmed. Override: SKIPPER_PANEL_REGEN_CONCURRENCY. */
-export const PANEL_REGEN_CONCURRENCY = (): number =>
-  intKnob(process.env.SKIPPER_PANEL_REGEN_CONCURRENCY, 4)
 
 // --- Eval panel + evaluator-optimizer (the in-pipeline flywheel) -------------
 

@@ -6,10 +6,10 @@ import type { MiddlewareHandler } from 'hono'
 import type { AccessTier } from '@skipper/shared'
 import { auth } from './auth'
 import { resolveSessionSafely } from './session'
-import { FEATURES, isAdmin, meetsTier, tierOf } from './tiers'
+import { isAdmin, tierOf } from './tiers'
 
 /** Better Auth's inferred session shape ({ session, user }), incl. role + isAnonymous (admin plugin). */
-export type AuthSession = typeof auth.$Infer.Session
+type AuthSession = typeof auth.$Infer.Session
 
 export type ApiEnv = {
   Variables: {
@@ -50,5 +50,5 @@ export const requireAccount: MiddlewareHandler<ApiEnv> = async (c, next) => {
   await next()
 }
 
-// Re-export the pure helpers so existing importers (index.ts) need no change.
-export { FEATURES, isAdmin, meetsTier, tierOf }
+// Re-export the pure helper so existing importers (index.ts) need no change.
+export { isAdmin }

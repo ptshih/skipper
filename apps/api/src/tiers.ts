@@ -31,9 +31,3 @@ export function isAdmin(session: TierSession | null | undefined): boolean {
 
 const TIER_RANK: Record<AccessTier, number> = { anonymous: 0, free: 1 }
 export const meetsTier = (have: AccessTier, need: AccessTier): boolean => TIER_RANK[have] >= TIER_RANK[need]
-
-/** Feature -> minimum access level. (Premium capacity is gated by CREDITS, not by this ladder.) */
-export const FEATURES = {
-  // Creating/playing a drive requires an account (anonymous = roam only).
-  playDrive: 'free',
-} as const satisfies Record<string, AccessTier>

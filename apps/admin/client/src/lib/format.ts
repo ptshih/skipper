@@ -1,9 +1,4 @@
-export const fmtDuration = (s?: number | null): string => (s == null ? '—' : `${Math.round(s / 60)} min`)
-export const fmtMiles = (m?: number | null): string => (m == null ? '—' : `${(m / 1609.344).toFixed(1)} mi`)
 export const fmtDate = (iso?: string | null): string => (iso ? new Date(iso).toLocaleString() : '—')
-export const fmtScore = (v?: number | null): string => (v == null ? '—' : v.toFixed(3))
-export const fmtCost = (v?: number | null): string => (v == null ? '—' : `$${v.toFixed(2)}`)
-export const fmtSec = (ms?: number | null): string => (ms == null ? '—' : `${(ms / 1000).toFixed(1)}s`)
 
 // Normalize a thrown value to a display string. ApiError extends Error, so this covers both.
 export const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e))

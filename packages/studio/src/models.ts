@@ -107,13 +107,13 @@ export type EnrichModelChoice = keyof typeof ENRICH_MODELS
 // models share the same voices + encoding set, so this does NOT affect the AAC output.
 export const TTS_MODEL = 'gemini-3.1-flash-tts-preview' as const
 
-// AUDIO FORMAT — LINEAR16 → AAC@48k .m4a (spike option B; chosen 2026-06-14, see
+// AUDIO FORMAT — LINEAR16 → AAC@64k .m4a (spike option B; chosen 2026-06-14, bumped 48k→64k for clean peaks, see
 // docs/decisions/audio-compression-spike.md). We request LOSSLESS LINEAR16 from Gemini-TTS,
 // then the loudnorm step (pipeline/loudnorm.ts) does the ONLY lossy encode: a single
-// ffmpeg pass that linear-normalizes AND encodes to AAC-LC 48 kbps in an .m4a. This beats
+// ffmpeg pass that true-peak-limits THEN single-pass dynamic loudnorm-normalizes AND encodes to AAC-LC 64 kbps in an .m4a. This beats
 // requesting Cloud TTS's fixed 32k MP3 directly because that path then RE-ENCODES (32k MP3 →
 // loudnorm → 32k MP3) — two lossy generations; LINEAR16-first collapses it to one and lets
-// us pick the codec/bitrate. AAC@48k is ~8× smaller than the LINEAR16 WAV, clearly better
+// us pick the codec/bitrate. AAC@64k is ~6× smaller than the LINEAR16 WAV, clearly better
 // than MP3@32k at ~the same size, and iOS AVPlayer (expo-audio) plays it (OGG_OPUS is smaller
 // but iOS can't decode Ogg/Opus — disqualified). Duration is EXACT from the PCM byte length
 // (pipeline/wav.ts), measured before the encode and preserved through it — no MP3 frame parse.

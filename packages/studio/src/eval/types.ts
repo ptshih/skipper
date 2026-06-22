@@ -3,11 +3,11 @@
 // This is step 1 of the "agentic tour generation" build order (see TODO.md / the design
 // thread): a STANDING, multi-dimension eval over a generated tour, so "is this tour good?"
 // stops being a per-tour bottleneck on the founder's ear and becomes a measured scorecard.
-// Only the GROUNDING dimension is implemented in this first slice (./grounding.ts) — it is
-// the crown-jewel invariant ("persona lives in DELIVERY, never in FACTS") and is near-
-// objective, so it can be a hard GATE rather than advisory. The other dimensions are
-// declared here as the panel this grows into; each is just another module that returns a
-// `StopEval` (or a tour-level one) in this shape.
+// GROUNDING is the crown-jewel GATE ("persona lives in DELIVERY, never in FACTS") — near-
+// objective, so it blocks rather than merely advises (./grounding.ts). The other dimensions
+// are now implemented as sibling modules (tts, diversity, pacing, charm, veracity, laterality),
+// each returning a `StopEval` (or a tour-level one) in this same shape; the gate/advisory split
+// lives in DIMENSION_KIND below.
 //
 // Why a uniform shape: a deterministic evaluator (e.g. TTS-cleanliness) and an LLM-judge
 // (e.g. charm) compose into one scorecard, and the SAME findings feed the regen loop's

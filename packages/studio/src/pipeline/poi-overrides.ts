@@ -185,11 +185,6 @@ export function applyFactEditsChecked(
   return { text: out, missed }
 }
 
-/** Convenience form for callers that don't report misses. */
-export function applyFactEdits(source: string, sourceId: string, extract: string): string {
-  return applyFactEditsChecked(source, sourceId, extract).text
-}
-
 const warned = new Set<string>()
 
 /**

@@ -49,10 +49,10 @@ export type ScoutModelCall = (params: {
   messages: Anthropic.MessageParam[]
 }) => Promise<Anthropic.Message>
 
-/** A model-call factory: binds a model id + token cap into a ScoutModelCall. The scout pins
- *  SCOUT_MODEL (Opus, calibration); the corpus well builder passes the operator-chosen ENRICH
- *  model (Sonnet by default). Both force tool_choice {type:'any'} so every turn acts (fetch or
- *  finalize) — no free prose. recordModelUsage tallies real calls only (test fakes don't). */
+/** A model-call factory: binds a model id + token cap into a ScoutModelCall. The corpus fact-sheet
+ *  builder passes the operator-chosen ENRICH model (Sonnet by default). It forces tool_choice
+ *  {type:'any'} so every turn acts (fetch or finalize) — no free prose. recordModelUsage tallies
+ *  real calls only (test fakes don't). */
 export function makeScoutCall(model: string, maxTokens: number): ScoutModelCall {
   return async ({ system, tools, messages }) => {
     const response = await getAnthropic('the enrichment scout needs it').messages.create({

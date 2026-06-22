@@ -13,7 +13,7 @@ import {
   index,
   check,
 } from 'drizzle-orm/pg-core'
-import { relations, sql } from 'drizzle-orm'
+import { sql } from 'drizzle-orm'
 
 /* -------------------------------------------------------------------------- */
 /*  Shared JSON shapes (compile-time only; jsonb does not enforce these)        */
@@ -462,7 +462,7 @@ export const poiOverrides = pgTable(
 /*  The roam-first model: pois ──1:1── narrations (the shared telling); roam is  */
 /*  a MODE over them; a `drive` is a user-owned ordered sequence of them. (Tour  */
 /*  tables tours/segments/tracks/tour_frames dropped in 0009; asides — placeless */
-/*  framing — dropped in 0018, see docs/decisions/geometry-first-regions.md.)    */
+/*  framing — dropped in 0019, see docs/decisions/geometry-first-regions.md.)    */
 /* -------------------------------------------------------------------------- */
 
 // The ONE shared telling of a place — 1:1 with its poi (UNIQUE poi_id). The atom: roam plays these by
@@ -808,51 +808,15 @@ export const studioJobs = pgTable(
 )
 
 /* -------------------------------------------------------------------------- */
-/*  Relations                                                                  */
-/* -------------------------------------------------------------------------- */
-
-export const poisRelations = relations(pois, ({ one }) => ({
-  narration: one(narrations),
-}))
-
-export const narrationsRelations = relations(narrations, ({ one }) => ({
-  poi: one(pois, { fields: [narrations.poiId], references: [pois.id] }),
-}))
-
-export const placesRelations = relations(places, ({ one }) => ({
-  detour: one(detours),
-}))
-
-export const detoursRelations = relations(detours, ({ one }) => ({
-  place: one(places, { fields: [detours.placeId], references: [places.id] }),
-}))
-
-// (No drivesRelations: a drive stores no region FK — region is derived from its bbox geometry.
-//  See docs/decisions/geometry-first-regions.md.)
-
-/* -------------------------------------------------------------------------- */
 /*  Inferred row types (import via the "@skipper/db/schema" subpath, aliased)   */
 /* -------------------------------------------------------------------------- */
 
 export type Region = typeof regions.$inferSelect
-export type NewRegion = typeof regions.$inferInsert
 export type Poi = typeof pois.$inferSelect
-export type NewPoi = typeof pois.$inferInsert
 export type Place = typeof places.$inferSelect
-export type NewPlace = typeof places.$inferInsert
-export type Detour = typeof detours.$inferSelect
-export type NewDetour = typeof detours.$inferInsert
 export type PoiOverride = typeof poiOverrides.$inferSelect
-export type NewPoiOverride = typeof poiOverrides.$inferInsert
-export type EvalRun = typeof evalRuns.$inferSelect
-export type NewEvalRun = typeof evalRuns.$inferInsert
-export type EvalScore = typeof evalScores.$inferSelect
 export type NewEvalScore = typeof evalScores.$inferInsert
 export type StudioJob = typeof studioJobs.$inferSelect
 export type NewStudioJob = typeof studioJobs.$inferInsert
 export type Narration = typeof narrations.$inferSelect
-export type NewNarration = typeof narrations.$inferInsert
 export type Drive = typeof drives.$inferSelect
-export type NewDrive = typeof drives.$inferInsert
-export type DriveDemand = typeof driveDemand.$inferSelect
-export type NewDriveDemand = typeof driveDemand.$inferInsert

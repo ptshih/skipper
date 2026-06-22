@@ -70,7 +70,7 @@ export function bearingDeg(a: LngLat, b: LngLat): number {
 /** Signed shortest difference a−b between two bearings, in (−180, 180] (positive = a is
  *  clockwise of b). The one place the modular wrap lives; callers that need the side/sign
  *  (e.g. left-vs-right of travel) build on this instead of re-deriving the trick. */
-export function signedBearingDeltaDeg(a: number, b: number): number {
+function signedBearingDeltaDeg(a: number, b: number): number {
   return ((a - b + 540) % 360) - 180
 }
 

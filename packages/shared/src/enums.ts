@@ -12,7 +12,6 @@ import { z } from 'zod'
  * Keep in lockstep with the pg `narration_form` enum (@skipper/db/schema).
  */
 export const narrationForm = z.enum(['story', 'scenic', 'break', 'wave', 'bside'])
-export type NarrationForm = z.infer<typeof narrationForm>
 
 /**
  * The WIRE projection of a stop's narration form down to the three the player renders as a
@@ -60,7 +59,6 @@ export type PoiSource = z.infer<typeof poiSource>
  * union in @skipper/db/schema.
  */
 export const attributionSource = z.enum(['wikipedia', 'google_places', 'macrostrat', 'wikidata'])
-export type AttributionSource = z.infer<typeof attributionSource>
 
 /**
  * Admin gen-job KINDS — the closed vocabulary of cloud-ops scripts the admin can launch, and the
@@ -123,7 +121,6 @@ export type Platform = z.infer<typeof platform>
  * Keep in lockstep with the pg `credit_entry_kind` enum (@skipper/db/schema).
  */
 export const creditEntryKind = z.enum(['grant', 'consume', 'reverse'])
-export type CreditEntryKind = z.infer<typeof creditEntryKind>
 
 /**
  * Where a credit came from (a `credit_entries.source`). `free_tier` (the lifetime free allotment)
@@ -132,4 +129,3 @@ export type CreditEntryKind = z.infer<typeof creditEntryKind>
  * the pg `credit_source` enum (@skipper/db/schema).
  */
 export const creditSource = z.enum(['free_tier', 'apple_iap', 'google_play', 'admin_grant'])
-export type CreditSource = z.infer<typeof creditSource>
