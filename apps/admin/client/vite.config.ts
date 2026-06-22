@@ -35,7 +35,7 @@ export default defineConfig({
       output: {
         codeSplitting: {
           groups: [
-            { name: 'maps', test: /leaflet/ },
+            { name: 'maps', test: /@vis\.gl/ },
             { name: 'tanstack', test: /@tanstack/ },
             { name: 'react-vendor', test: /[\\/]react(-dom)?[@\\/]/ },
             { name: 'vendor', test: /node_modules/ },

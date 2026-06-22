@@ -18,7 +18,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Callout } from '@/components/ui/callout'
 import { EmptyState } from '@/components/ui/empty-state'
-import { BboxMap } from '@/components/ui/leaflet-map'
+import { BboxMap } from '@/components/ui/google-map'
 import {
   Dialog,
   DialogContent,

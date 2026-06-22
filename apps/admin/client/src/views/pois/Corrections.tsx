@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ErrorCallout } from '@/components/ui/error-callout'
 import { Skeleton } from '@/components/ui/skeleton'
-import { AnchorMap } from '@/components/ui/leaflet-map'
+import { AnchorMap } from '@/components/ui/google-map'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { cn } from '@/lib/utils'
 

@@ -23,6 +23,10 @@ steps:
       - apps/admin/Dockerfile
       - --build-arg
       - VITE_GOOGLE_MAPS_BROWSER_KEY=AIzaSyDkyHLA573TyTMJ7DN9JoXW82IpXY2hBVU
+      # AdvancedMarkers' cloud Map ID (GCP console → Map Management). A public client value,
+      # baked into the bundle like the browser key. Blank would fall back to DEMO_MAP_ID.
+      - --build-arg
+      - VITE_GOOGLE_MAPS_MAP_ID=331aad2c49982226f1917c06
       - -t
       - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/admin:latest
       - .

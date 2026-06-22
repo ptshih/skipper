@@ -22,7 +22,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Callout } from '@/components/ui/callout'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { EmptyState } from '@/components/ui/empty-state'
-import { PlacesMap, PLACE_PIN_COLORS } from '@/components/ui/leaflet-map'
+import { PlacesMap, PLACE_PIN_COLORS } from '@/components/ui/google-map'
 import {
   Dialog,
   DialogContent,
@@ -93,9 +93,18 @@ export function PlacesView() {
     deleteMut.mutate(p.id)
   }
 
-  // Pin set for the map (endpoints + breaks; color-coded by role).
+  // Pin set for the map (endpoints + breaks; color-coded by role; click → InfoWindow with name/kind/roles).
   const pins = useMemo(
-    () => places.map((p) => ({ lat: p.lat, lng: p.lng, name: p.name, featured: p.featured, endpointEligible: p.endpointEligible })),
+    () =>
+      places.map((p) => ({
+        lat: p.lat,
+        lng: p.lng,
+        name: p.name,
+        featured: p.featured,
+        endpointEligible: p.endpointEligible,
+        breakEligible: p.breakEligible,
+        kind: p.primaryType ? kindLabel(p.primaryType) : null,
+      })),
     [places],
   )
   const endpointCount = places.filter((p) => p.endpointEligible).length

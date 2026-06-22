@@ -24,6 +24,9 @@ COPY apps/admin apps/admin
 # is referrer-restricted, not a secret). Passed via cloudbuild --build-arg.
 ARG VITE_GOOGLE_MAPS_BROWSER_KEY=""
 ENV VITE_GOOGLE_MAPS_BROWSER_KEY=$VITE_GOOGLE_MAPS_BROWSER_KEY
+# AdvancedMarkers need a cloud Map ID; optional — google-map.tsx falls back to DEMO_MAP_ID (watermarked).
+ARG VITE_GOOGLE_MAPS_MAP_ID=""
+ENV VITE_GOOGLE_MAPS_MAP_ID=$VITE_GOOGLE_MAPS_MAP_ID
 RUN cd apps/admin && bun run build
 
 # ---- stage 2: the Hono server ----
