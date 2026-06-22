@@ -51,16 +51,18 @@ const MAP_OPTIONS = {
 const BBOX_GREEN = '#16a34a'
 
 // Inline-SVG marker art (→ data URI, rendered as AdvancedMarker content). Colors are hardcoded here
-// because markers render outside the token system; teal pin = the fixed POI, amber ring = the drag-me
-// anchor. The teardrop pins anchor at their tip (BOTTOM_CENTER); the ring anchors at its CENTER.
-const POI_SVG =
-  '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="#0f766e" stroke="white" stroke-width="1.5"><path d="M12 22s-7-6.2-7-11a7 7 0 1 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="11" r="2.4" fill="white"/></svg>'
-const ANCHOR_SVG =
-  '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="#d97706" stroke="white" stroke-width="2"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.6" fill="white"/></svg>'
+// because markers render outside the token system. A teardrop map pin (crisp white border + inner dot)
+// for POIs/places, and a distinct amber "grab" knob for the draggable speakable anchor. The pin path's
+// tip sits at the bottom-center of its 24×30 viewBox, so BOTTOM_CENTER lands the tip on the coord; the
+// knob is CENTER-anchored. A soft drop shadow (MARKER_SHADOW) lifts both off busy satellite imagery.
 const pinSvg = (fill: string): string =>
-  `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="${fill}" stroke="white" stroke-width="1.5"><path d="M12 22s-7-6.2-7-11a7 7 0 1 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="11" r="2.4" fill="white"/></svg>`
+  `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="25" viewBox="0 0 24 30"><path d="M12 1C5.9 1 1 5.9 1 11c0 7.2 11 19 11 19s11-11.8 11-19C23 5.9 18.1 1 12 1Z" fill="${fill}" stroke="#ffffff" stroke-width="2"/><circle cx="12" cy="11" r="4.4" fill="#ffffff"/></svg>`
+const POI_SVG = pinSvg('#0f766e')
+const ANCHOR_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#d97706" stroke="#ffffff" stroke-width="2.5"/><circle cx="12" cy="12" r="3" fill="#ffffff"/></svg>'
 
 const dataUri = (svg: string): string => 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg)
+const MARKER_SHADOW = { filter: 'drop-shadow(0 1px 2px rgba(0,0,0,.45))' }
 
 // Role pin colors, EXPORTED so the /places legend keys the EXACT pin hex (no by-eye palette drift).
 export const PLACE_PIN_COLORS = { featured: '#d97706', endpoint: '#0f766e', break: '#64748b' } as const
@@ -260,7 +262,7 @@ function PlaceMarker({
         anchorPoint={AdvancedMarkerAnchorPoint.BOTTOM_CENTER}
         onClick={onSelect}
       >
-        <img src={dataUri(pinSvg(placePinFill(pin)))} width={22} height={22} alt="" />
+        <img src={dataUri(pinSvg(placePinFill(pin)))} width={20} height={25} alt="" style={MARKER_SHADOW} />
       </AdvancedMarker>
       {selected && (
         // Inline styles (not Tailwind) — the InfoWindow content is portaled into the Google bubble,
@@ -328,14 +330,14 @@ export function AnchorMap({
   anchor: { lat: number; lng: number } | null
   onAnchor: (a: { lat: number; lng: number }) => void
 }) {
-  if (!BROWSER_KEY) return <MapUnavailable className="h-64" />
+  if (!BROWSER_KEY) return <MapUnavailable className="h-80" />
   const pos = anchor ?? poi
   return (
-    <div className="h-64 w-full overflow-hidden rounded-lg border">
+    <div className="h-80 w-full overflow-hidden rounded-lg border">
       <APIProvider apiKey={BROWSER_KEY}>
         <Map {...MAP_OPTIONS} defaultCenter={{ lat: poi.lat, lng: poi.lng }} defaultZoom={16}>
           <AdvancedMarker position={{ lat: poi.lat, lng: poi.lng }} anchorPoint={AdvancedMarkerAnchorPoint.BOTTOM_CENTER}>
-            <img src={dataUri(POI_SVG)} width={24} height={24} alt="" />
+            <img src={dataUri(POI_SVG)} width={20} height={25} alt="" style={MARKER_SHADOW} />
           </AdvancedMarker>
           <AdvancedMarker
             position={{ lat: pos.lat, lng: pos.lng }}
@@ -345,7 +347,16 @@ export function AnchorMap({
               if (e.latLng) onAnchor({ lat: e.latLng.lat(), lng: e.latLng.lng() })
             }}
           >
-            <img src={dataUri(ANCHOR_SVG)} width={22} height={22} alt="" />
+            <img
+              src={dataUri(ANCHOR_SVG)}
+              width={22}
+              height={22}
+              alt=""
+              // A distinct MOVE cursor (4-arrow) over the anchor. The map's own pan cursor is an open
+              // hand, so `grab`/`grabbing` would look identical to it — `move` reads clearly as "drag me".
+              className="cursor-move"
+              style={MARKER_SHADOW}
+            />
           </AdvancedMarker>
         </Map>
       </APIProvider>

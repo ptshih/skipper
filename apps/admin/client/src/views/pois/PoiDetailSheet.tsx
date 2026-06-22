@@ -10,12 +10,14 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Segmented, type SegmentedOption } from '@/components/ui/segmented'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { FactsTab } from './FactsTab'
+import { Location } from './Location'
 import { NarrationTab } from './NarrationTab'
 import { Corrections } from './Corrections'
 
-type DetailTab = 'facts' | 'narration' | 'corrections'
+type DetailTab = 'facts' | 'location' | 'narration' | 'corrections'
 const DETAIL_TABS: SegmentedOption<DetailTab>[] = [
   { value: 'facts', label: 'Facts' },
+  { value: 'location', label: 'Location' },
   { value: 'narration', label: 'Narration' },
   { value: 'corrections', label: 'Corrections' },
 ]
@@ -82,9 +84,11 @@ export function PoiDetailSheet({ poiId, poiName, canDelete, hasNarration, open, 
             )
           )}
 
+          {tab === 'location' && <Location poiId={poiId} poiLat={detail?.lat} poiLng={detail?.lng} />}
+
           {tab === 'narration' && <NarrationTab poiId={poiId} hasNarration={hasNarration} />}
 
-          {tab === 'corrections' && <Corrections poiId={poiId} poiLat={detail?.lat} poiLng={detail?.lng} />}
+          {tab === 'corrections' && <Corrections poiId={poiId} />}
         </div>
 
         {canDelete && (
