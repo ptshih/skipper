@@ -126,6 +126,12 @@ product.** When a choice trades polish-for-the-builder against scale-for-a-marke
 - **Local dev servers stay UP** (the human runs them) — ports: API `bun run dev`; admin `bun run dev:admin`
   = vite client **:5173** proxying `/admin`+`/health` → Hono admin-api **:8788** (`ADMIN_DEV_BYPASS=1` skips
   IAP locally); site `bun run dev:site`.
+- **Shell is zsh; Claude Code snapshots `~/.zshrc` (options + aliases) onto every Bash command.** Two zsh
+  defaults bite agents: an unmatched glob ABORTS the whole command (`no matches found`, where bash passes the
+  literal through), and interactive aliases apply (`cat`→`bat`, `g`→`git`, `ll`→`eza`). A `CLAUDECODE`-gated
+  guard in the founder's `~/.zshrc` (`setopt no_nomatch` + `unalias -m '*'`) neutralizes both for NEW sessions,
+  but it's MACHINE-LOCAL (not in-repo) — so still prefer the Read/Grep/Glob tools over shell, guard globs
+  (`… 2>/dev/null`, or `find`), and use absolute paths (a `cd` in a compound command can trigger a prompt).
 - The **highest-leverage file** in the repo is the skipper narration system prompt — iterate on it more than anything.
 
 ## Mobile UI — design system ("Trailhead 89")
