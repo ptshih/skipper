@@ -7,6 +7,12 @@ import { PageHeader } from '@/components/PageHeader'
 
 // A static cheat-sheet so the operator remembers what each control does — above all which
 // actions spend money or delete bytes. Pure presentation, no data fetch.
+//
+// DEFINITION OF DONE — this page is the operator's source of truth, and nothing here is fetched or
+// tested, so it only stays accurate if it rides along. Any apps/admin change that adds/removes a
+// console PAGE or run kind, or changes what an action SPENDS / DELETES / RELEASES, must update this
+// file in the SAME commit (CLAUDE.md › Git workflow). Keep "Pages" in sync with the sidebar NAV
+// (components/Layout.tsx) and "Run kinds" with the jobKind vocabulary (@skipper/shared › enums.ts).
 export function ReferenceView() {
   return (
     <div className="space-y-8">
@@ -30,6 +36,8 @@ export function ReferenceView() {
             ['Evals', 'Generation + Re-score runs with their pass verdict and dimension scores (g / tts / div — grounding reddens below the 0.75 gate); click a row for the per-place gate report.'],
             ['Regions', 'The regions the corpus is keyed to — each with its discovery bbox (the area Discover + Generate sweep), a live POI count, and a Draft / Released status. Discover POIs and Release both launch here (select region row(s) → Discover / Release).'],
             ['POIs', 'The shared POI corpus — sources, enrichment, narration coverage + freshness, and per-POI curation. Quick-filters across the top triage it — “Needs attention” is the combined remediation queue (stale facts, defects, unattributed or drifted clips). Open a POI for its detail sheet: Facts (with Re-fetch facts), Narration (play the telling; Regenerate / Re-synth / Release), and Corrections (fact-edits + speakable anchor). New POIs are discovered from the Regions page.'],
+            ['Places', 'A region’s CURATED real-world hubs + pitstops that feed the drive endpoint picker (separate from the POI/narration corpus). Each row is tagged Endpoint (a start / end / midpoint) and/or Break (a pitstop), with Featured floating the popular ones to the top of the rider’s picker, shown on a map. Coords are resolved + stored at curation, so the rider’s picker makes zero live Places calls. Curate (interactive — see Run kinds) seeds a region; Add a place is the manual escape hatch.'],
+            ['Users', 'Accounts and their drive-credit ledger — Granted (lifetime cap), Used (drives generated), Remaining (live balance). Grant credits from a row to comp or top up an account; it’s free (it hands the USER generations, not a GCP spend) and append-only — there is no un-grant.'],
           ]}
         />
       </Section>
@@ -195,6 +203,12 @@ const RUN_KINDS: RunKind[] = [
     does: "Re-fetch a POI's upstream facts (Wikipedia extract). Updates facts_hash, which flags any grounded narration as stale.",
     cost: 'Free — MediaWiki only, no LLM or TTS.',
     safe: 'Free — no confirm needed.',
+  },
+  {
+    kind: 'Curate places',
+    does: "Build a region's curated drive endpoints + break pitstops on the Places page — interactive: Opus DRAFTS the hubs (writes nothing), you prune the list, then RESOLVE the keepers against Google Places and upsert them role-tagged. Re-runnable (OR-merges roles). Runs inline on the Places page — NOT a Jobs-page run. Add a place is the single-place manual form.",
+    cost: <span>LLM (Opus draft) + <span className="text-foreground">Google Places</span> (resolve) — a few cents each (when applied).</span>,
+    safe: 'Draft writes nothing — review the picks first; “Resolve & add” is the spend.',
   },
   {
     kind: 'Sweep orphans',

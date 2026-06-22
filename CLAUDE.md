@@ -32,6 +32,10 @@ product.** When a choice trades polish-for-the-builder against scale-for-a-marke
   (or this file), flip that doc's status line in the SAME commit — statuses change in place, files never
   move. `bun run lint:docs` (a hook + first in `bun run check`) fails on a missing `**Status**` line, a
   loose/unknown docs location, a `*-handoff.md`, a bare `docs/<file>.md` path, or CLAUDE.md over its ceiling.
+- **The admin Reference page rides along too.** Any `apps/admin` change that adds/removes a console PAGE
+  or run kind, or changes what an action SPENDS / DELETES / RELEASES, isn't DONE until the operator
+  cheat-sheet (`apps/admin/client/src/views/ReferenceView.tsx`) reflects it — in the SAME commit. It's
+  static (no test fails when it drifts), so the same-commit habit is the only guard.
 
 ## Hard invariants (enforced in code; don't regress them)
 
