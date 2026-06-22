@@ -1,19 +1,27 @@
 # Drive endpoints + pitstops from a curated Places set — Build Spec
 
-> **Status:** CODE BUILT 2026-06-20 (steps 1, 2, 4, 5); the **Tahoe curation run (step 3) is
-> FOUNDER-GATED / PAID and still PENDING** — until it runs, `GET /drives/anchors` returns an empty set
-> (no curated `places` yet). Built: the `places` role markers + `featured` (migration 0033, NOT YET
-> applied to the shared DB), the safe-by-default `curate-places` studio CLI, the `GET /drives/anchors`
-> repoint to curated endpoint-eligible `places`, the `regionAnchor.featured` DTO field, and the mobile
-> featured-first picker. Design walked through + settled with the founder (2026-06-20): a **per-region
-> CURATED set of Google Places** serves a drive's start / end / midpoint AND its break/pitstops; the
-> picker offers ONLY that set (Q6 resolved → curated, not open autocomplete). Spike-validated (Places
-> API (New) is enabled and returns clean Tahoe hubs — used at *curation* time, not runtime). SUPERSEDES
-> the interim corpus-anchor picker (`loadRegionAnchors` over the POI corpus). Pairs with
-> `../decisions/create-a-drive-architecture.md` and the `places` / `detours` tables.
+> **Status:** CODE BUILT 2026-06-20/21 (steps 1, 2, 4, 5 + the admin `/places` page); the **Tahoe
+> curation run (step 3) is FOUNDER-GATED / PAID and still PENDING** — until it runs, `GET /drives/anchors`
+> returns an empty set (no curated `places` yet). Built: the `places` role markers + `featured` (migration
+> 0033, **APPLIED** to the shared DB), the `GET /drives/anchors` repoint to curated endpoint-eligible
+> `places`, the `regionAnchor.featured` DTO field, the mobile featured-first picker, and the admin
+> **`/places`** curation page. Design walked through + settled with the founder (2026-06-20): a
+> **per-region CURATED set of Google Places** serves a drive's start / end / midpoint AND its
+> break/pitstops; the picker offers ONLY that set (Q6 resolved → curated, not open autocomplete).
+> Spike-validated (Places API (New) is enabled and returns clean Tahoe hubs — used at *curation* time, not
+> runtime). SUPERSEDES the interim corpus-anchor picker (`loadRegionAnchors` over the POI corpus). Pairs
+> with `../decisions/create-a-drive-architecture.md` and the `places` / `detours` tables.
 >
-> **Go-sequence to finish (founder):** `bun run db:migrate` (apply 0033) → `curate-places --apply`
-> (paid; drafts + resolves the Tahoe set) → review/prune in admin → deploy. Mobile is already wired.
+> **Curate is INTERACTIVE (2026-06-21):** the admin `/places` "Curate" button is a synchronous two-step —
+> `POST /admin/places/draft` makes ONE **Opus** call that names the region's hubs + pitstops (a few cents,
+> writes nothing), the operator prunes the list in the dialog, then `POST /admin/places/curate` resolves
+> only the keepers against Places + upserts them. This replaced the fire-and-forget `curate_places` Cloud
+> Run job for the button (whose Preview and Apply were separate invocations, so the draft you reviewed
+> wasn't the draft that got resolved). The `curate-places` studio CLI still exists for terminal/batch use
+> (now also Opus-default).
+>
+> **Go-sequence to finish (founder):** open admin `/places` → **Curate** → Draft (Opus) → prune → Resolve
+> & add (or `curate-places --apply` from the terminal) → review/promote → deploy. Mobile is already wired.
 
 ## Why
 
@@ -58,17 +66,21 @@ tail, fine for a charm toy, and reversible — see Deferred.
 
 ## Curation (offline, one-time per region; paid, founder-gated)
 
-A safe-by-default studio step `curate-places` (preview unless `--apply`, per the ops-scripts SOP):
+Two surfaces, same primitive:
 
-1. LLM drafts the region's popular **start/end hubs** + good **pitstops** (towns, lookouts, marinas,
-   the known-good coffee/gas/viewpoint stops).
-2. Resolve each via Places (autocomplete + details, bbox-bound) → `place_id`, `name`, coords,
-   `primary_type`.
-3. Upsert into `places` (dedup by `place_id`) with a **role** tag (endpoint-eligible / break-eligible /
-   both).
-4. Founder **reviews / prunes** in the admin console.
+- **Admin `/places` → Curate (the primary path, INTERACTIVE):** `POST /admin/places/draft` makes ONE
+  **Opus** forced-tool call that NAMES the region's hubs + pitstops (a few cents; **writes nothing, makes
+  no Places calls**) → the operator prunes the drafted list in the dialog → `POST /admin/places/curate`
+  resolves only the keepers via Places (autocomplete + details, bbox-bound) and upserts them. Reviewing
+  the *exact* draft that gets resolved is the whole point of splitting the steps.
+- **`curate-places` studio CLI (terminal/batch):** safe-by-default (preview unless `--apply`, per the
+  ops-scripts SOP); drafts (Opus by default; `--model sonnet` to A/B) → resolves → upserts all in one
+  shot. The reviewable middle step is the admin's; the CLI is the headless fallback.
 
-One-time per region; re-runnable to refresh. This is the only paid Google/LLM spend, and it's offline.
+Both: draft → resolve via Places → upsert into `places` (dedup by `place_id`) with a **role** tag
+(endpoint-eligible / break-eligible / both); the operator then **reviews / prunes / promotes** in the
+admin table. One-time per region, re-runnable to refresh (OR-merges roles). This is the only paid
+Google/LLM spend, and it's offline.
 
 ## Data
 
@@ -120,8 +132,9 @@ rest is searchable inline.
 ## Build steps
 
 1. **Schema:** add a role/curated marker to `places` (migration).
-2. **Curation step** `curate-places` (studio CLI + later an admin button): LLM draft → Places resolve →
-   upsert role-tagged `places` → admin review. Safe-by-default; paid; founder-gated.
+2. **Curation step:** the interactive admin `/places` Curate flow (`POST /admin/places/draft` Opus draft →
+   operator prunes → `POST /admin/places/curate` Places resolve → upsert role-tagged `places`) + the
+   `curate-places` studio CLI for terminal/batch. Paid; founder-gated.
 3. **Curate Lake Tahoe's set** (founder-gated run) + prune in admin.
 4. **API:** repoint `GET /drives/anchors` to curated endpoint-eligible places in-bbox; `propose`/`create`
    read the stored coords (retire the open-autocomplete/Details/session design from the prior draft).

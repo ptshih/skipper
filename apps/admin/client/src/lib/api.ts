@@ -285,6 +285,25 @@ export interface ResolvedPlace {
   primaryType?: string
 }
 
+// One LLM-drafted curated-place candidate (POST /admin/places/draft) — the reviewable preview a
+// curator prunes before the (paid) Places resolve. `query` is what the resolve step pins against.
+export interface PlaceDraft {
+  name: string
+  query: string
+  role: 'endpoint' | 'break' | 'both'
+  featured: boolean
+  rationale?: string
+}
+
+// Per-draft outcome of the curate-resolve step (POST /admin/places/curate). `resolved` = pinned +
+// upserted; `dropped` = no in-region Places match; `error` = a Places/validation failure on that row.
+export interface CurateResult {
+  name: string
+  status: 'resolved' | 'dropped' | 'error'
+  resolvedName?: string
+  message?: string
+}
+
 export const api = {
   // OPEN route (not under /admin) — the boot/interval health probe. `?deep=1` adds a DB ping.
   health: () => req<HealthStatus>('/health?deep=1'),
@@ -338,6 +357,11 @@ export const api = {
     breakEligible?: boolean
     featured?: boolean
   }) => req<{ place: PlaceRow }>('/admin/places', { method: 'POST', body: JSON.stringify(body) }),
+  // Curate (interactive): draft the region's set (Opus, no writes), then resolve the pruned keepers.
+  draftPlaces: (body: { region: string; target?: number }) =>
+    req<{ drafts: PlaceDraft[] }>('/admin/places/draft', { method: 'POST', body: JSON.stringify(body) }),
+  curatePlaces: (body: { region: string; drafts: PlaceDraft[] }) =>
+    req<{ added: number; results: CurateResult[] }>('/admin/places/curate', { method: 'POST', body: JSON.stringify(body) }),
   users: () => req<{ users: UserRow[] }>('/admin/users'),
   // Append an admin_grant ledger entry; returns the refreshed credit summary for the row.
   grantCredits: (id: string, body: { amount: number; reason?: string }) =>

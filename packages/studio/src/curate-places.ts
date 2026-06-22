@@ -22,7 +22,7 @@
 //   dotenvx run -f .env.development -- bun packages/studio/src/curate-places.ts
 //   ... --apply                  run it (drafts + resolves + upserts role-tagged `places`)
 //   ... --region <slug>          curate a region (default: lake-tahoe; resolves to its bbox)
-//   ... --model opus             draft with Opus instead of the default Sonnet
+//   ... --model sonnet           draft with Sonnet instead of the default Opus (cheaper A/B)
 //   ... --target 30              roughly how many places to draft (guidance to the model)
 //   ... --max-cost 1             abort before any spend if the LLM estimate exceeds this
 
@@ -45,7 +45,7 @@ const EST_USD_DRAFT: Record<EnrichModelChoice, number> = { sonnet: 0.03, opus: 0
 const flags = parseFlags(process.argv.slice(2), { valueFlags: ['region', 'model', 'target', 'max-cost'] })
 const apply = flags.has('apply')
 const regionKey = flags.value('region') ?? DEFAULT_REGION_SLUG
-const modelChoice: EnrichModelChoice = flags.value('model') === 'opus' ? 'opus' : 'sonnet'
+const modelChoice: EnrichModelChoice = flags.value('model') === 'sonnet' ? 'sonnet' : 'opus'
 const model = ENRICH_MODELS[modelChoice]
 const targetCount = Math.max(8, Math.min(60, Number(flags.value('target')) || 30))
 const maxCostUsd = maxCostFlag(flags)

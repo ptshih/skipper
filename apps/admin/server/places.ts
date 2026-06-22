@@ -8,6 +8,7 @@
 // resolved row is stored, so the runtime picker makes zero live Places calls. Needs Places API (New)
 // enabled on GOOGLE_MAPS_API_KEY (Routes enablement alone is not enough).
 
+import Anthropic from '@anthropic-ai/sdk'
 import type { BboxCorners } from './bbox'
 
 const AUTOCOMPLETE_URL = 'https://places.googleapis.com/v1/places:autocomplete'
@@ -97,4 +98,99 @@ export async function resolvePlaceInBbox(
   const inBbox =
     place.lat >= bbox.swLat && place.lat <= bbox.neLat && place.lng >= bbox.swLng && place.lng <= bbox.neLng
   return inBbox ? place : null
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Curate DRAFT — the cheap, reviewable LLM step (no Places calls, no writes)   */
+/* -------------------------------------------------------------------------- */
+// The /places "Curate" button drafts the region's curated set in TWO steps so the operator reviews the
+// LLM's picks BEFORE paying to resolve them: (1) this draft call — one forced-tool Anthropic call that
+// NAMES recognizable places (a few cents, writes nothing); the operator prunes the list; then (2) the
+// curate-resolve route resolves only the keepers against Google Places + upserts. This mirrors
+// packages/studio/src/curate-places.ts (DRAFT_TOOL + the system prompt are kept textually identical) —
+// duplicated, not imported, so the admin server doesn't pull in the whole @skipper/studio graph (same
+// reason resolvePlaceInBbox above mirrors that CLI's resolver). Keep the two in sync when either moves.
+
+/** One LLM-drafted candidate place — a name + a precise Places search query + its role + featured flag.
+ *  The model NAMES places it knows; Google Places is what RESOLVES them to coords (never the model). */
+export interface PlaceDraft {
+  name: string
+  query: string
+  role: 'endpoint' | 'break' | 'both'
+  featured: boolean
+  rationale?: string
+}
+
+const DRAFT_TOOL: Anthropic.Tool = {
+  name: 'draft_curated_places',
+  description:
+    'Return the curated set of real, recognizable places for this region: drive START/END/MIDPOINT hubs and good break pitstops.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      places: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            name: { type: 'string', description: 'The place name a rider would recognize (e.g. "Tahoe City").' },
+            query: {
+              type: 'string',
+              description:
+                'A precise Google Places search string that uniquely pins THIS place — include the locality/state when the bare name is ambiguous (e.g. "Emerald Bay State Park, California").',
+            },
+            role: {
+              type: 'string',
+              enum: ['endpoint', 'break', 'both'],
+              description:
+                'endpoint = a place a rider would START or END a drive at (town, marina, scenic lookout, trailhead gateway). break = a pitstop along the way (coffee, gas, rest area, viewpoint pull-off). both = a hub that is also a natural pitstop.',
+            },
+            featured: {
+              type: 'boolean',
+              description: 'true for the handful of most iconic, popular start points — floated to the top of the picker.',
+            },
+            rationale: { type: 'string', description: 'One short phrase on why this place earns a spot.' },
+          },
+          required: ['name', 'query', 'role', 'featured'],
+        },
+      },
+    },
+    required: ['places'],
+  },
+}
+
+function draftSystem(regionName: string, targetN: number): string {
+  return `You are curating the set of real-world PLACES a rider can pick to start, end, or break a self-guided driving audio tour of ${regionName}, narrated by a charming Jungle-Cruise-style skipper.
+
+Optimize for CHARM, not coverage: every place must be intentional, recognizable, and a real place a visitor would actually name. A short list of beloved hubs beats an exhaustive directory.
+
+Draft roughly ${targetN} places:
+- ENDPOINT hubs (most of the list): towns and villages, marinas and boat launches, famous scenic lookouts and state-park gateways, major trailheads — the kind of place someone says "let's drive from ___ to ___".
+- BREAK pitstops (a handful): well-known coffee spots, gas stations at natural stopping points, rest areas, and viewpoint pull-offs along the main routes.
+- Mark role="both" for a hub that is also a natural pitstop.
+- Mark featured=true for ONLY the few most iconic, popular start points (think 4–8).
+
+Stay strictly inside ${regionName}. For each place give a precise Google Places \`query\` that uniquely identifies it (add the town/state when the name alone is ambiguous), so it resolves to the right pin. Do NOT invent coordinates — name the place; resolution happens separately.`
+}
+
+/** Draft a region's curated candidates with one forced-tool Anthropic call. Spends a few cents and
+ *  writes nothing — the reviewable preview. Throws on a missing key / no tool call (the route maps it
+ *  to 502). `model` is the caller's choice (the admin defaults to Opus, the house judgment tier). */
+export async function draftCuratedPlaces(
+  regionName: string,
+  opts: { targetN: number; model: string },
+): Promise<PlaceDraft[]> {
+  const client = new Anthropic()
+  const res = await client.messages.create({
+    model: opts.model,
+    max_tokens: 4_000,
+    system: draftSystem(regionName, opts.targetN),
+    tools: [DRAFT_TOOL],
+    tool_choice: { type: 'tool', name: DRAFT_TOOL.name },
+    messages: [{ role: 'user', content: `Draft the curated places for ${regionName}.` }],
+  })
+  const toolUse = res.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
+  if (!toolUse) throw new Error('the draft model returned no tool call')
+  const out = toolUse.input as { places?: PlaceDraft[] }
+  return (out.places ?? []).filter((p) => p && p.name && p.query && p.role)
 }

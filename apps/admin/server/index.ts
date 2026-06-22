@@ -30,6 +30,8 @@
 //   DELETE /admin/places/:id      -> remove a curated place
 //   POST /admin/places/resolve    -> live Google Places resolve of a typed name (manual-add candidate)
 //   POST /admin/places            -> add a manually-resolved place (upsert by place_id, role-tagged)
+//   POST /admin/places/draft      -> LLM-draft a region's curated set (Opus, no Places calls / no writes) — the reviewable preview
+//   POST /admin/places/curate     -> resolve the pruned drafts against Google Places + upsert role-tagged
 
 import { Hono } from 'hono'
 import { serveStatic } from 'hono/bun'
@@ -51,7 +53,7 @@ import { CLAUDE_MODELS, classifyStoryEligibility } from '@skipper/shared'
 import { checkSpeakableAnchor } from '@skipper/engine'
 import { requireAdmin, type AdminEnv } from './auth'
 import { bboxError, parseBbox } from './bbox'
-import { resolvePlaceInBbox } from './places'
+import { draftCuratedPlaces, resolvePlaceInBbox, type PlaceDraft, type ResolvedPlace } from './places'
 import { contentTypeForKey, presignGet } from './storage'
 import {
   buildJobArgs,
@@ -319,8 +321,9 @@ app.post('/admin/regions/bbox-lookup', async (c) => {
 // The `places` table is the curated real-world-location layer (towns/marinas/lookouts as drive
 // endpoints; coffee/gas/rest as break pitstops), role-tagged. Coords are resolved + STORED here so the
 // runtime picker (GET /drives/anchors) makes zero live Places calls. Region membership is point-in-bbox
-// (geometry-first; no region_id). The bulk seed is the `curate_places` studio job; these endpoints are
-// the review/prune/promote + manual-add surface. See docs/specs/places-endpoints-spec.md.
+// (geometry-first; no region_id). The bulk seed is the interactive Curate flow (POST /draft → operator
+// prunes → POST /curate); these endpoints are the draft/resolve + review/prune/promote + manual-add
+// surface. See docs/specs/places-endpoints-spec.md.
 
 /** Columns returned for a curated place row (the table + map). */
 const placeCols = {
@@ -333,6 +336,39 @@ const placeCols = {
   endpointEligible: places.endpointEligible,
   breakEligible: places.breakEligible,
   featured: places.featured,
+}
+
+/** Upsert one curated place (dedup by place_id). OR-merge the role flags so a role, once curated,
+ *  persists until an admin prunes it (a re-curate / manual-add for the OTHER role never clears this
+ *  one); name/coords/primaryType/featured are last-write-wins (a re-resolve refreshes the snapshot +
+ *  the popular judgment). Shared by the manual-add (POST /admin/places) + the curate-resolve loop. */
+function upsertCuratedPlace(row: {
+  placeId: string
+  name: string
+  primaryType: string | null
+  lat: number
+  lng: number
+  endpointEligible: boolean
+  breakEligible: boolean
+  featured: boolean
+}) {
+  return db
+    .insert(places)
+    .values(row)
+    .onConflictDoUpdate({
+      target: places.placeId,
+      set: {
+        name: sql`excluded.name`,
+        primaryType: sql`excluded.primary_type`,
+        lat: sql`excluded.lat`,
+        lng: sql`excluded.lng`,
+        endpointEligible: sql`${places.endpointEligible} OR excluded.endpoint_eligible`,
+        breakEligible: sql`${places.breakEligible} OR excluded.break_eligible`,
+        featured: sql`excluded.featured`,
+        updatedAt: new Date(),
+      },
+    })
+    .returning(placeCols)
 }
 
 // GET /admin/places?region=<slug> — the region's curated places (point-in-bbox), all role flags, plus
@@ -430,33 +466,114 @@ app.post('/admin/places', async (c) => {
   if (!endpointEligible && !breakEligible) {
     return c.json({ error: 'pick at least one role (endpoint or break)' }, 400)
   }
-  const [row] = await db
-    .insert(places)
-    .values({
-      placeId,
-      name,
-      primaryType: body.primaryType ?? null,
-      lat: body.lat,
-      lng: body.lng,
-      endpointEligible,
-      breakEligible,
-      featured: body.featured === true,
-    })
-    .onConflictDoUpdate({
-      target: places.placeId,
-      set: {
-        name: sql`excluded.name`,
-        primaryType: sql`excluded.primary_type`,
-        lat: sql`excluded.lat`,
-        lng: sql`excluded.lng`,
-        endpointEligible: sql`${places.endpointEligible} OR excluded.endpoint_eligible`,
-        breakEligible: sql`${places.breakEligible} OR excluded.break_eligible`,
-        featured: sql`excluded.featured`,
-        updatedAt: new Date(),
-      },
-    })
-    .returning(placeCols)
+  const [row] = await upsertCuratedPlace({
+    placeId,
+    name,
+    primaryType: body.primaryType ?? null,
+    lat: body.lat,
+    lng: body.lng,
+    endpointEligible,
+    breakEligible,
+    featured: body.featured === true,
+  })
   return c.json({ place: row }, 201)
+})
+
+// POST /admin/places/draft { region, target? } — LLM-draft this region's curated hubs + pitstops with
+// Opus (forced tool). The REVIEWABLE preview: spends a few cents on ONE Opus call, makes NO Places calls
+// and writes NOTHING. The operator prunes the returned list, then POST /admin/places/curate resolves +
+// upserts the keepers. Founder-gated by IAP (+ the explicit button click). 503 if ANTHROPIC unset.
+app.post('/admin/places/draft', async (c) => {
+  const body = await c.req.json<{ region?: string; target?: number }>().catch(() => ({}) as Record<string, never>)
+  const slug = (body.region ?? '').trim()
+  if (!slug) return c.json({ error: 'region is required' }, 400)
+  const region = (
+    await db.select({ displayName: regions.displayName, bbox: regions.bbox }).from(regions).where(eq(regions.slug, slug)).limit(1)
+  )[0]
+  if (!region) return c.json({ error: 'not_found' }, 404)
+  if (!parseBbox(region.bbox)) {
+    return c.json({ error: 'bbox_required', message: 'Set a valid region bbox before curating.' }, 400)
+  }
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return c.json({ error: 'anthropic_unconfigured', message: 'ANTHROPIC_API_KEY is not set.' }, 503)
+  }
+  const targetN = Math.max(8, Math.min(60, Number(body.target) || 30))
+  try {
+    const drafts = await draftCuratedPlaces(region.displayName, {
+      targetN,
+      model: process.env.ADMIN_CURATE_MODEL ?? CLAUDE_MODELS.opus,
+    })
+    return c.json({ drafts })
+  } catch (e) {
+    return c.json({ error: 'draft_failed', message: e instanceof Error ? e.message : String(e) }, 502)
+  }
+})
+
+// POST /admin/places/curate { region, drafts } — resolve each operator-kept draft against Google Places
+// (bbox-bound) + upsert role-tagged (dedup by place_id, OR-merge roles). SPENDS a few cents of Places +
+// writes. A draft that can't be pinned in-region is dropped (non-fatal); a Places error on one draft is
+// reported per-row, not fatal to the batch. Returns a per-place result list so the dialog can summarize.
+app.post('/admin/places/curate', async (c) => {
+  const body = await c.req.json<{ region?: string; drafts?: PlaceDraft[] }>().catch(() => ({}) as Record<string, never>)
+  const slug = (body.region ?? '').trim()
+  const drafts = Array.isArray(body.drafts) ? body.drafts : []
+  if (!slug) return c.json({ error: 'region is required' }, 400)
+  if (!drafts.length) return c.json({ error: 'no drafts to curate' }, 400)
+  const region = (await db.select({ bbox: regions.bbox }).from(regions).where(eq(regions.slug, slug)).limit(1))[0]
+  if (!region) return c.json({ error: 'not_found' }, 404)
+  const box = parseBbox(region.bbox)
+  if (!box) return c.json({ error: 'bbox_required', message: 'Set a valid region bbox before curating.' }, 400)
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY
+  if (!apiKey) return c.json({ error: 'places_unconfigured', message: 'GOOGLE_MAPS_API_KEY is not set.' }, 503)
+
+  // Resolve sequentially (one-time, ~30 places) and merge by place_id — two drafts can pin the same
+  // canonical place (OR the roles, keep featured if either says so). Mirrors curate-places.ts.
+  const byId = new Map<string, { place: ResolvedPlace; endpointEligible: boolean; breakEligible: boolean; featured: boolean }>()
+  const results: { name: string; status: 'resolved' | 'dropped' | 'error'; resolvedName?: string; message?: string }[] = []
+  for (const d of drafts) {
+    const query = (d?.query ?? '').trim()
+    const role = d?.role
+    if (!query || (role !== 'endpoint' && role !== 'break' && role !== 'both')) {
+      results.push({ name: d?.name ?? '?', status: 'error', message: 'invalid draft (missing query/role)' })
+      continue
+    }
+    let place: ResolvedPlace | null
+    try {
+      place = await resolvePlaceInBbox(query, box, apiKey)
+    } catch (e) {
+      results.push({ name: d.name, status: 'error', message: e instanceof Error ? e.message : String(e) })
+      continue
+    }
+    if (!place) {
+      results.push({ name: d.name, status: 'dropped' })
+      continue
+    }
+    const endpoint = role === 'endpoint' || role === 'both'
+    const brk = role === 'break' || role === 'both'
+    const prev = byId.get(place.placeId)
+    byId.set(place.placeId, {
+      place,
+      endpointEligible: (prev?.endpointEligible ?? false) || endpoint,
+      breakEligible: (prev?.breakEligible ?? false) || brk,
+      featured: (prev?.featured ?? false) || d.featured === true,
+    })
+    results.push({ name: d.name, status: 'resolved', resolvedName: place.name })
+  }
+
+  for (const r of byId.values()) {
+    await upsertCuratedPlace({
+      placeId: r.place.placeId,
+      name: r.place.name,
+      primaryType: r.place.primaryType ?? null,
+      lat: r.place.lat,
+      lng: r.place.lng,
+      endpointEligible: r.endpointEligible,
+      breakEligible: r.breakEligible,
+      featured: r.featured,
+    })
+  }
+
+  return c.json({ added: byId.size, results })
 })
 
 // GET /admin/runs — a unified feed merging the operational studio_jobs with the historical

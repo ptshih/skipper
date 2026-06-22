@@ -43,8 +43,10 @@ pre-gen aside/bracket library; route-demand cache. Product rationale + the decis
 > endpoint land off any natural gateway. It now reads a per-region **CURATED set of Google Places**
 > (towns, marinas, lookouts) — the `places` table, role-tagged `endpoint_eligible`/`break_eligible`
 > + `featured`, coords RESOLVED + STORED once at curation, so the runtime picker makes ZERO live Places
-> calls. A new safe-by-default `curate-places` studio step (LLM draft → Places Autocomplete+Details
-> resolve, bbox-restricted → role-tagged upsert) builds the set; the founder prunes in admin. Region
+> calls. The set is built by an interactive admin `/places` Curate flow (Opus draft → the founder prunes
+> → Places Autocomplete+Details resolve, bbox-restricted → role-tagged upsert) — split so the founder
+> reviews the exact draft before paying to resolve it — plus a `curate-places` studio CLI for terminal
+> use. Region
 > membership stays point-in-bbox (geometry-first, no `region_id`). The wire shape is unchanged but for
 > `regionAnchor.featured` (the popular subset, floated to the top of the picker). `loadCorpusForRoute`
 > (the story layer that rides the route) is untouched. Full spec + the go-sequence:
