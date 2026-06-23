@@ -19,14 +19,7 @@ import { Label } from '@/components/ui/label'
 import { Callout } from '@/components/ui/callout'
 import { EmptyState } from '@/components/ui/empty-state'
 import { BboxMap } from '@/components/ui/google-map'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { DiscoverPoisDialog } from '@/components/DiscoverPoisDialog'
 import {
   Sheet,
   SheetContent,
@@ -51,7 +44,8 @@ export function RegionsView() {
   const [dialog, setDialog] = useState<DialogMode | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [sel, setSel] = useState<Set<string>>(new Set())
-  const [discoverOpen, setDiscoverOpen] = useState(false)
+  // The Discover dialog's scope: a row's own region (per-row button) or the bulk selection. null = closed.
+  const [discoverScope, setDiscoverScope] = useState<{ slug: string; displayName: string }[] | null>(null)
   const navigate = useNavigate()
   const { data: regions, error: err, isPending } = useAdminList(qk.regions(), async () => (await api.regions()).regions)
 
@@ -154,12 +148,20 @@ export function RegionsView() {
     },
     {
       header: '',
-      headClassName: 'w-44',
+      headClassName: 'w-64',
       cellStopPropagation: true,
       cell: (r) => {
         const released = r.releasedAt != null
         return (
           <div className="flex items-center justify-end gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setDiscoverScope([{ slug: r.slug, displayName: r.displayName }])}
+              title="Discover Wikidata POIs in this region's bbox (free — no spend)"
+            >
+              <Compass className="h-3.5 w-3.5" /> Discover
+            </Button>
             <Button
               variant={released ? 'ghost' : 'default'}
               size="sm"
@@ -203,10 +205,11 @@ export function RegionsView() {
       {notice && <Callout variant="info">{notice}</Callout>}
 
       <Callout variant="info">
-        <span className="font-medium text-foreground">Discovery bbox</span> — the bounding box passed to{' '}
-        <code className="font-mono text-xs">Discover POIs</code> as{' '}
-        <code className="font-mono text-xs">--bbox "lng_min,lat_min,lng_max,lat_max"</code>. Leave blank to use the
-        built-in default (Tahoe basin). Set this before running a discovery sweep for any new region.
+        <span className="font-medium text-foreground">Discovery bbox</span> — the area{' '}
+        <code className="font-mono text-xs">Discover POIs</code> sweeps for this region (
+        <code className="font-mono text-xs">lng_min,lat_min,lng_max,lat_max</code>). It's stored on the region and
+        resolved by slug at sweep time. Leave blank to use the built-in default (Tahoe basin). Set this before
+        running a discovery sweep for any new region.
       </Callout>
 
       {numSelected > 0 && (
@@ -214,7 +217,7 @@ export function RegionsView() {
           <span className="mr-1 font-medium">
             {numSelected} region{numSelected === 1 ? '' : 's'} selected
           </span>
-          <Button size="sm" onClick={() => setDiscoverOpen(true)}>
+          <Button size="sm" onClick={() => setDiscoverScope(selectedRegions)}>
             <Compass className="h-4 w-4" /> Discover {numSelected}
           </Button>
           <button className="text-xs text-muted-foreground hover:text-foreground" onClick={clearSel}>
@@ -242,82 +245,13 @@ export function RegionsView() {
         />
       )}
 
-      <DiscoverDialog
-        regions={selectedRegions}
-        open={discoverOpen}
-        onOpenChange={setDiscoverOpen}
-        onSubmitted={() => { setDiscoverOpen(false); clearSel(); navigate({ to: '/jobs' }) }}
+      <DiscoverPoisDialog
+        regions={discoverScope ?? []}
+        open={discoverScope != null}
+        onOpenChange={(o) => { if (!o) setDiscoverScope(null) }}
+        onSubmitted={() => { setDiscoverScope(null); clearSel(); navigate({ to: '/jobs' }) }}
       />
     </div>
-  )
-}
-
-/* ── DISCOVER POIs (per selected region; FREE — no LLM/TTS spend) ── */
-
-// Sweeps every Wikidata-pinned place in each selected region's bbox and upserts the shared POI corpus.
-// Free (no model/TTS), so no confirm gate. Launches one discover_pois run PER region — each lands on the
-// Jobs page. Preview dry-runs the sweep (counts candidates); Discover upserts.
-function DiscoverDialog({ regions, open, onOpenChange, onSubmitted }: {
-  regions: { slug: string; displayName: string }[]
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  onSubmitted: () => void
-}) {
-  const qc = useQueryClient()
-  const submitMut = useMutation({
-    mutationFn: (apply: boolean) =>
-      Promise.all(regions.map((r) => api.createJob({ kind: 'discover_pois', region: r.slug, apply }))),
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: qk.runs() }); onSubmitted() },
-  })
-  return (
-    <Dialog open={open} onOpenChange={(o) => { if (!submitMut.isPending) onOpenChange(o) }}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2"><Compass className="h-4 w-4" /> Discover POIs</DialogTitle>
-          <DialogDescription>
-            Discovers every Wikidata-pinned place in each region's bbox and upserts the shared POI corpus —
-            roam draws from it. Free — no LLM or TTS spend.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-3">
-          <div className="space-y-2 rounded-lg border bg-muted/30 px-3 py-2.5 text-sm">
-            <div className="font-medium text-foreground">
-              Discovering {regions.length} region{regions.length === 1 ? '' : 's'}
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {regions.map((r) => (
-                <Badge key={r.slug} variant="secondary" className="font-normal">{r.displayName}</Badge>
-              ))}
-            </div>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Free — no spend, no deletion. <span className="font-medium text-foreground">Preview</span> dry-runs the
-            sweep (counts candidates); <span className="font-medium text-foreground">Discover</span> upserts the corpus.
-            One job per region lands on the Jobs page.
-          </p>
-        </div>
-
-        {submitMut.error && (
-          <Callout variant="error" className="rounded-lg px-3 py-2">{errMsg(submitMut.error)}</Callout>
-        )}
-
-        <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={submitMut.isPending}>Cancel</Button>
-          <Button variant="outline" onClick={() => submitMut.mutate(false)} disabled={submitMut.isPending || regions.length === 0}>
-            Preview
-          </Button>
-          <PendingButton
-            onClick={() => submitMut.mutate(true)}
-            pending={submitMut.isPending}
-            disabled={regions.length === 0}
-            icon={<Compass className="h-4 w-4" />}
-            idleLabel="Discover"
-            pendingLabel="Queuing…"
-          />
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   )
 }
 

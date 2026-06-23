@@ -392,6 +392,7 @@ export function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loadin
         rowKey={(p) => p.id}
         loading={loading}
         skeletonRows={8}
+        pageSize={50}
         onRowClick={(p) => setSheetPoi({ id: p.id, name: p.name, canDelete: p.narrationCount === 0, hasNarration: p.narrationCount > 0 })}
         rowClassName={(p) => (isSelected(p.id) ? 'bg-muted/40' : undefined)}
         empty={<EmptyState icon={Search}>No POIs match these filters.</EmptyState>}

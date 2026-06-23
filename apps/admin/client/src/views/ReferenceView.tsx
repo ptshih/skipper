@@ -34,8 +34,8 @@ export function ReferenceView() {
           rows={[
             ['Jobs', 'Admin-triggered Cloud Run jobs, newest first — status, cost, who triggered them; click a row for run details + Cloud Run logs.'],
             ['Evals', 'Generation + Re-score runs with their pass verdict and dimension scores (g / tts / div — grounding reddens below the 0.75 gate); click a row for the per-place gate report.'],
-            ['Regions', 'The regions the corpus is keyed to — each with its discovery bbox (the area Discover + Generate sweep), a live POI count, and a Draft / Released status. Discover POIs and Release both launch here (select region row(s) → Discover / Release).'],
-            ['POIs', 'The shared POI corpus — sources, enrichment, narration coverage + freshness, and per-POI curation. Quick-filters across the top triage it — “Needs attention” is the combined remediation queue (stale facts, defects, unattributed or drifted clips). Open a POI for its detail sheet: Facts (with Re-fetch facts), Narration (play the telling; Regenerate / Re-synth / Release), and Corrections (fact-edits + speakable anchor). New POIs are discovered from the Regions page.'],
+            ['Regions', 'The regions the corpus is keyed to — each with its discovery bbox (the area Discover + Generate sweep), a live POI count, and a Draft / Released status. Discover POIs and Release both launch here — a row’s own Discover / Release button, or select multiple rows for a bulk run.'],
+            ['POIs', 'The shared POI corpus — sources, enrichment, narration coverage + freshness, and per-POI curation. Discover POIs (top right) sweeps a region’s bbox into the corpus. Quick-filters across the top triage it — “Needs attention” is the combined remediation queue (stale facts, defects, unattributed or drifted clips). Open a POI for its detail sheet: Facts (with Re-fetch facts), Narration (play the telling; Regenerate / Re-synth / Release), and Corrections (fact-edits + speakable anchor).'],
             ['Places', 'A region’s CURATED real-world hubs + pitstops that feed the drive endpoint picker (separate from the POI/narration corpus). Each row is tagged Endpoint (a start / end / midpoint) and/or Break (a pitstop), with Featured floating the popular ones to the top of the rider’s picker, shown on a map. Coords are resolved + stored at curation, so the rider’s picker makes zero live Places calls. Curate (interactive — see Run kinds) seeds a region; Add a place is the manual escape hatch.'],
             ['Users', 'Accounts and their drive-credit ledger — Granted (lifetime cap), Used (drives generated), Remaining (live balance). Grant credits from a row to comp or top up an account; it’s free (it hands the USER generations, not a GCP spend) and append-only — there is no un-grant.'],
           ]}
@@ -121,7 +121,7 @@ export function ReferenceView() {
             Regions page → <Step>Add region</Step> — set the slug + a discovery bbox (the lookup helps find one).
           </li>
           <li>
-            Regions page → select the region row(s) → <Step>Discover</Step> — hit <Step>Preview</Step> to dry-run the sweep (counts candidates) → verify the POI list in the job log.
+            Regions page → the new region row’s <Step>Discover</Step> button (or select multiple rows for a bulk run; the POIs page has a <Step>Discover POIs</Step> picker too) → hit <Step>Preview</Step> to dry-run the sweep (counts candidates) → verify the POI list in the job log.
           </li>
           <li>
             Hit <Step>Discover</Step> — upserts the shared POI corpus that roam + drives draw from (one job per selected region, each on the Jobs page). Free; no confirm needed.

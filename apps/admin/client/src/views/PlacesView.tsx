@@ -6,7 +6,7 @@
 // interactive Curate button (Opus draft → prune → Places resolve). See docs/specs/places-endpoints-spec.md.
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { MapPin, Plus, Search, Sparkles, Star, Trash2 } from 'lucide-react'
+import { Loader2, MapPin, Plus, Search, Sparkles, Star, Trash2 } from 'lucide-react'
 import { api, type CurateResult, type PlaceDraft, type PlaceRow, type ResolvedPlace } from '@/lib/api'
 import { errMsg } from '@/lib/format'
 import { qk } from '@/lib/queryKeys'
@@ -22,15 +22,9 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Callout } from '@/components/ui/callout'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { EmptyState } from '@/components/ui/empty-state'
+import { Skeleton } from '@/components/ui/skeleton'
+import { SectionLabel } from '@/components/ui/section-label'
 import { PlacesMap, PLACE_PIN_COLORS } from '@/components/ui/google-map'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { FormDialog } from '@/components/ui/form-dialog'
 
@@ -179,70 +173,73 @@ export function PlacesView() {
         description="Curated start / end / midpoint hubs (and break pitstops) for the drive picker. Coords are stored at curation — the rider's picker makes zero live Places calls."
         actions={
           <>
-            <Button variant="outline" disabled={!region} onClick={() => setAdding(true)}>
+            <Button variant="outline" disabled={!region || curating} onClick={() => setAdding(true)}>
               <Plus className="h-4 w-4" /> Add a place
             </Button>
-            <Button disabled={!region} onClick={() => setCurating(true)}>
+            <Button disabled={!region || curating} onClick={() => setCurating(true)}>
               <Sparkles className="h-4 w-4" /> Curate
             </Button>
           </>
         }
       />
 
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <Select value={region ?? ''} onValueChange={setRegion}>
-          <SelectTrigger className="w-56"><SelectValue placeholder="Select a region" /></SelectTrigger>
-          <SelectContent>
-            {regions.map((r) => (
-              <SelectItem key={r.slug} value={r.slug}>{r.displayName}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {region && !isPending && (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Badge variant="secondary">{endpointCount} endpoint</Badge>
-            <Badge variant="outline">{breakCount} break</Badge>
-          </div>
-        )}
-      </div>
-
-      {error && (
-        <Callout variant="error" className="mb-4 rounded-lg px-3 py-2">{errMsg(error)}</Callout>
-      )}
-
-      {region && pins.length > 0 && (
-        <div className="mb-5">
-          <PlacesMap places={pins} bbox={bbox} className="h-72" />
-          <p className="mt-1.5 text-xs text-muted-foreground">
-            <span style={{ color: PLACE_PIN_COLORS.featured }}>●</span> featured ·{' '}
-            <span style={{ color: PLACE_PIN_COLORS.endpoint }}>●</span> endpoint ·{' '}
-            <span style={{ color: PLACE_PIN_COLORS.break }}>●</span> break
-          </p>
-        </div>
-      )}
-
-      <DataTable
-        columns={columns}
-        rows={places}
-        rowKey={(p) => p.id}
-        loading={isPending && !!region}
-        skeletonRows={5}
-        empty={
-          <EmptyState icon={MapPin}>
-            <div className="font-medium text-foreground">No curated places yet</div>
-            <div>Run Curate to draft this region’s hubs + pitstops, or add a place by name.</div>
-          </EmptyState>
-        }
-      />
-
-      {region && (
-        <CurateDialog
-          open={curating}
-          onOpenChange={setCurating}
+      {curating && region ? (
+        <CuratePanel
           region={region}
+          regionName={regions.find((r) => r.slug === region)?.displayName ?? region}
+          onClose={() => setCurating(false)}
           onCurated={() => void qc.invalidateQueries({ queryKey })}
         />
+      ) : (
+        <>
+          <div className="mb-4 flex flex-wrap items-center gap-3">
+            <Select value={region ?? ''} onValueChange={setRegion}>
+              <SelectTrigger className="w-56"><SelectValue placeholder="Select a region" /></SelectTrigger>
+              <SelectContent>
+                {regions.map((r) => (
+                  <SelectItem key={r.slug} value={r.slug}>{r.displayName}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {region && !isPending && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Badge variant="secondary">{endpointCount} endpoint</Badge>
+                <Badge variant="outline">{breakCount} break</Badge>
+              </div>
+            )}
+          </div>
+
+          {error && (
+            <Callout variant="error" className="mb-4 rounded-lg px-3 py-2">{errMsg(error)}</Callout>
+          )}
+
+          {region && pins.length > 0 && (
+            <div className="mb-5">
+              <PlacesMap places={pins} bbox={bbox} className="h-72" />
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                <span style={{ color: PLACE_PIN_COLORS.featured }}>●</span> featured ·{' '}
+                <span style={{ color: PLACE_PIN_COLORS.endpoint }}>●</span> endpoint ·{' '}
+                <span style={{ color: PLACE_PIN_COLORS.break }}>●</span> break
+              </p>
+            </div>
+          )}
+
+          <DataTable
+            columns={columns}
+            rows={places}
+            rowKey={(p) => p.id}
+            loading={isPending && !!region}
+            skeletonRows={5}
+            empty={
+              <EmptyState icon={MapPin}>
+                <div className="font-medium text-foreground">No curated places yet</div>
+                <div>Run Curate to draft this region’s hubs + pitstops, or add a place by name.</div>
+              </EmptyState>
+            }
+          />
+        </>
       )}
+
       {region && (
         <AddPlaceDialog
           open={adding}
@@ -266,20 +263,20 @@ const roleLabel = (r: PlaceDraft['role']): string => (r === 'both' ? 'endpoint +
 //  3. Resolve & add — the keepers are resolved against Google Places (bbox-bound) + upserted role-tagged.
 // Re-runnable (OR-merges roles). Both steps spend, so the founder-gate is the explicit button click
 // (this whole console is behind IAP). Roles/featured can be fine-tuned in the table after they land.
-function CurateDialog({ open, onOpenChange, region, onCurated }: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
+//
+// Rendered INLINE on the page (not a modal): the Draft step is a long synchronous Opus call (~30s), and a
+// modal that dismisses on a stray overlay-click / Esc is a footgun there — it reads as frozen and one
+// click throws the in-flight draft away. Inline, the wait is a normal section loading state and the only
+// way out is the explicit, always-live Cancel.
+function CuratePanel({ region, regionName, onClose, onCurated }: {
   region: string
+  regionName: string
+  onClose: () => void
   onCurated: () => void
 }) {
   const [drafts, setDrafts] = useState<PlaceDraft[]>([])
   const [kept, setKept] = useState<Set<number>>(new Set())
   const [results, setResults] = useState<CurateResult[] | null>(null)
-
-  // Reset every time the dialog opens — a fresh draft each curate session.
-  useEffect(() => {
-    if (open) { setDrafts([]); setKept(new Set()); setResults(null) }
-  }, [open])
 
   const draftMut = useMutation({
     mutationFn: () => api.draftPlaces({ region }),
@@ -290,7 +287,7 @@ function CurateDialog({ open, onOpenChange, region, onCurated }: {
   })
   const curateMut = useMutation({
     mutationFn: () => api.curatePlaces({ region, drafts: drafts.filter((_, i) => kept.has(i)) }),
-    onSuccess: (res) => { setResults(res.results); onCurated() }, // refresh the table; keep the dialog open for the summary
+    onSuccess: (res) => { setResults(res.results); onCurated() }, // refresh the table; keep the panel open for the summary
   })
 
   const toggleKeep = (i: number) =>
@@ -301,75 +298,124 @@ function CurateDialog({ open, onOpenChange, region, onCurated }: {
       return n
     })
 
+  // Start a fresh draft WITHOUT leaving the panel (after a results summary, or to re-draft).
+  const reset = () => {
+    setDrafts([]); setKept(new Set()); setResults(null)
+    draftMut.reset(); curateMut.reset()
+  }
+
   const hasDrafts = drafts.length > 0
   const keptCount = kept.size
-  const busy = draftMut.isPending || curateMut.isPending
+  const drafting = draftMut.isPending
+  const resolving = curateMut.isPending
   const resolved = results?.filter((r) => r.status === 'resolved').length ?? 0
   const dropped = results?.filter((r) => r.status === 'dropped').length ?? 0
   const errored = results?.filter((r) => r.status === 'error').length ?? 0
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4" /> Curate places
-          </DialogTitle>
-          <DialogDescription>
-            Draft this region’s start / end hubs + break pitstops with Opus, prune the list, then resolve the
-            keepers against Google Places and add them role-tagged. Re-runnable — it OR-merges roles, so a
-            re-curate never clears a role you kept.
-          </DialogDescription>
-        </DialogHeader>
+    <section className="overflow-hidden rounded-xl border bg-card shadow-sm">
+      <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
+        <div className="flex items-center gap-2 font-medium">
+          <Sparkles className="h-4 w-4" /> Curate · {regionName}
+        </div>
+        {/* Always live — the point of going inline is to never trap the operator mid-draft. */}
+        <Button variant="ghost" size="sm" onClick={onClose}>
+          {results ? 'Done' : 'Cancel'}
+        </Button>
+      </div>
 
-        {!hasDrafts && !results && (
-          <Callout variant="info" className="rounded-lg px-3 py-2 text-xs">
-            <span className="font-medium text-foreground">Draft</span> spends a few cents (one Opus call) and
-            writes nothing — review the picks first.{' '}
-            <span className="font-medium text-foreground">Resolve &amp; add</span> spends a few cents of Google
-            Places and writes the keepers. You can fine-tune roles in the table afterward.
-          </Callout>
+      <div className="space-y-3 p-4">
+        {/* INITIAL — the explicit spend gate (a paid Opus call; writes nothing). */}
+        {!hasDrafts && !drafting && !results && (
+          <>
+            <Callout variant="info" className="rounded-lg px-3 py-2 text-xs">
+              <span className="font-medium text-foreground">Draft</span> spends a few cents (one Opus call) and
+              writes nothing — review the picks first.{' '}
+              <span className="font-medium text-foreground">Resolve &amp; add</span> spends a few cents of Google
+              Places and writes the keepers. You can fine-tune roles in the table afterward.
+            </Callout>
+            <Button onClick={() => draftMut.mutate()}>
+              <Sparkles className="h-4 w-4" /> Draft places
+            </Button>
+          </>
         )}
 
-        {results && (
-          <Callout variant={errored ? 'error' : 'info'} className="rounded-lg px-3 py-2 text-sm">
-            Added {resolved} {resolved === 1 ? 'place' : 'places'}.
-            {dropped > 0 && ` ${dropped} couldn’t be pinned in-region (skipped).`}
-            {errored > 0 && ` ${errored} errored.`}
-          </Callout>
-        )}
-
-        {hasDrafts && !results && (
-          <div className="max-h-80 space-y-0.5 overflow-y-auto rounded-lg border p-1.5">
-            {drafts.map((d, i) => (
-              <label
-                key={i}
-                className="flex cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 hover:bg-muted/50"
-              >
-                <Checkbox
-                  checked={kept.has(i)}
-                  onCheckedChange={() => toggleKeep(i)}
-                  className="mt-0.5"
-                  aria-label={`keep ${d.name}`}
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5 text-sm font-medium">
-                    {d.featured && (
-                      <Star
-                        className="h-3 w-3 shrink-0"
-                        style={{ color: PLACE_PIN_COLORS.featured, fill: PLACE_PIN_COLORS.featured }}
-                      />
-                    )}
-                    <span className="truncate">{d.name}</span>
-                    <Badge variant="secondary" className="ml-auto shrink-0 text-[10px] capitalize">
-                      {roleLabel(d.role)}
-                    </Badge>
-                  </div>
-                  {d.rationale && <div className="truncate text-xs text-muted-foreground">{d.rationale}</div>}
+        {/* DRAFTING — a long synchronous Opus call; show it's working, not frozen. */}
+        {drafting && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Drafting this region’s hubs + pitstops with Opus… this takes ~30s.
+            </div>
+            <div className="space-y-0.5 rounded-lg border p-1.5" aria-hidden>
+              {['w-40', 'w-52', 'w-32', 'w-48', 'w-36', 'w-44'].map((w, i) => (
+                <div key={i} className="flex items-center gap-2 px-2 py-1.5">
+                  <Skeleton className="h-4 w-4 shrink-0 rounded" />
+                  <Skeleton className={`h-4 ${w}`} />
                 </div>
-              </label>
-            ))}
+              ))}
+            </div>
           </div>
+        )}
+
+        {/* RESULTS summary — then re-draft or Done (in the header). */}
+        {results && (
+          <>
+            <Callout variant={errored ? 'error' : 'info'} className="rounded-lg px-3 py-2 text-sm">
+              Added {resolved} {resolved === 1 ? 'place' : 'places'}.
+              {dropped > 0 && ` ${dropped} couldn’t be pinned in-region (skipped).`}
+              {errored > 0 && ` ${errored} errored.`}
+            </Callout>
+            <Button variant="outline" size="sm" onClick={reset}>
+              <Sparkles className="h-4 w-4" /> Curate again
+            </Button>
+          </>
+        )}
+
+        {/* PRUNE — uncheck the unwanted, then resolve the keepers. */}
+        {hasDrafts && !results && (
+          <>
+            <SectionLabel>{keptCount} of {drafts.length} kept</SectionLabel>
+            <div className="max-h-[32rem] space-y-0.5 overflow-y-auto rounded-lg border p-1.5">
+              {drafts.map((d, i) => (
+                <label
+                  key={i}
+                  className="flex cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 hover:bg-muted/50"
+                >
+                  <Checkbox
+                    checked={kept.has(i)}
+                    onCheckedChange={() => toggleKeep(i)}
+                    className="mt-0.5"
+                    aria-label={`keep ${d.name}`}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 text-sm font-medium">
+                      {d.featured && (
+                        <Star
+                          className="h-3 w-3 shrink-0"
+                          style={{ color: PLACE_PIN_COLORS.featured, fill: PLACE_PIN_COLORS.featured }}
+                        />
+                      )}
+                      <span className="truncate">{d.name}</span>
+                      <Badge variant="secondary" className="ml-auto shrink-0 text-[10px] capitalize">
+                        {roleLabel(d.role)}
+                      </Badge>
+                    </div>
+                    {d.rationale && <div className="truncate text-xs text-muted-foreground">{d.rationale}</div>}
+                  </div>
+                </label>
+              ))}
+            </div>
+            <div className="flex justify-end">
+              <PendingButton
+                onClick={() => curateMut.mutate()}
+                pending={resolving}
+                disabled={keptCount === 0}
+                icon={<Plus className="h-4 w-4" />}
+                idleLabel={`Resolve & add ${keptCount}`}
+                pendingLabel="Resolving…"
+              />
+            </div>
+          </>
         )}
 
         {draftMut.error != null && (
@@ -378,33 +424,8 @@ function CurateDialog({ open, onOpenChange, region, onCurated }: {
         {curateMut.error != null && (
           <Callout variant="error" className="rounded-lg px-3 py-2">{errMsg(curateMut.error)}</Callout>
         )}
-
-        <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
-            {results ? 'Close' : 'Cancel'}
-          </Button>
-          {!hasDrafts && !results && (
-            <PendingButton
-              onClick={() => draftMut.mutate()}
-              pending={draftMut.isPending}
-              icon={<Sparkles className="h-4 w-4" />}
-              idleLabel="Draft places"
-              pendingLabel="Drafting…"
-            />
-          )}
-          {hasDrafts && !results && (
-            <PendingButton
-              onClick={() => curateMut.mutate()}
-              pending={curateMut.isPending}
-              disabled={keptCount === 0}
-              icon={<Plus className="h-4 w-4" />}
-              idleLabel={`Resolve & add ${keptCount}`}
-              pendingLabel="Resolving…"
-            />
-          )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </section>
   )
 }
 
