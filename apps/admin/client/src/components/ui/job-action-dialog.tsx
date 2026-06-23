@@ -46,7 +46,7 @@ interface JobActionDialogProps {
   previewLabel?: string
 }
 
-/** The shared shell for the corpus/run Preview+apply dialogs (Discover, Enrich, Generate roam): a
+/** The shared shell for the corpus/run Preview+apply dialogs (Enrich, Generate narration, Re-score corpus): a
  *  shadcn Dialog with an icon header, a per-dialog body, a muted note, a standardized error Callout,
  *  and a Cancel / Preview / apply footer wired to ONE `createJob` mutation (dry-run on Preview, apply
  *  + confirm on the primary). Each call site stays a thin wrapper that owns its local state + builds

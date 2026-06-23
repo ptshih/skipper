@@ -27,8 +27,9 @@ import { fetchWithRetry } from './http'
 const SEARCH_TEXT_URL = 'https://places.googleapis.com/v1/places:searchText'
 const AUTOCOMPLETE_URL = 'https://places.googleapis.com/v1/places:autocomplete'
 const PLACE_DETAILS_URL = 'https://places.googleapis.com/v1/places'
-/** Per-attempt timeout (ms). Break-anchor search is non-fatal, but a HUNG call never throws —
- *  so generate.ts's try/catch can't skip past it; only a finite timeout can. Small payloads. */
+/** Per-attempt timeout (ms). Break-anchor search is a deferred feed with no caller yet (see header),
+ *  but a HUNG call never throws — so a future caller's try/catch couldn't skip past it; only a finite
+ *  timeout can. Small payloads. */
 const REQUEST_TIMEOUT_MS = 15_000
 
 // includedType (Table A) + a matching natural-language query, one request each.

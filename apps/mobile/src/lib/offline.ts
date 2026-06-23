@@ -136,8 +136,8 @@ const CLIP_DOWNLOAD_TIMEOUT_MS = 30_000
 const CLIP_DOWNLOAD_ATTEMPTS = 3
 const RETRY_BASE_DELAY_MS = 400
 
-// Rough bytes/sec for the 32 kbps MP3 clips (32 kbit/s ÷ 8), for the pre-flight free-space estimate.
-const APPROX_BYTES_PER_SEC = 4_000
+// Rough bytes/sec for the 64 kbps AAC (.m4a) clips (64 kbit/s ÷ 8), for the pre-flight free-space estimate.
+const APPROX_BYTES_PER_SEC = 8_000
 
 /** A download can't fit in free space — surfaced with a dedicated, actionable message. (audit #174) */
 export class InsufficientStorageError extends Error {

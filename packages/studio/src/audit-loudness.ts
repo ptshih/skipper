@@ -51,8 +51,8 @@ const AUDIT_CONCURRENCY = 8
 // geofence trigger. Advisory only (we measure, never trim). Trailing silence is deferred — the AAC encoder
 // zero-pads, so a measured trailing gap is confounded with codec padding and would false-alarm.
 const LEADING_SILENCE_FLAG_MS = 600
-// Est. bytes/sec for the pull preview: AAC-LC ~48 kbps → 6 KB/s (+ small container overhead, ignored).
-const EST_BYTES_PER_SEC = 6000
+// Est. bytes/sec for the pull preview: AAC-LC ~64 kbps → 8 KB/s (+ small container overhead, ignored).
+const EST_BYTES_PER_SEC = 8000
 
 const TARGET = ACTIVE_MASTER_TARGET_LUFS
 const TP_CEILING = AUDIO_LOUDNESS.truePeakDbtp

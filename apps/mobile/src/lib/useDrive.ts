@@ -38,7 +38,7 @@ import { useReducedMotion } from '@/theme'
 import { voice } from '@/ui'
 
 // Grace before a clip that hasn't started is treated as stalled — same generous window
-// as the preview (32k MP3 clips, 1h presigned URLs → re-sign once on a stall).
+// as the preview (64k AAC-LC .m4a clips, 1h presigned URLs → re-sign once on a stall).
 const CLIP_STALL_MS = 12_000
 
 // V2 drives carry no host on the manifest (persona is decoupled + single in v2), so the lock-screen

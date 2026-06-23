@@ -22,9 +22,9 @@ export type ApiEnv = {
  *
  *  FAIL-OPEN: resolving the session reads the auth DB, and this middleware runs BEFORE the
  *  per-route gate — so a transient auth-DB blip must not 500 the request (it would needlessly
- *  take down the open `?preview=1` funnel, which needs no session). resolveSessionSafely retries
+ *  take down an open endpoint like `GET /roam`, which needs no session). resolveSessionSafely retries
  *  the read, then degrades to null → tierOf(null) = 'anonymous': the secure direction (a gated
- *  route falls back to its AccountGate 401, never a leak; preview keeps serving). See ./session. */
+ *  route falls back to its AccountGate 401, never a leak; open routes keep serving). See ./session. */
 export const withSession: MiddlewareHandler<ApiEnv> = async (c, next) => {
   const session = await resolveSessionSafely(() => auth.api.getSession({ headers: c.req.raw.headers }))
   c.set('session', session)

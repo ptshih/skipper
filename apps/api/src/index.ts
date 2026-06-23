@@ -108,7 +108,7 @@ function haversineMeters(aLat: number, aLng: number, bLat: number, bLng: number)
 // encounter is a poi's 1:1 `narration` — audio_url is NOT NULL, so everything returned is
 // playable. Geo filter runs in JS — the corpus is a few hundred rows per region at most, so a
 // bbox prefilter + haversine beats dragging in PostGIS.
-// ALPHA: OPEN, like ?preview=1 (founder TestFlight toy; no UI links it for anyone else).
+// ALPHA: OPEN to anyone (founder TestFlight toy; no UI links it for anyone else).
 // When roam ships for real it takes the live-drive wall (free account), same as /drives.
 // withSession runs (fail-open) so a logged-in admin is recognized — admins hear STAGED clips,
 // everyone else gets released-only (the released_at filter below). See region-release-gate.

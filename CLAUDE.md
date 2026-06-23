@@ -169,6 +169,13 @@ raw hex/rgba/`fontFamily`; colors live only in `src/theme`.
   question and decide from what they SAY; cite what you found so the next agent can re-check (a real miss:
   forcing the bun `linker = "hoisted"` papered over an undeclared `expo-font` import the default isolated
   linker had correctly flagged).
+- **Comments explain WHY, not WHAT.** The dense decision-journal style (rationale, dated founder calls,
+  source citations, `⚠` gotchas) is deliberate and earns its keep — KEEP it; "self-documenting code instead"
+  would delete the project's memory. But never restate what a line already says, and never bake a VOLATILE
+  fact into prose — a bitrate, timeout, dep pin, migration number, table/provider name, or "today only X
+  exists" claim. Each has ONE home (the constant, `cloudbuild`/`package.json`, the schema, a
+  `docs/decisions/` entry); point there, don't duplicate the value where it silently drifts (the rot the
+  2026-06-22 sweep cleaned was exactly this duplicated-fact subset, never the rationale).
 
 ## Milestones
 

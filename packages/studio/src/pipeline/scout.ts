@@ -42,7 +42,7 @@ const TOOL_WIKIDATA: Anthropic.Tool = {
   input_schema: { type: 'object', properties: {}, additionalProperties: false },
 }
 
-/** One model turn — injectable for tests (the real one is a JUDGMENT_MODEL messages.create). */
+/** One model turn — injectable for tests (the real one is an ENRICH-tier, Sonnet by default, messages.create). */
 export type ScoutModelCall = (params: {
   system: string
   tools: Anthropic.Tool[]

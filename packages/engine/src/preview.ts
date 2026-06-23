@@ -14,7 +14,8 @@
 // Pure + testable (no I/O, no RN). The same trigger core the live player uses lives
 // in trigger.ts; this is its couch-bound sibling — the live player is this with the
 // segment clock swapped for expo-location. Each stop carries its trigger point
-// (persisted on its `segments` row), so the route-progress positions match the real drive.
+// (frozen on the drive's `selection` manifest — DriveSelectionItem.triggerLat/Lng), so the
+// route-progress positions match the real drive.
 
 import { cumulativeMeters, nearestOnRoute } from './geo'
 import type { LngLat } from './geo'
@@ -22,8 +23,8 @@ import type { LngLat } from './geo'
 /** Fallback average drive speed (m/s ≈ 30 mph) when a tour lacks a frozen drive time. */
 const FALLBACK_SPEED_MPS = 13.4
 
-/** One tour stop, as the preview needs it (a subset of the segment + its variant-0 track,
- *  joined to the segment's pois anchor). */
+/** One tour stop, as the preview needs it (a subset of a place's `narrations` row, joined to
+ *  its `pois` anchor). */
 export interface PreviewStop {
   seq: number
   stopType: 'story' | 'scenic' | 'break'

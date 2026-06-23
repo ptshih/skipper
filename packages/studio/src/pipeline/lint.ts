@@ -7,8 +7,8 @@
 // can't catch a gag that recurs >3 stops apart, and a per-stop prompt quota can't
 // enforce a tour-level budget. After every stop is narrated, this lints the
 // ASSEMBLED scripts and emits per-stop `avoid` notes. It's consumed via
-// eval/diversity.ts (evaluateDiversity), whose findings drive optimize() in
-// generate.ts for a bounded re-narration.
+// eval/diversity.ts (evaluateDiversity), whose findings drive optimize() (defined in
+// eval/optimize.ts) from generate-narrations.ts for a bounded re-narration.
 //
 // Detection is DETERMINISTIC (fast, free, predictable) and targets LEXICAL/
 // STRUCTURAL repeats: repeated stock phrases and duplicate opener/closer

@@ -55,7 +55,7 @@ export const auth = betterAuth({
   // `fallback` covers any non-matching host and serves as the init-time base URL
   // (so there's no "Base URL could not be determined" startup warning).
   // Custom domain: api.skipper.fm — this service is API-ONLY. The apex skipper.fm is a
-  // SEPARATE landing site (Astro on Vercel), mapped
+  // SEPARATE landing site (Astro on Firebase Hosting), mapped
   // via a Cloud Run domain mapping (us-east4, Google-managed cert); a subdomain maps with a
   // CNAME to ghs.googlehosted.com, held DNS-only (grey cloud) in Cloudflare so Google can
   // provision the cert. The run.app host stays listed for direct access during cutover.

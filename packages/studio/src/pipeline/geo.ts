@@ -45,12 +45,12 @@ export function regionLabel(lat: number, lng: number): string {
  * Encode an [lng, lat] polyline to Google's precision-5 encoded-polyline string.
  *
  * The Places "search along route" API accepts ONLY the encoded string, never a
- * coordinate array — but materialize.ts decoded the Routes-API polyline and froze
+ * coordinate array — but @skipper/routing's materializeRoute decoded the Routes-API polyline and froze
  * only the [lng, lat] points (the encoded string was discarded). Rather than
  * re-call the Routes API (the frozen route is "never recomputed"), we re-encode
  * the frozen points. Decode→encode round-trips cleanly at precision 5 (the points
  * were already quantized to 1e-5 on decode), so the result is a valid polyline
- * that SAR accepts. Inverse of materialize.ts's decodePolyline.
+ * that SAR accepts. Inverse of @skipper/routing's decodePolyline (used inside materializeRoute).
  */
 export function encodePolyline(polyline: LngLat[]): string {
   let lastLat = 0

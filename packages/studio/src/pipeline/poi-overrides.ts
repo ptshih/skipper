@@ -21,8 +21,8 @@
 // this loop; adjudicated findings become table rows.
 //
 // Loading: once per process (ensurePoiOverridesLoaded), awaited inside the Wikipedia
-// fetchers (so the facts path can never forget) and at the top of generateTour (so the
-// sync select.ts lookup is populated before selection). Unloaded == no overrides — only
+// fetchers (so the facts path can never forget) and at the top of each corpus CLI
+// (discover-pois / enrich-pois / generate-narrations). Unloaded == no overrides — only
 // unit tests and the sim take that path.
 
 import { db } from '@skipper/db'

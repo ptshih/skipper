@@ -8,8 +8,9 @@
 // actually SPEAKS (personal names, builders, dates, institutions, superlatives), searches,
 // and reports contradictions with a correction + the authoritative source.
 //
-// Advisory BY DOCTRINE, not checkability: "no automated groundedness gate — the human ear
-// instead". Findings are adjudicated by a human; a confirmed upstream error becomes an
+// Advisory BY CHECKABILITY, not doctrine: the grounding/tts gate is now automated and
+// fail-closed (generate-narrations.ts), but sheet ↔ WORLD truth has no trustworthy auto-judge, so
+// veracity stays advisory. Findings are adjudicated by a human; a confirmed upstream error becomes an
 // entry in pipeline/poi-overrides.ts (the FIX side of this loop), which corrects the sheet
 // at the fetch seam and propagates via facts_hash staleness.
 //

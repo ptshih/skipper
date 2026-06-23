@@ -43,7 +43,7 @@ export function presignGet(key: string, expiresInSeconds: number = DEFAULT_TTL_S
  *  per-app copy DRIFTED once (admin was missing `m4a`, serving the canonical clip as
  *  octet-stream), so it lives here next to presignGet. */
 const AUDIO_CONTENT_TYPES: Record<string, string> = {
-  m4a: 'audio/mp4', // current canonical (LINEAR16 → AAC-LC 48k, see audio-compression-spike.md)
+  m4a: 'audio/mp4', // current canonical (LINEAR16 → AAC-LC 64k, see audio-compression-spike.md)
   mp3: 'audio/mpeg', // legacy gemini-tts 32k MP3 clips, if any survive
   wav: 'audio/wav', // legacy LINEAR16 clips, if any survive
 }

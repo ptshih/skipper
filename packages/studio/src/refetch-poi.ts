@@ -2,7 +2,7 @@
 //
 // Facts are SHARED + cached on `pois` (principle #1); the corpus is normally refreshed in
 // BULK by the region sweep (discover-pois.ts). This is the single-POI version: re-fetch the
-// lead extract for ONE place by title (the SAME path discovery uses, so an unchanged article
+// FULL article extract for ONE place by pageId (the SAME path discovery uses, so an unchanged article
 // hashes identically), apply the curated fact-edit overrides, and rewrite facts / facts_hash /
 // facts_fetched_at / summary. When the re-fetched facts MATERIALLY change (a new facts_hash),
 // every narration that grounded on the old facts goes detectably stale (narrations.facts_hash IS

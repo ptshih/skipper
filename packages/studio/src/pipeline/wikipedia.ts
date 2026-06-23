@@ -49,7 +49,8 @@ interface ExtractPage {
  * (pipeline/wikidata-discovery.ts). A STORY candidate carries Wikipedia prose (source
  * 'wikipedia', a pageid + a non-empty extract); a SCENIC candidate is a named Wikidata
  * feature with no prose (source 'wikidata', extract ''). `extract.length` still drives the
- * story↔scenic split in select.ts, and `source`/`sourceId` become the pois (source, source_id).
+ * story↔scenic split in tierOf() (pipeline/wikidata-discovery.ts, threshold STORY_MIN_FACT_CHARS),
+ * and `source`/`sourceId` become the pois (source, source_id).
  */
 export interface WikiPoi {
   /** Discovery source for the pois row: 'wikipedia' (story prose) | 'wikidata' (named scenic). */

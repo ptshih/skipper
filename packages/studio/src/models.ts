@@ -54,9 +54,9 @@ export function getAnthropic(label = 'a model call needs it'): Anthropic {
 // single-sourced in @skipper/shared (CLAUDE_MODELS).
 export const NARRATION_MODEL = CLAUDE_MODELS.opus
 
-// JUDGMENT tier — every NON-narration model call: the enrichment scout (pipeline/scout.ts)
-// and the structured-report / spot-check judges (eval/charm.ts, eval/grounding.ts,
-// eval/veracity.ts). Opus 4.8. With narration ALSO on Opus 4.8 now
+// JUDGMENT tier — the structured-report / spot-check judges (eval/charm.ts, eval/grounding.ts,
+// eval/veracity.ts): the NON-narration calls that need the calibration tier. (The enrichment
+// scout is a SEPARATE ENRICH tier, Sonnet by default — see ENRICH_MODELS below.) Opus 4.8. With narration ALSO on Opus 4.8 now
 // (Fable 5 unavailable, above), this tier currently COINCIDES with NARRATION_MODEL — but it
 // stays a SEPARATE constant on purpose, for two reasons that outlive the coincidence:
 //   (a) Most of them FORCE tool use (tool_choice {type:'tool'} or {type:'any'}); Opus 4.8

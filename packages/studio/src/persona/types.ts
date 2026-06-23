@@ -1,6 +1,6 @@
 // The generation-side persona definition — everything that makes a region's host sound
 // like itself. Resolved per tour by region slug (see ./index.ts), so adding a region is a
-// new PersonaDef + a registry entry, never edits scattered across generate.ts / lint.ts.
+// new PersonaDef + a registry entry, never edits scattered across generate-narrations.ts / lint.ts.
 //
 // PRESENTATION (the display name/tagline/backstory/portrait served to the app) has NO v2 home —
 // apps/api/src/host.ts was dropped with the legacy tour tables (commit e5afa38); it returns when

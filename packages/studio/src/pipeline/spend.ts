@@ -1,7 +1,7 @@
 // Run-spend visibility — the LLM token tally + the pre-TTS cost estimate.
 //
 // Every Anthropic call site (narrate, scout, closer judge, grounding) records its
-// response.usage here; generate.ts prints the tally + a TTS estimate right before the
+// response.usage here; generate-narrations.ts prints the tally + a TTS estimate right before the
 // TTS/R2 phase and enforces the --max-cost gate (TODO.md cost guardrail). The framing
 // is honest: by that point the LLM spend is SUNK — TTS is the one cost still unpaid,
 // so the gate's job is to SHOW the sunk spend and cap the remainder.
@@ -77,7 +77,7 @@ export function llmSpentUsd(): number {
 const fmtTok = (n: number): string =>
   n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n / 1_000).toFixed(1)}k` : String(n)
 
-/** One human line per model — printed by generate.ts ahead of the TTS phase. */
+/** One human line per model — printed by generate-narrations.ts ahead of the TTS phase. */
 export function llmSpendLines(): string[] {
   return [...tallies.entries()].map(([model, t]) => {
     const priced = MODEL_PRICING[model] ? `$${tallyUsd(model, t).toFixed(2)}` : 'unpriced'

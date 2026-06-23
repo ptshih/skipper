@@ -153,7 +153,7 @@ export default function HomeScreen() {
           <Text variant="label" color="accentWarm" style={styles.flex}>
             MY DRIVES
           </Text>
-          {/* Gentle, free-tier-only credit hint — informational, not a depleting "X/10" toll gauge. */}
+          {/* Gentle, free-tier-only credit hint — informational, not a depleting "X-left-of-N" toll gauge. */}
           {credits ? (
             <Text variant="label" color="inkFaint">
               {credits.remaining > 0

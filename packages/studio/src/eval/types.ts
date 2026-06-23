@@ -32,7 +32,7 @@ export interface ClaimVerdict {
   evidence: string | null
 }
 
-/** The eval dimensions. Only `grounding` ships in this slice; the rest are the target panel. */
+/** The eval dimensions — all implemented as sibling modules (see header); DIMENSION_KIND below splits gate vs advisory. */
 export type EvalDimension = 'grounding' | 'charm' | 'diversity' | 'pacing' | 'tts' | 'veracity'
 
 /** A GATE dimension fails the whole tour; an ADVISORY one only informs regen, never blocks. */
@@ -49,8 +49,9 @@ export const DIMENSION_KIND: Record<EvalDimension, EvalKind> = {
   charm: 'advisory',
   diversity: 'advisory',
   pacing: 'advisory',
-  // External truth (sheet ↔ world) is advisory BY DOCTRINE, not checkability: the human ear
-  // adjudicates and confirmed errors become poi-override entries — never an automated block.
+  // External truth (sheet ↔ world) is advisory because no trustworthy auto-judge exists for
+  // world-truth — a CHECKABILITY limit, not doctrine (grounding/tts ARE auto-gated). Confirmed
+  // errors become poi-override entries, adjudicated by a human.
   veracity: 'advisory',
 }
 
