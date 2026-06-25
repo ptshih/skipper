@@ -2,10 +2,10 @@
 
 > **Status (2026-06-25):** PARTIALLY BUILT. Fixes triage cluster **1b** from the 2026-06-25 founder
 > dogfood drive (build 11): clips that fire too early, too far in, or *after you've already passed* the
-> point. **Step 3 (passed-point retire) ✅ BUILT 2026-06-25** — closest-approach tracking + retire in
-> `trigger.ts`/`roam.ts` (+ tests). Steps 1–2 depend on
-> [road-snapped-anchors-spec.md](road-snapped-anchors-spec.md) (**1a**); step 4 is optional. Radius/lead
-> tuning still needs an on-device re-drive.
+> point. **Step 3 (passed-point retire) ✅ BUILT** + **Step 1 (consume the anchor) ✅ BUILT** —
+> `/roam` + `/drives` now trigger on `speakable ?? pin`, after the 1a snap populated **514/848** Tahoe
+> anchors (334 are off-road → no anchor → fall back to centroid). **Step 2 (radius retune) DEFERRED to an
+> on-device re-drive** — and it's NOT a blanket shrink (see below). Step 4 optional.
 
 ## Origin
 
@@ -47,21 +47,24 @@ pass the real point (Zephyr Cove).
 
 ## The fix (in order of leverage)
 
-### 1. Trigger on the road-snapped anchor, not the centroid  *(needs 1a)*
-Coalesce `speakable_lat/lng ?? lat/lng` as the trigger center where pins are built:
-- `/roam` pin build ([`index.ts:170-179`](../../apps/api/src/index.ts)).
-- `/drives` `candidateOf` ([`drives.ts:212-220`](../../apps/api/src/drives.ts)).
+### 1. Trigger on the road-snapped anchor, not the centroid — ✅ BUILT 2026-06-25
+Both API loaders now coalesce `speakable ?? pin` as the trigger coordinate: the `/roam` output pin
+([`apps/api/src/index.ts`](../../apps/api/src/index.ts)) and `NarrationRow.lat/lng` in BOTH `/drives`
+corpus loaders ([`apps/api/src/drives.ts`](../../apps/api/src/drives.ts)) — so `candidateOf` →
+`buildDrive` route-snaps from the road-adjacent anchor, and roam fires off it directly. Null anchors fall
+back to the centroid (today's behavior). This is **the dominant lever** — every downstream number gets
+honest once the center is on the road. No radius change here, so it's a pure improvement with no tuning:
+an anchored POI now fires where you actually drive past it; the existing (large) floor just means it
+fires a touch early, which is safe. Takes effect live on the next deploy.
 
-One change each. This is **the dominant lever** — every downstream number gets honest once the center is
-on the road. (Drives additionally re-snap stops to the route via `snapStopsToRoute`/`nearestOnRoute`,
-`trigger.ts:157-163` — feeding the road-snapped anchor makes that snap start from a sane point.)
-
-### 2. Shrink `radiusForKind` now that centers are road-relative
-The floor existed to bridge centroid→road. With the center **on** the road, the floor should drop toward
-a true trigger distance (tens–low-hundreds of m), letting the **speed-adaptive lead** be the dominant
-term at speed. Retune the `geo.ts:33-41` bands + roam `floorM`. **Do not guess final values** — pick
-conservative starts, verify on an on-device re-drive (this is single-sourced for `/roam` and `/drives`,
-so they stay in lockstep).
+### 2. Shrink `radiusForKind` — DEFERRED to the on-device re-drive (and NOT a blanket shrink)
+The floor was inflated to bridge centroid→road; with the center on the road it *can* drop. **But the 1a
+run found 514/848 anchored, 334 off-road (no anchor) — and an anchorless POI still triggers on its
+centroid, so shrinking its floor would REGRESS it** (small radius + centroid = never fires). So step 2 is
+**conditional on anchor presence**, not a global `geo.ts:33-41` edit: a tight radius only when a POI has a
+road-snapped anchor; keep the kind-aware floor when it doesn't. Final numbers (tight radius, roam
+`floorM`) are **not desk-tunable** — pick conservative starts and verify on a Tahoe re-drive, the same
+loop that produced this feedback.
 
 ### 3. Retire passed points (independent) — ✅ BUILT 2026-06-25
 A "not approaching / distance increasing" guard so a point that's now behind you stops being eligible

@@ -141,6 +141,11 @@ app.get('/roam', async (c) => {
           kind: pois.kind,
           lat: pois.lat,
           lng: pois.lng,
+          // The road-snapped "where to look" anchor (snap-speakable-anchors) — when present it's the
+          // trigger center the pin reports, so RoamEngine fires off the ROAD point, not the centroid
+          // (1b step 1). Null for off-road POIs → falls back to the pin, today's behavior.
+          speakableLat: pois.speakableLat,
+          speakableLng: pois.speakableLng,
           key: narrations.audioUrl,
           durationMs: narrations.audioDurationMs,
         })
@@ -170,8 +175,9 @@ app.get('/roam', async (c) => {
       pins: near.map((r) => ({
         poiId: r.poiId,
         name: r.name,
-        lat: r.lat,
-        lng: r.lng,
+        // Trigger center = the road-snapped anchor when we have one, else the centroid (1b step 1).
+        lat: r.speakableLat ?? r.lat,
+        lng: r.speakableLng ?? r.lng,
         durationMs: r.durationMs,
         radiusM: radiusForKind(r.kind),
         url: presignGet(r.key),

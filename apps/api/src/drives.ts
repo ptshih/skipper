@@ -178,6 +178,11 @@ async function loadCorpusForRoute(
           kind: pois.kind,
           lat: pois.lat,
           lng: pois.lng,
+          // Road-snapped trigger anchor (snap-speakable-anchors): when present, NarrationRow.lat/lng
+          // carries it instead of the centroid, so a road-adjacent POI places + triggers off the ROAD
+          // point (1b step 1). Null for off-road POIs → falls back to the pin, today's behavior.
+          speakableLat: pois.speakableLat,
+          speakableLng: pois.speakableLng,
         })
         .from(narrations)
         .innerJoin(pois, eq(pois.id, narrations.poiId))
@@ -202,8 +207,8 @@ async function loadCorpusForRoute(
       revisedAt: r.revisedAt,
       name: r.name,
       kind: r.kind,
-      lat: r.lat,
-      lng: r.lng,
+      lat: r.speakableLat ?? r.lat,
+      lng: r.speakableLng ?? r.lng,
     })
   }
   return map
@@ -710,6 +715,11 @@ async function loadCorpusByPoiIds(poiIds: string[]): Promise<Map<string, Narrati
           kind: pois.kind,
           lat: pois.lat,
           lng: pois.lng,
+          // Road-snapped trigger anchor (snap-speakable-anchors): when present, NarrationRow.lat/lng
+          // carries it instead of the centroid, so a road-adjacent POI places + triggers off the ROAD
+          // point (1b step 1). Null for off-road POIs → falls back to the pin, today's behavior.
+          speakableLat: pois.speakableLat,
+          speakableLng: pois.speakableLng,
         })
         .from(narrations)
         .innerJoin(pois, eq(pois.id, narrations.poiId))
@@ -728,8 +738,8 @@ async function loadCorpusByPoiIds(poiIds: string[]): Promise<Map<string, Narrati
       revisedAt: r.revisedAt,
       name: r.name,
       kind: r.kind,
-      lat: r.lat,
-      lng: r.lng,
+      lat: r.speakableLat ?? r.lat,
+      lng: r.speakableLng ?? r.lng,
     })
   }
   return map
