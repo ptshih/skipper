@@ -3,18 +3,24 @@
 // (docs/specs/road-snapped-anchors-spec.md): a POI whose pin sits off-road (a resort's grounds, a lake
 // centroid) never triggers, or triggers garbage, because the trigger center is the centroid. The
 // speakable slot already has a validator (@skipper/engine `checkSpeakableAnchor`) and an audit
-// (audit-speakable.ts) — this adds the missing automated PRODUCER (today the slot is hand-curated only;
+// (audit-speakable.ts) — this adds the missing automated PRODUCER (the slot is otherwise hand-curated;
 // discover-pois.ts leaves it untouched).
 //
-// For each eligible POI: Google Roads API "Nearest Roads" → the nearest road point → validate it sits
-// within the kind-aware bound (`speakableAnchorMaxM` = 1.5×radiusForKind) of the pin:
-//   • within bound  → write speakable_lat/lng (a road-relative trigger center for 1b steps 1–2).
-//   • too far / no road → DON'T write a bogus anchor; FLAG it — the POI is un-triggerable from any road
-//     (this is dogfood feedback #5, "flag POIs not near a road"). Leave the anchor null.
+// ROADS SOURCE = OpenStreetMap via Overpass (free, keyless). The first cut used Google Roads "Nearest
+// Roads", but its snap threshold is far tighter than our trigger bound: it flagged 233/334 Tahoe POIs
+// "no road" that actually have a drivable road within bound (a casino 81 m from the highway, parks at
+// 60 m…). OSM finds them, costs nothing, and needs no API enablement. We fetch all drivable roads in the
+// region bbox once (tiled), index the segments, and snap every POI locally.
 //
-// Blast radius: SPENDS $ (Roads API) + MUTATES DB — both ONLY on --apply. Conforms to
-// docs/guides/ops-scripts-sop.md (SAFE BY DEFAULT): preview counts the eligible POIs + estimates the
-// Roads cost and makes NO API calls and NO writes; --apply snaps + validates + writes.
+// For each eligible POI: nearest point on the nearest drivable road → validate it sits within the
+// kind-aware bound (`checkSpeakableAnchor`, `speakableAnchorMaxM` = 1.5×radiusForKind) of the pin:
+//   • within bound  → write speakable_lat/lng (a road-relative trigger center for 1b steps 1–2).
+//   • beyond bound  → DON'T write a bogus anchor; FLAG it — un-triggerable from any road (genuine
+//     backcountry, e.g. Desolation Wilderness peaks). This is dogfood feedback #5. Leave the anchor null.
+//
+// Blast radius: MUTATES DB on --apply only — and NO spend (OSM is free), so no founder $ gate. Conforms
+// to docs/guides/ops-scripts-sop.md (SAFE BY DEFAULT): preview fetches + snaps + reports what WOULD be
+// written/flagged but writes nothing; --apply also writes.
 //
 //   preview:  dotenvx run -f .env.development -- bun packages/studio/src/snap-speakable-anchors.ts
 //   apply:    dotenvx run -f .env.development -- bun packages/studio/src/snap-speakable-anchors.ts --apply
@@ -25,145 +31,202 @@
 import { and, eq, isNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { pois } from '@skipper/db/schema'
-import { checkSpeakableAnchor, haversineMeters } from '@skipper/engine'
-import { announce, maxCostFlag, parseFlags } from './pipeline/ops'
+import { checkSpeakableAnchor, speakableAnchorMaxM } from '@skipper/engine'
+import { announce, parseFlags } from './pipeline/ops'
 import { mapLimit } from './pipeline/concurrency'
-import { fetchWithRetry, withRetry } from './pipeline/http'
+import { withRetry } from './pipeline/http'
 import { resolveRegion, requireRegionBbox } from './pipeline/region'
-import { DEFAULT_REGION_SLUG, GOOGLE_READY, requireEnv } from './config'
+import { DEFAULT_REGION_SLUG } from './config'
 
-/** Roads API "Nearest Roads" — up to 100 points/request; ~$10 per 1,000 requests (verify current
- *  Google Maps Platform pricing). Needs the Roads API ENABLED on GOOGLE_MAPS_API_KEY (Routes/Places
- *  enablement alone won't do — same gotcha as Geocoding being off for the first West Shore tour). */
-const NEAREST_ROADS_URL = 'https://roads.googleapis.com/v1/nearestRoads'
-const ROADS_POINTS_PER_REQUEST = 100
-const ROADS_USD_PER_REQUEST = 0.01
+const OVERPASS = 'https://overpass-api.de/api/interpreter'
+const UA = 'Skipper/0.1 (https://github.com/ptshih/skipper; ptshih@gmail.com) road-snap'
+// Through-roads only (no `service` — driveways/parking aisles aren't "the road you drive past a POI on").
+const DRIVABLE =
+  '^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link)$'
+const TILES = 5 // 5×5 grid over the (padded) region bbox — light enough per `out geom` request
+const BBOX_PAD_DEG = 0.03 // ~3 km > the max kind-bound (2250 m), so an edge POI still sees its road
+const GRID_CELL_DEG = 0.02 // ~2.2 km spatial-index cell; a ±2 scan covers ±4.4 km
 
-interface NearestRoadsResponse {
-  snappedPoints?: { location: { latitude: number; longitude: number }; originalIndex?: number }[]
-  error?: { message?: string; status?: string }
-}
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 type PoiRow = { id: string; name: string; kind: string | null; lat: number; lng: number }
+type Seg = [number, number, number, number] // aLat, aLng, bLat, bLng
+type LngLat = [number, number]
 
-/** Snap each POI coord to its nearest road point. Returns a Map<row index → {lat,lng}>; an index with
- *  no road in snap range is OMITTED (Roads drops un-snappable points). When Roads returns several
- *  candidates for one point, keep the one closest to the original centroid. */
-async function snapToNearestRoad(coords: PoiRow[], apiKey: string): Promise<Map<number, { lat: number; lng: number }>> {
-  const out = new Map<number, { lat: number; lng: number }>()
-  for (let base = 0; base < coords.length; base += ROADS_POINTS_PER_REQUEST) {
-    const chunk = coords.slice(base, base + ROADS_POINTS_PER_REQUEST)
-    // Roads wants "lat,lng|lat,lng" (latitude FIRST), opposite our [lng,lat] internal order.
-    const points = chunk.map((c) => `${c.lat},${c.lng}`).join('|')
-    const url = `${NEAREST_ROADS_URL}?points=${encodeURIComponent(points)}&key=${apiKey}`
-    const res = await fetchWithRetry(url, undefined, { timeoutMs: 20_000 })
-    const body = (await res.json()) as NearestRoadsResponse
-    if (!res.ok || body.error) {
-      throw new Error(
-        `Roads API error (${res.status} ${body.error?.status ?? ''}): ${body.error?.message ?? 'unknown'} — ` +
-          `is the Roads API enabled on GOOGLE_MAPS_API_KEY?`,
-      )
-    }
-    for (const sp of body.snappedPoints ?? []) {
-      const i = base + (sp.originalIndex ?? 0)
-      const orig = coords[i]
-      if (!orig) continue
-      const cand = { lat: sp.location.latitude, lng: sp.location.longitude }
-      const prev = out.get(i)
-      // Keep the candidate nearest the original centroid (Roads may return several per point).
-      if (
-        !prev ||
-        haversineMeters([cand.lng, cand.lat], [orig.lng, orig.lat]) <
-          haversineMeters([prev.lng, prev.lat], [orig.lng, orig.lat])
-      ) {
-        out.set(i, cand)
+/** Closest point on a segment to P (+ its distance), via a local equirectangular projection at P. */
+function nearestOnSeg(plat: number, plng: number, s: Seg): { distM: number; lat: number; lng: number } {
+  const kx = Math.cos((plat * Math.PI) / 180) * 111_320
+  const ky = 111_320
+  const ax = (s[1] - plng) * kx,
+    ay = (s[0] - plat) * ky
+  const bx = (s[3] - plng) * kx,
+    by = (s[2] - plat) * ky
+  const dx = bx - ax,
+    dy = by - ay
+  const len2 = dx * dx + dy * dy
+  let t = len2 > 0 ? (-(ax * dx) - ay * dy) / len2 : 0
+  t = Math.max(0, Math.min(1, t))
+  const cx = ax + t * dx,
+    cy = ay + t * dy
+  return { distM: Math.hypot(cx, cy), lat: plat + cy / ky, lng: plng + cx / kx }
+}
+
+/** Fetch drivable-road geometry for one tile, with a CLIENT-side timeout + retry (Overpass throttles). */
+async function fetchTile(s: number, w: number, n: number, e: number): Promise<{ lat: number; lon: number }[][]> {
+  const q = `[out:json][timeout:90];way[highway~"${DRIVABLE}"](${s},${w},${n},${e});out geom;`
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      const res = await fetch(OVERPASS, {
+        method: 'POST',
+        body: 'data=' + encodeURIComponent(q),
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': UA },
+        signal: AbortSignal.timeout(90_000),
+      })
+      if (res.status === 429 || res.status >= 500) {
+        await sleep(3000 * 2 ** attempt)
+        continue
       }
+      if (!res.ok) throw new Error(`Overpass ${res.status}`)
+      const data = (await res.json()) as { elements?: { geometry?: { lat: number; lon: number }[] }[] }
+      return (data.elements ?? []).map((el) => el.geometry ?? []).filter((g) => g.length >= 2)
+    } catch (err) {
+      if (attempt === 3) throw err
+      await sleep(3000 * 2 ** attempt)
     }
   }
-  return out
+  return []
+}
+
+/** A road index: all drivable segments in the bbox + a coarse grid for nearest-segment lookup. */
+class RoadIndex {
+  private readonly segs: Seg[] = []
+  private readonly grid = new Map<string, number[]>()
+  private key = (lat: number, lng: number) => `${Math.floor(lat / GRID_CELL_DEG)}:${Math.floor(lng / GRID_CELL_DEG)}`
+  private bin(lat: number, lng: number, idx: number) {
+    const k = this.key(lat, lng)
+    const b = this.grid.get(k)
+    if (b) b.push(idx)
+    else this.grid.set(k, [idx])
+  }
+  add(ways: { lat: number; lon: number }[][]) {
+    for (const g of ways)
+      for (let i = 0; i < g.length - 1; i++) {
+        const a = g[i]!,
+          b = g[i + 1]!
+        const idx = this.segs.length
+        this.segs.push([a.lat, a.lon, b.lat, b.lon])
+        this.bin(a.lat, a.lon, idx) // bin at both endpoints + midpoint so a long segment is found near its middle
+        this.bin(b.lat, b.lon, idx)
+        this.bin((a.lat + b.lat) / 2, (a.lon + b.lon) / 2, idx)
+      }
+  }
+  get size() {
+    return this.segs.length
+  }
+  /** Nearest road point to P over candidate segments in P's cell ±2; null if no segment indexed nearby. */
+  nearest(plat: number, plng: number): { distM: number; lat: number; lng: number } | null {
+    const ci = Math.floor(plat / GRID_CELL_DEG),
+      cj = Math.floor(plng / GRID_CELL_DEG)
+    const seen = new Set<number>()
+    let best: { distM: number; lat: number; lng: number } | null = null
+    for (let di = -2; di <= 2; di++)
+      for (let dj = -2; dj <= 2; dj++)
+        for (const idx of this.grid.get(`${ci + di}:${cj + dj}`) ?? []) {
+          if (seen.has(idx)) continue
+          seen.add(idx)
+          const p = nearestOnSeg(plat, plng, this.segs[idx]!)
+          if (!best || p.distM < best.distM) best = p
+        }
+    return best
+  }
+}
+
+async function buildRoadIndex(bbox: { swLat: number; swLng: number; neLat: number; neLng: number }): Promise<RoadIndex> {
+  const s0 = bbox.swLat - BBOX_PAD_DEG,
+    n0 = bbox.neLat + BBOX_PAD_DEG
+  const w0 = bbox.swLng - BBOX_PAD_DEG,
+    e0 = bbox.neLng + BBOX_PAD_DEG
+  const dLat = (n0 - s0) / TILES,
+    dLng = (e0 - w0) / TILES
+  const index = new RoadIndex()
+  for (let i = 0; i < TILES; i++)
+    for (let j = 0; j < TILES; j++) {
+      const ways = await fetchTile(s0 + i * dLat, w0 + j * dLng, s0 + (i + 1) * dLat, w0 + (j + 1) * dLng)
+      index.add(ways)
+      console.error(`  tile ${i * TILES + j + 1}/${TILES * TILES}: +${ways.length} ways (${index.size} segments)`)
+    }
+  return index
 }
 
 async function main(): Promise<void> {
-  const flags = parseFlags(process.argv.slice(2), { valueFlags: ['region', 'max-cost'] })
+  const flags = parseFlags(process.argv.slice(2), { valueFlags: ['region'] })
   const apply = flags.has('apply')
   const force = flags.has('force')
-  const maxCostUsd = maxCostFlag(flags)
-  announce({ tool: 'snap-speakable-anchors', blast: ['SPENDS $', 'MUTATES DB'], apply })
+  announce({ tool: 'snap-speakable-anchors', blast: ['MUTATES DB'], apply })
   if (force) console.log('(force: re-snapping POIs that already carry an anchor — OVERWRITES admin corrections)\n')
 
   const region = await resolveRegion(flags.value('region') ?? DEFAULT_REGION_SLUG)
   const bbox = requireRegionBbox(region)
-  console.log(`Region: ${region.displayName} (${region.slug})\n`)
+  console.log(`Region: ${region.displayName} (${region.slug})`)
 
   const conds = [
     sql`${pois.lat} between ${bbox.swLat} and ${bbox.neLat}`,
     sql`${pois.lng} between ${bbox.swLng} and ${bbox.neLng}`,
   ]
-  if (!force) conds.push(isNull(pois.speakableLat)) // lat/lng are written together → checking lat suffices
+  if (!force) conds.push(isNull(pois.speakableLat)) // lat/lng written together → checking lat suffices
   const rows: PoiRow[] = await db
     .select({ id: pois.id, name: pois.name, kind: pois.kind, lat: pois.lat, lng: pois.lng })
     .from(pois)
     .where(and(...conds))
 
   if (rows.length === 0) {
-    console.log('Nothing to snap — every POI in range already has a speakable anchor (use --force to redo).')
+    console.log('\nNothing to snap — every POI in range already has a speakable anchor (use --force to redo).')
     return
   }
+  console.log(`${rows.length} POI(s) to snap.\n\nFetching drivable roads (OSM/Overpass, ${TILES * TILES} tiles)...`)
+  const roads = await buildRoadIndex(bbox)
+  console.log(`\nIndexed ${roads.size} road segments. Snapping...`)
 
-  const requests = Math.ceil(rows.length / ROADS_POINTS_PER_REQUEST)
-  const estUsd = requests * ROADS_USD_PER_REQUEST
-  console.log(`${rows.length} POI(s) to snap → ${requests} Roads request(s) ≈ $${estUsd.toFixed(2)}.\n`)
-
-  if (!apply) {
-    if (!GOOGLE_READY()) console.log('⚠ GOOGLE_MAPS_API_KEY is not set — --apply will need it (preview does not).')
-    console.log(
-      `PREVIEW — no Roads calls, no writes. Re-run with --apply to snap + write (≈ $${estUsd.toFixed(2)} Roads). ` +
-        `Within-bound snaps are written; POIs whose nearest road is too far are FLAGGED, not written.`,
-    )
-    return
+  // Snap every POI locally to its nearest road point, validated through the canonical bound.
+  type Snapped = { row: PoiRow; lat: number; lng: number }
+  const toWrite: Snapped[] = []
+  const flagged: { row: PoiRow; distanceM: number | null; maxM: number }[] = []
+  for (const row of rows) {
+    const pin: LngLat = [row.lng, row.lat]
+    const near = roads.nearest(row.lat, row.lng)
+    if (!near) {
+      flagged.push({ row, distanceM: null, maxM: speakableAnchorMaxM(row.kind) })
+      continue
+    }
+    const check = checkSpeakableAnchor(pin, [near.lng, near.lat], row.kind)
+    if (check.ok) toWrite.push({ row, lat: near.lat, lng: near.lng })
+    else flagged.push({ row, distanceM: check.distanceM, maxM: check.maxM })
   }
 
-  if (estUsd > maxCostUsd) {
-    throw new Error(
-      `⛔ Estimated Roads spend ~$${estUsd.toFixed(2)} exceeds --max-cost=$${maxCostUsd.toFixed(2)} — aborting. Raise --max-cost or narrow --region.`,
-    )
+  const verb = apply ? 'writing' : 'would write'
+  console.log(`\n${toWrite.length} within bound (${verb}); ${flagged.length} flagged off-road (no anchor).`)
+
+  if (apply) {
+    let written = 0
+    await mapLimit(toWrite, 8, async (s) => {
+      await withRetry(
+        () => db.update(pois).set({ speakableLat: s.lat, speakableLng: s.lng }).where(eq(pois.id, s.row.id)),
+        { label: `snap(${s.row.name})` },
+      )
+      written++
+    })
+    console.log(`✓ ${written} anchor(s) written.`)
+  } else {
+    console.log('PREVIEW — no writes. Re-run with --apply to persist.')
   }
 
-  console.log(`Snapping ${rows.length} POI(s) via Roads "Nearest Roads"...`)
-  const apiKey = requireEnv('GOOGLE_MAPS_API_KEY')
-  const snapped = await snapToNearestRoad(rows, apiKey)
-
-  let written = 0
-  const flaggedNoRoad: PoiRow[] = []
-  const flaggedTooFar: { row: PoiRow; distanceM: number; maxM: number }[] = []
-  await mapLimit(rows, 8, async (row, i) => {
-    const snap = snapped.get(i)
-    if (!snap) {
-      flaggedNoRoad.push(row) // Roads found no road near this point at all
-      return
-    }
-    const check = checkSpeakableAnchor([row.lng, row.lat], [snap.lng, snap.lat], row.kind)
-    if (!check.ok) {
-      flaggedTooFar.push({ row, distanceM: check.distanceM, maxM: check.maxM }) // un-triggerable from a road
-      return
-    }
-    await withRetry(
-      () => db.update(pois).set({ speakableLat: snap.lat, speakableLng: snap.lng }).where(eq(pois.id, row.id)),
-      { label: `snap(${row.name})` },
-    )
-    written++
-  })
-
-  console.log(`\nDone: ${written} anchor(s) written.`)
-  const flaggedTotal = flaggedNoRoad.length + flaggedTooFar.length
-  if (flaggedTotal > 0) {
-    console.log(
-      `\n${flaggedTotal} POI(s) FLAGGED as un-triggerable from a road (no anchor written — they need a ` +
-        `hand-set vantage in the admin, or they're genuinely not near any drive):`,
-    )
-    for (const f of flaggedTooFar)
-      console.log(`  too far  ${Math.round(f.distanceM)}m / ${f.maxM}m  ${f.row.name} (${f.row.kind ?? 'place'})`)
-    for (const r of flaggedNoRoad) console.log(`  no road  ${r.name} (${r.kind ?? 'place'})`)
+  if (flagged.length) {
+    console.log(`\n${flagged.length} POI(s) with no drivable road within bound (genuine backcountry — left anchorless):`)
+    for (const f of flagged.slice(0, 20))
+      console.log(
+        `  ${f.distanceM != null ? Math.round(f.distanceM) + 'm' : 'none'} / ${f.maxM}m  ${f.row.name} (${f.row.kind ?? 'place'})`,
+      )
+    if (flagged.length > 20) console.log(`  …and ${flagged.length - 20} more`)
   }
 }
 
