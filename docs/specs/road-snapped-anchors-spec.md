@@ -1,9 +1,12 @@
 # Road-Snapped Speakable Anchors — Build Spec
 
-> **Status (2026-06-25):** build-ready, UNBUILT. Fixes triage cluster **1a** from the 2026-06-25
-> founder dogfood drive (build 11): POIs whose centroid sits far from any drivable road never trigger,
-> or trigger garbage. Paired with [trigger-precision-spec.md](trigger-precision-spec.md) (**1b**), which
-> *consumes* the anchor this spec produces. The actual paid RUN is founder-gated.
+> **Status (2026-06-25):** CLI ✅ BUILT, paid RUN founder-gated. `snap-speakable-anchors.ts` is built +
+> preview-verified (848 Tahoe POIs lack an anchor → ~9 Roads requests ≈ $0.09). Fixes triage cluster
+> **1a** from the 2026-06-25 founder dogfood drive (build 11): POIs whose centroid sits far from any
+> drivable road never trigger, or trigger garbage. Paired with
+> [trigger-precision-spec.md](trigger-precision-spec.md) (**1b**), which *consumes* the anchor this pass
+> produces. The `--apply` run (Roads API + DB writes) awaits a founder go; Roads API must be enabled on
+> the key.
 
 ## Origin
 
@@ -34,10 +37,12 @@ The "where to look" anchor is a **slot with a validator and an audit, but no aut
 So this spec adds **one missing piece — an automated producer — to a slot that already has a consumer,
 a validator, and an audit.**
 
-## The change: a `snap-speakable-anchors` corpus pass
+## The change: a `snap-speakable-anchors` corpus pass — ✅ BUILT 2026-06-25
 
-A new safe-by-default studio CLI, sibling to `audit-speakable.ts`, following the
-[ops-scripts SOP](../guides/ops-scripts-sop.md) (**preview unless `--apply`**):
+A safe-by-default studio CLI (`packages/studio/src/snap-speakable-anchors.ts`), sibling to
+`audit-speakable.ts`, following the [ops-scripts SOP](../guides/ops-scripts-sop.md) (**preview unless
+`--apply`**). Preview makes NO Roads calls and NO writes (so nothing spends until `--apply` + a founder
+go); it counts the eligible POIs and estimates the Roads cost:
 
 ```
 bun packages/studio/src/snap-speakable-anchors.ts            # preview (no writes, no spend report)
