@@ -67,6 +67,11 @@ export interface RoamTriggerOptions {
   /** ...but only for this long — suppression is a WINDOW, not forever (a pin must be able
    *  to fire on a later pass once its own cooldown allows). */
   suppressWindowSec: number
+  /** Once a pin has receded this many metres past its closest approach, treat it as PASSED
+   *  (behind us) and don't start it — the heading gate's blind spot at low speed / unknown
+   *  heading. Roomier than a tour stop's: roam pins are un-snapped centroids, so closest
+   *  approach is farther out and noisier. */
+  recedeMarginM: number
 }
 
 export const DEFAULT_ROAM_TRIGGER: RoamTriggerOptions = {
@@ -82,6 +87,7 @@ export const DEFAULT_ROAM_TRIGGER: RoamTriggerOptions = {
   cooldownSec: 60 * 60 * 4, // 4h: don't re-tell on the drive home (cross-session memory later)
   suppressRadiusM: 300,
   suppressWindowSec: 15 * 60,
+  recedeMarginM: 60,
 }
 
 /** Coarse spatial-grid cell size in degrees (~5.5 km of latitude). A 3×3 neighborhood is a
@@ -101,6 +107,9 @@ export class RoamEngine {
   /** name → tSec it fired — same cooldown as poiId; guards against two DB rows for the
    *  same physical place (different poiIds, identical name) playing back-to-back. */
   private readonly firedNameAt = new Map<string, number>()
+  /** poiId → closest approach distance (m) seen while in range — the passed-point retire clock.
+   *  Tracked every fix (even gate-closed) and deleted when the pin falls out of range (re-arm). */
+  private readonly minDistM = new Map<string, number>()
   /** When the governor next allows an encounter start (tSec). */
   private gateOpenAtSec = 0
   /** Where + when the LAST encounter fired (cluster suppression anchor; window-bounded). */
@@ -152,7 +161,7 @@ export class RoamEngine {
     // coords/speed) must NEVER fire — a NaN distance or NaN effective-radius makes `d > radius` read
     // FALSE and would spuriously fire the nearest pin. Useless for triggering anyway → drop it. (audit #323)
     if (!Number.isFinite(fix.lat) || !Number.isFinite(fix.lng) || !Number.isFinite(fix.speedMps)) return []
-    if (fix.tSec < this.gateOpenAtSec) return [] // governor: a clip is playing / gap not elapsed
+    const gateOpen = fix.tSec >= this.gateOpenAtSec // governor: a clip is playing / gap not elapsed
     const here: [number, number] = [fix.lng, fix.lat]
     let best: { pin: RoamPinRef; d: number } | null = null
     // Spatial prune: only pins in the fix's cell + 8 neighbors can be in range (the 3×3
@@ -160,15 +169,28 @@ export class RoamEngine {
     // per-pin decision, debounce, and nearest-first below are byte-identical; we only shrink
     // the candidate set. (A pin missing coords lives in `ungridded` and is always included.)
     for (const pin of this.candidatesFor(fix.lat, fix.lng)) {
+      const d = haversineMeters(here, [pin.lng, pin.lat])
+      const floor = pin.radiusM ?? this.opts.floorM
+      if (d > effectiveRadiusM(floor, fix.speedMps, this.opts.leadSeconds)) {
+        this.minDistM.delete(pin.poiId) // out of range → forget this approach (re-arm for a later pass)
+        continue
+      }
+      // Track the closest approach on EVERY in-range fix — even while the gate is closed (a clip is
+      // playing) — so a pin we drive PAST mid-clip is retired below instead of narrated late when the
+      // gate reopens.
+      const minSeen = Math.min(this.minDistM.get(pin.poiId) ?? Infinity, d)
+      this.minDistM.set(pin.poiId, minSeen)
+      if (!gateOpen) continue // tracking done; nothing may START while the governor holds the gate
       const fired = this.firedAt.get(pin.poiId)
       if (fired !== undefined && fix.tSec - fired < this.opts.cooldownSec) continue
       if (pin.name) {
         const nameFired = this.firedNameAt.get(pin.name)
         if (nameFired !== undefined && fix.tSec - nameFired < this.opts.cooldownSec) continue
       }
-      const d = haversineMeters(here, [pin.lng, pin.lat])
-      const floor = pin.radiusM ?? this.opts.floorM
-      if (d > effectiveRadiusM(floor, fix.speedMps, this.opts.leadSeconds)) continue
+      // Passed-point retire: once we've clearly RECEDED past this pin's closest approach it's behind
+      // us — don't start it late (the "narrated after I drove past" failure the heading gate misses
+      // when heading is UNKNOWN or we're crawling).
+      if (d > minSeen + this.opts.recedeMarginM) continue
       // Cluster suppression: too close to where the last encounter RECENTLY fired → quiet.
       if (
         this.lastFire &&

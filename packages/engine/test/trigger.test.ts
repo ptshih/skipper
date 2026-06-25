@@ -62,6 +62,28 @@ describe('TriggerEngine', () => {
     expect(e.update(fix(0.0109, 0, MPH60, -1))).toHaveLength(1)
   })
 
+  test('passed-point retire: a stop driven past does not fire late once heading goes unknown', () => {
+    const e = new TriggerEngine([NORTH]) // stop at lat 0.01
+    // Approach from the south but heading SE (135°): the stop is outside the forward cone, so the
+    // heading gate blocks it on the way IN (no entry fire) — the only way a not-yet-fired stop survives
+    // to be passed. minDist still tracks the closest approach.
+    expect(e.update(fix(0.008, 0, MPH60, 135, 0))).toHaveLength(0) // ~222 m out, gated
+    expect(e.update(fix(0.0098, 0, MPH60, 135, 1))).toHaveLength(0) // ~22 m (closest), gated
+    // Now PAST the stop with heading UNKNOWN (-1) → the gate is skipped (proximity-only). Pre-retire
+    // this fired late; the passed-point guard suppresses it (we've receded past closest approach).
+    expect(e.update(fix(0.011, 0, MPH60, -1, 2))).toHaveLength(0) // ~111 m PAST → retired
+    expect(e.firedCount).toBe(0)
+  })
+
+  test('passed-point retire re-arms once the stop falls out of range again', () => {
+    const e = new TriggerEngine([NORTH])
+    e.update(fix(0.0098, 0, MPH60, 135, 0)) // near, gated out
+    e.update(fix(0.011, 0, MPH60, -1, 1)) // past → retired
+    e.update(fix(0.02, 0, MPH60, 0, 2)) // ~1.1 km away → out of range → re-armed
+    // A fresh approach from the south, heading north, now fires normally.
+    expect(e.update(fix(0.008, 0, MPH60, 0, 3))).toHaveLength(1)
+  })
+
   test('speed-adaptive: 300 m ahead fires at 60 mph but not at 20 mph', () => {
     const ahead = fix(0.0073, 0, MPH60, 0) // ~300 m south of the stop, heading north
     expect(new TriggerEngine([NORTH]).update(ahead)).toHaveLength(1) // 300 < 322

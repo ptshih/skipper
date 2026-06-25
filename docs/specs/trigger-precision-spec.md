@@ -1,9 +1,11 @@
 # Trigger Precision — Build Spec
 
-> **Status (2026-06-25):** build-ready, UNBUILT. Fixes triage cluster **1b** from the 2026-06-25 founder
+> **Status (2026-06-25):** PARTIALLY BUILT. Fixes triage cluster **1b** from the 2026-06-25 founder
 > dogfood drive (build 11): clips that fire too early, too far in, or *after you've already passed* the
-> point. Depends on [road-snapped-anchors-spec.md](road-snapped-anchors-spec.md) (**1a**) for steps 1–2;
-> step 3 (passed-point retire) is independent and can ship first. Tuning needs an on-device re-drive.
+> point. **Step 3 (passed-point retire) ✅ BUILT 2026-06-25** — closest-approach tracking + retire in
+> `trigger.ts`/`roam.ts` (+ tests). Steps 1–2 depend on
+> [road-snapped-anchors-spec.md](road-snapped-anchors-spec.md) (**1a**); step 4 is optional. Radius/lead
+> tuning still needs an on-device re-drive.
 
 ## Origin
 
@@ -61,12 +63,15 @@ term at speed. Retune the `geo.ts:33-41` bands + roam `floorM`. **Do not guess f
 conservative starts, verify on an on-device re-drive (this is single-sourced for `/roam` and `/drives`,
 so they stay in lockstep).
 
-### 3. Retire passed points (independent — ship first)
-Add a "not approaching / distance increasing" guard so a point that's now behind you stops being
-eligible **even when live heading is unknown** (`-1`) or below the 5 mph gate — the case the heading cone
-misses, and the likely cause of "fired after passing." Track per-pin closest-approach distance; once
-distance grows past the closest approach by a margin, mark the pin **passed** and retire it. Engine-level,
-in both `TriggerEngine` (`trigger.ts`) and `RoamEngine` (`roam.ts`).
+### 3. Retire passed points (independent) — ✅ BUILT 2026-06-25
+A "not approaching / distance increasing" guard so a point that's now behind you stops being eligible
+**even when live heading is unknown** (`-1`) or below the 5 mph gate — the case the heading cone misses,
+and the likely cause of "fired after passing." Both `TriggerEngine` and `RoamEngine` now track per-point
+closest-approach distance (`minDistM`) and skip firing once distance grows past it by `recedeMarginM`
+(40 m drives / 60 m roam, an option), re-arming when the point leaves range (out-and-back). **Roam fix:**
+the min-gap governor used to `return []` early while a clip played; tracking moved inside the loop so a
+point passed *during* a clip is retired, not narrated late when the gate reopens. Covered by tests in
+`packages/engine/test/{trigger,roam}.test.ts`.
 
 ### 4. Use the stored approach heading for drives *(optional)*
 `approachHeadingDeg` is already computed and persisted in `drives.selection` + the manifest

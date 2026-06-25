@@ -106,6 +106,37 @@ describe('RoamEngine — governors', () => {
   })
 })
 
+describe('RoamEngine — passed-point retire', () => {
+  test('a pin driven PAST while a clip plays is not narrated late when the gate reopens', () => {
+    // The headline "fired after I drove past it" failure: a pin you approach + pass DURING another
+    // clip can't START while the gate is held, then fires the moment the gate reopens — by which
+    // point it's behind you. Closest approach is tracked even gate-closed, so it's retired instead.
+    const first = pin('first', 0.001, 0) // fires at t=0; holds the gate (60s clip + 75s gap → t=135)
+    const later = pin('later', 0.01, 0) // approached + passed while 'first' plays
+    const e = new RoamEngine([first, later])
+    expect(e.update(fix(0.0005, 0, MPH60, 0, 0))).toHaveLength(1) // 'first' fires; gate closed to t=135
+    expect(e.update(fix(0.0098, 0, MPH60, 0, 10))).toHaveLength(0) // ~22 m from 'later' (closest), gate closed
+    // Gate reopens, but we're now ~333 m PAST 'later' → retired, not narrated late.
+    expect(e.update(fix(0.013, 0, MPH60, -1, 140))).toHaveLength(0)
+    expect(e.firedCount).toBe(1) // only 'first' ever fired
+  })
+
+  test('control: the same pin fires on a clean fresh approach (the guard is what suppresses it)', () => {
+    const later = pin('later', 0.01, 0)
+    const e = new RoamEngine([later], { minGapSec: 0 })
+    expect(e.update(fix(0.0085, 0, MPH60, 0, 0))).toHaveLength(1) // ~167 m ahead, heading north → fires
+  })
+
+  test('re-arms after the pin falls out of range (a later genuine re-approach still fires)', () => {
+    const e = new RoamEngine([NORTH], { minGapSec: 0 })
+    e.update(fix(0.0112, 0, MPH60, 0, 0)) // pin behind, heading away → gated out (no fire), tracked
+    e.update(fix(0.013, 0, MPH60, -1, 5)) // receded past → retired
+    e.update(fix(0.05, 0, MPH60, 0, 10)) // ~4.4 km away → out of range → re-armed
+    // Fresh approach from the south, heading north → fires (never fired before, so no cooldown).
+    expect(e.update(fix(0.0085, 0, MPH60, 0, 15))).toHaveLength(1)
+  })
+})
+
 describe('RoamEngine — spatial-grid bucketing equivalence', () => {
   // A brute-force engine that scans EVERY pin on every fix (the pre-grid behavior), built by
   // forcing a single cell so candidatesFor returns all pins. We can't reach the private grid, so

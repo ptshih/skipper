@@ -14,6 +14,11 @@
 //      so the gate is skipped — and likewise when the heading is UNKNOWN (negative:
 //      the iOS course -1 sentinel). Both are the same policy: no trustworthy heading
 //      → proximity only.
+//   2b. PASSED-POINT RETIRE. The heading gate goes dark below ~5 mph and when heading
+//      is UNKNOWN — exactly the gaps where a stop you've already driven PAST can still
+//      sit inside the radius and fire late ("narrated after I drove past it"). So also
+//      track each stop's closest approach and, once it has clearly RECEDED, stop it
+//      firing; re-arm only when it's well out of range again (a later there-and-back).
 //   3. DEBOUNCE. Each stop fires at most once per drive.
 //
 // Stateful: feed it fixes in order via update(); it returns any stops that fired on
@@ -66,6 +71,10 @@ export interface TriggerOptions {
   headingGateMps: number
   /** A stop only counts as "ahead" when its bearing is within this half-angle of heading. */
   headingConeDeg: number
+  /** Once a stop has receded this many metres past its closest approach, treat it as PASSED
+   *  (behind us) and stop it firing — covers the heading gate's blind spot (crawling / unknown
+   *  heading). Stops are route-snapped, so closest approach is ~on the road and this can be tight. */
+  recedeMarginM: number
 }
 
 // ~5 mph = 2.235 m/s; lead of 12 s ≈ 322 m at 60 mph, 161 m at 30 mph; a 90° cone is
@@ -74,6 +83,7 @@ export const DEFAULT_TRIGGER: TriggerOptions = {
   leadSeconds: 12,
   headingGateMps: 2.2,
   headingConeDeg: 90,
+  recedeMarginM: 40,
 }
 
 /** The effective trigger distance for a stop at a given speed (m). */
@@ -83,6 +93,9 @@ export function effectiveRadiusM(triggerRadiusM: number, speedMps: number, leadS
 
 export class TriggerEngine {
   private readonly fired = new Set<number>()
+  /** stop seq → closest approach distance (m) seen while in range — the passed-point retire clock.
+   *  Deleted when the stop falls out of range, so a later re-approach re-arms it. */
+  private readonly minDistM = new Map<number, number>()
   private readonly opts: TriggerOptions
 
   constructor(
@@ -108,7 +121,16 @@ export class TriggerEngine {
     for (const stop of this.stops) {
       if (this.fired.has(stop.seq)) continue
       const d = haversineMeters(here, [stop.lng, stop.lat])
-      if (d > effectiveRadiusM(stop.triggerRadiusM, fix.speedMps, this.opts.leadSeconds)) continue
+      if (d > effectiveRadiusM(stop.triggerRadiusM, fix.speedMps, this.opts.leadSeconds)) {
+        this.minDistM.delete(stop.seq) // out of range → forget this approach (re-arm for a later pass)
+        continue
+      }
+      // Passed-point retire: track the closest approach, and once we've clearly RECEDED past it the
+      // stop is BEHIND us — don't fire it late. Covers the heading gate's blind spot (it's skipped
+      // when crawling or when heading is UNKNOWN), the likely cause of "narrated after I drove past".
+      const minSeen = Math.min(this.minDistM.get(stop.seq) ?? Infinity, d)
+      this.minDistM.set(stop.seq, minSeen)
+      if (d > minSeen + this.opts.recedeMarginM) continue
       // Heading gate — only at meaningful speed AND with a KNOWN heading. iOS reports
       // course -1 when invalid; gating on the sentinel would read it as due-north and
       // silence every other direction (roam's first-live-drive zero-fire, ported here).
