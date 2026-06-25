@@ -44,6 +44,42 @@ export interface RoamMapProps {
 const HAS_GOOGLE_KEY = !!process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
 const PROVIDER = Platform.OS === 'android' || HAS_GOOGLE_KEY ? PROVIDER_GOOGLE : undefined
 
+// Marker culling (TestFlight 2026-06-25 #3/#4: "roam map is really laggy" / "loading way too many
+// POI markers really far away — lazy-load by proximity"). A region's manifest is a few hundred pins
+// scattered across the whole basin; drawing one <Marker> each chokes react-native-maps AND clutters
+// the view with pins miles away. So we DRAW only the pins inside the visible viewport, capped to the
+// nearest N to the viewport center. ⚠ This thins ONLY what the map RENDERS — the full pin set still
+// feeds the trigger engine (useRoam's pinsRef); culling here can never miss a narration.
+const MAX_MARKERS = 48
+/** Render pins a little past the viewport edges so a pan reveals neighbours already placed,
+ *  not popping in after onRegionChangeComplete settles. */
+const VIEWPORT_MARGIN = 1.25
+
+/** Cull the field to what the map should draw: pins inside the visible region (+ a margin),
+ *  capped to MAX_MARKERS nearest the viewport center. Longitude is cos(lat)-scaled so "nearest"
+ *  is geographic, not raw-degree (Tahoe ~39°N). Pure + cheap (O(pins)); the full set is unchanged. */
+function cullPins(pins: RoamMapPin[], region: Region | undefined): RoamMapPin[] {
+  if (pins.length <= MAX_MARKERS) return pins // small field — no point culling
+  if (!region) return pins.slice(0, MAX_MARKERS) // pre-first-region: a bounded slice, never the lag
+  const latHalf = (region.latitudeDelta / 2) * VIEWPORT_MARGIN
+  const lngHalf = (region.longitudeDelta / 2) * VIEWPORT_MARGIN
+  const cosLat = Math.cos((region.latitude * Math.PI) / 180)
+  const within: { pin: RoamMapPin; d2: number }[] = []
+  for (const p of pins) {
+    const dLat = p.lat - region.latitude
+    const dLng = p.lng - region.longitude
+    if (Math.abs(dLat) > latHalf || Math.abs(dLng) > lngHalf) continue
+    const dx = dLng * cosLat
+    within.push({ pin: p, d2: dLat * dLat + dx * dx })
+  }
+  if (within.length <= MAX_MARKERS) return within.map((w) => w.pin)
+  // Whole basin in view (zoomed out): everything passes the viewport test, so the cap is what
+  // saves us — keep the MAX_MARKERS nearest the center the rider is looking at.
+  within.sort((a, b) => a.d2 - b.d2)
+  within.length = MAX_MARKERS
+  return within.map((w) => w.pin)
+}
+
 // memo: RoamScreen re-renders on its 2s diagnostics tick; with a movement-guarded `position` + stable
 // pins, this skips re-rendering the map subtree when nothing the map shows changed. (audit #603)
 function RoamMapBase({ position, pins, heardPoiIds, clipActive, recenterBottom }: RoamMapProps) {
@@ -51,6 +87,10 @@ function RoamMapBase({ position, pins, heardPoiIds, clipActive, recenterBottom }
   const reducedMotion = useReducedMotion()
   const mapRef = useRef<MapView | null>(null)
   const [following, setFollowing] = useState(true)
+  // The currently visible viewport — drives marker culling. Seeded with the framing region so the
+  // very first paint is already culled (the whole field passes the viewport test → cap kicks in),
+  // then updated by onRegionChangeComplete on every follow-glide, pan, and zoom.
+  const [region, setRegion] = useState<Region | undefined>(undefined)
 
   // First paint frames the whole field of nearby pins (+ the rider) — "here's what's around".
   const initialRegion = useMemo<Region | undefined>(() => {
@@ -96,6 +136,10 @@ function RoamMapBase({ position, pins, heardPoiIds, clipActive, recenterBottom }
     }
   }
 
+  // Only the pins the map should actually DRAW — viewport-clipped + proximity-capped (see cullPins).
+  // Falls back to the framing region until the first onRegionChangeComplete lands.
+  const drawnPins = useMemo(() => cullPins(pins, region ?? initialRegion), [pins, region, initialRegion])
+
   const pinColor = clipActive ? colors.trackInactive : colors.trackActive // pine; dimmed under the sheet
 
   return (
@@ -118,10 +162,13 @@ function RoamMapBase({ position, pins, heardPoiIds, clipActive, recenterBottom }
         rotateEnabled={false}
         pitchEnabled={false}
         onPanDrag={() => following && setFollowing(false)}
+        // The visible viewport changed (follow-glide / pan / zoom) → re-cull the drawn markers.
+        onRegionChangeComplete={setRegion}
       >
         {/* Story-pins — hollow ("a story here, not yet heard"); heard ones fill in solid once
-            encounter history lands (pass-2). */}
-        {pins.map((p) => {
+            encounter history lands (pass-2). Drawn from the culled set (drawnPins), not the full
+            field, so react-native-maps never paints hundreds of far-away markers (the lag fix). */}
+        {drawnPins.map((p) => {
           const heard = heardPoiIds?.has(p.poiId) ?? false
           return (
             <Marker
