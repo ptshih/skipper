@@ -45,6 +45,8 @@ key/
 .design-review/
 # Playwright MCP output (screenshots / traces dumped during verification)
 .playwright-mcp/
+# TestFlight feedback dumps (tester PII — screenshots + comments; `bun run tf:feedback`)
+testflight-feedback/
 
 # Claude Code: local agent runtime state (locks, worktrees) stays ignored,
 # but the SHARED project settings (hooks — the docs lint) are committed.
