@@ -71,6 +71,7 @@ export function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loadin
     if (flags === 'staged' && (p.narrationStatus === 'none' || p.released)) return false
     if (flags === 'sheet-drift' && !p.sheetDrift) return false
     if (flags === 'speakable-drift' && !p.speakableDrift) return false
+    if (flags === 'off-road' && !p.offRoad) return false
     if (q) {
       const s = `${p.name} ${p.sourceId}`.toLowerCase()
       if (!s.includes(q.toLowerCase())) return false
@@ -146,7 +147,7 @@ export function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loadin
     'story-eligible': 'Story: eligible', 'story-filtered': 'Story: filtered out', enriched: 'Enriched',
     'needs-enrich': 'Eligible · un-enriched', narrated: 'Has narration', 'narration-stale': 'Narration: stale', staged: 'Narration: staged',
     'sheet-drift': 'Story: sheet drifted', 'speakable-drift': 'Speakable: drifted', defect: 'Narration defects',
-    stale: 'Stale facts', unattrib: 'Unattributed',
+    stale: 'Stale facts', unattrib: 'Unattributed', 'off-road': 'Off-road (no road anchor)',
   }
   const scopeChips: { label: string; value: string }[] = []
   if (region !== 'all') scopeChips.push({ label: 'Region', value: regions.find((r) => r.slug === region)?.name ?? region })
@@ -164,6 +165,9 @@ export function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loadin
     defects: pois.filter((p) => p.suspiciousDuration).length,
     // The combined remediation queue (the folded-in "Retire" tab) — anything needing attention.
     flagged: pois.filter((p) => p.staleFacts || p.suspiciousDuration || (!p.attributed && p.narrationCount > 0) || p.speakableDrift).length,
+    // Off-road = no road anchor in a snapped region (won't trigger). Its OWN stat, NOT in `flagged`:
+    // backcountry isn't a fixable defect, it's a "know these won't fire" awareness count.
+    offRoad: pois.filter((p) => p.offRoad).length,
   }
 
   // The 8-col corpus table. `colSpan`/skeleton cols derive from the column count (DataTable); the select
@@ -248,6 +252,14 @@ export function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loadin
                 speakable drift
               </Badge>
             )}
+            {p.offRoad && (
+              <Badge
+                variant="outline"
+                title="No road-snapped anchor — the nearest drivable road is beyond the kind-aware bound, so this POI triggers off its raw centroid or never. Genuine backcountry; decide whether to keep it in the corpus."
+              >
+                off-road
+              </Badge>
+            )}
             {p.narrationStatus !== 'none' && (
               <Badge variant={NARRATION_META[p.narrationStatus].variant} title={NARRATION_META[p.narrationStatus].hint}>
                 {NARRATION_META[p.narrationStatus].label}
@@ -317,6 +329,11 @@ export function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loadin
             <Badge variant="warning" className="cursor-pointer">{totals.flagged} need attention</Badge>
           </button>
         )}
+        {totals.offRoad > 0 && (
+          <button onClick={() => applyQuickFilter('off-road')} title="No road-snapped anchor in a snapped region — these fire off their centroid or not at all. Genuine backcountry (peaks, wilderness); review whether to keep them in the corpus.">
+            <Badge variant="outline" className="cursor-pointer">{totals.offRoad} off-road</Badge>
+          </button>
+        )}
         <span className="ml-auto text-sm text-muted-foreground">{filtered.length} of {pois.length}</span>
       </div>
 
@@ -356,6 +373,7 @@ export function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loadin
             <SelectItem value="staged">Narration: staged (unreleased)</SelectItem>
             <SelectItem value="sheet-drift">Story: sheet drifted</SelectItem>
             <SelectItem value="speakable-drift">Speakable: drifted</SelectItem>
+            <SelectItem value="off-road">Off-road: no road anchor</SelectItem>
             <SelectItem value="defect">Narration defects</SelectItem>
             <SelectItem value="stale">Stale facts</SelectItem>
             <SelectItem value="unattrib">Unattributed</SelectItem>

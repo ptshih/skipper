@@ -1043,6 +1043,20 @@ app.get('/admin/pois', async (c) => {
   const regionForPoi = (lat: number, lng: number) =>
     regionBoxes.find((b) => lat >= b.swLat && lat <= b.neLat && lng >= b.swLng && lng <= b.neLng) ?? null
 
+  // Off-road flag (dogfood 2026-06-25 #5/#7 "flag POIs not near a road — they won't trigger"): a POI with
+  // NO road-snapped speakable anchor triggers on its raw centroid, so an off-road pin fires garbage or never.
+  // But a null anchor is AMBIGUOUS — it's either genuine backcountry (the snap found no drivable road within
+  // bound, leaving it null on purpose — snap-speakable-anchors.ts) OR a region the snap simply hasn't run over
+  // yet. We disambiguate with NO new column + NO re-run: a region whose snap has run carries anchored POIs, so
+  // "anchorless WHERE its region also has anchors" = the snap examined this pin and found no road. Un-snapped
+  // regions (zero anchors) flag nothing — we don't know yet. Self-corrects the moment a new region is snapped.
+  const snappedRegions = new Set<string>()
+  for (const p of poisRows) {
+    if (p.speakableLat == null) continue
+    const r = regionForPoi(p.lat, p.lng)
+    if (r) snappedRegions.add(r.slug)
+  }
+
   const result = poisRows.map((p) => {
     const clip = clipMap.get(p.id)
     const region = regionForPoi(p.lat, p.lng)
@@ -1081,6 +1095,8 @@ app.get('/admin/pois', async (c) => {
       enriched: p.enriched,
       sheetDrift: p.sheetDrift,
       speakableDrift,
+      // Anchorless AND its region has been snapped (carries anchors) ⇒ off-road / won't trigger (see snappedRegions).
+      offRoad: p.speakableLat == null && region != null && snappedRegions.has(region.slug),
       narrationStatus,
       suspiciousDuration: clip?.suspiciousDuration ?? false,
       // Stale = the narration grounded on a now-changed facts_hash. narrationStatus already encodes this;

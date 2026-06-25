@@ -135,6 +135,11 @@ export interface PoiRow {
    *  kind-aware bound) — likely a typo/hallucination; re-verify + reset it in the Corrections tab.
    *  False when no anchor is set. */
   speakableDrift: boolean
+  /** No road-snapped speakable anchor in a region that HAS been snapped (it carries other anchored POIs) —
+   *  the snap found no drivable road within bound, so this POI is off-road: it triggers off its raw centroid
+   *  or never (dogfood 2026-06-25 #5/#7). Distinct from a POI in a region the snap hasn't run over yet — those
+   *  don't flag. Not a fixable defect (you can't move a peak to a road); it's a "know these won't trigger" signal. */
+  offRoad: boolean
   narrationStatus: NarrationStatus
   staleFacts: boolean
   attributed: boolean
