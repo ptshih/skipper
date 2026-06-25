@@ -108,6 +108,15 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   the 1:1 `pois`↔`narrations` atom, no `roam_clips` table.)
 
 ### specs/
+- [road-snapped-anchors-spec.md](specs/road-snapped-anchors-spec.md) — **1a** of the 2026-06-25 dogfood
+  triage: a safe-by-default `snap-speakable-anchors` pass auto-populates `pois.speakable_lat/lng` from the
+  nearest drivable road (Google Roads API), flagging POIs no road can reach; un-snappable centroids never
+  trigger. Build-ready, unbuilt; paired with the trigger-precision spec below.
+- [trigger-precision-spec.md](specs/trigger-precision-spec.md) — **1b** of the same triage: the trigger
+  primitives (speed-adaptive lead, heading gate, debounce) already exist in `@skipper/engine`, but both
+  engines fire on the raw centroid `pois.lat/lng` — so the fix is consume the 1a anchor as the trigger
+  center, shrink the inflated `radiusForKind` floors, and retire passed points (the "fired after passing"
+  bug). Build-ready, unbuilt; needs an on-device re-drive to tune.
 - [places-endpoints-spec.md](specs/places-endpoints-spec.md) — a per-region CURATED set of Google
   Places feeds the drive's start/end/midpoint picker (and break/pitstops); reuses the `places` table,
   zero runtime Google cost; build-ready, unbuilt, spike-validated; supersedes the interim

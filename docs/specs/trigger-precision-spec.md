@@ -1,0 +1,100 @@
+# Trigger Precision — Build Spec
+
+> **Status (2026-06-25):** build-ready, UNBUILT. Fixes triage cluster **1b** from the 2026-06-25 founder
+> dogfood drive (build 11): clips that fire too early, too far in, or *after you've already passed* the
+> point. Depends on [road-snapped-anchors-spec.md](road-snapped-anchors-spec.md) (**1a**) for steps 1–2;
+> step 3 (passed-point retire) is independent and can ship first. Tuning needs an on-device re-drive.
+
+## Origin
+
+Same dogfood drive, the timing complaints:
+- *"Triggered after already driving past"* (Zephyr Cove) — fired **late**; you hear about a place once
+  it's behind you. The worst failure mode.
+- *"Triggered a bit too far in 50"* (Van Sickle, on Hwy 50) — fired deep into the point.
+- *"Harrah's trigger really far on CA side"* — fired **too early**, from far away / the wrong approach.
+
+## What already exists (the primitives are built — the defect is upstream of them)
+
+The CLAUDE.md "in-car landmines" are largely **implemented** in `@skipper/engine` (there is no
+`drive-core`; the trigger core is `packages/engine/src/`):
+
+- **Speed-adaptive lead, not a fixed geofence:** `effectiveRadiusM(triggerRadiusM, speedMps, leadSeconds)
+  = max(triggerRadiusM, speedMps·leadSeconds)` ([`trigger.ts:80-82`](../../packages/engine/src/trigger.ts)).
+  `triggerRadiusM` is a **floor**. Drive `leadSeconds:12`, roam `leadSeconds:15`.
+- **Heading gate:** drive `headingConeDeg:90` ([`trigger.ts:116-119`](../../packages/engine/src/trigger.ts)),
+  roam `headingConeDeg:120` ([`roam.ts:184-187`](../../packages/engine/src/roam.ts)); both gated above
+  `~2.2 m/s` (≈5 mph) and **skipped when heading is unknown** (the iOS `-1` course sentinel).
+- **Debounce / already-fired:** drive `fired:Set` (`trigger.ts:85`); roam cooldowns — per-POI `firedAt`
+  (4 h), per-name `firedNameAt`, `minGapSec:75`, and cluster suppression (`roam.ts:155-204`).
+
+**The actual root cause is that the trigger center is the raw centroid `pois.lat/lng`** — the speakable
+anchor is **never used by the trigger**:
+- `/roam` selects `pois.lat/lng` and sets `radiusM: radiusForKind(kind)`
+  ([`apps/api/src/index.ts:142-176`](../../apps/api/src/index.ts)).
+- `/drives` candidates select `pois.lat/lng/kind` ([`apps/api/src/drives.ts:178-220`](../../apps/api/src/drives.ts)).
+- `speakable_lat/lng` is consumed **only** by `sideOfApproach` for side-of-road *content*
+  ([`packages/engine/src/geo.ts:169-174`](../../packages/engine/src/geo.ts)) — it never reaches
+  `TriggerEngine`/`RoamEngine`.
+
+Because the center is an un-snapped centroid, `radiusForKind` is deliberately **inflated to reach the
+road**: roam `floorM:600`; kinds up to **1500 m** (mountain/peak), 1200 m (lake/point/bay)
+([`geo.ts:33-41`](../../packages/engine/src/geo.ts)). `roam.ts` says as much — pins are un-snapped, "8/77
+within 250 m of the road" silenced the basin, so the floor is roomy. **A big radius fires early and
+imprecisely** (Harrah's), and an offset centroid means the radius+cone can still be satisfied *after* you
+pass the real point (Zephyr Cove).
+
+## The fix (in order of leverage)
+
+### 1. Trigger on the road-snapped anchor, not the centroid  *(needs 1a)*
+Coalesce `speakable_lat/lng ?? lat/lng` as the trigger center where pins are built:
+- `/roam` pin build ([`index.ts:170-179`](../../apps/api/src/index.ts)).
+- `/drives` `candidateOf` ([`drives.ts:212-220`](../../apps/api/src/drives.ts)).
+
+One change each. This is **the dominant lever** — every downstream number gets honest once the center is
+on the road. (Drives additionally re-snap stops to the route via `snapStopsToRoute`/`nearestOnRoute`,
+`trigger.ts:157-163` — feeding the road-snapped anchor makes that snap start from a sane point.)
+
+### 2. Shrink `radiusForKind` now that centers are road-relative
+The floor existed to bridge centroid→road. With the center **on** the road, the floor should drop toward
+a true trigger distance (tens–low-hundreds of m), letting the **speed-adaptive lead** be the dominant
+term at speed. Retune the `geo.ts:33-41` bands + roam `floorM`. **Do not guess final values** — pick
+conservative starts, verify on an on-device re-drive (this is single-sourced for `/roam` and `/drives`,
+so they stay in lockstep).
+
+### 3. Retire passed points (independent — ship first)
+Add a "not approaching / distance increasing" guard so a point that's now behind you stops being
+eligible **even when live heading is unknown** (`-1`) or below the 5 mph gate — the case the heading cone
+misses, and the likely cause of "fired after passing." Track per-pin closest-approach distance; once
+distance grows past the closest approach by a margin, mark the pin **passed** and retire it. Engine-level,
+in both `TriggerEngine` (`trigger.ts`) and `RoamEngine` (`roam.ts`).
+
+### 4. Use the stored approach heading for drives *(optional)*
+`approachHeadingDeg` is already computed and persisted in `drives.selection` + the manifest
+([`drive-select.ts:46-52`](../../packages/engine/src/drive-select.ts), `drives.ts:235-238`) but the live
+`TriggerEngine` **ignores it** (uses live `fix.headingDeg`, `trigger.ts:116-117`). For drives, fall back
+to "am I heading roughly along the stored approach bearing?" when live heading is noisy/unknown. (Roam
+has no route → relies on live heading + step 3.)
+
+### 5. Background-GPS pause *(flag only — out of scope)*
+`apps/mobile/src/lib/gps.ts:345-349` notes the foreground `watchPositionAsync` can't set
+`pausesUpdatesAutomatically` → iOS may pause GPS at a long stop/overlook, exactly when a stop should fire.
+Only escalate to background updates if the on-device re-drive shows pausing; tracked, not built here.
+
+## Sequencing
+
+- **Step 3** ships independently (no 1a dependency) and addresses the most damaging "fired after passing."
+- **Steps 1–2** ship after [1a](road-snapped-anchors-spec.md) populates anchors; they're a few-line
+  consume + a retune.
+- **Step 4** is a drive-only robustness add. **Step 5** is conditional on device evidence.
+
+## Validation
+
+Numbers (radii, lead seconds, retire margin) are **not** desk-tunable — they need a Tahoe re-drive on a
+dev build, the same loop that produced this feedback. Verify against the exact POIs that failed
+(Edgewood, Harrah's, Van Sickle, Zephyr Cove) before calling it done.
+
+## Touchpoints
+
+- `packages/engine/src/geo.ts` (`radiusForKind`), `trigger.ts` + `roam.ts` (passed-point retire,
+  optional stored-heading gate), `apps/api/src/index.ts` + `drives.ts` (coalesce anchor as center).
+- No schema change required (steps 1–4 reuse existing columns).
