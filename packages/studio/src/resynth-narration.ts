@@ -19,7 +19,7 @@
 //   ... --include-ids a,b,c --apply              re-synthesize the batch (resilient: a failure skips + continues)
 //   ... --include-ids <...> --apply --max-cost N  hard spend ceiling (skips the rest once crossed)
 
-import { eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray, isNotNull } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { narrations, pois } from '@skipper/db/schema'
 import type { DeliveryRegister } from '@skipper/shared'
@@ -41,9 +41,18 @@ const parseIds = (v: string | undefined): string[] => (v ? v.split(',').map((s) 
 const includeIds = parseIds(flags.value('include-ids'))
 // Back-compat: a bare positional poiId still works (the single-clip path); --include-ids is the batch.
 const poiIds = includeIds.length > 0 ? includeIds : flags.positionals[0] ? [flags.positionals[0]] : []
+// --all re-masters the WHOLE live corpus (every narration with a script + audio) — the master-change path.
+// Uses a full-table query, NOT a 460-id IN clause (a neon-http request can't carry that many parameters).
+const all = flags.has('all')
 
-if (poiIds.length === 0) {
-  console.error('Usage: resynth-narration.ts <poiId> [--apply]   OR   --include-ids a,b,c [--apply] [--max-cost N]')
+if (!all && poiIds.length === 0) {
+  console.error('Usage: resynth-narration.ts <poiId> [--apply]   OR   --include-ids a,b,c [--apply]   OR   --all [--apply --yes] [--max-cost N]')
+  process.exit(1)
+}
+// The whole-corpus fan-out is the most destructive combo (re-masters EVERY clip, ~$18, MUTATES DB + R2),
+// so a live --all run takes a second confirmation beyond --apply (ops-scripts-sop.md). Preview (no --apply) is free.
+if (all && apply && !flags.has('yes')) {
+  console.error('⛔ --all --apply re-masters the ENTIRE live corpus (~$18, MUTATES DB + R2). Re-run with --yes to confirm.')
   process.exit(1)
 }
 
@@ -80,6 +89,28 @@ async function loadTargets(ids: string[]): Promise<Target[]> {
         .innerJoin(pois, eq(narrations.poiId, pois.id))
         .where(inArray(narrations.poiId, ids)),
     { label: 'load narrations' },
+  )
+}
+
+/** Load EVERY live narration (script + audio present) — the --all full-corpus path. A single full-table
+ *  query, NOT a giant inArray (a neon-http request can't carry a 460-parameter IN clause). */
+async function loadAllTargets(): Promise<Target[]> {
+  return withRetry(
+    () =>
+      db
+        .select({
+          poiId: narrations.poiId,
+          narrationId: narrations.id,
+          audioUrl: narrations.audioUrl,
+          audioDurationMs: narrations.audioDurationMs,
+          script: narrations.script,
+          poiName: pois.name,
+          register: pois.deliveryRegister,
+        })
+        .from(narrations)
+        .innerJoin(pois, eq(narrations.poiId, pois.id))
+        .where(and(isNotNull(narrations.script), isNotNull(narrations.audioUrl))),
+    { label: 'load all narrations' },
   )
 }
 
@@ -121,7 +152,7 @@ async function resynthOne(t: Target, tag: string): Promise<void> {
 }
 
 async function main(): Promise<FinishOutcome> {
-  const targets = await loadTargets(poiIds)
+  const targets = all ? await loadAllTargets() : await loadTargets(poiIds)
   const found = new Set(targets.map((t) => t.poiId))
   const missing = poiIds.filter((id) => !found.has(id))
   if (missing.length > 0)
