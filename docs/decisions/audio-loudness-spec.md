@@ -144,11 +144,22 @@ tail-collapse retake + the 4 s last-words probe (`tts.ts`/`tail.ts`).
   spoken-word band. `ACTIVE_MASTER_TARGET_LUFS` −14.8 → −15.6. (Aside: 3 of 10 tail-collapsed — Red Dog /
   Galaxy / Mount Rose Summit — the structural deadpan coda, NOT a master defect; flagged for the ear-pass.)
 
+- **2026-06-26 — full-corpus resynth DONE.** Ran `resynth-narration.ts --all --apply` over the whole live
+  corpus (459/460, ~$18.26; the new `--all` flag — a full-table load, not a 460-id IN clause neon-http can't
+  carry). Audit: **median −15.7** (p5/p95 −16.5/−15.1), confirming `ACTIVE_MASTER_TARGET_LUFS` −15.6. A small
+  cleanup resynth fixed the genuine defects: 1 transient TTS-400 failure + **3 clips that overshot to
+  +0.4…+1.9 dBTP** (the peaky distribution tail; fresh takes landed ≤ −1.3) + 1 take that **rambled to 196 s**
+  (→ 81 s). Corpus is now consistent on PROD-natural.
+
 ## Open
 
-- **Full-corpus resynth on PROD-natural** — the 10-clip batch is validated (peaks safe, median −15.6); the
-  full **460 (~$18)** is the remaining paid step. Then `audit-loudness.ts` the distribution + re-confirm
-  `ACTIVE_MASTER_TARGET_LUFS` (−15.6) + the ±1.2 band against the full spread.
+- **Tail-collapse (41 clips, ~9%) — the deadpan/somber endings.** The TTS style prompt CANNOT fix it (tested
+  2026-06-26: a sharper anti-fade tweak left Galaxy/Red Dog still collapsed at 7–18 dB — the model reads the
+  closing CONTENT's somber/wry tone as low volume, and no delivery instruction overrides it). The only lever
+  is the NARRATION prompt's ending style (firmer closing beats) — a charm trade, tonally wrong for somber
+  stops, so a separate project. Mostly intended; the per-clip ear-pass splits a swallowed line from a dry button.
+- **Pipeline gap: no duration-sanity check.** A take that rambles to ~2× length ships unflagged (best-of-3
+  retakes only on tail-collapse). Consider flagging/retaking takes beyond ~1.5× the expected duration.
 - **On-device A/B vs Spotify** of the PROD-natural voice + bed on the real drive.
 - **Tail-collapse residual (16 clips)** survives best-of-3 — STRUCTURAL (a fresh take re-collapses at the
   same level), mostly the Skipper's signature deadpan button, not a defect. The synth-time retake now
