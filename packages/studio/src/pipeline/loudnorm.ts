@@ -24,10 +24,10 @@
 //   6. loudnorm I=−14       EBU R128 normalize; its own 100 ms look-ahead / 192 kHz true-peak limiter is
 //                           the FINAL peak guard, so no separate alimiter is needed for safety.
 //
-// LANDS ~−14.9 LUFS / ~−1.3 dBTP at 64k AAC — squarely in the −14…−16 spoken-word window (AES TD1008,
-// Apple −16). We do NOT force exactly −14: that needs heavy limiting (the squash the research warns
-// against), and speech reads ~2–3 dB louder than music at equal LUFS, so −14.9 over the −14 music bed
-// still keeps the Skipper on top. SINGLE-PASS loudnorm — two-pass linear can't reach target on this
+// LANDS ~−15.6 LUFS (median, 10-clip validation) / max −1.2 dBTP at 64k AAC — in the −14…−16 spoken-word
+// window (AES TD1008, Apple −16). We do NOT force a hotter target: that needs heavy limiting (the squash
+// the research warns against), and speech reads ~2–3 dB louder than music at equal LUFS, so −15.6 over the
+// −14 music bed still keeps the Skipper on top. SINGLE-PASS loudnorm — two-pass linear can't reach target on this
 // peak-bound source (it caps gain at the TP ceiling and undershoots), and a stateful filter before a
 // two-pass measure/apply once shipped a clipping clip (2026-06-19→20, reverted).
 //
@@ -46,8 +46,12 @@ import { LOUDNORM_RANGE_LU } from '../models'
  *  peak-bound TTS source (see header); the QA meter judges the LANDING, not this asked-for value. */
 const LOUDNORM_TARGET_LUFS = -14
 /** loudnorm PRE-ENCODE true-peak ceiling (dBTP) — headroom for 64k-AAC inter-sample overshoot so the
- *  DECODED clip clears the −1 dBTP delivery ceiling (PROD-natural measured −1.3 dBTP decoded). */
-const PRE_ENCODE_TP = -2.0
+ *  DECODED clip clears the −1 dBTP delivery ceiling. Deepened −2.0 → −3.0 after the 10-clip validation:
+ *  64k AAC overshoots up to ~+1.4 dB on PEAKY register-varied (town/landscape) takes, so −2.0 left two of
+ *  ten clips hot (−0.6/−0.9 dBTP, over the −1.0 ceiling). At −3.0 even the worst overshoot lands ~−1.6.
+ *  The gentle (no brick-wall limiter) chain trades ~0.6 LU of loudness for this headroom (sub-JND); a
+ *  louder target would need the squash. AES TD1008: drop the ceiling below −1 as bitrate falls. */
+const PRE_ENCODE_TP = -3.0
 /** Output AAC bitrate. iOS AVPlayer (expo-audio) plays AAC-LC; 64k is the compression-spike pick. */
 const AAC_BITRATE = '64k'
 
@@ -60,9 +64,10 @@ const COMPRESS = 'acompressor=threshold=-22dB:ratio=4:attack=8:release=140' // g
 
 /** The integrated loudness a HEALTHY clip is expected to MEASURE at (LUFS) — exported so read-only QA
  *  tooling (audit-loudness.ts) + the post-encode meter judge against the same number. This is the chain's
- *  LANDING (~−14.9, see header), NOT the asked-for LOUDNORM_TARGET_LUFS; provisional from the PROD-natural
- *  validation, re-confirm against the first full resynth's audit-loudness distribution. */
-export const ACTIVE_MASTER_TARGET_LUFS = -14.8
+ *  LANDING, NOT the asked-for LOUDNORM_TARGET_LUFS. Set from the 10-clip validation at the −3.0 ceiling:
+ *  median −15.6, p5/p95 −16.5/−15.0 (the deep AAC headroom costs ~0.7 LU vs the −2.0 trial). Re-confirm
+ *  against the full resynth's audit-loudness distribution. */
+export const ACTIVE_MASTER_TARGET_LUFS = -15.6
 
 /** Output sample rate — pinned to the TTS native 24 kHz (loudnorm runs at 192 kHz internally,
  *  so without this the muxed file would inherit 192 kHz). */

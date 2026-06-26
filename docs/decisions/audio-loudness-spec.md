@@ -3,8 +3,8 @@
 **Status:** LOCKED 2026-06-25 (founder): the narration master is **PROD-natural**, a researched spoken-word
 chain that REPLACED the old single heavy `alimiter`. Order: **corrective EQ (high-pass 90 + 300 Hz mud cut)
 → light denoise (`afftdn nr=6`) → noise gate → gentle compression (4:1) → single-pass loudnorm I=−14**. It
-LANDS **~−14.9 LUFS / ~−1.3 dBTP** at 64k AAC — in the −14…−16 spoken-word window (AES TD1008 / Apple −16);
-we do NOT force exactly −14 (that needs the squash). Shared with the **−14** music bed (`AUDIO_LOUDNESS` in
+LANDS **~−15.6 LUFS (median) / max −1.2 dBTP** at 64k AAC (10-clip validation) — in the −14…−16 spoken-word
+window (AES TD1008 / Apple −16); we do NOT force a hotter target (that needs the squash). Shared with the **−14** music bed (`AUDIO_LOUDNESS` in
 `@skipper/shared`): **11 LU range**, EBU R128, −1.0 dBTP delivery ceiling. The old `normal14`/`loud13` limiter
 presets are RETIRED (history below). Chain lives in `loudnorm.ts` `masteringChain()`; tune + regen — see §1.
 
@@ -19,11 +19,12 @@ The narration chain (`loudnorm.ts` `masteringChain()`, in order) + the music bed
 | 3. Denoise | `afftdn=nr=6` | LIGHT — nr=12 smeared ("underwater"); de-bass uncovers the TTS hiss |
 | 4. Gate | `agate=threshold=0.004:…:range=0.003` | silence the lead-in/gaps ("static at the start") |
 | 5. Compress | `acompressor=threshold=-22dB:ratio=4:…` | gentle density, NOT a brute-limit squash |
-| 6. Loudnorm | `loudnorm=I=-14:TP=-2.0:LRA=11` | EBU R128; its internal TP limiter is the final peak guard |
+| 6. Loudnorm | `loudnorm=I=-14:TP=-3.0:LRA=11` | EBU R128; its internal TP limiter is the final peak guard |
 
-Asks loudnorm for −14, **lands ~−14.9 LUFS / ~−1.3 dBTP decoded** (gentle compression doesn't crush crest
-enough to reach exactly −14 on the peak-bound source — and that's correct per the research). 64k AAC. The
-QA meter judges against the **landing** (`ACTIVE_MASTER_TARGET_LUFS = −14.8`, ±1.2 LU), not the asked-for −14.
+Asks loudnorm for −14, **lands ~−15.6 LUFS median / max −1.2 dBTP decoded** (gentle compression doesn't crush
+crest enough to reach −14 on the peak-bound source — and that's correct per the research). 64k AAC, **TP=−3.0**
+pre-encode for the peaky-take AAC overshoot (see History 2026-06-26). The QA meter judges against the
+**landing** (`ACTIVE_MASTER_TARGET_LUFS = −15.6`, ±1.2 LU), not the asked-for −14.
 Music bed target lives in `AUDIO_LOUDNESS`; the voice chain + landing in `loudnorm.ts`.
 
 ## Where it applies
@@ -50,7 +51,7 @@ after a clip. Verify on the on-device A/B (Open).
 The target used to be **asserted by construction and never read back** — the −14.7…−15.5 undershoot spread
 and the +1.4/+2.4 dBTP overshoot were both found BY HAND. `verifyMasteredLoudness` (`loudnorm.ts`) now
 re-decodes every shipped `.m4a` with `ffmpeg ebur128=peak=true` and checks the measured integrated loudness
-(within ±1.2 LU of the **landing** `ACTIVE_MASTER_TARGET_LUFS` = −14.8, not the asked-for −14) + the
+(within ±1.2 LU of the **landing** `ACTIVE_MASTER_TARGET_LUFS` = −15.6, not the asked-for −14) + the
 **decoded-AAC true peak** (the inter-sample overshoot the
 pre-encode PCM ceiling is blind to) against the −1.0 dBTP delivery ceiling. **ADVISORY (mark-and-flag):** an
 off-spec clip fails its `tts` eval row for the human-review pass (`applyLoudnessOutcomes`) but is **never
@@ -133,10 +134,21 @@ tail-collapse retake + the 4 s last-words probe (`tts.ts`/`tail.ts`).
   `test-mastering-chain.ts` edge-case harness (7 cases, all green). **Validated on ONE clip (Red Dog Saloon);
   the full-corpus resynth is the next paid step — audit-loudness the result + re-confirm the −14.8 landing.**
 
+- **2026-06-26 — pre-encode TP −2.0 → −3.0 after the 10-clip validation; landing −14.8 → −15.6.** A 10-clip
+  batch (duration-spread; registers town/landscape/civic/story) through the REAL resynth path exposed the
+  historical peaky-clip overshoot the single Red Dog test missed: at TP=−2.0, 64k AAC overshot to
+  **−0.6/−0.9 dBTP on the town/landscape takes** (Climate Center, Barnard) — over the −1.0 ceiling. Deepened
+  the pre-encode ceiling −2.0 → −3.0 (the gentle no-limiter chain has no brick-wall, so headroom is the only
+  lever; a louder target would need the squash). Re-validated: **max −1.2 dBTP, 0 over ceiling, 0 clipping** —
+  fixed. Cost: loudness median **−15.6** (p5/p95 −16.5/−15.0), ~0.7 LU under the −2.0 trial — sub-JND, still
+  spoken-word band. `ACTIVE_MASTER_TARGET_LUFS` −14.8 → −15.6. (Aside: 3 of 10 tail-collapsed — Red Dog /
+  Galaxy / Mount Rose Summit — the structural deadpan coda, NOT a master defect; flagged for the ear-pass.)
+
 ## Open
 
-- **Full-corpus resynth on PROD-natural** (the paid step) — then `audit-loudness.ts` the distribution and
-  re-confirm `ACTIVE_MASTER_TARGET_LUFS` (−14.8) + the ±1.2 band against the real spread (currently from one clip).
+- **Full-corpus resynth on PROD-natural** — the 10-clip batch is validated (peaks safe, median −15.6); the
+  full **460 (~$18)** is the remaining paid step. Then `audit-loudness.ts` the distribution + re-confirm
+  `ACTIVE_MASTER_TARGET_LUFS` (−15.6) + the ±1.2 band against the full spread.
 - **On-device A/B vs Spotify** of the PROD-natural voice + bed on the real drive.
 - **Tail-collapse residual (16 clips)** survives best-of-3 — STRUCTURAL (a fresh take re-collapses at the
   same level), mostly the Skipper's signature deadpan button, not a defect. The synth-time retake now

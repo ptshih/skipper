@@ -25,10 +25,10 @@ describe('masteringChain — EQ → denoise → gate → compress → single-pas
     expect(c).toContain('agate')
   })
 
-  test('loudnorm asks for −14 with a −2 dBTP PRE-ENCODE ceiling (64k-AAC overshoot headroom)', () => {
+  test('loudnorm asks for −14 with a −3 dBTP PRE-ENCODE ceiling (64k-AAC overshoot headroom)', () => {
     const c = masteringChain()
     expect(c).toContain('I=-14')
-    expect(c).toContain('TP=-2') // decoded lands ~−1.3 dBTP after AAC overshoot, under the −1 ceiling
+    expect(c).toContain('TP=-3') // deepened −2→−3: peaky takes overshoot ~+1.4 dB; decoded max ~−1.2, under −1
   })
 
   test('SINGLE-PASS — no two-pass measured_* / linear handoff (the clip bug it replaced)', () => {
@@ -72,24 +72,24 @@ describe('parseEbur128Summary — the real ffmpeg ebur128 Summary block', () => 
   })
 })
 
-describe('judgeMasteredLoudness — verdict vs the −14.8 landing (±1.2) + the −1 dBTP ceiling', () => {
-  test('a healthy clip at the ~−14.9 landing (peak ~−1.3) passes both checks', () => {
-    const v = judgeMasteredLoudness({ integratedLufs: -14.9, truePeakDb: -1.3 })
+describe('judgeMasteredLoudness — verdict vs the −15.6 landing (±1.2) + the −1 dBTP ceiling', () => {
+  test('a healthy clip at the ~−15.6 landing (peak ~−1.3) passes both checks', () => {
+    const v = judgeMasteredLoudness({ integratedLufs: -15.6, truePeakDb: -1.3 })
     expect(v.loudnessOk).toBe(true)
     expect(v.truePeakOk).toBe(true)
   })
 
-  test('flags an integrated undershoot past the −16.0 floor (a clip that failed to normalize)', () => {
-    expect(judgeMasteredLoudness({ integratedLufs: -16.1, truePeakDb: -1.7 }).loudnessOk).toBe(false)
+  test('flags an integrated undershoot past the −16.8 floor (a collapsed/failed-to-normalize clip)', () => {
+    expect(judgeMasteredLoudness({ integratedLufs: -16.9, truePeakDb: -1.7 }).loudnessOk).toBe(false)
   })
 
-  test('flags too-loud past the −13.6 ceiling as well', () => {
-    expect(judgeMasteredLoudness({ integratedLufs: -13.5, truePeakDb: -1.7 }).loudnessOk).toBe(false)
+  test('flags too-loud past the −14.4 ceiling as well', () => {
+    expect(judgeMasteredLoudness({ integratedLufs: -14.3, truePeakDb: -1.7 }).loudnessOk).toBe(false)
   })
 
-  test('passes clips comfortably inside the ±1.2 band around the −14.8 landing', () => {
-    expect(judgeMasteredLoudness({ integratedLufs: -15.9, truePeakDb: -1.7 }).loudnessOk).toBe(true)
-    expect(judgeMasteredLoudness({ integratedLufs: -13.7, truePeakDb: -1.7 }).loudnessOk).toBe(true)
+  test('passes clips comfortably inside the ±1.2 band around the −15.6 landing', () => {
+    expect(judgeMasteredLoudness({ integratedLufs: -16.7, truePeakDb: -1.7 }).loudnessOk).toBe(true)
+    expect(judgeMasteredLoudness({ integratedLufs: -14.5, truePeakDb: -1.7 }).loudnessOk).toBe(true)
   })
 
   test('flags a true peak above the −1.0 dBTP delivery ceiling (AAC overshoot / clipping)', () => {
