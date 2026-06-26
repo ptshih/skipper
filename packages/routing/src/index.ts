@@ -86,6 +86,10 @@ async function computeRoute(waypoints: readonly Waypoint[], apiKey: string) {
       'X-Goog-FieldMask': 'routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline',
     },
     body: JSON.stringify(body),
+    // Bun applies no default fetch timeout, so a hung upstream would pin a Cloud Run slot until the
+    // coarse ~300s platform deadline — on the UNRATED, credit-spending POST /drives path. Bound it; the
+    // AbortError surfaces as a throw, which materializeRoute's callers already map to a 422 no_route.
+    signal: AbortSignal.timeout(8000),
   })
   const json = (await res.json()) as {
     error?: { code: number; status: string; message: string }

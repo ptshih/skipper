@@ -143,6 +143,54 @@ interface NarrationRow {
   lng: number
 }
 
+/** The shared corpus projection + poi join. BOTH loaders (route-bbox and explicit-poiId) select these
+ *  exact columns, so the NarrationRow shape lives in ONE place and can't drift between the two read
+ *  paths. A fresh builder per call (the appended single-use `.where()` differs by path). */
+const narrationCorpusSelect = () =>
+  db
+    .select({
+      narrationId: narrations.id,
+      poiId: narrations.poiId,
+      form: narrations.form,
+      key: narrations.audioUrl,
+      durationMs: narrations.audioDurationMs,
+      attribution: narrations.attribution,
+      revisedAt: narrations.updatedAt,
+      name: pois.name,
+      kind: pois.kind,
+      lat: pois.lat,
+      lng: pois.lng,
+      // Road-snapped trigger anchor (snap-speakable-anchors): when present, NarrationRow.lat/lng carries
+      // it instead of the centroid, so a road-adjacent POI places + triggers off the ROAD point (1b
+      // step 1). Null for off-road POIs → falls back to the pin, today's behavior.
+      speakableLat: pois.speakableLat,
+      speakableLng: pois.speakableLng,
+    })
+    .from(narrations)
+    .innerJoin(pois, eq(pois.id, narrations.poiId))
+
+/** Map corpus rows to NarrationRow by poiId (the buildDrive ⇄ narration join key), preferring the
+ *  road-snapped anchor over the centroid. Shared by both loaders. */
+function rowsToCorpus(rows: Awaited<ReturnType<typeof narrationCorpusSelect>>): Map<string, NarrationRow> {
+  const map = new Map<string, NarrationRow>()
+  for (const r of rows) {
+    map.set(r.poiId, {
+      narrationId: r.narrationId,
+      poiId: r.poiId,
+      form: r.form,
+      key: r.key,
+      durationMs: r.durationMs,
+      attribution: (r.attribution ?? undefined) as DriveClip['attribution'],
+      revisedAt: r.revisedAt,
+      name: r.name,
+      kind: r.kind,
+      lat: r.speakableLat ?? r.lat,
+      lng: r.speakableLng ?? r.lng,
+    })
+  }
+  return map
+}
+
 /** Load every roam narration whose POI falls within the route's bounding box (padded by the off-route
  *  ceiling) — the candidate set buildDrive snaps + paces. A few hundred rows per region, so a bbox
  *  prefilter beats PostGIS. Keyed by poiId (the buildDrive ⇄ narration join).
@@ -165,53 +213,16 @@ async function loadCorpusForRoute(
 
   const rows = await withRetry(
     () =>
-      db
-        .select({
-          narrationId: narrations.id,
-          poiId: narrations.poiId,
-          form: narrations.form,
-          key: narrations.audioUrl,
-          durationMs: narrations.audioDurationMs,
-          attribution: narrations.attribution,
-          revisedAt: narrations.updatedAt,
-          name: pois.name,
-          kind: pois.kind,
-          lat: pois.lat,
-          lng: pois.lng,
-          // Road-snapped trigger anchor (snap-speakable-anchors): when present, NarrationRow.lat/lng
-          // carries it instead of the centroid, so a road-adjacent POI places + triggers off the ROAD
-          // point (1b step 1). Null for off-road POIs → falls back to the pin, today's behavior.
-          speakableLat: pois.speakableLat,
-          speakableLng: pois.speakableLng,
-        })
-        .from(narrations)
-        .innerJoin(pois, eq(pois.id, narrations.poiId))
-        .where(
-          and(
-            between(pois.lat, minLat - padLat, maxLat + padLat),
-            between(pois.lng, minLng - padLng, maxLng + padLng),
-            includeStaged ? undefined : isNotNull(narrations.releasedAt),
-          ),
+      narrationCorpusSelect().where(
+        and(
+          between(pois.lat, minLat - padLat, maxLat + padLat),
+          between(pois.lng, minLng - padLng, maxLng + padLng),
+          includeStaged ? undefined : isNotNull(narrations.releasedAt),
         ),
+      ),
     { label: 'drive.corpus' },
   )
-  const map = new Map<string, NarrationRow>()
-  for (const r of rows) {
-    map.set(r.poiId, {
-      narrationId: r.narrationId,
-      poiId: r.poiId,
-      form: r.form,
-      key: r.key,
-      durationMs: r.durationMs,
-      attribution: (r.attribution ?? undefined) as DriveClip['attribution'],
-      revisedAt: r.revisedAt,
-      name: r.name,
-      kind: r.kind,
-      lat: r.speakableLat ?? r.lat,
-      lng: r.speakableLng ?? r.lng,
-    })
-  }
-  return map
+  return rowsToCorpus(rows)
 }
 
 const candidateOf = (r: NarrationRow): DriveCandidate => ({
@@ -357,14 +368,24 @@ driveRoutes.post('/', async (c) => {
   // `drive:<id>` consume key (in the co-committed batch below) and no-op — exactly-once create + charge.
   const id = idempotencyKey ?? crypto.randomUUID()
 
-  // Idempotent replay: if that drive already exists for this user, return it WITHOUT re-running Routes,
-  // re-charging, or hitting the credit gate. Without this, a lost-ACK retry on the user's LAST credit
-  // would 403 (`drive_limit_reached`) even though the original request already committed their drive.
-  // Falls through to a normal create when nothing exists yet (first attempt, or a prior attempt that
-  // died before the co-committed insert).
+  // `drives.id` is a GLOBAL primary key and the id IS the client's idempotencyKey, so ONE by-id lookup
+  // disambiguates three cases before any spend:
+  //   • exists & ours & live  → idempotent replay: return the saved manifest WITHOUT re-running Routes,
+  //     re-charging, or hitting the credit gate. (Else a lost-ACK retry on the user's LAST credit would
+  //     403 `drive_limit_reached` though their drive already committed.)
+  //   • exists but NOT ours   → 409 conflict: a create would spend a Routes call and then no-op both
+  //     batch inserts (PK + consume-key conflicts), handing this caller a 200 for a drive they can
+  //     never load. Reject before spending. (Narrow: needs guessing another user's v4 UUID.)
+  //   • absent | ours+deleted → fall through to a normal create (a soft-deleted id re-creates; the
+  //     original charge already stood — delete never refunds).
   if (idempotencyKey) {
-    const existing = await loadOwnedDriveById(userId, id)
-    if (existing) {
+    const existing = (
+      await withRetry(() => db.select().from(drives).where(eq(drives.id, id)).limit(1), { label: 'drive.idLookup' })
+    )[0]
+    if (existing && existing.userId !== userId) {
+      return c.json({ error: 'conflict', message: 'That drive id is already in use. Use a fresh idempotency key.' }, 409)
+    }
+    if (existing && !existing.deletedAt) {
       try {
         return c.json(await manifestForStoredDrive(existing))
       } catch (e) {
@@ -503,17 +524,18 @@ driveRoutes.post('/', async (c) => {
 
   // Demand instrumentation (route-concentration signal; the cache-warming job that consumes it is
   // deferred). distinctUsers is a rough lower bound — exact per-user dedup isn't worth a join here.
-  await withRetry(
-    () =>
-      db
-        .insert(driveDemand)
-        .values({ routeSig, hits: 1, distinctUsers: 1, lastHitAt: new Date() })
-        .onConflictDoUpdate({
-          target: driveDemand.routeSig,
-          set: { hits: sql`${driveDemand.hits} + 1`, lastHitAt: new Date() },
-        }),
-    { label: 'drive.demand' },
-  ).catch((e) => console.error('[api] drive demand bump failed (non-fatal)', e))
+  // FIRE-AND-FORGET + intentionally NOT withRetry-wrapped: the `hits + 1` upsert is the one
+  // non-idempotent write on this path, so a commit-then-lost-response retry would double-count; and as
+  // deferred instrumentation it must never add a DB round-trip (or retry backoff) to the rider's create
+  // latency. Best-effort — a failure is logged and swallowed.
+  void db
+    .insert(driveDemand)
+    .values({ routeSig, hits: 1, distinctUsers: 1, lastHitAt: new Date() })
+    .onConflictDoUpdate({
+      target: driveDemand.routeSig,
+      set: { hits: sql`${driveDemand.hits} + 1`, lastHitAt: new Date() },
+    })
+    .catch((e) => console.error('[api] drive demand bump failed (non-fatal)', e))
 
   const manifest: DriveManifest = {
     driveId: id,
@@ -701,46 +723,8 @@ driveRoutes.delete('/:id', async (c) => {
 /** Load narration corpus rows by an explicit poiId set (the GET-replay path — no route bbox). */
 async function loadCorpusByPoiIds(poiIds: string[]): Promise<Map<string, NarrationRow>> {
   const rows = await withRetry(
-    () =>
-      db
-        .select({
-          narrationId: narrations.id,
-          poiId: narrations.poiId,
-          form: narrations.form,
-          key: narrations.audioUrl,
-          durationMs: narrations.audioDurationMs,
-          attribution: narrations.attribution,
-          revisedAt: narrations.updatedAt,
-          name: pois.name,
-          kind: pois.kind,
-          lat: pois.lat,
-          lng: pois.lng,
-          // Road-snapped trigger anchor (snap-speakable-anchors): when present, NarrationRow.lat/lng
-          // carries it instead of the centroid, so a road-adjacent POI places + triggers off the ROAD
-          // point (1b step 1). Null for off-road POIs → falls back to the pin, today's behavior.
-          speakableLat: pois.speakableLat,
-          speakableLng: pois.speakableLng,
-        })
-        .from(narrations)
-        .innerJoin(pois, eq(pois.id, narrations.poiId))
-        .where(inArray(narrations.poiId, poiIds)),
+    () => narrationCorpusSelect().where(inArray(narrations.poiId, poiIds)),
     { label: 'drive.corpusByIds' },
   )
-  const map = new Map<string, NarrationRow>()
-  for (const r of rows) {
-    map.set(r.poiId, {
-      narrationId: r.narrationId,
-      poiId: r.poiId,
-      form: r.form,
-      key: r.key,
-      durationMs: r.durationMs,
-      attribution: (r.attribution ?? undefined) as DriveClip['attribution'],
-      revisedAt: r.revisedAt,
-      name: r.name,
-      kind: r.kind,
-      lat: r.speakableLat ?? r.lat,
-      lng: r.speakableLng ?? r.lng,
-    })
-  }
-  return map
+  return rowsToCorpus(rows)
 }

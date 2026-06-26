@@ -21,7 +21,7 @@ import { Hono } from 'hono'
 import { and, asc, between, eq, isNotNull } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { narrations, pois, regions } from '@skipper/db/schema'
-import { radiusForKind } from '@skipper/engine'
+import { haversineMeters, radiusForKind } from '@skipper/engine'
 import { auth } from './auth'
 import { driveRoutes } from './drives'
 import { isAdmin, withSession, type ApiEnv } from './entitlements'
@@ -47,9 +47,6 @@ app.onError((err, c) => {
   console.error('[api] unhandled error', err)
   return c.json({ error: 'internal' }, 500)
 })
-
-// uuid columns reject non-UUID input with a DB error (500); validate ids up front.
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 // Health check — used by infra / local smoke tests.
 app.get('/health', (c) => c.json({ ok: true }))
@@ -91,18 +88,6 @@ app.use('/drives/propose', rateLimit({ limit: 15, windowSec: 60, label: 'propose
 // whole sub-app is behind a free account (anonymous = roam only) — see ./drives.
 app.route('/drives', driveRoutes)
 
-// Straight-line distance (m) — the same haversine as @skipper/engine's; inlined here
-// because the API's only geo need is this one filter (keep the dep graph flat).
-function haversineMeters(aLat: number, aLng: number, bLat: number, bLng: number): number {
-  const R = 6_371_000
-  const dLat = ((bLat - aLat) * Math.PI) / 180
-  const dLng = ((bLng - aLng) * Math.PI) / 180
-  const s =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((aLat * Math.PI) / 180) * Math.cos((bLat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2
-  return 2 * R * Math.asin(Math.sqrt(s))
-}
-
 // FREE-ROAM manifest: every roam-narratable place near a point, with presigned clip URLs
 // (shared schema: roamManifest). Roam is a MODE over the SHARED narration layer (V2): a roam
 // encounter is a poi's 1:1 `narration` — audio_url is NOT NULL, so everything returned is
@@ -116,11 +101,15 @@ app.use('/roam', rateLimit({ limit: 60, windowSec: 60, label: 'roam' }), withSes
 app.get('/roam', async (c) => {
   const lat = Number(c.req.query('lat'))
   const lng = Number(c.req.query('lng'))
-  // Default generously (a basin is ~40 km across); cap so "near a point" stays honest.
-  const radiusKm = Math.min(Number(c.req.query('radiusKm') ?? 50), 100)
-  if (!Number.isFinite(lat) || !Number.isFinite(lng) || !Number.isFinite(radiusKm)) {
-    return c.json({ error: 'bad_request', message: 'lat and lng are required numbers.' }, 400)
+  // lat/lng must be real WGS84 coordinates (parity with /drives' endpoint validation); NaN fails too.
+  if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lng) || lng < -180 || lng > 180) {
+    return c.json({ error: 'bad_request', message: 'lat (−90..90) and lng (−180..180) are required numbers.' }, 400)
   }
+  // Default generously (a basin is ~40 km across); cap at 100 so "near a point" stays honest. A
+  // non-positive or non-finite radius — incl. `radiusKm=` (Number('') === 0) and a negative that would
+  // INVERT the between() bounds into a silently-empty 200 — falls back to the 50 km default.
+  const rawRadiusKm = Number(c.req.query('radiusKm') ?? 50)
+  const radiusKm = Math.min(Number.isFinite(rawRadiusKm) && rawRadiusKm > 0 ? rawRadiusKm : 50, 100)
 
   // Bound the query to a lat/lng box (a cheap pois_lat_lng_idx prefilter) so we don't scan
   // every roam narration globally; the exact haversine pass below still trims the box's corners.
@@ -161,14 +150,10 @@ app.get('/roam', async (c) => {
     { label: 'roam.pins' },
   )
 
-  // A narration only goes live with script + audio filled, but audioUrl is nullable through
-  // generation — drop any keyless row so a half-baked roam narration never surfaces a bad pin.
-  const near = rows.filter(
-    (r): r is typeof r & { key: string; durationMs: number } =>
-      r.key != null &&
-      r.durationMs != null &&
-      haversineMeters(lat, lng, r.lat, r.lng) <= radiusKm * 1000,
-  )
+  // audioUrl/audioDurationMs are NOT NULL at the DB boundary (a narration goes live only once it has
+  // audio — schema.ts), so every joined row is already playable; the only trim left is the exact-radius
+  // pass (the bbox prefilter above still includes the box's corners). [lng, lat] axis order per @skipper/engine.
+  const near = rows.filter((r) => haversineMeters([lng, lat], [r.lng, r.lat]) <= radiusKm * 1000)
 
   try {
     return c.json({
