@@ -1,28 +1,34 @@
 import { describe, expect, test } from 'bun:test'
 import { judgeMasteredLoudness, masteringChain, parseEbur128Summary } from '../src/pipeline/loudnorm'
 
-// The mastering chain is a true-peak LIMITER (which makes the headroom) followed by a SINGLE-PASS
-// dynamic loudnorm (which hits −14). These guard the shape that matters — the limiter must come
-// FIRST, and there must be no two-pass measured_* handoff (the stateful-filter-before-two-pass bug
-// that shipped a clipping clip, 2026-06-19→20, then was reverted).
-describe('masteringChain — limiter → single-pass loudnorm to the spec', () => {
-  test('the true-peak limiter precedes loudnorm (headroom must be made before the gain)', () => {
+// The PROD-natural voice-master is the researched spoken-word order: corrective EQ → light denoise →
+// gate → gentle compression → single-pass loudnorm. These guard the shape that matters — the stages in
+// order, loudnorm LAST, the OLD heavy alimiter gone, and no two-pass measured_* handoff (the stateful-
+// filter-before-two-pass bug that shipped a clipping clip, 2026-06-19→20, then was reverted).
+describe('masteringChain — EQ → denoise → gate → compress → single-pass loudnorm', () => {
+  test('the stages appear in the researched order, loudnorm last', () => {
     const c = masteringChain()
-    expect(c).toContain('alimiter')
-    expect(c).toContain('loudnorm')
-    expect(c.indexOf('alimiter')).toBeLessThan(c.indexOf('loudnorm'))
+    const order = ['highpass', 'equalizer', 'afftdn', 'agate', 'acompressor', 'loudnorm']
+    const idx = order.map((f) => c.indexOf(f))
+    expect(idx.every((i) => i >= 0)).toBe(true) // every stage present
+    expect(idx).toEqual([...idx].sort((a, b) => a - b)) // strictly increasing = in order
   })
 
-  test('the limiter pushes gain into a brick-wall ceiling (that is what makes it louder)', () => {
-    const c = masteringChain()
-    expect(c).toMatch(/alimiter=level_in=\d/) // input gain into the limiter
-    expect(c).toMatch(/limit=0?\.\d/) // a true-peak ceiling below 0 dBFS
+  test('the old single heavy alimiter is gone (replaced by gentle compression)', () => {
+    expect(masteringChain()).not.toContain('alimiter')
   })
 
-  test('the ACTIVE master targets −14 with a −3 dBTP PRE-ENCODE ceiling (re-tuned for true-peak headroom)', () => {
+  test('de-bass = sub-bass high-pass + a 300 Hz mud cut; the noise gate cleans the lead-in', () => {
+    const c = masteringChain()
+    expect(c).toContain('highpass=f=90')
+    expect(c).toMatch(/equalizer=f=300:[^,]*g=-3/) // a CUT (negative gain), not a boost
+    expect(c).toContain('agate')
+  })
+
+  test('loudnorm asks for −14 with a −2 dBTP PRE-ENCODE ceiling (64k-AAC overshoot headroom)', () => {
     const c = masteringChain()
     expect(c).toContain('I=-14')
-    expect(c).toContain('TP=-3') // deepened −2 → −3 after the full-corpus resynth showed −2/48k ran hot
+    expect(c).toContain('TP=-2') // decoded lands ~−1.3 dBTP after AAC overshoot, under the −1 ceiling
   })
 
   test('SINGLE-PASS — no two-pass measured_* / linear handoff (the clip bug it replaced)', () => {
@@ -66,24 +72,24 @@ describe('parseEbur128Summary — the real ffmpeg ebur128 Summary block', () => 
   })
 })
 
-describe('judgeMasteredLoudness — verdict vs the active −14 target + the −1 dBTP ceiling', () => {
-  test('a healthy −14 clip (lands ~−14.1…−14.5, peak ~−1.7) passes both checks', () => {
-    const v = judgeMasteredLoudness({ integratedLufs: -14.3, truePeakDb: -1.7 })
+describe('judgeMasteredLoudness — verdict vs the −14.8 landing (±1.2) + the −1 dBTP ceiling', () => {
+  test('a healthy clip at the ~−14.9 landing (peak ~−1.3) passes both checks', () => {
+    const v = judgeMasteredLoudness({ integratedLufs: -14.9, truePeakDb: -1.3 })
     expect(v.loudnessOk).toBe(true)
     expect(v.truePeakOk).toBe(true)
   })
 
-  test('flags an integrated undershoot past ±1 LU (the −14.7…−15.5 spread)', () => {
-    expect(judgeMasteredLoudness({ integratedLufs: -15.6, truePeakDb: -1.7 }).loudnessOk).toBe(false)
+  test('flags an integrated undershoot past the −16.0 floor (a clip that failed to normalize)', () => {
+    expect(judgeMasteredLoudness({ integratedLufs: -16.1, truePeakDb: -1.7 }).loudnessOk).toBe(false)
   })
 
-  test('flags too-loud past ±1 LU as well', () => {
-    expect(judgeMasteredLoudness({ integratedLufs: -12.9, truePeakDb: -1.7 }).loudnessOk).toBe(false)
+  test('flags too-loud past the −13.6 ceiling as well', () => {
+    expect(judgeMasteredLoudness({ integratedLufs: -13.5, truePeakDb: -1.7 }).loudnessOk).toBe(false)
   })
 
-  test('tolerance is inclusive at exactly ±1 LU', () => {
-    expect(judgeMasteredLoudness({ integratedLufs: -15.0, truePeakDb: -1.7 }).loudnessOk).toBe(true)
-    expect(judgeMasteredLoudness({ integratedLufs: -13.0, truePeakDb: -1.7 }).loudnessOk).toBe(true)
+  test('passes clips comfortably inside the ±1.2 band around the −14.8 landing', () => {
+    expect(judgeMasteredLoudness({ integratedLufs: -15.9, truePeakDb: -1.7 }).loudnessOk).toBe(true)
+    expect(judgeMasteredLoudness({ integratedLufs: -13.7, truePeakDb: -1.7 }).loudnessOk).toBe(true)
   })
 
   test('flags a true peak above the −1.0 dBTP delivery ceiling (AAC overshoot / clipping)', () => {

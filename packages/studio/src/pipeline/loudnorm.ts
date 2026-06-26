@@ -1,27 +1,35 @@
-// Mastering — loudness-normalize + AAC-encode the shipped TTS take in ONE ffmpeg pass.
+// Mastering — voice-master + AAC-encode the shipped TTS take in ONE ffmpeg pass.
 //
-// This is the ONLY lossy encode on the audio path: synthesize() returns a LOSSLESS LINEAR16
-// WAV take, and this step (a) levels it and (b) encodes it to AAC-LC (48 or 64 kbps, per the active
-// master) in an .m4a. Encoding here (rather than requesting Cloud TTS's fixed 32k MP3) avoids a SECOND
-// lossy generation and lets us choose codec/bitrate — see docs/decisions/audio-compression-spike.md.
+// This is the ONLY lossy encode on the audio path: synthesize() returns a LOSSLESS LINEAR16 WAV take,
+// and this step (a) voice-masters it and (b) encodes it to AAC-LC 64 kbps in an .m4a. Encoding here
+// (rather than requesting Cloud TTS's fixed 32k MP3) avoids a SECOND lossy generation and lets us choose
+// codec/bitrate — see docs/decisions/audio-compression-spike.md.
 //
-// LEVELING — a true-peak LIMITER, then a single-pass dynamic LOUDNORM (the masteringChain), at one of
-// two parked presets (MASTERS below; `normal14` active, `loud13` validated-but-off):
-//   Gemini-TTS takes are quiet (~−19 to −22 LUFS) but PEAK-BOUND — they already crest at ~0 dBFS, so
-//   there's no headroom to gain up, and a plain loudnorm undershoots the target inconsistently (−14.7 …
-//   −15.5). The fix is the broadcast move: an `alimiter` pushes the body up and brick-walls the transient
-//   peaks, making the headroom; then `loudnorm` normalizes to the target (−14 natural, or −13 Spotify-"Loud").
+// THE CHAIN (PROD-natural — founder-approved 2026-06-25 after the dogfood "too quiet / too bass-y /
+// static at the start" triage + a cited deep-research pass; full history in docs/decisions/audio-loudness-spec.md).
+// It follows the researched spoken-word ORDER — corrective EQ → cleanup → dynamics → loudness — and
+// REPLACES the old single heavy `alimiter`. Each stage earns its place:
+//   1. highpass 90 Hz       drop sub-bass rumble + proximity boom the deep "Charon" voice doesn't use (and
+//                           phone/car speakers can't reproduce); the first de-bass move.
+//   2. −3 dB bell @ 300 Hz  scoop the "mud" band (200–400 Hz) so the voice cuts through — this, not a
+//                           hotter target, is the real fix for "feels quiet" (a CLARITY problem).
+//   3. afftdn nr=6          LIGHT denoise of the TTS HF noise floor. Light on purpose: nr=12 smeared the
+//                           voice ("underwater"). The de-bass above UNCOVERS this hiss (the low end had
+//                           masked it), so a touch of cleanup belongs here.
+//   4. agate                gate the silent lead-in + inter-word gaps so the amplified hiss can't surface
+//                           there — this is what kills the "static at the beginning". Speech sits well
+//                           above the threshold, so the voice itself is untouched.
+//   5. acompressor 4:1      gentle crest-factor reduction = density ("louder feel") WITHOUT the brute
+//                           limiting that squashes the voice (why we did NOT chase −11/−13).
+//   6. loudnorm I=−14       EBU R128 normalize; its own 100 ms look-ahead / 192 kHz true-peak limiter is
+//                           the FINAL peak guard, so no separate alimiter is needed for safety.
 //
-//   SINGLE-PASS (dynamic loudnorm), not two-pass linear: with a stateful filter (the limiter) in front,
-//   the two-pass design breaks — pass 1 measures a different signal than pass 2 gains, so its true-peak
-//   limit is computed against the wrong peaks and the AAC encode overshoots into CLIPPING (that bug
-//   shipped once, 2026-06-19→20, then was reverted). A single pass has no measure/apply gap.
-//
-//   Each preset's PRE-ENCODE TP ceiling sits below the −1 delivery ceiling to leave room for AAC inter-
-//   sample overshoot, so final clips land ~−1.5…−2 dBTP. The louder −13 preset needs MORE headroom AND
-//   64k AAC (at 48k the overshoot clipped some clips to +1.4 dBTP). The limiter only touches transient
-//   peaks, so it does not reintroduce tail-collapse (the quiet tail sits far below the brick-wall). See
-//   docs/decisions/audio-loudness-spec.md.
+// LANDS ~−14.9 LUFS / ~−1.3 dBTP at 64k AAC — squarely in the −14…−16 spoken-word window (AES TD1008,
+// Apple −16). We do NOT force exactly −14: that needs heavy limiting (the squash the research warns
+// against), and speech reads ~2–3 dB louder than music at equal LUFS, so −14.9 over the −14 music bed
+// still keeps the Skipper on top. SINGLE-PASS loudnorm — two-pass linear can't reach target on this
+// peak-bound source (it caps gain at the TP ceiling and undershoots), and a stateful filter before a
+// two-pass measure/apply once shipped a clipping clip (2026-06-19→20, reverted).
 //
 // ffmpeg is REQUIRED (it IS the encoder, not just QA): a missing/failed encode THROWS rather than ship
 // a mislabeled clip. The Cloud Run image carries ffmpeg (packages/studio/Dockerfile); a bare local box
@@ -33,60 +41,39 @@ import { readFile, unlink, writeFile } from 'node:fs/promises'
 import { AUDIO_LOUDNESS } from '@skipper/shared'
 import { LOUDNORM_RANGE_LU } from '../models'
 
-/** One narration master = the limiter→single-pass-loudnorm chain at a chosen loudness. */
-interface NarrationMaster {
-  /** loudnorm integrated target (LUFS). */
-  targetLufs: number
-  /** `alimiter` input gain — the loudness lever (pushes the body up into the brick-wall). */
-  limiterGain: number
-  /** `alimiter` true-peak ceiling (linear; kept == preEncodeTp so loudnorm needn't re-attenuate). */
-  limiterCeiling: number
-  /** loudnorm PRE-ENCODE true-peak ceiling (dBTP) — headroom for AAC overshoot (final ~−1.5…−2). */
-  preEncodeTp: number
-  /** Output AAC bitrate — a louder master needs more (less inter-sample overshoot). */
-  bitrate: string
-}
+// ── Voice-master parameters. ONE greppable home each (CLAUDE.md: don't duplicate a volatile fact). ──
+/** loudnorm integrated TARGET (LUFS) asked of the final stage. The chain LANDS ~0.9 LU under this on the
+ *  peak-bound TTS source (see header); the QA meter judges the LANDING, not this asked-for value. */
+const LOUDNORM_TARGET_LUFS = -14
+/** loudnorm PRE-ENCODE true-peak ceiling (dBTP) — headroom for 64k-AAC inter-sample overshoot so the
+ *  DECODED clip clears the −1 dBTP delivery ceiling (PROD-natural measured −1.3 dBTP decoded). */
+const PRE_ENCODE_TP = -2.0
+/** Output AAC bitrate. iOS AVPlayer (expo-audio) plays AAC-LC; 64k is the compression-spike pick. */
+const AAC_BITRATE = '64k'
 
-/**
- * Two VALIDATED narration masters — flip `MASTER` to switch; BOTH stay in code so the tuning work is
- * never lost. They now share ONE peak discipline (limiter gain 6 → ceiling 0.707 → pre-encode TP −3 →
- * 64k AAC) and differ ONLY in the loudness target:
- *   - normal14 (−14): the ACTIVE default. RE-TUNED 2026-06-20 from the original GENTLE params (gain 3 /
- *     ceiling 0.794 / TP −2 / 48k) after a full-corpus resynth proved they ran HOT: single-pass dynamic
- *     loudnorm does NOT hard-cap true-peak, so peaky register-varied (town/landscape) takes overshot —
- *     41/460 clips clipped, the worst at +4.7 dBTP (worse than the un-mastered corpus). loud13's headroom
- *     discipline holds where the gentle params didn't, so normal14 borrows it at the −14 target.
- *   - loud13  (−13): Spotify-"Loud" — ~1 dB louder; when active the VOICE sits 1 dB above the −14 music
- *     bed (AUDIO_LOUDNESS). −13 is the EDGE of clean AAC overshoot — don't push past it.
- * 64k AAC (vs the old 48k) is the price of clean peaks at low bitrate — ~33% bigger downloads, justified
- * by the clipping data. docs/decisions/audio-loudness-spec.md has the full history.
- */
-const MASTERS: Record<'normal14' | 'loud13', NarrationMaster> = {
-  normal14: { targetLufs: -14, limiterGain: 6, limiterCeiling: 0.707, preEncodeTp: -3.0, bitrate: '64k' },
-  loud13: { targetLufs: -13, limiterGain: 6, limiterCeiling: 0.707, preEncodeTp: -3.0, bitrate: '64k' },
-}
+// Per-stage filters in chain order (the WHY of each is in the header). Each is the literal ffmpeg arg
+// string, kept as its own constant so a tweak has ONE home — not a magic number re-derived inline.
+const VOICE_EQ = 'highpass=f=90,equalizer=f=300:t=q:w=1.0:g=-3' // de-bass: sub-bass roll-off + 300 Hz mud cut
+const DENOISE = 'afftdn=nr=6' // light HF-noise cleanup (nr=12 went "underwater")
+const GATE = 'agate=threshold=0.004:ratio=3:attack=5:release=180:range=0.003' // silence lead-in + gaps
+const COMPRESS = 'acompressor=threshold=-22dB:ratio=4:attack=8:release=140' // gentle density, not a squash
 
-/** The ACTIVE narration master. `normal14` (−14, the safe default) for now; flip to `MASTERS.loud13`
- *  for the founder-validated Spotify-"Loud" −13 (parked, not active). */
-const MASTER: NarrationMaster = MASTERS.normal14
+/** The integrated loudness a HEALTHY clip is expected to MEASURE at (LUFS) — exported so read-only QA
+ *  tooling (audit-loudness.ts) + the post-encode meter judge against the same number. This is the chain's
+ *  LANDING (~−14.9, see header), NOT the asked-for LOUDNORM_TARGET_LUFS; provisional from the PROD-natural
+ *  validation, re-confirm against the first full resynth's audit-loudness distribution. */
+export const ACTIVE_MASTER_TARGET_LUFS = -14.8
 
-/** The active master's integrated-loudness target (LUFS) — exported so read-only QA tooling (e.g.
- *  audit-loudness.ts) labels its distribution against the SAME target the judge uses, following a
- *  `loud13` flip automatically instead of hardcoding −14. */
-export const ACTIVE_MASTER_TARGET_LUFS = MASTER.targetLufs
-
-/** Output AAC bitrate (from the active master). iOS AVPlayer (expo-audio) plays AAC-LC. */
-const AAC_BITRATE = MASTER.bitrate
 /** Output sample rate — pinned to the TTS native 24 kHz (loudnorm runs at 192 kHz internally,
  *  so without this the muxed file would inherit 192 kHz). */
 const OUT_SAMPLE_RATE = '24000'
 
-/** The full `-af` mastering filter: limiter (makes the headroom), then single-pass dynamic loudnorm to
- *  the active target. Exported for tests (guards the limiter-before-loudnorm order + the active params). */
+/** The full `-af` voice-master filter: corrective EQ → light denoise → gate → gentle compression →
+ *  single-pass loudnorm. Exported for tests (guards the stage order + the active params). */
 export function masteringChain(): string {
   return (
-    `alimiter=level_in=${MASTER.limiterGain}:limit=${MASTER.limiterCeiling},` +
-    `loudnorm=I=${MASTER.targetLufs}:TP=${MASTER.preEncodeTp}:LRA=${LOUDNORM_RANGE_LU}`
+    `${VOICE_EQ},${DENOISE},${GATE},${COMPRESS},` +
+    `loudnorm=I=${LOUDNORM_TARGET_LUFS}:TP=${PRE_ENCODE_TP}:LRA=${LOUDNORM_RANGE_LU}`
   )
 }
 
@@ -151,10 +138,11 @@ export async function normalizeAndEncode(audio: Uint8Array): Promise<Uint8Array>
 // the caller records the verdict, it never withholds a clip and never fails synthesis.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Post-encode QA tolerance: |measured integrated − the active master target| beyond this many LU is
- *  FLAGGED. The limiter→loudnorm master lands ~−14.1…−14.5 on −14 (and −13.0…−13.4 on loud13), so ±1 LU
- *  never trips a healthy clip but catches the −14.7…−15.5 undershoot spread the old linear loudnorm left. */
-const LOUDNESS_TOLERANCE_LU = 1.0
+/** Post-encode QA tolerance: |measured integrated − ACTIVE_MASTER_TARGET_LUFS (the LANDING)| beyond this
+ *  many LU is FLAGGED. The PROD-natural chain lands ~−14.9 with a per-clip spread (gentle compression + the
+ *  single-pass undershoot vary with each take's crest factor), so ±1.2 LU never trips a healthy clip but
+ *  still catches one that failed to normalize. Mark-and-flag only — a flagged clip is recorded, never withheld. */
+const LOUDNESS_TOLERANCE_LU = 1.2
 
 /** The post-encode loudness/true-peak verdict for one shipped .m4a. */
 export interface LoudnessOutcome {
@@ -183,14 +171,14 @@ export function parseEbur128Summary(stderr: string): { integratedLufs: number; t
   return { integratedLufs: Number(i[1]), truePeakDb: Number(p[1]) }
 }
 
-/** Judge a measured (integrated, true-peak) pair against the ACTIVE master target + the shared −1 dBTP
- *  delivery ceiling. PURE (no ffmpeg) so the thresholds are unit-tested; the target follows `MASTER`, so
- *  flipping to `loud13` (−13) re-aims the loudness check automatically. */
+/** Judge a measured (integrated, true-peak) pair against the chain's expected LANDING
+ *  (ACTIVE_MASTER_TARGET_LUFS) + the shared −1 dBTP delivery ceiling. PURE (no ffmpeg) so the thresholds
+ *  are unit-tested; re-aims automatically if the landing constant is re-tuned after a resynth audit. */
 export function judgeMasteredLoudness(m: { integratedLufs: number; truePeakDb: number }): LoudnessOutcome {
   return {
     integratedLufs: m.integratedLufs,
     truePeakDb: m.truePeakDb,
-    loudnessOk: Math.abs(m.integratedLufs - MASTER.targetLufs) <= LOUDNESS_TOLERANCE_LU,
+    loudnessOk: Math.abs(m.integratedLufs - ACTIVE_MASTER_TARGET_LUFS) <= LOUDNESS_TOLERANCE_LU,
     truePeakOk: m.truePeakDb <= AUDIO_LOUDNESS.truePeakDbtp,
   }
 }

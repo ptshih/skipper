@@ -1,54 +1,57 @@
 # Audio loudness master spec — Spotify-aligned targets for Skipper audio
 
-**Status:** LOCKED 2026-06-20 (founder): −14 (`normal14`) active, −13 parked. The narration master is a
-true-peak LIMITER → single-pass loudnorm with TWO parked presets in `loudnorm.ts` (`MASTERS`):
-**`normal14` (−14, ACTIVE)** and **`loud13` (−13, Spotify-"Loud" — validated 2026-06-20 but OFF)**. At −14 the voice matches the **−14** drive-music bed (`AUDIO_LOUDNESS` in
-`@skipper/shared`); flipping `MASTER` to `loud13` puts the voice 1 dB above it. Shared: **11 LU range**,
-EBU R128, −1.0 dBTP delivery ceiling. Flip the preset in `loudnorm.ts` + regen — see §1 + History 2026-06-20.
+**Status:** LOCKED 2026-06-25 (founder): the narration master is **PROD-natural**, a researched spoken-word
+chain that REPLACED the old single heavy `alimiter`. Order: **corrective EQ (high-pass 90 + 300 Hz mud cut)
+→ light denoise (`afftdn nr=6`) → noise gate → gentle compression (4:1) → single-pass loudnorm I=−14**. It
+LANDS **~−14.9 LUFS / ~−1.3 dBTP** at 64k AAC — in the −14…−16 spoken-word window (AES TD1008 / Apple −16);
+we do NOT force exactly −14 (that needs the squash). Shared with the **−14** music bed (`AUDIO_LOUDNESS` in
+`@skipper/shared`): **11 LU range**, EBU R128, −1.0 dBTP delivery ceiling. The old `normal14`/`loud13` limiter
+presets are RETIRED (history below). Chain lives in `loudnorm.ts` `masteringChain()`; tune + regen — see §1.
 
 ## The spec
 
-The narration presets (`loudnorm.ts` `MASTERS`) + the music bed (`AUDIO_LOUDNESS`):
+The narration chain (`loudnorm.ts` `masteringChain()`, in order) + the music bed (`AUDIO_LOUDNESS`):
 
-| Knob | `normal14` (ACTIVE) | `loud13` (parked) | Music bed |
-|---|---|---|---|
-| Integrated loudness (I) | **−14 LUFS** | −13 LUFS | −14 LUFS |
-| Pre-encode TP ceiling | −3 dBTP | −3 dBTP | −1.0 dBTP |
-| Limiter gain (`level_in`) | 6 | 6 | n/a |
-| Limiter ceiling | 0.707 | 0.707 | n/a |
-| AAC bitrate | 64 kbps | 64 kbps | n/a (offline MP3) |
-| Loudness range (LRA) | 11 LU | 11 LU | 11 LU |
+| Stage | Filter | Why |
+|---|---|---|
+| 1. De-bass (sub) | `highpass=f=90` | drop rumble/proximity boom the deep voice doesn't use |
+| 2. De-bass (mud) | `equalizer=f=300:t=q:w=1.0:g=-3` | scoop 200–400 Hz so the voice cuts through (the "quiet" fix) |
+| 3. Denoise | `afftdn=nr=6` | LIGHT — nr=12 smeared ("underwater"); de-bass uncovers the TTS hiss |
+| 4. Gate | `agate=threshold=0.004:…:range=0.003` | silence the lead-in/gaps ("static at the start") |
+| 5. Compress | `acompressor=threshold=-22dB:ratio=4:…` | gentle density, NOT a brute-limit squash |
+| 6. Loudnorm | `loudnorm=I=-14:TP=-2.0:LRA=11` | EBU R128; its internal TP limiter is the final peak guard |
 
-The two presets now share ONE peak discipline and differ ONLY in the loudness target (−14 vs −13) — see
-History 2026-06-20 (re-tune). Final clips land ≈−1.5…−2 dBTP (AAC overshoot eats the pre-encode headroom).
-The voice presets live in `loudnorm.ts` (flip `MASTER`); the bed target in `AUDIO_LOUDNESS` (`@skipper/shared`).
+Asks loudnorm for −14, **lands ~−14.9 LUFS / ~−1.3 dBTP decoded** (gentle compression doesn't crush crest
+enough to reach exactly −14 on the peak-bound source — and that's correct per the research). 64k AAC. The
+QA meter judges against the **landing** (`ACTIVE_MASTER_TARGET_LUFS = −14.8`, ±1.2 LU), not the asked-for −14.
+Music bed target lives in `AUDIO_LOUDNESS`; the voice chain + landing in `loudnorm.ts`.
 
 ## Where it applies
 
-1. **Studio TTS narration.** Every shipped take is mastered by the `masteringChain` in
-   `packages/studio/src/pipeline/loudnorm.ts` — a true-peak **`alimiter`** (pushes the body up +
-   brick-walls the peaks, making the headroom peaky TTS lacks) → **single-pass dynamic `loudnorm`** to the
-   ACTIVE preset's target, fused with the AAC encode. Active = **`normal14` (−14, 48k)**; the parked
-   **`loud13` (−13, 64k)** is one `MASTER =` line away. Targets, limiter params, pre-encode ceilings +
-   bitrates all live in `loudnorm.ts` (only the LRA is shared from `AUDIO_LOUDNESS`). `loud13` was validated
-   2026-06-20 on the 6-clip Reno corpus through the REAL resynth path (−13.0…−13.4, clean −1.6…−2.1).
-   Applies on the next (re)synthesis — existing clips take the active preset on regen.
+1. **Studio TTS narration.** Every shipped take is mastered by `masteringChain()` in
+   `packages/studio/src/pipeline/loudnorm.ts` — the 6-stage PROD-natural chain above (EQ → denoise → gate →
+   gentle compression → single-pass `loudnorm`), fused with the single AAC encode. Each stage's parameters
+   live as their own constant in `loudnorm.ts` (only the LRA is shared from `AUDIO_LOUDNESS`). Edge-case
+   safety (full-scale peaks, silence, ultra-short, DC, a real take) is pinned by the standalone
+   `test-mastering-chain.ts` harness — run it before any chain tweak. Applies on the next (re)synthesis —
+   existing clips re-master on regen.
 
 2. **Bundled drive-music rotation → −14.** The 17 tracks in `apps/mobile/assets/audio/*.mp3`
    (`src/lib/driveMusic.ts`) are mastered OFFLINE to `AUDIO_LOUDNESS` (−14 / −1.0) — a one-time ffmpeg
    re-encode, NOT a runtime path. Recipe + per-track sources/licenses: `apps/mobile/assets/audio/SOURCE.md`.
 
-At the active −14 the voice MATCHES the bed (no hand-off jump — the original intent). Flipping to `loud13`
-puts the voice ~1 dB ABOVE the bed; since the bed ducks to SILENCE under a narration (it doesn't play under
-the voice), that gap only shows when music swells back after a clip — a subordinate-bed feel. Either way,
-verify on the on-device A/B (Open).
+The voice lands ~−14.9 — numerically ~1 dB under the −14 bed, but speech reads ~2–3 dB louder than music at
+equal LUFS (AES TD1008), so the Skipper still sits ON TOP perceptually; and the bed ducks to SILENCE under a
+narration anyway (it doesn't play under the voice), so the relationship only shows when music swells back
+after a clip. Verify on the on-device A/B (Open).
 
 ## Post-encode verification (the QA meter)
 
 The target used to be **asserted by construction and never read back** — the −14.7…−15.5 undershoot spread
 and the +1.4/+2.4 dBTP overshoot were both found BY HAND. `verifyMasteredLoudness` (`loudnorm.ts`) now
 re-decodes every shipped `.m4a` with `ffmpeg ebur128=peak=true` and checks the measured integrated loudness
-(within ±1 LU of the active master target) + the **decoded-AAC true peak** (the inter-sample overshoot the
+(within ±1.2 LU of the **landing** `ACTIVE_MASTER_TARGET_LUFS` = −14.8, not the asked-for −14) + the
+**decoded-AAC true peak** (the inter-sample overshoot the
 pre-encode PCM ceiling is blind to) against the −1.0 dBTP delivery ceiling. **ADVISORY (mark-and-flag):** an
 off-spec clip fails its `tts` eval row for the human-review pass (`applyLoudnessOutcomes`) but is **never
 withheld** — promote to fail-closed only after the gate has run a corpus clean. Pairs with the best-of-3
@@ -113,10 +116,28 @@ tail-collapse retake + the 4 s last-words probe (`tts.ts`/`tail.ts`).
   swallowed-clause clips drop LESS than the clear keep-buttons), so a blind raise would protect the wrong
   clips.
 
+- **2026-06-25 — PROD-natural chain, replacing the single heavy limiter (founder dogfood + cited research).**
+  A real-drive listen surfaced "too quiet / too bass-y", then "static at the start" + "underwater" as fixes
+  were tried. Root causes, each pinned on a fresh REAL TTS take (the proxy of re-mastering shipped 64k clips
+  lied — a double AAC encode adds its own crackle): (a) the deep Charon voice has untamed low-mid mud and a
+  faint HF noise floor; (b) a naive +2 dB presence boost AMPLIFIED that noise floor into audible static; (c)
+  the de-bass high-pass then UNCOVERED the hiss (the low end had masked it); (d) `afftdn nr=12` removed it but
+  SMEARED the voice ("underwater"); (e) pushing loudness to −11 squashed it. A cited deep-research pass
+  (AES TD1008, Apple/Auphonic, the loudnorm author) reframed the loudness goal: **−14 already exceeds the
+  spoken-word ceiling** ("never louder than −16 for speech"), and speech reads ~2–3 dB louder than music at
+  equal LUFS — so "quiet" is a CLARITY problem (fix with EQ + gentle compression), not a level one. Final
+  chain (founder A/B-picked, the **HYB-1** hiss treatment): high-pass 90 → −3 dB @ 300 Hz → `afftdn nr=6`
+  (light) → `agate` → `acompressor` 4:1 → single-pass `loudnorm` I=−14, in the researched order (corrective
+  EQ → cleanup → dynamics → loudness). Lands ~−14.9 / −1.3 dBTP at 64k. The old `alimiter` `MASTERS`
+  (`normal14`/`loud13`) are retired; the QA landing constant moved −14 → −14.8 (±1 → ±1.2). New
+  `test-mastering-chain.ts` edge-case harness (7 cases, all green). **Validated on ONE clip (Red Dog Saloon);
+  the full-corpus resynth is the next paid step — audit-loudness the result + re-confirm the −14.8 landing.**
+
 ## Open
 
-- **On-device A/B vs Spotify** of the active −14 voice + bed on the real drive — and, if revisiting
-  loudness, A/B `loud13` (−13) against it (flip the preset + regen).
+- **Full-corpus resynth on PROD-natural** (the paid step) — then `audit-loudness.ts` the distribution and
+  re-confirm `ACTIVE_MASTER_TARGET_LUFS` (−14.8) + the ±1.2 band against the real spread (currently from one clip).
+- **On-device A/B vs Spotify** of the PROD-natural voice + bed on the real drive.
 - **Tail-collapse residual (16 clips)** survives best-of-3 — STRUCTURAL (a fresh take re-collapses at the
   same level), mostly the Skipper's signature deadpan button, not a defect. The synth-time retake now
   DETECTS this (`retakeStalled`, `tail.ts`) and skips the futile remaining take(s) once a fresh retake
@@ -124,7 +145,9 @@ tail-collapse retake + the 4 s last-words probe (`tts.ts`/`tail.ts`).
   the unchanged 3 dB flag. The genuine-defect subset (a swallowed substantive clause vs a dry coda) awaits
   a founder in-car ear-pass — only the ear can split it, and any per-clip fix or paid-retake threshold
   split is gated on it.
-- **Louder?** `loud13` (−13) is the parked, validated answer — flip `MASTER` in `loudnorm.ts`. Don't go
-  past −13 (already the edge of clean AAC overshoot); drop the *bed* instead for more separation.
+- **Louder?** Don't chase a hotter integrated target — the research is explicit that −14.9 already sits at
+  the loud end of the spoken-word range, and forcing −14/−13/−11 means heavy limiting (the squash). For more
+  voice-over-bed separation, drop the *bed* instead. The lever for "clearer/more present" is the EQ (mud cut),
+  not level.
 - **Drive-music bed** stays plain offline loudnorm at −14 / −1.0 (pre-mastered, low-overshoot MP3 — no
   limiter needed).

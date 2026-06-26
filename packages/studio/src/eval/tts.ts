@@ -97,8 +97,8 @@ export interface LoudnessOutcomeLike {
 
 /**
  * Fold the TTS phase's POST-ENCODE loudness measurements into the tts dimension (ADVISORY mark-and-flag).
- * The masteringChain targets −14 LUFS / −1 dBTP but nothing read the shipped clip back until now; this
- * records whether the master actually landed in spec. A clip whose measured integrated loudness drifts
+ * The masteringChain lands ~−14.9 LUFS under the −1 dBTP ceiling but nothing read the shipped clip back
+ * until now; this records whether the master actually landed in spec. A clip whose measured integrated loudness drifts
  * past tolerance, OR whose decoded-AAC true peak breached the −1 dBTP delivery ceiling (the inter-sample
  * overshoot the pre-encode PCM ceiling can't see), fails its tts row so the human-review pass sees it — it
  * is NEVER withheld here (the gate ran pre-synthesis; the clip already shipped). A measured-clean clip
