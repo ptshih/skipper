@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import {
+  ANCHORED_TRIGGER_RADIUS_M,
   angularDiffDeg,
   bearingDeg,
   checkSpeakableAnchor,
@@ -9,6 +10,7 @@ import {
   radiusForKind,
   SPEAKABLE_ANCHOR_RADIUS_MULT,
   speakableAnchorMaxM,
+  triggerRadiusForKind,
 } from '../src/geo'
 import type { LngLat } from '../src/geo'
 
@@ -73,6 +75,31 @@ describe('radiusForKind vocabulary', () => {
     expect(radiusForKind('State Park')).toBe(1000)
     expect(radiusForKind('CAPE')).toBe(1200)
     expect(radiusForKind('Mountain')).toBe(1500)
+  })
+})
+
+describe('triggerRadiusForKind: tight when anchored, kind-floor when not', () => {
+  test('an anchored pin gets the tight floor regardless of kind (center is on the road)', () => {
+    expect(triggerRadiusForKind('mountain', true)).toBe(ANCHORED_TRIGGER_RADIUS_M)
+    expect(triggerRadiusForKind('bay', true)).toBe(ANCHORED_TRIGGER_RADIUS_M)
+    expect(triggerRadiusForKind('state park', true)).toBe(ANCHORED_TRIGGER_RADIUS_M)
+    expect(triggerRadiusForKind(null, true)).toBe(ANCHORED_TRIGGER_RADIUS_M)
+  })
+
+  test('an un-anchored pin keeps the kind-aware floor (a tight radius on an off-road centroid would never fire)', () => {
+    expect(triggerRadiusForKind('mountain', false)).toBe(radiusForKind('mountain'))
+    expect(triggerRadiusForKind('bay', false)).toBe(radiusForKind('bay'))
+    expect(triggerRadiusForKind('spring', false)).toBe(radiusForKind('spring'))
+    expect(triggerRadiusForKind(null, false)).toBe(radiusForKind(null))
+  })
+
+  test('the tight floor is genuinely tighter than every areal kind floor it replaces', () => {
+    expect(ANCHORED_TRIGGER_RADIUS_M).toBeLessThan(radiusForKind('spring')) // < the 600 m default
+    expect(ANCHORED_TRIGGER_RADIUS_M).toBeLessThan(radiusForKind('mountain')) // < the 1500 m widest
+  })
+
+  test('anchor VALIDITY (speakableAnchorMaxM) is unchanged — it reads the un-conditional radius, not this floor', () => {
+    expect(speakableAnchorMaxM('mountain')).toBe(Math.round(SPEAKABLE_ANCHOR_RADIUS_MULT * radiusForKind('mountain')))
   })
 })
 

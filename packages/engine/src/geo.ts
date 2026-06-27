@@ -40,6 +40,33 @@ export function radiusForKind(kind: string | null): number {
   return 600
 }
 
+/**
+ * A road-snapped (anchored) trigger point sits ON the road, so the centroid→road inflation that
+ * `radiusForKind` bakes into the areal tiers (1000–1500 m) is no longer needed — its whole purpose was
+ * to bridge an un-snapped centroid out to the highway, and an anchor already IS on the highway. A fat
+ * floor around an on-road center fires EARLY and imprecisely (the "Harrah's trigger really far" build-11
+ * complaint), so an anchored point gets this tight, kind-independent floor instead. The client's
+ * speed-adaptive lead still extends it at speed (`max(floor, speed·leadSeconds)`), so this only governs
+ * the low-speed case. CONSERVATIVE start — the final number is NOT desk-tunable; it's pinned on the next
+ * on-device Tahoe re-drive against the POIs that failed (Edgewood, Harrah's, Van Sickle, Zephyr Cove).
+ * trigger-precision-spec.md §2.
+ */
+export const ANCHORED_TRIGGER_RADIUS_M = 250
+
+/**
+ * The trigger floor (m) for a roam/drive pin, CONDITIONAL on whether that pin is a road-snapped anchor.
+ * Anchored ⇒ the tight `ANCHORED_TRIGGER_RADIUS_M` (center's on the road; no inflation needed).
+ * Un-anchored ⇒ the kind-aware `radiusForKind` floor stays — a tight radius around an OFF-road centroid
+ * would never fire, regressing the ~99 Tahoe POIs that have no anchor (trigger-precision §2: "NOT a
+ * blanket shrink"). This is the TRIGGER path's view of the radius only; `speakableAnchorMaxM` /
+ * `checkSpeakableAnchor` deliberately keep reading the un-conditional `radiusForKind`, so anchor
+ * VALIDITY at the admin write boundary + the corpus audit is judged by the feature's body, never by
+ * this trigger floor (the two concerns must not couple).
+ */
+export function triggerRadiusForKind(kind: string | null, anchored: boolean): number {
+  return anchored ? ANCHORED_TRIGGER_RADIUS_M : radiusForKind(kind)
+}
+
 const toRad = (deg: number): number => (deg * Math.PI) / 180
 const toDeg = (rad: number): number => (rad * 180) / Math.PI
 

@@ -1,11 +1,13 @@
 # Trigger Precision — Build Spec
 
-> **Status (2026-06-25):** PARTIALLY BUILT. Fixes triage cluster **1b** from the 2026-06-25 founder
+> **Status (2026-06-27):** PARTIALLY BUILT. Fixes triage cluster **1b** from the 2026-06-25 founder
 > dogfood drive (build 11): clips that fire too early, too far in, or *after you've already passed* the
 > point. **Step 3 (passed-point retire) ✅ BUILT** + **Step 1 (consume the anchor) ✅ BUILT** —
 > `/roam` + `/drives` now trigger on `speakable ?? pin`, after the 1a OSM snap populated **750** Tahoe
-> anchors (~99 genuine backcountry → no anchor → fall back to centroid). **Step 2 (radius retune) DEFERRED
-> to an on-device re-drive** — and it's NOT a blanket shrink (see below). Step 4 optional.
+> anchors (~99 genuine backcountry → no anchor → fall back to centroid). **Step 2 (conditional radius)
+> ✅ MECHANISM BUILT 2026-06-27** — an anchored pin now gets a tight kind-independent floor while an
+> anchorless pin keeps its kind floor (`triggerRadiusForKind`); only the **FINAL tuned numbers** wait on
+> the on-device re-drive (it is NOT a blanket shrink — see below). Step 4 optional.
 
 ## Origin
 
@@ -57,14 +59,26 @@ honest once the center is on the road. No radius change here, so it's a pure imp
 an anchored POI now fires where you actually drive past it; the existing (large) floor just means it
 fires a touch early, which is safe. Takes effect live on the next deploy.
 
-### 2. Shrink `radiusForKind` — DEFERRED to the on-device re-drive (and NOT a blanket shrink)
+### 2. Conditional radius — ✅ MECHANISM BUILT 2026-06-27 (FINAL NUMBERS deferred to the re-drive)
 The floor was inflated to bridge centroid→road; with the center on the road it *can* drop. **But the 1a
 run left ~99 POIs off-road (no anchor) — and an anchorless POI still triggers on its centroid, so
-shrinking its floor would REGRESS it** (small radius + centroid = never fires). So step 2 is
-**conditional on anchor presence**, not a global `geo.ts:33-41` edit: a tight radius only when a POI has a
-road-snapped anchor; keep the kind-aware floor when it doesn't. Final numbers (tight radius, roam
-`floorM`) are **not desk-tunable** — pick conservative starts and verify on a Tahoe re-drive, the same
-loop that produced this feedback.
+shrinking its floor would REGRESS it** (small radius + centroid = never fires). So this is **conditional
+on anchor presence**, not a global `geo.ts` edit: a tight radius only when a POI has a road-snapped
+anchor; keep the kind-aware floor when it doesn't.
+
+**Built:** `triggerRadiusForKind(kind, anchored)` ([`geo.ts`](../../packages/engine/src/geo.ts)) returns
+the tight `ANCHORED_TRIGGER_RADIUS_M` when `anchored`, else the existing `radiusForKind(kind)` floor.
+Both trigger call sites now pass the anchor flag: roam ([`apps/api/src/index.ts`](../../apps/api/src/index.ts),
+`speakableLat/Lng != null`) and the drive manifest (`NarrationRow.anchored`, set in `rowsToCorpus`,
+consumed in `manifestClips` — [`apps/api/src/drives.ts`](../../apps/api/src/drives.ts)). The anchor-VALIDITY
+path (`speakableAnchorMaxM`/`checkSpeakableAnchor`) is deliberately untouched — it keeps reading the
+un-conditional `radiusForKind`, so the admin write boundary + corpus audit don't couple to the trigger
+floor. Engine tests cover tight-when-anchored vs floor-when-not.
+
+**Deferred:** the FINAL number — `ANCHORED_TRIGGER_RADIUS_M` is a **conservative 250 m start** and is
+**not desk-tunable**. The re-drive tunes that single constant (and the roam `floorM` if needed) and
+verifies against the exact POIs that failed (Edgewood, Harrah's, Van Sickle, Zephyr Cove). The
+mechanism turns the next drive into a one-constant tuning pass, not an engineering pass.
 
 ### 3. Retire passed points (independent) — ✅ BUILT 2026-06-25
 A "not approaching / distance increasing" guard so a point that's now behind you stops being eligible

@@ -29,7 +29,7 @@ import {
   DRIVE_MIN_GAP_SEC,
   driveMaxStops,
   OFF_ROUTE_MAX_M,
-  radiusForKind,
+  triggerRadiusForKind,
   type DriveCandidate,
 } from '@skipper/engine'
 import {
@@ -142,6 +142,9 @@ interface NarrationRow {
   kind: string | null
   lat: number
   lng: number
+  /** True when lat/lng is a road-snapped speakable anchor (not the raw centroid) — tightens the
+   *  trigger floor at manifest time (`triggerRadiusForKind`). Set once in `rowsToCorpus`. */
+  anchored: boolean
 }
 
 /** The shared corpus projection + poi join. BOTH loaders (route-bbox and explicit-poiId) select these
@@ -187,6 +190,7 @@ function rowsToCorpus(rows: Awaited<ReturnType<typeof narrationCorpusSelect>>): 
       kind: r.kind,
       lat: r.speakableLat ?? r.lat,
       lng: r.speakableLng ?? r.lng,
+      anchored: r.speakableLat != null && r.speakableLng != null,
     })
   }
   return map
@@ -251,7 +255,7 @@ function manifestClips(selection: DriveSelection, corpusById: Map<string, Narrat
       name: n.name,
       lat: item.triggerLat,
       lng: item.triggerLng,
-      triggerRadiusM: radiusForKind(n.kind),
+      triggerRadiusM: triggerRadiusForKind(n.kind, n.anchored),
       approachHeadingDeg: item.approachHeadingDeg,
       alongSec: item.alongSec,
       durationMs: n.durationMs,

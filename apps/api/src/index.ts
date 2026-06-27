@@ -21,7 +21,7 @@ import { Hono } from 'hono'
 import { and, asc, between, eq, isNotNull } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { narrations, pois, regions } from '@skipper/db/schema'
-import { haversineMeters, radiusForKind } from '@skipper/engine'
+import { haversineMeters, triggerRadiusForKind } from '@skipper/engine'
 import { auth } from './auth'
 import { driveRoutes } from './drives'
 import { isAdmin, withSession, type ApiEnv } from './entitlements'
@@ -166,7 +166,9 @@ app.get('/roam', async (c) => {
         lat: r.speakableLat ?? r.lat,
         lng: r.speakableLng ?? r.lng,
         durationMs: r.durationMs,
-        radiusM: radiusForKind(r.kind),
+        // …and the radius tightens to match: an anchored center is ON the road, so it drops the fat
+        // kind-aware floor that exists to bridge an off-road centroid (trigger-precision §2, 1b step 2).
+        radiusM: triggerRadiusForKind(r.kind, r.speakableLat != null && r.speakableLng != null),
         url: presignGet(r.key),
         contentType: contentTypeForKey(r.key),
       })),
