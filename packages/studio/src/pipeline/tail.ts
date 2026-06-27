@@ -78,6 +78,35 @@ export function retakeStalled(prevBestDrop: number, latestDrop: number): boolean
   return latestDrop >= TAIL_COLLAPSE_DB && Math.abs(latestDrop - prevBestDrop) <= STRUCTURAL_RETAKE_EPSILON_DB
 }
 
+// ── Overlong-take guard (the no-duration-check gap, 2026-06-26) ──────────────────────────────────────
+// A SECOND take-variance defect: Gemini-TTS occasionally rambles/loops and ships a take ~2× its script's
+// natural length (Nevada Museum of Art 196 s-vs-87 s; Mount Tallac 126 s-vs-60 s). best-of-N retakes only on
+// tail-collapse, never on length, so these shipped unflagged. The corpus duration-ratio (actual ÷ a word-
+// count estimate) is TIGHT — p50 0.95, p99 1.20, legit max 1.32 — while rambles sit alone at ~2.1×, so a
+// 1.5× cut isolates them with margin on both sides.
+
+/** Skipper's natural speaking pace (words/sec). The corpus duration ratio (actual ÷ words-at-this-rate)
+ *  centers at ~0.95, so this slightly OVER-estimates length — a conservative bias that keeps the overlong
+ *  guard from false-tripping a normally-paced take. */
+export const WORDS_PER_SEC = 2.5
+/** A take longer than this MULTIPLE of its script's word-rate estimate is "overlong" (a ramble/loop). The
+ *  corpus's legit pacing tops out at ~1.32×; rambles sit alone at ~2.1×, so 1.5× splits them cleanly. */
+export const OVERLONG_RATIO = 1.5
+
+/** Estimated natural spoken length (ms) of a script from its word count. Pure; for the overlong guard. */
+export function expectedDurationMs(text: string): number {
+  const words = text.trim().split(/\s+/).filter(Boolean).length
+  return (words / WORDS_PER_SEC) * 1000
+}
+
+/** Is a take grossly longer than its script should run (the model rambled/looped)? Pure; tested. Closes the
+ *  gap where a ~2× overlong take ships unflagged. An empty/wordless script has no expectation → false (never
+ *  block on something unmeasurable). */
+export function isOverlongTake(durationMs: number, text: string): boolean {
+  const expected = expectedDurationMs(text)
+  return expected > 0 && durationMs > expected * OVERLONG_RATIO
+}
+
 // Warn ONCE per process when ffmpeg is unavailable — a full run synthesizes dozens of
 // clips and a per-clip warning would drown the log for a known, accepted degradation.
 let warnedUnavailable = false

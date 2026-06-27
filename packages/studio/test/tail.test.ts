@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import {
+  expectedDurationMs,
+  isOverlongTake,
   keepFirstTake,
   MIN_MEASURABLE_SEC,
   measureTailCollapse,
@@ -10,6 +12,8 @@ import {
 import type { TailMeasure } from '../src/pipeline/tail'
 
 const m = (dropDb: number): TailMeasure => ({ bodyDb: -20, tailDb: -20 - dropDb, terminalDb: -20 - dropDb, dropDb })
+/** An N-word script (the overlong guard only cares about word COUNT). */
+const script = (n: number): string => Array.from({ length: n }, () => 'word').join(' ')
 
 describe('parseMeanVolumeDb — ffmpeg volumedetect stderr', () => {
   test('parses the mean_volume line (negative, fractional)', () => {
@@ -84,6 +88,32 @@ describe('retakeStalled — stop the retake loop when the collapse is STRUCTURAL
   test('the epsilon band is inclusive at exactly 1.0 dB', () => {
     expect(retakeStalled(4.0, 3.0)).toBe(true) // |3.0 − 4.0| = 1.0
     expect(retakeStalled(4.05, 3.0)).toBe(false) // 1.05 > 1.0
+  })
+})
+
+describe('expectedDurationMs / isOverlongTake — the overlong (ramble) guard', () => {
+  // 250 words at WORDS_PER_SEC=2.5 → 100 s expected; OVERLONG_RATIO=1.5 → the gate is 150 s.
+  const s = script(250)
+
+  test('expectedDurationMs estimates from word count', () => {
+    expect(expectedDurationMs(s)).toBe(100_000) // 250 / 2.5 * 1000
+    expect(expectedDurationMs('  one   two three ')).toBe(1200) // 3 / 2.5 * 1000, whitespace-tolerant
+  })
+
+  test('flags a ~2× ramble (the 196s/126s ships) and passes the corpus legit max (~1.3×)', () => {
+    expect(isOverlongTake(211_000, s)).toBe(true) // 2.11× — the Mount Tallac / Museum-of-Art ramble
+    expect(isOverlongTake(132_000, s)).toBe(false) // 1.32× — the legit corpus max (Nevada SR 431)
+    expect(isOverlongTake(95_000, s)).toBe(false) // 0.95× — the corpus median
+  })
+
+  test('the 1.5× gate is strict (exactly 1.5× is NOT overlong; just past it is)', () => {
+    expect(isOverlongTake(150_000, s)).toBe(false) // exactly 1.5× → not >
+    expect(isOverlongTake(150_001, s)).toBe(true)
+  })
+
+  test('an empty/wordless script has no expectation → never overlong (unmeasurable)', () => {
+    expect(isOverlongTake(999_000, '')).toBe(false)
+    expect(isOverlongTake(999_000, '   ')).toBe(false)
   })
 })
 

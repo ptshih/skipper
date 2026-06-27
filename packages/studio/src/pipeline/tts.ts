@@ -21,7 +21,15 @@ import {
   TTS_SAMPLE_RATE_HZ,
 } from '../models'
 import { GEMINI_PCM, toWavWithDuration } from './wav'
-import { keepFirstTake, measureTailCollapse, retakeStalled, TAIL_COLLAPSE_DB, TERMINAL_WINDOW_SEC } from './tail'
+import {
+  expectedDurationMs,
+  isOverlongTake,
+  keepFirstTake,
+  measureTailCollapse,
+  retakeStalled,
+  TAIL_COLLAPSE_DB,
+  TERMINAL_WINDOW_SEC,
+} from './tail'
 import { normalizeAndEncode, verifyMasteredLoudness, type LoudnessOutcome } from './loudnorm'
 import { pronunciationClause } from './pronunciation'
 
@@ -139,10 +147,42 @@ export type SynthWithTailResult = SynthResult & {
  *  only fires on the ~6% that already failed twice. The running TTS cost cap bounds the overrun. */
 const RETAKE_LIMIT = 2
 
+/** Overlong-take retakes: Gemini-TTS occasionally rambles/loops to ~2× the script's length (the
+ *  no-duration-guard gap). On an overlong take, re-synth up to this many more times and keep the SHORTEST
+ *  (closest to the script). Fires only on the rare ramble; the in-length common case is a single synth. */
+const OVERLONG_RETAKE_LIMIT = 2
+
+/** Synthesize, retaking if the model rambles past OVERLONG_RATIO× the script's expected length (tail.ts).
+ *  Keeps the shortest take. Used for the first take AND every tail-retake so no overlong take reaches the
+ *  tail-collapse logic — best-of-N alone never retakes on length, so a 2× ramble used to ship unflagged. */
+async function synthesizeNotOverlong(
+  text: string,
+  voiceId: string,
+  style: string,
+  label: string,
+): Promise<SynthResult> {
+  let best = await synthesize(text, voiceId, style)
+  let tries = 0
+  while (isOverlongTake(best.durationMs, text) && tries < OVERLONG_RETAKE_LIMIT) {
+    tries++
+    const ratio = best.durationMs / expectedDurationMs(text)
+    console.warn(
+      `  ⚠ overlong take on ${label}: ${(best.durationMs / 1000).toFixed(0)}s ≈ ${ratio.toFixed(1)}× expected — re-synthesizing...`,
+    )
+    const next = await synthesize(text, voiceId, style)
+    if (next.durationMs < best.durationMs) best = next // keep the shortest (closest to the script's length)
+    if (!isOverlongTake(best.durationMs, text)) break
+  }
+  if (isOverlongTake(best.durationMs, text))
+    console.warn(`  ⚠ ${label}: still overlong after ${tries} retake(s) — shipping the shortest, flag for the human pass.`)
+  return best
+}
+
 /**
  * Synthesize with the tail-collapse retake (TODO.md audio-QA #1): Gemini-TTS takes are
  * non-deterministic in level and ~1 in 4 collapses over the closing sentence(s) — the
- * "mumble". Measure tail-vs-body after the synth (12 s tail AND a 4 s last-words window);
+ * "mumble". Each take is first LENGTH-guarded (synthesizeNotOverlong) — a rambling ~2× take is re-rolled
+ * before it reaches the collapse logic. Measure tail-vs-body after the synth (12 s tail AND a 4 s last-words window);
  * on a drop ≥ TAIL_COLLAPSE_DB re-synth up to RETAKE_LIMIT more times (best of RETAKE_LIMIT+1)
  * and keep the least-collapsed take, so a Dam-class take can never ship silently again.
  * Then master the WINNER (TODO.md audio-QA #2): the limiter→single-pass-loudnorm chain fused
@@ -159,7 +199,7 @@ export async function synthesizeWithTailRetake(
   style: string = SKIPPER_TTS_STYLE_PROMPT,
   label = 'clip',
 ): Promise<SynthWithTailResult> {
-  const first = await synthesize(text, voiceId, style)
+  const first = await synthesizeNotOverlong(text, voiceId, style, label)
   const m1 = await measureTailCollapse(first.audio, first.durationMs)
 
   // ── Pick the take (the tail-collapse retake) ──
@@ -186,7 +226,7 @@ export async function synthesizeWithTailRetake(
     let structural = false
     while (retakes < RETAKE_LIMIT && bestMeasure.dropDb >= TAIL_COLLAPSE_DB) {
       retakes++
-      const next = await synthesize(text, voiceId, style)
+      const next = await synthesizeNotOverlong(text, voiceId, style, label)
       const mNext = await measureTailCollapse(next.audio, next.durationMs)
       if (mNext === null) {
         unknownFallback = next // probe failed on this take — keep it as an unmeasured last resort
