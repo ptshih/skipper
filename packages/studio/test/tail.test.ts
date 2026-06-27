@@ -68,26 +68,27 @@ describe('keepFirstTake — which take ships after a retake', () => {
 })
 
 describe('retakeStalled — stop the retake loop when the collapse is STRUCTURAL', () => {
+  // Values are relative to TAIL_COLLAPSE_DB (=4): a "structural" re-collapse must stay AT/ABOVE the gate.
   test('a fresh take that re-collapsed at the same level is structural → stop', () => {
-    expect(retakeStalled(3.5, 3.4)).toBe(true) // the documented West-Shore deadpan coda
-    expect(retakeStalled(4.0, 3.9)).toBe(true)
+    expect(retakeStalled(4.5, 4.4)).toBe(true) // the documented West-Shore deadpan coda
+    expect(retakeStalled(5.0, 4.9)).toBe(true)
   })
 
   test('a retake that materially improved the best drop keeps going (worth another take)', () => {
-    expect(retakeStalled(8.0, 3.4)).toBe(false) // 8 → 3.4 is real movement, not a re-collapse
+    expect(retakeStalled(8.0, 4.5)).toBe(false) // 8 → 4.5 is real movement, not a re-collapse
   })
 
   test('a retake that came back clean (below the gate) is not structural', () => {
-    expect(retakeStalled(3.5, 2.0)).toBe(false) // exits via the loop's own gate, not this
+    expect(retakeStalled(4.5, 2.0)).toBe(false) // exits via the loop's own gate, not this
   })
 
   test('a high-variance WORSE take is not "the same level" → allow another retry', () => {
-    expect(retakeStalled(3.4, 9.0)).toBe(false)
+    expect(retakeStalled(4.4, 9.0)).toBe(false)
   })
 
   test('the epsilon band is inclusive at exactly 1.0 dB', () => {
-    expect(retakeStalled(4.0, 3.0)).toBe(true) // |3.0 − 4.0| = 1.0
-    expect(retakeStalled(4.05, 3.0)).toBe(false) // 1.05 > 1.0
+    expect(retakeStalled(5.0, 4.0)).toBe(true) // |4.0 − 5.0| = 1.0, and 4.0 ≥ the gate
+    expect(retakeStalled(5.05, 4.0)).toBe(false) // 1.05 > 1.0
   })
 })
 

@@ -24,8 +24,12 @@ export const TAIL_WINDOW_SEC = 12
  *  holds level across the 12 s tail but dies only over the final words averages out and slips the gate; a
  *  4 s window catches that "last-words mumble" (the documented residual West-Shore collapses). */
 export const TERMINAL_WINDOW_SEC = 4
-/** Tail-vs-body mean-volume drop (dB) that marks a take collapsed (the measured 8/30 line). */
-export const TAIL_COLLAPSE_DB = 3
+/** Tail-vs-body mean-volume drop (dB) that marks a take collapsed. RELAXED 3 → 4 (2026-06-26): the full-
+ *  corpus audit flagged 41 clips at 3 dB — mostly the Skipper's INTENDED dry/deadpan landings, which softly
+ *  drop a few dB (a somber close like the Galaxy plane-crash button measures ~5 dB and is correct). 4 dB →
+ *  18, clearing the mild buttons while keeping the more severe drops worth a human ear. Drives BOTH the
+ *  audit flag AND the synth-time retake trigger (so it also stops wasting paid retakes on mild structural drops). */
+export const TAIL_COLLAPSE_DB = 4
 /** A SMALL "did the retake actually help" band (dB). The best-of-N retake exists to escape a STOCHASTIC
  *  collapse (a fresh take of the same script comes back clean — the original Dam-class finding). But a
  *  documented residual is STRUCTURAL: the script itself cues a soft landing (the Skipper's deadpan button),

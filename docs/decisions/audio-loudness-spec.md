@@ -158,16 +158,19 @@ tail-collapse retake + the 4 s last-words probe (`tts.ts`/`tail.ts`).
   closing CONTENT's somber/wry tone as low volume, and no delivery instruction overrides it). The only lever
   is the NARRATION prompt's ending style (firmer closing beats) — a charm trade, tonally wrong for somber
   stops, so a separate project. Mostly intended; the per-clip ear-pass splits a swallowed line from a dry button.
-- **Pipeline gap: no duration-sanity check.** A take that rambles to ~2× length ships unflagged (best-of-3
-  retakes only on tail-collapse). Consider flagging/retaking takes beyond ~1.5× the expected duration.
+- **Overlong-take guard — DONE 2026-06-26.** `synthesizeNotOverlong` (`tts.ts`) re-rolls any take longer than
+  `OVERLONG_RATIO` (1.5×) its script's word-count estimate, keeping the shortest — closing the gap where a 2×
+  ramble shipped unflagged (best-of-N only retook on tail-collapse). Calibrated from the corpus (legit max
+  1.32×, rambles alone at ~2.1×); re-rolled both live rambles (Nevada Museum of Art 196→81s, Mount Tallac
+  126→62s — the guard fired in production on the latter).
+- **Tail-collapse flag RELAXED 3 → 4 dB (2026-06-26).** At 3 dB the full-corpus audit flagged 41 clips,
+  mostly the Skipper's intended dry/deadpan landings (a somber close like Galaxy measures ~5 dB and is
+  correct); 4 dB → 18. `TAIL_COLLAPSE_DB` drives BOTH the audit flag and the synth retake trigger, so this
+  also stops wasting paid retakes on mild structural drops. The genuine-defect subset (a swallowed clause vs
+  a dry coda) still awaits a founder in-car ear-pass; the per-clip fix or a flag/retake-threshold split is
+  gated on it. The `retakeStalled` early-out (skip futile retakes once a fresh take re-collapses within 1 dB)
+  is unchanged.
 - **On-device A/B vs Spotify** of the PROD-natural voice + bed on the real drive.
-- **Tail-collapse residual (16 clips)** survives best-of-3 — STRUCTURAL (a fresh take re-collapses at the
-  same level), mostly the Skipper's signature deadpan button, not a defect. The synth-time retake now
-  DETECTS this (`retakeStalled`, `tail.ts`) and skips the futile remaining take(s) once a fresh retake
-  re-collapses within 1 dB of the prior best; the audit (`audit-loudness.ts`) still surfaces all of them at
-  the unchanged 3 dB flag. The genuine-defect subset (a swallowed substantive clause vs a dry coda) awaits
-  a founder in-car ear-pass — only the ear can split it, and any per-clip fix or paid-retake threshold
-  split is gated on it.
 - **Louder?** Don't chase a hotter integrated target — the research is explicit that −14.9 already sits at
   the loud end of the spoken-word range, and forcing −14/−13/−11 means heavy limiting (the squash). For more
   voice-over-bed separation, drop the *bed* instead. The lever for "clearer/more present" is the EQ (mud cut),
