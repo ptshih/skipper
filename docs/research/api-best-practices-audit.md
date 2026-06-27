@@ -1,0 +1,65 @@
+# apps/api — Best-Practices Audit
+
+**Status:** Working doc — 2026-06-23. Multi-agent audit (6 dimensions × adversarial verification). Untracked; not a `docs/` decision record. Delete once the actionable items are triaged.
+
+> Method: 6 parallel dimension reviewers (security/auth, money-correctness, concurrency/DB, HTTP-contract/validation, resilience/error-handling, code-quality) scanned all of `apps/api/src`. Every finding was re-checked by an independent adversarial verifier against the project's documented doctrine (neon-http statelessness, fail-open sessions, per-instance rate limiting, the credit ledger, no-CORS) and classified actionable / documented-tradeoff / refuted. 37 verified → **18 actionable**, 14 accepted tradeoffs, 5 refuted.
+
+## Executive summary
+
+`apps/api` is in good shape for a pre-launch charm-over-scale toy: the money path (credit ledger, `db.batch` co-commit, idempotency keys) is thoughtfully built, the code is unusually well-commented, and nearly every sharp edge is already reasoned about in-line. **No critical or high-severity defects** were found — everything actionable is medium or below. The single most important fix is the rate limiter's IP derivation (`rate-limit.ts`): it trusts the spoofable leftmost `X-Forwarded-For` entry, which fully bypasses the per-IP cap on Cloud Run and leaves the paid Google Routes path effectively uncapped. The credit-consume TOCTOU and the unlimited `POST /drives` create path compound that same spend-exposure theme and are the next priorities.
+
+## Findings (actionable)
+
+### Medium
+
+- **Rate limiter trusts the spoofable leftmost `X-Forwarded-For` — per-IP cap is fully bypassable on Cloud Run** — `apps/api/src/rate-limit.ts:9-11,31-39`. `clientIp()` takes `fwd.split(',')[0]`, but GCP's LB *preserves* any client-supplied XFF and appends the real client + LB IP, so the leftmost entry is attacker-controlled — a caller sending a random `X-Forwarded-For` gets a fresh bucket every request, defeating the limiter on the paid `/drives/propose` Routes path. **Fix:** parse XFF from the right (client IP = second-from-last entry for this LB topology, after confirming the hop count), drop the unused `cf-connecting-ip` fallback, and correct the false "real client as the FIRST hop" comment.
+
+- **Credit pre-check TOCTOU is NOT bounded to 1 — balance goes arbitrarily negative under concurrent distinct creates** — `apps/api/src/drives.ts:377-497`. The `remaining` read (377-388) and the `-1` consume (487-497) are split by an awaited Routes round-trip; N concurrent creates with distinct `idempotencyKey`s all read `remaining===1`, all pass, all commit a `-1` (distinct consume keys aren't deduped by `onConflictDoNothing`), so balance → `1−N` and the over-spend is permanent (delete never refunds). The in-code "bounded to 1" claim is false for distinct-key creates. **Fix:** make the consume conditional inside the same `db.batch` via `INSERT … SELECT WHERE (SELECT SUM(amount) …) >= 1`, key success off rowcount, keep the cheap pre-check as a fast 403.
+
+- **`POST /drives` (the credit- and Routes-spending endpoint) has no rate limit; only `/propose` does** — `apps/api/src/index.ts:85-92`. `/drives/propose` is capped at 15/60s but the heavier create path — same Routes call plus a credit consume and DB write — is mounted uncapped, and several sub-paths (0-stop early return, no-route 422, cross-user key collision) spend a Routes call without consuming a credit. **Fix:** `app.use('/drives', rateLimit({ limit: 15, windowSec: 60, label: 'drives-create' }))` scoped to the POST, mirroring `/propose`.
+
+- **Create-path presign failure returns 200 with a warning the DTO silently strips** — `apps/api/src/drives.ts:519-527`. The four sibling presign sites return a retryable 503 `audio_unavailable`, but the fresh-create path returns 200 `{...manifest, warning:'audio_unavailable'}` with `clips:[]` — and `driveManifest` (a plain `z.object`) strips the unknown `warning`, so the client navigates into a silently-empty *paid* (non-refundable) drive with no retry signal. **Fix:** return the same 503 the other four sites use; the drive is already persisted and recoverable via `GET /drives/:id`.
+
+### Low
+
+- **`withRetry` wraps the non-idempotent demand increment (`hits+1` double-counts on retry)** — `apps/api/src/drives.ts:501-511`. The `hits = hits + 1` upsert is the one non-idempotent write wrapped in `withRetry`, so a commit-then-lost-response retry inflates the demand counter (instrumentation-only, `.catch()`-swallowed, no live consumer). **Fix:** drop the `withRetry` wrapper (keep the `.catch()`); add a one-line "not retry-safe" comment.
+
+- **Cross-user `idempotencyKey` collision returns a misleading 200 with no drive persisted and no credit charged** — `apps/api/src/drives.ts:346-370,487-529`. `idempotencyKey` is the global drive PK and the global-unique consume key, but the replay short-circuit is user-scoped; user B replaying user A's key spends a real Routes call, both batch inserts no-op, and B gets a 200 with a `driveId` it can never see. Requires guessing A's v4 UUID, so narrow. **Fix:** namespace the keys by user (`drive:<userId>:<id>`), or add an ownership-scoped existence check before `materializeRoute` and 409 on conflict.
+
+- **`/roam radiusKm` accepts negative/zero (and empty-string = 0) — degenerate values reach the bbox query** — `apps/api/src/index.ts:120-129`. `Number.isFinite` passes for `-50`/`0`, inverting the `between()` bounds → a silently-empty 200 instead of the 50 km default or a 400; `radiusKm=` also bypasses the `?? 50` default. **Fix:** `const raw = Number(...); const radiusKm = Math.min(Number.isFinite(raw) && raw > 0 ? raw : 50, 100)`, and range-check lat/lng to WGS84 for parity with `/drives`.
+
+- **Rate-limiter bucket Map is never evicted — unbounded growth under many distinct IPs** — `apps/api/src/rate-limit.ts:46-73`. The per-mount `buckets` Map is only ever written/overwritten; an IP that hits `/roam` (open/anonymous) once and never returns leaves a permanent entry, and the spoofable XFF above makes it floodable. **Fix:** size-gated lazy sweep on the window-roll branch, e.g. `if (buckets.size > 5000) for (const [k,b] of buckets) if (now >= b.resetAt) buckets.delete(k)`. (Complementary to the XFF fix.)
+
+- **External Google Routes fetch has no timeout/cancellation on the unrated, spending create path** — `packages/routing/src/index.ts:81-89`. `computeRoute` issues a bare `fetch()` with no `signal`; Bun has no default request timeout, so a hung upstream ties up a Cloud Run slot until the coarse ~300s platform deadline. **Fix:** `signal: AbortSignal.timeout(8000)`; the existing try/catch already maps the abort to 422.
+
+- **Non-fatal demand bump is `await`ed before responding — deferred-analytics work on the user's create latency** — `apps/api/src/drives.ts:501-511`. The best-effort demand write (whose consumer is deferred) blocks the response by one DB round-trip plus any cold-start retry backoff. **Fix:** fire-and-forget — `void withRetry(...).catch(...)` instead of `await`.
+
+- **`loadCorpusForRoute` / `loadCorpusByPoiIds` duplicate a byte-identical select + map-build block** — `apps/api/src/drives.ts:166-210,697-736`. The two loaders share an identical 11-column projection and `Map<string,NarrationRow>` loop (incl. the `attribution` cast), differing only in the `WHERE`; any `NarrationRow` change must be made twice. **Fix:** extract a shared `NARRATION_CORPUS_COLUMNS` projection and a `rowsToCorpus()` helper.
+
+### Nit
+
+- **`UUID_RE` duplicated verbatim across `index.ts` and `drives.ts`, and dead in `index.ts`** — `apps/api/src/index.ts:51-52` (and `drives.ts:48`). The same regex is defined in both files; the `index.ts` copy has zero references (its routes take no UUID params) and is dead local code, while `drives.ts:48` has all 4 live uses. **Fix:** delete the `index.ts:51-52` const+comment; keep the single `drives.ts` copy (do **not** swap to `z.uuid()` — its RFC version/variant checks are stricter than this shape guard). *(Found by three dimensions — merged.)*
+
+- **Dead null-filter + stale comment on `/roam` — `audioUrl`/`audioDurationMs` are NOT NULL** — `apps/api/src/index.ts:159-166`. The `r.key != null && r.durationMs != null` type-guard is unreachable (columns are `.notNull()`, schema.ts:183-184) and the "audioUrl is nullable through generation" comment contradicts the schema invariant. **Fix:** filter on haversine only, drop the predicate, rewrite the comment to state the NOT-NULL boundary. *(Found by two dimensions — merged.)*
+
+- **Geo/meters-per-degree math is inlined and duplicated across `index.ts` and `drives.ts`** — `apps/api/src/index.ts:96-104,127-129` vs `drives.ts:161-164`. Three copies of "meters-per-degree" (`111.32` km vs `111_320` m) and two haversines (R `6_371_000` vs engine's `6_371_008.8`) drift-risk; no live miscalculation at Tahoe latitudes, and the "keep the dep graph flat" comment is false (engine is already imported). **Fix:** import `haversineMeters` from `@skipper/engine`, add a shared `degBoxForMeters()` helper, or at minimum name the constants in place and drop the inaccurate comment.
+
+- **`drives.ts` at 736 lines mixes 5 concerns; the corpus/manifest cluster is the natural split** — `apps/api/src/drives.ts:59-248,696-736`. `NarrationRow` + both corpus loaders + `candidateOf` + `manifestClips` (~140 pure, Hono-free lines) could move to a `drive-corpus.ts` sibling, mirroring the existing `drive-geometry.ts`. **Fix:** extract opportunistically alongside the duplicate-loader consolidation; not worth doing on its own.
+
+## Known limitations (intentional / accepted — not bugs)
+
+- **Ghost-replay of a soft-deleted drive id** (`drives.ts:353-370`) — the replay short-circuit filters `isNull(deletedAt)`, so a deleted-then-recreated key re-serves a free manifest; the charge already stood (delete never refunds), so it's a consistency wart, not a money hole.
+- **Credit pre-check TOCTOU over-spend** (`drives.ts:484-486`) — accepted for a no-paid-tier toy; the *comment* understates the bound (it's N−1, not 1). Listed Medium-actionable above precisely because that in-code justification is false; tighten the comment and add a real spend guard when paid IAP lands.
+- **`assets/sign` / `GET /drives/:id` replay skip the release gate** (`drives.ts:596-610,696-736`) — safe because release is monotonic and drives are owner-only; only edge is an admin replaying their own staged-clip drive.
+- **`ensureFreeGrant` + consume are two separate round-trips** (`drives.ts:377-497`) — the grant is idempotent and additive, so a stray grant without a consume is just the user's normal full balance; no atomicity bug.
+- **`ensureFreeGrant` + `creditSummary` are two serial DB hops on hot paths** — an extra cold-start round-trip dwarfed by the downstream Routes+corpus work; the naive single-CTE "fix" is actually wrong (snapshot semantics would 403 a new user's first drive).
+- **Error JSON shape varies (`{error}` vs `{error,message}` vs `+cap`)** — cosmetic for a native-client-only toy; the `error` discriminator is stable everywhere.
+- **POST bodies have no size limit before `c.req.json()` buffers them** — bounded by Zod field caps, the account gate, and Cloud Run's request ceiling; optional `bodyLimit()` is defense-in-depth.
+- **Rate limiter disabled when `NODE_ENV==='test'`** — intentional, documented test wiring; the Dockerfile hard-codes `NODE_ENV=production`.
+- **`attribution` double-cast `as DriveClip['attribution']`** (`drives.ts:201,727`) — redundant today (DB and Zod shapes identical), guarded by `lint-enums.ts`; just delete the cast.
+- **`cl.url!` / `cl.contentType!` non-null assertions** (`drives.ts:660-665`) — incidentally safe because `manifestClips` always sets both.
+- **`manifestForStoredDrive` filters poiIds but passes the full selection to `manifestClips`** — `DriveSelectionItem` is single-kind so the filter is inert and `if (!n) continue` covers any future kind.
+
+## What the codebase does well
+
+This is an unusually well-documented codebase — nearly every sharp edge (the credit TOCTOU, the monotonic release gate, the in-memory limiter's scope, the lazy grant) carries an in-line comment that reasons about *why* it's safe, which turned most "findings" into comment-precision nits rather than hidden bugs. The money path is genuinely careful: `db.batch` co-commits, exactly-once idempotency keys, an append-only ledger, and owner-scoped reads throughout. The few real issues cluster on one theme — **spend protection on the paid Google Routes path** (IP trust, the unrated create endpoint, the consume race) — so the fixes are concentrated and tractable.

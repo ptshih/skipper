@@ -207,6 +207,10 @@ The rest are post-MVP features, gated behind the proven phone player:
 - [jungle-cruise-skipper-craft.md](research/jungle-cruise-skipper-craft.md) — adversarially-verified
   research digest behind the persona's voice; feeds `packages/studio/src/persona/skipper.ts` +
   `SKIPPER_TTS_STYLE_PROMPT` (2026-06-09).
+- [api-best-practices-audit.md](research/api-best-practices-audit.md) — internal `apps/api` audit
+  (2026-06-23): 18 actionable findings clustered on spend/security of the paid Routes path (XFF-spoof
+  rate-limit bypass, credit-consume TOCTOU, unrated `POST /drives`). **Working doc — UNTRIAGED; delete
+  once the findings are actioned.**
 
 ### guides/
 - [eas-setup.md](guides/eas-setup.md) — building + running the Expo app on EAS (dev build).
