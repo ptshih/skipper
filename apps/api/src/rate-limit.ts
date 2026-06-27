@@ -6,9 +6,8 @@
 // e.g. spamming the paid /drives/propose path) without standing up shared state. A shared store
 // (Redis/Cloud Run's not-yet-there) or an LB-layer limit is the M4 upgrade.
 //
-// Keyed by client IP: Cloud Run sets x-forwarded-for with the real client as the FIRST hop, so we
-// take that; falling back to cf-connecting-ip / x-real-ip / "anon" if it's absent. Enforcement is
-// SKIPPED entirely under NODE_ENV=test so the suite can't trip it.
+// Keyed by client IP, taken from the RIGHT of x-forwarded-for (see clientIp — the leftmost is
+// attacker-controlled). Enforcement is SKIPPED entirely under NODE_ENV=test so the suite can't trip it.
 
 import type { MiddlewareHandler } from 'hono'
 import type { ApiEnv } from './entitlements'
@@ -28,14 +27,36 @@ interface Bucket {
   resetAt: number
 }
 
-/** First hop of x-forwarded-for (Cloud Run's real client), else cf-connecting-ip / x-real-ip / "anon". */
+// How many RIGHT-hand x-forwarded-for entries are trusted infra hops to skip before the client IP.
+// 0 today: api.skipper.fm is a Cloud Run DOMAIN MAPPING (no load balancer), so Google Front End
+// appends only the real connecting IP as the rightmost entry. Set to 1 if an external HTTPS load
+// balancer is ever put in front (it appends an LB IP to the right of the client — see the LB-cutover
+// note in docs/guides/gcp-cloud-run-deploy.md). Env-tunable so that's a config change, not a code edit.
+const TRUSTED_PROXY_HOPS = Number(process.env.TRUSTED_PROXY_HOPS ?? 0)
+
+/**
+ * Client IP from the RIGHT of x-forwarded-for, skipping TRUSTED_PROXY_HOPS trusted infra entries.
+ *
+ * ⚠ Parse from the RIGHT, never the left. GFE/Cloud Run APPENDS the real connecting IP to the right;
+ * a caller can only PREPEND spoofed entries on the left. The old leftmost read let anyone send a
+ * random x-forwarded-for to mint a fresh bucket every request, fully bypassing the per-IP cap on the
+ * paid /drives Routes paths. Rightmost is unspoofable here. A short/forged chain clamps to the oldest
+ * entry rather than underflowing, and a wrong HOPS value can only OVER-share a bucket (over-block),
+ * never re-open the bypass. Falls back to x-real-ip then "anon" when x-forwarded-for is absent.
+ */
 function clientIp(c: Parameters<MiddlewareHandler<ApiEnv>>[0]): string {
   const fwd = c.req.header('x-forwarded-for')
   if (fwd) {
-    const first = fwd.split(',')[0]?.trim()
-    if (first) return first
+    const ips = fwd
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+    if (ips.length > 0) {
+      const ip = ips[Math.max(0, ips.length - 1 - TRUSTED_PROXY_HOPS)]
+      if (ip) return ip
+    }
   }
-  return c.req.header('cf-connecting-ip') ?? c.req.header('x-real-ip') ?? 'anon'
+  return c.req.header('x-real-ip') ?? 'anon'
 }
 
 /**

@@ -42,6 +42,7 @@ import {
 } from '@skipper/shared'
 import { isAdmin, requireAccount, withSession, type ApiEnv } from './entitlements'
 import { FREE_DRIVE_CAP, creditSummary, driveConsumeEntry, ensureFreeGrant } from './credits'
+import { rateLimit } from './rate-limit'
 import { withRetry } from './retry'
 import { contentTypeForKey, presignGet } from './storage'
 
@@ -343,13 +344,19 @@ driveRoutes.post('/propose', async (c) => {
   })
 })
 
+// Per-IP cap on the CREATE path — it fires a Google Routes call + consumes a credit + writes a row,
+// the same spend profile /propose is rate-limited for (index.ts). Applied as route-level middleware so
+// it scopes to EXACTLY POST / (the list GET, detail GET, re-sign POST, and delete under /drives stay
+// uncapped — they're cheap reads or idempotent). Same per-instance in-memory first-cut as ./rate-limit.
+const createDriveLimiter = rateLimit({ limit: 15, windowSec: 60, label: 'drives-create' })
+
 /**
  * POST /drives — generate + persist the confirmed drive. Free-account gated (above); enforces the
  * free-tier drive cap; materializes the route, runs the deterministic selection over the shared
  * narration corpus, freezes the STRUCTURE into `drives.selection`, bumps demand, and returns the
  * playable manifest. Mints no audio (reuses roam clips), so it spends only Routes + a DB write.
  */
-driveRoutes.post('/', async (c) => {
+driveRoutes.post('/', createDriveLimiter, async (c) => {
   const userId = c.get('session')?.user.id
   if (!userId) return c.json({ error: 'account_required', message: 'Create a free account to make a drive.' }, 401)
 
@@ -507,9 +514,16 @@ driveRoutes.post('/', async (c) => {
   // DO NOTHING (idempotency_key for the consume, the PK for the drive), so a retry that reuses the same
   // (now client-stable) id cleanly no-ops instead of erroring on the unique violation — the consume is
   // keyed on the drive id, so a drive charges exactly one credit even under retry. Every account
-  // consumes (no uncapped tier). (The balance was pre-checked above; with a client-stable id even a
-  // concurrent resubmit shares the consume key, so the only residual TOCTOU is two GENUINELY-DISTINCT
-  // creates racing the pre-check — bounded to 1, negligible.)
+  // consumes (no uncapped tier).
+  //
+  // ⚠ KNOWN residual TOCTOU (not closed here): the balance pre-check (above) and this consume are two
+  // separate neon-http round-trips, and the consume keys are DISTINCT per drive id — so N genuinely-
+  // concurrent creates with DISTINCT idempotency keys can all pass a `remaining===1` pre-check and all
+  // commit a −1, driving the balance to 1−N (and a delete never refunds). A client-stable id only
+  // dedupes RETRIES of the SAME create, not distinct ones. The create rate-limit (createDriveLimiter,
+  // 15/60s per IP) now bounds the blast radius; fully closing it needs DB-level per-user serialization
+  // (an advisory lock + a conditional INSERT…SELECT WHERE balance>=1 inside this batch), deferred until
+  // there's a DB-backed test harness to verify money-path SQL (today's credit tests are pure-surface).
   await withRetry(
     () =>
       db.batch([
@@ -549,8 +563,16 @@ driveRoutes.post('/', async (c) => {
     manifest.clips = manifestClips(selection, corpus)
   } catch (e) {
     console.error('[api] drive create presign failed', e)
-    // The drive IS saved; the client can re-fetch GET /drives/:id once R2 settles.
-    return c.json({ ...manifest, warning: 'audio_unavailable' })
+    // The drive IS saved + the credit already charged — return the SAME retryable 503 the four sibling
+    // presign sites use, NOT a 200 the client reads as success. A 200 + `warning` navigated the rider
+    // into a silently-EMPTY paid drive: driveManifest is a plain z.object, so it strips the unknown
+    // `warning` and the client never saw a retry signal. The create screen reuses its idempotencyKey on
+    // retry → the idempotent replay re-presigns the saved drive once R2 settles (no double charge);
+    // GET /drives/:id recovers it too.
+    return c.json(
+      { error: 'audio_unavailable', message: 'Audio is warming up. Give it a moment and try again.' },
+      503,
+    )
   }
   return c.json(manifest)
 })

@@ -81,7 +81,9 @@ app.on(['POST', 'GET'], '/api/auth/*', (c) => auth.handler(c.req.raw))
 
 // Rate-limit the propose path BEFORE mounting the sub-app: POST /drives/propose fires ONE Google
 // Routes call (+ a corpus read) per request and otherwise has no cap, so this is the spend/DB-load
-// guard (per-instance in-memory first cut — see ./rate-limit).
+// guard (per-instance in-memory first cut — see ./rate-limit). The heavier CREATE path (POST /drives:
+// Routes + a credit consume + a write) is capped too, via route-level middleware in ./drives
+// (createDriveLimiter) — kept there so it scopes to exactly POST / and not the cheap reads under /drives.
 app.use('/drives/propose', rateLimit({ limit: 15, windowSec: 60, label: 'propose' }))
 
 // Create-a-Drive (V2): user-owned, on-demand A→B drives over the shared narration corpus. The
