@@ -38,8 +38,8 @@ its own pass.
 > (e.g. wave suppression "on quiet") — there's ONE fixed cadence now. Cadence variety, if ever wanted,
 > returns as auto-adaptation, never a user notch.
 
-Three items locked from the 2026-06-11 brainstorm (full capture: `docs/ideas/free-roam-mode.md`
-§Alpha learnings). Order within the pass is free; all three are founder-facing on his daily drive.
+Two items locked from the 2026-06-11 brainstorm (full capture: `docs/ideas/free-roam-mode.md`
+§Alpha learnings). Order within the pass is free; both are founder-facing on his daily drive.
 
 - [ ] **Waves: narrate the scenic tier.** ~126 swept scenic pins sit unnarrated (`pois` story/scenic
       tiers — `discover-pois.ts`). Schema already done (V2): `narrations` HAS a `form` column
@@ -56,11 +56,6 @@ Three items locked from the 2026-06-11 brainstorm (full capture: `docs/ideas/fre
       startle dies) + a soft exit/resolve note as the duck releases. Client-side bundled assets
       (`apps/mobile`), played around the clip in `useRoam`. Sound design taste-gate: founder ear
       on the motif BEFORE wiring (charm shortlist already names sound design).
-- [ ] **Persistent encounter history + per-pin mute.** Local store (poiId, lastPlayedAt, count,
-      muted) — survives sessions (today's cooldown is session-scoped, `RoamEngine` 4h). Feed the
-      engine's cooldown from it; "Don't tell me this one again" action on the encounter sheet
-      writes `muted`. Unlocks later: deep-cuts rotation targeting, the corpus meter, revisit
-      preambles, mute-as-curation-telemetry. Keep it client-side (toy lens: no server surveillance).
 
 ## TTS audio QA: clip loudness normalization
 
