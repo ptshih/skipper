@@ -33,10 +33,10 @@ its own pass.
 
 ## Roam build pass 2 — LOCKED by the founder 2026-06-11 (the "companion grows up" pass)
 
-> ⚠ **Chattiness toggles (quiet/normal/talkative) are not very useful** (founder feedback
-> 2026-06-11). The min-gap governor knob is too coarse and blunt in practice. Before
-> building anything that assumes the quiet/normal/talkative axis (e.g. wave suppression
-> on quiet), reconsider whether to replace it with auto-adaptation or drop it entirely.
+> ⚠ **The chattiness axis (quiet/normal/talkative) was CUT** (2026-06-20 — too coarse, not useful in
+> practice; `useRoam.ts`, MEMORY "Roam chattiness toggles"). Don't build anything that assumes it
+> (e.g. wave suppression "on quiet") — there's ONE fixed cadence now. Cadence variety, if ever wanted,
+> returns as auto-adaptation, never a user notch.
 
 Three items locked from the 2026-06-11 brainstorm (full capture: `docs/ideas/free-roam-mode.md`
 §Alpha learnings). Order within the pass is free; all three are founder-facing on his daily drive.
@@ -47,8 +47,9 @@ Three items locked from the 2026-06-11 brainstorm (full capture: `docs/ideas/fre
       poiId (one telling per place); the Zod vocabulary is `narrationForm` in
       `@skipper/shared`. The remaining work is the 10–20s WAVE form in
       `generate-narrations.ts` (grammar: one-liner, self-contained, no laterality/volatile; no "ask
-      me about it" tease until B-sides exist). Engine + manifest: waves suppressed on quiet
-      chattiness, story-over-wave priority on simultaneous candidates. Prompt work is the real
+      me about it" tease until B-sides exist). Engine + manifest: story-over-wave priority on
+      simultaneous candidates (the old "suppress on quiet chattiness" is moot — that axis was cut).
+      Prompt work is the real
       cost — a wave must sound like HIM, not a gazetteer caption. ⚠ The --apply generation run is
       a PAID run (~$3–5 + TTS) — needs an explicit founder go, never inferred from this lock.
 - [ ] **The sonic cue.** ~1s entry motif before every encounter (the duck gets a reason; the
@@ -184,20 +185,6 @@ or strangers hold many offline.
 Refs: `apps/mobile/src/lib/offline.ts`, `apps/mobile/app/drives/[id]/index.tsx`,
 `packages/shared/src/schemas.ts` (`driveManifest`/`revisedAt`), `apps/api/src/index.ts`.
 
-## Offline downloads: expiration / forced freshness re-check (TTL)
-
-✅ **BUILT 2026-06-19 (section DONE, safe to delete).** Founder ask 2026-06-16: an offline download
-should EXPIRE (~30d) and nudge a re-check — offline clips never auto-refresh, and the content-diff
-(`isDownloadStale`) only catches drift if the rider re-opens the screen WHILE ONLINE, so a copy saved
-once and never re-opened (or held in a dead zone) can carry stale facts / a superseded clip forever.
-Shipped: `OFFLINE_TTL_DAYS = 30` + `isDownloadExpired` in `apps/mobile/src/lib/offline.ts` (pure date
-math in offline-util `isPastTtl`, unit-tested; reads only the existing `savedAt`, ZERO-network — so it
-fires even in a dead zone, unlike the content-diff); the drive-detail screen shows a "Saved a while back" chip + a
-"Refresh the download" ⋯ action past the TTL. **SOFT** (never blocks playback — decided per the
-never-strand-a-rider posture); **no manifest-version bump** (reuses `savedAt`, no shape change).
-Decision: `docs/decisions/offline-freshness-ttl.md`. (The per-clip-diff re-pull stays post-MVP — see
-"Offline downloads: full re-pull only" above.)
-
 ## Upstream-contribution drafts for the active poi_overrides (agent drafts, human submits)
 
 The fact-overrides loop's "contribute back" half is designed but UNBUILT: we correct upstream
@@ -250,25 +237,3 @@ over-broad trigger radius (all anti-charm or anti-doctrine).
 
 Validated-already (no action): our anonymous couch preview = Autio's
 tap-a-pin preview; the M3 notch/interests-as-setting = their interest-ordered queue.
-
-## Admin POIs: what is the "Retire" tab for? (rename / fold / keep — founder question 2026-06-20)
-
-The POIs page (`apps/admin/client/src/views/PoisView.tsx`) has a two-tab `Segmented`: **Corpus** (the
-full table) + **Retire**. Despite the name, the Retire tab is really a **flagged-POIs health/triage
-queue** — it lists POIs matching `staleFacts || suspiciousDuration || (!attributed && narrationCount
-> 0) || speakableDrift` (`PoisView.tsx:67`) and offers **Re-fetch** (free Wikipedia re-pull for stale
-ones) plus a pointer to regenerate/correct elsewhere. The actual **Retire** action (hard DELETE) is
-allowed ONLY for orphan POIs with no narration (`RetireTab`, ~L1342/1427; server-guarded too) — but
-three of the four flag predicates imply a narration EXISTS (unattributed needs `narrationCount > 0`;
-stale/suspicious-duration come from a clip), so Retire is disabled for nearly everything that lands
-there. So the tab named "Retire" almost never retires — it's a QA inbox.
-
-The open question: does this tab earn its place, and is "Retire" the wrong label?
-
-- [ ] Decide one of: **(a) rename** it to what it does ("Flagged" / "Health" / "Needs attention",
-      keeping the alert-dot count); **(b) fold** it into the Corpus tab as a saved filter/chip (one
-      table, a "flagged only" toggle) so there's no second surface; or **(c) keep** as-is if the
-      separate triage inbox is deliberately valuable. If kept/renamed, also reconsider whether hard
-      "Retire" (orphan-only delete) even belongs in a *flagged* list, or should move to a row action in
-      Corpus. Cheap, UX-only — no schema/wire change. Refs: `PoisView.tsx` `flagged`/`tabs`
-      (L67-72), `RetireTab` (L1328-1442).
