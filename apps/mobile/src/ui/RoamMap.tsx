@@ -165,15 +165,15 @@ function RoamMapBase({ position, pins, heardPoiIds, clipActive, recenterBottom }
         // The visible viewport changed (follow-glide / pan / zoom) → re-cull the drawn markers.
         onRegionChangeComplete={setRegion}
       >
-        {/* Story-pins — hollow ("a story here, not yet heard"); heard ones fill in solid once
-            encounter history lands (pass-2). Drawn from the culled set (drawnPins), not the full
-            field, so react-native-maps never paints hundreds of far-away markers (the lag fix). */}
+        {/* Story-pins — hollow ("a story here, not yet heard"); heard ones fill in solid from the
+            cross-session encounter history (useRoam.heardPoiIds). Drawn from the culled set (drawnPins),
+            not the full field, so react-native-maps never paints hundreds of far-away markers (lag fix). */}
         {drawnPins.map((p) => {
           const heard = heardPoiIds?.has(p.poiId) ?? false
           return (
             <Marker
               // Key on poiId+heard: tracksViewChanges=false snapshots once, so the heard→solid flip
-              // (pass-2's encounter history) must REMOUNT to redraw. Benign in v1 (always unheard). (audit #242)
+              // (a clip finishing, or reload from cross-session history) must REMOUNT to redraw. (audit #242)
               key={`${p.poiId}-${heard}`}
               coordinate={{ latitude: p.lat, longitude: p.lng }}
               anchor={{ x: 0.5, y: 0.5 }}

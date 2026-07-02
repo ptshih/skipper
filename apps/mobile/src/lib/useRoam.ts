@@ -42,6 +42,15 @@ import { errorMessage, getRoamManifest } from './api'
 import type { RoamManifest } from './api'
 import { liveRoamSource, simulatedSource } from './gps'
 import type { FixSubscription } from './gps'
+import {
+  heardPoiIds as heardPoiIdsOf,
+  historySeed,
+  loadRoamHistory,
+  recordPlayed,
+  saveRoamHistory,
+  setMuted as setMutedInHistory,
+  type RoamHistory,
+} from './roam-history'
 import { useLocationPriming } from './useLocationPriming'
 import { voice } from '@/ui/voice'
 
@@ -133,6 +142,8 @@ export interface RoamState {
   position: { lat: number; lng: number } | null
   /** The manifest's story-pins, for the roam map (set once when the session loads). */
   mapPins: { poiId: string; name: string; lat: number; lng: number }[]
+  /** poiIds the rider has HEARD before (cross-session) — the map fills these pins in vs. unheard. */
+  heardPoiIds: ReadonlySet<string>
   /** The session-start opener line (rotates per session). */
   openerLine: string
   gpsSearching: boolean
@@ -145,6 +156,9 @@ export interface RoamState {
   confirmLocationPrime: () => void
   /** Skip the playing encounter (the sheet's ghost action / scrim tap). */
   skip: () => void
+  /** "Don't tell me this one again" — mute the encounter the sheet is showing, persist it, drop it from
+   *  the queue, and skip it if it's playing. A muted poi never fires again (this session or any future). */
+  muteCurrent: () => void
   /** Hand-end the session → the sign-off state (teardown happens here). */
   end: () => void
   /** Leave the sign-off → back to idle/entry. */
@@ -170,12 +184,14 @@ export function useRoam(mode: RoamMode): RoamState {
   const [clipSounding, setClipSounding] = useState(false) // sawFresh mirror — real audio has started (the peek-bar safety-net truth)
   const [position, setPosition] = useState<{ lat: number; lng: number } | null>(null) // roam-map puck
   const [mapPins, setMapPins] = useState<{ poiId: string; name: string; lat: number; lng: number }[]>([])
+  const [heardPoiIds, setHeardPoiIds] = useState<ReadonlySet<string>>(() => new Set<string>())
   const [diag, setDiag] = useState<{ fixAgeSec: number | null; nearestM: number | null }>({
     fixAgeSec: null,
     nearestM: null,
   })
 
   const engineRef = useRef<RoamEngine | null>(null)
+  const historyRef = useRef<RoamHistory>({}) // cross-session memory (heard + muted); persisted to a JSON file
   const pinsRef = useRef<RoamManifest['pins']>([])
   const queueRef = useRef<string[]>([]) // fired poiIds waiting to play (FIFO)
   const clipBusy = useRef(false)
@@ -255,6 +271,14 @@ export function useRoam(mode: RoamMode): RoamState {
     }
   }, [teardown])
 
+  // Load cross-session roam memory ONCE on mount (heard pins + mutes) into the working ref, and seed the
+  // map's heard/unheard fill. The begin flow seeds the engine from this same ref at session start.
+  useEffect(() => {
+    const h = loadRoamHistory()
+    historyRef.current = h
+    setHeardPoiIds(heardPoiIdsOf(h))
+  }, [])
+
   // ---- FIFO pump: load + play the next fired encounter (one at a time) ----
   const pump = useCallback(() => {
     if (clipBusy.current) return
@@ -276,7 +300,15 @@ export function useRoam(mode: RoamMode): RoamState {
       }
       // The tally counts encounters that made SOUND — a stall-skipped clip the rider
       // never heard isn't a story told.
-      if (sawFresh.current) setToldCount((n) => n + 1)
+      if (sawFresh.current) {
+        setToldCount((n) => n + 1)
+        // Persist that this poi actually SOUNDED → cross-session cooldown (no re-tell on the drive home)
+        // + the map's heard fill. A stall-skipped clip (no sawFresh) is intentionally NOT recorded.
+        const next = recordPlayed(historyRef.current, poiId, Date.now())
+        historyRef.current = next
+        saveRoamHistory(next)
+        setHeardPoiIds(heardPoiIdsOf(next))
+      }
       setExclusiveAudio(false) // clip over → hand focus back so the rider's audio resumes
       setActivePoiId((cur) => (cur === poiId ? null : cur))
       // Keep the sheet UP if another encounter is queued (don't slide down then back up between
@@ -575,6 +607,9 @@ export function useRoam(mode: RoamMode): RoamState {
           name: p.name,
         })),
         { minGapSec: ROAM_MIN_GAP_SEC },
+        // Cross-session memory: prior-heard pins seed the cooldown (quiet on the drive home), muted pins
+        // never fire. Read from the working ref (loaded on mount, updated as encounters play/mute).
+        historySeed(historyRef.current, Date.now()),
       )
 
       const source =
@@ -682,6 +717,25 @@ export function useRoam(mode: RoamMode): RoamState {
       onClipDone(activePoiId)
     }
   }, [activePoiId, player, onClipDone])
+
+  // "Don't tell me this one again": mute the encounter the SHEET is showing (sheetPoiId — the title the
+  // rider sees; falls back to the loading/playing clip), persist it, tell the engine, drop it from the
+  // queue, and skip it if it's the one playing. A muted poi never fires again, this session or future.
+  const muteCurrent = useCallback(() => {
+    const poiId = sheetPoiId ?? activePoiId
+    if (poiId === null) return
+    const next = setMutedInHistory(historyRef.current, poiId, true)
+    historyRef.current = next
+    saveRoamHistory(next)
+    engineRef.current?.mute(poiId)
+    queueRef.current = queueRef.current.filter((id) => id !== poiId) // never play a queued-but-not-started mute
+    if (activePoiId === poiId) {
+      try {
+        player.pause()
+      } catch {}
+      onClipDone(poiId)
+    }
+  }, [sheetPoiId, activePoiId, player, onClipDone])
 
   // Tuck the sheet away WITHOUT stopping the clip (handle drag-down / scrim tap). The clip plays
   // on; the peek bar (driven by clipSounding) is the one-tap way back, so a hidden sheet is never a
@@ -804,12 +858,14 @@ export function useRoam(mode: RoamMode): RoamState {
     diag,
     position,
     mapPins,
+    heardPoiIds,
     openerLine,
     gpsSearching,
     start,
     retry,
     confirmLocationPrime,
     skip,
+    muteCurrent,
     end,
     finishSignoff,
   }

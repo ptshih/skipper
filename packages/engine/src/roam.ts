@@ -100,6 +100,19 @@ function cellKey(lat: number, lng: number): string {
   return `${Math.floor(lat / GRID_CELL_DEG)}:${Math.floor(lng / GRID_CELL_DEG)}`
 }
 
+/** Cross-session memory seeded into a fresh RoamEngine at session start. The PERSISTENCE lives in the
+ *  app (a JSON file — apps/mobile/src/lib/roam-history.ts); the engine stays pure/no-I/O and is just
+ *  born with this snapshot. */
+export interface RoamHistorySeed {
+  /** poiId → seconds since it last played (wall-clock AGE at session start). Seeded as a NEGATIVE fire
+   *  time so update()'s existing session-relative `fix.tSec - firedAt` cooldown keeps counting across
+   *  the session boundary — a pin heard on the morning commute stays quiet on the drive home until its
+   *  cooldown elapses. */
+  firedAgesSec?: Readonly<Record<string, number>>
+  /** poiIds the rider muted ("don't tell me this one again") — never fire, this session or ever. */
+  mutedPoiIds?: Iterable<string>
+}
+
 export class RoamEngine {
   private opts: RoamTriggerOptions
   /** poiId → tSec it fired (cooldown clock). */
@@ -107,6 +120,9 @@ export class RoamEngine {
   /** name → tSec it fired — same cooldown as poiId; guards against two DB rows for the
    *  same physical place (different poiIds, identical name) playing back-to-back. */
   private readonly firedNameAt = new Map<string, number>()
+  /** poiIds the rider has muted — never fire. Seeded from cross-session history; extendable at
+   *  runtime via mute() (the encounter sheet's "don't tell me this one again"). */
+  private readonly muted: Set<string>
   /** poiId → closest approach distance (m) seen while in range — the passed-point retire clock.
    *  Tracked every fix (even gate-closed) and deleted when the pin falls out of range (re-arm). */
   private readonly minDistM = new Map<string, number>()
@@ -124,6 +140,7 @@ export class RoamEngine {
   constructor(
     private readonly pins: RoamPinRef[],
     opts: Partial<RoamTriggerOptions> = {},
+    history: RoamHistorySeed = {},
   ) {
     this.opts = { ...DEFAULT_ROAM_TRIGGER, ...opts }
     for (const pin of this.pins) {
@@ -135,6 +152,24 @@ export class RoamEngine {
       const bucket = this.grid.get(key)
       if (bucket) bucket.push(pin)
       else this.grid.set(key, [pin])
+    }
+    // Seed cross-session memory (the app persists it; the engine stays pure). Muted pins never fire;
+    // prior fires seed the cooldown as a NEGATIVE tSec (age before session start) so the existing
+    // `fix.tSec - firedAt < cooldownSec` check keeps counting the cooldown across the session boundary.
+    this.muted = new Set<string>(history.mutedPoiIds)
+    if (history.firedAgesSec) {
+      const nameByPoi = new Map(this.pins.map((p) => [p.poiId, p.name]))
+      for (const [poiId, ageSec] of Object.entries(history.firedAgesSec)) {
+        if (!Number.isFinite(ageSec)) continue
+        const firedTSec = -Math.max(0, ageSec)
+        this.firedAt.set(poiId, firedTSec)
+        const name = nameByPoi.get(poiId)
+        if (name) {
+          // Two poiIds can share a name; keep the most RECENT fire (largest = least-negative tSec).
+          const prev = this.firedNameAt.get(name)
+          if (prev === undefined || firedTSec > prev) this.firedNameAt.set(name, firedTSec)
+        }
+      }
     }
   }
 
@@ -169,6 +204,7 @@ export class RoamEngine {
     // per-pin decision, debounce, and nearest-first below are byte-identical; we only shrink
     // the candidate set. (A pin missing coords lives in `ungridded` and is always included.)
     for (const pin of this.candidatesFor(fix.lat, fix.lng)) {
+      if (this.muted.has(pin.poiId)) continue // muted ("don't tell me this one again") — never fires
       const d = haversineMeters(here, [pin.lng, pin.lat])
       const floor = pin.radiusM ?? this.opts.floorM
       if (d > effectiveRadiusM(floor, fix.speedMps, this.opts.leadSeconds)) {
@@ -233,6 +269,17 @@ export class RoamEngine {
    */
   setMinGap(minGapSec: number): void {
     this.opts = { ...this.opts, minGapSec }
+  }
+
+  /** Mute a pin mid-session — "don't tell me this one again". It won't fire for the rest of this
+   *  session; the app persists it (roam-history) so it never fires again. Idempotent. */
+  mute(poiId: string): void {
+    this.muted.add(poiId)
+  }
+
+  /** Whether a pin is currently muted (for the app to reflect in the map / sheet). */
+  isMuted(poiId: string): boolean {
+    return this.muted.has(poiId)
   }
 
   hasFired(poiId: string): boolean {

@@ -157,6 +157,9 @@ export const voice = {
     musicHeld: 'Held · music back up', // encounter PAUSED — the rider's audio resumes
     storyBadge: 'STORY', // encounter sheet badge (waves/B-sides arrive with their clips)
     skip: 'Skip',
+    // "Don't tell me this one again" — mutes this pin for good (the engine never fires it again across
+    // sessions). The ghost action beneath the transport; muting also skips the clip that's playing.
+    muteStory: "Don't tell me this one again",
     // Tuck the encounter player away WITHOUT stopping the story — the handle drag-down / a scrim tap.
     // (Skip is the only thing that stops it.) The peek bar brings it back, so audio never plays with
     // no reachable controls (the "couldn't get the player back" fix).

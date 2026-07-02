@@ -106,6 +106,50 @@ describe('RoamEngine — governors', () => {
   })
 })
 
+describe('RoamEngine — cross-session memory (seed + mute)', () => {
+  test('seeded firedAgesSec suppresses a recently-heard pin, then re-fires once its cooldown elapses', () => {
+    // Heard 30 min ago on the morning commute → still inside the 4h cooldown on the drive home.
+    const ageSec = 30 * 60
+    const e = new RoamEngine([NORTH], { minGapSec: 0 }, { firedAgesSec: { north: ageSec } })
+    // session t=0, but 30 min of the cooldown has already elapsed (wall-clock) → still quiet.
+    expect(e.update(fix(0.0085, 0, MPH60, 0, 0))).toHaveLength(0)
+    // Once age + session time clears the cooldown, it may tell it again.
+    const remaining = DEFAULT_ROAM_TRIGGER.cooldownSec - ageSec
+    expect(e.update(fix(0.0085, 0, MPH60, 0, remaining + 60))).toHaveLength(1)
+  })
+
+  test('a stale seed (older than the cooldown) does NOT suppress — the pin fires immediately', () => {
+    const e = new RoamEngine([NORTH], { minGapSec: 0 }, {
+      firedAgesSec: { north: DEFAULT_ROAM_TRIGGER.cooldownSec + 3_600 },
+    })
+    expect(e.update(fix(0.0085, 0, MPH60, 0, 0))).toHaveLength(1)
+  })
+
+  test('seeded mute: a muted pin never fires, even far past any cooldown', () => {
+    const e = new RoamEngine([NORTH], { minGapSec: 0 }, { mutedPoiIds: ['north'] })
+    expect(e.update(fix(0.0085, 0, MPH60, 0, 0))).toHaveLength(0)
+    expect(e.update(fix(0.0085, 0, MPH60, 0, DEFAULT_ROAM_TRIGGER.cooldownSec * 2))).toHaveLength(0)
+  })
+
+  test('runtime mute() stops a pin from firing again mid-session', () => {
+    const e = new RoamEngine([NORTH], { minGapSec: 0 })
+    expect(e.update(fix(0.0085, 0, MPH60, 0, 0))).toHaveLength(1) // fires once
+    e.mute('north')
+    expect(e.isMuted('north')).toBe(true)
+    // Well past the cooldown it would normally re-fire — but it's muted now.
+    expect(e.update(fix(0.0085, 0, MPH60, 0, DEFAULT_ROAM_TRIGGER.cooldownSec + 1_800))).toHaveLength(0)
+  })
+
+  test('muting one pin does not muzzle a different nearby pin — the next-best fires', () => {
+    const a = pin('a', 0.0085, 0) // nearest, but muted
+    const b = pin('b', 0.0095, 0) // farther, not muted
+    const e = new RoamEngine([a, b], { minGapSec: 0 }, { mutedPoiIds: ['a'] })
+    const fired = e.update(fix(0.007, 0, MPH60, 0, 0)) // both in range; a is nearest but skipped
+    expect(fired).toHaveLength(1)
+    expect(fired[0]!.poiId).toBe('b')
+  })
+})
+
 describe('RoamEngine — passed-point retire', () => {
   test('a pin driven PAST while a clip plays is not narrated late when the gate reopens', () => {
     // The headline "fired after I drove past it" failure: a pin you approach + pass DURING another

@@ -338,6 +338,7 @@ export default function RoamScreen() {
               <RoamMap
                 position={r.position}
                 pins={r.mapPins}
+                heardPoiIds={r.heardPoiIds}
                 clipActive={sheetVisible || peekVisible}
                 recenterBottom={sheetVisible ? 360 : peekVisible ? 120 : undefined}
               />
@@ -505,6 +506,9 @@ export default function RoamScreen() {
                     onSeekForward={() => r.seekClipBy(15)}
                     secondary={{ title: voice.roam.skip, onPress: r.skip }}
                   />
+                  <View style={styles.muteRow}>
+                    <Button variant="ghost" title={voice.roam.muteStory} onPress={r.muteCurrent} />
+                  </View>
                 </>
               )}
             </Animated.View>
@@ -566,6 +570,8 @@ export default function RoamScreen() {
 
 const styles = StyleSheet.create({
   body: { flex: 1, padding: space.gutter, gap: space.lg, justifyContent: 'center' },
+  muteRow: { alignItems: 'center' }, // centers the ghost "don't tell me this one again" under the transport
+
   base: { flex: 1, padding: space.gutter },
   // Symmetric flex above + below the hero centers the idle cluster; the footer pins below it.
   flexSpace: { flex: 1 },
