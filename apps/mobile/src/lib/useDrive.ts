@@ -28,6 +28,7 @@ import {
   type GpsFix,
   type PreviewSegment,
 } from '@skipper/engine'
+import type { Attribution } from '@skipper/shared'
 import { ApiError, errorMessage } from './api'
 import { cleanPlaceName } from './labels'
 import { loadPlayback, resignPlayback } from './offline'
@@ -88,6 +89,10 @@ interface DriveStop {
   lng: number
   triggerRadiusM: number
   audioDurationMs: number | null | undefined
+  /** The clip's frozen source credit — carried so the player can show it while the clip plays
+   *  (CC BY-SA attribution rides the WORK, not a settings screen). Absent on scenic/break forms,
+   *  which ground on no source text. */
+  attribution?: Attribution[]
 }
 
 interface DriveData {
@@ -121,6 +126,8 @@ export interface DriveStopView {
   /** Raw POI coordinates — for the map's stop markers. */
   lat: number
   lng: number
+  /** The clip's frozen source credit, for the player's SourceCredit line. */
+  attribution?: Attribution[]
 }
 
 export interface UseDrive {
@@ -341,6 +348,7 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
             lng: c.lng,
             triggerRadiusM: c.triggerRadiusM ?? 120,
             audioDurationMs: c.durationMs,
+            attribution: c.attribution,
           })),
         })
         // PREVIEW: build the compressed segment timeline (the preview's clock). Stretch the
@@ -1124,6 +1132,7 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
         stopType: s.stopType,
         lat: s.lat,
         lng: s.lng,
+        attribution: s.attribution,
       })) ?? [],
     [data],
   )

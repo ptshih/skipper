@@ -234,6 +234,19 @@ export const voice = {
     signUpHeader: 'Come along for the ride',
     // Road idiom, not the London-Underground "Mind the gap" (the persona is a road-trip guide).
     subhead: 'Mind the potholes.',
+    // Password reset — the ONLY way back into a locked-out account (email/password is the only
+    // sign-in method in prod, and there's no email verification). The rider here is anxious and
+    // possibly about to lose their drives and credits, so the copy drops the bit and just helps.
+    forgot: 'Forgot your password?',
+    resetHeader: 'Let’s get you back in',
+    resetHint:
+      'Give us the email you signed up with and we’ll send a link to set a new password. The link works once and runs out after an hour.',
+    resetSend: 'Send the link',
+    // ⚠ Deliberately enumeration-safe: this reads the SAME whether or not the account exists,
+    // mirroring the server's own reply. Anything more specific ("no such account") would turn the
+    // form into an oracle for which emails are registered.
+    resetSent:
+      'If that address is one of ours, the link is on its way. Go check your email — and mind the spam bin.',
   },
   settings: {
     account: 'ACCOUNT',
@@ -242,8 +255,30 @@ export const voice = {
     // night drive dims itself. Persona-light, still informative.
     appearanceHint:
       'Auto rides with your phone — dusk-dark when the sun clocks out, bright by day. Pin Day or Dusk to hold one mood.',
-    credits: 'CREDITS',
-    creditsAction: 'Sources & licenses', // → /legal
+    // "SOURCES", not "CREDITS": this section is ATTRIBUTION (where the facts and music came from —
+    // credits as in a film's credits). The app now has literal drive CREDITS (the credit_entries
+    // ledger, surfaced on Home), and one label meaning both sent riders here looking for a balance.
+    sources: 'SOURCES',
+    sourcesAction: 'Sources & licenses', // → /legal
+    // The two public documents the App Store listing points at. They open on the web (skipper.fm)
+    // rather than shipping as in-app copy, so a policy fix never waits on a release.
+    legal: 'LEGAL',
+    privacyAction: 'Privacy policy',
+    termsAction: 'Terms of use',
+    // Account deletion — App Store Guideline 5.1.1(v) requires it in-app for any app that creates
+    // accounts. Every word is load-bearing and the persona stays out of it: deletion is immediate,
+    // total, and forfeits unspent credits (the ledger never refunds — docs/decisions/credit-ledger.md).
+    // A rider must not be able to read this as a fancier "Sign out".
+    deleteAccount: 'Delete account',
+    deleteIntro:
+      'This removes your account, your saved drives, and any credits you have left. It happens straight away and can’t be undone.',
+    deletePasswordLabel: 'Enter your password to confirm',
+    deleteAction: 'Permanently delete',
+    deleteTitle: 'Delete your account?',
+    deleteBody:
+      'Your account, your drives, and your remaining credits go for good. This can’t be undone.',
+    deleteCta: 'Delete forever',
+    deleteFailed: 'Could not delete your account',
     // Developer: an admin-only sub-screen (Settings → Developer → /developer), gated on the
     // server-set user.role (Better Auth admin plugin) === 'admin'. `developer` labels the entry
     // row; the controls (sim GPS + diagnostics) live on the sub-screen. They used to sit inline

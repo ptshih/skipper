@@ -8,7 +8,8 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyALwfidcKl0T3EOgNKwuryPg3PDIpRk5BQ"
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyALwfidcKl0T3EOgNKwuryPg3PDIpRk5BQ",
+        "SKIPPER_LAN_HTTP": "1"
       },
       "ios": {
         "simulator": true

@@ -36,7 +36,14 @@ export const authClient = createAuthClient({
   ],
 })
 
-export const { signIn, signUp, signOut, useSession, updateUser } = authClient
+export const { signIn, signUp, signOut, useSession, updateUser, deleteUser, requestPasswordReset } =
+  authClient
+
+/** Where a password-reset link lands. Reset resolves on the WEB, not in the app: a link opened from
+ *  a mail client can't be relied on to hand off to a specific app, and a reset that only works on the
+ *  device that still has a session isn't a reset at all. The page posts the new password back to this
+ *  API. Must be listed in the server's `trustedOrigins` or the request is rejected outright. */
+export const PASSWORD_RESET_URL = 'https://skipper.fm/reset-password'
 
 /** Admin gate — `role === 'admin'` (Better Auth admin plugin, server-set). The ONE client-side
  *  definition of "is this user an admin?", mirroring the API's isAdmin() in apps/api/src/tiers.ts.

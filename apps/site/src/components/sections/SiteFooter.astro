@@ -2,6 +2,11 @@
 // Footer — minimal, honest, on-brand plumbing. Deliberately sparse (no
 // affiliate/press/gift sprawl we haven't earned). The CC BY-SA attribution is
 // real and load-bearing per the project's licensing invariant — not decorative.
+//
+// Privacy/Terms are load-bearing too: the App Store listing REQUIRES a reachable
+// privacy-policy URL, so /privacy must stay linked and must stay live. The section
+// links are root-relative ("/#how", not "#how") because this footer also renders on
+// /privacy and /terms, where a bare hash would dead-end on the current page.
 const year = 2026
 ---
 
@@ -13,9 +18,9 @@ const year = 2026
         <p class="footer__tagline">A corny old skipper, a real road, and a lake that’s about to get talked about.</p>
       </div>
       <nav class="footer__links" aria-label="Footer">
-        <a href="#how">How it works</a>
-        <a href="#the-drive">The drive</a>
-        <a href="#modes">Free roam</a>
+        <a href="/#how">How it works</a>
+        <a href="/#the-drive">The drive</a>
+        <a href="/#modes">Free roam</a>
         <a href="mailto:hello@skipper.fm">Contact</a>
       </nav>
     </div>
@@ -28,6 +33,10 @@ const year = 2026
     </p>
     <div class="footer__legal">
       <span>© {year} Skipper · Made with too many puns in California.</span>
+      <span class="footer__dot">·</span>
+      <a href="/privacy">Privacy</a>
+      <span class="footer__dot">·</span>
+      <a href="/terms">Terms</a>
       <span class="footer__dot">·</span>
       <a href="https://skipper.fm">skipper.fm</a>
     </div>

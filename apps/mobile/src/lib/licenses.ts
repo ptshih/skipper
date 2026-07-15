@@ -12,6 +12,42 @@
 export type { DataSource } from '@skipper/shared'
 import type { DataSource } from '@skipper/shared'
 
+/** The public legal documents, on the marketing site (apps/site/src/pages/). They live on the WEB,
+ *  not in the app, because the App Store listing must point at a URL and a reviewer — plus anyone
+ *  deciding whether to install — has to read them BEFORE there's an app to read them in. Settings
+ *  links out to the same documents so a signed-in rider isn't sent hunting. Not localized, not
+ *  versioned in-app: the site is the single copy, so a policy update never waits on a release. */
+export const PRIVACY_POLICY_URL = 'https://skipper.fm/privacy'
+export const TERMS_URL = 'https://skipper.fm/terms'
+
+/** Canonical license deeds, keyed by the license CODE frozen on a clip's attribution
+ *  (`narrations.attribution[].license`). Creative Commons requires a LINK to the license wherever
+ *  the adapted work appears, and the frozen snapshot stores only the code — so this is the one place
+ *  that maps code → deed. Keep in step with FALLBACK_DATA_SOURCES below (same URLs, different key:
+ *  that catalog is per-SOURCE, this is per-LICENSE, and one source's license can change over time
+ *  while old clips keep crediting the license they were actually built under).
+ *  An unknown code renders as plain text — credit without a link beats a link to the wrong license. */
+const LICENSE_DEEDS: Record<string, string> = {
+  'CC BY-SA 4.0': 'https://creativecommons.org/licenses/by-sa/4.0/',
+  'CC BY 4.0': 'https://creativecommons.org/licenses/by/4.0/',
+  'CC0 1.0': 'https://creativecommons.org/publicdomain/zero/1.0/',
+}
+
+/** The deed URL for a frozen license code, or undefined if we don't know it. */
+export const licenseDeedUrl = (license: string): string | undefined => LICENSE_DEEDS[license]
+
+/** Human label for an `attributionSource` code (the wire carries the code, riders read the name). */
+const SOURCE_LABELS: Record<string, string> = {
+  wikipedia: 'Wikipedia',
+  wikidata: 'Wikidata',
+  macrostrat: 'Macrostrat',
+  google_places: 'Google Places',
+}
+
+/** Display name for an attribution source code; falls back to the raw code rather than dropping
+ *  the credit if a new source ships before this map learns it. */
+export const attributionSourceLabel = (source: string): string => SOURCE_LABELS[source] ?? source
+
 /** Offline fallback for the credits screen. Source of truth is GET /sources — keep this in
  *  rough sync, but it is non-authoritative (the live list overrides it whenever online). */
 export const FALLBACK_DATA_SOURCES: DataSource[] = [

@@ -28,6 +28,7 @@ import {
   RouteTrack,
   Screen,
   Scrubber,
+  SourceCredit,
   StateView,
   StopList,
   STOP_ROW_HEIGHT,
@@ -255,6 +256,9 @@ export default function DriveScreen() {
 
   const activeStop = d.activeSeq != null ? d.stops.find((s) => s.seq === d.activeSeq) : undefined
   const nowTitle = activeStop?.name ?? d.hostName
+  // Credit follows whatever the card is currently ABOUT — so it appears with the stop and clears
+  // between stops, rather than crediting a source while the skipper is talking about nothing.
+  const activeAttribution = activeStop?.attribution
   const nextStop = d.nextSeq != null ? d.stops.find((s) => s.seq === d.nextSeq) : undefined
   const nextName = nextStop?.name
 
@@ -437,6 +441,10 @@ export default function DriveScreen() {
           {d.stallNote}
         </Text>
       ) : null}
+      {/* The playing clip's source credit — CC BY-SA attaches to the adapted WORK, so it rides the
+          stop it belongs to rather than living only on the Sources screen. Renders nothing for a
+          clip with no attribution (scenic/break ground on no source text). */}
+      <SourceCredit items={activeAttribution} />
     </NowCard>
   )
 

@@ -1,4 +1,4 @@
-// Sources & Licenses — the public attribution surface, reached from Settings → Credits.
+// Sources & Licenses — the public attribution surface, reached from Settings → Sources.
 // CC BY-SA / CC BY oblige us to credit our sources and link the license; this is where
 // that credit lives app-wide (per-clip credit is frozen on narrations.attribution).
 // The catalog is served by GET /sources (authoritative) so a new fact source credits

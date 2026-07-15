@@ -1,0 +1,205 @@
+---
+// skipper.fm/terms — the terms of use the App Store listing points at.
+//
+// ⚠⚠ NOT LEGALLY REVIEWED. Drafted from the source tree by an engineer, not a
+// lawyer. Accurate to the code as of the date below; that is NOT the same as
+// legally sufficient. The liability, warranty, and arbitration-shaped questions in
+// particular are exactly the ones an engineer should not be answering alone. Have
+// counsel read this before it carries real weight.
+//
+// ⚠ Facts here that drift with the code:
+//   • credits: never refunded, forfeited on delete ... apps/api/src/{credits,account}.ts
+//   • the free allotment (FREE_DRIVE_CAP) ............ apps/api/src/credits.ts
+//   • CC BY-SA obligations on narration .............. packages/studio (narrations.attribution)
+//   • music licensing ................................ apps/mobile/src/lib/licenses.ts
+import Legal from '../layouts/Legal.astro'
+---
+
+<Legal
+  heading="Terms of Use"
+  kicker="The rules of the road"
+  description="The terms for using Skipper: drive safely, the narration is AI-generated and may be wrong, credits aren't refundable, and there's no warranty."
+  updated="July 15, 2026"
+>
+  <div class="legal-summary framed">
+    <h2>The short version</h2>
+    <ul>
+      <li><strong>Drive first, listen second.</strong> Skipper is audio. Don't look at your phone.</li>
+      <li>The Skipper is an AI narrator working from public sources. He is confident. He is not infallible.</li>
+      <li>Credits are a license to generate drives. They aren't money, aren't refundable, and have no cash value.</li>
+      <li>This is a small labor of love, provided as-is, with no warranty.</li>
+    </ul>
+  </div>
+
+  <p>
+    These terms are between you and <strong>Manoa, Inc.</strong> ("we", "us"), the maker of Skipper. By
+    using the app or this site, you're agreeing to them. If you don't, don't use Skipper — no hard
+    feelings.
+  </p>
+
+  <h2>Drive safely. Seriously.</h2>
+  <p>
+    <strong>Skipper is designed to be heard, not watched.</strong> That's the entire point of it: the
+    Skipper talks so you can keep your eyes on the road and the lake instead of on a screen. Set up your
+    drive before you put the car in gear.
+  </p>
+  <ul>
+    <li>
+      <strong>Never operate the app while driving.</strong> Don't read the screen, don't tap the map,
+      don't pick a stop. If you need to touch it, pull over somewhere safe.
+    </li>
+    <li>
+      <strong>Skipper is not a navigation app.</strong> It doesn't give driving directions and it isn't
+      built to be followed. Use a real navigation app, or a map, or your eyes.
+    </li>
+    <li>
+      <strong>The road is the authority.</strong> Obey traffic laws, road signs, closures, and conditions
+      — always, and especially over anything Skipper says. If the Skipper cheerfully describes a viewpoint
+      and there's a closure sign in front of it, the sign wins.
+    </li>
+    <li>
+      <strong>Pull-offs, viewpoints, and stops are suggestions, not assessments.</strong> We haven't
+      inspected them. Whether it's safe or legal to stop somewhere is your call, in the moment, with your
+      own eyes.
+    </li>
+  </ul>
+  <p>You are responsible for your driving. Nothing in the app changes that.</p>
+
+  <h2>About the narration</h2>
+  <p>
+    The Skipper's stories are <strong>AI-generated narration, grounded in public sources</strong> —
+    mostly Wikipedia, plus Wikidata, Macrostrat, and Google Places. We work reasonably hard at accuracy:
+    the stories are built from curated fact sheets rather than invented, every clip is checked against its
+    sources before it ships, and a place with thin sources gets a scenic remark instead of a story,
+    because silence beats a made-up battle.
+  </p>
+  <p>
+    Even so: <strong>it can be wrong.</strong> Sources go stale, facts get contested, and an AI narrator
+    can misread a good source with total confidence. Treat the Skipper the way you'd treat a charming
+    uncle who has read a lot — enjoyable, frequently right, not a citation. Don't rely on it for anything
+    that matters, and please don't repeat it as fact at a trivia night without checking.
+  </p>
+  <p>
+    He's also a corny old tour guide by design. The jokes are jokes. Any opinion he offers is a bit, not
+    a position of Manoa, Inc.
+  </p>
+
+  <h2>Your account</h2>
+  <p>
+    Free roam works without an account; making drives needs one. Keep your password to yourself — you're
+    responsible for what happens under your account. Give us an email address that's actually yours, and
+    keep it current: it's the only way back in if you forget your password.
+  </p>
+  <p>
+    You can delete your account from Settings at any time. It's immediate and it's total — see the
+    <a href="/privacy">Privacy Policy</a> for exactly what gets erased.
+  </p>
+
+  <h2>Credits</h2>
+  <p>
+    Generating a drive costs a credit. New accounts get an allotment of free ones. Here's the honest
+    shape of that:
+  </p>
+  <ul>
+    <li>
+      A credit is a <strong>limited, personal, non-transferable license</strong> to have us generate one
+      drive. It is not money, not a currency, not property, and not a stored-value balance.
+    </li>
+    <li>
+      Credits have <strong>no cash value</strong>, can't be sold, traded, or given away, and can't be
+      converted into anything.
+    </li>
+    <li>
+      Credits are <strong>not refundable</strong>. A credit is spent when the drive is generated — that's
+      the moment the work happens, and the work doesn't un-happen. Deleting the drive afterwards doesn't
+      give it back.
+    </li>
+    <li>
+      <strong>Deleting your account forfeits any credits you have left.</strong> Erasure is total; the
+      ledger goes with it. Spend them first if you care about them.
+    </li>
+    <li>
+      We may change the free allotment, or how credits work, for future drives. We won't retroactively
+      take away credits you already have.
+    </li>
+  </ul>
+  <p>
+    If you ever buy credits, anything you buy through the App Store is also subject to Apple's terms, and
+    refunds for those purchases are handled by Apple under their policy.
+  </p>
+
+  <h2>Content and licensing</h2>
+  <p>
+    <strong>What's ours.</strong> The Skipper — the persona, the voice, the writing, the audio, the app,
+    and this site — belongs to Manoa, Inc. We're giving you a personal, non-exclusive, non-transferable
+    license to use it for your own listening. Please don't rip the audio, redistribute it, republish it,
+    feed it into a training set, or build a competing tour out of it.
+  </p>
+  <p>
+    <strong>What isn't ours.</strong> The facts underneath the stories come from public sources with real
+    licenses attached. Narration drawn from <strong>Wikipedia is used under CC BY-SA</strong>, which
+    obliges us to credit it and to license adaptations alike; Wikidata is CC0; Macrostrat is CC BY 4.0;
+    place details come from Google Places under Google's terms. Every clip carries its own frozen
+    attribution, and the full catalog with license links is in the app under Settings → Sources &amp;
+    Licenses and at <a href="https://api.skipper.fm/sources">api.skipper.fm/sources</a>. Music in the
+    drives is separately licensed and credited in the app. If you think we've credited something wrong,
+    tell us and we'll fix it.
+  </p>
+
+  <h2>Using Skipper decently</h2>
+  <p>Don't:</p>
+  <ul>
+    <li>break into it — no probing, scraping, hammering our servers, or working around the signed links on the audio;</li>
+    <li>use someone else's account, or let someone else use yours;</li>
+    <li>resell, rebroadcast, or commercially exploit the drives or the audio;</li>
+    <li>use it in a way that breaks the law or endangers anyone (see: the whole first section).</li>
+  </ul>
+  <p>
+    If someone's doing that, we may suspend or terminate their access. We'd rather not, and it's not the
+    kind of app that should need this paragraph, but here we are.
+  </p>
+
+  <h2>No warranty</h2>
+  <p>
+    Skipper is a small, stubborn labor of love, provided <strong>"as is" and "as available"</strong>,
+    without warranties of any kind, express or implied — including any implied warranties of
+    merchantability, fitness for a particular purpose, accuracy, or non-infringement, to the fullest
+    extent the law allows.
+  </p>
+  <p>
+    We don't promise it'll always work, that it'll be available, that a story will trigger at exactly the
+    right moment, that the audio will download in a Tahoe dead zone, or that everything the Skipper says
+    is true. Regions come and go. Stories get rewritten. It might break.
+  </p>
+
+  <h2>Limitation of liability</h2>
+  <p>
+    To the fullest extent permitted by law, Manoa, Inc. isn't liable for any indirect, incidental,
+    special, consequential, or punitive damages, or any loss of data, arising out of your use of Skipper.
+    Our total liability for any claim relating to Skipper is limited to the greater of the amount you
+    actually paid us in the twelve months before the claim, or $50.
+  </p>
+  <p>
+    Some places don't allow these exclusions, in which case they don't apply to you to the extent their
+    law says otherwise.
+  </p>
+
+  <h2>Changes to these terms</h2>
+  <p>
+    We may update these terms as Skipper changes. When we do, we'll revise the date at the top, and we'll
+    flag anything significant in the app rather than quietly hoping you re-read this. Continuing to use
+    Skipper after a change means you accept the new version.
+  </p>
+
+  <h2>The legal bit at the bottom</h2>
+  <p>
+    These terms are governed by the laws of the State of California, without regard to its
+    conflict-of-laws rules. If a provision is unenforceable, the rest still stands.
+  </p>
+
+  <h2>Contact</h2>
+  <p>
+    Questions, or something here that reads wrong to you:
+    <a href="mailto:ptshih@gmail.com">ptshih@gmail.com</a>. Manoa, Inc., California, USA.
+  </p>
+</Legal>

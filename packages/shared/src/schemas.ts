@@ -118,7 +118,14 @@ export const roamPin = z.object({
   url: z.url(),
   /** MIME type derived server-side from the R2 key (see signedClip.contentType). */
   contentType: z.string(),
+  /** The clip's frozen source credit — the SAME array `driveClip` carries. Roam narrations are
+   *  Wikipedia-derived like every other, and CC BY-SA obliges attribution wherever the adapted
+   *  work is presented; roam is the anonymous front door, so it's the one surface that most needs
+   *  to carry it. Optional for wire-compat (the radiusM precedent); the server always sends it when
+   *  the narration has one. */
+  attribution: attributionList.optional(),
 })
+export type RoamPin = z.infer<typeof roamPin>
 
 /** GET /roam?lat=&lng=&radiusKm= — every roam-narratable place near a point. */
 export const roamManifest = z.object({ pins: z.array(roamPin) })

@@ -38,6 +38,7 @@ import {
   seekTargetReached,
 } from '@skipper/engine'
 import type { LngLat } from '@skipper/engine'
+import type { Attribution } from '@skipper/shared'
 import { errorMessage, getRoamManifest } from './api'
 import type { RoamManifest } from './api'
 import { liveRoamSource, simulatedSource } from './gps'
@@ -103,6 +104,8 @@ export interface RoamState {
   pinCount: number
   /** The encounter currently PLAYING (null = companionable silence). */
   activeName: string | null
+  /** The sheet clip's frozen source credit (CC BY-SA). Undefined when nothing's up. */
+  activeAttribution?: Attribution[]
   /** The active clip's name keyed on the LOADING/playing clip (not the sheet latch) — survives a
    *  minimize / any sheet-vs-audio desync, so the peek bar always has a title. */
   clipName: string | null
@@ -767,6 +770,13 @@ export function useRoam(mode: RoamMode): RoamState {
     sheetPoiId === null
       ? null
       : (pinsRef.current.find((p) => p.poiId === sheetPoiId)?.name ?? null)
+  // The sheet's source credit — keyed on the SHEET latch (not the loading clip) so it appears and
+  // clears with the title it belongs to. Roam is the anonymous front door and its clips are
+  // Wikipedia-derived, so this is the surface CC BY-SA attribution most needs to reach.
+  const activeAttribution =
+    sheetPoiId === null
+      ? undefined
+      : pinsRef.current.find((p) => p.poiId === sheetPoiId)?.attribution
   // Keyed on the LOADING/playing clip, not the sheet latch — so the peek bar keeps its title through
   // a minimize and through any sheet-vs-audio desync (the case where the controls went missing).
   const clipName =
@@ -840,6 +850,7 @@ export function useRoam(mode: RoamMode): RoamState {
     gate,
     pinCount,
     activeName,
+    activeAttribution,
     clipName,
     clipSounding,
     minimized,

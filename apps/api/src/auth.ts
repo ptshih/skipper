@@ -15,11 +15,18 @@ import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { admin, anonymous } from 'better-auth/plugins'
 import { expo } from '@better-auth/expo'
 import * as authSchema from '@skipper/db/auth-schema'
+import { purgeUserData } from './account'
 import { authDb } from './auth-db'
+import { emailConfigured, sendPasswordResetEmail } from './email'
 
 // The mobile app's deep-link scheme — must match apps/mobile app.json `scheme`
 // and the expoClient `scheme`. OAuth callbacks + cross-origin auth use it.
 const MOBILE_SCHEME = 'skipper'
+
+// The marketing site's origin (Astro on Firebase Hosting) — a DIFFERENT host from this API-only
+// service. It hosts the one auth surface that can't live in the app: the password-reset form. Env
+// override so a local site build (`bun run dev:site`) can be pointed at without editing code.
+const SITE_ORIGIN = process.env.SITE_ORIGIN ?? 'https://skipper.fm'
 
 // Register a social provider only if both its env creds are set.
 const socialProviders: Record<string, { clientId: string; clientSecret: string }> = {}
@@ -41,6 +48,18 @@ if (!secret) {
     'BETTER_AUTH_SECRET is not set. Generate one and store it (dev + prod):\n' +
       '  dotenvx set BETTER_AUTH_SECRET "$(openssl rand -base64 32)" -f .env.development\n' +
       '  dotenvx set BETTER_AUTH_SECRET "$(openssl rand -base64 32)" -f .env.production',
+  )
+}
+
+// A missing mailer is NOT fatal — dev and every read-only surface boot fine without it, and failing
+// boot over it would take roam (the anonymous front door) down with it. But it silently disables the
+// only unlock for a locked-out account, and Better Auth answers reset requests identically either way
+// (enumeration-safe), so the rider is told "check your email" for mail that never sends. Say it once,
+// loudly, at boot — the alternative is learning it from a stranded user with no support channel.
+if (!emailConfigured()) {
+  console.warn(
+    '[api] RESEND_API_KEY is not set — password RESET WILL FAIL. Set it, and verify the EMAIL_FROM ' +
+      'domain with Resend, before opening public signup.',
   )
 }
 
@@ -70,8 +89,12 @@ export const auth = betterAuth({
     fallback: 'https://api.skipper.fm', // base URL for any non-matching host + at init
   },
   database: drizzleAdapter(authDb, { provider: 'pg', schema: authSchema }),
-  // Allow the mobile app's deep-link scheme for cross-origin auth + OAuth callbacks.
-  trustedOrigins: [`${MOBILE_SCHEME}://`],
+  // Redirect/callback allowlist. The mobile app's deep-link scheme covers cross-origin auth + OAuth
+  // callbacks; the apex is here because password reset RESOLVES ON THE WEB (skipper.fm/reset-password
+  // is the client's `redirectTo` — see sendResetPassword below). Without the apex listed, Better Auth
+  // rejects the reset request outright with INVALID_REDIRECT_URL. This is an open-redirect guard, so
+  // it stays an exact-origin allowlist — never a wildcard.
+  trustedOrigins: [`${MOBILE_SCHEME}://`, SITE_ORIGIN],
   // Brute-force guard on the auth endpoints. Better Auth's built-in limiter is enabled by DEFAULT
   // ONLY in production; making it explicit (`enabled: true`) turns it on in dev too, so the same
   // ceiling holds everywhere. Default in-memory "memory" storage — per-instance, same first-cut
@@ -87,8 +110,35 @@ export const auth = betterAuth({
       '/sign-up/email': { window: 60, max: 10 },
     },
   },
-  emailAndPassword: { enabled: true },
+  emailAndPassword: {
+    enabled: true,
+    // Reset is the ONLY route back into a locked-out account: email/password is the sole sign-in
+    // method in prod (socialProviders registers nothing without creds) and there's no email
+    // verification, so a forgotten password otherwise costs the rider their drives AND their
+    // credits — permanently, since the ledger never refunds. `url` is Better Auth's one-time link
+    // (1 h default); it lands on the rider's phone but resolves on the WEB (skipper.fm/reset-password,
+    // the client's `redirectTo`) — a mail link can't be trusted to open a specific app, and a
+    // reset that only works on the device that lost access isn't a reset.
+    sendResetPassword: async ({ user, url }) => {
+      await sendPasswordResetEmail(user.email, url)
+    },
+  },
   socialProviders,
+  user: {
+    deleteUser: {
+      // App Store Guideline 5.1.1(v): an app that creates accounts MUST let them be deleted from
+      // inside the app. Non-negotiable for submission.
+      enabled: true,
+      // `sendDeleteAccountVerification` is deliberately UNSET → deletion is IMMEDIATE (founder call,
+      // 2026-07-15). The endpoint already sits behind a fresh session or a password re-entry
+      // (Better Auth's sensitiveSessionMiddleware), which is the confirmation that matters; an
+      // email round-trip would only add a second way to be locked out of your own erasure.
+      // beforeDelete (NOT afterDelete) — see ./account for why the order is load-bearing.
+      beforeDelete: async (user) => {
+        await purgeUserData(user.id)
+      },
+    },
+  },
   // No freemium tier column — premium is bought as CREDITS, governed by the credit_entries ledger
   // (docs/decisions/cut-tiers.md). (The region-release-gate preview role — who hears staged content —
   // is the admin plugin's `role`, a SEPARATE concern; see the admin() plugin below +

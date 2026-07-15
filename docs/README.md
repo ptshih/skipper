@@ -70,6 +70,10 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
 - [cut-tiers.md](decisions/cut-tiers.md) — removed `user.tier` ('free'|'paid'): credits govern premium,
   so `accessTier` collapses to `anonymous`|`free`, every account spends the ledger, and a comp is a
   large admin grant (2026-06-20).
+- [account-deletion-and-recovery.md](decisions/account-deletion-and-recovery.md) — in-app account
+  deletion (App Store 5.1.1(v)) is immediate + total and must PURGE `drives`/`credit_entries` by hand
+  (soft refs, no FK cascade); password reset mails a Resend link that resolves on the web. Reset is
+  inert until `RESEND_API_KEY` is set (2026-07-15).
 - [automated-grounding-gate.md](decisions/automated-grounding-gate.md) — the founder reversed "human
   ear instead": `generate-narrations.ts` now scores every clip through the eval panel and is
   FAIL-CLOSED (a clip whose grounding/tts gate stays dirty after the bounded `optimize()` retakes is

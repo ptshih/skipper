@@ -44,10 +44,18 @@ product.** When a choice trades polish-for-the-builder against scale-for-a-marke
   is a large admin grant; see `docs/decisions/cut-tiers.md`). ROAM is the open anonymous front door. A
   **DRIVE is user-OWNED** (`drives.user_id`, never a shared content table); **creating one needs a free
   account** — the whole `/drives*` sub-app is behind `requireAccount` (anonymous = roam only). Free credits
-  are an append-only `credit_entries` ledger (a lazy `FREE_DRIVE_CAP`=100 grant, −1 at `POST /drives`
-  co-committed with the drive via `db.batch`; `idempotency_key` UNIQUE = exactly-once; **delete never
-  refunds**); beyond the cap → a purchased pack (provider-agnostic IAP, deferred). Audio is PRIVATE in R2
-  (presigned, short TTL, after the tier check). See `docs/decisions/credit-ledger.md`.
+  are an append-only `credit_entries` ledger (a lazy `FREE_DRIVE_CAP` grant — the value lives in
+  `apps/api/src/credits.ts` + env, never in prose — −1 at `POST /drives` co-committed with the drive via
+  `db.batch`; `idempotency_key` UNIQUE = exactly-once; **delete never refunds**); beyond the cap → a
+  purchased pack (provider-agnostic IAP, deferred). Audio is PRIVATE in R2 (presigned, short TTL, after
+  the tier check). See `docs/decisions/credit-ledger.md`.
+- **In-app account deletion is REQUIRED and must PURGE, not just unlink** (App Store 5.1.1(v) — an app
+  that creates accounts must delete them from inside; removing this = rejection). `drives.user_id` /
+  `credit_entries.user_id` are SOFT refs across the auth pool boundary — **no FK, so no cascade**:
+  Better Auth's `deleteUser` alone would orphan a rider's drives + ledger. `purgeUserData`
+  (`apps/api/src/account.ts`) runs in `beforeDelete` (NOT after — a post-delete throw strands rows behind
+  a vanished user with no session left to retry). Erasure is immediate + total; re-signup mints a fresh
+  grant, knowingly. See `docs/decisions/account-deletion-and-recovery.md`.
 - **Region is a BBOX, never a stored FK (geometry-first).** A POI's region = point-in-bbox; a drive stores
   its route bbox + derives region by intersect — NO `region_id` anywhere. `docs/decisions/geometry-first-regions.md`.
 - **`pois` deduped by Wikidata QID (`pois_qid_uq`).** Every poi is Wikidata-discovered (`source` ∈

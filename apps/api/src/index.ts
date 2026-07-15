@@ -22,6 +22,7 @@ import { and, asc, between, eq, isNotNull } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { narrations, pois, regions } from '@skipper/db/schema'
 import { haversineMeters, triggerRadiusForKind } from '@skipper/engine'
+import type { RoamPin } from '@skipper/shared'
 import { auth } from './auth'
 import { driveRoutes } from './drives'
 import { isAdmin, withSession, type ApiEnv } from './entitlements'
@@ -64,12 +65,21 @@ app.get('/version', (c) => c.json({ policies: VERSION_POLICIES }))
 
 // The pickable regions for the Create-a-Drive region selector. Anonymous + tiny (just
 // id/slug/name) — the create FLOW is gated, but listing region names to pick from is open.
+//
+// RELEASE-GATED, same as /roam and the drive build: a region exists in the table from the moment
+// discovery starts, long before it has a released corpus or a single endpoint anchor. Listing an
+// unreleased one hands the rider a name they can pick and then a picker with nothing in it — a
+// dead end that reads as a broken app, not as "coming soon". `withSession` (fail-open) so an admin
+// still sees staged regions in-app and can check one before releasing. (region-release-gate)
+app.use('/regions', withSession)
 app.get('/regions', async (c) => {
+  const canPreview = isAdmin(c.get('session'))
   const rows = await withRetry(
     () =>
       db
         .select({ id: regions.id, slug: regions.slug, displayName: regions.displayName })
         .from(regions)
+        .where(canPreview ? undefined : isNotNull(regions.releasedAt))
         .orderBy(asc(regions.displayName)),
     { label: 'regions.list' },
   )
@@ -139,6 +149,9 @@ app.get('/roam', async (c) => {
           speakableLng: pois.speakableLng,
           key: narrations.audioUrl,
           durationMs: narrations.audioDurationMs,
+          // The frozen source credit — CC BY-SA obliges it wherever the adapted text is presented,
+          // and roam presents it to anonymous riders (the front door). Same array driveClip carries.
+          attribution: narrations.attribution,
         })
         .from(narrations)
         .innerJoin(pois, eq(pois.id, narrations.poiId))
@@ -171,6 +184,7 @@ app.get('/roam', async (c) => {
         radiusM: triggerRadiusForKind(r.kind, r.speakableLat != null && r.speakableLng != null),
         url: presignGet(r.key),
         contentType: contentTypeForKey(r.key),
+        attribution: (r.attribution ?? undefined) as RoamPin['attribution'],
       })),
     })
   } catch (e) {

@@ -33,6 +33,7 @@ import {
   RouteTrack,
   Screen,
   Scrubber,
+  SourceCredit,
   StateView,
   Text,
   TransportBar,
@@ -509,6 +510,10 @@ export default function RoamScreen() {
                   <View style={styles.muteRow}>
                     <Button variant="ghost" title={voice.roam.muteStory} onPress={r.muteCurrent} />
                   </View>
+                  {/* Source credit for the clip being told. Roam is the anonymous front door and
+                      these clips adapt Wikipedia — CC BY-SA wants the credit where the work is
+                      presented, which is here. */}
+                  <SourceCredit items={r.activeAttribution} />
                 </>
               )}
             </Animated.View>

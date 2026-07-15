@@ -1,0 +1,183 @@
+---
+// The shared shell for the legal pages (/privacy, /terms) — the two documents the
+// App Store listing points at. Wraps Base with a plain reading column: a slim
+// header back to the trailhead, a title block with the effective date, prose, and
+// the site footer. Deliberately quiet next to the landing page — no sunburst, no
+// glow, no CTA. It's a document; it should read like one.
+//
+// The prose styles live here (not global.css) because they're the ONLY place on
+// the site that styles bare <h2>/<p>/<ul> inside a slot — the landing sections all
+// carry explicit classes. Tokens only; no raw values.
+import Base from './Base.astro'
+import Icon from '../components/Icon.astro'
+import SiteFooter from '../components/sections/SiteFooter.astro'
+
+interface Props {
+  /** Document title — also the <title> (suffixed) and the H1. */
+  heading: string
+  /** The kicker above the H1. */
+  kicker: string
+  /** Meta description for the page. */
+  description: string
+  /** Human-readable effective date, e.g. "July 15, 2026". */
+  updated: string
+}
+
+const { heading, kicker, description, updated } = Astro.props
+---
+
+<Base title={`${heading} — Skipper`} description={description}>
+  <header class="legalnav">
+    <div class="container legalnav__inner">
+      <a class="legalnav__brand" href="/" aria-label="Skipper — home">
+        <span class="legalnav__wordmark">SKIPPER</span>
+      </a>
+      <a class="legalnav__back" href="/">
+        <Icon name="arrowRight" size={16} /> Back to the trailhead
+      </a>
+    </div>
+  </header>
+
+  <main class="section legaldoc">
+    <div class="container">
+      <div class="prose">
+        <span class="kicker">{kicker}</span>
+        <h1 class="title legaldoc__h1">{heading}</h1>
+        <p class="legaldoc__updated mono">Last updated: {updated}</p>
+        <hr class="divider-dashed legaldoc__rule" />
+        <div class="legaldoc__body">
+          <slot />
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <SiteFooter />
+</Base>
+
+<style>
+  /* Header: the landing nav's hash links (#how, #modes) don't exist here, so this
+     is its own slim bar rather than a reuse of Nav.astro. */
+  .legalnav {
+    border-bottom: var(--border-keyline) solid var(--keyline);
+    padding-top: env(safe-area-inset-top);
+    background: var(--surface);
+  }
+  .legalnav__inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-lg);
+    min-height: 4rem;
+  }
+  .legalnav__wordmark {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: var(--fs-wordmark);
+    letter-spacing: 0.04em;
+    color: var(--ink);
+  }
+  .legalnav__brand:hover .legalnav__wordmark {
+    color: var(--accent);
+  }
+  .legalnav__back {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45em;
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    color: var(--ink-dim);
+  }
+  .legalnav__back:hover {
+    color: var(--accent);
+  }
+  /* the arrow points back, not forward */
+  .legalnav__back :global(svg) {
+    transform: scaleX(-1);
+  }
+
+  .legaldoc__h1 {
+    margin-top: var(--space-md);
+    color: var(--ink);
+  }
+  .legaldoc__updated {
+    margin-top: var(--space-lg);
+    color: var(--ink-faint);
+    font-size: var(--fs-meta);
+  }
+  .legaldoc__rule {
+    margin-block: var(--space-3xl);
+  }
+
+  /* ── Document prose ───────────────────────────────────────────────────────
+     Bare tags inside the slot need :global — scoped styles don't reach slotted
+     content rendered by the child page. */
+  .legaldoc__body :global(h2) {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: var(--fs-heading);
+    line-height: 1.2;
+    color: var(--ink);
+    margin-top: var(--space-4xl);
+    margin-bottom: var(--space-lg);
+  }
+  .legaldoc__body :global(h2:first-child) {
+    margin-top: 0;
+  }
+  .legaldoc__body :global(h3) {
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: var(--fs-body-lg);
+    color: var(--ink);
+    margin-top: var(--space-2xl);
+    margin-bottom: var(--space-sm);
+  }
+  .legaldoc__body :global(p) {
+    color: var(--ink-dim);
+    font-size: var(--fs-body);
+    margin-bottom: var(--space-lg);
+  }
+  .legaldoc__body :global(ul) {
+    margin: 0 0 var(--space-lg);
+    padding-left: var(--space-xl);
+    color: var(--ink-dim);
+    font-size: var(--fs-body);
+  }
+  .legaldoc__body :global(li) {
+    margin-bottom: var(--space-sm);
+  }
+  .legaldoc__body :global(li::marker) {
+    color: var(--track-inactive);
+  }
+  .legaldoc__body :global(strong) {
+    color: var(--ink);
+    font-weight: 700;
+  }
+  .legaldoc__body :global(dt) {
+    color: var(--ink);
+    font-weight: 700;
+    font-size: var(--fs-body);
+    margin-top: var(--space-lg);
+  }
+  .legaldoc__body :global(dd) {
+    color: var(--ink-dim);
+    font-size: var(--fs-body);
+    margin: var(--space-xs) 0 0;
+  }
+
+  /* The lede box under a title — the honest one-paragraph summary. */
+  .legaldoc__body :global(.legal-summary) {
+    background: var(--surface-raised);
+    padding: var(--space-2xl);
+    margin-bottom: var(--space-3xl);
+  }
+  .legaldoc__body :global(.legal-summary h2) {
+    margin-top: 0;
+  }
+  .legaldoc__body :global(.legal-summary ul) {
+    margin-bottom: 0;
+  }
+  .legaldoc__body :global(.legal-summary li) {
+    color: var(--ink);
+  }
+</style>
