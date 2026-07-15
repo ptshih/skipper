@@ -12,8 +12,9 @@
 //      within a forward cone of travel) so a POI the road passes — or one behind
 //      you on a there-and-back — doesn't fire. Below ~5 mph heading is unreliable,
 //      so the gate is skipped — and likewise when the heading is UNKNOWN (negative:
-//      the iOS course -1 sentinel). Both are the same policy: no trustworthy heading
-//      → proximity only.
+//      the iOS course -1 sentinel), and when the stop is CLOSER than bearingFloorM
+//      (its bearing is then fabricated or noise — see the gate). All three are the
+//      same policy: no trustworthy heading OR bearing → proximity only.
 //   2b. PASSED-POINT RETIRE. The heading gate goes dark below ~5 mph and when heading
 //      is UNKNOWN — exactly the gaps where a stop you've already driven PAST can still
 //      sit inside the radius and fire late ("narrated after I drove past it"). So also
@@ -71,6 +72,9 @@ export interface TriggerOptions {
   headingGateMps: number
   /** A stop only counts as "ahead" when its bearing is within this half-angle of heading. */
   headingConeDeg: number
+  /** Closer than this (m) the bearing to the stop carries no signal — skip the heading gate and fire
+   *  on proximity. Must stay BELOW recedeMarginM so the passed-point retire still owns "drove past". */
+  bearingFloorM: number
   /** Once a stop has receded this many metres past its closest approach, treat it as PASSED
    *  (behind us) and stop it firing — covers the heading gate's blind spot (crawling / unknown
    *  heading). Stops are route-snapped, so closest approach is ~on the road and this can be tight. */
@@ -83,6 +87,12 @@ export const DEFAULT_TRIGGER: TriggerOptions = {
   leadSeconds: 12,
   headingGateMps: 2.2,
   headingConeDeg: 90,
+  // Just past GPS noise (~5-10 m), where bearing error still swamps the 90° cone; by ~20 m out the
+  // bearing is trustworthy again and the gate must keep working (a stop abeam at 22 m stays gated —
+  // see the retire tests). Only decides whether the GATE runs: the stop must still be inside the
+  // effective radius (322 m at 60 mph), so this fires nothing early — it only stops a meaningless
+  // bearing from vetoing a stop you're standing on, where d is exactly 0.
+  bearingFloorM: 15,
   recedeMarginM: 40,
 }
 
@@ -131,11 +141,18 @@ export class TriggerEngine {
       const minSeen = Math.min(this.minDistM.get(stop.seq) ?? Infinity, d)
       this.minDistM.set(stop.seq, minSeen)
       if (d > minSeen + this.opts.recedeMarginM) continue
-      // Heading gate — only at meaningful speed AND with a KNOWN heading. iOS reports
-      // course -1 when invalid; gating on the sentinel would read it as due-north and
-      // silence every other direction (roam's first-live-drive zero-fire, ported here).
-      // Unknown heading → proximity only, the same policy as crawling speed.
-      if (fix.speedMps >= this.opts.headingGateMps && fix.headingDeg >= 0) {
+      // Heading gate — only at meaningful speed, with a KNOWN heading, and far enough out for the
+      // BEARING to mean anything. iOS reports course -1 when invalid; gating on the sentinel would
+      // read it as due-north and silence every other direction (roam's first-live-drive zero-fire,
+      // ported here). The bearing has the same failure in the other direction: `bearingDeg` is
+      // atan2(0,0) = 0 — a fabricated DUE NORTH — when the fix sits on the stop, and pure noise
+      // within GPS error of it. That made "is it ahead?" a question about north: a stop you're
+      // standing on fired iff the route happened to leave within 90° of north, so a southbound
+      // drive silently dropped it (the rider's own start POI — endpoints are landmarks — snaps to
+      // polyline[0], where d is exactly 0 every time; only the parked-start speed skip hid it on
+      // the road). No trustworthy bearing → proximity only, the same policy as crawling speed and
+      // unknown heading. Standing on the stop, "ahead" has no answer — and no answer is needed.
+      if (d > this.opts.bearingFloorM && fix.speedMps >= this.opts.headingGateMps && fix.headingDeg >= 0) {
         const ahead = angularDiffDeg(fix.headingDeg, bearingDeg(here, [stop.lng, stop.lat]))
         if (ahead > this.opts.headingConeDeg) continue // stop is abeam/behind → not approaching
       }

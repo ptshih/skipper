@@ -108,6 +108,52 @@ describe('TriggerEngine', () => {
     expect(fired.map((ev) => ev.seq).sort((a, b) => a - b)).toEqual([1, 2])
   })
 
+  // A stop you are STANDING ON has no meaningful bearing: bearingDeg is atan2(0,0) = 0, a fabricated
+  // DUE NORTH. Gating on it asked "is north ahead of me?", so an origin stop fired iff the route left
+  // within 90° of north — a southbound drive dropped it forever. Not hypothetical: the rider's start
+  // POI (endpoints are landmarks) snaps to polyline[0], where d is exactly 0. Only the parked-start
+  // speed skip hid it on the road; the sim (constant 60 mph from fix 0) never starts parked.
+  describe('bearing floor — a stop at the route ORIGIN fires whichever way the drive leaves', () => {
+    const MLAT = 110_574
+    const mLng = (lat: number) => 111_320 * Math.cos((lat * Math.PI) / 180)
+    // A straight route leaving [0,0] on `headingDeg`, with a POI sitting exactly on its first vertex.
+    const leaving = (headingDeg: number) => {
+      const r = (headingDeg * Math.PI) / 180
+      const route: LngLat[] = Array.from(
+        { length: 101 },
+        (_, i) => [(Math.sin(r) * (i * 20)) / mLng(0), (Math.cos(r) * (i * 20)) / MLAT] as LngLat,
+      )
+      return { route, stop: { seq: 0, lat: 0, lng: 0, triggerRadiusM: 150 } as DriveStopRef }
+    }
+    const firesLeaving = (headingDeg: number, speedMps: number) => {
+      const { route, stop } = leaving(headingDeg)
+      const e = new TriggerEngine(snapStopsToRoute(route, [stop]))
+      const r = (headingDeg * Math.PI) / 180
+      for (let i = 0; i < 40; i++) {
+        const m = speedMps * 0.25 * i
+        const f = fix((Math.cos(r) * m) / MLAT, (Math.sin(r) * m) / mLng(0), speedMps, headingDeg, i * 0.25)
+        if (e.update(f).length > 0) return true
+      }
+      return false
+    }
+
+    // The regression: every southbound heading used to be dead at speed.
+    test.each([0, 45, 90, 135, 180, 221, 270, 315])('fires leaving on heading %i° at 60 mph', (h) => {
+      expect(firesLeaving(h, MPH60)).toBe(true)
+    })
+
+    test('fires from a PARKED start too (the real-drive case, gate already skipped on speed)', () => {
+      for (const h of [0, 135, 221, 270]) expect(firesLeaving(h, 0)).toBe(true)
+    })
+  })
+
+  test('the bearing floor does NOT resurrect a stop that is genuinely behind you', () => {
+    // Well past the floor (~111 m north of the stop) and driving AWAY: the gate still vetoes it.
+    // The floor must only silence a bearing that carries no signal, never widen what "ahead" means.
+    const e = new TriggerEngine([NORTH])
+    expect(e.update(fix(0.011, 0, MPH60, 0))).toHaveLength(0)
+  })
+
   test('snapStopsToRoute moves the trigger point onto the road, keeps the POI, records off-route', () => {
     const route: LngLat[] = Array.from({ length: 11 }, (_, i) => [0, i * 0.001] as LngLat) // lat 0..0.01 along lng 0
     const stops: DriveStopRef[] = [{ seq: 0, lat: 0.005, lng: 0.001, triggerRadiusM: 120 }] // ~111 m east of the line
