@@ -6,10 +6,12 @@
 > `beforeDelete` → `purgeUserData` (`apps/api/src/account.ts`) hard-deleting the rider's `drives` +
 > `credit_entries`; UI at Settings → Delete account. Reset mails a one-time link via Resend
 > (`apps/api/src/email.ts`) that resolves on the WEB (`apps/site/src/pages/reset-password.astro`).
-> **⚠ Reset is INERT until `notifications.skipper.fm` is verified with Resend** — the key is set
-> (2026-07-15) but the domain is NOT yet added; the API boots and warns, and a send would be rejected.
-> Verified E2E against the live DB: grant materialized → deleted → `credit_entries` 1→0 →
-> re-sign-in 401.
+> **Both are LIVE and proven E2E (2026-07-15).** Deletion: grant materialized → deleted →
+> `credit_entries` 1→0 → re-sign-in 401, against the real DB. Reset: `notifications.skipper.fm` is
+> Resend-verified with DKIM+SPF published, and a real reset mail to the founder's account came back
+> `last_event=delivered`. ⚠ The API reads env at BOOT — a running server keeps the old
+> `RESEND_API_KEY`/`FREE_DRIVE_CAP` until it restarts, and **prod still needs a deploy**: the live API
+> predates these routes, so `delete-user` does not exist in production yet.
 
 ## Why deletion had to exist
 
@@ -82,9 +84,11 @@ same account as a health product's mail. That coupling is the reason sending is 
   it's dedicated to sending, isn't already in use, and doesn't look machine-generated. It also mirrors
   the `notifications.manoa.health` convention, so both are managed the same way.
 
-⚠ **BLOCKED:** the Resend plan allows 1 domain and `notifications.manoa.health` holds it. Adding
-Skipper's domain needs a **plan upgrade** (dashboard; there's no billing API). Until then the key is
-live but every send is rejected.
+**RESOLVED 2026-07-15:** `notifications.skipper.fm` is verified and sending (a real reset mail came
+back `delivered`). Getting there hit the plan's 1-domain limit — Skipper's domain now holds the slot
+that `notifications.manoa.health` used to, so **Manoa Health can no longer send from this account**
+(its code hardcodes `hello@notifications.manoa.health` for sign-in OTPs). Founder is aware and called
+it acceptable; noted here because a future agent will otherwise rediscover it as an incident.
 
 ## Gotchas for the next agent
 
