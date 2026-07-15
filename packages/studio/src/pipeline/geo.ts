@@ -1,7 +1,7 @@
 // Route geometry for the M1 studio pipeline.
 //
 // The shared route-geometry — haversineMeters, bearingDeg, cumulativeMeters, nearestOnRoute,
-// totalMeters, routeBearingAt, timeAtAlong, sideOfApproach (+ LngLat / RoutePosition) — now lives
+// totalMeters, routeBearingAt, timeAtAlong (+ LngLat / RoutePosition) — now lives
 // in @skipper/engine (the pure, RN-safe driving/trigger core, single-sourced with
 // buildDrive's pacing) and is RE-EXPORTED here, so studio call sites keep importing it from
 // './geo' unchanged. This file adds only the GENERATION-specific helpers on top: the sub-region
@@ -23,7 +23,6 @@ export {
   totalMeters,
   routeBearingAt,
   timeAtAlong,
-  sideOfApproach,
 } from '@skipper/engine'
 
 /**

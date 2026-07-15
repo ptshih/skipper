@@ -82,7 +82,15 @@ export function haversineMeters(a: LngLat, b: LngLat): number {
   return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(h)))
 }
 
-/** Initial bearing (degrees, 0=N, 90=E) when traveling from `a` to `b`. */
+/**
+ * Initial bearing (degrees, 0=N, 90=E) when traveling from `a` to `b`.
+ *
+ * ⚠ COINCIDENT POINTS RETURN 0 — atan2(0,0), a FABRICATED due north, not a signal that the bearing
+ * is undefined. There is no in-band way to say "no answer", so a caller within GPS noise of `to`
+ * must gate on DISTANCE first; trust this only with real separation. Read as a real heading it
+ * silently turns "is it ahead of me?" into a question about north — which is exactly how a stop
+ * sitting on the route's first vertex fired only for northbound drives (TriggerOptions.bearingFloorM).
+ */
 export function bearingDeg(a: LngLat, b: LngLat): number {
   const [lng1, lat1] = a
   const [lng2, lat2] = b
@@ -187,18 +195,14 @@ export function timeAtAlong(alongM: number, totalRouteM: number, totalRouteSec: 
   return (alongM / totalRouteM) * totalRouteSec
 }
 
-/**
- * Which side of the road a point sits on, relative to the direction of travel. `headingDeg` is the
- * compass heading of travel (0=N, clockwise); `from` is the on-route trigger point and `to` is the
- * off-route POI. Compass bearings increase clockwise, so a target whose bearing is clockwise of the
- * heading is on the RIGHT. Returns null when too near dead-ahead/behind to call a side confidently.
- */
-export function sideOfApproach(headingDeg: number, from: LngLat, to: LngLat): 'left' | 'right' | null {
-  const rel = signedBearingDeltaDeg(bearingDeg(from, to), headingDeg) // (-180, 180]
-  const mag = Math.abs(rel)
-  if (mag < 10 || mag > 170) return null // ~collinear with travel — no clear side
-  return rel > 0 ? 'right' : 'left'
-}
+// `sideOfApproach` (which side of the road a POI sits on) lived here until 2026-07-15. It was wired
+// live by 6cb88d1 under the PHASE-2 tour model, where a narration was tour-owned and could bake a
+// side; 3b95785 deleted that pipeline and stranded it. V2 doesn't just not-use it — it BANS what it
+// computed: a narration is the shared atom (one telling reused by roam and by every drive, from any
+// approach direction), so naming a side is an ungrounded place-claim, fail-closed by the laterality
+// gate (studio eval/laterality.ts). Kept as a guarded helper it would read as blessed and current —
+// a trap pointing at the one thing that must never ship. If laterality ever returns it needs a
+// per-telling direction, not this. (Deleted with the pin-vs-anchor bearing audit.)
 
 /**
  * How far the "where to look" anchor sits from the pin before the guard rejects it, relative to the

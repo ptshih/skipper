@@ -5,7 +5,6 @@ import {
   haversineMeters,
   nearestOnRoute,
   routeBearingAt,
-  sideOfApproach,
   timeAtAlong,
   totalMeters,
   type LngLat,
@@ -40,28 +39,6 @@ describe('encodePolyline', () => {
 
   test('empty polyline encodes to empty string', () => {
     expect(encodePolyline([])).toBe('')
-  })
-})
-
-describe('sideOfApproach', () => {
-  const origin: LngLat = [0, 0]
-  test('heading north: a point to the east is on the right', () => {
-    expect(sideOfApproach(0, origin, [0.01, 0])).toBe('right')
-  })
-  test('heading north: a point to the west is on the left', () => {
-    expect(sideOfApproach(0, origin, [-0.01, 0])).toBe('left')
-  })
-  test('heading east: a point to the south is on the right', () => {
-    expect(sideOfApproach(90, origin, [0, -0.01])).toBe('right')
-  })
-  test('heading east: a point to the north is on the left', () => {
-    expect(sideOfApproach(90, origin, [0, 0.01])).toBe('left')
-  })
-  test('a point dead ahead has no callable side (null)', () => {
-    expect(sideOfApproach(0, origin, [0, 0.01])).toBeNull()
-  })
-  test('a point directly behind has no callable side (null)', () => {
-    expect(sideOfApproach(0, origin, [0, -0.01])).toBeNull()
   })
 })
 
