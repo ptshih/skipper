@@ -16,8 +16,16 @@
 
 const RESEND_ENDPOINT = 'https://api.resend.com/emails'
 
-/** Sender identity. Must be a Resend-VERIFIED domain or the API rejects the send. */
-const EMAIL_FROM = process.env.EMAIL_FROM ?? 'Skipper <skipper@skipper.fm>'
+/** Sender identity. Must be a Resend-VERIFIED domain or the API rejects the send.
+ *
+ *  A SENDING SUBDOMAIN, not the apex — Resend's own guidance ("send from a subdomain … to isolate
+ *  your sending reputation"), and it matters more than usual here because Skipper shares a Resend
+ *  account with Manoa Health: a consumer app's bounce/spam reputation must not be able to reach a
+ *  health product's mail, and `skipper.fm`'s apex already serves Firebase Hosting. `notifications.`
+ *  (not `mail.`) because `mail.<domain>` is the conventional webmail/MX label and would collide with
+ *  a future Workspace; and NOT `send.` — Resend puts its own SPF records at `send.<your-domain>`
+ *  (verified against the live account), so `send.skipper.fm` would yield `send.send.skipper.fm`. */
+const EMAIL_FROM = process.env.EMAIL_FROM ?? 'Skipper <skipper@notifications.skipper.fm>'
 
 /** Whether transactional email can actually be sent. Callers log; they don't silently degrade. */
 export function emailConfigured(): boolean {

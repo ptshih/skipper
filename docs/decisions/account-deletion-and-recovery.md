@@ -6,9 +6,10 @@
 > `beforeDelete` → `purgeUserData` (`apps/api/src/account.ts`) hard-deleting the rider's `drives` +
 > `credit_entries`; UI at Settings → Delete account. Reset mails a one-time link via Resend
 > (`apps/api/src/email.ts`) that resolves on the WEB (`apps/site/src/pages/reset-password.astro`).
-> **⚠ Reset is INERT until `RESEND_API_KEY` is set and the `EMAIL_FROM` domain is verified with
-> Resend** — the API boots and warns. Verified E2E against the live DB: grant materialized → deleted →
-> `credit_entries` 1→0 → re-sign-in 401.
+> **⚠ Reset is INERT until `notifications.skipper.fm` is verified with Resend** — the key is set
+> (2026-07-15) but the domain is NOT yet added; the API boots and warns, and a send would be rejected.
+> Verified E2E against the live DB: grant materialized → deleted → `credit_entries` 1→0 →
+> re-sign-in 401.
 
 ## Why deletion had to exist
 
@@ -60,6 +61,30 @@ never refunds. Not a rejection risk; just a guaranteed support burden with no su
 
 Resend over raw `fetch`, no SDK — the same call shape the studio's TTS makes to Google. One HTTP POST
 doesn't earn a dependency.
+
+## The mail account: SHARED with Manoa Health (founder call 2026-07-15)
+
+Skipper sends through the **Manoa Health Resend account** rather than its own. Consequences a future
+agent must know: one key rotates for BOTH products, and Skipper's bounce/spam reputation lands in the
+same account as a health product's mail. That coupling is the reason sending is scoped to a
+**subdomain** rather than the apex.
+
+`notifications.skipper.fm`, specifically:
+- **A subdomain at all** — Resend's own guidance ("send from one or more subdomains … to isolate your
+  sending reputation"). Doubly true on a shared account, and `skipper.fm`'s apex already serves
+  Firebase Hosting.
+- **Not `mail.`** — that's the conventional webmail/MX label; it would collide with a future Workspace
+  on `skipper.fm`.
+- **Not `send.`** — Resend puts its own SPF records at `send.<registered-domain>` (verified against the
+  live `notifications.manoa.health` records: SPF MX+TXT at `send.notifications`, DKIM at
+  `resend._domainkey.notifications`). Registering `send.skipper.fm` would yield `send.send.skipper.fm`.
+- The name itself carries no deliverability weight — no provider prescribes one. What matters is that
+  it's dedicated to sending, isn't already in use, and doesn't look machine-generated. It also mirrors
+  the `notifications.manoa.health` convention, so both are managed the same way.
+
+⚠ **BLOCKED:** the Resend plan allows 1 domain and `notifications.manoa.health` holds it. Adding
+Skipper's domain needs a **plan upgrade** (dashboard; there's no billing API). Until then the key is
+live but every send is rejected.
 
 ## Gotchas for the next agent
 
