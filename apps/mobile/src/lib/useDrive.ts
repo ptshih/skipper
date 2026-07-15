@@ -176,6 +176,13 @@ export interface UseDrive {
   seekBy: (deltaSec: number) => void
   setScrubbing: (active: boolean) => void
 
+  // Replay the last COMPLETED stop — fills the between-stops gap the scrubber can't reach.
+  /** Re-play the last completed stop clip (live/sim only). No-op unless `canReplay`; a live GPS
+   *  trigger preempts an in-progress replay. Pure playback — does not alter trigger/fired state. */
+  replayLast: () => void
+  /** True in the between-stops quiet when a completed clip exists to re-hear (drives the Replay button). */
+  canReplay: boolean
+
   // Sim setup (pre-drive only).
   fast: boolean
   setFast: (fast: boolean) => void
@@ -231,6 +238,9 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
   const [done, setDone] = useState(false)
   const [activeSeq, setActiveSeq] = useState<number | null>(null)
   const [firedSeqs, setFiredSeqs] = useState<Set<number>>(new Set())
+  // The last clip that ACTUALLY PLAYED — the "replay that" target. State (not a ref) so `canReplay`
+  // re-renders the Replay button as it appears/disappears between stops. (replay-last-stop)
+  const [lastCompletedSeq, setLastCompletedSeq] = useState<number | null>(null)
   const [stallNote, setStallNote] = useState<string | null>(null)
   const [fast, setFast] = useState(opts.defaultFast ?? false)
   // Set when a live drive is blocked on location: either DENIED (carries whether the OS will still
@@ -266,7 +276,11 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
   // Audio-playback refs (cloned from the preview player).
   const loadedSeq = useRef<number | null>(null) // which clip is loaded in the player
   const sawFresh = useRef(false) // have we seen the LOADED clip actually play yet?
+  // True from a replace() until the player's clock rewinds to the new clip's head — every status in
+  // that window still describes the OUTGOING clip. See the clip-end effect. (replay-last-stop)
+  const staleStatus = useRef(false)
   const finishedSeq = useRef<number | null>(null) // guard didJustFinish double-fire per clip
+  const replayingSeq = useRef<number | null>(null) // set while a REPLAY is the active clip — a live GPS trigger preempts it (replay-last-stop)
   const watchdog = useRef<ReturnType<typeof setTimeout> | null>(null)
   const clipRetried = useRef<Set<number>>(new Set()) // seqs re-signed once after a stall
   const scrubbing = useRef(false) // a drag is live — hold the clip-finished handler
@@ -416,11 +430,16 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
   const onClipDone = useCallback(
     (_seq: number) => {
       clipBusy.current = false
+      replayingSeq.current = null // this clip (a stop OR a replay) is over — no replay is in progress now
       if (mode === 'preview') {
         setActiveSeq(null)
         advanceSegment()
         return
       }
+      // Remember the last clip that ACTUALLY PLAYED (sawFresh) as the replay-last target; a
+      // skipped/stalled-before-start stop (sawFresh false) never becomes replayable — you can't
+      // re-hear silence (replay-last-stop §4/§7). Live/sim only (preview has its own drag-back timeline).
+      if (sawFresh.current) setLastCompletedSeq(_seq)
       setActiveSeq(null)
       pump()
     },
@@ -438,6 +457,14 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
       dot.setValue(total > 0 ? Math.min(1, Math.max(0, fix.alongM / total)) : 0)
       const events = engineRef.current?.update(fix) ?? []
       if (events.length === 0) return
+      // A live GPS trigger is time-sensitive (you're physically passing the place) and PREEMPTS an
+      // in-progress replay, which is merely re-hearable ("stops win" — replay-last-stop §3). Cut the
+      // replay by freeing the pump: the clip-load effect then REPLACES the replay audio with this stop
+      // (activeSeq changes → replace()). A real stop is NEVER preempted; only a replay is.
+      if (replayingSeq.current !== null) {
+        replayingSeq.current = null
+        clipBusy.current = false
+      }
       // Multiple stops on ONE fix play back-to-back with no gap (relies on the studio pipeline's spacing). Not a
       // crash, but surface it in dev so a too-tight cluster is visible rather than silent. (audit #296)
       if (events.length > 1 && __DEV__) console.warn(`[drive] ${events.length} stops fired on one fix`)
@@ -456,6 +483,25 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
     reachedEnd.current = true
     pump() // plays any remaining queued stop; ends the drive once the queue drains
   }, [pump])
+
+  // ---- replay the last COMPLETED stop (the "wait — what did he just say?" gap the scrubber can't
+  //      reach: the scrubber covers the ACTIVE clip, this covers the one that already ENDED). A pure
+  //      playback action — it feeds the existing queue → pump → clip-load path and does NOT touch
+  //      firedSeqs or the engine, so trigger/debounce state is untouched (the stop stays "fired").
+  //      `replayingSeq` marks it preemptible so a live GPS trigger wins (handleFix). (replay-last-stop) ----
+  const replayLast = useCallback(() => {
+    if (mode === 'preview') return // preview has a drag-back timeline; replay-last is live/sim only
+    if (activeSeqRef.current !== null || lastCompletedSeq === null) return // only in the between-stops quiet
+    // Force the just-ended clip to RELOAD from its start: the clip-load effect skips replace() when
+    // loadedSeq already equals activeSeq, and didJustFinish is guarded by finishedSeq — both still hold
+    // the seq we're replaying. Same reset the preview restart/jump-to-stop use.
+    loadedSeq.current = null
+    finishedSeq.current = null
+    clipRetried.current.clear()
+    replayingSeq.current = lastCompletedSeq // mark it preemptible — a live GPS trigger wins (handleFix)
+    queue.current.push(lastCompletedSeq)
+    pump()
+  }, [mode, lastCompletedSeq, pump])
 
   // ---- reset all drive state back to the pre-drive "ready" line ----
   const resetForReady = useCallback(() => {
@@ -476,7 +522,9 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
     reachedEnd.current = false
     loadedSeq.current = null
     sawFresh.current = false
+    staleStatus.current = false
     finishedSeq.current = null
+    replayingSeq.current = null
     clipRetried.current.clear()
     seekTarget.current = null
     finishedWhileScrubbing.current = null
@@ -487,6 +535,7 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
     resumeTried.current = false
     dot.setValue(0)
     setActiveSeq(null)
+    setLastCompletedSeq(null)
     setFiredSeqs(new Set())
     setStallNote(null)
     setPaused(false)
@@ -723,6 +772,7 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
     if (loadedSeq.current !== activeSeq) {
       loadedSeq.current = activeSeq
       sawFresh.current = false
+      staleStatus.current = true // the player reports the OUTGOING clip until replace() lands (clip-end effect)
       setStallNote(null)
       // Stop the old clip before the async replace() so it doesn't bleed into the new one.
       try {
@@ -783,6 +833,19 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
   useEffect(() => {
     if (activeSeq === null) return
     const t = status.currentTime ?? 0
+    // replace() is async: until it lands the player still reports the OUTGOING clip's clock, and those
+    // statuses must not be read against the INCOMING seq. The clock REWINDING to the head is the
+    // handover signal (expo-audio reports t=0 once the new source loads). Gating on `playing` alone is
+    // not enough — the progress tracker below takes `t` unconditionally, so ONE stale tick pins
+    // lastProgressTime past the new clip's whole runtime; its real ticks then never look like progress,
+    // lastProgressAt freezes, and the post-start stall recovery gives up and SKIPS the stop behind a
+    // false "couldn't load". Only reachable when the outgoing clip was still mid-play at the swap —
+    // i.e. a GPS trigger preempting a replay. A clip that never loads keeps this set, which is right:
+    // the pre-start watchdog owns that case. (replay-last-stop)
+    if (staleStatus.current) {
+      if (t > 0.5) return
+      staleStatus.current = false
+    }
     if (status.duration != null && status.duration > 0) durationRef.current = status.duration
     if (status.playing && t > 0.25) {
       sawFresh.current = true
@@ -1080,6 +1143,11 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
   // The current drive leg's along-route distance (m) for a "~X mi" label — preview only.
   const rollingDistanceM = mode === 'preview' && curSeg?.kind === 'drive' ? (curSeg.distanceM ?? null) : null
 
+  // Offer replay only in the between-stops quiet of a live/sim drive, once a clip has completed —
+  // the scrubber (seek-to-0) already covers "restart the ACTIVE clip". (replay-last-stop §3)
+  const canReplay =
+    mode !== 'preview' && driving && !paused && !done && activeSeq === null && lastCompletedSeq !== null
+
   return {
     phase,
     error,
@@ -1110,6 +1178,8 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
     seekToMs,
     seekBy,
     setScrubbing,
+    replayLast,
+    canReplay,
     fast,
     setFast,
     locationPriming,

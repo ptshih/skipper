@@ -5,9 +5,25 @@
 commentaries,"* and Skipper is *more* exposed: the live drive has **no auto-advance**, so once a
 clip finishes the player returns to ducked-quiet and the stop is simply gone.
 
-> **Status: SPEC ONLY — nothing built.** Small, **player-only** feature (no backend / schema /
-> generation / offline change). Decided 2026-06-09. Gated behind the proven phone player like the
-> rest, but cheap enough to land alongside Phase 4/5.
+> **Status: v1 BUILT 2026-06-27, sim-VERIFIED 2026-07-15** (live/sim, drive-screen button).
+> Player-only — landed entirely in `apps/mobile/src/lib/useDrive.ts`
+> (`lastCompletedSeq`/`replayLast`/`canReplay`/`replayingSeq`, the `handleFix` preempt) + a "Replay
+> that" `Button` on the drive screen (`app/drives/[id]/play.tsx`), no backend / schema / generation /
+> offline change. Verified on the iOS sim: the button appears only in the between-stops quiet, replays
+> from the head without touching fired state, and a live trigger preempts a mid-replay AND still plays
+> that stop in full. **Remaining: a real-device pass** (sim can't prove in-car audio focus). The **v2+**
+> items in §6 (tap-any-passed-row, lock-screen previous-track, persona "one more time—" pre-roll, voice
+> front-door) stay DEFERRED. Decided 2026-06-09.
+>
+> ⚠ **The preempt's landmine (fixed — don't regress it).** Cutting a mid-play clip is the ONLY path that
+> swaps `activeSeq` while audio is still sounding. `replace()` is async, so for a few ticks the player
+> still reports the OUTGOING clip's clock — and the clip-end effect's progress tracker takes
+> `currentTime` unconditionally. One stale tick pinned `lastProgressTime` past the incoming clip's whole
+> runtime, so its real ticks never read as progress, `lastProgressAt` froze, and the post-start stall
+> recovery gave up: the preempting stop was SKIPPED behind a false "Couldn't load that stop" — the drive
+> silently losing the very stop the preempt exists to serve. Guarded by `staleStatus`, which ignores
+> statuses until the clock rewinds to the new clip's head. Any future work that swaps clips mid-play
+> (lock-screen previous-track, tap-any-passed-row) inherits this and must keep the guard.
 
 ## 0. TL;DR
 

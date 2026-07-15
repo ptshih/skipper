@@ -414,6 +414,17 @@ export default function DriveScreen() {
           disabled={!d.canSeek}
         />
       ) : null}
+      {/* Between stops, once a clip has ended: one big "Replay that" tap to re-hear it — the gap the
+          scrubber (active-clip only) can't reach. A live GPS trigger preempts it. (replay-last-stop) */}
+      {d.canReplay ? (
+        <Button
+          title={voice.player.replay}
+          icon="restart"
+          variant="secondary"
+          onPress={d.replayLast}
+          accessibilityLabel={voice.player.replay}
+        />
+      ) : null}
       {d.buffering ? (
         <View style={styles.buffering}>
           <ActivityIndicator size="small" color={theme.colors.accent} />
