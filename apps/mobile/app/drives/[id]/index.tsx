@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActionSheetIOS, Alert, Animated, Linking, Platform, StyleSheet, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
 import { ApiError, deleteDrive, errorMessage, getDrive, type DriveManifest } from '@/lib/api'
 import { useStopPreview } from '@/lib/useStopPreview'
@@ -15,7 +16,8 @@ import {
   type DownloadProgress,
 } from '@/lib/offline'
 import { cleanPlaceName } from '@/lib/labels'
-import { radius, space } from '@/theme/tokens'
+import { useTheme } from '@/theme'
+import { border, radius, space } from '@/theme/tokens'
 import {
   AccountGate,
   AttributionButton,
@@ -63,6 +65,11 @@ export default function DriveDetailScreen() {
   // The detail map has no live position, so its puck is hidden and `progress` stays parked at 0 (the
   // whole route reads untraveled). DriveMap requires the value; this static one satisfies it.
   const mapProgress = useRef(new Animated.Value(0)).current
+  const insets = useSafeAreaInsets()
+  const { colors } = useTheme()
+  // Height of the FIXED now-playing dock (measured), reserved as bottom scroll padding so the last stop
+  // scrolls clear of the pinned bar instead of hiding behind it.
+  const [dockH, setDockH] = useState(0)
   const [drive, setDrive] = useState<DriveManifest | null>(null)
   const [needsAccount, setNeedsAccount] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -377,6 +384,8 @@ export default function DriveDetailScreen() {
     preview.activeSeq == null ? null : (drive.clips.find((c) => c.seq === preview.activeSeq) ?? null)
 
   return (
+    // Wrapper so the now-playing bar can pin to the bottom while the Screen's content scrolls under it.
+    <View style={styles.root}>
     <Screen scroll padded edges={['bottom']} contentContainerStyle={styles.body}>
       <Stack.Screen
         options={{
@@ -516,11 +525,29 @@ export default function DriveDetailScreen() {
         <StopList items={listItems} onPressItem={playStop} />
       )}
 
-      {/* NOW PLAYING — the single reused mini-player, shown while a stop sounds. Reachable in BOTH list
-          and map view. Its ⓘ reveals the playing clip's CC BY-SA credit — the same unified affordance
-          as the drive player + roam (legal, per-play). */}
+      {/* Spacer: reserve the fixed dock's measured height at the tail of the scroll so the last stop
+          can scroll clear of the now-playing bar pinned below (instead of hiding behind it). */}
+      {activeClip && dockH > 0 ? <View style={{ height: dockH }} /> : null}
+    </Screen>
+
+      {/* NOW PLAYING — FIXED to the bottom of the screen (does NOT scroll with the stops): the single
+          reused mini-player, shown while a stop sounds, reachable in BOTH List and Map view. Its ⓘ
+          reveals the playing clip's CC BY-SA credit — the same unified affordance as the drive player
+          + roam (legal, per-play). */}
       {activeClip ? (
-        <Card style={styles.nowCard}>
+        <View
+          onLayout={(e) => setDockH(e.nativeEvent.layout.height)}
+          style={[
+            styles.dock,
+            {
+              backgroundColor: colors.surfaceRaised,
+              borderTopColor: colors.rule,
+              paddingBottom: insets.bottom + space.sm, // clear the home-indicator strip
+              // Upward cast so the bar lifts off the scrolling content above (cross-platform, DESIGN §4).
+              boxShadow: [{ offsetX: 0, offsetY: -4, blurRadius: 14, color: colors.shadowCast }],
+            },
+          ]}
+        >
           <View style={styles.nowHead}>
             <View style={styles.nowHeadText}>
               <Text variant="label" color="accentWarm">
@@ -546,9 +573,9 @@ export default function DriveDetailScreen() {
             onSeekBack={() => preview.seekBy(-15)}
             onSeekForward={() => preview.seekBy(15)}
           />
-        </Card>
+        </View>
       ) : null}
-    </Screen>
+    </View>
   )
 }
 
@@ -587,6 +614,7 @@ function DriveDetailSkeleton() {
 }
 
 const styles = StyleSheet.create({
+  root: { flex: 1 },
   body: { gap: space.md },
   placard: { gap: space.sm },
   trail: { marginTop: space.xs },
@@ -610,7 +638,18 @@ const styles = StyleSheet.create({
   viewToggle: { minWidth: 168 }, // the two segments read comfortably without stretching full-width
   // A fixed-height map card inside the scroll (DriveMap fills it); rounded + clipped to the corners.
   mapCard: { height: 340, borderRadius: radius.lg, overflow: 'hidden' },
-  nowCard: { gap: space.sm },
+  // The now-playing bar PINNED to the bottom edge (full-width, a hairline-topped tray, not a floating
+  // card) so it stays put while the stops scroll under it. bg/border/cast set inline (need theme colors).
+  dock: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: space.gutter,
+    paddingTop: space.md,
+    gap: space.sm,
+    borderTopWidth: border.hair,
+  },
   // The header row: the kicker+title block on the left, the ⓘ source affordance hugged right.
   nowHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm },
   nowHeadText: { flex: 1, gap: 2 }, // the "NOW PLAYING" kicker sits tight over the stop name
