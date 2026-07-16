@@ -11,7 +11,13 @@
 // (untinted) and List mode stays the offline + accessibility-complete equivalent.
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Animated, Platform, Pressable, StyleSheet, View } from 'react-native'
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE, type LatLng, type Region } from 'react-native-maps'
+import MapView, {
+  Marker,
+  Polyline,
+  PROVIDER_GOOGLE,
+  type LatLng,
+  type Region,
+} from 'react-native-maps'
 import { border, radius, space } from '../theme/tokens'
 import { mapStyle } from '../theme/mapStyle'
 import { useReducedMotion, useTheme } from '../theme'
@@ -71,7 +77,16 @@ const PROVIDER = Platform.OS === 'android' || HAS_GOOGLE_KEY ? PROVIDER_GOOGLE :
 
 // memo: the player re-renders ~2×/sec from the audio status tick; with a memoized `stops` + stable
 // `progress`/`polyline`, this skips re-rendering the whole map subtree on those ticks. (audit #549)
-function DriveMapBase({ polyline, stops, progress, clipActive, hideRecenter, recenterBottom, onPressStop, hidePuck }: DriveMapProps) {
+function DriveMapBase({
+  polyline,
+  stops,
+  progress,
+  clipActive,
+  hideRecenter,
+  recenterBottom,
+  onPressStop,
+  hidePuck,
+}: DriveMapProps) {
   const { colors, isDark } = useTheme()
   const reducedMotion = useReducedMotion()
   const mapRef = useRef<MapView | null>(null)
@@ -134,7 +149,10 @@ function DriveMapBase({ polyline, stops, progress, clipActive, hideRecenter, rec
       const segLen = (cum[i + 1] ?? cum[i]!) - cum[i]!
       const segFrac = segLen > 0 ? (target - cum[i]!) / segLen : 0
       return {
-        puck: { latitude: a[1] + (b[1] - a[1]) * segFrac, longitude: a[0] + (b[0] - a[0]) * segFrac },
+        puck: {
+          latitude: a[1] + (b[1] - a[1]) * segFrac,
+          longitude: a[0] + (b[0] - a[0]) * segFrac,
+        },
         heading: bearingDeg(a, b),
         idx: i,
       }
@@ -171,7 +189,10 @@ function DriveMapBase({ polyline, stops, progress, clipActive, hideRecenter, rec
         const now = Date.now()
         if (now - lastCamAt.current >= 1000) {
           lastCamAt.current = now
-          mapRef.current?.animateCamera({ center: next.puck, zoom: 14 }, { duration: reducedMotion ? 0 : 500 })
+          mapRef.current?.animateCamera(
+            { center: next.puck, zoom: 14 },
+            { duration: reducedMotion ? 0 : 500 },
+          )
         }
       }
     })
@@ -181,8 +202,28 @@ function DriveMapBase({ polyline, stops, progress, clipActive, hideRecenter, rec
   const recenter = () => {
     setFollowing(true)
     lastCamAt.current = Date.now() // reset the follow throttle so the next tick doesn't immediately re-glide
+    // No live position (the detail mini-preview, hidePuck): "recenter" FRAMES THE WHOLE DRIVE — fit every
+    // stop marker + the route into view so all POIs are visible, not zoom to a single point.
+    if (hidePuck) {
+      const coords = [...latlngs, ...stops.map((s) => ({ latitude: s.lat, longitude: s.lng }))]
+      if (coords.length >= 2) {
+        mapRef.current?.fitToCoordinates(coords, {
+          edgePadding: { top: 64, right: 48, bottom: 64, left: 48 },
+          animated: !reducedMotion,
+        })
+      } else if (coords.length === 1) {
+        mapRef.current?.animateCamera(
+          { center: coords[0]!, zoom: 14 },
+          { duration: reducedMotion ? 0 : 400 },
+        )
+      }
+      return
+    }
     if (puck) {
-      mapRef.current?.animateCamera({ center: puck, zoom: 14 }, { duration: reducedMotion ? 0 : 400 })
+      mapRef.current?.animateCamera(
+        { center: puck, zoom: 14 },
+        { duration: reducedMotion ? 0 : 400 },
+      )
     }
   }
 
@@ -242,7 +283,9 @@ function DriveMapBase({ polyline, stops, progress, clipActive, hideRecenter, rec
               // since the tiny dot has no text). Read-only (no handler) on the live/sim drive.
               onPress={onPressStop ? () => onPressStop(s.seq) : undefined}
               accessibilityLabel={
-                onPressStop ? `${s.name}${active ? ', now playing' : passed ? ', played' : ''}` : undefined
+                onPressStop
+                  ? `${s.name}${active ? ', now playing' : passed ? ', played' : ''}`
+                  : undefined
               }
             >
               <View style={styles.markerBox}>
@@ -258,13 +301,26 @@ function DriveMapBase({ polyline, stops, progress, clipActive, hideRecenter, rec
                   style={[
                     styles.stopDot,
                     active
-                      ? { width: 22, height: 22, borderRadius: 11, backgroundColor: amber, borderColor: colors.surface, borderWidth: 3 }
+                      ? {
+                          width: 22,
+                          height: 22,
+                          borderRadius: 11,
+                          backgroundColor: amber,
+                          borderColor: colors.surface,
+                          borderWidth: 3,
+                        }
                       : passed
                         ? { backgroundColor: colors.trackActive }
-                        : { backgroundColor: colors.surface, borderColor: colors.trackInactive, borderWidth: 2 },
+                        : {
+                            backgroundColor: colors.surface,
+                            borderColor: colors.trackInactive,
+                            borderWidth: 2,
+                          },
                   ]}
                 >
-                  {active ? <View style={[styles.activeCore, { backgroundColor: colors.onAmber }]} /> : null}
+                  {active ? (
+                    <View style={[styles.activeCore, { backgroundColor: colors.onAmber }]} />
+                  ) : null}
                 </View>
               </View>
             </Marker>
@@ -282,7 +338,9 @@ function DriveMapBase({ polyline, stops, progress, clipActive, hideRecenter, rec
               <View style={[styles.puckWedge, { transform: [{ rotate: `${heading}deg` }] }]}>
                 <View style={[styles.wedgeTriangle, { borderBottomColor: amber }]} />
               </View>
-              <View style={[styles.puckDot, { backgroundColor: amber, borderColor: colors.surface }]} />
+              <View
+                style={[styles.puckDot, { backgroundColor: amber, borderColor: colors.surface }]}
+              />
             </View>
           </Marker>
         ) : null}
@@ -294,7 +352,7 @@ function DriveMapBase({ polyline, stops, progress, clipActive, hideRecenter, rec
         <Pressable
           onPress={recenter}
           accessibilityRole="button"
-          accessibilityLabel="Recenter the map on me"
+          accessibilityLabel={hidePuck ? 'Fit the whole drive on screen' : 'Recenter the map on me'}
           style={[
             styles.recenter,
             recenterBottom != null ? { bottom: recenterBottom } : null,
@@ -306,9 +364,9 @@ function DriveMapBase({ polyline, stops, progress, clipActive, hideRecenter, rec
             },
           ]}
         >
-          <Icon name="locate" size={18} color="accent" />
+          <Icon name={hidePuck ? 'fit' : 'locate'} size={18} color="accent" />
           <Text variant="label" color="ink">
-            Recenter
+            {hidePuck ? 'Fit route' : 'Recenter'}
           </Text>
         </Pressable>
       ) : null}
@@ -322,7 +380,13 @@ const PUCK = 18
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   markerBox: { width: 56, height: 56, alignItems: 'center', justifyContent: 'center' },
-  stopDot: { width: 12, height: 12, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
+  stopDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   activeHalo: { position: 'absolute', width: 38, height: 38, borderRadius: 19, opacity: 0.6 },
   activeCore: { width: 6, height: 6, borderRadius: 3 },
   puckHalo: { position: 'absolute', width: 34, height: 34, borderRadius: 17, opacity: 0.55 },

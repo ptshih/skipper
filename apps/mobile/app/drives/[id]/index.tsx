@@ -17,7 +17,7 @@ import {
 } from '@/lib/offline'
 import { cleanPlaceName } from '@/lib/labels'
 import { useTheme } from '@/theme'
-import { border, radius, space } from '@/theme/tokens'
+import { border, space } from '@/theme/tokens'
 import {
   AccountGate,
   AttributionButton,
@@ -67,8 +67,9 @@ export default function DriveDetailScreen() {
   const mapProgress = useRef(new Animated.Value(0)).current
   const insets = useSafeAreaInsets()
   const { colors } = useTheme()
-  // Height of the FIXED now-playing dock (measured), reserved as bottom scroll padding so the last stop
-  // scrolls clear of the pinned bar instead of hiding behind it.
+  // Measured height of the FIXED now-playing dock, reserved at the bottom so the dock never covers
+  // content: as tail scroll-padding in List mode (the last stop clears the bar) and as the map's
+  // bottom inset in Map mode (the map ends at the dock's top instead of being clipped behind it).
   const [dockH, setDockH] = useState(0)
   const [drive, setDrive] = useState<DriveManifest | null>(null)
   const [needsAccount, setNeedsAccount] = useState(false)
@@ -381,159 +382,189 @@ export default function DriveDetailScreen() {
   const durationMin = drive.durationSeconds ? Math.round(drive.durationSeconds / 60) : null
   // The clip behind the now-playing card (name + per-clip CC BY-SA credit) while a stop plays.
   const activeClip =
-    preview.activeSeq == null ? null : (drive.clips.find((c) => c.seq === preview.activeSeq) ?? null)
+    preview.activeSeq == null
+      ? null
+      : (drive.clips.find((c) => c.seq === preview.activeSeq) ?? null)
+
+  // Shared across the List + Map layouts (extracted so the two branches don't duplicate them).
+  const stackScreen = (
+    <Stack.Screen
+      options={{
+        title: 'Drive',
+        headerRight: () => (
+          <HeaderIconButton name="more" accessibilityLabel="More actions" onPress={openMenu} />
+        ),
+        // iOS 26: strip the Liquid Glass capsule so the chip isn't a second glow (mirrors index).
+        unstable_headerRightItems: () => [
+          {
+            type: 'custom',
+            hidesSharedBackground: true,
+            element: (
+              <HeaderIconButton name="more" accessibilityLabel="More actions" onPress={openMenu} />
+            ),
+          },
+        ],
+      }}
+    />
+  )
+  // The route label + the List/Map toggle — the slim header shared by both views.
+  const routeHead = (
+    <View style={styles.previewHead}>
+      <Text variant="label" color="inkFaint">
+        {`THE ROUTE · ${stops.length} STOPS`}
+      </Text>
+      <Segmented
+        accessibilityLabel={voice.preview.viewLabel}
+        options={[
+          { key: 'list', label: voice.preview.viewList, icon: 'list' },
+          { key: 'map', label: voice.preview.viewMap, icon: 'map' },
+        ]}
+        value={view}
+        onChange={setView}
+        style={styles.viewToggle}
+      />
+    </View>
+  )
+  const hintLine = (
+    <Text variant="dim" color={preview.unplayableSeq != null ? 'danger' : 'inkFaint'}>
+      {preview.unplayableSeq != null ? voice.preview.unplayable : voice.preview.hint}
+    </Text>
+  )
 
   return (
-    // Wrapper so the now-playing bar can pin to the bottom while the Screen's content scrolls under it.
     <View style={styles.root}>
-    <Screen scroll padded edges={['bottom']} contentContainerStyle={styles.body}>
-      <Stack.Screen
-        options={{
-          title: 'Drive',
-          headerRight: () => (
-            <HeaderIconButton name="more" accessibilityLabel="More actions" onPress={openMenu} />
-          ),
-          // iOS 26: strip the Liquid Glass capsule so the chip isn't a second glow (mirrors index).
-          unstable_headerRightItems: () => [
-            {
-              type: 'custom',
-              hidesSharedBackground: true,
-              element: (
-                <HeaderIconButton name="more" accessibilityLabel="More actions" onPress={openMenu} />
-              ),
-            },
-          ],
-        }}
-      />
+      {view === 'map' ? (
+        // MAP MODE — full-bleed + NON-scrolling so the map owns the pan/zoom drag (a MapView nested in a
+        // ScrollView fights it for the vertical gesture). Slim header + edge-to-edge map + the dock.
+        // `edges={[]}`: the map runs to the physical bottom; the map container reserves the dock's
+        // measured height (or the home-indicator strip when idle) so the fixed dock never CLIPS the map.
+        <Screen edges={[]}>
+          {stackScreen}
+          <View style={styles.mapHeader}>
+            {routeHead}
+            {hintLine}
+          </View>
+          <View
+            style={[
+              styles.mapFill,
+              { paddingBottom: activeClip ? dockH : insets.bottom + space.sm },
+            ]}
+          >
+            <DriveMap
+              polyline={drive.polyline}
+              stops={mapStops}
+              progress={mapProgress}
+              hidePuck
+              clipActive={preview.activeSeq != null}
+              onPressStop={playStop}
+            />
+          </View>
+        </Screen>
+      ) : (
+        // LIST MODE — the scrolling detail page (placard, Start CTA, itinerary); the offline + a11y default.
+        <Screen scroll padded edges={['bottom']} contentContainerStyle={styles.body}>
+          {stackScreen}
 
-      {/* THE TRAILHEAD SIGN — a carved ranger placard: "your drive" kicker → the A→B label →
+          {/* THE TRAILHEAD SIGN — a carved ranger placard: "your drive" kicker → the A→B label →
           the trail with the rig parked at the start → a stamped permit line. */}
-      <Card framed style={styles.placard}>
-        <Text variant="label" color="accentWarm">
-          YOUR DRIVE
-        </Text>
-        <Text variant="display" color="ink">
-          {drive.label}
-        </Text>
-        <View style={styles.trail}>
-          <RouteTrack progress={parked} glow={false} />
-        </View>
-        <Divider dashed />
-        <View style={styles.permitRow}>
-          <Text variant="monoStrong" color="inkDim">
-            {stops.length} STOPS{durationMin ? ` · ~${durationMin} MIN` : ''}
-          </Text>
-          {/* Offline state rides here as a compact chip — the ACTION lives in the ⋯ menu. */}
-          {downloading ? (
-            <Text variant="label" color="inkFaint">
-              {downloading.total ? `Saving ${downloading.done}/${downloading.total}` : 'Saving…'}
+          <Card framed style={styles.placard}>
+            <Text variant="label" color="accentWarm">
+              YOUR DRIVE
             </Text>
-          ) : downloaded && updatable ? (
-            <View style={styles.savedChip}>
-              <Icon name="update" size={14} color="accentWarm" />
-              <Text variant="label" color="accentWarm">
-                {voice.offline.updateReady}
-              </Text>
+            <Text variant="display" color="ink">
+              {drive.label}
+            </Text>
+            <View style={styles.trail}>
+              <RouteTrack progress={parked} glow={false} />
             </View>
-          ) : downloaded && partial ? (
-            // PARTIAL (H2): saved + playable, but some clips are still missing — a gentle "N left"
-            // nudge (warm, not alarming) toward the ⋯ re-pull.
-            <View style={styles.savedChip}>
-              <Icon name="update" size={14} color="accentWarm" />
-              <Text variant="label" color="accentWarm">
-                {`${partial.failed} ${voice.offline.partialSuffix}`}
+            <Divider dashed />
+            <View style={styles.permitRow}>
+              <Text variant="monoStrong" color="inkDim">
+                {stops.length} STOPS{durationMin ? ` · ~${durationMin} MIN` : ''}
               </Text>
+              {/* Offline state rides here as a compact chip — the ACTION lives in the ⋯ menu. */}
+              {downloading ? (
+                <Text variant="label" color="inkFaint">
+                  {downloading.total
+                    ? `Saving ${downloading.done}/${downloading.total}`
+                    : 'Saving…'}
+                </Text>
+              ) : downloaded && updatable ? (
+                <View style={styles.savedChip}>
+                  <Icon name="update" size={14} color="accentWarm" />
+                  <Text variant="label" color="accentWarm">
+                    {voice.offline.updateReady}
+                  </Text>
+                </View>
+              ) : downloaded && partial ? (
+                // PARTIAL (H2): saved + playable, but some clips are still missing — a gentle "N left"
+                // nudge (warm, not alarming) toward the ⋯ re-pull.
+                <View style={styles.savedChip}>
+                  <Icon name="update" size={14} color="accentWarm" />
+                  <Text variant="label" color="accentWarm">
+                    {`${partial.failed} ${voice.offline.partialSuffix}`}
+                  </Text>
+                </View>
+              ) : downloaded && expired ? (
+                // Past the freshness TTL — a warm "saved a while back" nudge toward the ⋯ refresh. Soft:
+                // the copy still plays; this just suggests a re-pull (and fires even offline).
+                <View style={styles.savedChip}>
+                  <Icon name="update" size={14} color="accentWarm" />
+                  <Text variant="label" color="accentWarm">
+                    {voice.offline.expired}
+                  </Text>
+                </View>
+              ) : downloaded ? (
+                <View style={styles.savedChip}>
+                  <Icon name="downloaded" size={14} color="accent" />
+                  <Text variant="label" color="accent">
+                    Saved offline
+                  </Text>
+                </View>
+              ) : null}
             </View>
-          ) : downloaded && expired ? (
-            // Past the freshness TTL — a warm "saved a while back" nudge toward the ⋯ refresh. Soft:
-            // the copy still plays; this just suggests a re-pull (and fires even offline).
-            <View style={styles.savedChip}>
-              <Icon name="update" size={14} color="accentWarm" />
-              <Text variant="label" color="accentWarm">
-                {voice.offline.expired}
-              </Text>
-            </View>
-          ) : downloaded ? (
-            <View style={styles.savedChip}>
-              <Icon name="downloaded" size={14} color="accent" />
-              <Text variant="label" color="accent">
-                Saved offline
-              </Text>
-            </View>
+          </Card>
+
+          {offline ? (
+            <Text variant="dim" color="inkFaint">
+              {voice.offline.detail}
+            </Text>
           ) : null}
-        </View>
-      </Card>
 
-      {offline ? (
-        <Text variant="dim" color="inkFaint">
-          {voice.offline.detail}
-        </Text>
-      ) : null}
-
-      {/* The live drive is the M1 headline. The couch "simulated drive" is CUT — auditioning is now the
+          {/* The live drive is the M1 headline. The couch "simulated drive" is CUT — auditioning is now the
           native mini-preview below (tap a stop to hear it). The dev simulator + offline download live in
           the header ⋯ menu so this stays glanceable. */}
-      <View style={styles.ctaGroup}>
-        <Button icon="car" title={voice.cta.drive} onPress={() => router.push(`/drives/${id}/play?mode=live`)} />
-        <Text variant="dim" color="inkFaint" align="center">
-          {voice.drive.blurb}
-        </Text>
-      </View>
+          <View style={styles.ctaGroup}>
+            <Button
+              icon="car"
+              title={voice.cta.drive}
+              onPress={() => router.push(`/drives/${id}/play?mode=live`)}
+            />
+            <Text variant="dim" color="inkFaint" align="center">
+              {voice.drive.blurb}
+            </Text>
+          </View>
 
-      {downloadError ? (
-        <Text variant="dim" color="danger">
-          {downloadError}
-        </Text>
-      ) : null}
+          {downloadError ? (
+            <Text variant="dim" color="danger">
+              {downloadError}
+            </Text>
+          ) : null}
 
-      {/* THE ROUTE — a native mini-preview: browse the stops as a List (offline + a11y default) or on a
-          Map, and tap any stop / pin to hear that one clip on the couch. */}
-      <View style={styles.previewHead}>
-        <Text variant="label" color="inkFaint">
-          {`THE ROUTE · ${stops.length} STOPS`}
-        </Text>
-        <Segmented
-          accessibilityLabel={voice.preview.viewLabel}
-          options={[
-            { key: 'list', label: voice.preview.viewList, icon: 'list' },
-            { key: 'map', label: voice.preview.viewMap, icon: 'map' },
-          ]}
-          value={view}
-          onChange={setView}
-          style={styles.viewToggle}
-        />
-      </View>
+          {/* THE ROUTE — browse the stops as a List or a Map; tap any stop / pin to hear that one clip. */}
+          {routeHead}
+          {hintLine}
+          <StopList items={listItems} onPressItem={playStop} />
 
-      <Text variant="dim" color={preview.unplayableSeq != null ? 'danger' : 'inkFaint'}>
-        {preview.unplayableSeq != null ? voice.preview.unplayable : voice.preview.hint}
-      </Text>
-
-      {view === 'map' ? (
-        // A fixed-height map card (the screen scrolls); List stays the offline/a11y default since map
-        // tiles need network + a Google key (else the untinted Apple-Maps fallback).
-        <View style={styles.mapCard}>
-          <DriveMap
-            polyline={drive.polyline}
-            stops={mapStops}
-            progress={mapProgress}
-            hidePuck
-            clipActive={preview.activeSeq != null}
-            onPressStop={playStop}
-          />
-        </View>
-      ) : (
-        <StopList items={listItems} onPressItem={playStop} />
+          {/* Spacer: reserve the fixed dock's measured height at the tail of the scroll so the last stop
+          can scroll clear of the now-playing bar pinned below (instead of hiding behind it). */}
+          {activeClip && dockH > 0 ? <View style={{ height: dockH }} /> : null}
+        </Screen>
       )}
 
-      {/* Spacer: reserve the fixed dock's measured height at the tail of the scroll so the last stop
-          can scroll clear of the now-playing bar pinned below (instead of hiding behind it). */}
-      {activeClip && dockH > 0 ? <View style={{ height: dockH }} /> : null}
-    </Screen>
-
-      {/* NOW PLAYING — FIXED to the bottom of the screen (does NOT scroll with the stops): the single
-          reused mini-player, shown while a stop sounds, reachable in BOTH List and Map view. Its ⓘ
-          reveals the playing clip's CC BY-SA credit — the same unified affordance as the drive player
-          + roam (legal, per-play). */}
+      {/* NOW PLAYING — FIXED to the bottom of the screen (both views): the single reused mini-player,
+          shown while a stop sounds. Its ⓘ reveals the playing clip's CC BY-SA credit — the same unified
+          affordance as the drive player + roam (legal, per-play). */}
       {activeClip ? (
         <View
           onLayout={(e) => setDockH(e.nativeEvent.layout.height)}
@@ -636,8 +667,15 @@ const styles = StyleSheet.create({
     gap: space.sm,
   },
   viewToggle: { minWidth: 168 }, // the two segments read comfortably without stretching full-width
-  // A fixed-height map card inside the scroll (DriveMap fills it); rounded + clipped to the corners.
-  mapCard: { height: 340, borderRadius: radius.lg, overflow: 'hidden' },
+  // MAP MODE (full-bleed, non-scrolling): a slim padded header over an edge-to-edge map that owns the
+  // pan/zoom gesture (a MapView can't share the vertical drag with a ScrollView).
+  mapHeader: {
+    paddingHorizontal: space.gutter,
+    paddingTop: space.md,
+    paddingBottom: space.sm,
+    gap: space.sm,
+  },
+  mapFill: { flex: 1 },
   // The now-playing bar PINNED to the bottom edge (full-width, a hairline-topped tray, not a floating
   // card) so it stays put while the stops scroll under it. bg/border/cast set inline (need theme colors).
   dock: {
@@ -651,7 +689,12 @@ const styles = StyleSheet.create({
     borderTopWidth: border.hair,
   },
   // The header row: the kicker+title block on the left, the ⓘ source affordance hugged right.
-  nowHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm },
+  nowHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: space.sm,
+  },
   nowHeadText: { flex: 1, gap: 2 }, // the "NOW PLAYING" kicker sits tight over the stop name
   skLines: { gap: space.sm }, // a cluster of skeleton lines (the route rows)
   skCtaCaption: { alignSelf: 'center' },

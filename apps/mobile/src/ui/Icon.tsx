@@ -37,6 +37,7 @@ export type IconName =
   | 'map'
   | 'list'
   | 'locate'
+  | 'fit'
   | 'chevronUp'
   | 'eye'
   | 'eyeOff'
@@ -74,6 +75,7 @@ const IONICON: Record<IconName, ComponentProps<typeof Ionicons>['name']> = {
   map: 'map-outline', // the live-drive Map view (vs the itinerary List)
   list: 'list-outline', // the itinerary List view
   locate: 'locate-outline', // recenter-on-me chip when the rider pans the map away
+  fit: 'scan-outline', // "fit route" chip — frame the whole drive (all POIs) on the detail map
   chevronUp: 'chevron-up', // the map peek-bar's "drag/tap up to expand the player" affordance
   eye: 'eye-outline', // show diagnostics overlay
   eyeOff: 'eye-off-outline', // hide diagnostics overlay
