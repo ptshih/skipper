@@ -40,6 +40,13 @@ export interface DriveMapProps {
   hideRecenter?: boolean
   /** Lift the recenter chip above a floating sheet (px from the bottom). */
   recenterBottom?: number
+  /** Tap a stop marker (the drive-detail mini-preview browses stops on the map, tap a pin to play).
+   *  Omit for the live/sim drive, where markers are read-only. */
+  onPressStop?: (seq: number) => void
+  /** Drop the live-position puck (+ the traveled/untraveled split): the detail mini-preview has no
+   *  live position — it's a static route + pins with the active stop highlighted, driven only by the
+   *  passed-in `progress` (held at 0). The in-drive player leaves this off so the puck rides. */
+  hidePuck?: boolean
 }
 
 const toLatLng = ([lng, lat]: [number, number]): LatLng => ({ latitude: lat, longitude: lng })
@@ -64,7 +71,7 @@ const PROVIDER = Platform.OS === 'android' || HAS_GOOGLE_KEY ? PROVIDER_GOOGLE :
 
 // memo: the player re-renders ~2×/sec from the audio status tick; with a memoized `stops` + stable
 // `progress`/`polyline`, this skips re-rendering the whole map subtree on those ticks. (audit #549)
-function DriveMapBase({ polyline, stops, progress, clipActive, hideRecenter, recenterBottom }: DriveMapProps) {
+function DriveMapBase({ polyline, stops, progress, clipActive, hideRecenter, recenterBottom, onPressStop, hidePuck }: DriveMapProps) {
   const { colors, isDark } = useTheme()
   const reducedMotion = useReducedMotion()
   const mapRef = useRef<MapView | null>(null)
@@ -231,6 +238,12 @@ function DriveMapBase({ polyline, stops, progress, clipActive, hideRecenter, rec
               anchor={{ x: 0.5, y: 0.5 }}
               title={s.name}
               tracksViewChanges={false}
+              // Detail mini-preview: a pin tap plays that stop (a11y label carries the now-playing state,
+              // since the tiny dot has no text). Read-only (no handler) on the live/sim drive.
+              onPress={onPressStop ? () => onPressStop(s.seq) : undefined}
+              accessibilityLabel={
+                onPressStop ? `${s.name}${active ? ', now playing' : passed ? ', played' : ''}` : undefined
+              }
             >
               <View style={styles.markerBox}>
                 {active ? (
@@ -260,8 +273,9 @@ function DriveMapBase({ polyline, stops, progress, clipActive, hideRecenter, rec
 
         {/* The live-position puck — "you are here", riding the route at `progress`. tracksViewChanges
             stays at its default (true): the heading wedge transform changes per tick, so the bitmap
-            must re-snapshot — an inherent cost of the rotating wedge. (audit #567) */}
-        {puck ? (
+            must re-snapshot — an inherent cost of the rotating wedge. (audit #567) Hidden on the
+            detail mini-preview (no live position — just route + pins). */}
+        {!hidePuck && puck ? (
           <Marker coordinate={puck} anchor={{ x: 0.5, y: 0.5 }} flat>
             <View style={styles.markerBox}>
               <View style={[styles.puckHalo, { backgroundColor: colors.glow }]} />

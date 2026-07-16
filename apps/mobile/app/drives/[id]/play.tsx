@@ -1,11 +1,10 @@
 // The live, GPS-triggered driving player. The skipper talks when the road reaches a
-// stop, not on a timer. THREE clocks behind one code path (the `?mode=` param), all in
-// `useDrive`: the couch SIMULATOR (default — testable on the iOS Simulator, no device
-// GPS), the real device GPS (`?mode=live`, Phase 4), and the map-less PREVIEW
-// (`?mode=preview`) — the anonymous-friendly couch SIMULATED DRIVE that walks a
-// compressed segment timeline (clip / drive / rest), tappable stops, no GPS or permission
-// gate. Reuses the @/ui player primitives; the clock + fire-queue + source swap live in
-// `useDrive`.
+// stop, not on a timer. TWO clocks behind one code path (the `?mode=` param), both in
+// `useDrive`: the couch SIMULATOR (default in dev — testable on the iOS Simulator, no
+// device GPS) and the real device GPS (`?mode=live`, Phase 4). (The old map-less couch
+// PREVIEW clock was cut — auditioning a drive is the native per-stop mini-preview on the
+// drive-detail page now; see docs/decisions/detail-page-mini-preview.md.) Reuses the @/ui
+// player primitives; the clock + fire-queue + source swap live in `useDrive`.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Alert, Animated, PixelRatio, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { Stack, useLocalSearchParams, useNavigation, useRouter } from 'expo-router'
@@ -24,11 +23,11 @@ import {
   Icon,
   LocationGate,
   LocationPrime,
+  AttributionButton,
   NowCard,
   RouteTrack,
   Screen,
   Scrubber,
-  SourceCredit,
   StateView,
   StopList,
   STOP_ROW_HEIGHT,
@@ -44,34 +43,28 @@ import type { BadgeTone } from '@/ui'
 // Map vs List is a per-rider preference that survives sessions (real-map spec §4).
 const VIEW_KEY = 'skipper.drivePlayerView'
 type PlayerView = 'map' | 'list'
-import { formatMmssMs, METERS_PER_MILE } from '@skipper/engine'
 
 export default function DriveScreen() {
   const theme = useTheme()
   const { id, mode } = useLocalSearchParams<{ id: string; mode?: string }>()
-  // 'live' = real device GPS (Phase 4); 'preview' = the couch SIMULATED DRIVE (anonymous,
-  // no GPS, tappable stops). An unrecognized/missing mode falls back to the dev simulator in
-  // dev, but to the open couch PREVIEW in release — the dev clock must never be one malformed
-  // deep link away from a production rider.
-  // The global Settings → Developer sim toggle swaps the real-GPS 'live' drive (and the
-  // release fallback) for the on-device SIMULATOR — but never overrides an explicit
-  // `?mode=preview` (that anonymous funnel is GPS-less by design and stays untouched).
+  // 'live' = real device GPS (Phase 4); the default is the on-device SIMULATOR (couch-testable).
+  // An unrecognized/missing mode falls back to 'sim' in DEV but to 'live' in RELEASE — the dev
+  // clock must never be one malformed deep link away from a production rider (the couch PREVIEW
+  // that used to be that release fallback is gone; auditioning is the drive-detail mini-preview).
+  // The global Settings → Developer sim toggle swaps the real-GPS 'live' drive for the on-device
+  // SIMULATOR, so it wins over an explicit `?mode=live`.
   const { simMode } = useSimMode()
-  const driveMode =
-    mode === 'preview'
-      ? 'preview'
-      : simMode
+  const driveMode: 'sim' | 'live' = simMode
+    ? 'sim'
+    : mode === 'live'
+      ? 'live'
+      : __DEV__
         ? 'sim'
-        : mode === 'live'
-          ? 'live'
-          : __DEV__
-            ? 'sim'
-            : 'preview'
-  // When the GLOBAL dev toggle forced sim, default the replay to fast (couch-testing a full
-  // tour at 1× is impractical); explicit ?mode=sim / the dev fallback keep real-time so
-  // trigger-timing tests are unchanged. The pre-drive knob still lets the rider switch.
-  const d = useDrive(id, { mode: driveMode, defaultFast: simMode && driveMode === 'sim' })
-  const isPreview = driveMode === 'preview'
+        : 'live'
+  // When the GLOBAL dev toggle forced sim, default the replay to fast (couch-testing a full drive
+  // at 1× is impractical); the plain dev-fallback sim keeps real-time so trigger-timing tests are
+  // unchanged. The pre-drive knob still lets the rider switch. (simMode ⟹ driveMode==='sim'.)
+  const d = useDrive(id, { mode: driveMode, defaultFast: simMode })
 
   // Map ⇄ List — the real map (route + live puck) or the bare itinerary. List stays the
   // offline + accessibility-complete equivalent; the choice persists across sessions.
@@ -145,28 +138,23 @@ export default function DriveScreen() {
   // Scale the row height by the user's font scale — rows are minHeight + grow with
   // Dynamic Type, so a fixed STOP_ROW_HEIGHT would undershoot the target at large text.
   const focusSeq = d.activeSeq ?? d.nextSeq
-  // Row index of the current segment's stop (preview's passed/active stop-list state).
+  // Row index of the focused stop (the active clip, else the next one) — the auto-scroll target.
   const focusRow = focusSeq != null ? d.stops.findIndex((s) => s.seq === focusSeq) : -1
   // Per-stop state, shared by the itinerary List rows and the Map markers. Memoized (NOT rebuilt every
   // ~500ms status tick) so the React.memo'd DriveMap doesn't re-render its marker tree on each tick.
   // Hoisted above the phase early-returns so the hook order stays unconditional. (audit #549)
   const stopViews = useMemo(
     () =>
-      d.stops.map((s, i) => {
-        const state: 'passed' | 'active' | 'upcoming' = isPreview
-          ? d.phase === 'done' || (focusRow >= 0 && i < focusRow)
-            ? 'passed'
-            : s.seq === focusSeq && d.currentKind !== 'drive'
-              ? 'active'
-              : 'upcoming'
-          : d.phase === 'done' || (d.firedSeqs.has(s.seq) && s.seq !== d.activeSeq)
+      d.stops.map((s) => {
+        const state: 'passed' | 'active' | 'upcoming' =
+          d.phase === 'done' || (d.firedSeqs.has(s.seq) && s.seq !== d.activeSeq)
             ? 'passed'
             : s.seq === d.activeSeq
               ? 'active'
               : 'upcoming'
         return { seq: s.seq, name: s.name, stopType: s.stopType, lat: s.lat, lng: s.lng, state }
       }),
-    [d.stops, d.phase, d.firedSeqs, d.activeSeq, d.currentKind, focusRow, focusSeq, isPreview],
+    [d.stops, d.phase, d.firedSeqs, d.activeSeq],
   )
   // Don't yank the list back while the rider is browsing the itinerary: mark a drag live on
   // begin, and keep it "browsing" for a grace window after they let go so a stop transition
@@ -270,8 +258,7 @@ export default function DriveScreen() {
   // then render ONE elevated card instead of five sibling cards. `mid` is the card's
   // state-dependent middle: a body line (ready/done) or the Scrubber (driving). The
   // transport stays at the bottom of the same card.
-  const restState = d.currentKind === 'rest'
-  const showReady = !isPreview && d.phase === 'ready'
+  const showReady = d.phase === 'ready'
   const showScrubber = !showReady && d.phase !== 'done'
 
   type CardConfig = {
@@ -298,9 +285,6 @@ export default function DriveScreen() {
       body: voice.drive.readyBody,
       glow: false,
     }
-  } else if (restState) {
-    // A silent break stop — a "good spot to stretch" pit-stop (no halo).
-    card = { kicker: voice.player.pitStop, title: nextName ?? voice.player.restFallback, glow: false }
   } else if (d.activeSeq != null) {
     // A loaded clip. A held clip dims the halo and stops claiming "NOW PLAYING".
     card = {
@@ -317,8 +301,6 @@ export default function DriveScreen() {
     card = {
       kicker: nextName ? `${voice.player.rolling} · ${voice.drive.nextStop}` : voice.player.rolling,
       title: nextName ?? voice.player.rollingOpen,
-      timer:
-        d.rollingDistanceM != null ? `~${(d.rollingDistanceM / METERS_PER_MILE).toFixed(1)} mi` : undefined,
       glow: false,
       badge: nextStop
         ? { tone: stopTone(nextStop.stopType), label: stopLabel(nextStop.stopType) }
@@ -340,8 +322,6 @@ export default function DriveScreen() {
     ) : showReady ? (
       <TransportBar single={{ icon: 'play', title: voice.cta.play, onPress: d.start }} />
     ) : (
-      // PREVIEW just plays (autostarts, no fix source to "pull over" from) — no secondary
-      // "Pull over" button; the live/sim drive keeps it to end the drive.
       <TransportBar
         playing={!d.paused}
         playLabel={voice.cta.resume}
@@ -349,12 +329,11 @@ export default function DriveScreen() {
         onSeekBack={() => d.seekBy(-15)}
         onSeekForward={() => d.seekBy(15)}
         canSeek={d.canSeek}
-        secondary={isPreview ? undefined : { title: voice.cta.endDrive, onPress: confirmEnd }}
+        secondary={{ title: voice.cta.endDrive, onPress: confirmEnd }}
       />
     )
 
-  // The Map ⇄ List header switch (real-map spec §4). Hidden in preview-on-a-zero-route
-  // edge cases by simply having no polyline → the map shows an empty basemap, still valid.
+  // The Map ⇄ List header switch (real-map spec §4).
   const viewToggle = () => (
     <View style={[styles.toggle, { backgroundColor: theme.colors.surfaceRaised, borderColor: theme.colors.rule }]}>
       {(['map', 'list'] as const).map((m) => {
@@ -380,9 +359,9 @@ export default function DriveScreen() {
 
   // Offline chip (M7): a quiet "playing from download" flag when the drive loaded entirely off the
   // saved copy (zero network). Same icon + accent tone as the drive-detail "Saved offline" chip, so
-  // the two surfaces read as one idea. Not shown in preview (the couch sim has no GPS/offline stakes).
+  // the two surfaces read as one idea.
   const offlineChip =
-    d.offline && !isPreview ? (
+    d.offline ? (
       <View
         style={[styles.offlineChip, { backgroundColor: theme.colors.surfaceRaised, borderColor: theme.colors.rule }]}
         accessibilityLiveRegion="polite"
@@ -403,7 +382,15 @@ export default function DriveScreen() {
       kicker={card.kicker}
       title={card.title}
       timer={card.timer}
-      right={card.badge ? <Badge tone={card.badge.tone} label={card.badge.label} /> : undefined}
+      right={
+        card.badge || activeAttribution?.length ? (
+          <View style={styles.headerRight}>
+            {card.badge ? <Badge tone={card.badge.tone} label={card.badge.label} /> : null}
+            {/* The ⓘ that reveals THIS stop's source(s) — same affordance as roam (unified). */}
+            <AttributionButton items={activeAttribution} />
+          </View>
+        ) : undefined
+      }
       transport={transport}
     >
       {card.body ? (
@@ -443,10 +430,6 @@ export default function DriveScreen() {
           {d.stallNote}
         </Text>
       ) : null}
-      {/* The playing clip's source credit — CC BY-SA attaches to the adapted WORK, so it rides the
-          stop it belongs to rather than living only on the Sources screen. Renders nothing for a
-          clip with no attribution (scenic/break ground on no source text). */}
-      <SourceCredit items={activeAttribution} />
     </NowCard>
   )
 
@@ -460,7 +443,7 @@ export default function DriveScreen() {
       <Screen edges={['bottom']}>
         <Stack.Screen
           options={{
-            title: isPreview ? 'Preview drive' : 'Drive',
+            title: 'Drive',
             gestureEnabled: d.phase !== 'driving',
             fullScreenGestureEnabled: false,
             headerRight: viewToggle,
@@ -560,10 +543,10 @@ export default function DriveScreen() {
     <Screen edges={['bottom']}>
       {/* Edge-swipe back is allowed when parked but DISABLED while a drive is rolling (a stray
           swipe shouldn't kill the run — the back chevron confirms instead). Also stop the
-          Scrubber drag from triggering the iOS-26 whole-screen back gesture (preview's fix). */}
+          Scrubber drag from triggering the iOS-26 whole-screen back gesture. */}
       <Stack.Screen
         options={{
-          title: isPreview ? 'Preview drive' : 'Drive',
+          title: 'Drive',
           gestureEnabled: d.phase !== 'driving',
           fullScreenGestureEnabled: false,
           headerRight: viewToggle,
@@ -575,18 +558,7 @@ export default function DriveScreen() {
           {d.driveName}
         </Text>
         <Text variant="dim" color="inkDim">
-          {isPreview ? (
-            // Rider-facing: no "simulated drive" dev-vocab — the "preview of the full drive"
-            // line already says what this is. (A drive carries no region name on the manifest.)
-            d.totalPreviewMs != null && d.totalRealMs != null
-              ? `${formatMmssMs(d.totalPreviewMs)} preview of the full ${formatMmssMs(d.totalRealMs)} drive`
-              : 'preview'
-          ) : (
-            <>
-              {driveMode === 'live' ? 'live drive' : 'simulated drive'} · {d.firedCount}/
-              {d.totalStops} stops
-            </>
-          )}
+          {driveMode === 'live' ? 'live drive' : 'simulated drive'} · {d.firedCount}/{d.totalStops} stops
         </Text>
       </View>
 
@@ -599,15 +571,10 @@ export default function DriveScreen() {
         style={styles.track}
       />
 
-      {/* The itinerary (flex:1) — a FIXED shell: all four rounded corners stay put while only
-          the rows scroll; tappable in PREVIEW (jump there), read-only on a real/sim drive (the
-          hint sits right above); the drive-complete cascade stamps the passed checks in. (Map
-          mode is a separate full-bleed layout above.) */}
-      {isPreview ? (
-        <Text variant="dim" color="inkFaint" style={styles.hint}>
-          {voice.player.previewHint}
-        </Text>
-      ) : null}
+      {/* The itinerary (flex:1) — a FIXED shell: all four rounded corners stay put while only the
+          rows scroll; read-only on the drive (auditioning per-stop is the drive-detail mini-preview);
+          the drive-complete cascade stamps the passed checks in. (Map mode is a separate full-bleed
+          layout above.) */}
       <StopList
         scroll
         scrollRef={listRef}
@@ -615,7 +582,6 @@ export default function DriveScreen() {
         onScrollEndDrag={onScrollSettled}
         onMomentumScrollEnd={onScrollSettled}
         style={styles.listCard}
-        onPressItem={isPreview ? d.jumpToStop : undefined}
         enterStamp={d.phase === 'done' && !reduce}
         items={stopViews.map((s) => ({
           seq: s.seq,
@@ -679,6 +645,8 @@ export default function DriveScreen() {
 }
 
 const styles = StyleSheet.create({
+  // The card header's trailing cluster: the stop-type badge + the ⓘ source affordance, side by side.
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   header: { paddingHorizontal: space.gutter, paddingTop: space.md, gap: space.xs },
   track: { marginHorizontal: space.gutter, marginTop: space.md },
   // paddingBottom stacks with the safe-area inset where one exists, and supplies a minimum of
@@ -694,7 +662,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.gutter,
     marginTop: space.md,
   },
-  hint: { paddingHorizontal: space.gutter, paddingTop: space.md, paddingBottom: space.sm }, // preview only
   // Offline "playing from download" chip (M7) — a quiet pill, shared by both modes' status rows.
   offlineChip: {
     flexDirection: 'row',

@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActionSheetIOS, Alert, Animated, Linking, Platform, StyleSheet, View } from 'react-native'
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
 import { ApiError, deleteDrive, errorMessage, getDrive, type DriveManifest } from '@/lib/api'
+import { useStopPreview } from '@/lib/useStopPreview'
+import { DriveMap, type DriveMapStop } from '@/ui/DriveMap'
 import {
   deleteDriveDownload,
   downloadDrive,
@@ -13,9 +15,10 @@ import {
   type DownloadProgress,
 } from '@/lib/offline'
 import { cleanPlaceName } from '@/lib/labels'
-import { space } from '@/theme/tokens'
+import { radius, space } from '@/theme/tokens'
 import {
   AccountGate,
+  AttributionButton,
   Button,
   Card,
   Divider,
@@ -23,11 +26,15 @@ import {
   Icon,
   RouteTrack,
   Screen,
+  Scrubber,
+  Segmented,
   Skeleton,
   SkeletonGroup,
   StateView,
   StopList,
+  type StopListItem,
   Text,
+  TransportBar,
   stopIcon,
   voice,
 } from '@/ui'
@@ -36,12 +43,26 @@ import {
 // Set EXPO_PUBLIC_SUPPORT_EMAIL to the real inbox; the default is a brand-domain placeholder.
 const SUPPORT_EMAIL = process.env.EXPO_PUBLIC_SUPPORT_EMAIL ?? 'feedback@skipper.fm'
 
-// A saved drive (the rider's own, account-gated): route + stops + the live GPS drive (the M1
-// phone player, fed by real device GPS) + the couch preview + offline download. Reached
-// from "My Drives" or straight after creating one (Create-a-Drive → preview → here).
+// A saved drive (the rider's own, account-gated): route + stops + the native mini-preview (tap a
+// stop to hear one clip, List/Map) + the live GPS drive (the M1 phone player, fed by real device
+// GPS) + offline download. Reached from "My Drives" or straight after creating one (Create-a-Drive
+// → here). docs/decisions/detail-page-mini-preview.md.
 export default function DriveDetailScreen() {
   const router = useRouter()
   const { id } = useLocalSearchParams<{ id: string }>()
+  // The native mini-preview: tap a stop (list row or map pin) to hear that one clip on the couch. Two
+  // ways to browse the same stops — a List (offline + accessibility default) and a Map (route + pins).
+  const [view, setView] = useState<'list' | 'map'>('list')
+  const preview = useStopPreview(id)
+  // A STABLE tap handler (reads the latest preview.play through a ref): preview.play's identity churns
+  // on every ~2/sec audio-status tick, and passing it straight to DriveMap would defeat DriveMap's memo
+  // (re-serializing the markers to native each tick while a clip plays). (audit #549)
+  const playRef = useRef(preview.play)
+  playRef.current = preview.play
+  const playStop = useCallback((seq: number) => playRef.current(seq), [])
+  // The detail map has no live position, so its puck is hidden and `progress` stays parked at 0 (the
+  // whole route reads untraveled). DriveMap requires the value; this static one satisfies it.
+  const mapProgress = useRef(new Animated.Value(0)).current
   const [drive, setDrive] = useState<DriveManifest | null>(null)
   const [needsAccount, setNeedsAccount] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -289,6 +310,42 @@ export default function DriveDetailScreen() {
     }, [load, id]),
   )
 
+  // Pause + clear the mini-preview when the screen BLURS (e.g. tapping "Start the drive" PUSHES the live
+  // player while this screen stays mounted underneath). Without this the couch clip keeps sounding UNDER
+  // the live drive — doNotMix governs only OTHER apps, not our own second player. `preview.stop` is
+  // bound to the audio player (stable), so this cleanup fires on real blur, not every render.
+  useFocusEffect(useCallback(() => () => preview.stop(), [preview.stop]))
+
+  // The itinerary = the place narrations (a clip with coords). Derived here (before the early returns)
+  // and MEMOIZED on [drive, activeSeq] — the screen re-renders on every audio-status tick, so a fresh
+  // array each render would defeat DriveMap's memo and re-serialize the markers to native every tick.
+  // The `state` flips only when the playing stop changes, so the map stays put during a clip. (audit #549)
+  const stops = useMemo(
+    () => (drive ? drive.clips.filter((c) => c.lat != null && c.lng != null) : []),
+    [drive],
+  )
+  const listItems = useMemo<StopListItem[]>(
+    () =>
+      stops.map((s) => ({
+        seq: s.seq,
+        name: cleanPlaceName(s.name ?? ''),
+        icon: stopIcon(s.form),
+        state: preview.activeSeq === s.seq ? 'active' : 'upcoming',
+      })),
+    [stops, preview.activeSeq],
+  )
+  const mapStops = useMemo<DriveMapStop[]>(
+    () =>
+      stops.map((s) => ({
+        seq: s.seq,
+        name: cleanPlaceName(s.name ?? ''),
+        lat: s.lat as number,
+        lng: s.lng as number,
+        state: preview.activeSeq === s.seq ? 'active' : 'upcoming',
+      })),
+    [stops, preview.activeSeq],
+  )
+
   if (loading) return <DriveDetailSkeleton />
   if (needsAccount)
     return (
@@ -315,9 +372,9 @@ export default function DriveDetailScreen() {
     )
 
   const durationMin = drive.durationSeconds ? Math.round(drive.durationSeconds / 60) : null
-  // A drive's clips are place narrations (with coords) woven with placeless framing (no coords);
-  // the itinerary is the narrations.
-  const stops = drive.clips.filter((c) => c.lat != null && c.lng != null)
+  // The clip behind the now-playing card (name + per-clip CC BY-SA credit) while a stop plays.
+  const activeClip =
+    preview.activeSeq == null ? null : (drive.clips.find((c) => c.seq === preview.activeSeq) ?? null)
 
   return (
     <Screen scroll padded edges={['bottom']} contentContainerStyle={styles.body}>
@@ -404,8 +461,9 @@ export default function DriveDetailScreen() {
         </Text>
       ) : null}
 
-      {/* Two real choices — the live drive (M1 headline) + the free couch preview. The dev
-          simulator + offline download live in the header ⋯ menu so this stays glanceable. */}
+      {/* The live drive is the M1 headline. The couch "simulated drive" is CUT — auditioning is now the
+          native mini-preview below (tap a stop to hear it). The dev simulator + offline download live in
+          the header ⋯ menu so this stays glanceable. */}
       <View style={styles.ctaGroup}>
         <Button icon="car" title={voice.cta.drive} onPress={() => router.push(`/drives/${id}/play?mode=live`)} />
         <Text variant="dim" color="inkFaint" align="center">
@@ -413,29 +471,83 @@ export default function DriveDetailScreen() {
         </Text>
       </View>
 
-      <Button
-        variant="ghost"
-        icon="play"
-        title={voice.cta.preview}
-        onPress={() => router.push(`/drives/${id}/play?mode=preview`)}
-      />
-
       {downloadError ? (
         <Text variant="dim" color="danger">
           {downloadError}
         </Text>
       ) : null}
 
-      {/* THE ITINERARY — the shared StopList (same card + hairline-ruled rows as the in-drive
-          player). No raw per-stop seconds — the tally lives on the sign. */}
-      <StopList
-        title={`THE ROUTE · ${stops.length} STOPS`}
-        items={stops.map((s) => ({
-          seq: s.seq,
-          name: cleanPlaceName(s.name ?? ''),
-          icon: stopIcon(s.form),
-        }))}
-      />
+      {/* THE ROUTE — a native mini-preview: browse the stops as a List (offline + a11y default) or on a
+          Map, and tap any stop / pin to hear that one clip on the couch. */}
+      <View style={styles.previewHead}>
+        <Text variant="label" color="inkFaint">
+          {`THE ROUTE · ${stops.length} STOPS`}
+        </Text>
+        <Segmented
+          accessibilityLabel={voice.preview.viewLabel}
+          options={[
+            { key: 'list', label: voice.preview.viewList, icon: 'list' },
+            { key: 'map', label: voice.preview.viewMap, icon: 'map' },
+          ]}
+          value={view}
+          onChange={setView}
+          style={styles.viewToggle}
+        />
+      </View>
+
+      <Text variant="dim" color={preview.unplayableSeq != null ? 'danger' : 'inkFaint'}>
+        {preview.unplayableSeq != null ? voice.preview.unplayable : voice.preview.hint}
+      </Text>
+
+      {view === 'map' ? (
+        // A fixed-height map card (the screen scrolls); List stays the offline/a11y default since map
+        // tiles need network + a Google key (else the untinted Apple-Maps fallback).
+        <View style={styles.mapCard}>
+          <DriveMap
+            polyline={drive.polyline}
+            stops={mapStops}
+            progress={mapProgress}
+            hidePuck
+            clipActive={preview.activeSeq != null}
+            onPressStop={playStop}
+          />
+        </View>
+      ) : (
+        <StopList items={listItems} onPressItem={playStop} />
+      )}
+
+      {/* NOW PLAYING — the single reused mini-player, shown while a stop sounds. Reachable in BOTH list
+          and map view. Its ⓘ reveals the playing clip's CC BY-SA credit — the same unified affordance
+          as the drive player + roam (legal, per-play). */}
+      {activeClip ? (
+        <Card style={styles.nowCard}>
+          <View style={styles.nowHead}>
+            <View style={styles.nowHeadText}>
+              <Text variant="label" color="accentWarm">
+                {voice.preview.nowPlaying}
+              </Text>
+              <Text variant="bodyStrong" color="ink" numberOfLines={1}>
+                {cleanPlaceName(activeClip.name ?? '')}
+              </Text>
+            </View>
+            {/* The ⓘ source affordance — same reveal as the drive player + roam (unified). */}
+            <AttributionButton items={activeClip.attribution} />
+          </View>
+          <Scrubber
+            positionMs={preview.positionMs}
+            durationMs={preview.durationMs}
+            onSeek={preview.seekToMs}
+            disabled={!preview.canSeek}
+          />
+          <TransportBar
+            playing={preview.playing}
+            onPlayPause={preview.togglePlay}
+            canSeek={preview.canSeek}
+            onSeekBack={() => preview.seekBy(-15)}
+            onSeekForward={() => preview.seekBy(15)}
+          />
+        </Card>
+      ) : null}
     </Screen>
   )
 }
@@ -487,6 +599,21 @@ const styles = StyleSheet.create({
   },
   savedChip: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   ctaGroup: { gap: space.xs }, // the bold Start CTA + its tucked caption read as one unit
+  // The route label + the List/Map toggle share a row; the toggle sizes to its content on the right.
+  previewHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: space.sm,
+  },
+  viewToggle: { minWidth: 168 }, // the two segments read comfortably without stretching full-width
+  // A fixed-height map card inside the scroll (DriveMap fills it); rounded + clipped to the corners.
+  mapCard: { height: 340, borderRadius: radius.lg, overflow: 'hidden' },
+  nowCard: { gap: space.sm },
+  // The header row: the kicker+title block on the left, the ⓘ source affordance hugged right.
+  nowHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm },
+  nowHeadText: { flex: 1, gap: 2 }, // the "NOW PLAYING" kicker sits tight over the stop name
   skLines: { gap: space.sm }, // a cluster of skeleton lines (the route rows)
   skCtaCaption: { alignSelf: 'center' },
 })

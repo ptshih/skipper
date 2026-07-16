@@ -1,5 +1,7 @@
 # M1 GPS Phone Player — Build Spec / Handoff
 
+> **Status update (2026-07-16):** the couch PREVIEW clock (§3.5, `?mode=preview`) is **CUT** — deleted along with `packages/engine/src/preview.ts` / `buildPreviewTimeline` and the preview branches in `useDrive` (mode is `sim | live` now). Auditioning a drive is the native per-stop mini-preview on the drive-detail page; read §3.5 as historical. See [`../decisions/detail-page-mini-preview.md`](../decisions/detail-page-mini-preview.md).
+
 > **Schema-names note (2026-06-13):** identifiers below predate later refactors — read `corridors`→`tours` (merged; `corridor.polyline`→`tour.polyline`) and `poiContentId`→dropped (`poi_content` is gone; narration lives on a `tracks` row). **(V2 2026-06-18):** the segments/tracks model was further collapsed — read `tracks`→`narrations`, `tours`→user-owned `drives`, and the `/tours*` routes → `/drives*`; hand-authored tours are deferred.
 >
 > **(V2 API/DTO + screen drift — 2026-06-19, read before §3/§4/§9):** the data contract this spec describes is the dissolved V1 surface. Map it forward:

@@ -1,15 +1,13 @@
-// Per-clip source credit — the CC BY-SA obligation, made visible.
+// The rows of source credit — one small "work · license" line per source a clip drew on, each
+// part tappable (work → the article, license → the CC deed). This is the BODY of the unified
+// attribution reveal: `AttributionButton` renders it inside the ⓘ tap-sheet on the drive player,
+// the free-roam encounter sheet, and the anonymous sample. It is not mounted on its own anywhere —
+// the ⓘ is the affordance, this is what the ⓘ shows.
 //
-// The app-wide Sources & Licenses screen (app/legal.tsx) credits the SOURCES in general; this
-// credits the actual work THIS clip adapted, at the moment it plays. That distinction is the legal
-// one: CC BY-SA asks for attribution wherever the adapted work is presented, naming the work and
-// linking the license — a catalog on a settings sub-screen doesn't carry a specific narration's
-// credit, and every clip already carries its own frozen snapshot (`narrations.attribution`,
-// populated at generation). It was on the wire and rendered nowhere; this renders it.
-//
-// Deliberately quiet: a line of small faint text under the stop, not a banner. The credit has to be
-// PRESENT and reachable, not loud — and this sits on a screen someone glances at while driving.
-// Named SourceCredit, not Attribution, so it can't be confused with the `Attribution` wire type.
+// Naming the specific work + linking the license is the attribution CC BY-SA / CC BY require
+// wherever the adapted work is presented (a general Settings catalog names the platform, not the
+// article, so it can't stand in for this). Named SourceCredit, not Attribution, so it can't be
+// confused with the `Attribution` wire type.
 import { Pressable, StyleSheet, View } from 'react-native'
 import * as Linking from 'expo-linking'
 import type { Attribution } from '@skipper/shared'
@@ -64,9 +62,6 @@ export function SourceCredit({ items }: SourceCreditProps) {
         const deed = item.license ? licenseDeedUrl(item.license) : undefined
         return (
           <View key={`${item.source}:${item.sourceId}`} style={styles.row}>
-            <Text variant="dim" color="inkFaint">
-              Source:
-            </Text>
             {/* The work itself — `title` when the snapshot froze one, else the source's name. */}
             <CreditAtom label={item.title ?? attributionSourceLabel(item.source)} url={item.url} />
             {item.license ? (

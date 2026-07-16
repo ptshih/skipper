@@ -30,10 +30,10 @@ import {
   Icon,
   LocationGate,
   LocationPrime,
+  AttributionButton,
   RouteTrack,
   Screen,
   Scrubber,
-  SourceCredit,
   StateView,
   Text,
   TransportBar,
@@ -485,7 +485,11 @@ export default function RoamScreen() {
                 <View style={[styles.handle, { backgroundColor: colors.trackInactive }]} />
               </View>
               <View style={styles.sheetTop}>
-                <Badge tone="pine" label={voice.roam.storyBadge} />
+                <View style={styles.sheetTopLead}>
+                  <Badge tone="pine" label={voice.roam.storyBadge} />
+                  {/* The ⓘ that reveals this clip's source(s) — same affordance as the drive player. */}
+                  <AttributionButton items={r.activeAttribution} />
+                </View>
                 {/* Paused while he talks; resumes (music back up) when held. */}
                 <Duck
                   label={r.clipPlaying ? voice.roam.musicPaused : voice.roam.musicHeld}
@@ -527,10 +531,6 @@ export default function RoamScreen() {
                   <View style={styles.muteRow}>
                     <Button variant="ghost" title={voice.roam.muteStory} onPress={r.muteCurrent} />
                   </View>
-                  {/* Source credit for the clip being told. Roam is the anonymous front door and
-                      these clips adapt Wikipedia — CC BY-SA wants the credit where the work is
-                      presented, which is here. */}
-                  <SourceCredit items={r.activeAttribution} />
                 </>
               )}
             </Animated.View>
@@ -662,6 +662,8 @@ const styles = StyleSheet.create({
   peekTrack: { height: 4, borderRadius: 2, overflow: 'hidden', marginTop: 2 },
   peekFill: { height: '100%' },
   sheetTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  // The badge + ⓘ source affordance, clustered on the left; the Duck stays hugged to the right.
+  sheetTopLead: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   // Map mode: a rounded full-bleed map card filling the padded base, + the floating toggle.
   mapCard: { flex: 1, borderRadius: radius.lg, overflow: 'hidden' },
   mapToggle: {

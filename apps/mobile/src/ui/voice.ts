@@ -7,8 +7,6 @@ export const voice = {
     drive: 'Pulling the logbook…',
   },
   empty: {
-    drives:
-      'No drives charted here yet. We’re still out mapping the good roads — check back soon.',
     drive: 'This drive took a wrong turn. Head back and pick another.',
   },
   error: {
@@ -22,30 +20,40 @@ export const voice = {
     pause: 'Hold here',
     resume: 'Roll on again',
     restart: 'Run it again, skipper',
-    preview: 'Take the simulated drive',
     drive: 'Start the drive', // open the live, GPS-triggered player (real device GPS)
     simDrive: 'Simulate the drive (dev)', // dev-only: the on-device drive simulator, no real GPS
     endDrive: 'Pull over', // stop the drive and head back to the start line
     backToTrailhead: 'Back to the trailhead', // leave the drive-complete card without replaying
   },
+  // The drive-detail mini-preview: tap a stop (a list row or a map pin) to hear that ONE clip on the
+  // couch, before ever driving. Discrete stop-by-stop — the old full-screen couch "simulated drive"
+  // was cut (docs/decisions/detail-page-mini-preview.md). Glanceable, warm.
+  preview: {
+    viewLabel: 'Route view', // segmented-toggle group a11y label
+    viewList: 'List',
+    viewMap: 'Map',
+    hint: 'Tap a stop to hear it.',
+    nowPlaying: 'NOW PLAYING',
+    // A tapped stop whose audio can't be resolved here (a partial download that never landed this clip).
+    unplayable: 'That stop didn’t come down with the rest — pull the drive again and I’ll have it.',
+  },
   gate: {
     title: 'Grab your ticket',
     body: 'The full drive needs a (free) ticket — ten seconds, and the skipper never stops talking.',
     action: 'Get my free ticket',
-    secondary: 'Just take the sample ride', // the play-screen gate → routes to the open preview
+    secondary: 'Just take the sample ride', // the play-screen gate → routes to /sample (the postcard)
     keepBrowsing: 'Keep browsing', // the detail download-gate → dismiss back to the drive
     // Context line for the live-drive gate — carries ONLY what the body lacks (the body
     // already makes the ticket ask), so the two don't stutter "needs a (free) ticket" twice.
     driveNote: 'This is the live, on-the-road drive.',
   },
-  // The live, GPS-triggered drive (vs the couch `preview`): the skipper talks when
-  // the road reaches a stop, not on a timer. Kept short + glanceable for the mount.
+  // The live, GPS-triggered drive: the skipper talks when the road reaches a stop, not on
+  // a timer. Kept short + glanceable for the mount.
   drive: {
     ready: 'READY TO ROLL', // pre-drive placard kicker
     readyBody: 'Mount up and start when you’re on the road. I’ll pipe up when we reach the good stuff.',
     blurb: 'The skipper talks as you reach each stop on the real roads.', // drive-detail explainer under the Start CTA
     sim: 'SIMULATED DRIVE', // the on-device sim setup — no real GPS yet
-    live: 'LIVE DRIVE', // real device GPS (Phase 4)
     nextStop: 'next stop', // "ROLLING · next stop: <name>"
     // Location-permission gate (live drive only): three states — can re-ask, must visit Settings
     // (denied), or location’s on but only APPROXIMATE (iOS Precise Location off → fixes too coarse
@@ -77,13 +85,10 @@ export const voice = {
     rolling: 'ROLLING', // between stops — road-trip, not the flat "DRIVING"
     rollingOpen: 'On the open road', // rolling-card title when there's no next stop queued yet
     replay: 'Replay that', // re-hear the stop that just ended — plain chrome, NOT the skipper's voice (replay-last-stop)
-    pitStop: 'PIT STOP', // a rest stop
     gpsSearching: 'Looking for the satellites — hang tight.', // live drive, no usable fix yet
     gpsError: 'Lost the GPS signal, folks. Pull over and give her another go.', // live watch failed
     driveCompleteKicker: 'DRIVE COMPLETE', // the done-card kicker
     arrived: 'You’ve arrived', // the done-card title
-    restFallback: 'A good spot to stretch', // pit-stop card title when the break carries no name
-    previewHint: 'Tap any stop to jump ahead', // above the preview itinerary
     // A quiet, non-alarming chip in the live player (M7): the drive is running entirely off the saved
     // download (so a dead zone won't bite). Mirrors the drive-detail "Saved offline" chip's tone.
     offlinePlayback: 'Playing from download',
@@ -95,9 +100,6 @@ export const voice = {
   // come from the roam pin (grounded) — never from here.
   roam: {
     entry: 'Roam', // the mode's display title (home card + screen header)
-    entryKicker: 'NEW · RIDE ALONG', // home card kicker (label face uppercases anyway)
-    entryAlpha: 'ALPHA', // tiny honesty badge
-    entryBlurb: 'No route, no plan — I pipe up when we pass something I know a story about.',
     start: 'Ride along',
     end: 'End', // ghost header affordance → the sign-off
     // First-run ambient contract — the dead-air inoculation, done as a bit, shown ONCE.
@@ -205,20 +207,10 @@ export const voice = {
   // Names BOTH modes now that roam is co-equal with drives on home (founder 2026-06-11) —
   // not a drives-only line. (Wording is a quick founder tweak if the voice wants nudging.)
   tagline: 'Narrated road trips — take a guided drive, or just ride along. One corny guide either way.',
-  // The home hero's enamel flourishes: a departures-board kicker ABOVE the headline
-  // (deliberately NOT repeating the tagline) + the section seam that turns the corridor
-  // list into "routes posted on the board". Warm, corny, glanceable, no facts.
+  // The home hero's enamel flourish: a departures-board kicker ABOVE the headline
+  // (deliberately NOT repeating the tagline). Warm, corny, glanceable, no facts.
   home: {
     kicker: 'NOW DEPARTING',
-    section: 'THE DRIVES',
-    // The location filter ("Where to?"): the picker title, the default/clear label, and the
-    // soft-degrade empty line (we never dead-end — show what's charted).
-    where: {
-      all: 'All regions',
-      title: 'Where are we headed?',
-      empty: 'No charted roads out that way yet — here’s everything I’ve mapped so far.',
-      showAll: 'Show all drives', // reset the region filter from the (near-impossible) empty state
-    },
   },
   driveComplete: 'That’s the end of the road, folks. Watch your step climbing out.',
   // Confirm before ending a live drive — one stray thumb shouldn't wipe a run in progress.
@@ -321,6 +313,17 @@ export const voice = {
     showDiagA11y: 'Diagnostics overlay',
     showDiagHint:
       'Show the pin count + GPS fix age + nearest-pin distance on the roam canvas. Useful for field-testing real drives; hidden by default so the idle reads clean.',
+  },
+  // The unified source-credit reveal — the ⓘ on the drive player + roam sheet + sample, and the
+  // sheet it opens. `open` is the button's a11y label; `adapted` is the modification notice CC
+  // BY-SA / CC BY require wherever an adapted work is presented. The work titles, license codes,
+  // and deed links are FACTS (rendered by SourceCredit from @/lib/licenses), never here. Distinct
+  // from the app-wide catalog below (legal — Settings → Sources).
+  attribution: {
+    open: 'Show sources',
+    heading: 'SOURCES',
+    adapted: 'The skipper’s telling is adapted and condensed from:',
+    close: 'Done',
   },
   // The legal/attribution page (Settings → Credits). Intro is the skipper's; the
   // source list + license codes are FACTS, kept in @/lib/licenses, never here.

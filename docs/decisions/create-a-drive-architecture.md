@@ -38,6 +38,13 @@ pre-gen aside/bracket library; route-demand cache. Product rationale + the decis
 > midpoint → the route materializes as start→midpoint→start (a real out-and-back, not a degenerate
 > zero-distance route). One-way mode disables "Plan the drive" when start == end.
 
+> **Supersession addendum (2026-07-16).** The couch **PREVIEW is CUT.** The old flow "Push to preview
+> (couch sim via `buildPreviewTimeline`) → start drive" (step 5 below) is GONE: create-success now lands
+> on the drive-detail page, which IS the mini-preview — tap a stop (List row or Map pin) to hear that one
+> clip. `?mode=preview`, `buildPreviewTimeline`, and the preview clock in `useDrive` are deleted; the
+> player is `sim | live` only. Read every "preview" step below as "the drive-detail mini-preview." See
+> [detail-page-mini-preview.md](./detail-page-mini-preview.md).
+
 > **Curated-Places picker addendum (2026-06-20).** The pickable anchor SOURCE changed: the interim
 > picker read the 459-POI corpus (`loadRegionAnchors` over `narrations`⋈`pois`) — noisy, and it let an
 > endpoint land off any natural gateway. It now reads a per-region **CURATED set of Google Places**

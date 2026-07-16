@@ -74,6 +74,10 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   Tahoe clip anyone outside the corpus (incl. an App Review tester) can hear in one permission-free tap,
   fixing the "I don't know these roads yet" dead-end; anonymous `GET /roam/sample`, three entry points,
   and the sim→diagnostics decouple (2026-07-16).
+- [detail-page-mini-preview.md](decisions/detail-page-mini-preview.md) — cut the couch "simulated drive"
+  (`?mode=preview`); the drive-detail page IS the mini-preview now — tap a stop (List row or Map pin) to
+  hear one clip, no auto-drop on create. Deletes the preview clock + `buildPreviewTimeline`; `useDrive`
+  is `sim | live` (2026-07-16).
 - [account-deletion-and-recovery.md](decisions/account-deletion-and-recovery.md) — in-app account
   deletion (App Store 5.1.1(v)) is immediate + total and must PURGE `drives`/`credit_entries` by hand
   (soft refs, no FK cascade); password reset mails a Resend link that resolves on the web. Reset is

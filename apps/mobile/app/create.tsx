@@ -176,9 +176,12 @@ export default function CreateDriveScreen() {
         idempotencyKey: idempotencyKeyRef.current,
       })
       if (m.driveId) {
-        // Hand the rider straight into the couch preview of their fresh drive (replace, so Back
-        // returns to home, not the spent create flow).
-        router.replace({ pathname: '/drives/[id]/play', params: { id: m.driveId, mode: 'preview' } })
+        // Land on the fresh drive's DETAIL page (its native mini-preview) — NOT straight into a player.
+        // The old auto-drop into the couch "simulated drive" felt abrupt; the rider now arrives at their
+        // drive and chooses: tap a stop to hear it, or Start the live drive. `replace` (not push) so Back
+        // returns to home, not the spent create flow (the credit is already gone). (docs/decisions/
+        // detail-page-mini-preview.md)
+        router.replace({ pathname: '/drives/[id]', params: { id: m.driveId } })
       } else {
         setError(voice_create.generateFail)
         setPhase('confirm')

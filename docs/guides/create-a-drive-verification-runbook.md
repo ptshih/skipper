@@ -1,5 +1,11 @@
 # Create-a-Drive verification runbook (V2)
 
+> **Update (2026-07-16):** the couch **PREVIEW is CUT.** Create-success now lands on the drive-detail
+> page (not a `?mode=preview` player), and that page IS the mini-preview: a List/Map toggle + tap a stop
+> to hear one clip. Read every "preview" step below (esp. §"Preview plays") as "the drive-detail
+> mini-preview": expect to land on the detail page, toggle List/Map, and tap stops — NOT a full-screen
+> autostarting simulated drive. See [`../decisions/detail-page-mini-preview.md`](../decisions/detail-page-mini-preview.md).
+
 > **Status:** guide (written 2026-06-18) — the one-sitting pass that clears the last V2 gate: the
 > live **Create→propose→confirm→generate→preview→drive** runtime, which `bun run check` cannot judge
 > (it needs a dev build + a signed-in account + a real Maps spend). Code-anchored to the tree as
@@ -55,12 +61,13 @@ OK before firing.
    **CONFIRM** screen: a road-snapped route on the map-hero, `Start → End` names, a `MIN` badge, and
    an `N STORIES` badge (= `estStopCount`, the REAL selection count — propose runs the same
    `buildDrive`, so the confirm count must match the drive you get).
-3. **Confirm → create.** "Make this drive" → `GENERATING_LINES` beat → it `router.replace`s straight
-   into the **preview** of the new drive (`/drives/[id]/play?mode=preview`). Back should return home,
-   not to the spent create flow.
-4. **Preview plays.** The map-less simulated drive autostarts: compressed segment timeline (clip /
-   drive / rest), tappable stops (jump-to), a route token gliding, lock-screen Now Playing per clip.
-   Confirm stop names are clean (no ", California"), audio plays, the trail lands on each stop.
+3. **Confirm → create.** "Make this drive" → `GENERATING_LINES` beat → it `router.replace`s onto the
+   new drive's **detail page** (`/drives/[id]`) — NOT a player. Back should return home, not the spent
+   create flow.
+4. **Detail mini-preview.** The detail page IS the preview: the placard + a **List/Map** toggle (List
+   default) + the route stops. Tap a stop (a List row or a Map pin) → the NOW PLAYING card plays that
+   one clip (scrubber + ±15 + its source credit). Confirm: stop names are clean (no ", California"),
+   audio plays, and switching to Map shows the route + pins with the playing stop highlighted.
 5. **Real sim drive.** From My Drives → open the drive → it loads in **sim** mode in dev (GPS-less
    couch sim). "Real time" vs "8× faster" knob appears pre-drive. Play → confirm stops TRIGGER by
    proximity (not on a timer), pace sanely (≥3-min gaps), the stop list auto-scrolls, and the drive

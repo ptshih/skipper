@@ -1,5 +1,12 @@
 # On-device verification runbook — M1 phone player
 
+> **Update (2026-07-16):** the couch **PREVIEW is CUT.** Any step that says to tap **"Take the simulated
+> drive"** or open a `?mode=preview` player is OBSOLETE — that CTA and mode are gone. Auditioning is now
+> the drive-detail mini-preview (List/Map toggle + tap a stop to hear one clip); the "Preview drive"
+> header and tappable-rows-only-in-preview checks below no longer apply (the live/sim player's list is
+> always read-only). The dev `⋯ → "Simulate the drive"` sim path is unchanged. See
+> [`../decisions/detail-page-mini-preview.md`](../decisions/detail-page-mini-preview.md).
+
 > **Status:** guide (written 2026-06-10) — the one-sitting EAS dev-build pass that clears the last
 > M1 gate: the phone-player *feel* + real GPS, neither of which `bun run check` can judge. Step
 > list is code-anchored to `apps/mobile` as of 2026-06-10 — re-verify anchors against the current

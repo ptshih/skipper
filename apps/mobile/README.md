@@ -1,9 +1,10 @@
 # @skipper/mobile — Expo app (backend wiring scaffolded; phone player TODO, CarPlay deferred)
 
 > **Status:** the JS/TS app is scaffolded and wired to the M2 backend (browse
-> drives + roam, auth, gated drive fetch/sign), and a **map-less couch preview player** (simulated
-> drive over `expo-audio`) is the `?mode=preview` branch of `app/drives/[id]/play.tsx`
-> (the unified player). A local iOS
+> drives + roam, auth, gated drive fetch/sign), and a **native per-stop mini-preview** (tap a stop —
+> List row or Map pin — to hear one clip over `expo-audio`) lives on the drive-detail page
+> (`app/drives/[id]/index.tsx`; the old `?mode=preview` couch "simulated drive" was cut — see
+> `docs/decisions/detail-page-mini-preview.md`). A local iOS
 > **simulator build compiles** (`xcodebuild` succeeds with `expo-audio` linked),
 > but there is **no EAS build, no device run, and no LIVE GPS-triggered phone
 > player yet** — that work (offline download, on-device triggering, lock-screen
@@ -16,8 +17,8 @@
 ## What's wired (works against the M2 API)
 
 - **Expo Router** app (`app/`): drive browse (`index`), `sign-in` (email/password),
-  `drives/[id]` (gated detail fetch + presign), and the unified **player**
-  (`drives/[id]/play`, with a `?mode=preview` couch-preview branch).
+  `drives/[id]` (gated detail fetch + presign + the per-stop **mini-preview**: List/Map, tap a stop
+  to hear it), and the live GPS **player** (`drives/[id]/play`, `?mode=live` / dev `sim`).
 - **Auth:** Better Auth Expo client (`src/lib/auth.ts`) — sessions in
   `expo-secure-store`, scheme `skipper` (matches the server `trustedOrigins` and
   the `expo()` server plugin in `apps/api/src/auth.ts`).

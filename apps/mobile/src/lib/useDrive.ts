@@ -2,21 +2,20 @@
 //
 // This is the Phase-2 core: it owns the trigger engine, the audio player, the
 // lock-screen Now Playing, and the fire-queue, and it's driven by a swappable
-// `GpsFixSource` (today the simulated one — couch-testable on the iOS Simulator).
+// `GpsFixSource` — the `simulatedSource` (couch-testable on the iOS Simulator, the dev
+// `sim` mode) or the real-device `liveSource`, interchangeable behind GpsFixSource.
 //
-// It REUSES the preview player's proven audio machinery verbatim (clip load/play,
-// lock-screen metadata, the stall watchdog + re-sign for expired presigned URLs, seek).
-// What it REPLACES is the clock: instead of a `setTimeout(previewMs)` segment driver
-// that auto-advances on `didJustFinish`, each GpsFix runs `engine.update(fix)` and any
-// stop that fires is queued and played. A finished clip returns to ducked-quiet and
-// WAITS for the next GPS trigger — it never advances by a clip ending. See
-// docs/specs/gps-player-spec.md §3.5.
+// The clock is the GPS fix stream: each GpsFix runs `engine.update(fix)` and any stop that
+// fires is queued and played. A finished clip returns to ducked-quiet and WAITS for the
+// next GPS trigger — it never advances by a clip ending. (The old map-less couch "simulated
+// drive" — a compressed segment-timeline PREVIEW clock — was CUT; auditioning a drive is now
+// the native per-stop mini-preview on the drive-detail page, so this hook is just sim + live.
+// See docs/decisions/detail-page-mini-preview.md.) See docs/specs/gps-player-spec.md §3.5.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Animated, AppState, Image, Linking } from 'react-native'
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake'
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
 import {
-  buildPreviewTimeline,
   clampSeekSec,
   cumulativeMeters,
   decideStall,
@@ -26,7 +25,6 @@ import {
   snapStopsToRoute,
   TriggerEngine,
   type GpsFix,
-  type PreviewSegment,
 } from '@skipper/engine'
 import type { Attribution } from '@skipper/shared'
 import { ApiError, errorMessage } from './api'
@@ -35,22 +33,15 @@ import { loadPlayback, resignPlayback } from './offline'
 import { getDrivePermission, liveSource, simulatedSource, type FixSubscription } from './gps'
 import { useLocationPriming } from './useLocationPriming'
 import { useDriveMusic } from './driveMusic'
-import { useReducedMotion } from '@/theme'
 import { voice } from '@/ui'
 
-// Grace before a clip that hasn't started is treated as stalled — same generous window
-// as the preview (64k AAC-LC .m4a clips, 1h presigned URLs → re-sign once on a stall).
+// Grace before a clip that hasn't started is treated as stalled — a generous window for the
+// 64k AAC-LC .m4a clips over 1h presigned URLs (→ re-sign once on a stall).
 const CLIP_STALL_MS = 12_000
 
 // V2 drives carry no host on the manifest (persona is decoupled + single in v2), so the lock-screen
 // "artist" is the persona name. The Skipper is the only host today.
 const DRIVE_HOST_NAME = 'Skipper'
-
-// buildPreviewTimeline's PreviewStop only knows story|scenic|break; a drive clip's form widens to
-// include 'wave' (a roam-style call-out). Map it down for the preview timeline (a wave plays as a
-// full narration beat). snapStopsToRoute takes a free-form string, so it needs no mapping.
-const toPreviewStopType = (form: string): 'story' | 'scenic' | 'break' =>
-  form === 'scenic' ? 'scenic' : form === 'break' ? 'break' : 'story'
 
 // Real drive speed for the simulator (mph). A FIXED 60 for now; the trigger lead is
 // speed-adaptive in @skipper/engine, so this is the only knob that matters here.
@@ -150,20 +141,12 @@ export interface UseDrive {
   activeSeq: number | null
   /** Seqs whose trigger has fired (for the stop list's passed/active states). */
   firedSeqs: Set<number>
-  /** First not-yet-fired stop, for the "ROLLING · next stop: X" strip. In preview, the
-   *  destination of the current drive/rest segment. */
+  /** First not-yet-fired stop, for the "ROLLING · next stop: X" strip. */
   nextSeq: number | null
 
-  /** What the current beat is: a stop clip, the silent drive between stops, or a rest/pit stop.
-   *  Drives the NOW-card variant. (preview = the segment kind; live/sim = clip vs drive.) */
-  currentKind: 'clip' | 'drive' | 'rest' | null
-  /** PREVIEW only: the along-route distance (m) of the current drive segment, for a "~X mi"
-   *  label in the rolling card. null on a clip/rest and in live/sim (real distance isn't tracked). */
-  rollingDistanceM: number | null
-  /** PREVIEW only: total compressed preview run time (ms) and the real drive it represents,
-   *  for the header subtitle. null in live/sim. */
-  totalPreviewMs: number | null
-  totalRealMs: number | null
+  /** What the current beat is: a stop clip, or the silent drive between stops. Drives the NOW-card
+   *  variant. (A clip when one's loaded, else the drive between triggers — live/sim have no rest beat.) */
+  currentKind: 'clip' | 'drive' | null
 
   nowPlaying: boolean
   buffering: boolean
@@ -211,16 +194,13 @@ export interface UseDrive {
   togglePause: () => void
   end: () => void
   restart: () => void
-  /** PREVIEW only: tap a stop to jump the drive there and play it from the start. No-op in live/sim
-   *  (you can't teleport the car on a real drive). */
-  jumpToStop: (seq: number) => void
 }
 
 export interface UseDriveOptions {
   /** 'sim' = the on-device drive simulator (default, couch-testable); 'live' = real device GPS
-   *  (Phase 4); 'preview' = the map-less couch SIMULATED DRIVE (anonymous-friendly open funnel,
-   *  no GPS, no permission gate) — a compressed segment-timeline clock instead of a fix source. */
-  mode?: 'sim' | 'live' | 'preview'
+   *  (Phase 4). (The map-less couch 'preview' clock was cut — auditioning is the drive-detail
+   *  mini-preview now; see docs/decisions/detail-page-mini-preview.md.) */
+  mode?: 'sim' | 'live'
   /** Seed the sim fast-replay (8×) ON. Used when the GLOBAL Settings→Developer sim toggle
    *  forced this drive into sim — couch-testing a full drive at real 1× is impractical (a
    *  30-min drive takes 30 real min), so default to fast there; the pre-drive knob still
@@ -230,7 +210,6 @@ export interface UseDriveOptions {
 
 export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}): UseDrive {
   const mode = opts.mode ?? 'sim'
-  const reducedMotion = useReducedMotion() // honor OS "Reduce Motion" for the preview token glide
   const [data, setData] = useState<DriveData | null>(null)
   const [urls, setUrls] = useState<Map<number, string>>(new Map())
   // True when playback is served entirely from the on-disk download (zero network) — surfaced as a
@@ -259,14 +238,6 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
   // rider sees "searching" instead of a silently frozen screen. (review #6)
   const [gpsSearching, setGpsSearching] = useState(false)
 
-  // PREVIEW-ONLY clock state. The preview replaces the GPS fix source with a compressed
-  // segment timeline (clip / drive / rest) the driver effect steps through; these hold it.
-  const [segments, setSegments] = useState<PreviewSegment[]>([])
-  const [segIdx, setSegIdx] = useState(0)
-  const [totalPreviewMs, setTotalPreviewMs] = useState<number | null>(null)
-  const [totalRealMs, setTotalRealMs] = useState<number | null>(null)
-  const segTimer = useRef<ReturnType<typeof setTimeout> | null>(null) // the drive/rest auto-advance
-
   const player = useAudioPlayer()
   const status = useAudioPlayerStatus(player)
 
@@ -280,7 +251,7 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
   const subRef = useRef<FixSubscription | null>(null)
   const mountedRef = useRef(true) // false after unmount — guards setState in the async drive flows (review #4)
   const lastFixAt = useRef(0) // ms of the last accepted live fix — feeds the no-GPS watchdog (review #6)
-  // Audio-playback refs (cloned from the preview player).
+  // Audio-playback refs.
   const loadedSeq = useRef<number | null>(null) // which clip is loaded in the player
   const sawFresh = useRef(false) // have we seen the LOADED clip actually play yet?
   // True from a replace() until the player's clock rewinds to the new clip's head — every status in
@@ -351,29 +322,6 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
             attribution: c.attribution,
           })),
         })
-        // PREVIEW: build the compressed segment timeline (the preview's clock). Stretch the
-        // between-stop drive gaps to 12–20s (vs the engine's short default) so the drive music
-        // has room to breathe — preview-only pacing (the real drive uses actual elapsed time).
-        if (mode === 'preview') {
-          const tl = buildPreviewTimeline(
-            narrationClips.map((c) => ({
-              seq: c.seq,
-              stopType: toPreviewStopType(c.form),
-              name: c.name ?? '',
-              lat: c.lat,
-              lng: c.lng,
-              audioDurationMs: c.durationMs,
-            })),
-            polyline,
-            {
-              minGapSec: 12,
-              maxGapSec: 20,
-            },
-          )
-          setSegments(tl.segments)
-          setTotalPreviewMs(tl.totalPreviewMs)
-          setTotalRealMs(tl.totalRealMs)
-        }
       } catch (e) {
         if (cancelled) return
         if (e instanceof ApiError && e.needsAccount) setNeedsAccount(true)
@@ -383,7 +331,7 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
     return () => {
       cancelled = true
     }
-  }, [driveId, reloadKey, mode])
+  }, [driveId, reloadKey])
 
   // ---- re-sign expired presigned URLs (online stall only; downloaded files never expire) ----
   const resign = useCallback(async (): Promise<boolean> => {
@@ -426,32 +374,20 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
     if (reachedEnd.current) finishDrive()
   }, [finishDrive])
 
-  // ---- advance the PREVIEW segment clock by one (the effect re-runs for the next segment;
-  // once segIdx passes the last segment it calls finishDrive). ----
-  const advanceSegment = useCallback(() => {
-    setSegIdx((i) => i + 1)
-  }, [])
-
-  // ---- a clip finished (or was skipped): return to ducked-quiet, then advance the clock ----
-  // PREVIEW steps the segment timeline; live/sim returns to ducked-quiet and pumps the trigger
-  // fire-queue (a finished clip WAITS for the next GPS trigger — it never advances by ending).
+  // ---- a clip finished (or was skipped): return to ducked-quiet, then pump the trigger fire-queue
+  // (a finished clip WAITS for the next GPS trigger — it never advances by ending). ----
   const onClipDone = useCallback(
     (_seq: number) => {
       clipBusy.current = false
       replayingSeq.current = null // this clip (a stop OR a replay) is over — no replay is in progress now
-      if (mode === 'preview') {
-        setActiveSeq(null)
-        advanceSegment()
-        return
-      }
       // Remember the last clip that ACTUALLY PLAYED (sawFresh) as the replay-last target; a
       // skipped/stalled-before-start stop (sawFresh false) never becomes replayable — you can't
-      // re-hear silence (replay-last-stop §4/§7). Live/sim only (preview has its own drag-back timeline).
+      // re-hear silence (replay-last-stop §4/§7).
       if (sawFresh.current) setLastCompletedSeq(_seq)
       setActiveSeq(null)
       pump()
     },
-    [mode, pump, advanceSegment],
+    [pump],
   )
 
   // ---- each GPS fix: advance the route dot + run the trigger engine ----
@@ -498,18 +434,17 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
   //      firedSeqs or the engine, so trigger/debounce state is untouched (the stop stays "fired").
   //      `replayingSeq` marks it preemptible so a live GPS trigger wins (handleFix). (replay-last-stop) ----
   const replayLast = useCallback(() => {
-    if (mode === 'preview') return // preview has a drag-back timeline; replay-last is live/sim only
     if (activeSeqRef.current !== null || lastCompletedSeq === null) return // only in the between-stops quiet
     // Force the just-ended clip to RELOAD from its start: the clip-load effect skips replace() when
     // loadedSeq already equals activeSeq, and didJustFinish is guarded by finishedSeq — both still hold
-    // the seq we're replaying. Same reset the preview restart/jump-to-stop use.
+    // the seq we're replaying. The same reset restart uses to force a reload from the head.
     loadedSeq.current = null
     finishedSeq.current = null
     clipRetried.current.clear()
     replayingSeq.current = lastCompletedSeq // mark it preemptible — a live GPS trigger wins (handleFix)
     queue.current.push(lastCompletedSeq)
     pump()
-  }, [mode, lastCompletedSeq, pump])
+  }, [lastCompletedSeq, pump])
 
   // ---- reset all drive state back to the pre-drive "ready" line ----
   const resetForReady = useCallback(() => {
@@ -564,13 +499,6 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
   // (couch-testable) or the `liveSource` (real device GPS), interchangeable behind GpsFixSource.
   const beginDrive = useCallback(() => {
     if (!data) return
-    // PREVIEW: there is no fix source — the segment-timeline driver effect IS the clock.
-    // Just go to driving and let the autostart effect seat segIdx at 0. No engine, no
-    // GpsFixSource subscription, no permission gate.
-    if (mode === 'preview') {
-      setDriving(true)
-      return
-    }
     resetForReady()
     // Re-snap RAW POI coords to the route (the API ships raw coords, not trigger points),
     // then drop stops too far off-route to have an honest trigger point. (spec §3.2)
@@ -623,7 +551,7 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
       },
     })
 
-  // ---- start: live mode primes BEFORE the first (one-shot) OS prompt; sim/preview start at once ----
+  // ---- start: live mode primes BEFORE the first (one-shot) OS prompt; sim starts at once ----
   const start = useCallback(() => {
     if (!data) return
     if (mode !== 'live') {
@@ -647,48 +575,8 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
   }, [resetForReady])
 
   const restart = useCallback(() => {
-    // PREVIEW: re-seat the segment clock at the top instead of re-subscribing a fix source.
-    if (mode === 'preview') {
-      loadedSeq.current = null
-      finishedSeq.current = null
-      clipRetried.current.clear()
-      dot.setValue(0)
-      setStallNote(null)
-      setActiveSeq(null)
-      setDone(false)
-      setDriving(true)
-      setSegIdx(0)
-      return
-    }
     start()
-  }, [mode, start, dot])
-
-  // ---- PREVIEW only: tap a stop to jump the drive there and play it from the start. ----
-  const jumpToStop = useCallback(
-    (seq: number) => {
-      if (mode !== 'preview') return // you can't teleport the car on a live/sim drive
-      const target = segments.findIndex((s) => s.seq === seq && s.kind !== 'drive')
-      if (target < 0) return
-      // Silence the current clip immediately on tap (the load effect's async replace would
-      // otherwise let it bleed until the new clip loads).
-      try {
-        player.pause()
-      } catch {}
-      if (segTimer.current) {
-        clearTimeout(segTimer.current)
-        segTimer.current = null
-      }
-      loadedSeq.current = null // force the target clip to (re)load from its start
-      finishedSeq.current = null
-      clipRetried.current.clear()
-      dot.setValue(segments[target]!.routeProgress)
-      setStallNote(null)
-      setDone(false)
-      setDriving(true)
-      setSegIdx(target)
-    },
-    [mode, segments, player, dot],
-  )
+  }, [start])
 
   const retry = useCallback(() => setReloadKey((k) => k + 1), [])
 
@@ -699,69 +587,7 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
     void Linking.openSettings().catch(() => {})
   }, [])
 
-  // ---- PREVIEW autostart: no permission gate, no fix source — the simulated drive just rolls.
-  // Seat the segment clock at 0 and go to driving as soon as the drive (and its timeline) loads.
-  useEffect(() => {
-    if (mode !== 'preview') return
-    if (!data || driving || done) return
-    setSegIdx(0)
-    setDriving(true)
-  }, [mode, data, driving, done])
-
-  // ---- PREVIEW segment driver: step the compressed timeline (clip / drive / rest). The CLOCK
-  // that replaces the GpsFixSource. It REUSES the shared clip-load effect (via setActiveSeq) for
-  // audio + lock-screen + the stall watchdog — it never touches the player itself. A `clip` seg
-  // hands off to that effect (which calls onClipDone → advanceSegment on finish); a `drive`/`rest`
-  // seg is a silent timed gap that slides the route dot, then auto-advances.
-  useEffect(() => {
-    if (mode !== 'preview' || !data || !driving || done) return
-    const seg = segments[segIdx]
-    if (!seg) {
-      // Ran past the last segment — the simulated drive is over.
-      finishDrive()
-      return
-    }
-    if (segTimer.current) {
-      clearTimeout(segTimer.current)
-      segTimer.current = null
-    }
-    if (seg.kind === 'clip') {
-      // Hand off to the shared clip-load effect: it loads + plays the clip, sets the lock screen,
-      // and arms the stall watchdog; on finish the didJustFinish effect calls onClipDone, which (in
-      // preview) advances the clock. Set the dot to the stop FIRST so the trail lands on it.
-      dot.setValue(seg.routeProgress)
-      setActiveSeq(seg.seq)
-      return
-    }
-    // drive / rest: a SILENT segment — no active clip. The clip-load effect relinquishes the
-    // lock screen when activeSeq goes null; the drive-music effect fades the soundtrack back in.
-    setActiveSeq(null)
-    if (paused) return // a held drive freezes here; toggling pause re-runs this effect and resumes
-    const from = seg.fromProgress ?? seg.routeProgress
-    dot.setValue(from)
-    // Animate the dot only when it actually moves (a drive). A break 'rest' holds in place, so skip
-    // the no-op X→X timing that would spin the JS animation at 60fps and jank the transition.
-    if (seg.kind === 'drive' && from !== seg.routeProgress) {
-      // Reduce Motion: step the token to the segment end instead of gliding it (same end state).
-      if (reducedMotion) dot.setValue(seg.routeProgress)
-      else
-        Animated.timing(dot, {
-          toValue: seg.routeProgress,
-          duration: seg.previewMs,
-          useNativeDriver: false,
-        }).start()
-    }
-    segTimer.current = setTimeout(() => advanceSegment(), seg.previewMs)
-    return () => {
-      if (segTimer.current) {
-        clearTimeout(segTimer.current)
-        segTimer.current = null
-      }
-      dot.stopAnimation() // freeze the trail on pause/jump instead of letting it run on
-    }
-  }, [mode, data, driving, done, segIdx, paused, segments, dot, advanceSegment, finishDrive, reducedMotion])
-
-  // ---- clip load / play (cloned from the preview): keyed on the active stop ----
+  // ---- clip load / play: keyed on the active stop ----
   useEffect(() => {
     if (!data || activeSeq === null) return
     if (watchdog.current) {
@@ -1050,7 +876,6 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
         player.setActiveForLockScreen(false)
       } catch {}
       if (watchdog.current) clearTimeout(watchdog.current)
-      if (segTimer.current) clearTimeout(segTimer.current) // preview's drive/rest auto-advance
     }
   }, [player, teardownSource])
 
@@ -1137,25 +962,14 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
     [data],
   )
 
-  // The current segment (preview only) — drives currentKind / rollingDistanceM / nextSeq.
-  const curSeg = mode === 'preview' ? (segments[segIdx] ?? null) : null
-  // The "next stop" strip: in live/sim it's the first not-yet-fired stop; in preview it's the
-  // destination of the current drive/rest segment (a clip's destination IS the active stop).
-  const nextSeq =
-    mode === 'preview'
-      ? (curSeg && curSeg.kind !== 'clip' ? curSeg.seq : null)
-      : (data?.stops.find((s) => !firedSeqs.has(s.seq))?.seq ?? null)
-  // What beat we're on, for the NOW-card variant. Preview reads the segment kind directly;
-  // live/sim has no rest segment (a clip is loaded, or we're driving between triggers).
-  const currentKind: 'clip' | 'drive' | 'rest' | null =
-    mode === 'preview' ? (curSeg?.kind ?? null) : activeSeq !== null ? 'clip' : 'drive'
-  // The current drive leg's along-route distance (m) for a "~X mi" label — preview only.
-  const rollingDistanceM = mode === 'preview' && curSeg?.kind === 'drive' ? (curSeg.distanceM ?? null) : null
+  // The "next stop" strip: the first not-yet-fired stop.
+  const nextSeq = data?.stops.find((s) => !firedSeqs.has(s.seq))?.seq ?? null
+  // What beat we're on, for the NOW-card variant: a clip is loaded, or we're driving between triggers.
+  const currentKind: 'clip' | 'drive' | null = activeSeq !== null ? 'clip' : 'drive'
 
-  // Offer replay only in the between-stops quiet of a live/sim drive, once a clip has completed —
-  // the scrubber (seek-to-0) already covers "restart the ACTIVE clip". (replay-last-stop §3)
-  const canReplay =
-    mode !== 'preview' && driving && !paused && !done && activeSeq === null && lastCompletedSeq !== null
+  // Offer replay only in the between-stops quiet, once a clip has completed — the scrubber
+  // (seek-to-0) already covers "restart the ACTIVE clip". (replay-last-stop §3)
+  const canReplay = driving && !paused && !done && activeSeq === null && lastCompletedSeq !== null
 
   return {
     phase,
@@ -1172,9 +986,6 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
     firedSeqs,
     nextSeq,
     currentKind,
-    rollingDistanceM,
-    totalPreviewMs,
-    totalRealMs,
     nowPlaying,
     buffering,
     stallNote,
@@ -1200,6 +1011,5 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
     togglePause,
     end,
     restart,
-    jumpToStop,
   }
 }

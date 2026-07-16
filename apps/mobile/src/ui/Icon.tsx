@@ -40,6 +40,7 @@ export type IconName =
   | 'chevronUp'
   | 'eye'
   | 'eyeOff'
+  | 'info'
 
 const IONICON: Record<IconName, ComponentProps<typeof Ionicons>['name']> = {
   // stop types
@@ -76,6 +77,7 @@ const IONICON: Record<IconName, ComponentProps<typeof Ionicons>['name']> = {
   chevronUp: 'chevron-up', // the map peek-bar's "drag/tap up to expand the player" affordance
   eye: 'eye-outline', // show diagnostics overlay
   eyeOff: 'eye-off-outline', // hide diagnostics overlay
+  info: 'information-circle-outline', // the ⓘ that reveals a clip's source credit (AttributionButton)
 }
 
 export interface IconProps {
