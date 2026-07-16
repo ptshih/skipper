@@ -86,7 +86,7 @@ HONEST ABOUT YOUR DATA
 No tracking. No analytics. No advertising. No third-party SDKs sitting in the passenger seat. Your location is used to time the stories and nothing else, and the record of what you've heard stays on your phone.
 
 WHERE THE STORIES COME FROM
-Skipper's facts are grounded in public sources, including Wikipedia (CC BY-SA). Every stop credits its source in the app, and the full list lives under Settings.
+Skipper's facts are grounded in public sources, including Wikipedia (CC BY-SA). Every stop's source is a tap away in the app, and the full list lives under Settings.
 
 A note on the driving: Skipper is meant to be heard, not watched. Mount your phone, start the drive, and keep your eyes where they belong. No story is worth it.
 ```
@@ -125,8 +125,8 @@ Answer **None / No** to everything. The ones worth pausing on:
 Answer: **Yes — contains, shows, or accesses third-party content.**
 
 If asked to explain: *"Narration is grounded in public sources, principally Wikipedia, reused under
-CC BY-SA 4.0. Attribution is displayed in-app per clip and in a full source list under Settings.
-Music is used under CC BY 4.0 with credit."*
+CC BY-SA 4.0. Attribution is shown in-app — a tap on any stop's ⓘ reveals that clip's specific
+source and license — plus a full source list under Settings. Music is used under CC BY 4.0 with credit."*
 
 This is the true answer and CC BY-SA explicitly permits the use, given attribution — which ships.
 

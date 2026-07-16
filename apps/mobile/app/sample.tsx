@@ -10,7 +10,7 @@ import type { RoamSample } from '@skipper/shared'
 import { space, radius } from '@/theme/tokens'
 import { useTheme, type Theme } from '@/theme'
 import {
-  SourceCredit,
+  AttributionButton,
   Badge,
   Scrubber,
   Screen,
@@ -202,7 +202,7 @@ export default function SampleScreen() {
         />
 
         {/* The ⓘ source affordance — same reveal as the drive player + roam (unified). */}
-        <SourceCredit items={sample?.attribution} />
+        <AttributionButton items={sample?.attribution} />
       </View>
     </Screen>
   )
