@@ -32,18 +32,9 @@ interface JobActionDialogProps {
   note?: ReactNode
   /** Build the `createJob` body (everything EXCEPT `apply`/`confirm`, which this adds). */
   buildBody: () => Record<string, unknown>
-  /** An external error to surface alongside the submit error (e.g. a failed dependency query). */
-  error?: unknown
-  /** Does the APPLY action spend money / delete bytes → adds `confirm:true` (server gate). Default true. */
-  spends?: boolean
   /** Primary (apply) button label + icon, e.g. "Discover" / Compass. */
   applyLabel: string
   applyIcon?: IconType
-  /** Disable both the Preview and apply actions (e.g. nothing selected yet). */
-  disabled?: boolean
-  /** Hide the dry-run Preview button (an action with no preview path). */
-  hidePreview?: boolean
-  previewLabel?: string
 }
 
 /** The shared shell for the corpus/run Preview+apply dialogs (Enrich, Generate narration, Re-score corpus): a
@@ -61,28 +52,24 @@ export function JobActionDialog({
   children,
   note,
   buildBody,
-  error,
-  spends = true,
   applyLabel,
   applyIcon: ApplyIcon,
-  disabled = false,
-  hidePreview = false,
-  previewLabel = 'Preview',
 }: JobActionDialogProps) {
   const qc = useQueryClient()
-  // Optional hard spend ceiling for paid runs (forwarded as --max-cost): the run aborts before billing
+  // Hard spend ceiling for paid runs (forwarded as --max-cost): the run aborts before billing
   // if the estimate exceeds it and stops mid-fan-out once actual spend crosses it. Blank = no cap.
   const [costCap, setCostCap] = useState('')
   const cap = Number(costCap)
-  const capBody = spends && costCap.trim() && Number.isFinite(cap) && cap > 0 ? { maxCostUsd: cap } : {}
+  const capBody = costCap.trim() && Number.isFinite(cap) && cap > 0 ? { maxCostUsd: cap } : {}
   const submitMut = useMutation({
+    // Every apply here is a paid/destructive run → always sends confirm:true (the server-side gate).
     mutationFn: (apply: boolean) =>
-      api.createJob({ ...buildBody(), ...capBody, apply, ...(apply && spends ? { confirm: true } : {}) }),
+      api.createJob({ ...buildBody(), ...capBody, apply, ...(apply ? { confirm: true } : {}) }),
     // Refresh the runs cache so the just-created job shows on the Jobs page (not after the 15s poll).
     onSuccess: () => { void qc.invalidateQueries({ queryKey: qk.runs() }); onSubmitted() },
   })
   const busy = submitMut.isPending
-  const shownError = submitMut.error ?? error
+  const shownError = submitMut.error
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -96,25 +83,23 @@ export function JobActionDialog({
 
         {children}
 
-        {spends && (
-          <div className="space-y-1.5">
-            <Label htmlFor="job-cost-cap">Spend cap (USD) — optional</Label>
-            <Input
-              id="job-cost-cap"
-              type="number"
-              inputMode="decimal"
-              min="0"
-              step="0.5"
-              placeholder="e.g. 10"
-              value={costCap}
-              onChange={(e) => setCostCap(e.target.value)}
-            />
-            <p className="text-xs text-muted-foreground">
-              Hard ceiling — the run aborts before billing if the estimate exceeds this, and stops
-              mid-run once actual spend crosses it. Blank = no cap.
-            </p>
-          </div>
-        )}
+        <div className="space-y-1.5">
+          <Label htmlFor="job-cost-cap">Spend cap (USD) — optional</Label>
+          <Input
+            id="job-cost-cap"
+            type="number"
+            inputMode="decimal"
+            min="0"
+            step="0.5"
+            placeholder="e.g. 10"
+            value={costCap}
+            onChange={(e) => setCostCap(e.target.value)}
+          />
+          <p className="text-xs text-muted-foreground">
+            Hard ceiling — the run aborts before billing if the estimate exceeds this, and stops
+            mid-run once actual spend crosses it. Blank = no cap.
+          </p>
+        </div>
 
         {note && (
           <Callout variant="info" className="rounded-lg px-3 py-2 text-xs">
@@ -132,12 +117,10 @@ export function JobActionDialog({
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
             Cancel
           </Button>
-          {!hidePreview && (
-            <Button variant="outline" disabled={busy || disabled} onClick={() => submitMut.mutate(false)}>
-              {busy ? 'Triggering…' : previewLabel}
-            </Button>
-          )}
-          <Button disabled={busy || disabled} onClick={() => submitMut.mutate(true)}>
+          <Button variant="outline" disabled={busy} onClick={() => submitMut.mutate(false)}>
+            {busy ? 'Triggering…' : 'Preview'}
+          </Button>
+          <Button disabled={busy} onClick={() => submitMut.mutate(true)}>
             {ApplyIcon && <ApplyIcon className="h-4 w-4" />} {busy ? 'Triggering…' : applyLabel}
           </Button>
         </DialogFooter>

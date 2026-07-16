@@ -39,12 +39,9 @@ const regionsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/regi
 const placesRoute = createRoute({ getParentRoute: () => rootRoute, path: '/places', component: PlacesView })
 const usersRoute = createRoute({ getParentRoute: () => rootRoute, path: '/users', component: UsersView })
 const referenceRoute = createRoute({ getParentRoute: () => rootRoute, path: '/reference', component: ReferenceView })
-export type PoiAction = 'discover' | 'generate' | 'rescore'
 export interface PoisSearch {
   /** Deep-link (one-shot, stripped after consuming): open this POI's detail sheet on mount. */
   poi?: string
-  /** Deep-link (one-shot, stripped after consuming): open this header dialog on mount. */
-  act?: PoiAction
 }
 // Plain validator (apps/admin has no zod dep) — coerce + whitelist, drop anything else.
 const poisRoute = createRoute({
@@ -54,7 +51,6 @@ const poisRoute = createRoute({
   validateSearch: (search: Record<string, unknown>): PoisSearch => {
     const out: PoisSearch = {}
     if (typeof search.poi === 'string' && search.poi) out.poi = search.poi
-    if (search.act === 'discover' || search.act === 'generate' || search.act === 'rescore') out.act = search.act
     return out
   },
 })

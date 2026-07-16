@@ -169,10 +169,6 @@ export class TriggerEngine {
     return events
   }
 
-  hasFired(seq: number): boolean {
-    return this.fired.has(seq)
-  }
-
   get firedCount(): number {
     return this.fired.size
   }

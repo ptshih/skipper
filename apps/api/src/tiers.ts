@@ -28,6 +28,3 @@ export function isAdmin(session: TierSession | null | undefined): boolean {
   const user = session?.user
   return !!user && !user.isAnonymous && user.role === 'admin'
 }
-
-const TIER_RANK: Record<AccessTier, number> = { anonymous: 0, free: 1 }
-export const meetsTier = (have: AccessTier, need: AccessTier): boolean => TIER_RANK[have] >= TIER_RANK[need]

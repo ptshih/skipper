@@ -1,14 +1,15 @@
 import { describe, expect, test } from 'bun:test'
+// The route-geometry primitives are owned by @skipper/engine (single-sourced with buildDrive's
+// pacing) — test them at their source. Only encodePolyline (+ the LngLat type) is studio-local.
 import {
   cumulativeMeters,
-  encodePolyline,
   haversineMeters,
   nearestOnRoute,
   routeBearingAt,
   timeAtAlong,
   totalMeters,
-  type LngLat,
-} from '../src/pipeline/geo'
+} from '@skipper/engine'
+import { encodePolyline, type LngLat } from '../src/pipeline/geo'
 
 /** One degree of latitude in meters at the radius geo.ts uses (R*π/180). */
 const ONE_DEG_LAT_M = (6_371_008.8 * Math.PI) / 180 // ≈ 111195

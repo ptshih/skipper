@@ -135,7 +135,6 @@ describe('RoamEngine — cross-session memory (seed + mute)', () => {
     const e = new RoamEngine([NORTH], { minGapSec: 0 })
     expect(e.update(fix(0.0085, 0, MPH60, 0, 0))).toHaveLength(1) // fires once
     e.mute('north')
-    expect(e.isMuted('north')).toBe(true)
     // Well past the cooldown it would normally re-fire — but it's muted now.
     expect(e.update(fix(0.0085, 0, MPH60, 0, DEFAULT_ROAM_TRIGGER.cooldownSec + 1_800))).toHaveLength(0)
   })
@@ -278,19 +277,3 @@ describe('RoamEngine — spatial-grid bucketing equivalence', () => {
   })
 })
 
-describe('RoamEngine — chattiness (setMinGap)', () => {
-  test('retuning the gap mid-session changes future spacing without resetting cooldowns', () => {
-    const a = pin('a', 0.0085, 0)
-    const b = pin('b', 0.012, 0)
-    const e = new RoamEngine([a, b])
-    expect(e.update(fix(0.007, 0, MPH60, 0, 0))).toHaveLength(1) // a fires; gate holds 60s clip + 75s gap
-    e.setMinGap(0) // talkative: gate now reopens right at clip end
-    expect(e.update(fix(0.0103, 0, MPH60, 0, 30))).toHaveLength(0) // still inside the clip
-    expect(e.update(fix(0.0103, 0, MPH60, 0, 61))).toHaveLength(0) // gate computed at fire time holds
-    // a's cooldown survives the retune: re-approach a long after the gate opens — no re-fire.
-    const e2 = new RoamEngine([a], { minGapSec: 0 })
-    e2.update(fix(0.007, 0, MPH60, 0, 0))
-    e2.setMinGap(0)
-    expect(e2.update(fix(0.007, 0, MPH60, 0, 120))).toHaveLength(0)
-  })
-})

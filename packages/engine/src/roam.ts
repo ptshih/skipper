@@ -114,7 +114,7 @@ export interface RoamHistorySeed {
 }
 
 export class RoamEngine {
-  private opts: RoamTriggerOptions
+  private readonly opts: RoamTriggerOptions
   /** poiId → tSec it fired (cooldown clock). */
   private readonly firedAt = new Map<string, number>()
   /** name → tSec it fired — same cooldown as poiId; guards against two DB rows for the
@@ -262,28 +262,10 @@ export class RoamEngine {
     ]
   }
 
-  /**
-   * Retune the min-gap governor mid-session — the CHATTINESS knob (a SELECTION control:
-   * which/how-many encounters fire, never what a telling says). Fired-pin cooldowns and
-   * the open gate are preserved; only the spacing of future encounter starts changes.
-   */
-  setMinGap(minGapSec: number): void {
-    this.opts = { ...this.opts, minGapSec }
-  }
-
   /** Mute a pin mid-session — "don't tell me this one again". It won't fire for the rest of this
    *  session; the app persists it (roam-history) so it never fires again. Idempotent. */
   mute(poiId: string): void {
     this.muted.add(poiId)
-  }
-
-  /** Whether a pin is currently muted (for the app to reflect in the map / sheet). */
-  isMuted(poiId: string): boolean {
-    return this.muted.has(poiId)
-  }
-
-  hasFired(poiId: string): boolean {
-    return this.firedAt.has(poiId)
   }
 
   get firedCount(): number {

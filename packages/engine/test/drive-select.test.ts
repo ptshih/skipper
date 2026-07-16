@@ -59,15 +59,15 @@ describe('buildDrive', () => {
     expect(stops[0]!.triggerLng).toBe(0)
   })
 
-  test('collapses co-located candidates PICK-ONE, keeping the higher-quality one', () => {
+  test('collapses co-located candidates PICK-ONE, keeping the richer (longer) one', () => {
     const stops = buildDrive({
       polyline,
       totalSec: TOTAL_SEC,
       minGapSec: 180,
       maxStops: 10,
       candidates: [
-        cand({ poiId: 'weak', lat: 38.05, qualityScore: 0 }),
-        cand({ poiId: 'strong', lat: 38.0505, qualityScore: 1 }), // ~55 m away → same physical stop
+        cand({ poiId: 'weak', lat: 38.05, audioDurationMs: 60_000 }),
+        cand({ poiId: 'strong', lat: 38.0505, audioDurationMs: 120_000 }), // ~55 m away → same physical stop
       ],
     })
     expect(stops.length).toBe(1)

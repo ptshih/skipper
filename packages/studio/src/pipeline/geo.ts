@@ -1,29 +1,13 @@
-// Route geometry for the M1 studio pipeline.
-//
-// The shared route-geometry — haversineMeters, bearingDeg, cumulativeMeters, nearestOnRoute,
-// totalMeters, routeBearingAt, timeAtAlong (+ LngLat / RoutePosition) — now lives
-// in @skipper/engine (the pure, RN-safe driving/trigger core, single-sourced with
-// buildDrive's pacing) and is RE-EXPORTED here, so studio call sites keep importing it from
-// './geo' unchanged. This file adds only the GENERATION-specific helpers on top: the sub-region
-// narration label (regionLabel) and polyline encoding for Places search-along-route (encodePolyline).
+// GENERATION-specific route geometry for the studio pipeline: the sub-region narration label
+// (regionLabel) and polyline encoding for Places search-along-route (encodePolyline). The shared
+// route-geometry primitives (haversineMeters, nearestOnRoute, totalMeters, …) live in @skipper/engine
+// — import them from there directly. `LngLat` is re-exported here only because these helpers'
+// signatures use it and studio call sites already import the type from this module.
 // [lng, lat] axis order throughout, matching drives.polyline.
 
 import type { LngLat } from '@skipper/engine'
 
-export {
-  type LngLat,
-  type RoutePosition,
-  haversineMeters,
-  bearingDeg,
-  cumulativeMeters,
-  nearestOnRoute,
-  METERS_PER_MILE,
-  // Route-relative helpers moved DOWN to @skipper/engine (single-sourced with buildDrive's
-  // pacing); re-exported so studio call sites keep importing them from './geo' unchanged.
-  totalMeters,
-  routeBearingAt,
-  timeAtAlong,
-} from '@skipper/engine'
+export { type LngLat } from '@skipper/engine'
 
 /**
  * The NARRATION region — the BROAD area the Skipper may name as "where you are" without the fact

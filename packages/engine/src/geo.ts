@@ -163,9 +163,8 @@ export function nearestOnRoute(polyline: LngLat[], cumulative: number[], point: 
 }
 
 // --- Route-relative helpers ---------------------------------------------------
-// Pure route geometry shared by the studio pipeline's stop selection (re-exported via
-// pipeline/geo.ts) and engine's own buildDrive pacing — single-sourced here so
-// both place candidates on a route identically.
+// Pure route geometry for engine's own buildDrive pacing (drive-select.ts) — single-sourced
+// here so the server and the on-device re-pace place candidates on a route identically.
 
 /** Total polyline length in meters (0 for a degenerate <2-point line). */
 export function totalMeters(cumulative: number[]): number {

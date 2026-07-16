@@ -79,19 +79,16 @@ export const duration = {
 } as const
 
 // ── Type families (loaded in fonts.ts via @expo-google-fonts) ────────────────
-// Display = constructed park-sign slab; all display sizes MUST use 700 (Zilla Slab
-//           is multi-weight; the token bakes the weight in).
+// Display = constructed park-sign slab; all display sizes use 700 (the token bakes the weight in).
 // Body    = calligraphic screen slab; road-notebook warmth at UI scale (Lora).
 // Mono    = highway-sign / odometer numerals — every number looks stamped.
 export const fonts = {
   display: 'ZillaSlab_700Bold',
-  displayMedium: 'ZillaSlab_600SemiBold',
   body: 'Lora_400Regular',
   bodyMedium: 'Lora_600SemiBold',
   bodyBold: 'Lora_700Bold',
   mono: 'OverpassMono_400Regular',
   monoSemiBold: 'OverpassMono_600SemiBold',
-  monoBold: 'OverpassMono_700Bold',
 } as const
 
 // ── Type scale (semantic variants) ───────────────────────────────────────────

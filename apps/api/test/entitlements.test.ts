@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { isAdmin, meetsTier, tierOf, type TierSession } from '../src/tiers'
+import { isAdmin, tierOf, type TierSession } from '../src/tiers'
 
 // Minimal session shape — the access helpers read user.isAnonymous (+ user.role). There is no tier
 // column anymore (premium = credits); any real account is `free`.
@@ -38,14 +38,5 @@ describe('isAdmin', () => {
   })
   test('signed-in account with role=admin → admin', () => {
     expect(isAdmin(session({ role: 'admin' }))).toBe(true)
-  })
-})
-
-describe('meetsTier', () => {
-  test('ranks anonymous < free', () => {
-    expect(meetsTier('anonymous', 'free')).toBe(false)
-    expect(meetsTier('free', 'free')).toBe(true)
-    expect(meetsTier('free', 'anonymous')).toBe(true)
-    expect(meetsTier('anonymous', 'anonymous')).toBe(true)
   })
 })

@@ -29,13 +29,9 @@ export type IconName =
   | 'auto'
   | 'settings'
   | 'expand'
-  | 'check'
-  | 'region'
-  | 'close'
   | 'downloaded'
   | 'update'
   | 'more'
-  | 'roam'
   | 'music'
   | 'patter'
   | 'map'
@@ -68,15 +64,10 @@ const IONICON: Record<IconName, ComponentProps<typeof Ionicons>['name']> = {
   night: 'moon-outline',
   auto: 'contrast-outline', // half-lit disc = "follow the phone" (system appearance)
   settings: 'settings-outline',
-  // filters / location picker (THE DRIVES "Where to?")
   expand: 'chevron-down', // a filter chip that opens a picker
-  check: 'checkmark', // the selected row in the picker
-  region: 'location-outline', // a region/destination row + the location chip glyph
-  close: 'close', // dismiss a modal sheet
   downloaded: 'cloud-done-outline', // a tour that's saved to disk + plays with no signal
   update: 'cloud-download-outline', // a saved tour whose clips were re-cut server-side — pull again
   more: 'ellipsis-horizontal', // header overflow menu (secondary/utility actions)
-  roam: 'compass-outline', // free-roam mode — no route, the skipper rides shotgun
   music: 'musical-notes-outline', // the rider's own audio (roam PAUSES it while the skipper talks, then hands it back — not ducking)
   patter: 'chatbubble-ellipses-outline', // the skipper talking (roam contract chip)
   map: 'map-outline', // the live-drive Map view (vs the itinerary List)

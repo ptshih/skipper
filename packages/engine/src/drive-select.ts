@@ -30,8 +30,6 @@ export interface DriveCandidate {
   kind?: string | null
   /** Display name (the spoken "stop"). */
   name?: string
-  /** Optional stored quality signal (a future eval score); absent ⇒ 0. Breaks dedupe/window ties. */
-  qualityScore?: number
 }
 
 /** One stop in an assembled drive — a narration placed on THIS route. A superset of the fields the
@@ -83,8 +81,6 @@ interface Snapped {
   approachHeadingDeg: number
 }
 
-const scoreOf = (c: DriveCandidate): number => c.qualityScore ?? 0
-
 export function buildDrive(params: BuildDriveParams): DriveStop[] {
   const { polyline, totalSec, candidates, minGapSec, maxStops } = params
   const offRouteMaxM = params.offRouteMaxM ?? OFF_ROUTE_MAX_M
@@ -110,10 +106,8 @@ export function buildDrive(params: BuildDriveParams): DriveStop[] {
   }
 
   // 2. PICK-ONE co-located dedupe — the INVERSE of the studio pipeline's merge (you cannot fuse two
-  //    finished clips). Greedy best-first (quality, then richer/longer) so the survivor is strongest.
-  const byScore = [...placed].sort(
-    (a, b) => scoreOf(b.cand) - scoreOf(a.cand) || b.cand.audioDurationMs - a.cand.audioDurationMs,
-  )
+  //    finished clips). Greedy best-first (richer/longer clip wins) so the survivor is strongest.
+  const byScore = [...placed].sort((a, b) => b.cand.audioDurationMs - a.cand.audioDurationMs)
   const kept: Snapped[] = []
   for (const cand of byScore) {
     const collides = kept.some(
@@ -125,7 +119,7 @@ export function buildDrive(params: BuildDriveParams): DriveStop[] {
 
   // 3. Time-paced selection: walk in route order; within each minGap window pick the BEST clip —
   //    one that FITS the gap (won't queue-lag) beats an over-long one; a DIFFERENT kind from the
-  //    previous pick beats a repeat (variety); then higher quality; then the richer (longer) clip.
+  //    previous pick beats a repeat (variety); then the richer (longer) clip.
   kept.sort((a, b) => a.alongSec - b.alongSec)
   let prevKind: string | null | undefined
   const better = (a: Snapped, b: Snapped): boolean => {
@@ -135,9 +129,6 @@ export function buildDrive(params: BuildDriveParams): DriveStop[] {
     const aVar = a.cand.kind !== prevKind
     const bVar = b.cand.kind !== prevKind
     if (aVar !== bVar) return aVar
-    const sa = scoreOf(a.cand)
-    const sb = scoreOf(b.cand)
-    if (sa !== sb) return sa > sb
     return a.cand.audioDurationMs > b.cand.audioDurationMs
   }
   const chosen: Snapped[] = []

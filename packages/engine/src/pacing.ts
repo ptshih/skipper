@@ -1,6 +1,6 @@
-// Route pacing primitives — shared by the studio pipeline's stop selection (pipeline/select.ts) and
-// engine's own buildDrive (drive-select.ts). Pure, zero-dep, RN-safe: the server paces a
-// drive AND the device can re-pace one offline with the same math.
+// Route pacing primitives — used by engine's buildDrive (drive-select.ts) and the sim/trigger/preview
+// path. Pure, zero-dep, RN-safe: the server paces a drive AND the device can re-pace one offline with
+// the same math.
 
 import {
   cumulativeMeters,

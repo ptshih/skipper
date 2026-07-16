@@ -10,7 +10,6 @@
 // requests in series. License for reuse is CC BY-SA 4.0 — attribution is snapshotted onto
 // the narration (`narrations.attribution`) at generation time.
 
-import type { FactSheetEntry, PoiFacts } from '@skipper/db/schema'
 import { ENRICHER_INPUT_CHARS, EXTRACT_CHARS, WIKIPEDIA_USER_AGENT } from '../config'
 import { fetchWithRetry, sleep } from './http'
 import {
@@ -42,47 +41,6 @@ interface ExtractPage {
   missing?: boolean
   /** Page properties; `wikibase_item` is the linked Wikidata QID (the enrichment join key). */
   pageprops?: { wikibase_item?: string }
-}
-
-/**
- * A selection candidate placed by (lat,lng) — produced by the Wikidata discovery spine
- * (pipeline/wikidata-discovery.ts). A STORY candidate carries Wikipedia prose (source
- * 'wikipedia', a pageid + a non-empty extract); a SCENIC candidate is a named Wikidata
- * feature with no prose (source 'wikidata', extract ''). `extract.length` still drives the
- * story↔scenic split in tierOf() (pipeline/wikidata-discovery.ts, threshold STORY_MIN_FACT_CHARS),
- * and `source`/`sourceId` become the pois (source, source_id).
- */
-export interface WikiPoi {
-  /** Discovery source for the pois row: 'wikipedia' (story prose) | 'wikidata' (named scenic). */
-  source: 'wikipedia' | 'wikidata'
-  /** Dedup id paired with source: a Wikipedia pageid (story) or a Wikidata QID (scenic). */
-  sourceId: string
-  title: string
-  lat: number
-  lng: number
-  /** Full article extract — the raw grounding text (the enricher's input + the un-enriched
-   *  fallback; the curated sheet lives on pois.fact_sheet); '' for a scenic pin (no prose). */
-  extract: string
-  /** Wikipedia article url (story) — the CC BY-SA attribution link; absent for a scenic pin. */
-  url?: string
-  /** Wikipedia pageid (story) — for the deep-extract fetch + attribution; absent for a scenic pin. */
-  pageid?: number
-  /** Linked Wikidata QID — the enrichment join key (story) and the source id (scenic). */
-  qid?: string
-  /** P31 feature type for a NAMED scenic pin (e.g. 'bay') — spoken as the KIND, sayable like a break's. */
-  kind?: string
-  /** Curated/admin "where to look" anchor (pois.speakable) — overrides the pin for the
-   *  side-of-road computation when the pin misleads. Carried from the corpus, not a code map. */
-  speakableLat?: number
-  speakableLng?: number
-  /** The poi's full corpus facts object (story rows loaded from `pois` by region-corpus) — the
-   *  well↔extract grounding source threaded onto the StopPlan. Absent on a freshly-discovered
-   *  candidate (the live spine emits none); present when read back from the corpus. */
-  facts?: PoiFacts
-  /** The poi's curated fact sheet + its enrich stamp (own `pois` columns now, NOT in `facts`) —
-   *  threaded onto the StopPlan for resolveStoryGrounding. Absent for scenic / un-enriched. */
-  factSheet?: FactSheetEntry[] | null
-  enrichedAt?: Date | null
 }
 
 /**

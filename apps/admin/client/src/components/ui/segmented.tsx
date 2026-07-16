@@ -4,8 +4,6 @@ import { cn } from '@/lib/utils'
 export interface SegmentedOption<T extends string> {
   value: T
   label: string
-  count?: number
-  alert?: boolean
 }
 
 // The pill-style segmented control used for page tabs and list filters.
@@ -33,16 +31,6 @@ export function Segmented<T extends string>({
             className={cn('h-7 gap-1.5', on && 'shadow-sm')}
           >
             {o.label}
-            {o.count != null && (
-              <span
-                className={cn(
-                  'rounded px-1.5 text-xs',
-                  o.alert ? 'bg-destructive/15 text-destructive' : 'bg-muted text-muted-foreground',
-                )}
-              >
-                {o.count}
-              </span>
-            )}
           </Button>
         )
       })}

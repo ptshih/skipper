@@ -23,10 +23,6 @@ export interface ButtonProps {
   loading?: boolean
   fullWidth?: boolean
   accessibilityLabel?: string // overrides `title` for the a11y label (icon-only buttons)
-  /** Cap the label's Dynamic Type growth (e.g. `IN_CAR_MAX_FONT_SCALE` for the flanked
-   *  transport controls, so a long resume label can't truncate between the ±15 buttons).
-   *  Omit on ordinary buttons — they grow with the user's text size. */
-  maxFontScale?: number
   /** Dusk primary buttons wear a campfire amber glow by default. Pass `false` to drop
    *  it (a neutral cast shadow instead) where the design system's one-amber-glow budget
    *  is already spent — e.g. the in-player play button while the NOW card is lit. */
@@ -43,7 +39,6 @@ export function Button({
   loading,
   fullWidth = true,
   accessibilityLabel,
-  maxFontScale,
   glow = true,
   style,
 }: ButtonProps) {
@@ -102,12 +97,7 @@ export function Button({
       <View style={[styles.row, loading && styles.hiddenWhileLoading]}>
         {icon ? <Icon name={icon} size={18} color={labelColor} style={styles.glyph} /> : null}
         {title ? (
-          <Text
-            variant="heading"
-            color={labelColor}
-            numberOfLines={1}
-            maxFontSizeMultiplier={maxFontScale}
-          >
+          <Text variant="heading" color={labelColor} numberOfLines={1}>
             {title}
           </Text>
         ) : null}

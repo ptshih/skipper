@@ -46,15 +46,9 @@ export interface NarrationRequest {
   facts?: string[]
   /** Coordinate-keyed geology facts (the rock underfoot). Grounded like `facts`; allowed on STORY and SCENIC. */
   geology?: string[]
-  /** STORY only: why geology is here — 'sparse' (thin facts, round it out) or 'iconic' (rich stop, the rock is the headline). */
-  geologyContext?: 'sparse' | 'iconic'
-  /** STORY only: discrete Wikidata facts (a date, an elevation, a namesake). Grounded like `facts`. */
-  wikidata?: string[]
   /** STORY only: co-located landmarks merged into this stop — each {name, facts}. Grounded;
    *  the narrator may name them and weave them into ONE telling of the place. */
   mergedFeatures?: { name: string; facts: string[] }[]
-  /** Only when actually known from the route geometry. */
-  sideOfRoad?: 'left' | 'right'
   /** Short reminders of earlier stops, for earned callbacks. */
   priorStops?: string[]
   /** How the last few stops OPENED — so this stop can open differently (each call is independent). */
@@ -94,7 +88,6 @@ export interface NarrationResult {
 function geologyLines(
   geology: string[] | undefined,
   stopType: StopType,
-  context?: 'sparse' | 'iconic',
   namedScenic = false,
 ): string[] {
   const geo = (geology ?? []).map((g) => g.trim()).filter(Boolean)
@@ -110,14 +103,8 @@ function geologyLines(
         ? '(On a SCENIC stop this is the ONE extra fact you may state. Beyond the named feature on your sheet you still name no OTHER peak, town, or island — only this feature, the rock, and its rough age, exactly as given. Invent nothing beyond these lines; speak the age as the rough range it is.)'
         : '(On a SCENIC stop this is the ONE thing you may state as fact. You still name no peak, town, island, or landmark — only the rock and its rough age, exactly as given. Invent nothing beyond these lines; speak the age as the rough range it is.)',
     )
-  } else if (context === 'iconic') {
-    // An allowlisted RICH stop where the rock IS the headline (Emerald Bay's granite): do NOT
-    // tell it it's "light on facts" (it isn't) — tell it the geology is genuinely notable.
-    out.push(
-      '(The rock here is a genuinely notable part of what this place IS, so give it a real mention — woven into the telling, in your own words. Two rules: do NOT make it your closing line, and do NOT reach for the "deep time versus our brief human lives" reflection — that frame gets old fast. Land it mid-telling and end the stop on something else.)',
-    )
   } else {
-    // The default STORY case: supporting texture. The cue asserts nothing about the sheet's
+    // The STORY case: supporting texture. The cue asserts nothing about the sheet's
     // thinness — the enrichment scout may attach supporting geology to a rich telling too,
     // and a "you're light on facts" premise would then be false. Same two bans, to kill the
     // monotony seen when every stop got geology.
@@ -125,27 +112,6 @@ function geologyLines(
       '(The rock here is good supporting material — work a little of it in where it fits, in your own words. Two rules: do NOT make it your closing line, and do NOT reach for the "deep time versus our brief human lives" reflection — that frame gets old fast. Land it mid-telling and end the stop on something else.)',
     )
   }
-  return out
-}
-
-/**
- * The KEY FACTS block — discrete, verified Wikidata statements (a date, an elevation, a
- * namesake). These ARE on the sheet, so they are sayable like any other fact. STORY-only
- * (a date/elevation/namesake identifies the place, so it can't ride a SCENIC stop the way
- * geology — which names no landmark — can). They are handed over BECAUSE the stop's own
- * prose is thin, so the model is nudged to weave them in rather than leave them optional.
- */
-function wikidataLines(wikidata: string[] | undefined): string[] {
-  const wd = (wikidata ?? []).map((w) => w.trim()).filter(Boolean)
-  if (wd.length === 0) return []
-  const out: string[] = [
-    '',
-    'KEY FACTS (grounded, from Wikidata — discrete, verified facts about this place; treat these as facts on the sheet, sayable like any other):',
-  ]
-  for (const w of wd) out.push(`- ${w}`)
-  out.push(
-    '(These are exact, dependable facts the rest of your sheet is thin on — a date, an elevation, a namesake. Work any that fit naturally into your telling, in your own words; do not invent beyond them, and do not let them become your closing line.)',
-  )
   return out
 }
 
@@ -186,7 +152,6 @@ export function buildFactSheet(req: NarrationRequest): string {
   if (req.stopType === 'story') {
     lines.push(`PLACE: ${req.place?.name ?? '(unnamed)'}`)
     if (req.place?.kind) lines.push(`KIND: ${req.place.kind}`)
-    if (req.sideOfRoad) lines.push(`SIDE OF ROAD: on the ${req.sideOfRoad}`)
     lines.push('')
     const facts = (req.facts ?? []).map((f) => f.trim()).filter(Boolean)
     if (facts.length > 0) {
@@ -201,15 +166,13 @@ export function buildFactSheet(req: NarrationRequest): string {
         'FACT SHEET: (none — no real facts available. Treat this as a scenic moment; do not invent a story.)',
       )
     }
-    for (const l of geologyLines(req.geology, 'story', req.geologyContext)) lines.push(l)
-    for (const l of wikidataLines(req.wikidata)) lines.push(l)
+    for (const l of geologyLines(req.geology, 'story')) lines.push(l)
     for (const l of mergedFeatureLines(req.mergedFeatures)) lines.push(l)
   } else if (req.stopType === 'scenic') {
     const namedScenic = Boolean(req.place?.name)
     if (namedScenic) {
       lines.push(`PLACE: ${req.place!.name}`)
       if (req.place!.kind) lines.push(`KIND: ${req.place!.kind}`)
-      if (req.sideOfRoad) lines.push(`SIDE OF ROAD: on the ${req.sideOfRoad}`)
       lines.push('')
       lines.push(
         'SCENIC stop, NAMED — a natural feature you are passing. You MAY name the PLACE above and say',
@@ -241,7 +204,7 @@ export function buildFactSheet(req: NarrationRequest): string {
         '(light, water color, sky, the road). Do not name any peak, town, island, or landmark.',
       )
     }
-    for (const l of geologyLines(req.geology, 'scenic', undefined, namedScenic)) lines.push(l)
+    for (const l of geologyLines(req.geology, 'scenic', namedScenic)) lines.push(l)
   } else {
     // break — the curated name + kind ARE given and sayable; everything volatile is not.
     lines.push(`PLACE: ${req.place?.name ?? '(unnamed)'}`)

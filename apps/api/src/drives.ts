@@ -609,12 +609,9 @@ driveRoutes.get('/', async (c) => {
   // `remaining` is the spendable balance and `cap` the lifetime granted (for "N of M" framing).
   // ensureFreeGrant materializes the allotment so a brand-new user reads the full balance even before
   // their first drive. `remaining` is clamped at 0 so a future refund clawback can't surface negative.
-  let credits: { remaining: number; cap: number } | null = null
   await ensureFreeGrant(userId)
-  {
-    const { remaining, granted } = await creditSummary(userId)
-    credits = { remaining: Math.max(0, remaining), cap: granted }
-  }
+  const { remaining, granted } = await creditSummary(userId)
+  const credits = { remaining: Math.max(0, remaining), cap: granted }
   return c.json({
     drives: rows.map((r) => ({
       driveId: r.driveId,

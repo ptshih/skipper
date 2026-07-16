@@ -1,6 +1,6 @@
 // Screen container: paints the `surface` background and respects safe-area. Top
 // inset is owned by the expo-router Stack header, so default edges skip 'top'.
-import { useState, type ReactElement, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import {
   ScrollView,
   StyleSheet,
@@ -8,7 +8,6 @@ import {
   type LayoutChangeEvent,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
-  type RefreshControlProps,
   type StyleProp,
   type ViewStyle,
 } from 'react-native'
@@ -25,7 +24,6 @@ export interface ScreenProps {
   edges?: readonly Edge[]
   /** Soft scroll-edge fades (top + bottom) over scrolling content. On by default. */
   fadeEdges?: boolean
-  refreshControl?: ReactElement<RefreshControlProps>
   style?: StyleProp<ViewStyle>
   contentContainerStyle?: StyleProp<ViewStyle>
 }
@@ -37,7 +35,6 @@ export function Screen({
   center,
   edges = ['left', 'right', 'bottom'],
   fadeEdges = true,
-  refreshControl,
   style,
   contentContainerStyle,
 }: ScreenProps) {
@@ -91,7 +88,6 @@ export function Screen({
               { paddingBottom: baseBottom + insets.bottom },
               contentContainerStyle,
             ]}
-            refreshControl={refreshControl}
             onLayout={onLayout}
             onContentSizeChange={onContentSizeChange}
             onScroll={onScroll}
