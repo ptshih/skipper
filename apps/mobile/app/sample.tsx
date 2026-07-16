@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Animated, StyleSheet, View } from 'react-native'
+import { Image, StyleSheet, View } from 'react-native'
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
+import type { ImageSourcePropType } from 'react-native'
 import { getRoamSample } from '@/lib/api'
 import { cleanPlaceName } from '@/lib/labels'
+import { postcardImageFor } from '@/lib/postcards'
 import type { RoamSample } from '@skipper/shared'
-import { space } from '@/theme/tokens'
+import { space, radius } from '@/theme/tokens'
+import { useTheme, type Theme } from '@/theme'
 import {
+  SourceCredit,
   Badge,
-  RouteTrack,
   Scrubber,
   Screen,
-  SourceCredit,
   StateView,
   Sunburst,
   Text,
@@ -40,6 +42,7 @@ export default function SampleScreen() {
   // `?from=roam` when reached from the roam no-coverage rescue (roam is already on the stack beneath
   // us). The end CTA then goes BACK to that roam rather than replace('/roam') stacking a second one.
   const { from } = useLocalSearchParams<{ from?: string }>()
+  const { colors } = useTheme()
   const player = useAudioPlayer()
   const status = useAudioPlayerStatus(player)
 
@@ -48,10 +51,6 @@ export default function SampleScreen() {
   // didJustFinish can double-fire; latch the end exactly once.
   const endedRef = useRef(false)
   const beatTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  // The motif token travels as the story plays — the screen's ONE amber while a clip sounds. Driven
-  // from playback progress (a real, cheap, meaningful animation), snapped under Reduce Motion.
-  const progress = useRef(new Animated.Value(0)).current
 
   // setAudioModeAsync is process-wide (shared with roam/drive). A taste is polite — mixWithOthers,
   // playsInSilentMode so it sounds on a muted reviewer device, background-safe.
@@ -66,7 +65,6 @@ export default function SampleScreen() {
   const load = useCallback(async () => {
     setPhase('loading')
     endedRef.current = false
-    progress.setValue(0)
     try {
       const s = await getRoamSample()
       setSample(s)
@@ -83,7 +81,7 @@ export default function SampleScreen() {
       // persona dead-end. Show the retry surface.
       setPhase('error')
     }
-  }, [player, progress])
+  }, [player])
 
   useEffect(() => {
     void load()
@@ -109,10 +107,6 @@ export default function SampleScreen() {
       setPhase('ended')
     }
   }, [status.didJustFinish, status.playing, status.currentTime, durSec, phase])
-  useEffect(() => {
-    if (durSec <= 0) return
-    progress.setValue(Math.max(0, Math.min((status.currentTime ?? 0) / durSec, 1)))
-  }, [status.currentTime, durSec, progress])
 
   const canSeek = !!status.isLoaded && durSec > 0
   const seekToMs = (ms: number) => {
@@ -177,23 +171,15 @@ export default function SampleScreen() {
       </Screen>
     )
 
-  // ── PLAYING: the postcard. The RouteTrack motif is the one amber; the transport row doesn't glow. ──
+  // ── PLAYING: the postcard proper. The framed image is the hero; the scrubber is the ONE progress
+  // bar (the old RouteTrack motif was a redundant second one). ──
   return (
     <Screen padded center contentContainerStyle={styles.body}>
       <Stack.Screen options={{ title: '' }} />
-      <View style={styles.heroSunburst} pointerEvents="none">
-        <Sunburst size={168} opacity={0.09} />
-      </View>
+
+      <PostcardFrame image={postcardImageFor(sample?.qid)} caption={voice.sample.kicker} colors={colors} />
 
       <View style={styles.card}>
-        <Text variant="label" color="accentWarm" align="center">
-          {voice.sample.kicker}
-        </Text>
-
-        <View style={styles.motif}>
-          <RouteTrack progress={progress} glow />
-        </View>
-
         <View style={styles.titleRow}>
           <Text variant="display" color="ink" align="center" numberOfLines={2}>
             {sample ? cleanPlaceName(sample.name) : ''}
@@ -215,9 +201,57 @@ export default function SampleScreen() {
           onSeekForward={() => seekBy(15)}
         />
 
+        {/* The ⓘ source affordance — same reveal as the drive player + roam (unified). */}
         <SourceCredit items={sample?.attribution} />
       </View>
     </Screen>
+  )
+}
+
+// The framed "postcard": a landscape image (the WPA poster of the place) matted like a real postcard,
+// with a little stamp in the corner, and the region caption printed on the bottom matte. Until the
+// curated art for this clip's QID exists (see @/lib/postcards), it renders a calm sunburst placeholder
+// so it reads as an intentional postcard, never a broken image.
+function PostcardFrame({
+  image,
+  caption,
+  colors,
+}: {
+  image: ImageSourcePropType | undefined
+  caption: string
+  colors: Theme['colors']
+}) {
+  return (
+    <View
+      style={[
+        styles.postcard,
+        {
+          backgroundColor: colors.surfaceRaised,
+          borderColor: colors.rule,
+          boxShadow: [{ offsetX: 0, offsetY: 8, blurRadius: 22, color: colors.shadowCast }],
+        },
+      ]}
+    >
+      <View style={[styles.postcardImage, { backgroundColor: colors.surfaceSunken }]}>
+        {image ? (
+          <Image source={image} style={styles.postcardFill} resizeMode="cover" accessibilityIgnoresInvertColors />
+        ) : (
+          <View style={styles.postcardPlaceholder} pointerEvents="none">
+            <Sunburst size={132} opacity={0.16} />
+          </View>
+        )}
+      </View>
+      <Text variant="label" color="accentWarm" align="center" style={styles.postcardCaption}>
+        {caption}
+      </Text>
+      {/* The stamp — the small thing that makes it read as a postcard rather than a photo card. */}
+      <View
+        style={[styles.stamp, { backgroundColor: colors.surfaceRaised, borderColor: colors.rule }]}
+        pointerEvents="none"
+      >
+        <Sunburst size={30} opacity={0.5} />
+      </View>
+    </View>
   )
 }
 
@@ -226,6 +260,38 @@ const styles = StyleSheet.create({
   heroSunburst: { position: 'absolute', top: -40, alignSelf: 'center' },
   card: { gap: space.lg, width: '100%' },
   endCard: { gap: space.md },
-  motif: { marginVertical: space.sm },
   titleRow: { gap: space.sm, alignItems: 'center' },
+  // The postcard matte: a raised card holding the image, with the caption printed on its lower margin.
+  postcard: {
+    width: '100%',
+    padding: space.sm,
+    paddingBottom: space.xs,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  postcardImage: {
+    width: '100%',
+    aspectRatio: 3 / 2, // a postcard is landscape
+    borderRadius: radius.sm,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  postcardFill: { width: '100%', height: '100%' },
+  postcardPlaceholder: { alignItems: 'center', justifyContent: 'center' },
+  postcardCaption: { marginTop: space.sm, marginBottom: space.xs },
+  stamp: {
+    position: 'absolute',
+    top: space.md,
+    right: space.md,
+    width: 46,
+    height: 46,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    transform: [{ rotate: '5deg' }],
+  },
 })

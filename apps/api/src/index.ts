@@ -222,6 +222,7 @@ app.get('/roam/sample', async (c) => {
     () =>
       db
         .select({
+          qid: pois.qid,
           name: pois.name,
           key: narrations.audioUrl,
           durationMs: narrations.audioDurationMs,
@@ -240,6 +241,7 @@ app.get('/roam/sample', async (c) => {
   }
   try {
     return c.json({
+      qid: row.qid,
       name: row.name,
       url: presignGet(row.key),
       contentType: contentTypeForKey(row.key),

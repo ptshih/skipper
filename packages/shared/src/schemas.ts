@@ -137,6 +137,9 @@ export type RoamManifest = z.infer<typeof roamManifest>
  *  shape as a roam pin minus the geography, since there's no map here, just the clip. `attribution`
  *  rides along because a taste presents the adapted work like any other surface (CC BY-SA). */
 export const roamSample = z.object({
+  // The clip's poi QID — lets the client pick the matching curated "postcard" artwork (qid→image),
+  // and fall back to a generic frame if it doesn't recognize the place. Optional for wire-compat.
+  qid: z.string().optional(),
   name: z.string(),
   url: z.url(),
   contentType: z.string(),
