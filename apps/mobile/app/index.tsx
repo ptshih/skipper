@@ -113,6 +113,15 @@ export default function HomeScreen() {
         <Text variant="dim" color="inkFaint" align="center">
           Pull over for stories as you go — no plan needed.
         </Text>
+        {/* Cold-open escape hatch: Ride Along needs Tahoe proximity, so a first-timer anywhere else
+            (and an App Review tester) hits "I don't know these roads yet." This ghost link — no amber,
+            doesn't demote the primary — lets ANYONE hear one curated clip in one permission-free tap. */}
+        <Button
+          variant="ghost"
+          title={voice.sample.homeLink}
+          onPress={() => navigateOnce(() => router.push('/sample'))}
+          fullWidth={false}
+        />
       </View>
       <View style={styles.modeBlock}>
         <Button variant="secondary" icon="map" title="Create a Drive" glow={false} onPress={() => navigateOnce(() => router.push('/create'))} fullWidth />

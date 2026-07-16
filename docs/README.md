@@ -70,6 +70,10 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
 - [cut-tiers.md](decisions/cut-tiers.md) — removed `user.tier` ('free'|'paid'): credits govern premium,
   so `accessTier` collapses to `anonymous`|`free`, every account spends the ledger, and a comp is a
   large admin grant (2026-06-20).
+- [sample-ride-postcard.md](decisions/sample-ride-postcard.md) — the `/sample` "postcard": one curated
+  Tahoe clip anyone outside the corpus (incl. an App Review tester) can hear in one permission-free tap,
+  fixing the "I don't know these roads yet" dead-end; anonymous `GET /roam/sample`, three entry points,
+  and the sim→diagnostics decouple (2026-07-16).
 - [account-deletion-and-recovery.md](decisions/account-deletion-and-recovery.md) — in-app account
   deletion (App Store 5.1.1(v)) is immediate + total and must PURGE `drives`/`credit_entries` by hand
   (soft refs, no FK cascade); password reset mails a Resend link that resolves on the web. Reset is

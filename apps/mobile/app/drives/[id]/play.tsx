@@ -215,15 +215,17 @@ export default function DriveScreen() {
   }, [d.phase, reduce, d.progress])
 
   if (d.phase === 'gate')
-    // A drive is owned (account-gated), so loading it at all needs a free account — the gate
-    // catches the 401 here. "Just take the sample ride" swaps the gated live drive for the couch
-    // preview (still the owner's drive — the manifest is already loaded once they're signed in).
+    // A drive is owned (account-gated), so loading it at all needs a free account — the gate catches
+    // the 401 here. "Just take the sample ride" used to route to ?mode=preview of THIS drive, which
+    // re-hit the same account-gated fetch and 401'd straight back to this gate — an anonymous rider
+    // looped forever. It now routes to /sample (the curated postcard), which is the real, working
+    // anonymous taste — unifying the two half-built "sample" ideas into one and killing the loop.
     return (
       <AccountGate
         note={voice.gate.driveNote}
         secondaryAction={{
           label: voice.gate.secondary,
-          onPress: () => router.replace(`/drives/${id}/play?mode=preview`),
+          onPress: () => router.replace('/sample'),
         }}
       />
     )

@@ -191,18 +191,10 @@ Skipper is a hands-free, GPS-triggered audio tour for drivers. Two things will h
 1) COVERAGE IS LAKE TAHOE, CALIFORNIA ONLY.
 Every story is written and recorded for a specific place, and our finished collection covers Lake Tahoe. This is stated plainly in the App Store description and inside the app. In Cupertino, the "Ride Along" mode will correctly report that it has no coverage for your area — that is intended behavior, not a failure.
 
-2) TO HEAR THE APP WITHOUT DRIVING — USE PREVIEW.
-Preview plays a complete drive on a timer: real narration, every stop, in order, with NO GPS and NO location permission required.
+2) TO HEAR THE APP WITHOUT DRIVING — ONE TAP, NO ACCOUNT, NO PERMISSION.
+On the Home screen, under the "Ride Along" button, tap "Not near Tahoe? Hear a quick sample." It opens a curated Lake Tahoe narration that plays immediately — real audio, about a minute — and then offers "Ride along for real." No sign-in, no location prompt.
 
-   a. Launch the app and tap "Create a Drive".
-   b. Sign in with the demo account provided above (or create one — any email works; no verification required).
-   c. The region is Lake Tahoe. Set START = "Tahoe City" and END = "South Lake Tahoe".
-   d. Tap "Plan the drive", then "Make this drive".
-   e. The app lands in Preview automatically and narration begins. Each stop plays its full audio; the gaps between stops are compressed. Expect roughly 20 minutes of real narration.
-
-FASTEST ALTERNATIVE (no account, no permission):
-Open this link on the device: skipper://roam?mode=sim
-It replays a fixed Lake Tahoe route through the real proximity engine, so stories trigger and play exactly as they would in a car. Audio starts within a few seconds.
+FULLER EXPERIENCE (optional): to hear a complete multi-stop drive on a timer (still no GPS), tap "Create a Drive", sign in with the demo account above (or any email — no verification), set START = "Tahoe City" and END = "South Lake Tahoe", then "Plan the drive" → "Make this drive". The app lands in Preview and plays each stop's full audio in order (~20 minutes).
 
 ACCOUNT DELETION (Guideline 5.1.1(v)):
 Settings (gear, top-right of Home) → Delete account. It permanently deletes the account, its saved drives, and its credits immediately. Password confirmation is required.
@@ -215,9 +207,10 @@ Thank you — happy to help if anything is unclear.
 
 **Why this matters more than the rest of the listing:** the app's primary button dead-ends 200 miles
 from the only corpus. Verified against production: `/roam` at Apple Park (37.3349, −122.0090) returns
-**0 pins**; at Tahoe it returns **337**. Without these notes a reviewer taps the biggest amber button
-on the screen, grants location, gets an honest in-persona "I don't know these roads yet," and has no
-way forward. That reads as an incomplete app under Guideline 2.1.
+**0 pins**; at Tahoe it returns **337**. The Home "Hear a quick sample" link (→ the `/sample` postcard,
+`docs/decisions/sample-ride-postcard.md`) is the deterministic, permission-free path built precisely so
+a reviewer — or any first-timer outside Tahoe — hears the Skipper regardless of location, and the former
+"I don't know these roads yet" dead-end now carries the same rescue. Point the reviewer at the sample.
 
 ---
 
@@ -233,6 +226,9 @@ Already answered by the binary: `ITSAppUsesNonExemptEncryption: false` in `app.j
       guideline they can check in 30 seconds). Verify: `POST https://api.skipper.fm/api/auth/delete-user`
       returns **401**, not 404.
 - [ ] `https://skipper.fm/privacy`, `/terms`, `/support` all return 200.
+- [ ] **The sample plays in prod:** `GET https://api.skipper.fm/roam/sample` returns 200 with a clip
+      (needs `SAMPLE_NARRATION_QID` set + the API deployed). This is the reviewer's primary path — if
+      it 404s, the sample link shows a retry and the review path is broken.
 - [ ] The demo account exists, its password is in ASC, and it has credits left to create a drive.
 - [ ] Screenshots captured in dark mode (§9).
 - [ ] The coverage sentence in the description still matches reality (it says Tahoe only).

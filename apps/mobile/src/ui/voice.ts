@@ -179,6 +179,25 @@ export const voice = {
     done: 'Done',
     loading: 'Checking which stories live out here…',
     noCoverage: 'I don’t know these roads yet, folks. Get me near Lake Tahoe and I’ve got stories.',
+    // The rescue out of the former dead-end: the noCoverage line now leads INTO this button
+    // instead of terminating. Routes to the /sample postcard (a Tahoe taste), not to a live drive.
+    noCoverageAction: 'Hear a Tahoe sample',
+  },
+  // The "postcard" — one curated Tahoe clip a stranger anywhere can hear (the /sample screen). The
+  // front-door taste for everyone outside the corpus AND the App Review path. Fact-free (the poi
+  // name is a FACT, served by the API, never baked here). Warm, corny, glanceable.
+  sample: {
+    kicker: 'POSTCARD FROM LAKE TAHOE',
+    badge: 'A TASTE', // teal — honest "this is a sample, not a live drive"
+    loading: 'Cueing up something good from the lake…',
+    endTitle: 'That’s the taste, friend.',
+    endBody:
+      'One stop of a few hundred up around the lake. Get me near Tahoe and I’ll do this all drive long.',
+    endCta: 'Ride along for real',
+    endSecondary: 'Maybe later',
+    // Home cold-open ghost link, under the primary "Ride along" — the guaranteed, permission-free
+    // path for a first-timer nowhere near Tahoe. No number promised (the clip runs about a minute).
+    homeLink: 'Not near Tahoe? Hear a quick sample.',
   },
   greeting: 'Hop in. I’ll do the talking.',
   // The cold-open descriptor: a newcomer should know WHAT this is before any audio

@@ -131,6 +131,20 @@ export type RoamPin = z.infer<typeof roamPin>
 export const roamManifest = z.object({ pins: z.array(roamPin) })
 export type RoamManifest = z.infer<typeof roamManifest>
 
+/** GET /roam/sample — ONE curated "taste" clip, anonymous, for a user OUTSIDE any coverage (the
+ *  Cupertino reviewer, and every first-timer who opens the app 200 miles from Tahoe). A single
+ *  hand-picked narration (server-side `SAMPLE_NARRATION_QID`) resolved to a presigned clip — same
+ *  shape as a roam pin minus the geography, since there's no map here, just the clip. `attribution`
+ *  rides along because a taste presents the adapted work like any other surface (CC BY-SA). */
+export const roamSample = z.object({
+  name: z.string(),
+  url: z.url(),
+  contentType: z.string(),
+  durationMs: z.number().int(),
+  attribution: attributionList.optional(),
+})
+export type RoamSample = z.infer<typeof roamSample>
+
 /* -------------------------------------------------------------------------- */
 /*  Create-a-Drive (V2) — a user-owned, on-demand A→B drive over reused narrations */
 /* -------------------------------------------------------------------------- */

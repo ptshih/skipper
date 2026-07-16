@@ -199,6 +199,62 @@ app.get('/roam', async (c) => {
   }
 })
 
+// GET /roam/sample — the anonymous "taste" for a user OUTSIDE any coverage. The corpus is Tahoe-only,
+// so a first-timer (or an Apple reviewer in Cupertino) who taps "Ride Along" gets 0 pins and a
+// dead-end; this serves ONE curated, always-iconic clip so they hear the Skipper regardless of where
+// they are. Anonymous, like /roam — no account, no location. Resolves SAMPLE_NARRATION_QID to its
+// released narration and presigns the private clip. Fails SOFT (404 with a friendly code) when the
+// QID is unset / not found / unreleased, so the client shows a reachable retry, never a white screen.
+// Additive wire contract (post-v1 safe).
+//
+// Its own rate limiter: the `/roam` limiter above is `app.use('/roam', …)`, which in Hono matches the
+// EXACT path only — NOT this subpath. Without this line /roam/sample would be an uncapped anonymous
+// DB-lookup + presign, while its sibling is 60/min. One indexed limit-1 query, so 30/min is ample.
+app.use('/roam/sample', rateLimit({ limit: 30, windowSec: 60, label: 'roam-sample' }))
+app.get('/roam/sample', async (c) => {
+  const qid = process.env.SAMPLE_NARRATION_QID
+  // Unset config is an OPERATOR miss, not a rider error — but the rider still gets a clean, retryable
+  // surface rather than a 500. Setting the QID is an explicit go-live gate (see the submission guide).
+  if (!qid) {
+    return c.json({ error: 'no_sample', message: 'No sample is cued up just yet — check back soon.' }, 404)
+  }
+  const rows = await withRetry(
+    () =>
+      db
+        .select({
+          name: pois.name,
+          key: narrations.audioUrl,
+          durationMs: narrations.audioDurationMs,
+          attribution: narrations.attribution,
+        })
+        .from(narrations)
+        .innerJoin(pois, eq(pois.id, narrations.poiId))
+        // RELEASED only — the taste is public, so it must clear the same gate as any anonymous clip.
+        .where(and(eq(pois.qid, qid), isNotNull(narrations.releasedAt)))
+        .limit(1),
+    { label: 'roam.sample' },
+  )
+  const row = rows[0]
+  if (!row) {
+    return c.json({ error: 'no_sample', message: 'No sample is cued up just yet — check back soon.' }, 404)
+  }
+  try {
+    return c.json({
+      name: row.name,
+      url: presignGet(row.key),
+      contentType: contentTypeForKey(row.key),
+      durationMs: row.durationMs,
+      attribution: (row.attribution ?? undefined) as RoamPin['attribution'],
+    })
+  } catch (e) {
+    console.error('[api] roam sample presign failed', e)
+    return c.json(
+      { error: 'audio_unavailable', message: 'Audio is warming up. Give it a moment and try again.' },
+      503,
+    )
+  }
+})
+
 const port = Number(process.env.PORT ?? 8787)
 
 // Bun serves a default export of the shape { port, fetch }.

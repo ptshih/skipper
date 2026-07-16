@@ -13,6 +13,7 @@ import {
   regionAnchorList,
   regionList,
   roamManifest,
+  roamSample,
   signedDriveAudio,
   sourcesResponse,
   versionResponse,
@@ -28,6 +29,7 @@ import type {
   Region,
   RegionAnchor,
   RoamManifest,
+  RoamSample,
   SignedDriveAudio,
   VersionPolicy,
 } from '@skipper/shared'
@@ -164,6 +166,12 @@ export const getRoamManifest = async (
       { anonymous: true },
     ),
   )
+
+/** GET /roam/sample — the one curated "taste" clip for a user outside any coverage. Anonymous (no
+ *  account, no location). Throws on a non-2xx (incl. the soft 404 when no sample is configured) — the
+ *  /sample screen catches it and shows a reachable retry. */
+export const getRoamSample = async (): Promise<RoamSample> =>
+  parseDto(roamSample, await fetchJson('/roam/sample', undefined, { anonymous: true }))
 
 /* -------------------------------------------------------------------------- */
 /*  Create-a-Drive (V2) — user-owned on-demand A→B drives. All account-gated     */

@@ -99,8 +99,11 @@ export default function RoamScreen() {
   // as a one-off (either path → the simulated drive source).
   const { simMode, showDiag } = useSimMode()
   const roamMode = simMode || mode === 'sim' ? 'sim' : 'live'
-  // The drive-test diagnostics line shows on dev builds / sim / the showDiag toggle.
-  const diagEnabled = __DEV__ || roamMode === 'sim' || showDiag
+  // Diagnostics visibility is OWNED by __DEV__ + the purpose-built showDiag toggle — NOT by sim mode.
+  // sim is a GPS *source* (couch replay), a separate concern from telemetry, exactly as sim-mode.tsx
+  // documents. Coupling them meant any user on the `?mode=sim` deep link or the Settings sim toggle
+  // (and now anyone routed near sim) saw the raw "N pins · GPS Xs · nearest Y m" footer. Decoupled.
+  const diagEnabled = __DEV__ || showDiag
   const r = useRoam(roamMode)
   // Glanceable map toggle — the motif is the eyes-on-road default; the map is an opt-in
   // glance (a stop, a passenger). Resets to the motif each session (local, not persisted).
@@ -280,7 +283,21 @@ export default function RoamScreen() {
         action={{ label: voice.error.retry, onPress: r.retry }}
       />
     )
-  if (r.phase === 'noCoverage') return <StateView title={title} message={voice.roam.noCoverage} />
+  if (r.phase === 'noCoverage')
+    // Formerly a terminal dead-end (no action). Now the "I don't know these roads yet" line leads
+    // INTO a rescue: hear one curated Tahoe clip on the /sample postcard. Covers the grant-location-
+    // then-empty rider and everyone who ever roams outside the corpus.
+    return (
+      <StateView
+        title={title}
+        message={voice.roam.noCoverage}
+        action={{
+          label: voice.roam.noCoverageAction,
+          // ?from=roam so the sample's end CTA returns to THIS roam instead of stacking a new one.
+          onPress: () => router.push('/sample?from=roam'),
+        }}
+      />
+    )
 
   if (r.phase === 'sessionStart')
     return (
