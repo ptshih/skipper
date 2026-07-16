@@ -217,6 +217,10 @@ The rest are post-MVP features, gated behind the proven phone player:
   once the findings are actioned.**
 
 ### guides/
+- [app-store-submission.md](guides/app-store-submission.md) — every App Store Connect field ready to
+  paste (name/subtitle/description/keywords pre-counted against Apple's caps), the privacy nutrition
+  label that must match the binary's manifest, and the App Review notes — which carry the whole
+  submission, since the corpus is Tahoe-only and a reviewer in Cupertino gets 0 roam pins.
 - [eas-setup.md](guides/eas-setup.md) — building + running the Expo app on EAS (dev build).
 - [device-verification-runbook.md](guides/device-verification-runbook.md) — the one-sitting
   on-device pass that clears the last M1 gate (phone-player feel + real GPS); checklist of what only

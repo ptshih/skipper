@@ -1,0 +1,95 @@
+---
+// /support — the App Store listing's required Support URL.
+//
+// Apple requires a working support URL for every listing, and it's the page a stranded rider lands
+// on, so it answers the questions people actually hit before it offers an email address. The top
+// answer is the honest one: the corpus is Lake Tahoe only, so most of the world opens the app and
+// hears nothing. Saying that plainly here is better than letting someone conclude the app is broken.
+//
+// Reuses the Legal shell — this is a document, not a landing page.
+import Legal from '../layouts/Legal.astro'
+---
+
+<Legal
+  heading="Support"
+  kicker="Help"
+  description="Help with Skipper — coverage, location, audio, credits, and how to reach a human."
+  updated="July 15, 2026"
+>
+  <p>
+    Skipper is a small, hand-built thing. If something's wrong, email
+    <a href="mailto:hello@skipper.fm">hello@skipper.fm</a> and a human — the person who built it —
+    will read it.
+  </p>
+
+  <h2>“The Skipper says he doesn't know these roads”</h2>
+  <p>
+    That's the honest answer, not a bug. Every story in Skipper is written and recorded for a
+    specific place, and right now the only place with a finished collection is
+    <strong>Lake Tahoe, California</strong>. Outside that basin there's nothing for him to tell you
+    about, and he'd rather say so than make something up.
+  </p>
+  <p>
+    You can still hear him without going anywhere: create a drive between two Tahoe points and the
+    app plays the whole thing as a <strong>preview</strong> — every stop, in order, from your couch.
+    More regions are the plan; there's no date to promise.
+  </p>
+
+  <h2>The stops aren't playing while I drive</h2>
+  <p>A few things to check, roughly in order of likelihood:</p>
+  <ul>
+    <li>
+      <strong>Location permission.</strong> Skipper needs “While Using the App” to know when you've
+      reached a stop. Settings → Skipper → Location.
+    </li>
+    <li>
+      <strong>Precise Location must be on.</strong> With it off, iOS gives a rough neighborhood
+      instead of a position, and a stop can't be timed to the road.
+    </li>
+    <li>
+      <strong>Keep the app open.</strong> Skipper plays in the foreground while you drive — mount the
+      phone, or start the drive before you set off.
+    </li>
+    <li>
+      <strong>Thin signal.</strong> Tahoe has real dead zones. Download the drive before you leave
+      and it plays from the phone with no signal at all.
+    </li>
+  </ul>
+
+  <h2>Credits</h2>
+  <p>
+    Each account gets a set number of free drives to create. Making a drive spends one. Deleting a
+    drive doesn't give it back — the work of building it already happened. Riding along (roam) is
+    free and unlimited, and doesn't touch credits.
+  </p>
+
+  <h2>Deleting your account</h2>
+  <p>
+    In the app: <strong>Settings → Delete account</strong>. It removes your account, your saved
+    drives, and any credits you have left, straight away and for good. There's no undo, and unused
+    credits don't come back. If you can't get into your account to delete it, email us.
+  </p>
+
+  <h2>Forgot your password</h2>
+  <p>
+    On the sign-in screen, tap <strong>“Forgot your password?”</strong> and we'll email a link. It
+    works once and expires after an hour. If it doesn't turn up, check the spam bin before writing
+    to us.
+  </p>
+
+  <h2>Is Skipper safe to use while driving?</h2>
+  <p>
+    It's built to be listened to, not looked at — start it, mount the phone, and drive. Nothing in
+    Skipper needs your eyes once a drive is running. Don't handle the phone while moving; no story is
+    worth it.
+  </p>
+
+  <h2>Still stuck</h2>
+  <p>
+    Email <a href="mailto:hello@skipper.fm">hello@skipper.fm</a>. Tell us what happened, roughly
+    where you were, and what iPhone you're on — that's usually enough to work it out.
+  </p>
+  <p>
+    See also our <a href="/privacy">Privacy Policy</a> and <a href="/terms">Terms</a>.
+  </p>
+</Legal>
