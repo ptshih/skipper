@@ -7,7 +7,6 @@
     "icon": "./assets/icon.png",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "bundleIdentifier": "fm.skipper.app",
       "icon": {
@@ -65,6 +64,9 @@
     },
     "plugins": [
       "expo-router",
+      "expo-asset",
+      "expo-font",
+      "expo-status-bar",
       ["expo-secure-store", { "faceIDPermission": false }],
       ["expo-audio", { "microphonePermission": false, "recordAudioAndroid": false }],
       [

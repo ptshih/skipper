@@ -191,8 +191,8 @@ raw hex/rgba/`fontFamily`; colors live only in `src/theme`.
 unchanged — the content artifact is a region's shared `narrations` corpus, REUSED pre-ordered along an A→B route.)
 
 0. **Content + phone-player spike.** Skipper prompt; a Tahoe roam corpus; stand up the **phone** audio player
-   — the MVP target, whose build (Expo SDK 56 / RN 0.85 / new arch) sets the SDK pin. CarPlay is deferred past
-   the MVP (the phone plays via mount / Bluetooth).
+   — the MVP target, whose build sets the SDK pin (Expo/RN versions live in `apps/mobile/package.json`; new
+   arch). CarPlay is deferred past the MVP (the phone plays via mount / Bluetooth).
 1. **Walking skeleton.** ROAM front door + ONE user-created **drive** (A→B → route → reuse roam narrations),
    one fixed corny delivery: discover → enrich → generate → TTS → R2 → Neon, the drive simulator, and the player
    (offline download → simulated drive → speed-adaptive triggering + debounce → audio + lock-screen Now
