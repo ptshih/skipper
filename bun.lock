@@ -15,7 +15,7 @@
       "name": "@skipper/admin",
       "version": "0.0.0",
       "dependencies": {
-        "@anthropic-ai/sdk": "^0.104.1",
+        "@anthropic-ai/sdk": "^0.112.1",
         "@neondatabase/serverless": "^1.1.0",
         "@skipper/db": "workspace:*",
         "@skipper/engine": "workspace:*",
@@ -57,7 +57,7 @@
       "name": "@skipper/api",
       "version": "0.0.0",
       "dependencies": {
-        "@anthropic-ai/sdk": "^0.104.1",
+        "@anthropic-ai/sdk": "^0.112.1",
         "@better-auth/expo": "^1.6.23",
         "@neondatabase/serverless": "^1.1.0",
         "@skipper/db": "workspace:*",
@@ -181,7 +181,7 @@
       "name": "@skipper/studio",
       "version": "0.0.0",
       "dependencies": {
-        "@anthropic-ai/sdk": "^0.104.1",
+        "@anthropic-ai/sdk": "^0.112.1",
         "@skipper/db": "workspace:*",
         "@skipper/engine": "workspace:*",
         "@skipper/shared": "workspace:*",
@@ -201,7 +201,7 @@
   "packages": {
     "@adobe/css-tools": ["@adobe/css-tools@4.5.0", "", {}, "sha512-6OzddxPio9UiWTCemp4N8cYLV2ZN1ncRnV1cVGtve7dhPOtRkleRyx32GQCYSwDYgaHU3USMm84tNsvKzRCa1Q=="],
 
-    "@anthropic-ai/sdk": ["@anthropic-ai/sdk@0.104.2", "", { "dependencies": { "json-schema-to-ts": "^3.1.1", "standardwebhooks": "^1.0.0" }, "peerDependencies": { "zod": "^3.25.0 || ^4.0.0" }, "optionalPeers": ["zod"], "bin": { "anthropic-ai-sdk": "bin/cli" } }, "sha512-s1wEVDAtEwkS7Ajgep6PZKJLFqybRkmD3Byz+iVVsSpbDY0gjROXE9aOft6V3PMqynn3NTcycV5whga9tCzmKA=="],
+    "@anthropic-ai/sdk": ["@anthropic-ai/sdk@0.112.1", "", { "dependencies": { "json-schema-to-ts": "^3.1.1", "standardwebhooks": "^1.0.0" }, "peerDependencies": { "zod": "^3.25.0 || ^4.0.0" }, "optionalPeers": ["zod"], "bin": { "anthropic-ai-sdk": "bin/cli" } }, "sha512-vPRhHWxG9gIDyI9anVET2tBkmMBOXyTpIFvQgUVveiAV0ihmQgBYzQHb/s9+pZ/FxprSWcQnj15YnRfPxOIEmg=="],
 
     "@astrojs/compiler": ["@astrojs/compiler@4.0.0", "", {}, "sha512-eouss7G8ygdZqHuke033VMcVw5HTZUu+PXd/h06DGDUg/jt5btPYPqh66ENWw/mU78rBrf/oeC4oqoBwMtDMNA=="],
 

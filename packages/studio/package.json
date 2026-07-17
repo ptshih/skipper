@@ -14,7 +14,7 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.104.1",
+    "@anthropic-ai/sdk": "^0.112.1",
     "@skipper/db": "workspace:*",
     "@skipper/engine": "workspace:*",
     "@skipper/shared": "workspace:*",

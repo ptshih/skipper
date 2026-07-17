@@ -12,7 +12,7 @@
     "test": "bun test --pass-with-no-tests"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.104.1",
+    "@anthropic-ai/sdk": "^0.112.1",
     "@neondatabase/serverless": "^1.1.0",
     "@skipper/db": "workspace:*",
     "@skipper/engine": "workspace:*",
