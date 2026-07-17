@@ -93,7 +93,8 @@
             "backgroundColor": "#14201B"
           }
         }
-      ]
+      ],
+      ["posthog-react-native/expo", { "uploadNativeSymbols": true }]
     ],
     "experiments": {
       "typedRoutes": true

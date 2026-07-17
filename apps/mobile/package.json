@@ -21,6 +21,7 @@
     "@expo-google-fonts/overpass-mono": "^0.4.2",
     "@expo-google-fonts/zilla-slab": "^0.4.1",
     "@expo/vector-icons": "^15.1.1",
+    "@posthog/react-native-plugin": "^2.2.3",
     "@skipper/engine": "workspace:*",
     "@skipper/shared": "workspace:*",
     "better-auth": "^1.6.23",

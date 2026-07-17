@@ -3,13 +3,16 @@
 // + @skipper/engine from the symlinked layout. VERIFIED (2026-06-08): `bunx
 // expo export` bundles cleanly through bun's isolated node_modules — a device
 // `expo run:ios` build is the final word; if it ever fights, see apps/mobile/README.md.
-const { getDefaultConfig } = require('expo/metro-config')
+const { getPostHogExpoConfig } = require('posthog-react-native/metro')
 const path = require('path')
 
 const projectRoot = __dirname
 const workspaceRoot = path.resolve(projectRoot, '../..')
 
-const config = getDefaultConfig(projectRoot)
+// PostHog's Metro wrapper is a drop-in for expo's getDefaultConfig (it calls it internally) that adds
+// a debug-id serializer, so release JS stack traces symbolicate against the source maps the build
+// uploads. The workspace resolver tweaks below still apply on top.
+const config = getPostHogExpoConfig(projectRoot)
 
 // Watch ONLY what the app's module graph touches — NOT the whole monorepo.
 // The app imports exactly two workspace packages (@skipper/shared,

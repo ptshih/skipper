@@ -16,22 +16,27 @@ singleton `captureError`. Env: `EXPO_PUBLIC_POSTHOG_KEY`/`_HOST` (US host), in g
 `bun run check` green + `expo export` bundles clean. This closes the analytics gap and a large share
 of RN crashes — but NOT the app-killed / native-fault case.
 
-**Stage 2 — native crash capture (the "died in the car" case).** Needs a native rebuild + a NEW
-secret, so it's founder-gated:
-- [ ] Founder: generate a PostHog **personal API key** (a real secret, distinct from the public
-      project key) for build-time symbol upload; store via dotenvx / EAS secret (`POSTHOG_CLI_TOKEN`),
-      never committed.
-- [ ] `npx expo install @posthog/react-native-plugin`; set `errorTracking.autocapture.nativeCrashes:
-      true` in `analytics.tsx` (the option is already there in the SDK, just off); enable "exception
-      autocapture" in PostHog project settings.
-- [ ] Add the **symbolication config plugin** `['posthog-react-native/expo', { uploadNativeSymbols:
-      true }]` to `app.config.ts` plugins, and wrap `metro.config.js` with `getPostHogExpoConfig`
-      (needed or release stack traces stay minified). Set iOS **User Script Sandboxing = No** (the
-      dSYM/source-map upload build phase fails silently otherwise).
+**Stage 2 — native crash capture (the "died in the car" case).** CODE + EAS config SHIPPED
+(2026-07-17); only the founder-owned native rebuild + verify remain.
+
+Done: `@posthog/react-native-plugin@2.2.3` installed; `errorTracking.autocapture.nativeCrashes: true`
+in `analytics.tsx`; the `posthog-react-native/expo` config plugin (`uploadNativeSymbols: true`) in
+`app.json` (it AUTO-sets iOS `ENABLE_USER_SCRIPT_SANDBOXING=NO` — no manual Xcode step); `metro.config.js`
+wrapped with `getPostHogExpoConfig`. Build-time symbol upload authenticates via EAS env vars
+`POSTHOG_CLI_API_KEY` (secret personal key) + `POSTHOG_CLI_PROJECT_ID` (`517151`), set on the
+`@manoa-inc/skipper` EAS project across production/preview/development — NOT in any committed file (the
+public `phc_` runtime key stays in eas.json; the `phx_` upload key is EAS-secret-only). Verified: mobile
+`bun run check` green + `expo export` bundles clean + `expo config` introspect loads the plugin.
+
+Remaining (founder-owned):
+- [x] ~~Confirm the Skipper PostHog project has exception autocapture on~~ — verified via API
+      2026-07-17: `autocapture_exceptions_opt_in = true` on project 517151 (PostHog's default).
+- [ ] **Native rebuild** — `expo prebuild --clean` + a fresh EAS/TestFlight build (a JS-only OTA won't
+      link the native module or run the upload build phase).
+- [ ] **Verify on a RELEASE build** (not the `expo run:ios` dev client, which skips the upload phase):
+      force a native crash, confirm a SYMBOLICATED report lands in the Skipper project.
 - [ ] EAS Update OTA caveat: native symbols are fixed at build time, so after each `eas update` run
-      `posthog-cli hermes upload --directory dist`. Wire into a release script if OTA channels are used.
-- [ ] Requires a native rebuild (dev client + a fresh TestFlight build); verify symbolication against
-      a RELEASE build, not the `expo run:ios` dev client.
+      `posthog-cli hermes upload --directory dist`. Wire into a release script only if OTA channels are used.
 
 **Stage 3 — session replay (opt-in, deferred).** A GPS/audio app: native map/camera/audio views are
 ALWAYS masked on iOS by default, so it's privacy-safe, but it adds a native module + a recording

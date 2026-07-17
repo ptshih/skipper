@@ -1,12 +1,16 @@
-// PostHog wiring — product analytics + JS-level crash autocapture. This is Stage 1: PURE-JS, no
-// native module, no native rebuild. It closes two audit gaps at once (zero analytics + zero crash
-// telemetry) for the large share of RN crashes that surface as JS throws / unhandled rejections.
+// PostHog wiring — product analytics + crash telemetry (JS-level AND native). Closes two audit gaps
+// at once: zero analytics + zero crash telemetry.
 //
-// What this DOESN'T cover, on purpose:
-//   • NATIVE crashes (the app killed by a native fault) — a separate opt-in path needing
-//     @posthog/react-native-plugin + the `posthog-react-native/expo` symbolication plugin + a
-//     personal API key for symbol upload + a native rebuild. Tracked in TODO.md.
-//   • Session replay — another native module + a recording-privacy call; deferred.
+// Coverage:
+//   • JS crashes — uncaught exceptions + unhandled rejections, captured with no native module.
+//   • NATIVE crashes (the app killed by a native fault) — via @posthog/react-native-plugin +
+//     `errorTracking.autocapture.nativeCrashes` below + the `posthog-react-native/expo` config plugin
+//     (app.json) that uploads iOS dSYMs / source maps at build time so reports are symbolicated. That
+//     build-time upload authenticates via EAS env vars POSTHOG_CLI_API_KEY (a SECRET personal key) +
+//     POSTHOG_CLI_PROJECT_ID (517151) — set on the EAS project, never committed. Requires a NATIVE
+//     REBUILD to link, and symbolication only validates against a RELEASE build (the dev client
+//     doesn't run the upload phase). See TODO.md "PostHog telemetry".
+//   • Session replay — a native module + a recording-privacy call; still DEFERRED (Stage 3, TODO.md).
 //
 // The client is a MODULE SINGLETON (not only the usePostHog hook) deliberately: expo-router renders
 // its ErrorBoundary OUTSIDE the provider tree (see app/_layout.tsx's comment), so a render crash can
@@ -30,13 +34,18 @@ const HOST = process.env.EXPO_PUBLIC_POSTHOG_HOST ?? 'https://us.i.posthog.com'
 export const posthog: PostHog | undefined = KEY
   ? new PostHog(KEY, {
       host: HOST,
-      // JS-level crash capture. `uncaughtExceptions` hooks ErrorUtils.setGlobalHandler and
-      // `unhandledRejections` the rejection tracker — both fire with no native module. `console:false`
-      // keeps our own console.warn/error degradations (font fallback, audio hiccups) from each
-      // becoming a phantom "exception"; we want crashes, not log lines. `nativeCrashes` stays OFF
-      // until the native plugin lands — that's the app-killed case (Stage 2).
+      // Crash capture. `uncaughtExceptions` hooks ErrorUtils.setGlobalHandler and `unhandledRejections`
+      // the rejection tracker (both JS-level, no native module). `nativeCrashes` forwards app-killed
+      // native faults through @posthog/react-native-plugin — a no-op until a native rebuild links it.
+      // `console:false` keeps our own console.warn/error degradations (font fallback, audio hiccups)
+      // from each becoming a phantom "exception"; we want crashes, not log lines.
       errorTracking: {
-        autocapture: { uncaughtExceptions: true, unhandledRejections: true, console: false },
+        autocapture: {
+          uncaughtExceptions: true,
+          unhandledRejections: true,
+          console: false,
+          nativeCrashes: true,
+        },
       },
     })
   : undefined
