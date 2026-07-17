@@ -48,6 +48,6 @@
     "@types/react": "~19.2.14",
     "babel-preset-expo": "~57.0.0",
     "expo-dev-client": "~57.0.7",
-    "typescript": "^7.0.2"
+    "typescript": "^6.0.3"
   }
 }

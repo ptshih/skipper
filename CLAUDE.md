@@ -111,9 +111,10 @@ product.** When a choice trades polish-for-the-builder against scale-for-a-marke
 
 - **bun everywhere** (package manager + runtime). Internal packages export `.ts` source (no dist build); bun
   runs it, `tsc --noEmit` type-checks. No `tsx`, no `@hono/node-server`.
-- Verified pins: TS 7.0.2 (the native/tsgo compiler — no programmatic API until 7.1, so `tsc --noEmit` is
-  the ONLY supported consumer; don't add eslint/ts-morph/ts-jest expecting the TS API), zod 4.4.3 (`z.enum`,
-  top-level `z.uuid()`/`z.url()`), drizzle-orm 0.45.2 +
+- Verified pins: TS 6.0.3 (do NOT bump to 7 — the native/tsgo compiler drops the programmatic TS API, and
+  expo's dynamic-config loader `@expo/require-utils` `require('typescript')`s it to transpile `app.config.ts`;
+  under 7 `expo prebuild`/`export` die with `ModuleKind` undefined. `tsc --noEmit` alone passes and hides it),
+  zod 4.4.3 (`z.enum`, top-level `z.uuid()`/`z.url()`), drizzle-orm 0.45.2 +
   drizzle-kit 0.31.10 (neon-http, stateless — no interactive transactions; use `db.batch`), hono 4.12.30,
   @anthropic-ai/sdk 0.112.1.
 - **TTS = Google Cloud Text-to-Speech via REST** (no SDK — raw `fetch` to `…/v1/text:synthesize`), model
