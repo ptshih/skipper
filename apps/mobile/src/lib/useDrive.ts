@@ -144,10 +144,6 @@ export interface UseDrive {
   /** First not-yet-fired stop, for the "ROLLING · next stop: X" strip. */
   nextSeq: number | null
 
-  /** What the current beat is: a stop clip, or the silent drive between stops. Drives the NOW-card
-   *  variant. (A clip when one's loaded, else the drive between triggers — live/sim have no rest beat.) */
-  currentKind: 'clip' | 'drive' | null
-
   nowPlaying: boolean
   buffering: boolean
   stallNote: string | null
@@ -178,8 +174,6 @@ export interface UseDrive {
   setFast: (fast: boolean) => void
 
   // Location permission (live mode only; null/true in sim mode).
-  /** True while the pre-permission explainer is up (live, first time only) — render the prime. */
-  locationPriming: boolean
   /** The explainer's single CTA: fire the OS location prompt. */
   confirmLocationPrime: () => void
   /** When a live drive is blocked on a denied permission: can the OS still prompt? (false → Settings). */
@@ -964,8 +958,6 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
 
   // The "next stop" strip: the first not-yet-fired stop.
   const nextSeq = data?.stops.find((s) => !firedSeqs.has(s.seq))?.seq ?? null
-  // What beat we're on, for the NOW-card variant: a clip is loaded, or we're driving between triggers.
-  const currentKind: 'clip' | 'drive' | null = activeSeq !== null ? 'clip' : 'drive'
 
   // Offer replay only in the between-stops quiet, once a clip has completed — the scrubber
   // (seek-to-0) already covers "restart the ACTIVE clip". (replay-last-stop §3)
@@ -985,7 +977,6 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
     activeSeq,
     firedSeqs,
     nextSeq,
-    currentKind,
     nowPlaying,
     buffering,
     stallNote,
@@ -1002,7 +993,6 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
     canReplay,
     fast,
     setFast,
-    locationPriming,
     confirmLocationPrime,
     locationCanAskAgain: locationBlock?.kind === 'denied' ? locationBlock.canAskAgain : true,
     locationReduced: locationBlock?.kind === 'reduced',
