@@ -35,7 +35,7 @@
     "db:studio": "dotenvx run -f .env.development -- bun --filter @skipper/db db:studio"
   },
   "devDependencies": {
-    "@dotenvx/dotenvx": "^1.75.1",
+    "@dotenvx/dotenvx": "^2.14.0",
     "concurrently": "^10.0.3",
     "prettier": "^3.9.5",
     "typescript": "^6.0.3"
