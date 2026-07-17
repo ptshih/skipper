@@ -25,6 +25,7 @@
     "lint:types": "bun scripts/lint-type-collisions.ts",
     "lint:enums": "bun scripts/lint-enums.ts",
     "check": "bun run lint:docs && bun run lint:types && bun run lint:enums && bun run typecheck && bun run test",
+    "reinstall": "rm -rf node_modules && bun install",
     "prepare": "dotenvx ext precommit --install || true",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yaml,yml}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,yaml,yml}\"",
