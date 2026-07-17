@@ -1,14 +1,14 @@
-// A pressable enamel filter chip for THE DRIVES filter bar. Pine-OUTLINED when idle,
-// pine-FILLED when a filter is active — using accent + onPrimary, the SAME contrast-safe
-// pairing Badge's pine tone uses (day: pine fill + cream; dusk: light-pine fill + ink), so
-// it reads "selected" in both themes. Pine, NEVER amber: the home's lone amber glow stays
-// the hero's parked rig (DESIGN §8). The trailing chevron reads "opens a picker". This is
-// the extension point — future filters (duration, interests, joke level) are just more
-// chips in the same bar.
+// A pressable enamel TOGGLE chip: pine-OUTLINED when idle, pine-FILLED when active — using
+// accent + onPrimary, the SAME contrast-safe pairing Badge's pine tone uses (day: pine fill
+// + cream; dusk: light-pine fill + ink), so it reads "selected" in both themes. Pine, NEVER
+// amber: the home's lone amber glow stays the hero's parked rig (DESIGN §8). Used as a
+// segmented selector on Create (region, one-way/round-trip) — a tap SELECTS directly (no
+// picker opens), so it carries NO trailing chevron: that caret read as a dropdown affordance
+// it doesn't have, and looked cramped in the pill. The real "opens a picker" fields are the
+// START/END PickerFields (a right-aligned chevron), not this chip.
 import { Pressable, StyleSheet } from 'react-native'
 import { border, radius, space } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'
-import { Icon } from './Icon'
 import { Text } from './Text'
 
 export interface FilterChipProps {
@@ -38,16 +38,12 @@ export function FilterChip({ label, active, onPress, accessibilityLabel }: Filte
       <Text variant="label" color={content} numberOfLines={1}>
         {label}
       </Text>
-      <Icon name="expand" size={14} color={content} />
     </Pressable>
   )
 }
 
 const styles = StyleSheet.create({
   chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.xs,
     paddingHorizontal: space.md,
     paddingVertical: space.sm,
     borderRadius: radius.pill,
