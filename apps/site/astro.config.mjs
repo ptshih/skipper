@@ -10,5 +10,8 @@ import sitemap from '@astrojs/sitemap'
 // next entitlement'd build if deep links return.
 export default defineConfig({
   site: 'https://skipper.fm',
+  // v7 flipped the compressHTML default true→'jsx' (whitespace between adjacent inline
+  // elements now collapses under JSX rules); pin `true` to preserve v6 rendering exactly.
+  compressHTML: true,
   integrations: [sitemap()],
 })
