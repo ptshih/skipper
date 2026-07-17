@@ -3,6 +3,7 @@ import { Stack, useRouter, type ErrorBoundaryProps } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import * as SplashScreen from 'expo-splash-screen'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
+import { AnalyticsProvider, captureError, track } from '@/lib/analytics'
 import { SimModeProvider, readStoredSimMode } from '@/lib/sim-mode'
 import { ThemeProvider, readStoredThemeMode, useAppFonts, useTheme, type ThemeMode } from '@/theme'
 import { fonts } from '@/theme/tokens'
@@ -21,6 +22,11 @@ export const unstable_settings = { initialRouteName: 'index' }
 // without them. We re-establish both here (default 'system' mood) so the boundary renders
 // in our themed chrome with semantic tokens instead of cascading into a second crash.
 export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  // Report the render crash to telemetry. This boundary renders OUTSIDE the provider tree (above),
+  // so it must use the module-singleton captureError — a hook would have no PostHog context here.
+  useEffect(() => {
+    captureError(error, { boundary: 'root' })
+  }, [error])
   return (
     <SafeAreaProvider>
       <ThemeProvider initialMode="system">
@@ -57,7 +63,10 @@ export default function RootLayout() {
   // Font load FAILED — we still unblock (degrade to the system font beats holding the splash
   // forever), but make the degrade OBSERVABLE rather than silent. (telemetry hook later.)
   useEffect(() => {
-    if (fontError) console.warn('[fonts] Trailhead type failed to load — degrading to system font:', fontError)
+    if (fontError) {
+      console.warn('[fonts] Trailhead type failed to load — degrading to system font:', fontError)
+      track('font_load_failed', { message: String(fontError) })
+    }
   }, [fontError])
 
   useEffect(() => {
@@ -67,16 +76,18 @@ export default function RootLayout() {
   if (!ready) return null
 
   return (
-    <SafeAreaProvider>
-      <ThemeProvider initialMode={initialMode ?? 'system'}>
-        <SimModeProvider initialSimMode={initialSimMode ?? false}>
-          <ThemedStack />
-        </SimModeProvider>
-        {/* Launch-time update gate — floats above the whole navigator. Renders nothing
-            unless the server /version floor says this build must nudge or force-update. */}
-        <VersionGate />
-      </ThemeProvider>
-    </SafeAreaProvider>
+    <AnalyticsProvider>
+      <SafeAreaProvider>
+        <ThemeProvider initialMode={initialMode ?? 'system'}>
+          <SimModeProvider initialSimMode={initialSimMode ?? false}>
+            <ThemedStack />
+          </SimModeProvider>
+          {/* Launch-time update gate — floats above the whole navigator. Renders nothing
+              unless the server /version floor says this build must nudge or force-update. */}
+          <VersionGate />
+        </ThemeProvider>
+      </SafeAreaProvider>
+    </AnalyticsProvider>
   )
 }
 

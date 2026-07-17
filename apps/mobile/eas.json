@@ -9,6 +9,8 @@
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyALwfidcKl0T3EOgNKwuryPg3PDIpRk5BQ",
+        "EXPO_PUBLIC_POSTHOG_KEY": "phc_xkfPYzDHTR5enkmmjfF84C9mPnaCfyWyzSAyaGibL9Ry",
+        "EXPO_PUBLIC_POSTHOG_HOST": "https://us.i.posthog.com",
         "SKIPPER_LAN_HTTP": "1"
       },
       "ios": {
@@ -25,14 +27,18 @@
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.skipper.fm",
-        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyALwfidcKl0T3EOgNKwuryPg3PDIpRk5BQ"
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyALwfidcKl0T3EOgNKwuryPg3PDIpRk5BQ",
+        "EXPO_PUBLIC_POSTHOG_KEY": "phc_xkfPYzDHTR5enkmmjfF84C9mPnaCfyWyzSAyaGibL9Ry",
+        "EXPO_PUBLIC_POSTHOG_HOST": "https://us.i.posthog.com"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.skipper.fm",
-        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyALwfidcKl0T3EOgNKwuryPg3PDIpRk5BQ"
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyALwfidcKl0T3EOgNKwuryPg3PDIpRk5BQ",
+        "EXPO_PUBLIC_POSTHOG_KEY": "phc_xkfPYzDHTR5enkmmjfF84C9mPnaCfyWyzSAyaGibL9Ry",
+        "EXPO_PUBLIC_POSTHOG_HOST": "https://us.i.posthog.com"
       }
     }
   },

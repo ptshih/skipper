@@ -5,6 +5,74 @@ Carry-forward **engineering** items (the near-term layer of the truth system —
 Each item has enough context to action without re-deriving the reasoning. **Delete items
 when done** — git history is the archive.
 
+## PostHog telemetry — Stage 2 (native crashes) + Stage 3 (session replay)
+
+Stage 1 is SHIPPED (2026-07-17): `apps/mobile/src/lib/analytics.tsx` — the pure-JS PostHog base SDK
+(`posthog-react-native@4.57.0`) wired at the root layout via `AnalyticsProvider`, giving product
+analytics + **JS-level** crash autocapture (uncaught exceptions + unhandled rejections) + manual
+expo-router screen tracking + the root `ErrorBoundary` reporting render crashes through the module
+singleton `captureError`. Env: `EXPO_PUBLIC_POSTHOG_KEY`/`_HOST` (US host), in gitignored
+`apps/mobile/.env` + all three `eas.json` profiles + the `.env.example` catalog. Verified: mobile
+`bun run check` green + `expo export` bundles clean. This closes the analytics gap and a large share
+of RN crashes — but NOT the app-killed / native-fault case.
+
+**Stage 2 — native crash capture (the "died in the car" case).** Needs a native rebuild + a NEW
+secret, so it's founder-gated:
+- [ ] Founder: generate a PostHog **personal API key** (a real secret, distinct from the public
+      project key) for build-time symbol upload; store via dotenvx / EAS secret (`POSTHOG_CLI_TOKEN`),
+      never committed.
+- [ ] `npx expo install @posthog/react-native-plugin`; set `errorTracking.autocapture.nativeCrashes:
+      true` in `analytics.tsx` (the option is already there in the SDK, just off); enable "exception
+      autocapture" in PostHog project settings.
+- [ ] Add the **symbolication config plugin** `['posthog-react-native/expo', { uploadNativeSymbols:
+      true }]` to `app.config.ts` plugins, and wrap `metro.config.js` with `getPostHogExpoConfig`
+      (needed or release stack traces stay minified). Set iOS **User Script Sandboxing = No** (the
+      dSYM/source-map upload build phase fails silently otherwise).
+- [ ] EAS Update OTA caveat: native symbols are fixed at build time, so after each `eas update` run
+      `posthog-cli hermes upload --directory dist`. Wire into a release script if OTA channels are used.
+- [ ] Requires a native rebuild (dev client + a fresh TestFlight build); verify symbolication against
+      a RELEASE build, not the `expo run:ios` dev client.
+
+**Stage 3 — session replay (opt-in, deferred).** A GPS/audio app: native map/camera/audio views are
+ALWAYS masked on iOS by default, so it's privacy-safe, but it adds a native module + a recording
+decision.
+- [ ] `npx expo install posthog-react-native-session-replay` (note: consolidating into
+      `@posthog/react-native-plugin` — follow the current install doc), set `enableSessionReplay: true`
+      + keep `sessionReplayConfig` masking at defaults (all ON). Enable replay in project settings.
+      ⚠ Do NOT enable on Android without re-checking the known new-arch replay crash ("Cannot get a
+      dirty matrix!").
+
+Refs: `apps/mobile/src/lib/analytics.tsx`, `apps/mobile/app/_layout.tsx`, `apps/mobile/app.config.ts`
+(where the config plugin goes), `apps/mobile/metro.config.js` (the Metro wrap), `apps/mobile/eas.json`.
+
+## Create-a-Drive: empty-corpus dead-end (anchor picker has no empty state)
+
+Surfaced in the 2026-07-16 feature audit. The whole Create-a-Drive flow silently dead-ends in any
+region whose endpoint anchors haven't been curated yet — and Tahoe's curated-Places feed is EMPTY
+until the founder-gated PAID curation run happens (the admin **/places** Curate flow; see
+`docs/decisions/` + the `places` role booleans), so at 1.0.0 launch this is the *default* state, not
+an edge case. Two concrete holes in `apps/mobile/app/create.tsx`:
+
+- **`anchorsReady = !!anchors` (create.tsx:399) treats an empty array as ready** — `[]` is truthy, so
+  the FROM/TO picker fields (`disabled={!anchorsReady}`, ~L449/460/471) stay ENABLED with zero anchors.
+- **The picker overlay shows the generic `"No matching places."` (create.tsx:370) for BOTH** a failed
+  search AND a genuinely empty corpus — so a rider who taps into an un-curated region reads it as "my
+  search is wrong," never "this region has no stops yet."
+
+- [ ] Give the picker a distinct **empty-CORPUS** state, separate from empty-SEARCH: when
+      `anchors` is a non-null empty array (loaded, but zero places), the FROM/TO fields should read as
+      unavailable (disabled + a one-line "Curated stops are coming to this region soon" hint), and/or
+      the picker's `ListEmptyComponent` should distinguish `query === '' && anchors.length === 0`
+      ("No curated stops here yet — check back soon") from a real no-match. Keep `anchorsError` (the
+      load-failure branch, ~L480) as-is; this is the *loaded-but-empty* case it doesn't cover.
+- [ ] Consider gating the whole "Create a Drive" entry point (the home CTA) when the only region's
+      corpus is empty, so the rider never reaches a form they can't complete — or leave the form
+      reachable with the empty-state copy above. Founder call on which; the copy path is the safe default.
+
+Refs: `apps/mobile/app/create.tsx` (`anchorsReady`, the picker overlay + `ListEmptyComponent`, the
+FROM/TO `PickerField`s), the `RegionAnchor[]` loader (~L116), the admin **/places** Curate flow (the
+paid curation run that fills the feed).
+
 ## Location: When-In-Use → Always/background (deferred half of permission priming)
 
 The pre-permission **explainer** shipped 2026-06-13 in front of the existing *When-In-Use*
