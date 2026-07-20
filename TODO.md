@@ -50,33 +50,20 @@ decision.
 Refs: `apps/mobile/src/lib/analytics.tsx`, `apps/mobile/app/_layout.tsx`, `apps/mobile/app.config.ts`
 (where the config plugin goes), `apps/mobile/metro.config.js` (the Metro wrap), `apps/mobile/eas.json`.
 
-## Create-a-Drive: empty-corpus dead-end (anchor picker has no empty state)
+## Create-a-Drive: empty-corpus dead-end — CORE FIX SHIPPED (2026-07-19)
 
-Surfaced in the 2026-07-16 feature audit. The whole Create-a-Drive flow silently dead-ends in any
-region whose endpoint anchors haven't been curated yet — and Tahoe's curated-Places feed is EMPTY
-until the founder-gated PAID curation run happens (the admin **/places** Curate flow; see
-`docs/decisions/` + the `places` role booleans), so at 1.0.0 launch this is the *default* state, not
-an edge case. Two concrete holes in `apps/mobile/app/create.tsx`:
+The loaded-but-empty-corpus state is now handled in `apps/mobile/app/create.tsx`: `anchorsReady` guards
+on LENGTH (was `!!anchors`, so `[]` read as ready and left the FROM/TO pickers ENABLED), so an
+un-curated region keeps the pickers disabled; a new `emptyCorpus` derived state shows a warm one-liner
+(`voice_create.emptyCorpus`, "No curated stops in this region yet — check back soon") in the form, and
+the picker's `ListEmptyComponent` now distinguishes empty-CORPUS from a search no-match. `anchorsError`
+(load-failure) unchanged. This matters because Tahoe's curated-Places feed is EMPTY until the
+founder-gated PAID curation run (admin **/places** Curate), so at 1.0.0 this was the DEFAULT state.
 
-- **`anchorsReady = !!anchors` (create.tsx:399) treats an empty array as ready** — `[]` is truthy, so
-  the FROM/TO picker fields (`disabled={!anchorsReady}`, ~L449/460/471) stay ENABLED with zero anchors.
-- **The picker overlay shows the generic `"No matching places."` (create.tsx:370) for BOTH** a failed
-  search AND a genuinely empty corpus — so a rider who taps into an un-curated region reads it as "my
-  search is wrong," never "this region has no stops yet."
-
-- [ ] Give the picker a distinct **empty-CORPUS** state, separate from empty-SEARCH: when
-      `anchors` is a non-null empty array (loaded, but zero places), the FROM/TO fields should read as
-      unavailable (disabled + a one-line "Curated stops are coming to this region soon" hint), and/or
-      the picker's `ListEmptyComponent` should distinguish `query === '' && anchors.length === 0`
-      ("No curated stops here yet — check back soon") from a real no-match. Keep `anchorsError` (the
-      load-failure branch, ~L480) as-is; this is the *loaded-but-empty* case it doesn't cover.
-- [ ] Consider gating the whole "Create a Drive" entry point (the home CTA) when the only region's
-      corpus is empty, so the rider never reaches a form they can't complete — or leave the form
-      reachable with the empty-state copy above. Founder call on which; the copy path is the safe default.
-
-Refs: `apps/mobile/app/create.tsx` (`anchorsReady`, the picker overlay + `ListEmptyComponent`, the
-FROM/TO `PickerField`s), the `RegionAnchor[]` loader (~L116), the admin **/places** Curate flow (the
-paid curation run that fills the feed).
+Remaining — OPTIONAL, founder call: gate the whole "Create a Drive" home CTA when the only region's
+corpus is empty (rider never reaches a form they can't complete) vs. the shipped copy-path (form
+reachable, empty-state copy shown). The copy path is the safe default and is what shipped; CTA-gating
+is a nicety, not a blocker — and it'd live on the home screen, not `create.tsx`.
 
 ## Location: When-In-Use → Always/background (deferred half of permission priming)
 

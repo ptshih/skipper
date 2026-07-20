@@ -367,7 +367,10 @@ export default function CreateDriveScreen() {
           ItemSeparatorComponent={() => <Divider />}
           ListEmptyComponent={
             <Text variant="dim" color="inkFaint" style={styles.pickerEmpty}>
-              No matching places.
+              {/* An empty CORPUS (region has zero curated places) reads differently than a search
+                  no-match — don't let "No matching places" imply the rider's query is wrong. (Defensive:
+                  a disabled field normally blocks opening the picker on an empty corpus.) */}
+              {anchors && anchors.length === 0 ? voice_create.emptyCorpus : voice_create.noMatch}
             </Text>
           }
           renderItem={({ item }) => (
@@ -396,7 +399,12 @@ export default function CreateDriveScreen() {
   }
 
   // FORM (default): region (auto/selectable) + a one-way/round-trip toggle + the pickers.
-  const anchorsReady = !!anchors
+  // `[]` is TRUTHY, so guard on LENGTH: a loaded-but-empty corpus — an un-curated region, the DEFAULT
+  // at launch until the paid Places curation runs — is NOT ready. Keep the pickers disabled and show the
+  // empty-corpus hint below, distinct from the load-FAILURE (`anchorsError`) and the still-loading (null)
+  // cases. Without this, `[]` reads as ready → pickers enabled → the rider dead-ends on "No matching places".
+  const anchorsReady = !!anchors && anchors.length > 0
+  const emptyCorpus = anchors !== null && anchors.length === 0
   const sameEndpoints = !loop && samePlace(start, end)
   const ready = loop ? !!(start && mid) : !!(start && end) && !sameEndpoints
   return (
@@ -475,6 +483,11 @@ export default function CreateDriveScreen() {
       {sameEndpoints ? (
         <Text variant="dim" color="inkFaint">
           Same start and end? Switch to Round trip and pick a midpoint.
+        </Text>
+      ) : null}
+      {emptyCorpus ? (
+        <Text variant="dim" color="inkFaint">
+          {voice_create.emptyCorpus}
         </Text>
       ) : null}
       {anchorsError ? (
@@ -559,6 +572,10 @@ const voice_create = {
   regionsFail: "Couldn't load the regions. Check your connection and try again.",
   anchorsFail: "Couldn't load places for this region. Check your connection and try again.",
   gateNote: 'Create a free account to plan your own drives.',
+  // A region whose curated Places feed hasn't been filled yet (the DEFAULT until the paid curation run).
+  // NOT an error and NOT a search miss — warm "coming soon", so the rider knows it's us, not them.
+  emptyCorpus: 'No curated stops in this region yet — check back soon.',
+  noMatch: 'No matching places.',
 }
 
 const styles = StyleSheet.create({
