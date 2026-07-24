@@ -56,7 +56,7 @@ export const R2_READY = (): boolean =>
 // Wikimedia REQUIRES a descriptive User-Agent with a contact; a generic/missing
 // UA can be blocked without notice. (Contact is the project owner.)
 export const WIKIPEDIA_USER_AGENT =
-  'Skipper/0.1 (https://github.com/ptshih/skipper; ptshih@gmail.com) bun/1.3'
+  'Skipper/0.1 (https://github.com/ptshih/skipper; hello@skipper.fm) bun/1.3'
 
 // --- Macrostrat geology enrichment ------------------------------------------
 

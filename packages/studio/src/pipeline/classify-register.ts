@@ -94,7 +94,7 @@ export function classifyFromMatches(matchedRegisters: DeliveryRegister[]): Struc
 }
 
 const WDQS = 'https://query.wikidata.org/sparql'
-const UA = 'Skipper/1.0 (https://skipper.fm; ptshih@gmail.com) delivery-register-classifier'
+const UA = 'Skipper/1.0 (https://skipper.fm; hello@skipper.fm) delivery-register-classifier'
 
 /** Fetch, per POI QID, which register ANCHORS it is a (sub)instance of — the P31/P279* walk runs in
  *  WDQS. Returns qid → matched registers (deduped). QIDs absent from the result matched nothing

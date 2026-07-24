@@ -39,7 +39,7 @@ import { resolveRegion, requireRegionBbox } from './pipeline/region'
 import { DEFAULT_REGION_SLUG } from './config'
 
 const OVERPASS = 'https://overpass-api.de/api/interpreter'
-const UA = 'Skipper/0.1 (https://github.com/ptshih/skipper; ptshih@gmail.com) road-snap'
+const UA = 'Skipper/0.1 (https://github.com/ptshih/skipper; hello@skipper.fm) road-snap'
 // Through-roads only (no `service` — driveways/parking aisles aren't "the road you drive past a POI on").
 const DRIVABLE =
   '^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link)$'
