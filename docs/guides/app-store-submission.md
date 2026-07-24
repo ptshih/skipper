@@ -25,9 +25,18 @@ single most rejection-prone sentence in the whole listing.
 | **Privacy Policy URL** | `https://skipper.fm/privacy` |
 | **Content Rights** | ✅ *Contains third-party content* — see §7 |
 | **Age Rating** | 4+ — see §6 |
+| **Availability** | **United States only** — founder call 2026-07-24, see below |
 
 **Why Travel / Entertainment, not Navigation:** Skipper gives no turn-by-turn directions and is not a
 routing app. Filing it under Navigation invites a reviewer to test it as one and find it wanting.
+
+**Why United States only.** Availability defaults to *all* territories, and shipping to the EU/UK pulls
+in GDPR whole — legal basis, data-subject rights, international-transfer disclosure — none of which the
+privacy policy carries, and none of which a size threshold exempts you from (unlike CCPA). EU consumer
+law would also override the Nevada choice of law in the terms, and GDPR Art. 8 turns the single
+"13 or older" line into a per-member-state matrix of 13–16. The corpus is one California lake, so the
+entire surface buys nothing today. **Uncheck everything but the United States** — one setting, and the
+GDPR question closes. Revisit only when a region outside the US is actually worth generating.
 
 ---
 
@@ -237,7 +246,10 @@ route without moving, and screenshot the encounter as it fires.
 
 ## 10. App Review Information — **the field that decides this**
 
-**Contact:** Peter Shih · `hello@skipper.fm` · (phone: fill in)
+**Contact:** Peter Shih · `hello@skipper.fm` · **(725) 777-5875**
+
+**Entity, for the ASC fields that ask:** Manoa, Inc., a Delaware corporation, 1810 E Sahara Ave
+STE 75994, Las Vegas, NV 89104, USA. ⚠ Not California — both legal pages said so until 2026-07-24.
 
 **Sign-in required:** Yes → provide the demo account. ⚠ Put the password in ASC only, never in git.
 
@@ -290,3 +302,6 @@ Already answered by the binary: `ITSAppUsesNonExemptEncryption: false` in `app.j
 - [ ] The demo account exists, its password is in ASC, and it has credits left to create a drive.
 - [ ] Screenshots captured in dark mode (§9).
 - [ ] The coverage sentence in the description still matches reality (it says Tahoe only).
+- [ ] **Availability is United States ONLY** (§1). It defaults to every territory — if this ships wide,
+      you have taken on GDPR without a policy that answers it. Check this last; it is one click and it
+      is the single cheapest legal decision on the list.
