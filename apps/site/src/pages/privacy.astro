@@ -18,20 +18,20 @@
 //   • the credit ledger ................ packages/db/src/schema.ts (credit_entries)
 //   • erasure on delete ................ apps/api/src/account.ts (purgeUserData)
 //   • the sub-processor list ........... apps/api/src/{email,storage}.ts, packages/routing
-//   • "no analytics SDKs" .............. every package.json
+//   • analytics + crash reporting ...... apps/mobile/src/lib/analytics.tsx (PostHog)
 import Legal from '../layouts/Legal.astro'
 ---
 
 <Legal
   heading="Privacy Policy"
   kicker="The fine print, minus the fog"
-  description="How Skipper handles your location, your account, and your drives. Short version: as little as possible, no trackers, and your roam history never leaves your phone."
+  description="How Skipper handles your location, your account, and your drives. Short version: as little as possible, no ads, and your precise location and roam history never leave your phone."
   updated="July 15, 2026"
 >
   <div class="legal-summary framed">
     <h2>The short version</h2>
     <ul>
-      <li>No analytics, no trackers, no ads, no third-party SDKs. None. We don't measure you.</li>
+      <li>No ads, and we never sell your data. We do use privacy-friendly analytics (PostHog) to see what's working and catch crashes — anonymous, and not tied to your account.</li>
       <li>Skipper uses your location only while the app is open, to play each story at the right moment.</li>
       <li>Your <strong>exact</strong> coordinates never leave your phone. To find nearby stories we send a
         deliberately blurred position — rounded to about 110 metres — with no account attached to it.</li>
@@ -143,12 +143,30 @@ import Legal from '../layouts/Legal.astro'
     Drives you download for offline playback are stored on your phone too.
   </p>
 
+  <h2>Analytics and crash reporting</h2>
+  <p>
+    We use <strong>PostHog</strong>, a third-party product-analytics and crash-reporting service, to see
+    which parts of the app people actually use and to catch crashes so we can fix them. This is
+    first-party product analytics — not advertising, and not a data broker. Through PostHog we collect:
+  </p>
+  <ul>
+    <li>which screens you open, and a small number of anonymous usage events;</li>
+    <li>crash and error reports — what failed and where — along with basic device and app-version
+      information;</li>
+    <li>an approximate, city-level location that PostHog derives from your internet (IP) address.</li>
+  </ul>
+  <p>
+    This data is <strong>not linked to your account</strong>: we don't tell PostHog who you are, so it's
+    tied to an anonymous per-device identifier, not your email. We don't record your taps or your screen,
+    there's no session replay, and we don't sell or share this data. Your <em>precise</em> location and
+    your on-device roam history (below) are never part of it.
+  </p>
+
   <h2>What we don't do</h2>
   <p>
-    Skipper contains <strong>no analytics, no tracking or advertising SDKs, no crash reporting, and no
-    third-party software development kits</strong> of any kind. We don't have a dashboard of your
-    behaviour. We don't build a profile on you. We don't sell or share personal information, and we never
-    have. There's no advertising identifier, so there's nothing to opt out of.
+    We don't run ads, and there's no advertising identifier in the app, so there's nothing to opt out of.
+    We don't sell or share your personal information, and we never have. We don't build a marketing
+    profile on you, and there's no marketing list.
   </p>
 
   <h2>Who else touches your data</h2>
@@ -165,6 +183,10 @@ import Legal from '../layouts/Legal.astro'
     <dd>Stores the narration audio files. Audio is private and served through short-lived signed links.</dd>
     <dt>Resend</dt>
     <dd>Sends the password-reset email. Your address is passed to them only for that message.</dd>
+    <dt>PostHog</dt>
+    <dd>Product analytics and crash reporting (US region). Receives the anonymous usage events, screen
+      views, crash reports, device information, and IP-derived approximate location described above —
+      never linked to your account.</dd>
     <dt>Apple</dt>
     <dd>Distributes the app and renders the map on iPhone.</dd>
   </dl>
@@ -210,7 +232,8 @@ import Legal from '../layouts/Legal.astro'
   <p>
     Your account and drives are kept until you delete them or ask us to. Sessions expire on their own.
     Server request logs — which include those blurred roam coordinates — are kept for a limited period by
-    our hosting provider for operating and debugging the service.
+    our hosting provider for operating and debugging the service. The anonymous analytics and crash data
+    held by PostHog is retained per our PostHog project's settings.
   </p>
 
   <h2>Children</h2>

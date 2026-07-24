@@ -83,7 +83,7 @@ HONEST ABOUT THE MONEY
 Riding along is free and unlimited. Creating a drive spends one of your free credits, because building one does real work. No subscription. No ads. No account needed to listen.
 
 HONEST ABOUT YOUR DATA
-No tracking. No analytics. No advertising. No third-party SDKs sitting in the passenger seat. Your location is used to time the stories and nothing else, and the record of what you've heard stays on your phone.
+No ads, and we never sell your data. Your precise location is used to time the stories and nothing else — it stays on your phone, and so does the record of what you've heard. We use privacy-friendly analytics (PostHog) to see what's working and catch crashes; it's anonymous and never tied to your account.
 
 WHERE THE STORIES COME FROM
 Skipper's facts are grounded in public sources, including Wikipedia (CC BY-SA). Every stop's source is a tap away in the app, and the full list lives under Settings.
@@ -138,6 +138,11 @@ This is the true answer and CC BY-SA explicitly permits the use, given attributi
 > They must agree — a mismatch is a rejection. The binary declares exactly these four.
 
 **Tracking:** No. **Third-party advertising:** No. **Data used to track you:** None.
+(PostHog is first-party product analytics — not linked to third-party data for ads, not shared with a
+data broker — so `NSPrivacyTracking`/"used to track" stays **No**. But its data IS *collected* and must
+be declared below.)
+
+App's own direct collection (all **App Functionality**):
 
 | Data type | Collected | Linked to identity | Tracking | Purpose |
 |---|---|---|---|---|
@@ -146,15 +151,33 @@ This is the true answer and CC BY-SA explicitly permits the use, given attributi
 | **Name** | Yes | Yes | No | App Functionality |
 | **User ID** | Yes | Yes | No | App Functionality |
 
-Everything else — Contacts, Health, Financial, Browsing/Search History, Usage Data, Diagnostics,
-Crash Data, Identifiers for advertising, Purchases, Sensitive Info — is **Not Collected**. That is
-literally true: there is no analytics or crash SDK in the app (see the dependency list).
+Collected via **PostHog** (analytics + crash reporting) — all **Not Linked** (no `identify()`, so tied
+to an anonymous per-device id, never the account):
+
+| Data type | Collected | Linked | Tracking | Purpose |
+|---|---|---|---|---|
+| **Product Interaction** (screen views, usage events) | Yes | No | No | Analytics |
+| **Crash Data** | Yes | No | No | App Functionality, Analytics |
+| **Other Diagnostic Data** (performance/errors) | Yes | No | No | App Functionality, Analytics |
+| **Device ID** (PostHog anonymous distinct_id) | Yes | No | No | Analytics |
+| **Coarse Location** (PostHog derives city-level from IP) | Yes | No | No | Analytics |
+
+Everything else — Contacts, Health, Financial, Browsing/Search History, Payment Info, Identifiers for
+advertising, Purchases, Sensitive Info, Contacts — is **Not Collected**.
 
 **On Precise Location being "Linked" — the nuance, so nobody "corrects" it later.** Roam coarsens the
 fix to 3 decimal places and sends it *without the session cookie*, so that call is genuinely
 unlinked. But (a) Apple counts ≥3 decimal places as *Precise*, and (b) a saved drive stores its
 endpoint coordinates against `user_id`. So one linked use exists, and Linked = Yes is the honest
 answer. Under-declaring is a rejection; over-declaring is not.
+
+**On Coarse Location (PostHog / IP):** PostHog derives an approximate city-level location from the
+request IP by default. Declaring it is the safe, honest call. If you'd rather not collect it at all,
+set `disableGeoip: true` in the PostHog client (`apps/mobile/src/lib/analytics.tsx`) and drop this row.
+
+**⚠ Keep the binary manifest in sync.** The `NSPrivacyCollectedDataTypes` in `app.json`'s
+`privacyManifests` must also list these PostHog types — PostHog ships no `PrivacyInfo.xcprivacy` of its
+own, so the app's manifest is the only one Apple sees. (Updated in the same change as this doc.)
 
 ---
 
