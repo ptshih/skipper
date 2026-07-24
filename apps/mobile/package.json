@@ -10,6 +10,7 @@
     "prebuild:ios": "expo prebuild --clean -p ios",
     "sim:erase": "xcrun simctl erase all",
     "testflight": "eas build --platform ios --profile production --auto-submit",
+    "eas-build-post-install": "mkdir -p \"$HOME/.posthog\" && ln -sf \"$(node -p 'require.resolve(\"@posthog/cli/run-posthog-cli.js\")')\" \"$HOME/.posthog/posthog-cli\"",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "lint:tokens": "bun scripts/check-tokens.ts",
