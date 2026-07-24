@@ -19,6 +19,12 @@
 //   • erasure on delete ................ apps/api/src/account.ts (purgeUserData)
 //   • the sub-processor list ........... apps/api/src/{email,storage}.ts, packages/routing
 //   • analytics + crash reporting ...... apps/mobile/src/lib/analytics.tsx (PostHog)
+//   • the NRS 603A request address ..... hello@skipper.fm (founder call 2026-07-24). Manoa, Inc.
+//     operates from Las Vegas, so Nevada's NRS 603A applies and — unlike CCPA — carries NO revenue
+//     or headcount threshold to fall under. The statute accepts an email, a toll-free number, or a
+//     web form as the "designated request address"; we chose email. ⚠ It MUST actually route: it is
+//     both this address and the published legal contact on both pages. The 60-day response window
+//     is the statute's, not a stylistic choice — don't soften it.
 //   • WHO RENDERS THE MAP .............. apps/mobile/src/ui/{RoamMap,DriveMap}.tsx + eas.json.
 //     PROVIDER_GOOGLE whenever EXPO_PUBLIC_GOOGLE_MAPS_API_KEY is set, which the `production`
 //     profile does — so shipped builds are GOOGLE Maps, and only a keyless build falls back to
@@ -235,6 +241,16 @@ import Legal from '../layouts/Legal.astro'
   <p>
     You can also email us to ask what we hold on you, or to have it corrected or deleted, at the address
     below.
+  </p>
+
+  <h2>Nevada residents</h2>
+  <p>
+    We're a Nevada company, and Nevada law (NRS 603A) gives Nevada residents the right to tell an online
+    service not to sell their covered information. <strong>We don't sell your information — not to
+    anyone, not for anything</strong> — so there's nothing here for us to stop doing. If you'd like that
+    answered in writing anyway, that's a fair thing to ask: email
+    <a href="mailto:hello@skipper.fm">hello@skipper.fm</a>, our designated request address, and we'll
+    confirm within the 60 days the law allows.
   </p>
 
   <h2>How long we keep things</h2>
