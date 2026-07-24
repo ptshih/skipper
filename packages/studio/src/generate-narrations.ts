@@ -28,6 +28,18 @@
 //   ... --force                regenerate even clips whose facts_hash is still fresh
 //   ... --region <slug>          generate a region's roam corpus (default: lake-tahoe; → its bbox)
 //   ... --include-ids a,b,c      regenerate EXACTLY these poi ids (implies --force)
+//   ... --wave                   generate the WAVE corpus instead of the story corpus (see below)
+//
+// TWO CORPORA, one script (--wave switches between them). They select DISJOINT pois, so neither can
+// steal the other's places and the 1:1 narrations row is never contested:
+//   STORY (default) — source='wikipedia' pois that have a curated fact sheet. A real telling.
+//   WAVE (--wave)   — source='wikidata' SCENIC pins (the tier with no article behind it), which have
+//                     no fact sheet and never will. A wave says the place's NAME and KIND and stops
+//                     (~15s), so it needs no grounding well: it is routed as stopType 'scenic', whose
+//                     gate rules are exactly "name + kind sayable, invent no specific". It writes
+//                     form='wave' with facts_hash NULL (nothing to go stale — there are no facts) and
+//                     attribution NULL (Wikidata is CC0 and no adapted text is presented; the CC BY-SA
+//                     obligation is a WIKIPEDIA-text one and no Wikipedia text is used here).
 
 import { and, eq, inArray, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
@@ -59,7 +71,7 @@ import {
 } from './config'
 import { estimateTtsUsd, llmSpendLines, llmSpentUsd, unpricedModels, TTS_ESTIMATE_SAFETY } from './pipeline/spend'
 import { STORY_TASTE_DENYLIST, type DeliveryRegister } from '@skipper/shared'
-import { NARRATION_MODEL, JUDGMENT_MODEL, ttsStyleFor, lengthForRegister, getAnthropic } from './models'
+import { NARRATION_MODEL, JUDGMENT_MODEL, ttsStyleFor, lengthForRegister, lengthForWave, getAnthropic } from './models'
 import { buildGroundingWell, evaluateGrounding } from './eval/grounding'
 import { applyLoudnessOutcomes, applyTailOutcomes, evaluateTts } from './eval/tts'
 import { evaluateDiversity } from './eval/diversity'
@@ -81,6 +93,9 @@ const flags = parseFlags(process.argv.slice(2), {
   valueFlags: ['limit', 'region', 'max-cost', 'query', 'include-ids', 'exclude-ids'],
 })
 const apply = flags.has('apply')
+// WAVE mode — generate the scenic tier's one-breath call-outs instead of the story corpus. Disjoint
+// candidate sets (wikidata pins vs wikipedia articles), so the two modes never contend for a poi.
+const waveMode = flags.has('wave')
 const maxCostUsd = maxCostFlag(flags)
 // Narrate + PRINT the scripts, then stop — NO TTS, NO R2, NO DB writes. The cheapest way to ear-read
 // the writing (e.g. a new length band) before committing to a paid synth + regen. Spends narration $.
@@ -98,7 +113,7 @@ const isExplicit = includeIds.length > 0 && !regionRaw && !query
 const force = flags.has('force') || isExplicit
 
 announce({
-  tool: 'generate-narrations',
+  tool: waveMode ? 'generate-narrations --wave' : 'generate-narrations',
   blast: scriptsOnly ? ['SPENDS $'] : ['SPENDS $', 'MUTATES DB'],
   apply: apply || scriptsOnly, // scripts-only spends narration $, so it's not a free dry run
 })
@@ -141,7 +156,8 @@ async function main(): Promise<void> {
           isExplicit
             ? inArray(pois.id, includeIds)
             : and(
-                eq(pois.source, 'wikipedia'),
+                // The tier switch: wikipedia = an article-backed story, wikidata = a bare named pin.
+                eq(pois.source, waveMode ? 'wikidata' : 'wikipedia'),
                 sql`${pois.lat} between ${bbox!.swLat} and ${bbox!.neLat}`,
                 sql`${pois.lng} between ${bbox!.swLng} and ${bbox!.neLng}`,
               ),
@@ -151,7 +167,11 @@ async function main(): Promise<void> {
 
   interface Candidate {
     poiId: string
-    pageId: number
+    /** Which corpus this candidate belongs to — decides grounding, length band, and the persisted
+     *  `form`. A wave carries none of the story fields below (there is no article behind it). */
+    form: 'story' | 'wave'
+    /** Wikipedia pageId — STORY only (a wave's poi has no article). */
+    pageId?: number
     name: string
     kind: string | null
     /** The poi's stored delivery register (classify-registers) — picks the TTS read + length band.
@@ -159,18 +179,23 @@ async function main(): Promise<void> {
     deliveryRegister: DeliveryRegister | null
     lat: number
     lng: number
+    /** The article extract — STORY only; '' for a wave (a wave grounds on its own name, not text). */
     extract: string
     /** The poi's full facts object — the source for the well↔extract-head grounding switch + the
-     *  grounding fingerprint (resolveStoryGrounding / storyFactsHash), shared with drives. */
-    facts: PoiFacts
+     *  grounding fingerprint (resolveStoryGrounding / storyFactsHash), shared with drives.
+     *  STORY only: a wave's poi is a bare Wikidata pin with no facts bag. */
+    facts?: PoiFacts
+    /** The TTS pronunciation label. STORY uses the article title; a wave uses the place name. */
     title: string
-    url: string
+    /** Source URL for attribution — STORY only (a wave persists attribution NULL). */
+    url?: string
     /** Wikidata qid — the canonical identity, read from the first-class `pois.qid` column. */
     qid: string | null
     factsFetchedAt: Date | null
-    /** The poi's curated fact sheet + its enrich stamp (own columns) — grounding source + fingerprint. */
-    factSheet: FactSheetEntry[] | null
-    enrichedAt: Date | null
+    /** The poi's curated fact sheet + its enrich stamp (own columns) — grounding source + fingerprint.
+     *  STORY only; a wave has no sheet and never will (that IS what makes it the scenic tier). */
+    factSheet?: FactSheetEntry[] | null
+    enrichedAt?: Date | null
     hasFreshClip: boolean
   }
 
@@ -179,17 +204,43 @@ async function main(): Promise<void> {
     if (excludeIds.has(r.id)) continue // "select all matching, minus a few"
     if (query && !`${r.name} ${r.sourceId}`.toLowerCase().includes(query)) continue
     const f = r.facts
-    // #1: a roam STORY encounter REQUIRES a curated fact sheet — an un-enriched poi is SKIPPED (never a
-    // raw-extract telling; the scenic-tier "wave" form will cover named-but-unenriched pins later). The
-    // sheet IS the eligibility gate now — no char floor (removed 2026-06-16); a sheet only exists for an
-    // enriched poi, so it subsumes the old `minExtract` check. `f` guards a text-less (pin) row.
-    if (!f || !(Array.isArray(r.factSheet) && r.factSheet.length > 0)) continue
     if (STORY_TASTE_DENYLIST.test(r.name)) {
       console.log(`  taste-gate: skipping "${r.name}"`)
       continue
     }
+    if (waveMode) {
+      // A wave is ELIGIBLE on its name alone — that is the entire premise of the scenic tier. The
+      // only hard requirement is a name worth saying: an unnamed pin, or one whose "name" is a bare
+      // coordinate/QID artifact, has nothing to wave AT and would produce a clip that says nothing.
+      const named = r.name.trim()
+      if (named.length < 2 || /^Q\d+$/.test(named)) continue
+      candidates.push({
+        poiId: r.id,
+        form: 'wave',
+        name: named,
+        kind: r.kind,
+        deliveryRegister: r.deliveryRegister,
+        lat: r.lat,
+        lng: r.lng,
+        extract: '',
+        title: named, // the TTS pronunciation label; a wave has no article title
+        qid: r.qid,
+        factsFetchedAt: r.factsFetchedAt,
+        // A wave carries NO facts_hash (nothing to go stale), so freshness is simply "does a
+        // narration already exist" — without this a wave would look perpetually stale (its stored
+        // hash is NULL, never equal to the poi's) and every run would re-pay for the same clips.
+        hasFreshClip: r.narrationId !== null,
+      })
+      continue
+    }
+    // #1: a roam STORY encounter REQUIRES a curated fact sheet — an un-enriched poi is SKIPPED (never a
+    // raw-extract telling; the scenic tier's named-but-unenriched pins are the --wave corpus). The
+    // sheet IS the eligibility gate now — no char floor (removed 2026-06-16); a sheet only exists for an
+    // enriched poi, so it subsumes the old `minExtract` check. `f` guards a text-less (pin) row.
+    if (!f || !(Array.isArray(r.factSheet) && r.factSheet.length > 0)) continue
     candidates.push({
       poiId: r.id,
+      form: 'story',
       pageId: f.pageId ?? Number(r.sourceId),
       name: r.name,
       kind: r.kind,
@@ -213,11 +264,16 @@ async function main(): Promise<void> {
   const queue = candidates.filter((c) => !c.hasFreshClip || force).slice(0, limit)
 
   console.log(
-    `Corpus: ${candidates.length} story-grade pois ` +
-      `(${isExplicit ? `${includeIds.length} hand-picked` : `region=${region!.slug}`}, enriched — have a fact sheet) — ` +
-      `${skipped.length} already have fresh roam clips (skipped), ${queue.length} to generate.\n`,
+    `Corpus: ${candidates.length} ${waveMode ? 'wave-grade pins' : 'story-grade pois'} ` +
+      `(${isExplicit ? `${includeIds.length} hand-picked` : `region=${region!.slug}`}, ` +
+      `${waveMode ? 'wikidata scenic tier — named, no fact sheet' : 'enriched — have a fact sheet'}) — ` +
+      `${skipped.length} already have ${waveMode ? 'a wave clip' : 'fresh roam clips'} (skipped), ${queue.length} to generate.\n`,
   )
-  for (const c of queue) console.log(`  ${String(c.extract.length).padStart(5)}  ${c.name}`)
+  // Story lists the extract size (the material available); a wave has none, so it lists the kind —
+  // the only other word the clip gets to say, and the thing worth eyeballing before a paid run.
+  for (const c of queue) {
+    console.log(waveMode ? `  ${(c.kind ?? '—').padEnd(20)}  ${c.name}` : `  ${String(c.extract.length).padStart(5)}  ${c.name}`)
+  }
 
   if (queue.length === 0) {
     console.log('Nothing to generate.')
@@ -231,11 +287,17 @@ async function main(): Promise<void> {
   // (estSeconds = words / WORDS_PER_SECOND) — so the dummy clip must contain that many real WORDS. A
   // space-less char blob ('x'.repeat(n)) reads as ONE word and collapses the audio estimate ~100× (it
   // under-quoted a full-region run by ~$28 and silently defeated --max-cost). Model a target-length clip.
-  const llmUsdPerClip = GROUNDING_EVAL() ? 0.15 : 0.1
+  // A wave's narration call carries a tiny sheet and returns ~40 words, so its LLM cost is well under a
+  // story's — but the grounding call (the dominant per-clip charge when the gate is on) is priced by the
+  // JUDGE's own prompt, not the clip, so it does NOT scale down proportionally. Estimate waves at ~half.
+  const llmUsdPerClip = (GROUNDING_EVAL() ? 0.15 : 0.1) * (waveMode ? 0.5 : 1)
   // Per-clip TTS estimate uses each poi's REGISTER target (a story clip quotes longer than a landscape
   // glance); the dummy clip must carry that many real WORDS (estimateTtsUsd derives audio tokens from the
-  // word count — a space-less blob reads as ONE word and collapses the audio estimate ~100×).
-  const targetSecFor = (c: Candidate): number => lengthForRegister(c.deliveryRegister ?? 'story').targetSeconds
+  // word count — a space-less blob reads as ONE word and collapses the audio estimate ~100×). A wave is
+  // FORM-banded, not register-banded (lengthForWave) — feeding it a register target would over-quote it 4×.
+  const bandFor = (c: Candidate): { targetSeconds: number; maxSeconds: number } =>
+    c.form === 'wave' ? lengthForWave() : lengthForRegister(c.deliveryRegister ?? 'story')
+  const targetSecFor = (c: Candidate): number => bandFor(c).targetSeconds
   const tts = estimateTtsUsd(
     queue.map((c) => Array(Math.round(targetSecFor(c) * WORDS_PER_SECOND)).fill('word').join(' ')),
     personaFromKey('skipper').ttsStyle.length,
@@ -284,30 +346,43 @@ async function main(): Promise<void> {
   }
 
   async function gateClip(c: Candidate, seq: number): Promise<GatedClip> {
-    // Ground on the curated WELL when the place is enriched, else the positional extract head — the
-    // SAME resolver tours + drives use, so the well the auditor builds matches the narrator's sheet.
-    const grounding = resolveStoryGrounding(c.facts, c.factSheet, c.enrichedAt, {
-      fallbackChars: NARRATION_FALLBACK_CHARS,
-      retrievedAt: (c.factsFetchedAt ?? new Date()).toISOString(),
-    })
+    const isWave = c.form === 'wave'
+    // STORY grounds on the curated WELL when the place is enriched, else the positional extract head —
+    // the SAME resolver tours + drives use, so the well the auditor builds matches the narrator's sheet.
+    // A WAVE skips this entirely: there are no facts to resolve, and calling the story resolver on a
+    // factless pin would just build an empty well and a meaningless hash.
+    const grounding = isWave
+      ? null
+      : resolveStoryGrounding(c.facts!, c.factSheet ?? null, c.enrichedAt ?? null, {
+          fallbackChars: NARRATION_FALLBACK_CHARS,
+          retrievedAt: (c.factsFetchedAt ?? new Date()).toISOString(),
+        })
     // The poi's delivery register sets BOTH the read (ttsStyleFor, at synth) and the length band.
     // null (un-classified) → 'story' base, so this is additive: classifying a poi differentiates it.
+    // A wave overrides the band by FORM (lengthForWave) — see models.ts on why the register floor loses.
     const register: DeliveryRegister = c.deliveryRegister ?? 'story'
-    const band = lengthForRegister(register)
+    const band = bandFor(c)
+    // A wave is routed as a NAMED SCENIC: same "name + kind, invent no specific" ceiling the gate
+    // already knows how to score, at one-breath length. `wave: true` swaps the delivery instruction
+    // and suppresses geology (founder call, pass 1) — it never widens what is groundable.
     const base = {
       region: regionLabel(c.lat, c.lng),
       // No corridor: the shared atom plays on its own (roam) OR on any route (a drive reusing it), so
       // it names only the stable REGION, never a specific stretch.
-      stopType: 'story' as const,
+      stopType: (isWave ? 'scenic' : 'story') as 'scenic' | 'story',
       place: { name: c.name, ...(c.kind ? { kind: c.kind } : {}) },
-      facts: grounding.facts,
+      ...(isWave ? { wave: true as const } : { facts: grounding!.facts }),
       targetSeconds: band.targetSeconds,
       maxSeconds: band.maxSeconds,
       selfContained: true,
     }
     // The permitted well, built from the SAME facts the narrator saw (buildGroundingWell is the
-    // shared seam, so the auditor's well can never drift from the narrator's sheet).
-    const well = buildGroundingWell({ stopType: 'story', name: c.name, kind: c.kind, facts: grounding.facts })
+    // shared seam, so the auditor's well can never drift from the narrator's sheet). For a wave the
+    // well is the scenic one — the place's own name + kind and nothing else, which is precisely the
+    // set of things the clip is allowed to say.
+    const well = isWave
+      ? buildGroundingWell({ stopType: 'scenic', name: c.name, kind: c.kind })
+      : buildGroundingWell({ stopType: 'story', name: c.name, kind: c.kind, facts: grounding!.facts })
 
     // The per-clip panel: free dims always (tts-cleanliness + diversity = within-clip tics/bows) +
     // laterality (a free grounding backstop); GROUNDING (one Opus call) behind SKIPPER_GROUNDING_EVAL.
@@ -315,7 +390,7 @@ async function main(): Promise<void> {
     const evaluate = async (script: string): Promise<StopEval[]> => {
       const evals: StopEval[] = [
         evaluateTts({ seq, script }),
-        ...evaluateDiversity([{ seq, stopType: 'story', script }]),
+        ...evaluateDiversity([{ seq, stopType: base.stopType, script }]),
         evaluateLaterality({ seq, script }),
         evaluatePacing({ seq, script, targetSeconds: band.targetSeconds, maxSeconds: band.maxSeconds }),
       ]
@@ -323,7 +398,7 @@ async function main(): Promise<void> {
         evals.push(
           await evaluateGrounding({
             seq,
-            stopType: 'story',
+            stopType: base.stopType,
             placeName: c.name,
             script,
             well,
@@ -453,11 +528,13 @@ async function main(): Promise<void> {
       )
     }
     console.log(
-      `\n(register length bands, aim/cap s: ` +
-        (['landscape', 'story', 'town', 'civic'] as const)
-          .map((r) => `${r} ${lengthForRegister(r).targetSeconds}/${lengthForRegister(r).maxSeconds}`)
-          .join(', ') +
-        `)`,
+      waveMode
+        ? `\n(wave band, aim/cap s: ${lengthForWave().targetSeconds}/${lengthForWave().maxSeconds} — form-level, not register-banded)`
+        : `\n(register length bands, aim/cap s: ` +
+            (['landscape', 'story', 'town', 'civic'] as const)
+              .map((r) => `${r} ${lengthForRegister(r).targetSeconds}/${lengthForRegister(r).maxSeconds}`)
+              .join(', ') +
+            `)`,
     )
     await recordRun(true) // a DRY eval run — observability without synth/persist
     for (const line of llmSpendLines()) console.log(line)
@@ -524,10 +601,15 @@ async function main(): Promise<void> {
       // Tail-collapse retake (pipeline/tts.ts): narration clips ship unheard, so a mumbled
       // closing sentence would reach riders' ears first — measure + retake here too.
       // The poi's register modulates the READ (pace/space/energy) on the shared base; null → story base.
+      // A wave that was never register-classified reads on the LANDSCAPE base, not the story one: it
+      // is a natural feature glanced at in passing, and the story read (fact-forward, more energy) is
+      // the wrong shape for one breath. This picks among the EXISTING register reads — a dedicated
+      // per-FORM style suffix is a separate, DEFERRED item (see TODO "differentiate the style prompt
+      // by narration FORM"), which wants an ear pass once waves actually exist to listen to.
       const { audio, durationMs, tail, loudness } = await synthesizeWithTailRetake(
         script,
         persona.voice,
-        ttsStyleFor(persona.ttsStyle, c.deliveryRegister ?? 'story'),
+        ttsStyleFor(persona.ttsStyle, c.deliveryRegister ?? (c.form === 'wave' ? 'landscape' : 'story')),
         `"${c.title}"`,
       )
       // The TTS is now paid — count it toward the running cap even if the upload/upsert below fails.
@@ -540,13 +622,22 @@ async function main(): Promise<void> {
       // Well-aware credit: an ENRICHED poi credits the well's distinct sources (wikipedia + any
       // geology/wikidata kept). Same resolver tours use, so attribution can't drift between roam and
       // a drive reusing the clip.
-      const { attribution } = resolveStoryGrounding(c.facts, c.factSheet, c.enrichedAt, {
-        fallbackChars: NARRATION_FALLBACK_CHARS,
-        retrievedAt: (c.factsFetchedAt ?? new Date()).toISOString(),
-      })
+      //
+      // A WAVE credits NOTHING, and that is correct rather than an omission: the CC BY-SA obligation
+      // attaches to adapted WIKIPEDIA TEXT, and a wave adapts none — it speaks the place's own name and
+      // kind, which came from Wikidata (CC0, no attribution required). Its facts_hash is NULL for the
+      // matching reason: there are no facts, so there is nothing that can go stale. Both NULLs are
+      // schema-legal (only audio_url is NOT NULL on narrations).
+      const isWaveClip = c.form === 'wave'
+      const { attribution } = isWaveClip
+        ? { attribution: null }
+        : resolveStoryGrounding(c.facts!, c.factSheet ?? null, c.enrichedAt ?? null, {
+            fallbackChars: NARRATION_FALLBACK_CHARS,
+            retrievedAt: (c.factsFetchedAt ?? new Date()).toISOString(),
+          })
       // The grounding fingerprint = pois.factsHash exactly (storyFactsHash on the SAME facts the
       // freshness query read), so a freshly-generated clip never reads as stale.
-      const factsHash = storyFactsHash(c.facts, c.factSheet)
+      const factsHash = isWaveClip ? null : storyFactsHash(c.facts!, c.factSheet ?? null)
       // A roam telling = the poi's ONE narration (1:1). Upsert on poi_id so a regen replaces the
       // same row's script/audio/hash in place.
       await withRetry(
@@ -555,7 +646,7 @@ async function main(): Promise<void> {
             .insert(narrations)
             .values({
               poiId: c.poiId,
-              form: 'story',
+              form: c.form,
               script,
               audioUrl,
               audioDurationMs: durationMs,
@@ -565,7 +656,7 @@ async function main(): Promise<void> {
             .onConflictDoUpdate({
               target: narrations.poiId,
               set: {
-                form: 'story',
+                form: c.form,
                 script,
                 audioUrl,
                 audioDurationMs: durationMs,

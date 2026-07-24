@@ -147,50 +147,57 @@ a **build-ready spec: `docs/specs/background-location-spec.md`**.
 Two items locked from the 2026-06-11 brainstorm (full capture: `docs/ideas/free-roam-mode.md`
 §Alpha learnings). Order within the pass is free; both are founder-facing on his daily drive.
 
-- [ ] **Waves: narrate the scenic tier.** Schema already done (V2): `narrations` HAS a `form` column
-      ('story'|'scenic'|'break'|'wave', 'bside' reserved) and a `narrations_poi_uq` unique index on
-      poiId (one telling per place); the Zod vocabulary is `narrationForm` in `@skipper/shared`. The
-      remaining work is the 10–20s WAVE form in `generate-narrations.ts` (grammar: one-liner,
-      self-contained, no laterality/volatile; no "ask me about it" tease until B-sides exist). Prompt
-      work is the real cost — a wave must sound like HIM, not a gazetteer caption.
+- **Waves: narrate the scenic tier — CODE BUILT 2026-07-24, awaiting the PAID run.** The $0 half is
+      done and verified green (root + mobile `bun run check`); nothing has been generated or spent.
 
-      **⚠ QUEUE SIZE RE-MEASURED 2026-07-24: 387, not "~126"** (that figure was a stale 2026-06-11
-      probe). Live read-only count for the `lake-tahoe` bbox: 387 wikidata-scenic pins, ALL unnarrated;
-      462 wikipedia pois, 459 narrated + released. Queue by kind: park 81, valley 71, mountain 69,
-      hill 43, spring 39, beach 14, lake 12, meadow 10, reservoir/bay 9 each, ridge 7, cape 6, tail
-      (canyon, historic district, …) ~15. **~3× the assumed scope — so the old "~$3–5" estimate is
-      DEAD; re-size the spend before asking for the go**, and consider whether pass 1 wants the whole
-      387 or a kind-capped subset (81 parks + 71 valleys is a lot of one-liners for one region).
+      What shipped: `generate-narrations --wave` selects `source='wikidata'` scenic pins with no
+      narration (disjoint from the story query, so the two modes can never contend for a poi), narrates
+      them at a form-level 15s/20s band (`lengthForWave`, models.ts — deliberately outside
+      `REGISTER_LENGTH`, whose 60s floor would prompt a wave to pad a minute it has no material for),
+      routes them as `stopType:'scenic'` + `wave:true` so the named-scenic grounding rules score them
+      unchanged, and persists `form:'wave'` with `facts_hash` NULL (no facts → nothing can go stale) and
+      `attribution` NULL (the CC BY-SA duty attaches to adapted WIKIPEDIA text; a wave adapts none, and
+      Wikidata is CC0). Freshness for a wave is "does a narration exist" — without that it would read
+      perpetually stale and every run would re-pay. The WAVE grammar is taught in `persona/skipper.ts`
+      (a fourth stop kind + three examples) and enforced in the sheet (`pipeline/narrate.ts`); geology is
+      suppressed on waves at the sheet builder, not just the caller, so it can't leak back in.
+      Roam priority is **distance-band, then form** (`bandM: 300` in `packages/engine/src/roam.ts`,
+      threaded `narrations.form` → `roamPin.form` (optional, wire-compat) → `useRoam` → engine), with 5
+      new engine tests covering both halves of the rule.
 
-      **Founder design calls (2026-07-24) — locked, don't re-litigate:**
-      - **Scope** = named scenic pins only in pass 1.
-      - **Content** = name + kind + region ONLY. No Macrostrat geology in pass 1.
-      - **Priority** = **distance-band first, then form** (nearer wins; form only breaks a tie) —
-        NOT strict story-over-wave. ⚠ This SUPERSEDES the earlier "story-over-wave priority" wording.
-        (The old "suppress on quiet chattiness" is moot either way — that axis was cut.)
+      ⚠ **A wave must NEVER become a drive stop**, and it silently would have: `loadCorpusForRoute`
+      filtered on bbox + released only, so once waves are released `buildDrive` would have picked
+      one-liners as stops (the wave corpus is ~3× the story corpus). Fixed with `ne(narrations.form,
+      'wave')` in `apps/api/src/drives.ts` — deliberately NOT in `loadCorpusByPoiIds`, which resolves an
+      already-frozen selection where filtering would break a saved drive instead of playing it.
 
-      Build notes (verified against source 2026-07-24, so they don't need re-deriving):
-      - **Route a wave as `stopType: 'scenic'`** — it grounds on the pin's own name; `'story'` would
-        false-flag it in the grounding gate. Flip at three literal sites (well builder, diversity eval,
-        narrate base) and skip `resolveStoryGrounding`/`storyFactsHash` in two (gateClip + the synth
-        loop). `factsHash: null`, `attribution: null` — both schema-legal for a non-story form.
-      - **The wave candidate query is DISTINCT from the story one.** Story hard-filters
-        `source = 'wikipedia'` and requires a `factSheet` (`generate-narrations.ts` ~L144); waves are
-        `source = 'wikidata'` scenic pins with no narration row.
-      - **`models.ts` needs a form-level wave length.** `REGISTER_LENGTH` bottoms out at
-        `targetSeconds: 60` (landscape/town), so a 10–20s wave has no band — add one and feed the
-        pacing eval the small target, or every wave fails length.
-      - **RELEASE STEP — without it the acceptance drive shows ZERO waves.** `generate-narrations`
-        writes `releasedAt = NULL` (staged) and `/roam` serves released-only
-        (`apps/api/src/index.ts:162`, `isNotNull(narrations.releasedAt)`). The fix is ONE call, not
-        387: `POST /admin/regions/:slug/release` bulk-stamps every staged clip in the region bbox and
-        is explicitly re-runnable (it preserves the region's first release date and only touches
-        `released_at IS NULL` rows — `apps/admin/server/index.ts:202-239`). The per-clip
-        `POST /admin/pois/:poiId/narration/release` exists too, for spot releases.
-      - ⚠ **`--scripts-only` SPENDS** (`generate-narrations.ts:103` — `apply: apply || scriptsOnly`).
-        The only free dry run is the default, no-flag invocation.
-      - ⚠ The --apply generation run is a PAID run (LLM + TTS) — needs an explicit founder go, never
-        inferred from this lock. Use `--max-cost` as a hard ceiling.
+      **⚠ REAL SPEND, MEASURED — not the "~$3–5" this file used to carry.** The free dry run now quotes
+      **387 clips ≈ $32 (~$29 narration+grounding-gate + ~$3 TTS), ≈97 min of audio.** The old figure
+      assumed ~126 clips AND ignored that the grounding call is priced by the JUDGE's prompt, so it does
+      not shrink with the clip. Founder decisions still open before any go:
+      - **Whole 387, or a kind-capped subset?** By kind: park 81, valley 71, mountain 69, hill 43,
+        spring 39, beach 14, lake 12, meadow 10, reservoir/bay 9 each, ridge 7, cape 6, tail ~15.
+      - **~3% of the queue is weak** (measured, not impressionistic): 9 pins have a NULL kind (the clip
+        then has ONLY a name — the thinnest legal wave), and 2 are parcel/facility records rather than
+        country you'd wave at ("Ward Creek Park Property", "Fallen Leaf Recreation Center"). The
+        tragedy/crime taste gate DOES run in wave mode; it just doesn't catch this category. Worth an
+        eyeball, not a blocker.
+      - **Cheapest next step is a `--scripts-only --limit 3` smoke** (~pennies) to ear-read three real
+        waves before committing to the full run. ⚠ `--scripts-only` DOES spend (`apply: apply ||
+        scriptsOnly`) — only the no-flag dry run is free.
+
+      Remaining after the run:
+      - [ ] **RELEASE — without it the acceptance drive shows ZERO waves.** Generation writes
+        `releasedAt = NULL` and `/roam` serves released-only (`apps/api/src/index.ts`). ONE call, not
+        387: `POST /admin/regions/:slug/release` bulk-stamps every staged clip in the bbox and is
+        re-runnable (preserves the first release date, touches only `released_at IS NULL` rows —
+        `apps/admin/server/index.ts:202-239`). Per-clip release exists for spot fixes.
+      - [ ] **Ear-pass the wave read.** Waves currently inherit the LANDSCAPE register read when the pin
+        is unclassified (a natural feature glanced at, not the fact-forward story read). A dedicated
+        per-FORM style suffix is the separate DEFERRED item below — now unblocked, since waves will
+        finally exist to listen to.
+      - [ ] Waves are CLI-only; the admin console can't trigger a wave run. Add a mode toggle only if
+        the founder wants to run them from the console (would touch the Reference cheat-sheet).
 - [ ] **The sonic cue.** ~1s entry motif before every encounter (the duck gets a reason; the
       startle dies) + a soft exit/resolve note as the duck releases. Client-side bundled assets
       (`apps/mobile`), played around the clip in `useRoam`. Sound design taste-gate: founder ear
@@ -227,10 +234,12 @@ scenic = "slow a touch, leave air, wonder not performance"; break = "quick light
 wave = "brief passing call-out" — keeping the universal **base** (persona + the load-bearing
 **anti-fade** clause) and appending a per-form suffix. One-line swap at the call site.
 
-**Why DEFERRED (founder, 2026-06-19):** scenic (the deferred "waves"), break (`detours`), and wave are
-all themselves deferred — so the form variants have **no output to act on and nothing to ear-test**
-until those forms ship. Revisit when waves / breaks ship (it rides ALONGSIDE that work — each new form
-wants its delivery tuned by ear in the same paid run). The single Skipper story read stands until then,
+**Why DEFERRED (founder, 2026-06-19):** the non-story forms had **no output to act on and nothing to
+ear-test** until they shipped. ⚠ **Partly unblocked 2026-07-24:** the WAVE form is now built (see the
+roam pass-2 item), so once the paid wave run lands there IS a wave read to judge. Today a wave inherits
+the LANDSCAPE register read when its pin is unclassified — a reasonable default among the EXISTING
+reads, not a wave-specific suffix. Do the suffix on a founder ear-complaint about the wave read, in the
+same pass as the wave ear-check; `break` (`detours`) is still stubbed, so its variant stays deferred. The single Skipper story read stands until then,
 and is only touched on a specific founder ear-complaint (never re-tuned blind — see the `models.ts`
 warning). NOTE: there is NO per-joke "notch" axis here — the joke notch was CUT
 (`docs/decisions/cut-joke-notch.md`); delivery variety returns later as different NARRATORS, not a notch.

@@ -607,6 +607,9 @@ export function useRoam(mode: RoamMode): RoamState {
           durationMs: p.durationMs,
           // Kind-aware server radius (areal places get room); engine floor covers absence.
           ...(p.radiusM != null ? { radiusM: p.radiusM } : {}),
+          // The telling's form — the engine breaks a same-distance-band tie with it (a story beats a
+          // one-breath wave); absent = treated as substantive, so nothing regresses without it.
+          ...(p.form != null ? { form: p.form } : {}),
           name: p.name,
         })),
         { minGapSec: ROAM_MIN_GAP_SEC },

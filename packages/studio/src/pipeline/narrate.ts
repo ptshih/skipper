@@ -65,6 +65,13 @@ export interface NarrationRequest {
   maxSeconds?: number
   /** Re-narration notes from the diversity lint — concrete things THIS take must avoid. */
   avoid?: string[]
+  /** WAVE form — a one-breath passing call-out on the SCENIC tier (form='wave' on the row). Routed as
+   *  stopType 'scenic' on purpose: the grounding rules a wave needs (name + kind sayable, no facts, no
+   *  invented specifics) are EXACTLY the named-scenic rules, so the gate's scenic branch already scores
+   *  it correctly — a separate stopType would mean duplicating those rules in eval/grounding.ts and
+   *  letting the two drift. This flag changes only the LENGTH + the delivery instruction, never what is
+   *  groundable. Requires `place` (a wave is always named); ignored on story/break. */
+  wave?: boolean
   /** SHARED-ATOM framing (generate-narrations.ts): this telling is the place's ONE narration, played
    *  BOTH on its own by proximity (roam) AND reused mid-drive on a planned route. Adds the
    *  self-contained block to the sheet (route-agnostic, no order, no baked laterality, no tour shape);
@@ -170,7 +177,46 @@ export function buildFactSheet(req: NarrationRequest): string {
     for (const l of mergedFeatureLines(req.mergedFeatures)) lines.push(l)
   } else if (req.stopType === 'scenic') {
     const namedScenic = Boolean(req.place?.name)
-    if (namedScenic) {
+    if (namedScenic && req.wave) {
+      // WAVE — the same name+kind ceiling as a named scenic, at one-breath length. The ceiling is
+      // restated here rather than shared with the block below because a wave's whole failure mode is
+      // DIFFERENT: a scenic that over-reaches invents a specific, while a wave that over-reaches just
+      // keeps talking. So the grounding line stays short and the length discipline carries the weight.
+      lines.push(`PLACE: ${req.place!.name}`)
+      if (req.place!.kind) lines.push(`KIND: ${req.place!.kind}`)
+      lines.push('')
+      lines.push(
+        'WAVE — you are passing a named piece of country and simply acknowledging it. You MAY say the',
+      )
+      lines.push(
+        'PLACE above and what KIND it is, and nothing else: no history, no how it got the name, no size,',
+      )
+      lines.push(
+        'depth, or age, no "famous"/"popular"/"hidden gem", no detail you would have to be standing there',
+      )
+      lines.push(
+        'to know. You cannot see it — you have a name and a kind, the way you would read a road sign.',
+      )
+      lines.push('')
+      lines.push(
+        'This is ONE BREATH. A sentence, or two short ones — not a telling, not a mood, not a build. Say',
+      )
+      lines.push(
+        'the name like a person noticing it out the window, add at most one plain honest reaction to the',
+      )
+      lines.push(
+        'general look of the day, and STOP. No lesson, no reflection on time or the West, no tidy bow. If',
+      )
+      lines.push(
+        'a groaner comes FREE off the name or the kind — needing no fact you were not handed — you may take',
+      )
+      lines.push(
+        'it and then you are done. Most waves carry no joke at all, and that is right. Never announce that',
+      )
+      lines.push(
+        'there is little to say, never describe yourself as waving, and never promise to come back to it.',
+      )
+    } else if (namedScenic) {
       lines.push(`PLACE: ${req.place!.name}`)
       if (req.place!.kind) lines.push(`KIND: ${req.place!.kind}`)
       lines.push('')
@@ -204,7 +250,11 @@ export function buildFactSheet(req: NarrationRequest): string {
         '(light, water color, sky, the road). Do not name any peak, town, island, or landmark.',
       )
     }
-    for (const l of geologyLines(req.geology, 'scenic', namedScenic)) lines.push(l)
+    // NO geology on a wave (founder call, pass 1): the rock is sayable on a scenic because a scenic has
+    // room to land it, but it is a second fact in a form whose whole discipline is one breath — it would
+    // turn every wave into a two-beat telling. Guarded here, not just at the caller, so a future caller
+    // can't leak it back in. Geology on waves is a pass-2 question.
+    if (!req.wave) for (const l of geologyLines(req.geology, 'scenic', namedScenic)) lines.push(l)
   } else {
     // break — the curated name + kind ARE given and sayable; everything volatile is not.
     lines.push(`PLACE: ${req.place?.name ?? '(unnamed)'}`)
