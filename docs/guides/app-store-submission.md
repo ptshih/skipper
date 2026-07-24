@@ -1,6 +1,8 @@
 # App Store Connect — the submission cheat-sheet
 
-> **Status:** LIVE 2026-07-15, UNSUBMITTED. Every field App Store Connect asks for, ready to paste,
+> **Status:** LIVE 2026-07-24, UNSUBMITTED. §8's privacy label was re-derived from the bundled SDKs'
+> own manifests on 2026-07-24 and grew from 9 data types to 12 — paste that table, not an older copy.
+> Every field App Store Connect asks for, ready to paste,
 > for `fm.skipper.app` (ASC app id `6778946770`, team `L24UJYJ5DK`, Manoa, Inc.). Character-limited
 > fields are pre-counted against Apple's caps. **Screenshots are the only asset not in here** — they
 > must be captured by hand (spec in §9). ⚠ Do NOT paste the review demo password into this file or
@@ -135,49 +137,82 @@ This is the true answer and CC BY-SA explicitly permits the use, given attributi
 ## 8. App Privacy ("nutrition label")
 
 > This is **separate** web data entry; the `PrivacyInfo.xcprivacy` in the binary does not fill it in.
-> They must agree — a mismatch is a rejection. The binary declares exactly these four.
+> The label must cover everything **the app AND its bundled third-party SDKs** collect — Apple: "You
+> need to identify all of the data you or your third-party partners collect." Under-declaring is a
+> rejection; over-declaring is not.
 
 **Tracking:** No. **Third-party advertising:** No. **Data used to track you:** None.
 (PostHog is first-party product analytics — not linked to third-party data for ads, not shared with a
 data broker — so `NSPrivacyTracking`/"used to track" stays **No**. But its data IS *collected* and must
 be declared below.)
 
-App's own direct collection (all **App Functionality**):
+**Enter these twelve.** "app" = our own collection; "SDK" = a bundled SDK declares it in its own
+manifest, which does not excuse the label from saying it.
 
-| Data type | Collected | Linked to identity | Tracking | Purpose |
+| Data type | Linked | Tracking | Purpose | Where it comes from |
 |---|---|---|---|---|
-| **Precise Location** | Yes | **Yes** | No | App Functionality |
-| **Email Address** | Yes | Yes | No | App Functionality |
-| **Name** | Yes | Yes | No | App Functionality |
-| **User ID** | Yes | Yes | No | App Functionality |
+| **Precise Location** | **Yes** | No | App Functionality | app — drive endpoints stored per user |
+| **Email Address** | Yes | No | App Functionality | app — account |
+| **Name** | Yes | No | App Functionality | app — account |
+| **User ID** | Yes | No | App Functionality | app — account |
+| **Coarse Location** | **Yes** | No | App Functionality, Analytics | app — session IP; + SDK PostHog |
+| **Device ID** | **Yes** | No | App Functionality, Analytics | SDK GoogleMaps (linked), PostHog (not) |
+| **Product Interaction** | No | No | Analytics | app; + SDK PostHog, GoogleMaps |
+| **Crash Data** | No | No | App Functionality, Analytics | app; + SDK PLCrashReporter, GoogleMaps |
+| **Other Diagnostic Data** | No | No | App Functionality, Analytics | app; + SDK PLCrashReporter |
+| **Performance Data** | No | No | Analytics | SDK GoogleMaps |
+| **Other Usage Data** | No | No | Analytics | SDK PostHog |
+| **Other Data** | **Yes** | No | Analytics | SDK GoogleMaps (`OtherDataTypes`) |
 
-Collected via **PostHog** (analytics + crash reporting) — all **Not Linked** (no `identify()`, so tied
-to an anonymous per-device id, never the account):
+Everything else — Contacts, Health, Fitness, Financial, Payment Info, Purchases, Browsing History,
+Search History, Sensitive Info, Identifiers for advertising, User Content — is **Not Collected**. Two
+that look close but genuinely aren't: a drive's `label` is server-generated from its endpoint names
+(`apps/api/src/drives.ts`), and the FROM/TO pickers choose from a curated anchor list — no free text
+and no geocode — so there is no User Content and no Search History.
 
-| Data type | Collected | Linked | Tracking | Purpose |
-|---|---|---|---|---|
-| **Product Interaction** (screen views, usage events) | Yes | No | No | Analytics |
-| **Crash Data** | Yes | No | No | App Functionality, Analytics |
-| **Other Diagnostic Data** (performance/errors) | Yes | No | No | App Functionality, Analytics |
-| **Device ID** (PostHog anonymous distinct_id) | Yes | No | No | Analytics |
-| **Coarse Location** (PostHog derives city-level from IP) | Yes | No | No | Analytics |
-
-Everything else — Contacts, Health, Financial, Browsing/Search History, Payment Info, Identifiers for
-advertising, Purchases, Sensitive Info, Contacts — is **Not Collected**.
-
-**On Precise Location being "Linked" — the nuance, so nobody "corrects" it later.** Roam coarsens the
+**Why Precise Location is "Linked" — the nuance, so nobody "corrects" it later.** Roam coarsens the
 fix to 3 decimal places and sends it *without the session cookie*, so that call is genuinely
 unlinked. But (a) Apple counts ≥3 decimal places as *Precise*, and (b) a saved drive stores its
-endpoint coordinates against `user_id`. So one linked use exists, and Linked = Yes is the honest
-answer. Under-declaring is a rejection; over-declaring is not.
+endpoint coordinates against `user_id`. So one linked use exists, and Linked = Yes is the honest answer.
 
-**On Coarse Location (PostHog / IP):** PostHog derives an approximate city-level location from the
-request IP by default. Declaring it is the safe, honest call. If you'd rather not collect it at all,
-set `disableGeoip: true` in the PostHog client (`apps/mobile/src/lib/analytics.tsx`) and drop this row.
+**Why Coarse Location is "Linked" too.** Better Auth stores `session.ip_address` and
+`session.user_agent` against `user.id` (`packages/db/src/auth-schema.ts`). Apple grants IP no
+exemption — "Declare the relevant data types based on how you use IP address, such as precise
+location, coarse location, device ID, or diagnostics" — and security/fraud is **not** among the
+optional-disclosure exceptions. PostHog's IP-derived city is unlinked, but the session row is linked,
+so the aggregate is Yes. (`disableGeoip: true` in `apps/mobile/src/lib/analytics.tsx` would drop
+PostHog's half; it would NOT drop the session-row half.)
 
-**⚠ Keep the binary manifest in sync.** The `NSPrivacyCollectedDataTypes` in `app.json`'s
-`privacyManifests` must also list these PostHog types — PostHog ships no `PrivacyInfo.xcprivacy` of its
-own, so the app's manifest is the only one Apple sees. (Updated in the same change as this doc.)
+**Why Device ID is "Linked".** Ours isn't — PostHog gets no `identify()` call anywhere in the app, so
+its `distinct_id` stays per-device and anonymous. But the bundled **GoogleMaps** SDK declares Device ID
+with `Linked = true` in its own manifest, and the label is the aggregate.
+
+**⚠ The map is GOOGLE Maps, not Apple Maps.** `PROVIDER_GOOGLE` is selected whenever
+`EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` is set, and the `production` EAS profile sets it — so shipped builds
+bundle the Google Maps SDK and its collection belongs on the label. Only a keyless build falls back to
+Apple Maps.
+
+**The binary manifest does NOT need the SDK rows, and none of this needs a rebuild.** Every bundled SDK
+ships its own `PrivacyInfo.xcprivacy` and Xcode aggregates them into the privacy report. Re-check any
+time with:
+
+```sh
+find ios/Pods -name '*.xcprivacy' -exec plutil -p {} \;
+```
+
+As of 2026-07-24 that shows **GoogleMaps** (CrashData, DeviceID *linked*, OtherDataTypes *linked*,
+PerformanceData, ProductInteraction), **PostHog** (ProductInteraction, OtherUsageData), and its vendored
+**PLCrashReporter** (CrashData, OtherDiagnosticData).
+
+⚠ An earlier version of this section claimed "PostHog ships no `PrivacyInfo.xcprivacy` of its own, so
+the app's manifest is the only one Apple sees." That was **wrong** — PostHog ships one. The five PostHog
+rows it justified adding to `app.json` are harmless over-declaration, so they stay rather than churn the
+manifest again.
+
+So `app.json` declares what the *app itself* collects. Its one genuine correction — Coarse Location
+→ `Linked: true`, for the session-IP row — is in the repo but **is not in TestFlight build 15**, which
+predates it. That mismatch runs in the safe direction (the binary declares *less* linkage than the
+label) and does not justify a build 16; it ships on the next natural rebuild.
 
 ---
 

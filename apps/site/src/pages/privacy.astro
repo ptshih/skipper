@@ -19,6 +19,10 @@
 //   • erasure on delete ................ apps/api/src/account.ts (purgeUserData)
 //   • the sub-processor list ........... apps/api/src/{email,storage}.ts, packages/routing
 //   • analytics + crash reporting ...... apps/mobile/src/lib/analytics.tsx (PostHog)
+//   • WHO RENDERS THE MAP .............. apps/mobile/src/ui/{RoamMap,DriveMap}.tsx + eas.json.
+//     PROVIDER_GOOGLE whenever EXPO_PUBLIC_GOOGLE_MAPS_API_KEY is set, which the `production`
+//     profile does — so shipped builds are GOOGLE Maps, and only a keyless build falls back to
+//     Apple Maps. This page claimed Apple until 2026-07-24; don't let it drift back.
 import Legal from '../layouts/Legal.astro'
 ---
 
@@ -26,7 +30,7 @@ import Legal from '../layouts/Legal.astro'
   heading="Privacy Policy"
   kicker="The fine print, minus the fog"
   description="How Skipper handles your location, your account, and your drives. Short version: as little as possible, no ads, and your precise location and roam history never leave your phone."
-  updated="July 15, 2026"
+  updated="July 24, 2026"
 >
   <div class="legal-summary framed">
     <h2>The short version</h2>
@@ -84,8 +88,11 @@ import Legal from '../layouts/Legal.astro'
       replay it.
     </li>
     <li>
-      <strong>The map.</strong> Your position is drawn on the map on your device. On iPhone, the map is
-      rendered by Apple Maps, which is part of iOS.
+      <strong>The map.</strong> Your position is drawn on the map on your device. The map itself is
+      rendered by the <strong>Google Maps SDK</strong> built into the app. Google receives what it needs
+      to draw a map — device and app diagnostics, a device identifier, and usage data — and, because the
+      map follows along while you drive, the area it draws is necessarily the area you're in. We don't
+      hand Google your account or a separate feed of your position.
     </li>
   </ul>
   <p>
@@ -96,9 +103,10 @@ import Legal from '../layouts/Legal.astro'
 
   <h3>Motion</h3>
   <p>
-    Skipper reads your device's motion to gauge your speed and heading, so a story starts at the right
-    moment at 55 mph instead of after you've gone past. This is used on your phone, in the moment. We
-    don't collect it and it isn't sent anywhere.
+    Your speed and heading come from the same location updates described above, and iOS draws on the
+    device's motion sensor to produce them — which is why the app asks for motion access. It's used on
+    your phone, in the moment, so a story starts at the right time at 55 mph instead of after you've
+    gone past. We don't collect it and it isn't sent anywhere.
   </p>
 
   <h2>Your account</h2>
@@ -174,10 +182,11 @@ import Legal from '../layouts/Legal.astro'
   <dl>
     <dt>Neon</dt>
     <dd>Hosts our database — your account, drives, and credit ledger live here.</dd>
-    <dt>Google Cloud</dt>
+    <dt>Google</dt>
     <dd>
-      Runs our server. Google's Routes API also computes the road route between the two endpoints you
-      pick for a drive.
+      Google Cloud runs our server. Google's Routes API computes the road route between the two
+      endpoints you pick for a drive. And the Google Maps SDK inside the app draws the map — see
+      <em>The map</em> above for what that involves.
     </dd>
     <dt>Cloudflare R2</dt>
     <dd>Stores the narration audio files. Audio is private and served through short-lived signed links.</dd>
@@ -188,7 +197,7 @@ import Legal from '../layouts/Legal.astro'
       views, crash reports, device information, and IP-derived approximate location described above —
       never linked to your account.</dd>
     <dt>Apple</dt>
-    <dd>Distributes the app and renders the map on iPhone.</dd>
+    <dd>Distributes the app through the App Store.</dd>
   </dl>
   <p>
     The Skipper's narration is written and voiced <strong>before you ever press play</strong> — it's made
