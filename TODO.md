@@ -90,6 +90,21 @@ Remaining (founder-owned):
       link the native module or run the upload build phase).
 - [ ] **Verify on a RELEASE build** (not the `expo run:ios` dev client, which skips the upload phase):
       force a native crash, confirm a SYMBOLICATED report lands in the Skipper project.
+      **⚠ Verification landmines — each one silently produces a false "it's broken":**
+      1. **Detach the debugger.** A native crash reporter installs a signal/Mach-exception handler;
+         an attached debugger (Xcode, or a dev client) intercepts the fault FIRST, so nothing is ever
+         written. Launch the TestFlight build standalone, from the phone.
+      2. **Relaunch after crashing.** The report is written to disk during the fault and uploaded on
+         the NEXT app launch — the dashboard stays empty until you reopen the app. Don't call it a
+         failure at step 1.
+      3. **Force a REAL native fault, not a JS `throw`.** A JS throw is caught by the JS autocapture
+         path (already shipped in Stage 1) and proves nothing about the native module.
+      4. **Confirm BOTH upload phases in the EAS build log** (dSYM/native symbols AND the Hermes
+         source map) before you even install — a missing phase means the report lands unsymbolicated
+         and the crash looks like it never arrived.
+      5. **Do a plain launch smoke test on iOS 26 / arm64e first.** ⚠ UNVERIFIED — this came from a
+         research pass citing a PostHog issue (reportedly #3562) that I could not confirm against
+         source; treat it as "spend 30s ruling out a launch crash," not as established fact.
 - [ ] EAS Update OTA caveat: native symbols are fixed at build time, so after each `eas update` run
       `posthog-cli hermes upload --directory dist`. Wire into a release script only if OTA channels are used.
 
@@ -132,21 +147,57 @@ a **build-ready spec: `docs/specs/background-location-spec.md`**.
 Two items locked from the 2026-06-11 brainstorm (full capture: `docs/ideas/free-roam-mode.md`
 §Alpha learnings). Order within the pass is free; both are founder-facing on his daily drive.
 
-- [ ] **Waves: narrate the scenic tier.** ~126 swept scenic pins sit unnarrated (`pois` story/scenic
-      tiers — `discover-pois.ts`). Schema already done (V2): `narrations` HAS a `form` column
+- [ ] **Waves: narrate the scenic tier.** Schema already done (V2): `narrations` HAS a `form` column
       ('story'|'scenic'|'break'|'wave', 'bside' reserved) and a `narrations_poi_uq` unique index on
-      poiId (one telling per place); the Zod vocabulary is `narrationForm` in
-      `@skipper/shared`. The remaining work is the 10–20s WAVE form in
-      `generate-narrations.ts` (grammar: one-liner, self-contained, no laterality/volatile; no "ask
-      me about it" tease until B-sides exist). Engine + manifest: story-over-wave priority on
-      simultaneous candidates (the old "suppress on quiet chattiness" is moot — that axis was cut).
-      Prompt work is the real
-      cost — a wave must sound like HIM, not a gazetteer caption. ⚠ The --apply generation run is
-      a PAID run (~$3–5 + TTS) — needs an explicit founder go, never inferred from this lock.
+      poiId (one telling per place); the Zod vocabulary is `narrationForm` in `@skipper/shared`. The
+      remaining work is the 10–20s WAVE form in `generate-narrations.ts` (grammar: one-liner,
+      self-contained, no laterality/volatile; no "ask me about it" tease until B-sides exist). Prompt
+      work is the real cost — a wave must sound like HIM, not a gazetteer caption.
+
+      **⚠ QUEUE SIZE RE-MEASURED 2026-07-24: 387, not "~126"** (that figure was a stale 2026-06-11
+      probe). Live read-only count for the `lake-tahoe` bbox: 387 wikidata-scenic pins, ALL unnarrated;
+      462 wikipedia pois, 459 narrated + released. Queue by kind: park 81, valley 71, mountain 69,
+      hill 43, spring 39, beach 14, lake 12, meadow 10, reservoir/bay 9 each, ridge 7, cape 6, tail
+      (canyon, historic district, …) ~15. **~3× the assumed scope — so the old "~$3–5" estimate is
+      DEAD; re-size the spend before asking for the go**, and consider whether pass 1 wants the whole
+      387 or a kind-capped subset (81 parks + 71 valleys is a lot of one-liners for one region).
+
+      **Founder design calls (2026-07-24) — locked, don't re-litigate:**
+      - **Scope** = named scenic pins only in pass 1.
+      - **Content** = name + kind + region ONLY. No Macrostrat geology in pass 1.
+      - **Priority** = **distance-band first, then form** (nearer wins; form only breaks a tie) —
+        NOT strict story-over-wave. ⚠ This SUPERSEDES the earlier "story-over-wave priority" wording.
+        (The old "suppress on quiet chattiness" is moot either way — that axis was cut.)
+
+      Build notes (verified against source 2026-07-24, so they don't need re-deriving):
+      - **Route a wave as `stopType: 'scenic'`** — it grounds on the pin's own name; `'story'` would
+        false-flag it in the grounding gate. Flip at three literal sites (well builder, diversity eval,
+        narrate base) and skip `resolveStoryGrounding`/`storyFactsHash` in two (gateClip + the synth
+        loop). `factsHash: null`, `attribution: null` — both schema-legal for a non-story form.
+      - **The wave candidate query is DISTINCT from the story one.** Story hard-filters
+        `source = 'wikipedia'` and requires a `factSheet` (`generate-narrations.ts` ~L144); waves are
+        `source = 'wikidata'` scenic pins with no narration row.
+      - **`models.ts` needs a form-level wave length.** `REGISTER_LENGTH` bottoms out at
+        `targetSeconds: 60` (landscape/town), so a 10–20s wave has no band — add one and feed the
+        pacing eval the small target, or every wave fails length.
+      - **RELEASE STEP — without it the acceptance drive shows ZERO waves.** `generate-narrations`
+        writes `releasedAt = NULL` (staged) and `/roam` serves released-only
+        (`apps/api/src/index.ts:162`, `isNotNull(narrations.releasedAt)`). The fix is ONE call, not
+        387: `POST /admin/regions/:slug/release` bulk-stamps every staged clip in the region bbox and
+        is explicitly re-runnable (it preserves the region's first release date and only touches
+        `released_at IS NULL` rows — `apps/admin/server/index.ts:202-239`). The per-clip
+        `POST /admin/pois/:poiId/narration/release` exists too, for spot releases.
+      - ⚠ **`--scripts-only` SPENDS** (`generate-narrations.ts:103` — `apply: apply || scriptsOnly`).
+        The only free dry run is the default, no-flag invocation.
+      - ⚠ The --apply generation run is a PAID run (LLM + TTS) — needs an explicit founder go, never
+        inferred from this lock. Use `--max-cost` as a hard ceiling.
 - [ ] **The sonic cue.** ~1s entry motif before every encounter (the duck gets a reason; the
       startle dies) + a soft exit/resolve note as the duck releases. Client-side bundled assets
       (`apps/mobile`), played around the clip in `useRoam`. Sound design taste-gate: founder ear
       on the motif BEFORE wiring (charm shortlist already names sound design).
+      ⚠ **Name the asset/hook a "sting," never "motif"/`RoamMotif`** — that name is TAKEN by the
+      VISUAL idle car component (`apps/mobile/app/roam.tsx:67`, referenced from `RoamMap.tsx` +
+      `useRoam.ts`); reusing it for audio makes both unsearchable.
 
 ## TTS audio QA: clip loudness normalization
 
