@@ -171,20 +171,45 @@ Two items locked from the 2026-06-11 brainstorm (full capture: `docs/ideas/free-
       'wave')` in `apps/api/src/drives.ts` — deliberately NOT in `loadCorpusByPoiIds`, which resolves an
       already-frozen selection where filtering would break a saved drive instead of playing it.
 
-      **⚠ REAL SPEND, MEASURED — not the "~$3–5" this file used to carry.** The free dry run now quotes
-      **387 clips ≈ $32 (~$29 narration+grounding-gate + ~$3 TTS), ≈97 min of audio.** The old figure
-      assumed ~126 clips AND ignored that the grounding call is priced by the JUDGE's prompt, so it does
-      not shrink with the clip. Founder decisions still open before any go:
-      - **Whole 387, or a kind-capped subset?** By kind: park 81, valley 71, mountain 69, hill 43,
+      **SMOKE-TESTED TWICE (2026-07-24, $0.66 total) — both runs found real defects, both now fixed.**
+
+      Run 1 (3 pins, $0.25) shipped 3/3 but exposed two problems. **Monotony was structural, not a
+      prompt weakness:** 2 of 3 opened "There's a peak out there called X. Standing … against the sky
+      today." Roam clips are narrated in a VACUUM — `narrate.ts` has `recentOpeners`/`recentClosers`/
+      `recentMotifs` and `generate-narrations` passes NONE of them, and `evaluateDiversity` sees one clip
+      at a time so it only catches within-clip tics. A story varies for free because its facts differ; a
+      wave has two fields, so 378 independent calls converge on one sentence. Fixed with **`WAVE_ANGLES`**
+      — six assigned opening shapes, round-robin by queue index (`waveAngleFor`), chosen over a rolling
+      recent-openers buffer because a buffer leaves the first `NARRATION_CONCURRENCY` clips colliding
+      while an index rotation holds at any concurrency. Every angle stays inside the name+kind ceiling.
+      **Second defect: a NULL kind made the narrator infer the kind from the NAME** — "Cathedral Peak"
+      (kind NULL) came back "there's a peak out there". Harmless when the name is honest, a fabricated
+      fact when it isn't (a "Castle Rock" that is no rock), and **the grounding gate PASSES it** because
+      the claim traces to the name. Waves now REQUIRE a kind (9 pins dropped, reported not silent).
+
+      Run 2 (6 pins, $0.41) was the verification: **6 MOUNTAINS — same kind on purpose, the worst case
+      for monotony — produced 6 distinct openers**, no two sharing a template (name-flat, thing-first,
+      reaction-first, kind-plainly, and a genuinely free groaner: "Big name for a big fella" off Big
+      Chief). Kind now comes from the card, not the name. The excision path fired on 2 of 6 (the gate
+      caught over-reach and trimmed rather than withheld) — fail-closed machinery working. Lengths ran
+      4–9s, UNDER the 15s aim, which is correct doctrine (a name-only wave lands short; `evaluatePacing`
+      is one-sided and never flags short).
+
+      **CURRENT SPEND: 378 clips, dry run quotes ~$31 (~$28 narration+gate + ~$3 TTS), ≈95 min.**
+      Measured per-clip in run 2 was $0.068 vs the $0.075 estimate, so the real number is likely ~$29.
+      (The long-dead "~$3–5" assumed ~126 clips AND that the grounding call shrinks with the clip; it
+      doesn't — that call is priced by the JUDGE's prompt.) ⚠ `--scripts-only` DOES spend
+      (`apply: apply || scriptsOnly`); only the no-flag dry run is free. Use `--max-cost` on the real run.
+
+      Open founder calls before the go:
+      - **Whole 378, or a kind-capped subset?** By kind: park 81, valley 71, mountain 69, hill 43,
         spring 39, beach 14, lake 12, meadow 10, reservoir/bay 9 each, ridge 7, cape 6, tail ~15.
-      - **~3% of the queue is weak** (measured, not impressionistic): 9 pins have a NULL kind (the clip
-        then has ONLY a name — the thinnest legal wave), and 2 are parcel/facility records rather than
-        country you'd wave at ("Ward Creek Park Property", "Fallen Leaf Recreation Center"). The
-        tragedy/crime taste gate DOES run in wave mode; it just doesn't catch this category. Worth an
-        eyeball, not a blocker.
-      - **Cheapest next step is a `--scripts-only --limit 3` smoke** (~pennies) to ear-read three real
-        waves before committing to the full run. ⚠ `--scripts-only` DOES spend (`apply: apply ||
-        scriptsOnly`) — only the no-flag dry run is free.
+      - **2 parcel/facility records remain** ("Ward Creek Park Property", "Fallen Leaf Recreation
+        Center") — country you wouldn't wave at. The tragedy/crime taste gate runs in wave mode but
+        doesn't catch this category. 2 of 378; not worth a mechanism unless more show up.
+      - **One cosmetic blemish seen post-excision:** Herlan Peak closed "...against the sky today, too."
+        The dangling "too" has nothing to refer to in a self-contained clip. Watch for it at ear-pass;
+        if it recurs it's an excision artifact, not a prompt bug.
 
       Remaining after the run:
       - [ ] **RELEASE — without it the acceptance drive shows ZERO waves.** Generation writes

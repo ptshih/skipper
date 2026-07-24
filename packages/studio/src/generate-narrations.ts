@@ -50,7 +50,7 @@ import { resolveRegion, requireRegionBbox } from './pipeline/region'
 import { runJob } from './pipeline/job-progress'
 import { ensurePoiOverridesLoaded } from './pipeline/poi-overrides'
 import { regionLabel } from './pipeline/geo'
-import { narrateStop } from './pipeline/narrate'
+import { narrateStop, waveAngleFor } from './pipeline/narrate'
 import { resolveStoryGrounding } from './pipeline/select'
 import { synthesizeWithTailRetake, type TailOutcome } from './pipeline/tts'
 import type { LoudnessOutcome } from './pipeline/loudnorm'
@@ -200,6 +200,8 @@ async function main(): Promise<void> {
   }
 
   const candidates: Candidate[] = []
+  /** Wave pins dropped for having no `kind` — reported, never silent (a quiet drop reads as coverage). */
+  let waveSkippedNoKind = 0
   for (const r of rows) {
     if (excludeIds.has(r.id)) continue // "select all matching, minus a few"
     if (query && !`${r.name} ${r.sourceId}`.toLowerCase().includes(query)) continue
@@ -214,6 +216,15 @@ async function main(): Promise<void> {
       // coordinate/QID artifact, has nothing to wave AT and would produce a clip that says nothing.
       const named = r.name.trim()
       if (named.length < 2 || /^Q\d+$/.test(named)) continue
+      // A wave REQUIRES a kind. With only a name on the card the model reaches for the kind the name
+      // implies — the smoke test's "Cathedral Peak" (kind NULL) came back "there's a peak out there",
+      // asserting a kind it was never given. Harmless when the name happens to be honest, a fabricated
+      // fact when it is not (a "Castle Rock" that is no rock), and the grounding gate PASSES it because
+      // the claim traces to the name. Name + kind is the whole wave sheet, so half a sheet is no wave.
+      if (!r.kind || !r.kind.trim()) {
+        waveSkippedNoKind++
+        continue
+      }
       candidates.push({
         poiId: r.id,
         form: 'wave',
@@ -269,6 +280,12 @@ async function main(): Promise<void> {
       `${waveMode ? 'wikidata scenic tier — named, no fact sheet' : 'enriched — have a fact sheet'}) — ` +
       `${skipped.length} already have ${waveMode ? 'a wave clip' : 'fresh roam clips'} (skipped), ${queue.length} to generate.\n`,
   )
+  if (waveSkippedNoKind > 0) {
+    console.log(
+      `  ${waveSkippedNoKind} wikidata pin(s) SKIPPED for having no kind — a wave's sheet is name + kind, ` +
+        `and with only a name the narrator infers the kind from it (see the wave eligibility note).`,
+    )
+  }
   // Story lists the extract size (the material available); a wave has none, so it lists the kind —
   // the only other word the clip gets to say, and the thing worth eyeballing before a paid run.
   for (const c of queue) {
@@ -371,7 +388,9 @@ async function main(): Promise<void> {
       // it names only the stable REGION, never a specific stretch.
       stopType: (isWave ? 'scenic' : 'story') as 'scenic' | 'story',
       place: { name: c.name, ...(c.kind ? { kind: c.kind } : {}) },
-      ...(isWave ? { wave: true as const } : { facts: grounding!.facts }),
+      // The assigned opening shape rides with the wave flag — round-robin by queue index, so the corpus
+      // spreads across WAVE_ANGLES deterministically instead of converging on one sentence template.
+      ...(isWave ? { wave: true as const, waveAngle: waveAngleFor(seq) } : { facts: grounding!.facts }),
       targetSeconds: band.targetSeconds,
       maxSeconds: band.maxSeconds,
       selfContained: true,

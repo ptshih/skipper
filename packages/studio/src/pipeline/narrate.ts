@@ -72,6 +72,12 @@ export interface NarrationRequest {
    *  letting the two drift. This flag changes only the LENGTH + the delivery instruction, never what is
    *  groundable. Requires `place` (a wave is always named); ignored on story/break. */
   wave?: boolean
+  /** WAVE only: the assigned OPENING SHAPE for this clip (see WAVE_ANGLES). A story varies its opener
+   *  naturally because its facts differ; a wave's only inputs are a name and a kind, so left alone the
+   *  model converges on one template across the whole corpus (measured: 2 of the first 3 smoke clips
+   *  opened "There's a peak out there called X. Standing … against the sky today"). Assigning the shape
+   *  makes the spread STRUCTURAL and deterministic instead of hoping for emergent variety. */
+  waveAngle?: string
   /** SHARED-ATOM framing (generate-narrations.ts): this telling is the place's ONE narration, played
    *  BOTH on its own by proximity (roam) AND reused mid-drive on a planned route. Adds the
    *  self-contained block to the sheet (route-agnostic, no order, no baked laterality, no tour shape);
@@ -146,6 +152,29 @@ function mergedFeatureLines(features: { name: string; facts: string[] }[] | unde
   return out
 }
 
+/**
+ * The WAVE opening rotation — the anti-monotony mechanism for the scenic tier.
+ *
+ * A story's facts differ per place, so its openers differ for free. A wave has only a name and a kind,
+ * and 387 independent calls with the same two-field sheet converge hard on one sentence shape. Every
+ * angle below stays strictly inside the wave ceiling (name + kind + the plainly-visible day) — none
+ * licenses a new fact; they only change WHERE the sentence starts. Assigned round-robin by queue index
+ * (waveAngleFor), so the spread holds at any concurrency and does not depend on clips seeing each other.
+ */
+export const WAVE_ANGLES: readonly string[] = [
+  'OPEN ON THE NAME, flat and immediate — the place\'s name in your very first words, the way you would read it off a sign, then one plain honest reaction to the look of the day. Do not warm up to it.',
+  'OPEN ON THE THING, unnamed — start with the plain shape of it out the window (water, an opening in the trees, a rise of ground) in ordinary words, and let the NAME land a beat later, once you have pointed.',
+  'OPEN BY TURNING THE NAME OVER — start with the name itself as a curiosity, the kind of name someone chose. ⚠ You do NOT know who named it or why and you must never guess, hedge, or imply an answer; the wondering IS the line, and it stays unanswered.',
+  'OPEN ON YOUR OWN REACTION — start with your honest feeling about this stretch of day (the light, the air, the quiet), then name the place as the thing that prompted it. The feeling is yours; keep it a feeling, never a claim about the place.',
+  'OPEN ON THE KIND, PLAINLY — start by calling out what KIND of thing it is in ordinary words ("another lake", "bit of meadow"), then give its name. If no kind was given on the card, open on the name instead — never infer a kind from the name.',
+  'OPEN ON A GROANER, if one comes FREE off the name or the kind — a pun needing no fact you were not handed. Lead with it and stop almost immediately after. If no free groaner is there, do NOT manufacture one: open on the name plainly and skip the joke entirely.',
+]
+
+/** The assigned opening shape for wave number `index` (round-robin over WAVE_ANGLES). */
+export function waveAngleFor(index: number): string {
+  return WAVE_ANGLES[((index % WAVE_ANGLES.length) + WAVE_ANGLES.length) % WAVE_ANGLES.length]!
+}
+
 /** Build the per-stop USER fact sheet, matching the system prompt's "Reading the fact sheet" contract. */
 export function buildFactSheet(req: NarrationRequest): string {
   const lines: string[] = []
@@ -195,8 +224,16 @@ export function buildFactSheet(req: NarrationRequest): string {
         'depth, or age, no "famous"/"popular"/"hidden gem", no detail you would have to be standing there',
       )
       lines.push(
-        'to know. You cannot see it — you have a name and a kind, the way you would read a road sign.',
+        'to know. You cannot see it — you have a name and a kind, the way you would read a road sign, so do',
       )
+      lines.push(
+        'NOT hand this feature a specific of its own: not its sand, its boulders, its trees, its crowds, its',
+      )
+      lines.push(
+        "shape. The day is everyone's to see (the light, the sky, the general color of water); THIS place's",
+      )
+      lines.push('particulars are not. And never infer the kind from the name — if the card gave no KIND, you')
+      lines.push('do not know what kind of thing it is, however much the name suggests one.')
       lines.push('')
       lines.push(
         'This is ONE BREATH. A sentence, or two short ones — not a telling, not a mood, not a build. Say',
@@ -216,6 +253,10 @@ export function buildFactSheet(req: NarrationRequest): string {
       lines.push(
         'there is little to say, never describe yourself as waving, and never promise to come back to it.',
       )
+      if (req.waveAngle) {
+        lines.push('')
+        lines.push(`HOW TO OPEN THIS ONE (assigned, so the corpus does not all start alike): ${req.waveAngle}`)
+      }
     } else if (namedScenic) {
       lines.push(`PLACE: ${req.place!.name}`)
       if (req.place!.kind) lines.push(`KIND: ${req.place!.kind}`)
