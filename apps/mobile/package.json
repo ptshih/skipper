@@ -47,6 +47,7 @@
     "react-native-screens": "~4.26.0"
   },
   "devDependencies": {
+    "@posthog/cli": "^0.9.1",
     "@types/react": "~19.2.14",
     "babel-preset-expo": "~57.0.0",
     "expo-dev-client": "~57.0.9",

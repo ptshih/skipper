@@ -109,6 +109,7 @@
         "react-native-screens": "~4.26.0",
       },
       "devDependencies": {
+        "@posthog/cli": "^0.9.1",
         "@types/react": "~19.2.14",
         "babel-preset-expo": "~57.0.0",
         "expo-dev-client": "~57.0.9",
@@ -665,6 +666,8 @@
     "@oslojs/encoding": ["@oslojs/encoding@1.1.0", "", {}, "sha512-70wQhgYmndg4GCPxPPxPGevRKqTIJ2Nh4OkiMWmDAVYsTQ+Ta7Sq+rPevXyXGdzr30/qZBnyOalCszoMxlyldQ=="],
 
     "@oxc-project/types": ["@oxc-project/types@0.139.0", "", {}, "sha512-r9gHphtCs+1M7J0pw6Sn/hh/Wpa/iQrOOkrNAlVLF/gHq+/CJmHIWKKUUhdWjcD6CIa8idarspCsASiXCXvFUw=="],
+
+    "@posthog/cli": ["@posthog/cli@0.9.1", "", { "dependencies": { "detect-libc": "^2.1.2" }, "bin": { "posthog-cli": "run-posthog-cli.js" } }, "sha512-O02l2e5wuuIUzqdF3Q1gtqgi139fK1V9uXRJn8WToxmazT48ub/ODIrB3A+G/cK+ccZPc05NuPLqcsT1VOFkgw=="],
 
     "@posthog/core": ["@posthog/core@1.43.1", "", { "dependencies": { "@posthog/types": "^1.396.0" } }, "sha512-hGM8f5sp3we6Em/RQHXbmyYm554hUx9+9jhf92ZQgDS4/xW72KHyZiO9wcFye+qAx2cJAOhOCDIznmO1FV8IbA=="],
 
