@@ -137,10 +137,11 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   north-star delighter); build-ready, unbuilt, post-MVP.
 - [gps-player-spec.md](specs/gps-player-spec.md) — the M1 live GPS phone player; mostly built (the
   duck flip is resolved → `doNotMix` by design; the real drive has since landed).
-- [background-location-spec.md](specs/background-location-spec.md) — the deferred When-In-Use → Always
-  escalation (screen-off / pocket triggering): a transport re-architecture from the foreground
-  `watchPositionAsync` to a `startLocationUpdatesAsync` + TaskManager background task. Build-ready,
-  unbuilt; empirically gated behind a real-device drive showing foreground + keep-awake is insufficient.
+- [background-location-spec.md](specs/background-location-spec.md) — the deferred When-In-Use →
+  background-updates escalation (screen-off / pocket triggering; **When-In-Use only, NO "Always"** —
+  proven from the installed expo-location source): a transport re-architecture from the foreground
+  `watchPositionAsync` to a `startLocationUpdatesAsync` + TaskManager task. Build-ready, unbuilt;
+  empirically gated behind a real-device drive showing foreground + keep-awake is insufficient.
 - [tour-structure-spec.md](specs/tour-structure-spec.md) — intro/outro brackets + quality-gated
   narration; §3/§4 built, data-model half superseded by zero-reuse.
 - [downtime-callouts-spec.md](specs/downtime-callouts-spec.md) — persona-only beats in the quiet

@@ -41,19 +41,22 @@ mode (tour drive or roam) the rider hits first; never again.
 - UI: `apps/mobile/src/ui/LocationPrime.tsx` (a "smart" composite like `AccountGate`) — Screen +
   framed Card + a single primary Button, **no dismiss**. Copy: `voice.drive.locationPrime*`.
 
-## Deferred — When-In-Use → Always/background escalation
+## Deferred — When-In-Use → background updates (screen-off / pocket triggering; NO "Always")
 
 Not built. Enables screen-off / phone-in-pocket triggering (today foreground location dies on
 lock, so the drive keeps the screen awake via `expo-keep-awake`; if the screen ever locks, audio
-keeps playing but GPS triggering silently stops — the failure Always fixes). Native + review
-work, hence its own pass. **Build-ready detail:
+keeps playing but GPS triggering silently stops). Native + review work, hence its own pass.
+**Build-ready detail:
 [`../specs/background-location-spec.md`](../specs/background-location-spec.md)**, empirically gated
 behind a real-device drive (build only if foreground + `expo-keep-awake` triggering fails
-locked/pocketed). Shape: `expo-location` plugin `isIosBackgroundLocationEnabled: true` +
-`locationAlwaysAndWhenInUsePermission` (`app.json`, `UIBackgroundModes += location` follows
-automatically), the **foreground→background** request sequence (you cannot ask for Always cold),
-handle the **"Allow Once" silent-fail** (→ Settings), and **App Store Review notes** (background
-location solely triggers GPS-anchored audio during an active drive). ⚠ CORRECTED 2026-07-24 — the
-earlier checklist said *"`allowsBackgroundLocationUpdates` on the watch"*; that option does NOT exist
-in expo-location. Background is a transport swap from the foreground `watchPositionAsync` to
-`startLocationUpdatesAsync` + a TaskManager task (the spec details it), NOT a flag on the watch.
+locked/pocketed). Shape: flip the `expo-location` plugin's `isIosBackgroundLocationEnabled: true`
+(adds `UIBackgroundModes += location`), swap the foreground `watchPositionAsync` for a
+`startLocationUpdatesAsync` + TaskManager task, add App Store review notes, native rebuild.
+⚠ CORRECTED 2026-07-24 (source-level re-verification of the installed `expo-location` ~57.0.6): this
+path is **When-In-Use ONLY — it does NOT request "Always."** `startLocationUpdatesAsync` checks only
+foreground permission (deliberate; expo PR #33617), so KEEP the Always usage strings FALSE and NEVER
+call `requestBackgroundPermissionsAsync` — requesting Always would be a 5.1.1 data-minimization
+liability. (Two now-dead stale claims: *"`allowsBackgroundLocationUpdates` on the watch"* — no such
+option; and *"→ Always escalation"* — the correct grant is When-In-Use.) ⚠ Do NOT declare the
+`location` background mode without shipping the task in the SAME build (documented 2.5.4 rejection).
+Full proof chain + citations in the spec.

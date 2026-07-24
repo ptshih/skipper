@@ -105,20 +105,22 @@ decision.
 Refs: `apps/mobile/src/lib/analytics.tsx`, `apps/mobile/app/_layout.tsx`, `apps/mobile/app.config.ts`
 (where the config plugin goes), `apps/mobile/metro.config.js` (the Metro wrap), `apps/mobile/eas.json`.
 
-## Location: When-In-Use → Always/background (deferred half of permission priming)
+## Location: When-In-Use → background updates (deferred half of permission priming; NO "Always")
 
 The pre-permission **explainer** shipped 2026-06-13 in front of the *When-In-Use* prompt
-(`docs/decisions/location-permission-priming.md`). The **Always/background** escalation — screen-off /
+(`docs/decisions/location-permission-priming.md`). The **background-updates** escalation — screen-off /
 phone-in-pocket triggering (foreground `watchPositionAsync` dies on lock, so the drive holds the screen
 awake via `expo-keep-awake`; if it ever locks, audio plays on but GPS triggering silently stops) — is now
 a **build-ready spec: `docs/specs/background-location-spec.md`**.
 
 - [ ] Build it — but ONLY after a real-device drive shows foreground + keep-awake triggering is
-      insufficient locked/pocketed (the founder's empirical gate; Always is heightened App Store review
-      scope). It's a transport re-architecture (foreground `watchPositionAsync` → a `startLocationUpdatesAsync`
-      TaskManager task; adds `expo-task-manager`), a foreground→background permission sequence, an
-      Always-scoped copy rewrite, review notes, and a native rebuild. Full checklist + gotchas + the
-      ⚠ corrected API (the old "`allowsBackgroundLocationUpdates` on the watch" note was wrong) live in the spec.
+      insufficient locked/pocketed (the founder's empirical gate). ⚠ This path is **When-In-Use ONLY, NOT
+      "Always"**: a source-level read of the installed expo-location proved `startLocationUpdatesAsync` needs
+      only foreground permission (expo PR #33617), so the review scope is the standard nav-app one, not the
+      heightened Always scope. Work: transport re-architecture (foreground `watchPositionAsync` → a
+      `startLocationUpdatesAsync` TaskManager task; adds `expo-task-manager`), flip `isIosBackgroundLocationEnabled`
+      (KEEP the Always strings false; never call `requestBackgroundPermissionsAsync`), a small copy tweak,
+      review notes, and a native rebuild. Full checklist + source proof + gotchas in the spec.
 
 ## Roam build pass 2 — LOCKED by the founder 2026-06-11 (the "companion grows up" pass)
 
