@@ -5,6 +5,61 @@ Carry-forward **engineering** items (the near-term layer of the truth system —
 Each item has enough context to action without re-deriving the reasoning. **Delete items
 when done** — git history is the archive.
 
+## Content + LLM-discovery marketing op — kick off during App Store review (founder ask 2026-07-24)
+
+Dead-time play: App Store review is idle builder-time, and **distribution is the project's named
+UNSOLVED existential question** — `docs/research/autio-content-moat.md` §"the honest hole" says it
+outright ("acquisition is the thing still to actually solve"), and Detour "died beloved, no
+distribution" (`docs/research/competitive-research.md`). Content compounds while we wait, so start now.
+
+⚠ **This must NOT become "rebuild Autio's SEO factory."** That same doc is a founder-blessed DON'T on
+exactly that: their comparison/listicle machine is a **trap** ("in a comparison table, breadth wins and
+charm has no cell" — 25k stories > our ~19 stops "by construction"), and out-publishing it plays FOR
+their niche-subscription plateau, not past it. CLAUDE.md's charm-not-scale + the doc's "refuse the
+category" say don't fight on the breadth grid. So "match/rival Shaka + Autio" = match their *presence
+and polish*, NEVER their breadth-comparison content.
+
+**The doctrine-safe wedge (and the real point of the founder ask): LLM answer-discovery (GEO/AEO).**
+When a rider asks ChatGPT/Gemini/Claude "what's a good audio tour for driving around Lake Tahoe?", the
+model SYNTHESIZES an entity-grounded answer — it is NOT the breadth grid where 25k>19 wins. A
+**region-deep character companion, a category of one**, can be surfaced there on merit, because the
+signal is entity presence + citable structured facts — exactly the asset we already own and they don't:
+- Our corpus is **Wikidata/Wikipedia-grounded** (`pois` deduped by QID, `pois.fact_sheet`, `narrations`)
+  — real, sourced, structured facts, with **CC BY-SA attribution already frozen** per the CLAUDE.md
+  invariant. That is the raw material LLMs cite; Autio's celebrity-voice catalog is opaque audio a model
+  can't read.
+- So the honest, uncopyable positioning ("category of one," region-honest, one continuous character —
+  `autio-content-moat.md` §"what this steers") IS also the GEO-optimal one. For once the strategy and
+  the discovery channel point the same way.
+
+FIRST STEP is RESEARCH, not building (founder doctrine: validate ROI + pre-mortem before infra;
+brainstorms land in `docs/ideas/` first — the idea→spec cadence). GEO best-practice moves fast and my
+training is stale — ground it in current sources and cite.
+
+- [ ] **Strategy pass → `docs/ideas/llm-discovery-marketing.md`.** Research current GEO/AEO tactics
+      (schema.org structured data, entity SEO, the `llms.txt` proposal's real adoption, WHICH sources
+      the big models actually retrieve/cite, Reddit/forum presence), pre-mortem, ROI. Reconcile with
+      `autio-content-moat.md` (refuse-the-category) so we build the answer-discovery wedge, NOT a
+      comparison factory. Founder greenlight promotes it to a spec + backlog work.
+
+Concrete candidates the research pass should size (do NOT build until greenlit — several touch the live
+corpus and want a design/ROI call):
+- **AI-crawler posture in `apps/site/public/robots.txt`.** Today it's blanket `Allow: /` (so GPTBot /
+  Google-Extended / ClaudeBot / PerplexityBot are already permitted) — since we WANT discovery, keep it
+  open; consider naming them explicitly + confirm the sitemap covers any new content pages.
+- **Structured data on skipper.fm** (JSON-LD: `TouristAttraction` / `TouristTrip` / `AudioObject`) so the
+  entity "Skipper — Lake Tahoe driving companion" is machine-legible. `apps/site` is static Astro.
+- **Programmatic region/POI content pages built FROM the corpus we already own** — a "Lake Tahoe driving
+  audio tour" hub + per-POI story pages (carrying the required CC BY-SA credit). The corpus→web lever no
+  competitor can match; also the biggest build, so it wants the ROI pass first.
+- **Off-domain presence in the sources LLMs cite** (Reddit, r/roadtrip, authoritative Tahoe guides) — the
+  doc is explicit our own domain ≠ discovery; models weight third-party mentions.
+
+Refs: `docs/research/autio-content-moat.md` (refuse-the-category + the unsolved-acquisition hole),
+`docs/research/competitive-research.md` (Detour distribution post-mortem), `apps/site` (static Astro on
+skipper.fm; `astro.config.mjs` sitemap + `public/robots.txt`), the Wikidata-grounded corpus
+(`pois`/`narrations`/`fact_sheet` + the CC BY-SA attribution invariant in CLAUDE.md).
+
 ## PostHog telemetry — Stage 2 (native crashes) + Stage 3 (session replay)
 
 Stage 1 is SHIPPED (2026-07-17): `apps/mobile/src/lib/analytics.tsx` — the pure-JS PostHog base SDK
@@ -50,46 +105,20 @@ decision.
 Refs: `apps/mobile/src/lib/analytics.tsx`, `apps/mobile/app/_layout.tsx`, `apps/mobile/app.config.ts`
 (where the config plugin goes), `apps/mobile/metro.config.js` (the Metro wrap), `apps/mobile/eas.json`.
 
-## Create-a-Drive: empty-corpus dead-end — CORE FIX SHIPPED (2026-07-19)
-
-The loaded-but-empty-corpus state is now handled in `apps/mobile/app/create.tsx`: `anchorsReady` guards
-on LENGTH (was `!!anchors`, so `[]` read as ready and left the FROM/TO pickers ENABLED), so an
-un-curated region keeps the pickers disabled; a new `emptyCorpus` derived state shows a warm one-liner
-(`voice_create.emptyCorpus`, "No curated stops in this region yet — check back soon") in the form, and
-the picker's `ListEmptyComponent` now distinguishes empty-CORPUS from a search no-match. `anchorsError`
-(load-failure) unchanged. This matters because Tahoe's curated-Places feed is EMPTY until the
-founder-gated PAID curation run (admin **/places** Curate), so at 1.0.0 this was the DEFAULT state.
-
-Remaining — OPTIONAL, founder call: gate the whole "Create a Drive" home CTA when the only region's
-corpus is empty (rider never reaches a form they can't complete) vs. the shipped copy-path (form
-reachable, empty-state copy shown). The copy path is the safe default and is what shipped; CTA-gating
-is a nicety, not a blocker — and it'd live on the home screen, not `create.tsx`.
-
 ## Location: When-In-Use → Always/background (deferred half of permission priming)
 
-The pre-permission **explainer** shipped 2026-06-13 in front of the existing *When-In-Use*
-prompt (drive + roam; `LocationPrime` + the `'locationPrime'` phase; decision:
-`docs/decisions/location-permission-priming.md`). The founder chose to **phase** the tier change:
-the Always/background escalation is this deferred item. WHY it matters — foreground location dies
-on screen-lock, so the drive keeps the screen awake (`expo-keep-awake`); if the screen ever locks,
-audio keeps playing but GPS triggering silently stops (the skipper goes quiet at the next stop).
-Always fixes that (screen-off / phone-in-pocket triggering). Native + App Store review work, so
-its own pass.
+The pre-permission **explainer** shipped 2026-06-13 in front of the *When-In-Use* prompt
+(`docs/decisions/location-permission-priming.md`). The **Always/background** escalation — screen-off /
+phone-in-pocket triggering (foreground `watchPositionAsync` dies on lock, so the drive holds the screen
+awake via `expo-keep-awake`; if it ever locks, audio plays on but GPS triggering silently stops) — is now
+a **build-ready spec: `docs/specs/background-location-spec.md`**.
 
-- [ ] Config plugin (`apps/mobile/app.json`): `expo-location` → `isIosBackgroundLocationEnabled: true`
-      + `locationAlwaysAndWhenInUsePermission` (skipper-voiced string); add `location` to iOS
-      `UIBackgroundModes` (today: `audio` only).
-- [ ] `gps.ts liveSource`: `allowsBackgroundLocationUpdates: true` on the watch; reconsider whether
-      `expo-keep-awake` can drop once background triggering is reliable.
-- [ ] Request **sequence**: foreground first, THEN `requestBackgroundPermissionsAsync()` (you cannot
-      ask for Always cold). Extend the `LocationPrime` copy to prime the Always reason — note the
-      current copy is When-In-Use-scoped (`voice.ts`: "Parked, I'm off the clock — no tracking"), so
-      it needs an Always-rationale rewrite, not just reuse. Reuse the `'locationPrime'` phase.
-- [ ] Handle the **"Allow Once" silent-fail**: a same-session background request returns denied with
-      NO prompt → route to Settings (the existing reduced/denied gate pattern).
-- [ ] Needs a native rebuild (dev build / EAS) + **App Store Review notes** stating background
-      location is used solely to trigger GPS-anchored audio during an active drive. Gated behind the
-      phone-player bet being proven. Sources cited in the decision doc.
+- [ ] Build it — but ONLY after a real-device drive shows foreground + keep-awake triggering is
+      insufficient locked/pocketed (the founder's empirical gate; Always is heightened App Store review
+      scope). It's a transport re-architecture (foreground `watchPositionAsync` → a `startLocationUpdatesAsync`
+      TaskManager task; adds `expo-task-manager`), a foreground→background permission sequence, an
+      Always-scoped copy rewrite, review notes, and a native rebuild. Full checklist + gotchas + the
+      ⚠ corrected API (the old "`allowsBackgroundLocationUpdates` on the watch" note was wrong) live in the spec.
 
 ## Roam build pass 2 — LOCKED by the founder 2026-06-11 (the "companion grows up" pass)
 

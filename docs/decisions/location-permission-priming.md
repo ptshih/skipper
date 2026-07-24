@@ -46,10 +46,14 @@ mode (tour drive or roam) the rider hits first; never again.
 Not built. Enables screen-off / phone-in-pocket triggering (today foreground location dies on
 lock, so the drive keeps the screen awake via `expo-keep-awake`; if the screen ever locks, audio
 keeps playing but GPS triggering silently stops — the failure Always fixes). Native + review
-work, hence its own pass. Checklist (from the 2025–2026 research pass): `expo-location` plugin
-`isIosBackgroundLocationEnabled: true` + `locationAlwaysAndWhenInUsePermission` (`app.json`),
-`UIBackgroundModes += location`, `allowsBackgroundLocationUpdates` on the watch
-(`gps.ts liveSource`), the **foreground→background** request sequence (you cannot ask for Always
-cold), handle the **"Allow Once" silent-fail** (a same-session background request returns denied
-with no prompt → route to Settings), and **App Store Review notes** stating background location
-is used solely to trigger GPS-anchored audio during an active drive (2025 reviewers expect this).
+work, hence its own pass. **Build-ready detail:
+[`../specs/background-location-spec.md`](../specs/background-location-spec.md)**, empirically gated
+behind a real-device drive (build only if foreground + `expo-keep-awake` triggering fails
+locked/pocketed). Shape: `expo-location` plugin `isIosBackgroundLocationEnabled: true` +
+`locationAlwaysAndWhenInUsePermission` (`app.json`, `UIBackgroundModes += location` follows
+automatically), the **foreground→background** request sequence (you cannot ask for Always cold),
+handle the **"Allow Once" silent-fail** (→ Settings), and **App Store Review notes** (background
+location solely triggers GPS-anchored audio during an active drive). ⚠ CORRECTED 2026-07-24 — the
+earlier checklist said *"`allowsBackgroundLocationUpdates` on the watch"*; that option does NOT exist
+in expo-location. Background is a transport swap from the foreground `watchPositionAsync` to
+`startLocationUpdatesAsync` + a TaskManager task (the spec details it), NOT a flag on the watch.
