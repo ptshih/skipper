@@ -81,13 +81,41 @@ export const auth = betterAuth({
   // NOTE: social OAuth (Google/Apple) needs EXACT pre-registered redirect URIs — use api.skipper.fm.
   baseURL: {
     allowedHosts: [
-      'localhost', // local dev
+      // Local dev. BOTH entries are needed: `matchesHostPattern` compares the Host header
+      // verbatim and does NOT strip the port, so bare 'localhost' alone never matches the
+      // real dev header (`localhost:8787`) — the request silently fell through to `fallback`
+      // and generated PRODUCTION links from a local server. Harmless-looking, and made worse
+      // by dev and prod sharing one Neon DB: a locally-triggered reset link resolved against
+      // prod instead of failing loudly. A port wildcard is not a spoofing risk — it widens
+      // the allowlist only to loopback, which an outside attacker can't point anywhere useful.
+      'localhost',
+      'localhost:*',
       'api.skipper.fm', // custom domain — the API host
       'skipper-api-csslmysz7q-uk.a.run.app', // Cloud Run direct (cutover / fallback)
     ],
-    protocol: 'auto', // http for localhost, https for the custom domain / Cloud Run hosts
+    // http for localhost, https everywhere else — but ONLY because `trustedProxyHeaders`
+    // is on below. 'auto' alone is not enough behind a TLS-terminating proxy; see there.
+    protocol: 'auto',
     fallback: 'https://api.skipper.fm', // base URL for any non-matching host + at init
   },
+  // Required for `protocol: 'auto'` above to resolve HTTPS in production. Cloud Run terminates
+  // TLS at the front end and forwards to the container over plain http, so the request URL the
+  // app sees is `http://…` no matter how the rider connected. Better Auth reads `x-forwarded-proto`
+  // ONLY when this is true (it defaults to FALSE, verified in better-auth's own
+  // dist/utils/url.mjs `getProtocolFromSource`); without it 'auto' falls through to that request
+  // URL and every generated link is http.
+  //
+  // That is not cosmetic: it emailed password-reset links as `http://api.skipper.fm/…` with the
+  // one-time recovery token in the PATH (observed in a real 2026-07-15 reset). The host redirects
+  // to https, so the flow worked — which is exactly why nothing caught it — but the token crossed
+  // the wire in cleartext first, on the ONLY route back into a locked-out account.
+  //
+  // Safe here, and the docs' "only if you trust your proxy" caveat is already satisfied twice over:
+  // the proto header is validated to be literally "http"|"https" (no injection surface — the worst a
+  // spoof achieves is DOWNGRADING our own links), and the far more dangerous `x-forwarded-host`
+  // it also enables is still gated by the `allowedHosts` allowlist above, which is the whole reason
+  // that allowlist exists. Google's front end overwrites both headers on the way in regardless.
+  advanced: { trustedProxyHeaders: true },
   database: drizzleAdapter(authDb, { provider: 'pg', schema: authSchema }),
   // Redirect/callback allowlist. The mobile app's deep-link scheme covers cross-origin auth + OAuth
   // callbacks; the apex is here because password reset RESOLVES ON THE WEB (skipper.fm/reset-password

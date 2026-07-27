@@ -111,6 +111,17 @@ curl -s "$URL/regions"  # {"regions":[...]}      — DB reachable + secret decry
   `skipper-api-csslmysz7q-uk.a.run.app`). If it's missing, Better Auth falls back to a
   wrong base URL and sign-in / OAuth / password-reset links break (anonymous preview
   still works). Update + push (CD redeploys). A custom domain, once mapped, replaces it.
+  ⚠ Entries are matched against the Host header **verbatim, including the port** — bare
+  `localhost` does NOT match `localhost:8787`, which is why the dev entry is a `localhost:*`
+  wildcard. A near-miss here doesn't error; it silently falls through to `fallback`, so a local
+  server happily generates production links.
+- **Cloud Run terminates TLS**, so the container always sees `http://` no matter how the rider
+  connected. `baseURL.protocol: 'auto'` therefore needs `advanced.trustedProxyHeaders: true`
+  (in `auth.ts`) to read `x-forwarded-proto` — it defaults to false, and without it every
+  generated link is `http`, including the password-reset link that carries a one-time recovery
+  token in its path. The host redirects http→https so nothing visibly breaks, which is exactly
+  why this went unnoticed from 2026-06-10 until 2026-07-27. Verify after a deploy by reading the
+  protocol on a real reset mail, not by assuming.
 - **Mobile:** build with `EXPO_PUBLIC_API_URL=$URL`.
 
 ## Gotchas we hit (so the next deploy doesn't re-discover them)
