@@ -1,7 +1,8 @@
 # App Store Connect — the submission cheat-sheet
 
-> **Status:** LIVE 2026-07-24, UNSUBMITTED. §8's privacy label was re-derived from the bundled SDKs'
+> **Status:** LIVE 2026-07-27, UNSUBMITTED. §8's privacy label was re-derived from the bundled SDKs'
 > own manifests on 2026-07-24 and grew from 9 data types to 12 — paste that table, not an older copy.
+> §13 (added 2026-07-27) holds the work that can only be done AFTER approval — don't submit and forget it.
 > Every field App Store Connect asks for, ready to paste,
 > for `fm.skipper.app` (ASC app id `6778946770`, team `L24UJYJ5DK`, Manoa, Inc.). Character-limited
 > fields are pre-counted against Apple's caps. **Screenshots are the only asset not in here** — they
@@ -305,3 +306,23 @@ Already answered by the binary: `ITSAppUsesNonExemptEncryption: false` in `app.j
 - [ ] **Availability is United States ONLY** (§1). It defaults to every territory — if this ships wide,
       you have taken on GDPR without a policy that answers it. Check this last; it is one click and it
       is the single cheapest legal decision on the list.
+
+## 13. After approval — the store link goes live
+
+Apple assigns the app id when the RECORD is created, so `6778946770` has been real since long before
+submission — but `apps.apple.com/app/id6778946770` **404s until the release is actually approved**
+(confirmed 2026-07-27, while the build was TestFlight-only). That gap is why these two are split:
+one is safe to set early, one is not.
+
+- **Already done — no action.** `apps/api/src/version-policy.ts` carries the real link now. Safe
+  ahead of the listing because the client only opens it when the version floor is raised, which can't
+  happen before there's a published version to upgrade to.
+- [ ] **Flip the site's download button.** `apps/site/src/components/sections/FinalCta.astro` — set
+      `APP_STORE_URL` (the value is in the comment beside it) and swap the placeholder glyph for
+      Apple's official "Download on the App Store" badge artwork, which their marketing guidelines
+      require. Until then the page shows a "coming soon" pill, which is *correct*, so nothing looks
+      broken and nothing fails — the only thing that would catch this drifting is this checkbox.
+- [ ] **Raise the version floor only when you mean it.** `VERSION_POLICIES` ships at a no-op
+      `0.0.0`/`0.0.0`. Raising `minimum` is the one hard-break hatch in the API versioning posture
+      (`docs/decisions/api-versioning-posture.md`) and walls every older client — a backend deploy,
+      never an App Store release.

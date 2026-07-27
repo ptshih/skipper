@@ -5,14 +5,22 @@
 // APP_STORE_URL below and it becomes the real "Download on the App Store" button
 // (the same drop-in pattern as the hero clip — see public/clips/README.md).
 //
-// GO-LIVE: set APP_STORE_URL to the live App Store listing URL. Per Apple's
-// marketing guidelines, swap the placeholder glyph for the official Apple-provided
-// "Download on the App Store" badge artwork at the same time.
+// GO-LIVE (two edits, both here): paste the URL below, and — per Apple's marketing
+// guidelines — swap the placeholder glyph for the official Apple-provided "Download
+// on the App Store" badge artwork at the same time.
+//
+// ⚠ Stays EMPTY until Apple actually approves the release. The id is already known
+// (see below), but a store page does NOT exist until then — verified 2026-07-27:
+// apps.apple.com/app/id6778946770 returns 404 and the iTunes lookup API reports zero
+// results while the build is TestFlight-only. Filling this in early doesn't ship the
+// button early, it ships a Download button to a dead page on a live site; the honest
+// "coming soon" pill is the better failure mode. Tracked in the submission guide's
+// after-approval section, since nothing here fails a test when it drifts.
 import Sunburst from '../Sunburst.astro'
 import Trail from '../Trail.astro'
 import Icon from '../Icon.astro'
 
-const APP_STORE_URL = '' // e.g. 'https://apps.apple.com/app/idXXXXXXXXX'
+const APP_STORE_URL = '' // go-live: 'https://apps.apple.com/app/id6778946770'
 ---
 
 <section class="section final" id="launch">

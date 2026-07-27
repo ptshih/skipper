@@ -14,10 +14,15 @@ export const VERSION_POLICIES: VersionPolicy[] = [
     platform: 'ios',
     minimum: '0.0.0',
     recommended: '0.0.0',
-    // TODO(submission): replace the placeholder ID with the real App Store numeric ID
-    // (https://apps.apple.com/app/id<ID>) once the app is submitted. Never opened while
-    // the floor is a no-op, so the placeholder is harmless until then.
-    storeUrl: 'https://apps.apple.com/app/id000000000',
+    // The real ASC app id (assigned when the app RECORD was created, long before any
+    // release — same number as `submit.production.ios.ascAppId` in apps/mobile/eas.json).
+    // Set deliberately AHEAD of the listing being public: this link is only ever opened
+    // by the client's VersionGate, which can only fire once a floor above is raised, which
+    // can only happen once there IS a published version to upgrade to. So it resolves by
+    // construction at the only moment it's used — whereas the placeholder it replaced
+    // would have deep-linked every iOS rider to a dead page the first time the one hard-
+    // break hatch in the whole versioning posture was ever pulled.
+    storeUrl: 'https://apps.apple.com/app/id6778946770',
   },
   {
     platform: 'android',
