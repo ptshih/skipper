@@ -53,6 +53,11 @@ a roam clip. Tahoe-basin corpus only; the founder (Zephyr Cove) is the alpha use
 
 - **No eval panel / grounding audit on roam clips** — founder ear gates; the only inline guards
   are the kit ban + the no-laterality rule (one retake each, then a loud warn).
+  ⚠ **Both halves of that sentence are out of date** (accurate for the 2026-06-10 alpha, kept as the
+  record): the **kit ban was deleted 2026-06-19** with the persona kit itself
+  ([cut-intro-frame-and-persona-kit](../decisions/cut-intro-frame-and-persona-kit.md)), and roam clips
+  are no longer un-gated — `generate-narrations` now scores every clip through the fail-closed eval
+  panel ([automated-grounding-gate](../decisions/automated-grounding-gate.md)).
 - **No diversity lint across clips** (encounters play minutes apart on different drives) — the
   shared-opener risk is real if several fire on one errand; cheap fix later is an opener-tic pass.
 - **No offline roam pack** — presigned streaming only (the manifest re-fetches per session).

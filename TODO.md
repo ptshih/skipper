@@ -199,20 +199,6 @@ and is only touched on a specific founder ear-complaint (never re-tuned blind �
 warning). NOTE: there is NO per-joke "notch" axis here — the joke notch was CUT
 (`docs/decisions/cut-joke-notch.md`); delivery variety returns later as different NARRATORS, not a notch.
 
-## De-stale the deferred specs that still assume the intro frame + personal kit
-
-The intro/outro frame + the "cousin Ray" personal kit were KILLED 2026-06-19 (founder call): V2 had
-already deleted asides (placeless framing), so the frame prompt + `PersonaDef.kit` + the kit
-diversity-lint were dead code, and the kit only ever leaked weird jokes into stops. All removed; the
-stop prompt now tells the host he invents NO backstory (`persona/skipper.ts`). Several DEFERRED specs
-still describe an intro/outro frame and/or the personal kit as if they exist:
-`docs/specs/{tell-me-more,downtime-callouts,drive-thesis,scenic-stops,ask-the-skipper,tour-structure}-spec.md`.
-
-- [ ] When each of those specs is next picked up (they're DEFERRED, not active), reconcile it with
-      "no intro/outro frame, no personal kit" — OR, if a "welcome aboard" intro is wanted as a real
-      feature, spec it fresh (it could be a charm win — meeting the host). Don't bulk-rewrite them now;
-      flag-on-touch is enough since none are being built.
-
 ## In-app narration volume trim — DEFERRED pending the −14 ear-gate (founder feedback 2026-06-11)
 
 Founder ask: an in-app control to make NARRATION slightly louder/quieter, INDEPENDENT of device

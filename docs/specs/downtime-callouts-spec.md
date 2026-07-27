@@ -24,6 +24,13 @@
 >   re-introduce a placeless-beat table (callouts' own, or the revived guided-tours framing table).
 > - `personaForRegion` → `personaFromKey('skipper')` (persona keyed by `persona_key`, resolved in
 >   code, decoupled from region).
+> - **⚠ The PERSONA KIT is GONE** (2026-06-19, deleted with the frame that housed it —
+>   [cut-intro-frame-and-persona-kit](../decisions/cut-intro-frame-and-persona-kit.md)). §7's
+>   "**kit BANNED** (the persona kit's only home is the intro)" and the §8 kit-from-stops ban are moot:
+>   there is no kit to ban, and no intro to house it. The rule they were approximating survives in a
+>   simpler form the live prompt already enforces — the host invents **no backstory at all** — so a v3
+>   callout inherits it for free rather than needing its own guard. `PersonaDef.kit` in §14's registry
+>   list no longer exists either.
 > - `finalizeTourReady` is GONE — readiness now derives from non-null `audio_url` on each `narrations`
 >   row, not a batched status flip. "Optional / never gates ready" still holds: a callout simply never
 >   blocks a drive becoming playable.

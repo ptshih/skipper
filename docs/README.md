@@ -70,6 +70,11 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
 - [cut-tiers.md](decisions/cut-tiers.md) — removed `user.tier` ('free'|'paid'): credits govern premium,
   so `accessTier` collapses to `anonymous`|`free`, every account spends the ledger, and a comp is a
   large admin grant (2026-06-20).
+- [cut-intro-frame-and-persona-kit.md](decisions/cut-intro-frame-and-persona-kit.md) — why the placeless
+  intro/outro frame (`asides`, dropped in `0019`) and the "cousin Ray" persona kit it housed were both
+  killed 2026-06-19: the kit outlived its only legal home and leaked off-persona jokes into stops, and
+  placeless content fights geometry-first selection. Backfilled 2026-07-27; the nine specs that still
+  assumed either feature now point here.
 - [cut-wave-form.md](decisions/cut-wave-form.md) — backed the WAVE form (the scenic tier's ~15s passing
   call-out) out of the tree before the v2 release: built + smoke-tested but never run, so zero rows and
   no audio existed and the removal was code-only; the `'wave'` enum value stays as reserved vocabulary,

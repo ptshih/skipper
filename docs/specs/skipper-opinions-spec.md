@@ -13,6 +13,15 @@
 > atom+sequences model: `regions`/`personas`/`pois`/`narrations`/`drives` (+ `places`/`detours` for
 > break anchors). `persona_key` lives on `personas`, NOT on any `tours` table; a `drive` carries a
 > `selection` JSONB and references its persona via the seeded `personas` row.
+> **⚠ `PersonaDef.kit` no longer exists** — the persona kit was deleted 2026-06-19 with the intro frame
+> that housed it ([cut-intro-frame-and-persona-kit](../decisions/cut-intro-frame-and-persona-kit.md)).
+> §6's "Kit stays banned outside the intro (existing guard)" and §12's "the per-region persona registry
+> (`personaForRegion`, `PersonaDef`, the kit) — where the taste profile lives" both describe a structure
+> that is gone: there is no kit, no intro, and the guard was removed with them. ⚠ This matters more here
+> than in the other stale specs, because a **taste profile** is exactly the kind of persona-owned content
+> the kit was, and the kit failed for a reason worth inheriting — it leaked off-persona jokes into stops
+> and was banned everywhere it could appear. Whoever builds opinions should read that entry first and
+> decide where taste legitimately LIVES before adding another persona-owned pool.
 > **Both delivery tiers this feature needs are now DEFERRED.** This feature rides the callout system
 > (`docs/specs/downtime-callouts-spec.md`): its **taste tier** = v1 placeless callouts, and its
 > **grounded tier** = the deferred Phase-2 positioned callouts. But callouts themselves had no v2

@@ -3,9 +3,11 @@
 > **Schema-names note (2026-06-13):** the `tour_brackets` table referenced below was renamed `tour_frames` in the 2026-06-12 segments/tracks refactor — read `tour_brackets`→`tour_frames` throughout.
 
 **Status:** design, 2026-06-08; **largely SUPERSEDED by V2 (2026-06-19)** — the durable survivors are
-**§0 (frozen-rails doctrine)** and **§4 (quality-gated narration + persona kit)**, both still load-bearing
-and absorbed into CLAUDE.md + the live persona. The quality-gated prompt + intro/outro narration modes
-shipped (67e9313/7860b3f). Everything structural in §1/§2/§3/§5/§6/§7 is HISTORY — see the V2 banner.
+**§0 (frozen-rails doctrine)** and the **quality-gate half of §4**, both still load-bearing and absorbed
+into CLAUDE.md + the live persona. ⚠ **The PERSONA KIT half of §4 is DEAD** (killed 2026-06-19 with the
+intro/outro frame that housed it — [`../decisions/cut-intro-frame-and-persona-kit.md`](../decisions/cut-intro-frame-and-persona-kit.md));
+so are the intro/outro narration modes that once shipped alongside the quality-gated prompt
+(67e9313/7860b3f). Everything structural in §1/§2/§3/§5/§6/§7 is HISTORY — see the V2 banner.
 
 > 🟥 **SUPERSEDED — STRUCTURE FULLY DISSOLVED IN V2 (updated 2026-06-19).** The canonical entity model is
 > **`docs/decisions/tour-data-model-zero-reuse.md`** §9 + the live [`packages/db/src/schema.ts`](../../packages/db/src/schema.ts) —
@@ -33,8 +35,16 @@ shipped (67e9313/7860b3f). Everything structural in §1/§2/§3/§5/§6/§7 is H
 >    baked into the audio; per-region hosts are the deferred region-skippers (M4). The §4a R2-path/region-pgEnum
 >    migration notes are moot.
 >
-> **Still LIVE (the durable survivors):** **§0 (governing principles — frozen rails)** and **§4 (quality-gated
-> narration + persona kit)**. Treat §1/§2/§3/§5/§6/§7 + §4a as history.
+> **Still LIVE (the durable survivors):** **§0 (governing principles — frozen rails)** and the
+> **quality-gate half of §4**. Treat §1/§2/§3/§5/§6/§7 + §4a as history.
+> 7. **(2026-06-19) The PERSONA KIT is GONE — §4's other half.** `PersonaDef.kit`/`KitBeat`, the
+>    `SKIPPER_FRAME_PROMPT`, and the kit diversity-lint were all deleted; the host now invents NO
+>    backstory. So §4's "kit is the host's opener pool", the kit→intro / bow→outro split (§3), the
+>    notch-scaled kit opener (§5 #8), and the region-registry `kit` field (§4a) are moot — as is every
+>    "banned from stops" kit guard, since there is no kit to ban. See
+>    [`../decisions/cut-intro-frame-and-persona-kit.md`](../decisions/cut-intro-frame-and-persona-kit.md).
+>    ⚠ The delivery-stack line just below this banner ("Algenib · 32k MP3") is also stale — voice and
+>    codec live in `packages/studio/src/models.ts`, read them there.
 
 Sits on top of the voice/narration work already shipped this session: Algenib ·
 `gemini-3.1-flash-tts-preview` · 32k MP3 · the **warmer** delivery prompt (see

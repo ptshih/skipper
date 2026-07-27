@@ -536,6 +536,9 @@ Bigger bets (past the free first pass):
   ear (the delivery version of "rebuild Shaka Guide"). Keep `charmScore`/`sag` strictly as
   deep-links that jump you to the stop to LISTEN; never a ranked list worked top-down. (A
   zero-LLM kit-overuse heat strip from `persona.kit.beats[].match` regexes is fine — it's
-  deterministic tic-detection, not a score to chase.)
+  deterministic tic-detection, not a score to chase. ⚠ **That example is dead** — `PersonaDef.kit`
+  was deleted 2026-06-19 with the intro frame that housed it, so there are no kit regexes to strip;
+  see [cut-intro-frame-and-persona-kit](../decisions/cut-intro-frame-and-persona-kit.md). The
+  navigation-not-worklist PRINCIPLE is untouched and still the point of this bullet.)
 - **Bulk region regen — one confirm for N spends fights the COST gate.** If ever built, it must
   still confirm per-tour (no blanket batch-confirm) and show a TTS-inclusive total.

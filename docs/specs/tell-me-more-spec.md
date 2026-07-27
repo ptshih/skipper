@@ -14,7 +14,13 @@
 > constraint). Other renames below: `pois.facts` well → `pois.fact_sheet`; `DEEP_EXTRACT_CHARS=4000`
 > → `NARRATION_FALLBACK_CHARS=4000` (+ the enricher's read bound `ENRICHER_INPUT_CHARS=12000`);
 > `resynth-tour.ts` → `resynth-narration.ts`; `finalizeTourReady` is gone (readiness derives from
-> non-null `audio_url`).
+> non-null `audio_url`). **⚠ `narrateIntro`/`narrateOutro` no longer exist** — §4 calls the b-side
+> generator "a sibling to `narrateStop`/`narrateIntro`/`narrateOutro`", but the intro/outro frame and
+> the persona kit were deleted 2026-06-19
+> ([cut-intro-frame-and-persona-kit](../decisions/cut-intro-frame-and-persona-kit.md)); `narrateStop`
+> is the only sibling left, which if anything makes §4's "a second `narrate.ts` call" simpler than
+> written. §7's note that framing would be a **hard** (never-preempted) clip class stays correct as a
+> v3 conditional — there is just nothing placeless to preempt today.
 
 **A pre-generated *deeper cut* per story stop, played on a "Tell me more" tap** — drawing on the
 leftover fact-sheet material the tight ~2-min main clip didn't use. The **offline-safe, shippable

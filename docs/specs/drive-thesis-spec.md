@@ -20,6 +20,12 @@
 > narrower piece: a nullable `thesis` field on the `drives` row as a generation INPUT (it can thread
 > into the route-anchored stop narrations even without frames). Read every `tours.*`/`tour_*` reference
 > below as the corresponding V2 entity, and every "intro/outro frame" as v3-deferred.
+> **⚠ Frames were CUT on their own merits, not just evicted by a migration** — read
+> [cut-intro-frame-and-persona-kit](../decisions/cut-intro-frame-and-persona-kit.md) before reviving
+> §6. It matters here more than anywhere else, since *plant → land* is ~90% of this feature: the frame
+> is not waiting in the wings for a v3 table, it was deliberately killed (placeless content fights
+> geometry-first selection, and the sentinel-seq machinery that smuggled it through the player queue
+> was deleted with it). A revived arc must be spec'd fresh against whatever v3 actually builds.
 
 ## 0. TL;DR
 
