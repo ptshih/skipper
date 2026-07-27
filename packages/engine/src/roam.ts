@@ -18,21 +18,13 @@
 //      persistent cross-session history is a later layer).
 //   5. CLUSTER SUPPRESSION: after a fire, neighbors within suppressRadiusM go quiet for
 //      the gap — co-located pins (a bay + its park twin) don't stack the queue.
-//   6. DISTANCE-BAND, THEN FORM: when several pins qualify on one fix, only ONE fires. Distance
-//      decides first, but in BANDS (bandM wide) rather than to the metre — inside a band the
-//      substantive telling wins over a one-breath wave. See pickBest below for why bands, not a
-//      strict form ranking.
+//   6. NEAREST-FIRST: when several pins qualify on one fix, only the nearest fires.
 //
 // Stateful, pure, no I/O — feed fixes via update(), exactly like TriggerEngine.
 
 import { angularDiffDeg, bearingDeg, haversineMeters } from './geo'
 import { effectiveRadiusM } from './trigger'
 import type { GpsFix } from './trigger'
-
-/** What KIND of telling a pin holds. Mirrors the wire's `driveClipForm` (@skipper/shared) rather
- *  than importing it — this package is deliberately dependency-free (see geo.ts) so the sim and RN
- *  can both take it. Only the story-vs-wave distinction matters to selection. */
-export type RoamPinForm = 'story' | 'scenic' | 'break' | 'wave'
 
 /** A roam-narratable place — a poi's narration surfaced as a proximity pin. */
 export interface RoamPinRef {
@@ -46,9 +38,6 @@ export interface RoamPinRef {
    *  a peak's pin is its summit, a lake's is open water. Falls back to floorM. */
   radiusM?: number
   name?: string
-  /** The clip's narration form — used ONLY to break a same-band tie (a story outranks a wave).
-   *  Optional: a pin without one counts as substantive, so an older pin never loses a tie. */
-  form?: RoamPinForm
 }
 
 export interface RoamTriggerEvent {
@@ -83,11 +72,6 @@ export interface RoamTriggerOptions {
    *  heading. Roomier than a tour stop's: roam pins are un-snapped centroids, so closest
    *  approach is farther out and noisier. */
   recedeMarginM: number
-  /** Width (m) of the distance BAND used to pick among simultaneous candidates. Two pins whose
-   *  distances fall in the same band are "about equally close", and form breaks the tie (a story
-   *  beats a wave); different bands → the nearer band always wins, whatever the forms. Set to 0 for
-   *  strict nearest-first (form never consulted). */
-  bandM: number
 }
 
 export const DEFAULT_ROAM_TRIGGER: RoamTriggerOptions = {
@@ -104,11 +88,6 @@ export const DEFAULT_ROAM_TRIGGER: RoamTriggerOptions = {
   suppressRadiusM: 300,
   suppressWindowSec: 15 * 60,
   recedeMarginM: 60,
-  // 300 m ≈ 11 s at highway speed — inside that, two pins are "the same moment" to a rider, so which
-  // one is nearer is noise and WHICH IS WORTH HEARING is the real question. Chosen relative to the
-  // 600 m floor (half of it): big enough that a story and a wave at the same viewpoint compete, small
-  // enough that a wave you are about to pass still beats a story a quarter-mile off.
-  bandM: 300,
 }
 
 /** Coarse spatial-grid cell size in degrees (~5.5 km of latitude). A 3×3 neighborhood is a
@@ -119,15 +98,6 @@ const GRID_CELL_DEG = 0.05
 /** Grid key for a [lat, lng] — coordinates floored to the cell size. */
 function cellKey(lat: number, lng: number): string {
   return `${Math.floor(lat / GRID_CELL_DEG)}:${Math.floor(lng / GRID_CELL_DEG)}`
-}
-
-/** Selection rank of a form — LOWER wins a same-band tie. Only 'wave' is demoted: it is the
- *  one-breath passing call-out, so at roughly equal distance a real telling is the better use of the
- *  one encounter the governor allows. Everything else (story/scenic/break, and an ABSENT form from an
- *  older pin) ranks equal-and-substantive — we deliberately do NOT invent a total order over forms
- *  the founder never ranked. */
-function formRank(form: RoamPinForm | undefined): number {
-  return form === 'wave' ? 1 : 0
 }
 
 /** Cross-session memory seeded into a fresh RoamEngine at session start. The PERSISTENCE lives in the
@@ -220,34 +190,6 @@ export class RoamEngine {
     return out
   }
 
-  /**
-   * Does candidate `a` beat the current `b` for this fix's single encounter slot?
-   *
-   * DISTANCE-BAND, THEN FORM (founder call): distance still decides, but quantized into bandM-wide
-   * bands, so "nearer" only wins when it is MEANINGFULLY nearer. Within one band the forms are
-   * compared and a wave yields to a substantive telling; ties fall back to true distance so the
-   * result is always deterministic.
-   *
-   * Why not simply rank story over wave outright? Because the corpus is ~3× more waves than stories,
-   * and strict form priority would let a story a kilometre away mute the wave you are passing THIS
-   * SECOND — the rider hears the wrong place named, which is worse than hearing the smaller one. And
-   * why not pure nearest? Because a wave whose un-snapped centroid happens to sit 40 m closer would
-   * beat the real telling at the same viewpoint, spending the encounter slot on a one-liner. Bands
-   * make "about equally close" an explicit, tunable idea instead of an accident of centroid noise.
-   */
-  private beats(a: { pin: RoamPinRef; d: number }, b: { pin: RoamPinRef; d: number }): boolean {
-    const band = this.opts.bandM
-    if (band > 0) {
-      const bandA = Math.floor(a.d / band)
-      const bandB = Math.floor(b.d / band)
-      if (bandA !== bandB) return bandA < bandB
-      const rankA = formRank(a.pin.form)
-      const rankB = formRank(b.pin.form)
-      if (rankA !== rankB) return rankA < rankB
-    }
-    return a.d < b.d
-  }
-
   /** Feed one fix; returns at most ONE encounter that fires on it. */
   update(fix: GpsFix): RoamTriggerEvent[] {
     // Defense-in-depth, mirroring TriggerEngine's shared choke point: a malformed fix (non-finite
@@ -301,7 +243,7 @@ export class RoamEngine {
         const off = angularDiffDeg(fix.headingDeg, bearingDeg(here, [pin.lng, pin.lat]))
         if (off > this.opts.headingConeDeg) continue
       }
-      if (!best || this.beats({ pin, d }, best)) best = { pin, d }
+      if (!best || d < best.d) best = { pin, d }
     }
     if (!best) return []
     this.firedAt.set(best.pin.poiId, fix.tSec)

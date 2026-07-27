@@ -141,88 +141,20 @@ a **build-ready spec: `docs/specs/background-location-spec.md`**.
 
 > ⚠ **The chattiness axis (quiet/normal/talkative) was CUT** (2026-06-20 — too coarse, not useful in
 > practice; `useRoam.ts`, MEMORY "Roam chattiness toggles"). Don't build anything that assumes it
-> (e.g. wave suppression "on quiet") — there's ONE fixed cadence now. Cadence variety, if ever wanted,
+> (e.g. suppressing a form of clip "on quiet") — there's ONE fixed cadence now. Cadence variety, if ever wanted,
 > returns as auto-adaptation, never a user notch.
 
 Two items locked from the 2026-06-11 brainstorm (full capture: `docs/ideas/free-roam-mode.md`
 §Alpha learnings). Order within the pass is free; both are founder-facing on his daily drive.
 
-- **Waves: narrate the scenic tier — CODE BUILT 2026-07-24, awaiting the PAID run.** The $0 half is
-      done and verified green (root + mobile `bun run check`); nothing has been generated or spent.
-
-      What shipped: `generate-narrations --wave` selects `source='wikidata'` scenic pins with no
-      narration (disjoint from the story query, so the two modes can never contend for a poi), narrates
-      them at a form-level 15s/20s band (`lengthForWave`, models.ts — deliberately outside
-      `REGISTER_LENGTH`, whose 60s floor would prompt a wave to pad a minute it has no material for),
-      routes them as `stopType:'scenic'` + `wave:true` so the named-scenic grounding rules score them
-      unchanged, and persists `form:'wave'` with `facts_hash` NULL (no facts → nothing can go stale) and
-      `attribution` NULL (the CC BY-SA duty attaches to adapted WIKIPEDIA text; a wave adapts none, and
-      Wikidata is CC0). Freshness for a wave is "does a narration exist" — without that it would read
-      perpetually stale and every run would re-pay. The WAVE grammar is taught in `persona/skipper.ts`
-      (a fourth stop kind + three examples) and enforced in the sheet (`pipeline/narrate.ts`); geology is
-      suppressed on waves at the sheet builder, not just the caller, so it can't leak back in.
-      Roam priority is **distance-band, then form** (`bandM: 300` in `packages/engine/src/roam.ts`,
-      threaded `narrations.form` → `roamPin.form` (optional, wire-compat) → `useRoam` → engine), with 5
-      new engine tests covering both halves of the rule.
-
-      ⚠ **A wave must NEVER become a drive stop**, and it silently would have: `loadCorpusForRoute`
-      filtered on bbox + released only, so once waves are released `buildDrive` would have picked
-      one-liners as stops (the wave corpus is ~3× the story corpus). Fixed with `ne(narrations.form,
-      'wave')` in `apps/api/src/drives.ts` — deliberately NOT in `loadCorpusByPoiIds`, which resolves an
-      already-frozen selection where filtering would break a saved drive instead of playing it.
-
-      **SMOKE-TESTED TWICE (2026-07-24, $0.66 total) — both runs found real defects, both now fixed.**
-
-      Run 1 (3 pins, $0.25) shipped 3/3 but exposed two problems. **Monotony was structural, not a
-      prompt weakness:** 2 of 3 opened "There's a peak out there called X. Standing … against the sky
-      today." Roam clips are narrated in a VACUUM — `narrate.ts` has `recentOpeners`/`recentClosers`/
-      `recentMotifs` and `generate-narrations` passes NONE of them, and `evaluateDiversity` sees one clip
-      at a time so it only catches within-clip tics. A story varies for free because its facts differ; a
-      wave has two fields, so 378 independent calls converge on one sentence. Fixed with **`WAVE_ANGLES`**
-      — six assigned opening shapes, round-robin by queue index (`waveAngleFor`), chosen over a rolling
-      recent-openers buffer because a buffer leaves the first `NARRATION_CONCURRENCY` clips colliding
-      while an index rotation holds at any concurrency. Every angle stays inside the name+kind ceiling.
-      **Second defect: a NULL kind made the narrator infer the kind from the NAME** — "Cathedral Peak"
-      (kind NULL) came back "there's a peak out there". Harmless when the name is honest, a fabricated
-      fact when it isn't (a "Castle Rock" that is no rock), and **the grounding gate PASSES it** because
-      the claim traces to the name. Waves now REQUIRE a kind (9 pins dropped, reported not silent).
-
-      Run 2 (6 pins, $0.41) was the verification: **6 MOUNTAINS — same kind on purpose, the worst case
-      for monotony — produced 6 distinct openers**, no two sharing a template (name-flat, thing-first,
-      reaction-first, kind-plainly, and a genuinely free groaner: "Big name for a big fella" off Big
-      Chief). Kind now comes from the card, not the name. The excision path fired on 2 of 6 (the gate
-      caught over-reach and trimmed rather than withheld) — fail-closed machinery working. Lengths ran
-      4–9s, UNDER the 15s aim, which is correct doctrine (a name-only wave lands short; `evaluatePacing`
-      is one-sided and never flags short).
-
-      **CURRENT SPEND: 378 clips, dry run quotes ~$31 (~$28 narration+gate + ~$3 TTS), ≈95 min.**
-      Measured per-clip in run 2 was $0.068 vs the $0.075 estimate, so the real number is likely ~$29.
-      (The long-dead "~$3–5" assumed ~126 clips AND that the grounding call shrinks with the clip; it
-      doesn't — that call is priced by the JUDGE's prompt.) ⚠ `--scripts-only` DOES spend
-      (`apply: apply || scriptsOnly`); only the no-flag dry run is free. Use `--max-cost` on the real run.
-
-      Open founder calls before the go:
-      - **Whole 378, or a kind-capped subset?** By kind: park 81, valley 71, mountain 69, hill 43,
-        spring 39, beach 14, lake 12, meadow 10, reservoir/bay 9 each, ridge 7, cape 6, tail ~15.
-      - **2 parcel/facility records remain** ("Ward Creek Park Property", "Fallen Leaf Recreation
-        Center") — country you wouldn't wave at. The tragedy/crime taste gate runs in wave mode but
-        doesn't catch this category. 2 of 378; not worth a mechanism unless more show up.
-      - **One cosmetic blemish seen post-excision:** Herlan Peak closed "...against the sky today, too."
-        The dangling "too" has nothing to refer to in a self-contained clip. Watch for it at ear-pass;
-        if it recurs it's an excision artifact, not a prompt bug.
-
-      Remaining after the run:
-      - [ ] **RELEASE — without it the acceptance drive shows ZERO waves.** Generation writes
-        `releasedAt = NULL` and `/roam` serves released-only (`apps/api/src/index.ts`). ONE call, not
-        387: `POST /admin/regions/:slug/release` bulk-stamps every staged clip in the bbox and is
-        re-runnable (preserves the first release date, touches only `released_at IS NULL` rows —
-        `apps/admin/server/index.ts:202-239`). Per-clip release exists for spot fixes.
-      - [ ] **Ear-pass the wave read.** Waves currently inherit the LANDSCAPE register read when the pin
-        is unclassified (a natural feature glanced at, not the fact-forward story read). A dedicated
-        per-FORM style suffix is the separate DEFERRED item below — now unblocked, since waves will
-        finally exist to listen to.
-      - [ ] Waves are CLI-only; the admin console can't trigger a wave run. Add a mode toggle only if
-        the founder wants to run them from the console (would touch the Reference cheat-sheet).
+- ~~**Waves: narrate the scenic tier.**~~ **CUT 2026-07-26 (founder) — backed out of the tree before
+      the v2 release.** Built + smoke-tested 2026-07-24, never run at scale: zero `form='wave'` rows were
+      ever written and no audio was ever synthesized, so the backout was code-only (no migration, no data,
+      no orphaned R2). The `'wave'` enum value STAYS in `narrationForm`/`narration_form` — it predates the
+      build as reserved vocabulary (like `bside`) and the label/mapping code that handles it is untouched.
+      Rationale, what was removed, and the two reusable traps the build surfaced (structural monotony in
+      low-input forms; the grounding gate cannot catch a claim derived from the place's own NAME) are in
+      `docs/decisions/cut-wave-form.md`. Re-read that before rebuilding any name+kind-only form.
 - [ ] **The sonic cue.** ~1s entry motif before every encounter (the duck gets a reason; the
       startle dies) + a soft exit/resolve note as the duck releases. Client-side bundled assets
       (`apps/mobile`), played around the clip in `useRoam`. Sound design taste-gate: founder ear
@@ -259,12 +191,10 @@ scenic = "slow a touch, leave air, wonder not performance"; break = "quick light
 wave = "brief passing call-out" — keeping the universal **base** (persona + the load-bearing
 **anti-fade** clause) and appending a per-form suffix. One-line swap at the call site.
 
-**Why DEFERRED (founder, 2026-06-19):** the non-story forms had **no output to act on and nothing to
-ear-test** until they shipped. ⚠ **Partly unblocked 2026-07-24:** the WAVE form is now built (see the
-roam pass-2 item), so once the paid wave run lands there IS a wave read to judge. Today a wave inherits
-the LANDSCAPE register read when its pin is unclassified — a reasonable default among the EXISTING
-reads, not a wave-specific suffix. Do the suffix on a founder ear-complaint about the wave read, in the
-same pass as the wave ear-check; `break` (`detours`) is still stubbed, so its variant stays deferred. The single Skipper story read stands until then,
+**Why DEFERRED (founder, 2026-06-19):** the non-story forms have **no output to act on and nothing to
+ear-test** until they ship. Still true across the board as of 2026-07-26: `wave` was built and then CUT
+(`docs/decisions/cut-wave-form.md`) and `break` (`detours`) is stubbed, so no non-story form emits audio
+to judge. The single Skipper story read stands until one does,
 and is only touched on a specific founder ear-complaint (never re-tuned blind — see the `models.ts`
 warning). NOTE: there is NO per-joke "notch" axis here — the joke notch was CUT
 (`docs/decisions/cut-joke-notch.md`); delivery variety returns later as different NARRATORS, not a notch.

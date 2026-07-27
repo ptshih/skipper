@@ -70,6 +70,10 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
 - [cut-tiers.md](decisions/cut-tiers.md) — removed `user.tier` ('free'|'paid'): credits govern premium,
   so `accessTier` collapses to `anonymous`|`free`, every account spends the ledger, and a comp is a
   large admin grant (2026-06-20).
+- [cut-wave-form.md](decisions/cut-wave-form.md) — backed the WAVE form (the scenic tier's ~15s passing
+  call-out) out of the tree before the v2 release: built + smoke-tested but never run, so zero rows and
+  no audio existed and the removal was code-only; the `'wave'` enum value stays as reserved vocabulary,
+  and the two traps the build surfaced (structural monotony, name-derived claims) are recorded (2026-07-26).
 - [sample-ride-postcard.md](decisions/sample-ride-postcard.md) — the `/sample` "postcard": one curated
   Tahoe clip anyone outside the corpus (incl. an App Review tester) can hear in one permission-free tap,
   fixing the "I don't know these roads yet" dead-end; anonymous `GET /roam/sample`, three entry points,

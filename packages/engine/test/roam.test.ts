@@ -71,66 +71,6 @@ describe('RoamEngine — proximity + heading', () => {
   })
 })
 
-describe('RoamEngine — distance-band, then form', () => {
-  // A pin carrying a narration form. Distances below are pure-latitude offsets from the fix at lat 0:
-  // 0.001° ≈ 111 m, so 0.0020° ≈ 222 m and 0.0025° ≈ 278 m are BOTH inside the first 300 m band,
-  // while 0.0040° ≈ 445 m sits in the second. Fix is at lat 0 heading north at 60 mph → effective
-  // radius max(600, 26.82×15) = 600 m, so every pin below is in range and ahead.
-  const formPin = (poiId: string, lat: number, form: RoamPinRef['form']): RoamPinRef => ({
-    ...pin(poiId, lat, 0),
-    form,
-  })
-
-  test('same band: the story wins even though the wave is nearer', () => {
-    const wave = formPin('wave', 0.0020, 'wave') // ~222 m — nearer
-    const story = formPin('story', 0.0025, 'story') // ~278 m — same band
-    const e = new RoamEngine([wave, story])
-    const fired = e.update(fix(0, 0, MPH60, 0))
-    expect(fired).toHaveLength(1)
-    expect(fired[0]!.poiId).toBe('story')
-  })
-
-  test('nearer band wins outright: a wave you are passing beats a farther story', () => {
-    // This is the half that makes it a BAND rule and not "story always outranks wave" — with ~3×
-    // more waves than stories in the corpus, strict form priority would name the wrong place.
-    const wave = formPin('wave', 0.0010, 'wave') // ~111 m — band 0
-    const story = formPin('story', 0.0040, 'story') // ~445 m — band 1
-    const e = new RoamEngine([wave, story])
-    const fired = e.update(fix(0, 0, MPH60, 0))
-    expect(fired).toHaveLength(1)
-    expect(fired[0]!.poiId).toBe('wave')
-  })
-
-  test('a pin with NO form counts as substantive (wire-compat: it beats a nearer wave in-band)', () => {
-    // `form` is optional on the wire, so a pin from an older server / rehydrated cache arrives
-    // without one. It must not silently lose ties it would have won.
-    const wave = formPin('wave', 0.0020, 'wave') // ~222 m — nearer
-    const legacy = pin('legacy', 0.0025, 0) // ~278 m, no form at all
-    const e = new RoamEngine([wave, legacy])
-    const fired = e.update(fix(0, 0, MPH60, 0))
-    expect(fired).toHaveLength(1)
-    expect(fired[0]!.poiId).toBe('legacy')
-  })
-
-  test('bandM 0 disables the rule — strict nearest-first, form never consulted', () => {
-    const wave = formPin('wave', 0.0020, 'wave') // ~222 m — nearer
-    const story = formPin('story', 0.0025, 'story') // ~278 m
-    const e = new RoamEngine([wave, story], { bandM: 0 })
-    const fired = e.update(fix(0, 0, MPH60, 0))
-    expect(fired).toHaveLength(1)
-    expect(fired[0]!.poiId).toBe('wave')
-  })
-
-  test('two waves in one band still resolve by true distance (deterministic tie-break)', () => {
-    const nearWave = formPin('near-wave', 0.0020, 'wave')
-    const farWave = formPin('far-wave', 0.0025, 'wave')
-    const e = new RoamEngine([farWave, nearWave])
-    const fired = e.update(fix(0, 0, MPH60, 0))
-    expect(fired).toHaveLength(1)
-    expect(fired[0]!.poiId).toBe('near-wave')
-  })
-})
-
 describe('RoamEngine — governors', () => {
   test('min-gap: a second pin cannot start until clip + gap elapse', () => {
     const a = pin('a', 0.0085, 0)

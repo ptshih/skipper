@@ -18,7 +18,7 @@
 // is behind requireAccount.
 
 import { Hono, type Context } from 'hono'
-import { and, between, desc, eq, inArray, isNotNull, isNull, ne, sql } from 'drizzle-orm'
+import { and, between, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { creditEntries, drives, driveDemand, narrations, places, pois, regions } from '@skipper/db/schema'
 import type { DriveSelection, DriveSelectionItem, Polyline, RouteProvenance } from '@skipper/db/schema'
@@ -223,16 +223,6 @@ async function loadCorpusForRoute(
           between(pois.lat, minLat - padLat, maxLat + padLat),
           between(pois.lng, minLng - padLng, maxLng + padLng),
           includeStaged ? undefined : isNotNull(narrations.releasedAt),
-          // WAVES are ROAM-ONLY and must never become drive stops. A wave is a ~15s passing call-out
-          // that says a place's name and stops (`narrationForm` in @skipper/shared: "a free-roam passing
-          // call-out"); a drive stop is a full telling the pacing model spaces out along the route. The
-          // wave corpus is ~3× the story corpus, so without this filter the candidate pool would be
-          // mostly one-liners and buildDrive would happily pick them — a drive of name-checks.
-          // Deliberately NOT applied in loadCorpusByPoiIds: that path resolves an ALREADY-FROZEN
-          // selection, where filtering would silently break a saved drive instead of playing it.
-          // (Using waves as deliberate gap-fill in long silences is a separate, unbuilt pacing idea —
-          // see the TODO on drive pacing — and would be an explicit selection choice, not this leak.)
-          ne(narrations.form, 'wave'),
         ),
       ),
     { label: 'drive.corpus' },

@@ -149,10 +149,6 @@ app.get('/roam', async (c) => {
           speakableLng: pois.speakableLng,
           key: narrations.audioUrl,
           durationMs: narrations.audioDurationMs,
-          // What KIND of telling this pin holds. RoamEngine uses it only to break ties inside a
-          // distance band (a story outranks a one-breath wave at roughly equal distance); a nearer
-          // pin still wins regardless of form.
-          form: narrations.form,
           // The frozen source credit — CC BY-SA obliges it wherever the adapted text is presented,
           // and roam presents it to anonymous riders (the front door). Same array driveClip carries.
           attribution: narrations.attribution,
@@ -186,10 +182,6 @@ app.get('/roam', async (c) => {
         // …and the radius tightens to match: an anchored center is ON the road, so it drops the fat
         // kind-aware floor that exists to bridge an off-road centroid (trigger-precision §2, 1b step 2).
         radiusM: triggerRadiusForKind(r.kind, r.speakableLat != null && r.speakableLng != null),
-        // `narrations.form` is a SUPERSET of the wire vocabulary (it also carries the deferred
-        // 'bside'), so project it down: anything outside driveClipForm is served as 'story', the
-        // substantive default — a pin never loses a band tie because of an unknown form.
-        form: (r.form === 'bside' ? 'story' : r.form) as RoamPin['form'],
         url: presignGet(r.key),
         contentType: contentTypeForKey(r.key),
         attribution: (r.attribution ?? undefined) as RoamPin['attribution'],

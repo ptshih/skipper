@@ -115,15 +115,6 @@ export const roamPin = z.object({
    *  places (a peak's summit, a lake's open water) need a wider trigger floor than a
    *  building. Optional for wire-compat; the server always sends it. */
   radiusM: z.number().int().optional(),
-  /** The clip's narration FORM — what KIND of telling this pin holds ('story' = a real telling,
-   *  'wave' = a one-breath passing call-out). The client feeds it to RoamEngine, which uses it to
-   *  break ties WITHIN a distance band: when a story and a wave are about equally close, the story
-   *  wins; a clearly-nearer wave still wins outright (nearer beats form — the founder's call). Optional
-   *  for wire-compat (the radiusM precedent); the server always sends it, and a pin without one is
-   *  treated as a substantive telling, so an older/rehydrated pin never loses a tie it should win.
-   *  `driveClipForm`, not `narrationForm`: this is a WIRE vocabulary, and it correctly excludes the
-   *  deferred 'bside' (which no roam pin can be). */
-  form: driveClipForm.optional(),
   url: z.url(),
   /** MIME type derived server-side from the R2 key (see signedClip.contentType). */
   contentType: z.string(),

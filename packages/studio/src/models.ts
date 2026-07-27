@@ -246,18 +246,3 @@ const REGISTER_LENGTH: Record<DeliveryRegister, { targetSeconds: number; maxSeco
 export function lengthForRegister(register: DeliveryRegister): { targetSeconds: number; maxSeconds: number } {
   return REGISTER_LENGTH[register]
 }
-
-// The WAVE band — a FORM-level length, deliberately outside REGISTER_LENGTH. A wave is the scenic
-// tier's passing call-out ("that's Cascade Lake out there"), not a telling: name + kind + the plain
-// look, then out. REGISTER_LENGTH bottoms out at a 60s landscape aim, so every register band is 3–4×
-// too long for it — a wave routed through `lengthForRegister` would be prompted to fill a minute it
-// has no material for, which is exactly the padding the grounding gate exists to prevent.
-// The band is the founder's 10–20s call: 15s aim, 20s ceiling. Length stays fact-driven underneath —
-// a wave with only a name lands at eight seconds and that is a WIN, not an undershoot (evaluatePacing
-// is one-sided and never flags short). ⚠ Ear-gated like the register bands.
-const WAVE_LENGTH = { targetSeconds: 15, maxSeconds: 20 } as const
-
-/** The target/max length band for a WAVE — the scenic tier's passing call-out (form='wave'). */
-export function lengthForWave(): { targetSeconds: number; maxSeconds: number } {
-  return WAVE_LENGTH
-}
