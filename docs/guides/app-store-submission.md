@@ -7,8 +7,8 @@
 > §13 (added 2026-07-27) holds the work that can only be done AFTER approval — don't submit and forget it.
 > Every field App Store Connect asks for, ready to paste,
 > for `fm.skipper.app` (ASC app id `6778946770`, team `L24UJYJ5DK`, Manoa, Inc.). Character-limited
-> fields are pre-counted against Apple's caps. **Screenshots are the only asset not in here** — they
-> must be captured by hand (spec in §9). ⚠ Do NOT paste the review demo password into this file or
+> fields are pre-counted against Apple's caps. Screenshots are DONE and uploaded (§9) — they
+> no longer need capturing by hand. ⚠ Do NOT paste the review demo password into this file or
 > any committed file; it lives only in App Store Connect.
 
 Why this doc exists: the listing is the one launch surface with no test to fail, so it drifts
@@ -124,7 +124,7 @@ Every story is researched and recorded for a specific place, and the finished co
 
 TWO WAYS TO RIDE
 
-Ride Along — free, no account, no plan. Just start it near Tahoe and drive. Whenever you come near something with a story, the Skipper speaks up. Wander at will; he'll find you.
+Ride Along — free, no account, no plan. Just start it and drive. Whenever you come near something with a story, the Skipper speaks up. Wander at will; he'll find you.
 
 Create a Drive — pick a start and an end, and Skipper lays out the good stuff along the way, in order, paced to the drive. Save it, download it, take it with you.
 
@@ -132,7 +132,7 @@ BUILT FOR AN ACTUAL CAR
 Audio-first, so it works from a mount or over Bluetooth with your eyes on the road. Lock-screen controls. Nothing to look at, nothing to tap. Start it and drive.
 
 WORKS WHERE THE SIGNAL DOESN'T
-Tahoe has real dead zones. Download a drive before you go and the whole thing plays from your phone — no bars required.
+Mountain roads have real dead zones. Download a drive before you go and the whole thing plays from your phone — no bars required.
 
 RE-HEAR ANYTHING
 Missed a line to a passing truck? Tap once to hear that stop again. Scrub, skip back fifteen seconds, pause. It's your drive.
@@ -279,22 +279,31 @@ label) and does not justify a build 16; it ships on the next natural rebuild.
 
 ---
 
-## 9. Screenshots — the only thing not in this doc
+## 9. Screenshots — DONE (six uploaded 2026-07-28)
 
-Required: **6.9"** (iPhone 17 Pro Max or sim). Apple up-scales for smaller sizes. **No iPad set
-needed** — `supportsTablet: false`.
+Required slot is **6.9"** at **1320×2868**, which ASC stores under `APP_IPHONE_67`. Apple up-scales for
+smaller sizes; **no iPad set needed** (`supportsTablet: false`). Six are uploaded and validated
+(`assetDeliveryState=COMPLETE`), in this narrative order: home → roam encounter → plan a drive → drive
+player → map → free sample.
 
-Capture in **dark mode** — the app is dusk-first and it's the better-looking theme. Suggested five,
-in narrative order:
+Captured from a **signed Release build against production**, then composited into branded frames by a
+script that reads the palette and type from `apps/site/src/styles/tokens.css`, so the listing matches
+the landing page. Two traps if they're ever recaptured:
 
-1. **Home** — the hero + "Ride Along" / "Create a Drive".
-2. **Roam, mid-encounter** — the sheet up with a real stop title and the transport visible.
-3. **Roam map** — pins around the lake (shows the corpus is real and dense).
-4. **Drive player** — now-playing card, scrubber, a stop list underneath.
-5. **The stop list / route** — the whole drive laid out.
+- **Shoot in dark mode**, and set the status bar with
+  `xcrun simctl status_bar <udid> override --time 9:41 --batteryState charged --batteryLevel 100`.
+- ⚠ **Use LIVE roam, not `?mode=sim`.** Sim mode is the easy way to fire an encounter from a desk, but
+  it renders a **SIMULATED** badge in the UI — not something to ship to App Review. Instead drive a real
+  GPS fix through a real trigger point: `xcrun simctl location <udid> start --speed=11 --interval=1.0`
+  along CA-89 through Eagle Falls trailhead. Pull actual trigger coordinates from `GET /roam`.
 
-Easiest capture path: run the app in the simulator, use `skipper://roam?mode=sim` to drive the demo
-route without moving, and screenshot the encounter as it fires.
+⚠ **CAPTION POLICY — don't pin the product to Tahoe** (founder call 2026-07-28). Screenshots are the
+surface people actually look at, so the same rule as the subtitle applies: Tahoe is where we START, not
+what we ARE. Exactly ONE caption names the place, and it says **"Starting in Lake Tahoe"** — on the map
+shot, where the image already shows the lake so the claim is self-evidently honest. An earlier set led
+with a bare `Lake Tahoe` kicker on the HERO shot and captioned the map "One lake, done properly"; both
+read as a permanent identity rather than a first region. Mentioning the launch location is fine.
+Framing the app as a Tahoe app is not.
 
 ---
 
