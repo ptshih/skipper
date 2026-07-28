@@ -22,7 +22,7 @@ single most rejection-prone sentence in the whole listing.
 | Field | Value |
 |---|---|
 | **Name** (30) | `Skipper: Road Trip Audio Tours` — ⚠ `Skipper` alone was TAKEN; this is the live name and it uses all 30 chars, which is right (Name is the most heavily weighted search field) |
-| **Subtitle** (30) | `Lake Tahoe Scenic Drive Tours` — ⚠ founder-edited in ASC 2026-07-28; see the note below |
+| **Subtitle** (30) | `Scenic Drives & Local History` — ⚠ deliberately GEOGRAPHY-FREE, see below |
 | **Primary category** | Travel |
 | **Secondary category** | Entertainment |
 | **Privacy Policy URL** | `https://skipper.fm/privacy` |
@@ -186,6 +186,13 @@ A note on the driving: Skipper is meant to be heard, not watched. Mount your pho
 > reasons, and metadata rides free on any of them. The only thing you genuinely cannot do is react to a
 > ranking insight the same day.
 >
+> ⚠ **The subtitle and keywords are COUPLED on geography.** Between them they are the only indexed
+> fields; Apple does not index the description. So "Lake Tahoe" must live in exactly one of the two,
+> never neither. This was nearly lost on 2026-07-28: the subtitle briefly read `Lake Tahoe Scenic
+> Drive Tours` while keywords were rewritten to pure category terms, and taking Tahoe out of the
+> subtitle alone would have left it indexed NOWHERE while Tahoe is 100% of the corpus. Whichever field
+> you take it out of, put it in the other in the same edit.
+>
 > The one wrinkle worth remembering: Skipper's content expands SERVER-SIDE, so adding a region needs no
 > app release. The moment you most want to refresh geo terms therefore isn't automatically a moment
 > you're shipping a build — you either ride the next update or cut one on purpose. Mild, but it's why
@@ -198,7 +205,7 @@ A note on the driving: Skipper is meant to be heard, not watched. Mount your pho
 > nowhere, so this is inferred from name/subtitle/description, not read.
 
 ```
-narrated,sightseeing,GPS,offline,history,landmark,legend,attraction,itinerary,car,route,nearby,guide
+narrated,sightseeing,GPS,offline,landmark,legend,attraction,itinerary,route,nearby,guide,Lake Tahoe
 ```
 
 ---
