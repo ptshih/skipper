@@ -19,7 +19,7 @@ single most rejection-prone sentence in the whole listing.
 
 | Field | Value |
 |---|---|
-| **Name** (30) | `Skipper` |
+| **Name** (30) | `Skipper: Road Trip Audio Tours` — ⚠ `Skipper` alone was TAKEN; this is the live name and it uses all 30 chars, which is right (Name is the most heavily weighted search field) |
 | **Subtitle** (30) | `Narrated audio tours for Tahoe` |
 | **Primary category** | Travel |
 | **Secondary category** | Entertainment |
@@ -307,6 +307,28 @@ a reviewer — or any first-timer outside Tahoe — hears the Skipper regardless
 Already answered by the binary: `ITSAppUsesNonExemptEncryption: false` in `app.json`. ASC won't ask.
 
 ---
+
+## 11b. What is ALREADY ENTERED (done 2026-07-28 via the ASC API, not by hand)
+
+Most of this doc has been applied to the live record already — it is a reference now, not a to-do.
+The ASC API key in `.env.development` (`ASC_KEY_ID`/`ASC_ISSUER_ID` + `keys/AuthKey_<ID>.p8`) has
+**write** access, so §§2–5, §6, §10 and Availability were set programmatically and verified by reading
+them back. Re-run those reads before trusting this list.
+
+- ✅ **Version `1.0.0`, build 15 attached.** ⚠ The record said `1.0` while build 15's short version is
+  `1.0.0`; Apple only offers builds whose version string MATCHES, so the build picker was silently
+  empty. If a build ever "isn't there", check this first.
+- ✅ Description (2700/4000), keywords (93/100), promo text (168/170), support + marketing URLs.
+- ✅ **Age rating → `FOUR_PLUS`.** The 2025 questionnaire is bigger than §6's table and mixes BOOLEAN
+  and enum attributes (`healthOrWellnessTopics` is a bool, `ageAssurance` is newly required).
+- ✅ **App Review Information** — contact, `review@skipper.fm`, and §10's notes (1598 chars).
+- ✅ **Availability = UNITED STATES ONLY**, verified by paging all 175 territories: exactly one
+  available. `availableInNewTerritories=false`, so it will not silently expand later. ⚠ The v2 API
+  demands EVERY territory be enumerated inline with `${local-id}` ids — you cannot just send USA.
+- ✅ Six screenshots at `APP_IPHONE_67` (1320×2868 is accepted there), all `assetDeliveryState=COMPLETE`.
+
+**Still by hand, and still required:** the App Privacy label (§8) — Apple exposes no public API for it —
+and the submission itself.
 
 ## 12. Before you hit Submit
 
