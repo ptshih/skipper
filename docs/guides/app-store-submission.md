@@ -22,7 +22,7 @@ single most rejection-prone sentence in the whole listing.
 | Field | Value |
 |---|---|
 | **Name** (30) | `Skipper: Road Trip Audio Tours` — ⚠ `Skipper` alone was TAKEN; this is the live name and it uses all 30 chars, which is right (Name is the most heavily weighted search field) |
-| **Subtitle** (30) | `Scenic Drives & Local History` — ⚠ deliberately GEOGRAPHY-FREE, see below |
+| **Subtitle** (30) | `Lake Tahoe Scenic Drive Tours` — ⚠ founder-edited in ASC 2026-07-28; see the note below |
 | **Primary category** | Travel |
 | **Secondary category** | Entertainment |
 | **Privacy Policy URL** | `https://skipper.fm/privacy` |
@@ -133,6 +133,8 @@ A corny old tour guide rides shotgun and narrates your drive.
 
 Skipper watches the road go by and tells you what happened there: the shipwreck under the water you're looking at, the hotel that burned down twice, the man who built a castle nobody asked for. Stories arrive timed to the road, so the tale about the bay lands while you can still see the bay.
 
+No account, no ads, and it plays offline. Mount your phone, start it, and drive.
+
 He's a ham. He will pun. He is also, underneath it, telling you the truth: every story is grounded in real, cited sources, and when the record is thin he says so and lets the view do the talking. A skipper who doesn't know is better than a skipper who invents.
 
 RIGHT NOW: LAKE TAHOE ONLY
@@ -145,7 +147,7 @@ Ride Along: free, no account, no plan. Just start it and drive. Whenever you com
 Create a Drive: pick a start and an end, and Skipper lays out the good stuff along the way, in order, paced to the drive. Save it, download it, take it with you.
 
 BUILT FOR AN ACTUAL CAR
-Audio-first, so it works from a mount or over Bluetooth with your eyes on the road. Lock-screen controls. Nothing to look at, nothing to tap. Start it and drive.
+Audio-first, so it works from a mount or over Bluetooth with your eyes on the road. Lock-screen controls. Nothing to look at, nothing to tap.
 
 WORKS WHERE THE SIGNAL DOESN'T
 Mountain roads have real dead zones. Download a drive before you go and the whole thing plays from your phone. No bars required.
@@ -154,10 +156,10 @@ RE-HEAR ANYTHING
 Missed a line to a passing truck? Tap once to hear that stop again. Scrub, skip back fifteen seconds, pause. It's your drive.
 
 HONEST ABOUT THE MONEY
-Riding along is free and unlimited. Creating a drive spends one of your free credits, because building one does real work. No subscription. No ads. No account needed to listen.
+Riding along is free and unlimited. Creating a drive spends one of your free credits, because building one does real work. No subscription, no ads, and nothing to buy inside the app.
 
 HONEST ABOUT YOUR DATA
-No ads, and we never sell your data. Your precise location is used to time the stories and nothing else. It stays on your phone, and so does the record of what you've heard. We use privacy-friendly analytics (PostHog) to see what's working and catch crashes; it's anonymous and never tied to your account.
+We never sell your data. Your precise location is used to time the stories and nothing else. It never runs in the background. If you create an account, your name, email, and saved drives are tied to it. We use privacy-friendly analytics (PostHog) to see what's working and catch crashes.
 
 WHERE THE STORIES COME FROM
 Skipper's facts are grounded in public sources, including Wikipedia (CC BY-SA). Every stop's source is a tap away in the app, and the full list lives under Settings.
@@ -194,7 +196,7 @@ A note on the driving: Skipper is meant to be heard, not watched. Mount your pho
 > nowhere, so this is inferred from name/subtitle/description, not read.
 
 ```
-sightseeing,GPS,travel guide,storytelling,offline,roadtrip,Lake Tahoe,landmarks,legends,self-guided
+narrated,sightseeing,GPS,offline,history,landmark,legend,attraction,itinerary,car,route,nearby,guide
 ```
 
 ---
