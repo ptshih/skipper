@@ -412,6 +412,31 @@ them back. Re-run those reads before trusting this list.
   demands EVERY territory be enumerated inline with `${local-id}` ids — you cannot just send USA.
 - ✅ Six screenshots at `APP_IPHONE_67` (1320×2868 is accepted there), all `assetDeliveryState=COMPLETE`.
 
+**Accessibility Nutrition Labels — declared 2026-07-28, currently DRAFT.** Voluntary today, but Apple
+says it becomes mandatory over time, and it is NOT neutral to skip: the product page shows an
+Accessibility section either way, and an absent declaration renders as "hasn't indicated support."
+
+Only TWO features are claimed, both evidence-backed:
+- **Sufficient Contrast** — `apps/mobile/src/theme/theme.test.ts` asserts 4.5:1 for every text role on
+  both surfaces in BOTH themes, executable under `bun test`.
+- **Dark Interface** — real light/dark themes, `userInterfaceStyle: automatic`.
+
+The other seven are declared **false on purpose**. VoiceOver and Larger Text are the ones worth
+upgrading — the app already carries accessibility labels on its controls, and Apple's bar is
+"can a user COMPLETE COMMON TASKS", which needs a real pass with VoiceOver on and text at 200% before
+it can be claimed honestly. Under-claiming is correctable; over-claiming misleads exactly the people
+who depend on the label.
+
+⚠ **Captions is the interesting one.** It reads as inapplicable to an audio app, but it's the opposite:
+a narration-only product is unusable to a deaf rider, and **the script text is already stored on
+`narrations`** — the data to caption every stop exists today, unshipped. That's a real feature with the
+hard part done, not an accessibility chore. Revisit it as product work, not compliance.
+
+⚠ The declaration sits in `state=DRAFT`. The ASC API refuses `state` on an update
+(`can not be included in a 'UPDATE' operation`), so publishing is either a UI action under
+**App Accessibility** or happens with the version submission — unverified. Check the UI before relying
+on it appearing.
+
 **Still by hand, and still required:** the App Privacy label (§8) — Apple exposes no public API for it —
 and the submission itself.
 
