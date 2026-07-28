@@ -1,6 +1,8 @@
 # Drive credits: a user-owned ledger (not a count of `drives`)
 
-**Status:** ✅ **BUILT 2026-06-19** (the free-tier slice). The `credit_entries` ledger + the free
+**Status:** ✅ **BUILT 2026-06-19** (the free-tier slice), **amended 2026-07-28** — the free allotment
+is now granted at SIGNUP rather than lazily on first touch (see the Free allotment bullet below; the
+lazy path stays as the backstop). The `credit_entries` ledger + the free
 allotment grant + per-drive consume are live (migration `0016`); POST/GET `/drives` run off the
 ledger. The PURCHASE plumbing (Apple IAP / Google Play grant + refund clawback) is **DEFERRED** —
 the schema is provider-agnostic and ready for it. Supersedes the implicit "credits = `COUNT(drives)`"
@@ -27,8 +29,16 @@ over their entries — never a stored mutable counter, never a count of another 
   for future purchases `<provider>:<txnId>`), so retries never double-grant or double-charge.
 - **Atomic consume**: `POST /drives` co-commits the `−1` consume with the drive insert in one
   `db.batch` (neon-http co-commit), keyed on the drive id → a drive charges exactly one credit.
-- **Free allotment** = a single `grant(+FREE_DRIVE_CAP)`, lazily materialized on first touch
-  (`ensureFreeGrant`, idempotent) — no coupling to the Better Auth user-creation lifecycle.
+- **Free allotment** = a single `grant(+FREE_DRIVE_CAP)` (`ensureFreeGrant`, idempotent on
+  `free:<userId>`), written **at signup** from `databaseHooks.user.create.after` — amended 2026-07-28.
+  It was originally lazy-on-first-touch to avoid coupling to the Better Auth user-creation lifecycle;
+  the cost of that decoupling was that a brand-new account read **0 credits** in the DB and in admin,
+  which is indistinguishable from a broken account (it was misread exactly that way while recovering
+  the App Review demo login). The lazy calls on the read/spend paths REMAIN as the backstop, so this is
+  additive: same idempotency key on both paths, no double-grant possible, and no signup route can
+  produce a credit-less account. ⚠ Anonymous users are skipped — the anonymous plugin deletes its
+  `user` row on link-to-account, and `credit_entries.user_id` has no FK/cascade, so granting there
+  would strand the row.
 - **Single pool**: free + (future) purchased credits share one balance. `user.tier='paid'` (comped)
   bypasses the gate entirely; the ledger governs free accounts.
 - **Lifetime / no-refund-on-delete** is now an explicit policy (delete emits no `reverse`), not a

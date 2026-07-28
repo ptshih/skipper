@@ -23,6 +23,19 @@ export const FREE_DRIVE_CAP = Number(process.env.FREE_DRIVE_CAP ?? 100)
 
 /** Idempotency key for a user's one free-tier grant (so the lazy grant is exactly-once). */
 const freeGrantKey = (userId: string) => `free:${userId}`
+
+/** Whether a NEWLY-CREATED user should be granted the free allotment at signup.
+ *
+ *  Extracted as a pure predicate (like the entry builders below) so the rule is unit-testable instead
+ *  of buried in the auth config. The rule is only "not anonymous", but the reason is load-bearing:
+ *  the anonymous plugin creates a real `user` row and then DELETES it when the rider links a real
+ *  account. `credit_entries.user_id` is a soft ref across the auth-pool boundary — no FK, no cascade —
+ *  and that delete doesn't run `purgeUserData`, so a grant written for an anonymous id becomes an
+ *  orphaned ledger row the moment they sign up. Anonymous riders also can't spend a credit anyway
+ *  (`/drives*` is behind requireAccount). See ./auth's `databaseHooks.user.create.after`. */
+export function shouldGrantAtSignup(u: { isAnonymous?: boolean | null }): boolean {
+  return !u.isAnonymous
+}
 /** Idempotency key for the consume that pays for a drive (a drive charges exactly one credit). */
 export const driveConsumeKey = (driveId: string) => `drive:${driveId}`
 
@@ -40,8 +53,15 @@ export function freeGrantEntry(userId: string): typeof creditEntries.$inferInser
 }
 
 /** Ensure the free-tier allotment grant exists for this user — idempotent (ON CONFLICT DO NOTHING on
- *  the idempotency key), so it's safe to call on every credit-relevant request. Lazy-on-first-touch
- *  avoids coupling to the auth user-creation lifecycle (anonymous → free conversion, account merges). */
+ *  the idempotency key), so it's safe to call on every credit-relevant request.
+ *
+ *  Called from TWO places, deliberately. The primary one is signup (`databaseHooks.user.create.after`
+ *  in ./auth), added 2026-07-28 so a new account's balance is real the moment the account exists
+ *  rather than on first touch — a freshly-created account used to read 0 here and in admin, which is
+ *  indistinguishable from a broken one. The calls below on the read/spend paths remain as the BACKSTOP:
+ *  the signup hook swallows its own errors (a ledger write must never fail account creation) and any
+ *  future user-creation path that skips the hook still cannot produce a credit-less account. Same
+ *  `free:<userId>` key on both, so they can never double-grant. */
 export async function ensureFreeGrant(userId: string): Promise<void> {
   await withRetry(
     () =>

@@ -262,13 +262,14 @@ nobody knew which of the two production accounts was the reviewer's, and its pas
 unrecoverable (reset mail lands in the skipper.fm catch-all, which does NOT forward to the founder's
 Gmail — verified). Recording the address is what makes the password recoverable later.
 
-`appreview@skipper.fm` is now an ORPHAN — real row, 10 credits, unknown password. It can't be deleted
-from outside (`delete-user` needs that user's own session), and with no real users it's harmless. Don't
-mistake it for the live demo account.
+The stale `appreview@skipper.fm` was deleted directly in the DB on 2026-07-28 (its `credit_entries`,
+sessions and `account` row went with it — those are soft refs with no cascade, so they had to be
+removed explicitly). Production now holds exactly two accounts: the founder's and this one.
 
 If the password is ever lost again: don't hunt for it. Sign up a fresh account (email/password, no
-verification), then `GET /drives` once while signed in — that materializes the lazy `FREE_DRIVE_CAP`
-grant, so the balance reads 10/10 before a reviewer ever touches it. Costs nothing.
+verification) and it arrives with a full balance — the free allotment is granted **at signup** since
+2026-07-28 (`docs/decisions/credit-ledger.md`). Costs nothing, and no `GET /drives` warm-up is needed
+the way it was under the old lazy grant.
 
 ### Notes — paste verbatim
 

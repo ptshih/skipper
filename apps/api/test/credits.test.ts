@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'bun:test'
-import { FREE_DRIVE_CAP, driveConsumeEntry, driveConsumeKey, freeGrantEntry } from '../src/credits'
+import {
+  FREE_DRIVE_CAP,
+  driveConsumeEntry,
+  driveConsumeKey,
+  freeGrantEntry,
+  shouldGrantAtSignup,
+} from '../src/credits'
 
 // Pure-surface contract for the credit LEDGER (./src/credits). The DB-bound logic (the idempotent
 // free grant's ON CONFLICT DO NOTHING, the SUM-based balance) lives in SQL and would need a live/test
@@ -47,5 +53,21 @@ describe('credit ledger — free grant contract', () => {
 
   test('a grant and a consume never share an idempotency key (no cross-kind dedupe collision)', () => {
     expect(freeGrantEntry('u').idempotencyKey).not.toBe(driveConsumeEntry('u', 'u').idempotencyKey)
+  })
+})
+
+describe('credit ledger — who gets granted at signup', () => {
+  // The grant moved to signup (databaseHooks.user.create.after) on 2026-07-28 so a new account's
+  // balance is real immediately. These pin the ONE rule that decides it — worth a test because the
+  // failure is silent: granting an anonymous id doesn't error, it just strands a ledger row when the
+  // anonymous plugin deletes that user on link (no FK, no cascade, no purgeUserData).
+  test('a real signup is granted', () => {
+    expect(shouldGrantAtSignup({})).toBe(true)
+    expect(shouldGrantAtSignup({ isAnonymous: false })).toBe(true)
+    expect(shouldGrantAtSignup({ isAnonymous: null })).toBe(true) // column absent/unset ⇒ not anonymous
+  })
+
+  test('an ANONYMOUS user is never granted — its row is deleted on link, orphaning the entry', () => {
+    expect(shouldGrantAtSignup({ isAnonymous: true })).toBe(false)
   })
 })

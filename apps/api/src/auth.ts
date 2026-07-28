@@ -17,6 +17,7 @@ import { expo } from '@better-auth/expo'
 import * as authSchema from '@skipper/db/auth-schema'
 import { purgeUserData } from './account'
 import { authDb } from './auth-db'
+import { ensureFreeGrant, shouldGrantAtSignup } from './credits'
 import { emailConfigured, sendPasswordResetEmail } from './email'
 
 // The mobile app's deep-link scheme — must match apps/mobile app.json `scheme`
@@ -164,6 +165,41 @@ export const auth = betterAuth({
       // beforeDelete (NOT afterDelete) — see ./account for why the order is load-bearing.
       beforeDelete: async (user) => {
         await purgeUserData(user.id)
+      },
+    },
+  },
+  databaseHooks: {
+    user: {
+      create: {
+        // Materialize the free allotment AT SIGNUP so a new account's balance is REAL the moment it
+        // exists (founder call 2026-07-28). Before this it appeared only on first credit-relevant
+        // request, so a freshly-created account read 0 credits in the DB and in admin — indistinguishable
+        // from a broken account, which is exactly how it was misread while recovering the App Review
+        // demo login.
+        //
+        // ⚠ ANONYMOUS USERS ARE SKIPPED, deliberately. The anonymous plugin creates a real `user` row,
+        // and on link-to-account it DELETES that row and creates a fresh one (verified in the installed
+        // plugin source, not assumed). Granting there would hand credits to an identity that cannot
+        // spend them — `/drives*` is behind requireAccount — and then STRAND the grant when the row is
+        // deleted, because `credit_entries.user_id` is a soft ref across the auth-pool boundary with no
+        // FK and no cascade, and the plugin's internal delete does not run `purgeUserData`. The real
+        // account created by the link gets its own grant through this same hook.
+        //
+        // This is ADDITIVE, not a replacement: `ensureFreeGrant` stays on its read/spend paths in
+        // ./drives as the backstop. Both write the same `free:<userId>` idempotency key under
+        // ON CONFLICT DO NOTHING, so the two paths can never double-grant, and any signup route that
+        // bypasses this hook still cannot produce a credit-less account.
+        after: async (createdUser) => {
+          if (!shouldGrantAtSignup(createdUser as { isAnonymous?: boolean | null })) return
+          try {
+            await ensureFreeGrant(createdUser.id)
+          } catch (err) {
+            // NEVER fail signup over a ledger write. The account is already committed at this point,
+            // and the lazy backstop will materialize the grant before any balance is read or spent —
+            // so the worst case is a delayed row, not a lost credit or a rider who can't sign up.
+            console.error(`[api] free-grant at signup failed for ${createdUser.id}; backstop will cover`, err)
+          }
+        },
       },
     },
   },
