@@ -59,18 +59,25 @@ law would also override the Nevada choice of law in the terms, and GDPR Art. 8 t
 entire surface buys nothing today. **Uncheck everything but the United States** — one setting, and the
 GDPR question closes. Revisit only when a region outside the US is actually worth generating.
 
-**Canada: DECLINED, then REVERSED the same day (2026-07-28).** The first call was to stay US-only;
-the founder reversed it on a point the analysis had underweighted — availability follows the account's
-**storefront, not the phone's location**, so a Canadian-storefront visitor driving Tahoe currently
-cannot install the app at all, even though the corpus serves them perfectly. That's a real user the
-US-only setting was silently excluding, not a hypothetical market.
+**Canada was considered and DECLINED (2026-07-28).** Briefly reversed the same day and then backed out
+again, so don't read the one-territory listing as an oversight, and don't re-open it casually.
 
-⚠ **Canada is NOT yet enabled, and the order is load-bearing.** The legal work comes first: **Quebec
-Law 25** (privacy officer, breach reporting, consent, data portability; penalties to CAD $25M or 4% of
-worldwide turnover), **PIPEDA**, and **Bill 96**'s French-language question for consumer contracts —
-Apple availability is country-level, so Quebec cannot be excluded. Our policy carries a Nevada section
-and nothing for Canada. Flipping the territory is one API call with no review, which is exactly why
-it must not go first. Full work list in `TODO.md`.
+The case AGAINST, which carried: Canada is not the free adjacency it looks like. **Quebec Law 25** is
+the closest thing to GDPR in North America (designated privacy officer, breach reporting, consent
+handling, data portability; penalties to CAD $25M or 4% of worldwide turnover), **PIPEDA** applies
+federally, and **Bill 96** raises a French-language question for consumer contracts of adhesion —
+awkward for an English-only policy attached to a product that IS an English-language performance.
+Apple availability is country-level, so **Quebec cannot be excluded**; it arrives with Canada. Our
+policy carries a Nevada section and nothing for Canada.
+
+⚠ **Keep the case FOR, because it's the strongest one and it isn't obvious.** App Store availability
+follows the account's **STOREFRONT, not the phone's location**. So this was never really a
+market-expansion question — a Canadian-storefront visitor driving Tahoe cannot install the app *at
+all*, even though the corpus serves them perfectly. US-only silently excludes a user we already built
+for. That argument doesn't expire; only the legal work stands between it and shipping.
+
+Revisit when either side moves: counsel adds a Canada section while reviewing the Nevada redline
+(cheapest, since that engagement is already queued), or Canadian content exists.
 
 ⚠ Availability is NOT version-locked — unlike the subtitle, it can be changed any time, post-launch,
 with no review. So this decision costs nothing to defer and nothing to reverse.

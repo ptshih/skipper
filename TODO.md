@@ -5,44 +5,6 @@ Carry-forward **engineering** items (the near-term layer of the truth system —
 Each item has enough context to action without re-deriving the reasoning. **Delete items
 when done** — git history is the archive.
 
-## Ship to CANADA — founder reversal 2026-07-28 (Canadians visit Tahoe)
-
-Reverses the 2026-07-28 "declined" call recorded in `docs/guides/app-store-submission.md` §1. The
-rationale is real: availability follows the account's **storefront, not the phone's location**, so a
-Canadian-storefront visitor driving Tahoe currently *cannot install the app at all* — the corpus serves
-them perfectly, the storefront doesn't.
-
-⚠ **ORDER MATTERS. Do the legal work BEFORE flipping availability.** The flip itself is one API call
-and takes effect immediately with no review — which is exactly the trap. Ship to Canada first and
-you're live in a jurisdiction whose privacy law our policy doesn't answer.
-
-- [ ] **Privacy policy: add a Canada section** (`apps/site/src/pages/privacy.astro`). Today it carries
-      Nevada NRS 603A and nothing else. Needs **PIPEDA** (federal) and — the sharp edge — **Quebec
-      Law 25**, the closest thing to GDPR in North America: designated privacy officer, breach
-      reporting, consent handling, data portability, penalties to CAD $25M or 4% of worldwide turnover.
-      A named officer is a real obligation, not boilerplate.
-- [ ] **Quebec Bill 96 / French.** Consumer contracts of adhesion in Quebec may need French. Awkward
-      here because the terms are English-only AND the product *is* an English-language performance.
-      Apple availability is country-level, so **Quebec cannot be excluded** — it arrives with Canada.
-      This is the item most likely to need a real legal answer rather than a paragraph.
-- [ ] **CASL** (anti-spam). Only outbound mail is the transactional password reset, which is very
-      likely fine, but it belongs on the counsel list rather than being assumed.
-- [ ] **Counsel pass.** Add all of the above to the review already queued for the Nevada redline —
-      it's the same conversation, and cheaper bundled than as a second engagement.
-- [ ] **Terms check.** Governing law stays Nevada/Clark County; the existing consumer savings clause
-      ("if your local law lets you sue where you live, this doesn't take that away") already softens
-      the cross-border edge. Confirm that's enough for Canada rather than assuming.
-- [ ] **THEN flip availability** — add `CAN` to the app's territories. One API call, no review, and
-      free pricing derives automatically. `availableInNewTerritories` stays **false** so this remains a
-      deliberate two-country list rather than an open door.
-- [ ] **Then update the docs that assert US-only**: the submission guide's §1 (both the "United States
-      only" rationale and the "Canada was DECLINED" paragraph, now superseded) and the
-      `skipper-fm-mail-posture` framing if it references US-only.
-
-Not required: a `fr-CA` App Store localization (Apple doesn't force it), and no content work — Canadian
-regions are a separate, much larger question. This is purely about letting Canadians who drive Tahoe
-buy the app that already serves them.
-
 ## Content + LLM-discovery marketing op — kick off during App Store review (founder ask 2026-07-24)
 
 Dead-time play: App Store review is idle builder-time, and **distribution is the project's named
