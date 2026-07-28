@@ -181,13 +181,15 @@ A note on the driving: Skipper is meant to be heard, not watched. Mount your pho
 > description" does not win the Tahoe search. `Emerald Bay` does not substitute; nobody searches it.
 > `roadtrip` (no space) is kept on purpose: Apple tokenizes it distinctly from the Name's "Road Trip".
 >
-> ⚠ **Keywords are VERSION-LOCKED** (same as the subtitle) — changing them needs a new version
-> submission. That bites harder here than for most apps, because Skipper's content expands
-> SERVER-SIDE: a new region ships without an app release, so a geo-heavy keyword field goes stale with
-> no natural moment to fix it. Hence exactly ONE place term, not two — `Emerald Bay` was dropped
-> 2026-07-28 (one cove, near-zero volume, 11 chars). `Lake Tahoe` stays only because it is currently
-> 100% of the corpus and the highest-intent query available; retire it the first time a second region
-> ships alongside a version bump.
+> **Keywords are version-scoped** (same as the subtitle): changing them rides along with a new version
+> submission. That is a scheduling detail, NOT a one-way door — updates ship regularly for unrelated
+> reasons, and metadata rides free on any of them. The only thing you genuinely cannot do is react to a
+> ranking insight the same day.
+>
+> The one wrinkle worth remembering: Skipper's content expands SERVER-SIDE, so adding a region needs no
+> app release. The moment you most want to refresh geo terms therefore isn't automatically a moment
+> you're shipping a build — you either ride the next update or cut one on purpose. Mild, but it's why
+> geo terms are worth spending sparingly rather than not at all.
 >
 > What the competitors do, for calibration: their public copy spends itself on CATEGORY terms
 > (`self-guided`, `national parks`, `scenic drives`, `hidden gems`, `location-based`) and names
