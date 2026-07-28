@@ -168,9 +168,23 @@ A note on the driving: Skipper is meant to be heard, not watched. Mount your pho
 > indexed field carrying it — the description is NOT indexed by Apple, so "we say Tahoe in the
 > description" does not win the Tahoe search. `Emerald Bay` does not substitute; nobody searches it.
 > `roadtrip` (no space) is kept on purpose: Apple tokenizes it distinctly from the Name's "Road Trip".
+>
+> ⚠ **Keywords are VERSION-LOCKED** (same as the subtitle) — changing them needs a new version
+> submission. That bites harder here than for most apps, because Skipper's content expands
+> SERVER-SIDE: a new region ships without an app release, so a geo-heavy keyword field goes stale with
+> no natural moment to fix it. Hence exactly ONE place term, not two — `Emerald Bay` was dropped
+> 2026-07-28 (one cove, near-zero volume, 11 chars). `Lake Tahoe` stays only because it is currently
+> 100% of the corpus and the highest-intent query available; retire it the first time a second region
+> ships alongside a version bump.
+>
+> What the competitors do, for calibration: their public copy spends itself on CATEGORY terms
+> (`self-guided`, `national parks`, `scenic drives`, `hidden gems`, `location-based`) and names
+> specific places only in the DESCRIPTION, which Apple does not index. They can afford that — Shaka has
+> 90+ tours, Autio 20,000+ stories. ⚠ Their actual keyword fields are PRIVATE; Apple exposes them
+> nowhere, so this is inferred from name/subtitle/description, not read.
 
 ```
-sightseeing,GPS,travel guide,storytelling,Emerald Bay,offline,roadtrip,Lake Tahoe,landmarks,legends
+sightseeing,GPS,travel guide,storytelling,offline,roadtrip,Lake Tahoe,landmarks,legends,self-guided
 ```
 
 ---
