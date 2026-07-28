@@ -111,7 +111,7 @@ the listing and the site flip together. Editable until submission and while awai
 > screenshot captions: mention the launch region, never pin the product to it.
 
 ```
-A corny old guide rides shotgun and tells you what happened where — timed to the road, hands-free, honest enough to hush when he doesn't know. Starting in Lake Tahoe.
+A corny old guide rides shotgun and tells you what happened where, timed to the road, hands-free, honest enough to hush when he doesn't know. Starting in Lake Tahoe.
 ```
 
 ---
@@ -121,24 +121,24 @@ A corny old guide rides shotgun and tells you what happened where — timed to t
 ```
 A corny old tour guide rides shotgun and narrates your drive.
 
-Skipper watches the road go by and tells you what happened there — the shipwreck under the water you're looking at, the hotel that burned down twice, the man who built a castle nobody asked for. Stories arrive timed to the road, so the tale about the bay lands while you can still see the bay.
+Skipper watches the road go by and tells you what happened there: the shipwreck under the water you're looking at, the hotel that burned down twice, the man who built a castle nobody asked for. Stories arrive timed to the road, so the tale about the bay lands while you can still see the bay.
 
 He's a ham. He will pun. He is also, underneath it, telling you the truth: every story is grounded in real, cited sources, and when the record is thin he says so and lets the view do the talking. A skipper who doesn't know is better than a skipper who invents.
 
 RIGHT NOW: LAKE TAHOE ONLY
-Every story is researched and recorded for a specific place, and the finished collection covers Lake Tahoe, California. Outside that basin, Skipper will tell you honestly that he doesn't know these roads yet. More regions are the plan — but we'd rather ship one place done properly than a nationwide map of nothing much.
+Every story is researched and recorded for a specific place, and the finished collection covers Lake Tahoe, California. Outside that basin, Skipper will tell you honestly that he doesn't know these roads yet. More regions are the plan, but we'd rather ship one place done properly than a nationwide map of nothing much.
 
 TWO WAYS TO RIDE
 
-Ride Along — free, no account, no plan. Just start it and drive. Whenever you come near something with a story, the Skipper speaks up. Wander at will; he'll find you.
+Ride Along: free, no account, no plan. Just start it and drive. Whenever you come near something with a story, the Skipper speaks up. Wander at will; he'll find you.
 
-Create a Drive — pick a start and an end, and Skipper lays out the good stuff along the way, in order, paced to the drive. Save it, download it, take it with you.
+Create a Drive: pick a start and an end, and Skipper lays out the good stuff along the way, in order, paced to the drive. Save it, download it, take it with you.
 
 BUILT FOR AN ACTUAL CAR
 Audio-first, so it works from a mount or over Bluetooth with your eyes on the road. Lock-screen controls. Nothing to look at, nothing to tap. Start it and drive.
 
 WORKS WHERE THE SIGNAL DOESN'T
-Mountain roads have real dead zones. Download a drive before you go and the whole thing plays from your phone — no bars required.
+Mountain roads have real dead zones. Download a drive before you go and the whole thing plays from your phone. No bars required.
 
 RE-HEAR ANYTHING
 Missed a line to a passing truck? Tap once to hear that stop again. Scrub, skip back fifteen seconds, pause. It's your drive.
@@ -147,7 +147,7 @@ HONEST ABOUT THE MONEY
 Riding along is free and unlimited. Creating a drive spends one of your free credits, because building one does real work. No subscription. No ads. No account needed to listen.
 
 HONEST ABOUT YOUR DATA
-No ads, and we never sell your data. Your precise location is used to time the stories and nothing else — it stays on your phone, and so does the record of what you've heard. We use privacy-friendly analytics (PostHog) to see what's working and catch crashes; it's anonymous and never tied to your account.
+No ads, and we never sell your data. Your precise location is used to time the stories and nothing else. It stays on your phone, and so does the record of what you've heard. We use privacy-friendly analytics (PostHog) to see what's working and catch crashes; it's anonymous and never tied to your account.
 
 WHERE THE STORIES COME FROM
 Skipper's facts are grounded in public sources, including Wikipedia (CC BY-SA). Every stop's source is a tap away in the app, and the full list lives under Settings.
@@ -345,20 +345,20 @@ the way it was under the old lazy grant.
 Skipper is a hands-free, GPS-triggered audio tour for drivers. Two things will help you review it from a desk.
 
 1) COVERAGE IS LAKE TAHOE, CALIFORNIA ONLY.
-Every story is written and recorded for a specific place, and our finished collection covers Lake Tahoe. This is stated plainly in the App Store description and inside the app. In Cupertino, the "Ride Along" mode will correctly report that it has no coverage for your area — that is intended behavior, not a failure.
+Every story is written and recorded for a specific place, and our finished collection covers Lake Tahoe. This is stated plainly in the App Store description and inside the app. In Cupertino, the "Ride Along" mode will correctly report that it has no coverage for your area. That is intended behavior, not a failure.
 
-2) TO HEAR THE APP WITHOUT DRIVING — ONE TAP, NO ACCOUNT, NO PERMISSION.
-On the Home screen, under the "Ride Along" button, tap "Not near Tahoe? Hear a quick sample." It opens a curated Lake Tahoe narration that plays immediately — real audio, about a minute — and then offers "Ride along for real." No sign-in, no location prompt.
+2) TO HEAR THE APP WITHOUT DRIVING: ONE TAP, NO ACCOUNT, NO PERMISSION.
+On the Home screen, under the "Ride Along" button, tap "Not near Tahoe? Hear a quick sample." It opens a curated Lake Tahoe narration that plays immediately (real audio, about a minute) and then offers "Ride along for real." No sign-in, no location prompt.
 
-FULLER EXPERIENCE (optional): to hear a complete multi-stop drive on a timer (still no GPS), tap "Create a Drive", sign in with the demo account above (or any email — no verification), set START = "Tahoe City" and END = "South Lake Tahoe", then "Plan the drive" → "Make this drive". The app lands in Preview and plays each stop's full audio in order (~20 minutes).
+FULLER EXPERIENCE (optional): to hear a complete multi-stop drive on a timer (still no GPS), tap "Create a Drive", sign in with the demo account above (or any email; no verification), set START = "Tahoe City" and END = "South Lake Tahoe", then "Plan the drive" → "Make this drive". The app lands in Preview and plays each stop's full audio in order (~20 minutes).
 
 ACCOUNT DELETION (Guideline 5.1.1(v)):
 Settings (gear, top-right of Home) → Delete account. It permanently deletes the account, its saved drives, and its credits immediately. Password confirmation is required.
 
 LOCATION USE:
-"When In Use" only — used solely to time narration to your position while driving. No background location, no tracking, no analytics, no advertising.
+"When In Use" only, used solely to time narration to your position while driving. No background location, no tracking, no analytics, no advertising.
 
-Thank you — happy to help if anything is unclear.
+Thank you. Happy to help if anything is unclear.
 ```
 
 **Why this matters more than the rest of the listing:** the app's primary button dead-ends 200 miles
