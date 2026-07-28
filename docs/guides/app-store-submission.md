@@ -1,6 +1,8 @@
 # App Store Connect — the submission cheat-sheet
 
-> **Status:** LIVE 2026-07-27, UNSUBMITTED. §8's privacy label was re-derived from the bundled SDKs'
+> **Status:** LIVE 2026-07-28, UNSUBMITTED — but MOSTLY ENTERED already; read §11b before typing
+> anything into ASC, and re-read the values back rather than trusting this file.
+> §8's privacy label was re-derived from the bundled SDKs'
 > own manifests on 2026-07-24 and grew from 9 data types to 12 — paste that table, not an older copy.
 > §13 (added 2026-07-27) holds the work that can only be done AFTER approval — don't submit and forget it.
 > Every field App Store Connect asks for, ready to paste,
@@ -20,7 +22,7 @@ single most rejection-prone sentence in the whole listing.
 | Field | Value |
 |---|---|
 | **Name** (30) | `Skipper: Road Trip Audio Tours` — ⚠ `Skipper` alone was TAKEN; this is the live name and it uses all 30 chars, which is right (Name is the most heavily weighted search field) |
-| **Subtitle** (30) | `Narrated audio tours for Tahoe` |
+| **Subtitle** (30) | `Scenic Drives & Local History` — ⚠ deliberately GEOGRAPHY-FREE, see below |
 | **Primary category** | Travel |
 | **Secondary category** | Entertainment |
 | **Privacy Policy URL** | `https://skipper.fm/privacy` |
@@ -30,6 +32,24 @@ single most rejection-prone sentence in the whole listing.
 
 **Why Travel / Entertainment, not Navigation:** Skipper gives no turn-by-turn directions and is not a
 routing app. Filing it under Navigation invites a reviewer to test it as one and find it wanting.
+
+**Why the subtitle names NO place (founder call 2026-07-28).** The subtitle is VERSION-LOCKED — once
+live, changing it needs a new version submission — so pinning the second-most-weighted search field to
+Tahoe would nail it to the one thing guaranteed to change. Geography belongs in **Promotional Text**
+(§3), which is editable with no review and already opens "Lake Tahoe, narrated." The competitors split
+exactly this way: Autio runs `Culture & History Guide` (geography-free, scales to every road they add),
+while Shaka Guide runs `Hawaii & National Park Travel` — affordable only because Hawaii IS their
+permanent identity, not a starting point. We're Autio's case.
+
+⚠ **Name and subtitle must share NO words** — Apple indexes them separately, so a repeat is wasted
+allowance in the two highest-weighted fields. Both competitors obey this. The Name owns
+*skipper / road / trip / audio / tours*; the Subtitle owns *scenic / drives / local / history*. An
+earlier subtitle (`Narrated audio tours for Tahoe`) repeated "audio tours" from the Name — don't
+reintroduce that.
+
+Coverage honesty is NOT weakened by a place-free subtitle: it lives where it does the work — the
+description's "RIGHT NOW: LAKE TAHOE ONLY", the §10 reviewer notes, and the app itself. Omitting Tahoe
+claims nothing false.
 
 **Why United States only.** Availability defaults to *all* territories, and shipping to the EU/UK pulls
 in GDPR whole — legal basis, data-subject rights, international-transfer disclosure — none of which the
@@ -108,10 +128,17 @@ A note on the driving: Skipper is meant to be heard, not watched. Mount your pho
 ## 5. Keywords (100 max, comma-separated)
 
 > Do NOT repeat words already in the Name or Subtitle — Apple indexes those separately, and a repeat
-> wastes characters that could win a different search.
+> wastes characters that could win a different search. Reworked 2026-07-28 when the Name turned out to
+> be `Skipper: Road Trip Audio Tours` (not bare `Skipper`) and the Subtitle went geography-free:
+> `road trip` and `scenic drive` became duplicates and were dropped, freeing ~23 chars.
+>
+> ⚠ **`Lake Tahoe` MUST stay here.** Once the subtitle stopped naming Tahoe, keywords became the ONLY
+> indexed field carrying it — the description is NOT indexed by Apple, so "we say Tahoe in the
+> description" does not win the Tahoe search. `Emerald Bay` does not substitute; nobody searches it.
+> `roadtrip` (no space) is kept on purpose: Apple tokenizes it distinctly from the Name's "Road Trip".
 
 ```
-road trip,scenic drive,sightseeing,GPS,travel guide,storytelling,Emerald Bay,offline,roadtrip
+sightseeing,GPS,travel guide,storytelling,Emerald Bay,offline,roadtrip,Lake Tahoe,landmarks,legends
 ```
 
 ---
