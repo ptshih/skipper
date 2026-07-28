@@ -27,6 +27,17 @@ const RESEND_ENDPOINT = 'https://api.resend.com/emails'
  *  (verified against the live account), so `send.skipper.fm` would yield `send.send.skipper.fm`. */
 const EMAIL_FROM = process.env.EMAIL_FROM ?? 'Skipper <skipper@notifications.skipper.fm>'
 
+/** Where a rider's REPLY goes. Not cosmetic: `EMAIL_FROM` lives on the sending subdomain, whose
+ *  only MX is Resend/SES's bounce-and-complaint endpoint — a mailbox nobody reads, because it isn't
+ *  one. Without this header, a reply to a reset mail is accepted and then discarded. The most common
+ *  reply to a password-reset email is "I didn't request this", which is a SECURITY SIGNAL (someone is
+ *  probing an account) and the one message we can least afford to drop on the floor.
+ *
+ *  ⚠ `reply_to`, snake_case — Resend's REST API. Their SDK takes `replyTo`, and we deliberately don't
+ *  use the SDK (see the note above the endpoint), so the camelCase spelling would be silently ignored
+ *  rather than rejected. Verified against Resend's API reference, 2026-07-27. */
+const REPLY_TO = process.env.EMAIL_REPLY_TO ?? 'hello@skipper.fm'
+
 /** Whether transactional email can actually be sent. Callers log; they don't silently degrade. */
 export function emailConfigured(): boolean {
   return Boolean(process.env.RESEND_API_KEY)
@@ -44,7 +55,13 @@ async function sendEmail(opts: { to: string; subject: string; text: string }): P
   const res = await fetch(RESEND_ENDPOINT, {
     method: 'POST',
     headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ from: EMAIL_FROM, to: [opts.to], subject: opts.subject, text: opts.text }),
+    body: JSON.stringify({
+      from: EMAIL_FROM,
+      reply_to: REPLY_TO,
+      to: [opts.to],
+      subject: opts.subject,
+      text: opts.text,
+    }),
     signal: AbortSignal.timeout(8_000),
   })
   if (!res.ok) {

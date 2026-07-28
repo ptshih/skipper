@@ -1,0 +1,23 @@
+# Skipper — how to report a security problem. Format is RFC 9116.
+#
+# Why this file exists: without it, someone who finds a real flaw in an app that holds
+# accounts and purchased credits has no channel except an address that reads like
+# marketing. The usual outcome of that is not a quiet report — it's silence, or a
+# public post. A findable contact is the cheapest incident-response tooling there is.
+#
+# Contact is hello@ ON PURPOSE, not security@: hello@ is a mailbox that provably exists
+# and is read. A dedicated security@ is the better end state (reports stop competing
+# with general mail, and it can be alerted on) — if it ever gets created, change the
+# line below to point at it. Do NOT publish an address here that nobody has created;
+# the domain runs a catch-all, so a wrong address would silently ACCEPT reports and
+# swallow them, which is worse than having no file at all.
+#
+# ⚠ Expires is REQUIRED by RFC 9116, and a security.txt past its expiry MUST be treated
+# as stale — so this file quietly stops counting on the date below. Nothing in CI or
+# the test suite fails when that happens. Renew it (push the date out a year) or delete
+# the file; leaving an expired one in place is the one outcome with no upside.
+
+Contact: mailto:hello@skipper.fm
+Expires: 2027-07-27T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://skipper.fm/.well-known/security.txt
