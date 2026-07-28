@@ -59,6 +59,19 @@ law would also override the Nevada choice of law in the terms, and GDPR Art. 8 t
 entire surface buys nothing today. **Uncheck everything but the United States** — one setting, and the
 GDPR question closes. Revisit only when a region outside the US is actually worth generating.
 
+**Canada was considered and DECLINED (founder call 2026-07-28)** — don't re-open it casually, and don't
+mistake it for an oversight. Canada is not the free adjacency it looks like: **Quebec Law 25** is the
+closest thing to GDPR in North America (privacy officer, breach reporting, consent handling, data
+portability; penalties to CAD $25M or 4% of worldwide turnover), PIPEDA applies federally, and **Bill 96**
+raises a French-language question for consumer contracts of adhesion — awkward for an English-only
+policy attached to a product that IS an English-language performance. Against that, the gain is only
+Canadian-*storefront* users who drive to Tahoe (availability follows the account's storefront, not the
+phone's location), because there is no Canadian content to serve them at home. Revisit when either side
+flips: Canadian content exists, or counsel adds a Canada section while reviewing the Nevada redline.
+
+⚠ Availability is NOT version-locked — unlike the subtitle, it can be changed any time, post-launch,
+with no review. So this decision costs nothing to defer and nothing to reverse.
+
 ---
 
 ## 2. Version Information (1.0.0)
