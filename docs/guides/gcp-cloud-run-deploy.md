@@ -139,10 +139,20 @@ curl -s "$URL/regions"  # {"regions":[...]}      — DB reachable + secret decry
 ## The apex site (skipper.fm) — Firebase Hosting
 
 `apps/site` is a static Astro app for the `skipper.fm` apex, deployed to **Firebase
-Hosting** in the SAME project (`lithe-window-491818-k8`). It serves the iOS
-universal-links AASA as a static file (`public/.well-known/apple-app-site-association`);
-`firebase.json` sets `appAssociation:NONE` + the `application/json` Content-Type and drops
-the `**/.*` ignore glob so the dotfolder deploys. CD reuses the SAME `skipper-gh` GitHub
+Hosting** in the SAME project (`lithe-window-491818-k8`). It serves the iOS association file
+(`public/.well-known/apple-app-site-association`); `firebase.json` sets `appAssociation:NONE`
++ the `application/json` Content-Type and drops the `**/.*` ignore glob so the dotfolder
+deploys. (Until 2026-07-27 this paragraph described a file that did not exist — the path 404'd.)
+
+⚠ That file declares **`webcredentials` only — deliberately no `applinks`**, and the app's
+`associatedDomains` matches. There is no universal-link destination to declare: `/t/<id>` was
+the SHARED-TOUR model, and the v2 pivot made drives user-owned and private, so nothing on
+skipper.fm is shareable content. The one page an app could claim, `/reset-password`, is
+deliberately web-only — intercepting it would recreate the exact failure the web reset exists
+to avoid (a reset that only works on the device that still has a session). What `webcredentials`
+buys is real though: reset finishes in a BROWSER, so iOS saves the new password against
+skipper.fm, and without the association the app's sign-in field can't autofill the password the
+rider just set. Don't "restore" applinks without a route that actually handles it. CD reuses the SAME `skipper-gh` GitHub
 connection via a second trigger (`cloudbuild.site.yaml`), path-filtered to `apps/site/**`,
 deploying with the official `us-docker.pkg.dev/firebase-cli/us/firebase` image (ADC, no token).
 

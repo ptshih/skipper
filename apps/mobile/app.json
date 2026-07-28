@@ -14,7 +14,7 @@
         "dark": "./assets/icon-dark.png"
       },
       "supportsTablet": false,
-      "associatedDomains": ["applinks:skipper.fm"],
+      "associatedDomains": ["webcredentials:skipper.fm"],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       },
