@@ -101,11 +101,17 @@ the listing and the site flip together. Editable until submission and while awai
 
 ## 3. Promotional Text (170 max)
 
-> Editable any time WITHOUT a new review — the one field you can fix after launch. Use it when
-> coverage expands past Tahoe.
+> Editable any time WITHOUT a new review — the one field you can fix after launch, and therefore the
+> right home for whatever is only true *right now*. Update it when coverage expands past Tahoe.
+>
+> ⚠ **Lead with the persona, close with the place.** Being the correct FIELD for geography doesn't
+> license leading with it. This used to open "Lake Tahoe, narrated." — the first line a browser reads,
+> framing the app as a Tahoe product before the hook lands. Tahoe is the starting point, not the
+> pitch, so it now closes the line as "Starting in Lake Tahoe." Same rule as the subtitle and the
+> screenshot captions: mention the launch region, never pin the product to it.
 
 ```
-Lake Tahoe, narrated. A corny old guide rides shotgun and tells you what happened where — timed to the road, hands-free, and honest enough to hush when he doesn't know.
+A corny old guide rides shotgun and tells you what happened where — timed to the road, hands-free, honest enough to hush when he doesn't know. Starting in Lake Tahoe.
 ```
 
 ---
