@@ -5,6 +5,40 @@ Carry-forward **engineering** items (the near-term layer of the truth system —
 Each item has enough context to action without re-deriving the reasoning. **Delete items
 when done** — git history is the archive.
 
+## When YOSEMITE ships: the metadata that goes stale (founder ask 2026-07-28)
+
+Content is SERVER-SIDE, so a second region goes live with no app release. That is the whole problem:
+the corpus changes underneath a listing that still says Tahoe-only, and nothing forces the two back
+into agreement. Trigger this list the day Yosemite narrations are RELEASED (`released_at` non-null and
+serving from `/roam`), not the day generation finishes.
+
+⚠ Do NOT pre-announce Yosemite in ASC before it serves. Guideline 2.3.7 wants keywords that
+"accurately describe the app", and §10's reviewer notes say in capitals that coverage is Lake Tahoe
+ONLY — pre-announcing contradicts the document written to reassure the reviewer. Under-promising is
+the safe direction; the reverse is what gets rejected.
+
+**Instantly, no review (the only same-day lever):**
+- [ ] **Promotional text.** Currently closes "Starting in Lake Tahoe." This is the one field editable
+      without a version submission, which is exactly why geography lives here.
+
+**Next version submission (all of these are version-scoped, so they ride one build):**
+- [ ] ⚠ **Description — this becomes FACTUALLY FALSE, not merely dated.** `RIGHT NOW: LAKE TAHOE ONLY`
+      and "the finished collection covers Lake Tahoe" both stop being true. Apple requires metadata be
+      kept up to date, so this is an obligation rather than an improvement.
+- [ ] ⚠ **§10 reviewer notes.** They tell the reviewer coverage is Tahoe only and give
+      Tahoe City → South Lake Tahoe as the test drive. Leave them and the next reviewer is actively
+      misled by our own instructions.
+- [ ] **Keywords.** Add `Yosemite`. Currently 99/100, so something goes — `nearby` or `car` are the
+      weakest. ⚠ Keep the subtitle/keywords geography coupling in mind (§5): between them they are the
+      only indexed fields, so don't end up with no place name anywhere.
+- [ ] **Screenshots.** The map frame is captioned "Starting in Lake Tahoe" and shows the Tahoe basin.
+      Recapture per §9 (live GPS, never `?mode=sim` — it renders a SIMULATED badge).
+- [ ] **App Preview.** The 28s video is an Emerald Bay postcard. Still honest, still fine; revisit only
+      if Yosemite is the better hook.
+
+Probably NO change needed: the **subtitle** is deliberately geography-free (`Scenic Drives & Local
+History`), which is the entire reason it was written that way — it survives new regions untouched.
+
 ## Content + LLM-discovery marketing op — kick off during App Store review (founder ask 2026-07-24)
 
 Dead-time play: App Store review is idle builder-time, and **distribution is the project's named
