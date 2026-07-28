@@ -138,13 +138,15 @@ No account, no ads, and it plays offline. Mount your phone, start it, and drive.
 He's a ham. He will pun. He is also, underneath it, telling you the truth: every story is grounded in real, cited sources, and when the record is thin he says so and lets the view do the talking. A skipper who doesn't know is better than a skipper who invents.
 
 RIGHT NOW: LAKE TAHOE ONLY
-Every story is researched and recorded for a specific place, and the finished collection covers Lake Tahoe, California. Outside that basin, Skipper will tell you honestly that he doesn't know these roads yet. More regions are the plan, but we'd rather ship one place done properly than a nationwide map of nothing much.
+Every story is researched and recorded for a specific place, and the finished collection covers Lake Tahoe. Outside that basin, Skipper will tell you honestly that he doesn't know these roads yet. More regions are the plan, but we'd rather ship one place done properly than a nationwide map of nothing much.
 
 TWO WAYS TO RIDE
-
 Ride Along: free, no account, no plan. Just start it and drive. Whenever you come near something with a story, the Skipper speaks up. Wander at will; he'll find you.
 
 Create a Drive: pick a start and an end, and Skipper lays out the good stuff along the way, in order, paced to the drive. Save it, download it, take it with you.
+
+HONEST ABOUT THE MONEY
+Riding along is free and unlimited. Creating a drive spends one of your free credits, because building one does real work. No subscription, nothing to buy inside the app, and we never sell your data.
 
 BUILT FOR AN ACTUAL CAR
 Audio-first, so it works from a mount or over Bluetooth with your eyes on the road. Lock-screen controls. Nothing to look at, nothing to tap.
@@ -155,12 +157,6 @@ Mountain roads have real dead zones. Download a drive before you go and the whol
 RE-HEAR ANYTHING
 Missed a line to a passing truck? Tap once to hear that stop again. Scrub, skip back fifteen seconds, pause. It's your drive.
 
-HONEST ABOUT THE MONEY
-Riding along is free and unlimited. Creating a drive spends one of your free credits, because building one does real work. No subscription, no ads, and nothing to buy inside the app.
-
-HONEST ABOUT YOUR DATA
-We never sell your data. Your precise location is used to time the stories and nothing else. It never runs in the background. If you create an account, your name, email, and saved drives are tied to it. We use privacy-friendly analytics (PostHog) to see what's working and catch crashes.
-
 WHERE THE STORIES COME FROM
 Skipper's facts are grounded in public sources, including Wikipedia (CC BY-SA). Every stop's source is a tap away in the app, and the full list lives under Settings.
 
@@ -168,6 +164,27 @@ A note on the driving: Skipper is meant to be heard, not watched. Mount your pho
 ```
 
 ---
+
+**Structure notes (2026-07-28), grounded in what Autio and Shaka Guide actually publish:**
+
+- **Money stays, and sits high** — right under TWO WAYS TO RIDE, because it explains the credit that
+  Create a Drive spends. Autio puts pricing in its FIRST paragraph; the top review complaint in this
+  category is "I thought it was free." Ours is the opposite of Autio's story (riding along really is
+  free, no subscription), so this is a competitive claim against the market leader, not a disclaimer.
+- **A privacy/data section was CUT.** Neither competitor has one sentence about data — checked their
+  full live descriptions. It cost ~300 chars, half of it was nutrition-label content ("your name,
+  email and saved drives are tied to your account"), and the App Privacy label now does that job in a
+  structured, Apple-enforced form that prose cannot match. Volunteering a privacy defence to a reader
+  who had not raised the worry tends to create it. The one persuasive clause, "we never sell your
+  data", was folded into the money beat.
+- ⚠ **Do not take structural cues from Shaka Guide.** Their description is a keyword farm — 47 tour
+  names listed at the end, "GPS audio tour" repeated a dozen times. It works because breadth IS their
+  product. `docs/research/autio-content-moat.md` calls competing on that grid a trap; copying its
+  shape pulls us onto it.
+
+⚠ **Always re-read the LIVE description before editing it** (`GET appStoreVersionLocalizations`).
+This file is a record, not the source of truth — the founder edits directly in ASC, and re-pushing a
+stale copy from here silently reverts that work.
 
 ## 5. Keywords (100 max, comma-separated)
 
