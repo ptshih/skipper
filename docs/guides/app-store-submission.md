@@ -252,7 +252,23 @@ route without moving, and screenshot the encounter as it fires.
 **Entity, for the ASC fields that ask:** Manoa, Inc., a Delaware corporation, 1810 E Sahara Ave
 STE 75994, Las Vegas, NV 89104, USA. ⚠ Not California — both legal pages said so until 2026-07-24.
 
-**Sign-in required:** Yes → provide the demo account. ⚠ Put the password in ASC only, never in git.
+**Sign-in required:** Yes → the demo account is **`review@skipper.fm`** (name "App Review"), created
+2026-07-28, balance verified 10/10 through the live API.
+
+⚠ The PASSWORD goes in App Store Connect and nowhere else — never in git, never in this file. But the
+ADDRESS belongs here, and its absence already cost us once: a 2026-07-24 session created
+`appreview@skipper.fm` and recorded neither the address nor the password anywhere, so by 2026-07-28
+nobody knew which of the two production accounts was the reviewer's, and its password was
+unrecoverable (reset mail lands in the skipper.fm catch-all, which does NOT forward to the founder's
+Gmail — verified). Recording the address is what makes the password recoverable later.
+
+`appreview@skipper.fm` is now an ORPHAN — real row, 10 credits, unknown password. It can't be deleted
+from outside (`delete-user` needs that user's own session), and with no real users it's harmless. Don't
+mistake it for the live demo account.
+
+If the password is ever lost again: don't hunt for it. Sign up a fresh account (email/password, no
+verification), then `GET /drives` once while signed in — that materializes the lazy `FREE_DRIVE_CAP`
+grant, so the balance reads 10/10 before a reviewer ever touches it. Costs nothing.
 
 ### Notes — paste verbatim
 
