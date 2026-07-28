@@ -83,6 +83,19 @@ with no review. So this decision costs nothing to defer and nothing to reverse.
 | **Support URL** | `https://skipper.fm/support` |
 | **Marketing URL** | `https://skipper.fm` |
 | **What's New** | *(first release — leave blank; Apple hides it for 1.0)* |
+| **Release type** | **MANUAL** — ⚠ not the default, see below |
+
+**Copyright format:** year of first publication + rights holder, and **no © symbol** — Apple renders
+that itself. `2026 Manoa, Inc.`, not `© 2026 Manoa, Inc.` The field is REQUIRED; a version can't be
+submitted with it empty (ours was `null` until 2026-07-28).
+
+**Why MANUAL release.** ASC defaults to `AFTER_APPROVAL` — the app goes live the instant Apple
+approves, which is frequently overnight. That is the exact scenario §13 exists to prevent:
+`apps.apple.com/app/id6778946770` 404s until release, and the site's download button is deliberately a
+"coming soon" pill until it has both the real URL and Apple's badge artwork. On automatic release the
+app appears in the Store while skipper.fm still says it isn't out, and any link already shared stays
+dead until someone notices and deploys. Manual makes approval a notification instead of an event, so
+the listing and the site flip together. Editable until submission and while awaiting review.
 
 ---
 
