@@ -327,6 +327,43 @@ the landing page. Two traps if they're ever recaptured:
   GPS fix through a real trigger point: `xcrun simctl location <udid> start --speed=11 --interval=1.0`
   along CA-89 through Eagle Falls trailhead. Pull actual trigger coordinates from `GET /roam`.
 
+⚠ **The roam screen has a large empty band when the map is toggled OFF** — about 40% of the frame.
+It's the real layout, but in a marketing frame it reads as a failed render. Do NOT restage it: the map
+is a REPLACEMENT view, not a background, so there is no "story over map" screen to capture. The fix is
+to splice the void shorter, which is invisible because the band is a single flat colour (`#090E0C`).
+Verified seam rows with `ffmpeg -vf crop=1320:1:0:<y>` piped to `xxd` — cut only where a row is one
+colour edge to edge, or a sliver of the progress-bar car marker bleeds in and looks like a glitch:
+
+```sh
+ffmpeg -i shot.png -filter_complex \
+  "[0:v]crop=1320:700:0:0[t];[0:v]crop=1320:1308:0:1560[b];[t][b]vstack=inputs=2[o]" -map "[o]" tight.png
+```
+
+## 9b. App Preview video — UPLOADED 2026-07-28
+
+One 28s preview at `IPHONE_67`, 1320×2868, H.264 30fps, AAC stereo. Apple validated it
+(`assetDeliveryState=COMPLETE`). It is the highest-leverage asset on the page for an audio-first app,
+because it's the only one that can carry the Skipper's VOICE — screenshots structurally cannot.
+
+Content is the sample flow, chosen because it's deterministic and needs no GPS: home → one tap →
+the illustrated postcard playing Emerald Bay. How it was made, since it isn't obvious:
+
+⚠ **`simctl recordVideo` captures NO audio.** A silent preview of a narration app is close to
+pointless, so the real clip is muxed in afterwards — the exact `/roam/sample` m4a the app is playing on
+screen, delayed to match the moment playback starts:
+
+```sh
+xcrun simctl io <udid> recordVideo --codec h264 --force raw.mov     # tap through while it records
+ffmpeg -ss 2.5 -t 28 -i raw.mov -i sample.m4a \
+  -filter_complex "[1:a]adelay=3000:all=1,apad,aformat=channel_layouts=stereo[a]" \
+  -map 0:v -map "[a]" -t 28 -r 30 -c:v libx264 -pix_fmt yuv420p -crf 20 \
+  -c:a aac -b:a 160k -ar 44100 -ac 2 -movflags +faststart preview.mov
+```
+
+Find the sync point by extracting frames (`ffmpeg -ss <t> -frames:v 1`) and reading the player's own
+elapsed-time counter — audio 0:00 lands where the counter starts. Apple's window is 15–30s; this sits
+at 28.
+
 ⚠ **CAPTION POLICY — don't pin the product to Tahoe** (founder call 2026-07-28). Screenshots are the
 surface people actually look at, so the same rule as the subtitle applies: Tahoe is where we START, not
 what we ARE. Exactly ONE caption names the place, and it says **"Starting in Lake Tahoe"** — on the map
