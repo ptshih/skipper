@@ -201,6 +201,14 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   grounding soft-gate via the built `optimize()` flywheel (needs a founder greenlight, crosses the
   "human ear instead" deferral). Brainstorm 2026-06-19; key finding: an upstream sheet-faithfulness
   gate is a no-op (the enricher selects verbatim spans by id).
+- [llm-discovery-marketing.md](ideas/llm-discovery-marketing.md) — a research pass on LLM answer
+  discovery (GEO/AEO) as the distribution wedge: **do the cheap subset** (extend the site's existing
+  JSON-LD with `MobileApplication` + `sameAs` — "Skipper" collides with a cluster of boating apps; one
+  answer-shaped page), **shelve** the programmatic corpus→web pages (our POI stories are downstream of
+  Wikipedia, the most-cited source in that query class — and CC BY-SA ShareAlike would open-license the
+  asset the moat doc calls uncopyable). Reconciles with
+  [autio-content-moat.md](research/autio-content-moat.md); every claim labelled primary/measured/vendor
+  because GEO advice is mostly vendor marketing. Captured 2026-07-28, awaiting a founder call.
 - [admin-ux-review.md](ideas/admin-ux-review.md) — a full visual + capability-map review of the admin
   ops console (vs the studio pipeline + DB surface). Tier 1 BUILT (per-POI Regenerate + a paid-dialog
   spend cap); Tiers 2–4 backlog (charm/veracity/offline_audit re-score, a map view, a useful ⌘K, and a
