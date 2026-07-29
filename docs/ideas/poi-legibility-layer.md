@@ -6,8 +6,9 @@
 > `TODO.md` ask "merging co-located POIs" (Camp Richardson / Emerald Bay) plus the follow-on ask to
 > ensure a POI sits close enough to a **major road** to trigger well. **NOT greenlit — no build.**
 > Every number below is `[measured]` against the live 460-clip Tahoe corpus and the 3 saved drives on
-> 2026-07-29, reproducible from the queries described in §2. Recommendation at the end: build §5
-> Phase 1 first (cheap, no schema, immediately useful), and treat §4 as the real design question.
+> 2026-07-29, reproducible from the queries described in §2. **§4's classifier was VALIDATED the same
+> day by a read-only dry run over the whole corpus — founder-approved, $0.82. It works; two fixable
+> problems fell out (§4a).** Recommendation: build §5 Phase 1 first (cheap, no schema, useful now).
 
 ## 1. The thesis
 
@@ -111,6 +112,38 @@ drive), grounded in the members' names, kinds, fact sheets, and Wikidata relatio
 (`part of` / `located in` — Vikingsholm *is* part of Emerald Bay State Park; the 1960 events *are*
 part of the 1960 Winter Olympics). ~78 calls per region ≈ a few dollars, once. That is the cheapest
 part of this whole design and the highest-leverage.
+
+### 4a. Dry-run result — 2026-07-29 `[measured]`
+
+Ran the classifier read-only over the whole corpus (leader grouping at R=600, **no cap**, so districts
+could form as one group; one Opus call per multi-member group; nothing written). 460 POIs → 248 groups,
+**64 with 2+ members** → **32 CLUSTER, 17 DISTRICT, 15 SOLO**. Total cost **$0.82** (96k in / 13.5k out).
+
+**The judgment is good.** CLUSTER caught every case this doc predicted — Emerald Bay
+(`Vikingsholm + Eagle Falls trailhead + Eagle Lake`), Cave Rock (`the tunnel bores through the rock
+itself`), Camp Richardson, the Stateline strip, both 1960 Olympic venues, the railroad museum's five
+exhibits — plus ones nobody had spotted: three licensed brothels within **40 m** of each other, and
+Boca (dam + reservoir + the town it drowned). DISTRICT correctly absorbed downtown Reno (33), Carson
+City (20), Virginia City (16), UNR, Truckee, Minden, Gardnerville, Sparks, Tahoe City — and picked the
+**existing district QID as the anchor** where one exists (Newlands, Virginia City, West Side), exactly
+as §4 hoped.
+
+**SOLO was the surprise.** It refuses to fuse *and* it curates: "a water park and an outlet mall share
+a freeway exit but are unrelated"; "keep the chapel, drop the CDP — an administrative boundary isn't a
+place"; "keep the house, drop the state route"; "a never-built casino is barely worth a stop." That is
+**junk-POI detection we did not ask for** — administrative abstractions, highway stubs, and phantom
+projects are exactly the noise a Wikidata sweep drags in. Worth harvesting as its own output.
+
+**Two problems, both fixable:**
+
+1. **Borderline calls aren't stable.** The run was executed twice; the `Virginia City & the Comstock
+   Lode` group (n=4, confidence 0.8) came back **CLUSTER** once and **DISTRICT** once. Treatment must
+   therefore be **decided once and persisted**, never recomputed live — which the §5 entity model
+   already implies. For low-confidence groups, either vote (3 calls, majority) or route to admin review.
+2. **A district spans more than one spatial group.** `downtown Reno` was returned **twice** (n=33 and
+   n=10), UNR twice, Carson City three times — the leader pass anchors more than once inside a big
+   district. So DISTRICT needs a **merge-by-title/anchor pass after classification**, or a second,
+   coarser grouping radius used only for district detection.
 
 ⚠ **Clustering must be corpus-level and precomputed, never per-route.** Audio is synthesized ahead of
 time and a merged telling is one clip; if cluster membership depended on the route, you'd need audio
