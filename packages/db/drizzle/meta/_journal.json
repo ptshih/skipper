@@ -239,6 +239,13 @@
       "when": 1782020419814,
       "tag": "0033_majestic_dark_beast",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1785342896916,
+      "tag": "0034_simple_nuke",
+      "breakpoints": true
     }
   ]
 }

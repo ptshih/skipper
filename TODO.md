@@ -22,14 +22,21 @@ not merely "stop losing places".
 
 Phases, in dependency order (1 and 2 are worth doing whatever happens to the rest):
 
-- [ ] **1. Road CLASS on the snap.** `snap-speakable-anchors.ts` already snaps to the nearest
-      *drivable* OSM road — including residential/service, which is why downtown buildings get anchors
-      that trigger from streets no drive uses. Record the `highway=` class (new
-      `pois.speakable_road_class`), prefer ≥`tertiary` when one is in bound. Free (OSM), no
-      regeneration, and its output feeds phase 3.
-- [ ] **2. `kind` is null on 392/460 narrated POIs.** Two silent consequences: `radiusForKind` falls to
-      its 600 m default for 85% of pins, and `drive-select.ts` `better()`'s variety tiebreak compares
-      `null` to `null` — **the variety rule is dead for 85% of selections**. Independent win.
+- [x] **1a. Road CLASS on the snap — BUILT 2026-07-29.** `pois.speakable_road_class` (migration 0034);
+      `snap-speakable-anchors` now asks Overpass for `out tags geom`, PREFERS a through-road when one
+      clears the same kind-aware bound, and records the class. New `--class-only` mode backfills the
+      class for existing anchors WITHOUT moving them (`--force` would relocate hand-curated ones).
+      Measured on a full re-snap preview: **628 of 699 land on a through-road, 71 on the minor layer**
+      — that 10% is the "triggers from a street nobody drives" set.
+- [ ] **1b. USE the road class.** Nothing reads `speakable_road_class` yet — selection/roam still treat
+      a residential anchor the same as a highway one. Decide the rule (demote? exclude? widen radius?)
+      against a real drive rather than at the desk.
+- [ ] **2. Variety tiebreak is dead outside natural features.** `kind` is null on 392/460 — correctly:
+      `featureKind()` is a NATURAL-feature allowlist, so a casino gets none. ⚠ The earlier claim that
+      this defaults `radiusForKind` for 85% of pins was WRONG (anchored POIs use a flat 250 m, and 426
+      of 460 are anchored — real exposure is 14 POIs). What IS broken: `drive-select.ts` `better()`
+      compares `null !== null`, so the variety rule no-ops for the built world. Needs a coarse
+      built-world category, NOT a `kind` backfill — a design question, unscoped.
 - [ ] **3. Treatment classifier** → `pois.cluster_anchor_id`. Leader (non-chaining) grouping, then ONE
       Opus call per candidate group to pick SOLO / CLUSTER / DISTRICT. ~78 groups per region, a few
       dollars, once, at corpus-build time. ⚠ Must be precomputed, NEVER per-route (audio is frozen).

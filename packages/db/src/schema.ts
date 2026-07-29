@@ -266,6 +266,21 @@ export const pois = pgTable(
     // (left/right) stays COMPUTED per-segment from approach_heading_deg × this anchor.
     speakableLat: doublePrecision('speakable_lat'),
     speakableLng: doublePrecision('speakable_lng'),
+    // The OSM `highway=` class of the road the speakable anchor was snapped TO (motorway…residential).
+    // Written by snap-speakable-anchors alongside the anchor; null when un-snapped (backcountry) or
+    // snapped before this column existed. Why it matters: "nearest DRIVABLE road" includes residential
+    // and living_street, so a downtown building anchors to a side street the drive never uses — the
+    // anchor is valid but triggers from a road nobody is on. Recording the class lets selection prefer
+    // places reachable from a road people actually drive, and it costs nothing (OSM already tags every
+    // way; the snapper was fetching and discarding it). See docs/ideas/poi-legibility-layer.md §6.
+    speakableRoadClass: text('speakable_road_class'),
+    // Why this entity is NOT a speakable place — null = eligible (the overwhelming majority).
+    // A Wikidata sweep drags in things that exist but cannot be TOLD: a state-route number used as a
+    // place, a census-designated place that duplicates the settlement beside it, a never-built project.
+    // A REASON rather than a boolean so the exclusion is auditable and reversible; kept as a flag rather
+    // than a delete because these rows may already own generated audio (deleting orphans paid R2 bytes).
+    // Read paths filter on `excluded_reason IS NULL`. See docs/ideas/poi-legibility-layer.md §4b.
+    excludedReason: text('excluded_reason'),
     summary: text('summary'),
     facts: jsonb('facts').$type<PoiFacts>(),
     // The curated, verbatim narration sheet (the corpus `enrich` step's output) — its OWN typed

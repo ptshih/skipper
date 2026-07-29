@@ -50,10 +50,19 @@ pin→road distance is p50 **19 m**, p75 40 m, p90 **221 m**, p99 **1831 m**, ma
 having no drivable road in bound at all (Mount Tallac, Susie Lake, Desolation peaks). So the *snapping*
 works. The gap is **which** road — see §6.
 
-**Most of the corpus has no `kind`:** 392 of 460 are `kind = null`. Two live consequences nobody has
-noticed: `radiusForKind` falls to its 600 m default for 85% of pins, and the variety tiebreak in
-`drive-select.ts` `better()` (`a.cand.kind !== prevKind`) compares `null` to `null` — so **the variety
-rule is effectively dead for 85% of selections**. Worth fixing independently of everything below.
+**Most of the corpus has no `kind`:** 392 of 460 are `kind = null` — *by design*: `featureKind()` is an
+allowlist of evocative NATURAL features (bay, peak, cove…), so a casino or a church correctly gets
+none. ⚠ **Correction, 2026-07-29:** an earlier revision of this doc claimed that leaves `radiusForKind`
+defaulting for 85% of pins. **That was wrong.** `triggerRadiusForKind` returns the flat
+`ANCHORED_TRIGGER_RADIUS_M` for any road-snapped POI, and 426 of 460 are snapped — so `kind` never
+reaches the radius for them. It only governs the 34 un-anchored backcountry places, 20 of which *do*
+carry a kind. Real exposure: **14 POIs**, not 392.
+
+What DOES survive is the other half: the variety tiebreak in `drive-select.ts` `better()`
+(`a.cand.kind !== prevKind`) compares `null` to `null` for 85% of pairs, so **the variety rule is
+effectively dead outside natural features**. The fix is not a `kind` backfill (the vocabulary is
+deliberately natural-only) — it needs a separate coarse category for the built world, which is a
+design question, not a chore.
 
 ## 3. Why the naive fix fails — two proofs
 

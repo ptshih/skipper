@@ -137,7 +137,8 @@ product.** When a choice trades polish-for-the-builder against scale-for-a-marke
   `DOTENV_PRIVATE_KEY_PRODUCTION` in the host env.
 - **The paid studio pipeline runs from the admin console** (`apps/admin`, behind IAP) or the CLIs in
   `packages/studio/src` (`discover-pois` / `enrich-pois` / `generate-narrations` / `resynth-narration` /
-  `sweep-orphans` / `refetch-poi`) — **safe-by-default: preview unless `--apply`** (`docs/guides/ops-scripts-sop.md`).
+  `sweep-orphans` / `refetch-poi` / `snap-speakable-anchors` / `prune-corpus`) — **safe-by-default:
+  preview unless `--apply`** (`docs/guides/ops-scripts-sop.md`). The last two are FREE (OSM / pure SQL).
 - **Local dev servers stay UP** (the human runs them) — ports: API `bun run dev`; admin `bun run dev:admin`
   = vite client **:5173** proxying `/admin`+`/health` → Hono admin-api **:8788** (`ADMIN_DEV_BYPASS=1` skips
   IAP locally); site `bun run dev:site`.

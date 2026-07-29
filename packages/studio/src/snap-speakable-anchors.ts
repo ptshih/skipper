@@ -27,6 +27,10 @@
 //   --region <slug>  scope to a region's bbox (default: lake-tahoe).
 //   --force          re-snap POIs that already carry an anchor (OVERWRITES admin corrections too) — a
 //                    clean re-baseline. Default: only POIs with no speakable anchor yet.
+//   --class-only     BACKFILL `speakable_road_class` for POIs that already have an anchor, WITHOUT
+//                    moving it. Looks up the road nearest each EXISTING anchor (which is already on a
+//                    road, so that road IS its road) and records only the class. Safe on hand-curated
+//                    anchors — the alternative, `--force`, would relocate every one of them.
 
 import { and, eq, isNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
@@ -43,6 +47,12 @@ const UA = 'Skipper/0.1 (https://github.com/ptshih/skipper; hello@skipper.fm) ro
 // Through-roads only (no `service` — driveways/parking aisles aren't "the road you drive past a POI on").
 const DRIVABLE =
   '^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link)$'
+// A THROUGH road — one a tour is plausibly driven on. The rest of DRIVABLE (unclassified, residential,
+// living_street) is the neighbourhood layer: real, drivable, and usually NOT where the drive is.
+// Snapping a downtown building to the side street behind it produces a perfectly valid anchor that
+// triggers from a road nobody is on — the failure the road CLASS exists to expose. We still snap to a
+// minor road when that's all there is (a lake road is `unclassified` too); we just record which.
+const MAJOR = /^(motorway|trunk|primary|secondary|tertiary)(_link)?$/
 const TILES = 5 // 5×5 grid over the (padded) region bbox — light enough per `out geom` request
 const BBOX_PAD_DEG = 0.03 // ~3 km > the max kind-bound (2250 m), so an edge POI still sees its road
 const GRID_CELL_DEG = 0.02 // ~2.2 km spatial-index cell; a ±2 scan covers ±4.4 km
@@ -51,6 +61,8 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 type PoiRow = { id: string; name: string; kind: string | null; lat: number; lng: number }
 type Seg = [number, number, number, number] // aLat, aLng, bLat, bLng
+/** One OSM way reduced to what the snapper needs: its geometry + its `highway=` class. */
+type Way = { geom: { lat: number; lon: number }[]; cls: string }
 type LngLat = [number, number]
 
 /** Closest point on a segment to P (+ its distance), via a local equirectangular projection at P. */
@@ -72,8 +84,10 @@ function nearestOnSeg(plat: number, plng: number, s: Seg): { distM: number; lat:
 }
 
 /** Fetch drivable-road geometry for one tile, with a CLIENT-side timeout + retry (Overpass throttles). */
-async function fetchTile(s: number, w: number, n: number, e: number): Promise<{ lat: number; lon: number }[][]> {
-  const q = `[out:json][timeout:90];way[highway~"${DRIVABLE}"](${s},${w},${n},${e});out geom;`
+async function fetchTile(s: number, w: number, n: number, e: number): Promise<Way[]> {
+  // `out tags geom` (not bare `out geom`) so each way carries its `highway=` class — the tag was
+  // always in the response envelope's reach; we simply never asked for or kept it.
+  const q = `[out:json][timeout:90];way[highway~"${DRIVABLE}"](${s},${w},${n},${e});out tags geom;`
   for (let attempt = 0; attempt < 4; attempt++) {
     try {
       const res = await fetch(OVERPASS, {
@@ -87,8 +101,12 @@ async function fetchTile(s: number, w: number, n: number, e: number): Promise<{ 
         continue
       }
       if (!res.ok) throw new Error(`Overpass ${res.status}`)
-      const data = (await res.json()) as { elements?: { geometry?: { lat: number; lon: number }[] }[] }
-      return (data.elements ?? []).map((el) => el.geometry ?? []).filter((g) => g.length >= 2)
+      const data = (await res.json()) as {
+        elements?: { geometry?: { lat: number; lon: number }[]; tags?: { highway?: string } }[]
+      }
+      return (data.elements ?? [])
+        .map((el) => ({ geom: el.geometry ?? [], cls: el.tags?.highway ?? 'unclassified' }))
+        .filter((w) => w.geom.length >= 2)
     } catch (err) {
       if (attempt === 3) throw err
       await sleep(3000 * 2 ** attempt)
@@ -100,6 +118,8 @@ async function fetchTile(s: number, w: number, n: number, e: number): Promise<{ 
 /** A road index: all drivable segments in the bbox + a coarse grid for nearest-segment lookup. */
 class RoadIndex {
   private readonly segs: Seg[] = []
+  /** Parallel to `segs`: the OSM `highway=` class of the way each segment came from. */
+  private readonly cls: string[] = []
   private readonly grid = new Map<string, number[]>()
   private key = (lat: number, lng: number) => `${Math.floor(lat / GRID_CELL_DEG)}:${Math.floor(lng / GRID_CELL_DEG)}`
   private bin(lat: number, lng: number, idx: number) {
@@ -108,13 +128,14 @@ class RoadIndex {
     if (b) b.push(idx)
     else this.grid.set(k, [idx])
   }
-  add(ways: { lat: number; lon: number }[][]) {
-    for (const g of ways)
+  add(ways: Way[]) {
+    for (const { geom: g, cls } of ways)
       for (let i = 0; i < g.length - 1; i++) {
         const a = g[i]!,
           b = g[i + 1]!
         const idx = this.segs.length
         this.segs.push([a.lat, a.lon, b.lat, b.lon])
+        this.cls.push(cls)
         this.bin(a.lat, a.lon, idx) // bin at both endpoints + midpoint so a long segment is found near its middle
         this.bin(b.lat, b.lon, idx)
         this.bin((a.lat + b.lat) / 2, (a.lon + b.lon) / 2, idx)
@@ -123,19 +144,23 @@ class RoadIndex {
   get size() {
     return this.segs.length
   }
-  /** Nearest road point to P over candidate segments in P's cell ±2; null if no segment indexed nearby. */
-  nearest(plat: number, plng: number): { distM: number; lat: number; lng: number } | null {
+  /** Nearest road point to P over candidate segments in P's cell ±2; null if no segment indexed nearby.
+   *  `majorOnly` restricts the search to through-roads (MAJOR) so a caller can ask "is there a road
+   *  people actually drive within bound?" separately from "is there any pavement". */
+  nearest(plat: number, plng: number, majorOnly = false): { distM: number; lat: number; lng: number; cls: string } | null {
     const ci = Math.floor(plat / GRID_CELL_DEG),
       cj = Math.floor(plng / GRID_CELL_DEG)
     const seen = new Set<number>()
-    let best: { distM: number; lat: number; lng: number } | null = null
+    let best: { distM: number; lat: number; lng: number; cls: string } | null = null
     for (let di = -2; di <= 2; di++)
       for (let dj = -2; dj <= 2; dj++)
         for (const idx of this.grid.get(`${ci + di}:${cj + dj}`) ?? []) {
           if (seen.has(idx)) continue
           seen.add(idx)
+          const cls = this.cls[idx]!
+          if (majorOnly && !MAJOR.test(cls)) continue
           const p = nearestOnSeg(plat, plng, this.segs[idx]!)
-          if (!best || p.distM < best.distM) best = p
+          if (!best || p.distM < best.distM) best = { ...p, cls }
         }
     return best
   }
@@ -162,7 +187,9 @@ async function main(): Promise<void> {
   const flags = parseFlags(process.argv.slice(2), { valueFlags: ['region'] })
   const apply = flags.has('apply')
   const force = flags.has('force')
+  const classOnly = flags.has('class-only')
   announce({ tool: 'snap-speakable-anchors', blast: ['MUTATES DB'], apply })
+  if (classOnly) console.log('(class-only: recording each EXISTING anchor\'s road class; anchors are NOT moved)\n')
   if (force) console.log('(force: re-snapping POIs that already carry an anchor — OVERWRITES admin corrections)\n')
 
   const region = await resolveRegion(flags.value('region') ?? DEFAULT_REGION_SLUG)
@@ -173,14 +200,27 @@ async function main(): Promise<void> {
     sql`${pois.lat} between ${bbox.swLat} and ${bbox.neLat}`,
     sql`${pois.lng} between ${bbox.swLng} and ${bbox.neLng}`,
   ]
-  if (!force) conds.push(isNull(pois.speakableLat)) // lat/lng written together → checking lat suffices
+  if (classOnly) conds.push(sql`${pois.speakableLat} is not null`, isNull(pois.speakableRoadClass))
+  else if (!force) conds.push(isNull(pois.speakableLat)) // lat/lng written together → checking lat suffices
   const rows: PoiRow[] = await db
-    .select({ id: pois.id, name: pois.name, kind: pois.kind, lat: pois.lat, lng: pois.lng })
+    .select({
+      id: pois.id,
+      name: pois.name,
+      kind: pois.kind,
+      // In class-only mode the ANCHOR is the query point — we want the road under the anchor we
+      // already trust, never the road nearest the (possibly misleading) centroid.
+      lat: classOnly ? sql<number>`${pois.speakableLat}` : pois.lat,
+      lng: classOnly ? sql<number>`${pois.speakableLng}` : pois.lng,
+    })
     .from(pois)
     .where(and(...conds))
 
   if (rows.length === 0) {
-    console.log('\nNothing to snap — every POI in range already has a speakable anchor (use --force to redo).')
+    console.log(
+      classOnly
+        ? '\nNothing to backfill — every anchored POI in range already records a road class.'
+        : '\nNothing to snap — every POI in range already has a speakable anchor (use --force to redo).',
+    )
     return
   }
   console.log(`${rows.length} POI(s) to snap.\n\nFetching drivable roads (OSM/Overpass, ${TILES * TILES} tiles)...`)
@@ -188,29 +228,73 @@ async function main(): Promise<void> {
   console.log(`\nIndexed ${roads.size} road segments. Snapping...`)
 
   // Snap every POI locally to its nearest road point, validated through the canonical bound.
-  type Snapped = { row: PoiRow; lat: number; lng: number }
+  type Snapped = { row: PoiRow; lat: number; lng: number; cls: string }
   const toWrite: Snapped[] = []
   const flagged: { row: PoiRow; distanceM: number | null; maxM: number }[] = []
   for (const row of rows) {
     const pin: LngLat = [row.lng, row.lat]
-    const near = roads.nearest(row.lat, row.lng)
+    // PREFER a through-road. Snapping to the nearest pavement of ANY class is what put downtown
+    // buildings on side streets: the anchor validates fine but sits on a road the drive never takes,
+    // so the stop can't trigger. Try MAJOR first and accept it whenever it clears the same kind-aware
+    // bound; only fall back to the minor layer when no through-road is in range (a lake road is
+    // `unclassified` too, so the fallback is load-bearing — this is a preference, not a filter).
+    const major = roads.nearest(row.lat, row.lng, true)
+    const majorOk = major && checkSpeakableAnchor(pin, [major.lng, major.lat], row.kind).ok
+    const near = majorOk ? major : roads.nearest(row.lat, row.lng)
     if (!near) {
       flagged.push({ row, distanceM: null, maxM: speakableAnchorMaxM(row.kind) })
       continue
     }
     const check = checkSpeakableAnchor(pin, [near.lng, near.lat], row.kind)
-    if (check.ok) toWrite.push({ row, lat: near.lat, lng: near.lng })
+    if (check.ok) toWrite.push({ row, lat: near.lat, lng: near.lng, cls: near.cls })
     else flagged.push({ row, distanceM: check.distanceM, maxM: check.maxM })
+  }
+
+  if (classOnly) {
+    const found = rows
+      .map((row) => ({ row, near: roads.nearest(row.lat, row.lng) }))
+      .filter((x): x is { row: PoiRow; near: NonNullable<ReturnType<RoadIndex['nearest']>> } => x.near != null)
+    const byCls = new Map<string, number>()
+    for (const f of found) byCls.set(f.near.cls, (byCls.get(f.near.cls) ?? 0) + 1)
+    const majorN = found.filter((f) => MAJOR.test(f.near.cls)).length
+    console.log(
+      `\n${found.length}/${rows.length} anchors matched a road — ${majorN} on a through-road, ` +
+        `${found.length - majorN} on the minor layer\n  (${[...byCls].sort((a, b) => b[1] - a[1]).map(([c, n]) => `${c}:${n}`).join(' ')})`,
+    )
+    if (!apply) {
+      console.log('\nPREVIEW — no writes. Re-run with --apply to record the classes.')
+      return
+    }
+    let n = 0
+    await mapLimit(found, 8, async (f) => {
+      await withRetry(() => db.update(pois).set({ speakableRoadClass: f.near.cls }).where(eq(pois.id, f.row.id)), {
+        label: `class(${f.row.name})`,
+      })
+      n++
+    })
+    console.log(`✓ ${n} road class(es) recorded. Anchors unchanged.`)
+    return
   }
 
   const verb = apply ? 'writing' : 'would write'
   console.log(`\n${toWrite.length} within bound (${verb}); ${flagged.length} flagged off-road (no anchor).`)
+  const byCls = new Map<string, number>()
+  for (const s of toWrite) byCls.set(s.cls, (byCls.get(s.cls) ?? 0) + 1)
+  const majorN = toWrite.filter((s) => MAJOR.test(s.cls)).length
+  console.log(
+    `  road class: ${majorN} on a through-road, ${toWrite.length - majorN} on the minor layer ` +
+      `(${[...byCls].sort((a, b) => b[1] - a[1]).map(([c, n]) => `${c}:${n}`).join(' ')})`,
+  )
 
   if (apply) {
     let written = 0
     await mapLimit(toWrite, 8, async (s) => {
       await withRetry(
-        () => db.update(pois).set({ speakableLat: s.lat, speakableLng: s.lng }).where(eq(pois.id, s.row.id)),
+        () =>
+          db
+            .update(pois)
+            .set({ speakableLat: s.lat, speakableLng: s.lng, speakableRoadClass: s.cls })
+            .where(eq(pois.id, s.row.id)),
         { label: `snap(${s.row.name})` },
       )
       written++
