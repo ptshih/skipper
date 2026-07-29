@@ -5,6 +5,65 @@ Carry-forward **engineering** items (the near-term layer of the truth system —
 Each item has enough context to action without re-deriving the reasoning. **Delete items
 when done** — git history is the archive.
 
+## Co-located POIs: collapse a cluster into ONE telling, not pick-one (founder ask 2026-07-29)
+
+Founder, from the road: POIs that sit right on top of each other don't all play — one fires and the
+car has already driven past the rest. They should be **combined into a single stop**. Named examples:
+**Camp Richardson** and **Emerald Bay**.
+
+**That's exactly what the code does today, by design — and the design note says why the obvious fix
+won't work.** `buildDrive` step 2 (`drive-select.ts:108`) is a PICK-ONE co-located dedupe: candidates
+are sorted longest-clip-first and any survivor within `DRIVE_MIN_SEPARATION_M` (**1 km**) of an
+already-kept stop is DISCARDED — not deferred, not queued. The header calls it "the INVERSE of the
+studio pipeline's merge (you cannot fuse two finished .m4a clips)", which is the whole problem: by
+selection time the audio is already synthesized, so nothing downstream *can* merge. **A real fix has
+to happen at GENERATION time**, not in the engine.
+
+Measured against the live Tahoe corpus (2026-07-29), both examples are 3-for-1 losses:
+
+| cluster (≤1 km) | narrated POIs | what's there |
+| --- | --- | --- |
+| Emerald Bay | 3 | Vikingsholm (81s), Fannette Island (68s), Eagle Falls trailhead (65s) |
+| Camp Richardson | 3 | Pope Estate (87s), CA-89 (64s), Camp Richardson (57s) |
+
+Those are the three things you look at from ONE pullout, and the rider hears one. Corpus-wide it is
+not a two-place problem: **311 of 460 narrated POIs (68%) have at least one neighbour inside the 1 km
+collapse window**, and the densest cluster has 62. Whatever this becomes, it's a large fraction of
+Tahoe.
+
+⚠ Roam and drives behave DIFFERENTLY on the same ground, so fix both or neither: roam's cluster
+suppression (`roam.ts:86-89`) is only **300 m** and time-bounded (15 min), so a neighbour can still
+fire later; the drive's 1 km pick-one is permanent for that drive. The drive is the lossier mode —
+which matches where the founder noticed it.
+
+**The design tension to resolve first (this is the hard part, not the merge itself):** a cluster
+telling has no single POI. `narrations` is 1:1 with a poi (`narrations_poi_uq`), `pois` is deduped by
+Wikidata QID, and a drive REUSES roam narrations — so a merged clip has to serve BOTH modes and can't
+hang off one poi_id without lying about the others. Options sketch (none costed):
+  1. **Cluster as a first-class entity** — a `poi_clusters` table; a narration keyed to the cluster,
+     members keep their pois. Cleanest, biggest schema change, and it forks the 1:1 invariant.
+  2. **Anchor POI + satellites** — one poi is the cluster's voice; its telling is generated over the
+     whole member fact-set. No new narration owner, but "which poi is the anchor" becomes editorial.
+  3. **Generation-time only** — leave the schema alone and teach `generate-narrations` to write ONE
+     longer telling for the anchor and none for the satellites. Cheapest; makes the satellites
+     invisible to roam too, which may be right (you're standing in one place) or may be a loss.
+
+- [ ] **Pick the entity model** (above) — this gates everything else. Likely wants a
+      `docs/ideas/` write-up before any build, per the idea→spec cadence.
+- [ ] **Decide the cluster RADIUS honestly.** 1 km is the drive's collapse window today, but it was
+      chosen for dedupe, not for "one pullout." Emerald Bay's three sit far tighter than that. Derive
+      it from the data (the 311-POI distribution) rather than reusing the dedupe constant.
+- [ ] **Mind the clip LENGTH ceiling.** Three merged Emerald Bay clips is ~3.5 min of continuous
+      narration; `DRIVE_MIN_GAP_SEC` is 180 and `DRIVE_MAX_LAG_SEC` drops a clip that starts >45 s
+      behind its trigger. A merged telling must be WRITTEN to a cluster length band, not concatenated.
+- [ ] **Re-check the trigger point.** A merged stop needs one anchor + one radius covering the
+      cluster's body — `triggerRadiusForKind` is per-POI and a road-snapped anchor is 250 m.
+
+Refs: `packages/engine/src/drive-select.ts` (`buildDrive` step 2, `DRIVE_MIN_SEPARATION_M`),
+`packages/engine/src/roam.ts:86-89` (`suppressRadiusM`/`suppressWindowSec`),
+`packages/studio/src/generate-narrations.ts` (where a merge would actually have to live).
+Related: the earlier "cluster merge" half of the drive-pacing work, and `docs/decisions/create-a-drive-architecture.md`.
+
 ## When YOSEMITE ships: the metadata that goes stale (founder ask 2026-07-28)
 
 Content is SERVER-SIDE, so a second region goes live with no app release. That is the whole problem:
