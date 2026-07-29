@@ -134,6 +134,44 @@ place"; "keep the house, drop the state route"; "a never-built casino is barely 
 **junk-POI detection we did not ask for** — administrative abstractions, highway stubs, and phantom
 projects are exactly the noise a Wikidata sweep drags in. Worth harvesting as its own output.
 
+### 4b. Determinism tuning — 2026-07-29 `[measured]`
+
+Four prompt variants, each run **3× over all 64 groups**, scoring per-group label agreement.
+Total tuning spend ≈ $15.
+
+| variant | agreement | split C/D/S | verdict |
+| --- | --- | --- | --- |
+| v1 — original, loose definitions | 92% (59/64) | 34/10/20 | baseline |
+| v2 — ordered tests, "count is not the test" | **97%** (62/64) | 12/24/28 | best rate, but over-districts small settlements — **Camp Richardson regressed to DISTRICT** |
+| v3 — binary `coherent`, treatment derived in code | **89%** (57/64) | — | **WORSE** — see below |
+| v4 — ordered tests + naming capacity | 95% (61/64) | 34/7/23 | healthiest split; Camp Richardson recovered |
+| **v4 + corpus hygiene** | 95% (54/57) | 36/7/14 | **recommended** — 31 junk entities gone, SOLO noise 23→14 |
+
+**Four findings that outlast the prompt text:**
+
+1. ⚠ **`temperature` is DEPRECATED on Opus 4.8** — the API 400s on it ("`temperature` is deprecated
+   for this model"). The obvious determinism lever does not exist here; prompt structure and voting
+   are what remain. Do not write code that passes it.
+2. **Some of the non-determinism was OURS.** The dry run's grouping query had no `ORDER BY` and the
+   leader sort had no tiebreak for equal clip lengths, so the *groups themselves* could differ
+   between runs. Deterministic ordering is free stability and must be in the real implementation.
+3. **The three-way taxonomy is LOAD-BEARING — do not collapse it.** v3 replaced CLUSTER/DISTRICT
+   with a binary `coherent` flag and derived the treatment from member count in code. Agreement got
+   *worse*, and specifically on the LARGE groups that had been rock-solid: downtown Reno's 33
+   buildings came back `SOLO` on one pass. DISTRICT is the natural home for "these share only an
+   area", and a binary has nowhere to put that.
+4. **Residual instability is a CORPUS problem, not a model problem.** Every remaining flip is a
+   2-member group, and before hygiene they were groups containing non-places — `California State
+   Route 89`, census-designated places. Dropping 31 route-number entities cut SOLO groups from 23 to
+   14 and removed Camp Richardson from the unstable set entirely. **Corpus hygiene is a prerequisite
+   for classifier stability, not a separate cleanup.**
+
+**So the residual ambiguity is confined to n=2 pairs** (e.g. `Lakeside Inn + Friday's Station` — a
+modern casino and a Pony Express stage station), all scoring ≤0.85 confidence, where merging or not
+barely changes a drive. Everything n≥4 was stable across every variant. Practical rule: **classify
+once and persist** (§5 already requires this), and route 2-member groups under ~0.85 confidence to a
+3-vote majority or admin review — a small minority of groups, so the cost stays trivial.
+
 **Two problems, both fixable:**
 
 1. **Borderline calls aren't stable.** The run was executed twice; the `Virginia City & the Comstock
