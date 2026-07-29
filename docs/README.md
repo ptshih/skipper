@@ -178,6 +178,12 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   deliberate cuts; BUILT 2026-06-10, founder-only TestFlight.
 
 ### ideas/
+- [poi-legibility-layer.md](ideas/poi-legibility-layer.md) — **the claimed moat**: everything between
+  "a Wikidata entity exists" and "a driver hears one coherent thing at the right moment" — the
+  SOLO/CLUSTER/DISTRICT treatment split, leader (non-chaining) grouping, an Opus treatment classifier,
+  and OSM road-CLASS relevance. Measured against the live Tahoe corpus 2026-07-29: drives select 8
+  stops where pacing allowed 12. Region-agnostic by requirement (it's what makes region N+1 cheap).
+  Design pass, NOT greenlit.
 - [journey-layer.md](ideas/journey-layer.md) — **the north-star vision**: Skipper as the
   entertainment/meaning layer of the journey (the self-driving age) + "any road, anywhere, generated
   live" — the demand and supply of one endgame the feature-ideas below ladder toward. Direction, not
