@@ -545,11 +545,15 @@ one is safe to set early, one is not.
 - **Already done — no action.** `apps/api/src/version-policy.ts` carries the real link now. Safe
   ahead of the listing because the client only opens it when the version floor is raised, which can't
   happen before there's a published version to upgrade to.
-- [ ] **Flip the site's download button.** `apps/site/src/components/sections/FinalCta.astro` — set
-      `APP_STORE_URL` (the value is in the comment beside it) and swap the placeholder glyph for
-      Apple's official "Download on the App Store" badge artwork, which their marketing guidelines
-      require. Until then the page shows a "coming soon" pill, which is *correct*, so nothing looks
-      broken and nothing fails — the only thing that would catch this drifting is this checkbox.
+- [ ] **Set `APP_STORE_URL` in `apps/site/src/appStore.ts`** to
+      `https://apps.apple.com/app/id6778946770`. ONE constant, deliberately: it drives BOTH the
+      download button (`components/sections/FinalCta.astro`) and the `MobileApplication` JSON-LD
+      (`layouts/Base.astro`), which used to be two edits that could silently drift apart. Until it's
+      set the page shows a "coming soon" pill and the structured data omits the store link — both
+      *correct*, so nothing looks broken and nothing fails a test. This checkbox is the only thing
+      that would catch it drifting.
+- [ ] **Swap in Apple's badge artwork** in `FinalCta.astro`, replacing the placeholder glyph. Their
+      marketing guidelines require the official "Download on the App Store" asset.
 - [ ] **Raise the version floor only when you mean it.** `VERSION_POLICIES` ships at a no-op
       `0.0.0`/`0.0.0`. Raising `minimum` is the one hard-break hatch in the API versioning posture
       (`docs/decisions/api-versioning-posture.md`) and walls every older client — a backend deploy,

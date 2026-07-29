@@ -1,6 +1,9 @@
 # LLM answer-discovery (GEO/AEO) as a distribution wedge
 
-> **Status:** idea / research pass — **2026-07-28**. UNBUILT, awaiting a founder call. Written during
+> **Status:** research pass — **2026-07-28**. Moves **A and B are BUILT** (2026-07-28, founder
+> greenlight): the `MobileApplication` + `sameAs` JSON-LD in `apps/site/src/layouts/Base.astro`, and
+> the answer-shaped page at `apps/site/src/pages/about.astro`. Move C stays SKIPPED, D stays SHELVED,
+> E is founder-owned and unstarted. The analysis below is unchanged and still the reason. Written during
 > App Store review per the `TODO.md` ask. **Recommendation: do the cheap subset (~half a day, $0),
 > SHELVE the programmatic corpus→web build.** Every claim below is labelled by source quality —
 > `[primary]` (provider/standards/legal docs, peer-reviewed), `[measured]` (first-party network

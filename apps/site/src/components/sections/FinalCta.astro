@@ -1,26 +1,23 @@
 ---
 // Closing — lead with the charm line UP FRONT (not buried like Autio's tagline)
 // and ONE honest pre-launch beat. The app isn't in the App Store yet, so this
-// slot shows a quiet "coming soon" badge; the moment there's a listing, set
-// APP_STORE_URL below and it becomes the real "Download on the App Store" button
-// (the same drop-in pattern as the hero clip — see public/clips/README.md).
+// slot shows a quiet "coming soon" badge; the moment APP_STORE_URL is set it becomes
+// the real "Download on the App Store" button (the same drop-in pattern as the hero
+// clip — see public/clips/README.md).
 //
-// GO-LIVE (two edits, both here): paste the URL below, and — per Apple's marketing
-// guidelines — swap the placeholder glyph for the official Apple-provided "Download
-// on the App Store" badge artwork at the same time.
+// GO-LIVE: the URL now lives in ../../appStore.ts (ONE constant, shared with the
+// MobileApplication JSON-LD in layouts/Base.astro — see there for why). The only edit
+// left HERE is Apple's marketing requirement: swap the placeholder glyph for the
+// official Apple-provided "Download on the App Store" badge artwork.
 //
-// ⚠ Stays EMPTY until Apple actually approves the release. The id is already known
-// (see below), but a store page does NOT exist until then — verified 2026-07-27:
-// apps.apple.com/app/id6778946770 returns 404 and the iTunes lookup API reports zero
-// results while the build is TestFlight-only. Filling this in early doesn't ship the
-// button early, it ships a Download button to a dead page on a live site; the honest
-// "coming soon" pill is the better failure mode. Tracked in the submission guide's
-// after-approval section, since nothing here fails a test when it drifts.
+// Why the constant stays empty until approval is documented at its definition.
 import Sunburst from '../Sunburst.astro'
 import Trail from '../Trail.astro'
 import Icon from '../Icon.astro'
 
-const APP_STORE_URL = '' // go-live: 'https://apps.apple.com/app/id6778946770'
+// Single source shared with the MobileApplication JSON-LD in layouts/Base.astro, so §13's
+// go-live is ONE edit rather than two that can silently drift apart.
+import { APP_STORE_URL } from '../../appStore'
 ---
 
 <section class="section final" id="launch">

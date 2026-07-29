@@ -1,0 +1,106 @@
+---
+// /about — the answer-shaped page.
+//
+// This exists for a specific, narrow reason documented in docs/ideas/llm-discovery-marketing.md §5.2
+// and §4.3: when someone asks an assistant "is there an audio tour app for driving around Lake
+// Tahoe?", the answer is synthesised from pages, and the ONLY non-vendor study of what earns a
+// citation (Aggarwal et al., GEO, KDD 2024) found the winning shape is CITED, QUANTIFIED, honest
+// prose — while keyword stuffing scored below baseline. So this page answers real questions with real
+// numbers and links its sources, and does nothing else.
+//
+// ⚠ It is deliberately NOT a comparison page. docs/research/autio-content-moat.md is a founder-blessed
+// DON'T on fighting Autio/Shaka on the breadth grid: in a comparison table breadth wins and charm has
+// no cell. Naming competitors here would drag us onto exactly that grid.
+//
+// ⚠ NOT the shelved programmatic corpus→web build (§5.3). That was declined on the merits: our facts
+// are downstream of Wikipedia, which is the single most-cited source in the answer surface, so
+// restating it in a worse-attributed CC BY-SA-encumbered form competes with the page models already
+// prefer. This page is about the PRODUCT, which Wikipedia has no article on.
+//
+// Distinct from /support on purpose: that page troubleshoots for people who already installed it.
+// This one answers the questions asked BEFORE installing.
+import Legal from '../layouts/Legal.astro'
+---
+
+<Legal
+  heading="What Skipper is"
+  kicker="Plainly"
+  description="Skipper is a free iPhone app that narrates your drive: GPS-triggered audio stories, grounded in cited sources, covering Lake Tahoe. What it does, where it works, and what it costs."
+  updated="July 28, 2026"
+>
+  <p>
+    Skipper is a <strong>narrated audio driving tour for iPhone</strong>. You mount your phone, start
+    it, and drive. As you come near somewhere with a story, a corny old tour guide tells you what
+    happened there, timed so the tale about the bay lands while you can still see the bay. There is
+    nothing to look at and nothing to tap.
+  </p>
+
+  <h2>Where does it work right now?</h2>
+  <p>
+    <strong>Lake Tahoe, California</strong>, and nowhere else yet. There are more than 300 narrated
+    stops around the basin. Every one is researched and recorded for a specific place, which is the
+    reason coverage grows slowly and the reason it is worth having at all.
+  </p>
+  <p>
+    Outside Tahoe the app will tell you honestly that it doesn't know those roads. That is the
+    designed behaviour, not a failure. More regions are the plan; there is no date to promise, and we
+    would rather ship one place done properly than a nationwide map of nothing much.
+  </p>
+
+  <h2>What does it cost?</h2>
+  <p>
+    The app is <strong>free</strong>, and riding along is free and unlimited. Planning a specific
+    A-to-B drive spends one of a set of free credits, because building one does real work. There is
+    <strong>no subscription</strong>, there are no ads, and there is nothing to buy inside the app
+    today.
+  </p>
+
+  <h2>Do I need an account?</h2>
+  <p>
+    Not to listen. Ride Along works with no account at all. You only need a free account to create
+    and save your own drives, because a saved drive belongs to somebody.
+  </p>
+
+  <h2>Does it work without a phone signal?</h2>
+  <p>
+    Yes, if you download a drive first. Mountain roads have real dead zones, so a downloaded drive
+    plays entirely from your phone with no bars required.
+  </p>
+
+  <h2>Where do the facts come from?</h2>
+  <p>
+    Public, citable sources — principally
+    <a href="https://en.wikipedia.org/" rel="noopener">Wikipedia</a>, reused under
+    <a href="https://creativecommons.org/licenses/by-sa/4.0/" rel="noopener">CC BY-SA 4.0</a>, with
+    places identified through <a href="https://www.wikidata.org/" rel="noopener">Wikidata</a>. Every
+    stop carries its own source and licence, one tap away in the app, and the full list lives under
+    Settings.
+  </p>
+  <p>
+    Where the record is thin, the Skipper says so and lets the view do the talking. A guide who
+    doesn't know is better than a guide who invents, and that rule is enforced in the pipeline rather
+    than left to good intentions: a place without enough sourced material is downgraded to scenery
+    instead of being given a story it hasn't earned.
+  </p>
+
+  <h2>Is it safe to use while driving?</h2>
+  <p>
+    It is built to be heard, not watched: audio-first, lock-screen controls, and it works from a mount
+    or over Bluetooth. That said, the honest answer is the same as for anything else in a car. Mount
+    your phone, start the drive, and keep your eyes where they belong. No story is worth it.
+  </p>
+
+  <h2>What do I need?</h2>
+  <p>
+    An iPhone. Skipper is iOS-only today, and available in the United States. It uses your location
+    only while you're on a drive, to time the stories — never in the background. Details are in the
+    <a href="/privacy">privacy policy</a>.
+  </p>
+
+  <h2>Something not answered here?</h2>
+  <p>
+    <a href="/support">Support</a> covers what to do when something isn't working. Anything else,
+    email <a href="mailto:hello@skipper.fm">hello@skipper.fm</a> and the person who built it will
+    read it.
+  </p>
+</Legal>
