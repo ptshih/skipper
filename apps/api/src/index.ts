@@ -19,7 +19,7 @@
 
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { and, asc, between, eq, isNotNull } from 'drizzle-orm'
+import { and, asc, between, eq, isNotNull, isNull } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { narrations, pois, regions } from '@skipper/db/schema'
 import { haversineMeters, triggerRadiusForKind } from '@skipper/engine'
@@ -186,6 +186,11 @@ app.get('/roam', async (c) => {
             between(pois.lat, lat - dLat, lat + dLat),
             between(pois.lng, lng - dLng, lng + dLng),
             canPreview ? undefined : isNotNull(narrations.releasedAt),
+            // Legibility gate (same rule as the drive BUILD path): a poi with an `excluded_reason`
+            // exists but can't be told as a stop. Roam applies it unconditionally — including for an
+            // admin, since this is about the SHAPE of the place, not about staged-vs-released content,
+            // and roam has no frozen artifact to protect (every session resolves pins live).
+            isNull(pois.excludedReason),
           ),
         ),
     { label: 'roam.pins' },

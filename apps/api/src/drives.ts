@@ -223,6 +223,11 @@ async function loadCorpusForRoute(
           between(pois.lat, minLat - padLat, maxLat + padLat),
           between(pois.lng, minLng - padLng, maxLng + padLng),
           includeStaged ? undefined : isNotNull(narrations.releasedAt),
+          // Legibility gate: a poi carrying an `excluded_reason` exists but cannot be TOLD as a stop
+          // (today: numbered highways, whose coordinate is an arbitrary point on a line you're on for
+          // twenty minutes). Filtered at BUILD only — see loadCorpusByPoiIds for why the replay path
+          // deliberately does not. `prune-corpus.ts` sets it; the reason string says which rule fired.
+          isNull(pois.excludedReason),
         ),
       ),
     { label: 'drive.corpus' },
@@ -743,7 +748,15 @@ driveRoutes.delete('/:id', async (c) => {
   return c.json({ ok: true })
 })
 
-/** Load narration corpus rows by an explicit poiId set (the GET-replay path — no route bbox). */
+/** Load narration corpus rows by an explicit poiId set (the GET-replay path — no route bbox).
+ *
+ *  ⚠ Deliberately NO `excluded_reason` filter, unlike the build path. Exclusion is NOT monotonic the
+ *  way the release gate is: releasing only ever ADDS eligibility, so filtering at build is sufficient,
+ *  whereas excluding REMOVES it. Applying it here would silently shrink a drive the rider already paid
+ *  a credit for — every stop that later got pruned would vanish from a saved drive, and the credit is
+ *  never refunded. A drive's selection is frozen at build; this path resolves that frozen set's CONTENT
+ *  and must not re-adjudicate which stops belong. New drives get the clean corpus; old drives keep
+ *  what they bought. */
 async function loadCorpusByPoiIds(poiIds: string[]): Promise<Map<string, NarrationRow>> {
   const rows = await withRetry(
     () => narrationCorpusSelect().where(inArray(narrations.poiId, poiIds)),
