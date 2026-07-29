@@ -18,12 +18,13 @@
 // demand after the tier check.
 
 import { Hono } from 'hono'
+import { cors } from 'hono/cors'
 import { and, asc, between, eq, isNotNull } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { narrations, pois, regions } from '@skipper/db/schema'
 import { haversineMeters, triggerRadiusForKind } from '@skipper/engine'
 import type { RoamPin } from '@skipper/shared'
-import { auth } from './auth'
+import { auth, SITE_ORIGIN } from './auth'
 import { driveRoutes } from './drives'
 import { isAdmin, withSession, type ApiEnv } from './entitlements'
 import { rateLimit } from './rate-limit'
@@ -34,13 +35,12 @@ import { VERSION_POLICIES } from './version-policy'
 
 const app = new Hono<ApiEnv>()
 
-// NO CORS by design. Every consumer is native (Expo/RN mobile) — CORS is a browser mechanism, so
-// it doesn't apply — and the static site (skipper.fm) makes no client-side call here (its hero
-// audio is a bundled same-origin asset). With no `Access-Control-Allow-Origin`, browsers already
-// default-deny cross-origin reads, so the absence of CORS is the SAFE posture, not a gap; adding a
-// policy would only OPEN access to a web client that doesn't exist. Add a strict allowlist here
-// (and extend auth.ts `trustedOrigins`) ONLY if a real browser client appears — a web player, or a
-// live (non-static) /t/:id share page that fetches this API from the browser.
+// CORS is CLOSED except on ONE route (the reset POST — see the `cors()` mount above the Better Auth
+// handler below). Every other consumer is native (Expo/RN mobile), where CORS doesn't apply at all,
+// so the absence of `Access-Control-Allow-Origin` everywhere else is the SAFE posture, not a gap:
+// browsers already default-deny cross-origin reads, and a broader policy would only OPEN access to
+// web clients that don't exist. Widen it (and auth.ts `trustedOrigins`) only when one does appear —
+// a web player, or a live (non-static) /t/:id share page that fetches this API from the browser.
 
 // Defense-in-depth: any unhandled throw returns a clean JSON 500 with no internal
 // details (DB messages etc.) leaked; the detail goes to the server log.
@@ -85,6 +85,32 @@ app.get('/regions', async (c) => {
   )
   return c.json({ regions: rows })
 })
+
+// ⚠ The one exception to the no-CORS posture above, and it must be registered BEFORE the auth mount
+// (Hono runs matching handlers in registration order — behind it, the POST/GET route below would
+// answer first and this would never run).
+//
+// skipper.fm/reset-password is this API's only browser client: a static page on a DIFFERENT origin
+// (Firebase Hosting vs this Cloud Run service), so its "save the new password" fetch is cross-origin,
+// and its `content-type: application/json` makes it PREFLIGHTED. The preflight OPTIONS matched
+// nothing (the mount below is POST/GET only) and 404'd, so the browser blocked the POST before it was
+// ever sent and the page fell into its transport-error branch. A rider could open a perfectly valid
+// link, type a new password, and never save it — on the ONLY route back into a locked-out account,
+// where the token stays unspent and every retry fails identically.
+//
+// Deliberately narrow: one exact path, one origin, no credentials. `SITE_ORIGIN` is the same const
+// auth.ts trusts for the redirect, so a local `dev:site` override moves both together. Credentials
+// stay OFF because the reset authenticates with its one-time TOKEN, not a session — no ambient cookie
+// should ever ride a cross-origin request here.
+app.use(
+  '/api/auth/reset-password',
+  cors({
+    origin: SITE_ORIGIN,
+    allowMethods: ['POST'],
+    allowHeaders: ['content-type'],
+    maxAge: 86_400,
+  }),
+)
 
 // Better Auth owns everything under /api/auth/* (its own handler).
 app.on(['POST', 'GET'], '/api/auth/*', (c) => auth.handler(c.req.raw))

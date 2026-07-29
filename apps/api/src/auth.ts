@@ -27,7 +27,13 @@ const MOBILE_SCHEME = 'skipper'
 // The marketing site's origin (Astro on Firebase Hosting) — a DIFFERENT host from this API-only
 // service. It hosts the one auth surface that can't live in the app: the password-reset form. Env
 // override so a local site build (`bun run dev:site`) can be pointed at without editing code.
-const SITE_ORIGIN = process.env.SITE_ORIGIN ?? 'https://skipper.fm'
+//
+// Exported because that page is also this API's ONLY browser client, so the same origin has to be
+// trusted TWICE, in two unrelated mechanisms: here for Better Auth's redirect allowlist, and in
+// ./index for the CORS policy on the reset POST. Keeping one const means a local override (or a
+// domain change) can't satisfy one and silently miss the other — which is exactly how the reset
+// form ended up rendering fine and failing on submit.
+export const SITE_ORIGIN = process.env.SITE_ORIGIN ?? 'https://skipper.fm'
 
 // Register a social provider only if both its env creds are set.
 const socialProviders: Record<string, { clientId: string; clientSecret: string }> = {}
