@@ -3,9 +3,15 @@
 # builder). IMPORTANT: when this file exists, gcloud STOPS consulting .gitignore —
 # so every sensitive/heavy path that .gitignore covered is re-listed here.
 #
-# The apps/api/Dockerfile only COPYs the api closure (root package.json,
-# apps/api, packages/db, packages/shared, .env.production), so everything else is
-# safe to leave out of the upload.
+# ⚠ This file is the ONLY thing standing between the two deploy paths behaving differently.
+# A push-triggered build gets a full repo CHECKOUT and never reads this, so a path missing here
+# breaks ONLY `gcloud builds submit` — the documented manual fallback — and only when someone
+# reaches for it, which is exactly when something is already wrong. Keep it in lockstep with the
+# Dockerfile's COPY list: anything that file needs and this one excludes fails the build at that
+# COPY with "file not found in build context" (how `packages/engine` was caught, 2026-07-29).
+#
+# The apps/api/Dockerfile COPYs the api closure: root package.json, apps/api, .env.production,
+# and packages/{db,shared,storage,engine,routing}. Everything else is safe to leave out.
 
 # Dependencies + VCS
 **/node_modules
@@ -24,11 +30,12 @@ keys/
 key/
 *-sa-key.json
 
-# Not part of the api image closure (the heavy RN tree + unrelated packages)
+# Not part of the api image closure (the heavy RN tree + unrelated packages).
+# `packages/engine` was listed here and is NOT unrelated — the API imports it (roam's
+# trigger radii + haversine), so the Dockerfile COPYs it and every `builds submit` died.
 apps/mobile
 packages/sim
 packages/studio
-packages/engine
 
 # Build / dev / scratch cruft
 dist/

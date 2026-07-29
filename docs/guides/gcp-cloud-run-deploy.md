@@ -135,6 +135,7 @@ curl -s "$URL/regions"  # {"regions":[...]}      — DB reachable + secret decry
 | `--allow-unauthenticated` → `One or more users named in the policy do not belong to a permitted customer` | Domain Restricted Sharing org policy blocks `allUsers` | Use `--no-invoker-iam-check` instead (public without an `allUsers` binding; app auth still applies) |
 | `connections create github` → `could not assert Secret Manager permissions … P4SA … secretmanager.secrets.create denied` | The Cloud Build service agent (`…@gcp-sa-cloudbuild…`, not the Compute SA) stores the GitHub token as a secret | Grant that service agent `roles/secretmanager.admin` |
 | `triggers create github` → bare `INVALID_ARGUMENT` (even with a valid `--repository`) | Secure-by-default: no usable default Cloud Build SA, so a regional 2nd-gen trigger must name one | Add `--service-account=projects/<id>/serviceAccounts/<compute-SA>` |
+| `builds submit` → `COPY failed: file not found in build context: packages/<name>/package.json` (push-triggered builds fine) | `.gcloudignore` excluded a package the Dockerfile COPYs. Only `builds submit` reads that file — a trigger build gets a full repo checkout — so the two paths drift silently until someone reaches for the fallback | Drop it from `.gcloudignore`; keep that file in lockstep with the Dockerfile's COPY list (hit 2026-07-29 on `packages/engine`, which the API has imported since roam) |
 
 ## The apex site (skipper.fm) — Firebase Hosting
 
