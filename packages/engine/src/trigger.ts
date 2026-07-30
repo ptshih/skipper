@@ -27,6 +27,7 @@
 
 import { angularDiffDeg, bearingDeg, cumulativeMeters, haversineMeters, nearestOnRoute } from './geo'
 import type { LngLat } from './geo'
+import { deepInsideArea, insideArea, signedDistanceM, type AreaRef } from './area'
 
 /** One GPS fix from the (simulated or real) location stream. */
 export interface GpsFix {
@@ -48,6 +49,10 @@ export interface DriveStopRef {
   lng: number
   /** The proximity floor (m); the effective trigger distance is never smaller than this. */
   triggerRadiusM: number
+  /** AREA mode: when present, this stop fires on CONTAINMENT rather than proximity — "am I inside
+   *  this district" instead of "am I near this point". lat/lng stay populated as the map/display
+   *  point and as the fallback for anything that doesn't understand areas. See ./area. */
+  area?: AreaRef
   /** Clip length (ms) — audio stops only; used downstream to detect overlapping playback. */
   durationMs?: number | null
   name?: string
@@ -79,6 +84,8 @@ export interface TriggerOptions {
    *  (behind us) and stop it firing — covers the heading gate's blind spot (crawling / unknown
    *  heading). Stops are route-snapped, so closest approach is ~on the road and this can be tight. */
   recedeMarginM: number
+  /** AREA mode only: consecutive seconds inside the area before it fires (a GPS-noise filter). */
+  enterDwellSec: number
 }
 
 // ~5 mph = 2.235 m/s; lead of 12 s ≈ 322 m at 60 mph, 161 m at 30 mph; a 90° cone is
@@ -94,6 +101,12 @@ export const DEFAULT_TRIGGER: TriggerOptions = {
   // bearing from vetoing a stop you're standing on, where d is exactly 0.
   bearingFloorM: 15,
   recedeMarginM: 40,
+  // AREA mode only: consecutive seconds inside before firing. Purely a GPS-noise filter — one stray
+  // fix inside a district boundary should not start a three-minute telling. ⚠ NOT a corner-clip
+  // filter: a rider who genuinely crosses a district's hull IS in that district, and the hull (rather
+  // than a bbox) is what already keeps the corners honest. Deliberately small — an area has no
+  // approach, so every second of dwell is a second of the clip starting later than it should.
+  enterDwellSec: 4,
 }
 
 /** The effective trigger distance for a stop at a given speed (m). */
@@ -103,6 +116,10 @@ export function effectiveRadiusM(triggerRadiusM: number, speedMps: number, leadS
 
 export class TriggerEngine {
   private readonly fired = new Set<number>()
+  /** AREA mode: seq → the tSec the rider entered. The engine's FIRST two-way state — every other gate
+   *  is a function of the current fix plus a one-way fired set. Cleared on leaving, so a re-entry
+   *  re-arms the dwell rather than firing instantly. */
+  private readonly insideSince = new Map<number, number>()
   /** stop seq → closest approach distance (m) seen while in range — the passed-point retire clock.
    *  Deleted when the stop falls out of range, so a later re-approach re-arms it. */
   private readonly minDistM = new Map<number, number>()
@@ -130,6 +147,36 @@ export class TriggerEngine {
     const events: TriggerEvent[] = []
     for (const stop of this.stops) {
       if (this.fired.has(stop.seq)) continue
+
+      // ── AREA stops take a different path entirely, and that is the point. ──
+      // ⚠ The proximity gates below are not merely irrelevant here, they are HARMFUL. Distance to a
+      // district's centre runs 900 → 0 → 900 as you cross it, so the passed-point retire would drop
+      // the stop 40 m past the nadir — i.e. while the rider is still deep inside downtown. And the
+      // heading cone asks for a bearing to a place you are standing in, which is the `bearingFloorM`
+      // problem generalised to an entire interior.
+      if (stop.area) {
+        if (!insideArea(here, stop.area)) {
+          this.insideSince.delete(stop.seq) // left (or never entered) → re-arm the dwell
+          continue
+        }
+        const since = this.insideSince.get(stop.seq) ?? fix.tSec
+        this.insideSince.set(stop.seq, since)
+        // The dwell guards the BOUNDARY only — a fix well inside is proof, not noise.
+        if (fix.tSec - since < this.opts.enterDwellSec && !deepInsideArea(here, stop.area)) continue
+        this.fired.add(stop.seq)
+        events.push({
+          seq: stop.seq,
+          tSec: fix.tSec,
+          alongM: fix.alongM,
+          // Distance to the BOUNDARY, negative inside — a point stop's `distanceM` is a lead, an
+          // area's is depth, and reporting the centre distance here would read as a huge late fire.
+          distanceM: signedDistanceM(here, stop.area),
+          speedMps: fix.speedMps,
+          leadSec: 0, // an area has no approach; there is no honest lead to report
+        })
+        continue
+      }
+
       const d = haversineMeters(here, [stop.lng, stop.lat])
       if (d > effectiveRadiusM(stop.triggerRadiusM, fix.speedMps, this.opts.leadSeconds)) {
         this.minDistM.delete(stop.seq) // out of range → forget this approach (re-arm for a later pass)

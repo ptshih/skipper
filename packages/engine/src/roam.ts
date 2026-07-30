@@ -23,6 +23,7 @@
 // Stateful, pure, no I/O — feed fixes via update(), exactly like TriggerEngine.
 
 import { angularDiffDeg, bearingDeg, haversineMeters } from './geo'
+import { deepInsideArea, insideArea, ringAreaM2, signedDistanceM, type AreaRef } from './area'
 import { effectiveRadiusM } from './trigger'
 import type { GpsFix } from './trigger'
 
@@ -37,6 +38,9 @@ export interface RoamPinRef {
    *  centroids, never road-snapped (no route to snap to), so areal places need room:
    *  a peak's pin is its summit, a lake's is open water. Falls back to floorM. */
   radiusM?: number
+  /** AREA mode: fire on CONTAINMENT rather than proximity — see ./area and the branch in `update`.
+   *  lat/lng stay populated as the map point and as the fallback for anything area-unaware. */
+  area?: AreaRef
   name?: string
 }
 
@@ -61,6 +65,8 @@ export interface RoamTriggerOptions {
   minGapSec: number
   /** A fired pin cannot re-fire within this many seconds (session cooldown). */
   cooldownSec: number
+  /** AREA mode only: consecutive seconds inside before firing (a GPS-noise filter). */
+  enterDwellSec: number
   /** After a fire, other pins within this distance of it are suppressed (queue-stacking
    *  backstop for co-located twins the corpus dedup missed)... */
   suppressRadiusM: number
@@ -87,6 +93,12 @@ export const DEFAULT_ROAM_TRIGGER: RoamTriggerOptions = {
   cooldownSec: 60 * 60 * 4, // 4h: don't re-tell on the drive home (cross-session memory later)
   suppressRadiusM: 300,
   suppressWindowSec: 15 * 60,
+  // AREA mode only. Purely a GPS-noise filter — one stray fix inside a district boundary should not
+  // start a three-minute telling. ⚠ NOT a corner-clip filter: a rider who genuinely crosses a
+  // district's HULL is in that district, and using the hull rather than a bbox is what keeps the
+  // corners honest. Small on purpose — an area has no approach, so every second of dwell is a second
+  // the clip starts later than it should.
+  enterDwellSec: 4,
   recedeMarginM: 60,
 }
 
@@ -126,6 +138,11 @@ export class RoamEngine {
   /** poiId → closest approach distance (m) seen while in range — the passed-point retire clock.
    *  Tracked every fix (even gate-closed) and deleted when the pin falls out of range (re-arm). */
   private readonly minDistM = new Map<string, number>()
+  /** AREA mode: poiId → the tSec the rider entered, for the entry dwell. Cleared on leaving.
+   *  ⚠ Does NOT survive the RoamEngine rebuild the app does when it adopts a fresh pin set — that
+   *  path reseeds cooldown + mute from history and nothing else, so a rebuild mid-district re-arms the
+   *  dwell. Acceptable (the rebuild is gated on having travelled a long way), but write it down. */
+  private readonly insideSince = new Map<string, number>()
   /** When the governor next allows an encounter start (tSec). */
   private gateOpenAtSec = 0
   /** Where + when the LAST encounter fired (cluster suppression anchor; window-bounded). */
@@ -198,13 +215,59 @@ export class RoamEngine {
     if (!Number.isFinite(fix.lat) || !Number.isFinite(fix.lng) || !Number.isFinite(fix.speedMps)) return []
     const gateOpen = fix.tSec >= this.gateOpenAtSec // governor: a clip is playing / gap not elapsed
     const here: [number, number] = [fix.lng, fix.lat]
-    let best: { pin: RoamPinRef; d: number } | null = null
+    // ⚠ ORDERING, and this is the gate that had NO existing answer once areas exist. Nearest-first
+    // cannot arbitrate two districts a rider is inside SIMULTANEOUSLY, and that is not hypothetical:
+    // measured on the real corpus, Downtown Reno and Reno's Historic Homes have members 54 m apart,
+    // and the two Carson City districts 73 m. Both containments are true and the centre distances are
+    // noise. So: INSIDE beats NEAR, and among the ones you are inside, the SMALLEST wins.
+    // "Most specific" is right twice over — correct for nesting, and the better telling (the tight
+    // historic core over the whole capital). The loser is then held by the min-gap governor and its
+    // cooldown, exactly as any other runner-up is.
+    let best: { pin: RoamPinRef; d: number; inside: boolean; size: number } | null = null
+    const better = (c: { d: number; inside: boolean; size: number }): boolean => {
+      if (!best) return true
+      if (c.inside !== best.inside) return c.inside
+      return c.inside ? c.size < best.size : c.d < best.d
+    }
     // Spatial prune: only pins in the fix's cell + 8 neighbors can be in range (the 3×3
     // ~16 km window dwarfs the max effective radius). Trigger semantics are unchanged — the
     // per-pin decision, debounce, and nearest-first below are byte-identical; we only shrink
     // the candidate set. (A pin missing coords lives in `ungridded` and is always included.)
     for (const pin of this.candidatesFor(fix.lat, fix.lng)) {
       if (this.muted.has(pin.poiId)) continue // muted ("don't tell me this one again") — never fires
+
+      // ── AREA pins: containment, not proximity. The recede + heading gates below are meaningless
+      // here (distance to a district's centre runs 900 → 0 → 900 as you cross it, so the passed-point
+      // retire would drop it while you are still inside; and there is no honest bearing to a place you
+      // are standing in). Every GOVERNOR — gate, cooldown, name-cooldown, suppression — still applies.
+      if (pin.area) {
+        if (!insideArea(here, pin.area)) {
+          this.insideSince.delete(pin.poiId)
+          continue
+        }
+        const since = this.insideSince.get(pin.poiId) ?? fix.tSec
+        this.insideSince.set(pin.poiId, since)
+        if (!gateOpen) continue
+        // The dwell guards the BOUNDARY only — a fix well inside is proof, not noise.
+        if (fix.tSec - since < this.opts.enterDwellSec && !deepInsideArea(here, pin.area)) continue
+        const firedArea = this.firedAt.get(pin.poiId)
+        if (firedArea !== undefined && fix.tSec - firedArea < this.opts.cooldownSec) continue
+        if (pin.name) {
+          const nameFired = this.firedNameAt.get(pin.name)
+          if (nameFired !== undefined && fix.tSec - nameFired < this.opts.cooldownSec) continue
+        }
+        if (
+          this.lastFire &&
+          fix.tSec - this.lastFire.tSec < this.opts.suppressWindowSec &&
+          haversineMeters([pin.lng, pin.lat], [this.lastFire.lng, this.lastFire.lat]) <
+            this.opts.suppressRadiusM
+        )
+          continue
+        const areaCand = { pin, d: signedDistanceM(here, pin.area), inside: true, size: ringAreaM2(pin.area.ring) }
+        if (better(areaCand)) best = areaCand
+        continue
+      }
+
       const d = haversineMeters(here, [pin.lng, pin.lat])
       const floor = pin.radiusM ?? this.opts.floorM
       if (d > effectiveRadiusM(floor, fix.speedMps, this.opts.leadSeconds)) {
@@ -243,7 +306,8 @@ export class RoamEngine {
         const off = angularDiffDeg(fix.headingDeg, bearingDeg(here, [pin.lng, pin.lat]))
         if (off > this.opts.headingConeDeg) continue
       }
-      if (!best || d < best.d) best = { pin, d }
+      const cand = { pin, d, inside: false, size: Number.POSITIVE_INFINITY }
+      if (better(cand)) best = cand
     }
     if (!best) return []
     this.firedAt.set(best.pin.poiId, fix.tSec)

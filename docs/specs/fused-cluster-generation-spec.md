@@ -201,10 +201,8 @@ the same shape argument that removed parks and ranges from the corpus.
 
 - **CLUSTER** — a point trigger works. **BUILT 2026-07-30 as `clusterTrigger` in `@skipper/engine`,
   and both halves of the rule proposed here were WRONG on the measurement** (see §4.1b).
-- **DISTRICT** — needs an AREA trigger ("am I inside the members' bbox?"), not a proximity one. That is
-  a genuinely new trigger mode in `@skipper/engine`, and it is the single biggest unbudgeted piece of
-  phase 4. ⚠ If that is too much scope, the honest fallback is to ship CLUSTER fusion only and leave
-  districts as they are today — 4 districts vs 60 clusters, so most of the value lands either way.
+- **DISTRICT** — needs an AREA trigger, not a proximity one. ✅ **The engine half is BUILT
+  (2026-07-30, founder go: "this will help when we open up new regions").** See §10.
 
 ### 4.1b The CLUSTER rule as BUILT — measured over the 30 generatable clusters
 
@@ -411,6 +409,60 @@ mildest failure in the original set, and one clip at the baseline rate is not a 
 to 1.00 was not representative. Naming five places in one telling pulls toward enumeration, which is
 exactly the NAME-DENSITY tension §3.3 predicted. Advisory only — it never withheld a clip — but at
 half the run it is a real quality signal rather than noise.
+
+## 10. The AREA trigger — engine BUILT 2026-07-30, NOT SHIPPABLE YET
+
+`packages/engine/src/area.ts` + an area branch in both trigger loops. 125 engine tests pass,
+including the whole existing point-trigger suite unchanged — the branch is additive.
+
+**⚠ THE CONSTRAINT THAT DECIDES THE SEQUENCING: this cannot ship without an App Store release.**
+Every trigger decision lives in `@skipper/engine`, which is bundled into the app binary. Server work
+is ~10% of the total and changes no behaviour on its own. Worse, **there is no client-version signal
+on the wire at all** — no capability flag, no `User-Agent`, nothing — so "send districts to everyone"
+and "send them to no one" are currently the only two options.
+
+And sending them to a 1.0.1 client is not acceptable: with `area` stripped by Zod it sees a 914 m
+point, which reproduces the exact failure that set `CLUSTER_MAX_TRIGGER_RADIUS_M` (a 92-second
+premature lead). In roam it is worse than that — `recedeMarginM` retires the pin 60 m past closest
+approach and a 4-hour cooldown locks it, so the rider hears "Downtown Reno" on the freeway approach
+and then **silence while actually downtown**. So: districts stay STAGED until an area-capable client
+has adoption. `clusterGenerationBlock` already refuses to generate them, so nothing is at risk today.
+
+**Design decisions, each measured rather than assumed:**
+
+- **Convex hull, not a bbox.** Measured over the five real districts: a hull is 6–9 vertices at
+  n=13..46 (cheap on the wire) and covers 44% of the enclosing circle's area on the two worst, against
+  the bbox's 71%. The decisive part is not the ratio though — a bbox concentrates ALL its over-cover in
+  the CORNERS, and the corner is exactly where the failure lives (a highway clipping downtown's bbox
+  would fire a downtown telling at someone who never went downtown). Not a union of per-member discs
+  either: measured, 250 m discs cover only 85% of downtown Reno's bbox, so a rider crossing a gap
+  flips outside and back in mid-district.
+- **The passed-point retire and the heading cone are BYPASSED, and that is the load-bearing bit.**
+  They are not merely irrelevant for an area, they are actively harmful: distance to a district's
+  centre runs 900 → 0 → 900 as you cross it, so the retire would drop the stop 40 m past the nadir —
+  *while the rider is still deep inside downtown*. There is a regression test named for exactly this.
+- **The entry dwell guards the BOUNDARY only.** A few seconds of consecutive containment rejects a
+  stray fix; a fix more than `AREA_CONFIDENT_DEPTH_M` inside is proof rather than noise and fires at
+  once. That waiver is not a nicety — with an unconditional dwell an area ALWAYS loses a race to a
+  co-located point pin (the point fires first and closes the min-gap governor behind it), so
+  "inside beats near" would have been true in the comparator and false in practice. A test caught it.
+- **Ordering: INSIDE beats NEAR, then SMALLEST wins.** Nearest-first cannot arbitrate two districts a
+  rider is inside simultaneously, and that is measured, not hypothetical: Downtown Reno and Reno's
+  Historic Homes have members 54 m apart, the two Carson City districts 73 m. "Most specific" is right
+  twice over — correct for nesting, and the better telling (the tight historic core over the whole
+  capital).
+
+**Still to build before this can ship:** the optional `area` field on the wire, the hull in
+`apps/api/src/clusters.ts`, `buildDrive`'s second admission rule (an area has no single point to snap
+to a route), the mobile client's engine wiring and map rendering, and a capability parameter so old
+clients can be withheld from. ⚠ Also unresolved: nothing bounds a clip that OUTLIVES its place — a
+120 s district clip on a route that is inside for 40 s ends ~2 km past downtown.
+
+**⚠ Two of the five districts never needed any of this.** Virginia City (265 m enclosing radius) and
+Historic Downtown Carson City (411 m) are already under `CLUSTER_MAX_TRIGGER_RADIUS_M` and can ship
+as point-triggered fused clips on the CURRENT client, today, for ~$1. The generation queue was changed
+to ask the geometry gate rather than the `treatment` column, so they are already in scope — that is
+40% of the district value for zero engine work and no release.
 
 ## 6. Staleness — BUILT 2026-07-30 (§9 step 1)
 

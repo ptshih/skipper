@@ -133,15 +133,24 @@ async function main(): Promise<void> {
     .select({
       id: poiClusters.id,
       title: poiClusters.title,
+      treatment: poiClusters.treatment,
       highlights: poiClusters.highlights,
       dropped: poiClusters.dropped,
       subjectPoiId: poiClusters.subjectPoiId,
     })
     .from(poiClusters)
+    // ⚠ NO `treatment` filter, and that is deliberate (2026-07-30, founder go). Phase 4 shipped
+    // CLUSTER-ONLY because a DISTRICT "cannot be a point trigger" — but `treatment` is a NAMING
+    // verdict (`highlights.length` against the clip band), never a geometry one, and letting it decide
+    // triggerability conflated the two. `clusterGenerationBlock` answers the geometry question
+    // directly and correctly. Measured over the 5 districts: three PASS the 600 m gate
+    // (Virginia City 265 m — tighter than Emerald Bay, which already shipped; Historic Downtown
+    // Carson City 411 m; Historic Carson City 552 m) and two do not (Reno's Historic Homes 698 m,
+    // Downtown Reno 914 m). The gate defers those two exactly as it defers the UNR campus.
     .where(
       includeIds.length > 0
         ? inArray(poiClusters.id, includeIds)
-        : and(eq(poiClusters.treatment, 'cluster'), sql`${poiClusters.id} in ${inRegion}`),
+        : sql`${poiClusters.id} in ${inRegion}`,
     )
 
   const membersByCluster = await loadClusterMembers(clusters.map((c) => c.id))
@@ -152,7 +161,7 @@ async function main(): Promise<void> {
     const members = membersByCluster.get(c.id) ?? []
     const block = clusterGenerationBlock(members)
     if (block) {
-      blocked.push(`  ${c.title} — ${block}`)
+      blocked.push(`  [${c.treatment}] ${c.title} — ${block}`)
       continue
     }
     const tellable = tellableMembers(members)
@@ -178,7 +187,7 @@ async function main(): Promise<void> {
     })
   }
 
-  console.log(`\nRegion: ${region.displayName}  ·  ${clusters.length} cluster(s) in scope`)
+  console.log(`\nRegion: ${region.displayName}  ·  ${clusters.length} group(s) in scope (clusters AND districts — the GATE decides, not the treatment)`)
   console.log(`${queue.length} generatable, ${blocked.length} blocked:`)
   for (const b of blocked.slice(0, 4)) console.log(b)
   if (blocked.length > 4) console.log(`  …+${blocked.length - 4} more`)
