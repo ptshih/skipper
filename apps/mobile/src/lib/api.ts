@@ -7,6 +7,7 @@
 // place-narration clips); POST /drives/propose (cheap, no credit) then POST /drives
 // create one. Plus the anonymous reads: GET /regions, GET /roam.
 import {
+  CLIENT_IDENTITY_HEADER,
   driveList,
   driveManifest,
   driveProposal,
@@ -34,6 +35,7 @@ import type {
   VersionPolicy,
 } from '@skipper/shared'
 import { API_URL, authClient } from './auth'
+import { CLIENT_IDENTITY_VALUE } from './clientIdentity'
 
 export class ApiError extends Error {
   constructor(
@@ -86,6 +88,13 @@ const REQUEST_TIMEOUT_MS = 15_000
 // the ?preview=1 funnel and GET /roam (which carries the rider's live lat/lng) — never links a
 // signed-in identity to preview activity or live coordinates. Authenticated calls (drive/offline
 // sign without preview) leave it false so the cookie still rides.
+//
+// ⚠ The client-identity header below rides EVERY call including the anonymous ones, and that is
+// correct rather than a leak: it carries a version and a capability list, nothing that identifies a
+// device or an install. /roam is exactly where capability matters (it is the route that serves
+// district hulls), so exempting anonymous calls would defeat the purpose. Keep it that way — adding
+// anything per-install here would quietly undo the separation the anonymous flag exists to create,
+// and make the App Privacy label wrong.
 async function fetchJson(
   path: string,
   init?: RequestInit,
@@ -109,6 +118,8 @@ async function fetchJson(
       ...init,
       headers: {
         ...(init?.headers ?? {}),
+        // Spread AFTER the caller's headers so neither of ours can be clobbered by a call site.
+        ...(CLIENT_IDENTITY_VALUE ? { [CLIENT_IDENTITY_HEADER]: CLIENT_IDENTITY_VALUE } : {}),
         ...(cookie ? { Cookie: cookie } : {}),
       },
       // The session cookie is set manually above; 'include' would interfere on RN.

@@ -3,9 +3,14 @@
 // never an App Store release. The client (apps/mobile VersionGate) reads its own version,
 // compares via @skipper/shared `gateFor`, and shows a dismissible nudge or a blocking wall.
 //
-// SEEDED AT A NO-OP FLOOR (minimum === recommended === the shipping app.json version,
-// "0.0.0") so it gates NOBODY until a floor is deliberately raised. When the app version
-// is bumped for the first submission, raise these intentionally.
+// SEEDED AT A NO-OP FLOOR of "0.0.0" — BELOW every shipped app version (app.json is 1.0.1), so
+// `gateFor` returns 'ok' for everyone and this gates NOBODY until a floor is deliberately raised.
+// ⚠ The floor is NOT kept in step with app.json and must not be: raising it is a deliberate act that
+// walls riders out of the app, never a side effect of a version bump.
+//
+// ⚠ This is a FLOOR, not a switch — it can force everyone to upgrade, but it cannot serve different
+// content to different builds. That is the client capability channel's job (`withClient`, ./client);
+// see the capability addendum in docs/decisions/api-versioning-posture.md.
 
 import type { VersionPolicy } from '@skipper/shared'
 

@@ -15,6 +15,28 @@ submission** — until that moment the contract is break-freely (CLAUDE.md's STO
 already states this). Everything else in this doc — no URL versioning, the `/version` floor, client
 self-defense — is unchanged and live.
 
+**Scope addendum (client capability channel, 2026-07-30):** this doc answers *don't break old
+clients*. It does **not** answer *serve old clients something DIFFERENT*, which is a distinct problem
+and now has a mechanism: the app sends `X-Skipper-Client: v=<semver>; caps=<tokens>` from `fetchJson`,
+and the API parses it into `c.get('client')` (`@skipper/shared` `client-identity.ts`, `apps/api/src/client.ts`).
+
+This **extends** the posture rather than superseding it, and the boundary is the load-bearing part:
+
+- **Capabilities gate CONTENT, never SHAPE.** Which items appear in a response may vary by caller; the
+  DTOs may not. §2 (additive-only) is untouched, and a capability must never become an excuse to
+  remove a field for some clients — a tolerant reader is still the contract.
+- **Absence means least-capable, always.** Every rider installed before this shipped sends no header
+  and always will, so "absent" is a permanent client class, not a migration state. It can never be
+  read as permissive.
+- **It is client-asserted and forgeable.** It shapes geometry, never entitlement — credits, staged
+  clips, presigned audio and the account wall stay on the session.
+- **`GET /version` is unchanged and still a client-side self-check** (§3/§5). A floor is not a switch;
+  the two coexist and neither replaces the other.
+
+Why it exists: AREA-triggered district tellings need a polygon an older build cannot fire, and with no
+way to tell clients apart the only options were "send to everyone" and "send to no one". See
+`fused-cluster-generation-spec.md` §10.
+
 ## Context
 
 CLAUDE.md's "break things freely" doctrine is scoped to STORAGE. Once the mobile app is in the App
@@ -30,8 +52,9 @@ toy/charm lens (no third-party consumers, no scale pressure).
    Researched 2026 prior art (SideKit / App Upgrade SaaS, the Firebase-Remote-Config tutorial genre,
    OSS `react-native-version-check`, and the GraphQL/tRPC "versionless" camp) all converge on
    evolve-in-place + a force-upgrade gate, not URL forks. Consequence: with no `/v2` fallback, the
-   force-upgrade gate is the **sole** escape hatch for a hard break — "make it additive, or raise the
-   floor and force-update" is the only path.
+   force-upgrade gate is the escape hatch for a hard break of the SHAPE — "make it additive, or raise
+   the floor and force-update". (It was the *sole* hatch until the client capability channel — see the
+   2026-07-30 scope addendum above; that answers a different question and does not loosen this one.)
 
 2. **Additive-only evolution is the rule.** Never remove/rename/retype a DTO field; only add optional
    ones. The client is already a tolerant reader (Zod strips unknown keys — no `.strict()` anywhere).

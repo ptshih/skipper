@@ -3,7 +3,7 @@
 // ./tiers (unit-testable without constructing the auth instance).
 
 import type { MiddlewareHandler } from 'hono'
-import type { AccessTier } from '@skipper/shared'
+import type { AccessTier, ClientIdentity } from '@skipper/shared'
 import { auth } from './auth'
 import { resolveSessionSafely } from './session'
 import { isAdmin, tierOf } from './tiers'
@@ -15,6 +15,11 @@ export type ApiEnv = {
   Variables: {
     session: AuthSession | null
     tier: AccessTier
+    /** What build is asking + what it claims it can do (`withClient`, ./client). Set on EVERY
+     *  request by a global middleware, so routes may read it unconditionally.
+     *  ⚠ Client-asserted and forgeable — shape CONTENT with it, never entitlement. Credits, staged
+     *  clips, presigned audio and the account wall all stay on `session`/`tier` above. */
+    client: ClientIdentity
   }
 }
 

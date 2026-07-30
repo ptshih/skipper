@@ -460,9 +460,17 @@ EVERY client.
 acknowledged).** It withheld area tellings from clients that could not fire a polygon. What protects
 those clients instead is the **capped point fallback**: an area telling's `radiusM` is
 `min(enclosingRadius, CLUSTER_MAX_TRIGGER_RADIUS_M)` — 600 m rather than downtown Reno's true 914 m —
-so an area-unaware client degrades to today's WIDEST existing pin instead of past it. Restoring the
-gate is a one-line query-param read if a real drive says the fallback is not good enough. The deeper
-fix is a client-version/capability channel, which does not exist — see TODO.
+so an area-unaware client degrades to today's WIDEST existing pin instead of past it.
+
+✅ **The deeper fix — a client capability channel — EXISTS as of 2026-07-30.** The app sends
+`X-Skipper-Client: v=<semver>; caps=area` from `fetchJson`; the API parses it in `withClient` and
+`loadClusterTellings` takes a **required** `areaCapable`. The founder's ship-to-everyone call still
+stands, so `/roam` passes `areaCapable: true` explicitly — the flip is the one line written beside it.
+Verified against the live corpus by request comparison (the only way this class of bug shows up):
+gated + no header ⇒ **105 pins, 0 areas**; gated + `caps=area` ⇒ **41 pins, 3 areas**. The 105 is the
+point — withholding a district hands back its ~67 member pins rather than leaving a hole, because
+`servedClusterIds` is derived AFTER the withhold. See `api-versioning-posture.md`'s capability
+addendum for the boundary: capabilities gate CONTENT, never SHAPE.
 
 ⚠ **Suppression now takes the SERVED cluster ids, not a predicate that re-derives them.** That is the
 difference between an invariant and a coincidence: a caller being withheld a district must not also

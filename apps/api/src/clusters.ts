@@ -146,6 +146,26 @@ async function tellableMembersByCluster(clusterIds: string[]): Promise<Map<strin
  */
 export async function loadClusterTellings(opts: {
   includeStaged: boolean
+  /** May this caller be served an AREA telling — one that fires on containment in a hull rather than
+   *  proximity to a point? False DROPS those tellings entirely for this caller.
+   *
+   *  ⚠ REQUIRED so a NEW call site cannot omit it — but do not mistake that for the guard that keeps
+   *  districts out of frozen drives. The predecessor field was ALSO required (17dc913) and was still
+   *  removed wholesale in 66435e9 on the founder's ship-to-everyone call. Nothing reverted silently:
+   *  deleting the property while a call site still passes it is a TS excess-property error, so `tsc`
+   *  forced all three to be edited. Required-ness prevents FORGETTING, not DELETING.
+   *  What the deletion cost was collateral — the drive path's `areaCapable: false` went with it, so
+   *  until 78f52c3 this loader fed wide districts into drive selection as capped 600 m points snapped
+   *  from an off-road centre. Measured 0 actually frozen, and only because all three saved drives are
+   *  Tahoe-basin; the first Reno drive would have baked one in (spec §10). The protection that exists
+   *  TODAY is buildDrive's second admission rule, which refuses an area candidate and has tests
+   *  naming it — not this flag.
+   *
+   *  ⚠ It gates INSIDE the loader, not by filtering the returned array afterwards. `servedClusterIds`
+   *  is derived from what this returns and feeds `notSupersededByServedCluster`, so a post-filter at
+   *  the call site would withhold a district while still suppressing its members — downtown Reno
+   *  would go from 12 pins to ZERO. Withholding and suppressing must read from the same list. */
+  areaCapable: boolean
   /** Restrict to specific clusters (the frozen-drive replay path, whose selection items name their
    *  subject). Omit for "every fused telling". An EMPTY array means "none" and short-circuits — it
    *  must never be read as "no filter", which would serve the whole corpus into one drive. */
@@ -184,6 +204,12 @@ export async function loadClusterTellings(opts: {
     // is the same predicate the generation gate asks, so what we SERVE and what we agreed to GENERATE
     // can never disagree about which mode a group is in.
     const needsArea = exceedsPointTrigger(trigger)
+    // Withhold rather than degrade. An area-unaware client that IS served one of these fires the
+    // capped point below instead — which is a real fallback, but a lossy one (it fires on the
+    // approach and the recede gate then retires it). The two protections are complementary, not
+    // alternatives: the cap covers "served it but ignored the ring", this covers "should never have
+    // been served it at all".
+    if (needsArea && !opts.areaCapable) continue
     const area = needsArea
       ? { ring: convexHull(pts.map((p): LngLat => [p.lng, p.lat])), marginM: AREA_MARGIN_M }
       : undefined

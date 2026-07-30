@@ -285,8 +285,13 @@ async function loadCorpusForRoute(
 
   // ⚠ Fused tellings FIRST — which ones we serve is what decides which members to suppress (see
   // notSupersededByServedCluster).
+  // `areaCapable: true` = LOAD them, deliberately — the refusal lives ONE level down, in buildDrive's
+  // second admission rule, which drops an area candidate unconditionally and has tests naming that
+  // rule. Withholding here as well would double-gate: both would fire today, and the day districts
+  // are admitted to drives, whichever one someone forgot about becomes a silent bug. One rule, in the
+  // place that also knows the route geometry.
   const clusters = await withRetry(
-    () => loadClusterTellings({ includeStaged }),
+    () => loadClusterTellings({ includeStaged, areaCapable: true }),
     { label: 'drive.clusterCorpus' },
   )
   const rows = await withRetry(
@@ -873,7 +878,11 @@ async function loadCorpusBySubjectIds(subjectIds: string[]): Promise<Map<string,
     withRetry(() => narrationCorpusSelect().where(inArray(narrations.poiId, subjectIds)), {
       label: 'drive.corpusByIds',
     }),
-    withRetry(() => loadClusterTellings({ includeStaged: true, clusterIds: subjectIds }), {
+    // `areaCapable: true` for the same reason `includeStaged: true` is here: this path resolves a
+    // FROZEN selection's content and must never re-adjudicate what belongs in it. A capability
+    // withhold here would silently shrink a drive the rider paid a non-refundable credit for —
+    // and would do it differently on different devices, since capability is per-request.
+    withRetry(() => loadClusterTellings({ includeStaged: true, areaCapable: true, clusterIds: subjectIds }), {
       label: 'drive.clusterCorpusByIds',
     }),
   ])

@@ -25,6 +25,7 @@ import { narrations, pois, regions } from '@skipper/db/schema'
 import { haversineMeters, triggerRadiusForKind } from '@skipper/engine'
 import type { RoamPin } from '@skipper/shared'
 import { auth, SITE_ORIGIN } from './auth'
+import { withClient } from './client'
 import { loadClusterTellings, notSupersededByServedCluster } from './clusters'
 import { driveRoutes } from './drives'
 import { isAdmin, withSession, type ApiEnv } from './entitlements'
@@ -49,6 +50,19 @@ app.onError((err, c) => {
   console.error('[api] unhandled error', err)
   return c.json({ error: 'internal' }, 500)
 })
+
+// What build is asking, and what it says it can do. Mounted FIRST and on '*' deliberately, for two
+// reasons this file has been bitten by before: `app.use('/roam', …)` matches that EXACT path only
+// (hence /roam/sample's own mount further down), and Hono runs handlers in REGISTRATION order, so a
+// late mount silently skips everything above it. Pure, no I/O, total parser — safe ahead of /health,
+// which is deliberately env-free and DB-free.
+//
+// ⚠ NOT wired into Better Auth's client, so /api/auth/* carries no identity. That is a decision, not
+// an oversight: auth routes serve no capability-shaped CONTENT, and adding a custom header to the
+// browser's cross-origin reset-password POST would make it fail preflight unless it were also added
+// to the `allowHeaders` list below — i.e. it would risk the ONE route back into a locked-out account
+// in exchange for nothing. Revisit only if the header ever feeds telemetry rather than content.
+app.use('*', withClient)
 
 // Health check — used by infra / local smoke tests.
 app.get('/health', (c) => c.json({ ok: true }))
@@ -164,12 +178,20 @@ app.get('/roam', async (c) => {
   // decides which member POIs to suppress. Deriving that the other way round is how an area-unaware
   // client ends up with a hole where downtown used to be.
   //
-  // ⚠ Area tellings go to EVERY client (founder call 2026-07-30, risks acknowledged). The capability
-  // gate that withheld them from area-unaware clients is gone; what protects those clients now is the
-  // CAPPED point fallback in loadClusterTellings. Restoring the gate is a one-line `caps` query param —
-  // see the spec — if a real drive says the fallback is not good enough.
+  // ⚠ Area tellings go to EVERY client — founder call 2026-07-30 (66435e9), risks acknowledged —
+  // and `areaCapable: true` here is that call, written down, not a default.
+  //
+  // The capability CHANNEL now exists (`c.get('client')`), so withholding is finally possible; this
+  // stays open because flipping it is a CONTENT change, not a refactor. Every rider installed today
+  // sends no header, so `clientCan(...)` would be false for all of them and the flip would silently
+  // take three districts away from the entire installed base and hand back their member pins. What
+  // protects an area-unaware client meanwhile is the CAPPED point fallback in loadClusterTellings.
+  //
+  // TO GATE IT, when a real drive says the fallback is not good enough, this is the one line (plus
+  // importing the two names from @skipper/shared):
+  //     areaCapable: clientCan(c.get('client'), CLIENT_CAPS.area),
   const clusterRows = await withRetry(
-    () => loadClusterTellings({ includeStaged: canPreview }),
+    () => loadClusterTellings({ includeStaged: canPreview, areaCapable: true }),
     { label: 'roam.clusterPins' },
   )
   const servedClusterIds = clusterRows.map((r) => r.clusterId)

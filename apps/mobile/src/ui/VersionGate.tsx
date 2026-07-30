@@ -9,11 +9,11 @@
 // above the navigator, so the wall covers everything.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Platform, StyleSheet, View } from 'react-native'
-import Constants from 'expo-constants'
 import * as Linking from 'expo-linking'
 import * as SecureStore from 'expo-secure-store'
 import { gateFor, type GateDecision, type VersionPolicy } from '@skipper/shared'
 import { getVersion } from '@/lib/api'
+import { APP_VERSION } from '@/lib/clientIdentity'
 import { Button } from './Button'
 import { Screen } from './Screen'
 import { Text } from './Text'
@@ -41,7 +41,7 @@ export function VersionGate() {
   useEffect(() => {
     let cancelled = false
     void (async () => {
-      const current = Constants.expoConfig?.version
+      const current = APP_VERSION
       if (!current) return // no version to compare against → fail-open
       try {
         const policies = await getVersion()
@@ -70,7 +70,7 @@ export function VersionGate() {
   }, [])
 
   const dismiss = useCallback(() => {
-    const current = Constants.expoConfig?.version
+    const current = APP_VERSION
     if (current) SecureStore.setItemAsync(DISMISS_KEY, current).catch(() => {})
     setGate(null)
   }, [])
