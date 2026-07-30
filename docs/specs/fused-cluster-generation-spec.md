@@ -356,11 +356,15 @@ that pair. Phase 4 raises the stakes rather than creating the problem — as a c
 be NAMED inside the fused Reno telling, and §3.2's exclusion clause is the only thing that could stop
 it.
 
-A cheap systematic detector exists and was run: two distinct QIDs at an EXACTLY identical coordinate.
-The corpus has 13 such pairs and 12 are genuine co-location (Glacier Point / Glacier Point Hotel,
-El Capitan / Salathé Wall, Genoa Historic District / Genoa). This is the only real mis-location — so
-it is one bad upstream row, not a systemic import bug. Worth re-running after each sweep; also a
-candidate for the upstream contribute-back queue (agent drafts, human submits).
+✅ **RESOLVED 2026-07-30 — the row is EXCLUDED** (reversible: the audio is kept and restoring needs no
+regeneration), and it is gone from `/roam`. A triage detector now runs automatically in `discover-pois`
+(on the swept batch, before anything is written) and `prune-corpus` (over existing rows) — see
+`docs/guides/ops-scripts-sop.md` §"what the checks can't see" for why it can only FLAG and never
+decide: every structured signal, ours and upstream, is wrong the same way, and only the prose is
+right. Measured: 13 collisions corpus-wide, 12 genuine, so auto-excluding would bury 12 real places to
+catch 1. The DECISIVE check needs to read the prose, i.e. model judgment, and belongs in the paid
+`enrich` step where the article is already in context — not built. Still a contribute-back candidate
+(agent drafts, human submits).
 
 **2. Two cluster rows over the same campus.** `University of Nevada, Reno Campus` (5 members, no
 subject) and `University of Nevada Reno Campus` (2 members, subject = the UNR Historic District), with

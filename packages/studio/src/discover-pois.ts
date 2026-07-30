@@ -29,6 +29,7 @@ import { fetchFullExtracts } from './pipeline/wikipedia'
 import { toFacts } from './pipeline/select'
 import { buildStoryFacts, hashFacts, summaryFromExtract, upsertPoi } from './pipeline/persist'
 import { announce, parseFlags } from './pipeline/ops'
+import { colocationReport, findColocations } from './pipeline/colocation'
 import { runJob } from './pipeline/job-progress'
 import { sleep } from './pipeline/http'
 import { resolveRegion } from './pipeline/region'
@@ -142,6 +143,13 @@ async function main(): Promise<void> {
     console.log(`  ${String(s.article!.extract.length).padStart(5)}  ${s.name}`)
   }
   console.log(`\nSCENIC pins persisted for the future wave layer: ${scenics.length}`)
+
+  // Co-location triage — runs on the swept batch, BEFORE anything is written, so a mis-located place
+  // is caught before it is paid to enrich and narrate. Warns, never rejects: most collisions are
+  // genuine (see pipeline/colocation.ts for why this can't be decided for free).
+  for (const line of colocationReport(findColocations(merged.map((c) => ({ qid: c.qid, name: c.name, lat: c.lat, lng: c.lng }))))) {
+    console.warn(line)
+  }
 
   if (!apply) {
     console.log('\nDRY RUN — nothing written. Re-run with --apply to upsert pois.')

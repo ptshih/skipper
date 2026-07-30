@@ -32,6 +32,44 @@ burns GCP credits). So they share one safety contract.
 6. **Idempotent + logged + honest exit.** Re-runnable without harm; log per item + a final
    summary; `process.exitCode = 1` on failure (the `main().catch(...)` tail).
 
+## Corpus hygiene: what the checks CAN'T see
+
+Two verification traps that have each produced a wrong conclusion in practice. Both belong here rather
+than in a code comment, because they bite the person reading a run's output.
+
+**1. A presigned R2 URL is signed PER HTTP METHOD.** A `HEAD` against a `presignGet` URL returns 403
+on a perfectly healthy object. Check with a ranged `GET` (`curl -r 0-1`), or you will diagnose a
+working corpus as entirely broken — this nearly produced a false outage report on 2026-07-30.
+
+**2. A green grounding score means "matches its fact sheet", NOT "is correct".** The fail-closed eval
+gate verifies script ↔ sheet, so it is structurally blind to anything outside that pair — most
+importantly **where the place actually is**.
+
+The live case (2026-07-30): `UNLV Arboretum` (Q7865354) carries the UNR Arboretum's coordinates, so a
+RELEASED clip saying *"…down in Paradise, Nevada"* fired on the Reno campus, 700 km away. Script,
+facts and attribution were all correct; only the coordinate was wrong. Worse, every structured signal
+agreed with every other and all were wrong — Wikidata `P625`, Wikidata `P131` ("located in" — it also
+says Reno), and the Wikipedia article's own coordinates, which inherit from Wikidata. Only the article
+PROSE was right. Our import was faithful; the error is upstream, so it is also a contribute-back
+candidate.
+
+**So there is no free, deterministic check that can DECIDE this class** — a decisive one has to read
+the prose, which means model judgment, and the natural home is the paid `enrich` step where the
+article is already in context. Not built; worth doing when `enrich` is next touched.
+
+**What IS free is the triage, and it now runs automatically:**
+`pipeline/colocation.ts` flags two DIFFERENT Wikidata items on a **byte-identical** coordinate —
+reported by `discover-pois` (on the swept batch, BEFORE anything is written, so a phantom place is
+caught before you pay to enrich and narrate it) and by `prune-corpus` (over existing rows, so a
+pre-existing one surfaces without a re-sweep). Exact equality, not a radius: genuinely adjacent places
+are normal (Harold's Club and Harrah's Reno are 60 m apart) and would flood any proximity rule.
+
+⚠ **It warns, it never excludes.** Measured over Tahoe + Yosemite: 13 collisions, **12 genuine**
+(Glacier Point / Glacier Point Hotel, El Capitan / Salathé Wall, Genoa Historic District / Genoa) and
+1 real error. Auto-excluding would bury 12 real places to catch 1. Treat a collision as a question:
+open both articles and check the stated location against the pin. Adjudicating one (excluding the
+wrong row) drops it out of the queue on the next run, so the list shrinks as you work it.
+
 ## The shared helper (`pipeline/ops.ts`)
 
 - `parseFlags(argv, { valueFlags })` → `{ positionals, has(name), value(name) }` — supports

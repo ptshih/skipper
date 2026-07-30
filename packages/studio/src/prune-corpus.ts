@@ -50,6 +50,7 @@ import { withRetry } from './pipeline/http'
 import { resolveRegion, requireRegionBbox } from './pipeline/region'
 import { DEFAULT_REGION_SLUG } from './config'
 import { containmentReason } from './pipeline/containment'
+import { colocationReport, findColocations } from './pipeline/colocation'
 
 /** Prefix on every reason this tool writes. `--restore` scopes to it, so a hand-made admin exclusion for
  *  some other cause is never silently undone by a re-run. */
@@ -143,6 +144,9 @@ async function main(): Promise<void> {
     .select({
       id: pois.id,
       name: pois.name,
+      qid: pois.qid,
+      lat: pois.lat,
+      lng: pois.lng,
       areaKm2: pois.areaKm2,
       lengthKm: pois.lengthKm,
       types: pois.wikidataTypes,
@@ -153,6 +157,16 @@ async function main(): Promise<void> {
     .from(pois)
     .leftJoin(narrations, eq(narrations.poiId, pois.id))
     .where(and(...inBbox, isNull(pois.excludedReason)))
+
+  // Co-location triage — reported alongside the prune scan because this is the FREE hygiene pass an
+  // operator already runs over a region, and it is the only place a pre-existing mis-located row
+  // surfaces without a re-sweep. Advisory only: it never sets `excluded_reason` (most collisions are
+  // genuine — see pipeline/colocation.ts).
+  for (const line of colocationReport(
+    findColocations(candidates.map((r) => ({ qid: r.qid, name: r.name, lat: r.lat, lng: r.lng }))))
+  ) {
+    console.warn(line)
+  }
 
   // Authoritative first, name pattern only as the fallback for un-backfilled rows.
   const rows = candidates
