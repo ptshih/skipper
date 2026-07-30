@@ -62,7 +62,7 @@ import { STORY_TASTE_DENYLIST, type DeliveryRegister } from '@skipper/shared'
 import { NARRATION_MODEL, JUDGMENT_MODEL, ttsStyleFor, lengthForRegister, getAnthropic } from './models'
 import { buildGroundingWell, evaluateGrounding } from './eval/grounding'
 import { applyLoudnessOutcomes, applyTailOutcomes, evaluateTts } from './eval/tts'
-import { evaluateDiversity } from './eval/diversity'
+import { evaluateDiversityAgainst } from './eval/diversity'
 import { evaluateLaterality } from './eval/laterality'
 import { evaluatePacing } from './eval/pacing'
 import { optimize } from './eval/optimize'
@@ -242,6 +242,36 @@ async function main(): Promise<void> {
     return
   }
 
+  // ── Diversity context: the region's EXISTING tellings ──────────────────────────────────────────
+  // The cross-clip lint can only see repetition it is handed. Seed it with every telling already in
+  // this region so a new clip is checked against the corpus a rider actually hears — not just against
+  // the handful this run happens to produce. Clips generated during the run are appended below.
+  // Cheap: one scripts-only query, and the lint is deterministic string work (no LLM, no spend).
+  const diversityContext: string[] = isExplicit
+    ? []
+    : (
+        await withRetry(
+          () =>
+            db
+              .select({ script: narrations.script })
+              .from(narrations)
+              .innerJoin(pois, eq(narrations.poiId, pois.id))
+              .where(
+                and(
+                  sql`${pois.lat} between ${bbox!.swLat} and ${bbox!.neLat}`,
+                  sql`${pois.lng} between ${bbox!.swLng} and ${bbox!.neLng}`,
+                ),
+              ),
+          { label: 'load diversity context' },
+        )
+      )
+        .map((r) => r.script)
+        .filter((s): s is string => !!s)
+  console.log(
+    `Diversity context: ${diversityContext.length} existing tellings in this region will be checked against.` +
+      (isExplicit ? ' (explicit-id run — region context skipped.)' : ''),
+  )
+
   // Cost preview: narration ≈ system+sheet in / ~1k thinking+output out per clip (Opus 4.8
   // $5/$25 per MTok → very roughly $0.03–0.08 per clip). The automated gate adds ~1 Opus GROUNDING
   // call/clip (~$0.04) plus the odd bounded retake, so model ~$0.15/clip of LLM spend when the gate
@@ -333,7 +363,14 @@ async function main(): Promise<void> {
     const evaluate = async (script: string): Promise<StopEval[]> => {
       const evals: StopEval[] = [
         evaluateTts({ seq, script }),
-        ...evaluateDiversity([{ seq, stopType: 'story', script }]),
+        // Scored against the REST of the region, not against itself. This used to be
+        // `evaluateDiversity([{ … }])` — a single-element array, in which every cross-clip rule is a
+        // no-op by arithmetic. That is why one geology sentence reached 17 released Tahoe clips and
+        // "national register of historic places" reached 67: nothing was ever in a position to see
+        // the second use. Diversity stays ADVISORY (it never withholds), but advisory findings are
+        // weighted by optimize()'s findingScore and their `avoid` notes feed the retake — so this
+        // genuinely changes which take ships, not just what gets logged.
+        ...evaluateDiversityAgainst({ seq, stopType: 'story', script }, diversityContext),
         evaluateLaterality({ seq, script }),
         evaluatePacing({ seq, script, targetSeconds: band.targetSeconds, maxSeconds: band.maxSeconds }),
       ]
@@ -369,6 +406,12 @@ async function main(): Promise<void> {
     // SHIP gate = every GATE dimension clean (grounding + tts; a laterality slip rides grounding).
     // Diversity is advisory — it drives the retake but never withholds an otherwise-clean clip.
     const shipped = result.evals.filter((e) => DIMENSION_KIND[e.dimension] === 'gate').every((e) => e.pass)
+    // Feed a shipped take back in, so later clips in THIS run are checked against it too — otherwise a
+    // fresh-region run (nothing in the DB yet) would have no context at all and repeat itself freely.
+    // ⚠ Best-effort by design: generation is concurrent (mapLimit), so how much context a given clip
+    // sees depends on completion order. That makes the run non-deterministic in its ADVISORY scoring
+    // only — gates are per-clip and unaffected — and more context is never worse than the none we had.
+    if (shipped && result.item) diversityContext.push(result.item)
     return { c, seq, script: result.item, evals: result.evals, shipped }
   }
 

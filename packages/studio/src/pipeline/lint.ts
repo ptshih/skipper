@@ -152,8 +152,11 @@ export function lintScripts(stops: LintInput[]): LintFinding[] {
   }
 
   // 1. Stock-phrase repeats — keep the first use, flag later reuses.
+  // Lowercase ONCE, not once per phrase: with V2 passing a whole region's corpus as context
+  // (evaluateDiversityAgainst), `stops` is hundreds of scripts and this loop runs per take.
+  const lowered = stops.map((s) => s.script.toLowerCase())
   for (const phrase of STOCK_PHRASES) {
-    const hits = stops.filter((s) => s.script.toLowerCase().includes(phrase))
+    const hits = stops.filter((_s, i) => lowered[i]!.includes(phrase))
     for (const s of hits.slice(1)) {
       flag(s.seq, `reuses stock phrase "${phrase}"`, `Do NOT use the phrase "${phrase}" — it already appears at an earlier stop.`)
     }

@@ -31,3 +31,33 @@ export function evaluateDiversity(inputs: LintInput[]): StopEval[] {
     }
   })
 }
+
+/**
+ * Score ONE take against the REST of the region's tellings — the entry point V2 generation needs.
+ *
+ * Why this exists: `lintScripts` is cross-stop by construction (it was written for V1, which narrated
+ * a whole tour and then linted the assembled scripts). V2 narrates ONE shared telling per POI, and the
+ * generator called `evaluateDiversity([oneStop])` — a single-element array. With n=1 every cross-stop
+ * rule is a no-op by arithmetic, not by configuration: `hits.slice(1)` on one hit is empty, and the
+ * opener/closer maps have nothing to collide with. So the corpus-wide repetition those rules exist to
+ * catch could never be seen, and adding a phrase to STOCK_PHRASES would not have changed that.
+ * (The PER-stop rules — banned tics, list shape, tidy bows — always worked; only the cross half was dead.)
+ *
+ * ⚠ ORDER IS THE SEMANTICS. Every cross-stop rule keeps the FIRST occurrence and flags later ones, so
+ * the take under test MUST go last. Put it anywhere else and the existing corpus is flagged for the new
+ * take's repetition while the take itself passes clean — the exact inversion of what we want.
+ *
+ * Context entries get synthetic NEGATIVE seqs: findings are keyed by seq, so they must never collide
+ * with the real one, and a negative reads unmistakably as "not a stop in this run" if it reaches a log.
+ * Only the current stop's eval is returned; the context's own findings are discarded.
+ */
+export function evaluateDiversityAgainst(current: LintInput, context: readonly string[]): StopEval[] {
+  if (context.length === 0) return evaluateDiversity([current])
+  const inputs: LintInput[] = context.map((script, i) => ({
+    seq: -(i + 1),
+    stopType: current.stopType,
+    script,
+  }))
+  inputs.push(current) // last — see the ORDER note above
+  return evaluateDiversity(inputs).filter((e) => e.seq === current.seq)
+}
