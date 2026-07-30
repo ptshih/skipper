@@ -245,6 +245,25 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
             effect verified: **Stateline went 18 pins → 6**, the 9 casino members replaced by one
             148-second telling; Emerald Bay is fused. 104 member clips retired from the read paths
             (reversible — the rows and R2 objects survive).
+      - [x] **The AREA trigger — engine BUILT 2026-07-30** (founder: "this will help when we open up
+            new regions"). `@skipper/engine/area.ts` (convex hull, ray-crossing containment, signed
+            boundary distance) + an area branch in BOTH trigger loops. 125 engine tests pass including
+            the whole existing point suite — the branch is additive. Design notes in spec §10; every
+            choice is measured (hull beats bbox because a bbox's over-cover is all in the CORNERS,
+            which is where the highway-clip failure lives).
+      - [ ] ⚠ **THE AREA TRIGGER CANNOT SHIP WITHOUT AN APP STORE RELEASE, and there is no per-client
+            withhold.** Every trigger decision is in the app binary; the server half is ~10% and does
+            nothing alone. There is NO client-version signal on the wire, so "send districts to
+            everyone" / "to no one" are the only options — and a 1.0.1 client sees `area` stripped and
+            fires a 914 m point: "Downtown Reno" on the freeway approach, then SILENCE downtown (recede
+            retires it, 4 h cooldown locks it). Districts stay STAGED until adoption. Remaining: the
+            wire field, the hull in `apps/api/src/clusters.ts`, buildDrive's second admission rule, the
+            mobile wiring + map render, a capability param. ⚠ Unresolved: nothing bounds a clip that
+            OUTLIVES its place (a 120 s clip on a route inside for 40 s ends ~2 km past downtown).
+      - [ ] **Cheap and shippable NOW: 2 of the 5 districts never needed the area trigger.**
+            Virginia City (265 m) and Historic Downtown Carson City (411 m) are already under
+            `CLUSTER_MAX_TRIGGER_RADIUS_M`. The generation queue now asks the GATE rather than the
+            `treatment` column, so they are in scope — ~$1, no release, 40% of the district value.
       - [x] **Step 7 trailing items — DONE 2026-07-30.** (a) `GET /admin/pois` now returns
             `coveredByCluster` and the console shows an "in a fused clip" chip; without it the console
             called 104 live places `narrationStatus: 'none'`, which reads as a generation backlog and
