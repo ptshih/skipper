@@ -1,9 +1,11 @@
 # Fused cluster generation — phase 4 of the legibility layer
 
 > **Status:** BUILD-READY spec — **2026-07-30**. Promoted from `docs/ideas/poi-legibility-layer.md` on
-> founder intent ("let's prepare to do phase 4"). Phases 1–3 are BUILT and APPLIED: the corpus is
-> grouped into **67 clusters** (62 cluster / 5 district) over 302 members, each carrying `treatment`,
-> `title`, an optional `subject_poi_id`, and the model's `highlights` / `dropped` evidence.
+> founder intent ("let's prepare to do phase 4"). Phases 1–3 are BUILT and APPLIED, and the grouping was
+> re-applied on 2026-07-30 after the third district-merge fix: **64 clusters** (60 cluster / 4 district)
+> over 295 members, all 64 carrying `highlights` / `dropped`, 33 with a real `subject_poi_id`. The four
+> districts are Downtown Reno (46), Historic Carson City (33), Virginia City (15), Stateline's Casino
+> Row (9). ⚠ §7.5 is now CLEARED — Carson City fused from two districts into one.
 > **Nothing here is built.** This is the first step that SPENDS on audio and the first that a rider
 > hears. Read `poi-legibility-layer.md` §4–§5 first — it records why the shape is what it is, including
 > two designs that were tried and replaced.
@@ -101,7 +103,8 @@ active would leave a stationary rider with 46 competing pins plus a fused one. S
 300 m / 15-minute suppression exists to paper over exactly this, and becomes redundant rather than a
 second differently-tuned mechanism.
 
-**Scale:** 421 tellings → **274** (207 solo + 67 fused). **214 member clips retire — 51% of the corpus.**
+**Scale (re-measured after the 2026-07-30 re-apply):** 421 tellings → **~271** (207 solo + 64 fused).
+**~214 member clips retire — roughly half the corpus.**
 
 ⚠ **Sequence this so good audio is never retired before its replacement is heard.** Generate the fused
 clips and listen BEFORE retiring members; a fused Emerald Bay telling that is worse than the individual
@@ -132,11 +135,10 @@ clips are silently never marked stale.
 3. **§6** — how the union hash plugs into the existing staleness join.
 4. **Admin** — the console shows grouping read-only; a fused clip needs a play/regenerate surface like
    the per-POI Narration tab, or it is ungovernable.
-5. ⚠ **Re-apply the grouping first.** The district merge was fixed again on 2026-07-30 (subset-of-words),
-   but the STORED grouping predates it, so Carson City is currently TWO districts — `Historic Carson City`
-   (20) and `Historic Downtown Carson City` (13). Generating from that produces two competing tellings
-   about one downtown, which is the precise thing the merge exists to prevent. One `--apply` per region
-   (~$1.20) before any audio is minted.
+5. ✅ **CLEARED 2026-07-30** — the grouping was re-applied on the subset-of-words merge. Carson City is
+   now ONE district of 33 (exactly the 20 + 13 that were split), so generation starts from a corpus with
+   no duplicate districts. The recalibrated review gate also cut the human queue from 25 groups to 15
+   across both regions.
 
 ## 8. Prerequisites — all met
 

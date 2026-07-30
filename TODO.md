@@ -123,8 +123,11 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
       not a roam pin, not a drive candidate. Keeping them would leave a rider in downtown Reno with 46
       competing pins plus a fused one. 421 tellings → 274; 214 member clips retire (51% of the corpus),
       but only AFTER a listen — retiring good audio before hearing its replacement has no fallback.
-      ⚠ Re-apply the grouping BEFORE minting audio: the stored data predates the 2026-07-30 merge fix and
-      still holds TWO Carson City districts. Four open questions remain in §7.
+      ✅ Grouping RE-APPLIED 2026-07-30 on the fixed merge: **64 clusters** (60 cluster / 4 district),
+      295 members, all carrying `highlights`; Carson City fused from two districts into one of 33. The
+      recalibrated review gate cut the human queue from 25 groups to 15 across both regions. Four open
+      questions remain in §7 — length bands, cluster position without a subject, the union facts_hash,
+      and an admin surface for a fused clip.
 - [ ] **5. `buildDrive` reads anchors; delete pick-one.** Orphans ~169 satellite clips —
       `sweep-orphans.ts` already handles that.
 
