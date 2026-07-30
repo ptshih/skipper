@@ -39,7 +39,7 @@ import { personaFromKey } from './persona'
 import { getAnthropic, lengthForRegister, ttsStyleFor } from './models'
 import { buildGroundingWell, evaluateGrounding } from './eval/grounding'
 import { applyLoudnessOutcomes, applyTailOutcomes, evaluateTts } from './eval/tts'
-import { evaluateDiversity } from './eval/diversity'
+import { evaluateDiversityAgainst } from './eval/diversity'
 import { evaluateLaterality } from './eval/laterality'
 import { evaluatePacing } from './eval/pacing'
 import { optimize } from './eval/optimize'
@@ -201,6 +201,40 @@ async function main(): Promise<void> {
 
   const persona = personaFromKey('skipper')
 
+  // ── Diversity context: every telling already in this region, fused AND solo ─────────────────────
+  // The cross-clip lint can only see repetition it is handed, and this generator used to hand it a
+  // single-element array — in which every cross-clip rule is a no-op by arithmetic. Solo generation was
+  // fixed in 0f80d97; this is the same fix for the fused path.
+  // ⚠ Deliberately BOTH kinds, not just fused: a fused telling replaces its members on the read paths,
+  // so one that echoes the member clips it retired is the same defect wearing a hat — and the member
+  // audio still exists, so a rider with a saved drive can hear both.
+  // ⚠ A fused narration carries `poi_id` NULL (`narrations_subject_xor`), so it has no poi to take a
+  // bbox from — reaching for one and coalescing the NULL away would have silently dropped every fused
+  // clip from its own context. Region membership resolves per subject kind: solo by its poi's point,
+  // fused by the same `inRegion` member-geometry the cluster query above uses.
+  const soloIn = db
+    .selectDistinct({ id: pois.id })
+    .from(pois)
+    .where(and(between(pois.lat, bbox.swLat, bbox.neLat), between(pois.lng, bbox.swLng, bbox.neLng)))
+  const diversityContext: string[] = (
+    await withRetry(
+      () =>
+        db
+          .select({ script: narrations.script })
+          .from(narrations)
+          .where(
+            and(
+              isNotNull(narrations.script),
+              sql`(${narrations.poiId} in ${soloIn} or ${narrations.clusterId} in ${inRegion})`,
+            ),
+          ),
+      { label: 'load diversity context' },
+    )
+  )
+    .map((r) => r.script)
+    .filter((s): s is string => !!s)
+  console.log(`Diversity context: ${diversityContext.length} existing tellings in this region.\n`)
+
   /** The nameable/background split (§3.2), plus the well BOTH the narrator and the judge see. */
   function inputsFor(f: Fused) {
     // ⚠ Keyed off `dropped`, NOT `highlights`. Both lists are the model's free text, but measured live
@@ -241,7 +275,8 @@ async function main(): Promise<void> {
     const evaluate = async (script: string): Promise<StopEval[]> => {
       const evals: StopEval[] = [
         evaluateTts({ seq, script }),
-        ...evaluateDiversity([{ seq, stopType: 'story', script }]),
+        // Scored against the rest of the region, not against itself — see `diversityContext` above.
+        ...evaluateDiversityAgainst({ seq, stopType: 'story', script }, diversityContext),
         evaluateLaterality({ seq, script }),
         evaluatePacing({ seq, script, targetSeconds: f.targetSeconds, maxSeconds: f.maxSeconds }),
       ]
@@ -264,6 +299,11 @@ async function main(): Promise<void> {
     const { script: initial } = await narrateStop(base, persona.systemPrompt)
     const result = await optimize(initial, { evaluate, regenerate, maxRounds: GROUNDING_REGEN_MAX_ROUNDS })
     const shipped = result.evals.filter((e) => DIMENSION_KIND[e.dimension] === 'gate').every((e) => e.pass)
+    // Feed a shipped take back in so later clips in THIS batch are checked against it too — the 31
+    // fused clips were generated in one run, so without this they only ever see the pre-existing corpus
+    // and can converge on each other freely. Best-effort: generation is concurrent, so how much context
+    // a clip sees depends on completion order (advisory scoring only; gates are per-clip).
+    if (shipped && result.item) diversityContext.push(result.item)
     const named = mergedFeatures.filter((m) => !m.background).length
     console.log(
       `  ${f.title} — ${named} nameable / ${mergedFeatures.length - named} background · ` +
