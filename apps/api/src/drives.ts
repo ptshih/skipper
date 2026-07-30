@@ -32,7 +32,7 @@ import {
   OFF_ROUTE_MAX_M,
   type DriveCandidate,
 } from '@skipper/engine'
-import { CLUSTER_VARIETY_KEY, loadClusterTellings, supersededByFusedTelling, type ClusterTelling } from './clusters'
+import { CLUSTER_VARIETY_KEY, loadClusterTellings, notSupersededByServedCluster, type ClusterTelling } from './clusters'
 import {
   createDriveRequest,
   driveProposeRequest,
@@ -274,6 +274,15 @@ async function loadCorpusForRoute(
   const cos = Math.cos((midLat * Math.PI) / 180)
   const padLng = padM / (111_320 * (Math.abs(cos) > 1e-6 ? Math.abs(cos) : 1e-6))
 
+  // ⚠ Fused tellings FIRST — which ones we serve is what decides which members to suppress (see
+  // supersededByServedCluster). ⚠ `areaCapable: false` on the DRIVE path, deliberately and for now:
+  // a drive's selection is FROZEN at create, so admitting an area stop would bake it into a saved
+  // drive permanently — including for a rider who never upgrades. Districts join drives when the
+  // client half ships and the create path can read the caller's capability.
+  const clusters = await withRetry(
+    () => loadClusterTellings({ includeStaged, areaCapable: false }),
+    { label: 'drive.clusterCorpus' },
+  )
   const rows = await withRetry(
     () =>
       narrationCorpusSelect().where(
@@ -289,16 +298,11 @@ async function loadCorpusForRoute(
           // A clustered member stops being a drive candidate once its cluster has a fused telling
           // this caller can see (spec §4.2). BUILD path only — `loadCorpusBySubjectIds` deliberately
           // does not re-adjudicate a frozen drive's stops, exactly as with `excluded_reason`.
-          not(supersededByFusedTelling(includeStaged)),
+          notSupersededByServedCluster(clusters.map((c) => c.clusterId)),
         ),
       ),
     { label: 'drive.corpus' },
   )
-  // …and the fused CLUSTER tellings. No bbox prefilter is possible (poi_clusters stores no
-  // coordinates), so every fused telling in the corpus is loaded and buildDrive's own off-route gate
-  // does the trimming — the set is a few dozen rows. Returns [] until fused generation runs, which is
-  // what makes landing this ahead of the audio a no-op.
-  const clusters = await withRetry(() => loadClusterTellings({ includeStaged }), { label: 'drive.clusterCorpus' })
   return clusterRowsToCorpus(clusters, rowsToCorpus(rows))
 }
 
@@ -860,7 +864,7 @@ async function loadCorpusBySubjectIds(subjectIds: string[]): Promise<Map<string,
     withRetry(() => narrationCorpusSelect().where(inArray(narrations.poiId, subjectIds)), {
       label: 'drive.corpusByIds',
     }),
-    withRetry(() => loadClusterTellings({ includeStaged: true, clusterIds: subjectIds }), {
+    withRetry(() => loadClusterTellings({ includeStaged: true, areaCapable: true, clusterIds: subjectIds }), {
       label: 'drive.clusterCorpusByIds',
     }),
   ])

@@ -19,7 +19,7 @@
 import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { narrations, poiClusters, pois } from '@skipper/db/schema'
-import { clusterTrigger } from '@skipper/engine'
+import { clusterTrigger, convexHull, exceedsPointTrigger, type LngLat } from '@skipper/engine'
 import { isNarratableStoryPoi } from '@skipper/shared'
 
 /** A fused telling resolved to something triggerable: the clip, plus the geometry derived from the
@@ -40,7 +40,16 @@ export interface ClusterTelling {
   /** From `clusterTrigger` — a cluster has no `kind`, so the radius vocabulary can't answer this and
    *  the floor has to be carried explicitly. */
   triggerRadiusM: number
+  /** AREA mode: the convex hull of the members, for a group too spread out to be a point. Undefined
+   *  for a compact group, which triggers on the point above exactly as before. */
+  area?: { ring: LngLat[]; marginM: number }
 }
+
+/** Slack outside a district's hull that still counts as arriving. The hull passes THROUGH the member
+ *  anchors rather than around the block they sit on, so a rider on the far kerb is a few tens of metres
+ *  "outside" a district they are plainly in. Sized for that plus consumer GPS error between tall
+ *  buildings — which is exactly where districts are. */
+const AREA_MARGIN_M = 60
 
 /** The variety bucket every fused telling shares. NOT null: `drive-select` treats two nulls as
  *  DIFFERENT (asserting sameness on absent data was the original variety bug), and two "here is a
@@ -50,27 +59,29 @@ export interface ClusterTelling {
 export const CLUSTER_VARIETY_KEY = 'cluster'
 
 /**
- * A poi is SUPERSEDED when its cluster already has a fused telling this caller can see — spec §4.2,
- * founder-settled: a clustered member is not an active POI in either mode once the fused clip exists.
- * The fused clip is the only telling for that place; keeping the members would leave a rider in
- * downtown Reno with 46 competing pins plus a fused one.
+ * A poi is SUPERSEDED when the fused telling that speaks for it is one we are ACTUALLY SERVING to
+ * this caller — spec §4.2, founder-settled: a clustered member is not an active POI once the fused
+ * clip exists. The fused clip is the only telling for that place; keeping the members would leave a
+ * rider in downtown Reno with 46 competing pins plus a fused one.
  *
- * ⚠ Keyed on "its cluster HAS a visible fused telling", NEVER on `cluster_id IS NOT NULL`. Most of the
- * grouped corpus has no fused clip and never will until it is enriched — 30 Yosemite clusters have
- * zero enriched members, and the UNR campus is deferred by the geometry gate. Suppressing on
- * membership alone would delete those places from roam and from drives with NOTHING to replace them.
- * Self-gating is also what makes the retirement safe to ship BEFORE a release: with every fused clip
- * staged, this predicate suppresses nothing.
+ * ⚠ Takes the ids of the tellings actually being served, NOT a predicate that re-derives them. That
+ * is the difference between an invariant and a coincidence: the served set already accounts for the
+ * release gate AND the client's area capability, so a caller who is being withheld a district cannot
+ * also lose that district's members. The earlier version asked "does a visible fused telling EXIST",
+ * which would have silently emptied downtown Reno for every area-unaware client.
  *
- * `includeStaged` mirrors the caller's own release filter, so an admin previewing staged content sees
- * what RELEASE would look like rather than both layers at once.
+ * An empty list suppresses nothing, which is the correct no-op.
  */
-export function supersededByFusedTelling(includeStaged: boolean) {
-  return sql`exists (
-    select 1 from ${narrations} n2
-    where n2.cluster_id = ${pois.clusterId}
-      ${includeStaged ? sql`` : sql`and n2.released_at is not null`}
-  )`
+export function notSupersededByServedCluster(servedClusterIds: readonly string[]) {
+  if (servedClusterIds.length === 0) return undefined // nothing served ⇒ nothing suppressed
+  const ids = sql.join(servedClusterIds.map((id) => sql`${id}::uuid`), sql`, `)
+  // ⚠ RETURNS THE *KEEP* CONDITION, and the NULL handling is the whole reason.
+  // `not(inArray(pois.clusterId, ids))` looks equivalent and is catastrophically wrong: for the ~1300
+  // POIs with a NULL cluster_id, `NULL IN (…)` is NULL, so `NOT (…)` is NULL — which is not TRUE, so
+  // Postgres drops the row. Measured when I wrote it that way: /roam near Tahoe City fell from 46 pins
+  // to 4, i.e. it deleted every UNCLUSTERED place in the corpus. The previous `NOT EXISTS (…)` form
+  // was NULL-safe by accident; this one is NULL-safe on purpose.
+  return sql`(${pois.clusterId} is null or ${pois.clusterId} not in (${ids}))`
 }
 
 /** Members of the given clusters, filtered to the ones a telling may be written over. Mirrors the
@@ -129,6 +140,15 @@ async function tellableMembersByCluster(clusterIds: string[]): Promise<Map<strin
  */
 export async function loadClusterTellings(opts: {
   includeStaged: boolean
+  /** Whether THIS caller's client understands area triggers.
+   *
+   *  ⚠ A false here DROPS spread-out groups entirely rather than sending them as a fat point, and that
+   *  is the whole reason the flag exists. An area-unaware client would fire a ~900 m circle: it hears
+   *  the district a kilometre out on the approach, the recede gate then retires it, and a long cooldown
+   *  locks it — so the rider hears about downtown everywhere EXCEPT downtown. Silence is the better
+   *  failure, and it is the same choice the read paths already made when a fused telling had no
+   *  consumer. */
+  areaCapable: boolean
   /** Restrict to specific clusters (the frozen-drive replay path, whose selection items name their
    *  subject). Omit for "every fused telling". An EMPTY array means "none" and short-circuits — it
    *  must never be read as "no filter", which would serve the whole corpus into one drive. */
@@ -160,9 +180,20 @@ export async function loadClusterTellings(opts: {
   const members = await tellableMembersByCluster(rows.map((r) => r.clusterId))
   const out: ClusterTelling[] = []
   for (const r of rows) {
-    const trigger = clusterTrigger(members.get(r.clusterId) ?? [])
+    const pts = members.get(r.clusterId) ?? []
+    const trigger = clusterTrigger(pts)
     if (!trigger) continue // nothing tellable left — drop it rather than fire it somewhere arbitrary
+    // A group too spread out for a point gets an AREA instead of a fatter circle. `exceedsPointTrigger`
+    // is the same predicate the generation gate asks, so what we SERVE and what we agreed to GENERATE
+    // can never disagree about which mode a group is in.
+    const needsArea = exceedsPointTrigger(trigger)
+    if (needsArea && !opts.areaCapable) continue // see the `areaCapable` note — never degrade to a fat point
+    const area = needsArea
+      ? { ring: convexHull(pts.map((p): LngLat => [p.lng, p.lat])), marginM: AREA_MARGIN_M }
+      : undefined
+    if (needsArea && (!area || area.ring.length < 3)) continue // collinear members: no honest polygon
     out.push({
+      ...(area ? { area } : {}),
       narrationId: r.narrationId,
       clusterId: r.clusterId,
       form: r.form,

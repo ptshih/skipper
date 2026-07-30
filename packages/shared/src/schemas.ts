@@ -105,6 +105,14 @@ export const signedStopClip = signedClip.extend({ seq: z.number().int() })
 /* -------------------------------------------------------------------------- */
 
 /** GET /roam — one free-roam encounter pin: a place + its presigned roam clip. */
+/** A convex ring in [lng, lat] plus its arrival slack — the wire form of @skipper/engine's `AreaRef`.
+ *  Measured on the real corpus, a district's hull is 6–9 vertices, so this stays small. */
+export const areaRing = z.object({
+  ring: z.array(z.tuple([z.number(), z.number()])).min(3),
+  marginM: z.number().int().nonnegative(),
+})
+export type AreaRing = z.infer<typeof areaRing>
+
 export const roamPin = z.object({
   poiId: z.uuid(),
   name: z.string(),
@@ -115,6 +123,17 @@ export const roamPin = z.object({
    *  places (a peak's summit, a lake's open water) need a wider trigger floor than a
    *  building. Optional for wire-compat; the server always sends it. */
   radiusM: z.number().int().optional(),
+  /** AREA pins: the ring a rider must be INSIDE for this to fire, as [lng, lat] vertices, plus the
+   *  metres of slack outside it that still count. Present only for a place you are IN rather than
+   *  NEAR — a district. See @skipper/engine `area.ts`.
+   *
+   *  ⚠ ADDITIVE, and the point fallback above is NOT decoration. Zod strips unknown keys, so a client
+   *  that predates this sees only lat/lng + radiusM and fires on proximity. That degradation is
+   *  deliberate but it is NOT good — a district's enclosing radius is ~900 m, which fires a kilometre
+   *  early and then the recede gate retires it, so an area-unaware client hears the district on the
+   *  approach and silence inside it. The server must therefore WITHHOLD area pins from clients that
+   *  did not ask for them (`caps`), never rely on the fallback being acceptable. */
+  area: areaRing.optional(),
   url: z.url(),
   /** MIME type derived server-side from the R2 key (see signedClip.contentType). */
   contentType: z.string(),

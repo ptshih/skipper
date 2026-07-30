@@ -452,10 +452,30 @@ has adoption. `clusterGenerationBlock` already refuses to generate them, so noth
   twice over — correct for nesting, and the better telling (the tight historic core over the whole
   capital).
 
-**Still to build before this can ship:** the optional `area` field on the wire, the hull in
-`apps/api/src/clusters.ts`, `buildDrive`'s second admission rule (an area has no single point to snap
-to a route), the mobile client's engine wiring and map rendering, and a capability parameter so old
-clients can be withheld from. ⚠ Also unresolved: nothing bounds a clip that OUTLIVES its place — a
+✅ **The SERVER half is built too (2026-07-30).** Optional `area` on `roamPin` (a ring + margin), the
+hull computed in `apps/api/src/clusters.ts`, and a **capability parameter**: `GET /roam?caps=area`.
+`caps` is a raw query param rather than a Zod DTO, so it costs nothing and needs no old-client change,
+and its ABSENCE means "old client" — which WITHHOLDS area tellings rather than degrading them to a fat
+point. Silence is the better failure, and it is the same call the read paths already made when a fused
+telling had no consumer.
+
+⚠ **Suppression now takes the SERVED cluster ids, not a predicate that re-derives them.** That is the
+difference between an invariant and a coincidence: a caller being withheld a district must not also
+lose that district's members. The earlier form asked "does a visible fused telling EXIST", which would
+have emptied downtown Reno for every area-unaware client.
+
+⚠ **And it must return the KEEP condition, not a suppression predicate to negate.** Writing it as
+`not(inArray(pois.clusterId, ids))` looks equivalent and is catastrophically wrong: `NULL IN (…)` is
+NULL, so `NOT (…)` is NULL, so Postgres drops every row — measured, `/roam` fell from 46 pins to 4,
+deleting every UNCLUSTERED place in the corpus. The old `NOT EXISTS` form was NULL-safe by accident;
+the current one is NULL-safe on purpose.
+
+⚠ The DRIVE path passes `areaCapable: false` for now, deliberately: a drive's selection is FROZEN at
+create, so admitting an area stop would bake it into a saved drive permanently — including for a rider
+who never upgrades.
+
+**Still to build:** `buildDrive`'s second admission rule (an area has no single point to snap to a
+route), and the mobile client's engine wiring + map rendering. ⚠ Also unresolved: nothing bounds a clip that OUTLIVES its place — a
 120 s district clip on a route that is inside for 40 s ends ~2 km past downtown.
 
 **⚠ Two of the five districts never needed any of this.** Virginia City (265 m enclosing radius) and

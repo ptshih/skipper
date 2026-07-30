@@ -25,7 +25,7 @@ import { narrations, pois, regions } from '@skipper/db/schema'
 import { haversineMeters, triggerRadiusForKind } from '@skipper/engine'
 import type { RoamPin } from '@skipper/shared'
 import { auth, SITE_ORIGIN } from './auth'
-import { loadClusterTellings, supersededByFusedTelling } from './clusters'
+import { loadClusterTellings, notSupersededByServedCluster } from './clusters'
 import { driveRoutes } from './drives'
 import { isAdmin, withSession, type ApiEnv } from './entitlements'
 import { rateLimit } from './rate-limit'
@@ -160,6 +160,20 @@ app.get('/roam', async (c) => {
   // it and hears staged content in-app. (region-release-gate)
   const canPreview = isAdmin(c.get('session'))
 
+  // ⚠ ORDER MATTERS: the fused tellings load FIRST, because which ones we are actually serving is what
+  // decides which member POIs to suppress. Deriving that the other way round is how an area-unaware
+  // client ends up with a hole where downtown used to be.
+  //
+  // `caps` is a raw query param, not a Zod DTO — so this costs nothing and needs no old-client change.
+  // Absence means "old client", which is the safe reading: it withholds area pins rather than
+  // degrading them to a fat point (see loadClusterTellings).
+  const areaCapable = (c.req.query('caps') ?? '').split(',').includes('area')
+  const clusterRows = await withRetry(
+    () => loadClusterTellings({ includeStaged: canPreview, areaCapable }),
+    { label: 'roam.clusterPins' },
+  )
+  const servedClusterIds = clusterRows.map((r) => r.clusterId)
+
   const rows = await withRetry(
     () =>
       db
@@ -198,18 +212,11 @@ app.get('/roam', async (c) => {
             // …and a place whose CLUSTER already speaks for it is no longer its own pin (spec §4.2).
             // Self-gating: with every fused clip staged this matches nothing, so shipping it ahead of
             // a release is a no-op rather than a coverage hole.
-            not(supersededByFusedTelling(canPreview)),
+            notSupersededByServedCluster(servedClusterIds),
           ),
         ),
     { label: 'roam.pins' },
   )
-
-  // The OTHER subject kind: a fused CLUSTER telling, whose geometry is derived from its members
-  // rather than stored (phase 4, ./clusters). Zero such narrations exist until fused generation runs,
-  // so this returns [] and the pin list is bit-identical to the poi-only one.
-  const clusterRows = await withRetry(() => loadClusterTellings({ includeStaged: canPreview }), {
-    label: 'roam.clusterPins',
-  })
 
   // audioUrl/audioDurationMs are NOT NULL at the DB boundary (a narration goes live only once it has
   // audio — schema.ts), so every joined row is already playable; the only trim left is the exact-radius
@@ -251,6 +258,9 @@ app.get('/roam', async (c) => {
           lng: r.lng,
           durationMs: r.durationMs,
           radiusM: r.triggerRadiusM,
+          // Present only for a group too spread out to be a point. An area-unaware client never gets
+          // here — those tellings are withheld upstream rather than degraded.
+          ...(r.area ? { area: r.area } : {}),
           url: presignGet(r.key),
           contentType: contentTypeForKey(r.key),
           attribution: (r.attribution ?? undefined) as RoamPin['attribution'],
