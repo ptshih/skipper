@@ -18,9 +18,10 @@
 //   --region <slug>         scope to a region's bbox via its members (default: lake-tahoe)
 //   --limit N               only the first N generatable clusters, WIDEST first (cost control)
 //   --query <substr>        narrow to cluster titles containing <substr>
+//   --include-ids a,b,c     regenerate EXACTLY these cluster ids (skips the region scope + --limit)
 //   --max-cost <usd>        stop launching work once spend crosses this
 
-import { and, between, eq, isNotNull, sql } from 'drizzle-orm'
+import { and, between, eq, inArray, isNotNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { narrations, poiClusters, pois } from '@skipper/db/schema'
 import type { FactSheetEntry } from '@skipper/db/schema'
@@ -102,7 +103,7 @@ interface GatedFused {
 }
 
 async function main(): Promise<void> {
-  const flags = parseFlags(process.argv.slice(2), { valueFlags: ['region', 'limit', 'query', 'max-cost'] })
+  const flags = parseFlags(process.argv.slice(2), { valueFlags: ['region', 'limit', 'query', 'max-cost', 'include-ids'] })
   const apply = flags.has('apply')
   const maxCostUsd = maxCostFlag(flags)
   announce({ tool: 'generate-cluster-narrations', blast: apply ? ['SPENDS $', 'MUTATES DB'] : ['SPENDS $'], apply })
@@ -112,6 +113,9 @@ async function main(): Promise<void> {
   const bbox = requireRegionBbox(region)
   const limit = Number(flags.value('limit') ?? 1)
   const query = flags.value('query')?.toLowerCase()
+  // An explicit id list is a TARGETED re-run (regenerate exactly these), so it bypasses the region
+  // scope and the limit — the caller has already decided the set.
+  const includeIds = (flags.value('include-ids') ?? '').split(',').map((x) => x.trim()).filter(Boolean)
 
   // A cluster is in the region the same geometry-first way everything else is — by where its members
   // are (poi_clusters stores no coordinates, deliberately).
@@ -134,7 +138,11 @@ async function main(): Promise<void> {
       subjectPoiId: poiClusters.subjectPoiId,
     })
     .from(poiClusters)
-    .where(and(eq(poiClusters.treatment, 'cluster'), sql`${poiClusters.id} in ${inRegion}`))
+    .where(
+      includeIds.length > 0
+        ? inArray(poiClusters.id, includeIds)
+        : and(eq(poiClusters.treatment, 'cluster'), sql`${poiClusters.id} in ${inRegion}`),
+    )
 
   const membersByCluster = await loadClusterMembers(clusters.map((c) => c.id))
   const queue: Fused[] = []
@@ -178,9 +186,9 @@ async function main(): Promise<void> {
   // Widest first — the density stress case is the one worth reading, and the one worth spending on
   // first when the run is capped.
   queue.sort((a, b) => b.tellable.length - a.tellable.length)
-  const picked = queue.slice(0, Math.max(0, limit))
+  const picked = includeIds.length > 0 ? queue : queue.slice(0, Math.max(0, limit))
   if (picked.length === 0) return console.log('\nNothing to narrate.')
-  console.log(`\nNarrating + gating ${picked.length} of them (--limit ${limit}).\n`)
+  console.log(`\nNarrating + gating ${picked.length} of them (${includeIds.length > 0 ? 'explicit ids' : `--limit ${limit}`}).\n`)
 
   const persona = personaFromKey('skipper')
 

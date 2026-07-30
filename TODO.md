@@ -180,8 +180,8 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
             non-empty on all 31, `facts_hash` stamped on all 31. Member clips untouched.
             ✅ **Grounding held at scale — 0 failures across 62 scores**, confirming the design's central
             bet (a fused well through `mergedFeatures` needs no gate change) on 31 clips, not an argument.
-      - [ ] ⚠ **TAIL COLLAPSE IS FUSED-SPECIFIC — 11 of 31 (35%) vs ~2% on solo clips, and I called
-            this wrong at n=1.** After the first clip collapsed I checked history (7 of 365 solo),
+      - [x] **TAIL COLLAPSE — diagnosed, fixed, verified. Was 11 of 31 (35%) vs ~2% on solo, now 1 of
+            31. ⚠ I called this wrong at n=1 first.** After the first clip collapsed I checked history (7 of 365 solo),
             concluded "pre-existing, don't tune", and proceeded. At n=31 that reverses: a 17× rate, and
             severity 4.2-14.4 dB vs solo's 3.3-4.6. Worst is `1960 Olympic Ski Stadium Site` at 14.4 dB
             — its last line should be near-inaudible. ⚠ The fix belongs in the NARRATION prompt (a fused
@@ -190,9 +190,12 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
             anti-fade clause is already maximal and ear-locked.
             ✅ **Closer rule shipped** (`mergedFeatureLines`, scoped to `named.length >= 2` so solo clips
             can't inherit it): "END ON ONE OF THEM — a full sentence about a single place… not a tally".
-            Probed on the WORST clip: **14.4 dB → 1.8 dB, clean after one retake.** ⚠ n=1 — the same
-            sample size that already misled this item once. The honest check is regenerating the 11
-            flagged clips (~$6) and re-reading the rate. Founder ear-test on the before/after first.
+            Probed on the WORST clip: **14.4 dB → 1.8 dB, clean after one retake.** Then VERIFIED at
+            n=10 on exactly the failing population ($4.44): 5 clean outright, 4 clean after one retake,
+            1 still flagged. **Corpus-wide 11 → 1 flagged, 35% → 3.2%** — the single-place baseline.
+            ⚠ Survivor is `Historic Esmeralda Avenue, Minden` (4.6 dB, "structural" per tail.ts — a
+            fresh take re-collapsed identically, so it stopped retrying). One clip at baseline is not a
+            pattern; worth an ear, not another retake.
       - [ ] **Diversity advisory failed 16 of 31 (52%).** The single-clip retake that took Stateline
             0.00 → 1.00 was not representative; naming five places pulls toward enumeration, the
             NAME-DENSITY tension §3.3 predicted. Never withheld a clip, but half a run is a signal.

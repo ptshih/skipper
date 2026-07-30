@@ -352,7 +352,8 @@ around it.
 
 ## 5b. What the 31-clip run surfaced
 
-**1. ⚠ TAIL COLLAPSE IS FUSED-SPECIFIC, and an earlier call in this spec was wrong.**
+**1. ⚠ TAIL COLLAPSE WAS FUSED-SPECIFIC — diagnosed, fixed, and verified. An earlier call in this
+spec was wrong.**
 
 After the FIRST fused clip collapsed, I checked the historical rate on solo poi clips — 6 of 335 and
 1 of 30, about **2%** — and concluded it was pre-existing, not fused-specific, and not worth re-tuning
@@ -387,9 +388,22 @@ clip in the run (`1960 Olympic Ski Stadium Site`):
 | before | **14.4 dB** | all 3 takes collapsed, shipped flagged |
 | after | **1.8 dB** | clean after ONE retake |
 
-⚠ **That is n=1, which is exactly the sample size that misled this section once already.** The honest
-verification is regenerating the 11 flagged clips (~$6) and re-reading the rate — not declaring it
-fixed. The fix costs nothing to keep either way: worst case it is inert.
+✅ **VERIFIED at n=10, on exactly the population that failed** ($4.44). Regenerating the 10 remaining
+flagged clips:
+
+| outcome | clips |
+| --- | --- |
+| no collapse at all | **5** |
+| collapsed once, then CLEAN after a single retake (3.5–3.9 dB) | **4** |
+| still flagged | **1** (`Historic Esmeralda Avenue, Minden`, 4.6 dB, "structural") |
+
+**Corpus-wide the flag count went 11 → 1: 35% → 3.2%**, which is the ~2% single-place baseline. The
+theory held: the defect was the closing SHAPE, not the delivery, and it was fixable in the fact sheet
+without touching the ear-locked TTS prompt.
+
+⚠ The survivor is worth its own look rather than another retake — `tail.ts` calls it a *structural*
+collapse (a fresh take re-collapsed at the same level, so it stopped retrying). At 4.6 dB it is the
+mildest failure in the original set, and one clip at the baseline rate is not a pattern.
 
 **2. Diversity failed 16 of 31 (52%), advisory.** The single-clip retake that took Stateline from 0.00
 to 1.00 was not representative. Naming five places in one telling pulls toward enumeration, which is
