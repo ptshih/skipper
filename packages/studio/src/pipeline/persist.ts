@@ -5,11 +5,12 @@
 // the V1→V2 migration; roam writes its 1:1 narration directly
 // (generate-narrations.ts upserts `narrations`). What survives here is the SHARED facts layer every
 // writer reads: the `pois` upsert (deduped on the Wikidata QID `pois.qid`; stamps facts_hash/
-// facts_fetched_at) + the grounding fingerprint helpers (storyFactsHash / hashFacts) that key the
-// staleness contract, used by the corpus tools (discover-pois / enrich-pois / refetch-poi)
-// and the roam studio pipeline.
+// facts_fetched_at). The grounding fingerprint helpers (storyFactsHash / hashFacts) that key the
+// staleness contract MOVED to `@skipper/db/hash` — a fused CLUSTER telling's fingerprint is an
+// aggregate the admin console has to compute too, and admin cannot import studio. They are re-exported
+// here so the corpus tools (discover-pois / enrich-pois / refetch-poi / generate-narrations) keep one
+// import path.
 
-import { createHash } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { pois } from '@skipper/db/schema'
@@ -17,65 +18,7 @@ import { withRetry } from './http'
 import type { AttributionSnapshot, PoiFacts, FactSheetEntry } from '@skipper/db/schema'
 import type { PoiSource } from '@skipper/shared'
 
-/**
- * Deterministic JSON serialization with object keys sorted recursively — so a hash taken over a
- * facts object is INVARIANT to key ORDER. This is load-bearing because `pois.facts` is `jsonb`:
- * Postgres does NOT preserve object key order, so the SAME logical facts serialize one way
- * in-memory (a writer's freshly-built object, stamped onto `pois.facts_hash`) and a DIFFERENT way
- * read back from the DB (what drives/roam stamp onto `narrations.facts_hash` — e.g. `{text,source,…}`
- * comes back as `{url,text,…}`). Plain `JSON.stringify` would make those two hashes diverge, so a
- * read-back-hashed clip would read as perpetually stale against the staleness contract
- * (`narrations.facts_hash IS DISTINCT FROM pois.facts_hash`). Sorting keys normalizes both sides to one
- * canonical form. ARRAY order is PRESERVED (significant — the well's spans are in reading order);
- * only object keys are reordered. Mirrors `JSON.stringify`'s treatment of `undefined` (object
- * entries dropped, array holes → null) so an omitted-vs-undefined key never shifts the hash.
- */
-function stableStringify(value: unknown): string {
-  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null'
-  if (Array.isArray(value)) {
-    return `[${value.map((v) => (v === undefined ? 'null' : stableStringify(v))).join(',')}]`
-  }
-  const obj = value as Record<string, unknown>
-  const parts: string[] = []
-  for (const k of Object.keys(obj).sort()) {
-    const v = obj[k]
-    if (v === undefined) continue // JSON.stringify omits undefined-valued object entries
-    parts.push(`${JSON.stringify(k)}:${stableStringify(v)}`)
-  }
-  return `{${parts.join(',')}}`
-}
-
-/** Order-invariant hash of a poi's facts — the change-detector for narration staleness. Null when
- *  no facts. Canonicalizes via `stableStringify` so the hash survives the `pois.facts` jsonb
- *  round-trip: a writer's in-memory `pois.facts_hash` equals a reader's read-back `narrations.facts_hash`
- *  for the same content (the staleness contract compares those two STORED columns by inequality). */
-export function hashFacts(facts: PoiFacts | null): string | null {
-  if (!facts) return null
-  return createHash('sha256').update(stableStringify(facts)).digest('hex')
-}
-
-/**
- * The GROUNDING fingerprint for a story poi — the hash a narration's `facts_hash` is compared against for
- * staleness. THE SWITCH (corpus-enrichment-spec §3/§8), now reading the typed `pois.fact_sheet` column:
- *   - ENRICHED (a non-empty fact sheet) → hash the SHEET ONLY. Narration grounds on it, so a
- *     re-`discover` that rewrites `extract` but keeps the SAME sheet must NOT stale narrations; the
- *     `enriched_at` stamp can't churn it either (it isn't in the hash). The true "did the narration
- *     input change" detector. Byte-identical to the pre-column well-hash, so existing rows stay valid.
- *   - UN-ENRICHED (no sheet) → hash the whole facts object (`hashFacts`), so existing rows + the
- *     extract-head fallback keep their current hash exactly. Both WRITERS (sweep/enrich) and READERS
- *     (drives/roam) call THIS, canonicalized (`stableStringify`), so a clip's stamped hash can never
- *     diverge from `pois.facts_hash` across the in-memory ↔ jsonb-read-back boundary.
- */
-export function storyFactsHash(
-  facts: PoiFacts | null,
-  factSheet: FactSheetEntry[] | null | undefined,
-): string | null {
-  if (factSheet && factSheet.length > 0) {
-    return createHash('sha256').update(stableStringify(factSheet)).digest('hex')
-  }
-  if (!facts) return null
-  return hashFacts(facts)
-}
+export { hashFacts, storyFactsHash } from '@skipper/db/hash'
 
 /** The distinct sourced credits in a fact sheet → the frozen `narrations.attribution` array (one entry per
  *  (source, sourceId), CC BY-SA / CC0 / CC BY preserved). `retrievedAt` is the sheet's enrich stamp. */
@@ -102,7 +45,7 @@ export function factSheetToAttribution(sheet: FactSheetEntry[], retrievedAt: str
  *  LONGER here — it lives in the typed `pois.fact_sheet` column (+ `enriched_at`); the Wikidata `qid`
  *  is NO LONGER here either — it's the first-class `pois.qid` column (the canonical identity), passed
  *  separately to `upsertPoi`. So this bag is now just the raw article + provenance. Key ORDER no longer
- *  affects the hash (`stableStringify` canonicalizes the jsonb read-back). */
+ *  affects the hash (`@skipper/db/hash`'s `stableStringify` canonicalizes the jsonb read-back). */
 export function buildStoryFacts(input: {
   extract: string
   title: string

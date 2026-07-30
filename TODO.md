@@ -113,29 +113,37 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
       stops — zero false negatives. (f) The review gate was flagging 25 of 55 groups at <0.85 confidence,
       which is noise not a queue; it now flags the shape that actually flip-flopped across runs (≤2
       members AND <0.85).
-- [ ] **4. Fused generation — SPEC IS BUILD-READY, build NOT started.**
-      `docs/specs/fused-cluster-generation-spec.md`. ~67 clips, ~$10-15, and the FIRST irreversible step
-      (audio in R2). ⚠ Two halves must ship together: generation, AND lifting the `pois` inner-join on
-      every read path — without the second, phase 4 buys audio nobody can hear. Generate from
-      `highlights`, never raw membership (Stateline is 9 members but 5 nameable). Grounding needs NO gate
-      change: `buildGroundingWell` already takes `mergedFeatures`.
+- [ ] **4. Fused generation — IN BUILD. Step 1 of 7 DONE; the build order is §9 of the spec.**
+      `docs/specs/fused-cluster-generation-spec.md`. Steps 1-3 spend nothing; **step 4 is the commitment
+      point** (audio in R2) and needs an explicit founder go.
+      ⚠ Two halves must ship together: generation, AND lifting the `pois` inner-join on every read path —
+      without the second, phase 4 buys audio nobody can hear. Generate from `highlights`, never raw
+      membership (Stateline is 9 members but 5 nameable). Grounding needs NO gate change:
+      `buildGroundingWell` already takes `mergedFeatures`.
       **§4.2 SETTLED (founder 2026-07-30): a clustered member is NOT an active POI in either mode** —
       not a roam pin, not a drive candidate. Keeping them would leave a rider in downtown Reno with 46
-      competing pins plus a fused one. 421 tellings → 274; 214 member clips retire (51% of the corpus),
-      but only AFTER a listen — retiring good audio before hearing its replacement has no fallback.
-      ✅ Grouping RE-APPLIED 2026-07-30 on the fixed merge: **64 clusters** (60 cluster / 4 district),
-      295 members, all carrying `highlights`; Carson City fused from two districts into one of 33. The
-      recalibrated review gate cut the human queue from 25 groups to 15 across both regions. Four open
-      ✅ All four §7 questions RESEARCHED 2026-07-30 — see the spec. Headlines: reuse `REGISTER_LENGTH`
-      rather than adding a treatment axis (180 s ceiling corroborated by museum practice, Autio's 20k
-      stops, and AAA's finding that pure LISTENING is the low-workload baseline — duration isn't the
-      risk, NAME DENSITY is); a sorted hash-of-hashes for staleness; the admin surface belongs on the
-      existing POI sheet. ⚠ **The measurement split the problem: a DISTRICT cannot be a point trigger**
-      (46 members over ~2 km leave a ~1 km worst-member distance under every candidate position), so it
-      needs an AREA trigger — a new mode in @skipper/engine. ✅ **DECIDED (founder): phase 4 is CLUSTER-ONLY,
-      60 of 64 groups.** Districts keep today's behaviour until they get their own trigger design.
-      **Build order is §9 of the spec** — staleness hash, position, read paths, generate, LISTEN, then
-      retire members. Steps 1-3 spend nothing; step 4 is the commitment point.
+      competing pins plus a fused one. Members retire only AFTER a listen — retiring good audio before
+      hearing its replacement has no fallback.
+      ✅ **DECIDED (founder): phase 4 is CLUSTER-ONLY.** A DISTRICT cannot be a point trigger (46 members
+      over ~2 km leave a ~1 km worst-member distance under every candidate position), so it needs an AREA
+      trigger — a new mode in @skipper/engine. Districts keep today's behaviour.
+      ⚠ **SCOPE AND COST ARE HALF what this item used to claim** (measured against the live corpus
+      2026-07-30, spec §4.2): of the 60 clusters, only **30 are generatable** — the other 30 are the
+      whole Yosemite side and have ZERO enriched members, and a story telling requires a fact sheet. So
+      it is **30 fused clips (~$5-8) retiring 107 member clips**, 421 tellings → 344. Generating the
+      Yosemite half first needs a separate founder-gated `enrich-pois` run.
+      - [x] **Step 1 — staleness hash + the member-set resolver. BUILT 2026-07-30, no migration.**
+            `@skipper/db/hash` (`clusterFactsHash`; the poi hashers moved there so the admin server can
+            reach them — it cannot import studio), `@skipper/shared`'s `isNarratableStoryPoi`,
+            `pipeline/cluster.ts`, `packages/db/test/hash.test.ts`. The hash covers the TELLABLE members
+            as `poiId:factsHash` pairs PLUS `title`/`highlights`/`dropped` — see spec §6 for the four
+            corrections to the originally-proposed formula, each of which was a paid-regeneration or a
+            silent-immortality bug. Also guarded the real hazard all three review passes found: a ~$1
+            `classify-treatments --apply` re-baseline cascade-DELETES every fused telling and orphans
+            its audio, so it now refuses without `--force-regroup`.
+      - [ ] **Steps 2-7** — position+radius, read paths, generate, LISTEN, retire, admin. See spec §9;
+            each carries its own ⚠ (notably: `isNull(pois.clusterId)` belongs in step 6, NOT earlier, or
+            the 30 un-generatable clusters lose their member clips with nothing to replace them).
 - [ ] **5. `buildDrive` reads anchors; delete pick-one.** Orphans ~169 satellite clips —
       `sweep-orphans.ts` already handles that.
 

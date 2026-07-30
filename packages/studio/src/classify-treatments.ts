@@ -34,11 +34,13 @@
 //   --region <slug>   scope to a region's bbox (default: lake-tahoe)
 //   --radius <m>      grouping radius around each anchor (default 600)
 //   --clear           on --apply, only CLEAR the grouping in scope (the undo); makes no model calls
+//   --force-regroup   re-baseline even when FUSED tellings exist for the clusters in scope. Without it
+//                     the run REFUSES: clearing cascades those narrations away and orphans paid audio.
 
 import type Anthropic from '@anthropic-ai/sdk'
 import { and, inArray, isNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
-import { poiClusters, pois } from '@skipper/db/schema'
+import { narrations, poiClusters, pois } from '@skipper/db/schema'
 import { announce, parseFlags } from './pipeline/ops'
 import { mapLimit } from './pipeline/concurrency'
 import { withRetry } from './pipeline/http'
@@ -164,6 +166,7 @@ async function main(): Promise<void> {
   const flags = parseFlags(process.argv.slice(2), { valueFlags: ['region', 'radius'] })
   const apply = flags.has('apply')
   const clearOnly = flags.has('clear')
+  const forceRegroup = flags.has('force-regroup')
   const radiusM = Number(flags.value('radius') ?? DEFAULT_RADIUS_M)
   if (!Number.isFinite(radiusM) || radiusM <= 0) {
     console.error('--radius must be a positive number of metres.')
@@ -195,13 +198,51 @@ async function main(): Promise<void> {
       { label: 'cluster.clear' },
     )
 
+  /** ⚠ THE MONEY GUARD. `clearGrouping` deletes `poi_clusters` rows, and `narrations.cluster_id` is
+   *  ON DELETE CASCADE — so once phase 4 has synthesized fused tellings, a re-classification silently
+   *  destroys every one of them and orphans its paid R2 audio, before any staleness check could fire.
+   *  A ~$1 classify run must not be able to erase $10+ of audio as a side effect. Deleting is still the
+   *  RIGHT thing when the grouping genuinely changed — it just has to be asked for. */
+  const fusedTellingsInScope = async (): Promise<number> => {
+    const [row] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(narrations)
+      .where(
+        sql`${narrations.clusterId} in (
+          select distinct ${pois.clusterId} from ${pois}
+          where ${pois.clusterId} is not null and ${and(...inBbox)})`,
+      )
+    return Number(row?.n ?? 0)
+  }
+
+  /** Reports the fused audio a re-baseline would take with it, and refuses unless it was asked for.
+   *  Returns true when the caller may proceed. */
+  const clearIsSafe = async (): Promise<boolean> => {
+    const fused = await fusedTellingsInScope()
+    if (fused === 0) return true
+    console.log(
+      `\n⚠ ${fused} FUSED cluster telling(s) in scope. Re-baselining the grouping DELETES them ` +
+        `(narrations.cluster_id is ON DELETE CASCADE) and orphans their R2 audio.`,
+    )
+    if (forceRegroup) {
+      console.log('  --force-regroup given — proceeding. Run sweep-orphans afterwards to reap the audio.')
+      return true
+    }
+    console.log('  Refusing. Re-run with --force-regroup if the grouping really should be rebuilt.')
+    return false
+  }
+
   if (clearOnly) {
     const [{ n } = { n: 0 }] = await db
       .select({ n: sql<number>`count(*)::int` })
       .from(pois)
       .where(and(...inBbox, sql`${pois.clusterId} is not null`))
     console.log(`\n${n} POI(s) currently carry a grouping.`)
-    if (!apply) return console.log('PREVIEW — no writes. Re-run with --apply --clear to clear them.')
+    if (!apply) {
+      await clearIsSafe()
+      return console.log('PREVIEW — no writes. Re-run with --apply --clear to clear them.')
+    }
+    if (!(await clearIsSafe())) return
     await clearGrouping()
     return console.log(`✓ grouping cleared for ${n} POI(s).`)
   }
@@ -317,7 +358,11 @@ async function main(): Promise<void> {
     `Writes: ${groupable.length} cluster row(s) covering ${memberCount} place(s); ${withSubject} have a real ` +
       `SUBJECT entity, ${groupable.length - withSubject} honestly have none. NO audio changes.`,
   )
-  if (!apply) return console.log('\nPREVIEW — no writes. Re-run with --apply to persist the grouping.')
+  if (!apply) {
+    await clearIsSafe() // surface the fused-audio cost in the PREVIEW, where it's still free to reconsider
+    return console.log('\nPREVIEW — no writes. Re-run with --apply to persist the grouping.')
+  }
+  if (!(await clearIsSafe())) return
 
   await clearGrouping() // re-baseline: a changed grouping must not leave stale membership behind
   let n = 0

@@ -42,3 +42,30 @@ export function classifyStoryEligibility(p: {
   if (p.extractChars < 1) return 'filtered-stub' // no article text → nothing for the enricher to quote
   return 'eligible'
 }
+
+/** Can this poi contribute to a STORY telling *right now*? The downstream half of the gate above:
+ *  `classifyStoryEligibility` answers "is it worth ENRICHING", this answers "has it been enriched and
+ *  is it still in the corpus". Structural (no DB row type) so the studio pipeline and the admin server
+ *  share one definition — a fused cluster telling names a SUBSET of its members, and the set it grounds
+ *  on has to be computed identically wherever it's asked about, or the clip's `facts_hash` describes a
+ *  different telling than the one that was synthesized.
+ *
+ *  ⚠ The `excludedReason` clause is the one place this is STRICTER than `generate-narrations`'s solo
+ *  queue, which doesn't check it. For a solo clip that's harmless — the read paths hide an excluded poi,
+ *  so the audio is merely unreachable. For a FUSED clip it is not: an excluded member that still reaches
+ *  the well gets NAMED ALOUD inside a telling for the places around it, and no read-path filter can
+ *  unsay it. */
+export function isNarratableStoryPoi(p: {
+  source: string
+  name: string
+  excludedReason: string | null
+  hasFacts: boolean
+  /** `pois.fact_sheet.length` — the paid enrich output. 0 / absent = un-enriched → scenic, no story. */
+  sheetLength: number
+}): boolean {
+  if (p.excludedReason != null) return false
+  if (p.source !== 'wikipedia') return false
+  if (!p.hasFacts) return false
+  if (p.sheetLength < 1) return false
+  return !STORY_TASTE_DENYLIST.test(p.name)
+}

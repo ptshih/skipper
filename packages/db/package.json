@@ -8,7 +8,8 @@
   "exports": {
     ".": "./src/client.ts",
     "./schema": "./src/schema.ts",
-    "./auth-schema": "./src/auth-schema.ts"
+    "./auth-schema": "./src/auth-schema.ts",
+    "./hash": "./src/hash.ts"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate",

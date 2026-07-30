@@ -1,14 +1,15 @@
 # Fused cluster generation — phase 4 of the legibility layer
 
-> **Status:** BUILD-READY spec — **2026-07-30**. Promoted from `docs/ideas/poi-legibility-layer.md` on
+> **Status:** IN BUILD — **2026-07-30**. §9 step 1 (the staleness hash + the member-set resolver) is
+> BUILT and green; steps 2–7 are not started. Promoted from `docs/ideas/poi-legibility-layer.md` on
 > founder intent ("let's prepare to do phase 4"). Phases 1–3 are BUILT and APPLIED, and the grouping was
 > re-applied on 2026-07-30 after the third district-merge fix: **64 clusters** (60 cluster / 4 district)
 > over 295 members, all 64 carrying `highlights` / `dropped`, 33 with a real `subject_poi_id`. The four
 > districts are Downtown Reno (46), Historic Carson City (33), Virginia City (15), Stateline's Casino
 > Row (9). ⚠ §7.5 is now CLEARED — Carson City fused from two districts into one.
-> **Nothing here is built.** This is the first step that SPENDS on audio and the first that a rider
-> hears. Read `poi-legibility-layer.md` §4–§5 first — it records why the shape is what it is, including
-> two designs that were tried and replaced.
+> **No audio exists yet.** Step 4 is the first step that SPENDS and the first a rider hears. Read
+> `poi-legibility-layer.md` §4–§5 first — it records why the shape is what it is, including two designs
+> that were tried and replaced.
 
 ## 1. What phase 4 is
 
@@ -40,16 +41,33 @@ the members it would NAME, after its `drop` list. Stateline drops 4 of 9, leavin
 So the telling is written over `poi_clusters.highlights`, with `dropped` members contributing **facts but
 never a mention**. Generating from raw membership produces a nine-name recital.
 
+⚠ **`highlights` are model-authored NAME STRINGS, not poi ids, and they do not reliably match
+`pois.name`** — measured over the 30 generatable clusters: 74 of 88 highlights match a member's name
+exactly, 14 are the model's paraphrase ("the Riverside" for `Riverside Hotel`). `dropped` matches
+19/19. So a highlight CANNOT be resolved to a member by string equality — do not build the well by
+looking each one up. The working shape is the other way round: ground on the tellable members
+(§3.2), and pass `highlights` to the prompt as the naming instruction it already is.
+
 ### 3.2 Grounding — the mechanism already exists
 
-`buildGroundingWell` already accepts `mergedFeatures: { name, facts }[]` and emits `"<name>: <fact>"`
-lines; it is live in `narrate.ts` and populated via `poi-overrides.ts`. A fused clip's well is the
+`buildGroundingWell` (in `eval/grounding.ts`, not `narrate.ts`) already accepts
+`mergedFeatures: { name, facts }[]` and emits `"<name>: <fact>"` lines. A fused clip's well is the
 members' fact sheets mapped into that shape — **no change to the gate**, which is the happiest finding
 in this design. The fail-closed grounding gate then applies unmodified.
 
-⚠ Ground on ALL members' sheets (including `dropped` ones — their facts are real, only their names are
-uninteresting), but permit only `highlights` to be NAMED. That asymmetry is new and the prompt must say
-it explicitly, or the model will name whatever it grounds on.
+⚠ Ground on ALL TELLABLE members' sheets (including `dropped` ones — their facts are real, only their
+names are uninteresting), but permit only `highlights` to be NAMED. That asymmetry is new and the prompt
+must say it explicitly, or the model will name whatever it grounds on.
+
+**"Tellable" is a defined set, and it is NOT `pois.cluster_id`.** `isNarratableStoryPoi`
+(`@skipper/shared`) is the one predicate: wikipedia-sourced, has facts, has a non-empty `fact_sheet`,
+not taste-denied, **and `excluded_reason IS NULL`**. The exclusion clause is stricter than the solo
+queue, deliberately: an excluded poi with a solo clip is merely unreachable behind a read-path filter,
+but an excluded member that reaches a fused well gets NAMED ALOUD inside the telling for its
+neighbours, and no filter can unsay that. Membership is assigned once at grouping time and never
+re-checked, so this is where it gets re-applied. Resolver: `pipeline/cluster.ts`
+(`loadClusterMembers` → `tellableMembers`) — the well, the attribution union, the trigger position, the
+`facts_hash` and the retirement list must all derive from that ONE array, never from a second query.
 
 ### 3.3 Length band — researched 2026-07-30
 
@@ -150,8 +168,22 @@ active would leave a stationary rider with 46 competing pins plus a fused one. S
 300 m / 15-minute suppression exists to paper over exactly this, and becomes redundant rather than a
 second differently-tuned mechanism.
 
-**Scale (re-measured after the 2026-07-30 re-apply):** 421 tellings → **~271** (207 solo + 64 fused).
-**~214 member clips retire — roughly half the corpus.**
+**Scale — RE-MEASURED against the live corpus 2026-07-30, and it is about HALF what this spec
+originally claimed.** The old figures counted every group and every member; the real scope is narrower
+on two independent axes.
+
+| | clusters | of those, generatable today | member clips they'd retire |
+| --- | --- | --- | --- |
+| CLUSTER — phase 4's scope | 60 | **30** | **107** |
+| DISTRICT — deferred (§4.1) | 4 | 4 | 103 |
+
+**Only 30 of the 60 clusters can be generated at all**, because the other 30 are the entire Yosemite
+side and have **zero enriched members** (85 of the 295 members carry no `fact_sheet`; all 85 are
+Yosemite). A story telling requires a sheet, so those clusters have nothing to ground on until a paid
+`enrich-pois --region yosemite` run — a separate founder-gated spend, not part of phase 4.
+
+So phase 4 as scoped is **30 fused clips replacing 107 member clips**: 421 tellings → **344**. Not
+"roughly half the corpus" — about a quarter of it.
 
 ⚠ **Sequence this so good audio is never retired before its replacement is heard.** Generate the fused
 clips and listen BEFORE retiring members; a fused Emerald Bay telling that is worse than the individual
@@ -160,38 +192,79 @@ R2 — run `sweep-orphans` only after the listen, not as part of the same pass.
 
 ## 5. Cost and blast radius
 
-~67 fused clips ≈ **$10–15** LLM + TTS. Cheap. What is NOT cheap is that this is the first irreversible
-step: fused audio in R2, and 214 member clips retired (§4.2).
+**30** fused clips ≈ **$5–8** LLM + TTS (halved with the scope, §4.2). Cheap. What is NOT cheap is that
+this is the first irreversible step: fused audio in R2, and 107 member clips retired.
 
 Sequence: `--apply` per region, preview first, and run `sweep-orphans` after — the corpus is currently at
 a clean 421 objects / 421 referenced / 0 orphans, so any drift is attributable to this run.
 
-## 6. Staleness — resolved 2026-07-30
+⚠ **A ~$1 `classify-treatments` run can destroy every one of these clips.** `--apply` re-baselines by
+DELETING the region's `poi_clusters` rows, and `narrations.cluster_id` is `ON DELETE CASCADE` — so a
+re-classification cascades the fused tellings away and orphans their paid R2 bytes before any staleness
+check could fire. Guarded 2026-07-30: the tool now counts fused tellings in scope and REFUSES to
+re-baseline without `--force-regroup`, printing what would be lost (both in preview and on apply).
+Re-baselining is still the right move when the grouping genuinely changed — it just has to be asked
+for. ⚠ The FK is still `CASCADE`; the guard is the only protection, so don't route a new clear path
+around it.
+
+## 6. Staleness — BUILT 2026-07-30 (§9 step 1)
 
 A fused clip grounds on N sheets, so one member's article moving makes it stale. The existing check joins
 `narrations.facts_hash` to ONE `pois.facts_hash` and cannot express that.
 
-**Rule:** a cluster narration's `facts_hash` is a hash over its members' hashes, ORDER-INDEPENDENT:
+**Shipped:** `clusterFactsHash` in `@skipper/db/hash`, wrapped by `clusterGroundingHash` in
+`pipeline/cluster.ts`. Its payload is the TELLABLE member set (§3.2) as sorted `poiId:factsHash` pairs,
+plus the cluster's naming evidence (`title`, `highlights`, `dropped`), canonicalized through the same
+`stableStringify` the poi hashes use. Null — never `sha256('')` — when nothing is tellable.
 
-```
-clusterFactsHash = sha256( members.map(p => p.facts_hash).filter(Boolean).sort().join(',') )
-```
+Four corrections to the formula this section originally proposed, each measured:
 
-Sorting (rather than XOR) keeps it deterministic, collision-resistant, and debuggable — you can print the
-input. Membership itself is part of the identity: if a member is added or removed the set changes and the
-hash changes, which is correct, because the telling should be rewritten.
+- **Hash the tellable members, not all members.** Generation cannot ground on a sheet-less poi, so a
+  bare `GROUP BY cluster_id` would hash a strictly larger set than the well — making every fused clip
+  read stale forever and turning each `--apply` into a paid re-mint of identical audio. It also
+  re-imports exactly the raw-article churn that `storyFactsHash`'s enriched/un-enriched switch exists
+  to suppress: 85 of 295 members are un-enriched, contribute nothing to the well, and their hashes
+  move on every free re-`discover`.
+- **`poiId:factsHash` pairs, not bare hashes; no `.filter(Boolean)`.** Bare sorted hashes do NOT make
+  membership part of the identity, which was this section's stated goal — a null-hash member is
+  invisible, so `{h1}` equals `{h1, null}`. Carrying the id also makes an `excluded_reason` toggle move
+  the digest, and exclusion is a free admin action that changes who is named while moving no facts at
+  all.
+- **Cover `title` / `highlights` / `dropped`.** §3.1 makes `highlights` the naming set, so moving a
+  member from highlights to dropped rewrites the telling with byte-identical member facts. A facts-only
+  hash calls that clip fresh. (`treatment` and `subject_poi_id` are deliberately OUT — both are derived
+  from what is already hashed. The delivery REGISTER is also out: a poi's own `facts_hash` doesn't
+  cover `pois.delivery_register` either, so a `classify-registers` re-run silently re-bands every solo
+  clip too. That gap is real and repo-wide; fixing it inside a cluster helper would put the two subject
+  kinds on different contracts.)
+- **Compute in TS on both sides — no SQL aggregate.** There is no SQL staleness expression anywhere in
+  the repo: `narrations.facts_hash IS DISTINCT FROM pois.facts_hash` appears only in comments, and both
+  real detection sites (`generate-narrations.ts` `hasFreshClip`, admin `GET /admin/pois`
+  `narrationStatus`) load rows and compare with `===`. A Postgres mirror would be a second
+  implementation of the digest whose `ORDER BY` runs under the DB collation while JS `.sort()` runs on
+  UTF-16 code units — precisely the writer/reader divergence `stableStringify` was written to prevent.
+  Hence also no materialized `poi_clusters.facts_hash` column: it would be an aggregate over OTHER
+  rows, invalidated by four writers (discover / enrich / refetch / classify) that know nothing about
+  clusters.
 
-The staleness query becomes a `GROUP BY cluster_id` computing the same aggregate and comparing. ⚠ Settle
-this BEFORE generating: retrofitting means recomputing hashes for all 64 clips, and until it exists fused
-clips are silently immortal — never stale, never regenerated, drifting away from their sources forever.
+⚠ **A null hash means "not generatable yet", and the caller must skip on it BEFORE consulting
+freshness.** The existing freshness idiom requires a non-null hash to read fresh, so a cluster queued on
+a null hash is re-narrated and re-synthesized on every non-`--force` run. Skip it the way
+`generate-narrations` already skips a sheet-less poi — before `hasFreshClip` is ever read.
+
+⚠ The one property that matters — *the hash's input set equals the well's input set* — cannot be
+tested until step 4 exists. It is bought STRUCTURALLY instead: both derive from the single array
+`tellableMembers()` returns. Step 4 should assert that identity at the insert rather than re-deriving it.
 
 ## 7. Open questions to settle before building
 
 (The "do members stay active" question was here and is now SETTLED in §4.2 — they do not.)
 
 1. **§3.3** — the length bands are guesses; pin them on a listen.
-2. **§4.1** — cluster position when there is no subject (31 of 67 clusters).
-3. **§6** — how the union hash plugs into the existing staleness join.
+2. **§4.1** — cluster position when there is no subject. Of the 30 GENERATABLE clusters, 21 have no
+   `subject_poi_id`, so the medoid path is the common case, not the fallback.
+3. ✅ **CLOSED 2026-07-30 — §6 is built.** It does not plug into a staleness *join* at all: there was
+   never a SQL one to plug into. See §6.
 4. **Admin** — RESOLVED in shape, unbuilt: surface the fused clip on the EXISTING POI sheet rather than
    building a `/clusters` page. Every member already renders its cluster on the Location tab, so a
    "Cluster narration" block there (play / regenerate / release, mirroring the per-POI Narration tab)
@@ -204,9 +277,44 @@ clips are silently immortal — never stale, never regenerated, drifting away fr
 
 ## 8. Prerequisites — all met
 
-- ✅ 67 clusters applied with `highlights`/`dropped` populated
+- ✅ 64 clusters applied with `highlights`/`dropped` populated
 - ✅ `narrations.cluster_id` + XOR CHECK + unique index (migrations 0036–0038)
 - ✅ containment keeps parks/ranges/roads out of clusters entirely (0039–0040)
 - ✅ `buildGroundingWell` already accepts merged features
+- ✅ the staleness hash + the member-set resolver (§6, §9 step 1) — no migration was needed
 - ⚠ NOT met: a real Tahoe drive. Every number in §3.3 and §4.1 is a desk estimate, and this is the step
-  that turns a desk estimate into 67 pieces of paid audio.
+  that turns a desk estimate into 30 pieces of paid audio.
+
+## 9. Build order
+
+Sequenced so nothing irreversible happens before the thing that makes it reversible-in-practice exists.
+**Steps 1–3 spend nothing and touch no audio. Step 4 is the commitment point.**
+
+1. ✅ **Staleness hash — BUILT 2026-07-30.** `@skipper/db/hash` (`clusterFactsHash`, plus the poi
+   hashers moved there so admin can reach them), `@skipper/shared`'s `isNarratableStoryPoi`,
+   `pipeline/cluster.ts` (`loadClusterMembers` / `tellableMembers` / `clusterGroundingHash`), and
+   `packages/db/test/hash.test.ts`. Verified read-only against the live corpus: 34 clusters resolve to a
+   hash (30 CLUSTER + 4 district), 34 distinct, stable under member reordering; 30 return null as
+   "not generatable yet". Went first not for the recompute cost — with zero cluster narrations there is
+   nothing to backfill — but because **steps 2, 4 and 6 all consume the same member-set definition**,
+   and because both failure modes cost money on a schedule: a null hash re-mints every clip on every
+   run, an over-broad hash makes them immortal.
+2. **Position + radius.** Pure engine, testable offline, no spend. Subject's speakable anchor when one
+   exists, else the medoid (§4.1) — which is the majority case, see §7.2.
+3. **Read paths — BEFORE generation.** Lift the `pois` inner-join so the first fused clip is playable
+   the moment it exists rather than invisible. ⚠ This is the half that gets forgotten (§2).
+   Reconnaissance: 19 sites read `narrations`; 9 inner-join `pois`, and 6 more filter on
+   `narrations.poi_id` with no join at all — those exclude clusters by SQL NULL semantics, so grepping
+   for JOINs alone will miss them.
+4. **Fused generation.** The first spend (~$5–8) and the first audio. **Needs an explicit founder go.**
+5. **LISTEN.** The gate on 6, and not automatable. A fused telling worse than its members is a
+   regression with no fallback.
+6. **Retire members.** Only after 5. `sweep-orphans` last and separately. ⚠ The queue filter in
+   `generate-narrations` must gain `isNull(pois.clusterId)` HERE and not before — added earlier it
+   would open a coverage hole in the 30 clusters that have no fused clip yet (no member clips, no fused
+   clip).
+7. **Admin surface.** Can trail; ungovernable without it, not broken. ⚠ Two things silently under-report
+   the moment a cluster narration exists: `GET /admin/pois` renders every member as
+   `narrationStatus: 'none'`, and the region-release stamp keys on `narrations.poi_id`, so a fused clip
+   cannot be released. Both are step-7 work, but step 4 must not be called done while a rider can't be
+   served the audio it bought.
