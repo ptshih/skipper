@@ -178,13 +178,17 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
             Tahoe is now 37 groups; corpus-wide 67 (62 cluster / 5 district). Stateline's casino row
             moved DISTRICT → CLUSTER, agreeing at last with the spec's own §3.1 example.
             ⚠ `--apply` RE-RUNS the classification, so preview + apply is ~2× the quoted cost.
-      - [ ] **Decide on the UNR campus trigger radius — 903 m** (spec §4.1b). Merging two groups whose
-            anchors were 1268 m apart necessarily makes a circle covering both ends of the campus:
-            ~34 s of lead at 60 mph, district territory (Downtown Reno 1165 m) on a group the
-            classifier calls a cluster. It is the ONLY one of 32 above 600 m — next widest is Emerald
-            Bay at 516, and 22 sit at the 250 m floor. Left undecided ON PURPOSE: one early-firing clip
-            is a listen-and-see, and the honest test is the real Tahoe drive. If it reads wrong, the fix
-            is a geometry gate deferring an over-wide cluster to the district bucket, costing this clip.
+      - [ ] **Decide on the UNR campus trigger radius — 903 m. SIMULATED 2026-07-30, and it fails**
+            (spec §4.1b). Merging two groups whose anchors were 1268 m apart necessarily makes a circle
+            covering both ends of the campus. Run through the real trigger engine on a dense Reno
+            corridor it fires with a **92-second lead** at city pace, against 25 s for every other stop.
+            It is the ONLY one of 32 above 600 m — Emerald Bay is next at 516 m and simulates fine
+            (26 s vs a 12 s baseline), and 22 sit at the 250 m floor. **Recommended: a geometry gate**
+            deferring an over-wide cluster to the district bucket until districts get their area
+            trigger — costs this one clip of 32. NOT built: it removes a place from the corpus.
+            ⚠ Same run also found fusing does NOT raise the stop count on a sparse corridor (the west
+            shore places 8 either way — geography binds there, not the pacing budget). Fusing buys
+            content quality where places STACK, which is Reno/Stateline, not the west shore.
 
 - [ ] **5. `buildDrive` reads anchors; delete pick-one.** Orphans ~169 satellite clips —
       `sweep-orphans.ts` already handles that.

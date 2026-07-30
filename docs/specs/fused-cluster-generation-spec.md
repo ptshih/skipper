@@ -193,10 +193,38 @@ kindless POI is already given today.**
 both ends of the campus. 903 m is ~34 s of lead at 60 mph — district territory (Downtown Reno measured
 1165 m, Carson City 993 m) on a group the classifier calls a CLUSTER, which is §4.1b's own point about
 `treatment` being a naming verdict rather than a geometry one, arriving from the other direction.
-Everything else is unchanged: next widest is Emerald Bay at 516 m. **Undecided on purpose** — one
-early-firing clip out of 32 is a listen-and-see, not a design hole, and the honest test is the real
-Tahoe drive that is still this spec's unmet prerequisite (§8). If it reads wrong there, the fix is a
-geometry gate that defers an over-wide cluster to the district bucket, costing this one clip.
+Everything else is unchanged: next widest is Emerald Bay at 516 m.
+
+**SIMULATED 2026-07-30 — and 903 m does not survive it.** The trigger engine (`runDrive`) was run over
+two corpora, today's poi-only and a fused one, on two corridors. Free, offline, no audio:
+
+| | route | stops | audio | notes |
+| --- | --- | --- | --- | --- |
+| today | Tahoe City → South Lake Tahoe (real, 48 min) | 8 | 10 min | — |
+| fused | same | **8** | 11 min | Emerald Bay fused correctly; coverage 24% → 27% |
+| today | synthetic Reno corridor (15 min, city pace) | 3 | 5 min | — |
+| fused | same | 3 | 6 min | **UNR fires 92 s early vs 25 s for every other stop** |
+
+Three things came out of it:
+
+- **Fusing does not "fill the drive" on a sparse corridor.** The west-shore route places 8 stops either
+  way — the binding constraint there is GEOGRAPHY (how many places sit near that road), not the pacing
+  budget. Fusing swaps content quality, not stop count. The backlog's "8 stops where the budget allowed
+  12" framing holds only where places actually stack.
+- **Emerald Bay is the fused case working.** `Vikingsholm` becomes `Emerald Bay and Vikingsholm`, and at
+  45 mph its 516 m radius fires at 26 s lead against a 12 s baseline — earlier, but defensible for a bay
+  you approach for a while.
+- **903 m is not.** On the dense corridor the fused UNR clip fires with a **92-second lead** at city
+  speed, against 25 s for every other stop. You would hear "the University of Nevada, Reno campus" a
+  minute and a half before reaching it. No audio overlaps in either corpus (an earlier overlap reading
+  was a fixture artefact — the pacing and the sim speed disagreed — and disappeared once they matched).
+
+⚠ The Reno corridor is a SYNTHETIC straight line, so its distances are indicative rather than Google's
+road geometry. The lead-time result does not depend on that: it is radius ÷ speed.
+
+So the geometry gate is now evidence-backed rather than a hedge — a cluster whose enclosing radius puts
+it in district territory should be DEFERRED with the districts until they get their area trigger,
+costing this one clip of 32. Not built: it removes a place from the corpus, which is a founder call.
 
 **The invariant that makes an off-road centre safe.** A 1-center can sit away from any road (Emerald
 Bay's is ~430 m out, over the water), and `buildDrive` silently drops a candidate whose off-route
