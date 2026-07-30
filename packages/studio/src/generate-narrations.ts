@@ -247,29 +247,41 @@ async function main(): Promise<void> {
   // this region so a new clip is checked against the corpus a rider actually hears — not just against
   // the handful this run happens to produce. Clips generated during the run are appended below.
   // Cheap: one scripts-only query, and the lint is deterministic string work (no LLM, no spend).
-  const diversityContext: string[] = isExplicit
-    ? []
-    : (
-        await withRetry(
-          () =>
-            db
-              .select({ script: narrations.script })
-              .from(narrations)
-              .innerJoin(pois, eq(narrations.poiId, pois.id))
-              .where(
-                and(
-                  sql`${pois.lat} between ${bbox!.swLat} and ${bbox!.neLat}`,
-                  sql`${pois.lng} between ${bbox!.swLng} and ${bbox!.neLng}`,
-                ),
-              ),
-          { label: 'load diversity context' },
-        )
+  // ⚠ An EXPLICIT-id run has no region and therefore no bbox — and that is exactly the path an operator
+  // takes to fix a handful of named clips, i.e. the run that most needs to know what the rest of the
+  // corpus already says. Falling back to NO context there would have quietly reproduced the original
+  // bug on the most common repair path. Whole-corpus is the honest scope for it: a rider can hear two
+  // clips from different regions on one drive, so repetition across them is still repetition.
+  // ⚠ Must reach FUSED tellings too, and they carry poi_id NULL (`narrations_subject_xor`) — so an
+  // inner join to `pois` silently drops all of them and a solo clip is never checked against the fused
+  // telling it will share a drive with. Region scope therefore resolves per subject kind: solo by its
+  // poi's point, fused by whether any MEMBER poi sits in the bbox (the same geometry-first rule
+  // everything else uses). The fused generator loads context the same way, so the two are symmetric.
+  const soloInRegion = db
+    .selectDistinct({ id: pois.id })
+    .from(pois)
+    .where(sql`${pois.lat} between ${bbox!.swLat} and ${bbox!.neLat} and ${pois.lng} between ${bbox!.swLng} and ${bbox!.neLng}`)
+  const clustersInRegion = db
+    .selectDistinct({ id: pois.clusterId })
+    .from(pois)
+    .where(sql`${pois.clusterId} is not null and ${pois.lat} between ${bbox!.swLat} and ${bbox!.neLat} and ${pois.lng} between ${bbox!.swLng} and ${bbox!.neLng}`)
+  const contextWhere = isExplicit
+    ? isNotNull(narrations.script)
+    : and(
+        isNotNull(narrations.script),
+        sql`(${narrations.poiId} in ${soloInRegion} or ${narrations.clusterId} in ${clustersInRegion})`,
       )
-        .map((r) => r.script)
-        .filter((s): s is string => !!s)
+  const diversityContext: string[] = (
+    await withRetry(
+      () => db.select({ script: narrations.script }).from(narrations).where(contextWhere),
+      { label: 'load diversity context' },
+    )
+  )
+    .map((r) => r.script)
+    .filter((s): s is string => !!s)
   console.log(
-    `Diversity context: ${diversityContext.length} existing tellings in this region will be checked against.` +
-      (isExplicit ? ' (explicit-id run — region context skipped.)' : ''),
+    `Diversity context: ${diversityContext.length} existing tellings ` +
+      `(${isExplicit ? 'whole corpus — explicit-id run has no region' : 'this region'}) will be checked against.`,
   )
 
   // Cost preview: narration ≈ system+sheet in / ~1k thinking+output out per clip (Opus 4.8
