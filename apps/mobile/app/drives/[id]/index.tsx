@@ -139,6 +139,25 @@ export default function DriveDetailScreen() {
     }
   }, [id, router])
 
+  // Start the LIVE drive — but warn once if nothing is saved. Tahoe's dead zones are the named
+  // landmine, and `useDrive`'s stall watchdog SKIPS any clip that won't stream (12s, one re-sign,
+  // then the stop is gone), so an unsaved drive loses stops silently — the rider just sails past
+  // Emerald Bay in quiet and never learns why. This is the last moment it's still fixable.
+  // Deliberately NOT a block: streaming is fine on a road with signal, and a rider mid-download or
+  // already saved goes straight through untouched.
+  const startDrive = useCallback(() => {
+    const go = () => router.push(`/drives/${id}/play?mode=live`)
+    if (downloaded || downloading) {
+      go()
+      return
+    }
+    Alert.alert(voice.offline.unsavedTitle, voice.offline.unsavedBody, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: voice.offline.unsavedSave, onPress: () => void startDownload() },
+      { text: voice.offline.unsavedStart, onPress: go },
+    ])
+  }, [downloaded, downloading, id, router, startDownload])
+
   const removeDownload = useCallback(() => {
     if (!id) return
     deleteDriveDownload(id)
@@ -521,7 +540,18 @@ export default function DriveDetailScreen() {
                     Saved offline
                   </Text>
                 </View>
-              ) : null}
+              ) : (
+                // NOT saved. This branch used to be `null`, which made "this drive will stream, and a
+                // dead zone will silently skip stops" the one state with no visual at all. Rendered
+                // faint, not warm/amber: it's a fact about the drive, not a warning to act on — the
+                // Save button below and the Start guard carry the actual nudge.
+                <View style={styles.savedChip}>
+                  <Icon name="notDownloaded" size={14} color="inkFaint" />
+                  <Text variant="label" color="inkFaint">
+                    {voice.offline.notSaved}
+                  </Text>
+                </View>
+              )}
             </View>
           </Card>
 
@@ -532,18 +562,33 @@ export default function DriveDetailScreen() {
           ) : null}
 
           {/* The live drive is the M1 headline. The couch "simulated drive" is CUT — auditioning is now the
-          native mini-preview below (tap a stop to hear it). The dev simulator + offline download live in
-          the header ⋯ menu so this stays glanceable. */}
+          native mini-preview below (tap a stop to hear it). The dev simulator lives in the header ⋯ menu
+          so this stays glanceable; offline download does NOT — it earned a main-path button below,
+          because hiding it made streaming the silent default on roads that can't stream. */}
           <View style={styles.ctaGroup}>
-            <Button
-              icon="car"
-              title={voice.cta.drive}
-              onPress={() => router.push(`/drives/${id}/play?mode=live`)}
-            />
+            <Button icon="car" title={voice.cta.drive} onPress={startDrive} />
             <Text variant="dim" color="inkFaint" align="center">
               {voice.drive.blurb}
             </Text>
           </View>
+
+          {/* Save for offline — a REAL button on the main path. It lived only in the header ⋯ menu,
+          which meant the default first drive STREAMED and every dead-zone stop was dropped in
+          silence. Shown only when there's something to save: a downloaded (or downloading) drive
+          keeps this space clean, and the ⋯ menu still owns re-pull / remove. */}
+          {!downloaded && !downloading ? (
+            <View style={styles.ctaGroup}>
+              <Button
+                variant="secondary"
+                icon="update"
+                title={voice.offline.save}
+                onPress={() => void startDownload()}
+              />
+              <Text variant="dim" color="inkFaint" align="center">
+                {voice.offline.saveHint}
+              </Text>
+            </View>
+          ) : null}
 
           {downloadError ? (
             <Text variant="dim" color="danger">

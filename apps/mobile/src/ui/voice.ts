@@ -237,6 +237,22 @@ export const voice = {
     // re-opened, or held in a dead zone). SOFT — a nudge, never a block.
     expired: 'Saved a while back', // chip
     refresh: 'Refresh the download', // ⋯ menu re-pull for an expired copy
+    // NOT saved — the honest counterpart to the "Saved offline" chip. This slot used to render
+    // NOTHING when a drive wasn't downloaded, so streaming (and the dead-zone stop-skipping it
+    // invites) was the silent, invisible default. Neutral tone: streaming is a legitimate choice on
+    // a road with signal, so this states a fact, it doesn't scold.
+    notSaved: 'Not saved',
+    save: 'Save for offline', // the main-path button under the Start CTA (was ⋯-menu-only)
+    saveHint: 'Tahoe has dead zones — best done before you lose signal.',
+    // The one warning in front of a live drive that hasn't been saved. NEVER a block: the rider may
+    // be on a road with good signal, or just auditioning from the couch. `useDrive`'s stall watchdog
+    // skips any clip that won't load, so an unsaved drive through a dead zone loses those stops
+    // SILENTLY — this is the only moment we can say so while it's still fixable.
+    unsavedTitle: 'This drive isn’t saved yet',
+    unsavedBody:
+      'Out where the signal drops, any stop that can’t load gets skipped — you’d drive right past it in silence. Saving it first takes a moment, and then the whole drive plays off your phone.',
+    unsavedSave: 'Save it first',
+    unsavedStart: 'Start anyway',
   },
   auth: {
     // "folks" is the skipper's address everywhere else (loading, GPS, drive-complete) — keep

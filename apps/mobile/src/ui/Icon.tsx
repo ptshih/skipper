@@ -30,6 +30,7 @@ export type IconName =
   | 'settings'
   | 'expand'
   | 'downloaded'
+  | 'notDownloaded'
   | 'update'
   | 'more'
   | 'music'
@@ -68,6 +69,9 @@ const IONICON: Record<IconName, ComponentProps<typeof Ionicons>['name']> = {
   settings: 'settings-outline',
   expand: 'chevron-down', // a filter chip that opens a picker
   downloaded: 'cloud-done-outline', // a tour that's saved to disk + plays with no signal
+  // Still in the cloud = will STREAM. The counterpart to `downloaded`, and deliberately a plain cloud
+  // (not `cloud-offline`, which reads as "you are offline" rather than "this isn't on your phone").
+  notDownloaded: 'cloud-outline',
   update: 'cloud-download-outline', // a saved tour whose clips were re-cut server-side — pull again
   more: 'ellipsis-horizontal', // header overflow menu (secondary/utility actions)
   music: 'musical-notes-outline', // the rider's own audio (roam PAUSES it while the skipper talks, then hands it back — not ducking)

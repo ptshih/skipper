@@ -14,6 +14,13 @@
 > the dev build) and `docs/specs/gps-player-spec.md` §6–§7 (the engineering accept bar this reports
 > against).
 
+> **Update (2026-07-30):** the offline download is **no longer `⋯`-only.** The placard now always shows
+> an offline state (a faint `Not saved` chip when it isn't downloaded — that slot used to render
+> nothing), a **"Save for offline"** button sits on the main path under the Start CTA, and starting a
+> live drive that isn't saved raises a one-time **"This drive isn't saved yet"** alert (Save it first /
+> Start anyway / Cancel) — never a block. Steps that expect Start to open the player *immediately*, or
+> an empty permit row before a download, are updated below. The `⋯` entry itself is unchanged.
+
 ## Why this exists
 
 Everything the design-review follow-through shipped is verified statically — `bun run check`
@@ -152,12 +159,21 @@ verified — they share the build, so do them together.
   `, <US State>` suffix — *not* `(disambiguation)` (those are filtered at generation, never a stop);
   and a StopRow truncates to one line, so a legit long name ending in `…` on the row is **expected**,
   not un-cleaned cruft. (`apps/mobile/src/lib/labels.ts:29-32`)
-- [ ] **Offline permit chip.** Do: signed in, open the header `⋯` → "Download for offline"; watch the
-  placard's permit row. Expect: a faint `Saving k/total` label beside the mono permit line, then a
-  `Saved offline` chip with a vector "downloaded" icon; the `⋯` item flips to a destructive "Remove
-  offline download". Watch-for: the chip colliding with the `N STOPS · ~M MIN` text on a narrow
-  device; tofu icon (must be vector, not emoji); the row not wrapping at large text.
-  (`apps/mobile/app/drives/[id]/index.tsx:227-244,300-307`)
+- [ ] **Offline permit chip.** Do: signed in, open an UNDOWNLOADED drive and read the placard's permit
+  row *before* doing anything; then tap "Save for offline" (or `⋯` → "Download for offline"). Expect:
+  a faint `Not saved` chip with a vector cloud icon at rest → a faint `Saving k/total` label while it
+  runs → a `Saved offline` chip with the "downloaded" icon; the `⋯` item flips to a destructive
+  "Remove download". Watch-for: the chip colliding with the `N STOPS · ~M MIN` text on a narrow
+  device — **the permit row now ALWAYS carries a chip, so this collision is far likelier than when the
+  slot could be empty**; tofu icon (must be vector, not emoji); the row not wrapping at large text.
+  (`apps/mobile/app/drives/[id]/index.tsx` — the permit-row chip ladder + `styles.permitRow`)
+- [ ] **Unsaved-drive guard (2026-07-30).** Do: signed in, on an UNDOWNLOADED drive tap the primary
+  "Start the drive". Expect: a one-time alert "This drive isn't saved yet" with **Save it first** /
+  **Start anyway** / Cancel — *not* the player. "Start anyway" opens the live drive; "Save it first"
+  begins the download and stays put (progress in the permit row). Then repeat on a SAVED drive and on
+  one mid-download: both must go straight into the player with **no alert at all**. Watch-for: the
+  alert firing on a saved drive (the guard reading stale state); three buttons stacking badly at large
+  text; "Save it first" navigating anywhere. (`apps/mobile/app/drives/[id]/index.tsx` — `startDrive`)
 
 ## §3 — The gate: anonymous vs signed-in (the honest sample ride)
 
@@ -181,9 +197,10 @@ Preview is the open funnel; the wall is the **live drive + offline download** fo
   to home. Watch-for: wrong ghost label, or it popping the stack to the drives list.
   (`apps/mobile/app/drives/[id]/index.tsx:51-67,150-157`)
 - [ ] **Signed-in user never sees the gate.** Do: sign in (free account), tap "Start the drive" and
-  separately `⋯` → "Download for offline". Expect: live drive opens (a *location* permission gate may
-  appear — that's GPS, §7, not the account gate); download shows the saving→saved chip; no
-  AccountGate. Watch-for: a signed-in user still hitting "Grab your ticket" (session cookie not sent);
+  separately "Save for offline" (or `⋯` → "Download for offline"). Expect: live drive opens (⚠ on an
+  UNSAVED drive the "This drive isn't saved yet" alert comes first — that's the offline guard above,
+  not the account gate; dismiss with "Start anyway"), and a *location* permission gate may follow —
+  that's GPS, §7. Download shows the not-saved→saving→saved chip; no AccountGate. Watch-for: a signed-in user still hitting "Grab your ticket" (session cookie not sent);
   or staying stuck on the gate after signing in from it (the play-screen session-retry should drop
   them into the drive). (`apps/api/src/tiers.ts:25-27`, `apps/api/src/index.ts:128-137`)
 
