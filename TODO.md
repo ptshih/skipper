@@ -127,11 +127,12 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
       ✅ **DECIDED (founder): phase 4 is CLUSTER-ONLY.** A DISTRICT cannot be a point trigger (46 members
       over ~2 km leave a ~1 km worst-member distance under every candidate position), so it needs an AREA
       trigger — a new mode in @skipper/engine. Districts keep today's behaviour.
-      ⚠ **SCOPE AND COST ARE HALF what this item used to claim** (measured against the live corpus
-      2026-07-30, spec §4.2): of the 60 clusters, only **30 are generatable** — the other 30 are the
-      whole Yosemite side and have ZERO enriched members, and a story telling requires a fact sheet. So
-      it is **30 fused clips (~$5-8) retiring 107 member clips**, 421 tellings → 344. Generating the
-      Yosemite half first needs a separate founder-gated `enrich-pois` run.
+      ⚠ **SCOPE AND COST ARE HALF what this item used to claim** (measured against the live corpus,
+      re-measured after the 2026-07-30 re-classify — spec §4.2): of the 62 clusters, only **32 are
+      generatable** — the other 30 are the whole Yosemite side and have ZERO enriched members, and a
+      story telling requires a fact sheet. So it is **32 fused clips (~$5-8) retiring 110 member
+      clips**, 421 tellings → 343. Generating the Yosemite half first needs a separate founder-gated
+      `enrich-pois` run.
       - [x] **Step 1 — staleness hash + the member-set resolver. BUILT 2026-07-30, no migration.**
             `@skipper/db/hash` (`clusterFactsHash`; the poi hashers moved there so the admin server can
             reach them — it cannot import studio), `@skipper/shared`'s `isNarratableStoryPoi`,
@@ -167,14 +168,24 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
             `discover-pois` + `prune-corpus` (`pipeline/colocation.ts`) — it FLAGS, never excludes
             (13 collisions corpus-wide, 12 genuine). The decisive check needs to read the prose, so it
             belongs in the paid `enrich` step; NOT built. See ops-scripts-sop.md.
-      - [ ] ⚠ **(b) BLOCKS step 4 — the UNR campus is split across TWO cluster rows** 1.2 km apart, so
-            phase 4 would ship two fused UNR clips on one drive. **Code fix committed, NOT RUN:** the
-            merge pass that fused Carson City now covers CLUSTERs too, and re-classifies whatever it
-            fuses so the verdict names all members (the old behaviour kept one half's `highlights`,
-            which is exactly what fused generation writes from — Carson City has that today).
-            Measured over all 64 groups, the widened rule fires exactly ONCE, on this pair, with zero
-            collateral. **Applying it needs a founder go: `classify-treatments`'s PREVIEW SPENDS**
-            (~$0.83 — only the DB write is gated on `--apply`; see the SOP).
+      - [x] **(b) The UNR campus split — FIXED + APPLIED 2026-07-30 (~$1.50).** The merge pass that
+            fused Carson City now covers CLUSTERs too, and re-classifies whatever it fuses so the
+            verdict names all members (it used to keep one half's `highlights`, which is exactly what
+            fused generation writes from). ⚠ On the live run the merge fired THREE times, not the one
+            predicted against the stored grouping — the UNR campus plus two district splits that recur
+            on any fresh classify — and the re-classification immediately paid for itself: seeing all
+            its members, `Reno's Historic Homes and Casinos` reconsidered CLUSTER → DISTRICT.
+            Tahoe is now 37 groups; corpus-wide 67 (62 cluster / 5 district). Stateline's casino row
+            moved DISTRICT → CLUSTER, agreeing at last with the spec's own §3.1 example.
+            ⚠ `--apply` RE-RUNS the classification, so preview + apply is ~2× the quoted cost.
+      - [ ] **Decide on the UNR campus trigger radius — 903 m** (spec §4.1b). Merging two groups whose
+            anchors were 1268 m apart necessarily makes a circle covering both ends of the campus:
+            ~34 s of lead at 60 mph, district territory (Downtown Reno 1165 m) on a group the
+            classifier calls a cluster. It is the ONLY one of 32 above 600 m — next widest is Emerald
+            Bay at 516, and 22 sit at the 250 m floor. Left undecided ON PURPOSE: one early-firing clip
+            is a listen-and-see, and the honest test is the real Tahoe drive. If it reads wrong, the fix
+            is a geometry gate deferring an over-wide cluster to the district bucket, costing this clip.
+
 - [ ] **5. `buildDrive` reads anchors; delete pick-one.** Orphans ~169 satellite clips —
       `sweep-orphans.ts` already handles that.
 

@@ -181,12 +181,22 @@ against the 1-center's 516.
 
 Radius: **`max(ANCHORED_TRIGGER_RADIUS_M, enclosingRadius)`**.
 
-⚠ **NOT `worstMember + ANCHORED_TRIGGER_RADIUS_M`.** Adding them puts 24 of the 30 above the 322 m the
+⚠ **NOT `worstMember + ANCHORED_TRIGGER_RADIUS_M`.** Adding them puts 24 of 30 above the 322 m the
 speed-adaptive lead already grants at 60 mph, so the floor rather than the lead would decide the fire
 point for 80% of clusters — reintroducing exactly the early-and-imprecise firing
-`ANCHORED_TRIGGER_RADIUS_M` was added to stop. Measured outcome of the `max()` form: **21 of 30 sit at
-the 250 m floor, median 250 m, max 516 m, and ZERO exceed the 600 m an un-anchored kindless POI is
-already given today.** Fused clusters trigger TIGHTER than the status quo default.
+`ANCHORED_TRIGGER_RADIUS_M` was added to stop. Measured outcome of the `max()` form, re-run after the
+2026-07-30 re-classify: **22 of 32 sit at the 250 m floor, and ONE exceeds the 600 m an un-anchored
+kindless POI is already given today.**
+
+⚠ **That one is `University of Nevada, Reno Campus` at 903 m, and it is the price of fixing the split**
+(§8b). Merging two groups whose anchors were 1268 m apart necessarily produces a circle that covers
+both ends of the campus. 903 m is ~34 s of lead at 60 mph — district territory (Downtown Reno measured
+1165 m, Carson City 993 m) on a group the classifier calls a CLUSTER, which is §4.1b's own point about
+`treatment` being a naming verdict rather than a geometry one, arriving from the other direction.
+Everything else is unchanged: next widest is Emerald Bay at 516 m. **Undecided on purpose** — one
+early-firing clip out of 32 is a listen-and-see, not a design hole, and the honest test is the real
+Tahoe drive that is still this spec's unmet prerequisite (§8). If it reads wrong there, the fix is a
+geometry gate that defers an over-wide cluster to the district bucket, costing this one clip.
 
 **The invariant that makes an off-road centre safe.** A 1-center can sit away from any road (Emerald
 Bay's is ~430 m out, over the water), and `buildDrive` silently drops a candidate whose off-route
@@ -226,16 +236,18 @@ on two independent axes.
 
 | | clusters | of those, generatable today | member clips they'd retire |
 | --- | --- | --- | --- |
-| CLUSTER — phase 4's scope | 60 | **30** | **107** |
-| DISTRICT — deferred (§4.1) | 4 | 4 | 103 |
+| CLUSTER — phase 4's scope | 62 | **32** | **110** |
+| DISTRICT — deferred (§4.1) | 5 | 5 | — |
 
 **Only 30 of the 60 clusters can be generated at all**, because the other 30 are the entire Yosemite
 side and have **zero enriched members** (85 of the 295 members carry no `fact_sheet`; all 85 are
 Yosemite). A story telling requires a sheet, so those clusters have nothing to ground on until a paid
 `enrich-pois --region yosemite` run — a separate founder-gated spend, not part of phase 4.
 
-So phase 4 as scoped is **30 fused clips replacing 107 member clips**: 421 tellings → **344**. Not
-"roughly half the corpus" — about a quarter of it.
+So phase 4 as scoped is **32 fused clips replacing 110 member clips**: 421 tellings → **343**. Not
+"roughly half the corpus" — about a quarter of it. (Counts re-measured after the 2026-07-30
+re-classify, which merged the split UNR campus and moved Stateline's casino row from DISTRICT to
+CLUSTER — matching what §3.1 always said about it.)
 
 ⚠ **Sequence this so good audio is never retired before its replacement is heard.** Generate the fused
 clips and listen BEFORE retiring members; a fused Emerald Bay telling that is worse than the individual
@@ -244,8 +256,8 @@ R2 — run `sweep-orphans` only after the listen, not as part of the same pass.
 
 ## 5. Cost and blast radius
 
-**30** fused clips ≈ **$5–8** LLM + TTS (halved with the scope, §4.2). Cheap. What is NOT cheap is that
-this is the first irreversible step: fused audio in R2, and 107 member clips retired.
+**32** fused clips ≈ **$5–8** LLM + TTS (halved with the scope, §4.2). Cheap. What is NOT cheap is that
+this is the first irreversible step: fused audio in R2, and 110 member clips retired.
 
 Sequence: `--apply` per region, preview first, and run `sweep-orphans` after — the corpus is currently at
 a clean 421 objects / 421 referenced / 0 orphans, so any drift is attributable to this run.
@@ -366,14 +378,24 @@ catch 1. The DECISIVE check needs to read the prose, i.e. model judgment, and be
 `enrich` step where the article is already in context — not built. Still a contribute-back candidate
 (agent drafts, human submits).
 
-**2. Two cluster rows over the same campus.** `University of Nevada, Reno Campus` (5 members, no
-subject) and `University of Nevada Reno Campus` (2 members, subject = the UNR Historic District), with
-1-centers 1.2 km apart. Generating both ships two fused clips about UNR on one drive. The
-district-merge pass that fixed exactly this shape for Carson City only merges DISTRICTs, so a split
-CLUSTER has nothing catching it — the 600 m leader-grouping radius seeded twice inside one campus.
+**2. ✅ RESOLVED 2026-07-30 — two cluster rows over the same campus.** `University of Nevada, Reno
+Campus` (5 members) and `University of Nevada Reno Campus` (2), 1-centers 1.2 km apart, would have
+shipped two fused clips about one campus. The merge pass that fixed this shape for Carson City only
+considered DISTRICTs; it now covers CLUSTERs too (`mergeDuplicateGroups`), and — the half that
+mattered more — **re-classifies whatever it fuses**, because a merged group used to inherit one half's
+`highlights`, which is exactly what fused generation writes from.
 
-Neither is fixed here. Both want a decision: excluding the arboretum row is free and immediate;
-re-merging the campus needs either a hand edit or a `classify-treatments` re-run (which SPENDS).
+Applied to Tahoe (~$1.50 total across preview + apply, since `--apply` re-runs the classification).
+The merge fired THREE times, not the one predicted against the stored grouping: the UNR campus plus
+two district splits that recur on any fresh classify. The re-classification earned its keep on the
+spot — seeing all its members at once, `Reno's Historic Homes and Casinos` reconsidered itself from
+CLUSTER to DISTRICT, which no half-group verdict would have caught. Result: 67 groups (62 cluster /
+5 district), UNR is one cluster of 6, and Stateline's casino row moved DISTRICT → CLUSTER, agreeing at
+last with what §3.1 has always used it as the example of. ⚠ The merge's side effect on trigger
+geometry is in §4.1b.
+
+Both are now resolved. What remains from them is the standing lesson in §"what the checks can't see"
+of `docs/guides/ops-scripts-sop.md`, and the 903 m UNR trigger radius in §4.1b.
 
 ## 9. Build order
 
