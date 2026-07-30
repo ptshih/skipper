@@ -217,49 +217,20 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
             vanished with nothing replacing them. Measured: public 0 suppressed (all staged ⇒ no-op),
             admin-preview 104 — exactly §4.2's number. ⚠ REVERSIBLE and deletes NOTHING: it is read-path
             suppression, member rows + R2 survive, so `sweep-orphans` is not part of this step.
-      - [ ] **THE RELEASE — the only thing left, and it is a real-riders change.** Releasing the region
-            is what activates the 31 fused clips AND retires 104 member clips, in one stamp. ⚠ 1.0 is
-            submitted and `released_at` is MONOTONIC (never cleared), so the undo is deleting the fused
-            narrations, not un-releasing. Founder call.
-      - [ ] **Step 7 (can trail):** `GET /admin/pois` still shows a cluster member as
-            `narrationStatus: 'none'`; no per-clip release for a fused telling. Also cosmetic: the
-            `generate-narrations` queue should skip superseded members so a run doesn't pay to
-            regenerate a clip nobody serves.
-      - [x] **(a) `UNLV Arboretum` — EXCLUDED 2026-07-30.** Wikidata Q7865354 carries UNR's exact
-            coordinates, so a released 71-second clip about a Las Vegas campus was firing in Reno — a
-            LIVE bug, not a phase-4 one. ⚠ A class the grounding gate cannot see (facts right, PLACE
-            wrong) and that NO free check can decide: P625, P131 and the Wikipedia article's own coords
-            are all wrong the same way; only the prose is right. A triage detector now runs in
-            `discover-pois` + `prune-corpus` (`pipeline/colocation.ts`) — it FLAGS, never excludes
-            (13 collisions corpus-wide, 12 genuine). The decisive check needs to read the prose, so it
-            belongs in the paid `enrich` step; NOT built. See ops-scripts-sop.md.
-      - [x] **(b) The UNR campus split — FIXED + APPLIED 2026-07-30 (~$1.50).** The merge pass that
-            fused Carson City now covers CLUSTERs too, and re-classifies whatever it fuses so the
-            verdict names all members (it used to keep one half's `highlights`, which is exactly what
-            fused generation writes from). ⚠ On the live run the merge fired THREE times, not the one
-            predicted against the stored grouping — the UNR campus plus two district splits that recur
-            on any fresh classify — and the re-classification immediately paid for itself: seeing all
-            its members, `Reno's Historic Homes and Casinos` reconsidered CLUSTER → DISTRICT.
-            Tahoe is now 37 groups; corpus-wide 67 (62 cluster / 5 district). Stateline's casino row
-            moved DISTRICT → CLUSTER, agreeing at last with the spec's own §3.1 example.
-            ⚠ `--apply` RE-RUNS the classification, so preview + apply is ~2× the quoted cost.
-      - [x] **UNR's 903 m radius — DECIDED + GATED 2026-07-30.** Simulated through the real trigger
-            engine it fired with a 92-second lead at city pace against 25 s for every other stop.
-            `CLUSTER_MAX_TRIGGER_RADIUS_M = 600` (engine) + `clusterGenerationBlock` (studio) now defer
-            an over-wide cluster with the districts. 600 is the floor an un-anchored kindless POI
-            already gets, so a fused clip can never trigger looser than the loosest thing shipping; the
-            corpus leaves a 387 m gap right there (…416, 516, then 903). Live: **31 generatable, 1
-            deferred, 30 awaiting enrichment.**
-      - [x] **Release path + eval plumbing — FIXED 2026-07-30.** ⚠ The region release stamped
-            `narrations.poi_id IN (…)`, which a fused clip's NULL poi_id can NEVER match — all 31 clips
-            would have been paid for and permanently STAGED, i.e. unhearable. Now stamps cluster
-            subjects too. `eval_scores.cluster_id` added (migration 0041) + `ClipIdentity` is
-            poi-XOR-cluster. ⚠ Known gap: `eval_scores_case_idx` is `(qid, dimension)` and a cluster has
-            no qid, so fused clips don't join across runs for regression tracking.
-      - [ ] **Still open for step 7 (neither blocks step 4):** `GET /admin/pois` shows every cluster
-            member as `narrationStatus: 'none'`, so an operator can't tell "covered by a fused clip"
-            from "never generated"; and there's no per-clip release for a fused telling.
-
+      - [x] **RELEASED 2026-07-30 (founder go). PHASE 4 IS LIVE.** 31 fused clips stamped, 0 other
+            clips affected (pre-flight confirmed nothing else was staged in the bbox). Rider-visible
+            effect verified: **Stateline went 18 pins → 6**, the 9 casino members replaced by one
+            148-second telling; Emerald Bay is fused. 104 member clips retired from the read paths
+            (reversible — the rows and R2 objects survive).
+      - [x] **Step 7 trailing items — DONE 2026-07-30.** (a) `GET /admin/pois` now returns
+            `coveredByCluster` and the console shows an "in a fused clip" chip; without it the console
+            called 104 live places `narrationStatus: 'none'`, which reads as a generation backlog and
+            would send an operator to pay for clips that already exist. (b) The per-clip release now
+            resolves a POI's subject the same way the sheet does (own narration, else its cluster's), so
+            publishing a regenerated fused clip no longer requires a whole-region release. (c)
+            `generate-narrations` skips superseded members — verified live, **104 skipped** with the
+            reason logged. ReferenceView updated (it still claimed grouping was "recorded but not yet
+            acted on").
 - [ ] **5. `buildDrive` reads anchors; delete pick-one.** Orphans ~169 satellite clips —
       `sweep-orphans.ts` already handles that.
 

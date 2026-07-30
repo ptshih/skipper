@@ -35,7 +35,7 @@
 
 import { Hono } from 'hono'
 import { serveStatic } from 'hono/bun'
-import { and, asc, between, count, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm'
+import { and, asc, between, count, desc, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import {
   creditEntries,
@@ -1010,6 +1010,7 @@ app.get('/admin/pois', async (c) => {
         )
         else false
       end`,
+      clusterId: pois.clusterId,
       createdAt: pois.createdAt,
     })
     .from(pois)
@@ -1019,7 +1020,7 @@ app.get('/admin/pois', async (c) => {
 
   const poiIds = poisRows.map((p) => p.id)
 
-  const [clipStats, regionRows] = await Promise.all([
+  const [clipStats, fusedRows, regionRows] = await Promise.all([
     // Per-poi: narration metadata — the poi's single `narrations` row (1:1,
     // UNIQUE poi_id). Duration + script power anomaly detection; factsHash/attribution/form drive
     // the stale + unattributed axes (story narrations carry CC BY-SA attribution).
@@ -1034,9 +1035,18 @@ app.get('/admin/pois', async (c) => {
         releasedAt: narrations.releasedAt, // region-release-gate: NULL = staged, non-null = public
       })
       .from(narrations)
-      // No cluster-telling guard needed: `poi_id IN (…)` is never true for NULL, so a fused telling
-      // (poi_id null) is excluded by SQL semantics rather than by an extra predicate. Don't "fix" this.
+      // `poi_id IN (…)` is never true for NULL, so a fused telling is excluded here by SQL semantics
+      // rather than by a predicate. That is still right — this map answers "does this POI have its OWN
+      // clip" — but it is no longer the whole story: a member whose cluster speaks for it has no clip
+      // of its own and is not un-narrated either. See `fusedByCluster` below.
       .where(inArray(narrations.poiId, poiIds)),
+    // The FUSED tellings, so a clustered member can be reported as COVERED rather than as a place
+    // nobody ever narrated. Without this the console calls 104 real, live places "none" — which reads
+    // as a generation backlog and would send an operator to pay for clips that already exist.
+    db
+      .select({ clusterId: narrations.clusterId, releasedAt: narrations.releasedAt })
+      .from(narrations)
+      .where(isNotNull(narrations.clusterId)),
     // All regions + their discovery bbox. POI→region is GEOGRAPHIC (bbox containment), matching
     // how roam actually selects candidates (region-corpus.ts / generate-narrations.ts). A region with no
     // bbox can't claim any poi.
@@ -1084,8 +1094,16 @@ app.get('/admin/pois', async (c) => {
     if (r) snappedRegions.add(r.slug)
   }
 
+  // clusterId → is its fused telling live to riders (vs still staged)
+  const fusedByCluster = new Map(fusedRows.map((f) => [f.clusterId, f.releasedAt != null]))
+
   const result = poisRows.map((p) => {
     const clip = clipMap.get(p.id)
+    // A member whose cluster carries a fused telling is SPOKEN FOR — its own clip (if any) is retired
+    // from the read paths once that telling is released. Reported so the operator can tell "covered"
+    // from "never generated"; they look identical on `narrationStatus` alone.
+    const fusedReleased = p.clusterId != null ? fusedByCluster.get(p.clusterId) : undefined
+    const coveredByCluster = fusedReleased === true
     const region = regionForPoi(p.lat, p.lng)
     // Story-eligibility — a POI property (roam draws story-grade POIs from this corpus);
     // single-sourced with the studio pipeline's gate constants (@skipper/shared).
@@ -1125,6 +1143,10 @@ app.get('/admin/pois', async (c) => {
       // Anchorless AND its region has been snapped (carries anchors) ⇒ off-road / won't trigger (see snappedRegions).
       offRoad: p.speakableLat == null && region != null && snappedRegions.has(region.slug),
       narrationStatus,
+      // True once the cluster's fused telling is RELEASED — at which point this place is live via that
+      // clip and its own clip (if any) no longer serves. `false` while the fused clip is merely staged,
+      // because nothing has changed for a rider yet.
+      coveredByCluster,
       suspiciousDuration: clip?.suspiciousDuration ?? false,
       // Stale = the narration grounded on a now-changed facts_hash. narrationStatus already encodes this;
       // surface it on the dedicated axis too (un-clipped pois are never stale).
@@ -1191,23 +1213,27 @@ app.get('/admin/pois/:poiId/narration', async (c) => {
 // Per-clip release (region-release-gate): stamp ONE narration released — the trickle case (release a
 // freshly ear-checked clip inside an already-open region, without re-releasing the whole region).
 // Release-only + monotonic: never clears released_at. See docs/decisions/region-release-gate.md.
+// ⚠ Takes a POI id, and a clustered member has no clip of its own — its telling hangs off the CLUSTER.
+// So this resolves the subject the same way the sheet does: the poi's own narration when it has one,
+// else its cluster's fused telling. Without that, the only way to publish a regenerated fused clip is
+// a whole-region release, which also stamps every other staged clip in the bbox.
 app.post('/admin/pois/:poiId/narration/release', async (c) => {
   const poiId = c.req.param('poiId')
   if (!UUID_RE.test(poiId)) return c.json({ error: 'not_found' }, 404)
+  const [poi] = await db.select({ clusterId: pois.clusterId }).from(pois).where(eq(pois.id, poiId)).limit(1)
+  const subject = poi?.clusterId
+    ? or(eq(narrations.poiId, poiId), eq(narrations.clusterId, poi.clusterId))
+    : eq(narrations.poiId, poiId)
   const [row] = await db
     .update(narrations)
     .set({ releasedAt: new Date() })
-    .where(and(eq(narrations.poiId, poiId), isNull(narrations.releasedAt)))
+    .where(and(subject, isNull(narrations.releasedAt)))
     .returning({ releasedAt: narrations.releasedAt })
   if (row) return c.json({ releasedAt: row.releasedAt })
   // No row updated → either no narration for this poi, or it's already released. Distinguish so the
   // client shows the right state (an already-released clip is a no-op success, not a 404).
   const existing = (
-    await db
-      .select({ releasedAt: narrations.releasedAt })
-      .from(narrations)
-      .where(eq(narrations.poiId, poiId))
-      .limit(1)
+    await db.select({ releasedAt: narrations.releasedAt }).from(narrations).where(subject).limit(1)
   )[0]
   if (!existing) return c.json({ error: 'not_found' }, 404)
   return c.json({ releasedAt: existing.releasedAt, alreadyReleased: true })

@@ -141,6 +141,10 @@ export interface PoiRow {
    *  don't flag. Not a fixable defect (you can't move a peak to a road); it's a "know these won't trigger" signal. */
   offRoad: boolean
   narrationStatus: NarrationStatus
+  /** True when this POI's CLUSTER carries a RELEASED fused telling — the place is live via that clip
+   *  and its own clip (if any) no longer serves. ⚠ Read this before `narrationStatus`: a covered member
+   *  reports 'none', which is indistinguishable from "never generated" without it. */
+  coveredByCluster: boolean
   staleFacts: boolean
   attributed: boolean
   suspiciousDuration: boolean

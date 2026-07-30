@@ -29,7 +29,7 @@
 //   ... --region <slug>          generate a region's roam corpus (default: lake-tahoe; → its bbox)
 //   ... --include-ids a,b,c      regenerate EXACTLY these poi ids (implies --force)
 
-import { and, eq, inArray, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { narrations, pois } from '@skipper/db/schema'
 import type { FactSheetEntry, PoiFacts } from '@skipper/db/schema'
@@ -134,6 +134,7 @@ async function main(): Promise<void> {
           enrichedAt: pois.enrichedAt,
           narrationId: narrations.id,
           clipFactsHash: narrations.factsHash,
+          clusterId: pois.clusterId,
         })
         .from(pois)
         .leftJoin(narrations, eq(narrations.poiId, pois.id))
@@ -174,6 +175,15 @@ async function main(): Promise<void> {
     hasFreshClip: boolean
   }
 
+  // The clusters that already have a fused telling — the supersession set (see the skip below).
+  const fusedClusterIds = new Set(
+    (await db
+      .select({ clusterId: narrations.clusterId })
+      .from(narrations)
+      .where(isNotNull(narrations.clusterId))
+    ).flatMap((r) => (r.clusterId ? [r.clusterId] : [])),
+  )
+
   const candidates: Candidate[] = []
   for (const r of rows) {
     if (excludeIds.has(r.id)) continue // "select all matching, minus a few"
@@ -184,6 +194,14 @@ async function main(): Promise<void> {
     // sheet IS the eligibility gate now — no char floor (removed 2026-06-16); a sheet only exists for an
     // enriched poi, so it subsumes the old `minExtract` check. `f` guards a text-less (pin) row.
     if (!f || !(Array.isArray(r.factSheet) && r.factSheet.length > 0)) continue
+    // A member whose cluster already carries a fused telling is SUPERSEDED — no read path serves its
+    // own clip any more, so paying to (re)generate one buys audio nobody can hear. Skipped rather than
+    // filtered in SQL so the reason is visible in the run log. ⚠ Keyed on "the cluster HAS a fused
+    // telling", never on membership: most grouped POIs have no fused clip and still need their own.
+    if (r.clusterId != null && fusedClusterIds.has(r.clusterId)) {
+      console.log(`  superseded: skipping "${r.name}" — its cluster's fused telling speaks for it`)
+      continue
+    }
     if (STORY_TASTE_DENYLIST.test(r.name)) {
       console.log(`  taste-gate: skipping "${r.name}"`)
       continue

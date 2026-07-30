@@ -66,7 +66,7 @@ export function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loadin
     // The actionable gap: story-grade but no fact well yet — exactly the rows an Enrich run will bill for.
     if (flags === 'needs-enrich' && (p.storyEligibility !== 'eligible' || p.enriched)) return false
     if (flags === 'narrated' && p.narrationCount === 0) return false
-    if (flags === 'narration-stale' && p.narrationStatus !== 'stale') return false
+    if (flags === 'narration-stale' && (p.narrationStatus !== 'stale' || p.coveredByCluster)) return false
     // region-release-gate: a narrated-but-not-yet-public clip waiting on a release.
     if (flags === 'staged' && (p.narrationStatus === 'none' || p.released)) return false
     if (flags === 'sheet-drift' && !p.sheetDrift) return false
@@ -260,12 +260,22 @@ export function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loadin
                 off-road
               </Badge>
             )}
-            {p.narrationStatus !== 'none' && (
+            {/* A clustered member reports narrationStatus 'none' because it has no clip of its OWN —
+                identical to "never generated" unless we say otherwise. It is live, via the group. */}
+            {p.coveredByCluster && (
+              <Badge
+                variant="outline"
+                title="Spoken for by its cluster's fused telling — this place is live through the group's clip, and its own clip (if it had one) no longer serves. Not a generation gap."
+              >
+                in a fused clip
+              </Badge>
+            )}
+            {p.narrationStatus !== 'none' && !p.coveredByCluster && (
               <Badge variant={NARRATION_META[p.narrationStatus].variant} title={NARRATION_META[p.narrationStatus].hint}>
                 {NARRATION_META[p.narrationStatus].label}
               </Badge>
             )}
-            {p.narrationStatus !== 'none' && !p.released && (
+            {p.narrationStatus !== 'none' && !p.released && !p.coveredByCluster && (
               <Badge variant="warning" title="Staged — not yet public (release the region or the clip)">
                 staged
               </Badge>
