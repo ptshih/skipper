@@ -1,7 +1,9 @@
 # Fused cluster generation — phase 4 of the legibility layer
 
-> **Status:** GENERATED — **2026-07-30**. §9 steps 1–4 are done: **all 31 fused clips exist** (59.8 min,
-> $16.70, every one STAGED). Step 5 is the LISTEN, and it has one known defect to judge — see §5b.
+> **Status:** READY TO RELEASE — **2026-07-30**. §9 steps 1–6 are done: 31 fused clips exist (59.6 min,
+> all STAGED), the founder listen passed ("clips sound fine"), and member retirement is built and inert.
+> **The only thing left is the release**, which is now a real-riders change — 1.0 is submitted, and
+> releasing is what activates both the fused clips and the retirement of 104 member clips.
 > Steps 1–3 (staleness hash + member-set resolver, trigger position, read paths) spend nothing and are
 > green. Step 4's tool is complete and its output has been read twice on one cluster ($0.83, nothing
 > persisted); running `--apply` is the commitment point and needs a founder go. §8b's two corpus
@@ -611,10 +613,28 @@ Sequenced so nothing irreversible happens before the thing that makes it reversi
    even though their names are never spoken.
 5. **LISTEN.** The gate on 6, and not automatable. A fused telling worse than its members is a
    regression with no fallback.
-6. **Retire members.** Only after 5. `sweep-orphans` last and separately. ⚠ The queue filter in
-   `generate-narrations` must gain `isNull(pois.clusterId)` HERE and not before — added earlier it
-   would open a coverage hole in the 30 clusters that have no fused clip yet (no member clips, no fused
-   clip).
+6. ✅ **Retire members — BUILT 2026-07-30, and it is INERT until a release.** `supersededByFusedTelling`
+   (`apps/api/src/clusters.ts`) drops a member from `/roam` and from the drive BUILD corpus once its
+   cluster has a fused telling the caller can see.
+
+   ⚠ **Keyed on "its cluster HAS a visible fused telling", never on `cluster_id IS NOT NULL`.** That
+   distinction is the whole safety property, and the naive version would have been a disaster: measured
+   live, 304 pois carry a `cluster_id` but only **104** belong to a cluster that has a fused clip. The
+   other **200** — the 30 un-enriched Yosemite clusters plus the geometry-gated UNR campus — would have
+   vanished from roam and from drives with nothing to replace them.
+
+   Measured in both modes: **public 0 suppressed** (every fused clip is staged, so it is a runtime
+   no-op), **admin preview 104 suppressed** — exactly the retirement count §4.2 predicted. Verified
+   live: `/roam` returns the same 46 pins it did before any of phase 4, Stateline's members included.
+
+   ⚠ **This retirement is REVERSIBLE and deletes nothing.** It is read-path suppression, so the member
+   `narrations` rows and their R2 objects survive untouched — deleting a fused telling brings its
+   members straight back. Nothing here creates orphans, so `sweep-orphans` is NOT part of this step.
+   The spec's earlier worry about retiring audio before hearing its replacement does not apply to the
+   shape that got built.
+
+   Still open: the queue filter in `generate-narrations` (so a run does not pay to regenerate a
+   superseded member's clip). Cosmetic — it wastes money, it does not break anything.
 7. **Admin surface.** Can trail; ungovernable without it, not broken.
    - ✅ **The release path was NOT trailable and is fixed (2026-07-30).** The region release stamped
      `narrations.poi_id IN (pois in bbox)`, which a fused clip's NULL `poi_id` can never match — so all

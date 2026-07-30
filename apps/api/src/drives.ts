@@ -18,7 +18,7 @@
 // is behind requireAccount.
 
 import { Hono, type Context } from 'hono'
-import { and, between, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm'
+import { and, between, desc, eq, inArray, isNotNull, isNull, not, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { creditEntries, drives, driveDemand, narrations, places, pois, regions, selectionSubject } from '@skipper/db/schema'
 import type { DriveSelection, DriveSelectionItem, Polyline, RouteProvenance } from '@skipper/db/schema'
@@ -32,7 +32,7 @@ import {
   OFF_ROUTE_MAX_M,
   type DriveCandidate,
 } from '@skipper/engine'
-import { CLUSTER_VARIETY_KEY, loadClusterTellings, type ClusterTelling } from './clusters'
+import { CLUSTER_VARIETY_KEY, loadClusterTellings, supersededByFusedTelling, type ClusterTelling } from './clusters'
 import {
   createDriveRequest,
   driveProposeRequest,
@@ -286,6 +286,10 @@ async function loadCorpusForRoute(
           // twenty minutes). Filtered at BUILD only — see loadCorpusByPoiIds for why the replay path
           // deliberately does not. `prune-corpus.ts` sets it; the reason string says which rule fired.
           isNull(pois.excludedReason),
+          // A clustered member stops being a drive candidate once its cluster has a fused telling
+          // this caller can see (spec §4.2). BUILD path only — `loadCorpusBySubjectIds` deliberately
+          // does not re-adjudicate a frozen drive's stops, exactly as with `excluded_reason`.
+          not(supersededByFusedTelling(includeStaged)),
         ),
       ),
     { label: 'drive.corpus' },

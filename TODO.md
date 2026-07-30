@@ -208,9 +208,23 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
             gated. ⚠ Cost was corrected UP: halving the original $10-15 along with the clip count was
             wrong, because per-clip cost RISES (a fused well is 9 sheets and the script runs to the
             180 s ceiling, not the 90 s story aim).
-      - [ ] **Steps 5-7** — LISTEN, retire members, admin. ⚠ `isNull(pois.clusterId)` belongs in step 6,
-            NOT earlier, or the 30 un-generatable clusters lose their member clips with nothing to
-            replace them.
+      - [x] **Step 5 — LISTEN: PASSED (founder, 2026-07-30, "clips sound fine").**
+      - [x] **Step 6 — member retirement BUILT + INERT.** `supersededByFusedTelling` drops a member from
+            `/roam` and the drive BUILD corpus once its cluster has a fused telling the caller can see.
+            ⚠ Keyed on "the cluster HAS a visible fused clip", NEVER on `cluster_id IS NOT NULL` — that
+            naive version would have been a disaster: 304 pois carry a cluster_id but only **104** have a
+            fused clip, so the other **200** (un-enriched Yosemite + the gated UNR campus) would have
+            vanished with nothing replacing them. Measured: public 0 suppressed (all staged ⇒ no-op),
+            admin-preview 104 — exactly §4.2's number. ⚠ REVERSIBLE and deletes NOTHING: it is read-path
+            suppression, member rows + R2 survive, so `sweep-orphans` is not part of this step.
+      - [ ] **THE RELEASE — the only thing left, and it is a real-riders change.** Releasing the region
+            is what activates the 31 fused clips AND retires 104 member clips, in one stamp. ⚠ 1.0 is
+            submitted and `released_at` is MONOTONIC (never cleared), so the undo is deleting the fused
+            narrations, not un-releasing. Founder call.
+      - [ ] **Step 7 (can trail):** `GET /admin/pois` still shows a cluster member as
+            `narrationStatus: 'none'`; no per-clip release for a fused telling. Also cosmetic: the
+            `generate-narrations` queue should skip superseded members so a run doesn't pay to
+            regenerate a clip nobody serves.
       - [x] **(a) `UNLV Arboretum` — EXCLUDED 2026-07-30.** Wikidata Q7865354 carries UNR's exact
             coordinates, so a released 71-second clip about a Las Vegas campus was firing in Reno — a
             LIVE bug, not a phase-4 one. ⚠ A class the grounding gate cannot see (facts right, PLACE

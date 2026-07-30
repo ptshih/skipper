@@ -49,6 +49,30 @@ export interface ClusterTelling {
  *  the fused whole. */
 export const CLUSTER_VARIETY_KEY = 'cluster'
 
+/**
+ * A poi is SUPERSEDED when its cluster already has a fused telling this caller can see — spec §4.2,
+ * founder-settled: a clustered member is not an active POI in either mode once the fused clip exists.
+ * The fused clip is the only telling for that place; keeping the members would leave a rider in
+ * downtown Reno with 46 competing pins plus a fused one.
+ *
+ * ⚠ Keyed on "its cluster HAS a visible fused telling", NEVER on `cluster_id IS NOT NULL`. Most of the
+ * grouped corpus has no fused clip and never will until it is enriched — 30 Yosemite clusters have
+ * zero enriched members, and the UNR campus is deferred by the geometry gate. Suppressing on
+ * membership alone would delete those places from roam and from drives with NOTHING to replace them.
+ * Self-gating is also what makes the retirement safe to ship BEFORE a release: with every fused clip
+ * staged, this predicate suppresses nothing.
+ *
+ * `includeStaged` mirrors the caller's own release filter, so an admin previewing staged content sees
+ * what RELEASE would look like rather than both layers at once.
+ */
+export function supersededByFusedTelling(includeStaged: boolean) {
+  return sql`exists (
+    select 1 from ${narrations} n2
+    where n2.cluster_id = ${pois.clusterId}
+      ${includeStaged ? sql`` : sql`and n2.released_at is not null`}
+  )`
+}
+
 /** Members of the given clusters, filtered to the ones a telling may be written over. Mirrors the
  *  studio-side resolver (`pipeline/cluster.ts`); the shared predicate is what keeps them in step. */
 async function tellableMembersByCluster(clusterIds: string[]): Promise<Map<string, { lat: number; lng: number }[]>> {

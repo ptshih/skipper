@@ -19,13 +19,13 @@
 
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { and, asc, between, eq, isNotNull, isNull } from 'drizzle-orm'
+import { and, asc, between, eq, isNotNull, isNull, not } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { narrations, pois, regions } from '@skipper/db/schema'
 import { haversineMeters, triggerRadiusForKind } from '@skipper/engine'
 import type { RoamPin } from '@skipper/shared'
 import { auth, SITE_ORIGIN } from './auth'
-import { loadClusterTellings } from './clusters'
+import { loadClusterTellings, supersededByFusedTelling } from './clusters'
 import { driveRoutes } from './drives'
 import { isAdmin, withSession, type ApiEnv } from './entitlements'
 import { rateLimit } from './rate-limit'
@@ -195,6 +195,10 @@ app.get('/roam', async (c) => {
             // admin, since this is about the SHAPE of the place, not about staged-vs-released content,
             // and roam has no frozen artifact to protect (every session resolves pins live).
             isNull(pois.excludedReason),
+            // …and a place whose CLUSTER already speaks for it is no longer its own pin (spec §4.2).
+            // Self-gating: with every fused clip staged this matches nothing, so shipping it ahead of
+            // a release is a no-op rather than a coverage hole.
+            not(supersededByFusedTelling(canPreview)),
           ),
         ),
     { label: 'roam.pins' },
