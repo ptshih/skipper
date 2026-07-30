@@ -157,9 +157,20 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
             (`subjectId`/`subjectKind`), never a `poiId` holding a cluster id — that false statement is
             what `poi_clusters` exists to prevent; `selectionSubject` reads the legacy shape so the 3
             existing drives keep every stop. The WIRE did not change.
-      - [ ] **Steps 4-7** — generate (SPENDS, founder go), LISTEN, retire, admin. See spec §9. ⚠
-            `isNull(pois.clusterId)` belongs in step 6, NOT earlier, or the 30 un-generatable clusters
-            lose their member clips with nothing to replace them.
+      - [ ] ⚠ **BLOCKS step 4 — `highlights` is decorative and the drop list does nothing.** Measured
+            by generating ONE fused telling (Stateline, 9 members / 5 highlights / 4 dropped, $0.41,
+            nothing persisted): the model NAMED 2 of the 4 DROPPED members and skipped 3 of the 5
+            highlights entirely — `Harrah's`, `Caesars Republic` and `Golden Nugget` never appear,
+            while a dropped country club's 1930s dinner menu opens the clip. It picked by FACT
+            RICHNESS, and nothing was violated: `mergedFeatures` says "you MAY name each", so there is
+            no channel for "ground on this, don't say it". Step 4 must add one. Spec §3.2.
+      - [ ] **Steps 4-7** — generate (SPENDS ~$12-16, founder go), LISTEN, retire, admin. See spec §9.
+            The narrate-and-score half is BUILT + previewed (`generate-cluster-narrations.ts`, no
+            `--apply` by design); TTS → loudnorm → R2 → upsert remains. ⚠ `isNull(pois.clusterId)`
+            belongs in step 6, NOT earlier, or the 30 un-generatable clusters lose their member clips
+            with nothing to replace them. ⚠ Cost was corrected UP: halving the original $10-15 with the
+            clip count was wrong, because per-clip cost rises (a fused well is 9 sheets and the script
+            runs to the 180 s ceiling, not the 90 s story aim).
       - [x] **(a) `UNLV Arboretum` — EXCLUDED 2026-07-30.** Wikidata Q7865354 carries UNR's exact
             coordinates, so a released 71-second clip about a Las Vegas campus was firing in Reno — a
             LIVE bug, not a phase-4 one. ⚠ A class the grounding gate cannot see (facts right, PLACE

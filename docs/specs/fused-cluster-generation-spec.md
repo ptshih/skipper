@@ -66,6 +66,21 @@ in this design. The fail-closed grounding gate then applies unmodified.
 names are uninteresting), but permit only `highlights` to be NAMED. That asymmetry is new and the prompt
 must say it explicitly, or the model will name whatever it grounds on.
 
+✅ **CONFIRMED THE HARD WAY, 2026-07-30 — and it is worse than "the model MIGHT".** One fused telling
+was generated for `Stateline: Tahoe's Casino Row` (9 members, 5 highlights, 4 dropped), grounded on
+every tellable member through `mergedFeatures`. Result:
+
+- it NAMED 2 of the 4 **dropped** members (`Stateline Country Club`, `Van Sickle Bi-State Park`);
+- it named at most 2 of the 5 **highlights** — `Harvey's` (via the bombing) and arguably Bally's under
+  its old `Sahara Tahoe` name. `Harrah's Lake Tahoe`, `Caesars Republic` and `Golden Nugget` — three of
+  the five places the group is NAMED for — do not appear at all.
+
+The model picked by FACT RICHNESS, not by the naming evidence: the Country Club's sheet carries a 1930s
+menu (frog legs, $2.50, a hardwood dance floor), so it opened there and spent a third of the telling on
+a dropped member. `mergedFeatures` says outright *"you MAY name each"*, so nothing was violated — there
+is simply no channel for "ground on this, don't say it". **Step 4 must add one before generating.**
+Until then `highlights` is decorative and the drop list does nothing.
+
 **"Tellable" is a defined set, and it is NOT `pois.cluster_id`.** `isNarratableStoryPoi`
 (`@skipper/shared`) is the one predicate: wikipedia-sourced, has facts, has a non-empty `fact_sheet`,
 not taste-denied, **and `excluded_reason IS NULL`**. The exclusion clause is stricter than the solo
@@ -287,8 +302,12 @@ R2 — run `sweep-orphans` only after the listen, not as part of the same pass.
 
 ## 5. Cost and blast radius
 
-**31** fused clips ≈ **$5–8** LLM + TTS (halved with the scope, §4.2). Cheap. What is NOT cheap is that
-this is the first irreversible step: fused audio in R2, and 104 member clips retired.
+**31** fused clips ≈ **$12–16** LLM + TTS. ⚠ Corrected upward 2026-07-30 by MEASURING one: a fused clip
+cost **$0.41** (narration + the grounding judge, which retried twice on a malformed response). Halving
+the original $10–15 along with the clip count was wrong — per-clip cost went UP, because a fused well is
+9 members' sheets and the script runs to the 180 s ceiling rather than the 90 s story aim. Still cheap.
+What is NOT cheap is that this is the first irreversible step: fused audio in R2, and 104 member clips
+retired.
 
 Sequence: `--apply` per region, preview first, and run `sweep-orphans` after — the corpus is currently at
 a clean 421 objects / 421 referenced / 0 orphans, so any drift is attributable to this run.
@@ -466,7 +485,10 @@ Sequenced so nothing irreversible happens before the thing that makes it reversi
      fired somewhere arbitrary.
    - ⚠ `packages/sim` skips cluster stops rather than mis-placing them — the simulator has no path for
      a member-derived geometry yet. Worth revisiting once there is fused audio to simulate.
-4. **Fused generation.** The first spend (~$5–8) and the first audio. **Needs an explicit founder go.**
+4. **Fused generation.** The first spend (~$12–16) and the first audio. **Needs an explicit founder go.**
+   The narrate-and-score half is BUILT and previewed (`generate-cluster-narrations.ts`, no `--apply` by
+   design); what remains is the naming channel from §3.2, then TTS → loudnorm → R2 → the upsert on
+   `narrations_cluster_uq`.
 5. **LISTEN.** The gate on 6, and not automatable. A fused telling worse than its members is a
    regression with no fallback.
 6. **Retire members.** Only after 5. `sweep-orphans` last and separately. ⚠ The queue filter in
