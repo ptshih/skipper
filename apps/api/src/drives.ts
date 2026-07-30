@@ -243,6 +243,9 @@ const candidateOf = (r: NarrationRow): DriveCandidate => ({
   lng: r.lng,
   kind: r.kind,
   name: r.name,
+  // Load-bearing for selection, not cosmetic: an anchored stop triggers off the TIGHT 250 m floor, so
+  // buildDrive needs it to know how close the car must actually get before this stop can play.
+  anchored: r.anchored,
 })
 
 /** Resolve a frozen `selection` into presigned, playable driveClips (narration content LIVE via the

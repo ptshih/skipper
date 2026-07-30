@@ -13,8 +13,9 @@
 // Breaks + clock-anchored asides are layered by the caller in later phases; this is the
 // narration core.
 
-import { haversineMeters, OFF_ROUTE_MAX_M, type LngLat } from './geo'
+import { cumulativeMeters, haversineMeters, OFF_ROUTE_MAX_M, totalMeters, triggerRadiusForKind, type LngLat } from './geo'
 import { buildRouteSnapper } from './pacing'
+import { DEFAULT_TRIGGER, effectiveRadiusM } from './trigger'
 
 /** A reusable roam narration a drive can include — the place's ONE shared telling (1:1 with the POI).
  *  engine stays DB-agnostic, so the caller maps DB rows to this shape. */
@@ -28,6 +29,12 @@ export interface DriveCandidate {
   lng: number
   /** POI kind — the variety bucket (and, later, trigger radius). */
   kind?: string | null
+  /** True when lat/lng is a ROAD-SNAPPED anchor rather than the raw centroid. Load-bearing for
+   *  selection, not just display: an anchored stop triggers off a TIGHT floor
+   *  (`ANCHORED_TRIGGER_RADIUS_M`) instead of the fat kind-aware one, so it is far easier for a
+   *  candidate to be admitted as "on route" and then sit outside its own trigger range. See the
+   *  reachability filter in buildDrive step 1. */
+  anchored?: boolean
   /** Display name (the spoken "stop"). */
   name?: string
 }
@@ -90,11 +97,40 @@ export function buildDrive(params: BuildDriveParams): DriveStop[] {
 
   const snap = buildRouteSnapper(polyline, totalSec)
 
-  // 1. Snap to the route + drop off-route candidates (no trustworthy trigger point past the floor).
+  // The route's average speed — the best estimate this function has of how fast the car will be
+  // moving, and therefore how far the speed-adaptive trigger will reach. Same uniform-speed
+  // approximation `timeAtAlong` already makes to pace stops, used here for the same reason: it is
+  // the only speed signal a frozen route carries. A stop on an unusually slow stretch can still
+  // fall short; a stop admitted by the ceiling alone reliably does.
+  const routeM = polyline.length > 1 ? totalMeters(cumulativeMeters(polyline)) : 0
+  const avgMps = totalSec > 0 && routeM > 0 ? routeM / totalSec : 0
+
+  // 1. Snap to the route, then drop candidates the car will never come close enough to TRIGGER.
+  //
+  //    ⚠ Two different distances used to govern this, and they disagreed. `offRouteMaxM` (700 m) is an
+  //    HONESTY bound — "is this place actually along the drive". The TRIGGER fires on the car's distance
+  //    to the stop, floored at ANCHORED_TRIGGER_RADIUS_M (250 m) for a road-snapped anchor and only
+  //    stretched by speed (max(floor, speed x leadSeconds) ~ 322 m at 60 mph). So every candidate
+  //    admitted in the 250-700 m band was SELECTED and then silent: it consumed a min-gap pacing slot,
+  //    blocked a stop that would have played, and produced nothing. Measured on the three saved Tahoe
+  //    drives before this filter: 3 of 18 selected stops could not fire at the drive's own average
+  //    speed, and Granlibakken (622 m off-route) would have needed 116 mph.
+  //
+  //    Selecting on the radius the TRIGGER will actually use makes the two agree by construction. This
+  //    can only ever TIGHTEN the gate (the radius is min'd with the honesty ceiling), so the stop COUNT
+  //    can fall. Measured on the same three drives: 18 stops with 3 silent became 16 stops with 0
+  //    silent — AUDIBLE stops went 15 to 16. One drive backfilled the freed window (7 audible to 8);
+  //    the other had no other candidate in range and went from 8 stops to 6. That is a truth
+  //    correction, not a regression: the stops it removes were never going to play, and a shorter
+  //    honest drive beats a longer one with silent gaps in it.
   const placed: Snapped[] = []
   for (const cand of candidates) {
     const s = snap([cand.lng, cand.lat])
-    if (s.offRouteM <= offRouteMaxM) {
+    const reachM = Math.min(
+      offRouteMaxM,
+      effectiveRadiusM(triggerRadiusForKind(cand.kind ?? null, cand.anchored === true), avgMps, DEFAULT_TRIGGER.leadSeconds),
+    )
+    if (s.offRouteM <= reachM) {
       placed.push({
         cand,
         alongSec: s.alongSec,

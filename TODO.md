@@ -33,9 +33,20 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
       an Eligibility block to exclude (reason required) / restore. Reference cheat-sheet updated.
       ⚠ **VISUAL PASS STILL OWED** — admin dev servers were down, so typecheck+build only, and that pair
       has missed a shell-collapsing CSS regression before. Eyeball it on `bun run dev:admin`.
-- [ ] **1b. USE the road class.** Nothing reads `speakable_road_class` yet — selection/roam still treat
-      a residential anchor the same as a highway one. Decide the rule (demote? exclude? widen radius?)
-      against a real drive rather than at the desk.
+- [x] **1b — the real finding wasn't road class at all. FIXED 2026-07-29.** Selection admitted anything
+      within `OFF_ROUTE_MAX_M` (700 m) of the route, but an ANCHORED stop triggers off a 250 m floor
+      (speed-adaptive to ~322 m at 60 mph). So every candidate in the 250–700 m band was selected, ate a
+      min-gap pacing slot, and played NOTHING. Measured on the three saved drives: **3 of 18 selected
+      stops were silent at the drive's own average speed**; Granlibakken (622 m off-route) needed 116 mph.
+      `buildDrive` now gates on the radius the trigger will actually use (`DriveCandidate.anchored` added
+      so it can tell). After: **18 stops/3 silent → 16 stops/0 silent, audible 15 → 16.** One drive
+      backfilled the freed window, one shrank 8→6 — a truth correction, not a regression. Two regression
+      tests cover the band and the un-anchored non-regression.
+- [ ] **1b-follow-on: road class still has no consumer.** The silence bug turned out to be a threshold
+      inconsistency, NOT a road-class problem — every silent stop was on a MAJOR road. So
+      `speakable_road_class` remains recorded-but-unused. It's now a question about CHOICE between two
+      reachable stops (prefer the through-road one in `better()`?), not about reachability. Worth far
+      less than it looked; decide on a real drive.
 - [ ] **2. Variety tiebreak is dead outside natural features.** `kind` is null on 392/460 — correctly:
       `featureKind()` is a NATURAL-feature allowlist, so a casino gets none. ⚠ The earlier claim that
       this defaults `radiusForKind` for 85% of pins was WRONG (anchored POIs use a flat 250 m, and 426

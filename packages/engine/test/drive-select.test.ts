@@ -29,6 +29,40 @@ describe('buildDrive', () => {
     expect(stops.some((s) => s.poiId === 'off')).toBe(false)
   })
 
+
+  // The 250-700 m band: a candidate the old flat off-route ceiling admitted but the TRIGGER could
+  // never reach, so it consumed a pacing slot and played nothing. Measured on the real Tahoe drives at
+  // 3 of 18 selected stops before the fix. ~11.1 km over 660 s = ~17 m/s, so speed x 12 s lead ~ 202 m
+  // and an ANCHORED stop keeps its 250 m floor — a 400 m offset is unreachable, a 150 m one is fine.
+  test('drops an ANCHORED candidate the trigger radius can never reach (250-700m band)', () => {
+    const stops = buildDrive({
+      polyline,
+      totalSec: TOTAL_SEC,
+      minGapSec: 180,
+      maxStops: 10,
+      candidates: [
+        cand({ poiId: 'near', lat: 38.02, lng: 0.0017, anchored: true }), // ~150 m east — within the 250 m floor
+        cand({ poiId: 'far', lat: 38.07, lng: 0.0046, anchored: true }), // ~400 m east — past it, silent
+      ],
+    })
+    expect(stops.some((s) => s.poiId === 'near')).toBe(true)
+    expect(stops.some((s) => s.poiId === 'far')).toBe(false)
+  })
+
+  // The same 400 m offset must STILL be admitted when the stop is NOT road-snapped: an un-anchored pin
+  // keeps the fat kind-aware floor (600 m default), so tightening the gate must not regress it. This is
+  // what stops the fix from quietly deleting the ~99 un-anchored backcountry places.
+  test('KEEPS the same offset when un-anchored (fat kind-aware floor still applies)', () => {
+    const stops = buildDrive({
+      polyline,
+      totalSec: TOTAL_SEC,
+      minGapSec: 180,
+      maxStops: 10,
+      candidates: [cand({ poiId: 'far', lat: 38.07, lng: 0.0046 })], // no `anchored` → 600 m floor
+    })
+    expect(stops.some((s) => s.poiId === 'far')).toBe(true)
+  })
+
   test('respects the minimum time gap and is ordered (seq 0..n-1, alongSec non-decreasing)', () => {
     const stops = buildDrive({
       polyline,
