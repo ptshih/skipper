@@ -233,6 +233,56 @@ Virginia City (15).
   out of a grouping pass on purpose.
 - The 600 m radius is still not derived (§8).
 
+### 4d. Facts-strength ranking + the Yosemite test — 2026-07-29 `[measured]`
+
+Founder call, and it was the better signal: **rank candidates by FACTS STRENGTH, not clip length.** Clip
+length was a noisy derivative of exactly that (a richer sheet produces a longer clip), so the old rank was
+the shadow of the right thing. Measured against it, facts-strength disagrees on **7 of 10** groups and
+wins the ones that matter — downtown Reno seeds from the Riverside Hotel instead of an apartment block,
+Camp Richardson from the settlement instead of one estate inside it.
+
+**The bigger consequence is pipeline ORDER.** Ranking on facts removes the `narrations` join, so grouping
+no longer has to run AFTER generation. That ordering is the only reason phase 4 owes an orphan cleanup:
+the Tahoe corpus contains 181 satellite clips that fused generation would discard, and they were PAID
+FOR. The pipeline should be **discover → enrich → group → generate**, which never mints them. Tahoe is
+the anomaly (grouped retroactively), not the template.
+
+**It also unblocked the region-agnosticism claim, which was previously untestable.** Yosemite has 837
+POIs, **0 narrated**, 292 with extracts — so the old narration-gated classifier could not run there at
+all, and proving region-agnosticism would have required generating a full corpus first. Circular. Now:
+
+| | Tahoe | Yosemite (never tuned) |
+| --- | --- | --- |
+| POIs with facts | 433 | 292 |
+| groups (2+ members) | 54 | 36 |
+| CLUSTER / DISTRICT / SOLO | 30 / 6 / 17 | **31 / 0 / 5** |
+| with a real subject | 13 of 36 | **22 of 31** |
+| cost | ~$0.70 | **$0.47** |
+
+**Zero DISTRICTs in Yosemite is the right answer, not a bug** — a national park has no downtown, whereas
+Tahoe's bbox swallows Reno, Carson City and Virginia City. The split tracks regional character with no
+tuning, which is the claim. Subject-resolution is *better* there (22/31) because natural features usually
+have a parent entity in Wikidata. Spot-checked groups are strong: `Mariposa Grove + Wawona Tree + Grove
+Museum + Washington Tree` (0.95), `Mist Trail + Vernal Fall + Emerald Pool`, `Camp 4 + Midnight Lightning
++ Columbia Boulder`.
+
+⚠ **But facts-strength introduced a NEW failure mode, and it is systematic rather than random.** Very
+large CONTAINING entities have enormous articles, so they outrank the specific places inside them and
+become group seeds:
+
+- `Half Dome` group seeded by **Yosemite National Park**, absorbing Half Dome
+- `Glacier Point and the Firefall` seeded by **Sierra Nevada** — a mountain range absorbing a viewpoint
+
+`pickSubject` still recovers the right SUBJECT in both (the title names it), so the output is not wrong —
+but the SEED decides group COMPOSITION, and a park's centroid absorbing whatever is within 600 m of it is
+arbitrary. A national park and a mountain range are containers, not stops. **This is the next refinement
+and it is unfixed:** candidate seeds probably need a size/containment exclusion. It is also precisely the
+class of bug only a second region surfaces, which is the argument for having run the test.
+
+**Not applied.** Yosemite was a dry run, and Tahoe's stored grouping still reflects the OLD clip-length
+rank with no evidence columns. Both regions should be re-applied ONCE, after the containing-entity seed
+question is decided — re-applying now would bake in a known-suboptimal grouping.
+
 ## 5. Entity model — `poi_clusters` (revised 2026-07-29 after an adversarial pass)
 
 A group is **its own row**. `poi_clusters` carries `treatment` ('cluster'|'district'), `title`, and a

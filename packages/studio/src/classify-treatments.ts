@@ -36,9 +36,9 @@
 //   --clear           on --apply, only CLEAR the grouping in scope (the undo); makes no model calls
 
 import type Anthropic from '@anthropic-ai/sdk'
-import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
+import { and, inArray, isNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
-import { narrations, poiClusters, pois } from '@skipper/db/schema'
+import { poiClusters, pois } from '@skipper/db/schema'
 import { announce, parseFlags } from './pipeline/ops'
 import { mapLimit } from './pipeline/concurrency'
 import { withRetry } from './pipeline/http'
@@ -198,8 +198,21 @@ async function main(): Promise<void> {
     return console.log(`✓ grouping cleared for ${n} POI(s).`)
   }
 
-  // Only NARRATED, non-excluded places: an un-narrated poi has nothing to fuse, and an excluded one is
-  // already out of the corpus (hygiene runs FIRST — it is what makes the classifier stable, §4b).
+  // Every non-excluded place with something to say — NOT just the narrated ones. An excluded poi is
+  // already out of the corpus (hygiene runs FIRST; it is what makes the classifier stable, §4b).
+  //
+  // ⚠ Ranked by FACTS STRENGTH, and deliberately NOT joined to `narrations`. Two reasons:
+  //
+  //   1. Facts strength is the RIGHT signal and clip length was a noisy derivative of it — a richer
+  //      fact sheet is what produces a longer clip. Ranking on the shadow picked worse seeds: measured
+  //      against clip length it disagreed on 7 of 10 groups, and facts won the ones that mattered
+  //      (downtown Reno seeded from the Riverside Hotel rather than an apartment block; Camp Richardson
+  //      from the settlement rather than one estate inside it).
+  //   2. Dropping the join removes the pipeline-ORDER trap. Requiring narration meant grouping could
+  //      only run AFTER generation — which is why the Tahoe corpus has 181 satellite clips that fused
+  //      generation would have to throw away. Grouping belongs BEFORE generation
+  //      (discover → enrich → group → generate), so the discarded clips are never paid for. It also
+  //      unblocks the region-agnosticism test: Yosemite has 837 POIs, 0 narrated, 292 with extracts.
   const rows: Row[] = (
     await db
       .select({
@@ -208,19 +221,25 @@ async function main(): Promise<void> {
         kind: pois.kind,
         lat: pois.lat,
         lng: pois.lng,
-        // Anchor = the richest telling in the group, so the strongest clip speaks for the place.
-        rank: narrations.audioDurationMs,
+        // Curated sheet entries first (the enricher's judgment about what is worth saying), then raw
+        // article length as the pre-enrichment proxy. `* 10000` keeps sheet count dominant over chars.
+        rank: sql<number>`(
+          coalesce(case when jsonb_typeof(${pois.factSheet}) = 'array' then jsonb_array_length(${pois.factSheet}) else 0 end, 0) * 10000
+          + coalesce(length(${pois.facts} ->> 'extract'), 0)
+        )`,
         sheet: sql<string | null>`left(${pois.factSheet}::text, 180)`,
       })
       .from(pois)
-      .innerJoin(narrations, eq(narrations.poiId, pois.id))
-      .where(and(...inBbox, isNull(pois.excludedReason)))
+      .where(and(...inBbox, isNull(pois.excludedReason), sql`(
+        ${pois.facts} ->> 'extract' is not null
+        or (jsonb_typeof(${pois.factSheet}) = 'array' and jsonb_array_length(${pois.factSheet}) > 0)
+      )`))
   ).map((r) => ({ ...r, rank: Number(r.rank) }))
 
   const groups = leaderGroups(rows, radiusM)
   const multi = groups.filter((g) => g.length > 1)
   console.log(
-    `\n${rows.length} narrated POI(s) → ${groups.length} group(s); ${multi.length} with 2+ members.\n` +
+    `\n${rows.length} POI(s) with facts → ${groups.length} group(s); ${multi.length} with 2+ members.\n` +
       `${multi.length} model call(s) ≈ $${(multi.length * 0.013).toFixed(2)} (measured ~$0.013/group).`,
   )
   if (multi.length === 0) return console.log('Nothing to classify.')
@@ -275,10 +294,18 @@ async function main(): Promise<void> {
   let n = 0
   await mapLimit(groupable, 8, async (c) => {
     const subject = pickSubject(c.members, c.title)
+    const v = byAnchor.get(c.members[0]!.id)
     await withRetry(async () => {
       const [row] = await db
         .insert(poiClusters)
-        .values({ treatment: c.treatment, title: c.title, subjectPoiId: subject?.id ?? null })
+        .values({
+          treatment: c.treatment,
+          title: c.title,
+          subjectPoiId: subject?.id ?? null,
+          // The EVIDENCE. Fused generation reads these, not `treatment` — see the schema comment.
+          highlights: v?.highlights ?? [],
+          dropped: v?.drop ?? [],
+        })
         .returning({ id: poiClusters.id })
       await db
         .update(pois)

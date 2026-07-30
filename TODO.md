@@ -55,11 +55,31 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
       `narrations_subject_xor` CHECK; `pickSubject` prefers a real district entity, else the member the
       group is named after, else NULL (honest for 22 of 38). 38 clusters / 219 memberships migrated with
       11 subjects reseated, no re-spend. Still INERT. See `docs/ideas/poi-legibility-layer.md` §5.
-- [ ] **3c. No staleness signal for a treatment.** cluster-vs-district is "how many can I name in ~90 s",
-      so changing the clip length band silently invalidates every stored treatment. `facts_hash` solves
-      this class of problem for facts; there is no equivalent here. Decide before the band is ever tuned.
-- [ ] **3b. Review the 25 low-confidence groups + the 68 suggested DROPs** before phase 4 spends on
-      fused audio. Both are reported by the CLI and visible per-POI in admin; neither is applied.
+- [x] **3c. Treatment staleness — SOLVED by persisting the EVIDENCE (migration 0038).** `poi_clusters`
+      now stores `highlights` + `dropped` (the model's actual lists). Fused generation reads those;
+      `treatment` is a conclusion derived from `highlights.length` against the current clip band, so it
+      cannot go stale. Also fixes a real bug: the lists were requested, reported, and thrown away, so
+      phase 4 had nothing to generate FROM and would have had to re-classify — whose 95% stability could
+      return a treatment disagreeing with the stored one. Evidence doesn't go stale; a conclusion drawn
+      from a moving budget does. This also dissolves the "68 drops" decision: a dropped member stays a
+      member and simply isn't named — a generation input, not an exclusion.
+- [x] **3d. Rank by FACTS STRENGTH, not clip length (founder call).** Removes the `narrations` join
+      entirely. Disagrees with the old rank on 7 of 10 groups and wins the ones that matter. ⚠ Two
+      consequences worth keeping: grouping now belongs BEFORE generation
+      (discover → enrich → group → generate) — the old order is the only reason Tahoe has 181 paid-for
+      satellite clips that fused generation would discard; and the region-agnosticism test became
+      possible (Yosemite: 837 POIs, 0 narrated, 292 with facts).
+- [x] **3e. Region-agnosticism TESTED on Yosemite, $0.47** — 31 CLUSTER / **0 DISTRICT** / 5 SOLO with
+      zero tuning. Zero districts is correct: a national park has no downtown. Subject resolution is
+      BETTER there (22/31 vs Tahoe's 13/36). See `docs/ideas/poi-legibility-layer.md` §4d.
+- [ ] **3f. ⚠ Containing entities become group SEEDS — the new failure mode facts-ranking introduced.**
+      Huge articles outrank the specific places inside them: the `Half Dome` group is seeded by
+      **Yosemite National Park**, `Glacier Point` by the **Sierra Nevada**. `pickSubject` recovers the
+      right subject, but the SEED decides group COMPOSITION, and a park centroid absorbing whatever is
+      within 600 m of it is arbitrary. A park and a mountain range are containers, not stops — seeds
+      likely need a size/containment exclusion. **Decide this BEFORE re-applying**: Tahoe's stored
+      grouping is still the old clip-length rank with no evidence columns, so both regions want one
+      clean re-apply after this is settled, not two.
 - [ ] **4. Fused generation.** One telling per cluster, written to a cluster length band — NOT
       concatenated (Emerald Bay's 3 = 214 s, Stateline's 5 = 489 s vs a 180 s min-gap).
 - [ ] **5. `buildDrive` reads anchors; delete pick-one.** Orphans ~169 satellite clips —

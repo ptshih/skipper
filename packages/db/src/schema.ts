@@ -355,6 +355,18 @@ export const poiClusters = pgTable(
     // What a driver would CALL this place ("Emerald Bay", "downtown Reno") — the classifier's own words.
     // Persisted because re-deriving it means paying the model again.
     title: text('title').notNull(),
+    // The members worth NAMING ALOUD, most recognisable first, and the ones not worth speaking at all.
+    // These are the model's actual EVIDENCE, and they are what fused generation reads — `treatment` is
+    // merely a conclusion drawn from `highlights.length` against the current clip-length band.
+    //
+    // ⚠ Persisting the evidence and DERIVING the conclusion is deliberate. The first cut stored only the
+    // conclusion and discarded these, which broke twice over: fused generation had nothing to generate
+    // FROM (it would have had to re-run the classifier, whose 95% stability could then return a
+    // treatment disagreeing with the stored one), and `treatment` silently encoded a naming-capacity
+    // budget with no staleness signal — retune the band and every stored verdict is wrong with nothing
+    // to detect it. Evidence doesn't go stale; a conclusion drawn from a moving budget does.
+    highlights: jsonb('highlights').$type<string[]>().notNull().default([]),
+    dropped: jsonb('dropped').$type<string[]>().notNull().default([]),
     // The member that IS the subject, when one exists: a `…Historic District` / settlement QID rather
     // than an arbitrary building. NULLABLE because plenty of real groups have no such entity (the
     // Stateline casino strip is not itself a Wikidata place), and a null here honestly says "this
