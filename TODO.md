@@ -168,13 +168,17 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
             (an unmatched member stays nameable). ⚠ Trade-off is real: naming all five nudged the take
             toward enumeration (diversity lint, advisory). "Work every one of them in" may be a notch
             too strong — a wording knob for the next pass.
-      - [ ] **Steps 4-7** — generate (SPENDS ~$12-16, founder go), LISTEN, retire, admin. See spec §9.
-            The narrate-and-score half is BUILT + previewed (`generate-cluster-narrations.ts`, no
-            `--apply` by design); TTS → loudnorm → R2 → upsert remains. ⚠ `isNull(pois.clusterId)`
-            belongs in step 6, NOT earlier, or the 30 un-generatable clusters lose their member clips
-            with nothing to replace them. ⚠ Cost was corrected UP: halving the original $10-15 with the
-            clip count was wrong, because per-clip cost rises (a fused well is 9 sheets and the script
-            runs to the 180 s ceiling, not the 90 s story aim).
+      - [ ] **Step 4 — BUILT, NOT RUN. Needs a founder go.** `generate-cluster-narrations.ts` is
+            complete: narrate → fail-closed gate with excision retakes → TTS → loudnorm → R2 → upsert
+            on `narrations_cluster_uq` → eval record keyed to the cluster. **`--limit 1 --apply` is the
+            cheap path to ONE real clip to listen to** (well under $1) before committing all 31
+            (~$12-16). ⚠ A PREVIEW is not free either — it narrates and scores; only persistence is
+            gated. ⚠ Cost was corrected UP: halving the original $10-15 along with the clip count was
+            wrong, because per-clip cost RISES (a fused well is 9 sheets and the script runs to the
+            180 s ceiling, not the 90 s story aim).
+      - [ ] **Steps 5-7** — LISTEN, retire members, admin. ⚠ `isNull(pois.clusterId)` belongs in step 6,
+            NOT earlier, or the 30 un-generatable clusters lose their member clips with nothing to
+            replace them.
       - [x] **(a) `UNLV Arboretum` — EXCLUDED 2026-07-30.** Wikidata Q7865354 carries UNR's exact
             coordinates, so a released 71-second clip about a Las Vegas campus was firing in Reno — a
             LIVE bug, not a phase-4 one. ⚠ A class the grounding gate cannot see (facts right, PLACE

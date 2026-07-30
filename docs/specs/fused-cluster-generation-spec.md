@@ -1,8 +1,10 @@
 # Fused cluster generation — phase 4 of the legibility layer
 
-> **Status:** IN BUILD — **2026-07-30**. §9 steps 1–3 (staleness hash + member-set resolver, trigger
-> position, read paths) are BUILT and green — **everything that spends nothing is done**. Step 4 is
-> the commitment point and needs a founder go; ⚠ §8b lists two corpus defects that block it. Promoted from `docs/ideas/poi-legibility-layer.md` on
+> **Status:** IN BUILD — **2026-07-30**. §9 steps 1–4 are BUILT; **nothing has been generated.**
+> Steps 1–3 (staleness hash + member-set resolver, trigger position, read paths) spend nothing and are
+> green. Step 4's tool is complete and its output has been read twice on one cluster ($0.83, nothing
+> persisted); running `--apply` is the commitment point and needs a founder go. §8b's two corpus
+> defects are both RESOLVED. Promoted from `docs/ideas/poi-legibility-layer.md` on
 > founder intent ("let's prepare to do phase 4"). Phases 1–3 are BUILT and APPLIED, and the grouping was
 > re-applied on 2026-07-30 after the third district-merge fix: **64 clusters** (60 cluster / 4 district)
 > over 295 members, all 64 carrying `highlights` / `dropped`, 33 with a real `subject_poi_id`. The four
@@ -511,10 +513,15 @@ Sequenced so nothing irreversible happens before the thing that makes it reversi
      fired somewhere arbitrary.
    - ⚠ `packages/sim` skips cluster stops rather than mis-placing them — the simulator has no path for
      a member-derived geometry yet. Worth revisiting once there is fused audio to simulate.
-4. **Fused generation.** The first spend (~$12–16) and the first audio. **Needs an explicit founder go.**
-   The narrate-and-score half is BUILT and previewed (`generate-cluster-narrations.ts`, no `--apply` by
-   design); what remains is the naming channel from §3.2, then TTS → loudnorm → R2 → the upsert on
-   `narrations_cluster_uq`.
+4. **Fused generation — BUILT, NOT RUN.** `generate-cluster-narrations.ts` is complete: narrate →
+   fail-closed gate with excision retakes → TTS → loudnorm → R2 → upsert on `narrations_cluster_uq`,
+   plus the eval-run record keyed to the CLUSTER. `--apply` is the first spend (~$12–16 for all 31)
+   and the first audio, so it **needs an explicit founder go**. ⚠ A PREVIEW is not free either — it
+   narrates and scores; only the persistence is gated. `--limit 1` is the cheap path to one real clip
+   to listen to. Notes: the R2 key stays under the `narration/` prefix (the only thing `sweep-orphans`
+   protects); `releasedAt` is absent from the upsert's `set`, so a regen never un-publishes; and
+   attribution unions EVERY tellable member including the background ones, whose facts are in the well
+   even though their names are never spoken.
 5. **LISTEN.** The gate on 6, and not automatable. A fused telling worse than its members is a
    regression with no fallback.
 6. **Retire members.** Only after 5. `sweep-orphans` last and separately. ⚠ The queue filter in

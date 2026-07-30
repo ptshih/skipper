@@ -44,6 +44,9 @@ export interface ClusterMemberRow {
   deliveryRegister: DeliveryRegister | null
   facts: PoiFacts | null
   factSheet: FactSheetEntry[] | null
+  /** The enrich stamp — the sheet's frozen credit instant, which a fused clip's attribution needs
+   *  (`factSheetToAttribution` takes ONE retrievedAt for the union, so the caller takes the latest). */
+  enrichedAt: Date | null
   factsHash: string | null
 }
 
@@ -87,6 +90,7 @@ export async function loadClusterMembers(
       deliveryRegister: pois.deliveryRegister,
       facts: pois.facts,
       factSheet: pois.factSheet,
+      enrichedAt: pois.enrichedAt,
       factsHash: pois.factsHash,
     })
     .from(pois)
