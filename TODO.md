@@ -157,13 +157,17 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
             (`subjectId`/`subjectKind`), never a `poiId` holding a cluster id — that false statement is
             what `poi_clusters` exists to prevent; `selectionSubject` reads the legacy shape so the 3
             existing drives keep every stop. The WIRE did not change.
-      - [ ] ⚠ **BLOCKS step 4 — `highlights` is decorative and the drop list does nothing.** Measured
-            by generating ONE fused telling (Stateline, 9 members / 5 highlights / 4 dropped, $0.41,
-            nothing persisted): the model NAMED 2 of the 4 DROPPED members and skipped 3 of the 5
-            highlights entirely — `Harrah's`, `Caesars Republic` and `Golden Nugget` never appear,
-            while a dropped country club's 1930s dinner menu opens the clip. It picked by FACT
-            RICHNESS, and nothing was violated: `mergedFeatures` says "you MAY name each", so there is
-            no channel for "ground on this, don't say it". Step 4 must add one. Spec §3.2.
+      - [x] **The naming channel — BUILT + VERIFIED 2026-07-30 ($0.83 across two takes).** The first
+            fused telling named 2 of 4 DROPPED members and skipped 3 of 5 highlights: with everything
+            equally nameable the model chose by FACT RICHNESS and opened on a dropped supper club's
+            1930s dinner menu. `mergedFeatures` now takes a `background` flag and the fact sheet splits
+            into "landmarks a driver would RECOGNISE — name each" vs "BACKGROUND ONLY — never the
+            subject". Second take, same cluster: **5 of 5 highlights named, 0 of 4 dropped.**
+            ⚠ Keyed off `dropped` not `highlights` — measured, `dropped` matches `pois.name` 68/69 and
+            `highlights` 165/186, so the fuzzy match goes on the near-exact list and a miss fails SAFE
+            (an unmatched member stays nameable). ⚠ Trade-off is real: naming all five nudged the take
+            toward enumeration (diversity lint, advisory). "Work every one of them in" may be a notch
+            too strong — a wording knob for the next pass.
       - [ ] **Steps 4-7** — generate (SPENDS ~$12-16, founder go), LISTEN, retire, admin. See spec §9.
             The narrate-and-score half is BUILT + previewed (`generate-cluster-narrations.ts`, no
             `--apply` by design); TTS → loudnorm → R2 → upsert remains. ⚠ `isNull(pois.clusterId)`

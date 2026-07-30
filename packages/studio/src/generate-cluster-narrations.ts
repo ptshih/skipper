@@ -51,6 +51,12 @@ import type { DeliveryRegister } from '@skipper/shared'
  *  register's own researched ceiling. */
 const SECONDS_PER_EXTRA_NAME = 20
 
+/** Fold a name for comparing the classifier's free-text lists against `pois.name`: case- and
+ *  punctuation-insensitive, whitespace collapsed. Same shape as `pipeline/clustering`'s `titleKey`,
+ *  kept local because that one folds TITLES and this one folds place names — one changing should not
+ *  silently move the other. */
+const nameKey = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+
 async function main(): Promise<void> {
   const flags = parseFlags(process.argv.slice(2), { valueFlags: ['region', 'limit', 'query'] })
   // apply:false ALWAYS — there is no --apply here (see the header). The preamble's "pass --apply"
@@ -121,13 +127,29 @@ async function main(): Promise<void> {
     const band = lengthForRegister(register)
     const targetSeconds = Math.min(band.maxSeconds, band.targetSeconds + SECONDS_PER_EXTRA_NAME * (nameable - 1))
 
-    // ⚠ Every tellable member is passed as a nameable merged feature. Spec §3.2 wants the tighter
-    // "ground on all, name only `highlights`" asymmetry, which the narrator has no channel for yet —
-    // `mergedFeatures` says outright "you MAY name each". Reading THIS take is how we learn whether
-    // that asymmetry is load-bearing or whether the model self-selects.
+    // §3.2's asymmetry: ground on every tellable member, but mark the ones not worth naming as
+    // BACKGROUND so they can't become the subject.
+    //
+    // ⚠ Keyed off `dropped`, NOT `highlights`, and that is the whole trick. Both lists are free-text
+    // names the model authored, but they match `pois.name` at very different rates — measured over the
+    // live corpus, `dropped` matches 68 of 69 while `highlights` manages 165 of 186. Inverting the
+    // question ("is this member on the drop list?") puts the fuzzy matching on the list that is
+    // essentially exact, and a matcher miss then fails SAFE: an unmatched member stays nameable,
+    // which is today's behaviour, rather than silently muting a place the telling is for.
+    const droppedKeys = new Set((c.dropped ?? []).map(nameKey))
+    const matchedDrops = new Set<string>()
     const mergedFeatures = tellable
-      .map((m: ClusterMemberRow) => ({ name: m.name, facts: (m.factSheet ?? []).map((f) => f.text) }))
+      .map((m: ClusterMemberRow) => {
+        const key = nameKey(m.name)
+        const background = droppedKeys.has(key)
+        if (background) matchedDrops.add(key)
+        return { name: m.name, facts: (m.factSheet ?? []).map((f) => f.text), background }
+      })
       .filter((m) => m.facts.length > 0)
+    const unmatched = (c.dropped ?? []).filter((d) => !matchedDrops.has(nameKey(d)))
+    if (unmatched.length) {
+      console.warn(`  ⚠ ${unmatched.length} drop entr(ies) matched no member — they stay NAMEABLE: ${unmatched.join(' · ')}`)
+    }
 
     const centroidLat = tellable.reduce((s, m) => s + (m.speakableLat ?? m.lat), 0) / tellable.length
     const centroidLng = tellable.reduce((s, m) => s + (m.speakableLng ?? m.lng), 0) / tellable.length
@@ -147,6 +169,7 @@ async function main(): Promise<void> {
       `aim ${targetSeconds}s / max ${band.maxSeconds}s`)
     console.log(`  highlights: ${(c.highlights ?? []).join(' · ') || '—'}`)
     if ((c.dropped ?? []).length) console.log(`  dropped:    ${(c.dropped ?? []).join(' · ')}`)
+    console.log(`  → ${mergedFeatures.filter((m) => !m.background).length} nameable, ${mergedFeatures.filter((m) => m.background).length} background`)
 
     const result = await withRetry(() => narrateStop(req, persona.systemPrompt), { label: `narrate(${c.title})` })
     const script = result.script.trim()

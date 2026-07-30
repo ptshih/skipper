@@ -47,8 +47,15 @@ export interface NarrationRequest {
   /** Coordinate-keyed geology facts (the rock underfoot). Grounded like `facts`; allowed on STORY and SCENIC. */
   geology?: string[]
   /** STORY only: co-located landmarks merged into this stop — each {name, facts}. Grounded;
-   *  the narrator may name them and weave them into ONE telling of the place. */
-  mergedFeatures?: { name: string; facts: string[] }[]
+   *  the narrator may name them and weave them into ONE telling of the place.
+   *
+   *  `background: true` marks a place whose facts are grounded but which is NOT worth naming — the
+   *  FUSED-cluster case, where a group of nine has five a driver would recognise and four that are
+   *  only texture. ⚠ Not cosmetic: measured on the first fused telling, with every member equally
+   *  nameable the model chose by FACT RICHNESS and opened on a dropped supper club's 1930s dinner
+   *  menu while never naming three of the five places the group is named for. Default (absent) is
+   *  nameable, so the poi path is unchanged. */
+  mergedFeatures?: { name: string; facts: string[]; background?: boolean }[]
   /** Short reminders of earlier stops, for earned callbacks. */
   priorStops?: string[]
   /** How the last few stops OPENED — so this stop can open differently (each call is independent). */
@@ -122,20 +129,46 @@ function geologyLines(
  * island, and falls) as ONE flowing telling, not several stops. Same grounding rule: only what
  * is listed here is known.
  */
-function mergedFeatureLines(features: { name: string; facts: string[] }[] | undefined): string[] {
+function mergedFeatureLines(
+  features: { name: string; facts: string[]; background?: boolean }[] | undefined,
+): string[] {
   const fs = (features ?? []).filter((f) => f.name && f.facts.length > 0)
   if (fs.length === 0) return []
-  const out: string[] = [
-    '',
-    'ALSO RIGHT HERE — landmarks at this same stop (grounded; you MAY name each and weave them into ONE telling of this place, not separate asides — only what is listed is known):',
-  ]
-  for (const f of fs) {
-    out.push(`• ${f.name}:`)
-    for (const fact of f.facts) out.push(`    - ${fact}`)
+  const named = fs.filter((f) => !f.background)
+  const background = fs.filter((f) => f.background)
+  const out: string[] = []
+  const bullets = (list: typeof fs) => {
+    for (const f of list) {
+      out.push(`• ${f.name}:`)
+      for (const fact of f.facts) out.push(`    - ${fact}`)
+    }
   }
-  out.push(
-    '(Cover these as part of the SAME stop — the place plus its notable features — in one flowing pass. Name them freely; invent nothing beyond their facts above.)',
-  )
+
+  if (named.length > 0) {
+    out.push('')
+    out.push(
+      background.length > 0
+        ? 'ALSO RIGHT HERE — the landmarks a driver would RECOGNISE. Name each of these (grounded; weave them into ONE telling of this place, not separate asides — only what is listed is known):'
+        : 'ALSO RIGHT HERE — landmarks at this same stop (grounded; you MAY name each and weave them into ONE telling of this place, not separate asides — only what is listed is known):',
+    )
+    bullets(named)
+    out.push(
+      background.length > 0
+        ? '(These are what the stop is FOR — work every one of them in, in one flowing pass. Invent nothing beyond their facts above.)'
+        : '(Cover these as part of the SAME stop — the place plus its notable features — in one flowing pass. Name them freely; invent nothing beyond their facts above.)',
+    )
+  }
+
+  // The asymmetry fused generation needs: grounded, but not the subject. Stated as PROPORTION rather
+  // than a naming ban, because most facts are intrinsically about their own place — an outright ban
+  // would make them unusable, which is the same as dropping them from the well.
+  if (background.length > 0) {
+    out.push('')
+    out.push(
+      'BACKGROUND ONLY — also at this stop, but not what a driver came for. These facts are grounded and you may draw on them for context or colour. Do NOT open on one, do NOT let one become the subject of the telling, and prefer not to name them at all:',
+    )
+    bullets(background)
+  }
   return out
 }
 

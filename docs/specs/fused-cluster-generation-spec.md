@@ -77,9 +77,35 @@ every tellable member through `mergedFeatures`. Result:
 
 The model picked by FACT RICHNESS, not by the naming evidence: the Country Club's sheet carries a 1930s
 menu (frog legs, $2.50, a hardwood dance floor), so it opened there and spent a third of the telling on
-a dropped member. `mergedFeatures` says outright *"you MAY name each"*, so nothing was violated — there
-is simply no channel for "ground on this, don't say it". **Step 4 must add one before generating.**
-Until then `highlights` is decorative and the drop list does nothing.
+a dropped member. `mergedFeatures` said outright *"you MAY name each"*, so nothing was violated — there
+was simply no channel for "ground on this, don't say it".
+
+✅ **FIXED + RE-MEASURED 2026-07-30.** `mergedFeatures` entries take a `background` flag, and the fact
+sheet splits into "the landmarks a driver would RECOGNISE — name each" and "BACKGROUND ONLY — do not
+open on one, do not let one become the subject, prefer not to name them at all". Same cluster, same
+$0.42, second take:
+
+| | highlights named | dropped named |
+| --- | --- | --- |
+| before | 1–2 of 5 | **2 of 4** |
+| after | **5 of 5** | **0 of 4** |
+
+⚠ **Keyed off `dropped`, NOT `highlights`.** Both are free-text names the model authored, but they
+match `pois.name` at very different rates — measured live, `dropped` matches **68 of 69** and
+`highlights` **165 of 186**. Inverting the question ("is this member on the drop list?") puts the fuzzy
+matching on the list that is essentially exact, and a matcher miss then fails SAFE: an unmatched member
+stays NAMEABLE, which is the old behaviour, rather than silently muting a place the telling is for.
+Unmatched drop entries are warned, not swallowed.
+
+⚠ **The trade-off is visible and is the one §3.3 predicted.** Naming all five pushed the take toward
+enumeration — the diversity lint (advisory) flagged "reads like a list (2 enumerated sentences)" where
+the first take was flagged for wind-up tics instead. NAME DENSITY is the real constraint, and
+"work every one of them in" may be a notch too strong. A wording knob to try on the next pass.
+
+⚠ **The grounding gate caught a real one, unmodified.** The second take scored 0.97 with an ungrounded
+place-claim ("Frank Sinatra Jr. came home safe" — true, but not in the well), so a real run would
+retake and then WITHHOLD. That is the fail-closed gate working on a fused clip with no changes at all,
+which is the last unproven assumption in §3.2.
 
 **"Tellable" is a defined set, and it is NOT `pois.cluster_id`.** `isNarratableStoryPoi`
 (`@skipper/shared`) is the one predicate: wikipedia-sourced, has facts, has a non-empty `fact_sheet`,
