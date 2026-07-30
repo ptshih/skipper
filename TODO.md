@@ -96,11 +96,13 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
       subject, and all 67 carry `highlights`. Then `prune-corpus --delete --apply` HARD-DELETED the flagged
       rows rather than leaving them flagged — 43 in Tahoe (39 narrations cascaded, 45 min of audio),
       12 in Yosemite. Corpus is now **1632 pois / 421 narrations**, `excluded_reason` count back to 0.
-- [ ] **3i. ⚠ 930 R2 orphans, only ~39 of them from today.** `sweep-orphans` reports 930 unreferenced
-      clips; the deletion above created 39, so ~891 predate it — accumulated regenerations and resynths
-      (some poi directories hold 4+ clips). Safe to delete by definition (no narration references them,
-      and offline downloads store BYTES not URLs), but it is a DELETES BYTES action at 24× the scale of
-      what today produced, so it wants an explicit look before running `--apply`.
+- [x] **3i. R2 swept — 930 orphans deleted 2026-07-30.** Only ~39 came from that day's row deletion; the
+      other ~891 were accumulated regenerations and resynths (some poi dirs held 4+ clips). Re-sweep now
+      reports **421 objects, 421 referenced, 0 orphans** — a clean 1:1 with `narrations`. Verified live
+      afterwards: prod `/roam` serves 420 pins and 15/15 sampled clips stream.
+      ⚠ TRAP when verifying presigned URLs: they are signed PER HTTP METHOD, so a HEAD against a
+      `presignGet` URL returns 403 by design. Check with a ranged GET or you will diagnose a working
+      corpus as entirely broken.
 - [ ] **4. Fused generation.** One telling per cluster, written to a cluster length band — NOT
       concatenated (Emerald Bay's 3 = 214 s, Stateline's 5 = 489 s vs a 180 s min-gap).
 - [ ] **5. `buildDrive` reads anchors; delete pick-one.** Orphans ~169 satellite clips —

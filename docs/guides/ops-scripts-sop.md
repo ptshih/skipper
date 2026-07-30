@@ -57,6 +57,11 @@ burns GCP credits). So they share one safety contract.
 | Tool | Blast radius | Default | Conforms |
 | --- | --- | --- | --- |
 | `sweep-orphans.ts` | DELETES BYTES | dry-run | ✅ (reference) |
+
+⚠ **Verifying a presigned clip URL: use a ranged GET, never HEAD.** Presigned R2 URLs are signed per HTTP
+METHOD, so a HEAD against a `presignGet` URL returns **403 Forbidden** even when the object is perfectly
+fine — enough to make a healthy corpus look entirely broken. `curl -r 0-1023 "<url>"` is the honest check.
+
 | `resynth-narration.ts` | SPENDS $ + MUTATES DB | dry-run | ✅ |
 | `rename-roam-prefix.ts` | MUTATES DB + DELETES BYTES | dry-run | ✅ |
 | `snap-speakable-anchors.ts` | MUTATES DB (no spend — OSM) | dry-run | ✅ |
