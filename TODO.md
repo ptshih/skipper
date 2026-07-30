@@ -159,13 +159,22 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
       - [ ] **Steps 4-7** — generate (SPENDS, founder go), LISTEN, retire, admin. See spec §9. ⚠
             `isNull(pois.clusterId)` belongs in step 6, NOT earlier, or the 30 un-generatable clusters
             lose their member clips with nothing to replace them.
-      - [ ] ⚠ **BLOCKS step 4 — two corpus defects, spec §8b.** (a) `UNLV Arboretum` (Q7865354) carries
-            UNR's exact coordinates in WIKIDATA, so a released 71-second clip about a Las Vegas campus
-            fires in Reno TODAY — a live bug, not a phase-4 one, and a class the grounding gate cannot
-            see (the facts are right, the PLACE is wrong). Excluding it is free. (b) The UNR campus is
-            split across TWO cluster rows 1.2 km apart, so phase 4 would ship two fused UNR clips on
-            one drive; the district-merge pass only merges DISTRICTs. Re-merging needs a hand edit or a
-            paid re-classify.
+      - [x] **(a) `UNLV Arboretum` — EXCLUDED 2026-07-30.** Wikidata Q7865354 carries UNR's exact
+            coordinates, so a released 71-second clip about a Las Vegas campus was firing in Reno — a
+            LIVE bug, not a phase-4 one. ⚠ A class the grounding gate cannot see (facts right, PLACE
+            wrong) and that NO free check can decide: P625, P131 and the Wikipedia article's own coords
+            are all wrong the same way; only the prose is right. A triage detector now runs in
+            `discover-pois` + `prune-corpus` (`pipeline/colocation.ts`) — it FLAGS, never excludes
+            (13 collisions corpus-wide, 12 genuine). The decisive check needs to read the prose, so it
+            belongs in the paid `enrich` step; NOT built. See ops-scripts-sop.md.
+      - [ ] ⚠ **(b) BLOCKS step 4 — the UNR campus is split across TWO cluster rows** 1.2 km apart, so
+            phase 4 would ship two fused UNR clips on one drive. **Code fix committed, NOT RUN:** the
+            merge pass that fused Carson City now covers CLUSTERs too, and re-classifies whatever it
+            fuses so the verdict names all members (the old behaviour kept one half's `highlights`,
+            which is exactly what fused generation writes from — Carson City has that today).
+            Measured over all 64 groups, the widened rule fires exactly ONCE, on this pair, with zero
+            collateral. **Applying it needs a founder go: `classify-treatments`'s PREVIEW SPENDS**
+            (~$0.83 — only the DB write is gated on `--apply`; see the SOP).
 - [ ] **5. `buildDrive` reads anchors; delete pick-one.** Orphans ~169 satellite clips —
       `sweep-orphans.ts` already handles that.
 
