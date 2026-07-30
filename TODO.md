@@ -132,8 +132,10 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
       risk, NAME DENSITY is); a sorted hash-of-hashes for staleness; the admin surface belongs on the
       existing POI sheet. ⚠ **The measurement split the problem: a DISTRICT cannot be a point trigger**
       (46 members over ~2 km leave a ~1 km worst-member distance under every candidate position), so it
-      needs an AREA trigger — a new mode in @skipper/engine. **Decision needed: ship CLUSTER fusion only
-      (60 of 64 groups) and treat districts separately?** Recommended.
+      needs an AREA trigger — a new mode in @skipper/engine. ✅ **DECIDED (founder): phase 4 is CLUSTER-ONLY,
+      60 of 64 groups.** Districts keep today's behaviour until they get their own trigger design.
+      **Build order is §9 of the spec** — staleness hash, position, read paths, generate, LISTEN, then
+      retire members. Steps 1-3 spend nothing; step 4 is the commitment point.
 - [ ] **5. `buildDrive` reads anchors; delete pick-one.** Orphans ~169 satellite clips —
       `sweep-orphans.ts` already handles that.
 
