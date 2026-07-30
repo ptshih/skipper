@@ -211,9 +211,18 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
             closers, within-stop repetition), which always worked at n=1. What has never been measured
             even once is whether the 31 fused clips repeat EACH OTHER. Do not read "diversity 52%" as
             "diversity is working here".
-            Fused clips are the worst population to be blind on: one run, one region, each naming
-            several places, so they share both source material and shape — exactly what the solo corpus
-            did when one geology sentence reached 17 clips and the NRHP phrase reached 67.
+            ✅ **MEASURED 2026-07-30 — and it downgrades this item.** Ran the real `lintScripts` over the
+            released corpus (free, deterministic, no spend): **fused-vs-fused is 0 of 31.** They are NOT
+            repeating each other, so the "worst population to be blind on" framing this entry originally
+            carried was wrong. Corpus-wide the cross-clip rules flag only **16 of 451 (3.5%)**, and none
+            of those are repetition a rider would notice ("the whole works" ×3, "take your pick" ×2).
+            ⚠ **The real lesson is the opposite of the one this item started with: fixing the CALL is the
+            cheap half, and nearly worthless alone.** What actually repeats is invisible to
+            `STOCK_PHRASES` — an n-gram sweep found "the national register of historic places" in
+            **60/420 solo (14%) and 7/31 fused (23%)** — fused is DENSER — and the granite age range in
+            20/420 solo. The load-bearing fix is the RULE, not the call:
+            **"any content n-gram appearing in ≥N clips in the region"** (~15 lines in `lint.ts`), which
+            would have caught both without anyone having to predict them.
             Fix is the one-line swap plus a context seed. Two things not to get wrong: **the take under
             test must go LAST** (every cross-stop rule keeps the FIRST occurrence and flags later ones,
             so any other order flags the corpus and lets the repeating take pass clean), and the context
@@ -222,6 +231,19 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
             ⚠ The 31 released clips are NOT retroactively fixed by this; it only changes what the NEXT
             run produces. Worth doing before Yosemite's 30 (the item below) or any fused regeneration —
             re-generating into the same blind spot buys the same defect at full price.
+      - [ ] **OPENER monotony is the bigger miss, and it splits into a detection gap and an enforcement
+            gap.** Measured over the released corpus: solo 420 clips → **`"here is a…"` opens 25 and
+            `"right about here…"` opens 20**; the first word is one of out/that/here/right in ~29%.
+            Fused is tighter still — 31 clips, only **26 distinct 3-word openers**, first word `right`
+            23%.
+            (a) DETECTION: `openerKey` is an EXACT match, so "right about here", "right about you are"
+            and "right about once stood" count as three different openers — the lint reported 2 opener
+            collisions where the real shape is ~29 clips. Coarsen the key.
+            (b) ⚠ ENFORCEMENT, not detection: `"here is a"` is ALREADY in the hard-banned wind-up list,
+            fires PER-stop (so it worked fine at n=1), and was caught on all 25 at generation time. They
+            shipped because diversity is ADVISORY. Different fix — and do NOT naively promote diversity
+            to a gate: ~135 clips match the ban regex and withholding them would bin a pile of factually
+            clean audio. The lever is feeding the finding harder into the retake.
       - [ ] **Yosemite's 30 clusters** — still un-generatable (zero enriched members); needs a
             founder-gated `enrich-pois --region yosemite` run first. `generate-cluster-narrations.ts` is
             complete: narrate → fail-closed gate with excision retakes → TTS → loudnorm → R2 → upsert
