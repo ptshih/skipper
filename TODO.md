@@ -231,6 +231,29 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
             ⚠ The 31 released clips are NOT retroactively fixed by this; it only changes what the NEXT
             run produces. Worth doing before Yosemite's 30 (the item below) or any fused regeneration —
             re-generating into the same blind spot buys the same defect at full price.
+            ✅ **ALL BUILT** — call fixed on both generators (`0f80d97`, `ab86ce5`), context made
+            fused-aware and explicit-run-safe (`d73d681`), n-gram + opener-shape rules (`f08dc9b`).
+      - [ ] **⛔ DO NOT REGENERATE FOR MONOTONY YET — a $1.68 preview says it does not work.**
+            Ran `--scripts-only` over the 12 worst repeat offenders (6 generated; the other 6 were
+            correctly skipped as superseded by fused tellings) with all of the above live, and diffed
+            the new scripts against the old through the same lint:
+            **NRHP 5→3 · geology 1→1 · total cross-clip findings 14→14.** No net improvement, and
+            `Alamo Ranchhouse` got WORSE (2→4): it dropped the NRHP phrase and landed on three other
+            shared ones. The corpus is saturated enough that a rephrase mostly finds another worn groove.
+            **Why, mechanically** (`eval/optimize.ts`): the loop runs while `bestScore > 0`, but breaks
+            on the first round that fails to STRICTLY improve. A worn-phrase finding is usually not
+            fixable in one round, so the clip spends a retake, does not improve, and stops. Measured
+            cost of that: $1.68 actual against a $0.90 estimate for 6 clips — about one extra narration
+            round each, on the ~38% of clips carrying a worn phrase. At 420 clips that is real money for
+            no gain.
+            ⚠ **The diagnosis this changes: NRHP and the granite age are a SOURCE problem wearing a
+            wording problem's clothes.** Both come from the same fact being handed to dozens of POIs
+            (one Macrostrat map unit per batholith; one NRHP listing sentence), so no per-clip "say it
+            differently" note can fix what is upstream of the clip. The next thing to try is therefore
+            NOT another regen but one of: gate the geology channel to at most N clips per region; teach
+            the persona prompt a house style for a fact it will say fifty times; or vary it at
+            fact-sheet build time. Re-run this same $2 preview to check before spending at scale — it is
+            now the cheap standing test for "would a regeneration actually help?".
       - [ ] **OPENER monotony is the bigger miss, and it splits into a detection gap and an enforcement
             gap.** Measured over the released corpus: solo 420 clips → **`"here is a…"` opens 25 and
             `"right about here…"` opens 20**; the first word is one of out/that/here/right in ~29%.
