@@ -1206,6 +1206,10 @@ interface CorrectionOverride {
 interface CorrectionsPayload {
   overrides: CorrectionOverride[]
   speakable: { lat: number; lng: number } | null
+  /** OSM `highway=` class the anchor snapped to; null when hand-placed or un-snapped. */
+  speakableRoadClass: string | null
+  /** Non-null ⇒ hidden from NEW drives + roam (audio kept; saved drives keep the stop). */
+  excludedReason: string | null
 }
 
 // Assemble the corrections payload for one poi: its (source, source_id)-keyed override rows
@@ -1215,6 +1219,8 @@ async function correctionsForPoi(poi: {
   sourceId: string
   speakableLat: number | null
   speakableLng: number | null
+  speakableRoadClass: string | null
+  excludedReason: string | null
 }): Promise<CorrectionsPayload> {
   const rows = await db
     .select({
@@ -1246,6 +1252,13 @@ async function correctionsForPoi(poi: {
       updatedAt: r.updatedAt.toISOString(),
     })),
     speakable,
+    // Which OSM road the anchor was snapped to. The operator's question this answers: "why does this
+    // stop trigger from nowhere?" — a `residential`/`unclassified` anchor is on a real road that the
+    // drive never takes. Written by snap-speakable-anchors; null for a hand-placed or un-snapped anchor.
+    speakableRoadClass: poi.speakableRoadClass,
+    // Non-null ⇒ this poi is HIDDEN from new drives and from roam. Surfaced here because it is
+    // otherwise invisible: the API just stops returning the place, with nothing in the console saying so.
+    excludedReason: poi.excludedReason,
   }
 }
 
@@ -1286,6 +1299,8 @@ app.get('/admin/pois/:id/corrections', async (c) => {
         sourceId: pois.sourceId,
         speakableLat: pois.speakableLat,
         speakableLng: pois.speakableLng,
+        speakableRoadClass: pois.speakableRoadClass,
+        excludedReason: pois.excludedReason,
       })
       .from(pois)
       .where(eq(pois.id, id))
@@ -1321,6 +1336,8 @@ app.post('/admin/pois/:id/corrections', async (c) => {
         lng: pois.lng,
         speakableLat: pois.speakableLat,
         speakableLng: pois.speakableLng,
+        speakableRoadClass: pois.speakableRoadClass,
+        excludedReason: pois.excludedReason,
       })
       .from(pois)
       .where(eq(pois.id, id))
@@ -1416,14 +1433,43 @@ app.post('/admin/pois/:id/corrections', async (c) => {
       console.log(`[admin] ${operator} set speakable anchor on ${poi.source}:${poi.sourceId} → ${lat},${lng} (${Math.round(check.distanceM)}m from pin)`)
       await db.update(pois).set({ speakableLat: lat, speakableLng: lng }).where(eq(pois.id, id))
     }
+  } else if (kind === 'exclude') {
+    // Hide/unhide a poi as a STOP. Cheap, reversible, and no spend — but it does change what riders
+    // hear, so the reason is REQUIRED on the way in: an unexplained exclusion is the exact thing this
+    // surface exists to prevent (a place vanishing from drives with nothing saying why).
+    // ⚠ Audio is never touched. The narration row and its R2 clip survive, so un-excluding restores the
+    // place with no regeneration — which is why this is a flag and not a delete.
+    const clear = body.clear === true || body.reason === null
+    if (clear) {
+      console.log(`[admin] ${operator} RESTORED ${poi.name} (${poi.source}:${poi.sourceId}) — exclusion cleared`)
+      await db.update(pois).set({ excludedReason: null }).where(eq(pois.id, id))
+    } else {
+      const reason = typeof body.reason === 'string' ? body.reason.trim() : ''
+      if (!reason) {
+        return c.json({ error: 'bad_request', message: '`reason` is required — an exclusion documents itself (or pass clear:true).' }, 400)
+      }
+      if (reason.length > MAX_REASON_LEN) {
+        return c.json({ error: 'bad_request', message: `\`reason\` must be ≤ ${MAX_REASON_LEN} chars.` }, 400)
+      }
+      console.log(`[admin] ${operator} EXCLUDED ${poi.name} (${poi.source}:${poi.sourceId}) — ${reason}`)
+      await db.update(pois).set({ excludedReason: `${reason} (by ${operator})` }).where(eq(pois.id, id))
+    }
   } else {
-    return c.json({ error: 'bad_request', message: 'unknown `kind` — expected fact_edit | retire | speakable.' }, 400)
+    return c.json(
+      { error: 'bad_request', message: 'unknown `kind` — expected fact_edit | retire | speakable | exclude.' },
+      400,
+    )
   }
 
   // Re-read the speakable anchor (it may have just changed) and return the refreshed payload.
   const fresh = (
     await db
-      .select({ speakableLat: pois.speakableLat, speakableLng: pois.speakableLng })
+      .select({
+        speakableLat: pois.speakableLat,
+        speakableLng: pois.speakableLng,
+        speakableRoadClass: pois.speakableRoadClass,
+        excludedReason: pois.excludedReason,
+      })
       .from(pois)
       .where(eq(pois.id, id))
       .limit(1)
@@ -1434,6 +1480,8 @@ app.post('/admin/pois/:id/corrections', async (c) => {
       sourceId: poi.sourceId,
       speakableLat: fresh?.speakableLat ?? null,
       speakableLng: fresh?.speakableLng ?? null,
+      speakableRoadClass: fresh?.speakableRoadClass ?? null,
+      excludedReason: fresh?.excludedReason ?? null,
     }),
   )
 })

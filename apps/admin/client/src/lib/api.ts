@@ -160,10 +160,17 @@ export interface CorrectionOverride {
   upstreamStatus: string
   updatedAt: string
 }
-// A POI's curation surface: its fact-edit overrides + speakable anchor.
+// A POI's curation surface: its fact-edit overrides + speakable anchor + legibility state.
 export interface PoiCorrections {
   overrides: CorrectionOverride[]
   speakable: { lat: number; lng: number } | null
+  /** The OSM `highway=` class the anchor sits on (`primary`, `residential`…), or null when the anchor
+   *  was hand-placed or the poi is un-snapped. A minor-layer class is the tell for "triggers from a
+   *  real road that no drive actually takes". */
+  speakableRoadClass: string | null
+  /** Non-null ⇒ HIDDEN from new drives and from roam. Audio is untouched, so clearing it restores the
+   *  place with no regeneration. */
+  excludedReason: string | null
 }
 // The discriminated POST body for /admin/pois/:id/corrections.
 export type CorrectionBody =
@@ -173,6 +180,10 @@ export type CorrectionBody =
   // `speakable_too_far` unless force is set) — for the rare genuinely-distant vantage.
   | { kind: 'speakable'; lat: number; lng: number; force?: boolean }
   | { kind: 'speakable'; lat: null }
+  // Hide/unhide the poi as a STOP. `reason` is required when excluding (an unexplained exclusion is
+  // the failure this surface exists to prevent); `clear` restores it. Never touches audio.
+  | { kind: 'exclude'; reason: string }
+  | { kind: 'exclude'; clear: true }
 
 // A run row from GET /admin/runs: either an operational gen_job or a historical eval_run. The Jobs
 // and Evals pages each render one source (job vs eval).

@@ -4,12 +4,18 @@ import { Locate, MapPin, RefreshCw, Trash2 } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
 import { errMsg } from '@/lib/format'
 import { qk } from '@/lib/queryKeys'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ErrorCallout } from '@/components/ui/error-callout'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AnchorMap } from '@/components/ui/google-map'
+
+// Through-roads — the classes a tour is plausibly driven on. Mirrors MAJOR in
+// packages/studio/src/snap-speakable-anchors.ts, which is what WRITES the class; kept as a literal
+// here rather than imported because the admin client must not pull in a studio (node-only) module.
+const MAJOR_ROAD = /^(motorway|trunk|primary|secondary|tertiary)(_link)?$/
 import { useConfirm } from '@/components/ui/confirm-dialog'
 
 // The POI's LOCATION surface: its pin + an optional SPEAKABLE ANCHOR (the vantage side-of-road content
@@ -39,6 +45,8 @@ export function Location({ poiId, poiLat, poiLng }: { poiId: string; poiLat?: nu
   // back. Drag → fills inputs → inputs drive the marker. Empty/non-numeric inputs fall back to the saved
   // speakable anchor, then to the POI pin.
   const latNum = Number(lat), lngNum = Number(lng)
+  const [exclReason, setExclReason] = useState('')
+
   const pendingAnchor =
     lat.trim() !== '' && lng.trim() !== '' && Number.isFinite(latNum) && Number.isFinite(lngNum)
       ? { lat: latNum, lng: lngNum }
@@ -85,6 +93,17 @@ export function Location({ poiId, poiLat, poiLng }: { poiId: string; poiLat?: nu
 
   // Discard the in-progress edit (a drag or typed coords) and revert the marker to the saved anchor (or
   // the POI pin if none) — does NOT touch the saved speakable anchor. "Clear" above removes that.
+  // Exclude / restore. Same corrections endpoint as the anchor edits (cheap, reversible, no spend),
+  // so no confirm dialog — the required reason is the deliberation.
+  function exclude() {
+    const reason = exclReason.trim()
+    if (!reason) return
+    saveMut.mutate({ kind: 'exclude', reason }, { onSuccess: () => setExclReason('') })
+  }
+  function restore() {
+    saveMut.mutate({ kind: 'exclude', clear: true })
+  }
+
   function resetAnchor() {
     setLat('')
     setLng('')
@@ -131,6 +150,15 @@ export function Location({ poiId, poiLat, poiLng }: { poiId: string; poiLat?: nu
           ) : (
             <span className="text-xs text-muted-foreground">not set — speaks from the POI pin</span>
           )}
+          {data?.speakableRoadClass && (
+            // The class the anchor was snapped to. A minor-layer road (residential/unclassified/
+            // living_street) is real pavement the drive almost certainly does NOT take, so the stop
+            // triggers from a street nobody is on — worth flagging amber rather than hiding.
+            <Badge variant={MAJOR_ROAD.test(data.speakableRoadClass) ? 'secondary' : 'warning'}>
+              {data.speakableRoadClass.replace(/_/g, ' ')}
+              {!MAJOR_ROAD.test(data.speakableRoadClass) && ' — minor road'}
+            </Badge>
+          )}
           {data?.speakable && (
             <Button variant="ghost" size="sm" disabled={saving} onClick={clearSpeakable}>
               <Trash2 className="h-3 w-3" /> Clear
@@ -158,6 +186,51 @@ export function Location({ poiId, poiLat, poiLng }: { poiId: string; poiLat?: nu
             <RefreshCw className="h-3 w-3" /> Reset
           </Button>
         </div>
+      </div>
+
+      {/* Eligibility as a STOP — lives beside the anchor because both answer the same operator
+          question: will this place trigger properly, and will it be picked at all? */}
+      <div className="flex flex-col gap-2 border-t pt-4">
+        <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Eligibility</div>
+        {data?.excludedReason ? (
+          <>
+            <div className="text-xs leading-relaxed">
+              <span className="font-semibold text-foreground">Hidden from new drives and from roam.</span>{' '}
+              <span className="text-muted-foreground">
+                Existing saved drives keep it — a drive's stops are frozen at build, so nobody loses a stop
+                they spent a credit on. Audio is untouched, so restoring needs no regeneration.
+              </span>
+            </div>
+            <div className="rounded-md bg-muted px-3 py-2 font-mono text-xs">{data.excludedReason}</div>
+            <div>
+              <Button variant="outline" size="sm" disabled={saving} onClick={restore}>
+                <RefreshCw className="h-3 w-3" /> Restore to the corpus
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="text-xs leading-relaxed text-muted-foreground">
+              Eligible. Exclude a place that EXISTS but can't be told as a stop — a numbered highway
+              (its coordinate is an arbitrary point on a line you're on for miles), or an administrative
+              boundary. Takes effect immediately for new drives and roam; audio is kept.
+            </div>
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="min-w-56 flex-1 space-y-1.5">
+                <Label htmlFor="loc-excl" className="text-xs">Reason (required)</Label>
+                <Input
+                  id="loc-excl"
+                  value={exclReason}
+                  onChange={(e) => setExclReason(e.target.value)}
+                  placeholder="linear feature: no meaningful point trigger"
+                />
+              </div>
+              <Button variant="outline" size="sm" disabled={saving || !exclReason.trim()} onClick={exclude}>
+                Exclude
+              </Button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Trash2, X } from 'lucide-react'
+import { EyeOff, Trash2, X } from 'lucide-react'
 import { api } from '@/lib/api'
 import { qk } from '@/lib/queryKeys'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
@@ -40,6 +40,15 @@ export function PoiDetailSheet({ poiId, poiName, canDelete, hasNarration, open, 
     queryFn: async () => (await api.poi(poiId)).poi,
     enabled: open,
   })
+  // Legibility state, read here rather than only inside the Location tab so an exclusion is visible on
+  // EVERY tab. The whole point of this banner: an excluded poi silently stops appearing in drives and
+  // roam, and an operator staring at a normal-looking detail sheet had no way to know why.
+  const { data: curation } = useQuery({
+    queryKey: qk.poiCorrections(poiId),
+    queryFn: () => api.poiCorrections(poiId),
+    enabled: open,
+  })
+
   // Hard delete — only surfaced for orphans (canDelete). Closes the sheet + refreshes the corpus.
   const deleteMut = useMutation({
     mutationFn: () => api.deletePoi(poiId),
@@ -58,6 +67,21 @@ export function PoiDetailSheet({ poiId, poiName, canDelete, hasNarration, open, 
             <X className="h-4 w-4" />
           </button>
         </SheetHeader>
+
+        {curation?.excludedReason && (
+          <div className="border-y border-amber-500/30 bg-amber-500/10 px-6 py-2.5">
+            <div className="flex items-start gap-2 text-xs">
+              <EyeOff className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-500" />
+              <div className="leading-relaxed">
+                <span className="font-semibold">Excluded — hidden from new drives and roam.</span>{' '}
+                <span className="text-muted-foreground">{curation.excludedReason}</span>{' '}
+                <span className="text-muted-foreground">
+                  Saved drives keep it; audio is untouched. Restore on the Location tab.
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Tab strip */}
         <div className="border-b px-6 py-3">
