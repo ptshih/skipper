@@ -35,6 +35,12 @@
 //   apply:    dotenvx run -f .env.development -- bun packages/studio/src/prune-corpus.ts --apply
 //   --region <slug>   scope to a region's bbox (default: lake-tahoe)
 //   --restore         clear the reason this tool sets, on the same scope (the undo)
+//   --delete          HARD-DELETE rows this tool already flagged (founder call 2026-07-30). Flagging was
+//                     the compromise for rows whose audio was already paid for; deleting is the honest
+//                     end state once that is accepted. ⚠ IRREVERSIBLE and it CASCADES to `narrations`
+//                     (poi_id ON DELETE CASCADE), which leaves their R2 clips ORPHANED — run
+//                     `sweep-orphans.ts` afterwards to reclaim the bytes. Scoped to this tool's own
+//                     reason prefix, so a hand-made admin exclusion is never swept up.
 
 import { and, eq, isNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
@@ -60,7 +66,14 @@ async function main(): Promise<void> {
   const flags = parseFlags(process.argv.slice(2), { valueFlags: ['region'] })
   const apply = flags.has('apply')
   const restore = flags.has('restore')
-  announce({ tool: 'prune-corpus', blast: ['MUTATES DB'], apply })
+  const hardDelete = flags.has('delete')
+  announce({
+    tool: 'prune-corpus',
+    // 'DELETES ROWS' rather than 'DELETES BYTES': this cascade removes narration ROWS and thereby
+    // ORPHANS their R2 objects — it never deletes the objects themselves. sweep-orphans does that.
+    blast: hardDelete ? ['MUTATES DB', 'DELETES ROWS'] : ['MUTATES DB'],
+    apply,
+  })
 
   const region = await resolveRegion(flags.value('region') ?? DEFAULT_REGION_SLUG)
   const bbox = requireRegionBbox(region)
@@ -73,6 +86,38 @@ async function main(): Promise<void> {
 
   const ownedByThisTool = sql`(${pois.excludedReason} = ${LINEAR_FEATURE_REASON}
     or ${pois.excludedReason} like ${PRUNE_REASON_PREFIX + '%'})`
+
+  if (hardDelete) {
+    // Only what THIS tool flagged. A narration row dies with its poi via the FK cascade, so count the
+    // audio explicitly — the operator should see the bytes they are about to orphan, not discover it.
+    const doomed = await db
+      .select({
+        id: pois.id,
+        name: pois.name,
+        reason: pois.excludedReason,
+        narrationId: narrations.id,
+        audioUrl: narrations.audioUrl,
+        durationMs: narrations.audioDurationMs,
+      })
+      .from(pois)
+      .leftJoin(narrations, eq(narrations.poiId, pois.id))
+      .where(and(...inBbox, ownedByThisTool))
+
+    if (doomed.length === 0) return console.log('\nNothing to delete — no rows carry this tool\'s exclusion in range.')
+    const withAudio = doomed.filter((d) => d.narrationId != null)
+    const sec = Math.round(withAudio.reduce((a, d) => a + (d.durationMs ?? 0), 0) / 1000)
+    console.log(`\n${doomed.length} row(s) to DELETE:`)
+    for (const d of doomed) console.log(`  ${d.narrationId ? '♪' : ' '} ${d.name}  —  ${d.reason}`)
+    console.log(
+      `\n⚠ ${withAudio.length} carry a narration that dies with them (${Math.round(sec / 60)} min of audio). ` +
+        `The R2 CLIPS ARE NOT TOUCHED by this delete — they become ORPHANS. Reclaim them with:\n` +
+        `    dotenvx run -f .env.development -- bun packages/studio/src/sweep-orphans.ts --apply`,
+    )
+    if (!apply) return console.log('\nPREVIEW — no writes. Re-run with --delete --apply to remove them.')
+    await withRetry(() => db.delete(pois).where(and(...inBbox, ownedByThisTool)), { label: 'prune.delete' })
+    console.log(`\n✓ ${doomed.length} row(s) deleted (${withAudio.length} narration(s) cascaded). Now sweep orphans.`)
+    return
+  }
 
   if (restore) {
     const rows = await db

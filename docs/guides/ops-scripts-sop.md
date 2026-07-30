@@ -60,6 +60,6 @@ burns GCP credits). So they share one safety contract.
 | `resynth-narration.ts` | SPENDS $ + MUTATES DB | dry-run | ✅ |
 | `rename-roam-prefix.ts` | MUTATES DB + DELETES BYTES | dry-run | ✅ |
 | `snap-speakable-anchors.ts` | MUTATES DB (no spend — OSM) | dry-run | ✅ |
-| `prune-corpus.ts` | MUTATES DB (flags only; never deletes) | dry-run | ✅ (has `--restore`) |
+| `prune-corpus.ts` | MUTATES DB; `--delete` DELETES ROWS + cascades | dry-run | ✅ (`--restore`; `--delete` needs `--apply`) |
 | `classify-treatments.ts` | SPENDS $ (~$0.7/region) + MUTATES DB | dry-run | ✅ (has `--clear`) |
 | `backfill-poi-extent.ts` | MUTATES DB (no spend — WDQS) | dry-run | ✅ |

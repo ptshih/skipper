@@ -91,9 +91,16 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
       (Wikidata types TRAILHEADS that way — it flagged Eagle Falls trailhead), and `isSettlement` now
       overrides containment at any size (Carson City at 407 km² is a DISTRICT subject, not a container).
       See `docs/ideas/poi-legibility-layer.md` §4f.
-- [ ] **3h. Re-apply BOTH regions once — now unblocked (3f + 3g are settled).** Tahoe's stored grouping
-      still reflects the pre-facts-strength rank, with no evidence columns and no container bar; Yosemite
-      has never been applied. One clean `classify-treatments --apply` per region, ~$1.20 total.
+- [x] **3h. Both regions re-applied + corpus PRUNED for real — 2026-07-30 (founder call).** Grouping now
+      reflects the final rules: **67 clusters** (62 cluster / 5 district), 302 members, 36 with a real
+      subject, and all 67 carry `highlights`. Then `prune-corpus --delete --apply` HARD-DELETED the flagged
+      rows rather than leaving them flagged — 43 in Tahoe (39 narrations cascaded, 45 min of audio),
+      12 in Yosemite. Corpus is now **1632 pois / 421 narrations**, `excluded_reason` count back to 0.
+- [ ] **3i. ⚠ 930 R2 orphans, only ~39 of them from today.** `sweep-orphans` reports 930 unreferenced
+      clips; the deletion above created 39, so ~891 predate it — accumulated regenerations and resynths
+      (some poi directories hold 4+ clips). Safe to delete by definition (no narration references them,
+      and offline downloads store BYTES not URLs), but it is a DELETES BYTES action at 24× the scale of
+      what today produced, so it wants an explicit look before running `--apply`.
 - [ ] **4. Fused generation.** One telling per cluster, written to a cluster length band — NOT
       concatenated (Emerald Bay's 3 = 214 s, Stateline's 5 = 489 s vs a 180 s min-gap).
 - [ ] **5. `buildDrive` reads anchors; delete pick-one.** Orphans ~169 satellite clips —

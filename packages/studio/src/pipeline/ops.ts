@@ -66,7 +66,7 @@ export function assertReady(needs: ('r2' | 'tts')[]): void {
 }
 
 /** The damage a script can do — declared in every ops-CLI header + printed by `announce`. */
-export type Blast = 'READ-ONLY' | 'MUTATES DB' | 'DELETES BYTES' | 'SPENDS $'
+export type Blast = 'READ-ONLY' | 'MUTATES DB' | 'DELETES BYTES' | 'DELETES ROWS' | 'SPENDS $'
 
 /** Print a loud preamble so the operator always knows the blast radius + whether it's live. */
 export function announce(opts: { tool: string; blast: Blast[]; apply: boolean }): void {
