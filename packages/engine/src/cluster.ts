@@ -23,9 +23,11 @@ import { ANCHORED_TRIGGER_RADIUS_M, haversineMeters, type LngLat } from './geo'
  * you would hear the campus named a minute and a half before reaching it. Emerald Bay at 516 m fires
  * at 26 s against a 12 s baseline on a real highway route, which is fine. The line is between them.
  *
- * A cluster over this is the same shape argument that deferred DISTRICTS: somewhere you are INSIDE
- * needs an AREA trigger, and until that exists the honest move is to leave it as separate places
- * rather than fire one clip a kilometre early.
+ * ⚠ WHAT THIS NOW MEANS (changed 2026-07-30). It used to DEFER a group — too wide, so don't tell it.
+ * The area trigger exists now, so it SELECTS THE MODE instead: at or under, a point; over, an AREA
+ * (`./area`). It is also the cap on the point FALLBACK an area telling carries for clients that cannot
+ * fire a polygon, which is the same idea one layer down — never trigger looser than the loosest thing
+ * already shipping.
  */
 export const CLUSTER_MAX_TRIGGER_RADIUS_M = 600
 

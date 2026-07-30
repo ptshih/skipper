@@ -377,6 +377,41 @@ None of this is a build; all of it is config. The premise changed on 2026-07-28:
       between a mistaken migration and permanent loss of the append-only `credit_entries` ledger, which
       never refunds and has no second copy. Check the retention setting; record it here.
 
+## The app tells the server NOTHING about itself (founder ask 2026-07-30)
+
+⚠ **Verified this session: there is no client-version signal on the wire at all.** `fetchJson`
+(`apps/mobile/src/lib/api.ts`) sends exactly one conditional header (`Cookie`); grepping
+`apps/mobile/src` + `apps/api/src` for `nativeApplicationVersion` / `X-App` / `appVersion` /
+`User-Agent` returns nothing. So **the server cannot tell a 1.0.1 rider from a 1.2.0 one.**
+
+`GET /version` does NOT close this. It is a client-side self-check — the app fetches the policy and
+decides whether to nudge or wall itself (`docs/decisions/api-versioning-posture.md` §3/§5). It is a
+floor, not a content switch: it can force everyone to upgrade, but it cannot let the server serve
+different content to different builds.
+
+**Why it bit, concretely.** Area-triggered districts need a polygon the current client can't fire. With
+no way to tell clients apart, the only options were "send to everyone" and "send to no one" — a
+capability query param (`?caps=area`) was built and then removed on the founder call to ship to
+everyone, protected instead by a capped point fallback. That fallback is a workaround for a missing
+capability channel, not a design.
+
+- [ ] **Client sends its identity on every request.** Minimum: the app's semver
+      (`Constants.expoConfig?.version`, already read by `VersionGate`) plus a capability set, on one
+      header from `fetchJson` — so it costs one edit and every route gets it. ⚠ It only helps builds
+      that SHIP with it, so the sooner it lands the sooner the server can start making per-client
+      decisions; today it would tell us nothing about anyone already installed.
+- [ ] **Server-side content switching keyed on that.** The pattern is already proven in the read paths:
+      `notSupersededByServedCluster` takes the tellings actually being served, so withholding content
+      and suppressing what it replaces stay consistent by construction. A capability channel would let
+      that be per-client instead of global.
+- [ ] **Decide whether this supersedes or extends the versioning posture.** The existing doc's
+      "additive-only + a force-upgrade floor" answers *don't break old clients*. It does not answer
+      *serve old clients something different*, which is a distinct problem — the doc should say so
+      either way once this is built, since the next person will otherwise re-derive it.
+
+Refs: `docs/decisions/api-versioning-posture.md`, `apps/mobile/src/lib/api.ts` (`fetchJson`),
+`apps/api/src/version-policy.ts`, `apps/api/src/clusters.ts` (the capped fallback this replaces).
+
 ## When YOSEMITE ships: the metadata that goes stale (founder ask 2026-07-28)
 
 Content is SERVER-SIDE, so a second region goes live with no app release. That is the whole problem:

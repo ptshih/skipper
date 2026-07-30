@@ -164,12 +164,12 @@ app.get('/roam', async (c) => {
   // decides which member POIs to suppress. Deriving that the other way round is how an area-unaware
   // client ends up with a hole where downtown used to be.
   //
-  // `caps` is a raw query param, not a Zod DTO — so this costs nothing and needs no old-client change.
-  // Absence means "old client", which is the safe reading: it withholds area pins rather than
-  // degrading them to a fat point (see loadClusterTellings).
-  const areaCapable = (c.req.query('caps') ?? '').split(',').includes('area')
+  // ⚠ Area tellings go to EVERY client (founder call 2026-07-30, risks acknowledged). The capability
+  // gate that withheld them from area-unaware clients is gone; what protects those clients now is the
+  // CAPPED point fallback in loadClusterTellings. Restoring the gate is a one-line `caps` query param —
+  // see the spec — if a real drive says the fallback is not good enough.
   const clusterRows = await withRetry(
-    () => loadClusterTellings({ includeStaged: canPreview, areaCapable }),
+    () => loadClusterTellings({ includeStaged: canPreview }),
     { label: 'roam.clusterPins' },
   )
   const servedClusterIds = clusterRows.map((r) => r.clusterId)

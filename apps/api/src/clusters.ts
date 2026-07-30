@@ -19,7 +19,13 @@
 import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { narrations, poiClusters, pois } from '@skipper/db/schema'
-import { clusterTrigger, convexHull, exceedsPointTrigger, type LngLat } from '@skipper/engine'
+import {
+  CLUSTER_MAX_TRIGGER_RADIUS_M,
+  clusterTrigger,
+  convexHull,
+  exceedsPointTrigger,
+  type LngLat,
+} from '@skipper/engine'
 import { isNarratableStoryPoi } from '@skipper/shared'
 
 /** A fused telling resolved to something triggerable: the clip, plus the geometry derived from the
@@ -140,15 +146,6 @@ async function tellableMembersByCluster(clusterIds: string[]): Promise<Map<strin
  */
 export async function loadClusterTellings(opts: {
   includeStaged: boolean
-  /** Whether THIS caller's client understands area triggers.
-   *
-   *  ⚠ A false here DROPS spread-out groups entirely rather than sending them as a fat point, and that
-   *  is the whole reason the flag exists. An area-unaware client would fire a ~900 m circle: it hears
-   *  the district a kilometre out on the approach, the recede gate then retires it, and a long cooldown
-   *  locks it — so the rider hears about downtown everywhere EXCEPT downtown. Silence is the better
-   *  failure, and it is the same choice the read paths already made when a fused telling had no
-   *  consumer. */
-  areaCapable: boolean
   /** Restrict to specific clusters (the frozen-drive replay path, whose selection items name their
    *  subject). Omit for "every fused telling". An EMPTY array means "none" and short-circuits — it
    *  must never be read as "no filter", which would serve the whole corpus into one drive. */
@@ -187,7 +184,6 @@ export async function loadClusterTellings(opts: {
     // is the same predicate the generation gate asks, so what we SERVE and what we agreed to GENERATE
     // can never disagree about which mode a group is in.
     const needsArea = exceedsPointTrigger(trigger)
-    if (needsArea && !opts.areaCapable) continue // see the `areaCapable` note — never degrade to a fat point
     const area = needsArea
       ? { ring: convexHull(pts.map((p): LngLat => [p.lng, p.lat])), marginM: AREA_MARGIN_M }
       : undefined
@@ -204,7 +200,16 @@ export async function loadClusterTellings(opts: {
       name: r.name,
       lat: trigger.lat,
       lng: trigger.lng,
-      triggerRadiusM: trigger.radiusM,
+      // ⚠ For an AREA telling this is the POINT FALLBACK, not the real trigger — an area-aware client
+      // uses the ring and ignores it. It is CAPPED rather than the true enclosing radius (914 m for
+      // downtown Reno) because an area-unaware client fires on it: uncapped, it hears the district a
+      // kilometre out on the approach, the recede gate retires it, and a long cooldown locks it — the
+      // rider hears about downtown everywhere EXCEPT downtown. The cap is the same line the generation
+      // gate uses, i.e. "never looser than the loosest thing already shipping" (an un-anchored kindless
+      // POI's floor), so the worst case degrades to today's worst case instead of past it.
+      triggerRadiusM: needsArea
+        ? Math.min(trigger.radiusM, CLUSTER_MAX_TRIGGER_RADIUS_M)
+        : trigger.radiusM,
     })
   }
   return out

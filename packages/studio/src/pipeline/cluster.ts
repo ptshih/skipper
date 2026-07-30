@@ -20,7 +20,6 @@ import { inArray } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { pois } from '@skipper/db/schema'
 import { clusterFactsHash, type ClusterHashInput } from '@skipper/db/hash'
-import { clusterTrigger, exceedsPointTrigger } from '@skipper/engine'
 import { isNarratableStoryPoi, type DeliveryRegister } from '@skipper/shared'
 import type { PoiFacts, FactSheetEntry } from '@skipper/db/schema'
 
@@ -152,9 +151,9 @@ export function clusterGroundingHash(
 export function clusterGenerationBlock(members: readonly ClusterMemberRow[]): string | null {
   const tellable = tellableMembers(members)
   if (tellable.length === 0) return 'no tellable members (un-enriched, excluded, or taste-denied)'
-  const trigger = clusterTrigger(tellable.map((m) => ({ lat: m.speakableLat ?? m.lat, lng: m.speakableLng ?? m.lng })))
-  if (trigger && exceedsPointTrigger(trigger)) {
-    return `too spread out for a point trigger (${trigger.radiusM} m) — deferred with the districts`
-  }
+  // ⚠ GEOMETRY NO LONGER BLOCKS (founder call 2026-07-30). It used to defer a group too spread out for
+  // a point trigger; now `exceedsPointTrigger` selects the trigger MODE instead — wide groups ship as
+  // AREA tellings and the read path serves them a polygon. The only remaining block is a corpus state
+  // an `enrich` run fixes.
   return null
 }

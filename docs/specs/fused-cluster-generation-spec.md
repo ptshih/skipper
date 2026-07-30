@@ -453,11 +453,16 @@ has adoption. `clusterGenerationBlock` already refuses to generate them, so noth
   capital).
 
 ✅ **The SERVER half is built too (2026-07-30).** Optional `area` on `roamPin` (a ring + margin), the
-hull computed in `apps/api/src/clusters.ts`, and a **capability parameter**: `GET /roam?caps=area`.
-`caps` is a raw query param rather than a Zod DTO, so it costs nothing and needs no old-client change,
-and its ABSENCE means "old client" — which WITHHOLDS area tellings rather than degrading them to a fat
-point. Silence is the better failure, and it is the same call the read paths already made when a fused
-telling had no consumer.
+hull computed in `apps/api/src/clusters.ts`, and a **capability parameter**: the hull served to
+EVERY client.
+
+⚠ **A capability gate (`?caps=area`) was built and then REMOVED on a founder call (2026-07-30, risks
+acknowledged).** It withheld area tellings from clients that could not fire a polygon. What protects
+those clients instead is the **capped point fallback**: an area telling's `radiusM` is
+`min(enclosingRadius, CLUSTER_MAX_TRIGGER_RADIUS_M)` — 600 m rather than downtown Reno's true 914 m —
+so an area-unaware client degrades to today's WIDEST existing pin instead of past it. Restoring the
+gate is a one-line query-param read if a real drive says the fallback is not good enough. The deeper
+fix is a client-version/capability channel, which does not exist — see TODO.
 
 ⚠ **Suppression now takes the SERVED cluster ids, not a predicate that re-derives them.** That is the
 difference between an invariant and a coincidence: a caller being withheld a district must not also

@@ -275,12 +275,9 @@ async function loadCorpusForRoute(
   const padLng = padM / (111_320 * (Math.abs(cos) > 1e-6 ? Math.abs(cos) : 1e-6))
 
   // ⚠ Fused tellings FIRST — which ones we serve is what decides which members to suppress (see
-  // supersededByServedCluster). ⚠ `areaCapable: false` on the DRIVE path, deliberately and for now:
-  // a drive's selection is FROZEN at create, so admitting an area stop would bake it into a saved
-  // drive permanently — including for a rider who never upgrades. Districts join drives when the
-  // client half ships and the create path can read the caller's capability.
+  // notSupersededByServedCluster).
   const clusters = await withRetry(
-    () => loadClusterTellings({ includeStaged, areaCapable: false }),
+    () => loadClusterTellings({ includeStaged }),
     { label: 'drive.clusterCorpus' },
   )
   const rows = await withRetry(
@@ -864,7 +861,7 @@ async function loadCorpusBySubjectIds(subjectIds: string[]): Promise<Map<string,
     withRetry(() => narrationCorpusSelect().where(inArray(narrations.poiId, subjectIds)), {
       label: 'drive.corpusByIds',
     }),
-    withRetry(() => loadClusterTellings({ includeStaged: true, areaCapable: true, clusterIds: subjectIds }), {
+    withRetry(() => loadClusterTellings({ includeStaged: true, clusterIds: subjectIds }), {
       label: 'drive.clusterCorpusByIds',
     }),
   ])
