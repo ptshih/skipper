@@ -28,10 +28,11 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
       class for existing anchors WITHOUT moving them (`--force` would relocate hand-curated ones).
       Measured on a full re-snap preview: **628 of 699 land on a through-road, 71 on the minor layer**
       — that 10% is the "triggers from a street nobody drives" set.
-- [ ] **Admin can't see an exclusion.** `prune-corpus` flags `pois.excluded_reason` and the API now
-      filters on it, but no admin surface SHOWS it — so a POI silently vanishes from drives/roam with
-      no in-console explanation. Add the reason to the POIs view (and the Reference cheat-sheet) before
-      the exclusion vocabulary grows past the one mechanical rule.
+- [x] **Admin exclusion surface — BUILT 2026-07-29** (`b0b240c`). Amber banner on every tab of the POI
+      sheet when excluded; Location tab shows the anchor's ROAD CLASS (amber chip on the minor layer) and
+      an Eligibility block to exclude (reason required) / restore. Reference cheat-sheet updated.
+      ⚠ **VISUAL PASS STILL OWED** — admin dev servers were down, so typecheck+build only, and that pair
+      has missed a shell-collapsing CSS regression before. Eyeball it on `bun run dev:admin`.
 - [ ] **1b. USE the road class.** Nothing reads `speakable_road_class` yet — selection/roam still treat
       a residential anchor the same as a highway one. Decide the rule (demote? exclude? widen radius?)
       against a real drive rather than at the desk.
