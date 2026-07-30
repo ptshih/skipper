@@ -20,18 +20,19 @@
 import { Hono, type Context } from 'hono'
 import { and, between, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
-import { creditEntries, drives, driveDemand, narrations, places, pois, regions } from '@skipper/db/schema'
+import { creditEntries, drives, driveDemand, narrations, places, pois, regions, selectionSubject } from '@skipper/db/schema'
 import type { DriveSelection, DriveSelectionItem, Polyline, RouteProvenance } from '@skipper/db/schema'
 import { polylineBbox } from './drive-geometry'
 import { materializeRoute, type Waypoint } from '@skipper/routing'
 import {
   buildDrive,
+  candidateTriggerRadiusM,
   DRIVE_MIN_GAP_SEC,
   driveMaxStops,
   OFF_ROUTE_MAX_M,
-  triggerRadiusForKind,
   type DriveCandidate,
 } from '@skipper/engine'
+import { CLUSTER_VARIETY_KEY, loadClusterTellings, type ClusterTelling } from './clusters'
 import {
   createDriveRequest,
   driveProposeRequest,
@@ -135,7 +136,15 @@ function routeSigOf(start: ResolvedEndpoint, end: ResolvedEndpoint, polyline: Po
 /** A narration corpus row mapped for both candidate selection and manifest assembly. */
 interface NarrationRow {
   narrationId: string
-  poiId: string
+  /** The corpus map key, and what a frozen selection item names: `pois.id` for a place telling,
+   *  `poi_clusters.id` for a FUSED one. Mirrors the `narrations_subject_xor` CHECK one level up —
+   *  a telling is about exactly one subject, so exactly one id identifies it. */
+  subjectId: string
+  subjectKind: 'poi' | 'cluster'
+  /** NULL for a fused telling. ⚠ Do NOT substitute the cluster id here: pointing `poi_id` at one
+   *  member of a group was the design that got replaced, precisely because it makes a false statement
+   *  every downstream reader inherits (see the `poiClusters` schema comment). */
+  poiId: string | null
   form: string
   key: string
   durationMs: number
@@ -151,6 +160,11 @@ interface NarrationRow {
   /** Coarse variety bucket (@skipper/shared `varietyKey`) — `kind` when it exists, else derived from
    *  the Wikidata types. Keeps the selector from narrating four houses in a row. */
   varietyKey: string | null
+  /** An EXPLICIT trigger floor, set only for a fused telling — a cluster has no `kind`, so the radius
+   *  vocabulary can't answer and the geometry supplies it (`clusterTrigger`). Undefined for a poi,
+   *  which keeps deriving from kind/anchored exactly as before. Read through
+   *  `candidateTriggerRadiusM` so selection and the manifest can never disagree. */
+  triggerRadiusM?: number
 }
 
 /** The shared corpus projection + poi join. BOTH loaders (route-bbox and explicit-poiId) select these
@@ -185,13 +199,15 @@ const narrationCorpusSelect = () =>
     .from(narrations)
     .innerJoin(pois, eq(pois.id, narrations.poiId))
 
-/** Map corpus rows to NarrationRow by poiId (the buildDrive ⇄ narration join key), preferring the
+/** Map corpus rows to NarrationRow by subjectId (the buildDrive ⇄ narration join key), preferring the
  *  road-snapped anchor over the centroid. Shared by both loaders. */
 function rowsToCorpus(rows: Awaited<ReturnType<typeof narrationCorpusSelect>>): Map<string, NarrationRow> {
   const map = new Map<string, NarrationRow>()
   for (const r of rows) {
     map.set(r.poiId, {
       narrationId: r.narrationId,
+      subjectId: r.poiId,
+      subjectKind: 'poi',
       poiId: r.poiId,
       form: r.form,
       key: r.key,
@@ -207,6 +223,35 @@ function rowsToCorpus(rows: Awaited<ReturnType<typeof narrationCorpusSelect>>): 
     })
   }
   return map
+}
+
+/** The same mapping for the OTHER subject kind. A fused telling has no `kind` (so no kind-derived
+ *  radius) and no single anchor — its geometry is derived from the members it names, in ./clusters —
+ *  so it arrives with its trigger point and floor already resolved. */
+function clusterRowsToCorpus(rows: ClusterTelling[], into: Map<string, NarrationRow>): Map<string, NarrationRow> {
+  for (const r of rows) {
+    into.set(r.clusterId, {
+      narrationId: r.narrationId,
+      subjectId: r.clusterId,
+      subjectKind: 'cluster',
+      poiId: null,
+      form: r.form,
+      key: r.key,
+      durationMs: r.durationMs,
+      attribution: (r.attribution ?? undefined) as DriveClip['attribution'],
+      revisedAt: r.revisedAt,
+      name: r.name,
+      kind: null,
+      lat: r.lat,
+      lng: r.lng,
+      // The derived point is NOT a road-snapped anchor (it can sit off-road by design — see
+      // `clusterTrigger`), so this stays false and the explicit radius below does the work instead.
+      anchored: false,
+      varietyKey: CLUSTER_VARIETY_KEY,
+      triggerRadiusM: r.triggerRadiusM,
+    })
+  }
+  return into
 }
 
 /** Load every roam narration whose POI falls within the route's bounding box (padded by the off-route
@@ -245,11 +290,16 @@ async function loadCorpusForRoute(
       ),
     { label: 'drive.corpus' },
   )
-  return rowsToCorpus(rows)
+  // …and the fused CLUSTER tellings. No bbox prefilter is possible (poi_clusters stores no
+  // coordinates), so every fused telling in the corpus is loaded and buildDrive's own off-route gate
+  // does the trimming — the set is a few dozen rows. Returns [] until fused generation runs, which is
+  // what makes landing this ahead of the audio a no-op.
+  const clusters = await withRetry(() => loadClusterTellings({ includeStaged }), { label: 'drive.clusterCorpus' })
+  return clusterRowsToCorpus(clusters, rowsToCorpus(rows))
 }
 
 const candidateOf = (r: NarrationRow): DriveCandidate => ({
-  poiId: r.poiId,
+  poiId: r.subjectId,
   audioKey: r.key,
   audioDurationMs: r.durationMs,
   lat: r.lat,
@@ -260,6 +310,8 @@ const candidateOf = (r: NarrationRow): DriveCandidate => ({
   // buildDrive needs it to know how close the car must actually get before this stop can play.
   anchored: r.anchored,
   varietyKey: r.varietyKey,
+  // Only a cluster sets this; a poi leaves it undefined and keeps deriving from kind/anchored.
+  ...(r.triggerRadiusM != null ? { triggerRadiusM: r.triggerRadiusM } : {}),
 })
 
 /** Resolve a frozen `selection` into presigned, playable driveClips (narration content LIVE via the
@@ -268,16 +320,19 @@ const candidateOf = (r: NarrationRow): DriveCandidate => ({
 function manifestClips(selection: DriveSelection, corpusById: Map<string, NarrationRow>): DriveClip[] {
   const clips: DriveClip[] = []
   for (const item of selection) {
-    const n = corpusById.get(item.poiId)
-    if (!n) continue // the poi/narration was deleted since freeze — drop the stale stop
+    const n = corpusById.get(selectionSubject(item)?.id ?? '')
+    if (!n) continue // the poi/cluster/narration was deleted since freeze — drop the stale stop
     clips.push({
       seq: item.seq,
       form: toClipForm(n.form),
+      // Null for a fused telling. The wire field is already `nullish()` and nothing on the client
+      // reads it (identity there is `seq`), so a fused clip simply omits it rather than claiming to
+      // be about one of the places it names.
       poiId: n.poiId,
       name: n.name,
       lat: item.triggerLat,
       lng: item.triggerLng,
-      triggerRadiusM: triggerRadiusForKind(n.kind, n.anchored),
+      triggerRadiusM: candidateTriggerRadiusM(n),
       approachHeadingDeg: item.approachHeadingDeg,
       alongSec: item.alongSec,
       durationMs: n.durationMs,
@@ -493,19 +548,25 @@ driveRoutes.post('/', createDriveLimiter, async (c) => {
     )
   }
 
-  // Freeze the structure: a narration selection item per stop (content resolves live via poiId).
-  const selection: DriveSelection = stops.map(
-    (s): DriveSelectionItem => ({
+  // Freeze the structure: a narration selection item per stop (content resolves live via its subject).
+  // ⚠ `DriveStop.poiId` is the engine's opaque candidate id, which is the SUBJECT id here — a poi's
+  // for a place telling, a cluster's for a fused one. Both ids are written so a stale-shaped row can
+  // never be produced by this path.
+  const selection: DriveSelection = stops.map((s): DriveSelectionItem => {
+    const n = corpus.get(s.poiId)!
+    return {
       kind: 'narration',
       seq: s.seq,
-      poiId: s.poiId,
-      narrationId: corpus.get(s.poiId)!.narrationId,
+      subjectId: n.subjectId,
+      subjectKind: n.subjectKind,
+      ...(n.poiId ? { poiId: n.poiId } : {}),
+      narrationId: n.narrationId,
       alongSec: s.alongSec,
       triggerLat: s.triggerLat,
       triggerLng: s.triggerLng,
       approachHeadingDeg: s.approachHeadingDeg,
-    }),
-  )
+    }
+  })
 
   const startEp: ResolvedEndpoint = { name: start.name, lat: start.lat, lng: start.lng }
   const endEp: ResolvedEndpoint = { name: end.name, lat: end.lat, lng: end.lng }
@@ -675,8 +736,11 @@ async function loadOwnedDriveById(userId: string, id: string) {
  *  regenerated telling auto-improves it), freshly presigned. Throws if presign fails — the caller maps
  *  that to a 503. Shared by GET /:id and the POST /drives idempotent replay. */
 async function manifestForStoredDrive(drive: NonNullable<Awaited<ReturnType<typeof loadOwnedDriveById>>>): Promise<DriveManifest> {
-  const poiIds = (drive.selection ?? []).filter((i) => i.kind === 'narration').map((i) => i.poiId)
-  const corpus = poiIds.length ? await loadCorpusByPoiIds(poiIds) : new Map<string, NarrationRow>()
+  const subjectIds = (drive.selection ?? [])
+    .filter((i) => i.kind === 'narration')
+    .map((i) => selectionSubject(i)?.id)
+    .filter((id): id is string => Boolean(id))
+  const corpus = subjectIds.length ? await loadCorpusBySubjectIds(subjectIds) : new Map<string, NarrationRow>()
   return {
     driveId: drive.id,
     label: drive.label ?? `${drive.startName ?? 'Start'} → ${drive.endName ?? 'End'}`,
@@ -732,8 +796,11 @@ driveRoutes.get('/:id', async (c) => {
 driveRoutes.post('/:id/assets/sign', async (c) => {
   const drive = await loadOwnedSelection(c)
   if (!drive) return c.json({ error: 'not_found' }, 404)
-  const poiIds = (drive.selection ?? []).filter((i) => i.kind === 'narration').map((i) => i.poiId)
-  const corpus = poiIds.length ? await loadCorpusByPoiIds(poiIds) : new Map<string, NarrationRow>()
+  const subjectIds = (drive.selection ?? [])
+    .filter((i) => i.kind === 'narration')
+    .map((i) => selectionSubject(i)?.id)
+    .filter((id): id is string => Boolean(id))
+  const corpus = subjectIds.length ? await loadCorpusBySubjectIds(subjectIds) : new Map<string, NarrationRow>()
   try {
     const clips = manifestClips(drive.selection ?? [], corpus).map((cl) => ({
       seq: cl.seq,
@@ -780,10 +847,18 @@ driveRoutes.delete('/:id', async (c) => {
  *  never refunded. A drive's selection is frozen at build; this path resolves that frozen set's CONTENT
  *  and must not re-adjudicate which stops belong. New drives get the clean corpus; old drives keep
  *  what they bought. */
-async function loadCorpusByPoiIds(poiIds: string[]): Promise<Map<string, NarrationRow>> {
-  const rows = await withRetry(
-    () => narrationCorpusSelect().where(inArray(narrations.poiId, poiIds)),
-    { label: 'drive.corpusByIds' },
-  )
-  return rowsToCorpus(rows)
+async function loadCorpusBySubjectIds(subjectIds: string[]): Promise<Map<string, NarrationRow>> {
+  // A frozen selection names subjects of both kinds, and the id spaces are disjoint uuids — so both
+  // queries run against the same list and each matches only its own. `includeStaged: true` on the
+  // cluster side mirrors the poi side's deliberate absence of a release filter (see above): this path
+  // resolves a frozen set's CONTENT and must not re-adjudicate eligibility.
+  const [rows, clusters] = await Promise.all([
+    withRetry(() => narrationCorpusSelect().where(inArray(narrations.poiId, subjectIds)), {
+      label: 'drive.corpusByIds',
+    }),
+    withRetry(() => loadClusterTellings({ includeStaged: true, clusterIds: subjectIds }), {
+      label: 'drive.clusterCorpusByIds',
+    }),
+  ])
+  return clusterRowsToCorpus(clusters, rowsToCorpus(rows))
 }

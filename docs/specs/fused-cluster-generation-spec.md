@@ -1,7 +1,8 @@
 # Fused cluster generation — phase 4 of the legibility layer
 
-> **Status:** IN BUILD — **2026-07-30**. §9 step 1 (the staleness hash + the member-set resolver) is
-> BUILT and green; steps 2–7 are not started. Promoted from `docs/ideas/poi-legibility-layer.md` on
+> **Status:** IN BUILD — **2026-07-30**. §9 steps 1–3 (staleness hash + member-set resolver, trigger
+> position, read paths) are BUILT and green — **everything that spends nothing is done**. Step 4 is
+> the commitment point and needs a founder go; ⚠ §8b lists two corpus defects that block it. Promoted from `docs/ideas/poi-legibility-layer.md` on
 > founder intent ("let's prepare to do phase 4"). Phases 1–3 are BUILT and APPLIED, and the grouping was
 > re-applied on 2026-07-30 after the third district-merge fix: **64 clusters** (60 cluster / 4 district)
 > over 295 members, all 64 carrying `highlights` / `dropped`, 33 with a real `subject_poi_id`. The four
@@ -24,11 +25,17 @@ plays one" and becomes "one clip that names all three."
 **(a) Generation** — write a `narrations` row with `cluster_id` set and `poi_id` NULL.
 
 **(b) Read paths** — ⚠ **without this, phase 4 generates audio nobody ever hears.** Every read path
-today inner-joins `pois` (`/roam`, `loadCorpusForRoute`, `loadCorpusByPoiIds`), which was the deliberate
+inner-joined `pois` (`/roam`, `loadCorpusForRoute`, `loadCorpusByPoiIds`), which was the deliberate
 safe default when `poi_id` became nullable: a cluster telling is invisible rather than mis-attributed.
-That default has to be lifted here, or the spend buys nothing.
 
-Ship (a) and (b) together. There is no useful intermediate state.
+✅ **BUILT 2026-07-30 (§9 step 3), ahead of (a) rather than beside it.** The lift turned out to be
+*additive* rather than a join change: `apps/api/src/clusters.ts` loads fused tellings on their own
+query and synthesizes the geometry `poi_clusters` doesn't store, and the corpus is the concatenation
+of the two subject kinds. Because every one of those queries is scoped to
+`narrations.cluster_id IS NOT NULL` and there are zero such rows, the whole change is a runtime no-op
+until generation runs — which is what makes shipping it FIRST safe, and better than shipping it
+beside the audio. Verified against the running dev API: `/roam` returns the same 46 pins, and all 18
+stops across the 3 existing drives still resolve.
 
 ## 3. Generation
 
@@ -383,11 +390,25 @@ Sequenced so nothing irreversible happens before the thing that makes it reversi
    `candidateTriggerRadiusM` so a subject with no `kind` can supply its own floor. Both rules §4.1
    originally proposed were rejected by the measurement. Verified live: the enclosing invariant holds
    for all 107 members of all 30 clusters.
-3. **Read paths — BEFORE generation.** Lift the `pois` inner-join so the first fused clip is playable
-   the moment it exists rather than invisible. ⚠ This is the half that gets forgotten (§2).
-   Reconnaissance: 19 sites read `narrations`; 9 inner-join `pois`, and 6 more filter on
-   `narrations.poi_id` with no join at all — those exclude clusters by SQL NULL semantics, so grepping
-   for JOINs alone will miss them.
+3. ✅ **Read paths — BUILT 2026-07-30.** `apps/api/src/clusters.ts` + the drive corpus and `/roam`
+   union. Notes worth keeping:
+   - **A subject, not a poi.** The corpus is keyed by `subjectId`, and `DriveSelectionItem` now
+     freezes `subjectId` + `subjectKind` rather than `poiId`. Putting a cluster id in a field called
+     `poiId` is the exact false statement the `poi_clusters` table was created to stop. `poiId`
+     survives as a read-only legacy field; `selectionSubject` (in `@skipper/db/schema`, so the API and
+     the simulator share one reader) coalesces it. Verified: all 18 stops in the 3 pre-existing drives
+     still resolve.
+   - **The wire did NOT change.** `driveClip.poiId` was already `nullish()` and nothing on the client
+     reads it (a drive clip's identity is `seq`). `roamPin.poiId` is required, so a cluster pin puts
+     the CLUSTER's uuid there — safe because the client treats it as an opaque token everywhere (a
+     Map/Set key, a React key; it never looks a poi up), and unsafe to rename because `roamManifest`
+     parses with `.parse` over `z.array`, where one bad pin rejects every pin.
+   - **No bbox prefilter for clusters** — `poi_clusters` stores no coordinates, so the position only
+     exists once the members are loaded. Fine at a few dozen rows; the distance trim happens after.
+   - A cluster whose members have all become un-tellable yields no position and is DROPPED rather than
+     fired somewhere arbitrary.
+   - ⚠ `packages/sim` skips cluster stops rather than mis-placing them — the simulator has no path for
+     a member-derived geometry yet. Worth revisiting once there is fused audio to simulate.
 4. **Fused generation.** The first spend (~$5–8) and the first audio. **Needs an explicit founder go.**
 5. **LISTEN.** The gate on 6, and not automatable. A fused telling worse than its members is a
    regression with no fallback.

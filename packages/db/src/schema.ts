@@ -111,7 +111,7 @@ export type RouteProvenance = {
 
 /**
  * A DRIVE's frozen, ordered manifest (the `drives.selection` jsonb). One entry per played item in
- * route order: a place NARRATION, referenced 1:1 via its poi — content resolves LIVE so a regenerated
+ * route order: a NARRATION, referenced by its SUBJECT — content resolves LIVE so a regenerated
  * telling auto-improves a saved drive. The STRUCTURE is frozen at create time (which items, order,
  * snapped trigger geometry); only a narration's audio resolves live. buildDrive (engine) produces
  * the items. (V2: asides — placeless intro/outro framing — were deleted; see geometry-first-regions.md.)
@@ -119,7 +119,22 @@ export type RouteProvenance = {
 export type DriveSelectionItem = {
   kind: 'narration'
   seq: number
-  poiId: string
+  /** The telling's subject: `pois.id` when `subjectKind` is 'poi', `poi_clusters.id` when it is
+   *  'cluster' (a FUSED telling — one clip for a group of places). Mirrors `narrations_subject_xor`:
+   *  exactly one subject, so one id names it.
+   *
+   *  ⚠ Deliberately NOT a `poiId` field carrying a cluster id. Making `poi_id` point at a member of a
+   *  group is the design that was replaced — a false statement every downstream reader inherits with
+   *  full referential integrity (see the `poiClusters` comment). */
+  subjectId: string
+  subjectKind: 'poi' | 'cluster'
+  /** ⚠ LEGACY, read-only. This TYPE describes what we WRITE; the jsonb column can still hold older
+   *  shapes, and drives frozen before fused tellings existed carry `poiId` with no `subjectId` — so
+   *  the read path coalesces (`subjectIdOf`) rather than trusting the type. No migration: `selection`
+   *  has no FK and the affected rows are a handful of pre-launch test drives — but they are real saved
+   *  drives, and silently dropping every stop in them is a worse trade than one field. Delete this
+   *  once no drive predates the change. */
+  poiId?: string
   narrationId: string
   alongSec: number
   triggerLat: number
@@ -127,6 +142,19 @@ export type DriveSelectionItem = {
   approachHeadingDeg: number
 }
 export type DriveSelection = DriveSelectionItem[]
+
+/** The subject a frozen selection item names, tolerating the pre-fused shape — the ONE reader of that
+ *  legacy coalesce, so the API and the simulator can't disagree about which drives still play.
+ *  Returns null when neither id is present (an unreadable item; the caller drops the stop). */
+export function selectionSubject(
+  item: Pick<DriveSelectionItem, 'subjectId' | 'subjectKind' | 'poiId'>,
+): { id: string; kind: 'poi' | 'cluster' } | null {
+  const id = item.subjectId ?? item.poiId
+  if (!id) return null
+  // A legacy item has no `subjectKind`, and every drive frozen before fused tellings existed is a poi
+  // drive by construction — there was no other kind to be.
+  return { id, kind: item.subjectKind ?? 'poi' }
+}
 
 /* -------------------------------------------------------------------------- */
 /*  Enums — keep these in lockstep with the Zod enums in @skipper/shared        */

@@ -5,6 +5,7 @@
 // Pure functions over strings — offline, no DB.
 import { describe, expect, it } from 'bun:test'
 import { clusterFactsHash, hashFacts, storyFactsHash, stableStringify } from '../src/hash'
+import { selectionSubject } from '../src/schema'
 
 const HEX64 = /^[0-9a-f]{64}$/
 const h = (n: number) => String(n).repeat(64).slice(0, 64) // a stand-in facts_hash, right shape
@@ -95,6 +96,27 @@ describe('storyFactsHash / hashFacts', () => {
   it('is null when there is nothing to ground on', () => {
     expect(storyFactsHash(null, null)).toBeNull()
     expect(hashFacts(null)).toBeNull()
+  })
+})
+
+describe('selectionSubject', () => {
+  // `drives.selection` is jsonb with no FK, so the column outlives the type. Getting this wrong drops
+  // every stop of a saved drive silently — the rider spent a non-refundable credit on it.
+  it('reads a fused-era item', () => {
+    expect(selectionSubject({ subjectId: 'c1', subjectKind: 'cluster' })).toEqual({ id: 'c1', kind: 'cluster' })
+    expect(selectionSubject({ subjectId: 'p1', subjectKind: 'poi' })).toEqual({ id: 'p1', kind: 'poi' })
+  })
+
+  it('reads a LEGACY item — poiId, no subjectId — as a poi subject', () => {
+    expect(selectionSubject({ poiId: 'p1' } as never)).toEqual({ id: 'p1', kind: 'poi' })
+  })
+
+  it('prefers subjectId when both are present (a fused-era poi item writes both)', () => {
+    expect(selectionSubject({ subjectId: 'p1', subjectKind: 'poi', poiId: 'p1' })).toEqual({ id: 'p1', kind: 'poi' })
+  })
+
+  it('returns null when the item names no subject at all, so the caller can drop the stop', () => {
+    expect(selectionSubject({} as never)).toBeNull()
   })
 })
 

@@ -14,7 +14,7 @@
 
 import { eq, inArray } from 'drizzle-orm'
 import { db } from '@skipper/db'
-import { drives, narrations, pois } from '@skipper/db/schema'
+import { drives, narrations, pois, selectionSubject } from '@skipper/db/schema'
 import { OFF_ROUTE_MAX_M, METERS_PER_MILE, formatMmss, runDrive } from '@skipper/engine'
 import type { LngLat, DriveStopRef } from '@skipper/engine'
 
@@ -44,7 +44,13 @@ async function main() {
   // The selection's place narrations, in route order. Resolve each poi's raw coords/name + the
   // narration's form/duration live (the drive freezes structure, not content).
   const narrationItems = (drive.selection ?? []).filter((i) => i.kind === 'narration')
-  const poiIds = narrationItems.map((i) => i.poiId)
+  // ⚠ POI subjects only. A frozen selection can also name a CLUSTER (a fused telling), whose geometry
+  // lives in its members rather than in `pois` — the simulator has no path for that yet, so those stops
+  // are skipped rather than mis-placed. `selectionSubject` also absorbs the pre-fused item shape.
+  const poiIds = narrationItems
+    .map((i) => selectionSubject(i))
+    .filter((s) => s?.kind === 'poi')
+    .map((s) => s!.id)
   const rows = poiIds.length
     ? await db
         .select({
@@ -63,7 +69,8 @@ async function main() {
 
   const stops: DriveStopRef[] = []
   for (const item of narrationItems) {
-    const n = byPoi.get(item.poiId)
+    const subject = selectionSubject(item)
+    const n = subject?.kind === 'poi' ? byPoi.get(subject.id) : undefined
     if (!n) continue
     stops.push({
       seq: item.seq,

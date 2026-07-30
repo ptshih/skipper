@@ -149,9 +149,16 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
             `ANCHORED_TRIGGER_RADIUS_M` was added to fix. As built (1-center, `max(250, enclosing)`):
             21 of 30 sit at the 250 m floor, max 516 m, and ZERO exceed the 600 m an un-anchored
             kindless POI already gets. See spec §4.1b.
-      - [ ] **Steps 3-7** — read paths, generate, LISTEN, retire, admin. See spec §9; each carries its
-            own ⚠ (notably: `isNull(pois.clusterId)` belongs in step 6, NOT earlier, or the 30
-            un-generatable clusters lose their member clips with nothing to replace them).
+      - [x] **Step 3 — read paths. BUILT 2026-07-30.** `apps/api/src/clusters.ts` + the `/roam` and
+            drive-corpus unions. The lift was ADDITIVE, not a join change: fused tellings load on their
+            own query (scoped to `cluster_id IS NOT NULL`, so it returns [] and the whole change is a
+            runtime no-op until step 4). ⚠ The corpus + the frozen selection are keyed by SUBJECT now
+            (`subjectId`/`subjectKind`), never a `poiId` holding a cluster id — that false statement is
+            what `poi_clusters` exists to prevent; `selectionSubject` reads the legacy shape so the 3
+            existing drives keep every stop. The WIRE did not change.
+      - [ ] **Steps 4-7** — generate (SPENDS, founder go), LISTEN, retire, admin. See spec §9. ⚠
+            `isNull(pois.clusterId)` belongs in step 6, NOT earlier, or the 30 un-generatable clusters
+            lose their member clips with nothing to replace them.
       - [ ] ⚠ **BLOCKS step 4 — two corpus defects, spec §8b.** (a) `UNLV Arboretum` (Q7865354) carries
             UNR's exact coordinates in WIKIDATA, so a released 71-second clip about a Las Vegas campus
             fires in Reno TODAY — a live bug, not a phase-4 one, and a class the grounding gate cannot

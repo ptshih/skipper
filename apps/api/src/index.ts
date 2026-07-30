@@ -25,6 +25,7 @@ import { narrations, pois, regions } from '@skipper/db/schema'
 import { haversineMeters, triggerRadiusForKind } from '@skipper/engine'
 import type { RoamPin } from '@skipper/shared'
 import { auth, SITE_ORIGIN } from './auth'
+import { loadClusterTellings } from './clusters'
 import { driveRoutes } from './drives'
 import { isAdmin, withSession, type ApiEnv } from './entitlements'
 import { rateLimit } from './rate-limit'
@@ -199,27 +200,58 @@ app.get('/roam', async (c) => {
     { label: 'roam.pins' },
   )
 
+  // The OTHER subject kind: a fused CLUSTER telling, whose geometry is derived from its members
+  // rather than stored (phase 4, ./clusters). Zero such narrations exist until fused generation runs,
+  // so this returns [] and the pin list is bit-identical to the poi-only one.
+  const clusterRows = await withRetry(() => loadClusterTellings({ includeStaged: canPreview }), {
+    label: 'roam.clusterPins',
+  })
+
   // audioUrl/audioDurationMs are NOT NULL at the DB boundary (a narration goes live only once it has
   // audio — schema.ts), so every joined row is already playable; the only trim left is the exact-radius
   // pass (the bbox prefilter above still includes the box's corners). [lng, lat] axis order per @skipper/engine.
   const near = rows.filter((r) => haversineMeters([lng, lat], [r.lng, r.lat]) <= radiusKm * 1000)
+  // Clusters get no bbox prefilter (poi_clusters stores no coordinates), so the radius pass is the
+  // ONLY trim — it runs against the derived trigger point, which is what the rider would drive to.
+  const nearClusters = clusterRows.filter((r) => haversineMeters([lng, lat], [r.lng, r.lat]) <= radiusKm * 1000)
 
   try {
     return c.json({
-      pins: near.map((r) => ({
-        poiId: r.poiId,
-        name: r.name,
-        // Trigger center = the road-snapped anchor when we have one, else the centroid (1b step 1).
-        lat: r.speakableLat ?? r.lat,
-        lng: r.speakableLng ?? r.lng,
-        durationMs: r.durationMs,
-        // …and the radius tightens to match: an anchored center is ON the road, so it drops the fat
-        // kind-aware floor that exists to bridge an off-road centroid (trigger-precision §2, 1b step 2).
-        radiusM: triggerRadiusForKind(r.kind, r.speakableLat != null && r.speakableLng != null),
-        url: presignGet(r.key),
-        contentType: contentTypeForKey(r.key),
-        attribution: (r.attribution ?? undefined) as RoamPin['attribution'],
-      })),
+      pins: [
+        ...near.map((r) => ({
+          poiId: r.poiId,
+          name: r.name,
+          // Trigger center = the road-snapped anchor when we have one, else the centroid (1b step 1).
+          lat: r.speakableLat ?? r.lat,
+          lng: r.speakableLng ?? r.lng,
+          durationMs: r.durationMs,
+          // …and the radius tightens to match: an anchored center is ON the road, so it drops the fat
+          // kind-aware floor that exists to bridge an off-road centroid (trigger-precision §2, 1b step 2).
+          radiusM: triggerRadiusForKind(r.kind, r.speakableLat != null && r.speakableLng != null),
+          url: presignGet(r.key),
+          contentType: contentTypeForKey(r.key),
+          attribution: (r.attribution ?? undefined) as RoamPin['attribution'],
+        })),
+        // ⚠ `poiId` carries the CLUSTER's uuid here. The wire field is required and typed as a bare
+        // uuid that asserts nothing about its table, and the client treats it as an opaque token
+        // throughout (a Map/Set key and a React key — it never looks a poi up), so this is additive:
+        // installed clients keep working. Renaming it would be a hard break, since `roamManifest`
+        // parses with `.parse` over `z.array`, where ONE bad pin rejects every pin.
+        // ⚠ Consequence to know: `roam-history.json` is keyed by this id and never pruned, and cluster
+        // ids are re-minted by a `--force-regroup`, so a regroup orphans a rider's heard/muted state
+        // for that cluster. Acceptable — it degrades to hearing it once more.
+        ...nearClusters.map((r) => ({
+          poiId: r.clusterId,
+          name: r.name,
+          lat: r.lat,
+          lng: r.lng,
+          durationMs: r.durationMs,
+          radiusM: r.triggerRadiusM,
+          url: presignGet(r.key),
+          contentType: contentTypeForKey(r.key),
+          attribution: (r.attribution ?? undefined) as RoamPin['attribution'],
+        })),
+      ],
     })
   } catch (e) {
     console.error('[api] roam presign failed', e)
