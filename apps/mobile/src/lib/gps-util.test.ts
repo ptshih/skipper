@@ -88,6 +88,21 @@ describe('projectForwardIndex (monotonic forward route projection — review #1/
     // Window of 2 from cursor 0 only sees idx 0,1 — so a fix near idx 5 caps at the best within [0,2).
     expect(projectForwardIndex(line, 0, 0, 0.005, 2)).toBe(1)
   })
+
+  test('OFF ROUTE: a fix far from every vertex in the window HOLDS the cursor', () => {
+    // ~111 km north of the entire line. Before the bound this returned the LEAST-far vertex anyway, so
+    // a rider who tapped Drive from somewhere else entirely walked the cursor forward on every fix —
+    // which fed reachedRouteEnd's index clause and ended the drive having played nothing.
+    expect(projectForwardIndex(line, 0, 0, 1, 400)).toBe(0)
+    expect(projectForwardIndex(line, 2, 0, 1, 400)).toBe(2)
+  })
+
+  test('the off-route bound is configurable; a fix just inside it still advances', () => {
+    // Vertex 5 sits at lat 0.005; a fix at 0.009 is ~445 m past it — inside the 700 m default.
+    expect(projectForwardIndex(line, 0, 0, 0.009, 400)).toBe(5)
+    // The same fix against a 100 m bound is off-route → hold.
+    expect(projectForwardIndex(line, 0, 0, 0.009, 400, 100)).toBe(0)
+  })
 })
 
 describe('reachedRouteEnd (live end-of-route detection — review #1, audit #332)', () => {
@@ -102,8 +117,18 @@ describe('reachedRouteEnd (live end-of-route detection — review #1, audit #332
     expect(reachedRouteEnd({ ...base, alongM: 970 })).toBe(false) // still short
   })
 
-  test('true once the cursor reaches the last segment', () => {
-    expect(reachedRouteEnd({ ...base, cursor: 98 })).toBe(true) // 98 >= 100-2
+  test('the cursor clause needs the rider ACTUALLY near the end, not just an advanced index', () => {
+    // 98 >= 100-2, but still 999 m from the final vertex. This assertion used to expect `true` — that
+    // WAS the false "you've arrived": off-route fixes walked the cursor to the last segment while the
+    // rider stood somewhere else, and the drive ended in seconds with the credit already spent.
+    expect(reachedRouteEnd({ ...base, cursor: 98 })).toBe(false)
+    expect(reachedRouteEnd({ ...base, cursor: 98, rawToEndM: 120 })).toBe(true)
+  })
+
+  test('a rider who drives PAST the destination still completes (alongM clause stays unclamped)', () => {
+    // alongM is complete but they are now 3 km beyond the final vertex. Clamping the alongM clause the
+    // way the cursor clause is clamped would strand this drive unfinished forever.
+    expect(reachedRouteEnd({ ...base, alongM: 1000, rawToEndM: 3000 })).toBe(true)
   })
 
   test('FALLBACK: raw distance within epsilon AND >50% covered completes a lagging cursor', () => {

@@ -3,7 +3,7 @@
 // native) wires these into the expo-location watch. Mirrors offline-util.ts's pure/native split.
 //
 // @skipper/engine is a pure (RN-free) package, so importing its geo math here keeps this file testable.
-import { DEFAULT_TRIGGER, haversineMeters } from '@skipper/engine'
+import { DEFAULT_TRIGGER, haversineMeters, OFF_ROUTE_MAX_M } from '@skipper/engine'
 import type { LngLat } from '@skipper/engine'
 
 // Drop a fix whose horizontal accuracy is worse than this (m) at rest/slow. A just-acquired GPS fix can
@@ -58,6 +58,16 @@ export function isReducedAccuracy(iosAccuracy: string | undefined): boolean {
  * closest to (lng,lat) and returns the new cursor index. NEVER decreases below `cursor` (monotonic), so a
  * return-leg fix on an out-and-back can't snap back to a nearby OUTBOUND vertex (which would jump the dot
  * backward AND keep alongM from ever reaching the end). Bounds per-fix work to the window. Pure.
+ *
+ * OFF-ROUTE REJECTION (`maxOffRouteM`): a fix that isn't near ANY vertex in the window does not advance
+ * the cursor. Without this the "nearest vertex in the window" is returned no matter how absurd the
+ * distance, so a rider who taps Drive from somewhere else entirely (the hotel the night before, or App
+ * Review in Cupertino) walks the cursor forward on every fix — which fed `reachedRouteEnd`'s index clause
+ * and fired the outro in seconds, drive over, credit spent, nothing played.
+ *
+ * Freezing is the SAFE failure: `alongM` feeds only the progress dot and the end predicate, while stop
+ * TRIGGERING keys on raw proximity to each stop (`TriggerEngine.onFix`) — so a parked cursor can never
+ * silence a stop. Rejoin the route inside the window and it simply resumes.
  */
 export function projectForwardIndex(
   polyline: LngLat[],
@@ -65,6 +75,7 @@ export function projectForwardIndex(
   lng: number,
   lat: number,
   window: number,
+  maxOffRouteM: number = OFF_ROUTE_MAX_M,
 ): number {
   const end = Math.min(polyline.length, cursor + window)
   let bestIdx = cursor
@@ -76,16 +87,24 @@ export function projectForwardIndex(
       bestIdx = i
     }
   }
-  return bestIdx // >= cursor → monotonic
+  // Off route → hold position rather than snap to whatever happened to be least-far away.
+  return bestDist <= maxOffRouteM ? bestIdx : cursor // >= cursor → monotonic
 }
 
 /**
  * Whether a projected live position has reached the route end (→ queue the outro + finish the drive).
  * Pure mirror of liveSource's three-clause predicate: the projected alongM is within epsilon of the end,
- * OR the cursor reached the last segment, OR (fallback for a GPS gap / a run of rejected fixes that left
- * the windowed cursor short) the RAW distance to the final vertex is within epsilon AND we've covered
- * >50% of the route — the >50% guard avoids a false end at the START of an out-and-back, where the final
- * vertex ≈ the start. Returns false when the route has no length.
+ * OR the cursor reached the last segment AND we're actually NEAR the end, OR (fallback for a GPS gap / a
+ * run of rejected fixes that left the windowed cursor short) the RAW distance to the final vertex is
+ * within epsilon AND we've covered >50% of the route — the >50% guard avoids a false end at the START of
+ * an out-and-back, where the final vertex ≈ the start. Returns false when the route has no length.
+ *
+ * ⚠ The `maxEndDistM` clamp belongs to the CURSOR clause ONLY, and deliberately not to the `alongM` one.
+ * The cursor clause was a pure index test, so any cursor that reached the last segment ended the drive no
+ * matter where on earth the rider stood — the false "you've arrived" seconds after starting a drive away
+ * from its start. The alongM clause must stay unclamped: a rider who drives PAST the destination has a
+ * legitimately complete `alongM` and a growing `rawToEndM`, and clamping it there would mean the drive
+ * never finishes at all.
  */
 export function reachedRouteEnd(args: {
   alongM: number
@@ -94,12 +113,15 @@ export function reachedRouteEnd(args: {
   polylineLen: number
   rawToEndM: number
   epsilonM: number
+  /** How near the final vertex the rider must actually be for the CURSOR clause to count. */
+  maxEndDistM?: number
 }): boolean {
   const { alongM, routeEndM, cursor, polylineLen, rawToEndM, epsilonM } = args
+  const maxEndDistM = args.maxEndDistM ?? OFF_ROUTE_MAX_M
   if (routeEndM <= 0) return false
   return (
     alongM >= routeEndM - epsilonM ||
-    cursor >= polylineLen - 2 ||
+    (cursor >= polylineLen - 2 && rawToEndM <= maxEndDistM) ||
     (rawToEndM <= epsilonM && alongM >= routeEndM * 0.5)
   )
 }

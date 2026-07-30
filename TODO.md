@@ -249,6 +249,35 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
 - [ ] **5. `buildDrive` reads anchors; delete pick-one.** Orphans ~169 satellite clips —
       `sweep-orphans.ts` already handles that.
 
+## Production ops hardening — from the 2026-07-30 ship-readiness audit
+
+None of this is a build; all of it is config. The premise changed on 2026-07-28: 1.0.0 is submitted, so
+"prod has no users" stops being true on approval (see CLAUDE.md's storage rule, rewritten the same day).
+
+- [ ] **Alerting — there is NONE.** No uptime checks, no alert policies, no notification channels on the
+      project. Prod 500'd for **14 days** (2026-06-30 → 07-15, billing disabled) and was found by a human
+      running `curl`. Want: one uptime check on `https://api.skipper.fm/health` + an email channel to
+      `hello@skipper.fm`. ⚠ That address must be confirmed to actually deliver first — it is also the
+      App Store support contact and the NRS 603A privacy address, and the repo's own record says the
+      skipper.fm catch-all does NOT forward to the founder's Gmail. ~10 min once the inbox is settled.
+- [ ] **GCP billing budget + alert.** The Budget API is not even enabled on the project
+      (`gcloud beta billing budgets list` → `SERVICE_DISABLED`). Billing — not code — is the documented
+      root cause of the only real outage this project has had. ~5 min.
+- [ ] **`skipper-api-deploy` has an EMPTY `includedFiles`.** It is the only Cloud Build trigger without a
+      path filter, so a docs-only commit rebuilds and redeploys the API at 100% traffic, with no test step
+      and no canary. Sharpest while a version is in App Review — a stray commit swaps the backend under
+      the reviewer. Add an `--included-files` filter (`apps/api/**`, `packages/**`, `cloudbuild.yaml`).
+- [ ] **`apps/api/Dockerfile` never copies `bun.lock`**, so every production image resolves dependencies
+      fresh (lockfile `better-auth` 1.6.23 vs 1.6.25 on npm today), and `RUN bun add -g @dotenvx/dotenvx`
+      is completely unpinned on the container's secret-decryption ENTRYPOINT. `COPY bun.lock` + pin the
+      dotenvx version.
+- [ ] **No Cloud Run instance/resource bounds** (`cloudbuild.yaml` sets no `--min-instances` /
+      `--max-instances` / `--cpu` / `--memory`), so defaults apply and every first tap after idle pays a
+      cold start plus a Neon wake. Only worth it if the cold start is actually felt in the car.
+- [ ] **Neon PITR / backup retention is unverified** and lives nowhere in git. It is the only thing
+      between a mistaken migration and permanent loss of the append-only `credit_entries` ledger, which
+      never refunds and has no second copy. Check the retention setting; record it here.
+
 ## When YOSEMITE ships: the metadata that goes stale (founder ask 2026-07-28)
 
 Content is SERVER-SIDE, so a second region goes live with no app release. That is the whole problem:

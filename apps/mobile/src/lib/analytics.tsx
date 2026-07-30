@@ -69,10 +69,29 @@ export function track(event: string, properties?: EventProps): void {
 // expo-router runs on react-navigation v7, whose container PostHog's `captureScreens` can't auto-hook
 // (the SDK docs say to disable it and send screens from the route path instead). This does exactly
 // that — one $screen event per path change.
+
+/** Collapse the ids out of a RESOLVED route path so `$screen` is a route SHAPE, not a record locator.
+ *  `usePathname()` returns the resolved path, so `/drives/<uuid>` shipped a real `drives.id` — joinable
+ *  to `drives.user_id` server-side, which quietly contradicts both the "not linked to your account"
+ *  line in the privacy policy and the `ProductInteraction: Linked = No` row on the App Privacy label.
+ *  Grouping by screen was always the analytic intent; the id was never wanted. */
+export function sanitizeScreenPath(pathname: string): string {
+  return pathname
+    .split('/')
+    .map((seg) =>
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(seg)
+        ? ':id'
+        : /^\d+$/.test(seg)
+          ? ':n'
+          : seg,
+    )
+    .join('/')
+}
+
 function ScreenTracker(): null {
   const pathname = usePathname()
   useEffect(() => {
-    if (pathname) void posthog?.screen(pathname)
+    if (pathname) void posthog?.screen(sanitizeScreenPath(pathname))
   }, [pathname])
   return null
 }

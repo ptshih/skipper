@@ -95,6 +95,13 @@ const SESSION_START_MS = 2_500
  *  'normal' setting now that the quiet/normal/talkative toggle is cut (audit 2026-06-20). */
 const ROAM_MIN_GAP_SEC = 75
 
+// Pin-fetch radius (km), and the distance travelled that earns a REFETCH. The manifest used to be
+// fetched exactly ONCE per session, so a rider who drove out of that bubble went quietly dead for the
+// rest of the drive — while the listing promises "Wander at will; he'll find you." Half the radius is
+// the natural trigger: you cannot leave the fetched set without first crossing it.
+const ROAM_RADIUS_KM = 50
+const ROAM_REFETCH_MOVE_KM = ROAM_RADIUS_KM / 2
+
 export interface RoamState {
   phase: RoamPhase
   mode: RoamMode
@@ -177,6 +184,9 @@ export function useRoam(mode: RoamMode): RoamState {
   const [gate, setGate] = useState<RoamGateInfo | null>(null)
   const [pinCount, setPinCount] = useState(0)
   const [activePoiId, setActivePoiId] = useState<string | null>(null) // the clip LOADING/playing
+  // Mirror, so the once-created fix callback can ask "is an encounter live?" without re-subscribing.
+  const activePoiIdRef = useRef<string | null>(null)
+  activePoiIdRef.current = activePoiId
   const [sheetPoiId, setSheetPoiId] = useState<string | null>(null) // what the sheet SHOWS (gated on ready/skeleton)
   const [clipReady, setClipReady] = useState(false) // real audio has started for the sheet's clip
   const [toldCount, setToldCount] = useState(0)
@@ -203,6 +213,9 @@ export function useRoam(mode: RoamMode): RoamState {
   const startPending = useRef(false) // a start flow is in flight — blocks double-tap (sim; live is guarded inside useLocationPriming)
   const lastFixAt = useRef(0)
   const lastFixPos = useRef<{ lat: number; lng: number } | null>(null)
+  // Where the CURRENT pin set was fetched, plus an in-flight guard — the movement refetch below.
+  const fetchAnchor = useRef<{ lat: number; lng: number } | null>(null)
+  const refetching = useRef(false)
   const lastPublishedPos = useRef<{ lat: number; lng: number } | null>(null) // last position pushed to the map puck (audit #603)
   const finishedPoi = useRef<string | null>(null) // didJustFinish double-fire guard
   const stallTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -224,9 +237,14 @@ export function useRoam(mode: RoamMode): RoamState {
 
   // Pause+resume focus toggle (founder 2026-06-11): the rider's audio is interrupted ONLY
   // while the skipper is actually talking. exclusive=true → `doNotMix` (pauses the rider's
-  // app); exclusive=false → `mixWithOthers` (hands focus back so it resumes). expo-audio has
-  // no explicit session-deactivate — flipping the interruption mode IS the release mechanism
-  // (SDK 56 docs). Fire-and-forget; a failed flip just leaves the prior focus, never throws.
+  // app); exclusive=false → `mixWithOthers` (hands focus back so it resumes). Flipping the
+  // interruption mode IS roam's release mechanism, and stays so ON PURPOSE: roam hands focus back
+  // BETWEEN clips and must keep its own session live to hear the next one.
+  // ⚠ Correction to an older note here: expo-audio DOES have an explicit session-deactivate —
+  // `setIsAudioActiveAsync(false)`, native on iOS + Android (verified in the installed 57.0.2). It is
+  // the right call at the END of something (useDrive's `finishDrive` uses it to release the drive's
+  // exclusive session), and the wrong one mid-roam. Don't "fix" roam to use it.
+  // Fire-and-forget; a failed flip just leaves the prior focus, never throws.
   // NOTE (audit #454): setAudioModeAsync is PROCESS-WIDE — the tour drive (useDrive) also mutates it
   // (doNotMix + a lock-screen claim). Navigation can't co-mount the drive + roam screens, so they
   // don't fight today; a structural assumption, not a guarded one.
@@ -539,6 +557,62 @@ export function useRoam(mode: RoamMode): RoamState {
     return () => sub.remove()
   }, [phase, setExclusiveAudio])
 
+  // Install a pin set — the shared tail of BOTH the initial session fetch and the movement refetch.
+  // Rebuilding the engine is the only way a pin set can change (RoamEngine builds its spatial grid once,
+  // in the constructor), and the rebuild is safe because it re-seeds from `historyRef`, which is written
+  // on every play and mute: "already heard" and "muted" survive intact. What does NOT survive is the
+  // in-session cadence state (the min-gap governor, the cluster-suppression anchor) — which is exactly
+  // why the caller refuses to swap mid-encounter.
+  const adoptPins = useCallback((pins: RoamManifest['pins']) => {
+    pinsRef.current = pins
+    setPinCount(pins.length)
+    setMapPins(pins.map((p) => ({ poiId: p.poiId, name: p.name, lat: p.lat, lng: p.lng })))
+    engineRef.current = new RoamEngine(
+      pins.map((p) => ({
+        poiId: p.poiId,
+        lat: p.lat,
+        lng: p.lng,
+        durationMs: p.durationMs,
+        // Kind-aware server radius (areal places get room); engine floor covers absence.
+        ...(p.radiusM != null ? { radiusM: p.radiusM } : {}),
+        name: p.name,
+      })),
+      { minGapSec: ROAM_MIN_GAP_SEC },
+      // Cross-session memory: prior-heard pins seed the cooldown (quiet on the drive home), muted pins
+      // never fire. Read from the working ref (loaded on mount, updated as encounters play/mute).
+      historySeed(historyRef.current, Date.now()),
+    )
+  }, [])
+
+  // Re-fetch the pin set once the rider has travelled far enough that the original fetch can no longer
+  // be trusted to cover them. Runs off the live fix stream; cheap because it is gated on distance.
+  const maybeRefetchPins = useCallback(
+    (lat: number, lng: number) => {
+      const anchor = fetchAnchor.current
+      if (!anchor || refetching.current) return
+      // Never swap the pin set out from under a live encounter: the clip-load effect resolves its pin
+      // from `pinsRef` by id, and the rebuild resets the cadence governor.
+      if (activePoiIdRef.current !== null || queueRef.current.length > 0) return
+      if (haversineMeters([anchor.lng, anchor.lat], [lng, lat]) / 1000 < ROAM_REFETCH_MOVE_KM) return
+      refetching.current = true
+      void (async () => {
+        try {
+          const fresh = await getRoamManifest(lat, lng, ROAM_RADIUS_KM)
+          if (!mountedRef.current) return
+          fetchAnchor.current = { lat, lng }
+          // Empty out here means we have driven PAST the corpus, not that the held pins went bad —
+          // keep them rather than blanking the map and going permanently silent.
+          if (fresh.pins.length > 0) adoptPins(fresh.pins)
+        } catch {
+          // Dead zone / transient: leave the anchor put so the next fix past the threshold retries.
+        } finally {
+          refetching.current = false
+        }
+      })()
+    },
+    [adoptPins],
+  )
+
   // The session body AFTER permission is settled (live) or for sim: locate → manifest → engine →
   // subscribe the source → opener. Shared by start()'s already-granted path and the explainer CTA.
   const beginRoamSession = useCallback(async () => {
@@ -586,34 +660,19 @@ export function useRoam(mode: RoamMode): RoamState {
         here = { lat: loc.coords.latitude, lng: loc.coords.longitude }
       }
 
-      const manifest = await getRoamManifest(here.lat, here.lng)
+      const manifest = await getRoamManifest(here.lat, here.lng, ROAM_RADIUS_KM)
       if (!mountedRef.current) return
       if (manifest.pins.length === 0) {
+        // Still terminal, deliberately: this is the screen App Review is pointed at, and it already
+        // leads INTO the /sample rescue rather than dead-ending. The movement refetch below covers the
+        // rider who starts WITH coverage and drives out of it; starting with none still means restart.
         setPhase('noCoverage')
         return
       }
-      pinsRef.current = manifest.pins
-      setPinCount(manifest.pins.length)
-      setMapPins(
-        manifest.pins.map((p) => ({ poiId: p.poiId, name: p.name, lat: p.lat, lng: p.lng })),
-      )
+      fetchAnchor.current = here
       setToldCount(0)
       clipRetried.current.clear() // a new session earns every clip a fresh recovery
-      engineRef.current = new RoamEngine(
-        manifest.pins.map((p) => ({
-          poiId: p.poiId,
-          lat: p.lat,
-          lng: p.lng,
-          durationMs: p.durationMs,
-          // Kind-aware server radius (areal places get room); engine floor covers absence.
-          ...(p.radiusM != null ? { radiusM: p.radiusM } : {}),
-          name: p.name,
-        })),
-        { minGapSec: ROAM_MIN_GAP_SEC },
-        // Cross-session memory: prior-heard pins seed the cooldown (quiet on the drive home), muted pins
-        // never fire. Read from the working ref (loaded on mount, updated as encounters play/mute).
-        historySeed(historyRef.current, Date.now()),
-      )
+      adoptPins(manifest.pins)
 
       const source =
         mode === 'sim'
@@ -624,6 +683,8 @@ export function useRoam(mode: RoamMode): RoamState {
         (fix) => {
           lastFixAt.current = Date.now()
           lastFixPos.current = { lat: fix.lat, lng: fix.lng }
+          // Drove far enough that the session's original fetch no longer covers us? Pull a fresh set.
+          maybeRefetchPins(fix.lat, fix.lng)
           const events = engineRef.current?.update(fix) ?? []
           if (events.length > 0) {
             for (const e of events) queueRef.current.push(e.poiId)
@@ -651,7 +712,7 @@ export function useRoam(mode: RoamMode): RoamState {
       setError(errorMessage(e, voice.error.generic))
       setPhase('error')
     }
-  }, [mode, pump, teardown])
+  }, [mode, pump, teardown, adoptPins, maybeRefetchPins])
 
   // ---- location-permission priming (live mode) — the prime → prompt → result SHELL, shared with
   // useDrive via useLocationPriming. The hook owns the double-tap guard, the no-prompt status read →

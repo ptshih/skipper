@@ -14,7 +14,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Animated, AppState, Image, Linking } from 'react-native'
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake'
-import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
+import {
+  setAudioModeAsync,
+  setIsAudioActiveAsync,
+  useAudioPlayer,
+  useAudioPlayerStatus,
+} from 'expo-audio'
 import {
   clampSeekSec,
   cumulativeMeters,
@@ -351,6 +356,14 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
     try {
       player.setActiveForLockScreen(false)
     } catch {}
+    // Hand the audio session BACK at the end of the drive. A drive holds an EXCLUSIVE `doNotMix`
+    // session for its whole length (by design — the drive IS the audio, not a voice-over), and pausing
+    // the player does not release it: iOS resumes the rider's own music/podcast only once the session
+    // is deactivated. Without this the car stays silent after "you've arrived" until something else
+    // happens to grab focus. `setIsAudioActiveAsync` is a real expo-audio export (native on iOS and
+    // Android) and is what its own docs point at for this; fire-and-forget, since a failure here must
+    // never block finishing the drive.
+    void setIsAudioActiveAsync(false).catch(() => {})
     setActiveSeq(null)
     setDriving(false)
     setDone(true)

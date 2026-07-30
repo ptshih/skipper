@@ -179,11 +179,15 @@ raw hex/rgba/`fontFamily`; colors live only in `src/theme`.
   when a cheap heuristic would save a few dollars (don't keep an arbitrary char-count pre-filter ahead of a
   paid `enrich` — let the enricher decide). This governs DESIGN; *running* a paid job still needs the founder
   OK (STOP).
-- **No users yet — break STORAGE freely.** Zero real users, so schema/storage changes need NO back-compat and
-  NO careful migration: prefer CLEAN, DESTRUCTIVE migrations (drop + recreate) over legacy rows or
-  nullable-for-back-compat columns. EXCEPTION: the **wire contract** (`@skipper/shared` + `apps/api` routes)
-  is NOT break-freely once v1 ships (installed clients lag) — evolve it additively; **no URL versioning**,
-  and the shipped `/version` force-upgrade gate is the only hard-break hatch
+- **STORAGE IS NO LONGER BREAK-FREELY — 1.0 is submitted (2026-07-28).** The old "zero users, prefer CLEAN
+  DESTRUCTIVE migrations (drop + recreate)" rule EXPIRED at submission; assume real riders. **Additive
+  migrations only** — a new nullable column beats a drop+recreate, and a destructive one now needs an explicit
+  founder OK. What makes this sharp: **`.env.development` and `.env.production` point at the SAME Neon DB and
+  the SAME R2**, so there is no staging — `db:push` (drizzle-kit push DROPS to match the schema) and
+  `dev:admin` (`ADMIN_DEV_BYPASS=1`, unauthenticated, full delete authority) are aimed at PRODUCTION despite
+  the "development" label. The `credit_entries` ledger is append-only, never refunds, and has no second copy.
+  The **wire contract** (`@skipper/shared` + `apps/api` routes) was always evolve-additively and still is —
+  **no URL versioning**; the shipped `/version` force-upgrade gate is the only hard-break hatch
   (`docs/decisions/api-versioning-posture.md`).
 - **Ground tooling/version decisions in authoritative docs, not memory.** The stack moves fast (bun, Expo/RN,
   drizzle, the SDKs) and training data goes stale — pull the actual current docs for a build/resolution/config
