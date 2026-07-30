@@ -129,6 +129,10 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   the 1:1 `pois`↔`narrations` atom, no `roam_clips` table.)
 
 ### specs/
+- [fused-cluster-generation-spec.md](specs/fused-cluster-generation-spec.md) — **phase 4** of the
+  legibility layer: one fused telling per cluster, and the read-path work that makes it audible.
+  Build-ready 2026-07-30, NOT started. Five open questions listed; the load-bearing one is whether
+  members keep their own clips for roam.
 - [road-snapped-anchors-spec.md](specs/road-snapped-anchors-spec.md) — **1a** of the 2026-06-25 dogfood
   triage: a safe-by-default `snap-speakable-anchors` pass auto-populates `pois.speakable_lat/lng` from the
   nearest drivable road (Google Roads API), flagging POIs no road can reach; un-snappable centroids never

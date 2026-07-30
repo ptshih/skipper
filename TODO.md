@@ -113,8 +113,14 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
       stops — zero false negatives. (f) The review gate was flagging 25 of 55 groups at <0.85 confidence,
       which is noise not a queue; it now flags the shape that actually flip-flopped across runs (≤2
       members AND <0.85).
-- [ ] **4. Fused generation.** One telling per cluster, written to a cluster length band — NOT
-      concatenated (Emerald Bay's 3 = 214 s, Stateline's 5 = 489 s vs a 180 s min-gap).
+- [ ] **4. Fused generation — SPEC IS BUILD-READY, build NOT started.**
+      `docs/specs/fused-cluster-generation-spec.md`. ~67 clips, ~$10-15, and the FIRST irreversible step
+      (audio in R2). ⚠ Two halves must ship together: generation, AND lifting the `pois` inner-join on
+      every read path — without the second, phase 4 buys audio nobody can hear. Generate from
+      `highlights`, never raw membership (Stateline is 9 members but 5 nameable). Grounding needs NO gate
+      change: `buildGroundingWell` already takes `mergedFeatures`.
+      **Five open questions in §7 — settle before building.** The load-bearing one: do cluster members
+      keep their own clips for roam (recommended) or get retired?
 - [ ] **5. `buildDrive` reads anchors; delete pick-one.** Orphans ~169 satellite clips —
       `sweep-orphans.ts` already handles that.
 
