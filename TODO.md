@@ -168,7 +168,14 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
             (an unmatched member stays nameable). ⚠ Trade-off is real: naming all five nudged the take
             toward enumeration (diversity lint, advisory). "Work every one of them in" may be a notch
             too strong — a wording knob for the next pass.
-      - [ ] **Step 4 — BUILT, NOT RUN. Needs a founder go.** `generate-cluster-narrations.ts` is
+      - [x] **Step 4 — FIRST CLIP GENERATED 2026-07-30 ($0.90).** Stateline (9 members, the density
+            stress case): 2:21, every GATE dimension clean, STAGED, sent for a listen. The retake loop
+            excised 2 ungrounded claims AND took diversity 0.00 → 1.00, so the list-feel resolved under
+            `optimize()` without a prompt change. ⚠ **TAIL COLLAPSE unresolved across all 3 takes** —
+            the closer is 6.3 dB below the body, shipped flagged for the human pass. Watch whether that
+            is fused-specific (a summarising closer after a long body) or just this clip; needs an ear
+            and more samples.
+      - [ ] **Step 4, the remaining 30 (~$12-16) — needs a founder go.** `generate-cluster-narrations.ts` is
             complete: narrate → fail-closed gate with excision retakes → TTS → loudnorm → R2 → upsert
             on `narrations_cluster_uq` → eval record keyed to the cluster. **`--limit 1 --apply` is the
             cheap path to ONE real clip to listen to** (well under $1) before committing all 31

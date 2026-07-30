@@ -1,10 +1,11 @@
 # Fused cluster generation — phase 4 of the legibility layer
 
-> **Status:** IN BUILD — **2026-07-30**. §9 steps 1–4 are BUILT; **nothing has been generated.**
+> **Status:** IN BUILD — **2026-07-30**. §9 steps 1–4 are BUILT and **ONE fused clip exists** (Stateline,
+> $0.90, staged); the remaining 30 need a founder go.
 > Steps 1–3 (staleness hash + member-set resolver, trigger position, read paths) spend nothing and are
 > green. Step 4's tool is complete and its output has been read twice on one cluster ($0.83, nothing
 > persisted); running `--apply` is the commitment point and needs a founder go. §8b's two corpus
-> defects are both RESOLVED. Promoted from `docs/ideas/poi-legibility-layer.md` on
+> defects are both RESOLVED. Step 5 (the LISTEN) is now actionable on a real clip. Promoted from `docs/ideas/poi-legibility-layer.md` on
 > founder intent ("let's prepare to do phase 4"). Phases 1–3 are BUILT and APPLIED, and the grouping was
 > re-applied on 2026-07-30 after the third district-merge fix: **64 clusters** (60 cluster / 4 district)
 > over 295 members, all 64 carrying `highlights` / `dropped`, 33 with a real `subject_poi_id`. The four
@@ -513,7 +514,23 @@ Sequenced so nothing irreversible happens before the thing that makes it reversi
      fired somewhere arbitrary.
    - ⚠ `packages/sim` skips cluster stops rather than mis-placing them — the simulator has no path for
      a member-derived geometry yet. Worth revisiting once there is fused audio to simulate.
-4. **Fused generation — BUILT, NOT RUN.** `generate-cluster-narrations.ts` is complete: narrate →
+4. **Fused generation — BUILT; ONE clip generated 2026-07-30.** `--limit 1 --apply` on Stateline
+   (9 members, the density stress case): **$0.90**, 2:21 of audio, every GATE dimension clean, STAGED.
+   The retake loop did real work — it excised 2 ungrounded claims AND took diversity from 0.00 to 1.00,
+   so the list-feel the previous take was flagged for resolved itself under `optimize()` rather than
+   needing a prompt change. Row verified: `cluster_id` set, `poi_id` NULL, 9 attribution sources,
+   `facts_hash` stamped.
+
+   ⚠ **The one real defect: TAIL COLLAPSE, unresolved across all 3 takes.** The closing line measures
+   6.3 dB below the body (−28.8 dB tail vs −22.5 dB body, against a 4 dB threshold), so the clip
+   shipped flagged for the human pass. That is the tail-retake mechanism working as designed — it
+   caught it and refused to hide it — but three failed takes on one clip is a pattern worth watching:
+   a fused telling ends on a summarising closer after a long body, which may be exactly the shape that
+   trails off. Needs an ear and more samples before concluding it is fused-specific.
+
+   The remaining 30 (~$12–16) need a founder go.
+
+4b. **Fused generation, the rest — NOT RUN.** `generate-cluster-narrations.ts` is complete: narrate →
    fail-closed gate with excision retakes → TTS → loudnorm → R2 → upsert on `narrations_cluster_uq`,
    plus the eval-run record keyed to the CLUSTER. `--apply` is the first spend (~$12–16 for all 31)
    and the first audio, so it **needs an explicit founder go**. ⚠ A PREVIEW is not free either — it
