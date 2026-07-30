@@ -27,8 +27,13 @@ export interface DriveCandidate {
   audioDurationMs: number
   lat: number
   lng: number
-  /** POI kind — the variety bucket (and, later, trigger radius). */
+  /** POI kind — the trigger-radius vocabulary (natural features only; null for most of the corpus). */
   kind?: string | null
+  /** Coarse "what sort of thing is this" bucket for the VARIETY rule, computed by the caller
+   *  (@skipper/shared `varietyKey`) because engine stays dependency-free. Kept SEPARATE from `kind`:
+   *  that one answers a physical size question for the trigger radius, this one answers "would these
+   *  two back-to-back feel repetitive". ⚠ null means UNKNOWN — two nulls are NOT a repeat. */
+  varietyKey?: string | null
   /** True when lat/lng is a ROAD-SNAPPED anchor rather than the raw centroid. Load-bearing for
    *  selection, not just display: an anchored stop triggers off a TIGHT floor
    *  (`ANCHORED_TRIGGER_RADIUS_M`) instead of the fat kind-aware one, so it is far easier for a
@@ -157,13 +162,17 @@ export function buildDrive(params: BuildDriveParams): DriveStop[] {
   //    one that FITS the gap (won't queue-lag) beats an over-long one; a DIFFERENT kind from the
   //    previous pick beats a repeat (variety); then the richer (longer) clip.
   kept.sort((a, b) => a.alongSec - b.alongSec)
-  let prevKind: string | null | undefined
+  let prevVariety: string | null | undefined
+  // Variety = "don't narrate four houses in a row". ⚠ An UNKNOWN bucket counts as different, always:
+  // treating two nulls as a repeat is what silently disabled this rule for 85% of the corpus, since
+  // `kind` is a natural-feature allowlist and the built world carries none.
+  const differs = (v: string | null | undefined): boolean => v == null || prevVariety == null || v !== prevVariety
   const better = (a: Snapped, b: Snapped): boolean => {
     const aFits = a.cand.audioDurationMs <= minGapMs
     const bFits = b.cand.audioDurationMs <= minGapMs
     if (aFits !== bFits) return aFits
-    const aVar = a.cand.kind !== prevKind
-    const bVar = b.cand.kind !== prevKind
+    const aVar = differs(a.cand.varietyKey ?? a.cand.kind)
+    const bVar = differs(b.cand.varietyKey ?? b.cand.kind)
     if (aVar !== bVar) return aVar
     return a.cand.audioDurationMs > b.cand.audioDurationMs
   }
@@ -188,7 +197,7 @@ export function buildDrive(params: BuildDriveParams): DriveStop[] {
     }
     chosen.push(best)
     lastSec = best.alongSec
-    prevKind = best.cand.kind
+    prevVariety = best.cand.varietyKey ?? best.cand.kind
     i = bestIdx + 1
   }
 

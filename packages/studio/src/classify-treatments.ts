@@ -61,10 +61,13 @@ const DISTRICT_MERGE_GAP_M = 3_000
 // Containment (may a place SEED a grouping?) is single-sourced in pipeline/containment.ts — the same
 // predicate `prune-corpus` uses to decide whether it belongs in the corpus at all.
 
-/** Below this the model's own verdict is not trustworthy enough to persist unreviewed — every unstable
- *  group in the determinism runs scored at or under 0.85, and they were all 2-member pairs. Reported,
- *  not withheld: the operator sees them listed so they can be checked in the console. */
-const LOW_CONFIDENCE = 0.85
+/** What actually needs a human look. ⚠ The first cut flagged everything under 0.85 confidence and that
+ *  surfaced 25 of 55 groups — half the corpus, which is not a review queue, it's noise. The determinism
+ *  runs say why: 2-4 member groups naturally sit at 0.72-0.85, so the threshold was measuring group SIZE
+ *  dressed up as doubt. Every group that actually returned a DIFFERENT answer across three runs was a
+ *  2-member pair. So flag on that shape instead — a handful of items, each genuinely ambiguous. */
+const REVIEW_MAX_MEMBERS = 2
+const REVIEW_MAX_CONFIDENCE = 0.85
 
 const TREATMENTS = ['SOLO', 'CLUSTER', 'DISTRICT'] as const
 type Treatment = (typeof TREATMENTS)[number]
@@ -283,7 +286,11 @@ async function main(): Promise<void> {
 
   const groupable = merged.filter((c) => c.treatment !== 'solo' && c.members.length > 1)
   const solo = merged.filter((c) => c.treatment === 'solo')
-  const lowConf = merged.filter((c) => (byAnchor.get(c.members[0]!.id)?.confidence ?? 1) < LOW_CONFIDENCE)
+  const lowConf = merged.filter(
+    (c) =>
+      c.members.length <= REVIEW_MAX_MEMBERS &&
+      (byAnchor.get(c.members[0]!.id)?.confidence ?? 1) < REVIEW_MAX_CONFIDENCE,
+  )
   const drops = merged.flatMap((c) => byAnchor.get(c.members[0]!.id)?.drop ?? [])
 
   for (const t of ['cluster', 'district'] as const) {
@@ -299,7 +306,8 @@ async function main(): Promise<void> {
   }
   console.log(
     `\n${'='.repeat(74)}\nSOLO — ${solo.length} group(s) left independent (nothing written for these).\n` +
-      `${lowConf.length} group(s) under ${LOW_CONFIDENCE} confidence — CHECK THESE in the console.\n` +
+      `${lowConf.length} group(s) worth a human look (${REVIEW_MAX_MEMBERS} members or fewer AND under ` +
+      `${REVIEW_MAX_CONFIDENCE} confidence — the shape that actually flip-flopped across runs).\n` +
       (drops.length ? `${drops.length} member(s) the model would DROP entirely (reported only, not applied): ${drops.slice(0, 8).join(' · ')}\n` : ''),
   )
 

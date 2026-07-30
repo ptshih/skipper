@@ -183,3 +183,44 @@ describe('buildDrive', () => {
     expect(stops).toEqual([])
   })
 })
+
+describe('buildDrive — variety', () => {
+  // Two UNKNOWN buckets must not count as a repeat. Treating null === null as "same" is what silently
+  // disabled the variety rule for 85% of the corpus, since `kind` is a natural-feature allowlist.
+  test('an unknown variety key never suppresses a candidate', () => {
+    const stops = buildDrive({
+      polyline,
+      totalSec: TOTAL_SEC,
+      minGapSec: 180,
+      maxStops: 10,
+      candidates: [
+        cand({ poiId: 'a', lat: 38.01 }),
+        cand({ poiId: 'b', lat: 38.05 }),
+        cand({ poiId: 'c', lat: 38.09 }),
+      ],
+    })
+    expect(stops).toHaveLength(3)
+  })
+
+  // With buckets present the selector prefers a DIFFERENT one inside the same min-gap window.
+  //
+  // ⚠ The two rivals must sit MORE than DRIVE_MIN_SEPARATION_M (1 km) apart. Step 2's co-located
+  // pick-one collapse runs BEFORE pacing, so anything closer is deduped by clip length and the variety
+  // rule never sees it — which is exactly how a first draft of this test "failed" against correct code.
+  // 0.012° of latitude ≈ 1.33 km (survives the collapse) and ≈ 79 s apart (same window).
+  test('prefers a different variety bucket over a repeat of the previous pick', () => {
+    const stops = buildDrive({
+      polyline,
+      totalSec: TOTAL_SEC,
+      minGapSec: 180,
+      maxStops: 10,
+      candidates: [
+        cand({ poiId: 'first', lat: 38.0, varietyKey: 'dwelling' }),
+        cand({ poiId: 'repeat', lat: 38.06, varietyKey: 'dwelling', audioDurationMs: 120_000 }),
+        cand({ poiId: 'varied', lat: 38.072, varietyKey: 'lodging', audioDurationMs: 120_000 }),
+      ],
+    })
+    expect(stops.some((s) => s.poiId === 'varied')).toBe(true)
+    expect(stops.some((s) => s.poiId === 'repeat')).toBe(false)
+  })
+})

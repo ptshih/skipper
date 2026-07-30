@@ -38,10 +38,11 @@ import {
   type DriveClip,
   type DriveClipForm,
   type DriveManifest,
+  varietyKey,
   type RegionAnchor,
 } from '@skipper/shared'
 import { isAdmin, requireAccount, withSession, type ApiEnv } from './entitlements'
-import { FREE_DRIVE_CAP, creditSummary, driveConsumeEntry, ensureFreeGrant } from './credits'
+import { creditSummary, driveConsumeEntry, ensureFreeGrant } from './credits'
 import { rateLimit } from './rate-limit'
 import { withRetry } from './retry'
 import { contentTypeForKey, presignGet } from './storage'
@@ -49,7 +50,9 @@ import { contentTypeForKey, presignGet } from './storage'
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 // Drive credits live in the user-owned `credit_entries` LEDGER (see ./credits + the decision doc), NOT
-// a count of drive rows. Every account is granted FREE_DRIVE_CAP credits once; each generated drive
+// a count of drive rows. Every account is granted `FREE_DRIVE_CAP` credits once — but that amount is
+// FROZEN into the grant row, so user-facing numbers read `granted` from the ledger, never the env
+// constant (which only describes what the NEXT account will get). Each generated drive
 // CONSUMES one (atomically, co-committed with the drive insert); a delete never refunds (no reverse is
 // emitted). There is no uncapped tier — a comp is a large admin grant. Beyond the free allotment, a
 // one-time credit pack is the planned unlock (Apple IAP / Google Play fast-follow).
@@ -145,6 +148,9 @@ interface NarrationRow {
   /** True when lat/lng is a road-snapped speakable anchor (not the raw centroid) — tightens the
    *  trigger floor at manifest time (`triggerRadiusForKind`). Set once in `rowsToCorpus`. */
   anchored: boolean
+  /** Coarse variety bucket (@skipper/shared `varietyKey`) — `kind` when it exists, else derived from
+   *  the Wikidata types. Keeps the selector from narrating four houses in a row. */
+  varietyKey: string | null
 }
 
 /** The shared corpus projection + poi join. BOTH loaders (route-bbox and explicit-poiId) select these
@@ -173,6 +179,8 @@ const narrationCorpusSelect = () =>
       // step 1). Null for off-road POIs → falls back to the pin, today's behavior.
       speakableLat: pois.speakableLat,
       speakableLng: pois.speakableLng,
+      // Wikidata P31 labels — the VARIETY bucket for the built world, where `kind` is null by design.
+      wikidataTypes: pois.wikidataTypes,
     })
     .from(narrations)
     .innerJoin(pois, eq(pois.id, narrations.poiId))
@@ -195,6 +203,7 @@ function rowsToCorpus(rows: Awaited<ReturnType<typeof narrationCorpusSelect>>): 
       lat: r.speakableLat ?? r.lat,
       lng: r.speakableLng ?? r.lng,
       anchored: r.speakableLat != null && r.speakableLng != null,
+      varietyKey: varietyKey(r.kind, r.wikidataTypes),
     })
   }
   return map
@@ -250,6 +259,7 @@ const candidateOf = (r: NarrationRow): DriveCandidate => ({
   // Load-bearing for selection, not cosmetic: an anchored stop triggers off the TIGHT 250 m floor, so
   // buildDrive needs it to know how close the car must actually get before this stop can play.
   anchored: r.anchored,
+  varietyKey: r.varietyKey,
 })
 
 /** Resolve a frozen `selection` into presigned, playable driveClips (narration content LIVE via the
@@ -424,13 +434,19 @@ driveRoutes.post('/', createDriveLimiter, async (c) => {
   // `ensureFreeGrant` lazily materializes the one-time allotment on first touch. This is a pre-check
   // (cheap; avoids the route/LLM work for a user with no credits); the consume is co-committed below.
   await ensureFreeGrant(userId)
-  const { remaining } = await creditSummary(userId)
+  const { remaining, granted } = await creditSummary(userId)
   if (remaining < 1) {
+    // ⚠ `granted`, NOT the FREE_DRIVE_CAP env constant. A grant's amount is FROZEN when written
+    // (credits.ts), so the env value is what the NEXT account will get, not what this one got. They
+    // diverge the moment they ever differ — and an admin comp is exactly that: `POST
+    // /admin/users/:id/credits` grants up to 1000, so a comped rider who spends 510 was being told
+    // "you've used all 10 of your free drives" while the admin console correctly showed 510. GET
+    // /drives already reports `granted`; this path disagreeing with it was the bug.
     return c.json(
       {
         error: 'drive_limit_reached',
-        message: `You've used all ${FREE_DRIVE_CAP} of your free drives. A credit pack to make more is coming soon.`,
-        cap: FREE_DRIVE_CAP,
+        message: `You've used all ${granted} of your free drives. A credit pack to make more is coming soon.`,
+        cap: granted,
       },
       403,
     )

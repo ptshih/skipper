@@ -41,12 +41,14 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
       `speakable_road_class` remains recorded-but-unused. It's now a question about CHOICE between two
       reachable stops (prefer the through-road one in `better()`?), not about reachability. Worth far
       less than it looked; decide on a real drive.
-- [ ] **2. Variety tiebreak is dead outside natural features.** `kind` is null on 392/460 — correctly:
-      `featureKind()` is a NATURAL-feature allowlist, so a casino gets none. ⚠ The earlier claim that
-      this defaults `radiusForKind` for 85% of pins was WRONG (anchored POIs use a flat 250 m, and 426
-      of 460 are anchored — real exposure is 14 POIs). What IS broken: `drive-select.ts` `better()`
-      compares `null !== null`, so the variety rule no-ops for the built world. Needs a coarse
-      built-world category, NOT a `kind` backfill — a design question, unscoped.
+- [x] **2. Variety tiebreak REVIVED for the built world — 2026-07-30.** `kind` is a natural-feature
+      allowlist and null for 85% of the corpus, so `better()`'s `a.kind !== prevKind` compared null to
+      null and the rule silently no-opped everywhere except lakes and peaks. Now unblocked by the
+      Wikidata types persisted for containment: **336 of the kindless narrated POIs carry one**, and they
+      are exactly the needed vocabulary (house 43, hotel 33, casino 7, railway station 6, ski resort 6).
+      New `@skipper/shared` `varietyKey()` maps them to coarse buckets; `DriveCandidate.varietyKey` is
+      kept SEPARATE from `kind` (which still answers the physical trigger-radius question). ⚠ An UNKNOWN
+      bucket now counts as DIFFERENT — treating two nulls as a repeat was the original bug.
 - [x] **3. Treatment classifier — BUILT + APPLIED, then RE-ARCHITECTED 2026-07-29.** An adversarial pass
       on the first cut found the anchor model wrong: it hung treatment/title off whichever member had the
       longest clip, which elected the wrong subject in **4 of 4 districts** (a fraternity house spoke for
@@ -103,6 +105,14 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
       ⚠ TRAP when verifying presigned URLs: they are signed PER HTTP METHOD, so a HEAD against a
       `presignGet` URL returns 403 by design. Check with a ranged GET or you will diagnose a working
       corpus as entirely broken.
+- [x] **Smaller-issues sweep — 2026-07-30.** (a) The credit-exhausted 403 now reports `granted` from the
+      ledger, not the `FREE_DRIVE_CAP` env constant — a grant's amount is frozen at write, so a comped
+      rider who spent 510 was told "you've used all 10". (b) Container-detection residue MEASURED and
+      CLOSED: only 2 POIs look container-ish by name and escape all three signals, and both
+      (`Tuolumne Meadows Wilderness Center`, `Eagle Lake (Desolation Wilderness)`) are genuinely good
+      stops — zero false negatives. (f) The review gate was flagging 25 of 55 groups at <0.85 confidence,
+      which is noise not a queue; it now flags the shape that actually flip-flopped across runs (≤2
+      members AND <0.85).
 - [ ] **4. Fused generation.** One telling per cluster, written to a cluster length band — NOT
       concatenated (Emerald Bay's 3 = 214 s, Stateline's 5 = 489 s vs a 180 s min-gap).
 - [ ] **5. `buildDrive` reads anchors; delete pick-one.** Orphans ~169 satellite clips —
