@@ -330,6 +330,47 @@ container, so this catches the worst offenders, not all of them. Absence of a cl
 "Yosemite National Park" should be a stop at all is the same question as the pruned highways, and is not
 answered here.
 
+### 4f. Containment is decidable — and belongs at DISCOVERY (2026-07-30) `[measured]`
+
+Two founder calls closed §4e's open ends: a container **should not be a drive stop at all**, and ideally
+**should never be discovered into the database in the first place.** The second one is the expensive
+insight, and the corpus proves it: of 59 container entities present, **43 were ENRICHED and 43 NARRATED —
+49 minutes of paid TTS** for places that cannot be told, including an 86-second telling about the
+**Diocese of Reno** off a 20-entry fact sheet. Roughly thirty were still serving in roam. Discovery is
+free; everything downstream of it is not, so the only filter that saves money is the one at the source.
+
+**Three signals, because each is blind to a shape the others catch** (`pipeline/containment.ts`, 15 tests):
+
+| signal | catches | blind to |
+| --- | --- | --- |
+| **P2046 area** ≥ 100 km² | Yosemite NP 3079, Lake Tahoe 502, Desolation Wilderness 259 | linear extents — `Carson Range` claims no area |
+| **P2043 length** ≥ 25 km | Carson Range 84, US-50 658, CA-89 391, Glacier Point Road 25 | compact areal things |
+| **P31 type** | all **13** `mountain range` in the corpus, wildernesses, dioceses, basins, `road` | nothing size-related; it is the semantic answer |
+
+Type is what finally got Carson Range, and it is size-independent — `Cathedral Range` is 16 km with no
+area claim. It also makes the highway prune AUTHORITATIVE: `P31 = road` catches `Glacier Point Road`,
+which a route-number regex misses entirely. The name pattern survives only as a fallback for rows whose
+claims were never backfilled.
+
+⚠ **Two narrow-it-down corrections the preview caught, both of which would have shipped silently:**
+
+1. `protected area` was in the type set and Wikidata applies it to **TRAILHEADS**. The preview flagged
+   `Eagle Falls trailhead` — a member of the Emerald Bay cluster — and `Glen Alpine Springs trailhead`.
+   Removed: a genuinely large protected area carries an area claim and is caught by extent anyway.
+2. `Carson City, Nevada` (407 km²) was pruned by extent, which would have deleted the natural SUBJECT of
+   the "Historic Carson City" district **and the fact sheet that district is grounded on**. A settlement
+   is somewhere you drive through that is ALSO what the telling is about — that is a DISTRICT, not a
+   container. `isSettlement` now overrides containment at any size.
+
+**Applied:** 14 flagged in Tahoe (10 with audio, preserved), 12 in Yosemite (none narrated — the filter
+arrived before the spend, which is the whole point). Future sweeps reject containers in
+`fetchWikidataBox` before they are ever inserted.
+
+**Residual, honest:** a flag and a discovery filter are different mechanisms on purpose. Existing rows are
+FLAGGED, not deleted, because deleting cascades to their narrations and orphans R2 bytes already paid for;
+new sweeps FILTER, because prevention is what saves the money. Nothing reconciles the two — a re-sweep of
+Tahoe would simply not re-add what is currently flagged.
+
 ## 5. Entity model — `poi_clusters` (revised 2026-07-29 after an adversarial pass)
 
 A group is **its own row**. `poi_clusters` carries `treatment` ('cluster'|'district'), `title`, and a

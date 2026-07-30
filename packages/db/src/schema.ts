@@ -291,6 +291,17 @@ export const pois = pgTable(
     // Populated by `backfill-poi-extent.ts` (free, WDQS). Null is the common case and means "no claim",
     // never "small". See docs/ideas/poi-legibility-layer.md §4e.
     areaKm2: doublePrecision('area_km2'),
+    // Wikidata P2043 (length) in km — the LINEAR half of "is this a container". Area cannot see a
+    // mountain range or a highway: `Carson Range` claims no area but is 84 km long, and `Glacier Point
+    // Road` is 25 km. Null = no claim, never "short".
+    lengthKm: doublePrecision('length_km'),
+    // Wikidata P31 ("instance of") type LABELS, lowercased. Discovery already fetches these to compute
+    // `kind` and then discards them — persisting them is what makes containment decidable rather than
+    // guessed. `Carson Range` is instance-of `mountain range`; `Half Dome` is `granite dome, mountain,
+    // climbing area`. Nothing else we store separates those two (same `kind`, article lengths within 15%).
+    // Also authoritative for LINEAR features: `road` replaces prune-corpus's name regex, and catches
+    // `Glacier Point Road`, which a route-number pattern misses. Null = never fetched.
+    wikidataTypes: jsonb('wikidata_types').$type<string[]>(),
     // Which legibility GROUP this place belongs to, or null when it stands alone (most of them).
     // See `poiClusters` below for why the group is its own row rather than three columns hung off an
     // "anchor" poi. ON DELETE SET NULL: dropping a cluster returns its members to standing alone.

@@ -80,13 +80,20 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
       the wildernesses, plus `Diocese of Reno` and `Ferguson Fire` as bonus catches); settlements stay
       seedable. Verified: Half Dome now seeds its own group. ⚠ `Carson Range` claims no area so it is NOT
       caught — worst offenders, not all. See `docs/ideas/poi-legibility-layer.md` §4e.
-- [ ] **3g. Should a CONTAINER be a stop at all?** A barred container is still a member, and could still
-      be a SOLO stop. "Yosemite National Park" as a drive stop is the same problem as the pruned numbered
-      highways — you are inside it for the whole drive, so no point trigger is meaningful. Decide whether
-      `area_km2 >= CONTAINER_AREA_KM2` should also feed `prune-corpus`.
-- [ ] **3h. Re-apply BOTH regions once.** Tahoe's stored grouping still reflects the pre-facts-strength
-      rank with no evidence columns and no container bar; Yosemite has never been applied. One clean
-      `--apply` per region (~$1.20 total) after 3g is decided.
+- [x] **3g. A container is NOT a stop, and should not even be DISCOVERED — done 2026-07-30 (founder call).**
+      Evidence for the discovery filter: of 59 containers in the DB, **43 were enriched AND narrated (49
+      min of paid TTS)**, incl. an 86-second telling about the Diocese of Reno. Containment is now one
+      tested predicate (`pipeline/containment.ts`) over THREE Wikidata signals — area ≥100 km², length
+      ≥25 km, P31 type — used by `prune-corpus` (existing rows: flag, since audio exists), by
+      `classify-treatments` (seed bar) and by `fetchWikidataBox` (future sweeps: reject before insert).
+      Applied: 14 Tahoe, 12 Yosemite. `P31 = road` now supersedes the route-number regex and catches
+      `Glacier Point Road`. ⚠ Two preview-caught corrections: `protected area` removed from the type set
+      (Wikidata types TRAILHEADS that way — it flagged Eagle Falls trailhead), and `isSettlement` now
+      overrides containment at any size (Carson City at 407 km² is a DISTRICT subject, not a container).
+      See `docs/ideas/poi-legibility-layer.md` §4f.
+- [ ] **3h. Re-apply BOTH regions once — now unblocked (3f + 3g are settled).** Tahoe's stored grouping
+      still reflects the pre-facts-strength rank, with no evidence columns and no container bar; Yosemite
+      has never been applied. One clean `classify-treatments --apply` per region, ~$1.20 total.
 - [ ] **4. Fused generation.** One telling per cluster, written to a cluster length band — NOT
       concatenated (Emerald Bay's 3 = 214 s, Stateline's 5 = 489 s vs a 180 s min-gap).
 - [ ] **5. `buildDrive` reads anchors; delete pick-one.** Orphans ~169 satellite clips —

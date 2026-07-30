@@ -4,13 +4,19 @@
 // and the gap between those is the legibility layer (docs/ideas/poi-legibility-layer.md). This is its
 // cheapest, most mechanical slice: entities that are disqualified by their SHAPE, not by taste.
 //
-// Today that is exactly one rule — LINEAR FEATURES. A numbered highway ("Nevada State Route 431") has
-// no meaningful point location: its Wikidata coordinate is an arbitrary spot along a line you are ON
-// for twenty minutes, so a proximity trigger fires it at a random moment and the telling ("you're on
-// SR-431") is equally true a mile earlier and a mile later. That is a broken STOP regardless of how
-// good the writing is. Judgment-based exclusions (a census-designated place duplicating the settlement
-// beside it, a never-built project) are deliberately NOT here — they need the treatment classifier,
-// which is where they belong.
+// ONE RULE, one idea: a place with no meaningful POINT is not a stop. A numbered highway's coordinate is
+// an arbitrary spot along a line you are ON for twenty minutes, so "you're on SR-431" is equally true a
+// mile either side. The same is true of a place you are INSIDE for an hour — Yosemite National Park is
+// not somewhere you pass (founder call 2026-07-29), and neither is a mountain range or a wilderness.
+// Both shapes fail for the same reason, so they share a predicate: `pipeline/containment.ts`.
+//
+// ⚠ That predicate SUPERSEDES the route-number name pattern this tool started with, and is strictly
+// better: `Glacier Point Road` is a 25 km road with no route number, which the regex missed entirely.
+// The regex survives only as a fallback for POIs whose Wikidata claims were never backfilled.
+//
+// Judgment-based exclusions (a census-designated place duplicating the settlement beside it, a
+// never-built project) are deliberately NOT here — they need the treatment classifier, and its `dropped`
+// list already records them without silencing the place.
 //
 // ⚠ FLAGS, NEVER DELETES. Every one of these rows may already own generated audio — the Tahoe corpus
 // had all 31 narrated, ~35 minutes of paid TTS — and a delete would orphan those R2 bytes and destroy
@@ -37,9 +43,12 @@ import { announce, parseFlags } from './pipeline/ops'
 import { withRetry } from './pipeline/http'
 import { resolveRegion, requireRegionBbox } from './pipeline/region'
 import { DEFAULT_REGION_SLUG } from './config'
+import { containmentReason } from './pipeline/containment'
 
-/** The reason string this tool owns. Scoping --restore to it means a hand-made admin exclusion
- *  for some other cause is never silently undone by a re-run. */
+/** Prefix on every reason this tool writes. `--restore` scopes to it, so a hand-made admin exclusion for
+ *  some other cause is never silently undone by a re-run. */
+export const PRUNE_REASON_PREFIX = 'no point trigger'
+/** Retained for the rows written before containment landed, so `--restore` still finds them. */
 export const LINEAR_FEATURE_REASON = 'linear-feature: no meaningful point trigger'
 
 /** Numbered-route naming, the one shape that reliably identifies a linear feature in this corpus.
@@ -62,11 +71,14 @@ async function main(): Promise<void> {
     sql`${pois.lng} between ${bbox.swLng} and ${bbox.neLng}`,
   ]
 
+  const ownedByThisTool = sql`(${pois.excludedReason} = ${LINEAR_FEATURE_REASON}
+    or ${pois.excludedReason} like ${PRUNE_REASON_PREFIX + '%'})`
+
   if (restore) {
     const rows = await db
       .select({ id: pois.id, name: pois.name })
       .from(pois)
-      .where(and(...inBbox, eq(pois.excludedReason, LINEAR_FEATURE_REASON)))
+      .where(and(...inBbox, ownedByThisTool))
     console.log(`\n${rows.length} POI(s) currently excluded by this tool.`)
     if (!apply) {
       console.log('PREVIEW — no writes. Re-run with --apply to restore them.')
@@ -82,17 +94,30 @@ async function main(): Promise<void> {
 
   // Candidates = not already excluded, matching the linear-feature name shape. The narration join is
   // reporting only: it is what makes the cost of this call visible before it is made.
-  const rows = await db
+  const candidates = await db
     .select({
       id: pois.id,
       name: pois.name,
+      areaKm2: pois.areaKm2,
+      lengthKm: pois.lengthKm,
+      types: pois.wikidataTypes,
       narrationId: narrations.id,
       durationMs: narrations.audioDurationMs,
       released: narrations.releasedAt,
     })
     .from(pois)
     .leftJoin(narrations, eq(narrations.poiId, pois.id))
-    .where(and(...inBbox, isNull(pois.excludedReason), sql`${pois.name} ~* ${LINEAR_NAME.source}`))
+    .where(and(...inBbox, isNull(pois.excludedReason)))
+
+  // Authoritative first, name pattern only as the fallback for un-backfilled rows.
+  const rows = candidates
+    .map((r) => ({
+      ...r,
+      reason:
+        containmentReason({ areaKm2: r.areaKm2, lengthKm: r.lengthKm, types: r.types }) ??
+        (LINEAR_NAME.test(r.name) ? 'linear feature: numbered route, no point trigger' : null),
+    }))
+    .filter((r): r is typeof r & { reason: string } => r.reason != null)
 
   if (rows.length === 0) {
     console.log('\nNothing to flag — no un-excluded linear features in range.')
@@ -103,8 +128,8 @@ async function main(): Promise<void> {
   const releasedN = rows.filter((r) => r.released != null).length
   const totalSec = Math.round(narrated.reduce((a, r) => a + (r.durationMs ?? 0), 0) / 1000)
 
-  console.log(`\n${rows.length} linear feature(s) to flag:`)
-  for (const r of rows) console.log(`  ${r.narrationId ? '♪' : ' '} ${r.name}`)
+  console.log(`\n${rows.length} place(s) with no meaningful point trigger:`)
+  for (const r of rows) console.log(`  ${r.narrationId ? '♪' : ' '} ${r.name}  —  ${r.reason}`)
   console.log(
     `\n⚠ ${narrated.length} of them already carry generated audio (${Math.round(totalSec / 60)} min, ` +
       `${releasedN} released). The audio is NOT deleted — these rows are flagged, so the clips stay in ` +
@@ -115,14 +140,12 @@ async function main(): Promise<void> {
     console.log('\nPREVIEW — no writes. Re-run with --apply to flag them.')
     return
   }
-  await withRetry(
-    () =>
-      db
-        .update(pois)
-        .set({ excludedReason: LINEAR_FEATURE_REASON })
-        .where(and(...inBbox, isNull(pois.excludedReason), sql`${pois.name} ~* ${LINEAR_NAME.source}`)),
-    { label: 'prune.flag' },
-  )
+  for (const r of rows) {
+    await withRetry(
+      () => db.update(pois).set({ excludedReason: `${PRUNE_REASON_PREFIX} — ${r.reason}` }).where(eq(pois.id, r.id)),
+      { label: `prune(${r.name})` },
+    )
+  }
   console.log(`\n✓ ${rows.length} POI(s) flagged. Undo: --restore --apply`)
 }
 

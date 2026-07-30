@@ -31,6 +31,7 @@ import {
   WDQS_USER_AGENT,
 } from '../config'
 import type { LngLat } from './geo'
+import { isContainer } from './containment'
 import { fetchWithRetry } from './http'
 import { fetchExtractsByTitle } from './wikipedia'
 
@@ -201,6 +202,10 @@ interface RawItem {
   lng: number
   types: Set<string>
   articleTitle?: string
+  /** Wikidata P2046 area in km² / P2043 length in km, when claimed. Fetched HERE so a CONTAINER can be
+   *  rejected before it enters the corpus — see the containment filter below. */
+  areaKm2?: number
+  lengthKm?: number
 }
 
 const titleFromUrl = (u: string): string =>
@@ -223,7 +228,7 @@ export function boundingBox(polyline: LngLat[], padDeg = 0.025): { sw: LngLat; n
 
 /** Every geocoded Wikidata entity in a bbox, with its P31 types + enwiki sitelink. */
 async function fetchWikidataBox(sw: LngLat, ne: LngLat): Promise<RawItem[]> {
-  const query = `SELECT ?item ?itemLabel ?lat ?lon ?typeLabel ?article WHERE {
+  const query = `SELECT ?item ?itemLabel ?lat ?lon ?typeLabel ?article ?areaSqm ?lenM WHERE {
     SERVICE wikibase:box {
       ?item wdt:P625 ?coord .
       bd:serviceParam wikibase:cornerSouthWest "Point(${sw[0]} ${sw[1]})"^^geo:wktLiteral .
@@ -231,6 +236,12 @@ async function fetchWikidataBox(sw: LngLat, ne: LngLat): Promise<RawItem[]> {
     }
     ?item p:P625/psv:P625 ?node . ?node wikibase:geoLatitude ?lat ; wikibase:geoLongitude ?lon .
     OPTIONAL { ?item wdt:P31 ?type . }
+    # Extent, normalised to m²/m by psn: whatever unit the claim used. Fetched at DISCOVERY so a
+    # container never enters the corpus — the alternative cost real money, twice: 43 containers were
+    # enriched AND narrated (49 min of audio) before anything noticed, including an 86-second telling
+    # about the Diocese of Reno.
+    OPTIONAL { ?item p:P2046/psn:P2046/wikibase:quantityAmount ?areaSqm . }
+    OPTIONAL { ?item p:P2043/psn:P2043/wikibase:quantityAmount ?lenM . }
     OPTIONAL { ?article schema:about ?item ; schema:isPartOf <https://en.wikipedia.org/> . }
     SERVICE wikibase:label { bd:serviceParam wikibase:language "en,mul". }
   }`
@@ -280,8 +291,25 @@ async function fetchWikidataBox(sw: LngLat, ne: LngLat): Promise<RawItem[]> {
     }
     if (b.typeLabel?.value) it.types.add(b.typeLabel.value.toLowerCase())
     if (b.article?.value && !it.articleTitle) it.articleTitle = titleFromUrl(b.article.value)
+    // One binding row PER TYPE (the OPTIONALs cross-product), so take the first non-empty value.
+    const sqm = Number(b.areaSqm?.value)
+    if (it.areaKm2 == null && Number.isFinite(sqm) && sqm > 0) it.areaKm2 = sqm / 1_000_000
+    const m = Number(b.lenM?.value)
+    if (it.lengthKm == null && Number.isFinite(m) && m > 0) it.lengthKm = m / 1000
   }
-  return [...items.values()]
+
+  // ⚠ REJECT CONTAINERS HERE, not later. A place you are INSIDE for an hour (a national park, a
+  // mountain range, a wilderness) or ALONG for miles (a highway) has no meaningful point trigger, so it
+  // can never be a stop — and discovering it anyway is not free. In the Tahoe/Yosemite corpus, 43 such
+  // entities were enriched AND narrated before anyone looked: 49 minutes of paid TTS for places that
+  // cannot be told, plus ~30 of them serving in roam. Filtering at the source prevents that; the
+  // `prune-corpus` flag only cleans it up afterwards, and cannot recover the spend.
+  const all = [...items.values()]
+  const keep = all.filter((it) => !isContainer({ areaKm2: it.areaKm2, lengthKm: it.lengthKm, types: [...it.types] }))
+  if (keep.length !== all.length) {
+    console.error(`  containment filter: dropped ${all.length - keep.length} container(s) of ${all.length}`)
+  }
+  return keep
 }
 
 /**

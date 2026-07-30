@@ -1,4 +1,4 @@
-// backfill-poi-extent — populate `pois.area_km2` from Wikidata P2046, in QID batches.
+// backfill-poi-extent — populate `pois.area_km2` / `length_km` / `wikidata_types` from Wikidata.
 //
 // WHY THIS EXISTS: the legibility layer needs to tell a CONTAINER from a STOP, and nothing else we store
 // can. `Sierra Nevada` and `Half Dome` both carry `kind = 'mountain'` with article lengths within 15% of
@@ -29,17 +29,28 @@ import { announce, parseFlags } from './pipeline/ops'
 import { withRetry } from './pipeline/http'
 import { resolveRegion, requireRegionBbox } from './pipeline/region'
 import { DEFAULT_REGION_SLUG, WDQS_ENDPOINT, WDQS_USER_AGENT } from './config'
+import { containmentReason, isContainer } from './pipeline/containment'
 
 /** QIDs per SPARQL VALUES block. WDQS is free but shared infrastructure — keep requests modest. */
 const BATCH = 150
 
-async function areasFor(qids: string[]): Promise<Map<string, number>> {
-  // P2046 carries a unit (km², m², acre, hectare…), so normalise via the unit's conversion-to-SI
-  // factor (P2370) rather than assuming km². `psv:` gives the normalised value node.
+interface Claims {
+  areaKm2?: number
+  lengthKm?: number
+  types: string[]
+}
+
+async function claimsFor(qids: string[]): Promise<Map<string, Claims>> {
+  // `psn:` is the NORMALISED value node, so P2046 arrives in square metres and P2043 in metres whatever
+  // unit the claim was authored in (km², acre, hectare, mile…). That normalisation is the only reason
+  // these two divisions are the whole conversion.
   const values = qids.map((q) => `wd:${q}`).join(' ')
-  const query = `SELECT ?item ?areaSqm WHERE {
+  const query = `SELECT ?item ?areaSqm ?lenM ?p31Label WHERE {
     VALUES ?item { ${values} }
-    ?item p:P2046/psn:P2046/wikibase:quantityAmount ?areaSqm .
+    OPTIONAL { ?item p:P2046/psn:P2046/wikibase:quantityAmount ?areaSqm . }
+    OPTIONAL { ?item p:P2043/psn:P2043/wikibase:quantityAmount ?lenM . }
+    OPTIONAL { ?item wdt:P31 ?p31 . }
+    SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
   }`
   const res = await withRetry(
     () =>
@@ -50,14 +61,29 @@ async function areasFor(qids: string[]): Promise<Map<string, number>> {
     { label: 'wdqs.area' },
   )
   if (!res.ok) throw new Error(`WDQS HTTP ${res.status} — free service, usually rate-limited; retry later.`)
-  const json = (await res.json()) as { results?: { bindings?: { item?: { value: string }; areaSqm?: { value: string } }[] } }
-  const out = new Map<string, number>()
+  const json = (await res.json()) as {
+    results?: {
+      bindings?: {
+        item?: { value: string }
+        areaSqm?: { value: string }
+        lenM?: { value: string }
+        p31Label?: { value: string }
+      }[]
+    }
+  }
+  const out = new Map<string, Claims>()
   for (const b of json.results?.bindings ?? []) {
     const qid = b.item?.value.split('/').pop()
+    if (!qid) continue
+    const c = out.get(qid) ?? { types: [] }
     const sqm = Number(b.areaSqm?.value)
-    if (!qid || !Number.isFinite(sqm) || sqm <= 0) continue
-    // psn: normalises every unit to square METRES, so this division is the only conversion needed.
-    out.set(qid, sqm / 1_000_000)
+    if (Number.isFinite(sqm) && sqm > 0) c.areaKm2 = sqm / 1_000_000
+    const m = Number(b.lenM?.value)
+    if (Number.isFinite(m) && m > 0) c.lengthKm = m / 1000
+    // One row PER TYPE (the OPTIONALs cross-product), so accumulate rather than overwrite.
+    const t = b.p31Label?.value?.toLowerCase().trim()
+    if (t && !c.types.includes(t)) c.types.push(t)
+    out.set(qid, c)
   }
   return out
 }
@@ -76,34 +102,43 @@ async function main(): Promise<void> {
     sql`${pois.lat} between ${bbox.swLat} and ${bbox.neLat}`,
     sql`${pois.lng} between ${bbox.swLng} and ${bbox.neLng}`,
   ]
-  if (!force) conds.push(isNull(pois.areaKm2))
+  if (!force) conds.push(isNull(pois.wikidataTypes))
   const rows = await db.select({ id: pois.id, qid: pois.qid, name: pois.name }).from(pois).where(and(...conds))
   if (rows.length === 0) return console.log('\nNothing to fetch — every POI in range already has an area (use --force to redo).')
 
   console.log(`${rows.length} POI(s) to look up · ${Math.ceil(rows.length / BATCH)} WDQS batch(es), free.\n`)
-  const found = new Map<string, number>()
+  const found = new Map<string, Claims>()
   for (let i = 0; i < rows.length; i += BATCH) {
     const slice = rows.slice(i, i + BATCH)
-    const areas = await areasFor(slice.map((r) => r.qid))
-    for (const [qid, km2] of areas) found.set(qid, km2)
-    console.error(`  batch ${Math.floor(i / BATCH) + 1}: +${areas.size} area claim(s)`)
+    const got = await claimsFor(slice.map((r) => r.qid))
+    for (const [qid, c] of got) found.set(qid, c)
+    console.error(`  batch ${Math.floor(i / BATCH) + 1}: +${got.size} entity claim(s)`)
   }
 
-  const hits = rows.filter((r) => found.has(r.qid))
-  console.log(`\n${hits.length}/${rows.length} have a P2046 area claim (the rest legitimately have none).`)
-  const big = hits
-    .map((r) => ({ ...r, km2: found.get(r.qid)! }))
-    .sort((a, b) => b.km2 - a.km2)
-  console.log('\nLargest — these are the CONTAINERS a grouping must not be seeded from:')
-  for (const b of big.slice(0, 12)) console.log(`  ${b.km2.toFixed(1).padStart(10)} km²  ${b.name}`)
+  const hits = rows.filter((r) => found.has(r.qid)).map((r) => ({ ...r, c: found.get(r.qid)! }))
+  const containers = hits.filter((h) => isContainer(h.c))
+  console.log(
+    `\n${hits.length}/${rows.length} resolved. Area claims: ${hits.filter((h) => h.c.areaKm2 != null).length}; ` +
+      `length claims: ${hits.filter((h) => h.c.lengthKm != null).length}.`,
+  )
+  console.log(`\n${containers.length} CONTAINER(s) — inside/along, not passed:`)
+  for (const b of containers.slice(0, 20)) console.log(`  ${containmentReason(b.c)}  ·  ${b.name}`)
+  if (containers.length > 20) console.log(`  …and ${containers.length - 20} more`)
 
   if (!apply) return console.log('\nPREVIEW — no writes. Re-run with --apply to persist.')
   let n = 0
-  for (const h of big) {
-    await withRetry(() => db.update(pois).set({ areaKm2: h.km2 }).where(eq(pois.id, h.id)), { label: `area(${h.name})` })
+  for (const h of hits) {
+    await withRetry(
+      () =>
+        db
+          .update(pois)
+          .set({ areaKm2: h.c.areaKm2 ?? null, lengthKm: h.c.lengthKm ?? null, wikidataTypes: h.c.types })
+          .where(eq(pois.id, h.id)),
+      { label: `claims(${h.name})` },
+    )
     n++
   }
-  console.log(`\n✓ ${n} area(s) written.`)
+  console.log(`\n✓ ${n} POI(s) updated (${containers.length} flagged as containers).`)
 }
 
 main()
