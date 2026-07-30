@@ -141,9 +141,24 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
             silent-immortality bug. Also guarded the real hazard all three review passes found: a ~$1
             `classify-treatments --apply` re-baseline cascade-DELETES every fused telling and orphans
             its audio, so it now refuses without `--force-regroup`.
-      - [ ] **Steps 2-7** — position+radius, read paths, generate, LISTEN, retire, admin. See spec §9;
-            each carries its own ⚠ (notably: `isNull(pois.clusterId)` belongs in step 6, NOT earlier, or
-            the 30 un-generatable clusters lose their member clips with nothing to replace them).
+      - [x] **Step 2 — trigger position + radius. BUILT 2026-07-30.** `clusterTrigger` in
+            `@skipper/engine` + `DriveCandidate.triggerRadiusM`. ⚠ BOTH rules spec §4.1 proposed were
+            wrong on the measurement: the SUBJECT never wins (it's a naming choice, and a district's
+            Wikidata point is a label point, not a centre — Vikingsholm is the worst position in the
+            corpus), and `worst + 250` would have put 24 of 30 above the speed lead, re-breaking what
+            `ANCHORED_TRIGGER_RADIUS_M` was added to fix. As built (1-center, `max(250, enclosing)`):
+            21 of 30 sit at the 250 m floor, max 516 m, and ZERO exceed the 600 m an un-anchored
+            kindless POI already gets. See spec §4.1b.
+      - [ ] **Steps 3-7** — read paths, generate, LISTEN, retire, admin. See spec §9; each carries its
+            own ⚠ (notably: `isNull(pois.clusterId)` belongs in step 6, NOT earlier, or the 30
+            un-generatable clusters lose their member clips with nothing to replace them).
+      - [ ] ⚠ **BLOCKS step 4 — two corpus defects, spec §8b.** (a) `UNLV Arboretum` (Q7865354) carries
+            UNR's exact coordinates in WIKIDATA, so a released 71-second clip about a Las Vegas campus
+            fires in Reno TODAY — a live bug, not a phase-4 one, and a class the grounding gate cannot
+            see (the facts are right, the PLACE is wrong). Excluding it is free. (b) The UNR campus is
+            split across TWO cluster rows 1.2 km apart, so phase 4 would ship two fused UNR clips on
+            one drive; the district-merge pass only merges DISTRICTs. Re-merging needs a hand edit or a
+            paid re-classify.
 - [ ] **5. `buildDrive` reads anchors; delete pick-one.** Orphans ~169 satellite clips —
       `sweep-orphans.ts` already handles that.
 

@@ -42,6 +42,19 @@ export interface DriveCandidate {
   anchored?: boolean
   /** Display name (the spoken "stop"). */
   name?: string
+  /** An EXPLICIT trigger floor (m), overriding the `kind`/`anchored` derivation below. Exists for
+   *  the fused CLUSTER telling, whose subject is a `poi_clusters` row: it has no `kind` to look up
+   *  and no single anchor, so its floor is computed from its members' geometry instead
+   *  (`clusterTrigger`). ⚠ Only set this when the kind vocabulary genuinely cannot answer — a POI
+   *  must keep deriving its radius, so the two paths can't drift. */
+  triggerRadiusM?: number
+}
+
+/** The trigger floor for a candidate: an explicit override when one is supplied (a cluster), else the
+ *  kind/anchored vocabulary (a poi). Single-sourced so selection and the manifest can't disagree —
+ *  a stop admitted under one radius and served under another is selected-then-silent. */
+export function candidateTriggerRadiusM(cand: Pick<DriveCandidate, 'kind' | 'anchored' | 'triggerRadiusM'>): number {
+  return cand.triggerRadiusM ?? triggerRadiusForKind(cand.kind ?? null, cand.anchored === true)
 }
 
 /** One stop in an assembled drive — a narration placed on THIS route. A superset of the fields the
@@ -133,7 +146,7 @@ export function buildDrive(params: BuildDriveParams): DriveStop[] {
     const s = snap([cand.lng, cand.lat])
     const reachM = Math.min(
       offRouteMaxM,
-      effectiveRadiusM(triggerRadiusForKind(cand.kind ?? null, cand.anchored === true), avgMps, DEFAULT_TRIGGER.leadSeconds),
+      effectiveRadiusM(candidateTriggerRadiusM(cand), avgMps, DEFAULT_TRIGGER.leadSeconds),
     )
     if (s.offRouteM <= reachM) {
       placed.push({

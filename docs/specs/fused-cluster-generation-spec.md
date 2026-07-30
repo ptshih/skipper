@@ -146,13 +146,58 @@ the same shape argument that removed parks and ranges from the corpus.
 
 **Therefore two mechanisms, not one:**
 
-- **CLUSTER** — a point trigger works. Small clusters measure ~240 m worst-member. Position: the
-  subject's speakable anchor when one exists, else the **medoid** (the member minimising worst distance
-  to the others) preferring a through-road anchor. Radius: `worstMemberDistance + ANCHORED_TRIGGER_RADIUS_M`.
+- **CLUSTER** — a point trigger works. **BUILT 2026-07-30 as `clusterTrigger` in `@skipper/engine`,
+  and both halves of the rule proposed here were WRONG on the measurement** (see §4.1b).
 - **DISTRICT** — needs an AREA trigger ("am I inside the members' bbox?"), not a proximity one. That is
   a genuinely new trigger mode in `@skipper/engine`, and it is the single biggest unbudgeted piece of
   phase 4. ⚠ If that is too much scope, the honest fallback is to ship CLUSTER fusion only and leave
   districts as they are today — 4 districts vs 60 clusters, so most of the value lands either way.
+
+### 4.1b The CLUSTER rule as BUILT — measured over the 30 generatable clusters
+
+Position: the **1-CENTER** (centre of the smallest circle enclosing every tellable member). Mean
+worst-member distance across the 30, computed two independent ways and agreeing within a metre:
+
+| candidate | mean | median | max |
+| --- | --- | --- | --- |
+| **1-center** | **192 m** | **170 m** | **516 m** |
+| centroid | 230 m (+20%) | 201 m | 653 m |
+| medoid | 325 m (+69%) | 286 m | 935 m |
+| subject (its 10 clusters) | 522 m (+171%) | 498 m | 1032 m |
+
+⚠ **NOT the subject.** It never wins: on the 10 clusters that have one it TIES the medoid 6 times —
+all n≤3, where the subject simply *is* the medoid, so the ties are arithmetic, not evidence — and
+LOSES the other 4. The reason is structural and won't improve with more data: a subject is picked for
+NAMING authority (a `…Historic District` or settlement QID), and such an entity's Wikidata point is a
+label point, not a centre. Vikingsholm is the worst case in the corpus — the flagship subject, 1032 m
+against the 1-center's 516.
+
+Radius: **`max(ANCHORED_TRIGGER_RADIUS_M, enclosingRadius)`**.
+
+⚠ **NOT `worstMember + ANCHORED_TRIGGER_RADIUS_M`.** Adding them puts 24 of the 30 above the 322 m the
+speed-adaptive lead already grants at 60 mph, so the floor rather than the lead would decide the fire
+point for 80% of clusters — reintroducing exactly the early-and-imprecise firing
+`ANCHORED_TRIGGER_RADIUS_M` was added to stop. Measured outcome of the `max()` form: **21 of 30 sit at
+the 250 m floor, median 250 m, max 516 m, and ZERO exceed the 600 m an un-anchored kindless POI is
+already given today.** Fused clusters trigger TIGHTER than the status quo default.
+
+**The invariant that makes an off-road centre safe.** A 1-center can sit away from any road (Emerald
+Bay's is ~430 m out, over the water), and `buildDrive` silently drops a candidate whose off-route
+distance exceeds its reach. But every member is within `enclosingRadius` of the centre by
+construction, so a route passing any member is inside the radius. Verified live: holds for all 107
+members of all 30 clusters. Snapping the point to the nearest member anchor would trade that
+guarantee away for a worse centre, so it is deliberately not done.
+
+⚠ **`treatment` is a NAMING-CAPACITY verdict, not a geometry one** (it is `highlights.length` against
+the clip band). So "a cluster is compact enough for a point" does NOT follow from the column, and the
+measurement proves it: four CLUSTERs are more spread out than the smallest DISTRICT (Stateline's
+Casino Row, 329 m) — Emerald Bay 516, UNR Campus 416, Newlands 386, Gardnerville 375. The point
+trigger is defensible for the bulk (21 of 30 fit inside a plain 250 m circle); Emerald Bay and the UNR
+campus are the two that want a listen before anyone calls them settled.
+
+`DriveCandidate` gained an optional `triggerRadiusM` for this: a cluster has no `kind` to look up, and
+`candidateTriggerRadiusM` is now the single source both selection and the manifest read, so a stop
+can't be admitted under one radius and served under another.
 
 ### 4.2 A clustered member is NOT an active POI — SETTLED (founder, 2026-07-30)
 
@@ -261,8 +306,8 @@ tested until step 4 exists. It is bought STRUCTURALLY instead: both derive from 
 (The "do members stay active" question was here and is now SETTLED in §4.2 — they do not.)
 
 1. **§3.3** — the length bands are guesses; pin them on a listen.
-2. **§4.1** — cluster position when there is no subject. Of the 30 GENERATABLE clusters, 21 have no
-   `subject_poi_id`, so the medoid path is the common case, not the fallback.
+2. ✅ **CLOSED 2026-07-30 — the question dissolved.** Position never consults the subject at all
+   (§4.1b), so "what happens when there isn't one" stopped being a case.
 3. ✅ **CLOSED 2026-07-30 — §6 is built.** It does not plug into a staleness *join* at all: there was
    never a SQL one to plug into. See §6.
 4. **Admin** — RESOLVED in shape, unbuilt: surface the fused clip on the EXISTING POI sheet rather than
@@ -285,6 +330,40 @@ tested until step 4 exists. It is bought STRUCTURALLY instead: both derive from 
 - ⚠ NOT met: a real Tahoe drive. Every number in §3.3 and §4.1 is a desk estimate, and this is the step
   that turns a desk estimate into 30 pieces of paid audio.
 
+## 8b. ⚠ Two corpus defects that BLOCK step 4 — found by the position measurement, 2026-07-30
+
+Both are in the Reno campus grouping, both survive every existing gate, and neither is a phase-4 bug —
+the measurement just happened to look closely enough to see them.
+
+**1. `UNLV Arboretum` is pinned in Reno, and it is ALREADY LIVE.** Wikidata Q7865354 carries
+`39.5458, -119.817` — byte-identical to Q7895895 (`University of Nevada, Reno Arboretum`), 700 km from
+the actual arboretum in Paradise, Nevada. Confirmed against Wikidata directly, so the error is
+UPSTREAM and our sweep imported it faithfully. It was enriched, narrated, and RELEASED: a 71-second
+clip that opens *"…the UNLV Arboretum down in Paradise, Nevada"* fires on the UNR campus today.
+
+⚠ **This is a whole error CLASS the fail-closed grounding gate is structurally blind to.** The script
+is accurate, the fact sheet is accurate, the attribution is correct — only the COORDINATE is wrong,
+and nothing in the pipeline checks a place against where it says it is. Same shape as the
+name-derived-claim trap in `cut-wave-form.md`: the gate verifies script↔facts and cannot see outside
+that pair. Phase 4 raises the stakes rather than creating the problem — as a cluster member it would
+be NAMED inside the fused Reno telling, and §3.2's exclusion clause is the only thing that could stop
+it.
+
+A cheap systematic detector exists and was run: two distinct QIDs at an EXACTLY identical coordinate.
+The corpus has 13 such pairs and 12 are genuine co-location (Glacier Point / Glacier Point Hotel,
+El Capitan / Salathé Wall, Genoa Historic District / Genoa). This is the only real mis-location — so
+it is one bad upstream row, not a systemic import bug. Worth re-running after each sweep; also a
+candidate for the upstream contribute-back queue (agent drafts, human submits).
+
+**2. Two cluster rows over the same campus.** `University of Nevada, Reno Campus` (5 members, no
+subject) and `University of Nevada Reno Campus` (2 members, subject = the UNR Historic District), with
+1-centers 1.2 km apart. Generating both ships two fused clips about UNR on one drive. The
+district-merge pass that fixed exactly this shape for Carson City only merges DISTRICTs, so a split
+CLUSTER has nothing catching it — the 600 m leader-grouping radius seeded twice inside one campus.
+
+Neither is fixed here. Both want a decision: excluding the arboretum row is free and immediate;
+re-merging the campus needs either a hand edit or a `classify-treatments` re-run (which SPENDS).
+
 ## 9. Build order
 
 Sequenced so nothing irreversible happens before the thing that makes it reversible-in-practice exists.
@@ -299,8 +378,11 @@ Sequenced so nothing irreversible happens before the thing that makes it reversi
    nothing to backfill — but because **steps 2, 4 and 6 all consume the same member-set definition**,
    and because both failure modes cost money on a schedule: a null hash re-mints every clip on every
    run, an over-broad hash makes them immortal.
-2. **Position + radius.** Pure engine, testable offline, no spend. Subject's speakable anchor when one
-   exists, else the medoid (§4.1) — which is the majority case, see §7.2.
+2. ✅ **Position + radius — BUILT 2026-07-30.** `clusterTrigger` in `@skipper/engine` (the 1-center +
+   `max(250, enclosingRadius)`, §4.1b), plus `DriveCandidate.triggerRadiusM` /
+   `candidateTriggerRadiusM` so a subject with no `kind` can supply its own floor. Both rules §4.1
+   originally proposed were rejected by the measurement. Verified live: the enclosing invariant holds
+   for all 107 members of all 30 clusters.
 3. **Read paths — BEFORE generation.** Lift the `pois` inner-join so the first fused clip is playable
    the moment it exists rather than invisible. ⚠ This is the half that gets forgotten (§2).
    Reconnaissance: 19 sites read `narrations`; 9 inner-join `pois`, and 6 more filter on
