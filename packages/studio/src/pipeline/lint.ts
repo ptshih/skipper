@@ -124,6 +124,55 @@ const openerKey = (s: string): string => contentWords(s).slice(0, 4).join(' ')
 /** Last N content words — a closer "shape" signature. */
 const closerKey = (s: string): string => contentWords(s).slice(-4).join(' ')
 
+/** A COARSE opener signature — the first 2 content words.
+ *
+ *  Why both: `openerKey`'s 4-word exact match is too specific to see the monotony that actually
+ *  exists. Measured over the 420 released solo clips, "right about here…" opens 20 and "here is a…"
+ *  opens 25, yet the exact key read "right about you are", "right about once stood" and "right about
+ *  here" as three unrelated openers and flagged 2 collisions in the whole corpus. Two words catches the
+ *  SHAPE; the tolerance below is what keeps it from crying wolf. */
+const openerShape = (s: string): string => contentWords(s).slice(0, 2).join(' ')
+
+/** How many EARLIER clips must already share an opener shape before the next one is flagged. Higher
+ *  than the exact-key rule's implicit 1 on purpose — a 2-word shape collides legitimately now and
+ *  then, and a rule that fires on the second use of "gold hill" would be noise. */
+const OPENER_SHAPE_MIN_PRIOR = 2
+
+// ── Shared content n-grams — the rule STOCK_PHRASES structurally cannot express ──────────────────
+// STOCK_PHRASES is a hand-written list, so it only ever catches repetition someone predicted. The
+// corpus measurement (2026-07-30) is what this rule exists for: the cross-stop rules flagged 16 of 451
+// released clips, while an n-gram sweep found "the national register of historic places" in 60/420 solo
+// and 7/31 fused tellings, and the granite age range in 20. None of it was in the list, and none of it
+// ever would have been — co-located POIs are handed the SAME source facts (one Macrostrat map unit for
+// a whole batholith, one NRHP listing phrase), so they converge on wording no author anticipated.
+const SHARED_NGRAM_N = 6
+/** An n-gram must be carried by this many DISTINCT clips before it counts as worn out. */
+const SHARED_NGRAM_MIN_CLIPS = 4
+/** Cap the notes per stop — overlapping windows of one phrase would otherwise fill the avoid list. */
+const SHARED_NGRAM_MAX_REPORTED = 3
+
+// MEASURED at these thresholds over the 451 released clips (2026-07-30), so the rate is not a surprise
+// later: the n-gram rule flags 170 clips (38%) and the opener-shape rule 49 (11%), against 6 and 10 for
+// the two rules that existed before. 38% READS high, but the top six shared phrases are all NRHP or
+// granite-age variants — it is not spraying, it is finding the two problems the corpus actually has, at
+// their real size. Both are ADVISORY (they weight optimize()'s score and feed the retake's avoid list,
+// never withhold), which is what makes a rate this high safe. ⚠ Do NOT promote either to a gate without
+// re-measuring: at 38% a gate would withhold a third of the corpus over wording, not truth.
+
+/** Word n-grams for the shared-phrase scan, deduped within the clip. Raw lowercase words (NOT
+ *  `contentWords`) so the reported phrase reads back as something the writer actually said. */
+function ngramsOf(script: string, n: number): Set<string> {
+  const w = script.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean)
+  const out = new Set<string>()
+  for (let i = 0; i + n <= w.length; i++) {
+    const g = w.slice(i, i + n)
+    // Need real substance: a run that is nearly all filler ("and it is on the a") is not a phrase.
+    if (g.filter((x) => !FILLER.has(x)).length < 3) continue
+    out.add(g.join(' '))
+  }
+  return out
+}
+
 /**
  * Lint the assembled narrated scripts for cross-stop monotony. Returns one finding
  * per flagged stop (each with the reasons and the `avoid` notes to regenerate with).
@@ -177,6 +226,62 @@ export function lintScripts(stops: LintInput[]): LintFinding[] {
       const prev = seenClose.get(ck)
       if (prev !== undefined) flag(s.seq, `closes like stop ${prev} ("${ck}")`, `Close DIFFERENTLY — do not end with words like "${ck}".`)
       else seenClose.set(ck, s.seq)
+    }
+  }
+
+  // 2b. Opener SHAPE — the coarse counterpart to 2's exact key, which under-counts badly (see
+  //     `openerShape`). Tolerated until OPENER_SHAPE_MIN_PRIOR earlier clips already share the shape,
+  //     so an occasional collision is free and a habit is not.
+  const shapeCount = new Map<string, number>()
+  for (const s of stops) {
+    const sh = openerShape(s.script)
+    if (!sh) continue
+    const prior = shapeCount.get(sh) ?? 0
+    if (prior >= OPENER_SHAPE_MIN_PRIOR) {
+      flag(
+        s.seq,
+        `opens on a worn shape — ${prior} earlier stops already begin "${sh}…"`,
+        `Do NOT open with "${sh}…" — ${prior} other tellings around here already start that way. Find a different way in.`,
+      )
+    }
+    shapeCount.set(sh, prior + 1)
+  }
+
+  // 2c. Shared content n-grams — repetition nobody predicted, which is most of it.
+  //     Keep the first user of a worn phrase and flag the rest, matching every other cross-stop rule.
+  if (n >= SHARED_NGRAM_MIN_CLIPS) {
+    const grams = stops.map((s) => ngramsOf(s.script, SHARED_NGRAM_N))
+    const carriers = new Map<string, number[]>() // n-gram → stop indices, in order
+    grams.forEach((set, i) => {
+      for (const g of set) {
+        const arr = carriers.get(g)
+        if (arr) arr.push(i)
+        else carriers.set(g, [i])
+      }
+    })
+    for (let i = 0; i < stops.length; i++) {
+      // Worn phrases this stop carries, most-shared first — but not if it was the FIRST to use it.
+      const worn = [...grams[i]!]
+        .map((g) => ({ g, at: carriers.get(g)! }))
+        .filter((x) => x.at.length >= SHARED_NGRAM_MIN_CLIPS && x.at[0] !== i)
+        .sort((a, b) => b.at.length - a.at.length)
+      const taken: string[][] = []
+      for (const { g, at } of worn) {
+        if (taken.length >= SHARED_NGRAM_MAX_REPORTED) break
+        // Collapse overlapping windows of ONE phrase: "on the national register of historic" and
+        // "the national register of historic places" are the same complaint slid by a word.
+        const words = g.split(' ')
+        if (taken.some((t) => words.filter((w) => t.includes(w)).length >= SHARED_NGRAM_N - 1)) continue
+        taken.push(words)
+        flag(
+          stops[i]!.seq,
+          `shares the phrase "${g}" with ${at.length - 1} other tellings`,
+          // ⚠ Aimed at the WORDING, never the fact. "On the National Register" is usually TRUE, and a
+          // note that reads as "don't mention it" would trade grounding for variety — the one trade
+          // this project never makes.
+          `Do not phrase it as "${g}" — ${at.length - 1} other tellings around here already use those exact words. Keep the fact; find your own way to say it.`,
+        )
+      }
     }
   }
 

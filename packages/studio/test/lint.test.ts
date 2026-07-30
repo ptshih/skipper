@@ -120,3 +120,83 @@ describe('lintScripts', () => {
     expect(lint([])).toEqual([])
   })
 })
+
+// Added 2026-07-30 after measuring the released corpus: the pre-existing cross-stop rules flagged only
+// 16 of 451 clips, while an n-gram sweep found one NRHP phrase in 67 and a granite age range in 20.
+// STOCK_PHRASES is hand-written, so it can only ever catch repetition somebody predicted — and
+// co-located POIs converge on wording nobody does, because they are handed the same source facts.
+describe('lintScripts — shared content n-grams (repetition nobody predicted)', () => {
+  const NRHP = 'it landed on the national register of historic places back in nineteen seventy two'
+  const carriers = (n: number) =>
+    Array.from({ length: n }, (_, i) =>
+      story(i, `A house of some note stands along this road, and ${NRHP}. Number ${i} of them, anyway.`),
+    )
+
+  test('a phrase shared by enough clips flags everyone EXCEPT the first to use it', () => {
+    const findings = lint(carriers(5))
+    const flagged = findings.filter((f) => f.reasons.some((r) => /shares the phrase/.test(r)))
+    expect(flagged.map((f) => f.seq).sort((a, b) => a - b)).toEqual([1, 2, 3, 4]) // seq 0 kept
+  })
+
+  test('below the threshold it stays quiet — an occasional echo is not a habit', () => {
+    const findings = lint(carriers(3)) // < SHARED_NGRAM_MIN_CLIPS
+    expect(findings.some((f) => f.reasons.some((r) => /shares the phrase/.test(r)))).toBe(false)
+  })
+
+  test('⚠ the avoid note targets the WORDING and explicitly preserves the FACT', () => {
+    // A note that reads as "stop mentioning the National Register" would trade grounding for variety —
+    // the one trade this project never makes. The gate would then pass a clip that dropped a true claim.
+    const f = lint(carriers(5)).find((x) => x.seq === 4)!
+    const note = f.avoid.join(' ')
+    expect(note).toMatch(/keep the fact/i)
+    expect(note).toMatch(/your own way to say it/i)
+  })
+
+  test('overlapping windows of ONE phrase collapse to a single complaint', () => {
+    // "on the national register of historic" and "the national register of historic places" are the
+    // same grievance slid by a word; without the overlap guard every window would file its own note.
+    const f = lint(carriers(6)).find((x) => x.seq === 5)!
+    const shared = f.reasons.filter((r) => /shares the phrase/.test(r))
+    expect(shared.length).toBeLessThanOrEqual(3)
+  })
+
+  test('a run of pure filler is not a phrase', () => {
+    // Every word of the shared span is in FILLER, so no window clears the substance bar. Without that
+    // bar, function-word runs — which every telling shares — would swamp the real findings.
+    const tails = ['A mill ground grain.', 'A ferry crossed.', 'A hotel burned.', 'A dam holds.', 'A school stood.', 'A church rang.']
+    const findings = lint(tails.map((t, i) => story(i, `Well now, and so it is up there on the out here just that. ${t}`)))
+    expect(findings.some((f) => f.reasons.some((r) => /shares the phrase/.test(r)))).toBe(false)
+  })
+})
+
+describe('lintScripts — opener SHAPE (the exact 4-word key under-counts)', () => {
+  // Measured: "right about here…" opens 20 released clips and "here is a…" opens 25, yet the exact key
+  // read "right about here" / "right about you are" / "right about once stood" as three unrelated
+  // openers and found 2 collisions in the whole corpus.
+  const openers = [
+    'Right about here the road bends past an old mill that ground grain for the valley.',
+    'Right about now you are passing a schoolhouse that served nine families for forty years.',
+    'Right about there the ferry landing stood before the ice took it one hard winter.',
+    'Right about where that fence runs, a hotel burned down twice and came back once.',
+  ]
+
+  test('a third clip sharing an opener shape is flagged; the first two ride free', () => {
+    const findings = lint(openers.map((s, i) => story(i, s)))
+    const flagged = findings.filter((f) => f.reasons.some((r) => /worn shape/.test(r))).map((f) => f.seq)
+    expect(flagged).toEqual([2, 3]) // OPENER_SHAPE_MIN_PRIOR = 2
+  })
+
+  test('these SAME clips slip past the exact 4-word key — which is why the shape rule exists', () => {
+    const findings = lint(openers.map((s, i) => story(i, s)))
+    expect(findings.some((f) => f.reasons.some((r) => /opens like stop/.test(r)))).toBe(false)
+  })
+
+  test('distinct openers stay clean', () => {
+    const findings = lint([
+      story(0, 'The bay opens wide here, sixty feet of the clearest water you ever saw.'),
+      story(1, 'Vikingsholm sits back in the trees, a castle somebody hauled across an ocean.'),
+      story(2, 'A dam holds this lake, six feet of it answering to one concrete wall.'),
+    ])
+    expect(findings.some((f) => f.reasons.some((r) => /worn shape/.test(r)))).toBe(false)
+  })
+})
