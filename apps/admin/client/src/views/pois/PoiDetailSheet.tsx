@@ -73,11 +73,13 @@ export function PoiDetailSheet({ poiId, poiName, canDelete, hasNarration, open, 
             <div className="flex items-start gap-2 text-xs">
               <EyeOff className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-500" />
               <div className="leading-relaxed">
-                <span className="font-semibold">Excluded — hidden from new drives and roam.</span>{' '}
-                <span className="text-muted-foreground">{curation.excludedReason}</span>{' '}
-                <span className="text-muted-foreground">
+                <div className="font-semibold">Excluded — hidden from new drives and roam.</div>
+                {/* Own line: the reason is operator-authored and does not reliably end in punctuation,
+                    so inlining it ran straight into the next sentence ("…point trigger Saved drives…"). */}
+                <div className="text-muted-foreground">{curation.excludedReason}</div>
+                <div className="text-muted-foreground">
                   Saved drives keep it; audio is untouched. Restore on the Location tab.
-                </span>
+                </div>
               </div>
             </div>
           </div>

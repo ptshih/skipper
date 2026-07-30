@@ -28,20 +28,14 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
       class for existing anchors WITHOUT moving them (`--force` would relocate hand-curated ones).
       Measured on a full re-snap preview: **628 of 699 land on a through-road, 71 on the minor layer**
       — that 10% is the "triggers from a street nobody drives" set.
-- [x] **Admin exclusion surface — BUILT 2026-07-29** (`b0b240c`). Amber banner on every tab of the POI
-      sheet when excluded; Location tab shows the anchor's ROAD CLASS (amber chip on the minor layer) and
-      an Eligibility block to exclude (reason required) / restore. Reference cheat-sheet updated.
-      ⚠ **VISUAL PASS STILL OWED** — admin dev servers were down, so typecheck+build only, and that pair
-      has missed a shell-collapsing CSS regression before. Eyeball it on `bun run dev:admin`.
-- [x] **1b — the real finding wasn't road class at all. FIXED 2026-07-29.** Selection admitted anything
-      within `OFF_ROUTE_MAX_M` (700 m) of the route, but an ANCHORED stop triggers off a 250 m floor
-      (speed-adaptive to ~322 m at 60 mph). So every candidate in the 250–700 m band was selected, ate a
-      min-gap pacing slot, and played NOTHING. Measured on the three saved drives: **3 of 18 selected
-      stops were silent at the drive's own average speed**; Granlibakken (622 m off-route) needed 116 mph.
-      `buildDrive` now gates on the radius the trigger will actually use (`DriveCandidate.anchored` added
-      so it can tell). After: **18 stops/3 silent → 16 stops/0 silent, audible 15 → 16.** One drive
-      backfilled the freed window, one shrank 8→6 — a truth correction, not a regression. Two regression
-      tests cover the band and the un-anchored non-regression.
+- [x] **Admin exclusion + grouping surface — BUILT & VISUALLY VERIFIED 2026-07-29** (`b0b240c`,
+      `ce9cab4`, + the visual-pass fixes). POI sheet shows an amber Excluded banner on every tab; Location
+      shows the anchor's ROAD CLASS (amber chip on the minor layer), the GROUPING (anchor/satellite,
+      treatment, title, members) read-only, and an Eligibility exclude/restore control. Verified in Chrome
+      in BOTH themes against a pruned POI, a cluster anchor, a satellite and a district anchor. The pass
+      caught two real bugs a typecheck+build could not: the banner ran the operator's reason straight into
+      the next sentence ("…point trigger Saved drives keep it"), and a `·` list separator rendered
+      asymmetrically ("Tahoe ·Caesars"). Both fixed.
 - [ ] **1b-follow-on: road class still has no consumer.** The silence bug turned out to be a threshold
       inconsistency, NOT a road-class problem — every silent stop was on a MAJOR road. So
       `speakable_road_class` remains recorded-but-unused. It's now a question about CHOICE between two

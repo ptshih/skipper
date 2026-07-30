@@ -205,7 +205,7 @@ export function Location({ poiId, poiLat, poiLng }: { poiId: string; poiLat?: nu
               </div>
               {data.cluster.members.length > 0 && (
                 <div className="text-xs leading-relaxed text-muted-foreground">
-                  {data.cluster.members.map((m) => m.name).join(' · ')}
+                  {data.cluster.members.map((m) => m.name).join(', ')}
                 </div>
               )}
             </>
