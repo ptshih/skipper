@@ -19,9 +19,20 @@
 # dotenvx decrypts it at boot (see CLAUDE.md "Secrets via dotenvx").
 #
 # Reproducibility: no bun.lock is copied — the trimmed set resolves fresh within the
-# declared semver ranges (minor drift possible). To pin exact versions, generate a
-# pruned lock once (trim workspaces, `bun install`, commit the resulting lock) and
-# COPY it before install.
+# declared semver ranges (minor drift possible).
+# ⚠ DO NOT "fix" this by adding `COPY bun.lock` — TESTED 2026-07-30 and it BREAKS THE BUILD.
+# `bun install --production` implies `--frozen-lockfile` (verified: it fails with CI unset and
+# BUN_CONFIG_FROZEN_LOCKFILE unset, so it is the flag itself, not the environment), and step 1
+# below REWRITES package.json to trim `workspaces` — which is exactly the kind of change a frozen
+# lockfile refuses:  `error: lockfile had changes, but lockfile is frozen`.
+# `--no-frozen-lockfile` did not clear it either. A repo-wide audit flagged the missing lockfile as
+# a supply-chain gap and prescribed `COPY bun.lock`; that prescription would have taken production
+# deploys down, which is why the evidence is recorded here rather than the suggestion re-tried.
+# The CORRECT fix, if exact pinning is wanted, is still a PRUNED lock: trim workspaces, `bun
+# install`, commit the resulting lock as its own file, COPY that. It buys reproducibility at the
+# cost of a second lockfile that must be regenerated whenever a dependency moves — so it is a
+# deliberate trade, not a one-liner. The ENTRYPOINT's dotenvx is pinned exactly regardless (below),
+# which is where the sharp end of this risk actually was.
 #
 # Leanest alternative (single self-contained binary, no node_modules):
 #   bun build ./apps/api/src/index.ts --compile --target=bun-linux-x64 --minify --outfile server
@@ -33,7 +44,11 @@ WORKDIR /app
 
 # dotenvx for deploy-time secret decryption (it's a ROOT devDependency, so a
 # --production install drops it — install it on its own).
-RUN bun add -g @dotenvx/dotenvx
+# ⚠ PINNED EXACTLY, and this is the one pin in the image that most deserves it: dotenvx is the
+# ENTRYPOINT and it handles the decrypted secrets, so an unpinned `bun add -g` would pull whatever
+# the registry served that minute straight into the process that holds the keys. Keep this in step
+# with the root devDependency (`^2.14.0`) — a `bun update` that moves one should move both.
+RUN bun add -g @dotenvx/dotenvx@2.14.0
 
 # 1) Manifests only, then resolve deps with the workspace TRIMMED to the api closure
 #    so the RN tree is never resolved or installed. --production drops devDeps.
