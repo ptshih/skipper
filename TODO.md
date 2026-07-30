@@ -199,6 +199,29 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
       - [ ] **Diversity advisory failed 16 of 31 (52%).** The single-clip retake that took Stateline
             0.00 → 1.00 was not representative; naming five places pulls toward enumeration, the
             NAME-DENSITY tension §3.3 predicted. Never withheld a clip, but half a run is a signal.
+      - [ ] **⚠ …and that 52% is only HALF the picture: the fused generator's diversity lint cannot see
+            another clip.** `generate-cluster-narrations.ts:244` still calls
+            `evaluateDiversity([{ seq, stopType: 'story', script }])` — a SINGLE-element array, in which
+            every cross-clip rule is a no-op by arithmetic (`hits.slice(1)` on one hit is empty; the
+            opener/closer maps have nothing to collide with). `generate-narrations.ts` had the identical
+            bug and was fixed in `0f80d97` with `evaluateDiversityAgainst(current, context)`; the fused
+            generator was mid-edit in the shared tree that day and was deliberately left for its owner.
+            **Read the numbers above correctly:** the 16/31 failures and Stateline's 0.00 → 1.00 are
+            REAL — they come from the PER-stop rules (banned wind-ups, list/inventory shape, tidy-bow
+            closers, within-stop repetition), which always worked at n=1. What has never been measured
+            even once is whether the 31 fused clips repeat EACH OTHER. Do not read "diversity 52%" as
+            "diversity is working here".
+            Fused clips are the worst population to be blind on: one run, one region, each naming
+            several places, so they share both source material and shape — exactly what the solo corpus
+            did when one geology sentence reached 17 clips and the NRHP phrase reached 67.
+            Fix is the one-line swap plus a context seed. Two things not to get wrong: **the take under
+            test must go LAST** (every cross-stop rule keeps the FIRST occurrence and flags later ones,
+            so any other order flags the corpus and lets the repeating take pass clean), and the context
+            should include the region's SOLO tellings too, not just the fused ones — a fused clip that
+            echoes the member clips it replaced is the same defect wearing a hat.
+            ⚠ The 31 released clips are NOT retroactively fixed by this; it only changes what the NEXT
+            run produces. Worth doing before Yosemite's 30 (the item below) or any fused regeneration —
+            re-generating into the same blind spot buys the same defect at full price.
       - [ ] **Yosemite's 30 clusters** — still un-generatable (zero enriched members); needs a
             founder-gated `enrich-pois --region yosemite` run first. `generate-cluster-narrations.ts` is
             complete: narrate → fail-closed gate with excision retakes → TTS → loudnorm → R2 → upsert
