@@ -3,7 +3,10 @@
 // reach, so "the circle always contains every member" is what keeps an off-road 1-center from
 // silently vanishing from a drive.
 import { describe, expect, it } from 'bun:test'
-import { clusterTrigger, ANCHORED_TRIGGER_RADIUS_M, haversineMeters, candidateTriggerRadiusM } from '../src'
+import {
+  clusterTrigger, ANCHORED_TRIGGER_RADIUS_M, CLUSTER_MAX_TRIGGER_RADIUS_M, exceedsPointTrigger,
+  haversineMeters, candidateTriggerRadiusM,
+} from '../src'
 
 /** Metres → degrees at Tahoe's latitude, for building fixtures that read in metres. */
 const LAT0 = 39.0
@@ -102,5 +105,28 @@ describe('candidateTriggerRadiusM', () => {
     expect(candidateTriggerRadiusM({ kind: 'lake', anchored: false })).toBe(1200)
     expect(candidateTriggerRadiusM({ kind: 'lake', anchored: true })).toBe(ANCHORED_TRIGGER_RADIUS_M)
     expect(candidateTriggerRadiusM({ kind: null, anchored: false })).toBe(600)
+  })
+})
+
+describe('exceedsPointTrigger', () => {
+  // Simulated, not guessed: the 903 m cluster fires 92 s early at city pace against a 25 s baseline,
+  // while Emerald Bay at 516 m fires at 26 s against 12 s on a real route. The line sits between them,
+  // on a number that already means something (the floor an un-anchored kindless POI gets).
+  it('passes a cluster no looser than the loosest thing already shipping', () => {
+    expect(exceedsPointTrigger({ radiusM: ANCHORED_TRIGGER_RADIUS_M })).toBe(false)
+    expect(exceedsPointTrigger({ radiusM: 516 })).toBe(false) // Emerald Bay
+    expect(exceedsPointTrigger({ radiusM: CLUSTER_MAX_TRIGGER_RADIUS_M })).toBe(false)
+  })
+
+  it('rejects a cluster that would fire like a district', () => {
+    expect(exceedsPointTrigger({ radiusM: CLUSTER_MAX_TRIGGER_RADIUS_M + 1 })).toBe(true)
+    expect(exceedsPointTrigger({ radiusM: 903 })).toBe(true) // the merged UNR campus
+  })
+
+  it('a real over-wide cluster is caught end to end', () => {
+    // Two members ~1.9 km apart → a ~950 m enclosing circle, the UNR shape.
+    const t = clusterTrigger([at(0, 0), at(1900, 0)])!
+    expect(t.radiusM).toBeGreaterThan(CLUSTER_MAX_TRIGGER_RADIUS_M)
+    expect(exceedsPointTrigger(t)).toBe(true)
   })
 })

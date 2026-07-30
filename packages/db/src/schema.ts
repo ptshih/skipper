@@ -846,8 +846,13 @@ export const evalScores = pgTable(
     runId: uuid('run_id')
       .notNull()
       .references(() => evalRuns.id, { onDelete: 'cascade' }),
-    /** The V2 case identity — the poi row (nullable: a poi may be pruned later). */
+    /** The V2 case identity — the poi row (nullable: a poi may be pruned later, and a FUSED cluster
+     *  telling has no poi at all). */
     poiId: uuid('poi_id').references(() => pois.id, { onDelete: 'set null' }),
+    /** …or the CLUSTER, for a fused telling. Mirrors `narrations`' poi-XOR-cluster subject one layer
+     *  down, minus the CHECK: this is an observability table, and a row whose subject was pruned to
+     *  null on BOTH sides is still a true record of a score that happened. */
+    clusterId: uuid('cluster_id').references(() => poiClusters.id, { onDelete: 'set null' }),
     /** Canonical cross-source key, denormalized for the regression join across runs. */
     qid: text('qid'),
     /** Place name at eval time, denormalized for a readable admin report. */

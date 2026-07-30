@@ -35,7 +35,7 @@
 
 import { Hono } from 'hono'
 import { serveStatic } from 'hono/bun'
-import { and, asc, between, count, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
+import { and, asc, between, count, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import {
   creditEntries,
@@ -221,7 +221,23 @@ app.post('/admin/regions/:slug/release', async (c) => {
     .from(pois)
     .where(and(between(pois.lat, box.swLat, box.neLat), between(pois.lng, box.swLng, box.neLng)))
 
-  const [, stamped] = await db.batch([
+  // …and the CLUSTERS those pois belong to, for FUSED tellings. ⚠ Without this a fused clip can NEVER
+  // be released: its `poi_id` is NULL, so the poi-keyed predicate below can't match it, and
+  // `released_at` is what every public read path filters on. It would be paid-for, correct, and
+  // unhearable. A cluster is "in the region" the same geometry-first way everything else is — by where
+  // its members are.
+  const inBboxCluster = db
+    .selectDistinct({ id: pois.clusterId })
+    .from(pois)
+    .where(
+      and(
+        isNotNull(pois.clusterId),
+        between(pois.lat, box.swLat, box.neLat),
+        between(pois.lng, box.swLng, box.neLng),
+      ),
+    )
+
+  const [, stamped, stampedFused] = await db.batch([
     // Region row: set ONLY while still draft, so a re-run preserves the first release timestamp.
     db.update(regions).set({ releasedAt }).where(and(eq(regions.slug, slug), isNull(regions.releasedAt))),
     // Every staged clip in the bbox → released. Re-runnable: only touches released_at IS NULL rows.
@@ -230,11 +246,19 @@ app.post('/admin/regions/:slug/release', async (c) => {
       .set({ releasedAt })
       .where(and(isNull(narrations.releasedAt), inArray(narrations.poiId, inBboxPoi)))
       .returning({ id: narrations.id }),
+    // The other subject kind. Separate statement rather than an OR, so each half stays an indexed
+    // lookup and the counts are reportable apart.
+    db
+      .update(narrations)
+      .set({ releasedAt })
+      .where(and(isNull(narrations.releasedAt), inArray(narrations.clusterId, inBboxCluster)))
+      .returning({ id: narrations.id }),
   ])
 
   return c.json({
     region: { slug: region.slug, releasedAt: region.releasedAt ?? releasedAt },
-    releasedClips: stamped.length,
+    releasedClips: stamped.length + stampedFused.length,
+    releasedFusedClips: stampedFused.length,
     alreadyReleased: region.releasedAt != null,
   })
 })

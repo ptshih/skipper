@@ -12,9 +12,18 @@ import { evalRuns, evalScores } from '@skipper/db/schema'
 import type { NewEvalScore } from '@skipper/db/schema'
 import type { RunScorecard } from './types'
 
-/** A clip's stable V2 identity, threaded onto its score rows + the withheld flag. */
+/** A clip's stable V2 identity, threaded onto its score rows + the withheld flag.
+ *
+ *  ⚠ EXACTLY ONE of `poiId` / `clusterId` is set, mirroring `narrations_subject_xor`. A FUSED cluster
+ *  telling has no poi, and putting its cluster id in `poiId` would violate the eval_scores FK as well
+ *  as being the same false statement the `poi_clusters` table exists to prevent. */
 export interface ClipIdentity {
-  poiId: string
+  poiId: string | null
+  /** Set for a fused cluster telling; null for a place telling. */
+  clusterId?: string | null
+  /** ⚠ Null for a fused telling — a cluster has no QID. `eval_scores_case_idx` is keyed on
+   *  (qid, dimension), so fused clips do NOT join across runs for regression tracking until that
+   *  index learns about `cluster_id`. Known gap, not worth an index churn before the clips exist. */
   qid: string | null
   name: string
   /** True when this clip was WITHHELD (a GATE dim stayed dirty after the retakes). */
@@ -58,6 +67,7 @@ export function buildScoreRows(
     return {
       runId,
       poiId: id?.poiId ?? null,
+      clusterId: id?.clusterId ?? null,
       qid: id?.qid ?? null,
       name: id?.name ?? null,
       dimension: s.dimension,

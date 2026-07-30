@@ -128,11 +128,11 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
       over ~2 km leave a ~1 km worst-member distance under every candidate position), so it needs an AREA
       trigger — a new mode in @skipper/engine. Districts keep today's behaviour.
       ⚠ **SCOPE AND COST ARE HALF what this item used to claim** (measured against the live corpus,
-      re-measured after the 2026-07-30 re-classify — spec §4.2): of the 62 clusters, only **32 are
-      generatable** — the other 30 are the whole Yosemite side and have ZERO enriched members, and a
-      story telling requires a fact sheet. So it is **32 fused clips (~$5-8) retiring 110 member
-      clips**, 421 tellings → 343. Generating the Yosemite half first needs a separate founder-gated
-      `enrich-pois` run.
+      re-measured after the 2026-07-30 re-classify — spec §4.2): of the 62 clusters, only **31 are
+      generatable** — 30 of the rest are the whole Yosemite side with ZERO enriched members (a story
+      telling requires a fact sheet) and one is deferred by the geometry gate. So it is **31 fused
+      clips (~$5-8) retiring 104 member clips**, 421 tellings → 348. Generating the Yosemite half
+      first needs a separate founder-gated `enrich-pois` run.
       - [x] **Step 1 — staleness hash + the member-set resolver. BUILT 2026-07-30, no migration.**
             `@skipper/db/hash` (`clusterFactsHash`; the poi hashers moved there so the admin server can
             reach them — it cannot import studio), `@skipper/shared`'s `isNarratableStoryPoi`,
@@ -178,17 +178,22 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
             Tahoe is now 37 groups; corpus-wide 67 (62 cluster / 5 district). Stateline's casino row
             moved DISTRICT → CLUSTER, agreeing at last with the spec's own §3.1 example.
             ⚠ `--apply` RE-RUNS the classification, so preview + apply is ~2× the quoted cost.
-      - [ ] **Decide on the UNR campus trigger radius — 903 m. SIMULATED 2026-07-30, and it fails**
-            (spec §4.1b). Merging two groups whose anchors were 1268 m apart necessarily makes a circle
-            covering both ends of the campus. Run through the real trigger engine on a dense Reno
-            corridor it fires with a **92-second lead** at city pace, against 25 s for every other stop.
-            It is the ONLY one of 32 above 600 m — Emerald Bay is next at 516 m and simulates fine
-            (26 s vs a 12 s baseline), and 22 sit at the 250 m floor. **Recommended: a geometry gate**
-            deferring an over-wide cluster to the district bucket until districts get their area
-            trigger — costs this one clip of 32. NOT built: it removes a place from the corpus.
-            ⚠ Same run also found fusing does NOT raise the stop count on a sparse corridor (the west
-            shore places 8 either way — geography binds there, not the pacing budget). Fusing buys
-            content quality where places STACK, which is Reno/Stateline, not the west shore.
+      - [x] **UNR's 903 m radius — DECIDED + GATED 2026-07-30.** Simulated through the real trigger
+            engine it fired with a 92-second lead at city pace against 25 s for every other stop.
+            `CLUSTER_MAX_TRIGGER_RADIUS_M = 600` (engine) + `clusterGenerationBlock` (studio) now defer
+            an over-wide cluster with the districts. 600 is the floor an un-anchored kindless POI
+            already gets, so a fused clip can never trigger looser than the loosest thing shipping; the
+            corpus leaves a 387 m gap right there (…416, 516, then 903). Live: **31 generatable, 1
+            deferred, 30 awaiting enrichment.**
+      - [x] **Release path + eval plumbing — FIXED 2026-07-30.** ⚠ The region release stamped
+            `narrations.poi_id IN (…)`, which a fused clip's NULL poi_id can NEVER match — all 31 clips
+            would have been paid for and permanently STAGED, i.e. unhearable. Now stamps cluster
+            subjects too. `eval_scores.cluster_id` added (migration 0041) + `ClipIdentity` is
+            poi-XOR-cluster. ⚠ Known gap: `eval_scores_case_idx` is `(qid, dimension)` and a cluster has
+            no qid, so fused clips don't join across runs for regression tracking.
+      - [ ] **Still open for step 7 (neither blocks step 4):** `GET /admin/pois` shows every cluster
+            member as `narrationStatus: 'none'`, so an operator can't tell "covered by a fused clip"
+            from "never generated"; and there's no per-clip release for a fused telling.
 
 - [ ] **5. `buildDrive` reads anchors; delete pick-one.** Orphans ~169 satellite clips —
       `sweep-orphans.ts` already handles that.

@@ -10,6 +10,25 @@
 
 import { ANCHORED_TRIGGER_RADIUS_M, haversineMeters, type LngLat } from './geo'
 
+/**
+ * The widest a fused cluster's trigger may be and still honestly be a POINT.
+ *
+ * 600 m is not a taste number: it is the floor `radiusForKind` already gives an un-anchored place with
+ * no kind, so a fused telling that exceeded it would trigger LOOSER than the loosest thing already
+ * shipping. The corpus also leaves a wide gap right there — measured over the 32 generatable clusters,
+ * radii run 250 (×22) … 386, 416, 516, then jump to 903, so nothing sits near the line.
+ *
+ * ⚠ Simulated, not assumed. Run through the real trigger engine on a dense city corridor, the 903 m
+ * cluster (the merged UNR campus) fires with a 92-SECOND lead against 25 s for every other stop —
+ * you would hear the campus named a minute and a half before reaching it. Emerald Bay at 516 m fires
+ * at 26 s against a 12 s baseline on a real highway route, which is fine. The line is between them.
+ *
+ * A cluster over this is the same shape argument that deferred DISTRICTS: somewhere you are INSIDE
+ * needs an AREA trigger, and until that exists the honest move is to leave it as separate places
+ * rather than fire one clip a kilometre early.
+ */
+export const CLUSTER_MAX_TRIGGER_RADIUS_M = 600
+
 /** A cluster member reduced to the one thing this needs: the point it would trigger from. Callers
  *  pass `speakableLat ?? lat`, matching the rule every read path already uses. */
 export interface ClusterMemberPoint {
@@ -123,8 +142,10 @@ function minimalEnclosingCircle(pts: [number, number][]): { c: [number, number];
  * floor rather than the lead would decide the fire point for 80% of them — reintroducing precisely
  * the early-and-imprecise firing that `ANCHORED_TRIGGER_RADIUS_M` was added to stop (see its comment
  * in geo.ts, and the "Harrah's triggers really far" complaint behind it). The max() form still
- * encloses every member of every cluster by construction, and tops out at 516 m — tighter than the
- * 600 m an un-anchored kindless POI gets today.
+ * encloses every member of every cluster by construction. ⚠ It does NOT bound the result: a group
+ * spread over a kilometre yields a kilometre-wide circle, which is why `CLUSTER_MAX_TRIGGER_RADIUS_M`
+ * exists as a separate policy above. 22 of the 32 clusters land on the 250 m floor and one (the merged
+ * UNR campus, 903 m) is over the line.
  *
  * That bound is also what makes the point safe to leave OFF-ROAD. The 1-center can sit away from any
  * road (over the water, for Emerald Bay), and `buildDrive` drops a candidate whose off-route distance
@@ -161,4 +182,12 @@ export function clusterTrigger(members: readonly ClusterMemberPoint[]): ClusterT
     radiusM: Math.max(ANCHORED_TRIGGER_RADIUS_M, Math.ceil(worstMemberM)),
     worstMemberM,
   }
+}
+
+/** Whether this cluster is too spread out to be told from a single point — see
+ *  `CLUSTER_MAX_TRIGGER_RADIUS_M`. Kept SEPARATE from `clusterTrigger`, which reports geometry: this
+ *  is a policy about what we are willing to ship, and conflating the two would make the measurement
+ *  unavailable to whoever wants to revisit the policy. */
+export function exceedsPointTrigger(trigger: Pick<ClusterTrigger, 'radiusM'>): boolean {
+  return trigger.radiusM > CLUSTER_MAX_TRIGGER_RADIUS_M
 }

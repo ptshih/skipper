@@ -222,9 +222,12 @@ Three things came out of it:
 ⚠ The Reno corridor is a SYNTHETIC straight line, so its distances are indicative rather than Google's
 road geometry. The lead-time result does not depend on that: it is radius ÷ speed.
 
-So the geometry gate is now evidence-backed rather than a hedge — a cluster whose enclosing radius puts
-it in district territory should be DEFERRED with the districts until they get their area trigger,
-costing this one clip of 32. Not built: it removes a place from the corpus, which is a founder call.
+✅ **BUILT 2026-07-30 (founder go): the geometry gate.** `CLUSTER_MAX_TRIGGER_RADIUS_M = 600` in
+`@skipper/engine` + `exceedsPointTrigger`, asked through `clusterGenerationBlock` (studio) so
+"generatable" has ONE definition. 600 is not a taste number — it is the floor `radiusForKind` already
+gives an un-anchored kindless place, so a fused telling may never trigger LOOSER than the loosest
+thing already shipping. The corpus leaves a wide gap right there: 250 (×22) … 386, 416, 516, then 903.
+Live result: **31 generatable, 1 deferred (UNR, 903 m), 30 awaiting enrichment.**
 
 **The invariant that makes an off-road centre safe.** A 1-center can sit away from any road (Emerald
 Bay's is ~430 m out, over the water), and `buildDrive` silently drops a candidate whose off-route
@@ -264,7 +267,7 @@ on two independent axes.
 
 | | clusters | of those, generatable today | member clips they'd retire |
 | --- | --- | --- | --- |
-| CLUSTER — phase 4's scope | 62 | **32** | **110** |
+| CLUSTER — phase 4's scope | 62 | **31** | **104** |
 | DISTRICT — deferred (§4.1) | 5 | 5 | — |
 
 **Only 30 of the 60 clusters can be generated at all**, because the other 30 are the entire Yosemite
@@ -272,7 +275,7 @@ side and have **zero enriched members** (85 of the 295 members carry no `fact_sh
 Yosemite). A story telling requires a sheet, so those clusters have nothing to ground on until a paid
 `enrich-pois --region yosemite` run — a separate founder-gated spend, not part of phase 4.
 
-So phase 4 as scoped is **32 fused clips replacing 110 member clips**: 421 tellings → **343**. Not
+So phase 4 as scoped is **31 fused clips replacing 104 member clips**: 421 tellings → **348**. Not
 "roughly half the corpus" — about a quarter of it. (Counts re-measured after the 2026-07-30
 re-classify, which merged the split UNR campus and moved Stateline's casino row from DISTRICT to
 CLUSTER — matching what §3.1 always said about it.)
@@ -284,8 +287,8 @@ R2 — run `sweep-orphans` only after the listen, not as part of the same pass.
 
 ## 5. Cost and blast radius
 
-**32** fused clips ≈ **$5–8** LLM + TTS (halved with the scope, §4.2). Cheap. What is NOT cheap is that
-this is the first irreversible step: fused audio in R2, and 110 member clips retired.
+**31** fused clips ≈ **$5–8** LLM + TTS (halved with the scope, §4.2). Cheap. What is NOT cheap is that
+this is the first irreversible step: fused audio in R2, and 104 member clips retired.
 
 Sequence: `--apply` per region, preview first, and run `sweep-orphans` after — the corpus is currently at
 a clean 421 objects / 421 referenced / 0 orphans, so any drift is attributable to this run.
@@ -470,8 +473,18 @@ Sequenced so nothing irreversible happens before the thing that makes it reversi
    `generate-narrations` must gain `isNull(pois.clusterId)` HERE and not before — added earlier it
    would open a coverage hole in the 30 clusters that have no fused clip yet (no member clips, no fused
    clip).
-7. **Admin surface.** Can trail; ungovernable without it, not broken. ⚠ Two things silently under-report
-   the moment a cluster narration exists: `GET /admin/pois` renders every member as
-   `narrationStatus: 'none'`, and the region-release stamp keys on `narrations.poi_id`, so a fused clip
-   cannot be released. Both are step-7 work, but step 4 must not be called done while a rider can't be
-   served the audio it bought.
+7. **Admin surface.** Can trail; ungovernable without it, not broken.
+   - ✅ **The release path was NOT trailable and is fixed (2026-07-30).** The region release stamped
+     `narrations.poi_id IN (pois in bbox)`, which a fused clip's NULL `poi_id` can never match — so all
+     31 clips would have been paid for, correct, and permanently STAGED, which is to say unhearable,
+     since `released_at` is what every public read path filters on. It now stamps cluster subjects too,
+     via the same geometry-first "a cluster is where its members are" rule, as a separate batch
+     statement so each half stays an indexed lookup and the counts report apart.
+   - ✅ The eval panel takes a cluster subject: `eval_scores.cluster_id` (migration 0041) and
+     `ClipIdentity` is poi-XOR-cluster. ⚠ Known gap: `eval_scores_case_idx` is keyed on
+     `(qid, dimension)` and a cluster has no QID, so fused clips do not join across runs for regression
+     tracking. Not worth an index churn before the clips exist.
+   - ⚠ **Still open:** `GET /admin/pois` renders every member of a cluster as
+     `narrationStatus: 'none'`, so an operator cannot tell "covered by a fused clip" from "never
+     generated"; and there is no per-clip release for a fused telling (the endpoint is poi-keyed). The
+     region release covers the real workflow, so neither blocks step 4.

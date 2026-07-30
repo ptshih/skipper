@@ -1,0 +1,2 @@
+ALTER TABLE "eval_scores" ADD COLUMN "cluster_id" uuid;--> statement-breakpoint
+ALTER TABLE "eval_scores" ADD CONSTRAINT "eval_scores_cluster_id_poi_clusters_id_fk" FOREIGN KEY ("cluster_id") REFERENCES "public"."poi_clusters"("id") ON DELETE set null ON UPDATE no action;

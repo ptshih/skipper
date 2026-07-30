@@ -288,6 +288,13 @@
       "when": 1785394518197,
       "tag": "0040_whole_network",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1785431464076,
+      "tag": "0041_new_nuke",
+      "breakpoints": true
     }
   ]
 }
