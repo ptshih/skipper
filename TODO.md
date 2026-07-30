@@ -175,7 +175,24 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
             the closer is 6.3 dB below the body, shipped flagged for the human pass. Watch whether that
             is fused-specific (a summarising closer after a long body) or just this clip; needs an ear
             and more samples.
-      - [ ] **Step 4, the remaining 30 (~$12-16) — needs a founder go.** `generate-cluster-narrations.ts` is
+      - [x] **Step 4 COMPLETE — all 31 fused clips generated 2026-07-30 ($16.70, 59.8 min, all
+            STAGED).** 31/31 shipped, 0 withheld. Verified: `poi_id` NULL on all 31, attribution
+            non-empty on all 31, `facts_hash` stamped on all 31. Member clips untouched.
+            ✅ **Grounding held at scale — 0 failures across 62 scores**, confirming the design's central
+            bet (a fused well through `mergedFeatures` needs no gate change) on 31 clips, not an argument.
+      - [ ] ⚠ **TAIL COLLAPSE IS FUSED-SPECIFIC — 11 of 31 (35%) vs ~2% on solo clips, and I called
+            this wrong at n=1.** After the first clip collapsed I checked history (7 of 365 solo),
+            concluded "pre-existing, don't tune", and proceeded. At n=31 that reverses: a 17× rate, and
+            severity 4.2-14.4 dB vs solo's 3.3-4.6. Worst is `1960 Olympic Ski Stadium Site` at 14.4 dB
+            — its last line should be near-inaudible. ⚠ The fix belongs in the NARRATION prompt (a fused
+            telling ends on a summarising falling-intonation fragment, and all 3 retakes collapse
+            identically because the SCRIPT determines it), NOT in `SKIPPER_TTS_STYLE_PROMPT` whose
+            anti-fade clause is already maximal and ear-locked. Founder ear-test first — two clips sent.
+      - [ ] **Diversity advisory failed 16 of 31 (52%).** The single-clip retake that took Stateline
+            0.00 → 1.00 was not representative; naming five places pulls toward enumeration, the
+            NAME-DENSITY tension §3.3 predicted. Never withheld a clip, but half a run is a signal.
+      - [ ] **Yosemite's 30 clusters** — still un-generatable (zero enriched members); needs a
+            founder-gated `enrich-pois --region yosemite` run first. `generate-cluster-narrations.ts` is
             complete: narrate → fail-closed gate with excision retakes → TTS → loudnorm → R2 → upsert
             on `narrations_cluster_uq` → eval record keyed to the cluster. **`--limit 1 --apply` is the
             cheap path to ONE real clip to listen to** (well under $1) before committing all 31

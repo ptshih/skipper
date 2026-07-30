@@ -1,11 +1,11 @@
 # Fused cluster generation — phase 4 of the legibility layer
 
-> **Status:** IN BUILD — **2026-07-30**. §9 steps 1–4 are BUILT and **ONE fused clip exists** (Stateline,
-> $0.90, staged); the remaining 30 need a founder go.
+> **Status:** GENERATED — **2026-07-30**. §9 steps 1–4 are done: **all 31 fused clips exist** (59.8 min,
+> $16.70, every one STAGED). Step 5 is the LISTEN, and it has one known defect to judge — see §5b.
 > Steps 1–3 (staleness hash + member-set resolver, trigger position, read paths) spend nothing and are
 > green. Step 4's tool is complete and its output has been read twice on one cluster ($0.83, nothing
 > persisted); running `--apply` is the commitment point and needs a founder go. §8b's two corpus
-> defects are both RESOLVED. Step 5 (the LISTEN) is now actionable on a real clip. Promoted from `docs/ideas/poi-legibility-layer.md` on
+> defects are both RESOLVED. Promoted from `docs/ideas/poi-legibility-layer.md` on
 > founder intent ("let's prepare to do phase 4"). Phases 1–3 are BUILT and APPLIED, and the grouping was
 > re-applied on 2026-07-30 after the third district-merge fix: **64 clusters** (60 cluster / 4 district)
 > over 295 members, all 64 carrying `highlights` / `dropped`, 33 with a real `subject_poi_id`. The four
@@ -350,6 +350,37 @@ Re-baselining is still the right move when the grouping genuinely changed — it
 for. ⚠ The FK is still `CASCADE`; the guard is the only protection, so don't route a new clear path
 around it.
 
+## 5b. What the 31-clip run surfaced
+
+**1. ⚠ TAIL COLLAPSE IS FUSED-SPECIFIC, and an earlier call in this spec was wrong.**
+
+After the FIRST fused clip collapsed, I checked the historical rate on solo poi clips — 6 of 335 and
+1 of 30, about **2%** — and concluded it was pre-existing, not fused-specific, and not worth re-tuning
+an ear-locked delivery prompt over. That was a reasonable read of n=1 and it is **wrong at n=31**:
+
+| | clips | tail-collapsed | rate |
+| --- | --- | --- | --- |
+| solo poi (historical) | 365 | 7 | **~2%** |
+| FUSED | 31 | **11** | **35%** |
+
+Severity is worse too: solo collapses ran 3.3–4.6 dB, fused run **4.2–14.4 dB**. The worst
+(`1960 Olympic Ski Stadium Site`, 14.4 dB below body) should be close to inaudible on its last line.
+A 17× rate increase on the one clip shape that is new is not a coincidence — the likely cause is
+structural rather than stochastic: a fused telling ends on a *summarising* closer after a long
+multi-place body ("Four towers, a mountain of stories, and one very deep crater's worth of history"),
+which is a falling-intonation fragment, and all three retakes collapse identically because the SCRIPT
+is what determines it, not the sampler.
+
+⚠ That points the fix at the NARRATION prompt (the closer's shape), NOT at
+`SKIPPER_TTS_STYLE_PROMPT` — whose anti-fade clause is already maximal ("never trail off, drop low, or
+swallow the closing words") and which is explicitly ear-locked. The tail check is a human-review FLAG,
+not a withholding gate (same as the poi path), so all 11 shipped and are visible in `eval_scores`.
+
+**2. Diversity failed 16 of 31 (52%), advisory.** The single-clip retake that took Stateline from 0.00
+to 1.00 was not representative. Naming five places in one telling pulls toward enumeration, which is
+exactly the NAME-DENSITY tension §3.3 predicted. Advisory only — it never withheld a clip — but at
+half the run it is a real quality signal rather than noise.
+
 ## 6. Staleness — BUILT 2026-07-30 (§9 step 1)
 
 A fused clip grounds on N sheets, so one member's article moving makes it stale. The existing check joins
@@ -530,7 +561,17 @@ Sequenced so nothing irreversible happens before the thing that makes it reversi
 
    The remaining 30 (~$12–16) need a founder go.
 
-4b. **Fused generation, the rest — NOT RUN.** `generate-cluster-narrations.ts` is complete: narrate →
+4b. ✅ **Fused generation — ALL 31 GENERATED 2026-07-30.** 31/31 shipped, 0 withheld, 59.8 min of audio
+   (avg 116 s), ~$16.70. Every row verified: `cluster_id` set, `poi_id` NULL on all 31, attribution
+   non-empty on all 31, `facts_hash` stamped on all 31, all STAGED. Member clips untouched.
+
+   **Grounding held perfectly at scale: 0 failures across 62 scores.** That is the design's central bet
+   — a fused well through `mergedFeatures` needs no gate change — confirmed on 31 clips rather than
+   argued.
+
+   ⚠ See §5b for the two defects the run surfaced, one of which reverses an earlier call of mine.
+
+4c. **Yosemite's 30 clusters — NOT RUN.** `generate-cluster-narrations.ts` is complete: narrate →
    fail-closed gate with excision retakes → TTS → loudnorm → R2 → upsert on `narrations_cluster_uq`,
    plus the eval-run record keyed to the CLUSTER. `--apply` is the first spend (~$12–16 for all 31)
    and the first audio, so it **needs an explicit founder go**. ⚠ A PREVIEW is not free either — it
