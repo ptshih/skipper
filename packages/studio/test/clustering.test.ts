@@ -78,6 +78,15 @@ describe('titlesOverlap', () => {
   test('does not match on a partial WORD', () => {
     expect(titlesOverlap('reno', 'renoir')).toBe(false)
   })
+  // The SECOND miss: contiguous containment still left Carson City split across two districts,
+  // because the shared words are interleaved rather than adjacent.
+  test('matches when the shared words are INTERLEAVED, not adjacent', () => {
+    expect(titlesOverlap(titleKey('Historic Carson City'), titleKey('Historic Downtown Carson City'))).toBe(true)
+  })
+  test('still refuses two genuinely different districts', () => {
+    expect(titlesOverlap(titleKey('Downtown Reno'), titleKey('Newlands Historic Neighborhood'))).toBe(false)
+    expect(titlesOverlap(titleKey('Historic Carson City'), titleKey('Virginia City Boomtown'))).toBe(false)
+  })
 })
 
 describe('pickSubject', () => {

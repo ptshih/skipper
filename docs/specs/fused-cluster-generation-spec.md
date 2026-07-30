@@ -87,25 +87,31 @@ A cluster has N member coordinates and no coordinate of its own. Decide:
   at `ANCHORED_TRIGGER_RADIUS_M`. ⚠ Then re-check §"reachability": the drive selector now gates on the
   radius the trigger will actually use, so a fat cluster radius changes which clusters are selectable.
 
-### 4.2 What happens to the members' own clips?
+### 4.2 A clustered member is NOT an active POI — SETTLED (founder, 2026-07-30)
 
-**The decision this spec most needs a human on.** Options:
+**A member stops being a stop in BOTH modes.** It is not a roam pin and not a drive candidate; the fused
+clip is the only telling for that place. Members remain rows — they keep their facts, their attribution,
+and their membership — they simply stop being independently triggerable.
 
-1. **Retire them.** Members stop being roam pins and stop being drive candidates; only the fused clip
-   plays. Clean, and it is the whole point — but it deletes 302 places' worth of individual tellings.
-2. **Keep for roam, fused for drives.** A drive gets one Emerald Bay stop; roam, where you are stationary
-   and curious, still offers Vikingsholm on its own. ⚠ But roam is where the original complaint lives
-   too — three casino stories on one block.
-3. **Keep both, let roam's suppression handle it.** Roam already suppresses within 300 m for 15 min.
+⚠ An earlier draft of this spec recommended keeping member clips for roam, on the theory that roam has no
+slot scarcity. That was wrong, and it contradicted this layer's own design note (`poi-legibility-layer.md`
+§5: *"satellites resolve to the anchor's clip … so roam stops telling five casino stories on one block"*).
+The triggering problem is PHYSICAL — `Downtown Reno` has **46 members inside ~600 m**, and keeping them
+active would leave a stationary rider with 46 competing pins plus a fused one. Strictly worse. Roam's
+300 m / 15-minute suppression exists to paper over exactly this, and becomes redundant rather than a
+second differently-tuned mechanism.
 
-Recommendation: **(2)**, because roam and drives have genuinely different failure modes — a drive has
-scarce slots and a rider who cannot stop, roam has neither. But it doubles the corpus's telling count and
-should be a deliberate call, not a default.
+**Scale:** 421 tellings → **274** (207 solo + 67 fused). **214 member clips retire — 51% of the corpus.**
+
+⚠ **Sequence this so good audio is never retired before its replacement is heard.** Generate the fused
+clips and listen BEFORE retiring members; a fused Emerald Bay telling that is worse than the individual
+Vikingsholm one would be a regression with no fallback. Retirement is reversible while the clips exist in
+R2 — run `sweep-orphans` only after the listen, not as part of the same pass.
 
 ## 5. Cost and blast radius
 
 ~67 fused clips ≈ **$10–15** LLM + TTS. Cheap. What is NOT cheap is that this is the first irreversible
-step: fused audio in R2, and (under §4.2 option 1) member clips retired.
+step: fused audio in R2, and 214 member clips retired (§4.2).
 
 Sequence: `--apply` per region, preview first, and run `sweep-orphans` after — the corpus is currently at
 a clean 421 objects / 421 referenced / 0 orphans, so any drift is attributable to this run.
@@ -119,12 +125,18 @@ clips are silently never marked stale.
 
 ## 7. Open questions to settle before building
 
-1. **§4.2** — retire member clips, or keep them for roam? (recommendation: keep)
-2. **§3.3** — the length bands are guesses; pin on a listen.
-3. **§4.1** — cluster position when there is no subject (31 of 67 clusters).
-4. **§6** — how the union hash plugs into the existing staleness join.
-5. **Admin** — the console shows grouping read-only; a fused clip needs a play/regenerate surface like
+(The "do members stay active" question was here and is now SETTLED in §4.2 — they do not.)
+
+1. **§3.3** — the length bands are guesses; pin them on a listen.
+2. **§4.1** — cluster position when there is no subject (31 of 67 clusters).
+3. **§6** — how the union hash plugs into the existing staleness join.
+4. **Admin** — the console shows grouping read-only; a fused clip needs a play/regenerate surface like
    the per-POI Narration tab, or it is ungovernable.
+5. ⚠ **Re-apply the grouping first.** The district merge was fixed again on 2026-07-30 (subset-of-words),
+   but the STORED grouping predates it, so Carson City is currently TWO districts — `Historic Carson City`
+   (20) and `Historic Downtown Carson City` (13). Generating from that produces two competing tellings
+   about one downtown, which is the precise thing the merge exists to prevent. One `--apply` per region
+   (~$1.20) before any audio is minted.
 
 ## 8. Prerequisites — all met
 

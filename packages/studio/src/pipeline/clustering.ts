@@ -83,12 +83,27 @@ export function titleKey(title: string): string {
     .trim()
 }
 
-/** Whether two folded titles name the same place: equal, or one contains the other as a WHOLE-WORD
- *  run. Substring alone would fuse "Reno" into "Renoir"; padding both sides forces word boundaries. */
+/** Whether two folded titles name the same place: one title's words are a SUBSET of the other's.
+ *
+ *  ⚠ Two failed cuts are recorded here because each looked sufficient until the data disagreed.
+ *  EQUALITY left downtown Reno split, because the classifier returned "Downtown Reno and the Arch" on
+ *  one pass and "Downtown Reno" on another. Contiguous WHOLE-WORD containment fixed that and still left
+ *  Carson City split across "Historic Carson City" (20 members) and "Historic Downtown Carson City" (13),
+ *  because the shared words are interleaved rather than adjacent. Subset-of-words catches both.
+ *
+ *  Still conservative, and still refuses "Downtown Reno" vs "Newlands Historic Neighborhood" — the
+ *  distance bound in `mergeDistricts` is what stops two same-named places in different states colliding,
+ *  and a subset match with no shared PROPER noun is not reachable in practice because the classifier
+ *  titles a group after what is in it. */
 export function titlesOverlap(a: string, b: string): boolean {
   if (!a || !b) return false
   if (a === b) return true
-  return ` ${a} `.includes(` ${b} `) || ` ${b} `.includes(` ${a} `)
+  const wa = new Set(a.split(' ').filter(Boolean))
+  const wb = new Set(b.split(' ').filter(Boolean))
+  if (wa.size === 0 || wb.size === 0) return false
+  const [small, big] = wa.size <= wb.size ? [wa, wb] : [wb, wa]
+  for (const w of small) if (!big.has(w)) return false
+  return true
 }
 
 /** The minimum a subject candidate must expose. */

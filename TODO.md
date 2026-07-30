@@ -119,8 +119,12 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
       every read path — without the second, phase 4 buys audio nobody can hear. Generate from
       `highlights`, never raw membership (Stateline is 9 members but 5 nameable). Grounding needs NO gate
       change: `buildGroundingWell` already takes `mergedFeatures`.
-      **Five open questions in §7 — settle before building.** The load-bearing one: do cluster members
-      keep their own clips for roam (recommended) or get retired?
+      **§4.2 SETTLED (founder 2026-07-30): a clustered member is NOT an active POI in either mode** —
+      not a roam pin, not a drive candidate. Keeping them would leave a rider in downtown Reno with 46
+      competing pins plus a fused one. 421 tellings → 274; 214 member clips retire (51% of the corpus),
+      but only AFTER a listen — retiring good audio before hearing its replacement has no fallback.
+      ⚠ Re-apply the grouping BEFORE minting audio: the stored data predates the 2026-07-30 merge fix and
+      still holds TWO Carson City districts. Four open questions remain in §7.
 - [ ] **5. `buildDrive` reads anchors; delete pick-one.** Orphans ~169 satellite clips —
       `sweep-orphans.ts` already handles that.
 
