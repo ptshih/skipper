@@ -376,6 +376,21 @@ is what determines it, not the sampler.
 swallow the closing words") and which is explicitly ear-locked. The tail check is a human-review FLAG,
 not a withholding gate (same as the poi path), so all 11 shipped and are visible in `eval_scores`.
 
+**Fix shipped + probed on the worst case.** `mergedFeatureLines` now closes a multi-subject sheet with
+*"END ON ONE OF THEM — a full sentence about a single place… not a tally of everything you just named:
+a closing fragment that lists them back has nothing to land on."* Scoped to `named.length >= 2` so
+single-place clips, which do not have this problem, cannot inherit the rule. Regenerating the worst
+clip in the run (`1960 Olympic Ski Stadium Site`):
+
+| | tail drop | outcome |
+| --- | --- | --- |
+| before | **14.4 dB** | all 3 takes collapsed, shipped flagged |
+| after | **1.8 dB** | clean after ONE retake |
+
+⚠ **That is n=1, which is exactly the sample size that misled this section once already.** The honest
+verification is regenerating the 11 flagged clips (~$6) and re-reading the rate — not declaring it
+fixed. The fix costs nothing to keep either way: worst case it is inert.
+
 **2. Diversity failed 16 of 31 (52%), advisory.** The single-clip retake that took Stateline from 0.00
 to 1.00 was not representative. Naming five places in one telling pulls toward enumeration, which is
 exactly the NAME-DENSITY tension §3.3 predicted. Advisory only — it never withheld a clip — but at

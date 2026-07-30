@@ -157,6 +157,19 @@ function mergedFeatureLines(
         ? '(These are what the stop is FOR — work every one of them in, in one flowing pass. Invent nothing beyond their facts above.)'
         : '(Cover these as part of the SAME stop — the place plus its notable features — in one flowing pass. Name them freely; invent nothing beyond their facts above.)',
     )
+    // ⚠ CLOSER SHAPE — the fix for a MEASURED defect, not a style preference. Across the first 31
+    // fused clips, 11 (35%) tail-collapsed against ~2% on single-place clips, at up to 14.4 dB below
+    // the body. All three retakes collapse identically, which means the SCRIPT determines it rather
+    // than the sampler: a many-subject telling reaches for a summarising sign-off, and a verbless
+    // tally ("four towers, a mountain of stories") is a falling-intonation fragment with nothing for
+    // the voice to land on. Scoped to the multi-subject block on purpose — the delivery prompt's
+    // anti-fade clause is already maximal and ear-locked, and single-place clips do not have this
+    // problem, so they must not inherit the rule.
+    if (named.length >= 2) {
+      out.push(
+        '(END ON ONE OF THEM — a full sentence about a single place, the last thing you would leave a friend with. Not a tally of everything you just named: a closing fragment that lists them back has nothing to land on, and it dies in the mouth.)',
+      )
+    }
   }
 
   // The asymmetry fused generation needs: grounded, but not the subject. Stated as PROPORTION rather

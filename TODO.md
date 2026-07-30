@@ -187,7 +187,12 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
             — its last line should be near-inaudible. ⚠ The fix belongs in the NARRATION prompt (a fused
             telling ends on a summarising falling-intonation fragment, and all 3 retakes collapse
             identically because the SCRIPT determines it), NOT in `SKIPPER_TTS_STYLE_PROMPT` whose
-            anti-fade clause is already maximal and ear-locked. Founder ear-test first — two clips sent.
+            anti-fade clause is already maximal and ear-locked.
+            ✅ **Closer rule shipped** (`mergedFeatureLines`, scoped to `named.length >= 2` so solo clips
+            can't inherit it): "END ON ONE OF THEM — a full sentence about a single place… not a tally".
+            Probed on the WORST clip: **14.4 dB → 1.8 dB, clean after one retake.** ⚠ n=1 — the same
+            sample size that already misled this item once. The honest check is regenerating the 11
+            flagged clips (~$6) and re-reading the rate. Founder ear-test on the before/after first.
       - [ ] **Diversity advisory failed 16 of 31 (52%).** The single-clip retake that took Stateline
             0.00 → 1.00 was not representative; naming five places pulls toward enumeration, the
             NAME-DENSITY tension §3.3 predicted. Never withheld a clip, but half a run is a signal.
