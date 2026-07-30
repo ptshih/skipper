@@ -11,7 +11,8 @@
 // (the tint applies), else Apple Maps (untinted) on iOS — never a crash for a missing key.
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { Platform, Pressable, StyleSheet, View } from 'react-native'
-import MapView, { Marker, PROVIDER_GOOGLE, type Region } from 'react-native-maps'
+import MapView, { Marker, Polygon, PROVIDER_GOOGLE, type LatLng, type Region } from 'react-native-maps'
+import type { AreaRing } from '@skipper/shared'
 import { border, radius, space } from '../theme/tokens'
 import { mapStyle } from '../theme/mapStyle'
 import { useReducedMotion, useTheme } from '../theme'
@@ -24,7 +25,16 @@ export interface RoamMapPin {
   name: string
   lat: number
   lng: number
+  /** DISTRICT pins only — the convex hull the telling fires INSIDE of, drawn as a wash instead of
+   *  a dot. `lat/lng` is still populated (it is the enclosing-circle centre + the point fallback
+   *  an area-unaware client fires on), but for a district it is an arbitrary interior point that
+   *  names nothing, so we deliberately do NOT also draw a marker there. */
+  area?: AreaRing
 }
+
+/** Wire rings are GeoJSON-order `[lng, lat]`; react-native-maps wants `{latitude, longitude}`.
+ *  ⚠ Getting this backwards draws the polygon in the Indian Ocean and throws nothing. */
+const toLatLng = ([lng, lat]: readonly [number, number]): LatLng => ({ latitude: lat, longitude: lng })
 
 export interface RoamMapProps {
   /** The rider's live position — null until the first fix lands. */
@@ -136,9 +146,19 @@ function RoamMapBase({ position, pins, heardPoiIds, clipActive, recenterBottom }
     }
   }
 
+  // Districts are drawn as HULLS, never as dots, so they are split out of the marker path entirely.
+  // ⚠ They are deliberately NOT culled: cullPins keys on a pin's single point, and a district whose
+  // centre sits outside the viewport can still have half its boundary in view — routing rings through
+  // the culler would make them flicker in and out on pan. There are a handful of them corpus-wide
+  // (3 today) against a few hundred dots, so they cost nothing to draw unconditionally.
+  const areaPins = useMemo(() => pins.filter((p) => p.area), [pins])
+  const dotPins = useMemo(() => pins.filter((p) => !p.area), [pins])
   // Only the pins the map should actually DRAW — viewport-clipped + proximity-capped (see cullPins).
   // Falls back to the framing region until the first onRegionChangeComplete lands.
-  const drawnPins = useMemo(() => cullPins(pins, region ?? initialRegion), [pins, region, initialRegion])
+  const drawnPins = useMemo(
+    () => cullPins(dotPins, region ?? initialRegion),
+    [dotPins, region, initialRegion],
+  )
 
   const pinColor = clipActive ? colors.trackInactive : colors.trackActive // pine; dimmed under the sheet
 
@@ -165,6 +185,20 @@ function RoamMapBase({ position, pins, heardPoiIds, clipActive, recenterBottom }
         // The visible viewport changed (follow-glide / pan / zoom) → re-cull the drawn markers.
         onRegionChangeComplete={setRegion}
       >
+        {/* District hulls — a place you are INSIDE, so it gets an extent rather than a dot.
+            ⚠ Drawn FIRST on purpose: draw order is mount order, and `zIndex` is Google-Maps-only
+            (the keyless iOS build falls back to Apple Maps), so JSX order is the only cross-provider
+            way to keep the wash UNDER the story dots and the rider's puck. */}
+        {areaPins.map((p) => (
+          <Polygon
+            key={`area-${p.poiId}`}
+            coordinates={p.area!.ring.map(toLatLng)}
+            fillColor={colors.areaFill}
+            strokeColor={colors.areaStroke}
+            strokeWidth={1.5}
+          />
+        ))}
+
         {/* Story-pins — hollow ("a story here, not yet heard"); heard ones fill in solid from the
             cross-session encounter history (useRoam.heardPoiIds). Drawn from the culled set (drawnPins),
             not the full field, so react-native-maps never paints hundreds of far-away markers (lag fix). */}

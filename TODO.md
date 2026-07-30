@@ -296,15 +296,59 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
             the whole existing point suite — the branch is additive. Design notes in spec §10; every
             choice is measured (hull beats bbox because a bbox's over-cover is all in the CORNERS,
             which is where the highway-clip failure lives).
-      - [ ] ⚠ **THE AREA TRIGGER CANNOT SHIP WITHOUT AN APP STORE RELEASE, and there is no per-client
+      - [x] ⚠ **THE AREA TRIGGER CANNOT SHIP WITHOUT AN APP STORE RELEASE, and there is no per-client
             withhold.** Every trigger decision is in the app binary; the server half is ~10% and does
             nothing alone. There is NO client-version signal on the wire, so "send districts to
-            everyone" / "to no one" are the only options — and a 1.0.1 client sees `area` stripped and
-            fires a 914 m point: "Downtown Reno" on the freeway approach, then SILENCE downtown (recede
-            retires it, 4 h cooldown locks it). Districts stay STAGED until adoption. Remaining: the
-            wire field, the hull in `apps/api/src/clusters.ts`, buildDrive's second admission rule, the
-            mobile wiring + map render, a capability param. ⚠ Unresolved: nothing bounds a clip that
-            OUTLIVES its place (a 120 s clip on a route inside for 40 s ends ~2 km past downtown).
+            everyone" / "to no one" are the only options — the founder chose EVERYONE (66435e9),
+            protected by the capped point fallback rather than a withhold. Remaining work is now
+            tracked in the two items directly below; the client-capability channel has its own section.
+      - [x] **Mobile ROAM half — BUILT 2026-07-30.** The ring was already on riders' devices (server
+            sends it, Zod parses it) and was being discarded by ONE hand-written field list in
+            `adoptPins` (`useRoam.ts`), so every district fired its capped 600 m point fallback. Now
+            threaded into `RoamPinRef`, plus the hull DRAWN as a `<Polygon>` on the roam map (new
+            `areaFill`/`areaStroke` theme roles, teal — pine is the story-dot colour and the one amber
+            is the puck). Districts are split OUT of `cullPins`: it keys on a pin's single point, and a
+            district whose centre is off-screen can still have half its boundary in view.
+            ⚠ The field is optional at all four hops, so a dropped thread compiles clean and silently
+            degrades to point-firing — verify by BEHAVIOUR (a fix inside a hull fires), never by
+            `bun run check`. ⚠ Still needs an App Store release to reach riders.
+      - [x] **buildDrive's second admission rule — BUILT 2026-07-30, and it closed a LIVE hole.**
+            ⚠ The spec claimed the drive path passed `areaCapable: false` "deliberately". **It does
+            not exist** — `areaCapable` appears nowhere in any `.ts`, and `drives.ts` had zero `area`
+            references, so `loadClusterTellings` fed wide districts into drive selection as capped
+            600 m points snapped from their off-road 1-centre, and `drives.selection` FREEZES that at
+            create against a credit that never refunds. Measured: 0 frozen today, but only because all
+            3 saved drives are Tahoe-basin — the first Reno drive would have baked one in. `area` now
+            reaches `DriveCandidate` for the express purpose of being REFUSED, with 2 regression tests
+            (refused when its point would be admitted; still admitted without a hull, which guards the
+            mapper). When a drive can carry a ring end-to-end, this branch becomes the real rule:
+            admit iff the polyline ENTERS the ring, `alongSec` from the entry vertex.
+      - [x] **⚠ "Nothing bounds a clip that OUTLIVES its place" — MEASURED, and it is not an area
+            problem.** At 40 mph the three area clusters give 34–46 s inside the hull against 148–185 s
+            clips. But every one of the 34 **point**-triggered fused clips already shipped is WORSE on
+            the same metric: Emerald Bay is ~7 s of extent against a 127 s clip, Truckee ~0 s against
+            150 s. It is a general property of a 2–3 minute telling at road speed, not something the
+            area mode introduces, and bounding it would mean cutting clips off mid-sentence across the
+            live corpus. Recorded rather than actioned. (Re-run: `packages/studio/.scratch` is
+            gitignored; the query is member anchors → `clusterTrigger` → mean chord = πA/P.)
+      - [ ] **Latent: a DEGENERATE hull that needs an area is dropped to silence.** `clusters.ts`
+            refuses to serve a `ring.length < 3` area ("no honest polygon"). Measured: 16 clusters hull
+            down to a 2-vertex ring and **0 are dropped** — not because they are small, but because
+            every one is under `CLUSTER_MAX_TRIGGER_RADIUS_M`, so `needsArea` is false and the guard is
+            never reached (14 sit at the 250 m floor; Truckee is 302 m, Mount Rose Summit 255 m). Only
+            three clusters exceed the cap today and all three have honest polygons (Downtown Reno 914 m
+            /9 vtx, UNR 903 m/5 vtx, Historic Homes 698 m/9 vtx).
+            ⚠ **The quantity that matters is DISTINCT ANCHORS, not members.** `convexHull` dedupes
+            co-located points and `speakableLat ?? lat` snapping co-locates them routinely — Truckee is
+            4 members over **2** distinct anchors, hull area exactly 0. So it bites the first time a
+            cluster with ≤2 distinct anchors spans >1.2 km, whatever its member count; triaging by
+            member count clears exactly the cluster that would be dropped.
+            ⚠ The near-miss that is NOT this bug is **Virginia City alone** (15 distinct anchors,
+            6-vertex hull, 384 m² — a genuine main-street sliver). It is point-triggered at 265 m, so no
+            `area` is served and `insideArea`'s 60 m margin never runs on it. A sliver behaving as a
+            60 m corridor down the street is what would happen IF such a district crossed the 600 m
+            line — arguably the ideal district shape, and the reason the guard should treat a sliver as
+            honest rather than widening it.
       - [x] **THREE districts (not two — I under-counted) shipped point-triggered, 2026-07-30, $2.39.**
             Virginia City (265 m), Historic Downtown Carson City (411 m) AND Historic Carson City
             (552 m) are all under `CLUSTER_MAX_TRIGGER_RADIUS_M`, so they needed no engine work and no
@@ -315,9 +359,10 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
             `length_km`, no `wikidata_types` and no `kind` — the known no-Wikidata-claim gap, now with a
             second confirmed instance after `Carson Range`. Worth a real fix when containment is next
             touched.
-      - [x] **Area trigger SERVER half — BUILT 2026-07-30.** Optional `area` on `roamPin`, the hull in
-            `apps/api/src/clusters.ts`, and `GET /roam?caps=area` — a raw query param (not a Zod DTO),
-            so it costs nothing and absence means "old client", which WITHHOLDS rather than degrades.
+      - [x] **Area trigger SERVER half — BUILT 2026-07-30.** Optional `area` on `roamPin` and the hull
+            in `apps/api/src/clusters.ts`. ⚠ A `GET /roam?caps=area` capability param was built and then
+            REMOVED the same day (66435e9, founder call): area tellings go to EVERY client, protected
+            by the capped point fallback instead. Restoring it is a one-line query-param read.
             ⚠ Two traps recorded in spec §10: suppression must take the SERVED cluster ids (not a
             predicate that re-derives them), and it must return the KEEP condition — `not(inArray(...))`
             drops every NULL cluster_id row, measured at /roam falling 46 pins → 4.

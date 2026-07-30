@@ -258,8 +258,9 @@ app.get('/roam', async (c) => {
           lng: r.lng,
           durationMs: r.durationMs,
           radiusM: r.triggerRadiusM,
-          // Present only for a group too spread out to be a point. An area-unaware client never gets
-          // here — those tellings are withheld upstream rather than degraded.
+          // Present only for a group too spread out to be a point. Sent to EVERY client: an
+          // area-unaware one strips it in Zod and fires the CAPPED `radiusM` above instead, which is
+          // the whole protection (the `?caps=area` withhold was built and then removed — see above).
           ...(r.area ? { area: r.area } : {}),
           url: presignGet(r.key),
           contentType: contentTypeForKey(r.key),

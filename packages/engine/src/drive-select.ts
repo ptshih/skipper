@@ -13,6 +13,7 @@
 // Breaks + clock-anchored asides are layered by the caller in later phases; this is the
 // narration core.
 
+import type { AreaRef } from './area'
 import { cumulativeMeters, haversineMeters, OFF_ROUTE_MAX_M, totalMeters, triggerRadiusForKind, type LngLat } from './geo'
 import { buildRouteSnapper } from './pacing'
 import { DEFAULT_TRIGGER, effectiveRadiusM } from './trigger'
@@ -48,6 +49,11 @@ export interface DriveCandidate {
    *  (`clusterTrigger`). ⚠ Only set this when the kind vocabulary genuinely cannot answer — a POI
    *  must keep deriving its radius, so the two paths can't drift. */
   triggerRadiusM?: number
+  /** Set when this candidate is an AREA telling — a district you are INSIDE rather than a place you
+   *  pass. Present ONLY to be REFUSED here (see the admission loop): a drive cannot carry one yet.
+   *  The caller must still populate it, because "absent" and "refused" have to be distinguishable —
+   *  dropping the field at the mapper would silently restore the point behaviour this exists to stop. */
+  area?: AreaRef
 }
 
 /** The trigger floor for a candidate: an explicit override when one is supplied (a cluster), else the
@@ -143,6 +149,24 @@ export function buildDrive(params: BuildDriveParams): DriveStop[] {
   //    honest drive beats a longer one with silent gaps in it.
   const placed: Snapped[] = []
   for (const cand of candidates) {
+    // The SECOND admission rule: an AREA candidate has no single point to snap, so the point rule
+    // below cannot judge it — and judging it anyway is not a harmless approximation.
+    //
+    // ⚠ A district's `lat/lng` is its enclosing-circle CENTRE, which `clusterTrigger` deliberately
+    // leaves un-snapped and off-road, while the radius it arrives with is CAPPED (600 m) below the
+    // group's true extent (914 m for downtown Reno). So the point rule both mis-places the stop and
+    // breaks the guarantee that justified the centre in the first place ("every member is within the
+    // enclosing radius" is only true UNCAPPED). The two failure modes are a stop that fires on the
+    // freeway approach and one that never fires at all — and a drive's `selection` is FROZEN at
+    // create against a credit that is never refunded, so either one is baked in for that rider
+    // permanently, including for a rider who never upgrades.
+    //
+    // Refusing is therefore the honest answer until a drive can carry a ring END TO END (a wire
+    // field, plus a client that fires polygons). Roam has no such problem — nothing is frozen there,
+    // so the same telling already reaches roam riders correctly. When the drive path can carry it,
+    // this branch becomes the real rule: admit iff the polyline ENTERS the ring, with `alongSec`
+    // taken from the ENTRY vertex rather than the centre's projection.
+    if (cand.area) continue
     const s = snap([cand.lng, cand.lat])
     const reachM = Math.min(
       offRouteMaxM,

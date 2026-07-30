@@ -30,6 +30,45 @@ describe('buildDrive', () => {
   })
 
 
+  // The SECOND admission rule. A district arrives with a hull, an off-road enclosing-circle CENTRE,
+  // and a radius CAPPED below its true extent — so the point rule would place it wherever the centre
+  // happens to fall and freeze that into the drive forever. It must be refused outright, even when
+  // its centre sits squarely ON the route (which is exactly the case the point rule would admit).
+  test('refuses an AREA candidate even when its point would be admitted', () => {
+    const ring: LngLat[] = [
+      [-0.004, 38.046],
+      [0.004, 38.046],
+      [0.004, 38.054],
+      [-0.004, 38.054],
+    ]
+    const stops = buildDrive({
+      polyline,
+      totalSec: TOTAL_SEC,
+      minGapSec: 180,
+      maxStops: 10,
+      candidates: [
+        cand({ poiId: 'point', lat: 38.02 }),
+        // Dead on the line — the point rule admits this without the area branch.
+        cand({ poiId: 'district', lat: 38.05, area: { ring, marginM: 60 } }),
+      ],
+    })
+    expect(stops.some((s) => s.poiId === 'point')).toBe(true)
+    expect(stops.some((s) => s.poiId === 'district')).toBe(false)
+  })
+
+  // Guards the mapper: `area` is optional at every hop, so an omitted field compiles clean and
+  // silently restores the point behaviour. Same candidate, no hull ⇒ admitted.
+  test('the same candidate WITHOUT a hull is still admitted (the refusal is the area, not the place)', () => {
+    const stops = buildDrive({
+      polyline,
+      totalSec: TOTAL_SEC,
+      minGapSec: 180,
+      maxStops: 10,
+      candidates: [cand({ poiId: 'district', lat: 38.05 })],
+    })
+    expect(stops.some((s) => s.poiId === 'district')).toBe(true)
+  })
+
   // The 250-700 m band: a candidate the old flat off-route ceiling admitted but the TRIGGER could
   // never reach, so it consumed a pacing slot and played nothing. Measured on the real Tahoe drives at
   // 3 of 18 selected stops before the fix. ~11.1 km over 660 s = ~17 m/s, so speed x 12 s lead ~ 202 m

@@ -128,11 +128,13 @@ export const roamPin = z.object({
    *  NEAR — a district. See @skipper/engine `area.ts`.
    *
    *  ⚠ ADDITIVE, and the point fallback above is NOT decoration. Zod strips unknown keys, so a client
-   *  that predates this sees only lat/lng + radiusM and fires on proximity. That degradation is
-   *  deliberate but it is NOT good — a district's enclosing radius is ~900 m, which fires a kilometre
-   *  early and then the recede gate retires it, so an area-unaware client hears the district on the
-   *  approach and silence inside it. The server must therefore WITHHOLD area pins from clients that
-   *  did not ask for them (`caps`), never rely on the fallback being acceptable. */
+   *  that predates this sees only lat/lng + radiusM and fires on proximity. Area pins are sent to
+   *  EVERY client (founder call 2026-07-30, risks acknowledged) — a `?caps=area` withhold was built
+   *  and then removed — so that fallback is the ONLY thing protecting an area-unaware rider, and it
+   *  works solely because `radiusM` is CAPPED at `CLUSTER_MAX_TRIGGER_RADIUS_M` rather than being the
+   *  district's true ~900 m extent. Uncapped, the pin fires a kilometre early, the recede gate retires
+   *  it, and a long cooldown locks it — the rider hears the district on the approach and silence
+   *  inside it. Never "simplify" an area pin by dropping lat/lng or radiusM. */
   area: areaRing.optional(),
   url: z.url(),
   /** MIME type derived server-side from the R2 key (see signedClip.contentType). */

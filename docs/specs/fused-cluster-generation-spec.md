@@ -475,13 +475,41 @@ NULL, so `NOT (…)` is NULL, so Postgres drops every row — measured, `/roam` 
 deleting every UNCLUSTERED place in the corpus. The old `NOT EXISTS` form was NULL-safe by accident;
 the current one is NULL-safe on purpose.
 
-⚠ The DRIVE path passes `areaCapable: false` for now, deliberately: a drive's selection is FROZEN at
-create, so admitting an area stop would bake it into a saved drive permanently — including for a rider
-who never upgrades.
+⚠ **This section used to claim the DRIVE path passed `areaCapable: false` "deliberately". By the time
+anything could exercise it, that flag was gone.** It was real for about fourteen minutes — added in
+`17dc913` alongside the `?caps=area` gate and deleted with it in `66435e9` — and it dropped zero rows
+in production over its whole life, because generation of wide groups was still blocked the entire time.
+`66435e9` is the same commit that turned `exceedsPointTrigger` into a mode selector and released the
+three area districts. So from then until 2026-07-30 the drive path had **no** `area` reference at all:
+`loadClusterTellings` fed wide districts into drive selection as capped 600 m points snapped from their
+off-road 1-centre, and `drives.selection` freezes that at create against a credit that never refunds.
+Measured: 0 frozen, but only because all three saved drives are Tahoe-basin — the first Reno drive
+would have baked one in. The protection is REAL now (below), and the lesson survives the correction:
+a safety property that outlives the code enforcing it is no longer a safety property, and prose is
+where that goes unnoticed.
 
-**Still to build:** `buildDrive`'s second admission rule (an area has no single point to snap to a
-route), and the mobile client's engine wiring + map rendering. ⚠ Also unresolved: nothing bounds a clip that OUTLIVES its place — a
-120 s district clip on a route that is inside for 40 s ends ~2 km past downtown.
+✅ **`buildDrive`'s second admission rule — BUILT 2026-07-30.** `DriveCandidate.area` exists for the
+express purpose of being REFUSED: an area candidate is skipped before the point snap, because a
+district's centre is deliberately off-road and its served radius is CAPPED below its true extent — so
+the point rule both mis-places the stop and voids the guarantee that justified the centre ("every
+member is within the enclosing radius" holds only UNCAPPED). Two regression tests: refused even when
+its point WOULD be admitted, and still admitted without a hull (guarding the mapper — `area` is
+optional at every hop, so a dropped field compiles clean and silently restores the old behaviour).
+When a drive can carry a ring end to end, this branch becomes the real rule: admit iff the polyline
+ENTERS the ring, with `alongSec` from the entry vertex rather than the centre's projection.
+
+✅ **Mobile ROAM wiring + map rendering — BUILT 2026-07-30.** The ring was already on riders' devices
+and was being discarded by one hand-written field list in `adoptPins`; the hull now also draws as a
+`<Polygon>` (teal `areaFill`/`areaStroke` roles, drawn BEFORE the markers because `zIndex` is
+Google-Maps-only, and held out of `cullPins` because a district's centre can be off-screen while its
+boundary is not). Still needs an App Store release to reach riders.
+
+✅ **"Nothing bounds a clip that OUTLIVES its place" — MEASURED, and it is not an area problem.** At
+40 mph the three area clusters give 34–46 s inside the hull against 148–185 s clips. But every one of
+the 34 **point**-triggered fused clips already shipped is worse on the same metric: Emerald Bay has
+~7 s of extent against a 127 s clip, Truckee ~0 s against 150 s. It is what a 2–3 minute telling does
+at road speed, not something the area mode introduces, and bounding it would mean cutting clips off
+mid-sentence across the live corpus. Recorded, not actioned.
 
 **⚠ Two of the five districts never needed any of this.** Virginia City (265 m enclosing radius) and
 Historic Downtown Carson City (411 m) are already under `CLUSTER_MAX_TRIGGER_RADIUS_M` and can ship

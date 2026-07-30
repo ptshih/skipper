@@ -36,9 +36,10 @@ import {
   POST_START_STALL_MS,
   RoamEngine,
   seekTargetReached,
+  signedDistanceM,
 } from '@skipper/engine'
 import type { LngLat } from '@skipper/engine'
-import type { Attribution } from '@skipper/shared'
+import type { Attribution, AreaRing } from '@skipper/shared'
 import { errorMessage, getRoamManifest } from './api'
 import type { RoamManifest } from './api'
 import { liveRoamSource, simulatedSource } from './gps'
@@ -150,8 +151,9 @@ export interface RoamState {
   diag: { fixAgeSec: number | null; nearestM: number | null }
   /** Live position for the glanceable roam map — null until the first fix (updates ~2s). */
   position: { lat: number; lng: number } | null
-  /** The manifest's story-pins, for the roam map (set once when the session loads). */
-  mapPins: { poiId: string; name: string; lat: number; lng: number }[]
+  /** The manifest's story-pins, for the roam map (set once when the session loads). `area` is the
+   *  district hull for a pin you are IN rather than NEAR — the map draws it as a polygon. */
+  mapPins: { poiId: string; name: string; lat: number; lng: number; area?: AreaRing }[]
   /** poiIds the rider has HEARD before (cross-session) — the map fills these pins in vs. unheard. */
   heardPoiIds: ReadonlySet<string>
   /** The session-start opener line (rotates per session). */
@@ -196,7 +198,9 @@ export function useRoam(mode: RoamMode): RoamState {
   const [minimized, setMinimized] = useState(false) // sheet tucked away by hand; the clip plays on (peek bar offers it back)
   const [clipSounding, setClipSounding] = useState(false) // sawFresh mirror — real audio has started (the peek-bar safety-net truth)
   const [position, setPosition] = useState<{ lat: number; lng: number } | null>(null) // roam-map puck
-  const [mapPins, setMapPins] = useState<{ poiId: string; name: string; lat: number; lng: number }[]>([])
+  const [mapPins, setMapPins] = useState<
+    { poiId: string; name: string; lat: number; lng: number; area?: AreaRing }[]
+  >([])
   const [heardPoiIds, setHeardPoiIds] = useState<ReadonlySet<string>>(() => new Set<string>())
   const [diag, setDiag] = useState<{ fixAgeSec: number | null; nearestM: number | null }>({
     fixAgeSec: null,
@@ -527,7 +531,12 @@ export function useRoam(mode: RoamMode): RoamState {
       let nearestM: number | null = null
       if (pos) {
         for (const p of pinsRef.current) {
-          const d = haversineMeters([pos.lng, pos.lat], [p.lng, p.lat])
+          // An AREA pin's `lat/lng` is its enclosing-circle centre, which is NOT where it fires —
+          // measuring to it reads ~900 m while the rider is standing in the middle of the district.
+          // Distance to the BOUNDARY is the honest number, floored at 0 once inside ("you're here").
+          const d = p.area
+            ? Math.max(0, signedDistanceM([pos.lng, pos.lat], p.area))
+            : haversineMeters([pos.lng, pos.lat], [p.lng, p.lat])
           if (nearestM === null || d < nearestM) nearestM = d
         }
       }
@@ -566,7 +575,15 @@ export function useRoam(mode: RoamMode): RoamState {
   const adoptPins = useCallback((pins: RoamManifest['pins']) => {
     pinsRef.current = pins
     setPinCount(pins.length)
-    setMapPins(pins.map((p) => ({ poiId: p.poiId, name: p.name, lat: p.lat, lng: p.lng })))
+    setMapPins(
+      pins.map((p) => ({
+        poiId: p.poiId,
+        name: p.name,
+        lat: p.lat,
+        lng: p.lng,
+        ...(p.area ? { area: p.area } : {}),
+      })),
+    )
     engineRef.current = new RoamEngine(
       pins.map((p) => ({
         poiId: p.poiId,
@@ -575,6 +592,14 @@ export function useRoam(mode: RoamMode): RoamState {
         durationMs: p.durationMs,
         // Kind-aware server radius (areal places get room); engine floor covers absence.
         ...(p.radiusM != null ? { radiusM: p.radiusM } : {}),
+        // A DISTRICT is somewhere you are INSIDE, not somewhere you pass. When the server sends a
+        // hull the engine's area branch takes over and `radiusM` above goes unread — the two are
+        // mutually exclusive inside the loop, never "whichever hits first" (@skipper/engine/area).
+        // ⚠ Dropping this line is invisible to `tsc` (the field is optional at every hop) and
+        // degrades a district to its CAPPED 600 m point fallback, which fires on the approach and
+        // is then retired by the recede gate — i.e. the rider hears about downtown everywhere
+        // except downtown. Verify by behaviour (a fix inside a hull fires), never by typecheck.
+        ...(p.area ? { area: p.area } : {}),
         name: p.name,
       })),
       { minGapSec: ROAM_MIN_GAP_SEC },

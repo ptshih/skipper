@@ -165,6 +165,12 @@ interface NarrationRow {
    *  which keeps deriving from kind/anchored exactly as before. Read through
    *  `candidateTriggerRadiusM` so selection and the manifest can never disagree. */
   triggerRadiusM?: number
+  /** The district hull, when this fused telling is one a rider is INSIDE rather than near. Carried
+   *  here for ONE reason: `buildDrive` must be able to SEE that a candidate is area-triggered so it
+   *  can refuse it (a drive's selection is frozen at create, and a district frozen as a mis-placed
+   *  point is permanent for that rider). ⚠ Dropping it at the mapper below silently re-admits the
+   *  district as a capped 600 m point — which is exactly what this code path did until 2026-07-30. */
+  area?: ClusterTelling['area']
 }
 
 /** The shared corpus projection + poi join. BOTH loaders (route-bbox and explicit-poiId) select these
@@ -249,6 +255,9 @@ function clusterRowsToCorpus(rows: ClusterTelling[], into: Map<string, Narration
       anchored: false,
       varietyKey: CLUSTER_VARIETY_KEY,
       triggerRadiusM: r.triggerRadiusM,
+      // Carried so buildDrive can REFUSE it — see NarrationRow.area and the admission loop in
+      // @skipper/engine's drive-select. A wide district must not be frozen into a drive as a point.
+      ...(r.area ? { area: r.area } : {}),
     })
   }
   return into
@@ -317,6 +326,9 @@ const candidateOf = (r: NarrationRow): DriveCandidate => ({
   varietyKey: r.varietyKey,
   // Only a cluster sets this; a poi leaves it undefined and keeps deriving from kind/anchored.
   ...(r.triggerRadiusM != null ? { triggerRadiusM: r.triggerRadiusM } : {}),
+  // Present only for a district. buildDrive refuses these outright rather than snapping the
+  // enclosing-circle centre to the route — see the second admission rule.
+  ...(r.area ? { area: r.area } : {}),
 })
 
 /** Resolve a frozen `selection` into presigned, playable driveClips (narration content LIVE via the
