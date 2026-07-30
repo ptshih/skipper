@@ -1,10 +1,14 @@
 # App Store Connect — the submission cheat-sheet
 
-> **Status:** LIVE 2026-07-28, UNSUBMITTED — but MOSTLY ENTERED already; read §11b before typing
-> anything into ASC, and re-read the values back rather than trusting this file.
+> **Status:** LIVE 2026-07-30 — **SUBMITTED**. `1.0.0` is `WAITING_FOR_REVIEW` (submitted
+> 2026-07-28T21:42:22Z) with **build 15** attached; **build 16 (`1.0.1`)** is `VALID` in TestFlight,
+> deliberately NOT attached — swapping the build under a submission in review restarts the queue, so
+> 16 ships as the first post-approval update. Everything through §11b is now a RECORD of what is on
+> the live listing, not a to-do; the only open work is **§13 (after approval)**. Re-read values back
+> from ASC rather than trusting this file — it has drifted before (this pass, 2026-07-30, corrected
+> the age rating and the §10 notes, both of which were stale enough to do damage if re-pasted).
 > §8's privacy label was re-derived from the bundled SDKs'
 > own manifests on 2026-07-24 and grew from 9 data types to 12 — paste that table, not an older copy.
-> §13 (added 2026-07-27) holds the work that can only be done AFTER approval — don't submit and forget it.
 > Every field App Store Connect asks for, ready to paste,
 > for `fm.skipper.app` (ASC app id `6778946770`, team `L24UJYJ5DK`, Manoa, Inc.). Character-limited
 > fields are pre-counted against Apple's caps. Screenshots are DONE and uploaded (§9) — they
@@ -27,7 +31,7 @@ single most rejection-prone sentence in the whole listing.
 | **Secondary category** | Entertainment |
 | **Privacy Policy URL** | `https://skipper.fm/privacy` |
 | **Content Rights** | ✅ *Contains third-party content* — see §7 |
-| **Age Rating** | 4+ — see §6 |
+| **Age Rating** | **12+** (Brazil 14) — raised from 4+ on 2026-07-30, see §6 |
 | **Availability** | **United States only** — founder call 2026-07-24, see below |
 
 **Why Travel / Entertainment, not Navigation:** Skipper gives no turn-by-turn directions and is not a
@@ -234,19 +238,31 @@ narrated,sightseeing,GPS,offline,landmark,legend,attraction,itinerary,route,near
 
 ---
 
-## 6. Age Rating questionnaire → **4+**
+## 6. Age Rating questionnaire → **12+**
 
-Answer **None / No** to everything. The ones worth pausing on:
+⚠ **Raised from 4+ to 12+ on 2026-07-30 (founder call), and that was the deliberate fix — not a
+mistake to undo.** The Nevada-side corpus tells the Comstock honestly: Virginia City saloons, and
+the legal-brothel history that is genuinely part of that region's story. The choice was *censor the
+corpus* or *rate the app for what it actually says*, and the founder kept the clips and moved the
+rating. Re-answering these to **None** to get back to 4+ would make the questionnaire false about
+shipped content — the exact misdeclaration Apple removes apps for. **Leave these two as INFREQUENT.**
 
-| Question | Answer | Why |
+Live declaration, read back from the API 2026-07-30 (only the non-`NONE` answers exist):
+
+| Question (API attribute) | Answer | Why |
 |---|---|---|
+| `matureOrSuggestiveThemes` | **INFREQUENT** | The Nevada brothel/red-light history on the Comstock. Discussed as history; nothing explicit. |
+| `alcoholTobaccoOrDrugUseOrReferences` | **INFREQUENT** | Saloons and the mining-camp drinking culture are referenced, never depicted or encouraged. |
 | Cartoon/Fantasy/Realistic Violence | None | Historical stories can mention a shipwreck or a fire; no depiction. |
 | Profanity or Crude Humor | None | The persona is corny, not crude — the prompt bans blue material. |
 | Horror/Fear Themes | None | |
-| Alcohol, Tobacco, Drug Use | None | A story may *mention* a saloon; nothing is depicted or encouraged. |
 | Unrestricted Web Access | **No** | There is no in-app browser. Source links hand off to Safari. |
 | Gambling | None | Even the Nevada-side stories don't simulate it. |
 | Contests | None | |
+
+Two INFREQUENT answers land the store rating at **12+** (`TWELVE_PLUS`), Brazil **14**. ⚠ The 2025
+questionnaire mixes BOOLEAN and enum attributes and is bigger than this table — read the live
+`ageRatingDeclaration` back rather than assuming the fields above are all of them (§11b).
 
 ---
 
@@ -435,24 +451,45 @@ verification) and it arrives with a full balance — the free allotment is grant
 2026-07-28 (`docs/decisions/credit-ledger.md`). Costs nothing, and no `GET /drives` warm-up is needed
 the way it was under the old lazy grant.
 
-### Notes — paste verbatim
+### Notes — the live text, read back from ASC 2026-07-30
+
+⚠ **This block was REWRITTEN on 2026-07-30 because the version this file used to carry was wrong in
+three ways that could each have cost a rejection** — and it sat here under a "paste verbatim" heading,
+so re-pasting it would have *re-broken* a listing that was already fixed. What was wrong:
+
+1. It walked the reviewer into a **dead end**: "tap Create a Drive, sign in with the demo account."
+   Opening that screen signed-out asks you to make an account first and leaves the pickers greyed
+   out. The order matters — sign in from Home FIRST.
+2. It promised **"The app lands in Preview and plays each stop's full audio in order (~20 minutes)"**.
+   Preview was cut ~8 days before build 15 shipped. The reviewer would have looked for a mode that
+   does not exist.
+3. It claimed **"no tracking, no analytics"** while the app ships PostHog and the Google Maps SDK —
+   contradicting our own App Privacy label (§8). A reviewer who diffs those two rejects the build.
+
+Below is what is actually on the record now (3655 chars). Treat it as a mirror of ASC, not a source:
+if you change one, change both, and read it back.
 
 ```
 Skipper is a hands-free, GPS-triggered audio tour for drivers. Two things will help you review it from a desk.
 
-1) COVERAGE IS LAKE TAHOE, CALIFORNIA ONLY.
-Every story is written and recorded for a specific place, and our finished collection covers Lake Tahoe. This is stated plainly in the App Store description and inside the app. In Cupertino, the "Ride Along" mode will correctly report that it has no coverage for your area. That is intended behavior, not a failure.
+1) COVERAGE IS THE LAKE TAHOE REGION ONLY.
+Every story is written and recorded for a specific place, and our finished collection covers Lake Tahoe and the nearby Nevada side (Reno, Carson City, Virginia City). Everywhere else has no content yet. In Cupertino, "Ride along" will correctly report that it has no coverage for your area - "I don't know these roads yet, folks. Get me near Lake Tahoe and I've got stories." That is intended behavior, not a failure. Note that "Ride along" first shows a one-time intro card ending in "Got it - let's ride", and then asks for location ("Switch on location", then the iOS When In Use prompt), before it can check your area. The sample in step 2 needs neither.
 
 2) TO HEAR THE APP WITHOUT DRIVING: ONE TAP, NO ACCOUNT, NO PERMISSION.
-On the Home screen, under the "Ride Along" button, tap "Not near Tahoe? Hear a quick sample." It opens a curated Lake Tahoe narration that plays immediately (real audio, about a minute) and then offers "Ride along for real." No sign-in, no location prompt.
+On the Home screen, under the "Ride along" button, tap "Not near Tahoe? Hear a quick sample." It opens a curated Lake Tahoe narration (Emerald Bay State Park) that starts playing on its own - real audio, about a minute - and then offers "Ride along for real". No sign-in and no location prompt on this path.
 
-FULLER EXPERIENCE (optional): to hear a complete multi-stop drive on a timer (still no GPS), tap "Create a Drive", sign in with the demo account above (or any email; no verification), set START = "Tahoe City" and END = "South Lake Tahoe", then "Plan the drive" → "Make this drive". The app lands in Preview and plays each stop's full audio in order (~20 minutes).
+FULLER EXPERIENCE (optional) - to hear stops from a complete multi-stop drive, still with no GPS:
+  - On Home, tap "Sign in" (top-left) and use the demo account above. Please sign in BEFORE opening "Create a Drive": opening that screen while signed out asks you to create an account first, and the start/end pickers stay greyed out until you go back to Home and re-enter.
+  - The demo account already has a saved drive. Under "MY DRIVES" at the bottom of Home, tap "Tahoe City → South Lake Tahoe".
+  - You land on a screen titled "Drive". Below the "THE ROUTE" heading is the line "Tap a stop to hear it." Tap any stop to play that stop's full narration (about a minute each, 8 stops). It plays one stop at a time and does not auto-advance, so tap the next stop when you are ready.
+  - Please do not tap "Start the drive" from a desk. That is the live, GPS-triggered drive: it waits until you physically reach a stop near Lake Tahoe, so in Cupertino nothing will play.
+  - If you would like to build one yourself, then while signed in: "Create a Drive", set START = "Tahoe City" and END = "South Lake Tahoe" (both appear near the top of the picker), then "Plan the drive" and "Make this drive". Each drive you create uses one of the account's free drive credits.
 
 ACCOUNT DELETION (Guideline 5.1.1(v)):
-Settings (gear, top-right of Home) → Delete account. It permanently deletes the account, its saved drives, and its credits immediately. Password confirmation is required.
+Sign in first, then: Settings (gear, top-right of Home) -> "Delete account" -> type the account password at "Enter your password to confirm" -> "Permanently delete" -> confirm "Delete forever". It permanently deletes the account, its saved drives, and its remaining credits immediately. Nothing is emailed, and it cannot be undone. If you would like the demo account to stay usable for a second pass, you can create a throwaway account first (any email, no verification) and delete that one instead - the flow is identical.
 
 LOCATION USE:
-"When In Use" only, used solely to time narration to your position while driving. No background location, no tracking, no analytics, no advertising.
+"When In Use" only, used to time narration to your position while driving. There is no background location and no advertising. If you create a drive, its start and end coordinates are saved with that drive on your account. You may also see a one-time "Motion & Fitness" prompt; motion is used only to gauge speed and heading so each stop plays at the right moment. Coarse location and device identifiers are used for app functionality and product analytics (the sign-in session record, PostHog, and the bundled Google Maps SDK), as declared in our App Privacy labels.
 
 Thank you. Happy to help if anything is unclear.
 ```
@@ -483,9 +520,15 @@ them back. Re-run those reads before trusting this list.
   `1.0.0`; Apple only offers builds whose version string MATCHES, so the build picker was silently
   empty. If a build ever "isn't there", check this first.
 - ✅ Description (2700/4000), keywords (93/100), promo text (168/170), support + marketing URLs.
-- ✅ **Age rating → `FOUR_PLUS`.** The 2025 questionnaire is bigger than §6's table and mixes BOOLEAN
+- ✅ **Age rating → `TWELVE_PLUS`** (Brazil 14) — raised from `FOUR_PLUS` on 2026-07-30; §6 says why,
+  and why not to put it back. The 2025 questionnaire is bigger than §6's table and mixes BOOLEAN
   and enum attributes (`healthOrWellnessTopics` is a bool, `ageAssurance` is newly required).
-- ✅ **App Review Information** — contact, `review@skipper.fm`, and §10's notes (1598 chars).
+  ⚠ To read it back, use `/v1/appInfos/{appInfoId}/ageRatingDeclaration` — the app-level
+  `/v1/apps/{id}/ageRatingDeclaration` relationship **404s** ("does not exist"). The resulting store
+  rating shows up as `appStoreAgeRating` on the `appInfos` record itself.
+- ✅ **App Review Information** — contact, `review@skipper.fm`, and §10's notes (**3655 chars**,
+  rewritten 2026-07-30). ⚠ The 1598-char original this file used to carry was materially wrong; §10
+  lists the three defects so nobody "restores" it.
 - ✅ **Availability = UNITED STATES ONLY**, verified by paging all 175 territories: exactly one
   available. `availableInNewTerritories=false`, so it will not silently expand later. ⚠ The v2 API
   demands EVERY territory be enumerated inline with `${local-id}` ids — you cannot just send USA.
@@ -519,11 +562,19 @@ on it appearing.
 **Still by hand, and still required:** the App Privacy label (§8) — Apple exposes no public API for it —
 and the submission itself.
 
-## 12. Before you hit Submit
+## 12. Before you hit Submit — cleared for 1.0.0 on 2026-07-28, and REUSABLE
+
+Every item below was verified before the 1.0.0 submission went in. They stay **unchecked on purpose**:
+this is the pre-flight for the *next* submission (build 16 / `1.0.1`) as much as it was for the last,
+and each one can silently regress between releases — a deploy can take `delete-user` with it, the demo
+account can run out of credits, and the coverage sentence rots the day a second region generates.
+Re-run the list; don't inherit last release's ticks.
 
 - [ ] The API is deployed with `delete-user` live (a reviewer WILL test deletion — it's the one
       guideline they can check in 30 seconds). Verify: `POST https://api.skipper.fm/api/auth/delete-user`
-      returns **401**, not 404.
+      returns **anything but 404**. A bare POST with no body answers **400** (measured 2026-07-30); with
+      a well-formed body and no session it answers 401. **404 is the only failing answer** — it means
+      the route never deployed.
 - [ ] `https://skipper.fm/privacy`, `/terms`, `/support` all return 200.
 - [ ] **The sample plays in prod:** `GET https://api.skipper.fm/roam/sample` returns 200 with a clip
       (needs `SAMPLE_NARRATION_QID` set + the API deployed). This is the reviewer's primary path — if
