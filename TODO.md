@@ -305,10 +305,22 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
             wire field, the hull in `apps/api/src/clusters.ts`, buildDrive's second admission rule, the
             mobile wiring + map render, a capability param. ⚠ Unresolved: nothing bounds a clip that
             OUTLIVES its place (a 120 s clip on a route inside for 40 s ends ~2 km past downtown).
-      - [ ] **Cheap and shippable NOW: 2 of the 5 districts never needed the area trigger.**
-            Virginia City (265 m) and Historic Downtown Carson City (411 m) are already under
-            `CLUSTER_MAX_TRIGGER_RADIUS_M`. The generation queue now asks the GATE rather than the
-            `treatment` column, so they are in scope — ~$1, no release, 40% of the district value.
+      - [x] **THREE districts (not two — I under-counted) shipped point-triggered, 2026-07-30, $2.39.**
+            Virginia City (265 m), Historic Downtown Carson City (411 m) AND Historic Carson City
+            (552 m) are all under `CLUSTER_MAX_TRIGGER_RADIUS_M`, so they needed no engine work and no
+            release. Generated, all gates clean, RELEASED. Corpus is now **34 fused tellings**.
+            ⚠ The pre-flight caught a stowaway: `U.S. Route 50 in Nevada` was staged and would have gone
+            live with them — a 70 s telling about a 300-mile highway, un-anchored, firing at one
+            arbitrary point. EXCLUDED first. It escapes `prune-corpus` because it carries no
+            `length_km`, no `wikidata_types` and no `kind` — the known no-Wikidata-claim gap, now with a
+            second confirmed instance after `Carson Range`. Worth a real fix when containment is next
+            touched.
+      - [x] **Area trigger SERVER half — BUILT 2026-07-30.** Optional `area` on `roamPin`, the hull in
+            `apps/api/src/clusters.ts`, and `GET /roam?caps=area` — a raw query param (not a Zod DTO),
+            so it costs nothing and absence means "old client", which WITHHOLDS rather than degrades.
+            ⚠ Two traps recorded in spec §10: suppression must take the SERVED cluster ids (not a
+            predicate that re-derives them), and it must return the KEEP condition — `not(inArray(...))`
+            drops every NULL cluster_id row, measured at /roam falling 46 pins → 4.
       - [x] **Step 7 trailing items — DONE 2026-07-30.** (a) `GET /admin/pois` now returns
             `coveredByCluster` and the console shows an "in a fused clip" chip; without it the console
             called 104 live places `narrationStatus: 'none'`, which reads as a generation backlog and
@@ -326,19 +338,34 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
 None of this is a build; all of it is config. The premise changed on 2026-07-28: 1.0.0 is submitted, so
 "prod has no users" stops being true on approval (see CLAUDE.md's storage rule, rewritten the same day).
 
+- [ ] **⚠ FIRST: confirm `hello@skipper.fm` actually delivers somewhere you read.** Founder-owned, ~5 min,
+      and it BLOCKS the alerting below (there is no point routing pages to an address nobody reads).
+      It is simultaneously the App Store support contact, the privacy contact, and the **NRS 603A
+      designated request address with a 60-day statutory clock** — so this is the one item here with a
+      legal edge, not just an ops one. The repo's own record says the skipper.fm catch-all does NOT
+      forward to the founder's Gmail (verified for `review@`, never for `hello@`), and because the
+      catch-all accepts everything, SMTP probing can NEVER prove an address is read. Only a real test
+      message can. Send one from a non-Workspace account to `hello@` and confirm arrival.
 - [ ] **Alerting — there is NONE.** No uptime checks, no alert policies, no notification channels on the
       project. Prod 500'd for **14 days** (2026-06-30 → 07-15, billing disabled) and was found by a human
       running `curl`. Want: one uptime check on `https://api.skipper.fm/health` + an email channel to
-      `hello@skipper.fm`. ⚠ That address must be confirmed to actually deliver first — it is also the
-      App Store support contact and the NRS 603A privacy address, and the repo's own record says the
-      skipper.fm catch-all does NOT forward to the founder's Gmail. ~10 min once the inbox is settled.
+      `hello@skipper.fm`. ~10 min once the inbox above is settled.
 - [ ] **GCP billing budget + alert.** The Budget API is not even enabled on the project
       (`gcloud beta billing budgets list` → `SERVICE_DISABLED`). Billing — not code — is the documented
       root cause of the only real outage this project has had. ~5 min.
-- [ ] **`skipper-api-deploy` has an EMPTY `includedFiles`.** It is the only Cloud Build trigger without a
-      path filter, so a docs-only commit rebuilds and redeploys the API at 100% traffic, with no test step
-      and no canary. Sharpest while a version is in App Review — a stray commit swaps the backend under
-      the reviewer. Add an `--included-files` filter (`apps/api/**`, `packages/**`, `cloudbuild.yaml`).
+- [x] **`skipper-api-deploy` had an EMPTY `includedFiles` — FIXED 2026-07-30.** It was the only one of the
+      four Cloud Build triggers without a path filter, so ANY commit rebuilt and redeployed the API at
+      100% traffic with no test step and no canary. Not theoretical: the build history showed it firing
+      on five docs-only commits that day (`24d0934`, `0b73667`, `09f7659`, …) while 1.0.0 sat in App
+      Review — a stray commit could swap the backend under the reviewer.
+      Filter now matches the API's real closure (its workspace deps + the Dockerfile's COPY list):
+      `apps/api/** packages/db/** packages/engine/** packages/routing/** packages/shared/**
+      packages/storage/** cloudbuild.yaml bun.lock package.json`.
+      ⚠ Two notes for anyone editing it again: `gcloud builds triggers update github` REJECTS this
+      trigger (it is a 2nd-gen `repositoryEventConfig` connection, not the legacy `github` block) — use
+      `triggers import` with the full spec. And the dangerous direction is TOO NARROW, not too wide: an
+      over-broad filter is merely noisy, while a missing path makes a real API fix look shipped when it
+      never deployed.
 - [ ] **`apps/api/Dockerfile` never copies `bun.lock`**, so every production image resolves dependencies
       fresh (lockfile `better-auth` 1.6.23 vs 1.6.25 on npm today), and `RUN bun add -g @dotenvx/dotenvx`
       is completely unpinned on the container's secret-decryption ENTRYPOINT. `COPY bun.lock` + pin the
