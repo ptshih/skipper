@@ -92,7 +92,7 @@ export function titleKey(title: string): string {
  *  because the shared words are interleaved rather than adjacent. Subset-of-words catches both.
  *
  *  Still conservative, and still refuses "Downtown Reno" vs "Newlands Historic Neighborhood" — the
- *  distance bound in `mergeDistricts` is what stops two same-named places in different states colliding,
+ *  distance bound in `mergeDuplicateGroups` is what stops two same-named places in different states colliding,
  *  and a subset match with no shared PROPER noun is not reachable in practice because the classifier
  *  titles a group after what is in it. */
 export function titlesOverlap(a: string, b: string): boolean {
@@ -145,23 +145,28 @@ export function pickSubject<T extends Subjectable>(members: readonly T[], title:
   return null
 }
 
-/** A classified group, as the district merge needs to see it. */
+/** A classified group, as the duplicate merge needs to see it. */
 export interface ClassifiedGroup<T extends Groupable> {
   members: T[]
   treatment: string
   title: string
+  /** How many ORIGINAL groups fused into this one. 1 (or absent) = untouched by the merge. Set by
+   *  `mergeDuplicateGroups`, and load-bearing downstream: a fused group's stored verdict was computed
+   *  over only ONE of its halves, so the caller must re-classify it before trusting `title`/
+   *  `highlights` — see the merge's own comment. */
+  fusedFrom?: number
 }
 
 /**
- * Merge DISTRICT groups that are the same district seen twice.
+ * Merge groups that are the SAME PLACE seen twice.
  *
- * Why this exists: leader grouping anchors more than once inside a large district, so the dry run
+ * Why this exists: leader grouping anchors more than once inside a large place, so the dry run
  * returned "downtown Reno" as TWO groups (33 members and 10), UNR twice, and Carson City three times
  * — each an arbitrary slice of one place. Left alone, phase 4 would write two competing tellings about
  * the same downtown.
  *
- * The rule is deliberately conservative — same treatment, OVERLAPPING folded titles, and anchors within
- * `maxAnchorGapM` — because the failure modes are asymmetric. Merging two genuinely distinct districts
+ * The rule is deliberately conservative — SAME treatment, OVERLAPPING folded titles, and anchors within
+ * `maxAnchorGapM` — because the failure modes are asymmetric. Merging two genuinely distinct places
  * silently fuses unrelated content; failing to merge just leaves the duplicate that exists today. The
  * distance bound is what stops two same-named downtowns in different states from colliding.
  *
@@ -171,42 +176,56 @@ export interface ClassifiedGroup<T extends Groupable> {
  * elaborating a title on one pass and not the other, which it does freely, while still refusing to fuse
  * "Downtown Reno" with "Newlands Historic Neighborhood".
  *
- * Only groups whose `treatment` equals `districtTreatment` are considered; everything else passes
- * through untouched, order preserved. The merged group's anchor is the highest-ranked member across
- * all the groups that fused, so the strongest telling still speaks for the district.
+ * ⚠ It was DISTRICT-ONLY until 2026-07-30, and that missed the identical failure one size down: the UNR
+ * campus came back as TWO CLUSTER groups 1268 m apart whose titles differ only by a comma. Districts got
+ * the rule because that is where the split was first noticed, not because clusters are immune. Widening
+ * it is measurably safe — run over all 64 groups in the corpus it fires exactly ONCE, on that pair, with
+ * no other candidate at any distance. `mergeTreatments` still gates it, because SOLO must never merge:
+ * a solo verdict means "these places are merely near each other", so fusing two of them would invent a
+ * group the model never blessed.
+ *
+ * ⚠ A fused group's stored verdict is now WRONG and the caller must re-classify it. `fusedFrom > 1`
+ * marks which. The verdict (title, highlights, drop) was computed over ONE half's members, so the
+ * other half's places would be members that the telling never names. That under-names rather than
+ * mis-names, but it is exactly the evidence fused generation reads.
+ *
+ * Groups whose treatment is not in `mergeTreatments` pass through untouched, order preserved. The
+ * merged group's anchor is the highest-ranked member across all the groups that fused, so the
+ * strongest telling still speaks for the place.
  */
-export function mergeDistricts<T extends Groupable>(
+export function mergeDuplicateGroups<T extends Groupable>(
   groups: readonly ClassifiedGroup<T>[],
-  opts: { districtTreatment: string; maxAnchorGapM: number },
+  opts: { mergeTreatments: readonly string[]; maxAnchorGapM: number },
 ): ClassifiedGroup<T>[] {
   const out: ClassifiedGroup<T>[] = []
-  // Indices into `out` of district groups already emitted, in order. A flat list rather than a map
+  // Indices into `out` of mergeable groups already emitted, in order. A flat list rather than a map
   // keyed by title, because CONTAINMENT matching can't be looked up by an exact key.
-  const openDistricts: number[] = []
+  const open: number[] = []
 
   for (const g of groups) {
-    if (g.treatment !== opts.districtTreatment || g.members.length === 0) {
+    if (!opts.mergeTreatments.includes(g.treatment) || g.members.length === 0) {
       out.push(g)
       continue
     }
     const key = titleKey(g.title)
     const anchor = g.members[0]!
-    const hit = openDistricts.find((i) => {
+    const hit = open.find((i) => {
       const other = out[i]!
-      const otherKey = titleKey(other.title)
-      if (!titlesOverlap(key, otherKey)) return false
+      if (other.treatment !== g.treatment) return false // same KIND of place, or not the same place
+      if (!titlesOverlap(key, titleKey(other.title))) return false
       const oa = other.members[0]!
       return metersBetween(anchor.lat, anchor.lng, oa.lat, oa.lng) <= opts.maxAnchorGapM
     })
     if (hit === undefined) {
-      out.push({ ...g, members: [...g.members] })
-      openDistricts.push(out.length - 1)
+      out.push({ ...g, members: [...g.members], fusedFrom: 1 })
+      open.push(out.length - 1)
       continue
     }
-    // Fuse, then re-seat the anchor: the strongest member across BOTH groups speaks for the district.
+    // Fuse, then re-seat the anchor: the strongest member across BOTH groups speaks for the place.
     const merged = out[hit]!
     merged.members.push(...g.members)
     merged.members.sort((a, b) => b.rank - a.rank || a.id.localeCompare(b.id))
+    merged.fusedFrom = (merged.fusedFrom ?? 1) + 1
   }
   return out
 }

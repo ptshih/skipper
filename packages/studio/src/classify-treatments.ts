@@ -26,8 +26,11 @@
 // CLUSTER to DISTRICT because it told the model to ignore member count; v4 restores the naming-capacity
 // rule. ⚠ `temperature` is DEPRECATED on Opus 4.8 (the API 400s on it), so it is NOT a lever here.
 //
-// Blast radius: SPENDS (one Opus call per multi-member group — measured ~$0.82 for 64 groups) and
-// MUTATES DB on --apply. Preview classifies and reports, writing nothing.
+// Blast radius: SPENDS (one Opus call per multi-member group — measured ~$0.82 for 64 groups — plus one
+// per group the duplicate merge fuses) and MUTATES DB on --apply.
+// ⚠ PREVIEW SPENDS TOO. Unlike every other ops CLI, the no-flag run is not free: it CLASSIFIES and
+// reports, and only the DB write is gated on --apply. There is no way to see the verdicts without
+// paying for them — that is what the tool does. Budget a preview like an apply.
 //
 //   preview:  dotenvx run -f .env.development -- bun packages/studio/src/classify-treatments.ts
 //   apply:    dotenvx run -f .env.development -- bun packages/studio/src/classify-treatments.ts --apply
@@ -45,7 +48,7 @@ import { announce, parseFlags } from './pipeline/ops'
 import { mapLimit } from './pipeline/concurrency'
 import { withRetry } from './pipeline/http'
 import { resolveRegion, requireRegionBbox } from './pipeline/region'
-import { leaderGroups, mergeDistricts, metersBetween, pickSubject, type ClassifiedGroup } from './pipeline/clustering'
+import { leaderGroups, mergeDuplicateGroups, metersBetween, pickSubject, type ClassifiedGroup } from './pipeline/clustering'
 import { isContainer } from './pipeline/containment'
 import { getAnthropic, JUDGMENT_MODEL } from './models'
 import { DEFAULT_REGION_SLUG, NARRATION_CONCURRENCY } from './config'
@@ -305,7 +308,8 @@ async function main(): Promise<void> {
   const multi = groups.filter((g) => g.length > 1)
   console.log(
     `\n${rows.length} POI(s) with facts → ${groups.length} group(s); ${multi.length} with 2+ members.\n` +
-      `${multi.length} model call(s) ≈ $${(multi.length * 0.013).toFixed(2)} (measured ~$0.013/group).`,
+      `${multi.length} model call(s) ≈ $${(multi.length * 0.013).toFixed(2)} (measured ~$0.013/group), ` +
+      `plus ONE re-classify per group the duplicate merge fuses.`,
   )
   if (multi.length === 0) return console.log('Nothing to classify.')
 
@@ -318,11 +322,44 @@ async function main(): Promise<void> {
     .map(({ g, v }) => ({ members: g, treatment: v.treatment.toLowerCase(), title: v.title }))
   const byAnchor = new Map(classified.map((c) => [c.members[0]!.id, verdicts.find((x) => x.g[0]!.id === c.members[0]!.id)!.v!]))
 
-  const beforeDistricts = classified.filter((c) => c.treatment === 'district').length
-  const merged = mergeDistricts(classified, { districtTreatment: 'district', maxAnchorGapM: DISTRICT_MERGE_GAP_M })
-  const afterDistricts = merged.filter((c) => c.treatment === 'district').length
-  if (beforeDistricts !== afterDistricts) {
-    console.log(`\ndistrict merge: ${beforeDistricts} → ${afterDistricts} (the leader pass anchors more than once inside a big district)`)
+  // ⚠ CLUSTERS merge too, not just districts (widened 2026-07-30). The UNR campus came back as two
+  // CLUSTER groups 1268 m apart whose titles differ only by a comma, and district-only merging sailed
+  // past it — phase 4 would have shipped two fused clips about one campus. SOLO is deliberately absent:
+  // a solo verdict means "merely near each other", so fusing two would invent a group nobody blessed.
+  const merged = mergeDuplicateGroups(classified, {
+    mergeTreatments: ['cluster', 'district'],
+    maxAnchorGapM: DISTRICT_MERGE_GAP_M,
+  })
+  if (merged.length !== classified.length) {
+    console.log(`\nduplicate merge: ${classified.length} → ${merged.length} group(s) (the leader pass anchors more than once inside one place)`)
+  }
+
+  // A fused group's verdict was computed over ONE half's members, so its title/highlights/drop do not
+  // cover the other half — and `highlights` is exactly what fused generation writes the telling from.
+  // Re-ask the model about the WHOLE group. One call per fused group, so the cost is bounded by how
+  // many duplicates the leader pass produced (measured on the current corpus: one).
+  const fused = merged.filter((c) => (c.fusedFrom ?? 1) > 1)
+  if (fused.length > 0) {
+    console.log(
+      `\nRe-classifying ${fused.length} merged group(s) so the verdict covers ALL members ` +
+        `(+$${(fused.length * 0.013).toFixed(2)}):`,
+    )
+    for (const c of fused) console.log(`  ${c.title}  (${c.members.length} members from ${c.fusedFrom} groups)`)
+    const reVerdicts = await mapLimit(fused, NARRATION_CONCURRENCY(), async (c: ClassifiedGroup<Row>) => ({
+      c,
+      v: await classify(c.members),
+    }))
+    for (const { c, v } of reVerdicts) {
+      if (!v) {
+        console.warn(`  ⚠ "${c.title}" returned no verdict on re-classify — keeping the half-group one.`)
+        continue
+      }
+      const before = `${c.treatment}/"${c.title}"`
+      c.treatment = v.treatment.toLowerCase()
+      c.title = v.title
+      byAnchor.set(c.members[0]!.id, v)
+      console.log(`  ✓ ${before} → ${c.treatment}/"${c.title}" (${v.highlights?.length ?? 0} highlights)`)
+    }
   }
 
   const groupable = merged.filter((c) => c.treatment !== 'solo' && c.members.length > 1)

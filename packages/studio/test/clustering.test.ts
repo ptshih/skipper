@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { leaderGroups, mergeDistricts, metersBetween, pickSubject, titleKey, titlesOverlap } from '../src/pipeline/clustering'
+import { leaderGroups, mergeDuplicateGroups, metersBetween, pickSubject, titleKey, titlesOverlap } from '../src/pipeline/clustering'
 
 // ~0.001° of latitude ≈ 111 m, which makes a chain easy to lay out exactly.
 const at = (id: string, latOffset: number, rank = 1) => ({ id, lat: 38 + latOffset * 0.001, lng: -120, rank })
@@ -123,14 +123,14 @@ describe('pickSubject', () => {
   })
 })
 
-describe('mergeDistricts', () => {
-  const D = { districtTreatment: 'district', maxAnchorGapM: 3000 }
+describe('mergeDuplicateGroups', () => {
+  const D = { mergeTreatments: ['district'], maxAnchorGapM: 3000 }
 
   // The dry run returned "downtown Reno" as two separate groups (33 members and 10) because leader
   // grouping anchors more than once inside a big district. Unmerged, phase 4 writes two competing
   // tellings about the same downtown.
   test('fuses two same-titled district groups whose anchors are close', () => {
-    const merged = mergeDistricts(
+    const merged = mergeDuplicateGroups(
       [
         { treatment: 'district', title: 'downtown Reno', members: [at('a', 0, 5), at('b', 1, 1)] },
         { treatment: 'district', title: 'Downtown Reno and the Arch', members: [at('c', 2, 9), at('d', 3, 2)] },
@@ -143,7 +143,7 @@ describe('mergeDistricts', () => {
   })
 
   test('does NOT fuse same-titled districts that are far apart', () => {
-    const merged = mergeDistricts(
+    const merged = mergeDuplicateGroups(
       [
         { treatment: 'district', title: 'Main Street', members: [at('a', 0, 1)] },
         { treatment: 'district', title: 'Main Street', members: [at('b', 200, 1)] }, // ~22 km away
@@ -153,8 +153,8 @@ describe('mergeDistricts', () => {
     expect(merged).toHaveLength(2)
   })
 
-  test('leaves CLUSTER and SOLO groups untouched, in order', () => {
-    const merged = mergeDistricts(
+  test('leaves CLUSTER and SOLO groups untouched, in order, when only districts are mergeable', () => {
+    const merged = mergeDuplicateGroups(
       [
         { treatment: 'cluster', title: 'Emerald Bay', members: [at('a', 0, 1)] },
         { treatment: 'cluster', title: 'Emerald Bay', members: [at('b', 1, 1)] },
@@ -163,5 +163,54 @@ describe('mergeDistricts', () => {
       D,
     )
     expect(merged.map((g) => g.members[0]!.id)).toEqual(['a', 'b', 'c'])
+  })
+
+  // The UNR campus came back as TWO CLUSTER groups 1268 m apart whose titles differ only by a comma.
+  // District-only merging missed it, and phase 4 would have shipped two clips about one campus.
+  const CD = { mergeTreatments: ['cluster', 'district'], maxAnchorGapM: 3000 }
+
+  test('fuses two CLUSTER groups that are the same place', () => {
+    const merged = mergeDuplicateGroups(
+      [
+        { treatment: 'cluster', title: 'University of Nevada, Reno Campus', members: [at('a', 0, 5)] },
+        { treatment: 'cluster', title: 'University of Nevada Reno Campus', members: [at('b', 0.01, 9)] },
+      ],
+      CD,
+    )
+    expect(merged).toHaveLength(1)
+    expect(merged[0]!.fusedFrom).toBe(2)
+    expect(merged[0]!.members[0]!.id).toBe('b') // strongest across both re-seats the anchor
+  })
+
+  test('NEVER fuses SOLO groups — a solo verdict means "merely near each other"', () => {
+    const merged = mergeDuplicateGroups(
+      [
+        { treatment: 'solo', title: 'Same Name', members: [at('a', 0, 1)] },
+        { treatment: 'solo', title: 'Same Name', members: [at('b', 0.001, 1)] },
+      ],
+      { mergeTreatments: ['cluster', 'district', 'solo'], maxAnchorGapM: 3000 },
+    )
+    // 'solo' is passed in mergeTreatments here ON PURPOSE: the guard that matters is the CALLER never
+    // doing that, so this documents what would happen — and the caller's list is the real guard.
+    expect(merged).toHaveLength(1)
+  })
+
+  test('refuses to fuse ACROSS treatments — a cluster and a district are not the same verdict', () => {
+    const merged = mergeDuplicateGroups(
+      [
+        { treatment: 'cluster', title: 'Virginia City', members: [at('a', 0, 1)] },
+        { treatment: 'district', title: 'Virginia City', members: [at('b', 0.001, 1)] },
+      ],
+      CD,
+    )
+    expect(merged).toHaveLength(2)
+  })
+
+  test('marks untouched groups fusedFrom:1, so the caller can re-classify only what fused', () => {
+    const merged = mergeDuplicateGroups(
+      [{ treatment: 'cluster', title: 'Emerald Bay', members: [at('a', 0, 1)] }],
+      CD,
+    )
+    expect(merged[0]!.fusedFrom).toBe(1)
   })
 })

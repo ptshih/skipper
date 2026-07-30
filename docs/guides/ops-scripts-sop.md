@@ -32,6 +32,14 @@ burns GCP credits). So they share one safety contract.
 6. **Idempotent + logged + honest exit.** Re-runnable without harm; log per item + a final
    summary; `process.exitCode = 1` on failure (the `main().catch(...)` tail).
 
+## ⚠ The one CLI whose PREVIEW spends
+
+`classify-treatments` breaks rule 2's spirit and it is not a bug: the tool's whole job is to ask the
+model how to group a region, so the no-flag run **classifies** (one Opus call per multi-member group,
+~$0.82 for 64 groups, plus one per group the duplicate merge fuses) and only the DB WRITE is gated on
+`--apply`. There is no way to see the verdicts without paying for them. Budget a preview like an apply,
+and get the founder go for either. Every other CLI's preview is genuinely free.
+
 ## Corpus hygiene: what the checks CAN'T see
 
 Two verification traps that have each produced a wrong conclusion in practice. Both belong here rather
@@ -95,14 +103,9 @@ wrong row) drops it out of the queue on the next run, so the list shrinks as you
 | Tool | Blast radius | Default | Conforms |
 | --- | --- | --- | --- |
 | `sweep-orphans.ts` | DELETES BYTES | dry-run | ✅ (reference) |
-
-⚠ **Verifying a presigned clip URL: use a ranged GET, never HEAD.** Presigned R2 URLs are signed per HTTP
-METHOD, so a HEAD against a `presignGet` URL returns **403 Forbidden** even when the object is perfectly
-fine — enough to make a healthy corpus look entirely broken. `curl -r 0-1023 "<url>"` is the honest check.
-
 | `resynth-narration.ts` | SPENDS $ + MUTATES DB | dry-run | ✅ |
 | `rename-roam-prefix.ts` | MUTATES DB + DELETES BYTES | dry-run | ✅ |
 | `snap-speakable-anchors.ts` | MUTATES DB (no spend — OSM) | dry-run | ✅ |
 | `prune-corpus.ts` | MUTATES DB; `--delete` DELETES ROWS + cascades | dry-run | ✅ (`--restore`; `--delete` needs `--apply`) |
-| `classify-treatments.ts` | SPENDS $ (~$0.7/region) + MUTATES DB | dry-run | ✅ (has `--clear`) |
+| `classify-treatments.ts` | SPENDS $ (~$0.8/region) + MUTATES DB | ⚠ preview SPENDS | ⚠ see above — only the WRITE is gated |
 | `backfill-poi-extent.ts` | MUTATES DB (no spend — WDQS) | dry-run | ✅ |
