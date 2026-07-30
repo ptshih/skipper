@@ -233,24 +233,52 @@ Virginia City (15).
   out of a grouping pass on purpose.
 - The 600 m radius is still not derived (§8).
 
-## 5. Entity model
+## 5. Entity model — `poi_clusters` (revised 2026-07-29 after an adversarial pass)
 
-Add **one nullable self-referencing column**: `pois.cluster_anchor_id`. A POI carrying it is a
-satellite of that anchor; the anchor's narration is generated over the whole group's fact sheets.
-This survives every hard invariant without forking one:
+A group is **its own row**. `poi_clusters` carries `treatment` ('cluster'|'district'), `title`, and a
+nullable `subject_poi_id`; members point at it via `pois.cluster_id`; the telling points at it via
+`narrations.cluster_id`, with a `narrations_subject_xor` CHECK making "a narration is about a poi XOR a
+cluster" structural.
 
-- `narrations_poi_uq` (1:1 with a poi) — **unchanged**; the fused telling belongs to the anchor.
-- QID dedup — **unchanged**; every member keeps its own `qid` row and attribution.
-- `narrations.attribution` is already an **array**, so one clip can carry the CC BY-SA credit for
-  every Wikipedia-sourced member. Legal requirement satisfied by construction.
-- Roam — satellites resolve to the anchor's clip instead of holding their own, so roam stops
-  telling five casino stories on one block. The 300 m/15-min roam suppression becomes redundant here
-  rather than a second, differently-tuned mechanism.
-- `buildDrive` — an anchor is one candidate; satellites never enter the pool, so pick-one has
-  almost nothing left to destroy.
+**This replaced an anchor model, and the reasons are worth keeping.** The first cut hung
+`treatment`/`title` off whichever member had the longest existing clip and pointed the narration at that
+poi. It was chosen because it let me claim no hard invariant was harmed — and that claim was the weakest
+part of the argument:
 
-Rejected: a `poi_clusters` table (a new entity to keep in sync for no gain), and generation-time-only
-merging with no persisted grouping (invisible to roam and to admin, unauditable).
+- **It preserved the LETTER of "narrations is 1:1 with a poi" and broke its MEANING.**
+  `narrations.poi_id → 3rd Street Flats` for a clip about downtown Reno is a false statement that every
+  downstream reader inherits with full referential integrity.
+- **The proxy elected the wrong subject, measured 4 of 4 districts.** A real `…Historic District` QID
+  sat in the group and was demoted to a satellite of an arbitrary building. A **fraternity house** ended
+  up speaking for a university campus; an apartment block for 43 members of downtown Reno. Clip length
+  says nothing about what a place IS. `pickSubject` now prefers a district/neighbourhood entity, then a
+  member the group was named after, then **null** — and null is the honest answer for 22 of 38 groups
+  (the Stateline casino strip is a real grouping that is not itself a place). Electing a stand-in was
+  precisely the old model's mistake.
+- **Role-dependent nullable columns with no constraints.** Three columns meaningful only on anchors, and
+  nothing in the schema stopping a satellite carrying a treatment, a self-reference, or an `A→B→C` chain.
+  The invariant lived in one script. A table makes all three impossible.
+- **I rejected the table on a weak argument** ("an entity to keep in sync for no gain"). Membership is a
+  FK either way, so there is no extra sync — it is one more table, and the gain is that the subject is
+  nameable instead of impersonated.
+
+What survives unchanged: QID dedup (every member keeps its row), and `narrations.attribution` as an
+array, so one fused clip credits every Wikipedia-sourced member — CC BY-SA satisfied by construction.
+
+⚠ **`narrations.poi_id` is now NULLABLE.** Every read path inner-joins `pois`, so a cluster telling is
+simply invisible to roam and to drives until generation is taught about it — silence, never a wrong
+place-name. Where a query had no join to borrow a non-null id from, it either filters explicitly or
+relies on `poi_id IN (…)` never matching NULL; both are commented at the site.
+
+**Known ceiling, not fixed:** grouping is a PARTITION, so a place has exactly one home. Fannette Island
+belongs to Emerald Bay and to "Tahoe's islands"; `Emerald Bay State Park` exists in the corpus but landed
+in a different spatial group, which is why "Emerald Bay at Lake Tahoe" has a null subject. Overlapping
+membership is expressible in this schema (a join table) but is not built.
+
+**Also unresolved:** treatment is a naming-CAPACITY decision (how many can I name in ~90 s) baked into
+persistent data with **no staleness signal** — change the clip length band and every stored treatment is
+silently wrong. The project has `facts_hash` for exactly this class of problem in the facts domain; there
+is no equivalent here yet.
 
 ## 6. Road class — "close enough to a major road" `[measured]`
 

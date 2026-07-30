@@ -154,7 +154,11 @@ const narrationCorpusSelect = () =>
   db
     .select({
       narrationId: narrations.id,
-      poiId: narrations.poiId,
+      // `pois.id`, not `narrations.poi_id`: identical under the innerJoin below, but NOT NULL, so a
+      // CLUSTER telling (poi_id null — see the narrations schema) can never enter the drive corpus
+      // keyed by a null. The join already excludes them; selecting the poi's own id makes the TYPE
+      // say so instead of relying on a runtime coincidence.
+      poiId: pois.id,
       form: narrations.form,
       key: narrations.audioUrl,
       durationMs: narrations.audioDurationMs,

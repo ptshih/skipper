@@ -163,7 +163,10 @@ app.get('/roam', async (c) => {
     () =>
       db
         .select({
-          poiId: narrations.poiId,
+          // `pois.id`, not `narrations.poi_id` — identical under the innerJoin below but NOT NULL, so a
+          // CLUSTER telling (poi_id null) can never surface as a roam pin with no place. Same idiom as
+          // the drive corpus in ./drives.
+          poiId: pois.id,
           name: pois.name,
           kind: pois.kind,
           lat: pois.lat,

@@ -171,13 +171,18 @@ export interface PoiCorrections {
   /** Non-null ⇒ HIDDEN from new drives and from roam. Audio is untouched, so clearing it restores the
    *  place with no regeneration. */
   excludedReason: string | null
-  /** How this poi is GROUPED for telling. Null = it stands alone (most of them). An ANCHOR speaks for
-   *  its members; a SATELLITE is spoken about by its anchor. INERT until phase 4 fuses the audio —
-   *  today every member still has its own clip. */
-  cluster:
-    | { role: 'anchor'; treatment: string; title: string | null; members: { id: string; name: string }[] }
-    | { role: 'satellite'; anchorId: string; anchorName: string; treatment: string | null; title: string | null }
-    | null
+  /** The legibility GROUP this poi belongs to, or null when it stands alone (most of them). INERT until
+   *  phase 4 fuses the audio — today every member still has its own clip. `subjectName` is the member
+   *  that IS the group, or null when none names it (the Stateline casino strip is a real grouping that
+   *  is not itself a place) — a null is honest, not missing data. */
+  cluster: {
+    id: string
+    treatment: string
+    title: string
+    isSubject: boolean
+    subjectName: string | null
+    others: { id: string; name: string }[]
+  } | null
 }
 // The discriminated POST body for /admin/pois/:id/corrections.
 export type CorrectionBody =

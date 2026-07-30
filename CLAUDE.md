@@ -72,8 +72,15 @@ product.** When a choice trades polish-for-the-builder against scale-for-a-marke
   fixed delivery. The **joke notch is CUT** — `jokeLevel` is gone everywhere (no enum, no wire field);
   delivery variation returns later as DIFFERENT NARRATORS (a per-narration persona key, region-skippers, M4),
   never a corniness notch. See `docs/decisions/cut-joke-notch.md`.
-- **A narration is only live once it has non-null audio.** `narrations` is 1:1 with a poi
-  (`narrations_poi_uq`); `audio_url` is NOT NULL at the DB boundary — story + scenic today. **Break audio is
+- **A narration is only live once it has non-null audio.** A narration is about EXACTLY ONE subject —
+  a poi (`narrations_poi_uq`) **or** a `poi_clusters` row (`narrations_cluster_uq`), enforced by the
+  `narrations_subject_xor` CHECK. Both FKs are nullable; neither-or-both is a constraint violation. A
+  CLUSTER is a group of places told as one thing (Emerald Bay = Vikingsholm + Eagle Falls + Eagle Lake);
+  members point at it via `pois.cluster_id`. **Fused cluster tellings are NOT generated yet** — every
+  read path inner-joins `pois`, so a cluster narration is invisible until generation is built (silence,
+  never a wrong place-name). ⚠ Do NOT hang a fused telling off one member's `poi_id`: that was the
+  first cut, and it made `narrations.poi_id → 3rd Street Flats` for a clip about downtown Reno.
+  `audio_url` is NOT NULL at the DB boundary — story + scenic today. **Break audio is
   a SEPARATE place-anchored `detours` table** (1:1 per place, `audio_url` NOT NULL there too), **DEFERRED/
   stubbed — nothing writes it yet**; a break is NOT a `narrations` row. Only fact-grounded (story)
   narrations carry a `facts_hash`; scenic/break carry none and are never fact-stale. A drive can't be

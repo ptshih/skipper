@@ -47,12 +47,17 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
       of 460 are anchored — real exposure is 14 POIs). What IS broken: `drive-select.ts` `better()`
       compares `null !== null`, so the variety rule no-ops for the built world. Needs a coarse
       built-world category, NOT a `kind` backfill — a design question, unscoped.
-- [x] **3. Treatment classifier — BUILT + APPLIED 2026-07-29.** `classify-treatments.ts` + pure
-      `pipeline/clustering.ts` (9 tests). Tahoe: 430 POIs → 34 CLUSTER / 4 DISTRICT / 15 SOLO, ~$0.7,
-      38 anchors + 181 satellites written. Migration 0035 adds `cluster_anchor_id` / `cluster_treatment`
-      / `cluster_title`. INERT — writes no audio; undo is `--apply --clear`. Admin Location tab shows the
-      grouping read-only. District merge solved via whole-word title CONTAINMENT (exact match left
-      downtown Reno split 33/10). See `docs/ideas/poi-legibility-layer.md` §4c.
+- [x] **3. Treatment classifier — BUILT + APPLIED, then RE-ARCHITECTED 2026-07-29.** An adversarial pass
+      on the first cut found the anchor model wrong: it hung treatment/title off whichever member had the
+      longest clip, which elected the wrong subject in **4 of 4 districts** (a fraternity house spoke for
+      a university campus) and would have made `narrations.poi_id` a false statement for every fused clip.
+      Replaced with a `poi_clusters` table (migrations 0036/0037) + `narrations.cluster_id` + a
+      `narrations_subject_xor` CHECK; `pickSubject` prefers a real district entity, else the member the
+      group is named after, else NULL (honest for 22 of 38). 38 clusters / 219 memberships migrated with
+      11 subjects reseated, no re-spend. Still INERT. See `docs/ideas/poi-legibility-layer.md` §5.
+- [ ] **3c. No staleness signal for a treatment.** cluster-vs-district is "how many can I name in ~90 s",
+      so changing the clip length band silently invalidates every stored treatment. `facts_hash` solves
+      this class of problem for facts; there is no equivalent here. Decide before the band is ever tuned.
 - [ ] **3b. Review the 25 low-confidence groups + the 68 suggested DROPs** before phase 4 spends on
       fused audio. Both are reported by the CLI and visible per-POI in admin; neither is applied.
 - [ ] **4. Fused generation.** One telling per cluster, written to a cluster length band — NOT

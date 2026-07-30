@@ -156,7 +156,10 @@ async function main(): Promise<void> {
       if (releasedOnly) conds.push(isNotNull(narrations.releasedAt))
       const sel = db
         .select({
-          poiId: narrations.poiId,
+          // `pois.id`, not `narrations.poi_id`: identical under the innerJoin below, but NOT NULL, so a
+        // CLUSTER telling (which has a null poi_id — see the narrations schema) can never reach a tool
+        // that needs a place. The inner join already excludes them; this makes the type say so.
+        poiId: pois.id,
           qid: pois.qid,
           name: pois.name,
           audioUrl: narrations.audioUrl,

@@ -8,10 +8,15 @@
 //   CLUSTER  — a driver experiences them as ONE place, few enough to NAME EACH (Emerald Bay).
 //   DISTRICT — an area you drive THROUGH with more landmarks than a telling can name (downtown Reno).
 //
-// WHAT THIS WRITES: only the grouping — `cluster_anchor_id` on satellites, `cluster_treatment` +
-// `cluster_title` on anchors. It writes NO audio and changes nothing a rider hears; every POI keeps its
-// own narration until phase 4 fuses them. That inertness is deliberate: it makes the design INSPECTABLE
-// (look at the groupings in the console) for a couple of dollars, before any regeneration is paid for.
+// WHAT THIS WRITES: only the grouping — one `poi_clusters` row per group, with every member's
+// `pois.cluster_id` pointing at it. It writes NO audio and changes nothing a rider hears; every POI
+// keeps its own narration until phase 4 fuses them. That inertness is deliberate: it makes the design
+// INSPECTABLE (look at the groupings in the console) for a couple of dollars, before any regeneration.
+//
+// ⚠ The group is a ROW, not three columns on an elected "anchor" poi — see the `poiClusters` schema
+// comment for why that first cut was replaced. Practically: the SUBJECT (`pickSubject`) is the member
+// that IS the group when one exists (a `…Historic District` QID), and NULL when none does, instead of
+// whichever member happened to own the longest clip.
 //
 // ⚠ PRECOMPUTED, NEVER PER-ROUTE. Audio is synthesized ahead of time and a fused telling is one clip,
 // so route-dependent membership would require audio per route — the thing V2 exists not to do.
@@ -31,14 +36,14 @@
 //   --clear           on --apply, only CLEAR the grouping in scope (the undo); makes no model calls
 
 import type Anthropic from '@anthropic-ai/sdk'
-import { and, eq, isNull, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
-import { narrations, pois } from '@skipper/db/schema'
+import { narrations, poiClusters, pois } from '@skipper/db/schema'
 import { announce, parseFlags } from './pipeline/ops'
 import { mapLimit } from './pipeline/concurrency'
 import { withRetry } from './pipeline/http'
 import { resolveRegion, requireRegionBbox } from './pipeline/region'
-import { leaderGroups, mergeDistricts, metersBetween, type ClassifiedGroup } from './pipeline/clustering'
+import { leaderGroups, mergeDistricts, metersBetween, pickSubject, type ClassifiedGroup } from './pipeline/clustering'
 import { getAnthropic, JUDGMENT_MODEL } from './models'
 import { DEFAULT_REGION_SLUG, NARRATION_CONCURRENCY } from './config'
 
@@ -170,13 +175,15 @@ async function main(): Promise<void> {
   // Clearing the grouping in scope is BOTH the undo and the first half of an apply: a re-run whose
   // groups came out differently would otherwise leave satellites pointing at anchors that are no longer
   // anchors. So a fresh classification always re-baselines rather than patching.
+  // Deleting the cluster rows is enough: `pois.cluster_id` is ON DELETE SET NULL, so membership
+  // unwinds itself. Scoped to clusters that actually have a member in this bbox, so clearing one
+  // region never touches another's.
   const clearGrouping = () =>
     withRetry(
       () =>
-        db
-          .update(pois)
-          .set({ clusterAnchorId: null, clusterTreatment: null, clusterTitle: null })
-          .where(and(...inBbox)),
+        db.execute(sql`delete from ${poiClusters} where id in (
+          select distinct ${pois.clusterId} from ${pois}
+          where ${pois.clusterId} is not null and ${and(...inBbox)})`),
       { label: 'cluster.clear' },
     )
 
@@ -184,7 +191,7 @@ async function main(): Promise<void> {
     const [{ n } = { n: 0 }] = await db
       .select({ n: sql<number>`count(*)::int` })
       .from(pois)
-      .where(and(...inBbox, sql`(${pois.clusterAnchorId} is not null or ${pois.clusterTreatment} is not null)`))
+      .where(and(...inBbox, sql`${pois.clusterId} is not null`))
     console.log(`\n${n} POI(s) currently carry a grouping.`)
     if (!apply) return console.log('PREVIEW — no writes. Re-run with --apply --clear to clear them.')
     await clearGrouping()
@@ -256,29 +263,31 @@ async function main(): Promise<void> {
       (drops.length ? `${drops.length} member(s) the model would DROP entirely (reported only, not applied): ${drops.slice(0, 8).join(' · ')}\n` : ''),
   )
 
-  const satellites = groupable.flatMap((c) => c.members.slice(1).map((m) => ({ id: m.id, anchorId: c.members[0]!.id })))
+  const withSubject = groupable.filter((c) => pickSubject(c.members, c.title) != null).length
+  const memberCount = groupable.reduce((a, c) => a + c.members.length, 0)
   console.log(
-    `Writes: ${groupable.length} anchor(s) get a treatment + title; ${satellites.length} satellite(s) point at them. NO audio changes.`,
+    `Writes: ${groupable.length} cluster row(s) covering ${memberCount} place(s); ${withSubject} have a real ` +
+      `SUBJECT entity, ${groupable.length - withSubject} honestly have none. NO audio changes.`,
   )
   if (!apply) return console.log('\nPREVIEW — no writes. Re-run with --apply to persist the grouping.')
 
-  await clearGrouping() // re-baseline, so a changed grouping can't leave stale satellites
+  await clearGrouping() // re-baseline: a changed grouping must not leave stale membership behind
+  let n = 0
   await mapLimit(groupable, 8, async (c) => {
-    await withRetry(
-      () =>
-        db
-          .update(pois)
-          .set({ clusterTreatment: c.treatment, clusterTitle: c.title, clusterAnchorId: null })
-          .where(eq(pois.id, c.members[0]!.id)),
-      { label: `anchor(${c.members[0]!.name})` },
-    )
+    const subject = pickSubject(c.members, c.title)
+    await withRetry(async () => {
+      const [row] = await db
+        .insert(poiClusters)
+        .values({ treatment: c.treatment, title: c.title, subjectPoiId: subject?.id ?? null })
+        .returning({ id: poiClusters.id })
+      await db
+        .update(pois)
+        .set({ clusterId: row!.id })
+        .where(inArray(pois.id, c.members.map((m) => m.id)))
+    }, { label: `cluster(${c.title})` })
+    n++
   })
-  await mapLimit(satellites, 8, async (s) => {
-    await withRetry(() => db.update(pois).set({ clusterAnchorId: s.anchorId }).where(eq(pois.id, s.id)), {
-      label: `satellite(${s.id})`,
-    })
-  })
-  console.log(`\n✓ ${groupable.length} anchor(s) + ${satellites.length} satellite(s) written. Undo: --apply --clear`)
+  console.log(`\n✓ ${n} cluster(s) written, ${memberCount} membership(s) set. Undo: --apply --clear`)
 }
 
 main()

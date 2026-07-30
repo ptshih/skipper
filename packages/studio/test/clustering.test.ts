@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { leaderGroups, mergeDistricts, metersBetween, titleKey, titlesOverlap } from '../src/pipeline/clustering'
+import { leaderGroups, mergeDistricts, metersBetween, pickSubject, titleKey, titlesOverlap } from '../src/pipeline/clustering'
 
 // ~0.001° of latitude ≈ 111 m, which makes a chain easy to lay out exactly.
 const at = (id: string, latOffset: number, rank = 1) => ({ id, lat: 38 + latOffset * 0.001, lng: -120, rank })
@@ -54,6 +54,40 @@ describe('titlesOverlap', () => {
   })
   test('does not match on a partial WORD', () => {
     expect(titlesOverlap('reno', 'renoir')).toBe(false)
+  })
+})
+
+describe('pickSubject', () => {
+  // The exact production failure: the district QID was in the group and lost to a longer clip.
+  test('prefers a real district entity over any other member', () => {
+    const m = [
+      { id: 'a', name: 'Alpha Tau Omega Fraternity House (Reno, Nevada)', kind: null },
+      { id: 'b', name: 'University of Nevada Reno Historic District', kind: 'historic district' },
+    ]
+    expect(pickSubject(m, 'University of Nevada, Reno Campus')?.id).toBe('b')
+  })
+
+  test('falls back to the member the group was NAMED after', () => {
+    const m = [
+      { id: 'a', name: 'Mormon Station State Historic Park', kind: null },
+      { id: 'b', name: 'Genoa, Nevada', kind: null },
+    ]
+    expect(pickSubject(m, "Genoa, Nevada's Oldest Town")?.id).toBe('b')
+  })
+
+  // A null subject is a FEATURE: the Stateline casino strip is a real grouping that is not itself a
+  // place, and electing a stand-in is what the old anchor model did wrong.
+  test('returns null when no member names the group', () => {
+    const m = [
+      { id: 'a', name: "Harrah's Lake Tahoe", kind: null },
+      { id: 'b', name: 'Golden Nugget Lake Tahoe', kind: null },
+    ]
+    expect(pickSubject(m, "Stateline's Casino Row")).toBeNull()
+  })
+
+  test('a very short name cannot match by title containment', () => {
+    const m = [{ id: 'a', name: 'CA', kind: null }]
+    expect(pickSubject(m, 'CA Route Somewhere')).toBeNull()
   })
 })
 

@@ -188,33 +188,30 @@ export function Location({ poiId, poiLat, poiLng }: { poiId: string; poiLat?: nu
         </div>
       </div>
 
-      {/* How this place is GROUPED for telling. Read-only: membership is decided in bulk by
+      {/* The GROUP this place belongs to. Read-only: membership is decided in bulk by
           `classify-treatments` (one model call per group), not per-POI in the console — a hand edit here
           would be silently overwritten by the next classification re-baseline. */}
       {data?.cluster && (
         <div className="flex flex-col gap-2 border-t pt-4">
           <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Grouping</div>
-          {data.cluster.role === 'anchor' ? (
-            <>
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="secondary">{data.cluster.treatment}</Badge>
-                <span className="text-xs font-semibold">{data.cluster.title ?? '(untitled)'}</span>
-                <span className="text-xs text-muted-foreground">
-                  speaks for {data.cluster.members.length} other place{data.cluster.members.length === 1 ? '' : 's'}
-                </span>
-              </div>
-              {data.cluster.members.length > 0 && (
-                <div className="text-xs leading-relaxed text-muted-foreground">
-                  {data.cluster.members.map((m) => m.name).join(', ')}
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <Badge variant="outline">satellite</Badge>
-              <span className="text-muted-foreground">spoken for by</span>
-              <span className="font-semibold">{data.cluster.anchorName}</span>
-              {data.cluster.title && <span className="text-muted-foreground">— “{data.cluster.title}”</span>}
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="secondary">{data.cluster.treatment}</Badge>
+            <span className="text-xs font-semibold">{data.cluster.title}</span>
+            {data.cluster.isSubject && <Badge variant="outline">this place IS the subject</Badge>}
+          </div>
+          <div className="text-xs leading-relaxed text-muted-foreground">
+            {/* A null subject is a real answer, not missing data — plenty of honest groups (a casino
+                strip) are not themselves a place, and the old model's mistake was electing a stand-in. */}
+            Subject:{' '}
+            {data.cluster.subjectName ? (
+              <span className="text-foreground">{data.cluster.subjectName}</span>
+            ) : (
+              <span className="italic">none — no single place names this group</span>
+            )}
+          </div>
+          {data.cluster.others.length > 0 && (
+            <div className="text-xs leading-relaxed text-muted-foreground">
+              Told together with: {data.cluster.others.map((m) => m.name).join(', ')}
             </div>
           )}
           <div className="text-xs leading-relaxed text-muted-foreground">

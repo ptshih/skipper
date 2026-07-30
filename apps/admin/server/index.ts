@@ -45,6 +45,7 @@ import {
   narrations,
   places,
   poiOverrides,
+  poiClusters,
   pois,
   regions,
 } from '@skipper/db/schema'
@@ -1009,6 +1010,8 @@ app.get('/admin/pois', async (c) => {
         releasedAt: narrations.releasedAt, // region-release-gate: NULL = staged, non-null = public
       })
       .from(narrations)
+      // No cluster-telling guard needed: `poi_id IN (…)` is never true for NULL, so a fused telling
+      // (poi_id null) is excluded by SQL semantics rather than by an extra predicate. Don't "fix" this.
       .where(inArray(narrations.poiId, poiIds)),
     // All regions + their discovery bbox. POI→region is GEOGRAPHIC (bbox containment), matching
     // how roam actually selects candidates (region-corpus.ts / generate-narrations.ts). A region with no
@@ -1210,13 +1213,19 @@ interface CorrectionsPayload {
   speakableRoadClass: string | null
   /** Non-null ⇒ hidden from NEW drives + roam (audio kept; saved drives keep the stop). */
   excludedReason: string | null
-  /** How this poi is GROUPED for telling (docs/ideas/poi-legibility-layer.md). Null when it stands
-   *  alone, which is most of them. An ANCHOR speaks for the group; a SATELLITE is spoken about by its
-   *  anchor. Written by `classify-treatments`; INERT until phase 4 fuses the audio. */
-  cluster:
-    | { role: 'anchor'; treatment: string; title: string | null; members: { id: string; name: string }[] }
-    | { role: 'satellite'; anchorId: string; anchorName: string; treatment: string | null; title: string | null }
-    | null
+  /** The legibility GROUP this poi belongs to, or null when it stands alone (most of them). Written by
+   *  `classify-treatments`; INERT until phase 4 fuses the audio. `subjectName` is the member that IS the
+   *  group (a `…Historic District` entity) or null when none names it — a null is honest, not missing
+   *  data. `isSubject` marks whether the poi being viewed is that one. */
+  cluster: {
+    id: string
+    treatment: string
+    title: string
+    isSubject: boolean
+    subjectName: string | null
+    /** The OTHER places in the group (this poi excluded). */
+    others: { id: string; name: string }[]
+  } | null
 }
 
 // Assemble the corrections payload for one poi: its (source, source_id)-keyed override rows
@@ -1229,33 +1238,36 @@ async function correctionsForPoi(poi: {
   speakableLng: number | null
   speakableRoadClass: string | null
   excludedReason: string | null
-  clusterAnchorId?: string | null
-  clusterTreatment?: string | null
-  clusterTitle?: string | null
+  clusterId?: string | null
 }): Promise<CorrectionsPayload> {
-  // Resolve the grouping into something the console can render without a second round-trip: an anchor
-  // needs the names it speaks for, a satellite needs the name of the poi that speaks for it.
+  // Resolve the grouping into one renderable shape so the console needs no second round-trip.
   let cluster: CorrectionsPayload['cluster'] = null
-  if (poi.clusterAnchorId) {
-    const [a] = await db
-      .select({ name: pois.name, treatment: pois.clusterTreatment, title: pois.clusterTitle })
-      .from(pois)
-      .where(eq(pois.id, poi.clusterAnchorId))
+  if (poi.clusterId) {
+    const [c] = await db
+      .select({
+        id: poiClusters.id,
+        treatment: poiClusters.treatment,
+        title: poiClusters.title,
+        subjectPoiId: poiClusters.subjectPoiId,
+      })
+      .from(poiClusters)
+      .where(eq(poiClusters.id, poi.clusterId))
       .limit(1)
-    cluster = {
-      role: 'satellite',
-      anchorId: poi.clusterAnchorId,
-      anchorName: a?.name ?? '(missing anchor)',
-      treatment: a?.treatment ?? null,
-      title: a?.title ?? null,
+    if (c) {
+      const members = await db
+        .select({ id: pois.id, name: pois.name })
+        .from(pois)
+        .where(eq(pois.clusterId, c.id))
+        .orderBy(pois.name)
+      cluster = {
+        id: c.id,
+        treatment: c.treatment,
+        title: c.title,
+        isSubject: c.subjectPoiId != null && c.subjectPoiId === poi.id,
+        subjectName: members.find((m) => m.id === c.subjectPoiId)?.name ?? null,
+        others: members.filter((m) => m.id !== poi.id),
+      }
     }
-  } else if (poi.clusterTreatment && poi.id) {
-    const members = await db
-      .select({ id: pois.id, name: pois.name })
-      .from(pois)
-      .where(eq(pois.clusterAnchorId, poi.id))
-      .orderBy(pois.name)
-    cluster = { role: 'anchor', treatment: poi.clusterTreatment, title: poi.clusterTitle ?? null, members }
   }
   const rows = await db
     .select({
@@ -1338,9 +1350,7 @@ app.get('/admin/pois/:id/corrections', async (c) => {
         speakableLng: pois.speakableLng,
         speakableRoadClass: pois.speakableRoadClass,
         excludedReason: pois.excludedReason,
-        clusterAnchorId: pois.clusterAnchorId,
-        clusterTreatment: pois.clusterTreatment,
-        clusterTitle: pois.clusterTitle,
+        clusterId: pois.clusterId,
       })
       .from(pois)
       .where(eq(pois.id, id))
@@ -1378,9 +1388,7 @@ app.post('/admin/pois/:id/corrections', async (c) => {
         speakableLng: pois.speakableLng,
         speakableRoadClass: pois.speakableRoadClass,
         excludedReason: pois.excludedReason,
-        clusterAnchorId: pois.clusterAnchorId,
-        clusterTreatment: pois.clusterTreatment,
-        clusterTitle: pois.clusterTitle,
+        clusterId: pois.clusterId,
       })
       .from(pois)
       .where(eq(pois.id, id))
@@ -1526,9 +1534,7 @@ app.post('/admin/pois/:id/corrections', async (c) => {
       speakableRoadClass: fresh?.speakableRoadClass ?? null,
       excludedReason: fresh?.excludedReason ?? null,
       id,
-      clusterAnchorId: poi.clusterAnchorId,
-      clusterTreatment: poi.clusterTreatment,
-      clusterTitle: poi.clusterTitle,
+      clusterId: poi.clusterId,
     }),
   )
 })

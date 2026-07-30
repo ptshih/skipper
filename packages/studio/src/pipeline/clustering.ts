@@ -78,6 +78,45 @@ export function titlesOverlap(a: string, b: string): boolean {
   return ` ${a} `.includes(` ${b} `) || ` ${b} `.includes(` ${a} `)
 }
 
+/** The minimum a subject candidate must expose. */
+export interface Subjectable {
+  id: string
+  name: string
+  kind?: string | null
+}
+
+/**
+ * Which member (if any) IS the subject of a group — the entity a fused telling is actually ABOUT.
+ *
+ * ⚠ This exists because the first cut got it wrong in production. Anchors were picked by longest
+ * existing clip, a proxy for "richest telling", and that elected the wrong subject in 4 of 4 districts:
+ * a real `…Historic District` QID sat in the group and was demoted to a satellite of an arbitrary
+ * building — a FRATERNITY HOUSE ended up speaking for a university campus, and an apartment block for
+ * 43 members of downtown Reno. Clip length says nothing about what a place IS.
+ *
+ * Returns null when no member names the group, which is the common and honest case: the Stateline
+ * casino strip is a real grouping that is not itself a Wikidata place. A null subject says "this
+ * grouping is ours" rather than electing a stand-in to impersonate it.
+ */
+export function pickSubject<T extends Subjectable>(members: readonly T[], title: string): T | null {
+  // 1. An entity whose TYPE is the group: a historic district, a neighbourhood. The strongest signal,
+  //    and the one the design doc always specified.
+  const byKind = members.find(
+    (m) => /district|neighborhood|neighbourhood/i.test(m.kind ?? '') || /historic district/i.test(m.name),
+  )
+  if (byKind) return byKind
+  // 2. A member the classifier NAMED THE GROUP AFTER — "Genoa, Nevada" for "Genoa, Nevada's Oldest
+  //    Town". Whole-word containment, with a length floor so a 2-3 character name can't match noise.
+  const key = titleKey(title)
+  const byTitle = members.find((m) => {
+    const n = titleKey(m.name)
+    return n.length >= 4 && ` ${key} `.includes(` ${n} `)
+  })
+  if (byTitle) return byTitle
+  // 3. Nothing names it. Say so.
+  return null
+}
+
 /** A classified group, as the district merge needs to see it. */
 export interface ClassifiedGroup<T extends Groupable> {
   members: T[]

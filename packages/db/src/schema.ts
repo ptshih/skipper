@@ -282,26 +282,10 @@ export const pois = pgTable(
     // than a delete because these rows may already own generated audio (deleting orphans paid R2 bytes).
     // Read paths filter on `excluded_reason IS NULL`. See docs/ideas/poi-legibility-layer.md §4b.
     excludedReason: text('excluded_reason'),
-    // ── Legibility grouping (docs/ideas/poi-legibility-layer.md §4/§5) ────────────────────────────
-    // A driver experiences Emerald Bay as ONE stop, not as Vikingsholm + Eagle Falls + Eagle Lake.
-    // These three columns record WHICH places fuse, HOW, and what to call the result — decided ONCE at
-    // corpus-build time by `classify-treatments.ts`, never per-route (audio is frozen ahead of time, so
-    // route-dependent membership would need audio per route).
-    //
-    // A SATELLITE points at its anchor; an ANCHOR has this NULL and carries the treatment + title
-    // instead. Self-referencing, ON DELETE SET NULL so deleting an anchor orphans its satellites into
-    // independent places rather than dangling. Nullable everywhere: the overwhelming majority of POIs
-    // are their own stop and carry none of this.
-    clusterAnchorId: uuid('cluster_anchor_id').references((): AnyPgColumn => pois.id, { onDelete: 'set null' }),
-    // On the ANCHOR only. `'cluster'` = few enough members to NAME EACH in one telling (Emerald Bay,
-    // the Stateline strip). `'district'` = an area you drive THROUGH with more landmarks than a telling
-    // can name, so the clip names two or three and lets the rest be background (downtown Reno's 33).
-    // Plain text, not a pgEnum: this is internal corpus metadata that never crosses the wire, so it owes
-    // no Zod counterpart (unlike the enums `lint:enums` keeps in lockstep).
-    clusterTreatment: text('cluster_treatment'),
-    // On the ANCHOR only — what a driver would CALL this place ("Emerald Bay", "downtown Reno"). The
-    // classifier's own words, persisted because re-deriving it means paying for the model again.
-    clusterTitle: text('cluster_title'),
+    // Which legibility GROUP this place belongs to, or null when it stands alone (most of them).
+    // See `poiClusters` below for why the group is its own row rather than three columns hung off an
+    // "anchor" poi. ON DELETE SET NULL: dropping a cluster returns its members to standing alone.
+    clusterId: uuid('cluster_id').references((): AnyPgColumn => poiClusters.id, { onDelete: 'set null' }),
     summary: text('summary'),
     facts: jsonb('facts').$type<PoiFacts>(),
     // The curated, verbatim narration sheet (the corpus `enrich` step's output) — its OWN typed
@@ -335,6 +319,60 @@ export const pois = pgTable(
     // Bounding-box prefilter for /roam (and any near-a-point query) — bounds the scan instead
     // of loading every roam narration globally before the haversine pass.
     index('pois_lat_lng_idx').on(t.lat, t.lng),
+  ],
+)
+
+/* -------------------------------------------------------------------------- */
+/*  poi_clusters — a GROUP of places told as one thing                          */
+/* -------------------------------------------------------------------------- */
+
+// A driver experiences Emerald Bay as ONE stop, not as Vikingsholm + Fannette Island + Eagle Falls.
+// This is that subject: the thing a fused telling is ABOUT. Members point here via `pois.cluster_id`;
+// the telling points here via `narrations.cluster_id`. Written by `classify-treatments.ts` at
+// corpus-build time — NEVER per-route, because audio is synthesized ahead of time and a fused clip is
+// one file, so route-dependent membership would need audio per route.
+//
+// ⚠ WHY A TABLE, and not three columns on an "anchor" poi (the first cut, replaced 2026-07-29).
+// The anchor model hung `treatment`/`title` off whichever member had the longest existing clip and
+// pointed the narration at that poi. It preserved the LETTER of "narrations is 1:1 with a poi" and
+// broke its MEANING: `narrations.poi_id → 3rd Street Flats` for a clip about downtown Reno is a false
+// statement that every downstream reader inherits with full referential integrity. It also picked the
+// wrong subject in practice — measured 4 of 4 districts, where a real `…Historic District` QID already
+// existed in the group and was demoted to a satellite of an arbitrary building (a FRATERNITY HOUSE
+// ended up speaking for a university campus). Making the group a first-class row means the subject is
+// nameable instead of impersonated, and lets the constraints below be structural rather than living in
+// one script. See docs/ideas/poi-legibility-layer.md §5.
+export const poiClusters = pgTable(
+  'poi_clusters',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    // 'cluster' = few enough members to NAME EACH in one telling (Emerald Bay, the Stateline strip).
+    // 'district' = an area you drive THROUGH with more landmarks than a telling can name, so the clip
+    // names two or three and the rest are background (downtown Reno's 43).
+    // Plain text, not a pgEnum: internal corpus metadata that never crosses the wire, so it owes no Zod
+    // counterpart (unlike the enums `lint:enums` keeps in lockstep).
+    treatment: text('treatment').notNull(),
+    // What a driver would CALL this place ("Emerald Bay", "downtown Reno") — the classifier's own words.
+    // Persisted because re-deriving it means paying the model again.
+    title: text('title').notNull(),
+    // The member that IS the subject, when one exists: a `…Historic District` / settlement QID rather
+    // than an arbitrary building. NULLABLE because plenty of real groups have no such entity (the
+    // Stateline casino strip is not itself a Wikidata place), and a null here honestly says "this
+    // grouping is ours, no single entity names it" instead of electing a stand-in.
+    // ⚠ ON DELETE SET NULL, never cascade: losing the subject poi must not delete the group.
+    subjectPoiId: uuid('subject_poi_id').references((): AnyPgColumn => pois.id, { onDelete: 'set null' }),
+    // ⚠ NO region FK — regions are geometry-first (a bbox, never a stored id; see
+    // docs/decisions/geometry-first-regions.md). A cluster's extent is its members' coordinates.
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    // The vocabulary is closed and load-bearing — 'solo' is NOT a cluster (a solo group writes no row
+    // at all), so anything outside these two is a bug that would silently change how audio generates.
+    check('poi_clusters_treatment', sql`${t.treatment} in ('cluster', 'district')`),
   ],
 )
 
@@ -512,9 +550,17 @@ export const narrations = pgTable(
   'narrations',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    poiId: uuid('poi_id')
-      .notNull()
-      .references(() => pois.id, { onDelete: 'cascade' }),
+    // A telling is about exactly ONE subject: a single place, or a CLUSTER of places told as one
+    // thing (see `poiClusters`). Both FKs are nullable and the `narrations_subject_xor` CHECK below
+    // makes "exactly one" structural.
+    //
+    // ⚠ poi_id was NOT NULL until 2026-07-29. It is nullable now so a FUSED telling can point at its
+    // cluster instead of impersonating one of its members. Every existing row still sets it, so the
+    // INNER JOINs on poi_id throughout the read paths keep working unchanged — a cluster telling is
+    // simply invisible to them until they are taught about it, which is the safe default (silence, not
+    // a wrong place-name) and is the work fused GENERATION has to do.
+    poiId: uuid('poi_id').references(() => pois.id, { onDelete: 'cascade' }),
+    clusterId: uuid('cluster_id').references(() => poiClusters.id, { onDelete: 'cascade' }),
     // story|scenic|wave|bside — the telling's treatment (1:1, so no `variant`). 'break' is enum-
     // valid (wire lockstep) but CHECK-excluded here: breaks live in `detours`, not narrations.
     form: narrationFormEnum('form').notNull(),
@@ -537,6 +583,8 @@ export const narrations = pgTable(
   (t) => [
     // UNIQUE poi_id = the 1:1 invariant (and the lookup index for roam/drive joins).
     uniqueIndex('narrations_poi_uq').on(t.poiId),
+    // …and 1:1 with a CLUSTER too: one fused telling per group, the same invariant one level up.
+    uniqueIndex('narrations_cluster_uq').on(t.clusterId),
     // CC BY-SA legal floor. A STORY clip is fact-grounded (Wikipedia, etc.), so it MUST freeze its
     // attribution — shipping Wikipedia-derived audio with no credit is a license violation. Other
     // forms (scenic/break/wave) ground on no facts and carry none, hence a form-CONDITIONAL CHECK
@@ -551,6 +599,13 @@ export const narrations = pgTable(
     // `'break'` stays in the pg enum only to keep `narration_form` in lockstep with the wire
     // `narrationForm`/`driveClipForm` projection; this CHECK makes "never stored here" structural.
     check('narrations_form_not_break', sql`${t.form} <> 'break'`),
+    // A telling is about a place OR a cluster, never both and never neither. The whole point of
+    // replacing the anchor model was to stop a fused clip claiming to be about one of its members, so
+    // "exactly one subject" has to be a constraint rather than a convention in the writer.
+    check(
+      'narrations_subject_xor',
+      sql`(${t.poiId} IS NOT NULL) <> (${t.clusterId} IS NOT NULL)`,
+    ),
   ],
 )
 
