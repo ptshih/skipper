@@ -126,8 +126,14 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
       ✅ Grouping RE-APPLIED 2026-07-30 on the fixed merge: **64 clusters** (60 cluster / 4 district),
       295 members, all carrying `highlights`; Carson City fused from two districts into one of 33. The
       recalibrated review gate cut the human queue from 25 groups to 15 across both regions. Four open
-      questions remain in §7 — length bands, cluster position without a subject, the union facts_hash,
-      and an admin surface for a fused clip.
+      ✅ All four §7 questions RESEARCHED 2026-07-30 — see the spec. Headlines: reuse `REGISTER_LENGTH`
+      rather than adding a treatment axis (180 s ceiling corroborated by museum practice, Autio's 20k
+      stops, and AAA's finding that pure LISTENING is the low-workload baseline — duration isn't the
+      risk, NAME DENSITY is); a sorted hash-of-hashes for staleness; the admin surface belongs on the
+      existing POI sheet. ⚠ **The measurement split the problem: a DISTRICT cannot be a point trigger**
+      (46 members over ~2 km leave a ~1 km worst-member distance under every candidate position), so it
+      needs an AREA trigger — a new mode in @skipper/engine. **Decision needed: ship CLUSTER fusion only
+      (60 of 64 groups) and treat districts separately?** Recommended.
 - [ ] **5. `buildDrive` reads anchors; delete pick-one.** Orphans ~169 satellite clips —
       `sweep-orphans.ts` already handles that.
 

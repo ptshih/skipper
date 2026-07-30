@@ -51,20 +51,42 @@ in this design. The fail-closed grounding gate then applies unmodified.
 uninteresting), but permit only `highlights` to be NAMED. That asymmetry is new and the prompt must say
 it explicitly, or the model will name whatever it grounds on.
 
-### 3.3 Length band
+### 3.3 Length band — researched 2026-07-30
 
 Concatenation is not an option: Emerald Bay's three clips total 214 s and Stateline's five total 489 s,
 against a 180 s `DRIVE_MIN_GAP_SEC` and a 45 s `DRIVE_MAX_LAG_SEC`. A fused telling is **written to a
 band**, not assembled.
 
-Proposed, and explicitly NOT derived — pin these on the first listen:
+**⚠ Do NOT add a per-TREATMENT band.** An earlier draft proposed one, which would have introduced a
+second, competing length axis: `REGISTER_LENGTH` already bands by DELIVERY REGISTER (landscape 60/100,
+story 90/180, town 60/90, civic 70/110) with reasoning per register. A fused clip should take **its
+subject's register**, with the ceiling — not a new vocabulary.
 
-| treatment | target | max | shape |
-| --- | --- | --- | --- |
-| `cluster` | ~120 s | 180 s | names each highlight, one connective thread |
-| `district` | ~150 s | 180 s | names 2–3 landmarks, the rest as texture |
+**What the research actually says.** Three sources agree the ceiling is right and the target is the
+question:
 
-`lengthForRegister` is the existing seam.
+- Museum-guide practice: **60–90 s for most stops, up to ~180 s for a "hero object"**; conventional
+  audio tours run ~180 s per stop. A fused cluster IS the hero-object case.
+- This repo's own competitive work: Autio runs **2–3 min stories across 20,000+ stops** — the band is
+  validated at scale, and `competitive-research.md` already recommends staying in it.
+- Driving specifically (AAA cognitive-distraction work): **pure LISTENING is the low-workload baseline**,
+  explicitly benchmarked against audiobooks. The "longer messages reduce comprehension" finding is about
+  INSTRUCTIONAL audio requiring action, not narrative — it does not transfer to a story you just hear.
+
+**So duration is not the risk; NAME DENSITY is.** A 180 s telling naming 3 places is comfortable; a
+120 s telling naming 9 is a recital regardless of length. That is the same constraint §3.1 arrives at
+from the other direction, which is a good sign.
+
+Proposed rule, replacing the treatment band:
+
+```
+band   = lengthForRegister(subject's register, or 'story' when there is no subject)
+target = min(band.max, band.target + 20s per highlight beyond the first)
+max    = band.max          ← never exceeded; 180s is the researched ceiling
+```
+
+⚠ Still pin the *feel* on a listen. The research bounds it; it does not tell you whether four names in
+150 s sounds generous or rushed in this persona's voice.
 
 ### 3.4 Write
 
@@ -79,15 +101,40 @@ The `narrations_subject_xor` CHECK enforces poi-XOR-cluster; the unique index gi
 
 ## 4. Read paths
 
-### 4.1 A cluster needs a POSITION and a RADIUS
+### 4.1 Position + radius — measured 2026-07-30, and a DISTRICT can't be a point
 
-A cluster has N member coordinates and no coordinate of its own. Decide:
+Measured every candidate position against all 64 clusters, scored by worst member distance (lower =
+tighter centre):
 
-- **Position** — the `subject_poi_id`'s speakable anchor when a subject exists (36 of 67 clusters), else
-  the member closest to a through-road. ⚠ NOT the centroid: for the Stateline strip that is a car park.
-- **Radius** — must cover the group, so `max(memberDistanceFromPosition) + triggerRadiusForKind`, floored
-  at `ANCHORED_TRIGGER_RADIUS_M`. ⚠ Then re-check §"reachability": the drive selector now gates on the
-  radius the trigger will actually use, so a fat cluster radius changes which clusters are selectable.
+| candidate | mean worst-member distance |
+| --- | --- |
+| centroid | **240 m** |
+| medoid on a through-road | 342 m |
+
+No rule dominates per-cluster — for `Historic Carson City` the subject (783 m) beats the centroid
+(965 m); for the railroad museum the centroid (159 m) beats the subject (271 m). But the aggregate hides
+the finding, which is in the large rows:
+
+```
+Downtown Reno        46 members   centroid 1141 m   best any candidate  954 m
+Historic Carson City 33 members   centroid  965 m   best any candidate  783 m
+```
+
+**⚠ A DISTRICT cannot be a point trigger at all.** Its members span ~2 km, so ANY single point leaves a
+worst-member distance near a kilometre. Covering that needs a ~1 km radius — which fires most of a mile
+before arrival, and directly contradicts the reachability gate shipped in `buildDrive` (a stop is only
+selected if the route comes within its trigger radius). A district is somewhere you are INSIDE, which is
+the same shape argument that removed parks and ranges from the corpus.
+
+**Therefore two mechanisms, not one:**
+
+- **CLUSTER** — a point trigger works. Small clusters measure ~240 m worst-member. Position: the
+  subject's speakable anchor when one exists, else the **medoid** (the member minimising worst distance
+  to the others) preferring a through-road anchor. Radius: `worstMemberDistance + ANCHORED_TRIGGER_RADIUS_M`.
+- **DISTRICT** — needs an AREA trigger ("am I inside the members' bbox?"), not a proximity one. That is
+  a genuinely new trigger mode in `@skipper/engine`, and it is the single biggest unbudgeted piece of
+  phase 4. ⚠ If that is too much scope, the honest fallback is to ship CLUSTER fusion only and leave
+  districts as they are today — 4 districts vs 60 clusters, so most of the value lands either way.
 
 ### 4.2 A clustered member is NOT an active POI — SETTLED (founder, 2026-07-30)
 
@@ -119,12 +166,24 @@ step: fused audio in R2, and 214 member clips retired (§4.2).
 Sequence: `--apply` per region, preview first, and run `sweep-orphans` after — the corpus is currently at
 a clean 421 objects / 421 referenced / 0 orphans, so any drift is attributable to this run.
 
-## 6. Staleness
+## 6. Staleness — resolved 2026-07-30
 
-A fused clip is grounded on N sheets, so its `facts_hash` must hash the **union** of member sheets. If a
-single member's article moves, the fused clip is stale. The existing per-poi staleness comparison does
-not express this — it joins `narrations.facts_hash` to one `pois.facts_hash`. Needs extending, or fused
-clips are silently never marked stale.
+A fused clip grounds on N sheets, so one member's article moving makes it stale. The existing check joins
+`narrations.facts_hash` to ONE `pois.facts_hash` and cannot express that.
+
+**Rule:** a cluster narration's `facts_hash` is a hash over its members' hashes, ORDER-INDEPENDENT:
+
+```
+clusterFactsHash = sha256( members.map(p => p.facts_hash).filter(Boolean).sort().join(',') )
+```
+
+Sorting (rather than XOR) keeps it deterministic, collision-resistant, and debuggable — you can print the
+input. Membership itself is part of the identity: if a member is added or removed the set changes and the
+hash changes, which is correct, because the telling should be rewritten.
+
+The staleness query becomes a `GROUP BY cluster_id` computing the same aggregate and comparing. ⚠ Settle
+this BEFORE generating: retrofitting means recomputing hashes for all 64 clips, and until it exists fused
+clips are silently immortal — never stale, never regenerated, drifting away from their sources forever.
 
 ## 7. Open questions to settle before building
 
@@ -133,8 +192,11 @@ clips are silently never marked stale.
 1. **§3.3** — the length bands are guesses; pin them on a listen.
 2. **§4.1** — cluster position when there is no subject (31 of 67 clusters).
 3. **§6** — how the union hash plugs into the existing staleness join.
-4. **Admin** — the console shows grouping read-only; a fused clip needs a play/regenerate surface like
-   the per-POI Narration tab, or it is ungovernable.
+4. **Admin** — RESOLVED in shape, unbuilt: surface the fused clip on the EXISTING POI sheet rather than
+   building a `/clusters` page. Every member already renders its cluster on the Location tab, so a
+   "Cluster narration" block there (play / regenerate / release, mirroring the per-POI Narration tab)
+   needs no new navigation, no new Reference-page section, and is reachable from any of the 295 members.
+   A dedicated page only earns its keep once clusters need list-level operations.
 5. ✅ **CLEARED 2026-07-30** — the grouping was re-applied on the subset-of-words merge. Carson City is
    now ONE district of 33 (exactly the 20 + 13 that were split), so generation starts from a corpus with
    no duplicate districts. The recalibrated review gate also cut the human queue from 25 groups to 15
