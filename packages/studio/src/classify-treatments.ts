@@ -57,6 +57,21 @@ const DEFAULT_RADIUS_M = 600
  *  that happen to share a name. */
 const DISTRICT_MERGE_GAP_M = 3_000
 
+/** At or above this extent (km², Wikidata P2046) a place is a CONTAINER — somewhere you are INSIDE for
+ *  an hour, not somewhere you pass — so it may be a group MEMBER but may never SEED one.
+ *
+ *  100 km² is chosen from the observed distribution, not from taste. It catches every real container in
+ *  two regions (Sierra Nevada 63118, Yosemite NP 3079, Yosemite Wilderness 2851, Lake Tahoe 502,
+ *  Desolation Wilderness 259, Mount Rose Wilderness 126) while leaving SETTLEMENTS seedable — Truckee 87,
+ *  Incline Village 56, South Lake Tahoe 43, Wawona 16 — because a town's centroid IS roughly the town and
+ *  makes a fine district centre. A higher bar (500) would let the roadless wildernesses back in.
+ *
+ *  ⚠ KNOWN GAP: only the big things claim P2046 at all (53/849 in Tahoe, 11/837 in Yosemite), which is
+ *  fine — a rock face like Half Dome correctly claims none. But `Carson Range` claims none EITHER and is
+ *  a genuine container, so this catches the worst offenders rather than all of them. Absence of a claim
+ *  means "unknown", never "small". */
+const CONTAINER_AREA_KM2 = 100
+
 /** Below this the model's own verdict is not trustworthy enough to persist unreviewed — every unstable
  *  group in the determinism runs scored at or under 0.85, and they were all 2-member pairs. Reported,
  *  not withheld: the operator sees them listed so they can be checked in the console. */
@@ -117,6 +132,7 @@ interface Row {
   lng: number
   rank: number
   sheet: string | null
+  seedable: boolean
 }
 interface Verdict {
   treatment: Treatment
@@ -228,14 +244,28 @@ async function main(): Promise<void> {
           + coalesce(length(${pois.facts} ->> 'extract'), 0)
         )`,
         sheet: sql<string | null>`left(${pois.factSheet}::text, 180)`,
+        areaKm2: pois.areaKm2,
       })
       .from(pois)
       .where(and(...inBbox, isNull(pois.excludedReason), sql`(
         ${pois.facts} ->> 'extract' is not null
         or (jsonb_typeof(${pois.factSheet}) = 'array' and jsonb_array_length(${pois.factSheet}) > 0)
       )`))
-  ).map((r) => ({ ...r, rank: Number(r.rank) }))
+  ).map((r) => ({
+    ...r,
+    rank: Number(r.rank),
+    // A container may join a group but never define one — see CONTAINER_AREA_KM2. Null area means
+    // "Wikidata claims none", which for a POI means small-or-unknown, so it stays seedable.
+    seedable: !(r.areaKm2 != null && r.areaKm2 >= CONTAINER_AREA_KM2),
+  }))
 
+  const blocked = rows.filter((r) => !r.seedable)
+  if (blocked.length) {
+    console.log(
+      `\n${blocked.length} container(s) barred from SEEDING (still joinable as members): ` +
+        blocked.slice(0, 6).map((b) => b.name).join(' · ') + (blocked.length > 6 ? ` +${blocked.length - 6}` : ''),
+    )
+  }
   const groups = leaderGroups(rows, radiusM)
   const multi = groups.filter((g) => g.length > 1)
   console.log(

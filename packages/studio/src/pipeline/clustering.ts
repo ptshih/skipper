@@ -19,6 +19,16 @@ export interface Groupable {
   lat: number
   lng: number
   rank: number
+  /** Whether this item may ANCHOR a group. Default true. A `false` item is still absorbed as a MEMBER —
+   *  it just never defines a group's centre.
+   *
+   *  ⚠ This exists because ranking by facts strength (correctly) promotes big famous entities, and the
+   *  biggest are CONTAINERS: a mountain range and a national park have enormous articles, so they
+   *  outranked the places inside them and became seeds. Measured on Yosemite: the `Half Dome` group was
+   *  seeded by `Yosemite National Park` and `Glacier Point` by the `Sierra Nevada` (63,118 km²). The
+   *  subject resolver still recovered the right subject, but a seed's coordinate defines the group's
+   *  CENTRE, and a park's nominal centroid is arbitrary relative to anything you can see. */
+  seedable?: boolean
 }
 
 const R_EARTH = 6_371_008.8
@@ -46,7 +56,7 @@ export function leaderGroups<T extends Groupable>(items: readonly T[], radiusM: 
   const taken = new Set<string>()
   const out: T[][] = []
   for (const anchor of pool) {
-    if (taken.has(anchor.id)) continue
+    if (taken.has(anchor.id) || anchor.seedable === false) continue
     taken.add(anchor.id)
     const members: T[] = [anchor]
     for (const c of pool) {
@@ -58,6 +68,9 @@ export function leaderGroups<T extends Groupable>(items: readonly T[], radiusM: 
     }
     out.push(members)
   }
+  // A non-seedable item that nothing absorbed still has to go SOMEWHERE — dropping it here would delete
+  // it from the corpus silently, which is a different and worse bug than mis-seeding. It stands alone.
+  for (const leftover of pool) if (!taken.has(leftover.id)) out.push([leftover])
   return out
 }
 

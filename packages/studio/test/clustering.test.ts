@@ -38,6 +38,29 @@ describe('leaderGroups', () => {
   })
 })
 
+describe('leaderGroups — seedable', () => {
+  // The Yosemite failure: `Yosemite National Park` (a container with a huge article) outranked
+  // `Half Dome` and seeded the group, so the group formed around a park's arbitrary centroid.
+  test('a non-seedable item never anchors, but is still absorbed as a member', () => {
+    const container = { ...at('park', 0, 99), seedable: false }
+    const stop = at('dome', 0.5, 5)
+    const groups = leaderGroups([container, stop], 300)
+    expect(groups).toHaveLength(1)
+    expect(groups[0]![0]!.id).toBe('dome') // the stop anchors despite the far lower rank
+    expect(groups[0]!.map((m) => m.id).sort()).toEqual(['dome', 'park'])
+  })
+
+  // Dropping an unabsorbed container would delete it from the corpus silently — a worse bug than
+  // mis-seeding, and a much harder one to notice.
+  test('a non-seedable item with no neighbour still stands alone rather than vanishing', () => {
+    const lone = { ...at('range', 0, 99), seedable: false }
+    const far = at('other', 400, 1)
+    const groups = leaderGroups([lone, far], 300)
+    expect(groups.flat().map((m) => m.id).sort()).toEqual(['other', 'range'])
+    expect(groups.find((g) => g.some((m) => m.id === 'range'))).toHaveLength(1)
+  })
+})
+
 describe('titleKey', () => {
   test('folds case, punctuation and whitespace', () => {
     expect(titleKey('Downtown Reno')).toBe(titleKey('downtown  reno!'))

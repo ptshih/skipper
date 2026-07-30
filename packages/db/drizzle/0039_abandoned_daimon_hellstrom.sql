@@ -1,0 +1,1 @@
+ALTER TABLE "pois" ADD COLUMN "area_km2" double precision;

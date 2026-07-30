@@ -283,6 +283,53 @@ class of bug only a second region surfaces, which is the argument for having run
 rank with no evidence columns. Both regions should be re-applied ONCE, after the containing-entity seed
 question is decided — re-applying now would bake in a known-suboptimal grouping.
 
+### 4e. Containers can't seed a group — 3f resolved 2026-07-29 `[measured]`
+
+The failure §4d introduced: ranking by facts strength (correctly) promotes big famous entities, and the
+biggest are CONTAINERS. `Half Dome`'s group was seeded by **Yosemite National Park**; `Glacier Point`'s by
+the **Sierra Nevada**. A seed's coordinate defines the group's centre, and a park's nominal centroid is
+arbitrary relative to anything you can see.
+
+**Nothing we already stored could separate a container from a stop.** Measured:
+
+| | `kind` | article chars |
+| --- | --- | --- |
+| Sierra Nevada *(container)* | `mountain` | 11,621 |
+| **Half Dome** *(good stop)* | `mountain` | 10,138 |
+| Carson Range *(container)* | `mountain` | 1,281 |
+
+Same kind, overlapping lengths, containers at both ends of the length range. Name patterns fail too —
+"Sierra Nevada" gives nothing away. Containment is SEMANTIC.
+
+**The signal is EXTENT, and Wikidata states it: P2046.** A container is somewhere you are INSIDE for an
+hour, not somewhere you pass, and that is exactly what area measures. `backfill-poi-extent.ts` (free,
+WDQS, same endpoint discovery already uses) populates `pois.area_km2`; a POI at or above
+**`CONTAINER_AREA_KM2` = 100** may be a group MEMBER but never a SEED (`Groupable.seedable`).
+
+The threshold comes from the observed distribution, not taste. All 11 barred corpus-wide:
+
+```
+183506  Diocese of Reno          502  Lake Tahoe            388  Ferguson Fire
+ 63118  Sierra Nevada            456  Emigrant Wilderness   259  Desolation Wilderness
+  3079  Yosemite National Park   407  Carson City, NV       126  Mount Rose Wilderness
+  2851  Yosemite Wilderness      519  Hoover Wilderness
+```
+
+…while SETTLEMENTS stay seedable (Truckee 87, Incline Village 56, South Lake Tahoe 43, Wawona 16), because
+a town's centroid IS roughly the town and makes a fine district centre. A 500 km² bar would let the
+roadless wildernesses back in. `Diocese of Reno` (an administrative jurisdiction) and `Ferguson Fire` (a
+wildfire) are bonus catches — neither is a place you stop.
+
+**Verified on Yosemite:** `Half Dome` now seeds its own group with Yosemite NP absorbed as a member;
+`Glacier Point` seeds from the Firefall with Sierra Nevada absorbed. Treatment split unchanged (31/0/5).
+
+⚠ **Two honest limits.** (1) Only the big things claim P2046 at all — 53/849 in Tahoe, 11/837 in Yosemite —
+which is correct (a rock face claims no area), but `Carson Range` claims none EITHER and is a genuine
+container, so this catches the worst offenders, not all of them. Absence of a claim means "unknown", never
+"small". (2) A barred container is still a MEMBER and could still be a SOLO stop elsewhere; whether
+"Yosemite National Park" should be a stop at all is the same question as the pruned highways, and is not
+answered here.
+
 ## 5. Entity model — `poi_clusters` (revised 2026-07-29 after an adversarial pass)
 
 A group is **its own row**. `poi_clusters` carries `treatment` ('cluster'|'district'), `title`, and a

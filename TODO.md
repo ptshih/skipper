@@ -72,14 +72,21 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
 - [x] **3e. Region-agnosticism TESTED on Yosemite, $0.47** — 31 CLUSTER / **0 DISTRICT** / 5 SOLO with
       zero tuning. Zero districts is correct: a national park has no downtown. Subject resolution is
       BETTER there (22/31 vs Tahoe's 13/36). See `docs/ideas/poi-legibility-layer.md` §4d.
-- [ ] **3f. ⚠ Containing entities become group SEEDS — the new failure mode facts-ranking introduced.**
-      Huge articles outrank the specific places inside them: the `Half Dome` group is seeded by
-      **Yosemite National Park**, `Glacier Point` by the **Sierra Nevada**. `pickSubject` recovers the
-      right subject, but the SEED decides group COMPOSITION, and a park centroid absorbing whatever is
-      within 600 m of it is arbitrary. A park and a mountain range are containers, not stops — seeds
-      likely need a size/containment exclusion. **Decide this BEFORE re-applying**: Tahoe's stored
-      grouping is still the old clip-length rank with no evidence columns, so both regions want one
-      clean re-apply after this is settled, not two.
+- [x] **3f. Containers can't seed — FIXED 2026-07-29.** Nothing already stored separated a container from
+      a stop (`Sierra Nevada` and `Half Dome` share `kind='mountain'` with article lengths within 15%;
+      `Carson Range` is a container with a SHORT article). The signal is EXTENT: new
+      `backfill-poi-extent.ts` (free, WDQS P2046) fills `pois.area_km2`, and a POI ≥ 100 km² may be a
+      group MEMBER but never a SEED. 11 barred corpus-wide (Sierra Nevada, Yosemite NP, Lake Tahoe,
+      the wildernesses, plus `Diocese of Reno` and `Ferguson Fire` as bonus catches); settlements stay
+      seedable. Verified: Half Dome now seeds its own group. ⚠ `Carson Range` claims no area so it is NOT
+      caught — worst offenders, not all. See `docs/ideas/poi-legibility-layer.md` §4e.
+- [ ] **3g. Should a CONTAINER be a stop at all?** A barred container is still a member, and could still
+      be a SOLO stop. "Yosemite National Park" as a drive stop is the same problem as the pruned numbered
+      highways — you are inside it for the whole drive, so no point trigger is meaningful. Decide whether
+      `area_km2 >= CONTAINER_AREA_KM2` should also feed `prune-corpus`.
+- [ ] **3h. Re-apply BOTH regions once.** Tahoe's stored grouping still reflects the pre-facts-strength
+      rank with no evidence columns and no container bar; Yosemite has never been applied. One clean
+      `--apply` per region (~$1.20 total) after 3g is decided.
 - [ ] **4. Fused generation.** One telling per cluster, written to a cluster length band — NOT
       concatenated (Emerald Bay's 3 = 214 s, Stateline's 5 = 489 s vs a 180 s min-gap).
 - [ ] **5. `buildDrive` reads anchors; delete pick-one.** Orphans ~169 satellite clips —

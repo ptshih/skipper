@@ -62,3 +62,4 @@ burns GCP credits). So they share one safety contract.
 | `snap-speakable-anchors.ts` | MUTATES DB (no spend — OSM) | dry-run | ✅ |
 | `prune-corpus.ts` | MUTATES DB (flags only; never deletes) | dry-run | ✅ (has `--restore`) |
 | `classify-treatments.ts` | SPENDS $ (~$0.7/region) + MUTATES DB | dry-run | ✅ (has `--clear`) |
+| `backfill-poi-extent.ts` | MUTATES DB (no spend — WDQS) | dry-run | ✅ |

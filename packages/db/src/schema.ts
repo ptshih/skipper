@@ -282,6 +282,15 @@ export const pois = pgTable(
     // than a delete because these rows may already own generated audio (deleting orphans paid R2 bytes).
     // Read paths filter on `excluded_reason IS NULL`. See docs/ideas/poi-legibility-layer.md §4b.
     excludedReason: text('excluded_reason'),
+    // Wikidata P2046 (area) in km², or null when the entity claims none. The signal that separates a
+    // CONTAINER from a STOP: extent. A national park or a mountain range is something you are INSIDE for
+    // an hour, not something you pass, so it must never seed a grouping — and nothing else we store can
+    // tell the two apart. Measured: `Sierra Nevada` and `Half Dome` share `kind = 'mountain'` and have
+    // article lengths within 15% of each other (11.6k vs 10.1k chars), while `Carson Range` is a
+    // container with a SHORT article. Kind and prose length both fail; area doesn't.
+    // Populated by `backfill-poi-extent.ts` (free, WDQS). Null is the common case and means "no claim",
+    // never "small". See docs/ideas/poi-legibility-layer.md §4e.
+    areaKm2: doublePrecision('area_km2'),
     // Which legibility GROUP this place belongs to, or null when it stands alone (most of them).
     // See `poiClusters` below for why the group is its own row rather than three columns hung off an
     // "anchor" poi. ON DELETE SET NULL: dropping a cluster returns its members to standing alone.
