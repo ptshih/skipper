@@ -4,11 +4,16 @@
 > Skipper's intelligence… a moat that prevents anyone with access to an LLM and Wikidata from
 > replicating us"*, and as the thing that makes **region N+1 cheap and accurate**. Grew out of the
 > `TODO.md` ask "merging co-located POIs" (Camp Richardson / Emerald Bay) plus the follow-on ask to
-> ensure a POI sits close enough to a **major road** to trigger well. **NOT greenlit — no build.**
-> Every number below is `[measured]` against the live 460-clip Tahoe corpus and the 3 saved drives on
-> 2026-07-29, reproducible from the queries described in §2. **§4's classifier was VALIDATED the same
-> day by a read-only dry run over the whole corpus — founder-approved, $0.82. It works; two fixable
-> problems fell out (§4a).** Recommendation: build §5 Phase 1 first (cheap, no schema, useful now).
+>
+> **PHASES 1–3 ARE BUILT AND APPLIED (2026-07-29).** Road class + the linear-feature prune shipped; the
+> silence bug §2 hinted at turned out to be a threshold inconsistency and is FIXED in `buildDrive`; the
+> treatment classifier is live and has grouped Tahoe (§4c). Phase 4 — fused GENERATION, the first
+> irreversible, audio-spending step — is **NOT greenlit**. Everything written so far is inert metadata
+> that `--clear` undoes.
+>
+> Every number below is `[measured]` against the live Tahoe corpus and the 3 saved drives on 2026-07-29.
+> Read §4c before phase 4: 25 groups scored under 0.85 confidence and the model wants to DROP 68 members,
+> neither of which has been reviewed.
 
 ## 1. The thesis
 
@@ -195,6 +200,38 @@ once and persist** (§5 already requires this), and route 2-member groups under 
 ⚠ **Clustering must be corpus-level and precomputed, never per-route.** Audio is synthesized ahead of
 time and a merged telling is one clip; if cluster membership depended on the route, you'd need audio
 per route, which is the thing V2 exists not to do.
+
+### 4c. Phase 3 BUILT + applied — 2026-07-29 `[measured]`
+
+`classify-treatments.ts` (+ pure `pipeline/clustering.ts`, 9 unit tests) is live and has been run over
+Tahoe. 430 narrated POIs → 232 groups, 55 with 2+ members, **34 CLUSTER / 4 DISTRICT / 15 SOLO**,
+~$0.7. Applied: **38 anchors + 181 satellites**. It writes ONLY the grouping — no audio, nothing a
+rider hears — which is what makes it safe to look at before paying for phase 4. Undo is `--apply --clear`.
+
+Three columns rather than the one this doc originally proposed: phase 4 needs to know WHICH places fuse
+(`cluster_anchor_id`), HOW (`cluster_treatment` — cluster vs district generate differently), and WHAT TO
+CALL the place (`cluster_title`). Title and treatment come from the model, so re-deriving them means
+paying again — they are persisted for the same reason the treatment is.
+
+**The district merge (§4b problem 2) is solved, and the first fix was wrong.** Merging by exact folded
+title left downtown Reno split in two, because the classifier returned "Downtown Reno and the Arch" (33)
+and "Downtown Reno" (10) — not equal. Whole-word CONTAINMENT fuses them into one 43-member district and
+takes districts 6 → 4, while still refusing to fuse "Downtown Reno" with "Newlands Historic
+Neighborhood". The four districts are now clean: downtown Reno (43), Carson City (28), Newlands (16),
+Virginia City (15).
+
+**Still open, and worth knowing before phase 4:**
+
+- **25 of 55 groups score under 0.85 confidence** — reported, not withheld. They are overwhelmingly the
+  2–4 member groups, where §4b already showed confidence naturally sits at 0.72–0.85. Treat the number
+  as "worth a look", not "45% broken", but do look before generating.
+- **CLUSTER groups of 7–9 members exist** (Stateline's casino row = 9, UNR = 8, Minden = 7), which
+  reads like a violation of the prompt's own "seven or more → DISTRICT" rule. It isn't: the model applies
+  the count to the NAMEABLE members after its `drop` list, and Stateline drops 4 of 9 leaving 5. Defensible,
+  but it means phase 4 must generate from `highlights`, NOT from raw membership, or those tellings run long.
+- **68 members the model would DROP entirely** are reported but NOT applied — a content decision, kept
+  out of a grouping pass on purpose.
+- The 600 m radius is still not derived (§8).
 
 ## 5. Entity model
 

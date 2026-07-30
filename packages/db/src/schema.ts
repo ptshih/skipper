@@ -12,6 +12,7 @@ import {
   unique,
   index,
   check,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 
@@ -281,6 +282,26 @@ export const pois = pgTable(
     // than a delete because these rows may already own generated audio (deleting orphans paid R2 bytes).
     // Read paths filter on `excluded_reason IS NULL`. See docs/ideas/poi-legibility-layer.md §4b.
     excludedReason: text('excluded_reason'),
+    // ── Legibility grouping (docs/ideas/poi-legibility-layer.md §4/§5) ────────────────────────────
+    // A driver experiences Emerald Bay as ONE stop, not as Vikingsholm + Eagle Falls + Eagle Lake.
+    // These three columns record WHICH places fuse, HOW, and what to call the result — decided ONCE at
+    // corpus-build time by `classify-treatments.ts`, never per-route (audio is frozen ahead of time, so
+    // route-dependent membership would need audio per route).
+    //
+    // A SATELLITE points at its anchor; an ANCHOR has this NULL and carries the treatment + title
+    // instead. Self-referencing, ON DELETE SET NULL so deleting an anchor orphans its satellites into
+    // independent places rather than dangling. Nullable everywhere: the overwhelming majority of POIs
+    // are their own stop and carry none of this.
+    clusterAnchorId: uuid('cluster_anchor_id').references((): AnyPgColumn => pois.id, { onDelete: 'set null' }),
+    // On the ANCHOR only. `'cluster'` = few enough members to NAME EACH in one telling (Emerald Bay,
+    // the Stateline strip). `'district'` = an area you drive THROUGH with more landmarks than a telling
+    // can name, so the clip names two or three and lets the rest be background (downtown Reno's 33).
+    // Plain text, not a pgEnum: this is internal corpus metadata that never crosses the wire, so it owes
+    // no Zod counterpart (unlike the enums `lint:enums` keeps in lockstep).
+    clusterTreatment: text('cluster_treatment'),
+    // On the ANCHOR only — what a driver would CALL this place ("Emerald Bay", "downtown Reno"). The
+    // classifier's own words, persisted because re-deriving it means paying for the model again.
+    clusterTitle: text('cluster_title'),
     summary: text('summary'),
     facts: jsonb('facts').$type<PoiFacts>(),
     // The curated, verbatim narration sheet (the corpus `enrich` step's output) — its OWN typed

@@ -188,6 +188,43 @@ export function Location({ poiId, poiLat, poiLng }: { poiId: string; poiLat?: nu
         </div>
       </div>
 
+      {/* How this place is GROUPED for telling. Read-only: membership is decided in bulk by
+          `classify-treatments` (one model call per group), not per-POI in the console — a hand edit here
+          would be silently overwritten by the next classification re-baseline. */}
+      {data?.cluster && (
+        <div className="flex flex-col gap-2 border-t pt-4">
+          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Grouping</div>
+          {data.cluster.role === 'anchor' ? (
+            <>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="secondary">{data.cluster.treatment}</Badge>
+                <span className="text-xs font-semibold">{data.cluster.title ?? '(untitled)'}</span>
+                <span className="text-xs text-muted-foreground">
+                  speaks for {data.cluster.members.length} other place{data.cluster.members.length === 1 ? '' : 's'}
+                </span>
+              </div>
+              {data.cluster.members.length > 0 && (
+                <div className="text-xs leading-relaxed text-muted-foreground">
+                  {data.cluster.members.map((m) => m.name).join(' · ')}
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <Badge variant="outline">satellite</Badge>
+              <span className="text-muted-foreground">spoken for by</span>
+              <span className="font-semibold">{data.cluster.anchorName}</span>
+              {data.cluster.title && <span className="text-muted-foreground">— “{data.cluster.title}”</span>}
+            </div>
+          )}
+          <div className="text-xs leading-relaxed text-muted-foreground">
+            Grouping is recorded but <strong className="text-foreground">not yet acted on</strong> — every
+            place still has its own clip until the fused tellings are generated. Change it by re-running
+            <span className="font-mono"> classify-treatments</span>, not here.
+          </div>
+        </div>
+      )}
+
       {/* Eligibility as a STOP — lives beside the anchor because both answer the same operator
           question: will this place trigger properly, and will it be picked at all? */}
       <div className="flex flex-col gap-2 border-t pt-4">

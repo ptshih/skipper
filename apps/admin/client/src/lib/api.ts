@@ -171,6 +171,13 @@ export interface PoiCorrections {
   /** Non-null ⇒ HIDDEN from new drives and from roam. Audio is untouched, so clearing it restores the
    *  place with no regeneration. */
   excludedReason: string | null
+  /** How this poi is GROUPED for telling. Null = it stands alone (most of them). An ANCHOR speaks for
+   *  its members; a SATELLITE is spoken about by its anchor. INERT until phase 4 fuses the audio —
+   *  today every member still has its own clip. */
+  cluster:
+    | { role: 'anchor'; treatment: string; title: string | null; members: { id: string; name: string }[] }
+    | { role: 'satellite'; anchorId: string; anchorName: string; treatment: string | null; title: string | null }
+    | null
 }
 // The discriminated POST body for /admin/pois/:id/corrections.
 export type CorrectionBody =

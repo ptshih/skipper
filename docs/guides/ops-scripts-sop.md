@@ -61,3 +61,4 @@ burns GCP credits). So they share one safety contract.
 | `rename-roam-prefix.ts` | MUTATES DB + DELETES BYTES | dry-run | ✅ |
 | `snap-speakable-anchors.ts` | MUTATES DB (no spend — OSM) | dry-run | ✅ |
 | `prune-corpus.ts` | MUTATES DB (flags only; never deletes) | dry-run | ✅ (has `--restore`) |
+| `classify-treatments.ts` | SPENDS $ (~$0.7/region) + MUTATES DB | dry-run | ✅ (has `--clear`) |

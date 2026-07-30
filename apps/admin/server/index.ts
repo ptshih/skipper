@@ -1210,18 +1210,53 @@ interface CorrectionsPayload {
   speakableRoadClass: string | null
   /** Non-null ⇒ hidden from NEW drives + roam (audio kept; saved drives keep the stop). */
   excludedReason: string | null
+  /** How this poi is GROUPED for telling (docs/ideas/poi-legibility-layer.md). Null when it stands
+   *  alone, which is most of them. An ANCHOR speaks for the group; a SATELLITE is spoken about by its
+   *  anchor. Written by `classify-treatments`; INERT until phase 4 fuses the audio. */
+  cluster:
+    | { role: 'anchor'; treatment: string; title: string | null; members: { id: string; name: string }[] }
+    | { role: 'satellite'; anchorId: string; anchorName: string; treatment: string | null; title: string | null }
+    | null
 }
 
 // Assemble the corrections payload for one poi: its (source, source_id)-keyed override rows
 // (newest first) + its speakable anchor.
 async function correctionsForPoi(poi: {
+  id?: string
   source: 'wikipedia' | 'wikidata'
   sourceId: string
   speakableLat: number | null
   speakableLng: number | null
   speakableRoadClass: string | null
   excludedReason: string | null
+  clusterAnchorId?: string | null
+  clusterTreatment?: string | null
+  clusterTitle?: string | null
 }): Promise<CorrectionsPayload> {
+  // Resolve the grouping into something the console can render without a second round-trip: an anchor
+  // needs the names it speaks for, a satellite needs the name of the poi that speaks for it.
+  let cluster: CorrectionsPayload['cluster'] = null
+  if (poi.clusterAnchorId) {
+    const [a] = await db
+      .select({ name: pois.name, treatment: pois.clusterTreatment, title: pois.clusterTitle })
+      .from(pois)
+      .where(eq(pois.id, poi.clusterAnchorId))
+      .limit(1)
+    cluster = {
+      role: 'satellite',
+      anchorId: poi.clusterAnchorId,
+      anchorName: a?.name ?? '(missing anchor)',
+      treatment: a?.treatment ?? null,
+      title: a?.title ?? null,
+    }
+  } else if (poi.clusterTreatment && poi.id) {
+    const members = await db
+      .select({ id: pois.id, name: pois.name })
+      .from(pois)
+      .where(eq(pois.clusterAnchorId, poi.id))
+      .orderBy(pois.name)
+    cluster = { role: 'anchor', treatment: poi.clusterTreatment, title: poi.clusterTitle ?? null, members }
+  }
   const rows = await db
     .select({
       find: poiOverrides.find,
@@ -1255,6 +1290,7 @@ async function correctionsForPoi(poi: {
     // Which OSM road the anchor was snapped to. The operator's question this answers: "why does this
     // stop trigger from nowhere?" — a `residential`/`unclassified` anchor is on a real road that the
     // drive never takes. Written by snap-speakable-anchors; null for a hand-placed or un-snapped anchor.
+    cluster,
     speakableRoadClass: poi.speakableRoadClass,
     // Non-null ⇒ this poi is HIDDEN from new drives and from roam. Surfaced here because it is
     // otherwise invisible: the API just stops returning the place, with nothing in the console saying so.
@@ -1295,12 +1331,16 @@ app.get('/admin/pois/:id/corrections', async (c) => {
   const poi = (
     await db
       .select({
+        id: pois.id,
         source: pois.source,
         sourceId: pois.sourceId,
         speakableLat: pois.speakableLat,
         speakableLng: pois.speakableLng,
         speakableRoadClass: pois.speakableRoadClass,
         excludedReason: pois.excludedReason,
+        clusterAnchorId: pois.clusterAnchorId,
+        clusterTreatment: pois.clusterTreatment,
+        clusterTitle: pois.clusterTitle,
       })
       .from(pois)
       .where(eq(pois.id, id))
@@ -1338,6 +1378,9 @@ app.post('/admin/pois/:id/corrections', async (c) => {
         speakableLng: pois.speakableLng,
         speakableRoadClass: pois.speakableRoadClass,
         excludedReason: pois.excludedReason,
+        clusterAnchorId: pois.clusterAnchorId,
+        clusterTreatment: pois.clusterTreatment,
+        clusterTitle: pois.clusterTitle,
       })
       .from(pois)
       .where(eq(pois.id, id))
@@ -1482,6 +1525,10 @@ app.post('/admin/pois/:id/corrections', async (c) => {
       speakableLng: fresh?.speakableLng ?? null,
       speakableRoadClass: fresh?.speakableRoadClass ?? null,
       excludedReason: fresh?.excludedReason ?? null,
+      id,
+      clusterAnchorId: poi.clusterAnchorId,
+      clusterTreatment: poi.clusterTreatment,
+      clusterTitle: poi.clusterTitle,
     }),
   )
 })

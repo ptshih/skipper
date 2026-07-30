@@ -53,9 +53,14 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
       of 460 are anchored — real exposure is 14 POIs). What IS broken: `drive-select.ts` `better()`
       compares `null !== null`, so the variety rule no-ops for the built world. Needs a coarse
       built-world category, NOT a `kind` backfill — a design question, unscoped.
-- [ ] **3. Treatment classifier** → `pois.cluster_anchor_id`. Leader (non-chaining) grouping, then ONE
-      Opus call per candidate group to pick SOLO / CLUSTER / DISTRICT. ~78 groups per region, a few
-      dollars, once, at corpus-build time. ⚠ Must be precomputed, NEVER per-route (audio is frozen).
+- [x] **3. Treatment classifier — BUILT + APPLIED 2026-07-29.** `classify-treatments.ts` + pure
+      `pipeline/clustering.ts` (9 tests). Tahoe: 430 POIs → 34 CLUSTER / 4 DISTRICT / 15 SOLO, ~$0.7,
+      38 anchors + 181 satellites written. Migration 0035 adds `cluster_anchor_id` / `cluster_treatment`
+      / `cluster_title`. INERT — writes no audio; undo is `--apply --clear`. Admin Location tab shows the
+      grouping read-only. District merge solved via whole-word title CONTAINMENT (exact match left
+      downtown Reno split 33/10). See `docs/ideas/poi-legibility-layer.md` §4c.
+- [ ] **3b. Review the 25 low-confidence groups + the 68 suggested DROPs** before phase 4 spends on
+      fused audio. Both are reported by the CLI and visible per-POI in admin; neither is applied.
 - [ ] **4. Fused generation.** One telling per cluster, written to a cluster length band — NOT
       concatenated (Emerald Bay's 3 = 214 s, Stateline's 5 = 489 s vs a 180 s min-gap).
 - [ ] **5. `buildDrive` reads anchors; delete pick-one.** Orphans ~169 satellite clips —
