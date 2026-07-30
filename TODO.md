@@ -446,60 +446,40 @@ the safe direction; the reverse is what gets rejected.
 Probably NO change needed: the **subtitle** is deliberately geography-free (`Scenic Drives & Local
 History`), which is the entire reason it was written that way — it survives new regions untouched.
 
-## Content + LLM-discovery marketing op — kick off during App Store review (founder ask 2026-07-24)
+## LLM answer-discovery (GEO/AEO) — research DONE, the cheap moves SHIPPED
 
-Dead-time play: App Store review is idle builder-time, and **distribution is the project's named
-UNSOLVED existential question** — `docs/research/autio-content-moat.md` §"the honest hole" says it
-outright ("acquisition is the thing still to actually solve"), and Detour "died beloved, no
-distribution" (`docs/research/competitive-research.md`). Content compounds while we wait, so start now.
+The research pass and the two cheap builds landed 2026-07-28 (`c286f29`, `a9f6474`). Verdict, evidence
+and per-claim source-quality labels live in `docs/ideas/llm-discovery-marketing.md` — read that, not a
+summary of it.
 
-⚠ **This must NOT become "rebuild Autio's SEO factory."** That same doc is a founder-blessed DON'T on
-exactly that: their comparison/listicle machine is a **trap** ("in a comparison table, breadth wins and
-charm has no cell" — 25k stories > our ~19 stops "by construction"), and out-publishing it plays FOR
-their niche-subscription plateau, not past it. CLAUDE.md's charm-not-scale + the doc's "refuse the
-category" say don't fight on the breadth grid. So "match/rival Shaka + Autio" = match their *presence
-and polish*, NEVER their breadth-comparison content.
+The short version, so nobody re-opens the expensive half: the founder premise was **half right**. The
+answer surface genuinely is not the breadth/comparison grid, and entity legibility was worth the hour.
+But the big build — programmatic per-POI pages generated from our own corpus — is **dead on the merits,
+not on cost**: our corpus is downstream of Wikipedia, Wikipedia is the single most-cited source in that
+surface, and we cannot out-cite our own supplier with a CC BY-SA-encumbered restatement of it.
 
-**The doctrine-safe wedge (and the real point of the founder ask): LLM answer-discovery (GEO/AEO).**
-When a rider asks ChatGPT/Gemini/Claude "what's a good audio tour for driving around Lake Tahoe?", the
-model SYNTHESIZES an entity-grounded answer — it is NOT the breadth grid where 25k>19 wins. A
-**region-deep character companion, a category of one**, can be surfaced there on merit, because the
-signal is entity presence + citable structured facts — exactly the asset we already own and they don't:
-- Our corpus is **Wikidata/Wikipedia-grounded** (`pois` deduped by QID, `pois.fact_sheet`, `narrations`)
-  — real, sourced, structured facts, with **CC BY-SA attribution already frozen** per the CLAUDE.md
-  invariant. That is the raw material LLMs cite; Autio's celebrity-voice catalog is opaque audio a model
-  can't read.
-- So the honest, uncopyable positioning ("category of one," region-honest, one continuous character —
-  `autio-content-moat.md` §"what this steers") IS also the GEO-optimal one. For once the strategy and
-  the discovery channel point the same way.
+- ✅ **A — app entity JSON-LD.** `MobileApplication` + `sameAs` in `apps/site/src/layouts/Base.astro`.
+      Bought because "Skipper" collides with a cluster of *boating* apps in entity space, and being
+      unresolvable is a mechanical cost that refusing-the-category doesn't cover. ⚠ `sameAs` /
+      `installUrl` stay omitted until `APP_STORE_URL` is set post-approval — pointing them at a 404
+      would be worse than omitting. Tracked in `docs/guides/app-store-submission.md` §13, not here.
+- ✅ **B — an answer-shaped self-description page.** `apps/site/src/pages/about.astro`. A
+      *self-description* (who it's for, where it works, what it costs, what it does NOT cover), never a
+      comparison. ⚠ Do not write "Skipper vs Shaka Guide" — our honest Tahoe-only limits make that a
+      table we LOSE, which is exactly `autio-content-moat.md`'s trap.
+- ⛔ **C — naming AI crawlers in `robots.txt`: SKIPPED ON PURPOSE.** A functional no-op (the blanket
+      `Allow: /` already permits every one of them) plus a real drift footgun. Don't "fix" this.
+- 🧊 **D — programmatic corpus→web pages: SHELVED** on the merits, see above.
+- [ ] **E — off-domain presence: FOUNDER-OWNED, unstarted, free half only.** ⚠ The observed pass killed
+      the Reddit plan *for this vertical*: the queries a rider actually asks return OTA/marketplace
+      listings (Viator, TripAdvisor, even a Marriott white-label) — **zero Reddit threads, zero Autio,
+      zero Skipper**. The cross-vertical "Reddit is ~40% of AI citations" stat is someone else's
+      average. The high-return move here is becoming a marketplace supplier: business development, not
+      engineering, and it collides with the free-app + credits model. Flagged, not recommended.
 
-FIRST STEP is RESEARCH, not building (founder doctrine: validate ROI + pre-mortem before infra;
-brainstorms land in `docs/ideas/` first — the idea→spec cadence). GEO best-practice moves fast and my
-training is stale — ground it in current sources and cite.
-
-- [ ] **Strategy pass → `docs/ideas/llm-discovery-marketing.md`.** Research current GEO/AEO tactics
-      (schema.org structured data, entity SEO, the `llms.txt` proposal's real adoption, WHICH sources
-      the big models actually retrieve/cite, Reddit/forum presence), pre-mortem, ROI. Reconcile with
-      `autio-content-moat.md` (refuse-the-category) so we build the answer-discovery wedge, NOT a
-      comparison factory. Founder greenlight promotes it to a spec + backlog work.
-
-Concrete candidates the research pass should size (do NOT build until greenlit — several touch the live
-corpus and want a design/ROI call):
-- **AI-crawler posture in `apps/site/public/robots.txt`.** Today it's blanket `Allow: /` (so GPTBot /
-  Google-Extended / ClaudeBot / PerplexityBot are already permitted) — since we WANT discovery, keep it
-  open; consider naming them explicitly + confirm the sitemap covers any new content pages.
-- **Structured data on skipper.fm** (JSON-LD: `TouristAttraction` / `TouristTrip` / `AudioObject`) so the
-  entity "Skipper — Lake Tahoe driving companion" is machine-legible. `apps/site` is static Astro.
-- **Programmatic region/POI content pages built FROM the corpus we already own** — a "Lake Tahoe driving
-  audio tour" hub + per-POI story pages (carrying the required CC BY-SA credit). The corpus→web lever no
-  competitor can match; also the biggest build, so it wants the ROI pass first.
-- **Off-domain presence in the sources LLMs cite** (Reddit, r/roadtrip, authoritative Tahoe guides) — the
-  doc is explicit our own domain ≠ discovery; models weight third-party mentions.
-
-Refs: `docs/research/autio-content-moat.md` (refuse-the-category + the unsolved-acquisition hole),
-`docs/research/competitive-research.md` (Detour distribution post-mortem), `apps/site` (static Astro on
-skipper.fm; `astro.config.mjs` sitemap + `public/robots.txt`), the Wikidata-grounded corpus
-(`pois`/`narrations`/`fact_sheet` + the CC BY-SA attribution invariant in CLAUDE.md).
+⚠ **Unresolved, and it undercuts the whole channel:** an LLM-sourced install is very likely **invisible
+to every instrument we have** (doc §6). A channel you cannot attribute is one you cannot iterate on —
+so treat the shipped moves as cheap insurance against being mis-resolved, NOT as a measurable channel.
 
 ## PostHog telemetry — Stage 2 (native crashes) + Stage 3 (session replay)
 
