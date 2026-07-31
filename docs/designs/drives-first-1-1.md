@@ -64,13 +64,16 @@ All settled. If you think one is wrong, raise it before building — don't re-li
 | D30 | Ask-the-Skipper stays **deferred**. The planner gets no retrieval. |
 | D31 | The full analytics event set ships with 1.1. |
 | D32 | Tests cover the **access and cost boundaries** first. |
-| D33 | Planner model: **`claude-opus-5`, thinking ON, effort `low`/`medium`, streaming.** ⚠ INV-8. |
+| D33 | Planner model: **`claude-opus-5`, thinking ON, effort `low`/`medium`, streaming.** ⚠ INV-8. The model id is a **NEW key** in `packages/shared/src/models.ts` — ⚠ **never bump `opus` in place**: that silently repoints `NARRATION_MODEL`, `JUDGMENT_MODEL`, `ENRICH_MODELS.opus` and two admin job models — a paid-run behaviour change disguised as a constant edit. Add the `$5/$25` pricing row AND extend the drift guard (it iterates only two models today, so an unpriced planner tallies **$0 forever** with nothing failing). |
+| D33a | **Streaming is built in 1.1 via the `expo/fetch` seam** (installed with expo ~57; RN's global fetch is XHR-backed and cannot expose `response.body`). ⚠ Because output is tool-use, streaming the rider-visible `say` means accumulating `input_json_delta` partials — budget it as a real build on both sides, not a flag. |
 | D34 | Abuse control is **session id + IP limiting**. The per-instance tail risk under autoscale is accepted; no global spend ceiling (RISK-4). |
 | D35 | Preview audio takes **exclusive focus**, same as a drive. Only the drive and pre-drive skipper audio ever own the channel. |
 | D36 | Simplification scope is **repo-wide, admin and studio included** — ⚠ except `curate-places` (INV-2). |
 | D37 | Ships as **one 1.1**, one submission, App Store listing rewritten in the same pass. |
 | D38 | Built on **`main`**, atomic commits per build step. No release branch. |
 | D39 | `docs/ideas/` + `docs/specs/` merged into **`docs/designs/`** (done). |
+| D40 | **Districts are re-anchored BEFORE roam is removed** (D22 moves ahead of the sweep). Once no cluster is area-shaped, `area.ts` and `drive-select.ts:169`'s refusal have nothing left to guard and delete honestly — instead of red-typechecking, or worse, being 'fixed' by deleting a production guard. |
+| D41 | **Spec step 1 is CUT as dead work.** It hardened `app/create.tsx`, which step 2 deletes one commit later, and D37+D3 mean no build ships in between. Its two durable halves survive: the INV-9 signed-in helper moves into the mobile leg, and the credit-disclosure copy lands on the preview card. |
 
 ---
 
@@ -83,8 +86,9 @@ Today `driveProposeRequest`/`createDriveRequest` accept a free `{name, lat, lng}
 into a **billed** Google Routes call, and `RegionAnchor` has **no `id` field at all**. Opening
 `/propose` to anonymous without fixing this creates an unauthenticated endpoint that bills Routes for
 any two points on Earth, and "grounded by construction" degrades to "the prompt asked nicely."
-→ Add a stable `id` to `places`/`RegionAnchor`. The propose/create requests carry **anchor ids, never
-coordinates**. The server loads each row and re-asserts `endpoint_eligible`; an unknown or ineligible
+→ ✅ **`places.id` ALREADY EXISTS** (`packages/db/src/schema.ts:458`) — **no migration needed**; only the
+Zod `RegionAnchor` lacks it. Add it there, project it from `loadRegionAnchors`, and carry **anchor ids,
+never coordinates**. The server loads each row and re-asserts `endpoint_eligible`; an unknown or ineligible
 id is a **400 before any Routes call**. An off-list ask gets the in-persona "don't know that one" —
 **never** a geocode.
 
@@ -114,6 +118,8 @@ run `purgeUserData`.
 `includeStaged: true` — correct, because they resolve a frozen selection a rider paid for. That is
 safe **only** while every caller is owner-scoped behind `requireAccount`. Presigning from that path
 for an anonymous rider **publishes unreleased work**.
+→ ✅ Cheaper than it reads: `/propose` **already** calls `selectStopsForRoute`, so the correct
+release-filtered clip is already in a local variable in the right handler.
 → The preview clip comes from `loadCorpusForRoute` (release-filtered). Exactly **one** clip per
 proposal, chosen server-side from that proposal's own selection — the preview is never a list. Public
 read paths serve `released_at IS NOT NULL` only; `isAdmin` is the sole bypass.
@@ -184,6 +190,24 @@ optimization — it is a new class of personal data `purgeUserData` would have t
 soft-ref boundary, and it needs an explicit founder call. Model errors, prompts and transcripts are
 never echoed to the client.
 
+**INV-15 — ⚠ THE SHARPEST ONE. The anonymous mint silently re-types three authorization guards.**
+`c.get('session')?.user.id` today means "proof of an account". After D16 it means "any warm body" — and
+three sites treat it as authorization: `drives.ts:449` (POST /, which then **spends a credit**), `:663`
+(GET /, which then calls `ensureFreeGrant`), and the owner-scoped loaders. An anonymous rider merely
+opening the home screen would write a `free:<anonUserId>` grant into `credit_entries` — against a user
+id better-auth is about to **hard-delete with no cascade and no `purgeUserData`** — stranding a row
+forever in an append-only ledger with no second copy. An INV-4 breach by OMISSION, not by writing code.
+→ Mitigation is **DEPLOY ordering, not merge ordering**: the API's per-route `requireAccount` must be
+**deployed** before the mobile mint ships. Keep the `!userId` checks as backstops but demote them in
+their comments — they are no longer the wall. Gate the mint on `!isPending && !session` (ANY session)
+behind a module-level once-guard: `/sign-in/anonymous` refuses only a caller who already holds an
+anonymous session, and will otherwise sign a real rider **out of their own account and drives**.
+
+**INV-16 — `driveClip` cannot key the offline store yet.**
+It has no `subjectId`/`subjectKind`, and `drives.ts:354` sets only `poiId` — a fused cluster clip
+reaches the client with `poiId: null` **by design**. Server-side subject identity exists but is never
+projected to the wire. Step "offline store" cannot start until it is.
+
 **INV-14 — Never bulk-delete anonymous `user` rows.**
 They are the identity the limiter keys on and the row the funnel runs through. A reaper (cron, admin
 sweep, "clean up old users" migration) breaks conversations mid-flight and is a destructive change
@@ -204,6 +228,17 @@ device is normal, a hundred a minute is not.
 | Shared/API | `client-identity.ts` + test, `apps/api/src/client.ts` (`clientCan` has zero live callsites) |
 | API | the `areaCapable` option, hull synthesis, and the roam-protecting radius cap in `clusters.ts` |
 | DB | the `drive_demand` table + its upsert (D25) |
+
+⚠ **The removal table is INCOMPLETE — pre-flight found these, and two are architectural:**
+- `packages/engine/src/area.ts` — load-bearing for `drive-select.ts:169`'s frozen-drive guard until D40
+  lands. Do step 2 first and it dies honestly. `drives.ts` and `entitlements.ts` also need listing.
+- `packages/shared/src/client-identity.ts` — its `APP_VERSION` feeds `VersionGate`, the shipped
+  force-upgrade hatch. **Re-home `APP_VERSION` in the same commit** or that gate breaks.
+- Unlisted mobile fallout: `voice.settings.roamPack*` (~18 keys) + `voice.settings.diagnostics`,
+  `app/developer.tsx`, `sim-mode.tsx`, `sample.tsx`'s `router.replace('/roam')`, the home modes block.
+- ⚠ Engine tests live in `test/`, **not** `src/` — and there is a third: `test/area-trigger.test.ts`.
+- ⚠ Do **NOT** delete `notSupersededByServedCluster` — `drives.ts:313` still calls it, and its comment
+  records a measured 46-pins-to-4 production failure.
 
 **Harvested, not deleted:** `roam-pack.ts`'s type-level credential strip (`PackPin = Omit<RoamPin,'url'>`)
 moves into the region-pack work — strictly better than the drive side's null-a-field convention.
@@ -258,45 +293,67 @@ now takes drive creation down with it.
 
 ## Build order
 
-One release, one submission, on `main`, atomic commits per step.
+⚠ **Re-ordered after a pre-flight pass against the code** — the original sequence did not survive
+contact. One atomic commit per step unless noted. On `main`, explicit paths only, no codemods.
 
-**0 — Snapshot** (D5). Corpus + R2, offsite. Nothing destructive starts until this exists.
+**0 — SNAPSHOT.** ✅ DONE locally 2026-07-31 (D5). **Still owed: the offsite copy.** No `db:push` /
+`db:migrate` / destructive data work until it exists — dev and prod share one Neon host.
 
-**1 — Live defects.** Port the session re-check from `drives/[id]/play.tsx` into the create flow — a
-successful signup currently strands **every** new rider. Disclose the credit before it is spent.
+**1 — `apps/api/src/limits.ts` + the bounded body read** (INV-3, INV-12). Pulled forward: zero
+dependencies, zero collisions, fully unit-testable, and it closes a **live 1.0 defect** — today one
+unauthenticated request can carry a megabyte body into `/propose`. ⚠ `readJsonBody`'s first act is
+`await c.req.json()`, so bound the actual read; never trust a caller-supplied `Content-Length`. Do NOT
+build the cap on `rateLimit()`, which returns `next()` unconditionally under `NODE_ENV=test`.
 
-**2 — Remove roam.** The removal table, in one sweep. Reclaim home.
+**2 — Corpus (D22/D23/D40), gated on step 0.** Re-anchor the 5 districts as points (free, no regen);
+merge the Carson City duplicates via `excluded_reason`. **This must precede roam removal** so `area.ts`
+and `drive-select.ts:169`'s refusal have nothing left to guard.
 
-**3 — The planner.** Server: `/drives/plan`, the anchor-constrained resolver (INV-1), the persona +
-deflection prompt in its named home (INV-10), `apps/api/src/limits.ts` (INV-12), request bounds (INV-3).
-Client: the conversation on home, example asks, the inline preview card, the offline degraded state.
+**3 — Remove roam**, in layered commits. ⚠ The removal table is INCOMPLETE — see its footnotes; two
+omissions are architectural, not mechanical. Regenerate router types (`bunx expo customize tsconfig.json`)
+or mobile typecheck fails. Carry `PackPin` forward in the same commit that deletes it, or step 9's
+harvest source is gone. **Move `drive_demand` OUT of this step** into the sweep — it is destructive DDL,
+not roam.
 
-**4 — Anonymous split.** `requireAccount` per-route; anonymous mint at app open (D16) + the client
-signed-in helper (INV-9); preview-clip presign from the **build** path (INV-5); the wall as a **sheet
-over** the preview card — never a screen replacement, which is the root cause of defect 1.
+**4 — THE WIRE COMMIT** (batched — `packages/shared/src/schemas.ts` is visited **once**, additively,
+instead of four times on a shared tree). One atomic change spanning shared + its API producers + its
+mobile consumers: `regionAnchor` gains `id` (from the already-existing `places.id` — no migration);
+propose/create carry **anchor ids**, server re-asserts `endpoint_eligible` and 400s **before** any Routes
+call (INV-1); `driveClip` gains `subjectId` + `subjectKind` (INV-16); `driveProposal` gains the preview
+clip **including `attribution`** (CC BY-SA is legal, not optional). Unblocks steps 8, 9 and 11.
 
-**5 — Offline store.** Re-key the store by narration **subject id** (from `drives/<driveId>/<seq>.m4a`),
-**re-keying existing bytes — never delete-and-refetch**. Fill it from the `DriveManifest` the app
-already holds (INV-6). Harvest `roam-pack.ts`'s type-level credential strip on the way through. No pack
-endpoint (D21).
+**5 — INV-11 pricing move**, own commit, announced first: `MODEL_PRICING` + `recordModelUsage` move to
+`@skipper/shared` (TTS pricing stays in studio). Add the planner model's row and extend the drift guard.
 
-**6 — Corpus.** Re-anchor the 5 districts as points (D22, free). Merge the Carson City duplicates (D23).
+**6 — Planner (server).** Prompt in `apps/api/src/planner-prompt.ts` — ⚠ **not** in `@skipper/shared`,
+which mobile imports and would ship the system prompt into the app bundle. `@anthropic-ai/sdk` is already
+declared in `apps/api`. Tool-use output, thinking ON (INV-8), effort low, hard `max_tokens`, lazy client
+with `maxRetries` 0–1 and an explicit timeout. ⚠ Mount `/drives/plan` **outside** `driveRoutes` or it
+inherits the blanket `requireAccount` and every anonymous plan 401s. Include the deflection-clause test.
 
-**7 — Simplification sweep** (repo-wide, admin + studio, **except `curate-places`** — INV-2). Dead CLIs
-(D26). Runtime form collapse + loud guard (INV-7). `drive_demand` dropped (D25). `detours` tests (D27).
-**Music stays** (D28). ⚠ By explicit path, atomic commits — **no codemods, no repo-wide auto-fixers.**
+**7 — Planner (client)** + the `expo/fetch` streaming seam (D33a). Conversation on home, example asks,
+inline preview card, in-persona offline state. Requires `bun run check` inside `apps/mobile`.
 
-**8 — Instrumentation + tests.** Events: `conversation_started`, `route_drawn`, `preview_clip_played`,
-`wall_shown`, `account_created`, `drive_created`, `drive_playback_started`, `clip_playback_completed`.
-Tests cover the access and cost boundaries (D32): the anonymous split, request bounds, credit
-consumption.
+**8 — Anonymous split — THREE commits with a MANDATORY DEPLOY GATE** (INV-15). Pre-work: a request-level
+test harness for `apps/api` (importing `drives.ts` pulls `auth.ts`, which throws at module load without
+`BETTER_AUTH_SECRET`). **(8a)** API: `requireAccount` off the mount onto the five owner routes, keep
+`withSession` on the mount, preview presign from `loadCorpusForRoute`. **DEPLOY THIS.** **(8b)** mobile:
+register `anonymousClient`; flip the seven bare-`session` call sites (INV-9). **(8c)** mint at app open
+behind the once-guard, the wall as a sheet over the preview, and INV-14's `/sign-in/anonymous` rule.
 
-**9 — Docs + store, same commit as the code.** Rewrite CLAUDE.md. Mark the roam decision records
-SUPERSEDED. Flip `offline-region-packs.md` (its D1 is void). Update `ReferenceView.tsx` if a run kind
-changes. Rewrite the App Store listing — the "Ride Along" copy and the review notes are built entirely
-around explaining that the primary button dead-ends outside Tahoe.
+**9 — Offline subject-keyed store.** Unblocked by step 4. Add a v4→v5 entry to the existing (empty,
+unit-tested) `MANIFEST_MIGRATIONS` ladder. **Re-key bytes with `File.moveSync`, never delete-and-refetch.**
+A saved v4 manifest still carries `clips[].poiId`, so the poi half migrates with **zero network**.
 
----
+**10 — Simplification sweep** (D36, plus `drive_demand` from step 3). ⚠ Announce and claim paths first —
+this collides with any concurrent workspace-cleanup agents far harder than docs work did. `curate-places`
+untouched (INV-2). `routeSigOf` survives the table drop.
+
+**11 — Instrumentation + remaining boundary tests** (D31/D32).
+
+**12 — Docs + store.** CLAUDE.md is already rewritten (`0c268cf`). Still owed: `.env.example` still scopes
+`ANTHROPIC_API_KEY` to narration; the roam decision records need SUPERSEDED lines; the App Store listing is
+built entirely around "Ride Along" copy that no longer exists. **Then RISK-1: drive one for real.**
 
 ## Acceptance
 

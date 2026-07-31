@@ -188,10 +188,12 @@ product.** When a choice trades polish-for-the-builder against scale-for-a-marke
 - **The paid studio pipeline runs from the admin console** (`apps/admin`, behind IAP) or the CLIs in
   `packages/studio/src` (`discover-pois` / `enrich-pois` / `generate-narrations` / `resynth-narration` /
   `sweep-orphans` / `refetch-poi` / `snap-speakable-anchors` / `prune-corpus` / `classify-treatments` /
-  `classify-registers` / `backfill-poi-extent` / `curate-places` / the `audit-*` + `judge-voice` QA passes)
-  — **safe-by-default: preview unless `--apply`** (`docs/guides/ops-scripts-sop.md`). `snap-speakable-anchors`
-  + `prune-corpus` + `backfill-poi-extent` are FREE; `classify-treatments` + `curate-places` SPEND — founder
-  go. ⚠ `curate-places` is LOAD-BEARING: the curated `places` set IS the planner's allowlist.
+  `classify-registers` / `backfill-poi-extent` / `curate-places` / `snapshot-corpus` / the `audit-*` +
+  `judge-voice` QA passes)
+  — **safe-by-default: preview unless `--apply`** (`docs/guides/ops-scripts-sop.md`). `snap-speakable-anchors`,
+  `prune-corpus`, `backfill-poi-extent`, `snapshot-corpus` are FREE (run the last before ANY destructive work);
+  `classify-treatments` + `curate-places` SPEND — founder go. ⚠ `curate-places` is LOAD-BEARING: the curated
+  `places` set IS the planner's allowlist.
 - **Local dev servers stay UP** (the human runs them) — ports: API `bun run dev`; admin `bun run dev:admin`
   = vite client **:5173** proxying `/admin`+`/health` → Hono admin-api **:8788** (`ADMIN_DEV_BYPASS=1` skips
   IAP locally); site `bun run dev:site`.
@@ -253,9 +255,8 @@ raw hex/rgba/`fontFamily`; colors live only in `src/theme`.
 
 ## Milestones
 
-(The ladder is ONE artifact: the user-owned DRIVE. Roam was removed in 1.1; hand-authored tours stay
-DEFERRED. The phone-player bet is unchanged — the content artifact is a region's shared `narrations`
-corpus, REUSED pre-ordered along a route.)
+(The ladder is ONE artifact: the user-owned DRIVE. Roam removed in 1.1; hand-authored tours stay DEFERRED.
+The phone-player bet is unchanged — the artifact is a region's shared `narrations` corpus, reused in order.)
 
 0. **Content + phone-player spike.** Skipper prompt; a Tahoe corpus; stand up the **phone** audio player
    — the MVP target, whose build sets the SDK pin (Expo/RN versions live in `apps/mobile/package.json`; new

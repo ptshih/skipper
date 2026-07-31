@@ -10,7 +10,13 @@ import { join, resolve } from 'node:path'
 const ROOT = resolve(import.meta.dir, '..')
 const KINDS = ['decisions', 'designs', 'research', 'guides']
 const STATUS_WINDOW_LINES = 12
-const CLAUDE_MD_CEILING = 320
+// Raised 320 -> 340 on 2026-07-31, deliberately. The 1.1 rewrite ADDED four invariants that each
+// prevent a verified production defect (rider-triggered spend caps, the anonymous row deleted at link,
+// the wire-enforced anchor allowlist, two non-interchangeable persona prompts) while roam's removal
+// only shrank the file ~10 lines. Absorbing them by compressing prose was making the sentences worse,
+// which defeats the point of a file agents must read correctly. Raise it again only for the same
+// reason: a NEW rule that prevents breakage or spend — never to park an essay here.
+const CLAUDE_MD_CEILING = 340
 
 const errors: string[] = []
 
