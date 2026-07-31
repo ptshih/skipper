@@ -889,8 +889,11 @@ This is the whole gap, not the audio pipeline.
       cheapest single win here.
 - [ ] **Roam clips are streamed, never saved** (`useRoam.ts:396` plays the presigned URL directly).
       Even a story the rider just heard is unreplayable without signal. The header comment already owns
-      this as an alpha cut. A roam offline pack is the big one — and note the corpus is ~200 clips /
-      ~200 min for Tahoe, so "download the region" is a real product question, not a checkbox.
+      this as an alpha cut. A roam offline pack is the big one — but **MEASURED, it is far smaller than
+      it sounds: the ENTIRE rider-reachable corpus is 238 clips / 293 min / ~138 MB** at the shipped
+      64 kbps `AAC_BITRATE` (69 MB if it were ever re-encoded at 32k). That is a few podcast episodes.
+      "Download the whole region" is a checkbox, not an architecture project — and `offline.ts` already
+      proves the shape (manifest + bytes on disk, urls NULLED, `file://` rebuilt at read time).
 - [ ] **Mid-session signal loss costs ~24 s of dead air per encounter, then a silent skip**
       (3 s skeleton → 12 s stall → one futile recovery → 12 s stall → `onClipDone`). Worse, `sawFresh`
       never flips so the "N stories told" pill stays at 0 — the rider gets no evidence anything was
