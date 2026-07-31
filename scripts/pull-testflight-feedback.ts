@@ -151,7 +151,19 @@ async function listAll(path: string): Promise<{ data: any[]; included: any[] }> 
   return { data, included }
 }
 
-const ts = () => new Date().toISOString().slice(0, 16).replace('T', ' ')
+/** ISO 8601 → "YYYY-MM-DD HH:MM". One definition: the pulled-at stamp and every item heading in both
+ *  reports were each hand-copying the same slice/replace pair. */
+const fmtDate = (iso?: string): string => iso?.slice(0, 16).replace('T', ' ') ?? '?'
+const ts = () => fmtDate(new Date().toISOString())
+
+/** A tester's note as a markdown blockquote, or an explicit placeholder. Shared so the screenshot and
+ *  crash reports can't drift into rendering an empty comment differently. */
+const mdComment = (comment?: string): string =>
+  comment ? `> ${comment.replace(/\n/g, '\n> ')}` : '_(no written comment)_'
+
+/** Screenshot bytes come from presigned URLs, NOT the rate-limited ASC API, so they are safe to fetch
+ *  concurrently — but one tester can attach a lot, and unbounded fetch would open a socket per shot. */
+const CONCURRENT_DOWNLOADS = 6
 
 // ── --list-apps ─────────────────────────────────────────────────────────────────────────────────────
 async function listApps() {
@@ -214,20 +226,25 @@ async function pullScreenshots(appId: string) {
     const dir = join(outDir, 'screenshots', s.id)
     const images: string[] = []
     if (shots.length) mkdirSync(dir, { recursive: true })
-    for (let i = 0; i < shots.length; i++) {
-      const p = await download(shots[i].url, join(dir, `${i + 1}`))
-      if (p) images.push(p)
+    // Batched rather than one-at-a-time: these are presigned-URL fetches, not ASC API calls. Order is
+    // preserved, so `images` still lines up with the 1..N numbering written to disk.
+    for (let i = 0; i < shots.length; i += CONCURRENT_DOWNLOADS) {
+      const batch = shots.slice(i, i + CONCURRENT_DOWNLOADS)
+      const done = await Promise.all(
+        batch.map((shot: any, j: number) => download(shot.url, join(dir, `${i + j + 1}`))),
+      )
+      for (const p of done) if (p) images.push(p)
     }
     records.push({ id: s.id, ...a, tester, build, images })
 
-    md.push(`## ${a.createdDate?.slice(0, 16).replace('T', ' ') ?? '?'} — ${tester}`)
+    md.push(`## ${fmtDate(a.createdDate)} — ${tester}`)
     md.push(
       `**Device:** ${a.deviceModel ?? '?'} · **OS:** ${a.osVersion ?? '?'}` +
         (build ? ` · **Build:** ${build}` : '') +
         (a.locale ? ` · ${a.locale}` : ''),
     )
     md.push('')
-    md.push(a.comment ? `> ${a.comment.replace(/\n/g, '\n> ')}` : '_(no written comment)_')
+    md.push(mdComment(a.comment))
     md.push('')
     for (const img of images) md.push(`![screenshot](${img.replace(`${outDir}/`, '')})`)
     md.push('', '---', '')
@@ -267,10 +284,10 @@ async function pullCrashes(appId: string) {
     }
     records.push({ id: c.id, ...a, tester, build, hasLog: Boolean(logText) })
 
-    md.push(`## ${a.createdDate?.slice(0, 16).replace('T', ' ') ?? '?'} — ${tester}`)
+    md.push(`## ${fmtDate(a.createdDate)} — ${tester}`)
     md.push(`**Device:** ${a.deviceModel ?? '?'} · **OS:** ${a.osVersion ?? '?'}` + (build ? ` · **Build:** ${build}` : ''))
     md.push('')
-    md.push(a.comment ? `> ${a.comment.replace(/\n/g, '\n> ')}` : '_(no written comment)_')
+    md.push(mdComment(a.comment))
     if (logText) md.push('', `Crash log: \`crashes/${c.id}.crash\``)
     md.push('', '---', '')
   }
