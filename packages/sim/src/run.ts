@@ -10,12 +10,23 @@
 //
 // V2: a drive is a frozen `selection` of place NARRATIONS (each 1:1 with its poi) along a route.
 // We resolve each narration's poi coords/name + form/duration live, then run the SAME trigger
-// engine the in-car player uses (engine runDrive) over the raw POI coords (it snaps them).
+// engine the in-car player uses (engine runDrive), which snaps each stop onto the route.
+//
+// ⚠ The point of this tool is that it agrees with the car. That means resolving a stop's geometry the
+// SAME way `rowsToCorpus` (apps/api/src/drives.ts) does — speakable anchor when present, trigger floor
+// from kind + anchored — not approximating it. A constant floor here silently turns the report into
+// fiction for any stop whose real floor differs, which is most of them.
 
 import { eq, inArray } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { drives, narrations, pois, selectionSubject } from '@skipper/db/schema'
-import { OFF_ROUTE_MAX_M, METERS_PER_MILE, formatMmss, runDrive } from '@skipper/engine'
+import {
+  OFF_ROUTE_MAX_M,
+  METERS_PER_MILE,
+  formatMmss,
+  runDrive,
+  triggerRadiusForKind,
+} from '@skipper/engine'
 import type { LngLat, DriveStopRef } from '@skipper/engine'
 
 function parseArgs(argv: string[]) {
@@ -60,6 +71,11 @@ async function main() {
           lat: pois.lat,
           lng: pois.lng,
           name: pois.name,
+          // ⚠ kind + the speakable anchor are what make a stop's trigger geometry REAL. Without them
+          // this CLI cannot reproduce what the car does — see the stop assembly below.
+          kind: pois.kind,
+          speakableLat: pois.speakableLat,
+          speakableLng: pois.speakableLng,
         })
         .from(narrations)
         .innerJoin(pois, eq(pois.id, narrations.poiId))
@@ -72,13 +88,23 @@ async function main() {
     const subject = selectionSubject(item)
     const n = subject?.kind === 'poi' ? byPoi.get(subject.id) : undefined
     if (!n) continue
+    // Mirror `rowsToCorpus` in apps/api/src/drives.ts exactly: place the stop on its road-snapped
+    // speakable anchor when it has one, and derive the trigger floor from kind + anchored.
+    //
+    // ⚠ This used to hardcode `triggerRadiusM: 120`, which quietly made the simulator disagree with
+    // the road — the one thing @skipper/engine exists to prevent. 120 is neither value the live path
+    // ever uses: an ANCHORED stop fires off the tight 250 m floor, and an un-anchored natural feature
+    // keeps its kind-aware floor, which runs to 1500 m for a peak and 1200 m for a lake or valley. So
+    // the CLI was reporting "on-route but never fired" for exactly the areal features you would open
+    // it to diagnose, and reporting them tighter-than-real for the anchored ones.
+    const anchored = n.speakableLat != null && n.speakableLng != null
     stops.push({
       seq: item.seq,
-      lat: n.lat,
-      lng: n.lng,
+      lat: n.speakableLat ?? n.lat,
+      lng: n.speakableLng ?? n.lng,
       name: n.name,
       stopType: n.form,
-      triggerRadiusM: 120,
+      triggerRadiusM: triggerRadiusForKind(n.kind ?? null, anchored),
       durationMs: n.durationMs,
     })
   }
