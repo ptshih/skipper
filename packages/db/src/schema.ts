@@ -44,7 +44,7 @@ export interface PoiFacts {
  * the corpus `enrich` step SELECTED from the article, or a discrete fact a sourced fetcher returned
  * (Wikidata key fact, Macrostrat geology). The enricher chooses WHICH spans to keep, NEVER what they
  * say — `text` is always verbatim from `source` (the "persona lives in DELIVERY, never FACTS"
- * invariant mapped onto storage; see docs/specs/corpus-enrichment-spec.md §2). Narration grounds on
+ * invariant mapped onto storage; see docs/designs/corpus-enrichment-spec.md §2). Narration grounds on
  * the fact sheet; `narrations.attribution` is frozen from the distinct `(source, sourceId, license, url)` here.
  * `source` is a subset of `AttributionSnapshot['source']` (the fact-bearing sources only).
  */
@@ -301,14 +301,14 @@ export const pois = pgTable(
     // and living_street, so a downtown building anchors to a side street the drive never uses — the
     // anchor is valid but triggers from a road nobody is on. Recording the class lets selection prefer
     // places reachable from a road people actually drive, and it costs nothing (OSM already tags every
-    // way; the snapper was fetching and discarding it). See docs/ideas/poi-legibility-layer.md §6.
+    // way; the snapper was fetching and discarding it). See docs/designs/poi-legibility-layer.md §6.
     speakableRoadClass: text('speakable_road_class'),
     // Why this entity is NOT a speakable place — null = eligible (the overwhelming majority).
     // A Wikidata sweep drags in things that exist but cannot be TOLD: a state-route number used as a
     // place, a census-designated place that duplicates the settlement beside it, a never-built project.
     // A REASON rather than a boolean so the exclusion is auditable and reversible; kept as a flag rather
     // than a delete because these rows may already own generated audio (deleting orphans paid R2 bytes).
-    // Read paths filter on `excluded_reason IS NULL`. See docs/ideas/poi-legibility-layer.md §4b.
+    // Read paths filter on `excluded_reason IS NULL`. See docs/designs/poi-legibility-layer.md §4b.
     excludedReason: text('excluded_reason'),
     // Wikidata P2046 (area) in km², or null when the entity claims none. The signal that separates a
     // CONTAINER from a STOP: extent. A national park or a mountain range is something you are INSIDE for
@@ -317,7 +317,7 @@ export const pois = pgTable(
     // article lengths within 15% of each other (11.6k vs 10.1k chars), while `Carson Range` is a
     // container with a SHORT article. Kind and prose length both fail; area doesn't.
     // Populated by `backfill-poi-extent.ts` (free, WDQS). Null is the common case and means "no claim",
-    // never "small". See docs/ideas/poi-legibility-layer.md §4e.
+    // never "small". See docs/designs/poi-legibility-layer.md §4e.
     areaKm2: doublePrecision('area_km2'),
     // Wikidata P2043 (length) in km — the LINEAR half of "is this a container". Area cannot see a
     // mountain range or a highway: `Carson Range` claims no area but is 84 km long, and `Glacier Point
@@ -389,7 +389,7 @@ export const pois = pgTable(
 // existed in the group and was demoted to a satellite of an arbitrary building (a FRATERNITY HOUSE
 // ended up speaking for a university campus). Making the group a first-class row means the subject is
 // nameable instead of impersonated, and lets the constraints below be structural rather than living in
-// one script. See docs/ideas/poi-legibility-layer.md §5.
+// one script. See docs/designs/poi-legibility-layer.md §5.
 export const poiClusters = pgTable(
   'poi_clusters',
   {
@@ -451,7 +451,7 @@ export const poiClusters = pgTable(
 // Places name via `narrations.attribution` (`google_places`); break NARRATIONS — when un-deferred — get
 // their OWN `detours` table (place-anchored break audio), NEVER the pois-bound `narrations` (1:1 with a
 // poi). A curated place belongs to a region by POINT-IN-BBOX (geometry-first; no region_id FK,
-// consistent with `pois`). See docs/specs/places-endpoints-spec.md + decisions/create-a-drive-architecture.md.
+// consistent with `pois`). See docs/designs/places-endpoints-spec.md + decisions/create-a-drive-architecture.md.
 export const places = pgTable(
   'places',
   {

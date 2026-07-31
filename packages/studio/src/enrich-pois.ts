@@ -6,7 +6,7 @@
 // enricher SELECTED (never rewrote) + any geology/Wikidata bundles it chose to include (pipeline/
 // scout.ts buildCorpusFactSheet). Tours + roam both READ that fact sheet (resolveStoryGrounding), so enrich cost
 // amortizes once-per-place across every telling, and roam gets enrichment for the first time. See
-// docs/specs/corpus-enrichment-spec.md.
+// docs/designs/corpus-enrichment-spec.md.
 //
 // VERBATIM-only (spec §2): the fact sheet carries facts verbatim from sourced fetchers with provenance —
 // the make-or-break invariant ("persona lives in DELIVERY, never FACTS"). A poi the enricher can't

@@ -1,6 +1,6 @@
 // Cluster membership — the ONE resolver for "which places does a fused telling speak for".
 //
-// Phase 4 of the legibility layer (docs/specs/fused-cluster-generation-spec.md) has four consumers of
+// Phase 4 of the legibility layer (docs/designs/fused-cluster-generation-spec.md) has four consumers of
 // that answer, and they must not each invent it:
 //   · the grounding well + the attribution union   (generation)
 //   · `narrations.facts_hash`                      (staleness)

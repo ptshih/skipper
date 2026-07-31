@@ -18,7 +18,7 @@
 //
 // Cloud Run injects CLOUD_RUN_EXECUTION automatically, so the row captures the real execution
 // name for the admin-api's reconcile backstop without anyone passing it in.
-// Background: docs/specs/admin-ops-console-spec.md §9.
+// Background: docs/designs/admin-ops-console-spec.md §9.
 
 import { and, eq, inArray, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'

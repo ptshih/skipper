@@ -1,7 +1,7 @@
 // prune-corpus — flag Wikidata entities that EXIST but cannot be told as a stop.
 //
 // A Wikidata sweep answers "what is here", not "what can a driver be told about from a moving car",
-// and the gap between those is the legibility layer (docs/ideas/poi-legibility-layer.md). This is its
+// and the gap between those is the legibility layer (docs/designs/poi-legibility-layer.md). This is its
 // cheapest, most mechanical slice: entities that are disqualified by their SHAPE, not by taste.
 //
 // ONE RULE, one idea: a place with no meaningful POINT is not a stop. A numbered highway's coordinate is

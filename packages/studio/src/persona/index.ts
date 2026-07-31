@@ -2,7 +2,7 @@
 // to the Skipper so an unknown/absent key is never persona-less. In v2 generation calls
 // `personaFromKey('skipper')` directly (one host per region; the persona is baked into the
 // narration's AUDIO, NOT stored on the row). Adding a host = a new PersonaDef + one entry here
-// (a backend deploy, never an app update). Background: docs/ideas/region-skippers.md.
+// (a backend deploy, never an app update). Background: docs/designs/region-skippers.md.
 
 import { SKIPPER } from './skipper'
 import type { PersonaDef } from './types'

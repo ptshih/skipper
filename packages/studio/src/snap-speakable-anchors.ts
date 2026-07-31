@@ -1,6 +1,6 @@
 // snap-speakable-anchors — auto-populate `pois.speakable_lat/lng` (the "where to look" trigger anchor)
 // by snapping each POI's centroid pin to the nearest DRIVABLE road. Fixes triage cluster 1a
-// (docs/specs/road-snapped-anchors-spec.md): a POI whose pin sits off-road (a resort's grounds, a lake
+// (docs/designs/road-snapped-anchors-spec.md): a POI whose pin sits off-road (a resort's grounds, a lake
 // centroid) never triggers, or triggers garbage, because the trigger center is the centroid. The
 // speakable slot already has a validator (@skipper/engine `checkSpeakableAnchor`) and an audit
 // (audit-speakable.ts) — this adds the missing automated PRODUCER (the slot is otherwise hand-curated;

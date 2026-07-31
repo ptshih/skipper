@@ -101,7 +101,7 @@ export const signedClip = z.object({
 export const signedStopClip = signedClip.extend({ seq: z.number().int() })
 
 /* -------------------------------------------------------------------------- */
-/*  Free-roam (ALPHA surface — docs/ideas/free-roam-mode.md)                    */
+/*  Free-roam (ALPHA surface — docs/designs/free-roam-mode.md)                    */
 /* -------------------------------------------------------------------------- */
 
 /** A convex ring in [lng, lat] plus its arrival slack — the wire form of @skipper/engine's `AreaRef`.

@@ -1,6 +1,6 @@
 // classify-treatments — decide, ONCE per region, how each group of nearby places should be TOLD.
 //
-// The legibility layer's decision step (docs/ideas/poi-legibility-layer.md §4/§5). A Wikidata sweep
+// The legibility layer's decision step (docs/designs/poi-legibility-layer.md §4/§5). A Wikidata sweep
 // answers "what is here"; this answers "is this one stop, one area, or several unrelated things", which
 // is the part a competitor with an API key doesn't get for free.
 //

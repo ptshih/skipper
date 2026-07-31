@@ -1,7 +1,7 @@
 // The corpus-enrichment facts layer: the fact-sheet-aware hash switch, the facts builder's shape, the
 // sheet→attribution dedup, and the fact-sheet↔extract-head resolver. The curated sheet lives in its OWN
 // `pois.fact_sheet` column now (NOT the `facts` bag). Pure logic, zero network/spend.
-// See docs/specs/corpus-enrichment-spec.md §2/§3/§6.
+// See docs/designs/corpus-enrichment-spec.md §2/§3/§6.
 
 import { describe, expect, test } from 'bun:test'
 import { buildStoryFacts, hashFacts, storyFactsHash, factSheetToAttribution } from '../src/pipeline/persist'

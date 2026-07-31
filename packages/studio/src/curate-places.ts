@@ -12,7 +12,7 @@
 // WHY curated (not open autocomplete): coords are resolved + STORED here, ONCE, so the RUNTIME picker
 // reads a stored short list with ZERO live Places calls — no proxy, no session tokens, no Details.
 // Charm over scale: every option is an intentional, recognizable place. See
-// docs/specs/places-endpoints-spec.md.
+// docs/designs/places-endpoints-spec.md.
 //
 // SOP (docs/guides/ops-scripts-sop.md): PREVIEWS by default (the dry run makes NO paid calls — it just
 // explains what --apply will do); --apply spends (Anthropic + Places) and writes. FOUNDER-GATED: a paid

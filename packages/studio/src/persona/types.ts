@@ -5,7 +5,7 @@
 // PRESENTATION (the display name/tagline/backstory/portrait served to the app) has NO v2 home —
 // apps/api/src/host.ts was dropped with the legacy tour tables (commit e5afa38); it returns when
 // region-skippers ship (M4). This file is the GENERATION half (prompt, voice) that never reaches
-// the client. Background: docs/ideas/region-skippers.md.
+// the client. Background: docs/designs/region-skippers.md.
 
 import type { GeminiVoice } from '../models'
 

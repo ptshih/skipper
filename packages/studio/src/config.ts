@@ -92,7 +92,7 @@ export const WIKIDATA_ENRICHMENT = (): boolean => process.env.SKIPPER_WIKIDATA !
 // --- The corpus enrich step's fact-sheet builder (pipeline/scout.ts buildCorpusFactSheet) ------
 // Generalizes the per-stop scout to the CORPUS: it selects verbatim article spans (by id) +
 // includes/excludes grounded bundles (geology@centroid, Wikidata), ONCE per place — the shared
-// fact sheet tours + roam ground on (docs/specs/corpus-enrichment-spec.md). Same ReAct shape +
+// fact sheet tours + roam ground on (docs/designs/corpus-enrichment-spec.md). Same ReAct shape +
 // bounds as the scout; the only difference is the finalize emits a list of kept span ids, so it
 // gets a bit more output headroom.
 /** Max model turns per place — look (fetch geology/wikidata), then finalize. */
@@ -204,7 +204,7 @@ export const STORY_MIN_FACT_CHARS = 140
  * positional cap before the enricher can even see it (a city article runs long); the bound on the
  * enricher's READ, not on narration. Trimmed of trailing meta sections (References/See also/…) in
  * wikipedia.ts. (Was DEEP_EXTRACT_CHARS=4000 — the per-stop narration cap — until the corpus
- * enrichment migration, 2026-06-15; see docs/specs/corpus-enrichment-spec.md §7.)
+ * enrichment migration, 2026-06-15; see docs/designs/corpus-enrichment-spec.md §7.)
  */
 export const ENRICHER_INPUT_CHARS = 12_000
 /**

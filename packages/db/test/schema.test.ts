@@ -168,7 +168,7 @@ describe('places / detours — break-anchor structural invariants', () => {
   it('a place carries independent role flags (endpoint/break) + featured, all NOT NULL default false', () => {
     // Two INDEPENDENT booleans (not a tri-value enum) so a place can be BOTH and the admin can prune
     // one role without touching the other. NOT NULL + a default keeps the curate upsert + the picker
-    // query total (no null-role rows). See docs/specs/places-endpoints-spec.md.
+    // query total (no null-role rows). See docs/designs/places-endpoints-spec.md.
     for (const col of ['endpoint_eligible', 'break_eligible', 'featured']) {
       const c = columnByDbName(places, col)
       expect(c.notNull).toBe(true)

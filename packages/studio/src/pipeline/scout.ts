@@ -2,7 +2,7 @@
 // most narratable verbatim article spans and rounds them out with grounded enrichment (centroid
 // geology, Wikidata key facts). The corpus `enrich` step (enrich-pois.ts) runs buildCorpusFactSheet
 // ONCE per place to produce the shared `pois.fact_sheet` that tours + roam ground on. See
-// docs/specs/corpus-enrichment-spec.md + docs/decisions/enrichment-scout.md.
+// docs/designs/corpus-enrichment-spec.md + docs/decisions/enrichment-scout.md.
 // (History: this file also held a per-STOP `scoutStop` from the V1 generate-tour pipeline; it was
 // removed 2026-06-19 — dead since the V2 corpus collapse, with no non-test caller.)
 //
@@ -74,7 +74,7 @@ export function makeScoutCall(model: string, maxTokens: number): ScoutModelCall 
 //
 // The corpus `enrich` step (enrich-pois.ts) runs this ONCE per story place to produce the
 // shared fact sheet (stored on `pois.fact_sheet`) — the curated narration source tours + roam both
-// ground on (principle #1; docs/specs/corpus-enrichment-spec.md). It is the scout, generalized:
+// ground on (principle #1; docs/designs/corpus-enrichment-spec.md). It is the scout, generalized:
 // instead of only include/exclude-ing fetched bundles, it ALSO selects WHICH verbatim spans of the
 // (uncapped) article to keep.
 //

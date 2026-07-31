@@ -1,7 +1,7 @@
 // Spatial grouping for the legibility layer — pure, no I/O, so the two hard-won properties below are
 // unit-testable instead of only observable in a paid run.
 //
-// docs/ideas/poi-legibility-layer.md §3 records why this is LEADER grouping and not the obvious
+// docs/designs/poi-legibility-layer.md §3 records why this is LEADER grouping and not the obvious
 // transitive-closure kind. Single-linkage CHAINS: at a 400 m radius it produced a cluster with a
 // 1623 m diameter and 60 members, because A-B-C-D each 400 m apart collapse into one blob. Leader
 // grouping picks the strongest candidate and absorbs only what lies within R of THAT ANCHOR, never
