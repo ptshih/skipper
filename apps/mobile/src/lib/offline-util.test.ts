@@ -7,10 +7,65 @@ import {
   extForContentType,
   hasDownloadableAudio,
   isPastTtl,
+  migrateToVersion,
   missingAudioSeqs,
   urlMapFromDriveManifest,
   urlMapFromDriveSigned,
+  type ManifestMigration,
 } from './offline-util'
+
+// The walk that stands between an app update and a rider's saved drives. A bare
+// `version !== CURRENT → null` gate reads to every caller as "never downloaded", which retires every
+// saved download on the next update while its audio stays on disk, unreachable and unswept.
+describe('migrateToVersion', () => {
+  const bumpTo = (v: number): ManifestMigration => (m) => ({ ...m, version: v, [`did${v}`]: true })
+
+  test('an already-current manifest passes through untouched', () => {
+    const m = { version: 4, keep: 'me' }
+    expect(migrateToVersion(m, 4, {})).toBe(m) // same object — no needless rewrite
+  })
+
+  test('walks a multi-step chain and preserves the payload', () => {
+    const out = migrateToVersion({ version: 2, clips: { '0': 'a' } }, 4, {
+      2: bumpTo(3),
+      3: bumpTo(4),
+    })
+    expect(out?.version).toBe(4)
+    expect(out?.did3).toBe(true)
+    expect(out?.did4).toBe(true)
+    expect(out?.clips).toEqual({ '0': 'a' })
+  })
+
+  test('a missing migration is no path across, not a crash', () => {
+    expect(migrateToVersion({ version: 2 }, 4, { 3: bumpTo(4) })).toBeNull()
+  })
+
+  test('a migration that declines this download returns null', () => {
+    expect(migrateToVersion({ version: 3 }, 4, { 3: () => null })).toBeNull()
+  })
+
+  // A migration that forgets to bump `version` would otherwise spin forever inside a file read.
+  test('a non-progressing migration stops rather than looping', () => {
+    expect(migrateToVersion({ version: 3 }, 4, { 3: (m) => ({ ...m }) })).toBeNull()
+  })
+
+  test('a NEWER manifest than this build knows is left alone for the shape check to reject', () => {
+    // Downgrade (an older build reading a newer download) — the loop never runs; the caller's
+    // isCurrentManifest is what refuses it, so this never silently plays a shape we can't read.
+    const m = { version: 9 }
+    expect(migrateToVersion(m, 4, {})).toBe(m)
+  })
+
+  test('a lying version cannot spin forever', () => {
+    // Every step bumps by a fraction, so `version < target` stays true indefinitely without the guard.
+    const creep: ManifestMigration = (m) => ({ ...m, version: (m.version as number) + 0.01 })
+    expect(
+      migrateToVersion({ version: 1 }, 4, Object.fromEntries(
+        Array.from({ length: 40 }, (_, i) => [1 + i * 0.01, creep]),
+      )),
+    ).toBeNull()
+  })
+})
 
 describe('extForContentType', () => {
   test('maps known audio MIME types to on-disk extensions', () => {

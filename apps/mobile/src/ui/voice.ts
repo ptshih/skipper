@@ -263,6 +263,11 @@ export const voice = {
     // invites) was the silent, invisible default. Neutral tone: streaming is a legitimate choice on
     // a road with signal, so this states a fact, it doesn't scold.
     notSaved: 'Not saved',
+    // Bytes on disk that THIS build can't read — a saved manifest in a format with no migration
+    // across (see offline.ts MANIFEST_MIGRATIONS). Distinct from "Not saved" because it is
+    // actionable and costs real space: the ⋯ menu offers a re-pull and a remove. Short, because it
+    // rides in a chip; the ⋯ actions carry the what-to-do.
+    unreadable: 'Saved copy needs refreshing',
     save: 'Save for offline', // the main-path button under the Start CTA (was ⋯-menu-only)
     saveHint: 'Tahoe has dead zones — best done before you lose signal.',
     // The one warning in front of a live drive that hasn't been saved. NEVER a block: the rider may

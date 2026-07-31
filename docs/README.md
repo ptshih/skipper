@@ -58,6 +58,11 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
 - [api-versioning-posture.md](decisions/api-versioning-posture.md) — no URL versioning; evolve the
   contract additively, with `GET /version` + the mobile `VersionGate` as the sole hard-break escape
   hatch; decided + built 2026-06-09.
+- [offline-connectivity-and-roam-pack.md](decisions/offline-connectivity-and-roam-pack.md) — working
+  without internet: one push-only connectivity verdict that fails OPEN and self-heals, the roam
+  offline pack (pins AND audio, one artifact), and a migration seam so a `MANIFEST_VERSION` bump
+  stops silently destroying saved downloads. ⚠ Carries three expo native landmines that must not be
+  undone; built 2026-07-30.
 - [region-corpus-discovery.md](decisions/region-corpus-discovery.md) — the discovery-first sweep
   (`discover-pois.ts` → `pois`) that populates a region's shared POI corpus; the SWEEP survives but
   its original tour-generation consumer is **CONSUMER SUPERSEDED by V2** (migration `0009`).

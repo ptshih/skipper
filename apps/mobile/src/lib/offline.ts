@@ -22,13 +22,17 @@ import {
   extForContentType,
   hasDownloadableAudio,
   isPastTtl,
+  migrateToVersion,
   missingAudioSeqs,
+  type ManifestMigration,
   urlMapFromDriveManifest,
   urlMapFromDriveSigned,
 } from './offline-util'
 
-// Manifest schema version — bump on any shape change so a stale-format manifest left by an older
-// app build reads as NOT-downloaded (and re-downloads) instead of crashing the player.
+// Manifest schema version. ⚠ Bumping this is NOT a free action — see MANIFEST_MIGRATIONS below. An
+// additive change should get a migration, not a bump that silently invalidates every saved download
+// on the next app update. Only a genuine shape break, where saved bytes cannot be reinterpreted,
+// should invalidate — and even then the bytes stay reclaimable via `downloadDirState`.
 // v3: V2 reshape — the embedded `detail` is now a DRIVE manifest (flat clips[] keyed by seq, with
 // per-clip `revisedAt`), not a tour detail; a v2 download is a different shape → invalidated.
 // v4: + `audioSeqs` (the expected downloadable seqs, so completeness survives the strip below) AND the
@@ -271,28 +275,84 @@ async function runDownload(
   }
 }
 
-/** Read the manifest from disk; null if absent, corrupt, or a stale/foreign schema version. */
+/** Is this object a manifest THIS build can hand to the player? Shape, not just version — a
+ *  half-written file must not reach the player as a crash (a missing `detail`/`audioSeqs`). */
+function isCurrentManifest(m: unknown): m is OfflineManifest {
+  const x = m as OfflineManifest | null
+  return Boolean(
+    x &&
+      x.version === MANIFEST_VERSION &&
+      x.detail &&
+      Array.isArray(x.detail.clips) &&
+      Array.isArray(x.audioSeqs) &&
+      typeof x.clips === 'object',
+  )
+}
+
+/**
+ * Forward migrations, keyed by the version being migrated FROM. Each returns the manifest one
+ * version newer (with `version` bumped) or null if this particular download can't be carried across.
+ *
+ * ⚠ THE POINT OF THIS TABLE is that bumping MANIFEST_VERSION used to be a silent data-loss event:
+ * the old gate was `version !== MANIFEST_VERSION → null`, and all seven callers read null as "never
+ * downloaded". So an app update turned every saved drive into a drive that vanishes from the offline
+ * list, error-walls its detail screen in a dead zone, and silently downgrades the live player to
+ * streaming — while tens of MB of perfectly good audio stayed on disk with nothing able to find it.
+ * The rider updates in town and finds nothing in Tahoe. It has already happened twice (v2→v3, v3→v4).
+ *
+ * So: an ADDITIVE change gets a migration here, not a bump-and-wipe. Only a genuine shape break —
+ * where the saved bytes truly cannot be reinterpreted — is allowed to invalidate, and even then the
+ * bytes stay reclaimable through `downloadDirState` rather than becoming invisible.
+ *
+ * Empty today: v2 and v3 were real reshapes (see the MANIFEST_VERSION note above) and no v4 successor
+ * exists yet. The seam is here so the next one has somewhere obvious to go.
+ */
+const MANIFEST_MIGRATIONS: Record<number, ManifestMigration> = {}
+
+/** Read the manifest from disk, migrating an older format forward when we know how. Null if absent,
+ *  corrupt, or a format this build genuinely can't carry across. */
 export function loadManifest(driveId: string): OfflineManifest | null {
   const f = manifestFile(driveId)
   if (!f.exists) return null
+  let raw: unknown
   try {
-    const m = JSON.parse(f.textSync()) as OfflineManifest
-    // Reject a malformed or stale-format manifest → treat as not-downloaded (re-download)
-    // rather than return a half-shape the player would crash on (e.g. a missing `detail`/`audioSeqs`).
-    if (
-      !m ||
-      m.version !== MANIFEST_VERSION ||
-      !m.detail ||
-      !Array.isArray(m.detail.clips) ||
-      !Array.isArray(m.audioSeqs) ||
-      typeof m.clips !== 'object'
-    ) {
-      return null
-    }
-    return m
+    raw = JSON.parse(f.textSync())
   } catch {
     return null
   }
+  if (!raw || typeof raw !== 'object') return null
+
+  const startedAt = (raw as Record<string, unknown>).version
+  // The walk itself is pure + unit-tested in offline-util (it is what stands between an app update
+  // and a rider's saved drives); this file only supplies the file, the table and the shape check.
+  const m = migrateToVersion(raw as Record<string, unknown>, MANIFEST_VERSION, MANIFEST_MIGRATIONS)
+  if (!m || !isCurrentManifest(m)) return null
+  // Persist the upgrade so the walk is a one-time cost per download, never per read.
+  if (m.version !== startedAt) {
+    try {
+      manifestFile(driveId).write(JSON.stringify(m))
+    } catch {
+      // Best-effort: failing to persist costs a re-migration next read, never the download.
+    }
+  }
+  return m
+}
+
+/** Whether a drive has bytes on disk, INDEPENDENT of whether this build can read their manifest.
+ *  `unreadable` is the state the version gate used to hide: a real download, occupying real space,
+ *  that `loadManifest` reports as nothing. Surfacing it is what keeps the reclaim affordance
+ *  reachable — see the drive-detail ⋯ menu. */
+export type DownloadDirState = 'none' | 'unreadable' | 'ok'
+
+export function downloadDirState(driveId: string): DownloadDirState {
+  let exists = false
+  try {
+    exists = driveDir(driveId).exists
+  } catch {
+    exists = false
+  }
+  if (!exists) return 'none'
+  return loadManifest(driveId) ? 'ok' : 'unreadable'
 }
 
 /** Every clip the manifest references is present on disk + nonzero. */

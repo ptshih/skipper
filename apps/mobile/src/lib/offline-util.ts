@@ -101,6 +101,45 @@ export function contentSignature(d: { clips: DriveClip[] }): string {
 }
 
 /* -------------------------------------------------------------------------- */
+/*  Saved-manifest migration (pure walk; offline.ts wires in the file + table)  */
+/* -------------------------------------------------------------------------- */
+
+/** One step of a saved-manifest upgrade: take the manifest at version N, return it at N+1 (with
+ *  `version` bumped), or null if THIS download can't be carried across. */
+export type ManifestMigration = (m: Record<string, unknown>) => Record<string, unknown> | null
+
+/** A runaway backstop for a corrupt/lying `version`, not a real bound on the chain. */
+const MAX_MIGRATION_STEPS = 16
+
+/**
+ * Walk a saved manifest forward to `target`, one registered migration at a time. Returns the
+ * migrated object (the SAME object when it was already current), or null when there is no path
+ * across — a genuine shape break, a missing migration, or a migration that fails to make progress.
+ *
+ * Pure so the thing standing between an app update and a rider's saved drives is actually testable.
+ * The failure this exists to prevent: a bare `version !== CURRENT → null` gate reads to every caller
+ * as "never downloaded", which silently retires every saved download on the next update while its
+ * audio stays on disk, unreachable and unswept.
+ */
+export function migrateToVersion(
+  raw: Record<string, unknown>,
+  target: number,
+  migrations: Record<number, ManifestMigration>,
+): Record<string, unknown> | null {
+  let m = raw
+  for (let step = 0; typeof m.version === 'number' && m.version < target; step++) {
+    if (step >= MAX_MIGRATION_STEPS) return null
+    const migrate = migrations[m.version]
+    if (!migrate) return null
+    const next = migrate(m)
+    // A migration that returns the same version would spin forever; treat it as no path across.
+    if (!next || next.version === m.version) return null
+    m = next
+  }
+  return m
+}
+
+/* -------------------------------------------------------------------------- */
 /*  Offline freshness TTL (pure date math; offline.ts wires in savedAt + now)   */
 /* -------------------------------------------------------------------------- */
 

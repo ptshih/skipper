@@ -7,12 +7,14 @@ import { useStopPreview } from '@/lib/useStopPreview'
 import { DriveMap, type DriveMapStop } from '@/ui/DriveMap'
 import {
   deleteDriveDownload,
+  downloadDirState,
   downloadDrive,
   InsufficientStorageError,
   isDownloadExpired,
   isDownloadStale,
   loadManifest,
   offlineStatus,
+  type DownloadDirState,
   type DownloadProgress,
 } from '@/lib/offline'
 import { cleanPlaceName } from '@/lib/labels'
@@ -85,6 +87,11 @@ export default function DriveDetailScreen() {
   const [offline, setOffline] = useState(false)
   // Offline download state — Tahoe has dead zones, so a rider can save the whole drive.
   const [downloaded, setDownloaded] = useState(false)
+  // Whether bytes are on disk AT ALL, independent of whether this build can read their manifest.
+  // `unreadable` is the state a MANIFEST_VERSION bump used to hide completely: a real download the
+  // app reports as nothing, with the only reclaim affordance gated behind `downloaded` and therefore
+  // unreachable exactly when it was needed. (offline.ts MANIFEST_MIGRATIONS)
+  const [dirState, setDirState] = useState<DownloadDirState>('none')
   // A saved copy past its freshness TTL (OFFLINE_TTL_DAYS) — a SOFT, offline-safe nudge to re-pull
   // (fires even in a dead zone, where the content-diff `updatable` can't). Never blocks play.
   const [expired, setExpired] = useState(false)
@@ -246,6 +253,13 @@ export default function DriveDetailScreen() {
       actions.push({ label: 'Remove download', onPress: removeDownload, destructive: true })
     } else {
       actions.push({ label: 'Download for offline', onPress: () => void startDownload() })
+      // ⚠ Bytes on disk this build can't read (a manifest format with no migration across). They
+      // still occupy real space, so the reclaim MUST stay reachable here — this used to sit inside
+      // the `downloaded` branch, which is false in exactly this case, leaving the rider unable to
+      // free the space at all. Re-downloading also fixes it, but that needs signal; this doesn't.
+      if (dirState === 'unreadable') {
+        actions.push({ label: 'Remove download', onPress: removeDownload, destructive: true })
+      }
     }
     actions.push({ label: 'Report an issue', onPress: reportIssue })
     if (__DEV__) {
@@ -339,6 +353,7 @@ export default function DriveDetailScreen() {
             : null,
         )
         setExpired(isDownloadExpired(id)) // offline-safe (reads savedAt) — fires even in a dead zone
+        setDirState(downloadDirState(id))
       }
     }, [load, id]),
   )
@@ -544,6 +559,16 @@ export default function DriveDetailScreen() {
                   <Icon name="downloaded" size={14} color="accent" />
                   <Text variant="label" color="accent">
                     Saved offline
+                  </Text>
+                </View>
+              ) : dirState === 'unreadable' ? (
+                // A saved copy this build can't read (a manifest format with no migration across).
+                // Warm, not faint: unlike "Not saved" this one is actionable and costs real space —
+                // the ⋯ menu offers both a re-pull and a remove.
+                <View style={styles.savedChip}>
+                  <Icon name="update" size={14} color="accentWarm" />
+                  <Text variant="label" color="accentWarm">
+                    {voice.offline.unreadable}
                   </Text>
                 </View>
               ) : (

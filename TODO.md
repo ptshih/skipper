@@ -924,13 +924,29 @@ network listener — so holding the count above zero from the start is what stop
 teardown taking our stream with it. The verdict fails OPEN throughout: never having observed an event
 reads as ONLINE, so a missing native module degrades to exactly the old behaviour, not a bricked app.
 
-One more, unrelated to roam:
+✅ **A SAVED MANIFEST NOW MIGRATES INSTEAD OF VANISHING (2026-07-30).** The old
+`version !== MANIFEST_VERSION → null` gate was silent data loss — all seven `loadManifest` callers
+read null as "never downloaded", so an app update retired every saved drive (gone from the offline
+list, error wall in a dead zone, the live player silently downgraded to streaming) while its audio
+sat on disk unreachable and unswept, and backed up to iCloud. It had already happened twice. Now an
+ADDITIVE change gets an entry in `MANIFEST_MIGRATIONS`, not a bump; the walk (`migrateToVersion`) is
+pure + unit-tested; and `downloadDirState` reports "a download is here that I can't read"
+independently of the version, so the reclaim stays reachable — it used to be gated on `downloaded`,
+i.e. unreachable in exactly the case that needed it.
 
-- [ ] **⚠ A `MANIFEST_VERSION` bump silently invalidates EVERY saved download** (`offline.ts:36,392`).
-      `loadManifest` returns null on mismatch, so the drive vanishes from the offline list and the
-      detail screen shows the error wall — while the audio bytes stay on disk, orphaned, with nothing
-      sweeping them. Rider updates in town, drives into Tahoe, finds nothing. Needs a migration path or
-      at minimum a re-pull prompt at update time.
+- [ ] **Founder call: may a launch-time sweep DELETE orphaned downloads automatically?** They are now
+      visible and removable, but nothing removes them for you, because reclaiming tens of MB of
+      rider-owned audio unasked is destructive under the post-1.0 posture. Options: auto-sweep at
+      launch, sweep only on an explicit "free up space" tap, or sweep only dirs older than N days.
+- [ ] **Verify on a real device.** None of the offline work has run on hardware. Two specifics: a
+      COLD LAUNCH in airplane mode (the listener arms at import, but home's `load()` may still beat
+      the first pushed event — if it reproduces, the bounded fix is a one-time race against a ~250 ms
+      delay inside the FIRST `fetchJson` only; ⚠ never an await on `getNetworkStateAsync`, see the
+      landmines), and a real Tahoe drive running off a saved roam pack.
+- [ ] **Better Auth's transport is deliberately NOT covered** (`src/lib/auth.ts` has its own fetch),
+      so sign-in / sign-up / password-reset / delete-account get no offline line and no timeout at
+      all — offline they hang on RN's untimed fetch, then print the generic line. Named as a non-goal
+      rather than left silent; the fix is a custom `fetch` passed into `createAuthClient`.
 
 ## Offline downloads: full re-pull only (no per-clip diff)
 
