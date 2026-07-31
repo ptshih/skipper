@@ -3,6 +3,8 @@
 // no faked headshot). A national-park patch: arced "THE SKIPPER" up top, a dusk
 // ridgeline with the sun and the car token cresting a dashed trail, a straight
 // "LAKE TAHOE" banner. Amber is rim-light + token only; type stays parchment.
+import { CAR_BODY_PATH } from './carBody'
+
 interface Props {
   size?: number
   class?: string
@@ -46,7 +48,7 @@ const { size = 200, class: klass = '' } = Astro.props
     <path d="M30 150 C58 150 64 120 92 120 C120 120 126 150 170 150" fill="none" stroke="var(--track-inactive)" stroke-width="1.6" stroke-dasharray="3 3"></path>
     <!-- car token on the crest -->
     <g transform="translate(80 110) scale(0.9)" style="color:var(--amber)">
-      <path d="M4 14 L4 11 Q4 10 5.5 9.8 L10 9.8 L13 5.5 Q13.4 5 14.4 5 L20.5 5 Q21.6 5 22.3 5.8 L25.2 9.8 L30.5 10.4 Q32 10.7 32 12.2 L32 14 Z" fill="currentColor"></path>
+      <path d={CAR_BODY_PATH} fill="currentColor"></path>
       <circle cx="10.5" cy="14.4" r="3" fill="var(--surface-sunken)"></circle>
       <circle cx="25" cy="14.4" r="3" fill="var(--surface-sunken)"></circle>
     </g>

@@ -3,6 +3,8 @@
 // little side-view car, amber by default (the app's amberToken). Color comes
 // from `currentColor`, so a parent `style="color:..."` re-tints it; the wheel
 // tires punch through to the page surface.
+import { CAR_BODY_PATH } from './carBody'
+
 interface Props {
   size?: number
   class?: string
@@ -20,10 +22,7 @@ const h = Math.round((size * 19) / 36)
   aria-hidden="true"
 >
   <!-- body -->
-  <path
-    d="M4 14 L4 11 Q4 10 5.5 9.8 L10 9.8 L13 5.5 Q13.4 5 14.4 5 L20.5 5 Q21.6 5 22.3 5.8 L25.2 9.8 L30.5 10.4 Q32 10.7 32 12.2 L32 14 Z"
-    fill="currentColor"
-  ></path>
+  <path d={CAR_BODY_PATH} fill="currentColor"></path>
   <!-- windows (punch to surface) -->
   <path d="M12.7 9.4 L14.7 6.2 L17.4 6.2 L17.4 9.4 Z" fill="var(--surface)"></path>
   <path d="M18.7 6.2 L20.3 6.2 Q21.1 6.2 21.5 6.8 L23.1 9.4 L18.7 9.4 Z" fill="var(--surface)"></path>

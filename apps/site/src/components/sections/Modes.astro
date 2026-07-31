@@ -3,6 +3,7 @@
 // of the product. Both are real shipped product (the route player + RoamEngine),
 // so featuring Roam is honest and differentiating. The art literally encodes
 // "fixed route" (closed loop) vs "wander" (open trail).
+import { CAR_BODY_PATH } from '../carBody'
 ---
 
 <section class="section modes" id="modes">
@@ -33,7 +34,7 @@
           </g>
           <!-- car token mid-route -->
           <g transform="translate(176 96) scale(0.82)" style="color:var(--amber)">
-            <path d="M4 14 L4 11 Q4 10 5.5 9.8 L10 9.8 L13 5.5 Q13.4 5 14.4 5 L20.5 5 Q21.6 5 22.3 5.8 L25.2 9.8 L30.5 10.4 Q32 10.7 32 12.2 L32 14 Z" fill="currentColor"></path>
+            <path d={CAR_BODY_PATH} fill="currentColor"></path>
             <circle cx="10.5" cy="14.4" r="2.8" fill="var(--surface-raised)"></circle>
             <circle cx="25" cy="14.4" r="2.8" fill="var(--surface-raised)"></circle>
           </g>
@@ -68,7 +69,7 @@
           </g>
           <!-- car token free on the trail -->
           <g transform="translate(122 60) scale(0.82)" style="color:var(--amber)">
-            <path d="M4 14 L4 11 Q4 10 5.5 9.8 L10 9.8 L13 5.5 Q13.4 5 14.4 5 L20.5 5 Q21.6 5 22.3 5.8 L25.2 9.8 L30.5 10.4 Q32 10.7 32 12.2 L32 14 Z" fill="currentColor"></path>
+            <path d={CAR_BODY_PATH} fill="currentColor"></path>
             <circle cx="10.5" cy="14.4" r="2.8" fill="var(--surface-raised)"></circle>
             <circle cx="25" cy="14.4" r="2.8" fill="var(--surface-raised)"></circle>
           </g>
