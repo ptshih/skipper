@@ -9,6 +9,13 @@ import { cleanPlaceName } from '@/lib/labels'
 import { space } from '@/theme/tokens'
 import { Badge, Button, Card, Divider, HeaderIconButton, RouteTrack, Screen, Skeleton, SkeletonGroup, Sunburst, Text, voice } from '@/ui'
 
+/** Show the remaining-drives hint only at or below this balance. Not derived from the server's grant
+ *  amount on purpose: the rider's grant is FROZEN at signup while the server default moves, so a
+ *  ratio ("show under 10%") would mean different things to two riders on the same screen. An absolute
+ *  count is the thing a rider can act on — it answers "should I be careful?", which a percentage of a
+ *  number they never saw does not. */
+const CREDIT_HINT_THRESHOLD = 5
+
 // Home — the two first-day modes, ranked by friction. RIDE ALONG (roam) is the PRIMARY CTA: it
 // works anonymously, no plan, the front door for a new rider. CREATE A DRIVE is the secondary,
 // higher-intent action (account-gated at the create tap). MY DRIVES — the rider's saved drives —
@@ -197,8 +204,13 @@ export default function HomeScreen() {
           <Text variant="label" color="accentWarm" style={styles.flex}>
             MY DRIVES
           </Text>
-          {/* Gentle, free-tier-only credit hint — informational, not a depleting "X-left-of-N" toll gauge. */}
-          {credits ? (
+          {/* Gentle credit hint — informational, and deliberately SILENT until the balance is actually
+              low. The comment here used to claim it was "not a depleting X-left-of-N toll gauge" while
+              rendering unconditionally, which was true only while the allotment was small enough to be
+              interesting. With the allotment generous (2026-07-31) an always-on counter is worse than
+              none: it hangs a meter on a charm-first screen to report a wall roughly a decade away.
+              It reappears with enough runway to matter, which is the only moment it informs anything. */}
+          {credits && credits.remaining <= CREDIT_HINT_THRESHOLD ? (
             <Text variant="label" color="inkFaint">
               {credits.remaining > 0
                 ? `${credits.remaining} free ${credits.remaining === 1 ? 'drive' : 'drives'} left`

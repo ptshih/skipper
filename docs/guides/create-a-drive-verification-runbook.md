@@ -90,10 +90,13 @@ Hit these deliberately; several are unproven and called out as findings below.
 - **OUT-OF-REGION.** Prompt somewhere clearly outside Tahoe (e.g. "downtown San Francisco"). Expect
   the propose `422 out_of_region` message, surfaced inline on the form. Then try an AMBIGUOUS
   in-vs-out name to probe the `inRegion` gate + geocode bias (Finding 3).
-- **FREE CAP.** A free account is granted `FREE_DRIVE_CAP` (default **100**) credits ONCE in the
-  user-owned `credit_entries` ledger; each generated drive spends one (and is NEVER refunded on
-  delete — the cap is lifetime, not a live row count). Spend the balance to zero, then create one
-  more → expect the `403 drive_limit_reached` message (names the cap + the credit-pack path). The
+- **FREE CAP.** A free account is granted `FREE_DRIVE_CAP` credits ONCE in the user-owned
+  `credit_entries` ledger; each generated drive spends one (and is NEVER refunded on delete — the cap
+  is lifetime, not a live row count). ⚠ Don't assume the value from this page: it lives in
+  `apps/api/src/credits.ts` + env, and a rider's own grant is FROZEN at signup, so an existing account
+  can legitimately differ from the current setting. Read the balance from admin, then spend it to zero
+  and create one more → expect the `403 drive_limit_reached` message (names the cap + the credit-pack
+  path; it reports `granted` from the ledger, not the env value). The
   client surfaces the server message as-is. (Ledger model: `docs/decisions/credit-ledger.md`; the
   balance is `SUM(amount)` over `credit_entries`, `apps/api/src/credits.ts`.)
 - **DEAD CLIP / dead zone.** Mid-drive, a clip that won't start gets re-signed ONCE then SKIPPED

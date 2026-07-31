@@ -37,9 +37,13 @@ behind a user row that no longer exists.
 *new* free allotment. That is a spend-farming vector, taken knowingly. The alternative — retaining a
 one-way hash of the email to recognize a returning rider — means keeping a derived identifier about
 someone who just asked to be forgotten, and then disclosing that retention in the privacy policy.
-Erasure wins. `FREE_DRIVE_CAP` is the blast radius, which is the other half of this change: it was
-**unset in prod and defaulting to 100**; it is now explicitly **10** in both env files. (⚠ Env is read
-at boot — a running server keeps the old value until it restarts/redeploys.)
+Erasure wins. `FREE_DRIVE_CAP` was described here as the blast radius, and was set explicitly in both
+env files for that reason. ⚠ **Superseded 2026-07-31** (see [free-allotment-through-1-1.md](free-allotment-through-1-1.md)):
+the cap was raised for 1.1, and the blast-radius framing was never quite right. A grant is only a ledger
+row — it costs nothing until spent, and spending means creating drives, which the per-IP create limiter
+bounds regardless of how many credits an account holds. The cap bounds a farmed account's **lifetime**
+total, never its **rate**. (⚠ Env is still read at boot — a running server keeps the old value until it
+restarts/redeploys.)
 
 ## Why reset resolves on the web, not in the app
 

@@ -30,8 +30,13 @@ import { withRetry } from './retry'
  *  ⚠ The accepted consequence: `free:<userId>` keys the one-time free grant on the user id, so a
  *  delete → re-signup mints a FRESH allotment. That's a spend-farming vector, knowingly taken —
  *  the alternative (retaining an email hash post-deletion to recognize a returning user) means
- *  keeping a derived identifier after someone asked to be forgotten. Erasure wins; FREE_DRIVE_CAP
- *  is the blast radius, which is why it's small.
+ *  keeping a derived identifier after someone asked to be forgotten. Erasure wins.
+ *  ⚠ This used to read "FREE_DRIVE_CAP is the blast radius, which is why it's small". That stopped
+ *  being true when the cap was raised for 1.1 (founder call 2026-07-31), and the reasoning was never
+ *  quite right anyway: a grant is only a LEDGER ROW — it costs nothing until it is spent, and spending
+ *  means creating drives, which `createDriveLimiter` bounds per IP per minute regardless of how many
+ *  credits an account holds. So the cap bounds a farmed account's LIFETIME total, never its RATE; the
+ *  rate limiter is and always was the actual control. See ./limits.
  *
  *  Batched so a partial purge can't leave drives without their ledger (or vice versa). */
 export async function purgeUserData(userId: string): Promise<void> {

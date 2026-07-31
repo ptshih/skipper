@@ -27,7 +27,8 @@ admin Users page → "Grant credits" CTA). One concept (credits) instead of two 
   pre-check, the co-committed consume, and the `GET /drives` "N left" hint now run for **every**
   account. There is no uncapped path.
 - **Comp = a grant, not a tier.** To give someone unlimited-feeling capacity, grant a big credit pile
-  via the admin CTA. (`FREE_DRIVE_CAP`, the lazy first-touch allotment, is 100.)
+  via the admin CTA. (The allotment is `FREE_DRIVE_CAP` — the value lives in `apps/api/src/credits.ts`
+  + env, never in prose; see [free-allotment-through-1-1.md](free-allotment-through-1-1.md).)
 - **`role` is untouched.** The Better Auth admin `role` (region-release-gate preview / admin console)
   was always a separate concern from tier and stays exactly as-is.
 
