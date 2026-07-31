@@ -14,10 +14,16 @@ import { z } from 'zod'
 export const narrationForm = z.enum(['story', 'scenic', 'break', 'wave', 'bside'])
 
 /**
- * The WIRE projection of a stop's narration form down to the three the player renders as a
- * "stop" (story/scenic/break) — the icon/treatment switch. A read-DTO vocabulary, no longer
- * backed by its own pg enum: `narrations.form` (a superset) is the storage truth, projected
- * down by the API.
+ * The three-way TREATMENT discriminator the studio branches on while building a prompt or grading a
+ * clip. Not backed by its own pg enum: `narrations.form` (a superset) is the storage truth.
+ *
+ * ⚠ Despite living here, this is NOT a wire shape and nothing ever parses it (verified 2026-07-30:
+ * the Zod value has zero importers; only the inferred TYPE is imported, by exactly three studio files
+ * — `pipeline/narrate.ts`, `pipeline/lint.ts`, `eval/grounding.ts`). The DTO for a played clip is
+ * `driveClipForm` (four values — it carries `wave`), and the player's icon/treatment switch is its own
+ * plain-string map in `apps/mobile/src/ui/stops.ts` that does not import this. Reach for
+ * `driveClipForm` if you want a stop's wire form. Studio-only today, so `@skipper/studio` is arguably
+ * where it belongs — left here because moving it buys less than the churn costs.
  */
 export const stopType = z.enum(['story', 'scenic', 'break'])
 export type StopType = z.infer<typeof stopType>
