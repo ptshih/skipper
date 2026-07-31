@@ -10,8 +10,9 @@
 // Same provider/key handling as DriveMap: Google basemap with EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
 // (the tint applies), else Apple Maps (untinted) on iOS — never a crash for a missing key.
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { Platform, Pressable, StyleSheet, View } from 'react-native'
-import MapView, { Marker, Polygon, PROVIDER_GOOGLE, type LatLng, type Region } from 'react-native-maps'
+import { Pressable, StyleSheet, View } from 'react-native'
+import MapView, { Marker, Polygon, type LatLng, type Region } from 'react-native-maps'
+import { MAP_PROVIDER, toLatLng } from './mapChrome'
 import type { AreaRing } from '@skipper/shared'
 import { border, radius, space } from '../theme/tokens'
 import { mapStyle } from '../theme/mapStyle'
@@ -32,9 +33,6 @@ export interface RoamMapPin {
   area?: AreaRing
 }
 
-/** Wire rings are GeoJSON-order `[lng, lat]`; react-native-maps wants `{latitude, longitude}`.
- *  ⚠ Getting this backwards draws the polygon in the Indian Ocean and throws nothing. */
-const toLatLng = ([lng, lat]: readonly [number, number]): LatLng => ({ latitude: lat, longitude: lng })
 
 export interface RoamMapProps {
   /** The rider's live position — null until the first fix lands. */
@@ -51,8 +49,6 @@ export interface RoamMapProps {
   recenterBottom?: number
 }
 
-const HAS_GOOGLE_KEY = !!process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
-const PROVIDER = Platform.OS === 'android' || HAS_GOOGLE_KEY ? PROVIDER_GOOGLE : undefined
 
 // Marker culling (TestFlight 2026-06-25 #3/#4: "roam map is really laggy" / "loading way too many
 // POI markers really far away — lazy-load by proximity"). A region's manifest is a few hundred pins
@@ -166,13 +162,13 @@ function RoamMapBase({ position, pins, heardPoiIds, clipActive, recenterBottom }
     <View style={styles.fill}>
       <MapView
         ref={mapRef}
-        provider={PROVIDER}
+        provider={MAP_PROVIDER}
         style={styles.fill}
         customMapStyle={mapStyle(isDark)}
         // customMapStyle is Google-only; on the keyless Apple-Maps fallback these keep the night
         // basemap dark + muted instead of a bright untinted default. (audit #463)
         userInterfaceStyle={isDark ? 'dark' : 'light'}
-        mapType={PROVIDER === undefined ? 'mutedStandard' : 'standard'}
+        mapType={MAP_PROVIDER === undefined ? 'mutedStandard' : 'standard'}
         initialRegion={initialRegion}
         showsUserLocation={false} // we draw our OWN puck, brand-styled
         showsCompass={false}

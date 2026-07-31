@@ -11,14 +11,9 @@
 // (untinted) and List mode stays the offline + accessibility-complete equivalent.
 import { bearingDeg } from '@skipper/engine'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Animated, Platform, Pressable, StyleSheet, View } from 'react-native'
-import MapView, {
-  Marker,
-  Polyline,
-  PROVIDER_GOOGLE,
-  type LatLng,
-  type Region,
-} from 'react-native-maps'
+import { Animated, Pressable, StyleSheet, View } from 'react-native'
+import MapView, { Marker, Polyline, type LatLng, type Region } from 'react-native-maps'
+import { MAP_PROVIDER, toLatLng } from './mapChrome'
 import { border, radius, space } from '../theme/tokens'
 import { mapStyle } from '../theme/mapStyle'
 import { useReducedMotion, useTheme } from '../theme'
@@ -56,13 +51,7 @@ export interface DriveMapProps {
   hidePuck?: boolean
 }
 
-const toLatLng = ([lng, lat]: [number, number]): LatLng => ({ latitude: lat, longitude: lng })
 
-// Google styling only applies to the Google provider. On Android react-native-maps is
-// always Google; on iOS we need a key (else Apple Maps, untinted). No key → undefined
-// provider (the native default) so it never crashes claiming a missing SDK.
-const HAS_GOOGLE_KEY = !!process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
-const PROVIDER = Platform.OS === 'android' || HAS_GOOGLE_KEY ? PROVIDER_GOOGLE : undefined
 
 // memo: the player re-renders ~2×/sec from the audio status tick; with a memoized `stops` + stable
 // `progress`/`polyline`, this skips re-rendering the whole map subtree on those ticks. (audit #549)
@@ -222,13 +211,13 @@ function DriveMapBase({
     <View style={styles.fill}>
       <MapView
         ref={mapRef}
-        provider={PROVIDER}
+        provider={MAP_PROVIDER}
         style={styles.fill}
         customMapStyle={mapStyle(isDark)}
         // customMapStyle is Google-only; on the keyless Apple-Maps fallback these keep the night
         // basemap dark + muted instead of a bright untinted default. (audit #463)
         userInterfaceStyle={isDark ? 'dark' : 'light'}
-        mapType={PROVIDER === undefined ? 'mutedStandard' : 'standard'}
+        mapType={MAP_PROVIDER === undefined ? 'mutedStandard' : 'standard'}
         initialRegion={routeRegion}
         showsUserLocation={false} // we draw our OWN puck (route-snapped) — not the raw blue dot
         showsCompass={false}
