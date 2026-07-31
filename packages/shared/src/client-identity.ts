@@ -33,6 +33,13 @@ export const CLIENT_IDENTITY_HEADER = 'X-Skipper-Client'
  *  Run access logs. Real values are ~30 chars. */
 const MAX_HEADER_LEN = 256
 
+/** The header's grammar, hoisted: `parseClientIdentity` runs in middleware ahead of EVERY request, and
+ *  `CAP_TOKEN_RE` is the one definition shared by the emitter and the parser — so the build that writes
+ *  a token and the server that reads it cannot drift on what a legal token looks like. Neither is
+ *  `/g`, so sharing one instance carries no `lastIndex` state between calls. */
+const VERSION_RE = /^[0-9][0-9a-zA-Z.\-+]*$/
+const CAP_TOKEN_RE = /^[a-z0-9_-]+$/
+
 /**
  * The capability vocabulary — ONE home, because the app emits these strings and the API branches on
  * them. A token names something the CLIENT can DO that an older build cannot.
@@ -77,7 +84,7 @@ export function clientIdentityHeader(
   if (version) parts.push(`v=${version}`)
   // Sorted so the header is stable across builds — it lands in access logs, and a set whose order
   // wobbles would look like a changing client.
-  const clean = [...new Set(caps)].filter((c) => c && /^[a-z0-9_-]+$/.test(c)).sort()
+  const clean = [...new Set(caps)].filter((c) => c && CAP_TOKEN_RE.test(c)).sort()
   if (clean.length > 0) parts.push(`caps=${clean.join(',')}`)
   return parts.join('; ')
 }
@@ -104,11 +111,11 @@ export function parseClientIdentity(raw: string | null | undefined): ClientIdent
     const value = part.slice(eq + 1).trim()
     if (key === 'v') {
       // Only a plausible version string — never a free-form label that a comparison might mishandle.
-      if (/^[0-9][0-9a-zA-Z.\-+]*$/.test(value)) version = value
+      if (VERSION_RE.test(value)) version = value
     } else if (key === 'caps') {
       for (const tok of value.split(',')) {
         const t = tok.trim().toLowerCase()
-        if (t && /^[a-z0-9_-]+$/.test(t)) caps.add(t)
+        if (t && CAP_TOKEN_RE.test(t)) caps.add(t)
       }
     }
   }

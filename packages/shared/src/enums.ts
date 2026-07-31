@@ -89,14 +89,12 @@ export type JobKind = z.infer<typeof jobKind>
  * lands it becomes a player-side trim, never separate tours.
  */
 export const durationBucket = z.enum(['short', 'standard', 'long'])
-export type DurationBucket = z.infer<typeof durationBucket>
 
 /**
  * DEFERRED axis (no variant matrix in v1). When interests land they are a stop FILTER
  * (stop tags), never separate tours. Kept for forward use; not a stored tour column.
  */
 export const interest = z.enum(['history', 'nature', 'geology', 'culture', 'food', 'quirky'])
-export type Interest = z.infer<typeof interest>
 
 /**
  * Access level (DERIVED per request, not a column):

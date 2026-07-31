@@ -104,15 +104,15 @@ export const signedStopClip = signedClip.extend({ seq: z.number().int() })
 /*  Free-roam (ALPHA surface — docs/ideas/free-roam-mode.md)                    */
 /* -------------------------------------------------------------------------- */
 
-/** GET /roam — one free-roam encounter pin: a place + its presigned roam clip. */
 /** A convex ring in [lng, lat] plus its arrival slack — the wire form of @skipper/engine's `AreaRef`.
  *  Measured on the real corpus, a district's hull is 6–9 vertices, so this stays small. */
 export const areaRing = z.object({
-  ring: z.array(z.tuple([z.number(), z.number()])).min(3),
+  ring: z.array(coordinate).min(3),
   marginM: z.number().int().nonnegative(),
 })
 export type AreaRing = z.infer<typeof areaRing>
 
+/** GET /roam — one free-roam encounter pin: a place + its presigned roam clip. */
 export const roamPin = z.object({
   poiId: z.uuid(),
   name: z.string(),
