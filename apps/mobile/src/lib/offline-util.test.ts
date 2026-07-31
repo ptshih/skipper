@@ -3,6 +3,7 @@ import type { DriveClip, SignedDriveAudio } from '@skipper/shared'
 import {
   contentSignature,
   daysSinceIso,
+  driveIdsToSweep,
   expectedAudioSeqs,
   extForContentType,
   hasDownloadableAudio,
@@ -13,6 +14,34 @@ import {
   urlMapFromDriveSigned,
   type ManifestMigration,
 } from './offline-util'
+
+// Decides DELETIONS of rider-owned audio, so it gets tests rather than a careful read.
+describe('driveIdsToSweep', () => {
+  test('keeps what the list accounts for and sweeps what it does not', () => {
+    expect(driveIdsToSweep(['a', 'b', 'c'], ['a', 'c'])).toEqual(['b'])
+  })
+
+  test('never sweeps a download that is mid-write', () => {
+    // Deleting these files under the downloader as it verifies them turns a good copy into a broken
+    // one — worse than the leak the sweep exists to fix.
+    expect(driveIdsToSweep(['a', 'b'], [], ['b'])).toEqual(['a'])
+  })
+
+  test('an empty keep-list sweeps everything — authority over it is the CALLER’s guarantee', () => {
+    // The account-switch path relies on exactly this; the list path must therefore only ever pass a
+    // list from a SUCCEEDED fetch (app/index.tsx), since a failed one is indistinguishable here.
+    expect(driveIdsToSweep(['a', 'b'], []).sort()).toEqual(['a', 'b'])
+  })
+
+  test('a list naming drives that are not on disk sweeps nothing', () => {
+    expect(driveIdsToSweep([], ['a', 'b'])).toEqual([])
+    expect(driveIdsToSweep(['a'], ['a', 'b', 'c'])).toEqual([])
+  })
+
+  test('a duplicated dir name is only reported once', () => {
+    expect(driveIdsToSweep(['a', 'a'], [])).toEqual(['a'])
+  })
+})
 
 // The walk that stands between an app update and a rider's saved drives. A bare
 // `version !== CURRENT → null` gate reads to every caller as "never downloaded", which retires every

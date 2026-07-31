@@ -944,20 +944,30 @@ the content diff still flags a superseded cut afterwards. Offered on the drive d
 across saves (so a cancel resumes) stranded files for places that left the corpus — invisible to the
 size readout; now swept after each save.
 
-- [ ] **Founder call: may a launch-time sweep DELETE the remainder automatically?** Repair now covers
-      everything recoverable, so what's left is genuinely dead. ⚠ Two reasons it is still not built:
-      a sweep turns a RECOVERABLE mistake into an unrecoverable one (bump without a migration →
-      sweep at launch → hotfix the migration a day later → the data is already gone, on rider
-      hardware, no undo — and the migration table is empty with two bumps of history); and the
-      "only sweep what is provably deleted" option is UNSAFE today, because the drives dir is not
-      namespaced by user, so diffing `listDrives()` against local dirs would mass-delete the
-      previous account's downloads on the same device. Options ranked: a Settings "free up space"
-      line (consented, and it makes the problem visible); an age gate via
-      `Directory.info().modificationTime` (buys a hotfix window, still unconsented); the
-      deleted-elsewhere diff (blocked on namespacing).
-- [ ] **⚠ Namespace the drives dir by user.** Prerequisite for the diff above, and a correctness /
-      privacy gap on its own: `listDownloadedDrives()` reads every dir regardless of owner, so the
-      offline fallback shows one account's saved drives to the next account signed in on that device.
+✅ **DOWNLOADS THAT ARE NO LONGER YOURS ARE SWEPT (founder OK 2026-07-31: "switching accounts and
+getting data deleted is acceptable").** Two paths, because one must work offline.
+`sweepUnknownDownloads(keep)` drops anything the caller's drive list doesn't mention (deleted on
+another device, or another account's) — ⚠ sound ONLY because `GET /drives` has no limit and no
+pagination, and ⚠ only ever called after the fetch SUCCEEDED, since it cannot tell an empty list from
+a failed one and a call from the catch would wipe every saved drive in a dead zone.
+`reconcileDownloadOwner(userId)` records the owning account and drops everything when it changes —
+that's what makes the accepted behaviour true OFFLINE, where there IS no authoritative list and
+`listDownloadedDrives` would otherwise hand the previous account's drives to the new one. It runs
+BEFORE anything reads the disk, never sweeps on first sight of an owner, and ⚠ deliberately leaves
+the ROAM PACK alone (roam is anonymous and its clips aren't user-owned — a pack belongs to the
+DEVICE; re-pulling ~138 MB on an account switch would be cost for no ownership reason).
+`driveIdsToSweep` is pure + unit-tested because it decides deletions.
+
+- [ ] **Still NOT swept: downloads this build simply can't READ.** That objection was never about
+      ownership and still stands — a sweep turns a RECOVERABLE mistake into an unrecoverable one
+      (bump without a migration → sweep at launch → hotfix a day later → gone, on rider hardware, no
+      undo; the migration table is empty with two bumps of history). `repairDownload` covers it
+      non-destructively when online. What's left is offline leftovers sitting until the rider taps
+      Remove; a Settings "free up space" line is the remaining option (an age gate via
+      `Directory.info().modificationTime` works but still deletes unasked).
+- [ ] **Narrow residual: downloads predating the owner file have no recorded owner**, so they're
+      claimed by whoever is signed in when it's first written. Stamping the owner into each manifest
+      would close it — additive, and no version bump needed now that the migration seam exists.
 - [ ] **Verify on a real device.** None of the offline work has run on hardware. Two specifics: a
       COLD LAUNCH in airplane mode (the listener arms at import, but home's `load()` may still beat
       the first pushed event — if it reproduces, the bounded fix is a one-time race against a ~250 ms

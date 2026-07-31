@@ -101,6 +101,35 @@ export function contentSignature(d: { clips: DriveClip[] }): string {
 }
 
 /* -------------------------------------------------------------------------- */
+/*  Which downloads to reclaim (pure set math; offline.ts does the deleting)    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The drive ids on disk that the rider's current drive list doesn't account for — i.e. deleted
+ * elsewhere, or belonging to another account. `busy` (a download mid-write) is never swept: deleting
+ * those files under the downloader as it verifies them would turn a good copy into a broken one.
+ *
+ * ⚠ This function CANNOT tell a genuinely-empty list from a failed fetch, and an empty `keep`
+ * therefore sweeps everything. That is correct here and dangerous at the call site: authority over
+ * `keep` is the caller's guarantee (offline.ts `sweepUnknownDownloads`, in turn app/index.tsx, which
+ * only calls it after `GET /drives` has SUCCEEDED). Pure + tested because it decides deletions.
+ */
+export function driveIdsToSweep(
+  onDisk: Iterable<string>,
+  keep: Iterable<string>,
+  busy: Iterable<string> = [],
+): string[] {
+  const keepSet = new Set(keep)
+  const busySet = new Set(busy)
+  const out = new Set<string>()
+  for (const id of onDisk) {
+    if (keepSet.has(id) || busySet.has(id)) continue
+    out.add(id)
+  }
+  return Array.from(out)
+}
+
+/* -------------------------------------------------------------------------- */
 /*  Saved-manifest migration (pure walk; offline.ts wires in the file + table)  */
 /* -------------------------------------------------------------------------- */
 

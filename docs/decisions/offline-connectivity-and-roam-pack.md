@@ -143,19 +143,39 @@ resumes) while rebuilding `clips` from the current pin set stranded files that n
 invisible to the size readout, reclaimable only by removing the whole pack. Now swept after each
 save.
 
-### ⚠ Why the launch-time sweep is still NOT built
+### Sweeping what is no longer the rider's — BUILT; sweeping on unreadability — still NOT
 
-Two reasons, and the second was a surprise:
+Two objections were raised against a sweep, and they turned out to apply to **different triggers**.
+Founder call 2026-07-31 — *"switching accounts and getting data deleted is acceptable"* — resolved
+the one that blocked the safe trigger.
 
-1. **A sweep converts a recoverable mistake into an unrecoverable one.** Ship a version bump without
-   its migration → sweep at launch → hotfix the migration a day later → the data is already gone,
-   on rider hardware, with no undo. The migration table is empty and there have been two bumps
-   already, so that is not hypothetical.
-2. **The "only sweep what is provably deleted" option is UNSAFE today.** It would diff `listDrives()`
-   against local dirs — but the drives directory is not namespaced by user. Sign in as a different
-   account and every local dir looks "not mine", so the diff would mass-delete the previous
-   account's downloads. Namespacing is a prerequisite. (The same gap means today's offline fallback
-   shows account A's saved drives to account B — worth its own look, independent of sweeping.)
+**BUILT: sweep on ownership evidence.** Two paths, because one of them has to work offline.
+
+- `sweepUnknownDownloads(keep)` deletes any download the caller's drive list doesn't mention — a
+  drive deleted on another device, or another account's. ⚠ Sound only because `GET /drives` has NO
+  limit and NO pagination (`drives.ts` selects every non-deleted row for the user), so absence really
+  is absence. ⚠ And only ever called after the fetch SUCCEEDED: the function cannot tell an empty
+  list from a failed one, so calling it from a catch would wipe every saved drive in a dead zone.
+  That guarantee lives at the call site (`app/index.tsx`), and is stated at both ends.
+- `reconcileDownloadOwner(userId)` records which account the downloads belong to and deletes them all
+  when it changes. This is what makes the accepted behaviour true OFFLINE, where no authoritative
+  list exists — without it, a rider signing in as somebody else in a dead zone would still see and
+  play the previous account's saved drives, because `listDownloadedDrives` reads every dir regardless
+  of owner. It runs BEFORE anything reads the disk, and never sweeps on first sight of an owner
+  (downloads predating the file have no recorded owner, and whoever holds the phone is their only
+  claimant). ⚠ It deliberately does NOT touch the roam pack: roam is the anonymous front door and its
+  clips aren't user-owned, so a pack is a property of the DEVICE — re-pulling ~138 MB on an account
+  switch would be real cost for no ownership reason.
+
+`driveIdsToSweep` (the set math both use, including the in-flight exclusion — sweeping a download
+mid-write would break a good copy) is pure and unit-tested, because it decides deletions.
+
+**NOT built: sweeping on unreadability.** The other objection stands and is unaffected by the
+founder call, because it is not about ownership: **a sweep converts a recoverable mistake into an
+unrecoverable one.** Ship a version bump without its migration → sweep at launch → hotfix the
+migration a day later → the data is already gone, on rider hardware, with no undo. The migration
+table is empty and there have been two bumps already. `repairDownload` covers that case
+non-destructively instead, which is the better answer regardless.
 
 ## Deliberate non-goals
 
@@ -178,13 +198,13 @@ Two reasons, and the second was a surprise:
   pushed event — if it reproduces, the bounded fix is a one-time race against a ~250 ms delay inside
   the FIRST `fetchJson` only, never an await on the native state call), and a real Tahoe drive on a
   saved pack.
-- **Founder call: may a launch-time sweep delete orphaned downloads automatically?** Repair now
-  covers classes A and B without deleting anything, so what is left is the genuinely-dead remainder.
-  Options: a Settings "free up space" line (consented, and it makes the problem visible — the
-  recommendation); an age-gated sweep, implementable via `Directory.info().modificationTime`, which
-  buys a hotfix window but still deletes without consent; or the deleted-elsewhere diff, which is
-  blocked on namespacing the drives dir by user.
-- **Namespace the drives dir by user.** Prerequisite for the diff above, and independently a
-  correctness/privacy gap: the offline fallback shows one account's saved drives to the next account
-  signed in on the same device.
+- **Class-A/B leftovers are still only rider-reclaimable.** Repair fixes them non-destructively when
+  online; offline, an un-repairable download sits there until the rider taps Remove. A Settings
+  "free up space" line (consented, and it makes the problem visible) is the remaining option — an
+  age gate via `Directory.info().modificationTime` would work but still deletes without consent, and
+  carries the hotfix-foreclosure risk above.
+- **A residual visibility window, now narrow.** `reconcileDownloadOwner` closes the account-switch
+  case at the point of sign-in, but downloads that predate the owner file have no recorded owner and
+  are claimed by whoever is signed in when it is first written. Stamping the owner into each manifest
+  (additive — no version bump needed, given the migration seam) would close it completely.
 - The mid-session dead-air cost (~24 s per encounter) is unchanged for a clip the pack does NOT hold.
