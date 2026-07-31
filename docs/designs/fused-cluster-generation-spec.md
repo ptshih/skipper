@@ -197,6 +197,15 @@ before arrival, and directly contradicts the reachability gate shipped in `build
 selected if the route comes within its trigger radius). A district is somewhere you are INSIDE, which is
 the same shape argument that removed parks and ranges from the corpus.
 
+> ⚠ **REVERSED 2026-07-31 (1.1 D42) — this paragraph assumed ROAM.** The worst-member-coverage metric
+> only binds when the rider can arrive from ANY direction, which is roam's model. A DRIVE knows the
+> frozen polyline: where the route crosses the group, from which side, at what speed. With roam removed
+> the metric does not bind, and the capped point plus `CLUSTER_MAX_TRIGGER_RADIUS_M` is the honest
+> answer. ⚠ Also measured wrong here: "district" is NOT the set that needs an area — over the live
+> corpus the two cross in both directions (2 district+area, 3 district+point, **1 cluster+area — UNR at
+> 903 m**, 61 cluster+point). The naming-capacity conclusion and the trigger geometry are independent
+> questions that shared one word. The DISTRICT vocabulary survives; the area trigger does not.
+
 **Therefore two mechanisms, not one:**
 
 - **CLUSTER** — a point trigger works. **BUILT 2026-07-30 as `clusterTrigger` in `@skipper/engine`,

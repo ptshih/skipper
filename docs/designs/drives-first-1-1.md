@@ -53,8 +53,9 @@ All settled. If you think one is wrong, raise it before building — don't re-li
 | D19 | Both tastes survive: the `GET /sample` postcard (1-tap) **and** the route-stop preview (conversion). |
 | D20 | Offline is the **subject-keyed store + per-drive top-up**. The top-up alone is sufficient AND authoritative (INV-6). |
 | D21 | The **REGION PACK is CUT from 1.1** — its purpose was ambient proximity playback, which dies with roam. No pack endpoint, no `bbox` on `/regions`, no ~138 MB download. Revisit only if per-drive downloads prove insufficient on a real trip; the store is already keyed so it would be additive. |
-| D22 | The 5 districts are **re-anchored as points**. Verified free — all five scripts are place-scoped with zero motion-dependent phrasing, so **no regen is needed**. |
-| D23 | The two near-duplicate Carson City districts **merge**; the weaker is retired via `excluded_reason`. |
+| D22 | ⚠ **WITHDRAWN 2026-07-31 — there is nothing to re-anchor.** `poi_clusters` has no coordinate column (`schema.ts:424`: "a cluster's extent is its members' coordinates"), so "re-anchor the districts as points" has no mechanism. Its scope was also wrong: 3 of the 5 districts are ALREADY under the cap (Virginia City 265 m, Historic Downtown Carson City 411 m, Historic Carson City 552 m), and the over-cap set includes **UNR, which is a `cluster`, not a district**. Replaced by the area deletion (D42). |
+| D23 | ⚠ **WITHDRAWN 2026-07-31 — the merge CREATES the problem D40 wanted removed.** Measured over exactly the two named districts (33 anchors): merged `clusterTrigger` radius is **741 m**, over the 600 m cap — so the merge would manufacture a NEW area-shaped group at the moment the plan wants none left. Once D42 lands, the merge is harmless (741 m just becomes a capped point) and optional; it is no longer part of 1.1. |
+| D42 | **The AREA trigger is DELETED whole; the DISTRICT vocabulary is KEPT untouched** (founder 2026-07-31). They were never the same concept — measured, "district" and "needs an area trigger" cross in both directions (2 district+area, 3 district+point, 1 cluster+area, 61 cluster+point). The classifier's DISTRICT clause is a **naming-capacity** instruction ("name the 2–3 most recognisable, background the rest") and is **mode-neutral** — it is the only thing in the repo that turns 46 competing Reno POIs into one good clip, and a drives-only region with a downtown needs it exactly as much. The AREA trigger answered "a roamer can arrive from any direction", which **a drive never can** — the route is a frozen polyline. `treatment` stays as-is (one runtime reader: an admin badge). |
 | D24 | Runtime form handling collapses to `story` **only in `apps/api` + `apps/mobile`**, plus a loud guard (INV-7). The studio's scenic-downgrade path **stays**. |
 | D25 | `drive_demand` — **drop the table, the upsert, the schema block, and the M4 reference.** PostHog is the demand instrument. (Resolves the earlier contradiction: there is no "fix `distinct_users`" work.) |
 | D26 | Dead studio CLIs deleted: `regen-report.ts`, `rename-roam-prefix.ts`, `test-mastering-chain.ts`, and `golden.ts`'s unrun `TTS_CASES`/`DIVERSITY_CASES`. |
@@ -72,7 +73,7 @@ All settled. If you think one is wrong, raise it before building — don't re-li
 | D37 | Ships as **one 1.1**, one submission, App Store listing rewritten in the same pass. |
 | D38 | Built on **`main`**, atomic commits per build step. No release branch. |
 | D39 | `docs/ideas/` + `docs/specs/` merged into **`docs/designs/`** (done). |
-| D40 | **Districts are re-anchored BEFORE roam is removed** (D22 moves ahead of the sweep). Once no cluster is area-shaped, `area.ts` and `drive-select.ts:169`'s refusal have nothing left to guard and delete honestly — instead of red-typechecking, or worse, being 'fixed' by deleting a production guard. |
+| D40 | ⚠ **DISSOLVED 2026-07-31.** Its ordering constraint existed to make no cluster area-shaped before deleting `area.ts`. D42 deletes the area path end-to-end in ONE commit — including the MINT site (`clusters.ts`), so no `area` is ever constructed, `cand.area` is permanently undefined, and `drive-select.ts:169` deletes honestly with nothing red-typechecking. No corpus work is needed first, so there is no ordering constraint left to state. |
 | D41 | **Spec step 1 is CUT as dead work.** It hardened `app/create.tsx`, which step 2 deletes one commit later, and D37+D3 mean no build ships in between. Its two durable halves survive: the INV-9 signed-in helper moves into the mobile leg, and the credit-disclosure copy lands on the preview card. |
 
 ---
@@ -321,9 +322,31 @@ values rather than buy a merge conflict; and `loadRegionAnchors` has **no `LIMIT
 that set becomes the planner's allowlist and rides in the cached prompt prefix on every turn, so an
 unstable row order is a silent prompt-cache invalidator. **Fix in step 6.**
 
-**2 — Corpus (D22/D23/D40), gated on step 0.** Re-anchor the 5 districts as points (free, no regen);
-merge the Carson City duplicates via `excluded_reason`. **This must precede roam removal** so `area.ts`
-and `drive-select.ts:169`'s refusal have nothing left to guard.
+**2 — DELETE THE AREA PATH (D42). Rewritten 2026-07-31; the old corpus step is withdrawn.** One atomic
+deletion, **no corpus work, no `excluded_reason` retirements, no regeneration, no spend**, and it is
+NOT gated on step 0 (nothing destructive touches data).
+
+⚠ **It also fixes a LIVE BUG, which is the real reason to do it first.** `drives.ts` loads fused
+tellings with `areaCapable: true`, whose cluster ids feed `notSupersededByServedCluster` and suppress
+every member of every loaded cluster — and then `drive-select.ts:169` refuses the area ones. So for the
+three over-cap groups the fused clip is loaded, its members are silenced, and then the clip itself is
+dropped. Measured on the live corpus: **Downtown Reno 46 released member clips + 1 fused → 0 audible;
+Reno's Historic Homes 15 + 1 → 0; UNR Campus 6 + 1 → 0.** 67 paid-for released clips unreachable on any
+drive through them. Nothing is frozen today only because all three saved drives are Tahoe-basin.
+Deleting the area path turns all three into ordinary capped-600 m points that actually play.
+
+Delete: `packages/engine/src/area.ts` + its tests + the `index.ts` re-export; the area branch in
+`trigger.ts`; `DriveCandidate.area` and `drive-select.ts`'s second admission rule; `ClusterTelling.area`,
+`areaCapable` and the `needsArea`/hull-mint block in `apps/api/src/clusters.ts`; the `area` plumbing in
+`apps/api/src/drives.ts`; `areaRing` + `roamPin.area` in `packages/shared`; the `<Polygon>` + `area`
+threading in mobile; and the whole `CLIENT_CAPS`/`clientCan` capability channel, whose ONLY token is
+`area` and which has no production caller.
+
+⚠ **KEEP and RENAME-IN-COMMENT, do not delete:** `CLUSTER_MAX_TRIGGER_RADIUS_M` + `exceedsPointTrigger`.
+With areas gone they stop selecting a MODE and become the honesty CAP — the only thing keeping UNR
+(903 m), Downtown Reno (914 m) and Historic Homes (698 m) from firing a kilometre out. `cluster.ts`'s
+comment ("the area trigger exists now, so it SELECTS THE MODE") becomes false and must be rewritten in
+the same commit. ⚠ **KEEP `treatment` and the classifier's DISTRICT clause untouched** (D42).
 
 **3 — Remove roam**, in layered commits. ⚠ The removal table is INCOMPLETE — see its footnotes; two
 omissions are architectural, not mechanical. Regenerate router types (`bunx expo customize tsconfig.json`)
