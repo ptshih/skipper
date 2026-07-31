@@ -254,6 +254,26 @@ export function buildFactSheet(req: NarrationRequest): string {
     }
     for (const l of geologyLines(req.geology, 'story')) lines.push(l)
     for (const l of mergedFeatureLines(req.mergedFeatures)) lines.push(l)
+    // ⚠ CLOSER SHAPE for a SINGLE-SUBJECT telling — added 2026-07-30 for a MEASURED regression, and
+    // it deliberately reverses the scoping note on the fused rule above ("single-place clips do not
+    // have this problem, so they must not inherit the rule"). That was true when it was written, at
+    // ~2%. It stopped being true the moment the persona prompt's "here's the …" ban was widened from
+    // three completions to the whole family: regenerating 72 clips took tail collapse from 2 of 125
+    // rows to 15 of 72 (21%), on THE SAME PLACES. The construction the model used to run up to its
+    // payoff was gone, so it landed on a quiet aside instead — "Not bad company.", "This one just
+    // earns the view." — and the voice has nothing to put weight on.
+    //
+    // ⚠ This must NOT kill the deflate. "The grand build, then the deflate" is the Skipper's signature
+    // move and the system prompt teaches it; the defect is a closer with no PREDICATE to land on, not
+    // a closer that is wry. So the rule asks for a full sentence, not for a bigger finish.
+    //
+    // Scoped to the single-subject case because the fused block above already carries its own version.
+    if (!req.mergedFeatures?.length) {
+      lines.push('')
+      lines.push(
+        '(END ON A FULL SENTENCE — subject and verb, said flat and sure, the last thing you would leave a friend with as the car pulls away. Your deflate still belongs here; just give it something to stand on. A closing FRAGMENT ("Not bad company.", "A house furnished by half a state.") reads as an afterthought and dies in the mouth — the voice drops away and the rider loses the line entirely over road noise.)',
+      )
+    }
   } else if (req.stopType === 'scenic') {
     const namedScenic = Boolean(req.place?.name)
     if (namedScenic) {
