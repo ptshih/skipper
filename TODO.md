@@ -304,8 +304,12 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
             the guard test exempts it in PROSE — but deliberately NOT in the example narrations, which
             is the half that caught the real bug. Validated by reverting the example and watching the
             test fail.
-            ⚠ UNVERIFIED against a real generation (the regex is proven, the prompt change is not) —
-            same standing `--scripts-only` probe applies if it is worth ~$3 to confirm.
+            ✅ **VERIFIED on a paid probe, 2026-07-30 ($1.85, founder-authorized).** All 8 eligible
+            clips carrying the leak, regenerated `--scripts-only`: **card 8 → 0.** Five of them also
+            carried the `"here's the …"` tic, giving an independent second sample of the earlier fix:
+            **ban 5 → 0.** Across both probes that is 23 → 2 on 20 clips. Voice held (the Nevada State
+            Prison take still lands its groaner), and "the cards and dice went out" survived untouched
+            in the same clip — the narrow pattern behaving correctly on real subject matter.
       - [ ] **`--scripts-only` DOES write to the DB, but its blast label says it does not.**
             `generate-narrations.ts` declares `blast: scriptsOnly ? ['SPENDS $'] : ['SPENDS $',
             'MUTATES DB']`, yet the run still recorded `eval_runs` + 60 `eval_scores` rows. Harmless
