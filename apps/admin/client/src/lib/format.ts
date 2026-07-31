@@ -1,5 +1,9 @@
 export const fmtDate = (iso?: string | null): string => (iso ? new Date(iso).toLocaleString() : '—')
 
+/** An eval score to 2dp, or an em-dash when it wasn't measured. Shared so the run list and the run
+ *  detail can't render the same number to different precision. */
+export const fmtScore = (v: number | null): string => (v == null ? '—' : v.toFixed(2))
+
 // Normalize a thrown value to a display string. ApiError extends Error, so this covers both.
 export const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e))
 

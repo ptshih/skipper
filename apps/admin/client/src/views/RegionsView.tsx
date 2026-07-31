@@ -3,7 +3,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, Compass, Layers, Loader2, Plus, Rocket, Search, Sparkles, TriangleAlert } from 'lucide-react'
 import { api, type BboxLlmResult, type BboxRefinement, type Region } from '@/lib/api'
-import { errMsg } from '@/lib/format'
+import { errMsg, fmtDate } from '@/lib/format'
 import { qk } from '@/lib/queryKeys'
 import { useAdminList } from '@/lib/useAdminList'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -139,7 +139,7 @@ export function RegionsView() {
       header: 'Status',
       cell: (r) =>
         r.releasedAt != null ? (
-          <Badge variant="success" title={`Released ${new Date(r.releasedAt).toLocaleString()}`}>
+          <Badge variant="success" title={`Released ${fmtDate(r.releasedAt)}`}>
             <CheckCircle2 className="h-3 w-3" /> Released
           </Badge>
         ) : (

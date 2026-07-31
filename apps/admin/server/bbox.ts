@@ -50,3 +50,11 @@ export function parseBbox(raw: string | null | undefined): BboxCorners | null {
   if (p.length !== 4 || p.some((n) => !Number.isFinite(n))) return null
   return { swLng: p[0]!, swLat: p[1]!, neLng: p[2]!, neLat: p[3]! }
 }
+
+/** Is a point inside the box? Bounds are INCLUSIVE on all four edges — the same containment the
+ *  /admin/regions poi-count and the /admin/pois region column each used to spell out inline. They
+ *  have to agree exactly: the two views show counts the operator reads as the same number, so an edge
+ *  case decided differently in one place would surface as two screens disagreeing about one poi. */
+export function pointInBbox(box: BboxCorners, lat: number, lng: number): boolean {
+  return lat >= box.swLat && lat <= box.neLat && lng >= box.swLng && lng <= box.neLng
+}

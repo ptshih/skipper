@@ -1,4 +1,14 @@
 // Typed fetch client for the admin-api. Same-origin in prod (behind IAP), proxied in dev.
+//
+// `JobKind` and `StoryEligibility` are IMPORTED from @skipper/shared rather than mirrored as literal
+// unions here. Both used to be hand-copied with a "keep in sync" comment, which meant a kind added to
+// the real enum — a list the shared file itself calls out as churning — silently failed to reach this
+// copy, with nothing to catch the drift. These are `type` imports, so they erase at build and add
+// nothing to the bundle; @skipper/shared depends only on zod and touches no node builtins.
+// Re-exported so views keep getting their types from this one module.
+import type { JobKind, StoryEligibility } from '@skipper/shared'
+
+export type { JobKind, StoryEligibility }
 
 export class ApiError extends Error {
   constructor(
@@ -25,9 +35,6 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 
 /* ------------------------------- types ------------------------------- */
 
-// Mirrors the `jobKind` enum in @skipper/shared (the server validates against it; this is the UX-typing
-// view, like StoryEligibility). Keep in sync if a kind is added/renamed there.
-export type JobKind = 'generate' | 'patch_clip' | 'resynth' | 'resynth_narration' | 'sweep_orphans' | 'discover_pois' | 'enrich_pois' | 'generate_narrations' | 'curate_places' | 'refetch_facts' | 'offline_audit'
 export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled'
 
 export interface StudioJob {
@@ -108,10 +115,6 @@ export interface NarrationDetail {
   /** region-release-gate: null = STAGED (not public), ISO string = RELEASED. */
   releasedAt: string | null
 }
-
-/** Story-eligibility — whether a POI is story-grade narration material (a POI property; roam draws
- *  from it). Mirrors `StoryEligibility` in @skipper/shared (server computes it). */
-export type StoryEligibility = 'eligible' | 'filtered-source' | 'filtered-taste' | 'filtered-stub'
 
 /** Narration axis: does a narration exist for this POI, and is it on the POI's current facts. */
 export type NarrationStatus = 'none' | 'fresh' | 'stale'

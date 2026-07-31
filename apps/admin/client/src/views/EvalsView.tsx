@@ -3,7 +3,7 @@ import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { Activity, Search, X } from 'lucide-react'
 import { api, type EvalScoreRow, type RunEvent } from '@/lib/api'
-import { errMsg, fmtDate, timeAgo } from '@/lib/format'
+import { errMsg, fmtDate, fmtScore, timeAgo } from '@/lib/format'
 import { KIND_META, TARGET_SENTINELS, RunTarget, RUNS_REFETCH_MS } from '@/lib/runs'
 import { VERDICT_VARIANT, verdictOf, isPartial, isTrueFail } from '@/lib/status'
 import { qk } from '@/lib/queryKeys'
@@ -29,12 +29,11 @@ import { cn } from '@/lib/utils'
 
 // grounding/tts/diversity; grounding turns red below the gate.
 function RunScores({ r }: { r: RunEvent }) {
-  const fmt = (v: number | null) => (v == null ? '—' : v.toFixed(2))
   return (
     <span className="flex gap-2 font-mono text-xs text-muted-foreground">
-      <span className={cn(r.grounding != null && r.grounding < 0.75 && 'text-destructive')}>g {fmt(r.grounding)}</span>
-      <span>tts {fmt(r.tts)}</span>
-      <span>div {fmt(r.diversity)}</span>
+      <span className={cn(r.grounding != null && r.grounding < 0.75 && 'text-destructive')}>g {fmtScore(r.grounding)}</span>
+      <span>tts {fmtScore(r.tts)}</span>
+      <span>div {fmtScore(r.diversity)}</span>
     </span>
   )
 }
@@ -292,7 +291,6 @@ function EvalReport({ runId }: { runId: string }) {
   // Advisory-only flags: a place that cleared the gate but has a failing advisory dim (charm /
   // veracity / diversity) — invisible in the withheld section, surfaced on its own below.
   const advisory = groups.filter((p) => !p.withheld && p.dims.some((d) => !d.pass))
-  const score = (v: number | null) => (v == null ? '—' : v.toFixed(2))
   // charm/veracity have no eval_runs rollup column — average their per-clip scores here so the run
   // summary shows them when present (an offline_audit run with --charm / --veracity).
   const advMean = (dim: string): number | null => {
@@ -312,9 +310,9 @@ function EvalReport({ runId }: { runId: string }) {
             <span className={cn(run.withheld > 0 && 'font-medium text-warning')}>{run.withheld} withheld</span>
           </DetailRow>
           <DetailRow label="Scores" mono>
-            g {score(run.grounding)} · tts {score(run.tts)} · div {score(run.diversity)}
-            {charmMean != null && ` · charm ${score(charmMean)}`}
-            {verMean != null && ` · ver ${score(verMean)}`}
+            g {fmtScore(run.grounding)} · tts {fmtScore(run.tts)} · div {fmtScore(run.diversity)}
+            {charmMean != null && ` · charm ${fmtScore(charmMean)}`}
+            {verMean != null && ` · ver ${fmtScore(verMean)}`}
           </DetailRow>
           {run.judgeModel && <DetailRow label="Judge" mono>{run.judgeModel}</DetailRow>}
         </DetailList>

@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { CircleCheck, RefreshCw, Rocket, Zap } from 'lucide-react'
 import { api } from '@/lib/api'
-import { errMsg } from '@/lib/format'
+import { errMsg, fmtDate } from '@/lib/format'
 import { qk } from '@/lib/queryKeys'
 import { Badge } from '@/components/ui/badge'
 import { PendingButton } from '@/components/ui/pending-button'
@@ -119,7 +119,7 @@ export function NarrationTab({ poiId, hasNarration }: { poiId: string; hasNarrat
         )}
         {clip.factsHash && <code className="font-mono">{clip.factsHash.slice(0, 7)}</code>}
         {clip.releasedAt ? (
-          <Badge variant="success" title={`Released ${new Date(clip.releasedAt).toLocaleString()}`}>
+          <Badge variant="success" title={`Released ${fmtDate(clip.releasedAt)}`}>
             <CircleCheck className="h-3 w-3" /> Released
           </Badge>
         ) : (

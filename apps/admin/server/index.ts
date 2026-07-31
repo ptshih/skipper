@@ -53,7 +53,7 @@ import { user } from '@skipper/db/auth-schema'
 import { CLAUDE_MODELS, classifyStoryEligibility } from '@skipper/shared'
 import { checkSpeakableAnchor } from '@skipper/engine'
 import { requireAdmin, type AdminEnv } from './auth'
-import { bboxError, parseBbox } from './bbox'
+import { bboxError, parseBbox, pointInBbox } from './bbox'
 import { draftCuratedPlaces, resolvePlaceInBbox, type PlaceDraft, type ResolvedPlace } from './places'
 import { contentTypeForKey, presignGet } from './storage'
 import {
@@ -143,9 +143,7 @@ app.get('/admin/regions', async (c) => {
   const boxed = rows.map((r) => ({ slug: r.slug, box: parseBbox(r.bbox) }))
   const counts = new Map<string, number>(boxed.flatMap((b) => (b.box ? [[b.slug, 0]] : [])))
   for (const { lat, lng } of poiCoords) {
-    const hit = boxed.find(
-      ({ box }) => box && lat >= box.swLat && lat <= box.neLat && lng >= box.swLng && lng <= box.neLng,
-    )
+    const hit = boxed.find(({ box }) => box && pointInBbox(box, lat, lng))
     if (hit) counts.set(hit.slug, counts.get(hit.slug)! + 1)
   }
 
@@ -746,43 +744,50 @@ app.get('/admin/runs', async (c) => {
 // held back (withheld=true) and why (findings), worst-first. Read-only observability.
 app.get('/admin/runs/:id/scores', async (c) => {
   const runId = c.req.param('id')
-  const [run] = await db
-    .select({
-      id: evalRuns.id,
-      region: evalRuns.region,
-      kind: evalRuns.kind,
-      pass: evalRuns.pass,
-      dryRun: evalRuns.dryRun,
-      total: evalRuns.total,
-      shipped: evalRuns.shipped,
-      withheld: evalRuns.withheld,
-      grounding: evalRuns.groundingScore,
-      tts: evalRuns.ttsScore,
-      diversity: evalRuns.diversityScore,
-      narrationModel: evalRuns.narrationModel,
-      judgeModel: evalRuns.judgeModel,
-      gitSha: evalRuns.gitSha,
-      createdAt: evalRuns.createdAt,
-    })
-    .from(evalRuns)
-    .where(eq(evalRuns.id, runId))
+  // Both queries key only off `runId` — neither needs the other's result — so they go together rather
+  // than paying two sequential neon-http round trips. That driver is one-shot HTTP per query, and this
+  // route is fetched when the operator opens a run drawer, so the second trip is time a human spends
+  // watching a spinner. The trade: a run that doesn't exist now issues one query it won't use. That's
+  // the rare branch paying for the common one.
+  const [[run], scores] = await Promise.all([
+    db
+      .select({
+        id: evalRuns.id,
+        region: evalRuns.region,
+        kind: evalRuns.kind,
+        pass: evalRuns.pass,
+        dryRun: evalRuns.dryRun,
+        total: evalRuns.total,
+        shipped: evalRuns.shipped,
+        withheld: evalRuns.withheld,
+        grounding: evalRuns.groundingScore,
+        tts: evalRuns.ttsScore,
+        diversity: evalRuns.diversityScore,
+        narrationModel: evalRuns.narrationModel,
+        judgeModel: evalRuns.judgeModel,
+        gitSha: evalRuns.gitSha,
+        createdAt: evalRuns.createdAt,
+      })
+      .from(evalRuns)
+      .where(eq(evalRuns.id, runId)),
+    db
+      .select({
+        poiId: evalScores.poiId,
+        qid: evalScores.qid,
+        name: evalScores.name,
+        dimension: evalScores.dimension,
+        pass: evalScores.pass,
+        value: evalScores.value,
+        withheld: evalScores.withheld,
+        findings: evalScores.findings,
+        detail: evalScores.detail,
+        script: evalScores.script,
+      })
+      .from(evalScores)
+      .where(eq(evalScores.runId, runId)),
+  ])
   if (!run) return c.json({ error: 'run not found' }, 404)
 
-  const scores = await db
-    .select({
-      poiId: evalScores.poiId,
-      qid: evalScores.qid,
-      name: evalScores.name,
-      dimension: evalScores.dimension,
-      pass: evalScores.pass,
-      value: evalScores.value,
-      withheld: evalScores.withheld,
-      findings: evalScores.findings,
-      detail: evalScores.detail,
-      script: evalScores.script,
-    })
-    .from(evalScores)
-    .where(eq(evalScores.runId, runId))
   // Worst-first: withheld places, then failures, then the rest.
   scores.sort(
     (a, b) => Number(b.withheld) - Number(a.withheld) || Number(a.pass) - Number(b.pass),
@@ -1072,13 +1077,11 @@ app.get('/admin/pois', async (c) => {
   // (deterministic by displayName) whose box contains its coords. A region with no/invalid bbox
   // claims nothing — set one in the admin Regions view to light up coverage.
   const regionBoxes = regionRows.flatMap((r) => {
-    if (!r.bbox) return []
-    const p = r.bbox.split(',').map(Number)
-    if (p.length !== 4 || p.some((n) => !Number.isFinite(n))) return []
-    return [{ slug: r.slug, name: r.displayName, swLng: p[0]!, swLat: p[1]!, neLng: p[2]!, neLat: p[3]! }]
+    const box = parseBbox(r.bbox)
+    return box ? [{ slug: r.slug, name: r.displayName, box }] : []
   })
   const regionForPoi = (lat: number, lng: number) =>
-    regionBoxes.find((b) => lat >= b.swLat && lat <= b.neLat && lng >= b.swLng && lng <= b.neLng) ?? null
+    regionBoxes.find((b) => pointInBbox(b.box, lat, lng)) ?? null
 
   // Off-road flag (dogfood 2026-06-25 #5/#7 "flag POIs not near a road — they won't trigger"): a POI with
   // NO road-snapped speakable anchor triggers on its raw centroid, so an off-road pin fires garbage or never.
@@ -1625,6 +1628,16 @@ app.delete('/admin/pois/:id', async (c) => {
 // the cheap guard is worth it. Tune freely; not a product limit.
 const MAX_ADMIN_GRANT = 1000
 
+/** The credit-ledger rollup, in ONE place because two routes report it and the operator reads their
+ *  numbers as the same number: the users list (grouped by userId) and the grant response (one user).
+ *  remaining = SUM(amount), the live balance; granted = SUM of grant amounts, the lifetime cap;
+ *  used = the consumed magnitude — consumes are stored NEGATIVE, so the sum is negated back to a count. */
+const creditSummaryCols = {
+  remaining: sql<number>`coalesce(sum(${creditEntries.amount}), 0)::int`,
+  granted: sql<number>`coalesce(sum(${creditEntries.amount}) filter (where ${creditEntries.kind} = 'grant'), 0)::int`,
+  used: sql<number>`coalesce(-sum(${creditEntries.amount}) filter (where ${creditEntries.kind} = 'consume'), 0)::int`,
+}
+
 // Account list + each user's credit-ledger summary (granted/used/remaining), one row per `user`.
 // The `user` table (Better Auth) and `credit_entries` ledger live in the SAME Neon DB, so the admin's
 // neon-http `db` reads both. Credits are aggregated in ONE grouped pass and joined in JS (mirrors the
@@ -1646,11 +1659,7 @@ app.get('/admin/users', async (c) => {
     db
       .select({
         userId: creditEntries.userId,
-        // remaining = SUM(amount) (the live balance); granted = SUM of grant amounts (lifetime cap);
-        // used = the consumed magnitude (consumes are stored negative — negate the sum to a count).
-        remaining: sql<number>`coalesce(sum(${creditEntries.amount}), 0)::int`,
-        granted: sql<number>`coalesce(sum(${creditEntries.amount}) filter (where ${creditEntries.kind} = 'grant'), 0)::int`,
-        used: sql<number>`coalesce(-sum(${creditEntries.amount}) filter (where ${creditEntries.kind} = 'consume'), 0)::int`,
+        ...creditSummaryCols,
       })
       .from(creditEntries)
       .groupBy(creditEntries.userId),
@@ -1721,11 +1730,7 @@ app.post('/admin/users/:id/credits', async (c) => {
 
   // Return the refreshed credit summary so the row updates in place without a full refetch race.
   const [summary] = await db
-    .select({
-      remaining: sql<number>`coalesce(sum(${creditEntries.amount}), 0)::int`,
-      granted: sql<number>`coalesce(sum(${creditEntries.amount}) filter (where ${creditEntries.kind} = 'grant'), 0)::int`,
-      used: sql<number>`coalesce(-sum(${creditEntries.amount}) filter (where ${creditEntries.kind} = 'consume'), 0)::int`,
-    })
+    .select(creditSummaryCols)
     .from(creditEntries)
     .where(eq(creditEntries.userId, id))
   return c.json({
