@@ -187,6 +187,12 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   deliberate cuts; BUILT 2026-06-10, founder-only TestFlight.
 
 ### ideas/
+- [offline-region-packs.md](ideas/offline-region-packs.md) — treat offline as ONE region pack kept
+  fresh opportunistically, rather than a download per drive: it matches "the narration is the shared
+  atom", ends the double-storage between a roam pack and a saved drive, and makes most of the
+  per-drive manifest machinery unrepresentable. ⚠ Carries the two things that must be designed in —
+  a roam-built pack does NOT cover every clip a FROZEN drive can reference, and `roamPin` has no
+  revision token to sync against. Founder direction 2026-07-31, NOT greenlit.
 - [poi-legibility-layer.md](ideas/poi-legibility-layer.md) — **the claimed moat**: everything between
   "a Wikidata entity exists" and "a driver hears one coherent thing at the right moment" — the
   SOLO/CLUSTER/DISTRICT treatment split, leader (non-chaining) grouping, an Opus treatment classifier,
