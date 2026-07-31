@@ -4,10 +4,13 @@
 // transactions — and the app's @skipper/db client is neon-http, which has none.
 // So auth uses a separate drizzle client over the neon-serverless WebSocket Pool
 // (same Neon database). Lazy + proxied so importing this never requires
-// DATABASE_URL (keeps schema codegen / typecheck env-free), mirroring @skipper/db.
+// DATABASE_URL (keeps schema codegen / typecheck env-free) — via @skipper/db's
+// `createLazyProxy`, so the DRIVER is the only thing that differs between the two
+// clients. It used to be a hand-copied proxy that merely "mirrored" that one.
 
 import { drizzle, type NeonDatabase } from 'drizzle-orm/neon-serverless'
 import { Pool } from '@neondatabase/serverless'
+import { createLazyProxy } from '@skipper/db'
 
 let cached: NeonDatabase | undefined
 
@@ -29,10 +32,4 @@ function getAuthDb(): NeonDatabase {
   return cached
 }
 
-export const authDb: NeonDatabase = new Proxy({} as NeonDatabase, {
-  get(_target, prop) {
-    const real = getAuthDb()
-    const value = Reflect.get(real as object, prop)
-    return typeof value === 'function' ? value.bind(real) : value
-  },
-})
+export const authDb: NeonDatabase = createLazyProxy(getAuthDb)

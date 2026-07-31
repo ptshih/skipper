@@ -33,14 +33,31 @@ export function getDb(): DB {
   return cached
 }
 
+/**
+ * Build `factory()` on FIRST property access, then delegate every access to it.
+ *
+ * Extracted because there are TWO lazy clients, not one, and they are lazy for the same reason while
+ * their drivers legitimately differ: this package's neon-http client, and Better Auth's
+ * neon-serverless Pool client in `apps/api/src/auth-db.ts` (it needs interactive transactions, which
+ * neon-http has none of). Both must stay lazy so that importing either never requires
+ * `DATABASE_URL` — that is what keeps env-free routes like `GET /health` booting, and what keeps
+ * schema codegen/typecheck env-free. Only the driver construction differs, so only that is duplicated.
+ *
+ * ⚠ Methods are BOUND to the real client. A drizzle method plucked off the proxy and called
+ * unbound loses its `this` and throws, so the bind is load-bearing, not tidiness.
+ */
+export function createLazyProxy<T extends object>(factory: () => T): T {
+  return new Proxy({} as T, {
+    get(_target, prop) {
+      const real = factory()
+      const value = Reflect.get(real as object, prop)
+      return typeof value === 'function' ? value.bind(real) : value
+    },
+  })
+}
+
 /** Lazy proxy: `db.select()...` works but the client is built on first access. */
-export const db: DB = new Proxy({} as DB, {
-  get(_target, prop) {
-    const real = getDb()
-    const value = Reflect.get(real as object, prop)
-    return typeof value === 'function' ? value.bind(real) : value
-  },
-})
+export const db: DB = createLazyProxy(getDb)
 
 // Schema is intentionally NOT re-exported here. Import DB row types from the
 // "@skipper/db/schema" subpath, aliased to avoid clashing with the Zod boundary
