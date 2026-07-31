@@ -39,9 +39,11 @@ identically, which means the SCRIPT determines it"). That finding was real FOR F
 not generalise: a fused clip ending on a verbless list has nothing to land on in any take, while a
 solo clip ending on a wry sentence is a coin-flip the sampler sometimes loses.
 
-⚠ **What this means for the next person: reach for `resynth-narration` BEFORE re-narrating.** It is
-~$0.035/clip against ~$0.28, and it fixed 63% of the population. Re-generating to fix a tail is paying
-8× for a re-roll you can buy directly.
+⚠ **The durable lessons from this episode live in `docs/guides/ops-scripts-sop.md`** ("Judging a paid
+run: five traps that each produced a wrong conclusion") — reversibility before the first `--apply`,
+baseline before the intervention, never validate on the repair population, no conclusion from a sample
+that cannot answer, and cheap lever first. Recorded there rather than here because this section gets
+deleted when done and those outlive it.
 
 - [x] **The solo closer rule shipped anyway (`968a0ab`) and is worth keeping, but do not credit it
       with much:** measured 21% → 17% on fresh generation. It was justified by 15 → 3 on the clips that
@@ -52,9 +54,7 @@ solo clip ending on a wry sentence is a coin-flip the sampler sometimes loses.
       next move is another `resynth` round on just those (~$0.50); a few are genuinely structural and
       want an ear, not another re-roll.
 - [ ] **Standing regression test for any persona-prompt change**: same places, tail-flagged rows,
-      before vs after. A prompt edit moved this 10× without failing a single gate. ⚠ And measure on a
-      FRESH population — a re-run of already-broken clips regresses to the mean and will tell you a
-      bad fix worked.
+      before vs after. A prompt edit moved this 10× without failing a single gate.
 
 ## The POI legibility layer — cluster / district / road-relevance (founder ask 2026-07-29)
 

@@ -14,6 +14,11 @@ The studio pipeline's **one-off ops CLIs** — `packages/studio/src/*.ts` you ru
 These touch live, irreversible things — the DB, R2 bytes, and metered TTS/LLM spend (a live regen
 burns GCP credits). So they share one safety contract.
 
+⚠ Two sections below are scoped WIDER than that on purpose — "what the checks can't see" and "judging
+a paid run" are about interpreting a run's OUTPUT, so they apply to the generation CLIs
+(`generate-narrations`, `generate-cluster-narrations`, `enrich-pois`) as much as to the one-offs.
+That is where the money is, and where the wrong conclusions have actually been drawn.
+
 ## The rules
 
 1. **Declare the blast radius** in the file's header comment, using these labels:
@@ -77,6 +82,42 @@ are normal (Harold's Club and Harrah's Reno are 60 m apart) and would flood any 
 1 real error. Auto-excluding would bury 12 real places to catch 1. Treat a collision as a question:
 open both articles and check the stated location against the pin. Adjudicating one (excluding the
 wrong row) drops it out of the queue on the next run, so the list shrinks as you work it.
+
+## Judging a paid run: five traps that each produced a wrong conclusion
+
+Same genre as the section above — these bite the person deciding what a run MEANT, not the person
+writing the tool. Every one is from the 2026-07-30 corpus regeneration, where three prompt fixes were
+shipped correctly and a fourth defect was introduced, diagnosed wrong twice, and finally fixed for
+$1.25 after ~$70 of avoidable spend.
+
+**1. Establish REVERSIBILITY before the first `--apply`, not after.** `generate-narrations` overwrites
+`narrations.script` in place and there is no history table, so a regeneration cannot be undone — only
+fixed forward. That was discovered after 72 clips had been rewritten. Ask it in the same breath as
+"what does this cost?", because it decides how you stage: an irreversible op earns a small first batch
+and a measured baseline; a reversible one does not.
+
+**2. Capture the baseline BEFORE the intervention.** The tail-collapse rate for the affected places was
+2% — learned only after shipping a change that took it to 21%. Had it been measured first, batch 1
+would have caught it at six clips instead of 187. A "before" number costs one read-only query.
+
+**3. Never validate a fix on the population it was written to repair.** A closer rule measured 15 → 3
+on already-broken clips looked decisive; on fresh generation it was 21% → 17%. A repair population
+regresses to the mean and will tell you a weak fix worked. Measure on clips that were fine.
+
+**4. A sample that cannot answer the question should produce no conclusion.** The same metric was
+called a catastrophe and then an all-clear, both at n=6. Six clips cannot distinguish 2% from 20%.
+"This sample can't tell us" is a valid and cheap answer; two confident opposite readings are not.
+
+**5. Try the CHEAP lever before the expensive one — and check that an inherited finding transfers.**
+Tail collapse was treated as a writing problem because a code comment said all three retakes collapse
+identically, *therefore the script determines it*. That was measured on FUSED tallies, where a verbless
+list has nothing to land on in any take. It does not generalise: a `resynth-narration` pass — same
+scripts, TTS re-rolled — cleared 22 of 35 flagged clips for $1.25, i.e. the collapse is largely
+stochastic in the synth. Resynth is ~$0.035/clip against ~$0.28 to re-narrate. **Reach for it first**;
+regenerating to fix a tail is paying 8× for a re-roll you can buy directly.
+
+⚠ The meta-lesson under 5: a load-bearing conclusion in a comment is evidence about the population it
+was measured on. Before building on one, check that yours is the same population.
 
 ## The shared helper (`pipeline/ops.ts`)
 
