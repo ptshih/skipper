@@ -5,6 +5,38 @@ Carry-forward **engineering** items (the near-term layer of the truth system —
 Each item has enough context to action without re-deriving the reasoning. **Delete items
 when done** — git history is the archive.
 
+## ⚠ REGRESSION I SHIPPED: the 2026-07-30 regeneration raised tail collapse 2% → 21%
+
+**72 released solo clips were regenerated** (2026-07-30, ~$20) to pick up three prompt fixes — the
+`"here's the …"` ban, the `"the card"` leak, and SHARED-fact marking. All three worked. But the same
+run raised TAIL COLLAPSE by an order of magnitude, and the clips are LIVE.
+
+**Measured, on the SAME 72 places** (so it is not a property of the places): earlier runs flagged
+**2 of 125 tts rows (2%)**; this regeneration flagged **15 of 72 (21%)**. 8 of the 15 were "structural"
+— a fresh retake re-collapsed identically, so `tail.ts` stopped retrying and shipped the best take
+flagged for a human pass.
+
+⚠ **NOT the shared-fact marker**, which was the obvious suspect: clips that got a `[SHARED]` note
+collapsed at 24%, clips that got none at **18%** — both far above 2%, so the cause is a change that
+touches EVERY clip. The widened `"here's the …"` ban is the broadest candidate (the model used that
+construction to run up to its payoff and now has to find another way in), with the HARD-tier retake
+weighting second (it changes which take is accepted).
+⚠ **NOT closer length** — flagged closers median 8 words vs clean 10. They are the persona's quiet
+signature deflate ("Not bad company.", "This one just earns the view.", "That is what I call a soft
+landing."), which TTS renders soft.
+
+⚠ **THE PREVIOUS SCRIPTS ARE GONE.** Regeneration overwrites `narrations.script` in place and there is
+no history table, so this is NOT revertible — only fixable forward.
+
+- [ ] **Fix the closer, then re-run the 15.** The proven precedent is the FUSED closer rule, which took
+      fused collapse 35% → 3.2% by demanding a substantive ending ("END ON ONE OF THEM — a full
+      sentence about a single place… not a tally") — it is scoped to `named.length >= 2`, so solo clips
+      never got it. An equivalent solo rule is the obvious first try. Verify on a `--scripts-only`
+      probe of the 15 before spending, then re-run them (~$4).
+- [ ] **Then re-check the rate** — this is now the standing regression test for any persona-prompt
+      change: same places, tail-flagged rows, before vs after. A prompt edit can move it 10× without
+      failing a single gate.
+
 ## The POI legibility layer — cluster / district / road-relevance (founder ask 2026-07-29)
 
 Founder, from the road: stacked POIs don't all play — one fires and the car is already past the rest
