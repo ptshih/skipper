@@ -55,7 +55,8 @@ All settled. If you think one is wrong, raise it before building — don't re-li
 | D21 | The **REGION PACK is CUT from 1.1** — its purpose was ambient proximity playback, which dies with roam. No pack endpoint, no `bbox` on `/regions`, no ~138 MB download. Revisit only if per-drive downloads prove insufficient on a real trip; the store is already keyed so it would be additive. |
 | D22 | ⚠ **WITHDRAWN 2026-07-31 — there is nothing to re-anchor.** `poi_clusters` has no coordinate column (`schema.ts:424`: "a cluster's extent is its members' coordinates"), so "re-anchor the districts as points" has no mechanism. Its scope was also wrong: 3 of the 5 districts are ALREADY under the cap (Virginia City 265 m, Historic Downtown Carson City 411 m, Historic Carson City 552 m), and the over-cap set includes **UNR, which is a `cluster`, not a district**. Replaced by the area deletion (D42). |
 | D23 | ⚠ **WITHDRAWN 2026-07-31 — the merge CREATES the problem D40 wanted removed.** Measured over exactly the two named districts (33 anchors): merged `clusterTrigger` radius is **741 m**, over the 600 m cap — so the merge would manufacture a NEW area-shaped group at the moment the plan wants none left. Once D42 lands, the merge is harmless (741 m just becomes a capped point) and optional; it is no longer part of 1.1. |
-| D42 | **The AREA trigger is DELETED whole; the DISTRICT vocabulary is KEPT untouched** (founder 2026-07-31). They were never the same concept — measured, "district" and "needs an area trigger" cross in both directions (2 district+area, 3 district+point, 1 cluster+area, 61 cluster+point). The classifier's DISTRICT clause is a **naming-capacity** instruction ("name the 2–3 most recognisable, background the rest") and is **mode-neutral** — it is the only thing in the repo that turns 46 competing Reno POIs into one good clip, and a drives-only region with a downtown needs it exactly as much. The AREA trigger answered "a roamer can arrive from any direction", which **a drive never can** — the route is a frozen polyline. `treatment` stays as-is (one runtime reader: an admin badge). |
+| D42 | **The AREA MODE is deleted; the REFUSAL and the DISTRICT vocabulary are KEPT** (founder 2026-07-31, amended same day after an outside review). They were never one concept — measured, "district" and "needs an area trigger" cross in both directions (2 district+area, 3 district+point, **1 cluster+area — UNR at 903 m**, 61 cluster+point). The classifier's DISTRICT clause is a **naming-capacity** instruction ("name the 2–3 most recognisable, background the rest"), is **mode-neutral**, and is the only thing in the repo that turns 46 competing Reno POIs into one good clip. The AREA TRIGGER answered "a roamer can arrive from any direction", which a drive never can. `treatment` stays as-is (one runtime reader: an admin badge). |
+| D42a | ⚠ **DELETING `area` DOES NOT LEAVE `drive-select.ts:169` WITH "NOTHING TO GUARD" — IT FLIPS IT FROM REFUSE TO ADMIT.** `if (cand.area) continue` is the ONLY thing keeping the three over-cap groups out of drives. Once `cand.area` is permanently undefined they become ordinary candidates firing from the **un-snapped, off-road enclosing-circle centre** at a capped radius — the exact two failure modes `drive-select.ts:151-168` documents (fires on the freeway approach, or never fires), **frozen into `drives.selection` against a credit that never refunds.** The right reading of D42 is that a drive can't arrive from an arbitrary direction, which argues for deleting the MODE — never for admitting a 914 m group as a 600 m point. **Keep the refusal, re-keyed off GEOMETRY.** ⚠ And it must be an explicit boolean carried from `clusters.ts`, **not** a recomputation: that file serves `triggerRadiusM: min(trigger.radiusM, CLUSTER_MAX_TRIGGER_RADIUS_M)`, so the cap **destroys the evidence** before the candidate is built and `exceedsPointTrigger(cand.triggerRadiusM)` would read 600 and answer `false` for all three. Compute it where the uncapped radius still exists. |
 | D24 | Runtime form handling collapses to `story` **only in `apps/api` + `apps/mobile`**, plus a loud guard (INV-7). The studio's scenic-downgrade path **stays**. |
 | D25 | `drive_demand` — **drop the table, the upsert, the schema block, and the M4 reference.** PostHog is the demand instrument. (Resolves the earlier contradiction: there is no "fix `distinct_users`" work.) |
 | D26 | Dead studio CLIs deleted: `regen-report.ts`, `rename-roam-prefix.ts`, `test-mastering-chain.ts`, and `golden.ts`'s unrun `TTS_CASES`/`DIVERSITY_CASES`. |
@@ -326,14 +327,26 @@ unstable row order is a silent prompt-cache invalidator. **Fix in step 6.**
 deletion, **no corpus work, no `excluded_reason` retirements, no regeneration, no spend**, and it is
 NOT gated on step 0 (nothing destructive touches data).
 
-⚠ **It also fixes a LIVE BUG, which is the real reason to do it first.** `drives.ts` loads fused
-tellings with `areaCapable: true`, whose cluster ids feed `notSupersededByServedCluster` and suppress
-every member of every loaded cluster — and then `drive-select.ts:169` refuses the area ones. So for the
-three over-cap groups the fused clip is loaded, its members are silenced, and then the clip itself is
-dropped. Measured on the live corpus: **Downtown Reno 46 released member clips + 1 fused → 0 audible;
-Reno's Historic Homes 15 + 1 → 0; UNR Campus 6 + 1 → 0.** 67 paid-for released clips unreachable on any
-drive through them. Nothing is frozen today only because all three saved drives are Tahoe-basin.
-Deleting the area path turns all three into ordinary capped-600 m points that actually play.
+⚠ **A LATENT SILENCE BUG lives here — record it, do NOT try to fix it in this step.** `drives.ts` loads
+fused tellings with `areaCapable: true`, whose cluster ids feed `notSupersededByServedCluster` and
+suppress every member of every loaded cluster — and then `drive-select.ts:169` refuses the area ones. So
+for the three over-cap groups the fused clip is loaded, its members are silenced, and the clip itself is
+dropped: **Downtown Reno 46 released member clips + 1 fused → 0 audible; Reno's Historic Homes 15 + 1 →
+0; UNR Campus 6 + 1 → 0.**
+
+⚠ **CORRECTION (2026-07-31): an earlier draft of this step claimed deleting the area path "fixes it for
+free". That was WRONG** — see D42a. It converts silence into a *frozen, possibly mis-placed* trigger,
+which is worse: silence costs a rider nothing, a mis-fire is baked into `drives.selection` against a
+non-refundable credit. The three groups have only unattractive answers today: (a) refuse + suppress =
+silence, (b) refuse + un-suppress = 46 individual candidates where pick-one ranks by clip length and
+elects *3rd Street Flats* over the Reno Arch, (c) admit as a capped point = the frozen mis-fire. The
+honest fix needs a **route-aware trigger point** (the route is the rails: snap to where the polyline
+comes closest to the members — no hull required), which is new machinery and not this step.
+
+✅ **It is safe to defer, and measured so:** all **26** `endpoint_eligible` places are Tahoe-basin
+(lat 38.93–39.25, lng −120.16 to −119.93) and the three groups sit **33.0 / 32.7 / 34.7 km** from the
+nearest one — **no A→B drive between curated endpoints can reach them.** ⚠ That immunity ends the day a
+paid `curate-places` run adds a Reno endpoint, which is exactly why the REFUSAL must survive this step.
 
 Delete: `packages/engine/src/area.ts` + its tests + the `index.ts` re-export; the area branch in
 `trigger.ts`; `DriveCandidate.area` and `drive-select.ts`'s second admission rule; `ClusterTelling.area`,
@@ -342,13 +355,27 @@ Delete: `packages/engine/src/area.ts` + its tests + the `index.ts` re-export; th
 threading in mobile; and the whole `CLIENT_CAPS`/`clientCan` capability channel, whose ONLY token is
 `area` and which has no production caller.
 
-⚠ **KEEP and RENAME-IN-COMMENT, do not delete:** `CLUSTER_MAX_TRIGGER_RADIUS_M` + `exceedsPointTrigger`.
-With areas gone they stop selecting a MODE and become the honesty CAP — the only thing keeping UNR
-(903 m), Downtown Reno (914 m) and Historic Homes (698 m) from firing a kilometre out. `cluster.ts`'s
-comment ("the area trigger exists now, so it SELECTS THE MODE") becomes false and must be rewritten in
-the same commit. ⚠ **KEEP `treatment` and the classifier's DISTRICT clause untouched** (D42).
+⚠ **KEEP, do not delete: the REFUSAL** (D42a) — re-keyed from `cand.area` to an explicit geometry
+boolean set in `clusters.ts` where the uncapped radius still exists, carried on `ClusterTelling` →
+`DriveCandidate`. `drive-select.ts:169` becomes `if (cand.tooWideForPoint) continue`, keeping its
+`:151-168` comment (rewritten to say the refusal is now geometric, not mode-based). Its two regression
+tests survive with the field renamed.
 
-**3 — Remove roam**, in layered commits. ⚠ The removal table is INCOMPLETE — see its footnotes; two
+⚠ **KEEP, with the comment rewritten:** `CLUSTER_MAX_TRIGGER_RADIUS_M` + `exceedsPointTrigger`. They
+live in `cluster.ts`, NOT `area.ts`, so they survive the deletion untouched — with areas gone they stop
+selecting a MODE and become the refusal threshold. `cluster.ts`'s comment ("the area trigger exists now,
+so it SELECTS THE MODE") becomes false and must be rewritten in the same commit.
+
+⚠ **KEEP `treatment` and the classifier's DISTRICT clause untouched** (D42).
+
+**3 — Remove roam** — ⚠ **BLOCKED ON A FOUNDER DECISION, not on code.** Probed read-only 2026-07-31:
+**1.0.0 is `WAITING_FOR_REVIEW`** (release type MANUAL, created 2026-06-10). Step 3 deletes
+`GET /roam/sample` — **the exact endpoint `docs/guides/app-store-submission.md` §12 tells the reviewer
+to check** — and `skipper-api-deploy` ships **push-to-main at 100% traffic with no canary**. So the
+sequence that breaks a live review is: land step 3 → push → a reviewer picks 1.0.0 up → the endpoint
+their own instructions name is gone. The no-push rule holds this shut for now, but the decision must be
+MADE (withdraw 1.0.0? wait for review? keep `/sample` alive under its new path first?) before step 3
+lands, not discovered at push time. — then, in layered commits. ⚠ The removal table is INCOMPLETE — see its footnotes; two
 omissions are architectural, not mechanical. Regenerate router types (`bunx expo customize tsconfig.json`)
 or mobile typecheck fails. Carry `PackPin` forward in the same commit that deletes it, or step 9's
 harvest source is gone. **Move `drive_demand` OUT of this step** into the sweep — it is destructive DDL,
@@ -361,14 +388,26 @@ propose/create carry **anchor ids**, server re-asserts `endpoint_eligible` and 4
 call (INV-1); `driveClip` gains `subjectId` + `subjectKind` (INV-16); `driveProposal` gains the preview
 clip **including `attribution`** (CC BY-SA is legal, not optional). Unblocks steps 8, 9 and 11.
 
+⚠ **`via` MUST go through the allowlist too — INV-1 currently stops at start/end.** Verified: `via` is
+`z.array(resolvedEndpoint).max(8)` (`schemas.ts:206`) and flows straight into `routeWaypoints` →
+`materializeRoute` at `drives.ts:427` (propose) and `:539` (create), never touching `places`. Hydrate it
+through the **same by-id + `endpoint_eligible` re-assert** as the endpoints. Without this, step 4 can
+satisfy the acceptance line exactly and still ship an **unauthenticated endpoint that bills Google
+Routes for 8 arbitrary points on Earth** — "grounded by construction" degrades to "grounded at both
+ends". ⚠ The acceptance line below says "a non-anchor ENDPOINT", which is why this gap was invisible;
+it is corrected there in the same breath.
+
 **5 — INV-11 pricing move**, own commit, announced first: `MODEL_PRICING` + `recordModelUsage` move to
 `@skipper/shared` (TTS pricing stays in studio). Add the planner model's row and extend the drift guard.
 
 **6 — Planner (server).** Prompt in `apps/api/src/planner-prompt.ts` — ⚠ **not** in `@skipper/shared`,
 which mobile imports and would ship the system prompt into the app bundle. `@anthropic-ai/sdk` is already
 declared in `apps/api`. Tool-use output, thinking ON (INV-8), effort low, hard `max_tokens`, lazy client
-with `maxRetries` 0–1 and an explicit timeout. ⚠ Mount `/drives/plan` **outside** `driveRoutes` or it
-inherits the blanket `requireAccount` and every anonymous plan 401s. Include the deflection-clause test.
+with `maxRetries` 0–1 and an explicit timeout. ⚠ Register `/drives/plan` **ABOVE the
+`app.route('/drives', driveRoutes)` mount**, not merely "outside" it — hono matches in registration
+order, so below the mount it is swallowed by `driveRoutes`' blanket `requireAccount` and every anonymous
+plan 401s. **Pin it with a test asserting 200 WITHOUT a session**, since the failure is a plain 401 that
+reads like an auth bug rather than a routing one. Include the deflection-clause test.
 
 **7 — Planner (client)** + the `expo/fetch` streaming seam (D33a). Conversation on home, example asks,
 inline preview card, in-persona offline state. Requires `bun run check` inside `apps/mobile`.
@@ -401,7 +440,9 @@ built entirely around "Ride Along" copy that no longer exists. **Then RISK-1: dr
 - **No location permission until "Let's roll."** The whole pre-drive flow is location-free.
 - Signing up from the wall lands the rider on **their own proposal**, never an empty form.
 - The credit is named before it is spent.
-- `POST /drives/propose` **rejects** a non-anchor endpoint with a 400 **before** any Routes call.
+- `POST /drives/propose` **rejects** a non-anchor **start, end, OR `via` midpoint** with a 400 **before**
+  any Routes call. ⚠ The `via` half is stated explicitly because it was missing: the earlier wording
+  ("a non-anchor endpoint") is satisfiable while `via` still carries 8 arbitrary billable coordinates.
 - An anonymous preview clip is never a staged narration.
 - Offline at a trailhead: conversation unavailable in persona, saved drives play.
 - `bun run check` green at root and in `apps/mobile`.
