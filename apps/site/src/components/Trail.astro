@@ -6,29 +6,14 @@ import CarToken from './CarToken.astro'
 interface Props {
   progress?: number
   trailId?: string
-  /** optional small stop pips: array of {at:0-1, tone:'pine'|'teal'|'amber'} */
-  stops?: { at: number; tone?: string }[]
   class?: string
 }
-const { progress = 0, trailId, stops = [], class: klass = '' } = Astro.props
-const toneColor: Record<string, string> = {
-  pine: 'var(--accent)',
-  teal: 'var(--water)',
-  amber: 'var(--amber)',
-}
+const { progress = 0, trailId, class: klass = '' } = Astro.props
 ---
 
 <div class={`trail ${klass}`} id={trailId} style={`--progress:${progress}`}>
   <span class="trail__line"></span>
   <span class="trail__done"></span>
-  {
-    stops.map((s) => (
-      <span
-        class="trail__pip"
-        style={`left:${s.at * 100}%;--pip:${toneColor[s.tone ?? 'pine']}`}
-      />
-    ))
-  }
   <span class="trail__car"><CarToken size={36} /></span>
 </div>
 
@@ -52,16 +37,6 @@ const toneColor: Record<string, string> = {
     width: calc(var(--progress, 0) * 100%);
     border-top: 1.5px solid var(--track-active);
     transition: width 120ms linear;
-  }
-  .trail__pip {
-    position: absolute;
-    top: 50%;
-    width: 9px;
-    height: 9px;
-    border-radius: 999px;
-    background: var(--surface);
-    border: 1.5px solid var(--pip, var(--accent));
-    transform: translate(-50%, -50%);
   }
   .trail__car {
     position: absolute;

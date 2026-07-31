@@ -107,12 +107,6 @@ a:hover {
   font-size: var(--fs-title);
   text-wrap: balance;
 }
-.heading {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: var(--fs-heading);
-  line-height: 1.2;
-}
 .lede {
   font-size: var(--fs-lede);
   line-height: 1.55;
@@ -164,11 +158,6 @@ a:hover {
 .prose {
   max-width: var(--maxw-prose);
 }
-.center {
-  text-align: center;
-  margin-inline: auto;
-}
-
 /* ── Carved double-keyline + corner screw-dots (the ranger-sign edge) ────── */
 /* The double rule = a border plus an inset outline; the screws = 4 radial
    dots painted into the corners. Reserved for NON-driving / large surfaces. */
@@ -229,13 +218,6 @@ a:hover {
   border-radius: var(--radius-pill);
   background: currentColor;
 }
-/* A filled amber disc badge uses ink-on-amber, never cream. */
-.badge--filled {
-  background: var(--amber);
-  color: var(--on-amber);
-  border-color: transparent;
-}
-
 /* ── Buttons ────────────────────────────────────────────────────────────── */
 .btn {
   display: inline-flex;
@@ -303,20 +285,4 @@ a:hover {
 /* `hidden` must win over any `display` we set on a class (the icon-swap bug). */
 [hidden] {
   display: none !important;
-}
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-.eyebrow-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  flex-wrap: wrap;
 }
