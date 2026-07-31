@@ -66,6 +66,41 @@ describe('lintScripts', () => {
     expect(findings).toEqual([])
   })
 
+  // "The card" is the prompt's internal word for the fact sheet — meaningless to a rider. The
+  // subtlety is that this is a casino region, so cards are legitimate SUBJECT matter; the leak is
+  // always "the/my card" singular, real usage is "a card" or "cards". Measured over all 458 scripted
+  // clips: 18 leaks caught, 15 genuine mentions untouched.
+  describe('the fact sheet named out loud', () => {
+    test('flags the Skipper referring to his own card', () => {
+      for (const script of [
+        'Late Cretaceous, the card tells me. Somewhere between sixty-six million and a hundred.',
+        'That is the whole card, folks. A racing series, real horses, real distance.',
+        'Described, and I am quoting the card here, as a man of great enterprise.',
+        'That is most of what is on my card for this one.',
+        'You would never believe it if it were not on the card.',
+      ]) {
+        expect(lint([story(0, script)]).length).toBeGreaterThan(0)
+      }
+    })
+
+    test('does NOT flag cards as real subject matter', () => {
+      for (const script of [
+        'Six tries, six answers. Pick a card, any card. The fellow who finally made it stuck.',
+        'It has been dealing cards longer than any other casino on this street.',
+        'This one hands you a calling card, and you tip your hat and roll on.',
+        'More aliases than a card shark, and every one of them on a lease somewhere.',
+        'All-night card games with the door propped open and nobody counting.',
+      ]) {
+        expect(lint([story(0, script)])).toEqual([])
+      }
+    })
+
+    test('it is a HARD finding — per-clip and fixable, like the other banned tics', () => {
+      const f = lint([story(0, 'Late Victorian, the card tells me, which is the fancy kind.')])
+      expect(f[0]!.hard).toBeGreaterThan(0)
+    })
+  })
+
   test('does NOT flag legitimate "there is the …" pointing', () => {
     const findings = lint([
       story(0, 'Out across the water there is the lighthouse, the highest one in the country.'),

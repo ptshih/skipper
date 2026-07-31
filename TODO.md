@@ -285,20 +285,27 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
             where"), one each. Nothing was written to R2 or `narrations`.
             ⚠ Re-running this probe is the standing cheap test for any future prompt change: pick
             offenders, `--scripts-only`, count the construction in the printed scripts.
-      - [ ] **⚠ The Skipper says "the card" OUT LOUD in 15 of 458 clips — and nothing catches it.**
-            Found while reading the probe output. "The card" is the PROMPT's internal word for the fact
-            sheet; a rider has no idea what it means. Real examples shipped: "The card tells me it is
-            Queen Anne in its massing", "Late Cretaceous, the card tells me", "I'm quoting the card
-            here", "That is the card, folks". Pre-existing (not caused by the ban fix) and not in
-            `BANNED` or `STOCK_PHRASES`. It is exactly the shape the new HARD tier handles — per-clip,
-            always wrong, fixable in one retake.
-            ⚠ **The fix is NOT a plain `/the card/` pattern.** The prompt legitimately says "the card"
-            throughout in its INSTRUCTION voice ("On the card, it is yours"), so that regex would fire
-            on the prompt itself and trip the new persona guard test. The discriminator that actually
-            separates them is PERSON: the prompt addresses the Skipper ("the card gives *you*"), the
-            leak is the Skipper speaking ("the card tells *me*", "quoting the card", "that is the
-            card"). Target the spoken construction, and add the matching line to the prompt in the same
-            change — the two lists must agree (see the ⚠ on `BANNED`).
+      - [x] **The Skipper said "the card" OUT LOUD in 18 clips — FIXED 2026-07-30.** "The card" is the
+            PROMPT's internal word for the fact sheet; a rider has never heard it. Shipped examples:
+            "Late Cretaceous, the card tells me", "I'm quoting the card here", "That is the whole card,
+            folks", "most of what is on my card for this one".
+            ⚠ **The prompt did not merely leak it, it TAUGHT it — in two places.** Its honesty
+            paragraph blessed the line `"I'll tell you what's on the card…"` as *"part of the bit"*,
+            and the Coyote Mesa scenic EXAMPLE narrated "That is all the card gives me". Few-shot text
+            is the strongest conditioning in the prompt, so that one example plausibly seeded a large
+            share of the 18. Both rewritten, and the rule is now stated outright ("never MENTION the
+            card itself… it is how you know things, not a prop you hold up").
+            ⚠ **The pattern is narrow ON PURPOSE — this is a casino region and cards are legitimate
+            SUBJECT matter.** The leak is always "the/my card" SINGULAR; genuine use is "a card" or
+            "cards" ("pick a card, any card", "a calling card", "still dealing the cards", "more
+            aliases than a card shark"). Measured over all 458 scripted clips: **18 leaks caught in 18
+            clips, 0 of 15 genuine mentions touched**, plus a lookahead for a real card room/table/game.
+            ⚠ New `PROMPT_PROSE_EXEMPT`: the prompt must SAY "the card" to explain what the card is, so
+            the guard test exempts it in PROSE — but deliberately NOT in the example narrations, which
+            is the half that caught the real bug. Validated by reverting the example and watching the
+            test fail.
+            ⚠ UNVERIFIED against a real generation (the regex is proven, the prompt change is not) —
+            same standing `--scripts-only` probe applies if it is worth ~$3 to confirm.
       - [ ] **`--scripts-only` DOES write to the DB, but its blast label says it does not.**
             `generate-narrations.ts` declares `blast: scriptsOnly ? ['SPENDS $'] : ['SPENDS $',
             'MUTATES DB']`, yet the run still recorded `eval_runs` + 60 `eval_scores` rows. Harmless

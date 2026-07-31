@@ -83,7 +83,31 @@ const BANNED: [RegExp, string][] = [
   [/\bover the years\b/i, '"over the years"'],
   [/\bnestled\b/i, '"nestled"'],
   [/\brich history\b/i, '"rich history"'],
+  // "The card" is the PROMPT's internal word for the fact sheet. A rider has never heard it and has
+  // no idea what it means, so naming it aloud breaks the fiction mid-sentence — "Late Cretaceous, the
+  // card tells me", "I'm quoting the card here", "That is the whole card, folks."
+  // ⚠ Narrowed against the real corpus, because this is a casino region and cards are legitimate
+  // SUBJECT matter: the leak always says "the/my card" singular, while every genuine use is "a card"
+  // or "cards" ("pick a card, any card", "a calling card", "still dealing the cards", "more aliases
+  // than a card shark"). Measured over all 458 scripted clips: this catches 18 leaks in 18 clips and
+  // none of the 15 legitimate mentions. The lookahead keeps a real card room/table/game out of it.
+  [
+    /\b(?:the|my) (?:whole )?card\b(?!\s+(?:room|table|game|games|club|catalogue|catalog|shark))/i,
+    '"the card" — the fact sheet named out loud',
+  ],
 ]
+
+/** Labels whose WORDS the persona prompt legitimately uses in its own INSTRUCTION voice, so the
+ *  prompt-guard test must not flag them in its prose.
+ *
+ *  ⚠ Only prose is exempt. The guard still lints the prompt's EXAMPLE narrations against the full
+ *  table, and that is the half that matters: the prompt has to say "the card" to explain what the
+ *  card IS, but an example narration that says it is teaching the leak. One did — the Coyote Mesa
+ *  scenic example read "That is all the card gives me" — which is where a good share of the 18 came
+ *  from. Add to this set only when the prompt must NAME a thing it forbids the Skipper from saying. */
+export const PROMPT_PROSE_EXEMPT: ReadonlySet<string> = new Set([
+  '"the card" — the fact sheet named out loud',
+])
 
 /** Which banned wind-ups/tics appear in a piece of text, by label. Exported so anything that must
  *  agree with this table can ASK it instead of keeping a second copy — notably the persona-prompt

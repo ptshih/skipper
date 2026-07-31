@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { personaFromKey, SKIPPER } from '../src/persona'
-import { bannedTicsIn } from '../src/pipeline/lint'
+import { bannedTicsIn, PROMPT_PROSE_EXEMPT } from '../src/pipeline/lint'
 
 describe('personaFromKey', () => {
   test('the skipper key resolves to the Skipper', () => {
@@ -41,11 +41,17 @@ describe('Skipper persona def', () => {
 
     test('its own PROSE voice is clean (quoted bans exempt)', () => {
       const unquoted = prose.replace(/"[^"]*"/g, ' ')
-      expect(bannedTicsIn(unquoted)).toEqual([])
+      // PROMPT_PROSE_EXEMPT is for words the prompt must NAME to forbid them — it has to say "the
+      // card" to explain what the card is. Everything else is held to the full table.
+      const found = bannedTicsIn(unquoted).filter((l) => !PROMPT_PROSE_EXEMPT.has(l))
+      expect(found).toEqual([])
     })
 
     test('every EXAMPLE narration is clean — few-shot text is the strongest conditioning here', () => {
       expect(exampleBlocks.length).toBeGreaterThan(0) // the regex must actually be finding them
+      // ⚠ NO exemption here, deliberately. A scenic example once read "That is all the card gives
+      // me" and taught the leak to every clip generated after it; few-shot text is the strongest
+      // conditioning in this prompt, so it is held to the whole table.
       for (const block of exampleBlocks) {
         // The narration is the quoted body; the `Card:` line is input, not the Skipper talking.
         for (const [, said] of block.matchAll(/"([^"]*)"/g)) {
