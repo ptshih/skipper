@@ -9,6 +9,7 @@
 // and floats a "recenter" chip (the standard nav pattern). The basemap tint is Google-
 // only — without a key (EXPO_PUBLIC_GOOGLE_MAPS_API_KEY) iOS falls back to Apple Maps
 // (untinted) and List mode stays the offline + accessibility-complete equivalent.
+import { bearingDeg } from '@skipper/engine'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Animated, Platform, Pressable, StyleSheet, View } from 'react-native'
 import MapView, {
@@ -56,18 +57,6 @@ export interface DriveMapProps {
 }
 
 const toLatLng = ([lng, lat]: [number, number]): LatLng => ({ latitude: lat, longitude: lng })
-
-// Initial-bearing between two [lng,lat] points, for the puck's heading wedge.
-function bearingDeg(a: [number, number], b: [number, number]): number {
-  const rad = (d: number) => (d * Math.PI) / 180
-  const deg = (r: number) => (r * 180) / Math.PI
-  const φ1 = rad(a[1])
-  const φ2 = rad(b[1])
-  const Δλ = rad(b[0] - a[0])
-  const y = Math.sin(Δλ) * Math.cos(φ2)
-  const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ)
-  return (deg(Math.atan2(y, x)) + 360) % 360
-}
 
 // Google styling only applies to the Google provider. On Android react-native-maps is
 // always Google; on iOS we need a key (else Apple Maps, untinted). No key → undefined
