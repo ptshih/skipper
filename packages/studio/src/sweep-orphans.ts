@@ -15,7 +15,12 @@ import { db } from '@skipper/db'
 import { narrations } from '@skipper/db/schema'
 import { announce, assertReady, parseFlags } from './pipeline/ops'
 import { deleteAudio, listAudioKeys, orphanKeys } from './pipeline/storage'
+import { mapLimit } from './pipeline/concurrency'
 import { beginJob, runJob } from './pipeline/job-progress'
+
+/** R2 delete fan-out. Object stores handle this comfortably; kept modest so a large post-regen sweep
+ *  doesn't open a socket per orphan. */
+const R2_DELETE_CONCURRENCY = 8
 
 /** The R2 keys the corpus currently points at — every narration's audioUrl (1:1 per poi). A regen
  *  mints a fresh key + repoints audio_url, so the superseded narration/<poiId>/ object orphans. */
@@ -40,13 +45,15 @@ async function main() {
   console.log(
     `narration corpus — ${listed.length} object(s), ${referenced.size} referenced, ${orphans.length} orphan(s)`,
   )
+  // List every key FIRST — the listing is this tool's output and its order is the report — then delete
+  // in parallel. Deletes are independent R2 objects; serial cost one round trip each after a big regen.
+  for (const key of orphans) console.log(`  ${apply ? 'delete' : 'orphan'}: ${key}`)
   let deleted = 0
-  for (const key of orphans) {
-    console.log(`  ${apply ? 'delete' : 'orphan'}: ${key}`)
-    if (apply) {
+  if (apply) {
+    await mapLimit(orphans, R2_DELETE_CONCURRENCY, async (key) => {
       await deleteAudio(key)
       deleted++
-    }
+    })
   }
   console.log(
     `\n${apply ? `Deleted ${deleted}` : `Found ${orphans.length}`} narration orphan(s).` +

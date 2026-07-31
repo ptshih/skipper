@@ -26,10 +26,15 @@ import { and, eq, isNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { pois } from '@skipper/db/schema'
 import { announce, parseFlags } from './pipeline/ops'
+import { mapLimit } from './pipeline/concurrency'
 import { withRetry } from './pipeline/http'
 import { resolveRegion, requireRegionBbox } from './pipeline/region'
 import { DEFAULT_REGION_SLUG, WDQS_ENDPOINT, WDQS_USER_AGENT } from './config'
 import { containmentReason, isContainer } from './pipeline/containment'
+
+/** DB-write fan-out. These are Neon round trips — a different resource from the LLM/TTS knobs in
+ *  config.ts — so the pool is local, matching classify-treatments' DB-write concurrency. */
+const DB_WRITE_CONCURRENCY = 8
 
 /** QIDs per SPARQL VALUES block. WDQS is free but shared infrastructure — keep requests modest. */
 const BATCH = 150
@@ -127,7 +132,9 @@ async function main(): Promise<void> {
 
   if (!apply) return console.log('\nPREVIEW — no writes. Re-run with --apply to persist.')
   let n = 0
-  for (const h of hits) {
+  // Each update targets one poi id — independent, no ordering. Serial cost one Neon round trip per
+  // row across a whole-region backfill; bounded fan-out instead.
+  await mapLimit(hits, DB_WRITE_CONCURRENCY, async (h) => {
     await withRetry(
       () =>
         db
@@ -137,7 +144,7 @@ async function main(): Promise<void> {
       { label: `claims(${h.name})` },
     )
     n++
-  }
+  })
   console.log(`\n✓ ${n} POI(s) updated (${containers.length} flagged as containers).`)
 }
 

@@ -501,6 +501,30 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
 - [ ] **5. `buildDrive` reads anchors; delete pick-one.** Orphans ~169 satellite clips —
       `sweep-orphans.ts` already handles that.
 
+## VALIDATE: four ops CLIs went from serial writes to bounded fan-out (2026-07-30)
+
+The /simplify sweep converted four free ops CLIs from one-write-at-a-time to `mapLimit(…, 8, …)` —
+the pool the paid CLIs and `classify-treatments`' DB writes already use. Typecheck and the 350 studio
+tests pass, but **none of these can be exercised without writing to the live corpus**, so they ship
+unvalidated by construction. dev and prod are ONE Neon database; there is no staging to rehearse in.
+
+- [ ] **Validate with a PREVIEW first, then one small `--apply`.** In order, cheapest first:
+      - `discover-pois` (both the story and scenic upsert loops) — the biggest win, and the one that
+        gates the rest of the pipeline. Region-scale: Tahoe ~459 story pins, Yosemite 837.
+      - `backfill-poi-extent` (whole-region `pois` update) · `prune-corpus` (flags a subset) ·
+        `sweep-orphans` (R2 deletes).
+      What to check: the counts printed at the end match a preview run of the same region, and no poi
+      is written twice or skipped. `upsertPoi` is a QID-keyed `onConflictDoUpdate`, so a re-run is
+      idempotent and a partial failure is recoverable by re-running — that property is what made the
+      change safe to attempt at all.
+- [ ] ⚠ **Know the one semantic change.** `mapLimit` FAILS FAST like the serial loops did, but on a
+      throw the ~7 in-flight siblings settle unobserved rather than never starting. So a crashed run
+      leaves a slightly larger, less predictable written prefix than before. Idempotent upserts make
+      that recoverable; it is not a reason to panic if a run dies mid-way, but it IS why the counts
+      should be eyeballed rather than assumed.
+- [ ] `sweep-orphans` deletes R2 objects. Its preview LISTING is byte-identical to before (every key
+      is logged before any delete now), so a `--apply`-less run is a safe first check.
+
 ## Production ops hardening — from the 2026-07-30 ship-readiness audit
 
 None of this is a build; all of it is config. The premise changed on 2026-07-28: 1.0.0 is submitted, so
@@ -514,6 +538,9 @@ None of this is a build; all of it is config. The premise changed on 2026-07-28:
       forward to the founder's Gmail (verified for `review@`, never for `hello@`), and because the
       catch-all accepts everything, SMTP probing can NEVER prove an address is read. Only a real test
       message can. Send one from a non-Workspace account to `hello@` and confirm arrival.
+      ⚠ Got heavier on 2026-07-30: the in-app "Report an issue" mailto now points at `hello@` too. It
+      previously pointed at a `feedback@` placeholder nobody had replaced, which shipped in builds 15
+      and 16 — so this address is now the ONLY route a rider has to reach a human from inside the app.
 - [ ] **Alerting — there is NONE.** No uptime checks, no alert policies, no notification channels on the
       project. Prod 500'd for **14 days** (2026-06-30 → 07-15, billing disabled) and was found by a human
       running `curl`. Want: one uptime check on `https://api.skipper.fm/health` + an email channel to

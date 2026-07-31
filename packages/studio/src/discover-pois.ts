@@ -30,11 +30,16 @@ import { toFacts } from './pipeline/select'
 import { buildStoryFacts, hashFacts, summaryFromExtract, upsertPoi } from './pipeline/persist'
 import { announce, parseFlags } from './pipeline/ops'
 import { colocationReport, findColocations } from './pipeline/colocation'
+import { mapLimit } from './pipeline/concurrency'
 import { runJob } from './pipeline/job-progress'
 import { sleep } from './pipeline/http'
 import { resolveRegion } from './pipeline/region'
 import { DEFAULT_REGION_SLUG, TAHOE_RENO_BBOX } from './config'
 import type { LngLat } from './pipeline/geo'
+
+/** DB-write fan-out for the corpus upserts. Matches classify-treatments' DB pool — these are Neon
+ *  round trips, a different resource from the LLM/TTS knobs in config.ts, so it lives with them. */
+const POI_UPSERT_CONCURRENCY = 8
 
 /** Tahoe–Reno corridor: Meyers/South Lake Tahoe west to Homewood/Sugar Pine Point,
  *  north to Kings Beach/Incline, east through Spooner/Zephyr Cove → Carson City →
@@ -166,7 +171,11 @@ async function main(): Promise<void> {
   const fetchedAt = new Date()
   let wrote = 0
   let deepMiss = 0
-  for (const s of stories) {
+  // Bounded fan-out, not a serial walk: upsertPoi is a single QID-keyed insert...onConflictDoUpdate,
+  // idempotent and order-independent, so the only thing serial buys is one neon-http round trip per
+  // poi — minutes of pure latency on a region-scale sweep (Tahoe ~459 story pins, Yosemite 837). 8
+  // matches the DB-write pool classify-treatments already uses.
+  await mapLimit(stories, POI_UPSERT_CONCURRENCY, async (s) => {
     const a = s.article!
     const full = deep.get(a.pageId)
     if (!full) deepMiss++
@@ -197,9 +206,9 @@ async function main(): Promise<void> {
       factsFetchedAt: fetchedAt,
     })
     wrote++
-  }
+  })
   if (deepMiss > 0) console.warn(`  ⚠ ${deepMiss} story extract(s) fell back to the lead (deep fetch miss).`)
-  for (const s of scenics) {
+  await mapLimit(scenics, POI_UPSERT_CONCURRENCY, async (s) => {
     await upsertPoi({
       qid: s.qid,
       source: 'wikidata',
@@ -214,7 +223,7 @@ async function main(): Promise<void> {
       factsFetchedAt: null,
     })
     wrote++
-  }
+  })
   console.log(`\nUpserted ${wrote} pois (${stories.length} story + ${scenics.length} scenic).`)
 }
 

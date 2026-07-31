@@ -46,11 +46,16 @@ import { and, eq, isNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { narrations, pois } from '@skipper/db/schema'
 import { announce, parseFlags } from './pipeline/ops'
+import { mapLimit } from './pipeline/concurrency'
 import { withRetry } from './pipeline/http'
 import { resolveRegion, requireRegionBbox } from './pipeline/region'
 import { DEFAULT_REGION_SLUG } from './config'
 import { containmentReason } from './pipeline/containment'
 import { colocationReport, findColocations } from './pipeline/colocation'
+
+/** DB-write fan-out. These are Neon round trips — a different resource from the LLM/TTS knobs in
+ *  config.ts — so the pool is local, matching classify-treatments' DB-write concurrency. */
+const DB_WRITE_CONCURRENCY = 8
 
 /** Prefix on every reason this tool writes. `--restore` scopes to it, so a hand-made admin exclusion for
  *  some other cause is never silently undone by a re-run. */
@@ -199,12 +204,13 @@ async function main(): Promise<void> {
     console.log('\nPREVIEW — no writes. Re-run with --apply to flag them.')
     return
   }
-  for (const r of rows) {
+  // One update per poi id, independent and order-free — fan out rather than pay a round trip each.
+  await mapLimit(rows, DB_WRITE_CONCURRENCY, async (r) => {
     await withRetry(
       () => db.update(pois).set({ excludedReason: `${PRUNE_REASON_PREFIX} — ${r.reason}` }).where(eq(pois.id, r.id)),
       { label: `prune(${r.name})` },
     )
-  }
+  })
   console.log(`\n✓ ${rows.length} POI(s) flagged. Undo: --restore --apply`)
 }
 
