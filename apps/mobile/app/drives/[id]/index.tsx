@@ -42,8 +42,14 @@ import {
 } from '@/ui'
 
 // "Report an issue" opens the rider's mail composer (no in-app support backend yet — alpha).
-// Set EXPO_PUBLIC_SUPPORT_EMAIL to the real inbox; the default is a brand-domain placeholder.
-const SUPPORT_EMAIL = process.env.EXPO_PUBLIC_SUPPORT_EMAIL ?? 'feedback@skipper.fm'
+//
+// ⚠ The default IS the address, not a placeholder. `EXPO_PUBLIC_SUPPORT_EMAIL` has never been set —
+// not in either env file, eas.json or app.config — so whatever sits here is what shipped, and until
+// 2026-07-30 that was a `feedback@` placeholder nobody had replaced. Every PUBLISHED contact address
+// is `hello@skipper.fm` (founder rule): one inbox, the same one the legal pages, the support page and
+// the App Review contact all name. The env override stays for a future real support desk; it is not
+// an excuse for the fallback to be wrong.
+const SUPPORT_EMAIL = process.env.EXPO_PUBLIC_SUPPORT_EMAIL ?? 'hello@skipper.fm'
 
 // A saved drive (the rider's own, account-gated): route + stops + the native mini-preview (tap a
 // stop to hear one clip, List/Map) + the live GPS drive (the M1 phone player, fed by real device
