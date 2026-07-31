@@ -105,7 +105,6 @@ const ROAM_REFETCH_MOVE_KM = ROAM_RADIUS_KM / 2
 
 export interface RoamState {
   phase: RoamPhase
-  mode: RoamMode
   error: string | null
   gate: RoamGateInfo | null
   /** Pins in range (the manifest), for honesty lines. */
@@ -173,8 +172,6 @@ export interface RoamState {
   muteCurrent: () => void
   /** Hand-end the session → the sign-off state (teardown happens here). */
   end: () => void
-  /** Leave the sign-off → back to idle/entry. */
-  finishSignoff: () => void
 }
 
 /**
@@ -843,12 +840,8 @@ export function useRoam(mode: RoamMode): RoamState {
     setMinimized(false)
     setGpsSearching(false)
     setPosition(null) // drop the map puck; mapPins reset on the next start
-    setPhase('signoff') // toldCount survives for the tally; finishSignoff resets
+    setPhase('signoff') // toldCount survives for the tally; leaving the screen drops it all
   }, [teardown])
-
-  const finishSignoff = useCallback(() => {
-    setPhase('idle')
-  }, [])
 
   // The sheet keys on sheetPoiId, NOT activePoiId: a clip is selected (activePoiId) and loads
   // SILENTLY; the sheet only appears once it's ready to play (or the skeleton grace fires).
@@ -931,7 +924,6 @@ export function useRoam(mode: RoamMode): RoamState {
 
   return {
     phase,
-    mode,
     error,
     gate,
     pinCount,
@@ -964,6 +956,5 @@ export function useRoam(mode: RoamMode): RoamState {
     skip,
     muteCurrent,
     end,
-    finishSignoff,
   }
 }
