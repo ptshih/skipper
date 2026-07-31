@@ -28,14 +28,33 @@ landing."), which TTS renders soft.
 ⚠ **THE PREVIOUS SCRIPTS ARE GONE.** Regeneration overwrites `narrations.script` in place and there is
 no history table, so this is NOT revertible — only fixable forward.
 
-- [ ] **Fix the closer, then re-run the 15.** The proven precedent is the FUSED closer rule, which took
-      fused collapse 35% → 3.2% by demanding a substantive ending ("END ON ONE OF THEM — a full
-      sentence about a single place… not a tally") — it is scoped to `named.length >= 2`, so solo clips
-      never got it. An equivalent solo rule is the obvious first try. Verify on a `--scripts-only`
-      probe of the 15 before spending, then re-run them (~$4).
-- [ ] **Then re-check the rate** — this is now the standing regression test for any persona-prompt
-      change: same places, tail-flagged rows, before vs after. A prompt edit can move it 10× without
-      failing a single gate.
+✅ **RESOLVED to 6.5% — and the cause was NOT what any of us thought. 2026-07-30.**
+
+⚠ **SOLO TAIL COLLAPSE IS MOSTLY STOCHASTIC IN THE SYNTH, NOT DETERMINED BY THE SCRIPT.** A
+`resynth-narration` pass — the SAME scripts, TTS re-rolled, best-of-3 again — cleared **22 of 35
+flagged clips for $1.25**. Corpus went 21% → **13 of 201 (6.5%)**. Nothing was re-narrated.
+
+That directly contradicts the note the fused closer rule was built on ("all three retakes collapse
+identically, which means the SCRIPT determines it"). That finding was real FOR FUSED TALLIES and does
+not generalise: a fused clip ending on a verbless list has nothing to land on in any take, while a
+solo clip ending on a wry sentence is a coin-flip the sampler sometimes loses.
+
+⚠ **What this means for the next person: reach for `resynth-narration` BEFORE re-narrating.** It is
+~$0.035/clip against ~$0.28, and it fixed 63% of the population. Re-generating to fix a tail is paying
+8× for a re-roll you can buy directly.
+
+- [x] **The solo closer rule shipped anyway (`968a0ab`) and is worth keeping, but do not credit it
+      with much:** measured 21% → 17% on fresh generation. It was justified by 15 → 3 on the clips that
+      were already broken — a REPAIR population, which flattered it badly. The clips it "fixed" were
+      mostly re-rolls. ⚠ The rule is followed (flagged closers now carry finite verbs at the same rate
+      as clean ones, median 10 words vs 12), so closer SHAPE is not the mechanism.
+- [ ] **13 clips remain flagged** at median 5.6 dB (max 9.3, vs the fused disaster's 14.4). Cheapest
+      next move is another `resynth` round on just those (~$0.50); a few are genuinely structural and
+      want an ear, not another re-roll.
+- [ ] **Standing regression test for any persona-prompt change**: same places, tail-flagged rows,
+      before vs after. A prompt edit moved this 10× without failing a single gate. ⚠ And measure on a
+      FRESH population — a re-run of already-broken clips regresses to the mean and will tell you a
+      bad fix worked.
 
 ## The POI legibility layer — cluster / district / road-relevance (founder ask 2026-07-29)
 
