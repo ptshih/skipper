@@ -35,20 +35,48 @@ of those states unrepresentable rather than handled.
 ~138 MB. A single drive is tens of MB. So the whole region is single-digit multiples of one drive,
 and the founder's own note called it "a checkbox, not an architecture project."
 
-## ⚠ The thing that has to be designed in, not discovered
+## ⚠ Roam POIs and drive POIs are NOT the same set — in either direction
 
-**A region pack built from `GET /roam` would NOT reliably cover every clip a stored drive needs.**
+Same audio. Same `narrations` rows, same R2 keys. What differs is **selection policy** and
+**addressing**, and only the first is a problem.
 
-The drive BUILD path filters exactly as roam does — released only, `excluded_reason IS NULL`,
-`notSupersededByServedCluster` (`apps/api/src/drives.ts:300-315`). But the drive REPLAY path
-deliberately does **not** re-adjudicate: `corpusForSelection` → `loadCorpusBySubjectIds` resolves a
-FROZEN selection by subject id, and the comments say so explicitly ("BUILD path only … deliberately
-does not re-adjudicate a frozen drive's stops"). So a saved drive can legitimately reference a
-narration the current roam manifest omits:
+**Roam selects at presentation time, and its policy moves.** `GET /roam` applies, live, per request:
+`released_at NOT NULL` (unless admin), `excluded_reason IS NULL` (unconditionally — even for an
+admin), `notSupersededByServedCluster(...)`, and a radius bbox + haversine trim
+(`apps/api/src/index.ts:199-249`).
 
-- a POI that gained an `excluded_reason` after the drive was built (`prune-corpus.ts` runs later);
-- a POI whose cluster later gained a served fused telling, so roam now suppresses the member;
-- geographically, a route whose stops fall outside the radius the pack was anchored at.
+**A drive resolves a FROZEN selection with essentially no eligibility filtering.**
+`loadCorpusBySubjectIds` (`drives.ts:884-902`) is `inArray(narrations.poiId, subjectIds)` plus
+`loadClusterTellings({ includeStaged: true, areaCapable: true, clusterIds })` — no release filter, no
+`excluded_reason`, no suppression. Deliberate, and the comment says why: this path "resolves a frozen
+set's CONTENT and must not re-adjudicate eligibility", because re-adjudicating would silently shrink
+a drive the rider paid a non-refundable credit for. The BUILD path (`drives.ts:300-315`) *does* filter
+like roam — so **a drive's stop list is a snapshot of roam's policy at build time**, resolved forever
+after by id.
+
+Concretely, how they drift: a drive is built with a Vikingsholm stop; later `classify-treatments`
+groups Vikingsholm into the Emerald Bay cluster and a fused telling is released. Roam now suppresses
+Vikingsholm (the cluster speaks for it); the drive still names Vikingsholm's own narration, correctly.
+A roam-built pack has the fused clip and NOT the solo one, and the saved drive goes silent at that
+stop. Same shape for a POI that later gains an `excluded_reason` via `prune-corpus.ts`.
+
+⚠ **The case that bites first, today:** `getRoamManifest` is called `{ anonymous: true }` on purpose
+(roam carries live coordinates and must never link them to a signed-in identity — `api.ts:164-179`),
+so even an admin gets released-only content from roam. But an admin's drives can be built on STAGED
+narrations. A roam-built pack would therefore systematically miss exactly the staged clips the
+founder's own drives use.
+
+**And the reverse:** roam serves DISTRICT/area tellings that `buildDrive` refuses outright (it won't
+snap an enclosing-circle centre to a route — `drives.ts:335-337`). So a roam pack also carries clips
+no drive will ever reference. Harmless, but neither set contains the other.
+
+**This aims the idea rather than sinking it.** The conclusion is: *don't build the pack's contents
+from a presentation-time selection policy.* Key the store by NARRATION SUBJECT ID — poi or cluster,
+which is what both paths already use (roam even overloads `poiId` to carry cluster uuids, documented
+as opaque to the client) — and fill it from an eligibility question that doesn't move: "every
+released narration in this bbox". The ADDRESSING stays separate and that is fine: roam indexes by
+proximity (`radiusM`/`area`), a drive by route order (`seq`/`alongSec`). Same bytes, two indexes —
+precisely the shape that makes one shared store correct.
 
 Two ways out:
 
@@ -67,7 +95,9 @@ Two ways out:
 already uses it (`contentSignature` / `isDownloadStale`), but the roam wire has nothing, so today a
 client cannot tell a re-cut clip from an unchanged one — only "re-download everything" is available.
 Adding `revisedAt` to `roamPin` is additive and back-compatible (Zod strips unknown keys), and it is
-the prerequisite for any of this.
+the prerequisite for any of this. It is also cheaper than it sounds: the drive corpus already selects
+`revisedAt: narrations.updatedAt` (`drives.ts:193`), so it is the SAME column on the SAME table —
+roam simply doesn't project it.
 
 With it, sync is a small diff: fetch the manifest (~a few hundred KB), compare `poiId → revisedAt`
 against the pack, pull only what's new or changed, drop what's gone.
