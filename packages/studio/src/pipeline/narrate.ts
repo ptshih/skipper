@@ -44,7 +44,32 @@ export interface NarrationRequest {
   place?: { name: string; kind?: string | null }
   /** Grounded fact lines (STORY only). The entire well of facts the model may use. */
   facts?: string[]
-  /** Coordinate-keyed geology facts (the rock underfoot). Grounded like `facts`; allowed on STORY and SCENIC. */
+  /**
+   * Which of `facts` are REGIONAL BOILERPLATE, and how many OTHER places carry the identical line.
+   * Keyed by the exact fact text; absent/empty means "nothing shared", which is the old behaviour.
+   *
+   * ⚠ The model cannot possibly know this on its own, and that is the whole bug. One Macrostrat map
+   * unit hands 24 Tahoe POIs the byte-identical pair "the bedrock at this spot is undivided granitic
+   * rocks…" / "Late Cretaceous — roughly 66 to 101 million years old", and from inside a single call
+   * that is simply a good, vivid, specific fact — so the model leads with it, 24 times. Measured, the
+   * carriers are NOT thin cards (most have 3-5 other facts), so this is not "it had nothing else to
+   * say"; it is a choice made without the one piece of context that would change it.
+   *
+   * Marking beats gating: dropping the fact would lose a true and interesting thing from the one clip
+   * where a rider meets it first, and any "only the first N places may mention it" rule has to pick
+   * arbitrarily which peak gets the good line.
+   */
+  sharedFacts?: Readonly<Record<string, number>>
+  /**
+   * Coordinate-keyed geology facts (the rock underfoot). Grounded like `facts`; allowed on STORY and SCENIC.
+   *
+   * ⚠ NOTHING SETS THIS ON ANY LIVE PATH (verified 2026-07-30: the only two `narrateStop` callers are
+   * generate-narrations and generate-cluster-narrations, and neither passes it). V2 enrichment folds
+   * macrostrat sentences into `facts` as ordinary sheet bullets instead, so `geologyLines` below —
+   * including its careful "do not close on the rock / no deep-time reflection" cues — never fires.
+   * That is why the geology monotony it was written to prevent happened anyway. Kept because an
+   * authored-tour path may want the separate channel; do not trust it as live coverage.
+   */
   geology?: string[]
   /** STORY only: co-located landmarks merged into this stop — each {name, facts}. Grounded;
    *  the narrator may name them and weave them into ONE telling of the place.
@@ -204,7 +229,22 @@ export function buildFactSheet(req: NarrationRequest): string {
       lines.push(
         'FACT SHEET (the entire well of facts you may draw from — if it is not here, you do not know it):',
       )
-      for (const f of facts) lines.push(`- ${f}`)
+      const shared = req.sharedFacts ?? {}
+      let anyShared = false
+      for (const f of facts) {
+        const others = shared[f] ?? 0
+        if (others > 0) {
+          anyShared = true
+          lines.push(`- ${f}  [SHARED — ${others} other places near here carry this exact line]`)
+        } else {
+          lines.push(`- ${f}`)
+        }
+      }
+      if (anyShared) {
+        lines.push(
+          '(A line marked SHARED is REGIONAL character, not this place\'s story — the identical sentence sits on many other sheets around here, so a rider meets it again and again. You may still use one, but keep it to a clause in the middle, never open on it, never close on it, and never spend your one groaner on it. Lead with whatever is TRUE OF THIS PLACE ALONE.)',
+        )
+      }
     } else {
       // STORY requested but nothing groundable arrived: the system prompt tells the
       // Skipper to treat this as a scenic moment rather than invent a story.

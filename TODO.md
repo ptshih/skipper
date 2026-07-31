@@ -249,11 +249,27 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
             ⚠ **The diagnosis this changes: NRHP and the granite age are a SOURCE problem wearing a
             wording problem's clothes.** Both come from the same fact being handed to dozens of POIs
             (one Macrostrat map unit per batholith; one NRHP listing sentence), so no per-clip "say it
-            differently" note can fix what is upstream of the clip. The next thing to try is therefore
-            NOT another regen but one of: gate the geology channel to at most N clips per region; teach
-            the persona prompt a house style for a fact it will say fifty times; or vary it at
-            fact-sheet build time. Re-run this same $2 preview to check before spending at scale — it is
-            now the cheap standing test for "would a regeneration actually help?".
+            differently" note can fix what is upstream of the clip.
+            ✅ **ADDRESSED 2026-07-30 — by telling the narrator what it could not know.** The sheet now
+            marks a line carried by >3 other places as `[SHARED — N other places near here carry this
+            exact line]`, with one note demoting it ("REGIONAL character, not this place's story…never
+            open on it, never close on it, never spend your groaner on it"). Measured corpus-wide: 4013
+            distinct fact lines, **17** shared — the granite pair at **24 places each**, the generic
+            NRHP designation at 11, then the andesite/Cenozoic and intrusive/Mesozoic pairs. Tight, not
+            spraying.
+            ⚠ **The carriers are NOT thin cards** (most have 3-5 other facts), so the old "it had
+            nothing else to say" theory was wrong — the model was *choosing* granite, 24 times, because
+            from inside one call it is a vivid specific fact and nothing said otherwise. Same shape as
+            the two tic bugs: not a rule ignored, a fact never communicated.
+            ⚠ Marking beats GATING: dropping the fact would rob the one clip where a rider meets it
+            first, and any "first N places may say it" rule picks arbitrarily which peak gets the good
+            line.
+            ⚠ **Dead-code finding en route: the `geology` narration channel is unreachable.** Only two
+            callers of `narrateStop` exist and NEITHER sets it, so `geologyLines` — with its careful
+            "do not close on the rock / no deep-time reflection" cues — has never fired. V2 enrichment
+            folds macrostrat sentences into `facts` as ordinary bullets. That is why the monotony those
+            cues were written to prevent happened anyway. Left in place (an authored-tour path may want
+            it) but commented as not-live; do not read it as coverage.
       - [x] **"OPENER monotony" — RE-MEASURED 2026-07-30, and it is neither an opener problem nor a
             detection one.** (a) DETECTION was already done: `f08dc9b` shipped `openerShape` (a coarse
             2-word key with a tolerance), which flags 49 of 457 against the exact key's 7.

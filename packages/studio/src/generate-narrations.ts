@@ -77,6 +77,12 @@ import { recordEvalRun, type ClipIdentity } from './eval/record'
 // STORY is still "has a curated fact sheet" (#1); "never pad past the facts" governs the ACTUAL length
 // within the band, so a thin pin lands honestly short. An ENRICHED poi grounds on its sheet.
 
+/** How many OTHER places must carry the identical fact line before it is marked SHARED on the sheet.
+ *  3 (i.e. 4+ carriers) to match `SHARED_NGRAM_MIN_CLIPS` in pipeline/lint.ts — the lint FLAGS a
+ *  phrase at that many clips, so the sheet should WARN at the same point rather than let generation
+ *  and evaluation disagree about what counts as worn out. */
+const SHARED_FACT_MIN_OTHERS = 3
+
 const flags = parseFlags(process.argv.slice(2), {
   valueFlags: ['limit', 'region', 'max-cost', 'query', 'include-ids', 'exclude-ids'],
 })
@@ -291,6 +297,36 @@ async function main(): Promise<void> {
       `(${isExplicit ? 'whole corpus — explicit-id run has no region' : 'this region'}) will be checked against.`,
   )
 
+  // How many DISTINCT pois carry each exact fact line, corpus-wide. The narrator gets this per stop
+  // (`sharedFacts`) so it can tell a fact ABOUT THIS PLACE from regional boilerplate.
+  //
+  // ⚠ It cannot work this out for itself, and that is the whole point: one Macrostrat map unit hands
+  // 24 Tahoe pois the byte-identical "undivided granitic rocks … Late Cretaceous, roughly 66 to 101
+  // million years old", and inside a single narration call that reads as a vivid, specific fact worth
+  // leading with. Measured, the carriers are NOT thin (most have 3-5 other facts), so this is a choice
+  // made blind rather than a shortage of material. Corpus-wide, not region-scoped, because a rider on
+  // one drive can hear clips from either side of a region boundary.
+  const factCarriers = new Map<string, number>()
+  for (const row of await withRetry(
+    () => db.select({ sheet: pois.factSheet }).from(pois).where(isNotNull(pois.factSheet)),
+    { label: 'load shared-fact counts' },
+  )) {
+    const items = Array.isArray(row.sheet) ? row.sheet : []
+    // Count each poi ONCE per distinct line — a sheet that repeats itself must not inflate the count.
+    const seen = new Set<string>()
+    for (const it of items) {
+      const t = (it as { text?: string })?.text?.trim()
+      if (!t || seen.has(t)) continue
+      seen.add(t)
+      factCarriers.set(t, (factCarriers.get(t) ?? 0) + 1)
+    }
+  }
+  const sharedLines = [...factCarriers.values()].filter((n) => n > SHARED_FACT_MIN_OTHERS).length
+  console.log(
+    `Shared-fact map: ${factCarriers.size} distinct fact lines, ${sharedLines} carried by more than ` +
+      `${SHARED_FACT_MIN_OTHERS} places (those get marked SHARED on the sheet).`,
+  )
+
   // Cost preview: narration ≈ system+sheet in / ~1k thinking+output out per clip (Opus 4.8
   // $5/$25 per MTok → very roughly $0.03–0.08 per clip). The automated gate adds ~1 Opus GROUNDING
   // call/clip (~$0.04) plus the odd bounded retake, so model ~$0.15/clip of LLM spend when the gate
@@ -368,6 +404,12 @@ async function main(): Promise<void> {
       stopType: 'story' as const,
       place: { name: c.name, ...(c.kind ? { kind: c.kind } : {}) },
       facts: grounding.facts,
+      // Only the lines OTHER places also carry, with this poi discounted from its own count.
+      sharedFacts: Object.fromEntries(
+        grounding.facts
+          .map((f) => [f, (factCarriers.get(f.trim()) ?? 1) - 1] as const)
+          .filter(([, others]) => others >= SHARED_FACT_MIN_OTHERS),
+      ),
       targetSeconds: band.targetSeconds,
       maxSeconds: band.maxSeconds,
       selfContained: true,
