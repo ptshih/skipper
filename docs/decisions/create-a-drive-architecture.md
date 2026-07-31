@@ -133,9 +133,12 @@ regenerated telling auto-improves a saved drive; a deleted POI → skip).
 
 **Anonymous = Roam ONLY.** Creating a drive requires a FREE account (create-action wall at
 account-creation — earlier than the play/preview wall; a doctrine refinement for user-GENERATED
-artifacts). Free tier caps at **N = 10** drives (admin-tunable); beyond → **one-time credit packs**
-(Apple IAP consumables — not a subscription; shares IAP groundwork with the tip-jar idea). Cap ships in
-core; the credit IAP is a fast-follow.
+artifacts). Free tier caps at `FREE_DRIVE_CAP` drives (admin-tunable; the value's home is
+`apps/api/src/credits.ts` + env). ⚠ **Amended 2026-07-31**
+([free-allotment-through-1-1.md](free-allotment-through-1-1.md)): beyond the cap the rider is sent to
+the support address for a **free admin top-up**, not to a purchase — one-time credit packs (Apple IAP
+consumables, sharing IAP groundwork with the tip-jar idea) remain the eventual unlock, but the 403 no
+longer promises one, because nothing sells today and 2.0 may price differently.
 
 ## Key engineering decisions
 

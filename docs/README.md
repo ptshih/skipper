@@ -75,9 +75,11 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
 - [credit-ledger.md](decisions/credit-ledger.md) — drive credits are a user-owned, append-only
   `credit_entries` ledger (balance = SUM), NOT a `count(drives)`; free-tier lifetime grant + per-drive
   consume live (migration `0016`), Apple IAP / Google Play purchase plumbing deferred; built 2026-06-19.
-- [free-allotment-through-1-1.md](decisions/free-allotment-through-1-1.md) — 1.1 ships effectively free
-  and the ledger stays live but silent; ⚠ frozen grant amounts block RAISING the cap as well as lowering
-  it, so any raise owes existing riders an admin top-up (2026-07-31).
+- [free-allotment-through-1-1.md](decisions/free-allotment-through-1-1.md) — the free allotment stays
+  SMALL and running out is a conversation: the 403 sends the rider to `hello@skipper.fm` for a free
+  admin top-up, keeping 2.0 pricing open. ⚠ Frozen grant amounts block RAISING the cap as well as
+  lowering it, so any cap change owes existing riders a grant — and `hello@` is now load-bearing
+  (2026-07-31).
 - [cut-tiers.md](decisions/cut-tiers.md) — removed `user.tier` ('free'|'paid'): credits govern premium,
   so `accessTier` collapses to `anonymous`|`free`, every account spends the ledger, and a comp is a
   large admin grant (2026-06-20).

@@ -15,10 +15,17 @@ import { creditEntries } from '@skipper/db/schema'
 import { withRetry } from './retry'
 
 // LIFETIME free allotment: every account is granted this many credits, once, ever. A credit is spent
-// at generation (POST /drives) and never refunded on delete (no `reverse` is emitted). Beyond it a
-// one-time credit pack is the planned unlock (IAP/Play fast-follow); a comp = a large admin grant.
-// Admin-tunable via env. NOTE: a grant's amount is frozen when it's written (the ledger is immutable),
-// so raising this only affects users not yet granted.
+// at generation (POST /drives) and never refunded on delete (no `reverse` is emitted).
+//
+// Deliberately SMALL, and running out is a CONVERSATION rather than a paywall (founder call
+// 2026-07-31): the 403 sends the rider to the support address for a free top-up, which is just an
+// admin grant. A one-time credit pack (IAP/Play) remains the eventual unlock, but nothing sells today
+// and the copy no longer promises one. Keeping the allotment small is what keeps 2.0 pricing OPEN —
+// see docs/decisions/free-allotment-through-1-1.md.
+//
+// Admin-tunable via env. ⚠ A grant's amount is FROZEN when written (the ledger is immutable), so
+// changing this affects only users not yet granted — in BOTH directions. Any cap change owes existing
+// riders an explicit admin grant; that is also why the top-up path is a grant, not a cap raise.
 export const FREE_DRIVE_CAP = Number(process.env.FREE_DRIVE_CAP ?? 100)
 
 /** Idempotency key for a user's one free-tier grant (so the lazy grant is exactly-once). */

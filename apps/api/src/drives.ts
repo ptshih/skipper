@@ -52,6 +52,14 @@ import { audioUnavailable, contentTypeForKey, presignGet } from './storage'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
+/** Where a rider who runs out of free drives is sent. `hello@skipper.fm` is the founder rule for every
+ *  PUBLISHED address (same inbox as the legal pages, the support page and the in-app report link) —
+ *  never a personal address. Env-overridable with the same default as ./email's reply-to, so a redirect
+ *  is a config change rather than a code edit.
+ *  ⚠ This address must actually be READ by a human: since 2026-07-31 it is the only route past the
+ *  free-drive wall, so an unmonitored inbox turns a friendly top-up into a dead end. */
+const SUPPORT_EMAIL = process.env.EMAIL_REPLY_TO ?? 'hello@skipper.fm'
+
 // Drive credits live in the user-owned `credit_entries` LEDGER (see ./credits + the decision doc), NOT
 // a count of drive rows. Every account is granted `FREE_DRIVE_CAP` credits once — but that amount is
 // FROZEN into the grant row, so user-facing numbers read `granted` from the ledger, never the env
@@ -509,11 +517,18 @@ driveRoutes.post('/', createDriveLimiter, async (c) => {
     // /admin/users/:id/credits` grants up to 1000, so a comped rider who spends 510 was being told
     // "you've used all 10 of your free drives" while the admin console correctly showed 510. GET
     // /drives already reports `granted`; this path disagreeing with it was the bug.
+    // ⚠ This string is the ONLY thing that tells a rider the top-up path exists — the client renders
+    // the server message verbatim. Founder call 2026-07-31: the allotment stays small and the wall is a
+    // CONVERSATION, not a paywall — anyone who runs out emails and gets more, free, until there is
+    // actually something to sell. So the address is load-bearing copy, not a courtesy sign-off.
+    // ⚠ Do NOT promise a credit pack here. It used to say "a credit pack to make more is coming soon",
+    // which is a commitment to ship a purchase flow; nothing sells today and 2.0 may price differently.
     return c.json(
       {
         error: 'drive_limit_reached',
-        message: `You've used all ${granted} of your free drives. A credit pack to make more is coming soon.`,
+        message: `That's all ${granted} of your free drives — you've been busy. Email ${SUPPORT_EMAIL} and we'll top you up, free.`,
         cap: granted,
+        supportEmail: SUPPORT_EMAIL,
       },
       403,
     )
