@@ -11,7 +11,7 @@ import { Stack, useLocalSearchParams, useNavigation, useRouter } from 'expo-rout
 import * as SecureStore from 'expo-secure-store'
 import { useDrive } from '@/lib/useDrive'
 import { useSession } from '@/lib/auth'
-import { useIsOffline } from '@/lib/connectivity'
+import { isOfflineNow } from '@/lib/connectivity'
 import { useSimMode } from '@/lib/sim-mode'
 import { stopLabel } from '@/lib/labels'
 import { useReducedMotion, useTheme } from '@/theme'
@@ -85,11 +85,16 @@ export default function DriveScreen() {
     SecureStore.setItemAsync(VIEW_KEY, next).catch(() => {})
   }, [])
   // Basemap tiles are network-only, so in a dead zone Map is our route line and puck floating on a
-  // blank field, while List is complete. Open on List instead — DERIVED, never a setState: writing
+  // blank field, while List is complete. OPEN on List instead — DERIVED, never a setState: writing
   // it back would quietly overwrite a preference the rider set in town and never asked to change.
   // They can still tap Map (a blank basemap with the route drawn is a legitimate thing to want).
-  const isOffline = useIsOffline()
-  const view: PlayerView = !pickedView && isOffline && savedView === 'map' ? 'list' : savedView
+  //
+  // ⚠ LATCHED at mount, not read live. Map and List are two different trees (Map floats the player
+  // as a peek sheet; List is a fixed shell with its own scroll position), and Tahoe coverage flaps —
+  // so reading the live verdict would re-lay-out the screen, mid-drive, repeatedly, with the rider
+  // touching nothing. The verdict at the moment the player opens is the one that matters.
+  const offlineAtOpen = useRef(isOfflineNow()).current
+  const view: PlayerView = !pickedView && offlineAtOpen && savedView === 'map' ? 'list' : savedView
   // Map mode floats the player as an expandable PEEK sheet (mini-bar ↔ full card). Pre-drive
   // (ready) and arrival (done) force the full card — there's nothing to peek past.
   const [expanded, setExpanded] = useState(false)

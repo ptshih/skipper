@@ -9,8 +9,9 @@
 // The encounter sheet reuses the EXACT story-player transport (Scrubber + play/pause + ±15s)
 // so both players feel identical (founder call, superseding the alpha's read-only bar).
 // Alpha cuts vs the full design: the encounter PATTER line (grounded, from the roam track), waves
-// + B-sides ("Tell me more"), and the offline region pack + logbook wait on their backends —
-// honest UI shows none of them.
+// + B-sides ("Tell me more"), and the logbook wait on their backends — honest UI shows none of
+// them. (The offline region pack has since SHIPPED — see @/lib/roam-pack; a session running off it
+// flags itself with the chip below.)
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Animated, Linking, PanResponder, Pressable, StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -373,6 +374,9 @@ export default function RoamScreen() {
                 {voice.roam.ridingKicker}
               </Text>
               {roamMode === 'sim' && <Badge tone="teal" label={voice.roam.simBadge} />}
+              {/* Running off the saved pack — the rider should know why the skipper still talks
+                  with no bars, and that it's the pack working rather than something degraded. */}
+              {r.fromPack && <Badge label={voice.roam.packBadge} />}
             </View>
             <View style={styles.motif}>
               <RoamMotif glow={!sheetVisible && !peekVisible} nearestM={r.diag.nearestM} />

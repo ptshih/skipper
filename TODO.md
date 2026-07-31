@@ -874,46 +874,55 @@ GPS triggering imports only `expo-location` + `@skipper/engine` (no fetch anywhe
 drive LIST and DETAIL both fall back to disk. The downloader is partial-tolerant with retries and a
 size verify. Refs: `offline.ts:369,425-434,566-585`, `useDrive.ts:296`, `app/index.tsx:56-68`.
 
-⚠ **ROAM IS 100% ONLINE-ONLY — and it is the anonymous front door and the founder's daily mode.**
-This is the whole gap, not the audio pipeline.
+✅ **ROAM WORKS OFFLINE (2026-07-30) — the pack shipped.** `src/lib/roam-pack.ts` saves ONE artifact
+holding pins AND audio; `useRoam` resolves its pin set from the network when it can reach it and from
+the pack when it can't, and prefers saved BYTES over a presigned url even on a live session (so a
+thin-signal stall on a clip we already hold is now impossible, and the whole expired-presign stall
+class is a no-op). Sim mode rides the same path, so the couch replay is no longer network-bound
+either. Saved from Settings → RIDE ALONG OFFLINE, anchored on wherever the rider last rode — which is
+why it needs no location permission of its own.
 
-- [ ] **Roam cannot START offline.** `getRoamManifest` is an unguarded `await` (`useRoam.ts:685`) whose
-      rejection sets `phase='error'`. Rider sees the "Checking which stories live out here…" spinner,
-      then a red "that's a kink in the hose" card with a retry button that re-runs the identical fetch
-      and fails identically. Permanent dead end while they have no bars. ⚠ **SIM mode is not an escape
-      either** — the sim branch only chooses where `here` comes from; the manifest fetch below it is
-      unconditional, so there is currently NO way to QA roam without a live network.
-- [ ] **Nothing caches the roam manifest.** The pin set lives only in `pinsRef` and dies with the
-      screen (`useRoam.ts:209`); `roam-history.json` stores heard/muted ids only. A rider who roamed
-      this exact road yesterday starts from nothing. A last-known-pins cache keyed by bbox is the
-      cheapest single win here.
-- [ ] **Roam clips are streamed, never saved** (`useRoam.ts:396` plays the presigned URL directly).
-      Even a story the rider just heard is unreplayable without signal. The header comment already owns
-      this as an alpha cut. A roam offline pack is the big one — but **MEASURED, it is far smaller than
-      it sounds: the ENTIRE rider-reachable corpus is 238 clips / 293 min / ~138 MB** at the shipped
-      64 kbps `AAC_BITRATE` (69 MB if it were ever re-encoded at 32k). That is a few podcast episodes.
-      "Download the whole region" is a checkbox, not an architecture project — and `offline.ts` already
-      proves the shape (manifest + bytes on disk, urls NULLED, `file://` rebuilt at read time).
-- [ ] **Mid-session signal loss costs ~24 s of dead air per encounter, then a silent skip**
-      (3 s skeleton → 12 s stall → one futile recovery → 12 s stall → `onClipDone`). Worse, `sawFresh`
-      never flips so the "N stories told" pill stays at 0 — the rider gets no evidence anything was
-      even attempted.
+⚠ **Pins and audio ship together, deliberately** (`playablePins` in `roam-pack-util.ts`). A cached pin
+whose bytes never landed would fire its trigger, buffer for `CLIP_STALL_MS` and skip in silence — a
+rider watching a sheet spin. Only pins with audio on disk are ever narrated from a pack; the filter is
+the feature, not a detail. Same reason the pack refuses to move its anchor once audio exists: a drive
+to another basin must not silently orphan ~138 MB.
+
+- [ ] **Mid-session signal loss still costs ~24 s of dead air per encounter for a clip the pack does
+      NOT hold** (3 s skeleton → 12 s stall → one futile recovery → 12 s stall → `onClipDone`), and
+      `sawFresh` never flips so the "N stories told" pill stays at 0 — no evidence anything was even
+      attempted. Unchanged for an un-saved rider; a saved pack sidesteps it entirely.
 
 ✅ **CONNECTIVITY AWARENESS IS BUILT (2026-07-30) — the app knows, and says so.** One app-wide verdict
 in `src/lib/connectivity.ts`; `api.ts` throws `OfflineError` INSTEAD of attempting a request the device
 can't carry, so every dead-zone fallback that used to wait out the 15 s timeout is now an instant disk
-read, and every failure surface says the honest thing instead of the generic in-voice line. Home dims
-the two mode CTAs (both open with a fetch) and self-heals on the offline→online edge; the drive player
-opens on List when offline (DERIVED — it never overwrites the rider's persisted view preference).
+read, and every failure surface says the honest thing instead of the generic in-voice line. Home shows
+an honest heads-up (a NUDGE — the CTAs stay live, and Ride Along genuinely works with a pack) and
+self-heals on the offline→online edge; the drive player opens on List when offline (DERIVED and
+LATCHED at mount — it never overwrites the rider's persisted preference, and flapping coverage must
+not re-lay-out the in-car screen).
 
-⚠ **Two landmines are documented in `connectivity.ts` and must not be undone.** (1) We never call
+⚠ **The verdict SELF-HEALS rather than being trusted forever, and that is load-bearing.** An offline
+verdict is trusted for `OFFLINE_TRUST_MS`; past that the next request goes through as a PROBE, and any
+successful response clears a stale verdict outright. Without it a dead event stream (see below) that
+last said "offline" would short-circuit every request for the life of the process. ⚠ Do NOT replace
+the probe with a plain expiry: parked in a dead zone no new events arrive, so a plain TTL would switch
+the feature off exactly where it earns its keep. One call opts out of the pre-flight entirely —
+`signDriveAudio` — because it runs from the mid-drive stall watchdog where the request timeout is a
+deliberate second chance for a slow clip, not latency to save.
+
+⚠ **Three landmines are documented in `connectivity.ts` and must not be undone.** (1) We never call
 `getNetworkStateAsync()`: read expo-network's `ios/NetworkModule.swift` — with no path in hand it spins
 a temporary `NWPathMonitor` and blocks on a semaphore up to 5 s, and on TIMEOUT returns
 `isConnected: false`, i.e. it can FABRICATE an offline verdict. (2) The listener is registered once and
 never removed, because the native module cancels `NWPathMonitor` in `OnStopObserving` and a cancelled
 monitor is final — which is also why expo-network's own `useNetworkState()` hook must not be used in a
-component. The verdict fails OPEN throughout: never having observed an event reads as ONLINE, so a
-missing native module degrades to exactly the old behaviour rather than to a bricked app.
+component. (3) It is armed from `index.js` ABOVE `expo-router/entry`, because expo-modules-core's
+`removeAllListeners` fires `stopObserving` whenever the prior listener count was ≥ 1 rather than only
+at zero (`common/cpp/EventEmitter.cpp`), and `@better-auth/expo` registers and tears down its own
+network listener — so holding the count above zero from the start is what stops someone else's
+teardown taking our stream with it. The verdict fails OPEN throughout: never having observed an event
+reads as ONLINE, so a missing native module degrades to exactly the old behaviour, not a bricked app.
 
 One more, unrelated to roam:
 

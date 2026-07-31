@@ -36,7 +36,7 @@ import type {
 } from '@skipper/shared'
 import { API_URL, authClient } from './auth'
 import { CLIENT_IDENTITY_VALUE } from './clientIdentity'
-import { isOfflineNow } from './connectivity'
+import { noteNetworkReachable, shouldSkipRequest } from './connectivity'
 import { voice } from '@/ui/voice'
 
 export class ApiError extends Error {
@@ -90,10 +90,6 @@ export const errorMessage = (e: unknown, fallback: string): string =>
       ? e.message
       : fallback
 
-/** Did this failure happen because the device has no network? Lets a surface swap its whole
- *  treatment (a "no signal" note + a disk fallback) rather than only its error string. */
-export const isOfflineError = (e: unknown): e is OfflineError => e instanceof OfflineError
-
 // Time-box every request. RN's fetch has NO default timeout, so a half-open connection in a
 // cellular dead zone (the core Tahoe-drive concern — CLAUDE.md "Offline-first… Tahoe dead zones")
 // would hang FOREVER: the load effect's await never settles (an infinite spinner, no retry
@@ -121,14 +117,15 @@ const REQUEST_TIMEOUT_MS = 15_000
 async function fetchJson(
   path: string,
   init?: RequestInit,
-  opts?: { anonymous?: boolean },
+  opts?: { anonymous?: boolean; ignoreOffline?: boolean },
 ): Promise<unknown> {
   // Pre-flight: with NO network, don't spend the 15 s timeout discovering it. Every dead-zone
   // fallback in the app (the home drive list, the drive detail, roam's manifest) is triggered by a
   // FAILED fetch, so short-circuiting here is what turns each of them from "~15 s of skeletons,
   // then the saved copy" into an instant disk read — without any of them changing shape. The
-  // verdict is push-based and fails OPEN (see connectivity.ts), so an unknown state still tries.
-  if (isOfflineNow()) throw new OfflineError()
+  // verdict is push-based, fails OPEN, and self-heals via a probe (see connectivity.ts), so an
+  // unknown — or merely stale — state still tries.
+  if (!opts?.ignoreOffline && shouldSkipRequest()) throw new OfflineError()
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
   try {
@@ -155,6 +152,10 @@ async function fetchJson(
       credentials: 'omit',
       signal: controller.signal,
     })
+    // A response of ANY status proves the device reached the network. If the pushed verdict said
+    // otherwise, it was stale or the event stream is dead — correct it now rather than let one bad
+    // verdict short-circuit the app for the rest of the process. (connectivity.ts)
+    noteNetworkReachable()
     const json = (await res.json().catch(() => ({}))) as { error?: string; message?: string }
     if (!res.ok) {
       throw new ApiError(res.status, json.error, json.message ?? `Request failed (${res.status})`)
@@ -248,11 +249,20 @@ export const listDrives = async (): Promise<DriveList> =>
 export const getDrive = async (driveId: string): Promise<DriveManifest> =>
   parseDto(driveManifest, await fetchJson(`/drives/${encodeURIComponent(driveId)}`))
 
-/** Re-presign a saved drive's clips (offline refresh), keyed by seq. */
+/** Re-presign a saved drive's clips (offline refresh), keyed by seq.
+ *
+ *  ⚠ The ONLY call that opts OUT of the offline pre-flight, and deliberately. This runs from
+ *  useDrive's mid-drive stall watchdog, where a FAILED re-sign skips the stop immediately — and the
+ *  skip is guarded on `!sawFresh`, so the seconds this call spends waiting are a real second chance
+ *  for a slow-but-alive clip to start and save the stop. Short-circuiting it instantly would delete
+ *  that window in exactly the marginal coverage it exists for, and silently drop stops. Here the
+ *  request timeout is the FEATURE, not the cost. */
 export const signDriveAudio = async (driveId: string): Promise<SignedDriveAudio> =>
   parseDto(
     signedDriveAudio,
-    await fetchJson(`/drives/${encodeURIComponent(driveId)}/assets/sign`, { method: 'POST' }),
+    await fetchJson(`/drives/${encodeURIComponent(driveId)}/assets/sign`, { method: 'POST' }, {
+      ignoreOffline: true,
+    }),
   )
 
 /** Remove a saved drive from the caller's list. Soft-delete on the server — it does NOT refund a

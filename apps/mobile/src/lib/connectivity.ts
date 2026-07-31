@@ -20,83 +20,123 @@
 // from a real NWPath. Until one arrives the answer is "unknown" → assume ONLINE. That is what makes
 // a missing/broken native module degrade to exactly today's behaviour rather than to a dead app.
 //
-// ⚠ The subscription is registered ONCE and NEVER removed. The native module starts NWPathMonitor in
-// `OnStartObserving` and CANCELS it in `OnStopObserving` — and a cancelled NWPathMonitor is in a
-// final state, so a remove/re-add cycle risks permanently killing the event stream. Don't call
-// expo-network's own `useNetworkState()` hook in a component either: it adds a listener on mount and
-// removes it on unmount, which is that same cycle. Read this module instead.
+// ⚠ The subscription is registered ONCE and NEVER removed, and it is armed as early as the app can
+// arm it (apps/mobile/index.js, beside the expo-network import). Two reasons, both native:
+//   1. The module starts NWPathMonitor in `OnStartObserving` and CANCELS it in `OnStopObserving`,
+//      and a cancelled NWPathMonitor is final — `setupNetworkMonitoring()` restarting the same
+//      `let monitor` instance is a no-op. So losing the stream once loses it for the process.
+//   2. `removeAllListeners` in expo-modules-core fires `stopObserving` whenever the prior listener
+//      count was >= 1 — NOT only when it reaches zero (common/cpp/EventEmitter.cpp; contrast
+//      `removeListener`, which correctly checks for zero). @better-auth/expo registers its own
+//      network listener and tears it down on session-refresh cleanup, so arming FIRST and holding
+//      the count above zero is what keeps someone else's teardown from taking our stream with it.
+// For the same reason, don't call expo-network's own `useNetworkState()` hook in a component: mount
+// /unmount IS an add/remove cycle.
+//
+// And because none of that is guaranteed, the verdict is SELF-HEALING rather than trusted forever —
+// see `shouldSkipRequest` and `noteNetworkReachable`.
 
 import { useSyncExternalStore } from 'react'
-import { AppState } from 'react-native'
 import { addNetworkStateListener } from 'expo-network'
 import { isOfflineSnapshot, type NetworkSnapshot } from './connectivity-util'
 
 /** The last state the OS PUSHED us. Null = never observed → unknown → assume online. */
 let snapshot: NetworkSnapshot | null = null
+/** When that push landed. A verdict with no recent evidence behind it gets probed, not trusted. */
+let observedAt = 0
+/** When we last let a request through to TEST a stale offline verdict. */
+let probedAt = 0
 
 /**
- * After the app returns to the foreground we distrust a held OFFLINE verdict for this long. While
- * the app was suspended the queue that delivers path updates wasn't running, so a network that came
- * back may not have been reported yet. Cleared EARLY by the first pushed event (the normal case —
- * a pending update is delivered within milliseconds of resume), so this is a ceiling, not a wait.
- * Without it, a rider who backgrounds the app in a dead zone and reopens it in town could hold a
- * stale "offline" and short-circuit requests that would have worked.
+ * How long an OFFLINE verdict is trusted without fresh evidence. Past it, the next request is let
+ * through as a PROBE rather than short-circuited.
+ *
+ * This is the guard against the module's one catastrophic failure: an event stream that dies (see
+ * the header — a cancelled monitor is final, and someone else's `removeAllListeners` can cancel it)
+ * while the last thing it said was "offline". Without a probe that verdict would stand until the
+ * process was killed, and every request in the app would short-circuit with full bars.
+ *
+ * ⚠ It is a PROBE, not an expiry. A plain "distrust anything older than N" would be worse than
+ * useless here: parked in a dead zone no new events arrive, so the verdict would go stale and stay
+ * stale, and the feature would switch itself off exactly where it earns its keep. Instead a lapsed
+ * window buys ONE real attempt, then re-arms — so a genuinely offline rider pays at most one
+ * timeout per window (and only when they tap something), while a lying stream is corrected by the
+ * first request that succeeds.
  */
-const RESUME_GRACE_MS = 1_500
-let unconfirmedUntil = 0
+const OFFLINE_TRUST_MS = 90_000
 
 const subscribers = new Set<() => void>()
 function notify(): void {
   for (const fn of subscribers) fn()
 }
 
-function apply(next: NetworkSnapshot): void {
-  snapshot = next
-  unconfirmedUntil = 0 // a real event outranks the resume grace
-  notify()
-}
-
 let armed = false
-/** Register the app-lifetime listener. Idempotent; safe to call from anywhere. */
-function arm(): void {
+/** Register the app-lifetime listener. Idempotent; safe to call from anywhere, any number of times. */
+export function armConnectivity(): void {
   if (armed) return
   armed = true
   try {
     // NEVER `.remove()` this — see the header note on OnStopObserving cancelling the monitor.
-    addNetworkStateListener((state) => apply(state))
+    addNetworkStateListener((state) => {
+      if (__DEV__ && observedAt === 0) {
+        // First push. A monitor that never emits is invisible in production (the verdict just stays
+        // "unknown" and the app behaves as it always did), so this is the one cheap way to notice
+        // in dev that the stream is alive at all.
+        console.log('[connectivity] first network state', state)
+      }
+      snapshot = state
+      observedAt = Date.now()
+      probedAt = 0 // real evidence outranks any probe bookkeeping
+      notify()
+    })
   } catch {
     // No native module (a misconfigured build, a future web target): stay permanently "unknown",
     // which reads as ONLINE everywhere. The app behaves exactly as it did before this file existed.
   }
-  try {
-    AppState.addEventListener('change', (s) => {
-      if (s !== 'active') return
-      if (!isOfflineSnapshot(snapshot)) return // a stale ONLINE costs nothing — don't churn
-      unconfirmedUntil = Date.now() + RESUME_GRACE_MS
-      notify()
-      setTimeout(() => {
-        // Skip if an event already cleared it (=== 0), or a later resume pushed the window out
-        // (its own timer owns that one).
-        if (unconfirmedUntil === 0 || Date.now() < unconfirmedUntil) return
-        unconfirmedUntil = 0
-        notify()
-      }, RESUME_GRACE_MS)
-    })
-  } catch {}
 }
 
-// Armed on IMPORT so "imported = watching" — there is no ordering bug where a screen reads the
-// verdict before someone remembered to start the monitor. api.ts imports this, so the listener is
-// registered as early as anything in the app touches the network.
-arm()
+// Armed on IMPORT too, so "imported = watching" even if the early call in index.js is ever dropped.
+armConnectivity()
 
 /**
- * Is the device definitively offline RIGHT NOW? Synchronous (no bridge call, no await), so it is
- * safe on any hot path. False whenever we don't know — see the asymmetry note at the top.
+ * Is the device definitively offline RIGHT NOW? Synchronous and PURE (no clock, no bridge call), so
+ * it is safe both on a hot path and as a `useSyncExternalStore` snapshot. False whenever we don't
+ * know — see the asymmetry note at the top.
+ *
+ * This is the UI's verdict. The REQUEST gate is `shouldSkipRequest`, which is deliberately stricter:
+ * being wrong here costs a line of copy, being wrong there costs a request that never happens.
  */
 export function isOfflineNow(): boolean {
-  if (unconfirmedUntil !== 0 && Date.now() < unconfirmedUntil) return false
   return isOfflineSnapshot(snapshot)
+}
+
+/**
+ * Should this request be skipped instead of attempted? Same verdict as {@link isOfflineNow}, plus
+ * the staleness probe: once OFFLINE_TRUST_MS has passed with no fresh event, ONE request is allowed
+ * through to test whether the event stream is still telling the truth.
+ *
+ * ⚠ Not pure — it records the probe. Never use it as a render-time read.
+ */
+export function shouldSkipRequest(): boolean {
+  if (!isOfflineNow()) return false
+  const now = Date.now()
+  if (now - Math.max(observedAt, probedAt) <= OFFLINE_TRUST_MS) return true
+  probedAt = now // spend the probe; the window re-arms from here
+  return false
+}
+
+/**
+ * A request just completed against the real network. If we believed we were offline, that belief is
+ * provably wrong — the event stream is stale or dead — so drop it and go back to "unknown" (which
+ * reads as online). This is what makes a killed monitor recoverable within one probe instead of
+ * lasting the whole process.
+ */
+export function noteNetworkReachable(): void {
+  if (!isOfflineSnapshot(snapshot)) return
+  snapshot = null
+  observedAt = 0
+  probedAt = 0
+  notify()
 }
 
 function subscribe(fn: () => void): () => void {

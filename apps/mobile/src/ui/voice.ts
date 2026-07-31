@@ -119,6 +119,10 @@ export const voice = {
     // Riding-along idle — alive, never a spinner.
     ridingKicker: 'Riding along',
     simBadge: 'SIMULATED', // couch/dev clock
+    // The session is running entirely off the saved pack — no network was reached. Quiet and
+    // non-alarming (neutral, not amber): running offline is the pack working, not a degradation.
+    // The roam twin of the drive player's "Playing from download" chip.
+    packBadge: 'SAVED STORIES',
     idleTitle: 'All quiet — and that’s fine.',
     idle: 'Enjoying the view. I’ll pipe up when there’s something worth saying.',
     // The idle "wandering thought" — a placeless, time-of-day-keyed murmur pool that slow-
@@ -229,14 +233,16 @@ export const voice = {
     // here. Same "No signal out here" opening as its two siblings above so the three read as one
     // idea; the second clause is the part that changes (nothing saved to fall back ON).
     noSignal: 'No signal out here — and this one needs a bar or two. Try again when they’re back.',
-    // Home, offline: ONE note above the two mode CTAs, which are dimmed to match. This is the one
-    // place the app BLOCKS rather than nudges, and the reason is narrow — unlike starting an unsaved
-    // drive (a legitimate gamble on a road that may have bars), riding along and creating a drive
-    // BOTH begin with a fetch, so there is no "anyway" behind the tap, only a spinner and an error.
-    // One note, not a caption per button: three repetitions of the same fact is noise.
-    needsSignal: 'No signal out here — these two need a bar or two.',
-    // Appended to the note when there ARE saved drives, so the screen ends on what still works
-    // rather than on what doesn't. Omitted when the list is empty (it would promise nothing).
+    // Home, offline: ONE heads-up note above the mode CTAs. The CTAs stay LIVE and tappable —
+    // a nudge, never a block, like every other offline call in this app ("never strand a rider",
+    // "Start anyway"). Three reasons the block that was here first was wrong: the app now fails
+    // instantly and in voice rather than spinning, so the tap costs nothing; Ride Along genuinely
+    // WORKS offline once the stories are saved (see @/lib/roam-pack), so dimming it would be a lie;
+    // and dimming the anonymous front door contradicts what roam is for. The note names the one
+    // thing that truly can't happen out here, and doesn't pretend to speak for the rest.
+    needsSignal: 'No signal out here — creating a drive will have to wait for a bar or two.',
+    // Appended when there ARE saved drives, so the screen ends on what still works rather than on
+    // what doesn't. Omitted when the list is empty (it would promise nothing).
     needsSignalSaved: 'Your saved drives below still play.',
     // A saved drive whose clips were re-cut on the server: the chip flag + the ⋯ menu action to
     // re-pull. Never forced — offline play keeps working on the copy you’ve got.
@@ -321,6 +327,34 @@ export const voice = {
       'Your account, your drives, and your remaining credits go for good. This can’t be undone.',
     deleteCta: 'Delete forever',
     deleteFailed: 'Could not delete your account',
+    // The roam offline pack (Settings → RIDE ALONG OFFLINE). Roam is the front door and the daily
+    // mode, and Tahoe has dead zones — this is the control that makes it work out there. Counts and
+    // sizes are FACTS filled in by the caller; nothing here bakes one.
+    roamPack: 'RIDE ALONG OFFLINE',
+    roamPackIntro:
+      'Stow the stories on your phone and the skipper keeps talking where the bars don’t reach.',
+    // Nothing cached yet — the pack is anchored on wherever you last rode, so there's nothing to
+    // stow until you've ridden once. Says what to do, not just what's missing.
+    roamPackNoAnchor:
+      'Take one Ride Along first and I’ll know which stories to stow for you.',
+    roamPackSave: 'Save the stories',
+    roamPackUpdate: 'Refresh the stories',
+    roamPackRemove: 'Remove saved stories',
+    // Confirm before freeing the space — it's a big download to have to pull again, and out of
+    // signal it can't be pulled at all. States the consequence, not just the action.
+    roamPackRemoveBody:
+      'The stories come off your phone and the skipper goes quiet where there’s no signal. You can save them again next time you have bars.',
+    roamPackRemoveCta: 'Remove them',
+    roamPackCancel: 'Stop saving',
+    roamPackSaving: 'Stowing the stories…',
+    roamPackFailed: 'Couldn’t stow them all — signal’s thin out here. Give it another go?',
+    // A pack past PACK_TTL_DAYS. Roam pins carry no per-clip revision token, so age is the only
+    // freshness signal there is — a nudge, never a block; a stale telling still beats silence.
+    roamPackExpired: 'Saved a while back — a refresh will pick up any re-cut tellings.',
+    // A pack written by an older build of the app. Honest about the one thing the rider can act on:
+    // it still occupies the space, and removing it is how they get it back.
+    roamPackStale:
+      'Your saved stories were stowed by an older version and can’t be read. Remove them and save again.',
     // Developer: an admin-only sub-screen (Settings → Developer → /developer), gated on the
     // server-set user.role (Better Auth admin plugin) === 'admin'. `developer` labels the entry
     // row; the controls (sim GPS + diagnostics) live on the sub-screen. They used to sit inline

@@ -17,9 +17,12 @@
 //   - The engine's min-gap governor is fixed at ROAM_MIN_GAP_SEC — a SELECTION knob (how
 //     often encounters fire), never a generation knob. (The quiet/normal/talkative UI toggle
 //     was cut 2026-06-20 — not useful in practice; see MEMORY "Roam chattiness toggles".)
-//   - No offline pack (alpha streams presigned URLs), no re-sign-on-stall (a stalled clip
-//     just skips — a missed encounter is invisible by design), no music bed (the rider's
-//     own audio IS the bed), no end-of-route (the session ends when the rider ends it).
+//   - No re-sign-on-stall (a stalled clip just skips — a missed encounter is invisible by
+//     design), no music bed (the rider's own audio IS the bed), no end-of-route (the session
+//     ends when the rider ends it).
+//   - There IS an offline pack now (roam-pack.ts): the session resolves its pins from the
+//     network when it can reach it and from the saved pack when it can't, and prefers saved
+//     BYTES over a presigned url even on a live session. Roam is no longer network-bound.
 //
 // Sim mode (couch/dev): replays a FIXED demo polyline through the SAME engine — same fix
 // data a real drive would produce, so triggers behave exactly as on the road (no drive needed).
@@ -39,11 +42,13 @@ import {
   signedDistanceM,
 } from '@skipper/engine'
 import type { LngLat } from '@skipper/engine'
-import type { Attribution, AreaRing } from '@skipper/shared'
+import type { Attribution, AreaRing, RoamPin } from '@skipper/shared'
 import { errorMessage, getRoamManifest } from './api'
 import type { RoamManifest } from './api'
 import { liveRoamSource, simulatedSource } from './gps'
 import type { FixSubscription } from './gps'
+import { cacheRoamPins, loadRoamPack, localClipResolver } from './roam-pack'
+import { preferLocalUrls } from './roam-pack-util'
 import {
   heardPoiIds as heardPoiIdsOf,
   historySeed,
@@ -109,6 +114,9 @@ export interface RoamState {
   gate: RoamGateInfo | null
   /** Pins in range (the manifest), for honesty lines. */
   pinCount: number
+  /** This session is running entirely off the SAVED PACK — no network reached. Powers a quiet chip,
+   *  the roam twin of the drive player's "Playing from download". */
+  fromPack: boolean
   /** The encounter currently PLAYING (null = companionable silence). */
   activeName: string | null
   /** The sheet clip's frozen source credit (CC BY-SA). Undefined when nothing's up. */
@@ -182,6 +190,7 @@ export function useRoam(mode: RoamMode): RoamState {
   const [error, setError] = useState<string | null>(null)
   const [gate, setGate] = useState<RoamGateInfo | null>(null)
   const [pinCount, setPinCount] = useState(0)
+  const [fromPack, setFromPack] = useState(false)
   const [activePoiId, setActivePoiId] = useState<string | null>(null) // the clip LOADING/playing
   // Mirror, so the once-created fix callback can ask "is an encounter live?" without re-subscribing.
   const activePoiIdRef = useRef<string | null>(null)
@@ -361,7 +370,11 @@ export function useRoam(mode: RoamMode): RoamState {
           const fresh = await getRoamManifest(pos.lat, pos.lng)
           // Only adopt fresh pins if they still include the ACTIVE poi — else the clip-load reload
           // below can't find it (silent drop) while the engine keeps the old pins. (audit #1004)
-          if (fresh.pins.some((p) => p.poiId === poiId)) pinsRef.current = fresh.pins
+          // Local bytes win here too: this path exists to replace an EXPIRED presign, and a saved
+          // clip has nothing to expire — so a pack turns the whole stall class into a no-op.
+          if (fresh.pins.some((p) => p.poiId === poiId)) {
+            pinsRef.current = preferLocalUrls(fresh.pins, localClipResolver())
+          }
         }
       } catch {} // offline/dead zone: the reload below retries the old URL — then skips
       // Audio may have started playing during the async manifest fetch — if sawFresh flipped
@@ -624,7 +637,10 @@ export function useRoam(mode: RoamMode): RoamState {
           fetchAnchor.current = { lat, lng }
           // Empty out here means we have driven PAST the corpus, not that the held pins went bad —
           // keep them rather than blanking the map and going permanently silent.
-          if (fresh.pins.length > 0) adoptPins(fresh.pins)
+          if (fresh.pins.length > 0) {
+            cacheRoamPins({ lat, lng }, ROAM_RADIUS_KM, fresh.pins)
+            adoptPins(preferLocalUrls(fresh.pins, localClipResolver()))
+          }
         } catch {
           // Dead zone / transient: leave the anchor put so the next fix past the threshold retries.
         } finally {
@@ -682,19 +698,41 @@ export function useRoam(mode: RoamMode): RoamState {
         here = { lat: loc.coords.latitude, lng: loc.coords.longitude }
       }
 
-      const manifest = await getRoamManifest(here.lat, here.lng, ROAM_RADIUS_KM)
+      // Pins come from the network when we can reach it and from the SAVED PACK when we can't.
+      // Three things happen on the live path, all cheap: the pin set is cached to disk (a few
+      // hundred KB — this is what lets a future session start with no bars at all), and saved BYTES
+      // are preferred over the presigned url for any clip the pack already holds, so a live session
+      // on a thin road plays off the disk instead of stalling. Sim mode runs this same path, which
+      // is why the couch replay is no longer network-bound either — given a pack to fall back on.
+      let pins: RoamPin[]
+      let usedPack = false
+      try {
+        const manifest = await getRoamManifest(here.lat, here.lng, ROAM_RADIUS_KM)
+        cacheRoamPins(here, ROAM_RADIUS_KM, manifest.pins)
+        pins = preferLocalUrls(manifest.pins, localClipResolver())
+      } catch (e) {
+        // No bars (api.ts short-circuits before the request now, so this is instant) or the API is
+        // down. Fall back to the pack — and if there ISN'T one for here, let the original error
+        // stand rather than invent an empty session: the honest "no signal" card beats a roam that
+        // looks alive and never speaks.
+        const saved = loadRoamPack(here)
+        if (!saved) throw e
+        pins = saved
+        usedPack = true
+      }
       if (!mountedRef.current) return
-      if (manifest.pins.length === 0) {
+      if (pins.length === 0) {
         // Still terminal, deliberately: this is the screen App Review is pointed at, and it already
         // leads INTO the /sample rescue rather than dead-ending. The movement refetch below covers the
         // rider who starts WITH coverage and drives out of it; starting with none still means restart.
         setPhase('noCoverage')
         return
       }
+      setFromPack(usedPack)
       fetchAnchor.current = here
       setToldCount(0)
       clipRetried.current.clear() // a new session earns every clip a fresh recovery
-      adoptPins(manifest.pins)
+      adoptPins(pins)
 
       const source =
         mode === 'sim'
@@ -927,6 +965,7 @@ export function useRoam(mode: RoamMode): RoamState {
     error,
     gate,
     pinCount,
+    fromPack,
     activeName,
     activeAttribution,
     clipName,

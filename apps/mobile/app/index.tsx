@@ -16,8 +16,8 @@ import { Badge, Button, Card, Divider, HeaderIconButton, RouteTrack, Screen, Ske
 export default function HomeScreen() {
   const router = useRouter()
   const { data: session } = useSession()
-  // Both mode CTAs open with a fetch, so with no network they lead nowhere. Dim them and say so
-  // rather than let two live-looking amber buttons hand the rider a spinner and an error.
+  // Drives the offline heads-up above the mode CTAs (the CTAs themselves stay live — see there)
+  // and the reconnect self-heal below.
   const isOffline = useIsOffline()
   const [drives, setDrives] = useState<DriveSummary[]>([])
   const [loading, setLoading] = useState(true)
@@ -41,7 +41,15 @@ export default function HomeScreen() {
   // animated. The home has no NOW card, so this halo is the screen's sole amber glow.
   const parkedAnim = useRef(new Animated.Value(0.12)).current
 
+  // Monotonic request id: the focus load, the reconnect self-heal and a Better Auth session refetch
+  // can all fire within the same moment (they share the network edge), and without this the SLOWER
+  // of two overlapping loads wins and can stamp a stale list — or a stale error — over a good one.
+  // Only the newest run is allowed to write. (The same in-flight discipline useRoam's refetch uses.)
+  const loadSeq = useRef(0)
+
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current
+    const isCurrent = () => loadSeq.current === seq
     setError(null)
     // Anonymous riders can't own drives (creating one needs a free account), so skip the gated
     // call and show whatever's saved on disk (normally nothing → the zero-state invite to create).
@@ -54,10 +62,12 @@ export default function HomeScreen() {
     }
     try {
       const r = await listDrives()
+      if (!isCurrent()) return
       setDrives(r.drives)
       setCredits(r.credits ?? null) // null for paid/uncapped (or an older server) → hint hidden
       setOffline(false)
     } catch (e) {
+      if (!isCurrent()) return
       // Offline-first: in a dead zone the list fetch fails — fall back to the drives saved on disk
       // so they stay reachable rather than a blank error wall.
       const saved = listDownloadedDrives()
@@ -68,7 +78,7 @@ export default function HomeScreen() {
         setError(errorMessage(e, voice.error.generic))
       }
     } finally {
-      setLoading(false)
+      if (isCurrent()) setLoading(false)
     }
   }, [session])
 
@@ -121,9 +131,11 @@ export default function HomeScreen() {
   // the secondary action just under it. Each carries a one-line blurb.
   const modes = (
     <View style={styles.modes}>
-      {/* Offline: one honest note, and the CTAs below it dimmed to match. Both modes OPEN with a
-          fetch (roam pulls its pin manifest, create lists regions), so out here the tap has nothing
-          behind it. The note ends on what still works whenever there IS something saved. */}
+      {/* Offline: one honest heads-up, and the CTAs stay LIVE beneath it. A nudge, not a block —
+          Ride Along really does work out here once the stories are saved (@/lib/roam-pack), the
+          destinations now fail instantly and in voice rather than spinning, and dimming the
+          anonymous front door would contradict what roam is for. The note ends on what still works
+          whenever there IS something saved. */}
       {isOffline ? (
         <Text variant="dim" color="inkFaint" align="center">
           {drives.length > 0
@@ -132,7 +144,7 @@ export default function HomeScreen() {
         </Text>
       ) : null}
       <View style={styles.modeBlock}>
-        <Button icon="car" title={voice.roam.start} disabled={isOffline} onPress={() => navigateOnce(() => router.push('/roam'))} fullWidth />
+        <Button icon="car" title={voice.roam.start} onPress={() => navigateOnce(() => router.push('/roam'))} fullWidth />
         <Text variant="dim" color="inkFaint" align="center">
           Pull over for stories as you go — no plan needed.
         </Text>
@@ -142,13 +154,12 @@ export default function HomeScreen() {
         <Button
           variant="ghost"
           title={voice.sample.homeLink}
-          disabled={isOffline}
           onPress={() => navigateOnce(() => router.push('/sample'))}
           fullWidth={false}
         />
       </View>
       <View style={styles.modeBlock}>
-        <Button variant="secondary" icon="map" title="Create a Drive" glow={false} disabled={isOffline} onPress={() => navigateOnce(() => router.push('/create'))} fullWidth />
+        <Button variant="secondary" icon="map" title="Create a Drive" glow={false} onPress={() => navigateOnce(() => router.push('/create'))} fullWidth />
         <Text variant="dim" color="inkFaint" align="center">
           Pick a start and end; the skipper lines up the stories.
         </Text>

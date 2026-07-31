@@ -15,6 +15,7 @@
 import { Directory, File, Paths } from 'expo-file-system'
 import type { DriveClip, DriveManifest, DriveSummary } from '@skipper/shared'
 import { getDrive, signDriveAudio } from './api'
+import { abortError, assertFreeSpaceFor, downloadFileWithRetry } from './download'
 import {
   contentSignature,
   expectedAudioSeqs,
@@ -123,114 +124,11 @@ function clipsToDownload(detail: DriveManifest): {
 
 const DOWNLOAD_CONCURRENCY = 4
 
-// Per-clip byte-transfer budget. The JSON path (getDrive) is time-boxed in api.ts, but the DOWNLOAD
-// bytes were not — a half-open / slow-drip dead-zone connection would hang forever. Bound each clip
-// with an AbortController so a stuck transfer rejects instead of wedging downloadDrive. (audit #2)
-const CLIP_DOWNLOAD_TIMEOUT_MS = 30_000
-
-// A TRANSIENT per-clip failure (a 5xx, a momentary dead-zone drop, a slow-drip timeout, a zero-byte
-// landing) is RETRIED with backoff before the clip is given up — one network blip must not permanently
-// drop a clip from an otherwise-good copy (which, combined with the partial-tolerant manifest, would
-// then read as a COMPLETE download after a restart). A real CANCEL (the outer signal) is never retried.
-// (audit #1 / #3)
-const CLIP_DOWNLOAD_ATTEMPTS = 3
-const RETRY_BASE_DELAY_MS = 400
-
-// Rough bytes/sec for the 64 kbps AAC (.m4a) clips (64 kbit/s ÷ 8), for the pre-flight free-space estimate.
-const APPROX_BYTES_PER_SEC = 8_000
-
-/** A download can't fit in free space — surfaced with a dedicated, actionable message. (audit #174) */
-export class InsufficientStorageError extends Error {
-  constructor(message = 'Not enough free space to download this drive.') {
-    super(message)
-    this.name = 'InsufficientStorageError'
-  }
-}
-
-/** An AbortError shaped so callers can detect a cancel/timeout uniformly. */
-function abortError(): Error {
-  return Object.assign(new Error('Download canceled.'), { name: 'AbortError' })
-}
-
-/** Download one clip, bounded by a per-clip timeout AND the caller's (optional) cancel signal. (audit #2, #816) */
-async function downloadClip(url: string, dest: File, outer?: AbortSignal): Promise<File> {
-  const ctrl = new AbortController()
-  const onAbort = () => ctrl.abort()
-  if (outer) {
-    if (outer.aborted) ctrl.abort()
-    else outer.addEventListener?.('abort', onAbort)
-  }
-  const timer = setTimeout(() => ctrl.abort(), CLIP_DOWNLOAD_TIMEOUT_MS)
-  try {
-    return await File.downloadFileAsync(url, dest, { signal: ctrl.signal })
-  } finally {
-    clearTimeout(timer)
-    outer?.removeEventListener?.('abort', onAbort)
-  }
-}
-
-/** Sleep `ms`, rejecting immediately (with an AbortError) if the optional cancel signal fires — so a
- *  retry backoff doesn't keep a canceled download alive for the delay. */
-function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(abortError())
-      return
-    }
-    const onAbort = () => {
-      clearTimeout(timer)
-      signal?.removeEventListener?.('abort', onAbort)
-      reject(abortError())
-    }
-    const timer = setTimeout(() => {
-      signal?.removeEventListener?.('abort', onAbort)
-      resolve()
-    }, ms)
-    signal?.addEventListener?.('abort', onAbort)
-  })
-}
-
-/**
- * Download one clip with bounded retries + exponential backoff. Each attempt is the timeout-bounded
- * downloadClip PLUS a nonzero-size verify (the manifest carries no size/hash, so presence + bytes>0 is
- * the only integrity signal — audit #834); a transient failure (timeout, 5xx, dropped connection,
- * zero-byte landing) is retried up to CLIP_DOWNLOAD_ATTEMPTS, deleting the half-written file between
- * tries (downloadFileAsync rejects on an existing dest). A real CANCEL — the OUTER signal aborting —
- * is terminal and propagates so the worker aborts the whole run (a per-clip TIMEOUT, in contrast, aborts
- * only the INNER controller, so it stays retryable). Throws the last error once attempts are exhausted.
- * (audit #1 / #3)
- */
-async function downloadClipWithRetry(
-  url: string,
-  dest: File,
-  name: string,
-  signal?: AbortSignal,
-): Promise<void> {
-  let lastErr: unknown
-  for (let attempt = 1; attempt <= CLIP_DOWNLOAD_ATTEMPTS; attempt++) {
-    if (signal?.aborted) throw abortError()
-    try {
-      const out = await downloadClip(url, dest, signal)
-      if (!out.exists || !out.size || out.size <= 0) {
-        throw new Error(`Download verify failed for ${name} (exists=${out.exists}, size=${out.size}).`)
-      }
-      return
-    } catch (e) {
-      // A user CANCEL (the outer signal) is terminal — never retry it; let the worker abort the run.
-      if (signal?.aborted) throw e
-      lastErr = e
-      // Drop the (possibly half-written / zero-byte) file before the next attempt — a truncated file
-      // must not read as a saved clip, and downloadFileAsync rejects on an existing dest.
-      try {
-        if (dest.exists) dest.delete()
-      } catch {}
-      if (attempt < CLIP_DOWNLOAD_ATTEMPTS) {
-        await abortableDelay(RETRY_BASE_DELAY_MS * 2 ** (attempt - 1), signal)
-      }
-    }
-  }
-  throw lastErr ?? new Error(`Download failed for ${name}.`)
-}
+// The per-clip transfer (timeout, retry/backoff, nonzero-size verify, cancel semantics) and the
+// free-space guard live in ./download — shared with the roam offline pack so the two downloaders
+// can't drift. `InsufficientStorageError` is re-exported because the drive-detail screen catches it
+// by name and this module is its established import site.
+export { InsufficientStorageError } from './download'
 
 // In-flight downloads by driveId — dedupes concurrent downloadDrive calls for the same drive so two
 // taps (a fast double-select before React commits the busy state) can't race on the same files (one
@@ -287,24 +185,9 @@ async function runDownload(
   const total = items.length
   if (total === 0) throw new Error('This drive has no audio to download.')
 
-  // Pre-flight free-space check: estimate total bytes from clip durations and require comfortable
-  // headroom, so a doomed download fails fast with an actionable message instead of a misleading
-  // "network" error after filling the disk. Skipped if the OS can't report free space. (audit #174)
-  const estBytes = items.reduce(
-    (sum, it) => sum + Math.max(0, (it.durationMs ?? 0) / 1000) * APPROX_BYTES_PER_SEC,
-    0,
-  )
-  if (estBytes > 0) {
-    let free = 0
-    try {
-      free = Paths.availableDiskSpace
-    } catch {
-      free = 0
-    }
-    if (Number.isFinite(free) && free > 0 && free < estBytes * 1.5 + 5_000_000) {
-      throw new InsufficientStorageError()
-    }
-  }
+  // Pre-flight free-space check, so a doomed download fails fast with an actionable message instead
+  // of a misleading "network" error after filling the disk. (audit #174)
+  assertFreeSpaceFor(items.map((it) => it.durationMs))
 
   let attempted = 0
   onProgress?.({ done: attempted, total })
@@ -320,7 +203,7 @@ async function runDownload(
       try {
         // Retries a transient blip (timeout/5xx/dropped/zero-byte) with backoff + a nonzero-size verify
         // before giving up — so one flaky moment doesn't permanently drop a clip. (audit #1 / #3)
-        await downloadClipWithRetry(item.url, dest, item.name, signal)
+        await downloadFileWithRetry(item.url, dest, item.name, signal)
         results.set(item.key, { name: item.name, contentType: item.contentType, durationMs: item.durationMs })
       } catch {
         // The OUTER signal is the ONLY terminal failure: a USER CANCEL aborts the whole run — re-throw
