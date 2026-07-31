@@ -11,14 +11,11 @@
 // (untinted) and List mode stays the offline + accessibility-complete equivalent.
 import { bearingDeg } from '@skipper/engine'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Animated, Pressable, StyleSheet, View } from 'react-native'
+import { Animated, StyleSheet, View } from 'react-native'
 import MapView, { Marker, Polyline, type LatLng, type Region } from 'react-native-maps'
-import { MAP_PROVIDER, toLatLng } from './mapChrome'
+import { baseMapProps, puckStyles, RecenterChip, toLatLng } from './mapChrome'
 import { border, radius, space } from '../theme/tokens'
-import { mapStyle } from '../theme/mapStyle'
 import { useReducedMotion, useTheme } from '../theme'
-import { Icon } from './Icon'
-import { Text } from './Text'
 
 /** A map stop = a place to pin, with its current drive state (mirrors the StopList rows). */
 export interface DriveMapStop {
@@ -211,21 +208,9 @@ function DriveMapBase({
     <View style={styles.fill}>
       <MapView
         ref={mapRef}
-        provider={MAP_PROVIDER}
+        {...baseMapProps(isDark)}
         style={styles.fill}
-        customMapStyle={mapStyle(isDark)}
-        // customMapStyle is Google-only; on the keyless Apple-Maps fallback these keep the night
-        // basemap dark + muted instead of a bright untinted default. (audit #463)
-        userInterfaceStyle={isDark ? 'dark' : 'light'}
-        mapType={MAP_PROVIDER === undefined ? 'mutedStandard' : 'standard'}
         initialRegion={routeRegion}
-        showsUserLocation={false} // we draw our OWN puck (route-snapped) — not the raw blue dot
-        showsCompass={false}
-        showsPointsOfInterests={false}
-        showsMyLocationButton={false}
-        toolbarEnabled={false}
-        rotateEnabled={false}
-        pitchEnabled={false}
         onPanDrag={() => following && setFollowing(false)}
       >
         {/* Untraveled base: the FULL route, dashed tan — static (identity stable), so it isn't
@@ -312,12 +297,12 @@ function DriveMapBase({
         {!hidePuck && puck ? (
           <Marker coordinate={puck} anchor={{ x: 0.5, y: 0.5 }} flat>
             <View style={styles.markerBox}>
-              <View style={[styles.puckHalo, { backgroundColor: colors.glow }]} />
+              <View style={[puckStyles.halo, { backgroundColor: colors.glow }]} />
               <View style={[styles.puckWedge, { transform: [{ rotate: `${heading}deg` }] }]}>
                 <View style={[styles.wedgeTriangle, { borderBottomColor: amber }]} />
               </View>
               <View
-                style={[styles.puckDot, { backgroundColor: amber, borderColor: colors.surface }]}
+                style={[puckStyles.dot, { backgroundColor: amber, borderColor: colors.surface }]}
               />
             </View>
           </Marker>
@@ -327,26 +312,11 @@ function DriveMapBase({
       {/* Recenter chip — appears once the rider pans the map away from the puck (and isn't
           hidden behind an expanded player sheet). */}
       {!following && !hideRecenter ? (
-        <Pressable
+        <RecenterChip
           onPress={recenter}
-          accessibilityRole="button"
-          accessibilityLabel={hidePuck ? 'Fit the whole drive on screen' : 'Recenter the map on me'}
-          style={[
-            styles.recenter,
-            recenterBottom != null ? { bottom: recenterBottom } : null,
-            {
-              backgroundColor: colors.surfaceRaised,
-              borderColor: colors.rule,
-              // Cross-platform cast (DESIGN §4) so it lifts off the map on Android too. (M4)
-              boxShadow: [{ offsetX: 0, offsetY: 2, blurRadius: 8, color: colors.shadowCast }],
-            },
-          ]}
-        >
-          <Icon name={hidePuck ? 'fit' : 'locate'} size={18} color="accent" />
-          <Text variant="label" color="ink">
-            {hidePuck ? 'Fit route' : 'Recenter'}
-          </Text>
-        </Pressable>
+          label={hidePuck ? 'Fit the whole drive on screen' : 'Recenter the map on me'}
+          bottom={recenterBottom}
+        />
       ) : null}
     </View>
   )
@@ -354,7 +324,6 @@ function DriveMapBase({
 
 export const DriveMap = memo(DriveMapBase)
 
-const PUCK = 18
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   markerBox: { width: 56, height: 56, alignItems: 'center', justifyContent: 'center' },
@@ -367,8 +336,6 @@ const styles = StyleSheet.create({
   },
   activeHalo: { position: 'absolute', width: 38, height: 38, borderRadius: 19, opacity: 0.6 },
   activeCore: { width: 6, height: 6, borderRadius: 3 },
-  puckHalo: { position: 'absolute', width: 34, height: 34, borderRadius: 17, opacity: 0.55 },
-  puckDot: { width: PUCK, height: PUCK, borderRadius: PUCK / 2, borderWidth: border.keyline },
   // the heading wedge sits just outside the dot, pointing in travel direction
   puckWedge: { position: 'absolute', width: 56, height: 56, alignItems: 'center' },
   wedgeTriangle: {

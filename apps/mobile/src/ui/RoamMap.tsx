@@ -10,15 +10,12 @@
 // Same provider/key handling as DriveMap: Google basemap with EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
 // (the tint applies), else Apple Maps (untinted) on iOS — never a crash for a missing key.
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { Pressable, StyleSheet, View } from 'react-native'
+import { StyleSheet, View } from 'react-native'
 import MapView, { Marker, Polygon, type LatLng, type Region } from 'react-native-maps'
-import { MAP_PROVIDER, toLatLng } from './mapChrome'
+import { baseMapProps, puckStyles, RecenterChip, toLatLng } from './mapChrome'
 import type { AreaRing } from '@skipper/shared'
 import { border, radius, space } from '../theme/tokens'
-import { mapStyle } from '../theme/mapStyle'
 import { useReducedMotion, useTheme } from '../theme'
-import { Icon } from './Icon'
-import { Text } from './Text'
 
 /** A roam story-pin = a place near you the skipper knows a story about. */
 export interface RoamMapPin {
@@ -162,21 +159,9 @@ function RoamMapBase({ position, pins, heardPoiIds, clipActive, recenterBottom }
     <View style={styles.fill}>
       <MapView
         ref={mapRef}
-        provider={MAP_PROVIDER}
+        {...baseMapProps(isDark)}
         style={styles.fill}
-        customMapStyle={mapStyle(isDark)}
-        // customMapStyle is Google-only; on the keyless Apple-Maps fallback these keep the night
-        // basemap dark + muted instead of a bright untinted default. (audit #463)
-        userInterfaceStyle={isDark ? 'dark' : 'light'}
-        mapType={MAP_PROVIDER === undefined ? 'mutedStandard' : 'standard'}
         initialRegion={initialRegion}
-        showsUserLocation={false} // we draw our OWN puck, brand-styled
-        showsCompass={false}
-        showsPointsOfInterests={false}
-        showsMyLocationButton={false}
-        toolbarEnabled={false}
-        rotateEnabled={false}
-        pitchEnabled={false}
         onPanDrag={() => following && setFollowing(false)}
         // The visible viewport changed (follow-glide / pan / zoom) → re-cull the drawn markers.
         onRegionChangeComplete={setRegion}
@@ -236,10 +221,10 @@ function RoamMapBase({ position, pins, heardPoiIds, clipActive, recenterBottom }
             tracksViewChanges={false}
           >
             <View style={styles.markerBox}>
-              <View style={[styles.puckHalo, { backgroundColor: colors.glow }]} />
+              <View style={[puckStyles.halo, { backgroundColor: colors.glow }]} />
               <View
                 style={[
-                  styles.puckDot,
+                  puckStyles.dot,
                   { backgroundColor: clipActive ? colors.trackInactive : colors.amberToken, borderColor: colors.surface },
                 ]}
               />
@@ -250,26 +235,7 @@ function RoamMapBase({ position, pins, heardPoiIds, clipActive, recenterBottom }
 
       {/* Recenter chip — once the rider pans away from the puck. */}
       {!following ? (
-        <Pressable
-          onPress={recenter}
-          accessibilityRole="button"
-          accessibilityLabel="Recenter the map on me"
-          style={[
-            styles.recenter,
-            recenterBottom != null ? { bottom: recenterBottom } : null,
-            {
-              backgroundColor: colors.surfaceRaised,
-              borderColor: colors.rule,
-              // Cross-platform shadow via the cast role (was iOS-only shadow* + elevation). (M4)
-              boxShadow: [{ offsetX: 0, offsetY: 2, blurRadius: 8, color: colors.shadowCast }],
-            },
-          ]}
-        >
-          <Icon name="locate" size={18} color="accent" />
-          <Text variant="label" color="ink">
-            Recenter
-          </Text>
-        </Pressable>
+        <RecenterChip onPress={recenter} label="Recenter the map on me" bottom={recenterBottom} />
       ) : null}
     </View>
   )
@@ -277,13 +243,10 @@ function RoamMapBase({ position, pins, heardPoiIds, clipActive, recenterBottom }
 
 export const RoamMap = memo(RoamMapBase)
 
-const PUCK = 18
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   markerBox: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   storyDot: { width: 13, height: 13, borderRadius: 7 },
-  puckHalo: { position: 'absolute', width: 34, height: 34, borderRadius: 17, opacity: 0.55 },
-  puckDot: { width: PUCK, height: PUCK, borderRadius: PUCK / 2, borderWidth: border.keyline },
   recenter: {
     position: 'absolute',
     right: space.md,
