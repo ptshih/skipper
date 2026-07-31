@@ -136,6 +136,16 @@ export function signedDistanceM(p: LngLat, area: AreaRef): number {
  *  and false in practice. */
 export const AREA_CONFIDENT_DEPTH_M = 60
 
+/** Slack outside a district's hull that still counts as arriving — the `marginM` a served `AreaRef`
+ *  carries. The hull passes THROUGH the member anchors rather than around the block they sit on, so a
+ *  rider on the far kerb is a few tens of metres "outside" a district they are plainly in. Sized for
+ *  that plus consumer GPS error between tall buildings — which is exactly where districts are.
+ *
+ *  Lives here, next to the depth constant it is the mirror of and the `insideArea` that consumes it,
+ *  so the server that MINTS an area and the engine that FIRES it can never hold different opinions
+ *  about where a district ends. (It was previously a private constant in apps/api/src/clusters.ts.) */
+export const AREA_MARGIN_M = 60
+
 /** Inside, allowing the margin. */
 export function insideArea(p: LngLat, area: AreaRef): boolean {
   return signedDistanceM(p, area) <= area.marginM

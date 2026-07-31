@@ -46,7 +46,7 @@ import { isAdmin, requireAccount, withSession, type ApiEnv } from './entitlement
 import { creditSummary, driveConsumeEntry, ensureFreeGrant } from './credits'
 import { rateLimit } from './rate-limit'
 import { withRetry } from './retry'
-import { contentTypeForKey, presignGet } from './storage'
+import { audioUnavailable, contentTypeForKey, presignGet } from './storage'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -499,8 +499,7 @@ driveRoutes.post('/', createDriveLimiter, async (c) => {
       try {
         return c.json(await manifestForStoredDrive(existing))
       } catch (e) {
-        console.error('[api] drive create idempotent-replay presign failed', e)
-        return c.json({ error: 'audio_unavailable', message: 'Audio is warming up. Give it a moment and try again.' }, 503)
+        return audioUnavailable(c, 'drive create idempotent-replay', e)
       }
     }
   }
@@ -677,17 +676,11 @@ driveRoutes.post('/', createDriveLimiter, async (c) => {
   try {
     manifest.clips = manifestClips(selection, corpus)
   } catch (e) {
-    console.error('[api] drive create presign failed', e)
-    // The drive IS saved + the credit already charged — return the SAME retryable 503 the four sibling
-    // presign sites use, NOT a 200 the client reads as success. A 200 + `warning` navigated the rider
-    // into a silently-EMPTY paid drive: driveManifest is a plain z.object, so it strips the unknown
-    // `warning` and the client never saw a retry signal. The create screen reuses its idempotencyKey on
-    // retry → the idempotent replay re-presigns the saved drive once R2 settles (no double charge);
-    // GET /drives/:id recovers it too.
-    return c.json(
-      { error: 'audio_unavailable', message: 'Audio is warming up. Give it a moment and try again.' },
-      503,
-    )
+    // ⚠ The drive IS saved and the credit already charged, so this must stay the retryable 503 every
+    // sibling presign site answers with, NEVER a 200 the client reads as success. The create screen
+    // reuses its idempotencyKey on retry → the idempotent replay re-presigns the saved drive once R2
+    // settles (no double charge); GET /drives/:id recovers it too.
+    return audioUnavailable(c, 'drive create', e)
   }
   return c.json(manifest)
 })
@@ -809,8 +802,7 @@ driveRoutes.get('/:id', async (c) => {
   try {
     return c.json(await manifestForStoredDrive(drive))
   } catch (e) {
-    console.error('[api] drive replay presign failed', e)
-    return c.json({ error: 'audio_unavailable', message: 'Audio is warming up. Give it a moment and try again.' }, 503)
+    return audioUnavailable(c, 'drive replay', e)
   }
 })
 
@@ -832,8 +824,7 @@ driveRoutes.post('/:id/assets/sign', async (c) => {
     }))
     return c.json({ clips })
   } catch (e) {
-    console.error('[api] drive sign presign failed', e)
-    return c.json({ error: 'audio_unavailable', message: 'Audio is warming up. Give it a moment and try again.' }, 503)
+    return audioUnavailable(c, 'drive sign', e)
   }
 })
 

@@ -32,7 +32,7 @@ import { isAdmin, withSession, type ApiEnv } from './entitlements'
 import { rateLimit } from './rate-limit'
 import { withRetry } from './retry'
 import { DATA_SOURCES } from './sources'
-import { contentTypeForKey, presignGet } from './storage'
+import { audioUnavailable, contentTypeForKey, presignGet } from './storage'
 import { VERSION_POLICIES } from './version-policy'
 
 const app = new Hono<ApiEnv>()
@@ -291,14 +291,7 @@ app.get('/roam', async (c) => {
       ],
     })
   } catch (e) {
-    console.error('[api] roam presign failed', e)
-    return c.json(
-      {
-        error: 'audio_unavailable',
-        message: 'Audio is warming up. Give it a moment and try again.',
-      },
-      503,
-    )
+    return audioUnavailable(c, 'roam', e)
   }
 })
 
@@ -352,11 +345,7 @@ app.get('/roam/sample', async (c) => {
       attribution: (row.attribution ?? undefined) as RoamPin['attribution'],
     })
   } catch (e) {
-    console.error('[api] roam sample presign failed', e)
-    return c.json(
-      { error: 'audio_unavailable', message: 'Audio is warming up. Give it a moment and try again.' },
-      503,
-    )
+    return audioUnavailable(c, 'roam sample', e)
   }
 })
 

@@ -20,6 +20,7 @@ import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { narrations, poiClusters, pois } from '@skipper/db/schema'
 import {
+  AREA_MARGIN_M,
   CLUSTER_MAX_TRIGGER_RADIUS_M,
   clusterTrigger,
   convexHull,
@@ -50,12 +51,6 @@ export interface ClusterTelling {
    *  for a compact group, which triggers on the point above exactly as before. */
   area?: { ring: LngLat[]; marginM: number }
 }
-
-/** Slack outside a district's hull that still counts as arriving. The hull passes THROUGH the member
- *  anchors rather than around the block they sit on, so a rider on the far kerb is a few tens of metres
- *  "outside" a district they are plainly in. Sized for that plus consumer GPS error between tall
- *  buildings — which is exactly where districts are. */
-const AREA_MARGIN_M = 60
 
 /** The variety bucket every fused telling shares. NOT null: `drive-select` treats two nulls as
  *  DIFFERENT (asserting sameness on absent data was the original variety bug), and two "here is a
