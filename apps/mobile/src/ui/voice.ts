@@ -268,6 +268,14 @@ export const voice = {
     // actionable and costs real space: the ⋯ menu offers a re-pull and a remove. Short, because it
     // rides in a chip; the ⋯ actions carry the what-to-do.
     unreadable: 'Saved copy needs refreshing',
+    // The ⋯ action for the state above. The audio is all still on the phone — only the little index
+    // file is unreadable — so the honest offer is "put it back together", NOT "download it again".
+    // Says "without downloading it again" because that is the whole point to the rider.
+    repair: 'Recover it without downloading again',
+    // Repair ran but matched nothing on disk (bytes for a different cut, or a stripped dir). Points
+    // at the two things that DO work from here; both live in the same ⋯ menu.
+    repairFailed:
+      'Couldn’t match what’s on the phone to this drive. Download it again, or remove the leftovers.',
     save: 'Save for offline', // the main-path button under the Start CTA (was ⋯-menu-only)
     saveHint: 'Tahoe has dead zones — best done before you lose signal.',
     // The one warning in front of a live drive that hasn't been saved. NEVER a block: the rider may

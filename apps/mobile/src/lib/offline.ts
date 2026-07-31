@@ -338,6 +338,77 @@ export function loadManifest(driveId: string): OfflineManifest | null {
   return m
 }
 
+/**
+ * Rebuild a readable manifest around audio that is ALREADY on disk, without re-downloading it.
+ *
+ * The case this exists for: a download whose manifest is unreadable — a version with no migration
+ * across, or a file lost to a hard kill mid-run (runDownload's catch sweeps, but a SIGKILL doesn't
+ * run it). Deleting there would throw away the EXPENSIVE half (hundreds of MB, minutes of transfer)
+ * to fix the CHEAP half (a few KB of re-fetchable JSON). The clip files are named deterministically
+ * from the seq, so a fresh manifest is all that's needed to adopt them again.
+ *
+ * NON-DESTRUCTIVE: it only ever writes a manifest. Nothing is deleted, so a repair that turns out to
+ * be wrong costs nothing — unlike a sweep, which forecloses shipping the missing migration later.
+ *
+ * Safe even when the saved bytes are an OLDER cut: `savedAt` is taken from the download's own mtime
+ * where the OS reports it (a repaired copy must not read as freshly downloaded, or the freshness TTL
+ * is quietly reset), and the content diff still flags a superseded cut afterwards and offers the
+ * re-pull. Worst case is playable-but-flagged audio, which in a dead zone beats nothing.
+ *
+ * Partial-tolerant: whatever is present is adopted, and `audioSeqs` records what SHOULD be there, so
+ * the gap resurfaces as the usual "N left to save". Needs network (the manifest fetch) and returns
+ * null when nothing on disk could be matched — the caller then offers a real download or a remove.
+ */
+export async function repairDownload(driveId: string): Promise<OfflineStatus | null> {
+  const dir = driveDir(driveId)
+  let exists = false
+  try {
+    exists = dir.exists
+  } catch {
+    exists = false
+  }
+  if (!exists) return null
+
+  // Fetch BEFORE touching disk (the ordering rule the whole file follows): a repair attempted in a
+  // dead zone must leave the download exactly as it found it.
+  const detail = await getDrive(driveId)
+
+  const clips: Record<string, ClipFile> = {}
+  for (const item of clipsToDownload(detail)) {
+    try {
+      const f = new File(dir, item.name)
+      if (f.exists && (f.size ?? 0) > 0) {
+        clips[item.key] = { name: item.name, contentType: item.contentType, durationMs: item.durationMs }
+      }
+    } catch {}
+  }
+  if (Object.keys(clips).length === 0) return null // nothing salvageable — not a repair, a download
+
+  // Date the copy from the bytes, not from now — a repaired download must not read as freshly
+  // pulled, or the freshness TTL is silently reset on a copy that could be months old. The dir's
+  // mtime is roughly when the last clip landed. `modificationTime` is optional on DirectoryInfo, so
+  // fall back to now rather than invent a timestamp.
+  let savedAt = new Date().toISOString()
+  try {
+    const mtime = dir.info().modificationTime
+    if (typeof mtime === 'number' && Number.isFinite(mtime) && mtime > 0) {
+      savedAt = new Date(mtime).toISOString()
+    }
+  } catch {}
+
+  const manifest: OfflineManifest = {
+    driveId,
+    version: MANIFEST_VERSION,
+    savedAt,
+    // Same url strip as a real download — a short-TTL credential never belongs in a backed-up file.
+    detail: { ...detail, clips: detail.clips.map((c) => ({ ...c, url: null })) },
+    audioSeqs: expectedAudioSeqs(detail.clips),
+    clips,
+  }
+  manifestFile(driveId).write(JSON.stringify(manifest))
+  return offlineStatus(driveId)
+}
+
 /** Whether a drive has bytes on disk, INDEPENDENT of whether this build can read their manifest.
  *  `unreadable` is the state the version gate used to hide: a real download, occupying real space,
  *  that `loadManifest` reports as nothing. Surfacing it is what keeps the reclaim affordance

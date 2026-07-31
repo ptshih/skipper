@@ -118,6 +118,45 @@ of the version gate. That last part fixes the sharpest edge of the old behaviour
 affordance ("Remove download") was gated on `downloaded`, i.e. unreachable in exactly the case where
 the rider needed it.
 
+### REPAIR beats sweep — the expensive half survives
+
+Follow-up 2026-07-31. An orphaned download is not one thing, and the classes differ in the only way
+that matters — whether the data is recoverable:
+
+| Class | Cause | Recoverable? |
+|---|---|---|
+| **A** un-migratable manifest | a version bump with no migration (the retroactive v2/v3 case) | yes — by shipping the migration later |
+| **B** missing/corrupt manifest | a hard kill mid-download (`runDownload`'s catch sweeps; a SIGKILL doesn't run it) | yes — by repair |
+| **C** drive deleted elsewhere | deleted on another device; this one never learns | no |
+| **D** pack intra-dir orphans | a place leaves the corpus; its clip file stays | no |
+
+For A and B, deleting throws away the EXPENSIVE half (hundreds of MB, minutes of transfer) to fix
+the CHEAP half (a few KB of re-fetchable JSON). The clip files are named deterministically from the
+seq, so a fresh manifest is all that is needed to adopt them again. `repairDownload` does exactly
+that, and is **non-destructive** — it only ever writes a manifest, so a repair that turns out wrong
+costs nothing, unlike a sweep. It is safe on older bytes too: `savedAt` is taken from the download's
+mtime (a repaired copy must not read as freshly pulled, or the freshness TTL is silently reset), and
+the existing content diff still flags a superseded cut and offers the re-pull afterwards.
+
+Class D was a leak introduced by the pack itself: keeping already-verified bytes (so a canceled save
+resumes) while rebuilding `clips` from the current pin set stranded files that nothing referenced —
+invisible to the size readout, reclaimable only by removing the whole pack. Now swept after each
+save.
+
+### ⚠ Why the launch-time sweep is still NOT built
+
+Two reasons, and the second was a surprise:
+
+1. **A sweep converts a recoverable mistake into an unrecoverable one.** Ship a version bump without
+   its migration → sweep at launch → hotfix the migration a day later → the data is already gone,
+   on rider hardware, with no undo. The migration table is empty and there have been two bumps
+   already, so that is not hypothetical.
+2. **The "only sweep what is provably deleted" option is UNSAFE today.** It would diff `listDrives()`
+   against local dirs — but the drives directory is not namespaced by user. Sign in as a different
+   account and every local dir looks "not mine", so the diff would mass-delete the previous
+   account's downloads. Namespacing is a prerequisite. (The same gap means today's offline fallback
+   shows account A's saved drives to account B — worth its own look, independent of sweeping.)
+
 ## Deliberate non-goals
 
 - **Better Auth's transport is NOT covered.** `authClient` has its own fetch (`src/lib/auth.ts`), so
@@ -126,7 +165,9 @@ the rider needed it.
   line. Named here rather than left silent; wiring a custom `fetch` into `createAuthClient` is the
   fix when it is worth doing.
 - **No automatic sweep of orphaned downloads.** Reclaiming tens of MB of rider-owned audio without
-  asking is a destructive act under the post-1.0 posture, so it stays rider-initiated. See below.
+  asking is destructive under the post-1.0 posture, so it stays rider-initiated — and the two
+  reasons above make deferring it the safer call rather than merely the politer one. Repair covers
+  the recoverable classes without deleting anything.
 - **Offline map tiles.** The player opens on List when offline instead; real offline tiles are not
   cheap and List is already the offline- and accessibility-complete equivalent.
 
@@ -137,7 +178,13 @@ the rider needed it.
   pushed event — if it reproduces, the bounded fix is a one-time race against a ~250 ms delay inside
   the FIRST `fetchJson` only, never an await on the native state call), and a real Tahoe drive on a
   saved pack.
-- **Founder call: may a launch-time sweep delete orphaned downloads automatically?** Today they are
-  visible and removable but never removed for you. Options: auto-sweep at launch, sweep only on an
-  explicit "free up space" tap, or sweep only dirs older than N days.
+- **Founder call: may a launch-time sweep delete orphaned downloads automatically?** Repair now
+  covers classes A and B without deleting anything, so what is left is the genuinely-dead remainder.
+  Options: a Settings "free up space" line (consented, and it makes the problem visible — the
+  recommendation); an age-gated sweep, implementable via `Directory.info().modificationTime`, which
+  buys a hotfix window but still deletes without consent; or the deleted-elsewhere diff, which is
+  blocked on namespacing the drives dir by user.
+- **Namespace the drives dir by user.** Prerequisite for the diff above, and independently a
+  correctness/privacy gap: the offline fallback shows one account's saved drives to the next account
+  signed in on the same device.
 - The mid-session dead-air cost (~24 s per encounter) is unchanged for a clip the pack does NOT hold.

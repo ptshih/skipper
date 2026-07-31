@@ -14,6 +14,7 @@ import {
   isDownloadStale,
   loadManifest,
   offlineStatus,
+  repairDownload,
   type DownloadDirState,
   type DownloadProgress,
 } from '@/lib/offline'
@@ -233,6 +234,32 @@ export default function DriveDetailScreen() {
     )
   }, [id, router])
 
+  // Put a readable manifest back around audio that is already on the phone (offline.ts
+  // repairDownload). Non-destructive: it only writes a manifest, so a repair that finds nothing
+  // costs the rider nothing and the ⋯ menu's download/remove are still right there.
+  const repair = useCallback(async () => {
+    if (!id) return
+    setDownloadError(null)
+    try {
+      const status = await repairDownload(id)
+      if (!status) {
+        setDownloadError(voice.offline.repairFailed)
+        return
+      }
+      setDownloaded(true)
+      setDirState('ok')
+      setPartial(
+        status.missingSeqs.length > 0
+          ? { failed: status.missingSeqs.length, total: status.expectedCount }
+          : null,
+      )
+      setExpired(isDownloadExpired(id)) // repair dates the copy from the BYTES, so this can fire
+      setUpdatable(false) // the manifest we just wrote IS the server's current cut, by construction
+    } catch (e) {
+      setDownloadError(errorMessage(e, voice.error.download))
+    }
+  }, [id])
+
   // Secondary/utility actions live in a header ⋯ menu (native iOS action sheet) instead of
   // stacked buttons — the offline download (state-aware) + the dev-only on-device simulator.
   const openMenu = useCallback(() => {
@@ -252,11 +279,16 @@ export default function DriveDetailScreen() {
       }
       actions.push({ label: 'Remove download', onPress: removeDownload, destructive: true })
     } else {
+      // ⚠ Bytes on disk this build can't read (a manifest format with no migration across, or a
+      // manifest lost to a hard kill mid-download). REPAIR comes first: the audio is the expensive
+      // half and it is all still here, so re-fetching the few-KB manifest and re-adopting it beats
+      // pulling hundreds of MB again. The reclaim sits alongside it and MUST stay reachable — it
+      // used to live inside the `downloaded` branch, which is false in exactly this case, leaving
+      // the rider unable to free the space at all.
+      if (dirState === 'unreadable') {
+        actions.push({ label: voice.offline.repair, onPress: () => void repair() })
+      }
       actions.push({ label: 'Download for offline', onPress: () => void startDownload() })
-      // ⚠ Bytes on disk this build can't read (a manifest format with no migration across). They
-      // still occupy real space, so the reclaim MUST stay reachable here — this used to sit inside
-      // the `downloaded` branch, which is false in exactly this case, leaving the rider unable to
-      // free the space at all. Re-downloading also fixes it, but that needs signal; this doesn't.
       if (dirState === 'unreadable') {
         actions.push({ label: 'Remove download', onPress: removeDownload, destructive: true })
       }
@@ -294,12 +326,14 @@ export default function DriveDetailScreen() {
   }, [
     downloaded,
     downloading,
+    dirState,
     updatable,
     partial,
     expired,
     id,
     router,
     startDownload,
+    repair,
     removeDownload,
     cancelDownload,
     reportIssue,

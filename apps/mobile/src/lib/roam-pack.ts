@@ -240,6 +240,30 @@ export function roamPackStatus(): { state: 'none' } | { state: 'stale' } | ({ st
   }
 }
 
+/**
+ * Delete clip files in the pack dir that the manifest no longer claims.
+ *
+ * ⚠ Needed because a save deliberately KEEPS already-verified bytes (so a canceled or partial run
+ * resumes instead of re-pulling ~138 MB) while rebuilding `clips` from the CURRENT pin set. A place
+ * that leaves the corpus — or whose contentType changes, moving its filename — therefore strands a
+ * file that nothing references: invisible to the size readout (which walks `clips`), and reclaimable
+ * only by removing the entire pack. Swept here, AFTER the manifest is written, so a crash mid-sweep
+ * leaves a manifest that still describes files which exist.
+ */
+function sweepPackOrphans(dir: Directory, keep: Set<string>): void {
+  try {
+    for (const entry of dir.list()) {
+      if (entry instanceof Directory) continue
+      if (entry.name === PACK_FILE || keep.has(entry.name)) continue
+      try {
+        entry.delete()
+      } catch {}
+    }
+  } catch {
+    // A dir torn down under us (a concurrent remove) — nothing to reclaim, nothing to report.
+  }
+}
+
 /** Remove the pack (pins + every clip). Idempotent — and the ONLY way to reclaim the bytes, so it
  *  stays reachable even when the pack's format is one this build can't read. */
 export function deleteRoamPack(): void {
@@ -361,6 +385,9 @@ async function runPackDownload(
       pins: manifest.pins.map(stripUrl),
       clips,
     })
+    // Reclaim anything the fresh manifest no longer claims (a place that left the corpus, or one
+    // whose contentType moved its filename). Kept bytes are the reason those can strand at all.
+    sweepPackOrphans(dir, new Set(Object.values(clips).map((c) => c.name)))
     return { saved, total }
   } catch (e) {
     // A cancel mid-run leaves verified bytes in place but no pack.json describing them; the next

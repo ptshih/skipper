@@ -934,10 +934,30 @@ pure + unit-tested; and `downloadDirState` reports "a download is here that I ca
 independently of the version, so the reclaim stays reachable — it used to be gated on `downloaded`,
 i.e. unreachable in exactly the case that needed it.
 
-- [ ] **Founder call: may a launch-time sweep DELETE orphaned downloads automatically?** They are now
-      visible and removable, but nothing removes them for you, because reclaiming tens of MB of
-      rider-owned audio unasked is destructive under the post-1.0 posture. Options: auto-sweep at
-      launch, sweep only on an explicit "free up space" tap, or sweep only dirs older than N days.
+✅ **REPAIR BEATS SWEEP, and it is BUILT (2026-07-31).** `repairDownload` re-fetches the few-KB
+manifest and re-adopts the audio ALREADY on the phone, instead of deleting hundreds of MB to fix a
+few KB of unreadable JSON — the clip files are named deterministically from the seq, so a fresh
+manifest is all that's needed. NON-DESTRUCTIVE (it only writes a manifest), and safe on older bytes:
+`savedAt` comes from the download's own mtime, so a repaired copy can't read as freshly pulled, and
+the content diff still flags a superseded cut afterwards. Offered on the drive detail ⋯ menu whenever
+`dirState === 'unreadable'`. Also fixed a leak the pack itself introduced: keeping verified bytes
+across saves (so a cancel resumes) stranded files for places that left the corpus — invisible to the
+size readout; now swept after each save.
+
+- [ ] **Founder call: may a launch-time sweep DELETE the remainder automatically?** Repair now covers
+      everything recoverable, so what's left is genuinely dead. ⚠ Two reasons it is still not built:
+      a sweep turns a RECOVERABLE mistake into an unrecoverable one (bump without a migration →
+      sweep at launch → hotfix the migration a day later → the data is already gone, on rider
+      hardware, no undo — and the migration table is empty with two bumps of history); and the
+      "only sweep what is provably deleted" option is UNSAFE today, because the drives dir is not
+      namespaced by user, so diffing `listDrives()` against local dirs would mass-delete the
+      previous account's downloads on the same device. Options ranked: a Settings "free up space"
+      line (consented, and it makes the problem visible); an age gate via
+      `Directory.info().modificationTime` (buys a hotfix window, still unconsented); the
+      deleted-elsewhere diff (blocked on namespacing).
+- [ ] **⚠ Namespace the drives dir by user.** Prerequisite for the diff above, and a correctness /
+      privacy gap on its own: `listDownloadedDrives()` reads every dir regardless of owner, so the
+      offline fallback shows one account's saved drives to the next account signed in on that device.
 - [ ] **Verify on a real device.** None of the offline work has run on hardware. Two specifics: a
       COLD LAUNCH in airplane mode (the listener arms at import, but home's `load()` may still beat
       the first pushed event — if it reproduces, the bounded fix is a one-time race against a ~250 ms
