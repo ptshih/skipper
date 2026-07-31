@@ -1,5 +1,14 @@
 # TODO — engineering backlog
 
+> ⚠ **1.1 IS MID-BUILD AND IT DELETES ROAM.** The build truth is
+> [docs/designs/drives-first-1-1.md](docs/designs/drives-first-1-1.md) (43 decisions, 16 invariants)
+> with verified file:line coordinates in
+> [docs/designs/drives-first-1-1-build-notes.md](docs/designs/drives-first-1-1-build-notes.md).
+> Items below that assume ROAM, the client capability channel, or per-drive-only offline are
+> superseded by that spec — it wins. Roam-specific sections were deleted on 2026-07-31 (git is the
+> archive); anything still here mentioning roam is either historical record of shipped work or an
+> item whose value survives the mode.
+
 Carry-forward **engineering** items (the near-term layer of the truth system — see
 `docs/README.md`; product ideas live in `docs/designs/`, build-ready designs in `docs/designs/`).
 Each item has enough context to action without re-deriving the reasoning. **Delete items
@@ -572,29 +581,6 @@ None of this is a build; all of it is config. The premise changed on 2026-07-28:
       between a mistaken migration and permanent loss of the append-only `credit_entries` ledger, which
       never refunds and has no second copy. Check the retention setting; record it here.
 
-## The client capability channel — BUILT 2026-07-30; one decision left
-
-The app now sends `X-Skipper-Client: v=<semver>; caps=area` from `fetchJson` (one edit, every route),
-the API parses it in `withClient` onto `c.get('client')`, and `loadClusterTellings` takes a **required**
-`areaCapable`. Grammar + vocabulary are single-sourced in `@skipper/shared/client-identity.ts`.
-`api-versioning-posture.md` carries the scope addendum: capabilities gate **CONTENT, never SHAPE**;
-absence means least-capable, permanently; forgeable, so never entitlement.
-
-- [ ] **DECIDE: flip `/roam` to gate area tellings on the capability?** Today it passes
-      `areaCapable: true` — the founder's ship-to-everyone call (66435e9), written down rather than
-      defaulted, with the one-line flip beside it. ⚠ Flipping is a CONTENT change, not a refactor:
-      every rider installed today sends no header, so they would all lose the 3 Reno districts and get
-      their member pins back. Measured live against the corpus — gated + no header ⇒ **105 pins,
-      0 areas**; gated + `caps=area` ⇒ **41 pins, 3 areas**. Worth deciding on a real Reno drive: is
-      the capped 600 m point fallback good enough, or is silence better?
-      ⚠ Not urgent in the other direction either — the channel is DARK until an area-capable build has
-      adoption, since it only helps builds that ship with it.
-
-⚠ **Deliberately NOT wired into Better Auth's client**, so `/api/auth/*` carries no identity. Auth
-routes serve no capability-shaped content, and a custom header on the browser's cross-origin
-reset-password POST would fail preflight unless added to that route's `allowHeaders` — risking the only
-route back into a locked-out account for nothing. Revisit only if the header ever feeds telemetry.
-
 ## When YOSEMITE ships: the metadata that goes stale (founder ask 2026-07-28)
 
 Content is SERVER-SIDE, so a second region goes live with no app release. That is the whole problem:
@@ -741,32 +727,6 @@ a **build-ready spec: `docs/designs/background-location-spec.md`**.
       (KEEP the Always strings false; never call `requestBackgroundPermissionsAsync`), a small copy tweak,
       review notes, and a native rebuild. Full checklist + source proof + gotchas in the spec.
 
-## Roam build pass 2 — LOCKED by the founder 2026-06-11 (the "companion grows up" pass)
-
-> ⚠ **The chattiness axis (quiet/normal/talkative) was CUT** (2026-06-20 — too coarse, not useful in
-> practice; `useRoam.ts`, MEMORY "Roam chattiness toggles"). Don't build anything that assumes it
-> (e.g. suppressing a form of clip "on quiet") — there's ONE fixed cadence now. Cadence variety, if ever wanted,
-> returns as auto-adaptation, never a user notch.
-
-Two items locked from the 2026-06-11 brainstorm (full capture: `docs/designs/free-roam-mode.md`
-§Alpha learnings). Order within the pass is free; both are founder-facing on his daily drive.
-
-- ~~**Waves: narrate the scenic tier.**~~ **CUT 2026-07-26 (founder) — backed out of the tree before
-      the v2 release.** Built + smoke-tested 2026-07-24, never run at scale: zero `form='wave'` rows were
-      ever written and no audio was ever synthesized, so the backout was code-only (no migration, no data,
-      no orphaned R2). The `'wave'` enum value STAYS in `narrationForm`/`narration_form` — it predates the
-      build as reserved vocabulary (like `bside`) and the label/mapping code that handles it is untouched.
-      Rationale, what was removed, and the two reusable traps the build surfaced (structural monotony in
-      low-input forms; the grounding gate cannot catch a claim derived from the place's own NAME) are in
-      `docs/decisions/cut-wave-form.md`. Re-read that before rebuilding any name+kind-only form.
-- [ ] **The sonic cue.** ~1s entry motif before every encounter (the duck gets a reason; the
-      startle dies) + a soft exit/resolve note as the duck releases. Client-side bundled assets
-      (`apps/mobile`), played around the clip in `useRoam`. Sound design taste-gate: founder ear
-      on the motif BEFORE wiring (charm shortlist already names sound design).
-      ⚠ **Name the asset/hook a "sting," never "motif"/`RoamMotif`** — that name is TAKEN by the
-      VISUAL idle car component (`apps/mobile/app/roam.tsx:67`, referenced from `RoamMap.tsx` +
-      `useRoam.ts`); reusing it for audio makes both unsearchable.
-
 ## TTS audio QA: clip loudness normalization
 
 The mechanism shipped 2026-06-11: every ship path (`generate-narrations`, `resynth-narration`)
@@ -863,6 +823,8 @@ Refs: `apps/mobile/src/lib/driveMusic.ts` (`useDriveMusic` + the `TRACKS` rotati
 `apps/mobile/app/drives/[id]/play.tsx` (the V2 player + `driveMode`).
 
 ## Make the app fully functional without internet (founder ask 2026-07-31)
+
+> ⚠ **Direction SETTLED by 1.1** — the offline store is re-keyed by narration SUBJECT ID and filled from the `DriveManifest` (spec step 9). The REGION PACK is **cut** (D21). The verified findings below still hold and are why the store survives largely intact — read them, but take the direction from the spec.
 
 Surveyed the real behaviour before writing this (2026-07-31) — the gap is NOT where it looks.
 
@@ -1034,18 +996,3 @@ single-Charon model already answer, so the moat (persona continuity, in-car qual
 a feature to copy. This borrow is small and serves that moat. NOT borrowing:
 subscription-first pricing, celebrity narrator roster, national free-roam pin-map,
 over-broad trigger radius (all anti-charm or anti-doctrine).
-
-- [ ] **Pause+resume music in roam — DEVICE-VERIFY (built 2026-06-11).** Founder feedback: BOTH
-      players pause+resume the rider's audio, never duck. The TOUR player was already `doNotMix`
-      (its own bed fades to silence under narration), so this was a ROAM-only change, now IN CODE
-      (`useRoam.ts`): opens `mixWithOthers` (rider's audio untouched through the quiet), takes
-      exclusive `doNotMix` only on the sawFresh edge (real audio), hands focus back (`mixWithOthers`)
-      on clip-end / hold / teardown. Taking focus on sawFresh (not clip-load) means a silent
-      pre-buffer / dead-zone skip never strands the rider's music paused. ⚠ REMAINING: the RESUME is
-      device-only — expo-audio has no session-deactivate, so we rely on iOS resuming Spotify/podcasts
-      when we flip back to `mixWithOthers` (grounded in SDK 56 docs, but the actual resume is
-      unverified). Run runbook §6 (resume after a 60s encounter, re-pause on the next, dead-zone skip
-      never interrupts) before relying on it. Refs: `useRoam.ts`, `docs/guides/device-verification-runbook.md` §6.
-
-Validated-already (no action): our anonymous couch preview = Autio's
-tap-a-pin preview; the M3 notch/interests-as-setting = their interest-ordered queue.
