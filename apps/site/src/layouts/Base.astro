@@ -3,10 +3,36 @@
 // and the global stylesheet. Pages drop their sections into the <slot/>.
 //
 // Fonts: the Trailhead-89 trio (Zilla Slab display, Lora body, Overpass Mono
-// numerals) — the same families the app loads via @expo-google-fonts. Served
-// from Google Fonts here (lowest-friction for a static Firebase host); preconnect
-// + display=swap keep the first paint fast. If a fully self-hosted/offline build
-// is ever wanted, swap to @fontsource.
+// numerals) — the same families the app loads via @expo-google-fonts.
+//
+// SELF-HOSTED via @fontsource (2026-07-30), previously a Google Fonts <link>. The stylesheet link was
+// the ONLY cross-origin blocking resource on the page, and `preload as=style` in front of it does not
+// make it non-blocking — the browser still waits on that response before first paint, and
+// `display=swap` only governs the font FILE swap, not the CSS fetch. Self-hosting removes a whole
+// cross-origin round trip from FCP and stops leaking every visitor's IP to a third party on page load,
+// which also keeps the privacy page honest about who receives data.
+//
+// Imported per WEIGHT and per SUBSET on purpose — Fontsource's bare package import pulls all seven
+// subsets (cyrillic, math, symbols, vietnamese…). The site is English and US-only, so latin +
+// latin-ext is everything it renders; anything outside those ranges falls back to the stack in
+// tokens.css exactly as it does today. Add a subset here if that ever stops being true.
+//
+// ⚠ NO italic face, deliberately. The Google request never asked for one either
+// (`Lora:ital,wght@0,400;0,600;0,700` is ital=0 throughout), so the `<em>` in the legal pages has
+// always rendered as a browser-synthesised oblique. Adding a real italic would be a typography
+// change, not a hosting change — worth doing, but not smuggled in here.
+import '@fontsource/zilla-slab/latin-700.css'
+import '@fontsource/zilla-slab/latin-ext-700.css'
+import '@fontsource/lora/latin-400.css'
+import '@fontsource/lora/latin-ext-400.css'
+import '@fontsource/lora/latin-600.css'
+import '@fontsource/lora/latin-ext-600.css'
+import '@fontsource/lora/latin-700.css'
+import '@fontsource/lora/latin-ext-700.css'
+import '@fontsource/overpass-mono/latin-400.css'
+import '@fontsource/overpass-mono/latin-ext-400.css'
+import '@fontsource/overpass-mono/latin-600.css'
+import '@fontsource/overpass-mono/latin-ext-600.css'
 import '../styles/global.css'
 import { APP_STORE_URL } from '../appStore'
 
@@ -78,8 +104,6 @@ const ldJson = JSON.stringify({
 // Absolute URLs for canonical + social cards (Astro.site = https://skipper.fm).
 const canonical = new URL(Astro.url.pathname, Astro.site)
 const ogImage = new URL(image, Astro.site)
-const fontHref =
-  'https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@700&family=Lora:ital,wght@0,400;0,600;0,700&family=Overpass+Mono:wght@400;600&display=swap'
 ---
 
 <!doctype html>
@@ -112,11 +136,8 @@ const fontHref =
 
     {!noindex && <script type="application/ld+json" set:html={ldJson} />}
 
-    <!-- Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="preload" as="style" href={fontHref} />
-    <link rel="stylesheet" href={fontHref} />
+    <!-- Fonts are self-hosted (see the @fontsource imports above) — no preconnect, no third-party
+         stylesheet, nothing cross-origin left to block first paint. -->
   </head>
   <body>
     <slot />
