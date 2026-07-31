@@ -112,8 +112,8 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   adversarial pre-build critique; the design it reviewed is fully deleted, so the record is now a
   tombstone (the full body lives in git history) pointing to the live model.
 - [audio-compression-spike.md](decisions/audio-compression-spike.md) — get clips off uncompressed
-  WAV: MP3 32k shipped 2026-06-08, then switched to LINEAR16 → AAC-LC 48k `.m4a` (one ffmpeg
-  loudnorm+encode pass) 2026-06-14; the MP3 body is historical.
+  WAV: MP3 32k shipped 2026-06-08, then switched to LINEAR16 → AAC-LC `.m4a` (one ffmpeg
+  loudnorm+encode pass) 2026-06-14, bitrate later bumped for clean peaks; the MP3 body is historical.
 - [drive-audio-exclusive-focus.md](decisions/drive-audio-exclusive-focus.md) — the drive uses
   `doNotMix` (exclusive focus) BY DESIGN: it IS the audio (curated soundtrack + narration), not a
   voice-over that ducks the rider's music; settles the old "Phase-0 duck flip". Decided 2026-06-19.

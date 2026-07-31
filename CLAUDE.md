@@ -127,7 +127,8 @@ product.** When a choice trades polish-for-the-builder against scale-for-a-marke
 - **TTS = Google Cloud Text-to-Speech via REST** (no SDK — raw `fetch` to `…/v1/text:synthesize`), model
   `gemini-3.1-flash-tts-preview`, Gemini-TTS voice **"Charon"** (a fixed function of persona;
   `TTS_MODEL`/`SKIPPER_VOICE_ID` in `models.ts`), OAuth/ADC via `google-auth-library`, NO API key. Output is
-  **AAC-LC 48 kbps `.m4a`**: TTS returns LINEAR16, then ONE ffmpeg pass (`pipeline/loudnorm.ts`
+  **AAC-LC `.m4a`** (bitrate = `AAC_BITRATE` in `pipeline/loudnorm.ts` — ONE home; this line said a
+  stale `48 kbps` until 2026-07-30): TTS returns LINEAR16, then ONE ffmpeg pass (`pipeline/loudnorm.ts`
   `normalizeAndEncode`) does loudnorm + the single AAC encode. **ffmpeg is REQUIRED on ship paths** (the
   encoder, not just QA — throws if absent; Cloud Run carries it). `docs/decisions/audio-compression-spike.md`.
 - **R2 = Bun's native `S3Client`** (no `@aws-sdk`; `region: "auto"`); studio tsconfig needs `types: ["node","bun"]`.

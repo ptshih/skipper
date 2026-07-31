@@ -254,7 +254,7 @@ Network to prep: `1× GET /tours` + `1× POST /sign` + `N` audio GETs.
 each clip's `contentType` in the sign response (`audio/mp4` → `m4a`) — never hardcoded. Write a
 **manifest** (`manifest.json`: tourId, a version/generatedAt, polyline, stops, per-seq file path +
 contentType). At playback prefer the local `file://` if present, else the presigned URL (re-sign if the
-1 h TTL lapsed). Note: clips are now **AAC-LC 48k `.m4a` (`audio/mp4`)** (~12× smaller than the old LINEAR16 WAVs — a few MB/tour),
+1 h TTL lapsed). Note: clips are now **AAC-LC `.m4a` (`audio/mp4`)** (an order of magnitude smaller than the old LINEAR16 WAVs — a few MB/tour),
 but still budget storage + download time + a progress UI that gates "Start drive". Gating is real: a
 non-preview tour needs a signed-in (free) account at prep time (the `/tours` + `/sign` tier check).
 

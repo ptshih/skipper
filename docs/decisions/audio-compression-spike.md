@@ -1,8 +1,12 @@
 # Audio compression spike — get clips off uncompressed WAV
 
-**Status:** spike → MP3 32k SHIPPED 2026-06-08 → **switched to option B (LINEAR16 → AAC-LC 48k)
-2026-06-14.** Current state: TTS requests **LINEAR16** (lossless), and the loudnorm step does the
-ONLY lossy encode — one ffmpeg pass that linear-normalizes AND encodes to **AAC-LC 48 kbps `.m4a`**
+**Status:** spike → MP3 32k SHIPPED 2026-06-08 → **switched to option B (LINEAR16 → AAC-LC)
+2026-06-14**, then the bitrate was **bumped 48k → 64k for clean peaks** (64k AAC overshoots true-peak
+on peaky register-varied takes; see `loudnorm.ts`). ⚠ The rate is NOT restated here — it lives in
+`AAC_BITRATE` (`pipeline/loudnorm.ts`), its one home. Every "48k" further down this page is the
+of-its-time spike record, not current state. Current state: TTS requests **LINEAR16** (lossless), and
+the loudnorm step does the ONLY lossy encode — one ffmpeg pass that linear-normalizes AND encodes to
+**AAC-LC `.m4a`**
 (`TTS_AUDIO_ENCODING='LINEAR16'`, `TTS_CLIP_EXTENSION='m4a'` in `models.ts`; `pipeline/loudnorm.ts`
 `normalizeAndEncode`). Exact duration from the PCM byte length (`pipeline/wav.ts`), measured before
 the encode and preserved through it — the MP3 frame-sum parser (`pipeline/mp3.ts`) is RETIRED.

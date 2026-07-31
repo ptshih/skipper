@@ -20,7 +20,7 @@ launch"** state, so the page is never broken.
 
 Recommended: ~20 s, the Emerald Bay overlook telling (the stop named in the hero caption);
 ≤ ~150 KB. Keep it **MP3** for maximum browser compatibility as a static web asset — the
-studio pipeline now emits AAC-LC 48k `.m4a`, so transcode the blessed clip to MP3 before
+studio pipeline now emits AAC-LC `.m4a`, so transcode the blessed clip to MP3 before
 committing it here. Audio in R2 is presigned/private, so **export a copy** and commit it as a
 public static asset — don't link a short-TTL presigned URL.
 
