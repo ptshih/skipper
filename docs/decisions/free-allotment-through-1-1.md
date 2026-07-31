@@ -57,6 +57,32 @@ This keeps three things simultaneously true, which no single number does on its 
    It previously rendered unconditionally under a comment claiming it was "not a depleting X-left-of-N
    toll gauge". At a cap of 10 a threshold of 5 gives a rider real runway before the ask.
 
+## ⚠ PLANNING IS NEVER METERED. Only the artifact is. (founder, 2026-07-31)
+
+**Talking to the Skipper costs the rider nothing, even though it costs us money.** A credit is consumed
+at `POST /drives` — creating/saving a planned drive — and nowhere else. `POST /drives/plan` (model
+tokens) and `POST /drives/propose` (Google Routes) are free to the rider, forever, including
+anonymously.
+
+This is a deliberate inversion, not an oversight: **the expensive surface is free and the cheap surface
+is charged.** A drive is nearly free to serve (it reuses pre-generated `narrations`; ~$0.08 all-in),
+while the conversation that precedes it is where the real per-request spend lives. Do not "fix" this
+after reading a cost report — the inversion IS the product decision:
+
+- The persona is the product. A rider who batches their intent into one careful message to conserve
+  credits has already lost the thing being sold. Windsurf shipped exactly this meter on a conversational
+  agent and **killed it in public** (2026-03-19), naming the harm: users *"scared of asking quick
+  questions"*, cramming requests together, *"ultimately degrading the quality of their experience."*
+- A credit prices a discrete, ownable artifact the rider actually wants, at the emotional peak of the
+  conversation, with no arithmetic in the way. That is the one job credits are good at.
+- The conversation is bounded by **capacity, not price** — `apps/api/src/limits.ts` and nothing else.
+  That is why those caps are the real cost control and why weakening one is a cost regression rather
+  than a UX tweak (INV-11).
+
+⚠ The corollary: **no amount of credit pricing can ever bound planner spend**, because an anonymous
+rider never reaches `POST /drives`. Anyone reasoning about "making the planner pay for itself" via
+credits is reasoning about the wrong lever.
+
 ## The dependency this creates
 
 ⚠ **`hello@skipper.fm` must be read by a human.** It was already the App Store support contact, the
