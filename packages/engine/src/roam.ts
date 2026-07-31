@@ -67,6 +67,10 @@ export interface RoamTriggerOptions {
   headingGateMps: number
   /** A pin counts as "ahead" when its bearing is within this half-angle of travel heading. */
   headingConeDeg: number
+  /** Closer than this (m) the bearing to the pin carries no signal — skip the heading gate and fire
+   *  on proximity alone. Must stay BELOW `recedeMarginM` so the passed-point retire still owns
+   *  "drove past". Mirrors `TriggerOptions.bearingFloorM`; see the gate itself for why. */
+  bearingFloorM: number
   /** Governor: minimum seconds between encounter STARTS (also holds while a clip plays). */
   minGapSec: number
   /** A fired pin cannot re-fire within this many seconds (session cooldown). */
@@ -95,6 +99,10 @@ export const DEFAULT_ROAM_TRIGGER: RoamTriggerOptions = {
   floorM: 600,
   headingGateMps: 2.2,
   headingConeDeg: 120, // generous: a roam miss is invisible, a false pass is bounded by cooldown
+  // 15 m, the same as a tour stop's — this floor tracks CONSUMER GPS ERROR (5–20 m), not how far the
+  // pin usually sits from the road, so roam's roomier 600 m proximity floor doesn't move it. Well
+  // under recedeMarginM (60), so the passed-point retire still decides "drove past".
+  bearingFloorM: 15,
   minGapSec: 75,
   cooldownSec: 60 * 60 * 4, // 4h: don't re-tell on the drive home (cross-session memory later)
   suppressRadiusM: 300,
@@ -304,11 +312,27 @@ export class RoamEngine {
       if (d > minSeen + this.opts.recedeMarginM) continue
       // Cluster suppression: too close to where the last encounter RECENTLY fired → quiet.
       if (this.suppressedByLastFire(pin, fix.tSec)) continue
-      // Heading-toward gate — only at meaningful speed AND with a KNOWN heading. iOS
-      // reports course -1 when invalid; a negative heading means "unknown", and gating
-      // on it would treat the sentinel as due-north and silence every other direction
-      // (the first live drive's zero-fire failure). Unknown heading → proximity only.
-      if (fix.speedMps >= this.opts.headingGateMps && fix.headingDeg >= 0) {
+      // Heading-toward gate — only at meaningful speed, with a KNOWN heading, and far enough away
+      // for the bearing to mean anything. Three ways a bearing lies, and this gate skips all three:
+      //
+      //  • iOS reports course -1 when invalid. A negative heading means "unknown", and gating on it
+      //    would read the sentinel as due-north and silence every other direction — this engine's
+      //    own first-live-drive zero-fire failure.
+      //  • Crawling or parked, heading is noise.
+      //  • ⚠ And within `bearingFloorM` of the pin, `bearingDeg` is atan2(0,0) = 0 — a FABRICATED due
+      //    north, not a signal that the bearing is undefined. Read as a real heading it turns "is it
+      //    ahead of me?" into a question about north, so a pin you are level with fires only if your
+      //    travel happens to point northish. trigger.ts has guarded this since the equivalent bug
+      //    there (a stop on the route's first vertex fired only for northbound drives); roam pins are
+      //    UN-SNAPPED centroids, so a pin sitting a few metres off the road hits the same noise with
+      //    nothing to catch it. Ported 2026-07-30.
+      //
+      // No trustworthy bearing → proximity only. Standing next to the pin, "ahead" has no answer.
+      if (
+        d > this.opts.bearingFloorM &&
+        fix.speedMps >= this.opts.headingGateMps &&
+        fix.headingDeg >= 0
+      ) {
         const off = angularDiffDeg(fix.headingDeg, bearingDeg(here, [pin.lng, pin.lat]))
         if (off > this.opts.headingConeDeg) continue
       }

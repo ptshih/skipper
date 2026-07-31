@@ -25,6 +25,31 @@ const MPH60 = 26.82
 const MPH20 = 8.94
 
 describe('RoamEngine — proximity + heading', () => {
+  // ⚠ Regression guard for the bearingFloorM port (2026-07-30). `bearingDeg` is atan2(0,0) = 0 — a
+  // FABRICATED due north — when the rider is on or within GPS noise of a pin. Before the floor, that
+  // made "is it ahead of me?" a question about north: standing on a pin, roam fired if you happened to
+  // be travelling N/E/W (all inside the 120° cone around a fake north) and stayed SILENT heading south.
+  // Roam pins are un-snapped centroids, so sitting metres from the road is ordinary, not exotic.
+  test('a pin you are standing on fires whichever way you face (no fabricated-north gate)', () => {
+    const here = pin('here', 0, 0)
+    for (const heading of [0, 90, 180, 270]) {
+      const e = new RoamEngine([here])
+      expect(e.update(fix(0, 0, MPH60, heading))).toHaveLength(1)
+    }
+  })
+
+  test('beyond bearingFloorM the heading gate still vetoes a pin behind you', () => {
+    // ~40 m north of the pin, travelling north = moving away. Well past the 15 m floor, so the
+    // bearing is trustworthy and the gate must still bite.
+    const behind = pin('behind', 0, 0)
+    const e = new RoamEngine([behind])
+    expect(e.update(fix(40 / 111_132, 0, MPH60, 0))).toHaveLength(0)
+  })
+
+  test('bearingFloorM stays below recedeMarginM so the passed-point retire still owns "drove past"', () => {
+    expect(DEFAULT_ROAM_TRIGGER.bearingFloorM).toBeLessThan(DEFAULT_ROAM_TRIGGER.recedeMarginM)
+  })
+
   test('fires on approach within the speed-adaptive radius, nearest first', () => {
     const near = pin('near', 0.0085, 0) // ~167 m ahead
     const far = pin('far', 0.0095, 0) // ~278 m ahead
