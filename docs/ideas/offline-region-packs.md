@@ -1,8 +1,10 @@
 # Offline as REGION PACKS, not per-drive downloads
 
-> **Status:** PRE-SPEC — founder direction 2026-07-31, grounded against the code the same day. NOT
-> greenlit for build. Supersedes nothing yet; the per-drive download in `apps/mobile/src/lib/offline.ts`
-> is what ships today. Build truth for the current offline subsystem:
+> **Status:** DESIGN SETTLED, **build NOT greenlit** (founder, 2026-07-31: *"log it but don't build
+> yet"*). Direction + the three open questions were resolved the same day — see *Decisions* at the
+> foot. Stays in `ideas/` rather than `specs/` precisely because it is not greenlit; promote it on an
+> explicit build call. Supersedes nothing yet: the per-drive download in
+> `apps/mobile/src/lib/offline.ts` is what ships today, and its build truth is
 > [../decisions/offline-connectivity-and-roam-pack.md](../decisions/offline-connectivity-and-roam-pack.md).
 
 ## The idea
@@ -32,8 +34,9 @@ warning — nearly all of it exists to manage *a per-drive download*. Region-sha
 of those states unrepresentable rather than handled.
 
 **Sizing already says yes.** Measured: the entire rider-reachable corpus is 238 clips / 293 min /
-~138 MB. A single drive is tens of MB. So the whole region is single-digit multiples of one drive,
-and the founder's own note called it "a checkbox, not an architecture project."
+~138 MB — about 0.47 MB per minute of audio, so a typical ~10-stop drive is ~10 MB and the region is
+roughly 14× one drive. Real, but the founder's own note called it "a checkbox, not an architecture
+project": a few podcast episodes, against streaming apps whose downloads live in GB.
 
 ## ⚠ Roam POIs and drive POIs are NOT the same set — in either direction
 
@@ -43,7 +46,7 @@ Same audio. Same `narrations` rows, same R2 keys. What differs is **selection po
 **Roam selects at presentation time, and its policy moves.** `GET /roam` applies, live, per request:
 `released_at NOT NULL` (unless admin), `excluded_reason IS NULL` (unconditionally — even for an
 admin), `notSupersededByServedCluster(...)`, and a radius bbox + haversine trim
-(`apps/api/src/index.ts:199-249`).
+(`apps/api/src/index.ts:203-249`).
 
 **A drive resolves a FROZEN selection with essentially no eligibility filtering.**
 `loadCorpusBySubjectIds` (`drives.ts:884-902`) is `inArray(narrations.poiId, subjectIds)` plus
@@ -61,7 +64,7 @@ A roam-built pack has the fused clip and NOT the solo one, and the saved drive g
 stop. Same shape for a POI that later gains an `excluded_reason` via `prune-corpus.ts`.
 
 ⚠ **The case that bites first, today:** `getRoamManifest` is called `{ anonymous: true }` on purpose
-(roam carries live coordinates and must never link them to a signed-in identity — `api.ts:164-179`),
+(roam carries live coordinates and must never link them to a signed-in identity — `api.ts:194-205`),
 so even an admin gets released-only content from roam. But an admin's drives can be built on STAGED
 narrations. A roam-built pack would therefore systematically miss exactly the staged clips the
 founder's own drives use.
@@ -78,16 +81,9 @@ released narration in this bbox". The ADDRESSING stays separate and that is fine
 proximity (`radiusM`/`area`), a drive by route order (`seq`/`alongSec`). Same bytes, two indexes —
 precisely the shape that makes one shared store correct.
 
-Two ways out:
-
-1. **A purpose-built pack endpoint** — "every released narration in this bbox", without roam's
-   presentation-time suppression. Cleanest, and it also fixes that `GET /roam` is point+radius with
-   no region parameter and that `GET /regions` doesn't expose `regions.bbox` today.
-2. **Region pack + per-drive top-up** — the pack carries the bulk; saving a drive additionally pulls
-   only the clips it needs that the pack lacks (normally zero). Preserves one store and one filing
-   system, guarantees correctness, and degrades gracefully for a drive that leaves the region.
-
-(2) is the cheaper first step and doesn't need an API change; (1) is the better end state.
+How the fill is scoped — a purpose-built pack endpoint vs. region-pack-plus-per-drive-top-up — is
+settled in **D1** below. Short version: they were never alternatives, because the top-up is required
+either way.
 
 ## Keeping it up to date
 
@@ -128,9 +124,71 @@ nudge, the same soft posture the rest of this subsystem uses.
   identity gap above (`/roam` has no region param, `/regions` no bbox) becomes load-bearing rather
   than cosmetic.
 
-## Open questions for the founder
+## Decisions (founder, 2026-07-31) — design settled, build NOT greenlit
 
-1. Pack endpoint (1) or region-pack-plus-top-up (2)? (2) ships without touching the API.
-2. Is "prepare for offline" a region-level action ONLY, or does per-drive saving survive as a
-   convenience for someone who doesn't want 138 MB?
-3. Auto-apply threshold for sync deltas — and does it differ on cellular vs wifi?
+### D1 — Region pack + per-drive top-up. No new endpoint.
+
+The two options were never alternatives: **a per-drive top-up is structurally required either way.**
+No bbox-level eligibility rule can guarantee coverage of a FROZEN selection, because the selection
+was frozen under a different rule — even a clean "every released narration in this bbox" endpoint
+misses a clip excluded or unreleased after the freeze, and misses staged clips entirely unless
+authenticated. The only authority on what a given drive needs is that drive's own manifest.
+
+And the top-up is nearly free: `createDrive` and `getDrive` both already return a full `DriveManifest`
+with presigned clip urls, a drive can only be CREATED online (account + credit), and a drive opened on
+a second device fetches its manifest to render. So every moment the app holds a drive manifest it can
+fill the store with what's missing — **zero extra requests, usually zero clips** — and it is invisible
+to the rider, whose model stays "I saved the region".
+
+A purpose-built pack endpoint stays worthwhile LATER, for reasons that aren't urgent at one region:
+real region identity (`/roam` is point+radius with no region param, and `GET /regions` doesn't expose
+`regions.bbox`, so "the region" is currently a 100 km circle around wherever you last rode);
+authenticated bulk fill, which would fix the staged-content gap above at the pack level instead of
+per-drive; and not carrying district clips drives never reference.
+
+### D2 — Region is the only rider-facing action. Keep the fill scoped; don't ship the button.
+
+Offline is ONE control: save the region. The per-drive fill capability stays in code (it IS the
+top-up, called with one manifest), so exposing it later is a button, not a build — but it is not
+shown. Sizing for the record: ~0.47 MB per minute of audio, so a typical ~10-stop / ~2-min-a-stop
+drive is **~10 MB against the region's 138 MB, about 14×**.
+
+Note what this does and does not delete. The per-drive MACHINERY — its own manifest, version gate,
+migrations, repair, orphan classes, partial state — dies regardless, because that is a property of
+per-drive STORAGE, not of a per-drive FILL. And the per-drive UI collapses: today's `downloaded` /
+`partial` / `expired` / `updatable` / `dirState` become ONE derived question against the store — are
+all my clips present and current — with three states (covered / partly covered / not covered).
+
+Revisit only if riders appear who create drives and never roam; for them the 14× is a real tax on the
+primary flow and the button should ship.
+
+### D3 — Sync: metadata always; audio only when it's a good moment AND small enough.
+
+The manifest fetch is always safe (a few hundred KB), so metadata syncs whenever we are online and
+idle. Audio bytes auto-apply only when ALL of:
+
+1. **No active session.** A bulk download mid-roam or mid-drive competes with the clip stream and the
+   GPS. Absolute.
+2. **The connection reports wifi.** Matches when people actually prepare — in town, not in the canyon.
+3. **The delta is under a cap** — start ~25 MB: above a normal few-clip delta, below a full regen.
+
+Otherwise it NUDGES rather than failing silently: Settings shows "N stories have a fresh cut — X MB"
+with a Refresh button. Never blocks, never surprises.
+
+⚠ **The cap is not redundant with the wifi check, and the reason is a real gap.** expo-network exposes
+neither `isExpensive` nor `isConstrained` from NWPath, so a **personal hotspot reports as WIFI** and
+iOS Low Data Mode is invisible to us. We cannot tell tethering from real wifi. The cap is what stops a
+wholesale corpus regen — where the "delta" IS the entire 138 MB — from being re-downloaded unasked
+over someone's phone plan.
+
+⚠ **Unknown connection type counts as METERED** — deliberately the opposite default from the
+connectivity verdict, where unknown reads as ONLINE. Not an inconsistency: the rule is fail in the
+SAFE direction, and the harms differ. There, being wrong bricks the app; here, being wrong spends the
+rider's data.
+
+Deliberately NOT built: treating new POIs (a coverage hole — real silence at a place) more eagerly
+than re-cuts (polish on a clip already held). Defensible, but a third knob for a second-order gain.
+
+Implementation note: `connectivity.ts` keeps only `isConnected`/`isInternetReachable` today and drops
+`type`. Retaining `type` is trivial but touches the module carrying the native landmines — do it
+deliberately, not incidentally.

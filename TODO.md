@@ -966,7 +966,13 @@ device. Nothing in the app deletes downloads automatically now except that one e
       classes, ownership — exists to manage a per-drive download. A region-shaped store dissolves
       most of it and matches what the architecture already says ("the NARRATION is the shared atom;
       ASSEMBLE per drive"). Today a rider holding a roam pack AND a drive stores the same clips
-      twice under two filing systems. Write it up in `docs/ideas/` before building.
+      twice under two filing systems. **Design is SETTLED** in
+      `docs/ideas/offline-region-packs.md` — region pack + per-drive top-up (no new endpoint, because
+      the top-up is structurally required either way: only a drive's OWN manifest is authoritative for
+      a FROZEN selection), region as the only rider-facing action, and sync that auto-applies only
+      off-session, on wifi, under a size cap. ⚠ Build NOT greenlit (founder 2026-07-31). Prerequisite
+      when it is: `revisedAt` on `roamPin` — the same `narrations.updatedAt` column the drive corpus
+      already selects.
 - [ ] **Verify on a real device.** None of the offline work has run on hardware. Two specifics: a
       COLD LAUNCH in airplane mode (the listener arms at import, but home's `load()` may still beat
       the first pushed event — if it reproduces, the bounded fix is a one-time race against a ~250 ms

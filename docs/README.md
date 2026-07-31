@@ -192,7 +192,9 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   atom", ends the double-storage between a roam pack and a saved drive, and makes most of the
   per-drive manifest machinery unrepresentable. ⚠ Carries the two things that must be designed in —
   a roam-built pack does NOT cover every clip a FROZEN drive can reference, and `roamPin` has no
-  revision token to sync against. Founder direction 2026-07-31, NOT greenlit.
+  revision token to sync against. DESIGN SETTLED 2026-07-31 (region pack + per-drive top-up, no new
+  endpoint; region is the only rider-facing action; sync auto-applies only off-session, on wifi,
+  under a cap) — build NOT greenlit.
 - [poi-legibility-layer.md](ideas/poi-legibility-layer.md) — **the claimed moat**: everything between
   "a Wikidata entity exists" and "a driver hears one coherent thing at the right moment" — the
   SOLO/CLUSTER/DISTRICT treatment split, leader (non-chaining) grouping, an Opus treatment classifier,
