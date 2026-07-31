@@ -208,6 +208,33 @@ export class RoamEngine {
   }
 
   /** Feed one fix; returns at most ONE encounter that fires on it. */
+  /** Has this pin fired too recently to fire again — by id, or by NAME so two pins that share a name
+   *  (the same place discovered twice) cannot double-narrate? Pure reads; mutates nothing.
+   *
+   *  ⚠ Shared by the AREA and POINT branches of `update`, which apply it at DIFFERENT points in their
+   *  sequences (the point branch runs the passed-point recede check between this and suppression).
+   *  Keep the call sites where they are — the order of these governors is the behaviour. */
+  private onCooldown(pin: RoamPinRef, tSec: number): boolean {
+    const fired = this.firedAt.get(pin.poiId)
+    if (fired !== undefined && tSec - fired < this.opts.cooldownSec) return true
+    if (pin.name) {
+      const nameFired = this.firedNameAt.get(pin.name)
+      if (nameFired !== undefined && tSec - nameFired < this.opts.cooldownSec) return true
+    }
+    return false
+  }
+
+  /** Cluster suppression: is this pin too close to where the last encounter RECENTLY fired? Keeps a
+   *  dense knot of places from narrating on top of each other. Pure read of `lastFire`. */
+  private suppressedByLastFire(pin: RoamPinRef, tSec: number): boolean {
+    return (
+      this.lastFire != null &&
+      tSec - this.lastFire.tSec < this.opts.suppressWindowSec &&
+      haversineMeters([pin.lng, pin.lat], [this.lastFire.lng, this.lastFire.lat]) <
+        this.opts.suppressRadiusM
+    )
+  }
+
   update(fix: GpsFix): RoamTriggerEvent[] {
     // Defense-in-depth, mirroring TriggerEngine's shared choke point: a malformed fix (non-finite
     // coords/speed) must NEVER fire — a NaN distance or NaN effective-radius makes `d > radius` read
@@ -250,19 +277,8 @@ export class RoamEngine {
         if (!gateOpen) continue
         // The dwell guards the BOUNDARY only — a fix well inside is proof, not noise.
         if (fix.tSec - since < this.opts.enterDwellSec && !deepInsideArea(here, pin.area)) continue
-        const firedArea = this.firedAt.get(pin.poiId)
-        if (firedArea !== undefined && fix.tSec - firedArea < this.opts.cooldownSec) continue
-        if (pin.name) {
-          const nameFired = this.firedNameAt.get(pin.name)
-          if (nameFired !== undefined && fix.tSec - nameFired < this.opts.cooldownSec) continue
-        }
-        if (
-          this.lastFire &&
-          fix.tSec - this.lastFire.tSec < this.opts.suppressWindowSec &&
-          haversineMeters([pin.lng, pin.lat], [this.lastFire.lng, this.lastFire.lat]) <
-            this.opts.suppressRadiusM
-        )
-          continue
+        if (this.onCooldown(pin, fix.tSec)) continue
+        if (this.suppressedByLastFire(pin, fix.tSec)) continue
         const areaCand = { pin, d: signedDistanceM(here, pin.area), inside: true, size: ringAreaM2(pin.area.ring) }
         if (better(areaCand)) best = areaCand
         continue
@@ -280,24 +296,13 @@ export class RoamEngine {
       const minSeen = Math.min(this.minDistM.get(pin.poiId) ?? Infinity, d)
       this.minDistM.set(pin.poiId, minSeen)
       if (!gateOpen) continue // tracking done; nothing may START while the governor holds the gate
-      const fired = this.firedAt.get(pin.poiId)
-      if (fired !== undefined && fix.tSec - fired < this.opts.cooldownSec) continue
-      if (pin.name) {
-        const nameFired = this.firedNameAt.get(pin.name)
-        if (nameFired !== undefined && fix.tSec - nameFired < this.opts.cooldownSec) continue
-      }
+      if (this.onCooldown(pin, fix.tSec)) continue
       // Passed-point retire: once we've clearly RECEDED past this pin's closest approach it's behind
       // us — don't start it late (the "narrated after I drove past" failure the heading gate misses
       // when heading is UNKNOWN or we're crawling).
       if (d > minSeen + this.opts.recedeMarginM) continue
       // Cluster suppression: too close to where the last encounter RECENTLY fired → quiet.
-      if (
-        this.lastFire &&
-        fix.tSec - this.lastFire.tSec < this.opts.suppressWindowSec &&
-        haversineMeters([pin.lng, pin.lat], [this.lastFire.lng, this.lastFire.lat]) <
-          this.opts.suppressRadiusM
-      )
-        continue
+      if (this.suppressedByLastFire(pin, fix.tSec)) continue
       // Heading-toward gate — only at meaningful speed AND with a KNOWN heading. iOS
       // reports course -1 when invalid; a negative heading means "unknown", and gating
       // on it would treat the sentinel as due-north and silence every other direction
