@@ -18,7 +18,7 @@
 // is behind requireAccount.
 
 import { Hono, type Context } from 'hono'
-import { and, between, desc, eq, inArray, isNotNull, isNull, not, sql } from 'drizzle-orm'
+import { and, between, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { creditEntries, drives, driveDemand, narrations, places, pois, regions, selectionSubject } from '@skipper/db/schema'
 import type { DriveSelection, DriveSelectionItem, Polyline, RouteProvenance } from '@skipper/db/schema'

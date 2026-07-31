@@ -38,7 +38,6 @@ import { resolveRegion, requireRegionBbox } from './pipeline/region'
 import { runJob } from './pipeline/job-progress'
 import { ensurePoiOverridesLoaded } from './pipeline/poi-overrides'
 import { regionLabel } from './pipeline/geo'
-import { narrateStop } from './pipeline/narrate'
 import { resolveStoryGrounding } from './pipeline/select'
 import { synthesizeWithTailRetake, type TailOutcome } from './pipeline/tts'
 import type { LoudnessOutcome } from './pipeline/loudnorm'
@@ -54,7 +53,6 @@ import { personaFromKey } from './persona'
 import {
   DEFAULT_REGION_SLUG,
   GROUNDING_EVAL,
-  GROUNDING_REGEN_MAX_ROUNDS,
   NARRATION_CONCURRENCY,
   NARRATION_FALLBACK_CHARS,
   TTS_CONCURRENCY,

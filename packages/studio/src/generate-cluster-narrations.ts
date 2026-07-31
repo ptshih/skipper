@@ -21,14 +21,13 @@
 //   --include-ids a,b,c     regenerate EXACTLY these cluster ids (skips the region scope + --limit)
 //   --max-cost <usd>        stop launching work once spend crosses this
 
-import { and, eq, inArray, sql } from 'drizzle-orm'
+import { inArray, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
-import { narrations, poiClusters, pois } from '@skipper/db/schema'
+import { narrations, poiClusters } from '@skipper/db/schema'
 import type { FactSheetEntry } from '@skipper/db/schema'
 import { announce, assertReady, maxCostFlag, parseFlags } from './pipeline/ops'
 import { resolveRegion, requireRegionBbox } from './pipeline/region'
 import { regionLabel } from './pipeline/geo'
-import { narrateStop } from './pipeline/narrate'
 import { synthesizeWithTailRetake, type TailOutcome } from './pipeline/tts'
 import type { LoudnessOutcome } from './pipeline/loudnorm'
 import { narrationClipKey, uploadAudio } from './pipeline/storage'
@@ -48,8 +47,6 @@ import { recordEvalRun, type ClipIdentity } from './eval/record'
 import { estimateTtsUsd, llmSpendLines, llmSpentUsd, unpricedModels } from './pipeline/spend'
 import {
   DEFAULT_REGION_SLUG,
-  GROUNDING_EVAL,
-  GROUNDING_REGEN_MAX_ROUNDS,
   NARRATION_CONCURRENCY,
   TTS_CONCURRENCY,
   WORDS_PER_SECOND,

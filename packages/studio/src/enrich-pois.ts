@@ -32,7 +32,6 @@
 import { and, eq, inArray, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { pois } from '@skipper/db/schema'
-import type { PoiFacts } from '@skipper/db/schema'
 import { announce, maxCostFlag, parseFlags } from './pipeline/ops'
 import { resolveRegion, requireRegionBbox } from './pipeline/region'
 import { runJob } from './pipeline/job-progress'

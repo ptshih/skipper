@@ -11,8 +11,6 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
     "types": ["node", "vite/client", "google.maps"],
     "paths": { "@/*": ["./src/*"] }
   },

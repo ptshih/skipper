@@ -1,7 +1,7 @@
 // eval/veracity — scoring/aggregation with a deterministic injected checker (zero spend).
 // Mirrors eval-grounding.test.ts: the Anthropic-backed checker is NOT under test here.
 
-import { describe, expect, test } from 'bun:test'
+import { expect, test } from 'bun:test'
 import { evaluateVeracity } from '../src/eval/veracity'
 import type { VeracityInput, VeracityVerdict } from '../src/eval/veracity'
 

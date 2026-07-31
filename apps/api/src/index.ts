@@ -19,7 +19,7 @@
 
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { and, asc, between, eq, isNotNull, isNull, not } from 'drizzle-orm'
+import { and, asc, between, eq, isNotNull, isNull } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { narrations, pois, regions } from '@skipper/db/schema'
 import { haversineMeters, triggerRadiusForKind } from '@skipper/engine'

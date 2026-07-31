@@ -26,7 +26,6 @@
 import { eq } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { pois } from '@skipper/db/schema'
-import type { FactSheetEntry } from '@skipper/db/schema'
 import { fetchFullExtracts, wikiUrlForPageId } from './pipeline/wikipedia'
 import { sheetDriftSpans, toFacts } from './pipeline/select'
 import { buildStoryFacts, storyFactsHash, summaryFromExtract } from './pipeline/persist'
