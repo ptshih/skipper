@@ -44,9 +44,16 @@ import { gateNarration } from './pipeline/gate'
 import { buildScorecard } from './eval/scorecard'
 import { DIMENSION_KIND, type StopEval } from './eval/types'
 import { recordEvalRun, type ClipIdentity } from './eval/record'
-import { estimateTtsUsd, llmSpendLines, llmSpentUsd, unpricedModels } from './pipeline/spend'
+import {
+  estimateTtsUsd,
+  llmSpendLines,
+  llmSpentUsd,
+  TTS_ESTIMATE_SAFETY,
+  unpricedModels,
+} from './pipeline/spend'
 import {
   DEFAULT_REGION_SLUG,
+  GROUNDING_EVAL,
   NARRATION_CONCURRENCY,
   TTS_CONCURRENCY,
   WORDS_PER_SECOND,
@@ -263,6 +270,35 @@ async function main(): Promise<void> {
     return { f, seq, script, evals, shipped }
   }
 
+  // ⚠ COST CEILING, and it sits HERE — above the gating loop — rather than after the preview exit
+  // where the poi generator puts its equivalent. That difference is the whole point: a fused PREVIEW
+  // narrates and scores (only persistence is gated), so narration money is spent before the preview
+  // ever returns. Until this landed, --max-cost bounded nothing on this path but TTS: the first cap
+  // check was inside the synthesis loop, so a capped run paid for every narration and its Opus
+  // grounding judge first, then discovered the ceiling.
+  //
+  // The TTS dummy clip must carry real WORDS — estimateTtsUsd derives audio tokens from the word
+  // count, so a space-less blob reads as ONE word and collapses the estimate ~100× (that mistake
+  // under-quoted a full-region poi run by ~$28 and silently defeated the cap).
+  const llmUsdPerClip = GROUNDING_EVAL() ? 0.15 : 0.1
+  const ttsPreEst = estimateTtsUsd(
+    picked.map((f) => Array(Math.round(f.targetSeconds * WORDS_PER_SECOND)).fill('word').join(' ')),
+    persona.ttsStyle.length,
+  )
+  const estSpendUsd = picked.length * llmUsdPerClip + ttsPreEst.usd * TTS_ESTIMATE_SAFETY
+  console.log(
+    `\nEstimated spend: narration+gate ~$${(picked.length * llmUsdPerClip).toFixed(2)} ± half ` +
+      `+ TTS ~$${ttsPreEst.usd.toFixed(2)} (${picked.length} fused clip(s)` +
+      `${GROUNDING_EVAL() ? '' : '; grounding gate OFF'})`,
+  )
+  if (estSpendUsd > maxCostUsd) {
+    // THROW, not return: runJob's catch settles the studio_jobs row as FAILED. A bare return would
+    // record 'succeeded' — indistinguishable from a clean run that did the work.
+    throw new Error(
+      `⛔ Estimated spend ~$${estSpendUsd.toFixed(2)} exceeds --max-cost=$${maxCostUsd.toFixed(2)} — aborting before any spend. Narrow with --limit or raise --max-cost.`,
+    )
+  }
+
   const gated = await mapLimit(picked, NARRATION_CONCURRENCY(), async (f, i): Promise<GatedFused> => {
     try {
       return await gateOne(f, i)
@@ -359,6 +395,18 @@ async function main(): Promise<void> {
     await recordRun(true) // the gating work is done and paid for — keep its scorecard
     throw new Error(
       `⛔ --max-cost is set but these models are UNPRICED (their spend reads $0, defeating the cap): ${unpriced.join(', ')}. Add them to MODEL_PRICING (pipeline/spend.ts) or re-run without --max-cost.`,
+    )
+  }
+
+  // The gate's retakes can overrun the pre-flight estimate, so re-check against ACTUAL narration spend
+  // before committing to the TTS. Mirrors the poi path; the eval run is recorded first so a run that
+  // aborts here still leaves its scorecard.
+  const ttsEstNow = estimateTtsUsd(shippedClips.map((g) => g.script), persona.ttsStyle.length)
+  const ttsCapEst = ttsEstNow.usd * TTS_ESTIMATE_SAFETY // honour the cap against the upper bound
+  if (llmSpentUsd() + ttsCapEst > maxCostUsd) {
+    await recordRun(true)
+    throw new Error(
+      `⛔ Spend after narrate+gate ($${llmSpentUsd().toFixed(2)}) + est TTS ($${ttsCapEst.toFixed(2)}, incl. safety margin) exceeds --max-cost=$${maxCostUsd.toFixed(2)} — aborting before synthesis. Eval recorded.`,
     )
   }
 
