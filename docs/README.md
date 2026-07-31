@@ -151,6 +151,18 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   preview including one clip from their own route, with the wall at "Make this drive". Also: region
   packs, district re-anchoring, a repo-wide simplification sweep, instrumentation. ⚠ Removes the only
   road-tested mode — drive one before submitting. Greenlit 2026-07-31, NOT started.
+- [1-1-adversarial-review.md](designs/1-1-adversarial-review.md) — a ten-lens outside pass over the
+  1.1 spec **while it was mid-build**, every code claim checked by an adversarial verifier: 15 findings
+  to raise with the builder (⚠ `via` bypasses INV-1's allowlist; the `/drives/plan` mount is
+  order-dependent; INV-15's mitigation doesn't cover its own hazard; D22's district re-anchor is not
+  free), 6 before-submission items (the published privacy policy **denies** what 1.1 does), and three
+  decisions — the sharpest being whether 1.0.0 (probed: `WAITING_FOR_REVIEW`) should ever ship.
+  Findings, **not** decisions; the spec still wins. Captured 2026-07-31.
+- [post-1-1-slate.md](designs/post-1-1-slate.md) — the same pass's post-1.1 half: 1.2 candidates
+  (nothing reads `eval_scores`; selection still ranks by clip LENGTH), a ranked charm shelf (give
+  ANTICIPATE a moment; pick the one anonymous preview clip by ear), 11 cuts to feed D36's step-10 sweep
+  (⚠ `drives.route_sig` has no reader at all), and a list of things **explicitly not worth doing**, each
+  with the condition that expires it. Idea shelf, nothing greenlit; 2026-07-31.
 - [fused-cluster-generation-spec.md](designs/fused-cluster-generation-spec.md) — **phase 4** of the
   legibility layer: one fused telling per cluster, and the read-path work that makes it audible.
   Build-ready 2026-07-30, NOT started. Five open questions listed; the load-bearing one is whether
