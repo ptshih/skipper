@@ -1,11 +1,15 @@
 # Offline as REGION PACKS, not per-drive downloads
 
-> **Status:** DESIGN SETTLED, **build NOT greenlit** (founder, 2026-07-31: *"log it but don't build
-> yet"*). Direction + the three open questions were resolved the same day — see *Decisions* at the
-> foot. Stays in `ideas/` rather than `specs/` precisely because it is not greenlit; promote it on an
-> explicit build call. Supersedes nothing yet: the per-drive download in
-> `apps/mobile/src/lib/offline.ts` is what ships today, and its build truth is
-> [../decisions/offline-connectivity-and-roam-pack.md](../decisions/offline-connectivity-and-roam-pack.md).
+> **Status:** ⚠ **The REGION PACK is CUT (founder, 2026-07-31)** — but **D1's per-drive top-up is now
+> load-bearing** and ships in 1.1 as INV-6 of [drives-first-1-1.md](drives-first-1-1.md). What changed:
+> the pack's purpose was ambient proximity playback, and 1.1 removes ROAM entirely, so a drives-only
+> rider can only ever play clips that are in some drive's manifest — and a drive can't be created
+> offline anyway (it needs the planner + Routes). The pack became a pre-fetch for a case that no longer
+> exists. D1's reasoning survives intact and got sharper on the way: *no bbox-level eligibility rule
+> can guarantee coverage of a FROZEN selection*, so only a drive's own manifest is authoritative — which
+> is exactly why the pack could never have replaced the top-up. "No new endpoint" ends up true, for a
+> different reason than when it was written. Everything below is the pre-cut reasoning, kept because it
+> is the argument to re-read if per-drive downloads ever prove insufficient on a real trip.
 
 ## The idea
 

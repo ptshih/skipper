@@ -3,11 +3,12 @@
 > **Status:** BUILD-READY, **greenlit 2026-07-31** (founder). Supersedes the roam-first PRODUCT
 > structure of [roam-first-create-a-drive.md](roam-first-create-a-drive.md) (its shared-corpus DATA
 > model is unchanged and load-bearing). Rationale: [drive-as-arc.md](drive-as-arc.md). Consumes
-> [offline-region-packs.md](offline-region-packs.md) — ⚠ **half of its D1 changes.** Its *per-drive
-> top-up* half SURVIVES and is load-bearing (see INV-6; its reasoning is the sharper one — only a
-> drive's own manifest is authoritative for that drive, and the top-up is nearly free because
-> `createDrive`/`getDrive` already return a full `DriveManifest`). Its *"no new endpoint"* half is
-> VOID: that was only correct while `GET /roam` existed to fill the pack. Line numbers drift — **code wins**.
+> [offline-region-packs.md](offline-region-packs.md) — ⚠ **its D1 holds; the REGION PACK itself is
+> cut from 1.1.** D1's load-bearing half was always the per-drive top-up ("only a drive's own manifest
+> is authoritative for that drive", and it's nearly free since `createDrive`/`getDrive` already return
+> a full `DriveManifest`) — that survives as INV-6. The pack's *purpose* was ambient proximity
+> playback, which dies with roam: a drives-only rider can only play clips that are in some drive's
+> manifest. So "no new endpoint" is true again. Line numbers drift — **code wins**.
 
 ## Objectives
 
@@ -50,8 +51,8 @@ All settled. If you think one is wrong, raise it before building — don't re-li
 | D17 | The blank page is solved by **tappable example asks** under the input. |
 | D18 | Offline home: the conversation shows an **in-persona unavailable state**; MY DRIVES stays fully live. |
 | D19 | Both tastes survive: the `GET /sample` postcard (1-tap) **and** the route-stop preview (conversion). |
-| D20 | Offline switches to **region packs** in 1.1. ⚠ Per-drive top-up is structurally required (INV-6). |
-| D21 | The pack is filled by a **new `GET /regions/:id/pack`**. `GET /regions` starts returning `bbox`. |
+| D20 | Offline is the **subject-keyed store + per-drive top-up**. The top-up alone is sufficient AND authoritative (INV-6). |
+| D21 | The **REGION PACK is CUT from 1.1** — its purpose was ambient proximity playback, which dies with roam. No pack endpoint, no `bbox` on `/regions`, no ~138 MB download. Revisit only if per-drive downloads prove insufficient on a real trip; the store is already keyed so it would be additive. |
 | D22 | The 5 districts are **re-anchored as points**. Verified free — all five scripts are place-scoped with zero motion-dependent phrasing, so **no regen is needed**. |
 | D23 | The two near-duplicate Carson City districts **merge**; the weaker is retired via `excluded_reason`. |
 | D24 | Runtime form handling collapses to `story` **only in `apps/api` + `apps/mobile`**, plus a loud guard (INV-7). The studio's scenic-downgrade path **stays**. |
@@ -117,14 +118,16 @@ for an anonymous rider **publishes unreleased work**.
 proposal, chosen server-side from that proposal's own selection — the preview is never a list. Public
 read paths serve `released_at IS NOT NULL` only; `isAdmin` is the sole bypass.
 
-**INV-6 — A region pack is NOT sufficient for a saved drive.**
+**INV-6 — Only a drive's own manifest is authoritative for that drive.**
 A drive's stops were frozen under a policy that has since moved — a POI later given an
 `excluded_reason`, a POI later absorbed into a released cluster, or (for the founder's own drives)
-STAGED clips. None are returned by "every released narration in this bbox."
-→ The **per-drive top-up is structurally required**. Every time the app holds a `DriveManifest`
-(create, open, refresh) it fills the shared store with any subject the pack lacks. The migration from
-`drives/<driveId>/<seq>.m4a` to the subject-keyed store must **re-key existing bytes**, never
-delete-and-refetch — a rider offline at a trailhead mid-upgrade must not lose their download.
+STAGED clips. **No bbox-level eligibility rule can ever guarantee coverage of a frozen selection**,
+which is why the per-drive top-up is structural rather than an optimization — and why a region pack
+could never have replaced it (`offline-region-packs.md` D1).
+→ Every time the app holds a `DriveManifest` (create, open, refresh) it fills the subject-keyed store
+with any subject it lacks. Nearly free: those endpoints already return the full manifest. The
+migration from `drives/<driveId>/<seq>.m4a` to the subject-keyed store must **re-key existing bytes**,
+never delete-and-refetch — a rider offline at a trailhead mid-upgrade must not lose their download.
 
 **INV-7 — Collapsing form handling must fail loudly, not silently.**
 The corpus is 458/458 `story`. Collapse the runtime switch, but guard so a non-`story` narration
@@ -212,10 +215,6 @@ moves into the region-pack work — strictly better than the drive side's null-a
 Destructive is fine (D4). These must exist:
 
 - `RegionAnchor` gains a stable **`id`**; propose/create carry **anchor ids**, not coordinates (INV-1).
-- `GET /regions` returns **`bbox`** — a region becomes a real identity, not a circle around the last fix.
-- **`GET /regions/:id/pack`** — every **released** narration subject in the region bbox: `subjectId`,
-  `revisedAt`, `durationMs`, presigned url. No radius, no cluster suppression, no area rings. This is
-  the eligibility question that does not move.
 - **`POST /drives/plan`** — one conversational turn. Model only.
 - `POST /drives/propose` — unchanged apart from anchor ids; still the only Routes call.
 
@@ -224,7 +223,7 @@ Destructive is fine (D4). These must exist:
 | Surface | anonymous | free |
 | --- | --- | --- |
 | `GET /sample` | ✅ | ✅ |
-| `GET /regions`, `GET /regions/:id/pack` | ✅ | ✅ |
+| `GET /regions` | ✅ | ✅ |
 | `POST /drives/plan` | ✅ capped | ✅ |
 | `POST /drives/propose` | ✅ rate-limited | ✅ |
 | Preview clip presign (one, own route, release-filtered) | ✅ | ✅ |
@@ -276,8 +275,10 @@ Client: the conversation on home, example asks, the inline preview card, the off
 signed-in helper (INV-9); preview-clip presign from the **build** path (INV-5); the wall as a **sheet
 over** the preview card — never a screen replacement, which is the root cause of defect 1.
 
-**5 — Region packs.** `GET /regions/:id/pack` + `bbox` on `/regions` (D21). Store keyed by narration
-subject id. Per-drive top-up (INV-6). Re-key existing bytes, never delete-and-refetch.
+**5 — Offline store.** Re-key the store by narration **subject id** (from `drives/<driveId>/<seq>.m4a`),
+**re-keying existing bytes — never delete-and-refetch**. Fill it from the `DriveManifest` the app
+already holds (INV-6). Harvest `roam-pack.ts`'s type-level credential strip on the way through. No pack
+endpoint (D21).
 
 **6 — Corpus.** Re-anchor the 5 districts as points (D22, free). Merge the Carson City duplicates (D23).
 
