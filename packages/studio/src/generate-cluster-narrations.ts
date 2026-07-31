@@ -47,7 +47,7 @@ import { exciseUngrounded, makeExciseCall } from './eval/excise'
 import { buildScorecard } from './eval/scorecard'
 import { DIMENSION_KIND, type StopEval } from './eval/types'
 import { recordEvalRun, type ClipIdentity } from './eval/record'
-import { estimateTtsUsd, llmSpendLines, llmSpentUsd } from './pipeline/spend'
+import { estimateTtsUsd, llmSpendLines, llmSpentUsd, unpricedModels } from './pipeline/spend'
 import {
   DEFAULT_REGION_SLUG,
   GROUNDING_EVAL,
@@ -359,6 +359,21 @@ async function main(): Promise<void> {
     for (const l of llmSpendLines()) console.log(l)
     console.log(`\nSpent $${llmSpentUsd().toFixed(2)}. PREVIEW — nothing written. Re-run with --apply to synthesize + persist.`)
     return
+  }
+
+  // Fail-safe the cap on an UNPRICED model: a model we called with no MODEL_PRICING entry tallies its
+  // tokens but reads $0, so llmSpentUsd() silently under-counts and --max-cost can't bind. Abort loudly
+  // rather than spend TTS under a defeated cap. (No-op when --max-cost is unset, or all models priced.)
+  //
+  // ⚠ This guard was in `generate-narrations.ts` and NOT here for as long as this file has existed —
+  // the two generators share ~90 lines of hand-copied gate wiring, and this is what that duplication
+  // cost: the fused path could run a whole synthesis under a cap that silently read $0. Whatever else
+  // changes, these two must not disagree about when spending is allowed.
+  const unpriced = unpricedModels()
+  if (maxCostUsd !== Infinity && unpriced.length > 0) {
+    throw new Error(
+      `⛔ --max-cost is set but these models are UNPRICED (their spend reads $0, defeating the cap): ${unpriced.join(', ')}. Add them to MODEL_PRICING (pipeline/spend.ts) or re-run without --max-cost.`,
+    )
   }
 
   /* ── APPLY: synthesize, upload, upsert. The first irreversible step. ── */
