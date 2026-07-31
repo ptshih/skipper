@@ -8,7 +8,7 @@
 // ⚠ Everything below is MEASURED over the 30 generatable Tahoe clusters (2026-07-30), not reasoned
 // from taste. The candidates the spec originally proposed both lost.
 
-import { ANCHORED_TRIGGER_RADIUS_M, haversineMeters, type LngLat } from './geo'
+import { ANCHORED_TRIGGER_RADIUS_M, EARTH_RADIUS_M, haversineMeters, type LngLat } from './geo'
 
 /**
  * The widest a fused cluster's trigger may be and still honestly be a POINT.
@@ -56,7 +56,7 @@ function projector(origin: LngLat): {
   to: (p: ClusterMemberPoint) => [number, number]
   from: (xy: [number, number]) => LngLat
 } {
-  const R = 6_371_008.8
+  const R = EARTH_RADIUS_M
   const [lng0, lat0] = origin
   const cosLat = Math.cos((lat0 * Math.PI) / 180)
   return {

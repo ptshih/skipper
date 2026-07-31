@@ -27,7 +27,7 @@
 
 import { angularDiffDeg, bearingDeg, cumulativeMeters, haversineMeters, nearestOnRoute } from './geo'
 import type { LngLat } from './geo'
-import { deepInsideArea, insideArea, signedDistanceM, type AreaRef } from './area'
+import { areaDwellSatisfied, signedDistanceM, trackAreaEntry, type AreaRef } from './area'
 
 /** One GPS fix from the (simulated or real) location stream. */
 export interface GpsFix {
@@ -155,14 +155,9 @@ export class TriggerEngine {
       // heading cone asks for a bearing to a place you are standing in, which is the `bearingFloorM`
       // problem generalised to an entire interior.
       if (stop.area) {
-        if (!insideArea(here, stop.area)) {
-          this.insideSince.delete(stop.seq) // left (or never entered) → re-arm the dwell
-          continue
-        }
-        const since = this.insideSince.get(stop.seq) ?? fix.tSec
-        this.insideSince.set(stop.seq, since)
-        // The dwell guards the BOUNDARY only — a fix well inside is proof, not noise.
-        if (fix.tSec - since < this.opts.enterDwellSec && !deepInsideArea(here, stop.area)) continue
+        const since = trackAreaEntry(this.insideSince, stop.seq, here, stop.area, fix.tSec)
+        if (since == null) continue
+        if (!areaDwellSatisfied(here, stop.area, since, fix.tSec, this.opts.enterDwellSec)) continue
         this.fired.add(stop.seq)
         events.push({
           seq: stop.seq,

@@ -6,7 +6,11 @@
 
 export type LngLat = [number, number]
 
-const EARTH_RADIUS_M = 6_371_008.8
+/** Mean Earth radius (m), IUGG. Exported because `cluster.ts`'s equirectangular projector needs the
+ *  SAME sphere: `clusterTrigger` re-measures its projected result with `haversineMeters` to keep the
+ *  projection honest, and two Earth models would make that check quietly compare against a different
+ *  planet. One home for the constant, per CLAUDE.md — point here, don't restate the number. */
+export const EARTH_RADIUS_M = 6_371_008.8
 export const MPH_TO_MPS = 0.44704
 /** Meters per statute mile (exact) — the one constant for every meters→miles display. */
 export const METERS_PER_MILE = 1609.344

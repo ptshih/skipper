@@ -147,6 +147,47 @@ export function deepInsideArea(p: LngLat, area: AreaRef): boolean {
   return signedDistanceM(p, area) <= -AREA_CONFIDENT_DEPTH_M
 }
 
+/**
+ * Containment + entry bookkeeping for an AREA subject, shared by `TriggerEngine` and `RoamEngine`
+ * so the two area paths cannot drift (the dwell rule below was previously spelled out, comment and
+ * all, in both files).
+ *
+ * Returns the tSec the rider was first seen inside, or NULL when they are outside — which also
+ * RE-ARMS the dwell, so leaving and re-entering starts the clock over.
+ *
+ * ⚠ Deliberately does NOT evaluate the dwell itself; see `areaDwellSatisfied`. The two are separate
+ * because the callers interleave a governor between them: RoamEngine checks its open/closed gate
+ * after this bookkeeping and before the dwell, so that dwell time keeps accruing while a clip is
+ * playing. Fusing these into one call would quietly move that gate.
+ */
+export function trackAreaEntry<K>(
+  insideSince: Map<K, number>,
+  key: K,
+  p: LngLat,
+  area: AreaRef,
+  tSec: number,
+): number | null {
+  if (!insideArea(p, area)) {
+    insideSince.delete(key) // left (or never entered) → re-arm the dwell
+    return null
+  }
+  const since = insideSince.get(key) ?? tSec
+  insideSince.set(key, since)
+  return since
+}
+
+/** Has the entry dwell been satisfied for an area the rider is already inside?
+ *  The dwell guards the BOUNDARY only — a fix well inside is proof, not noise. */
+export function areaDwellSatisfied(
+  p: LngLat,
+  area: AreaRef,
+  since: number,
+  tSec: number,
+  enterDwellSec: number,
+): boolean {
+  return tSec - since >= enterDwellSec || deepInsideArea(p, area)
+}
+
 /** Planar area of the ring in m², for ordering overlapping areas (smallest — most specific — wins).
  *  Shoelace on the same local projection; exactness does not matter, only the ordering. */
 export function ringAreaM2(ring: Ring): number {

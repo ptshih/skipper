@@ -23,7 +23,13 @@
 // Stateful, pure, no I/O — feed fixes via update(), exactly like TriggerEngine.
 
 import { angularDiffDeg, bearingDeg, haversineMeters } from './geo'
-import { deepInsideArea, insideArea, ringAreaM2, signedDistanceM, type AreaRef } from './area'
+import {
+  areaDwellSatisfied,
+  ringAreaM2,
+  signedDistanceM,
+  trackAreaEntry,
+  type AreaRef,
+} from './area'
 import { effectiveRadiusM } from './trigger'
 import type { GpsFix } from './trigger'
 
@@ -268,15 +274,10 @@ export class RoamEngine {
       // retire would drop it while you are still inside; and there is no honest bearing to a place you
       // are standing in). Every GOVERNOR — gate, cooldown, name-cooldown, suppression — still applies.
       if (pin.area) {
-        if (!insideArea(here, pin.area)) {
-          this.insideSince.delete(pin.poiId)
-          continue
-        }
-        const since = this.insideSince.get(pin.poiId) ?? fix.tSec
-        this.insideSince.set(pin.poiId, since)
-        if (!gateOpen) continue
-        // The dwell guards the BOUNDARY only — a fix well inside is proof, not noise.
-        if (fix.tSec - since < this.opts.enterDwellSec && !deepInsideArea(here, pin.area)) continue
+        const since = trackAreaEntry(this.insideSince, pin.poiId, here, pin.area, fix.tSec)
+        if (since == null) continue
+        if (!gateOpen) continue // ⚠ stays HERE: dwell keeps accruing while a clip plays
+        if (!areaDwellSatisfied(here, pin.area, since, fix.tSec, this.opts.enterDwellSec)) continue
         if (this.onCooldown(pin, fix.tSec)) continue
         if (this.suppressedByLastFire(pin, fix.tSec)) continue
         const areaCand = { pin, d: signedDistanceM(here, pin.area), inside: true, size: ringAreaM2(pin.area.ring) }
