@@ -23,7 +23,7 @@ import { and, asc, between, eq, isNotNull, isNull, not } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { narrations, pois, regions } from '@skipper/db/schema'
 import { haversineMeters, triggerRadiusForKind } from '@skipper/engine'
-import type { RoamPin } from '@skipper/shared'
+import type { Region, RoamPin } from '@skipper/shared'
 import { auth, SITE_ORIGIN } from './auth'
 import { withClient } from './client'
 import { loadClusterTellings, notSupersededByServedCluster } from './clusters'
@@ -98,7 +98,11 @@ app.get('/regions', async (c) => {
         .orderBy(asc(regions.displayName)),
     { label: 'regions.list' },
   )
-  return c.json({ regions: rows })
+  // Typed against the WIRE DTO, not just returned raw: the select happens to match `Region` today, and
+  // "happens to match" is how a shape drifts out of the contract without a test failing. Its sibling
+  // `loadRegionAnchors` already annotates its return for the same reason.
+  const payload: Region[] = rows
+  return c.json({ regions: payload })
 })
 
 // ⚠ The one exception to the no-CORS posture above, and it must be registered BEFORE the auth mount

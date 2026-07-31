@@ -31,6 +31,7 @@ import {
   driveMaxStops,
   OFF_ROUTE_MAX_M,
   type DriveCandidate,
+  type LngLat,
 } from '@skipper/engine'
 import { CLUSTER_VARIETY_KEY, loadClusterTellings, notSupersededByServedCluster, type ClusterTelling } from './clusters'
 import {
@@ -401,16 +402,8 @@ driveRoutes.get('/anchors', async (c) => {
  * confirm-before-spend interstitial. (No LLM/geocoding: endpoints are grounded by construction.)
  */
 driveRoutes.post('/propose', async (c) => {
-  let body: unknown
-  try {
-    body = await c.req.json()
-  } catch {
-    return c.json({ error: 'bad_request', message: 'Invalid JSON body.' }, 400)
-  }
-  const parsed = driveProposeRequest.safeParse(body)
-  if (!parsed.success) {
-    return c.json({ error: 'bad_request', message: 'start{name,lat,lng} and end{name,lat,lng} are required.' }, 400)
-  }
+  const parsed = await readJsonBody(c, driveProposeRequest, 'start{name,lat,lng} and end{name,lat,lng} are required.')
+  if (!parsed.ok) return parsed.res
   const startEp: ResolvedEndpoint = parsed.data.start
   const endEp: ResolvedEndpoint = parsed.data.end
   const via = parsed.data.via
@@ -425,14 +418,7 @@ driveRoutes.post('/propose', async (c) => {
 
   // Accurate est. stop count: run the real selection (pure, free) so the confirm screen matches.
   // An admin previews over staged clips too, so the proposed count matches what they'll build.
-  const corpus = await loadCorpusForRoute(route.polyline, isAdmin(c.get('session')))
-  const stops = buildDrive({
-    polyline: route.polyline,
-    totalSec: route.durationSeconds,
-    candidates: [...corpus.values()].map(candidateOf),
-    minGapSec: DRIVE_MIN_GAP_SEC,
-    maxStops: driveMaxStops(route.durationSeconds),
-  })
+  const { stops } = await selectStopsForRoute(route, isAdmin(c.get('session')))
 
   // Echo `via` so the confirm screen can mark the midpoint(s) + render a loop as a round trip.
   return c.json({
@@ -463,14 +449,8 @@ driveRoutes.post('/', createDriveLimiter, async (c) => {
   const userId = c.get('session')?.user.id
   if (!userId) return c.json({ error: 'account_required', message: 'Create a free account to make a drive.' }, 401)
 
-  let body: unknown
-  try {
-    body = await c.req.json()
-  } catch {
-    return c.json({ error: 'bad_request', message: 'Invalid JSON body.' }, 400)
-  }
-  const parsed = createDriveRequest.safeParse(body)
-  if (!parsed.success) return c.json({ error: 'bad_request', message: 'start{name,lat,lng} and end{name,lat,lng} are required.' }, 400)
+  const parsed = await readJsonBody(c, createDriveRequest, 'start{name,lat,lng} and end{name,lat,lng} are required.')
+  if (!parsed.ok) return parsed.res
   const { start, end, via, idempotencyKey } = parsed.data
 
   // The drive id is the client's idempotencyKey when supplied (a v4 UUID, stable across retries),
@@ -538,14 +518,7 @@ driveRoutes.post('/', createDriveLimiter, async (c) => {
 
   // Release gate: an admin builds over staged clips too; everyone else gets released-only. The frozen
   // selection then references whatever was eligible at build time (monotonic → stays valid). (region-release-gate)
-  const corpus = await loadCorpusForRoute(route.polyline, isAdmin(c.get('session')))
-  const stops = buildDrive({
-    polyline: route.polyline,
-    totalSec: route.durationSeconds,
-    candidates: [...corpus.values()].map(candidateOf),
-    minGapSec: DRIVE_MIN_GAP_SEC,
-    maxStops: driveMaxStops(route.durationSeconds),
-  })
+  const { corpus, stops } = await selectStopsForRoute(route, isAdmin(c.get('session')))
 
   // GUARD: an empty selection must NOT persist. buildDrive returns [] when nothing rides the route
   // (sparse corpus, everything off-route, or a degenerate/zero-length route — the likeliest cause
@@ -747,15 +720,67 @@ async function loadOwnedDriveById(userId: string, id: string) {
   return rows[0] ?? null
 }
 
+/** Read a JSON body and validate it, or hand back the 400 the caller should return.
+ *
+ *  Both write routes did this by hand, which meant the "Invalid JSON body." wording lived in two
+ *  places while the per-route shape message lived in each. Only the shape message actually differs,
+ *  so only that is a parameter. */
+async function readJsonBody<T>(
+  c: Context,
+  schema: { safeParse: (v: unknown) => { success: true; data: T } | { success: false } },
+  shapeMessage: string,
+): Promise<{ ok: true; data: T } | { ok: false; res: Response }> {
+  let body: unknown
+  try {
+    body = await c.req.json()
+  } catch {
+    return { ok: false, res: c.json({ error: 'bad_request', message: 'Invalid JSON body.' }, 400) }
+  }
+  const parsed = schema.safeParse(body)
+  if (!parsed.success) return { ok: false, res: c.json({ error: 'bad_request', message: shapeMessage }, 400) }
+  return { ok: true, data: parsed.data }
+}
+
+/** Load the corpus along a frozen route and run the deterministic selection over it.
+ *
+ *  Shared by POST /drives/propose and POST /drives so the count the rider is shown on the confirm
+ *  screen is produced by the SAME call that builds the drive they pay for. Two copies of this is how a
+ *  preview starts promising a different number of stops than it delivers.
+ *
+ *  `admin` widens the corpus to staged clips as well as released ones (region-release-gate). */
+async function selectStopsForRoute(route: { polyline: LngLat[]; durationSeconds: number }, admin: boolean) {
+  const corpus = await loadCorpusForRoute(route.polyline, admin)
+  const stops = buildDrive({
+    polyline: route.polyline,
+    totalSec: route.durationSeconds,
+    candidates: [...corpus.values()].map(candidateOf),
+    minGapSec: DRIVE_MIN_GAP_SEC,
+    maxStops: driveMaxStops(route.durationSeconds),
+  })
+  // The corpus rides along: POST /drives reads it again to shape the persisted selection and to log
+  // the candidate count, so returning only the stops would just make the caller re-load it.
+  return { corpus, stops }
+}
+
+/** The narration rows a stored drive's frozen selection points at, keyed by subject id.
+ *
+ *  ⚠ Via `selectionSubject`, which absorbs the pre-fused item shape AND resolves the subject kind — a
+ *  fused telling is named by its `cluster_id`, not a member's `poi_id`. Reaching into the item for a
+ *  poi id directly is the mistake that made `narrations.poi_id → 3rd Street Flats` for a clip about
+ *  downtown Reno. One definition, shared by the replay manifest and the offline re-sign. */
+async function corpusForSelection(selection: DriveSelectionItem[]): Promise<Map<string, NarrationRow>> {
+  const subjectIds = selection
+    .filter((i) => i.kind === 'narration')
+    .map((i) => selectionSubject(i)?.id)
+    .filter((id): id is string => Boolean(id))
+  return subjectIds.length ? await loadCorpusBySubjectIds(subjectIds) : new Map<string, NarrationRow>()
+}
+
 /** Build a replay manifest from a STORED drive row: frozen structure + LIVE narration content (a
  *  regenerated telling auto-improves it), freshly presigned. Throws if presign fails — the caller maps
  *  that to a 503. Shared by GET /:id and the POST /drives idempotent replay. */
 async function manifestForStoredDrive(drive: NonNullable<Awaited<ReturnType<typeof loadOwnedDriveById>>>): Promise<DriveManifest> {
-  const subjectIds = (drive.selection ?? [])
-    .filter((i) => i.kind === 'narration')
-    .map((i) => selectionSubject(i)?.id)
-    .filter((id): id is string => Boolean(id))
-  const corpus = subjectIds.length ? await loadCorpusBySubjectIds(subjectIds) : new Map<string, NarrationRow>()
+  const corpus = await corpusForSelection(drive.selection ?? [])
   return {
     driveId: drive.id,
     label: drive.label ?? `${drive.startName ?? 'Start'} → ${drive.endName ?? 'End'}`,
@@ -810,11 +835,7 @@ driveRoutes.get('/:id', async (c) => {
 driveRoutes.post('/:id/assets/sign', async (c) => {
   const drive = await loadOwnedSelection(c)
   if (!drive) return c.json({ error: 'not_found' }, 404)
-  const subjectIds = (drive.selection ?? [])
-    .filter((i) => i.kind === 'narration')
-    .map((i) => selectionSubject(i)?.id)
-    .filter((id): id is string => Boolean(id))
-  const corpus = subjectIds.length ? await loadCorpusBySubjectIds(subjectIds) : new Map<string, NarrationRow>()
+  const corpus = await corpusForSelection(drive.selection ?? [])
   try {
     const clips = manifestClips(drive.selection ?? [], corpus).map((cl) => ({
       seq: cl.seq,
