@@ -257,20 +257,27 @@ async function main(): Promise<void> {
   // telling it will share a drive with. Region scope therefore resolves per subject kind: solo by its
   // poi's point, fused by whether any MEMBER poi sits in the bbox (the same geometry-first rule
   // everything else uses). The fused generator loads context the same way, so the two are symmetric.
-  const soloInRegion = db
-    .selectDistinct({ id: pois.id })
-    .from(pois)
-    .where(sql`${pois.lat} between ${bbox!.swLat} and ${bbox!.neLat} and ${pois.lng} between ${bbox!.swLng} and ${bbox!.neLng}`)
-  const clustersInRegion = db
-    .selectDistinct({ id: pois.clusterId })
-    .from(pois)
-    .where(sql`${pois.clusterId} is not null and ${pois.lat} between ${bbox!.swLat} and ${bbox!.neLat} and ${pois.lng} between ${bbox!.swLng} and ${bbox!.neLng}`)
-  const contextWhere = isExplicit
-    ? isNotNull(narrations.script)
-    : and(
-        isNotNull(narrations.script),
-        sql`(${narrations.poiId} in ${soloInRegion} or ${narrations.clusterId} in ${clustersInRegion})`,
-      )
+  // ⚠ Built INSIDE the branch that uses them. `--include-ids` sets no region, so `bbox` is null on
+  // that path, and constructing these eagerly threw `bbox.swLat` on a value the explicit branch then
+  // discarded — crashing the hand-picked regeneration path before it narrated anything. A `!` is a
+  // claim about one branch; hoisting the expression out of that branch quietly makes it a lie.
+  let contextWhere
+  if (isExplicit) {
+    contextWhere = isNotNull(narrations.script)
+  } else {
+    const soloInRegion = db
+      .selectDistinct({ id: pois.id })
+      .from(pois)
+      .where(sql`${pois.lat} between ${bbox!.swLat} and ${bbox!.neLat} and ${pois.lng} between ${bbox!.swLng} and ${bbox!.neLng}`)
+    const clustersInRegion = db
+      .selectDistinct({ id: pois.clusterId })
+      .from(pois)
+      .where(sql`${pois.clusterId} is not null and ${pois.lat} between ${bbox!.swLat} and ${bbox!.neLat} and ${pois.lng} between ${bbox!.swLng} and ${bbox!.neLng}`)
+    contextWhere = and(
+      isNotNull(narrations.script),
+      sql`(${narrations.poiId} in ${soloInRegion} or ${narrations.clusterId} in ${clustersInRegion})`,
+    )
+  }
   const diversityContext: string[] = (
     await withRetry(
       () => db.select({ script: narrations.script }).from(narrations).where(contextWhere),
