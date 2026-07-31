@@ -277,9 +277,34 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
             was accepted, and tripped the thrash guard. ⚠ The weight does NOT make a gate buyable —
             `gatesNotWorse` is a separate absolute veto; do not "fix" the number.
             ⚠ **Detection is byte-identical after the change (267 of 457 flagged, before and after)** —
-            only the weighting moved. ⚠ **UNVERIFIED against a real generation**: both levers only
-            affect FUTURE takes, and confirming the prompt fix costs a paid run. The cheap test is the
-            standing `--scripts-only` probe: re-run it and count `here is the` in the new scripts.
+            only the weighting moved.
+            ✅ **VERIFIED on a paid probe, 2026-07-30 ($3.54, founder-authorized).** `--scripts-only`
+            over the 12 worst offenders (each carrying 1-2 instances, none superseded):
+            **18 occurrences → 2. Ten of the twelve came back completely clean.** The two survivors are
+            `Tevis Cup` ("now here is the part that keeps you humble") and `Indian Hills` ("here is
+            where"), one each. Nothing was written to R2 or `narrations`.
+            ⚠ Re-running this probe is the standing cheap test for any future prompt change: pick
+            offenders, `--scripts-only`, count the construction in the printed scripts.
+      - [ ] **⚠ The Skipper says "the card" OUT LOUD in 15 of 458 clips — and nothing catches it.**
+            Found while reading the probe output. "The card" is the PROMPT's internal word for the fact
+            sheet; a rider has no idea what it means. Real examples shipped: "The card tells me it is
+            Queen Anne in its massing", "Late Cretaceous, the card tells me", "I'm quoting the card
+            here", "That is the card, folks". Pre-existing (not caused by the ban fix) and not in
+            `BANNED` or `STOCK_PHRASES`. It is exactly the shape the new HARD tier handles — per-clip,
+            always wrong, fixable in one retake.
+            ⚠ **The fix is NOT a plain `/the card/` pattern.** The prompt legitimately says "the card"
+            throughout in its INSTRUCTION voice ("On the card, it is yours"), so that regex would fire
+            on the prompt itself and trip the new persona guard test. The discriminator that actually
+            separates them is PERSON: the prompt addresses the Skipper ("the card gives *you*"), the
+            leak is the Skipper speaking ("the card tells *me*", "quoting the card", "that is the
+            card"). Target the spoken construction, and add the matching line to the prompt in the same
+            change — the two lists must agree (see the ⚠ on `BANNED`).
+      - [ ] **`--scripts-only` DOES write to the DB, but its blast label says it does not.**
+            `generate-narrations.ts` declares `blast: scriptsOnly ? ['SPENDS $'] : ['SPENDS $',
+            'MUTATES DB']`, yet the run still recorded `eval_runs` + 60 `eval_scores` rows. Harmless
+            in itself (observability tables, not content, and arguably worth keeping), but the blast
+            line is the contract an operator reads before spending — per `ops-scripts-sop.md` it has to
+            be true. Either widen the label or skip the eval record on scripts-only.
       - [ ] **Yosemite's 30 clusters** — still un-generatable (zero enriched members); needs a
             founder-gated `enrich-pois --region yosemite` run first. `generate-cluster-narrations.ts` is
             complete: narrate → fail-closed gate with excision retakes → TTS → loudnorm → R2 → upsert
