@@ -299,11 +299,27 @@ contact. One atomic commit per step unless noted. On `main`, explicit paths only
 **0 — SNAPSHOT.** ✅ DONE locally 2026-07-31 (D5). **Still owed: the offsite copy.** No `db:push` /
 `db:migrate` / destructive data work until it exists — dev and prod share one Neon host.
 
-**1 — `apps/api/src/limits.ts` + the bounded body read** (INV-3, INV-12). Pulled forward: zero
-dependencies, zero collisions, fully unit-testable, and it closes a **live 1.0 defect** — today one
-unauthenticated request can carry a megabyte body into `/propose`. ⚠ `readJsonBody`'s first act is
-`await c.req.json()`, so bound the actual read; never trust a caller-supplied `Content-Length`. Do NOT
-build the cap on `rateLimit()`, which returns `next()` unconditionally under `NODE_ENV=test`.
+**1 — `apps/api/src/limits.ts` + the bounded body read** (INV-3, INV-12). ✅ **DONE 2026-07-31.**
+`readBoundedText` measures the ACTUAL stream and never reads `Content-Length`; `readJsonBody` takes a
+required, undefaulted `maxBytes` and 413s before `JSON.parse`. 15 tests, and the two load-bearing ones
+were mutation-checked against a Content-Length-trusting and a `String.length`-based implementation —
+both wrong versions return `ok: true` where the tests assert `false`.
+⚠ **`hono/body-limit` was evaluated and REJECTED**, so nobody re-litigates it: its fast path is
+`contentLength > maxSize ? onError : next()` with the stream never measured — literally what INV-3
+forbids — and its default `onError` throws an `HTTPException` that `index.ts`'s handler converts into a
+`500 {"error":"internal"}`.
+⚠ **The planner caps ship with no consumer** (`MAX_PLAN_*`, `PLANNER_MAX_TOKENS`, `PLAN_RATE_*`) so
+step 6 inherits an argued number instead of inventing one under deadline. `PLAN_RATE_HOUR` is the
+highest-leverage: 20/min alone permits ~28,800 req/day per IP per instance. Enforce it by mounting
+**both** limiters — verified that a second `rateLimit()` is an independent bucket map, so it is one
+extra line, not a limiter rewrite.
+⚠ `SERVER_MAX_BODY_BYTES` is wired into the Bun default export — verified by probe that Bun honours
+`maxRequestBodySize` in the `export default { … }` object form, not only via `Bun.serve({ … })`. It is
+process-wide, so it also bounds the otherwise-unbounded `/api/auth/*` mount.
+⚠ Left for their owners: `index.ts:157`/`:313` (roam, deleted/re-pathed by step 3) keep their inline
+values rather than buy a merge conflict; and `loadRegionAnchors` has **no `LIMIT` and no `ORDER BY`** —
+that set becomes the planner's allowlist and rides in the cached prompt prefix on every turn, so an
+unstable row order is a silent prompt-cache invalidator. **Fix in step 6.**
 
 **2 — Corpus (D22/D23/D40), gated on step 0.** Re-anchor the 5 districts as points (free, no regen);
 merge the Carson City duplicates via `excluded_reason`. **This must precede roam removal** so `area.ts`

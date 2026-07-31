@@ -28,6 +28,7 @@ import { auth, SITE_ORIGIN } from './auth'
 import { withClient } from './client'
 import { loadClusterTellings, notSupersededByServedCluster } from './clusters'
 import { driveRoutes } from './drives'
+import { PROPOSE_RATE, SERVER_MAX_BODY_BYTES } from './limits'
 import { isAdmin, withSession, type ApiEnv } from './entitlements'
 import { rateLimit } from './rate-limit'
 import { withRetry } from './retry'
@@ -139,7 +140,7 @@ app.on(['POST', 'GET'], '/api/auth/*', (c) => auth.handler(c.req.raw))
 // guard (per-instance in-memory first cut — see ./rate-limit). The heavier CREATE path (POST /drives:
 // Routes + a credit consume + a write) is capped too, via route-level middleware in ./drives
 // (createDriveLimiter) — kept there so it scopes to exactly POST / and not the cheap reads under /drives.
-app.use('/drives/propose', rateLimit({ limit: 15, windowSec: 60, label: 'propose' }))
+app.use('/drives/propose', rateLimit(PROPOSE_RATE))
 
 // Create-a-Drive (V2): user-owned, on-demand A→B drives over the shared narration corpus. The
 // whole sub-app is behind a free account (anonymous = roam only) — see ./drives.
@@ -356,4 +357,9 @@ app.get('/roam/sample', async (c) => {
 const port = Number(process.env.PORT ?? 8787)
 
 // Bun serves a default export of the shape { port, fetch }.
-export default { port, fetch: app.fetch }
+//
+// `maxRequestBodySize` is the only guard that stops bytes at the SOCKET, before any JS runs — a floor
+// under the per-route caps in ./limits rather than a replacement for them (Bun's 413 carries an empty
+// body, so the friendly JSON still comes from readJsonBody). It is process-wide, so it also bounds the
+// /api/auth/* handler mount, which has no body limit of its own.
+export default { port, fetch: app.fetch, maxRequestBodySize: SERVER_MAX_BODY_BYTES }

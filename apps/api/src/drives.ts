@@ -45,6 +45,7 @@ import {
 } from '@skipper/shared'
 import { isAdmin, requireAccount, withSession, type ApiEnv } from './entitlements'
 import { creditSummary, driveConsumeEntry, ensureFreeGrant } from './credits'
+import { DRIVE_CREATE_RATE, MAX_DRIVE_BODY_BYTES, readBoundedText } from './limits'
 import { rateLimit } from './rate-limit'
 import { withRetry } from './retry'
 import { audioUnavailable, contentTypeForKey, presignGet } from './storage'
@@ -402,7 +403,12 @@ driveRoutes.get('/anchors', async (c) => {
  * confirm-before-spend interstitial. (No LLM/geocoding: endpoints are grounded by construction.)
  */
 driveRoutes.post('/propose', async (c) => {
-  const parsed = await readJsonBody(c, driveProposeRequest, 'start{name,lat,lng} and end{name,lat,lng} are required.')
+  const parsed = await readJsonBody(
+    c,
+    driveProposeRequest,
+    'start{name,lat,lng} and end{name,lat,lng} are required.',
+    MAX_DRIVE_BODY_BYTES,
+  )
   if (!parsed.ok) return parsed.res
   const startEp: ResolvedEndpoint = parsed.data.start
   const endEp: ResolvedEndpoint = parsed.data.end
@@ -437,7 +443,7 @@ driveRoutes.post('/propose', async (c) => {
 // the same spend profile /propose is rate-limited for (index.ts). Applied as route-level middleware so
 // it scopes to EXACTLY POST / (the list GET, detail GET, re-sign POST, and delete under /drives stay
 // uncapped — they're cheap reads or idempotent). Same per-instance in-memory first-cut as ./rate-limit.
-const createDriveLimiter = rateLimit({ limit: 15, windowSec: 60, label: 'drives-create' })
+const createDriveLimiter = rateLimit(DRIVE_CREATE_RATE)
 
 /**
  * POST /drives — generate + persist the confirmed drive. Free-account gated (above); enforces the
@@ -449,7 +455,12 @@ driveRoutes.post('/', createDriveLimiter, async (c) => {
   const userId = c.get('session')?.user.id
   if (!userId) return c.json({ error: 'account_required', message: 'Create a free account to make a drive.' }, 401)
 
-  const parsed = await readJsonBody(c, createDriveRequest, 'start{name,lat,lng} and end{name,lat,lng} are required.')
+  const parsed = await readJsonBody(
+    c,
+    createDriveRequest,
+    'start{name,lat,lng} and end{name,lat,lng} are required.',
+    MAX_DRIVE_BODY_BYTES,
+  )
   if (!parsed.ok) return parsed.res
   const { start, end, via, idempotencyKey } = parsed.data
 
@@ -720,19 +731,39 @@ async function loadOwnedDriveById(userId: string, id: string) {
   return rows[0] ?? null
 }
 
-/** Read a JSON body and validate it, or hand back the 400 the caller should return.
+/** Read a JSON body and validate it, or hand back the 4xx the caller should return.
  *
  *  Both write routes did this by hand, which meant the "Invalid JSON body." wording lived in two
  *  places while the per-route shape message lived in each. Only the shape message actually differs,
- *  so only that is a parameter. */
+ *  so only that is a parameter.
+ *
+ *  ⚠ `maxBytes` is REQUIRED and undefaulted on purpose — a new caller has to state what it is willing
+ *  to carry. This function's first act used to be `await c.req.json()`, which buffers an unbounded body
+ *  into memory before anything can object: one unauthenticated request could carry a megabyte into the
+ *  paid paths (INV-3). The bound is measured on the real stream and Content-Length is never consulted;
+ *  see ./limits for why that distinction is the whole guarantee. */
 async function readJsonBody<T>(
   c: Context,
   schema: { safeParse: (v: unknown) => { success: true; data: T } | { success: false } },
   shapeMessage: string,
+  maxBytes: number,
 ): Promise<{ ok: true; data: T } | { ok: false; res: Response }> {
+  const read = await readBoundedText(c.req.raw, maxBytes)
+  // 413 — "Content Too Large" (RFC 9110 §15.5.14; "Payload Too Large" is the retired RFC 7231 name).
+  // ⚠ Nothing is logged here, not even a truncation: this path is anonymously triggerable, so a log
+  // line would be a free log-spam amplifier, and the body itself is rider content (INV-13).
+  if (!read.ok) {
+    return {
+      ok: false,
+      res: c.json({ error: 'payload_too_large', message: 'That request is too large. Try trimming it down.' }, 413),
+    }
+  }
   let body: unknown
   try {
-    body = await c.req.json()
+    // NOT c.req.json() — readBoundedText already consumed the stream, and hono only caches bodies read
+    // through its own accessors, so calling it here throws. An absent body arrives as '' and fails into
+    // the same 400 as before.
+    body = JSON.parse(read.text)
   } catch {
     return { ok: false, res: c.json({ error: 'bad_request', message: 'Invalid JSON body.' }, 400) }
   }

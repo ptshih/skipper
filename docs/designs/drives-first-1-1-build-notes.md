@@ -29,9 +29,25 @@
   `JUDGMENT_MODEL` (`:69`), `ENRICH_MODELS.opus` (`:80`) and two admin job models
   (`apps/admin/server/index.ts:323,:527`). Add a NEW key.
 
-## Step 1 — `limits.ts` + the bounded body read
+## Step 1 — `limits.ts` + the bounded body read — ✅ BUILT 2026-07-31
 
-- `apps/api/src/limits.ts` **does not exist**. Create it.
+Kept as the record of what the pre-flight found and what it got wrong. Three corrections from the build:
+- **The "four call sites" figure is right for `rateLimit()` and wrong as a cap inventory** — a sweep found
+  ~30 more rider-facing caps, including a SECOND independent rider-facing limiter (Better Auth's own
+  `customRules` in `auth.ts`), the only cap that bounds a paid call's shape (`via.max(8)` in
+  `schemas.ts`), and three list endpoints (`GET /drives`, `loadRegionAnchors`, `GET /regions`) with no
+  bound at all. `limits.ts` owns the caps it can honestly own and POINTS at the rest — never re-exports
+  them, since a re-export is a second import path that invites a second home.
+- **`limits.ts` imports NOTHING, deliberately**, and `readBoundedText` takes a `Request` rather than a
+  hono `Context` for the same reason: `drives.ts:46` → `entitlements.ts:7` → `auth.ts` throws at module
+  load without `BETTER_AUTH_SECRET`, so a single value import would make every future limits test seed a
+  secret. Zero imports closes that question permanently.
+- **A second rate-limit WINDOW does not need a limiter rewrite.** Each `rateLimit()` call closes over its
+  own bucket map, so `app.use(path, rateLimit(MINUTE), rateLimit(HOUR))` gives two independent windows —
+  verified by probe. An earlier read concluded the opposite, which would have meant accepting the
+  per-day exposure instead of writing one line.
+
+- ~~`apps/api/src/limits.ts` **does not exist**. Create it.~~ Created.
 - `readJsonBody` is at `apps/api/src/drives.ts:728-742`, **module-private**, callers `:405` (propose) and
   `:452` (POST /). Its first act is `await c.req.json()` at `:735` — **no** Content-Length check, no cap.
   ⚠ INV-3's "reject before parsing" is therefore not a one-liner: bound the **bytes actually consumed**
