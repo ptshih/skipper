@@ -110,9 +110,10 @@ export function contentSignature(d: { clips: DriveClip[] }): string {
  * those files under the downloader as it verifies them would turn a good copy into a broken one.
  *
  * ⚠ This function CANNOT tell a genuinely-empty list from a failed fetch, and an empty `keep`
- * therefore sweeps everything. That is correct here and dangerous at the call site: authority over
- * `keep` is the caller's guarantee (offline.ts `sweepUnknownDownloads`, in turn app/index.tsx, which
- * only calls it after `GET /drives` has SUCCEEDED). Pure + tested because it decides deletions.
+ * therefore sweeps everything. Today its ONLY caller passes an empty keep deliberately
+ * (`deleteAllDriveDownloads`, the account-deletion purge). If a caller ever passes a SERVER list
+ * here, that list must come from a fetch that SUCCEEDED — a failed one is indistinguishable at this
+ * layer and would wipe every saved drive in a dead zone. Pure + tested because it decides deletions.
  */
 export function driveIdsToSweep(
   onDisk: Iterable<string>,

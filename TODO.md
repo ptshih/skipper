@@ -944,30 +944,29 @@ the content diff still flags a superseded cut afterwards. Offered on the drive d
 across saves (so a cancel resumes) stranded files for places that left the corpus — invisible to the
 size readout; now swept after each save.
 
-✅ **DOWNLOADS THAT ARE NO LONGER YOURS ARE SWEPT (founder OK 2026-07-31: "switching accounts and
-getting data deleted is acceptable").** Two paths, because one must work offline.
-`sweepUnknownDownloads(keep)` drops anything the caller's drive list doesn't mention (deleted on
-another device, or another account's) — ⚠ sound ONLY because `GET /drives` has no limit and no
-pagination, and ⚠ only ever called after the fetch SUCCEEDED, since it cannot tell an empty list from
-a failed one and a call from the catch would wipe every saved drive in a dead zone.
-`reconcileDownloadOwner(userId)` records the owning account and drops everything when it changes —
-that's what makes the accepted behaviour true OFFLINE, where there IS no authoritative list and
-`listDownloadedDrives` would otherwise hand the previous account's drives to the new one. It runs
-BEFORE anything reads the disk, never sweeps on first sight of an owner, and ⚠ deliberately leaves
-the ROAM PACK alone (roam is anonymous and its clips aren't user-owned — a pack belongs to the
-DEVICE; re-pulling ~138 MB on an account switch would be cost for no ownership reason).
-`driveIdsToSweep` is pure + unit-tested because it decides deletions.
+✅ **DOWNLOADS ARE DEVICE DATA, AND ONLY ERASURE DELETES THEM (2026-07-31).** An ownership sweep was
+built and then removed the same day, on the founder's follow-up: do downloads need a user at all?
+Mostly no — a drive's audio IS the shared roam corpus (roam serves those same clips anonymously to
+anyone near Tahoe), so the only account-specific part is the route/label, a few KB of JSON. Scoping
+drives to a user while the roam pack was device-scoped applied two rules to the same bytes.
+Where it DOES matter is account DELETION — and the sweep missed exactly that case, because after
+`deleteUser` the rider is anonymous, so the owner reconcile never fired while `listDownloadedDrives`
+would hand the deleted account's drives to the next person holding the phone. `deleteAllDriveDownloads`
+now runs in the delete-account flow (roam pack left alone — anonymous device content).
+`sweepUnknownDownloads` went too: if it were ever wrong the rider loses every saved drive silently,
+possibly right before Tahoe, and all it bought was disk reclaimed from a drive deleted on another
+device. Nothing in the app deletes downloads automatically now except that one erasure path.
 
-- [ ] **Still NOT swept: downloads this build simply can't READ.** That objection was never about
-      ownership and still stands — a sweep turns a RECOVERABLE mistake into an unrecoverable one
-      (bump without a migration → sweep at launch → hotfix a day later → gone, on rider hardware, no
-      undo; the migration table is empty with two bumps of history). `repairDownload` covers it
-      non-destructively when online. What's left is offline leftovers sitting until the rider taps
-      Remove; a Settings "free up space" line is the remaining option (an age gate via
-      `Directory.info().modificationTime` works but still deletes unasked).
-- [ ] **Narrow residual: downloads predating the owner file have no recorded owner**, so they're
-      claimed by whoever is signed in when it's first written. Stamping the owner into each manifest
-      would close it — additive, and no version bump needed now that the migration seam exists.
+- [ ] **⚠ The gap that follows: leftovers sit until the rider removes them** — a drive deleted on
+      another device, a previous account's, or one this build can't read. And a drive missing from
+      the server list can't be tapped into, so the per-drive Remove is unreachable. A Settings
+      "free up space" line is the honest fix; NOT built yet, pending the direction below.
+- [ ] **⭐ DIRECTION (founder 2026-07-31): treat downloads as REGION PACKS, not per-drive.** Most of
+      the offline machinery above — versioned per-drive manifests, migrations, repair, orphan
+      classes, ownership — exists to manage a per-drive download. A region-shaped store dissolves
+      most of it and matches what the architecture already says ("the NARRATION is the shared atom;
+      ASSEMBLE per drive"). Today a rider holding a roam pack AND a drive stores the same clips
+      twice under two filing systems. Write it up in `docs/ideas/` before building.
 - [ ] **Verify on a real device.** None of the offline work has run on hardware. Two specifics: a
       COLD LAUNCH in airplane mode (the listener arms at import, but home's `load()` may still beat
       the first pushed event — if it reproduces, the bounded fix is a one-time race against a ~250 ms

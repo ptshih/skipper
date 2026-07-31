@@ -28,8 +28,8 @@ describe('driveIdsToSweep', () => {
   })
 
   test('an empty keep-list sweeps everything — authority over it is the CALLER’s guarantee', () => {
-    // The account-switch path relies on exactly this; the list path must therefore only ever pass a
-    // list from a SUCCEEDED fetch (app/index.tsx), since a failed one is indistinguishable here.
+    // The account-deletion purge relies on exactly this. Any future caller passing a SERVER list
+    // must have had a SUCCEEDED fetch, since a failed one is indistinguishable here.
     expect(driveIdsToSweep(['a', 'b'], []).sort()).toEqual(['a', 'b'])
   })
 

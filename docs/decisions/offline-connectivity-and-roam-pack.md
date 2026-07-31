@@ -143,39 +143,52 @@ resumes) while rebuilding `clips` from the current pin set stranded files that n
 invisible to the size readout, reclaimable only by removing the whole pack. Now swept after each
 save.
 
-### Sweeping what is no longer the rider's — BUILT; sweeping on unreadability — still NOT
+### Downloads are DEVICE data, not account data — and only erasure deletes them
 
-Two objections were raised against a sweep, and they turned out to apply to **different triggers**.
-Founder call 2026-07-31 — *"switching accounts and getting data deleted is acceptable"* — resolved
-the one that blocked the safe trigger.
+An ownership sweep was built on 2026-07-31 (founder: *"switching accounts and getting data deleted is
+acceptable"*) and then **removed the same day**, on the founder's follow-up question: do downloads
+need to be associated with a user at all? Working through it, mostly no:
 
-**BUILT: sweep on ownership evidence.** Two paths, because one of them has to work offline.
+- **A drive's audio IS the shared roam corpus.** Drives reuse roam narrations pre-ordered along a
+  route, and `GET /roam` serves those same clips anonymously to anyone near Tahoe. "Another account
+  can hear these clips" is not a leak — they could hear them by driving there. R2 being private
+  gates the ACCESS PATH, not the content.
+- What is genuinely account-specific is the **route and label** — a few KB of JSON saying "someone
+  planned X → Y". Real but slight, and on a personal-phone product the two-accounts-one-device case
+  barely arises.
+- The roam pack was already device-scoped on the reasoning that its clips aren't user-owned. Making
+  drives user-scoped applied **two different rules to the same bytes**, and protected the metadata,
+  not the ~138 MB.
 
-- `sweepUnknownDownloads(keep)` deletes any download the caller's drive list doesn't mention — a
-  drive deleted on another device, or another account's. ⚠ Sound only because `GET /drives` has NO
-  limit and NO pagination (`drives.ts` selects every non-deleted row for the user), so absence really
-  is absence. ⚠ And only ever called after the fetch SUCCEEDED: the function cannot tell an empty
-  list from a failed one, so calling it from a catch would wipe every saved drive in a dead zone.
-  That guarantee lives at the call site (`app/index.tsx`), and is stated at both ends.
-- `reconcileDownloadOwner(userId)` records which account the downloads belong to and deletes them all
-  when it changes. This is what makes the accepted behaviour true OFFLINE, where no authoritative
-  list exists — without it, a rider signing in as somebody else in a dead zone would still see and
-  play the previous account's saved drives, because `listDownloadedDrives` reads every dir regardless
-  of owner. It runs BEFORE anything reads the disk, and never sweeps on first sight of an owner
-  (downloads predating the file have no recorded owner, and whoever holds the phone is their only
-  claimant). ⚠ It deliberately does NOT touch the roam pack: roam is the anonymous front door and its
-  clips aren't user-owned, so a pack is a property of the DEVICE — re-pulling ~138 MB on an account
-  switch would be real cost for no ownership reason.
+**Where it does matter: account DELETION, not switching.** `purgeUserData` erases the server; nothing
+erased the phone. Worse, the ownership sweep missed exactly that case — after `deleteUser` the rider
+is anonymous, so home takes its signed-out branch and `listDownloadedDrives` would hand the deleted
+account's drives to whoever picks the phone up next, with `reconcileDownloadOwner` never firing (no
+session to compare). Those copies were also permanently unreclaimable: the server rows are gone, so
+no future drive list could mention them. `deleteAllDriveDownloads` now runs in the delete-account
+flow, where erasure is the explicit intent and costs the rider nothing. The roam pack is left alone —
+anonymous device content.
 
-`driveIdsToSweep` (the set math both use, including the in-flight exclusion — sweeping a download
-mid-write would break a good copy) is pure and unit-tested, because it decides deletions.
+**Nothing else deletes automatically.** `sweepUnknownDownloads` (delete anything the server list
+doesn't mention) was dropped too, on the same asymmetry that governs the rest of this document: if it
+were ever wrong, the rider loses every saved drive silently, possibly right before driving into
+Tahoe — the exact failure the offline system exists to prevent — and all it bought was reclaimed disk
+from a drive deleted on another device. An automatic destructive action guarded only by a call-site
+invariant is not worth that. `repairDownload` (non-destructive) covers the unreadable case; the
+remaining leftovers are a disk-space leak, not a correctness bug.
 
-**NOT built: sweeping on unreadability.** The other objection stands and is unaffected by the
-founder call, because it is not about ownership: **a sweep converts a recoverable mistake into an
-unrecoverable one.** Ship a version bump without its migration → sweep at launch → hotfix the
-migration a day later → the data is already gone, on rider hardware, with no undo. The migration
-table is empty and there have been two bumps already. `repairDownload` covers that case
-non-destructively instead, which is the better answer regardless.
+⚠ The known gap that follows: a drive deleted on another device, or a previous account's, now sits
+on disk until the rider removes it — and if it is missing from their server list they cannot reach
+the per-drive Remove at all. A Settings "free up space" control is the honest fix, and is
+deliberately NOT built yet pending the direction below.
+
+### Open direction: downloads as REGION packs, not per-drive
+
+Founder, 2026-07-31. Most of this document is machinery for a per-drive download — versioned
+manifests, migrations, repair, orphan classes, ownership. A region-shaped store would dissolve
+much of it, and it matches the content model the architecture already states ("the NARRATION is the
+shared atom; ASSEMBLE per drive"). Today a rider holding both a roam pack and a drive stores the
+same clips twice, under two filing systems. Not yet specified — see `docs/ideas/`.
 
 ## Deliberate non-goals
 

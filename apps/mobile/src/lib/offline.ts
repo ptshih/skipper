@@ -568,73 +568,26 @@ function downloadedDriveIds(): string[] {
 }
 
 /**
- * Delete every download the caller's AUTHORITATIVE drive list doesn't mention — a drive deleted on
- * another device, or one belonging to somebody else. Returns how many were reclaimed.
+ * Delete EVERY drive download on this device. Returns how many were reclaimed.
  *
- * ⚠ `keepDriveIds` MUST come from a SUCCEEDED `GET /drives`. Calling this with a list from a failed
- * or offline fetch would delete every saved drive the rider owns, in a dead zone, which is the exact
- * opposite of this file's job. There is no way for this function to tell a real empty list from a
- * failed one, so the guarantee lives at the call site — see app/index.tsx. The route has no limit or
- * pagination (`drives.ts` selects every non-deleted row for the user), so absence really is absence.
+ * For account deletion, and only that. `purgeUserData` erases the server side, but the copies on the
+ * phone are the same rider's data and CLAUDE.md is unambiguous that erasure is immediate and total —
+ * and after `deleteUser` the rider is anonymous, so home takes its signed-out branch and
+ * `listDownloadedDrives` would hand the deleted account's drives to whoever picks the phone up next.
+ * Those copies are also permanently unreclaimable by any other path: the server rows are gone, so no
+ * future drive list can ever mention them for `sweepUnknownDownloads` to act on.
  *
- * An in-flight download is skipped: sweeping a drive mid-write would delete files under the
- * downloader as it verifies them.
+ * ⚠ Deliberately does NOT touch the roam pack. Roam is the open anonymous front door — `GET /roam`
+ * takes no session and its clips are the same shared narrations any anonymous rider hears — so a
+ * pack is a property of the DEVICE, not of an account. Wiping it would force a ~138 MB re-download
+ * for no ownership reason.
  */
-export function sweepUnknownDownloads(keepDriveIds: Iterable<string>): number {
-  const doomed = driveIdsToSweep(downloadedDriveIds(), keepDriveIds, inFlight.keys())
+export function deleteAllDriveDownloads(): number {
+  // Keep NOTHING. Still excludes an in-flight download, which would otherwise have its files pulled
+  // out from under the downloader mid-verify.
+  const doomed = driveIdsToSweep(downloadedDriveIds(), [], inFlight.keys())
   for (const driveId of doomed) deleteDriveDownload(driveId)
   return doomed.length
-}
-
-// Which account the downloads on this device belong to. A flat file beside the drives dir, mirroring
-// roam-history's precedent (a small JSON at the root of Paths.document, never Paths.cache).
-const OWNER_FILE = 'drives-owner.json'
-
-/**
- * Reconcile the downloads on this device against the account now signed in, deleting them all when
- * the owner has CHANGED. Returns how many were reclaimed.
- *
- * Founder call 2026-07-31: losing downloads on an account switch is acceptable. This is what makes
- * that true OFFLINE as well — `sweepUnknownDownloads` needs a live list, so without this a rider who
- * signs in as somebody else in a dead zone would still see (and play) the previous account's saved
- * drives until the next successful fetch. `listDownloadedDrives` reads every dir regardless of owner,
- * so the reconcile has to happen BEFORE anything reads the disk.
- *
- * Never sweeps on FIRST sight of an owner: downloads that predate this file have no recorded owner,
- * and the account holding the phone now is the best (and only) claim on them.
- *
- * ⚠ Deliberately does NOT touch the roam pack. Roam is the open anonymous front door — `GET /roam` is
- * called without a session and its clips aren't user-owned — so a pack is a property of the DEVICE,
- * not of whoever happens to be signed in. Re-pulling ~138 MB on an account switch would be a real
- * cost for no ownership reason.
- */
-export function reconcileDownloadOwner(userId: string): number {
-  const f = new File(Paths.document, OWNER_FILE)
-  let previous: string | null = null
-  try {
-    if (f.exists) {
-      const parsed = JSON.parse(f.textSync()) as { userId?: unknown }
-      if (typeof parsed?.userId === 'string') previous = parsed.userId
-    }
-  } catch {
-    previous = null // unreadable → treat as unknown, which never sweeps
-  }
-  let swept = 0
-  if (previous !== null && previous !== userId) {
-    // Keep NOTHING — the owner changed, so every download belongs to the previous account. Same
-    // in-flight exclusion as the list sweep.
-    const doomed = driveIdsToSweep(downloadedDriveIds(), [], inFlight.keys())
-    for (const driveId of doomed) deleteDriveDownload(driveId)
-    swept = doomed.length
-  }
-  if (previous !== userId) {
-    try {
-      f.write(JSON.stringify({ userId }))
-    } catch {
-      // Best-effort: a failed write just means we reconcile again next launch.
-    }
-  }
-  return swept
 }
 
 /** Remove a drive's offline download (manifest + clips). Idempotent. */

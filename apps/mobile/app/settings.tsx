@@ -6,6 +6,7 @@ import { errorMessage } from '@/lib/api'
 import { deleteUser, isAdmin, signOut, updateUser, useSession } from '@/lib/auth'
 import { useIsOffline } from '@/lib/connectivity'
 import { PRIVACY_POLICY_URL, TERMS_URL } from '@/lib/licenses'
+import { deleteAllDriveDownloads } from '@/lib/offline'
 import {
   deleteRoamPack,
   downloadRoamPack,
@@ -97,6 +98,14 @@ export default function SettingsScreen() {
         setDeleteError(res.error.message ?? voice.settings.deleteFailed)
         return
       }
+      // Erasure is immediate and TOTAL (CLAUDE.md), and the server half is only half. The saved
+      // drives on this phone are the same rider's data, and after this flow they are also
+      // unreachable by every other cleanup path: the rider is anonymous, so home takes its
+      // signed-out branch and `listDownloadedDrives` would hand the deleted account's drives to
+      // whoever picks the phone up next — and with the server rows gone, no future drive list can
+      // ever mention them for the ownership sweep to act on. (The roam pack stays: it is anonymous
+      // device content, not an account's.)
+      deleteAllDriveDownloads()
       // The account (and its sessions) are gone server-side, but the token still sits in this
       // device's SecureStore — clear it, or the app keeps believing it's signed in until some
       // later call 401s. Best-effort: the session it would revoke no longer exists.

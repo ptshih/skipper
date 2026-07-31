@@ -4,7 +4,7 @@ import { Stack, useFocusEffect, useRouter } from 'expo-router'
 import { errorMessage, listDrives, type DriveSummary } from '@/lib/api'
 import { useSession } from '@/lib/auth'
 import { useIsOffline } from '@/lib/connectivity'
-import { listDownloadedDrives, reconcileDownloadOwner, sweepUnknownDownloads } from '@/lib/offline'
+import { listDownloadedDrives } from '@/lib/offline'
 import { cleanPlaceName } from '@/lib/labels'
 import { space } from '@/theme/tokens'
 import { Badge, Button, Card, Divider, HeaderIconButton, RouteTrack, Screen, Skeleton, SkeletonGroup, Sunburst, Text, voice } from '@/ui'
@@ -60,21 +60,12 @@ export default function HomeScreen() {
       setLoading(false)
       return
     }
-    // Whose downloads are these? Reconcile BEFORE anything reads the disk — the dead-zone fallback
-    // below reads every saved drive regardless of owner, so a rider who signed in as somebody else
-    // out of signal would otherwise browse and play the previous account's drives. Losing downloads
-    // on an account switch is accepted (founder 2026-07-31); showing them to the wrong account is not.
-    reconcileDownloadOwner(session.user.id)
     try {
       const r = await listDrives()
       if (!isCurrent()) return
       setDrives(r.drives)
       setCredits(r.credits ?? null) // null for paid/uncapped (or an older server) → hint hidden
       setOffline(false)
-      // This list is AUTHORITATIVE (the route has no limit or pagination) and it SUCCEEDED, which is
-      // the only condition under which absence means deleted rather than unreachable. Reclaims a
-      // drive deleted on another device. ⚠ Never move this into the catch below.
-      sweepUnknownDownloads(r.drives.map((d) => d.driveId))
     } catch (e) {
       if (!isCurrent()) return
       // Offline-first: in a dead zone the list fetch fails — fall back to the drives saved on disk
