@@ -35,7 +35,7 @@ finding: a thin layer everywhere, depth nowhere.)
 
 - **vs. Just Ahead** — *"You don't select a specific tour or route. You start driving, and stories
   trigger automatically… works on a planned Yellowstone trip AND on a random Tuesday drive to the
-  grocery store."* That is roam; that is the [journey-layer](../ideas/journey-layer.md) continuum. But
+  grocery store."* That is roam; that is the [journey-layer](../designs/journey-layer.md) continuum. But
   it rests on *"25,000+ stories"* (a coverage number = the "nothing for miles" engine, frozen so also
   repeat-fatigue) and *"one subscription covers everything"* (the churning outlier). Tagline —
   *"Every place has a story. Now every story has a place"* — is points-first: story is the unit, place
@@ -56,7 +56,7 @@ finding: a thin layer everywhere, depth nowhere.)
    family car has *no* personal audio to defer to; the skipper *is* the shared show. That's the
    **guest-in-your-audio vs it-IS-the-audio** fork, and the carful lands on the second side. We've
    shipped one posture; the passenger/family mode wants the other (host/station). Open product
-   question, not a bug — flagged into [free-roam-mode.md](../ideas/free-roam-mode.md)'s audio thread.
+   question, not a bug — flagged into [free-roam-mode.md](../designs/free-roam-mode.md)'s audio thread.
 2. **The family case is the brutal test of our silence-default.** *"Hour three… 'I'm bored.'"*
    "Companionable silence" is fine for a solo commuter and *fatal* in a back seat. The honest family
    bar isn't "beat other tour apps" — it's **"beat an audiobook for THIS drive"** (the piece itself
@@ -134,5 +134,5 @@ honestly is the point; acquisition is the thing still to actually solve.
 - Cross-refs: [autio-deep-dive.md](autio-deep-dive.md) (product/business/plateau),
   [competitor-ux-studies.md](competitor-ux-studies.md) (dead-air 4-for-4, preview generosity,
   rented-vs-owned voice), [competitive-research.md](competitive-research.md) (Detour distribution
-  post-mortem), [../ideas/journey-layer.md](../ideas/journey-layer.md) (continuum + character-as-moat +
-  passenger mode), [../ideas/free-roam-mode.md](../ideas/free-roam-mode.md) (the audio-posture thread).
+  post-mortem), [../designs/journey-layer.md](../designs/journey-layer.md) (continuum + character-as-moat +
+  passenger mode), [../designs/free-roam-mode.md](../designs/free-roam-mode.md) (the audio-posture thread).

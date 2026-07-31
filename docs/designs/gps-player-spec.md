@@ -438,4 +438,4 @@ iOS accuracy=-1 gate; watch-reject onError; start() guards; AppState Settings re
 keep-awake pause/race). §3.3/§8/§1 above re-synced to the fixed code. Deferred low-sev: #9/#11/#13 (see §1).
 Related memory: `drive-simulator-and-triggering`, `preview-try-without-driving`,
 `mobile-workspace-isolated-linker`, `carplay-deferred-phone-first-mvp`. Sibling spec (different feature):
-`docs/specs/ask-the-skipper-spec.md`.
+`docs/designs/ask-the-skipper-spec.md`.

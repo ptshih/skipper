@@ -11,7 +11,7 @@
 > M1 gate: the phone-player *feel* + real GPS, neither of which `bun run check` can judge. Step
 > list is code-anchored to `apps/mobile` as of 2026-06-10 — re-verify anchors against the current
 > tree before trusting a line number. Pairs with `docs/guides/eas-setup.md` (how to build/install
-> the dev build) and `docs/specs/gps-player-spec.md` §6–§7 (the engineering accept bar this reports
+> the dev build) and `docs/designs/gps-player-spec.md` §6–§7 (the engineering accept bar this reports
 > against).
 
 > **Update (2026-07-30):** the offline download is **no longer `⋯`-only.** The placard now always shows
@@ -40,7 +40,7 @@ verified — they share the build, so do them together.
   failure mode you saw.
 - **§0** (build) carries a *prerequisite* — do the prereq before the checks it gates. (§6 no longer
   needs a code change: the pause+resume behaviour is already in code.)
-- Report pass/fail against the per-phase **Accept** bar in `docs/specs/gps-player-spec.md` §7.
+- Report pass/fail against the per-phase **Accept** bar in `docs/designs/gps-player-spec.md` §7.
 
 ---
 
@@ -433,7 +433,7 @@ Foreground When-In-Use only. Mode resolves to `live` via "Start the drive" (`ind
 - **Duck vs lock-screen Now Playing conflict (§6).** The riskiest assumption: `'duckOthers'` may
   break the skipper's lock-screen card (`setActiveForLockScreen` wants `doNotMix`). If §6 shows they
   don't coexist, the flip needs a different approach (e.g. revert + revisit) — capture the finding in
-  `docs/specs/gps-player-spec.md` (Phase 0).
+  `docs/designs/gps-player-spec.md` (Phase 0).
 - **No `UIBackgroundModes:['audio']` (§7).** Locked-screen audio during a live drive is unverified
   and may require this native entry + a rebuild. Decide before the build if you want to test it.
 

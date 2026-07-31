@@ -189,7 +189,7 @@ IAP**. `packages/studio` → a Cloud Run **job** `skipper-studio` (the corpus/ro
 discover-pois / enrich-pois / generate-narrations / resynth-narration / sweep-orphans / refetch-poi,
 one image, per-execution `args`). Both reuse the
 SAME `skipper-gh` connection + the `skipper` Artifact Registry repo — CD is two more
-triggers. Full design: `docs/specs/admin-ops-console-spec.md` (§7/§10). Code-complete on
+triggers. Full design: `docs/designs/admin-ops-console-spec.md` (§7/§10). Code-complete on
 branch `feat/admin-ops-v0`; the steps below are the first deploy.
 
 **Sequence:** merge to `main` → one-time setup → register triggers → first build → enable

@@ -1,7 +1,7 @@
 # TODO — engineering backlog
 
 Carry-forward **engineering** items (the near-term layer of the truth system — see
-`docs/README.md`; product ideas live in `docs/ideas/`, build-ready designs in `docs/specs/`).
+`docs/README.md`; product ideas live in `docs/designs/`, build-ready designs in `docs/designs/`).
 Each item has enough context to action without re-deriving the reasoning. **Delete items
 when done** — git history is the archive.
 
@@ -64,7 +64,7 @@ road** to trigger well, and make the whole thing **region-agnostic** so adding Y
 not hand-curation. Founder framing: this is *"a primary piece of logic unique to Skipper's
 intelligence… a moat"* — LLM spend is explicitly fine here.
 
-**Full design + all measurements: `docs/ideas/poi-legibility-layer.md` (2026-07-29, NOT greenlit).**
+**Full design + all measurements: `docs/designs/poi-legibility-layer.md` (2026-07-29, NOT greenlit).**
 Read it before touching any of this — two naive approaches are already disproven there (proximity
 clustering CHAINS: 400 m radius → a 1623 m/60-member blob; and proximity alone is semantically wrong:
 capping Reno's 84 NRHP entries just fragments them into arbitrary quintets). Headline measurement:
@@ -107,7 +107,7 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
       Replaced with a `poi_clusters` table (migrations 0036/0037) + `narrations.cluster_id` + a
       `narrations_subject_xor` CHECK; `pickSubject` prefers a real district entity, else the member the
       group is named after, else NULL (honest for 22 of 38). 38 clusters / 219 memberships migrated with
-      11 subjects reseated, no re-spend. Still INERT. See `docs/ideas/poi-legibility-layer.md` §5.
+      11 subjects reseated, no re-spend. Still INERT. See `docs/designs/poi-legibility-layer.md` §5.
 - [x] **3c. Treatment staleness — SOLVED by persisting the EVIDENCE (migration 0038).** `poi_clusters`
       now stores `highlights` + `dropped` (the model's actual lists). Fused generation reads those;
       `treatment` is a conclusion derived from `highlights.length` against the current clip band, so it
@@ -124,7 +124,7 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
       possible (Yosemite: 837 POIs, 0 narrated, 292 with facts).
 - [x] **3e. Region-agnosticism TESTED on Yosemite, $0.47** — 31 CLUSTER / **0 DISTRICT** / 5 SOLO with
       zero tuning. Zero districts is correct: a national park has no downtown. Subject resolution is
-      BETTER there (22/31 vs Tahoe's 13/36). See `docs/ideas/poi-legibility-layer.md` §4d.
+      BETTER there (22/31 vs Tahoe's 13/36). See `docs/designs/poi-legibility-layer.md` §4d.
 - [x] **3f. Containers can't seed — FIXED 2026-07-29.** Nothing already stored separated a container from
       a stop (`Sierra Nevada` and `Half Dome` share `kind='mountain'` with article lengths within 15%;
       `Carson Range` is a container with a SHORT article). The signal is EXTENT: new
@@ -132,7 +132,7 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
       group MEMBER but never a SEED. 11 barred corpus-wide (Sierra Nevada, Yosemite NP, Lake Tahoe,
       the wildernesses, plus `Diocese of Reno` and `Ferguson Fire` as bonus catches); settlements stay
       seedable. Verified: Half Dome now seeds its own group. ⚠ `Carson Range` claims no area so it is NOT
-      caught — worst offenders, not all. See `docs/ideas/poi-legibility-layer.md` §4e.
+      caught — worst offenders, not all. See `docs/designs/poi-legibility-layer.md` §4e.
 - [x] **3g. A container is NOT a stop, and should not even be DISCOVERED — done 2026-07-30 (founder call).**
       Evidence for the discovery filter: of 59 containers in the DB, **43 were enriched AND narrated (49
       min of paid TTS)**, incl. an 86-second telling about the Diocese of Reno. Containment is now one
@@ -143,7 +143,7 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
       `Glacier Point Road`. ⚠ Two preview-caught corrections: `protected area` removed from the type set
       (Wikidata types TRAILHEADS that way — it flagged Eagle Falls trailhead), and `isSettlement` now
       overrides containment at any size (Carson City at 407 km² is a DISTRICT subject, not a container).
-      See `docs/ideas/poi-legibility-layer.md` §4f.
+      See `docs/designs/poi-legibility-layer.md` §4f.
 - [x] **3h. Both regions re-applied + corpus PRUNED for real — 2026-07-30 (founder call).** Grouping now
       reflects the final rules: **67 clusters** (62 cluster / 5 district), 302 members, 36 with a real
       subject, and all 67 carry `highlights`. Then `prune-corpus --delete --apply` HARD-DELETED the flagged
@@ -165,7 +165,7 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
       which is noise not a queue; it now flags the shape that actually flip-flopped across runs (≤2
       members AND <0.85).
 - [ ] **4. Fused generation — IN BUILD. Step 1 of 7 DONE; the build order is §9 of the spec.**
-      `docs/specs/fused-cluster-generation-spec.md`. Steps 1-3 spend nothing; **step 4 is the commitment
+      `docs/designs/fused-cluster-generation-spec.md`. Steps 1-3 spend nothing; **step 4 is the commitment
       point** (audio in R2) and needs an explicit founder go.
       ⚠ Two halves must ship together: generation, AND lifting the `pois` inner-join on every read path —
       without the second, phase 4 buys audio nobody can hear. Generate from `highlights`, never raw
@@ -632,7 +632,7 @@ History`), which is the entire reason it was written that way — it survives ne
 ## LLM answer-discovery (GEO/AEO) — research DONE, the cheap moves SHIPPED
 
 The research pass and the two cheap builds landed 2026-07-28 (`c286f29`, `a9f6474`). Verdict, evidence
-and per-claim source-quality labels live in `docs/ideas/llm-discovery-marketing.md` — read that, not a
+and per-claim source-quality labels live in `docs/designs/llm-discovery-marketing.md` — read that, not a
 summary of it.
 
 The short version, so nobody re-opens the expensive half: the founder premise was **half right**. The
@@ -730,7 +730,7 @@ The pre-permission **explainer** shipped 2026-06-13 in front of the *When-In-Use
 (`docs/decisions/location-permission-priming.md`). The **background-updates** escalation — screen-off /
 phone-in-pocket triggering (foreground `watchPositionAsync` dies on lock, so the drive holds the screen
 awake via `expo-keep-awake`; if it ever locks, audio plays on but GPS triggering silently stops) — is now
-a **build-ready spec: `docs/specs/background-location-spec.md`**.
+a **build-ready spec: `docs/designs/background-location-spec.md`**.
 
 - [ ] Build it — but ONLY after a real-device drive shows foreground + keep-awake triggering is
       insufficient locked/pocketed (the founder's empirical gate). ⚠ This path is **When-In-Use ONLY, NOT
@@ -748,7 +748,7 @@ a **build-ready spec: `docs/specs/background-location-spec.md`**.
 > (e.g. suppressing a form of clip "on quiet") — there's ONE fixed cadence now. Cadence variety, if ever wanted,
 > returns as auto-adaptation, never a user notch.
 
-Two items locked from the 2026-06-11 brainstorm (full capture: `docs/ideas/free-roam-mode.md`
+Two items locked from the 2026-06-11 brainstorm (full capture: `docs/designs/free-roam-mode.md`
 §Alpha learnings). Order within the pass is free; both are founder-facing on his daily drive.
 
 - ~~**Waves: narrate the scenic tier.**~~ **CUT 2026-07-26 (founder) — backed out of the tree before
@@ -967,7 +967,7 @@ device. Nothing in the app deletes downloads automatically now except that one e
       most of it and matches what the architecture already says ("the NARRATION is the shared atom;
       ASSEMBLE per drive"). Today a rider holding a roam pack AND a drive stores the same clips
       twice under two filing systems. **Design is SETTLED** in
-      `docs/ideas/offline-region-packs.md` — region pack + per-drive top-up (no new endpoint, because
+      `docs/designs/offline-region-packs.md` — region pack + per-drive top-up (no new endpoint, because
       the top-up is structurally required either way: only a drive's OWN manifest is authoritative for
       a FROZEN selection), region as the only rider-facing action, and sync that auto-applies only
       off-session, on wifi, under a size cap. ⚠ Build NOT greenlit (founder 2026-07-31). Prerequisite

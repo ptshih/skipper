@@ -1,7 +1,7 @@
 # Free-roam mode — the skipper rides shotgun
 
 > **Status:** ALPHA BUILT 2026-06-10 — founder greenlit a same-day prototype; the shipped v0 (and
-> its deliberate cuts) is recorded in `docs/specs/free-roam-alpha-spec.md`. THIS doc remains the
+> its deliberate cuts) is recorded in `docs/designs/free-roam-alpha-spec.md`. THIS doc remains the
 > full product vision (second product, tours primary; the grammar/logbook/monetization layers are
 > still future). Originally captured + fleshed out 2026-06-10 as the buildable-now rung missing
 > from [journey-layer.md](journey-layer.md)'s coverage spectrum. 2026-06-11: post-field-drive
@@ -32,7 +32,7 @@ second mode beside THE DRIVES — never a separate product surface. (Working mod
   persona's omnipresence *is* the running gag — the tour guide who just lives in your car now.
 - It turns Skipper from an **occasions** product (a tour is a planned outing) into a **companion**
   (every Tahoe drive is a touchpoint). Retention between tours, in character.
-- Natural habitat for `docs/specs/ask-the-skipper-spec.md` — no script to interrupt; "what's that?"
+- Natural habitat for `docs/designs/ask-the-skipper-spec.md` — no script to interrupt; "what's that?"
   grounded on whatever's nearby.
 - The cross-sell is in character: *"y'know, I do a whole show about this lake."* Roam funnels tours;
   tours unlock roam (see Monetization).
@@ -66,8 +66,8 @@ Not every POI deserves a monologue; an ambient companion must read the room. Thr
 - **The story** (~45–75s): the full encounter for POIs with real fact depth — self-contained, no
   callbacks, no arc assumed.
 - **The B-side** (opt-in): "tell me more" on the card (or, later, asking him —
-  `docs/specs/ask-the-skipper-spec.md`) plays the deeper cut. This is
-  `docs/specs/tell-me-more-spec.md`'s machinery with roam as a second customer; opt-in depth is how
+  `docs/designs/ask-the-skipper-spec.md`) plays the deeper cut. This is
+  `docs/designs/tell-me-more-spec.md`'s machinery with roam as a second customer; opt-in depth is how
   roam respects the commute while still rewarding curiosity.
 - **Revisit preambles:** a tiny placeless pool that gates a replay after cooldown — *"stop me if
   you've heard this one—"*. Dirt cheap (persona-only, region-agnostic), and it converts the
@@ -130,7 +130,7 @@ repeat-fatigue problem builds the variant machinery the later rungs want anyway.
    streaming-first) we already don't copy — continuous-foreground trigger + offline packs carry over.
 4. **Dead-air honesty:** in a tour, silence is a pacing failure we fight; in roam, silence is the
    DEFAULT — owned by the ambient contract (above), enforced by the density bar (below);
-   `docs/specs/downtime-callouts-spec.md` beats (placeless, time-based) can soften long quiets later.
+   `docs/designs/downtime-callouts-spec.md` beats (placeless, time-based) can soften long quiets later.
 
 ## The corpus, honestly — and the flywheel
 
@@ -156,7 +156,7 @@ first.** (Aggregate telemetry only — the toy lens has no appetite for surveill
   self-contained, no callbacks/arc, **no baked laterality** (no route → approach side unknowable;
   same rule family as break-stops' no-volatile-data), no volatile data; region-wide cluster-merge
   for co-located POIs (the Emerald Bay bay+castle+island move, applied per-region). Runs as another
-  job type on the ops substrate (`docs/specs/admin-ops-console-spec.md`).
+  job type on the ops substrate (`docs/designs/admin-ops-console-spec.md`).
 - **Rail-less trigger mode in `@skipper/engine`:** regional proximity index + speed-adaptive
   lead + heading-toward gate + per-POI cooldown + min-gap pacing/frequency governor + cluster
   suppression + wave/story priority. THE real engineering — tractable because the failure asymmetry
@@ -351,6 +351,6 @@ failing score).
 - Slots into [journey-layer.md](journey-layer.md) (rung 1.5 of the coverage spectrum); inverts the
   Autio IGNORE verdict by scope (`docs/research/competitor-ux-studies.md`); carve-out pending on
   `docs/decisions/tour-data-model-zero-reuse.md` when built; shares machinery with
-  `docs/specs/tell-me-more-spec.md`, `docs/specs/downtime-callouts-spec.md`,
-  `docs/specs/ask-the-skipper-spec.md`, [passport-logbook.md](passport-logbook.md),
-  `docs/specs/admin-ops-console-spec.md` (roam batch = another ops job type).
+  `docs/designs/tell-me-more-spec.md`, `docs/designs/downtime-callouts-spec.md`,
+  `docs/designs/ask-the-skipper-spec.md`, [passport-logbook.md](passport-logbook.md),
+  `docs/designs/admin-ops-console-spec.md` (roam batch = another ops job type).

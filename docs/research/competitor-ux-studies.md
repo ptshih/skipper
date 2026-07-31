@@ -14,7 +14,7 @@ Every direct comp's most UX-relevant complaint is the **silence/gap between cont
 - **Autio:** the points-library produces *"5 stories in a 3-hour radius"* / "nothing for miles" in sparse areas.
 - (VoiceMap is walking-first, so gaps are shorter — but its thin tours draw *"limited insights compared to Google Maps."*)
 
-This is the single most validated finding in the whole competitive set. **Skipper attacks it from three angles no comp combines:** between-stop **music** (`driveMusic` — kills the "is it broken?" anxiety GuideAlong suffers), the **downtime-callouts** feature (fills the gap with *content* — `docs/specs/downtime-callouts-spec.md`), and **curated routes** (no Autio-style "nothing for miles" from a coverage-as-moat points model). Prioritize accordingly: callouts + music aren't polish, they're aimed at the category's #1 reviewed wound.
+This is the single most validated finding in the whole competitive set. **Skipper attacks it from three angles no comp combines:** between-stop **music** (`driveMusic` — kills the "is it broken?" anxiety GuideAlong suffers), the **downtime-callouts** feature (fills the gap with *content* — `docs/designs/downtime-callouts-spec.md`), and **curated routes** (no Autio-style "nothing for miles" from a coverage-as-moat points model). Prioritize accordingly: callouts + music aren't polish, they're aimed at the category's #1 reviewed wound.
 
 ## Five patterns across all four comps
 

@@ -4,7 +4,7 @@
 // so the whole trigger→play→duck→lock-screen loop is couch-testable on the iOS Simulator;
 // and the live `liveSource()` / `liveRoamSource()` (expo-location `watchPositionAsync` →
 // GpsFix), which implement the SAME `GpsFixSource` shape — the hooks swap which one they
-// subscribe and nothing else changes. See docs/specs/gps-player-spec.md §3.4 / §7.
+// subscribe and nothing else changes. See docs/designs/gps-player-spec.md §3.4 / §7.
 import * as Location from 'expo-location'
 import { cumulativeMeters, generateDrive, haversineMeters, type GpsFix, type LngLat } from '@skipper/engine'
 import {

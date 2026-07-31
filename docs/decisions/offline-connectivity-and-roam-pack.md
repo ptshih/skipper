@@ -188,7 +188,7 @@ Founder, 2026-07-31. Most of this document is machinery for a per-drive download
 manifests, migrations, repair, orphan classes, ownership. A region-shaped store would dissolve
 much of it, and it matches the content model the architecture already states ("the NARRATION is the
 shared atom; ASSEMBLE per drive"). Today a rider holding both a roam pack and a drive stores the
-same clips twice, under two filing systems. Not yet specified — see `docs/ideas/`.
+same clips twice, under two filing systems. Not yet specified — see `docs/designs/`.
 
 ## Deliberate non-goals
 

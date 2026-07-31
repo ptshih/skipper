@@ -9,7 +9,7 @@
 > shipped surface, and the committed seed-spec chain was deleted. Current truth: the live schema
 > `packages/db/src/schema.ts` and the live routes in `apps/admin/server/index.ts`; the deferred-authoring
 > posture is `docs/decisions/tour-data-model-zero-reuse.md`. Drifted claims are flagged inline below.
-> Greenlit 2026-06-10 (promoted from the `docs/ideas/admin-ops-console.md` brainstorm,
+> Greenlit 2026-06-10 (promoted from the `docs/designs/admin-ops-console.md` brainstorm,
 > which this supersedes). **Reviewed under a microscope + hardened 2026-06-10:** GCP claims
 > re-verified against current docs, internal contracts spot-checked against the code, and the work
 > **sequenced v0 (the Job = cloud execution) → v1 (the admin app = UX/monitoring)** — see §1, §11.

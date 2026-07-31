@@ -3,7 +3,7 @@
 // FREE position puck at the rider's real GPS and the field of nearby story-pins from the
 // manifest, on the same tinted Trailhead-89 basemap. It is NOT the default surface — the
 // RoamMotif stays the eyes-on-road idle; the map is an opt-in glance (a stop, a passenger,
-// curiosity) and the seed of the logbook "pin-map filling in as you roam" (docs/ideas/
+// curiosity) and the seed of the logbook "pin-map filling in as you roam" (docs/designs/
 // free-roam-mode.md). The heard/unheard fill-in (heardPoiIds) lands with the persistent
 // encounter history (pass-2); v1 ships every pin hollow ("a story here, not yet heard").
 //

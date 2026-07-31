@@ -47,7 +47,7 @@ Not built. Enables screen-off / phone-in-pocket triggering (today foreground loc
 lock, so the drive keeps the screen awake via `expo-keep-awake`; if the screen ever locks, audio
 keeps playing but GPS triggering silently stops). Native + review work, hence its own pass.
 **Build-ready detail:
-[`../specs/background-location-spec.md`](../specs/background-location-spec.md)**, empirically gated
+[`../designs/background-location-spec.md`](../designs/background-location-spec.md)**, empirically gated
 behind a real-device drive (build only if foreground + `expo-keep-awake` triggering fails
 locked/pocketed). Shape: flip the `expo-location` plugin's `isIosBackgroundLocationEnabled: true`
 (adds `UIBackgroundModes += location`), swap the foreground `watchPositionAsync` for a

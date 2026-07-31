@@ -114,7 +114,7 @@ promoted.
   **no answer for at all** (repeat handling: unaddressed; offline: listen-later only).
 - The Chattiness knob and explicit-session model are already ahead of the incumbent's
   zoom-as-density and notification-spam posture.
-- Category read for [roam-first-region-expansion](../ideas/roam-first-region-expansion.md):
+- Category read for [roam-first-region-expansion](../designs/roam-first-region-expansion.md):
   ambient location audio sustains a real niche business six years in — but distribution, not
   product, is the binding constraint (Detour + Autio agree). A cheap roam region is only
   cheap to BUILD; telling anyone remains the expensive part.

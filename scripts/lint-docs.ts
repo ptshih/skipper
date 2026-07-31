@@ -8,7 +8,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
 const ROOT = resolve(import.meta.dir, '..')
-const KINDS = ['decisions', 'specs', 'ideas', 'research', 'guides']
+const KINDS = ['decisions', 'designs', 'research', 'guides']
 const STATUS_WINDOW_LINES = 12
 const CLAUDE_MD_CEILING = 320
 
@@ -76,7 +76,7 @@ for (const rel of files) {
 const claudeLines = readFileSync(join(ROOT, 'CLAUDE.md'), 'utf8').split('\n').length
 if (claudeLines > CLAUDE_MD_CEILING)
   errors.push(
-    `CLAUDE.md is ${claudeLines} lines (ceiling ${CLAUDE_MD_CEILING}) — it's operating truth only: move essays to docs/ideas|specs/, ` +
+    `CLAUDE.md is ${claudeLines} lines (ceiling ${CLAUDE_MD_CEILING}) — it's operating truth only: move essays to docs/designs/, ` +
       `superseded text to docs/decisions/. (Or consciously raise CLAUDE_MD_CEILING in scripts/lint-docs.ts.)`,
   )
 

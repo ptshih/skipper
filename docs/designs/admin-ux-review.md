@@ -46,7 +46,7 @@ line/symbol anchors were true at capture and will drift.
 
 All ON-DEMAND (no generation-gate change → the written "automated groundedness gate — human ear
 instead" deferral is untouched; inline auto-gating on every generate stays deferred). Pairs with
-`docs/ideas/eval-panel-rewire.md`.
+`docs/designs/eval-panel-rewire.md`.
 
 - ✅ **"Re-score corpus" (offline_audit) keystone** (`0af9c23`). `packages/studio/src/audit-corpus.ts`
   scores EXISTING `narrations.script` (grounding via Opus; tts + cross-clip diversity free) with NO

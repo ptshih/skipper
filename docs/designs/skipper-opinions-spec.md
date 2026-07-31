@@ -1,7 +1,7 @@
 # The skipper's opinions ("the world off the rails") — build spec / handoff
 
 > **Status: SPEC ONLY — nothing built.** Future feature, gated behind the proven phone player
-> like the rest of the charm roadmap. **Builds ON `docs/specs/downtime-callouts-spec.md` — read that
+> like the rest of the charm roadmap. **Builds ON `docs/designs/downtime-callouts-spec.md` — read that
 > first**; this reuses its delivery system and gives its deferred Phase 2 (grounded spatial
 > callouts) a content theory + discovery scope. Decided in a design session 2026-06-09. **DEFERRED to
 > v3/guided-tours** — it rides the callout system, whose placeless storage (the `asides` table) was
@@ -23,7 +23,7 @@
 > and was banned everywhere it could appear. Whoever builds opinions should read that entry first and
 > decide where taste legitimately LIVES before adding another persona-owned pool.
 > **Both delivery tiers this feature needs are now DEFERRED.** This feature rides the callout system
-> (`docs/specs/downtime-callouts-spec.md`): its **taste tier** = v1 placeless callouts, and its
+> (`docs/designs/downtime-callouts-spec.md`): its **taste tier** = v1 placeless callouts, and its
 > **grounded tier** = the deferred Phase-2 positioned callouts. But callouts themselves had no v2
 > storage — the placeless `asides` table that would have held them was **DELETED in migration 0019**
 > ([geometry-first-regions](../decisions/geometry-first-regions.md)), and v2 keeps no placeless-content
@@ -228,7 +228,7 @@ the **schema widening** for positioned/attributed callouts + the **second geofen
 ## 11. Provenance
 
 Designed 2026-06-09. Builds on and cites for re-check:
-- `docs/specs/downtime-callouts-spec.md` — the delivery system (scheduler, duck-overlay, sentinel seqs,
+- `docs/designs/downtime-callouts-spec.md` — the delivery system (scheduler, duck-overlay, sentinel seqs,
   a v3 callouts table) and its deferred Phase 2 (grounded spatial callouts) that this concretizes. NOTE:
   that whole system is itself DEFERRED to v3 — its placeless `asides` storage was deleted in 0019.
 - `packages/studio/src/pipeline/macrostrat.ts` — coordinate-keyed CC-BY geology + the persona-prompt

@@ -2,9 +2,9 @@
 
 > **Status:** SPEC ONLY — unbuilt. Generation-only feature; post-MVP, gated behind the proven phone
 > player. Decided 2026-06-09. **The keystone** of the charm layer: it organizes the through-line
-> (`docs/specs/downtime-callouts-spec.md` is the push side; the through-line is its pull cousin) and
-> the skipper's opinions (`docs/specs/skipper-opinions-spec.md`), and it supplies the missing
-> *content* for the drive-complete payoff (`docs/ideas/drive-complete-moment.md`). **The thesis's
+> (`docs/designs/downtime-callouts-spec.md` is the push side; the through-line is its pull cousin) and
+> the skipper's opinions (`docs/designs/skipper-opinions-spec.md`), and it supplies the missing
+> *content* for the drive-complete payoff (`docs/designs/drive-complete-moment.md`). **The thesis's
 > *plant → land* arc is DEFERRED to v3** — it rides intro/outro frames whose storage was deleted (see
 > the banner); only the `drives.thesis` input + light stop-nods survive onto v2.
 
@@ -53,15 +53,15 @@ difference between a guide who *knows facts* and one who has a *take on the plac
 being stop #4 and becomes *Exhibit C*.
 
 The insight that elevates it above "nice framing": **it's exactly what the drive-complete payoff pays
-off.** That payoff beat (`docs/ideas/drive-complete-moment.md`) is roadmapped as motion + sound, but
+off.** That payoff beat (`docs/designs/drive-complete-moment.md`) is roadmapped as motion + sound, but
 it has *no content* — it's an emotional landing with nothing specific to say. A thesis is its
 destination: *"Forty miles, ten stops, and like I told you at the start — it was always about the
 water."* It lands because it was *planted.*
 
 And it's the organizing idea the other charm features were circling:
-- **The through-line** (`docs/specs/downtime-callouts-spec.md` and the pull-ladder family) is *how*
+- **The through-line** (`docs/designs/downtime-callouts-spec.md` and the pull-ladder family) is *how*
   the thesis recurs — callbacks become "there's the water again," not arbitrary "remember the island?"
-- **The skipper's opinions/taste** (`docs/specs/skipper-opinions-spec.md`) are the *voice* of the
+- **The skipper's opinions/taste** (`docs/designs/skipper-opinions-spec.md`) are the *voice* of the
   thesis — his geology obsession was really just *one possible thesis*. "Cultivate the granite thread"
   generalizes to "cultivate the drive's thesis."
 - **The payoff** is *where it lands.*
@@ -88,7 +88,7 @@ The skipper can *frame* the drive however his persona likes — but a thesis tha
 the facts don't support ("the water *caused* the gold rush") is a hallucination wearing a frame. So:
 - The thesis must be **derived from the actual collective facts** — "what do these real wells
   *genuinely* share?" — not imposed top-down.
-- **Exhaustion-gated**, exactly like the deeper cut (`docs/specs/tell-me-more-spec.md`): if no honest
+- **Exhaustion-gated**, exactly like the deeper cut (`docs/designs/tell-me-more-spec.md`): if no honest
   thesis emerges, **return none** — a warm, theme-less intro/outro is correct, and *better* than a
   forced one. Not every drive has a thesis, and faking one is the worst outcome.
 - A **thesis judge** (reuse the validation-harness judge pattern) gates it: *does the thesis survive
@@ -166,7 +166,7 @@ rides the v3 frames + the v2 stops, which already carry audio). Same weight clas
   before it's a drumbeat — ear-tune.)*
 - **One thesis per tour, or per region?** → per *tour* (each route coheres around its own idea), but a
   region's skipper may have a recurring *meta*-lens (his obsession) the per-tour theses rhyme with —
-  that's the §1 link to `docs/specs/skipper-opinions-spec.md`, deferred.
+  that's the §1 link to `docs/designs/skipper-opinions-spec.md`, deferred.
 
 ## 10. Edge cases
 
@@ -179,10 +179,10 @@ rides the v3 frames + the v2 stops, which already carry audio). Same weight clas
 ## 11. Provenance
 
 - Designed 2026-06-09 as the keystone unifying the charm layer.
-- Lands the payoff: `docs/ideas/drive-complete-moment.md`. Organizes: the through-line
-  (`docs/specs/downtime-callouts-spec.md` + the pull ladder) and `docs/specs/skipper-opinions-spec.md`
+- Lands the payoff: `docs/designs/drive-complete-moment.md`. Organizes: the through-line
+  (`docs/designs/downtime-callouts-spec.md` + the pull ladder) and `docs/designs/skipper-opinions-spec.md`
   (the thesis is taste at drive-altitude). Borrows the **exhaustion gate** from
-  `docs/specs/tell-me-more-spec.md`.
+  `docs/designs/tell-me-more-spec.md`.
 - Generation seams: `packages/studio/src/pipeline/narrate.ts` (intro/outro frame gen — **v3-deferred**,
   since the `asides` frame storage was deleted in 0019 — + the proposal step + within-tour
   conditioning), `packages/studio/src/persona/` (`PersonaDef` — the voice), `packages/db/src/schema.ts`

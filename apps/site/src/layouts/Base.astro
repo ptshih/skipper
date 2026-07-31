@@ -61,7 +61,7 @@ const {
 // vendor-promised ranking lift: "Skipper" collides with a pile of boating apps, and this is the
 // cheapest way to assert which entity this domain is about. Google reads it for ordinary rich
 // results; whether any LLM reads it is undocumented either way, so the justification is simply that
-// it's CORRECT metadata about a real product. See docs/ideas/llm-discovery-marketing.md §5.2.
+// it's CORRECT metadata about a real product. See docs/designs/llm-discovery-marketing.md §5.2.
 //
 // ⚠ NEVER add `aggregateRating` or `review` here. There are zero users, so any value would be
 // fabricated — a Google spam-policy violation that would also torch the one asset (honesty) the

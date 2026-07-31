@@ -60,7 +60,7 @@ and addressed to YOUR drive, not a static unlock.
   "I noticed" stamps; (2) callbacks / running gags across a single drive (a
   per-tour continuity layer threading the per-stop clips). Both are
   companions/prerequisites to the charm here. (The "skipper's opinions" and
-  "downtime callouts" specs in `docs/specs/` have since given thread (1) a partial home.)
+  "downtime callouts" specs in `docs/designs/` have since given thread (1) a partial home.)
 - **Sequencing:** post-MVP, gated behind the proven phone player like the rest.
   Stamps + single-skipper logbook work pre-breadth; the "cast of skippers"
   collection only blooms at M4 (multiple regions). Pairs with the Stripe/IAP work

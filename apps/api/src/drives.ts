@@ -84,7 +84,7 @@ function toClipForm(form: string): DriveClipForm {
  *  runtime Places call and NO geocode hop — endpoints are grounded by construction. Region membership
  *  is point-in-bbox (geometry-first; `places` carries no region_id). `kind` is the humanized Google
  *  `primary_type` (display only); `featured` floats the popular subset to the top of the picker.
- *  (SUPERSEDES the interim POI-corpus join — see docs/specs/places-endpoints-spec.md.) */
+ *  (SUPERSEDES the interim POI-corpus join — see docs/designs/places-endpoints-spec.md.) */
 async function loadRegionAnchors(bbox: string | null): Promise<RegionAnchor[]> {
   const p = (bbox ?? '').split(',').map(Number)
   if (p.length !== 4 || p.some((n) => !Number.isFinite(n))) return []

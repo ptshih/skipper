@@ -9,7 +9,7 @@
 > branch in the player, and `voice.cta.preview` / `voice.player.previewHint` / the orphaned rest-stop copy.
 > `useDrive`'s mode union is now `'sim' | 'live'`. Supersedes the "post-create → couch preview" handoff in
 > [create-a-drive-architecture.md](./create-a-drive-architecture.md) and the three-clock model in
-> [gps-player-spec.md](../specs/gps-player-spec.md). Founder-directed; discrete-only was chosen over keeping a
+> [gps-player-spec.md](../designs/gps-player-spec.md). Founder-directed; discrete-only was chosen over keeping a
 > continuous "play all" (the tradeoffs were surfaced and accepted). Not committed/pushed as of writing.
 
 ## Why

@@ -10,7 +10,7 @@
 // next GPS trigger — it never advances by a clip ending. (The old map-less couch "simulated
 // drive" — a compressed segment-timeline PREVIEW clock — was CUT; auditioning a drive is now
 // the native per-stop mini-preview on the drive-detail page, so this hook is just sim + live.
-// See docs/decisions/detail-page-mini-preview.md.) See docs/specs/gps-player-spec.md §3.5.
+// See docs/decisions/detail-page-mini-preview.md.) See docs/designs/gps-player-spec.md §3.5.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Animated, AppState, Image, Linking } from 'react-native'
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake'

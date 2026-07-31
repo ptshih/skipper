@@ -1,7 +1,7 @@
 # Free-roam ALPHA — what v0 actually is
 
 > **Status:** BUILT 2026-06-10 (same-day founder greenlight off
-> [free-roam-mode.md](../ideas/free-roam-mode.md)) — shipped as a founder-only TestFlight alpha.
+> [free-roam-mode.md](free-roam-mode.md)) — shipped as a founder-only TestFlight alpha.
 > This spec records what the alpha IS (including its deliberate cuts) so the next pass knows
 > what's real vs. deferred. The idea doc keeps the full product vision.
 

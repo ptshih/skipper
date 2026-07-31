@@ -241,7 +241,7 @@ Concretizes §4.5's "on-device STT/LLM fallback is explicitly later-phase." Moti
 
 **Shape: a degradation tier the persona absorbs.** Online → cloud Sonnet + Algenib (the §4 path, best). Dead zone → on-device 3B + (voice TBD), degraded but *present*. The charm-toy advantage a productivity app lacks: the persona **absorbs** the degradation — *"signal's gone, so I'm running on my own steam out here — only what's in the logbook, and I'm a step slow."* Degradation becomes character (cf. §3.6 — every failure is the Skipper in character).
 
-**Where it sits on the pull ladder** (the family of dead-air answers; see `docs/specs/tell-me-more-spec.md`):
+**Where it sits on the pull ladder** (the family of dead-air answers; see `docs/designs/tell-me-more-spec.md`):
 - **tell-me-more** — pre-canned deeper-cut B-side, **zero LLM**, offline. The floor.
 - **on-device Ask** (this tier) — live, answers *your* question, offline, *degraded*. The middle.
 - **cloud Ask** (§4) — live, responsive, online, best. The ceiling.
@@ -249,7 +249,7 @@ Concretizes §4.5's "on-device STT/LLM fallback is explicitly later-phase." Moti
 The on-device LLM is precisely what makes the *offline* tier *responsive* rather than pre-canned.
 
 **Prerequisites & caveats:**
-- **Bundle the fact wells offline.** On-device RAG needs the `pois.facts.extract` wells in the offline download (today it ships clips, not source facts). This is *this tier's own* payload — tell-me-more bundles pre-baked *audio*, not raw facts — but the two share the offline-manifest-extension *pattern* and the pull UX, so **build tell-me-more first** to prove both with zero LLM risk (see `docs/specs/tell-me-more-spec.md` §6).
+- **Bundle the fact wells offline.** On-device RAG needs the `pois.facts.extract` wells in the offline download (today it ships clips, not source facts). This is *this tier's own* payload — tell-me-more bundles pre-baked *audio*, not raw facts — but the two share the offline-manifest-extension *pattern* and the pull UX, so **build tell-me-more first** to prove both with zero LLM risk (see `docs/designs/tell-me-more-spec.md` §6).
 - **Device-gated:** Apple-Intelligence phones + iOS 26 only → older devices get no on-device tier (fall back to cloud, or to tell-me-more's pre-canned content).
 - **3B wit:** extraction it can do; the Skipper's *deadpan comedy* is harder — charm may flatten offline (lean on the persona lampshade).
 - **Latency:** on-device generation is slower; short grounded answers are probably acceptable for conversational feel, but measure on-device before committing.

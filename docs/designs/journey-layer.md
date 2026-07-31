@@ -12,7 +12,7 @@ the experience, and it deserves a storyteller.** The long bet is that Skipper be
 entertainment + meaning layer of the journey itself** — and that the autonomous-vehicle age is simply
 *when the world finally has the attention to agree.*
 
-This is a *mission*, not a feature. Everything in `docs/specs/` is the larval stage of it.
+This is a *mission*, not a feature. Everything in `docs/designs/` is the larval stage of it.
 
 ## The two halves — demand and supply of one machine
 
@@ -65,8 +65,8 @@ Any-road-anywhere stresses three principles. Each survives:
   given, not model-derived *or* hand-curated. The concern dissolves: the world picks the route.
 - **Grounding (the #1 invariant).** This is where the charm machinery becomes the **load-bearing
   wall.** On an un-curated road, coverage is brutally uneven — grounded story stops light up
-  *wherever* real facts exist, and the persona-only layers (`docs/specs/downtime-callouts-spec.md`,
-  `docs/specs/skipper-opinions-spec.md`, the road-memory idea, the drive thesis) carry *everything
+  *wherever* real facts exist, and the persona-only layers (`docs/designs/downtime-callouts-spec.md`,
+  `docs/designs/skipper-opinions-spec.md`, the road-memory idea, the drive thesis) carry *everything
   between.* "Grounded where possible, persona-only everywhere else, silence over hallucination" is
   *precisely* the architecture that makes an un-curated road survivable. The dead-air work isn't a
   nicety here — it's the wall.
@@ -78,7 +78,7 @@ Any-road-anywhere stresses three principles. Each survives:
 
 1. **Curated corridors** (today) — hand-picked, batch-generated, maximal charm. The *premium* tier.
 2. **Per-trip bespoke** (the sweet spot to aim at) — the rider gives their *actual route* (A→B from
-   nav); Skipper scans the path, paces the POIs, *derives a thesis* (`docs/specs/drive-thesis-spec.md`),
+   nav); Skipper scans the path, paces the POIs, *derives a thesis* (`docs/designs/drive-thesis-spec.md`),
    and generates a bespoke drive for **that** route in seconds-to-minutes, then caches it. Keeps most
    of the curation-charm (a known route can still be paced + themed) while achieving "any road."
 3. **Truly live / wandering** (hardest) — no known destination, narrate-as-you-go. Maximal coverage,
@@ -96,8 +96,8 @@ real route.**
 ## The engine
 
 "Generated live" inverts the offline-batch generation architecture (the same inversion
-`docs/specs/ask-the-skipper-spec.md` needs for live Q&A). And offline / dead-zone live generation
-*requires* an **on-device LLM** — so Apple's Foundation Models (`docs/specs/ask-the-skipper-spec.md`
+`docs/designs/ask-the-skipper-spec.md` needs for live Q&A). And offline / dead-zone live generation
+*requires* an **on-device LLM** — so Apple's Foundation Models (`docs/designs/ask-the-skipper-spec.md`
 §4.6) aren't just Ask's dead-zone fallback; they're the **generation engine for offline any-road.**
 
 ## The bigger surface, and the endgame
@@ -115,7 +115,7 @@ real route.**
 > **AV-future** (demand) + **any-road-anywhere** (supply) + **the charm machinery** (what keeps an
 > un-curated road charming) + **on-device LLM** (the offline generation engine) + **the character**
 > (the moat that compounds — a competitor clones your geofence in a weekend, never *him*;
-> `docs/ideas/region-skippers.md`, `docs/ideas/passport-logbook.md`). One coherent endgame.
+> `docs/designs/region-skippers.md`, `docs/designs/passport-logbook.md`). One coherent endgame.
 
 ## Honest hard parts
 
@@ -139,7 +139,7 @@ A north-star earns its keep by tilting near-term decisions:
   discipline aren't just charm for the curated tours; they're the *any-road survivability layer.*
 - **Lean into the visual/windshield dimension sooner** (the reveal as a designed visual moment) — it's
   the AV-future surface.
-- **Invest in the character's depth/IP** (`docs/ideas/region-skippers.md`) — in this future the moat
+- **Invest in the character's depth/IP** (`docs/designs/region-skippers.md`) — in this future the moat
   is *him*, not the geofence. **Upgraded 2026-06-12 from nice-to-have to imperative:** Autio's
   defensible asset is a comparison/SEO **funnel**, not its app
   ([../research/autio-content-moat.md](../research/autio-content-moat.md)) — and against a rival *with*
@@ -155,10 +155,10 @@ A north-star earns its keep by tilting near-term decisions:
 
 - Two founder long-term visions (the self-driving-age entertainment layer; "any road, anywhere,
   generated live"), captured as one endgame 2026-06-09.
-- Steers / is steered by: `docs/specs/drive-thesis-spec.md`, `docs/specs/downtime-callouts-spec.md`,
-  `docs/specs/skipper-opinions-spec.md`, `docs/specs/ask-the-skipper-spec.md` (§4.6 on-device),
-  `docs/ideas/drive-complete-moment.md`, `docs/ideas/region-skippers.md`,
-  `docs/ideas/passport-logbook.md`.
+- Steers / is steered by: `docs/designs/drive-thesis-spec.md`, `docs/designs/downtime-callouts-spec.md`,
+  `docs/designs/skipper-opinions-spec.md`, `docs/designs/ask-the-skipper-spec.md` (§4.6 on-device),
+  `docs/designs/drive-complete-moment.md`, `docs/designs/region-skippers.md`,
+  `docs/designs/passport-logbook.md`.
 - Grounded in the category lessons: `docs/research/competitive-research.md` (Detour distribution
   post-mortem; the existential risk), `docs/research/competitor-ux-studies.md` (Autio's coverage model
   produces "nothing for miles" — the any-road failure mode our charm machinery must beat).

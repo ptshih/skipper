@@ -9,7 +9,7 @@ tours are DEFERRED — see CLAUDE.md and `packages/db/src/schema.ts` for current
 corpus gained a distinct paid **`enrich`** op between discovery and generation: it
 scouts each story poi **once** into a curated, grounded **"fact sheet"** on `pois.fact_sheet`, which
 tours AND roam both ground on. Generalizes the per-tour-stop scout (`pipeline/scout.ts`) to the corpus
-and gives **roam** enrichment for the first time. Built from `docs/specs/corpus-enrichment-spec.md`
+and gives **roam** enrichment for the first time. Built from `docs/designs/corpus-enrichment-spec.md`
 (now BUILT). Pairs with `docs/decisions/region-corpus-discovery.md` (the corpus + ops sequence),
 `docs/decisions/enrichment-scout.md` (the scout this generalizes), and principle #1.
 

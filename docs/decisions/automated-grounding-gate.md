@@ -4,7 +4,7 @@
 > automated, fail-closed gate; the `eval_runs`/`eval_scores` tables are redesigned for V2 and written
 > on every run. Migration (eval-table redesign) generated separately + applied with the 0016–0020
 > backlog. Supersedes the Deferred-list entry "any automated groundedness gate (human ear instead)"
-> (CLAUDE.md) and the parked staging in `docs/ideas/eval-panel-rewire.md`.
+> (CLAUDE.md) and the parked staging in `docs/designs/eval-panel-rewire.md`.
 
 ## The decision
 
@@ -78,4 +78,4 @@ The panel design panel (2026-06-19) showed an advisory instrument scored highest
 lowest on quality (a report has no shipped-quality delta without manual follow-through — exactly the
 per-clip work the founder is rejecting). Automating the gate converts detection into prevention with no
 human in the per-clip loop, and grounding is the LEAST thrash-prone case for auto-retake (a binary
-zero-ungrounded target). The brainstorm lineage: `docs/ideas/eval-panel-rewire.md`.
+zero-ungrounded target). The brainstorm lineage: `docs/designs/eval-panel-rewire.md`.

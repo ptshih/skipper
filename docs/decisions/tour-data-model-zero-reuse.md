@@ -23,7 +23,7 @@ facts-staleness contract on `narrations.facts_hash` and the no-content-cache pos
 **Prior status (V1):** ✅ **BUILT + live-migrated 2026-06-08** (commits `d0f2ba6` schema + cascade, `f1396cf` the
 applied migration baseline; the canonical preview was regenerated into this model = tour `9ac50db5`). The
 design below is now the SHIPPED entity model, not a proposal. It remains the **single source of truth** for
-the entity model + migration; `docs/specs/tour-structure-spec.md` is superseded on the data model (it keeps only
+the entity model + migration; `docs/designs/tour-structure-spec.md` is superseded on the data model (it keeps only
 the `tour_brackets` design + the narration quality gate), and the tour-structure handoff (doc since
 deleted) deferred here for schema. Supersedes the "`pois` + `poi_content` are a cache" half of
 CLAUDE.md principle #1.
@@ -295,7 +295,7 @@ Clean + **destructive** (no users → no back-compat, no data fold). Mostly `db:
 
 ## 9. Addendum (2026-06-10): a THIRD narration owner — `roam_clips` (free-roam alpha)
 
-Free-roam mode (`docs/specs/free-roam-alpha-spec.md`) added a third owner to the model without
+Free-roam mode (`docs/designs/free-roam-alpha-spec.md`) added a third owner to the model without
 bending the rule: **`pois` = shared FACTS, `tour_stops` = a TOUR's telling, `roam_clips` = the
 ROAM telling.** The reasoning that holds it: a tour's clip already replays for every driver *of
 that tour* — a roam clip replays for every roamer *of that region*. Narration still belongs to

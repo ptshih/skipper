@@ -120,7 +120,7 @@ time—" persona pre-roll is a future flourish, §6.)
   - **A persona "one more time—" pre-roll** before the replayed clip (charming, but needs a generated
     snippet — overkill for v1).
   - **Voice "hey skipper, say that again"** → this is the natural front door once **Ask the Skipper**
-    exists (`docs/specs/ask-the-skipper-spec.md`); replay-last is the hands-on-button version that ships first.
+    exists (`docs/designs/ask-the-skipper-spec.md`); replay-last is the hands-on-button version that ships first.
 
 ## 7. Edge cases
 
@@ -140,8 +140,8 @@ time—" persona pre-roll is a future flourish, §6.)
 - Built on `apps/mobile/src/lib/useDrive.ts` — `onClipDone`/`pump`/`clipBusy`/`queue`/`handleFix`/
   `activeSeq`/`firedSeqs`/`sawFresh`/the clip-load effect/`setActiveForLockScreen`; complements the
   shipped scrubber (`seekToMs`/`seekBy`, the ±15s + position bar).
-- Preemption rule mirrors the "stops win by construction" principle in `docs/specs/downtime-callouts-spec.md`.
-- Future voice front-door: `docs/specs/ask-the-skipper-spec.md`.
+- Preemption rule mirrors the "stops win by construction" principle in `docs/designs/downtime-callouts-spec.md`.
+- Future voice front-door: `docs/designs/ask-the-skipper-spec.md`.
 
 **Decisions locked:** player-only (no backend); replay the last *completed* clip via the existing
 clip path; a live GPS trigger **preempts** a replay (only replays are preemptible); offered in the

@@ -5,7 +5,7 @@
 // funnel. Reads the same DB + presigns R2 for the roam ear-pass; triggers the skipper-studio Cloud
 // Run Job for corpus ops (jobs.ts). V2: authored tours are deferred — the console operates the
 // shared POI corpus + roam narrations; the tour catalog / Create-a-Tour flow is gone.
-// Background: docs/specs/admin-ops-console-spec.md §6.
+// Background: docs/designs/admin-ops-console-spec.md §6.
 //
 //   GET  /health                  -> liveness (OPEN — Cloud Run probes don't pass through IAP)
 //   --- everything below is behind requireAdmin (IAP founder-only) ---
@@ -346,7 +346,7 @@ app.post('/admin/regions/bbox-lookup', async (c) => {
 // runtime picker (GET /drives/anchors) makes zero live Places calls. Region membership is point-in-bbox
 // (geometry-first; no region_id). The bulk seed is the interactive Curate flow (POST /draft → operator
 // prunes → POST /curate); these endpoints are the draft/resolve + review/prune/promote + manual-add
-// surface. See docs/specs/places-endpoints-spec.md.
+// surface. See docs/designs/places-endpoints-spec.md.
 
 /** Columns returned for a curated place row (the table + map). */
 const placeCols = {

@@ -3,7 +3,7 @@
 // rider starts or ends at) and/or a BREAK pitstop; FEATURED floats the popular subset to the top of the
 // rider's picker. Coords are resolved + STORED at curation, so the runtime picker makes zero live
 // Places calls. This page is the review/prune/promote + manual-add surface; the bulk seed is the
-// interactive Curate button (Opus draft → prune → Places resolve). See docs/specs/places-endpoints-spec.md.
+// interactive Curate button (Opus draft → prune → Places resolve). See docs/designs/places-endpoints-spec.md.
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Loader2, MapPin, Plus, Search, Sparkles, Star, Trash2 } from 'lucide-react'

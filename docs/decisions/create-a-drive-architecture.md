@@ -6,7 +6,7 @@ paid clips preserved), the `/drives` API (propose → `buildDrive` → persist) 
 Create-a-Drive flow (conversational prompt → map-hero confirm → preview) + Roam-first home, and the
 studio/admin/sim rewires onto narrations. OPEN: simulator verification of the live create→drive runtime;
 pre-gen aside/bracket library; route-demand cache. Product rationale + the decision journey live in
-[../ideas/roam-first-create-a-drive.md](../ideas/roam-first-create-a-drive.md). Designed via a
+[../designs/roam-first-create-a-drive.md](../designs/roam-first-create-a-drive.md). Designed via a
 3-architecture × 3-judge-lens workflow + a 4-lens terminology audit, then founder-refined.
 
 > **Supersession addendum (2026-06-19).** Three pieces of the data model below have since been
@@ -57,7 +57,7 @@ pre-gen aside/bracket library; route-demand cache. Product rationale + the decis
 > membership stays point-in-bbox (geometry-first, no `region_id`). The wire shape is unchanged but for
 > `regionAnchor.featured` (the popular subset, floated to the top of the picker). `loadCorpusForRoute`
 > (the story layer that rides the route) is untouched. Full spec + the go-sequence:
-> [../specs/places-endpoints-spec.md](../specs/places-endpoints-spec.md).
+> [../designs/places-endpoints-spec.md](../designs/places-endpoints-spec.md).
 
 ## Context
 

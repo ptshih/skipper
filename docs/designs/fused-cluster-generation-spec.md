@@ -7,7 +7,7 @@
 > Steps 1–3 (staleness hash + member-set resolver, trigger position, read paths) spend nothing and are
 > green. Step 4's tool is complete and its output has been read twice on one cluster ($0.83, nothing
 > persisted); running `--apply` is the commitment point and needs a founder go. §8b's two corpus
-> defects are both RESOLVED. Promoted from `docs/ideas/poi-legibility-layer.md` on
+> defects are both RESOLVED. Promoted from `docs/designs/poi-legibility-layer.md` on
 > founder intent ("let's prepare to do phase 4"). Phases 1–3 are BUILT and APPLIED, and the grouping was
 > re-applied on 2026-07-30 after the third district-merge fix: **64 clusters** (60 cluster / 4 district)
 > over 295 members, all 64 carrying `highlights` / `dropped`, 33 with a real `subject_poi_id`. The four
