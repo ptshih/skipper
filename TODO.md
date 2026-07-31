@@ -862,6 +862,67 @@ Refs: `apps/mobile/src/lib/driveMusic.ts` (`useDriveMusic` + the `TRACKS` rotati
 `apps/mobile/src/lib/useDrive.ts` (~L888 the soundtrack effect; `onClipDone`/`pump` at ~L397-429),
 `apps/mobile/app/drives/[id]/play.tsx` (the V2 player + `driveMode`).
 
+## Make the app fully functional without internet (founder ask 2026-07-31)
+
+Surveyed the real behaviour before writing this (2026-07-31) — the gap is NOT where it looks.
+
+✅ **A DOWNLOADED DRIVE IS ALREADY OFFLINE-COMPLETE, and well-hardened. Do not rebuild it.**
+`loadPlayback` short-circuits before any fetch; the on-disk manifest **nulls every clip url** and
+rebuilds `file://` uris at read time, so presigned expiry structurally cannot bite a saved drive.
+Soundtrack, fonts, lock-screen art and CC BY-SA attribution are all bundled or frozen in the manifest;
+GPS triggering imports only `expo-location` + `@skipper/engine` (no fetch anywhere in engine). The
+drive LIST and DETAIL both fall back to disk. The downloader is partial-tolerant with retries and a
+size verify. Refs: `offline.ts:369,425-434,566-585`, `useDrive.ts:296`, `app/index.tsx:56-68`.
+
+⚠ **ROAM IS 100% ONLINE-ONLY — and it is the anonymous front door and the founder's daily mode.**
+This is the whole gap, not the audio pipeline.
+
+- [ ] **Roam cannot START offline.** `getRoamManifest` is an unguarded `await` (`useRoam.ts:685`) whose
+      rejection sets `phase='error'`. Rider sees the "Checking which stories live out here…" spinner,
+      then a red "that's a kink in the hose" card with a retry button that re-runs the identical fetch
+      and fails identically. Permanent dead end while they have no bars. ⚠ **SIM mode is not an escape
+      either** — the sim branch only chooses where `here` comes from; the manifest fetch below it is
+      unconditional, so there is currently NO way to QA roam without a live network.
+- [ ] **Nothing caches the roam manifest.** The pin set lives only in `pinsRef` and dies with the
+      screen (`useRoam.ts:209`); `roam-history.json` stores heard/muted ids only. A rider who roamed
+      this exact road yesterday starts from nothing. A last-known-pins cache keyed by bbox is the
+      cheapest single win here.
+- [ ] **Roam clips are streamed, never saved** (`useRoam.ts:396` plays the presigned URL directly).
+      Even a story the rider just heard is unreplayable without signal. The header comment already owns
+      this as an alpha cut. A roam offline pack is the big one — and note the corpus is ~200 clips /
+      ~200 min for Tahoe, so "download the region" is a real product question, not a checkbox.
+- [ ] **Mid-session signal loss costs ~24 s of dead air per encounter, then a silent skip**
+      (3 s skeleton → 12 s stall → one futile recovery → 12 s stall → `onClipDone`). Worse, `sawFresh`
+      never flips so the "N stories told" pill stays at 0 — the rider gets no evidence anything was
+      even attempted.
+
+⚠ **The app has NO connectivity awareness at all.** `expo-network` is a dependency but is imported
+ONLY as a Metro lazy-bundling workaround (`index.js:13`); nothing reads network state.
+
+- [ ] **Know you are offline, and say so.** `errorMessage` collapses every non-`ApiError` into one
+      in-voice line, so "you're offline" is indistinguishable from a 500, a parse blip, or a GPS
+      timeout — and the rider is handed a retry button that cannot work. This is the highest
+      value-per-hour item on the list: it costs one hook and it fixes the *experience* of every
+      failure below without fixing any of them.
+- [ ] **Every offline fallback pays up to the full 15 s timeout first**, because the fallbacks are
+      triggered by a FAILED fetch rather than a connectivity check (`api.ts:85`). Cold start in a dead
+      zone: ~15 s of skeletons, then the saved drives appear; tap one, ~15 s more. It feels broken
+      twice before it works. A connectivity check turns both into instant disk reads.
+- [ ] **Online-only CTAs look live offline.** Ride Along, Create a Drive and "hear one clip" all sit as
+      amber CTAs that lead to a spinner and a generic error.
+
+Two more, unrelated to roam:
+
+- [ ] **⚠ A `MANIFEST_VERSION` bump silently invalidates EVERY saved download** (`offline.ts:36,392`).
+      `loadManifest` returns null on mismatch, so the drive vanishes from the offline list and the
+      detail screen shows the error wall — while the audio bytes stay on disk, orphaned, with nothing
+      sweeping them. Rider updates in town, drives into Tahoe, finds nothing. Needs a migration path or
+      at minimum a re-pull prompt at update time.
+- [ ] **Map basemap tiles are network-only and the player DEFAULTS to map view** (`play.tsx:71`).
+      Route line, stop dots and puck float on a blank field. `DriveMap.tsx:10-11` already calls the
+      List view "the offline + accessibility-complete equivalent" — but nothing tells the rider to flip
+      to it. Auto-switching (or nudging) when offline is cheap; real offline tiles are not.
+
 ## Offline downloads: full re-pull only (no per-clip diff)
 
 DONE: a re-cut clip (a `resynth-narration` or a regen) is detectable + recoverable on-device — each
