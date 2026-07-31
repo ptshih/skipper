@@ -28,6 +28,78 @@ describe('findingScore — gate findings weigh heavier', () => {
   })
 })
 
+// The HARD advisory tier. Measured motivation: 155 of 457 released clips ship a banned wind-up,
+// every one caught at generation time, because a ban scored exactly the same as a shared n-gram —
+// so the loop had no reason to spend a retake on the one the model can actually fix.
+describe('findingScore — a HARD advisory finding outranks an ordinary one', () => {
+  const diversity = (findings: string[], hard: number): StopEval => ({
+    seq: 0,
+    dimension: 'diversity',
+    pass: false,
+    score: 0,
+    findings,
+    hardFindings: hard,
+  })
+
+  test('a banned tic weighs more than a plain advisory finding', () => {
+    expect(findingScore([diversity(['banned tic'], 1)])).toBeGreaterThan(
+      findingScore([diversity(['shared n-gram'], 0)]),
+    )
+  })
+
+  test('hardFindings is an UPCHARGE on findings, never an addition', () => {
+    // One finding, marked hard → one hard charge, not one hard + one ordinary.
+    const oneHard = findingScore([diversity(['banned tic'], 1)])
+    const twoOrdinary = findingScore([diversity(['a', 'b'], 0)])
+    expect(oneHard).toBeGreaterThan(twoOrdinary) // 4 vs 2
+    // And a mixed clip charges each finding exactly once.
+    expect(findingScore([diversity(['banned', 'ngram'], 1)])).toBe(oneHard + 1)
+  })
+
+  test('one hard advisory still ranks below one GATE finding', () => {
+    const gate: StopEval = { seq: 0, dimension: 'grounding', pass: false, score: 0, findings: ['ungrounded'] }
+    expect(findingScore([diversity(['banned'], 1)])).toBeLessThan(findingScore([gate]))
+  })
+
+  // ⚠ The weight does NOT make a gate unbuyable — enough hard findings out-total one gate (4x3 > 10).
+  // `gatesNotWorse` is the actual safety property, and it is an absolute veto independent of score.
+  test('a pile of hard advisories can out-total a gate, and gatesNotWorse still refuses it', () => {
+    const gate = (n: number): StopEval => ({ seq: 0, dimension: 'grounding', pass: n === 0, score: 0, findings: Array.from({ length: n }, () => 'ungrounded') })
+    const best = [gate(0), diversity(['a', 'b', 'c'], 3)] // score 12, gates clean
+    const candidate = [gate(1), diversity([], 0)] // score 10 — LOWER, but adds a gate violation
+    expect(findingScore(candidate)).toBeLessThan(findingScore(best))
+    expect(gatesNotWorse(candidate, best)).toBe(false) // …and is rejected anyway
+  })
+
+  test('THE REGRESSION: clearing the ban beats clearing the unfixable n-gram', () => {
+    // Both takes have one finding left. Before the hard tier these scored identically, so a take
+    // that kept the ban was accepted as a tie and the thrash guard stopped the loop.
+    const keptTheBan = findingScore([diversity(['banned tic'], 1)])
+    const clearedTheBan = findingScore([diversity(['shared n-gram'], 0)])
+    expect(clearedTheBan).toBeLessThan(keptTheBan)
+  })
+
+  test('an over-reported hard count is clamped, not trusted', () => {
+    expect(findingScore([diversity(['only one'], 99)])).toBe(findingScore([diversity(['only one'], 1)]))
+  })
+
+  test('absent hardFindings behaves exactly as before', () => {
+    const withoutField: StopEval = { seq: 0, dimension: 'diversity', pass: false, score: 0, findings: ['a', 'b'] }
+    expect(findingScore([withoutField])).toBe(2)
+  })
+})
+
+describe('collectAvoid — hard notes lead the advisory ones', () => {
+  test('gate > hard advisory > ordinary advisory', () => {
+    const evals: StopEval[] = [
+      { seq: 0, dimension: 'charm', pass: false, score: 0, findings: ['ordinary'] },
+      { seq: 0, dimension: 'diversity', pass: false, score: 0, findings: ['banned'], detail: ['DROP THE BAN'], hardFindings: 1 },
+      { seq: 0, dimension: 'grounding', pass: false, score: 0, findings: ['ungrounded'] },
+    ]
+    expect(collectAvoid(evals)).toEqual(['ungrounded', 'DROP THE BAN', 'ordinary'])
+  })
+})
+
 describe('collectAvoid — gate-first, prefers string[] detail', () => {
   test('gate findings lead; diversity uses its lint `avoid` detail over reasons', () => {
     const evals: StopEval[] = [

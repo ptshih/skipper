@@ -66,6 +66,15 @@ export interface StopEval {
   findings: string[]
   /** Dimension-specific payload (grounding → ClaimVerdict[]). */
   detail?: unknown
+  /** How many of `findings` are HARD ones — never acceptable at any count, and fixable within the
+   *  clip. Today only diversity sets it, for the hard-banned wind-ups/tics.
+   *
+   *  ⚠ Exists because an advisory dimension can carry findings of genuinely different kinds. A banned
+   *  tic is a per-clip writing defect the model can fix on the next take; a shared n-gram is a CORPUS
+   *  problem (the same source fact handed to dozens of POIs — measured, and a $1.68 regeneration
+   *  probe showed rewording does not fix it). Scoring them equally let `optimize()` "improve" a take
+   *  by dropping the n-gram it was never going to fix while keeping the ban, and then stop. */
+  hardFindings?: number
 }
 
 /** A dimension rolled up across every evaluated stop on the tour. */

@@ -44,6 +44,28 @@ describe('lintScripts', () => {
     expect(findings.find((f) => f.seq === 0)!.avoid.join(' ')).toMatch(/here is the/i)
   })
 
+  // The `hard` count is the contract optimize()'s HARD_ADVISORY_WEIGHT depends on — a banned tic is
+  // per-clip and fixable, a shared phrase is a corpus-level source problem, and they must not weigh
+  // the same. Reported as a count so the consumer never has to parse the reason prose.
+  test('reports banned tics as HARD, and ordinary cross-stop findings as not', () => {
+    const findings = lint([
+      story(0, 'A captain ran this place. But here is the fun of it: the maps once called it Yanks.'),
+      story(1, 'The pines lean over the cove. The whole works sits quiet under the snow.'),
+      story(2, 'A mill stood here once. The whole works burned in a single afternoon.'),
+    ])
+    const banned = findings.find((f) => f.seq === 0)!
+    expect(banned.hard).toBeGreaterThan(0)
+    // Stop 2 reuses a stock phrase — flagged, but not HARD.
+    const reuse = findings.find((f) => f.seq === 2)
+    expect(reuse).toBeDefined()
+    expect(reuse!.hard).toBe(0)
+  })
+
+  test('a clean stop produces no finding at all (so `hard` has nothing to report)', () => {
+    const findings = lint([story(0, 'The pines lean over the cove, quiet as a held breath.')])
+    expect(findings).toEqual([])
+  })
+
   test('does NOT flag legitimate "there is the …" pointing', () => {
     const findings = lint([
       story(0, 'Out across the water there is the lighthouse, the highest one in the country.'),

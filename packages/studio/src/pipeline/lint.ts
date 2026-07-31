@@ -46,11 +46,23 @@ export interface LintFinding {
   reasons: string[]
   /** Concrete instructions fed verbatim into the stop's re-narration. */
   avoid: string[]
+  /** How many of `reasons` are HARD — a banned wind-up/tic the persona prompt forbids outright.
+   *  Reported separately so a consumer can weight it without parsing the prose: these are per-clip
+   *  and fixable on the next take, unlike the shared-n-gram findings, which are a corpus-level
+   *  source problem. See `StopEval.hardFindings`. */
+  hard: number
 }
 
 // HARD-BANNED reveal wind-ups and AI/brochure tics — the persona prompt forbids
 // these outright ("just say the surprising thing plainly"), so flag on the FIRST
-// occurrence, not on repeat. The "here is the ..." family is the one the model
+// occurrence, not on repeat.
+//
+// ⚠ ADDING A PATTERN HERE IS HALF THE JOB — say it in the PROMPT too (persona/skipper.ts). This
+// table and that prose are two hand-maintained lists, and only one of them the model ever reads.
+// That gap is not theoretical: the prompt banned three completions of the "here's the …" family
+// while this regex banned nine, so the model avoided the three it was told about and wrote the rest
+// — 148 of 457 released clips. A test guards the OTHER direction (the prompt may not itself USE a
+// pattern in this table, via `bannedTicsIn`); nothing yet checks that the prompt MENTIONS each one. The "here is the ..." family is the one the model
 // reaches for most as a kit replacement ("here is the fun of it", "here is the
 // family deal", "here is one that ..."). Note: only "here's"/"here is" — "there is
 // the lighthouse" is legitimate pointing, not a wind-up.
@@ -72,6 +84,15 @@ const BANNED: [RegExp, string][] = [
   [/\bnestled\b/i, '"nestled"'],
   [/\brich history\b/i, '"rich history"'],
 ]
+
+/** Which banned wind-ups/tics appear in a piece of text, by label. Exported so anything that must
+ *  agree with this table can ASK it instead of keeping a second copy — notably the persona-prompt
+ *  guard test, which checks that the prompt does not itself model the constructions it forbids.
+ *  (It did: two sentences in its own voice, measured as the cause of 148 shipped clips carrying the
+ *  "here's the …" family, because the prompt's prose banned only three completions of it.) */
+export function bannedTicsIn(text: string): string[] {
+  return BANNED.filter(([re]) => re.test(text)).map(([, label]) => label)
+}
 
 // Global-flag variants of BANNED, precomputed once at module load — used to COUNT
 // occurrences for the within-stop tic-stacking check below. The base BANNED forms are
@@ -180,9 +201,10 @@ function ngramsOf(script: string, n: number): Set<string> {
  */
 export function lintScripts(stops: LintInput[]): LintFinding[] {
   const findings = new Map<number, LintFinding>()
-  const flag = (seq: number, reason: string, avoid: string): void => {
-    const f = findings.get(seq) ?? { seq, reasons: [], avoid: [] }
+  const flag = (seq: number, reason: string, avoid: string, hard = false): void => {
+    const f = findings.get(seq) ?? { seq, reasons: [], avoid: [], hard: 0 }
     f.reasons.push(reason)
+    if (hard) f.hard++
     if (!f.avoid.includes(avoid)) f.avoid.push(avoid)
     findings.set(seq, f)
   }
@@ -195,7 +217,12 @@ export function lintScripts(stops: LintInput[]): LintFinding[] {
   for (const s of stops) {
     for (const [re, label] of BANNED) {
       if (re.test(s.script)) {
-        flag(s.seq, `uses a banned wind-up/tic: ${label}`, `Do NOT use ${label} — say the surprising thing plainly; the persona prompt bans this.`)
+        flag(
+          s.seq,
+          `uses a banned wind-up/tic: ${label}`,
+          `Do NOT use ${label} — say the surprising thing plainly; the persona prompt bans this.`,
+          true, // HARD: never acceptable, and fixable in this clip — see LintFinding.hard
+        )
       }
     }
   }
@@ -296,6 +323,7 @@ export function lintScripts(stops: LintInput[]): LintFinding[] {
         s.seq,
         `stacks ${ticCount} wind-up/AI tics in one stop`,
         'You used several canned setups/wind-ups in this single stop — remove ALL of them and just state each surprising thing plainly.',
+        true, // HARD for the same reason as the per-pattern ban above: it counts the SAME patterns.
       )
     }
   }

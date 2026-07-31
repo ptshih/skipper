@@ -28,6 +28,9 @@ export function evaluateDiversity(inputs: LintInput[]): StopEval[] {
       score: finding ? 0 : 1,
       findings: finding?.reasons ?? [],
       detail: finding?.avoid,
+      // Carried so optimize() can spend its retake budget on the banned tics (per-clip, fixable)
+      // rather than on shared n-grams (corpus-level, and measurably not fixable by rewording).
+      hardFindings: finding?.hard ?? 0,
     }
   })
 }

@@ -17,14 +17,34 @@ import { DIMENSION_KIND, type EvalDimension, type StopEval } from './types'
 // (charm/diversity), so the loop spends its budget killing hard violations before polish.
 const GATE_WEIGHT = 10
 const ADVISORY_WEIGHT = 1
+/** An advisory finding the dimension marked HARD — a banned wind-up/tic. Between the two, and it is
+ *  the ORDERING that matters rather than the number: one hard finding must outrank an ordinary one so
+ *  the loop spends its retakes on the fixable defect.
+ *
+ *  ⚠ It does NOT make a gate unbuyable, and it does not need to: enough hard findings would out-total
+ *  a single gate violation (4 × 3 > 10), but `gatesNotWorse` is a SEPARATE and absolute veto — a
+ *  candidate worse on any gate dimension is rejected no matter how the weighted score lands. Do not
+ *  "fix" this by tuning the number; the Pareto guard is the safety property, this is only triage.
+ *
+ *  ⚠ WHY THIS TIER EXISTS, measured over the 457 released clips (2026-07-30): 155 of them ship a
+ *  hard-banned tic — 148 carry the "here's the …" family — and every one was CAUGHT at generation
+ *  time. They shipped because the ban scored 1, exactly like a shared n-gram, while the n-gram rule
+ *  flags 38% of the corpus. So the loop was indifferent between clearing a defect the model can
+ *  actually fix on the next take and clearing one it cannot (a shared n-gram is the same SOURCE fact
+ *  handed to dozens of POIs — a $1.68 regeneration probe showed rewording does not move it), and for
+ *  the 50 clips whose ONLY finding was a ban, a take that swapped the ban for any other single
+ *  finding scored a TIE, got accepted, and stopped the loop. */
+const HARD_ADVISORY_WEIGHT = 4
 
 /** Weighted finding count — the score the loop MINIMIZES (0 = nothing flagged). */
 export function findingScore(evals: StopEval[]): number {
-  return evals.reduce(
-    (n, e) =>
-      n + e.findings.length * (DIMENSION_KIND[e.dimension] === 'gate' ? GATE_WEIGHT : ADVISORY_WEIGHT),
-    0,
-  )
+  return evals.reduce((n, e) => {
+    if (DIMENSION_KIND[e.dimension] === 'gate') return n + e.findings.length * GATE_WEIGHT
+    // `hardFindings` is a COUNT of findings already inside `findings`, so it is an upcharge on those,
+    // never an addition — and it is clamped in case a dimension ever reports more than it lists.
+    const hard = Math.min(e.hardFindings ?? 0, e.findings.length)
+    return n + (e.findings.length - hard) * ADVISORY_WEIGHT + hard * HARD_ADVISORY_WEIGHT
+  }, 0)
 }
 
 const isGate = (e: StopEval): boolean => DIMENSION_KIND[e.dimension] === 'gate'
@@ -60,7 +80,11 @@ export function gatesNotWorse(candidate: StopEval[], best: StopEval[]): boolean 
  * human-readable `findings`.
  */
 export function collectAvoid(evals: StopEval[]): string[] {
-  const failing = evals.filter((e) => !e.pass).sort((a, b) => Number(isGate(b)) - Number(isGate(a)))
+  // Gates lead, then a dimension carrying HARD findings, then the rest. The order is not cosmetic:
+  // these notes go into the next prompt, and a banned tic the model can actually fix should not sit
+  // below a pile of shared-phrase notes it mostly cannot.
+  const rank = (e: StopEval): number => (isGate(e) ? 2 : (e.hardFindings ?? 0) > 0 ? 1 : 0)
+  const failing = evals.filter((e) => !e.pass).sort((a, b) => rank(b) - rank(a))
   const avoid: string[] = []
   for (const e of failing) {
     const detailNotes =

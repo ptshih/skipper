@@ -254,19 +254,32 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
             the persona prompt a house style for a fact it will say fifty times; or vary it at
             fact-sheet build time. Re-run this same $2 preview to check before spending at scale — it is
             now the cheap standing test for "would a regeneration actually help?".
-      - [ ] **OPENER monotony is the bigger miss, and it splits into a detection gap and an enforcement
-            gap.** Measured over the released corpus: solo 420 clips → **`"here is a…"` opens 25 and
-            `"right about here…"` opens 20**; the first word is one of out/that/here/right in ~29%.
-            Fused is tighter still — 31 clips, only **26 distinct 3-word openers**, first word `right`
-            23%.
-            (a) DETECTION: `openerKey` is an EXACT match, so "right about here", "right about you are"
-            and "right about once stood" count as three different openers — the lint reported 2 opener
-            collisions where the real shape is ~29 clips. Coarsen the key.
-            (b) ⚠ ENFORCEMENT, not detection: `"here is a"` is ALREADY in the hard-banned wind-up list,
-            fires PER-stop (so it worked fine at n=1), and was caught on all 25 at generation time. They
-            shipped because diversity is ADVISORY. Different fix — and do NOT naively promote diversity
-            to a gate: ~135 clips match the ban regex and withholding them would bin a pile of factually
-            clean audio. The lever is feeding the finding harder into the retake.
+      - [x] **"OPENER monotony" — RE-MEASURED 2026-07-30, and it is neither an opener problem nor a
+            detection one.** (a) DETECTION was already done: `f08dc9b` shipped `openerShape` (a coarse
+            2-word key with a tolerance), which flags 49 of 457 against the exact key's 7.
+            (b) The real shape of it, over all 457 released clips: **155 (34%) carry a hard-banned tic
+            SOMEWHERE, 148 of those the `"here's the …"` family — but only 32 open with one.** So it is
+            a whole-script tic, not an opening habit, and every one was caught at generation time.
+            ⚠ **ROOT CAUSE, and it was in the prompt, not the machinery.** The persona prompt banned
+            exactly three completions ("the kicker / the wild part / the thing") while the lint bans a
+            nine-way family — so the model dutifully avoided those three and wrote "here is the part I
+            like" (10 clips), "here is a place that", "here is what happened", none of which it had ever
+            been told not to write. **And the prompt demonstrated the construction twice in its own
+            voice** ("Here is the heart of you…", "So here is how it works."). Fixed: the prompt now
+            states the family and the reason ("that construction is a runway you do not need"), and its
+            own two instances are gone.
+            ✅ Mechanical backstop, second: `optimize()` gained a HARD advisory tier
+            (`LintFinding.hard` → `StopEval.hardFindings` → `HARD_ADVISORY_WEIGHT`). A ban and a shared
+            n-gram used to score identically at 1 apiece, so the loop was indifferent between clearing
+            the defect the model CAN fix in a retake and the one it cannot (an n-gram is the same source
+            fact handed to dozens of POIs — the $1.68 probe above). Worse, for the **50** clips whose
+            only finding was a ban, a take that swapped it for any other single finding scored a TIE,
+            was accepted, and tripped the thrash guard. ⚠ The weight does NOT make a gate buyable —
+            `gatesNotWorse` is a separate absolute veto; do not "fix" the number.
+            ⚠ **Detection is byte-identical after the change (267 of 457 flagged, before and after)** —
+            only the weighting moved. ⚠ **UNVERIFIED against a real generation**: both levers only
+            affect FUTURE takes, and confirming the prompt fix costs a paid run. The cheap test is the
+            standing `--scripts-only` probe: re-run it and count `here is the` in the new scripts.
       - [ ] **Yosemite's 30 clusters** — still un-generatable (zero enriched members); needs a
             founder-gated `enrich-pois --region yosemite` run first. `generate-cluster-narrations.ts` is
             complete: narrate → fail-closed gate with excision retakes → TTS → loudnorm → R2 → upsert
