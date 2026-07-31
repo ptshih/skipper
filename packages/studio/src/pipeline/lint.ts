@@ -191,8 +191,11 @@ const OPENER_SHAPE_MIN_PRIOR = 2
 // ever would have been — co-located POIs are handed the SAME source facts (one Macrostrat map unit for
 // a whole batholith, one NRHP listing phrase), so they converge on wording no author anticipated.
 const SHARED_NGRAM_N = 6
-/** An n-gram must be carried by this many DISTINCT clips before it counts as worn out. */
-const SHARED_NGRAM_MIN_CLIPS = 4
+/** An n-gram must be carried by this many DISTINCT clips before it counts as worn out.
+ *  Exported because GENERATION has to agree with EVALUATION about where "worn out" starts —
+ *  `generate-narrations.ts` derives its shared-fact warning threshold from this rather than
+ *  restating the number and trusting a comment to keep the two aligned. */
+export const SHARED_NGRAM_MIN_CLIPS = 4
 /** Cap the notes per stop — overlapping windows of one phrase would otherwise fill the avoid list. */
 const SHARED_NGRAM_MAX_REPORTED = 3
 

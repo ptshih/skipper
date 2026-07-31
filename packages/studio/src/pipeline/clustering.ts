@@ -12,6 +12,8 @@
 // invalidates every stored treatment. The dry run's grouping was accidentally non-deterministic (an
 // unordered query plus a sort with no tiebreak), which is why `rank` ties break on `id`.
 
+import { haversineMeters } from '@skipper/engine'
+
 /** The minimum a caller must supply per item. `rank` picks anchors — HIGHER wins (we use clip length:
  *  the richest telling in a group should be the one that speaks for it). */
 export interface Groupable {
@@ -31,17 +33,17 @@ export interface Groupable {
   seedable?: boolean
 }
 
-const R_EARTH = 6_371_008.8
-const toRad = (d: number): number => (d * Math.PI) / 180
-
-/** Great-circle metres between two lat/lng points. Local to keep this module dependency-free. */
+/** Great-circle metres between two lat/lng points.
+ *
+ *  Delegates to `@skipper/engine` rather than carrying its own copy of the formula. It used to hold a
+ *  verbatim re-derivation — same Earth radius, same asin(sqrt(h)) shape — under a comment claiming it
+ *  was "local to keep this module dependency-free". That was not true: studio already depends on
+ *  `@skipper/engine` and `pipeline/geo.ts` right next door says outright that shared route-geometry
+ *  primitives live there and should be imported from there. `leaderGroups` below backs the grouping
+ *  decisions `classify-treatments` PERSISTS, so it is the last place that should measure distance on a
+ *  private copy of the planet. Arguments stay (lat, lng) for the callers; only the axis order flips. */
 export function metersBetween(aLat: number, aLng: number, bLat: number, bLng: number): number {
-  const dLat = toRad(bLat - aLat)
-  const dLng = toRad(bLng - aLng)
-  const s1 = Math.sin(dLat / 2)
-  const s2 = Math.sin(dLng / 2)
-  const h = s1 * s1 + Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * s2 * s2
-  return 2 * R_EARTH * Math.asin(Math.min(1, Math.sqrt(h)))
+  return haversineMeters([aLng, aLat], [bLng, bLat])
 }
 
 /**

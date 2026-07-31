@@ -42,6 +42,7 @@ import { narrateStop } from './pipeline/narrate'
 import { resolveStoryGrounding } from './pipeline/select'
 import { synthesizeWithTailRetake, type TailOutcome } from './pipeline/tts'
 import type { LoudnessOutcome } from './pipeline/loudnorm'
+import { SHARED_NGRAM_MIN_CLIPS } from './pipeline/lint'
 import { narrationClipKey, uploadAudio } from './pipeline/storage'
 import { storyFactsHash } from './pipeline/persist'
 import { wikiUrlForPageId } from './pipeline/wikipedia'
@@ -78,10 +79,11 @@ import { recordEvalRun, type ClipIdentity } from './eval/record'
 // within the band, so a thin pin lands honestly short. An ENRICHED poi grounds on its sheet.
 
 /** How many OTHER places must carry the identical fact line before it is marked SHARED on the sheet.
- *  3 (i.e. 4+ carriers) to match `SHARED_NGRAM_MIN_CLIPS` in pipeline/lint.ts — the lint FLAGS a
- *  phrase at that many clips, so the sheet should WARN at the same point rather than let generation
- *  and evaluation disagree about what counts as worn out. */
-const SHARED_FACT_MIN_OTHERS = 3
+ *  DERIVED from the lint's threshold rather than restated: the lint FLAGS a phrase once
+ *  `SHARED_NGRAM_MIN_CLIPS` distinct clips carry it, so the sheet should WARN at the same point — this
+ *  poi plus this many others. Two hand-maintained numbers with a comment promising they match is
+ *  exactly how generation and evaluation end up disagreeing about what counts as worn out. */
+const SHARED_FACT_MIN_OTHERS = SHARED_NGRAM_MIN_CLIPS - 1
 
 const flags = parseFlags(process.argv.slice(2), {
   valueFlags: ['limit', 'region', 'max-cost', 'query', 'include-ids', 'exclude-ids'],
