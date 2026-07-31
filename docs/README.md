@@ -270,6 +270,11 @@ The rest are post-MVP features, gated behind the proven phone player:
   wait for; DEFERRED 2026-06-10 (revisit with region-skippers, M4-ish).
 
 ### research/
+- [credit-monetization-research.md](research/credit-monetization-research.md) — how modern agentic AI
+  apps charge via credits, and what it implies here. ⚠ The free grant's SIZE is the only irreversible
+  decision (frozen per user at signup) and gets costlier with every signup; Apple's no-expiry rule
+  covers only PURCHASED credits; the revealed price of a driving tour is $14.99–$19.99, not $2.99
+  (2026-07-31, not greenlit).
 - [competitive-research.md](research/competitive-research.md) — multi-agent cited research across
   the category (2026-06-07).
 - [shaka-guide-ux-study.md](research/shaka-guide-ux-study.md) — teardown of THE reference comp.
