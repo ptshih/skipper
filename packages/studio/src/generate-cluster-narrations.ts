@@ -36,14 +36,10 @@ import { factSheetToAttribution } from './pipeline/persist'
 import { withRetry } from './pipeline/http'
 import { mapLimit } from './pipeline/concurrency'
 import { personaFromKey } from './persona'
-import { getAnthropic, lengthForRegister, ttsStyleFor } from './models'
-import { buildGroundingWell, evaluateGrounding } from './eval/grounding'
-import { applyLoudnessOutcomes, applyTailOutcomes, evaluateTts } from './eval/tts'
-import { evaluateDiversityAgainst } from './eval/diversity'
-import { evaluateLaterality } from './eval/laterality'
-import { evaluatePacing } from './eval/pacing'
-import { optimize } from './eval/optimize'
-import { exciseUngrounded, makeExciseCall } from './eval/excise'
+import { lengthForRegister, ttsStyleFor } from './models'
+import { buildGroundingWell } from './eval/grounding'
+import { applyLoudnessOutcomes, applyTailOutcomes } from './eval/tts'
+import { gateNarration } from './pipeline/gate'
 import { buildScorecard } from './eval/scorecard'
 import { DIMENSION_KIND, type StopEval } from './eval/types'
 import { recordEvalRun, type ClipIdentity } from './eval/record'
@@ -272,44 +268,22 @@ async function main(): Promise<void> {
     if (unmatched.length) {
       console.warn(`  ⚠ ${f.title}: ${unmatched.length} drop entr(ies) matched no member — they stay NAMEABLE: ${unmatched.join(' · ')}`)
     }
-    const evaluate = async (script: string): Promise<StopEval[]> => {
-      const evals: StopEval[] = [
-        evaluateTts({ seq, script }),
-        // Scored against the rest of the region, not against itself — see `diversityContext` above.
-        ...evaluateDiversityAgainst({ seq, stopType: 'story', script }, diversityContext),
-        evaluateLaterality({ seq, script }),
-        evaluatePacing({ seq, script, targetSeconds: f.targetSeconds, maxSeconds: f.maxSeconds }),
-      ]
-      if (GROUNDING_EVAL()) {
-        evals.push(await evaluateGrounding({ seq, stopType: 'story', placeName: f.title, script, well, region: base.region }))
-      }
-      return evals
-    }
-    // Same asymmetry as the poi path: an ungrounded claim is EXCISED from the prior take rather than
-    // re-rolled (re-rolling just reaches for a different flourish); everything else re-narrates.
-    const exciseCall = makeExciseCall(() => getAnthropic('grounding excision'))
-    const regenerate = async (avoid: string[], prev: string): Promise<string> => {
-      const ungrounded = avoid.filter((a) => a.startsWith('ungrounded place-claim'))
-      if (ungrounded.length > 0) {
-        console.log(`  ✂ ${f.title}: excising ${ungrounded.length} ungrounded claim(s)`)
-        return exciseUngrounded(prev, ungrounded, well, exciseCall)
-      }
-      return (await narrateStop({ ...base, avoid }, persona.systemPrompt)).script
-    }
-    const { script: initial } = await narrateStop(base, persona.systemPrompt)
-    const result = await optimize(initial, { evaluate, regenerate, maxRounds: GROUNDING_REGEN_MAX_ROUNDS })
-    const shipped = result.evals.filter((e) => DIMENSION_KIND[e.dimension] === 'gate').every((e) => e.pass)
-    // Feed a shipped take back in so later clips in THIS batch are checked against it too — the 31
-    // fused clips were generated in one run, so without this they only ever see the pre-existing corpus
-    // and can converge on each other freely. Best-effort: generation is concurrent, so how much context
-    // a clip sees depends on completion order (advisory scoring only; gates are per-clip).
-    if (shipped && result.item) diversityContext.push(result.item)
+    const { script, evals, shipped } = await gateNarration({
+      seq,
+      name: f.title,
+      base,
+      well,
+      targetSeconds: f.targetSeconds,
+      maxSeconds: f.maxSeconds,
+      diversityContext,
+      systemPrompt: persona.systemPrompt,
+    })
     const named = mergedFeatures.filter((m) => !m.background).length
     console.log(
       `  ${f.title} — ${named} nameable / ${mergedFeatures.length - named} background · ` +
-        `${shipped ? `${result.item.split(/\s+/).filter(Boolean).length} words` : 'WITHHELD (gate)'}`,
+        `${shipped ? `${script.split(/\s+/).filter(Boolean).length} words` : 'WITHHELD (gate)'}`,
     )
-    return { f, seq, script: result.item, evals: result.evals, shipped }
+    return { f, seq, script, evals, shipped }
   }
 
   const gated = await mapLimit(picked, NARRATION_CONCURRENCY(), async (f, i): Promise<GatedFused> => {

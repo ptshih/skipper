@@ -169,9 +169,14 @@ export async function optimize<T>(initial: T, opts: OptimizeOptions<T>): Promise
   return { item: best, evals: bestEvals, rounds: round, stop, history }
 }
 
-// ── HOW generate-narrations.ts WIRES THIS ──────────────────────────────────────────────────
-// gateClip() (generate-narrations.ts ~L350) makes ONE optimize() call per clip. Its evaluate()
-// runs the whole per-clip panel together — evaluateTts + evaluateDiversity + evaluateLaterality
-// + evaluatePacing, plus evaluateGrounding behind SKIPPER_GROUNDING_EVAL. Its regenerate()
-// excises the ungrounded claims for a grounding failure (eval/excise.ts) and otherwise
-// re-narrates via narrateStop with the avoid notes folded in. The loop owns only accept/stop.
+// ── HOW THIS IS WIRED ──────────────────────────────────────────────────────────────────────
+// `gateNarration` (pipeline/gate.ts) makes ONE optimize() call per clip, for BOTH generators —
+// the solo poi path and the fused cluster path. Its evaluate() runs the whole per-clip panel
+// together (evaluateTts + evaluateDiversityAgainst + evaluateLaterality + evaluatePacing, plus
+// evaluateGrounding behind SKIPPER_GROUNDING_EVAL). Its regenerate() excises the ungrounded
+// claims for a grounding failure (eval/excise.ts) and otherwise re-narrates via narrateStop with
+// the avoid notes folded in. The loop owns only accept/stop.
+//
+// (This block used to name generate-narrations.ts as the single caller. There were two by then,
+// each with its own hand-copied wiring — which is how the fused path ended up missing the
+// unpriced-model spend guard. One shared gate now, and test/gate.test.ts covers its branching.)

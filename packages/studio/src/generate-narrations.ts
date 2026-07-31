@@ -43,6 +43,7 @@ import { resolveStoryGrounding } from './pipeline/select'
 import { synthesizeWithTailRetake, type TailOutcome } from './pipeline/tts'
 import type { LoudnessOutcome } from './pipeline/loudnorm'
 import { SHARED_NGRAM_MIN_CLIPS } from './pipeline/lint'
+import { gateNarration } from './pipeline/gate'
 import { narrationClipKey, uploadAudio } from './pipeline/storage'
 import { storyFactsHash } from './pipeline/persist'
 import { wikiUrlForPageId } from './pipeline/wikipedia'
@@ -60,14 +61,9 @@ import {
 } from './config'
 import { estimateTtsUsd, llmSpendLines, llmSpentUsd, unpricedModels, TTS_ESTIMATE_SAFETY } from './pipeline/spend'
 import { STORY_TASTE_DENYLIST, type DeliveryRegister } from '@skipper/shared'
-import { NARRATION_MODEL, JUDGMENT_MODEL, ttsStyleFor, lengthForRegister, getAnthropic } from './models'
-import { buildGroundingWell, evaluateGrounding } from './eval/grounding'
-import { applyLoudnessOutcomes, applyTailOutcomes, evaluateTts } from './eval/tts'
-import { evaluateDiversityAgainst } from './eval/diversity'
-import { evaluateLaterality } from './eval/laterality'
-import { evaluatePacing } from './eval/pacing'
-import { optimize } from './eval/optimize'
-import { exciseUngrounded, makeExciseCall } from './eval/excise'
+import { NARRATION_MODEL, JUDGMENT_MODEL, ttsStyleFor, lengthForRegister } from './models'
+import { buildGroundingWell } from './eval/grounding'
+import { applyLoudnessOutcomes, applyTailOutcomes } from './eval/tts'
 import { buildScorecard } from './eval/scorecard'
 import { DIMENSION_KIND, type StopEval } from './eval/types'
 import { recordEvalRun, type ClipIdentity } from './eval/record'
@@ -420,62 +416,17 @@ async function main(): Promise<void> {
     // shared seam, so the auditor's well can never drift from the narrator's sheet).
     const well = buildGroundingWell({ stopType: 'story', name: c.name, kind: c.kind, facts: grounding.facts })
 
-    // The per-clip panel: free dims always (tts-cleanliness + diversity = within-clip tics/bows) +
-    // laterality (a free grounding backstop); GROUNDING (one Opus call) behind SKIPPER_GROUNDING_EVAL.
-    // evaluate() is what optimize() scores each take on; regenerate() is narrateStop with avoid folded in.
-    const evaluate = async (script: string): Promise<StopEval[]> => {
-      const evals: StopEval[] = [
-        evaluateTts({ seq, script }),
-        // Scored against the REST of the region, not against itself. This used to be
-        // `evaluateDiversity([{ … }])` — a single-element array, in which every cross-clip rule is a
-        // no-op by arithmetic. That is why one geology sentence reached 17 released Tahoe clips and
-        // "national register of historic places" reached 67: nothing was ever in a position to see
-        // the second use. Diversity stays ADVISORY (it never withholds), but advisory findings are
-        // weighted by optimize()'s findingScore and their `avoid` notes feed the retake — so this
-        // genuinely changes which take ships, not just what gets logged.
-        ...evaluateDiversityAgainst({ seq, stopType: 'story', script }, diversityContext),
-        evaluateLaterality({ seq, script }),
-        evaluatePacing({ seq, script, targetSeconds: band.targetSeconds, maxSeconds: band.maxSeconds }),
-      ]
-      if (GROUNDING_EVAL())
-        evals.push(
-          await evaluateGrounding({
-            seq,
-            stopType: 'story',
-            placeName: c.name,
-            script,
-            well,
-            region: base.region,
-          }),
-        )
-      return evals
-    }
-    // Grounding retake = targeted EXCISION (eval/excise.ts), not re-narration: when the gate flags
-    // ungrounded place-claims, trim exactly those lines from the prior take and keep the rest, instead
-    // of re-rolling the whole clip (which just reaches for a different flourish). Non-grounding findings
-    // (tts/diversity/pacing) still re-narrate. `prev` is the prior best take, supplied by optimize().
-    const exciseCall = makeExciseCall(() => getAnthropic('grounding excision'))
-    const regenerate = async (avoid: string[], prev: string): Promise<string> => {
-      const ungrounded = avoid.filter((a) => a.startsWith('ungrounded place-claim'))
-      if (ungrounded.length > 0) {
-        console.log(`  ✂ ${c.name}: excising ${ungrounded.length} ungrounded claim(s)`)
-        return exciseUngrounded(prev, ungrounded, well, exciseCall)
-      }
-      return (await narrateStop({ ...base, avoid }, persona.systemPrompt)).script
-    }
-
-    const { script: initial } = await narrateStop(base, persona.systemPrompt)
-    const result = await optimize(initial, { evaluate, regenerate, maxRounds: GROUNDING_REGEN_MAX_ROUNDS })
-    // SHIP gate = every GATE dimension clean (grounding + tts; a laterality slip rides grounding).
-    // Diversity is advisory — it drives the retake but never withholds an otherwise-clean clip.
-    const shipped = result.evals.filter((e) => DIMENSION_KIND[e.dimension] === 'gate').every((e) => e.pass)
-    // Feed a shipped take back in, so later clips in THIS run are checked against it too — otherwise a
-    // fresh-region run (nothing in the DB yet) would have no context at all and repeat itself freely.
-    // ⚠ Best-effort by design: generation is concurrent (mapLimit), so how much context a given clip
-    // sees depends on completion order. That makes the run non-deterministic in its ADVISORY scoring
-    // only — gates are per-clip and unaffected — and more context is never worse than the none we had.
-    if (shipped && result.item) diversityContext.push(result.item)
-    return { c, seq, script: result.item, evals: result.evals, shipped }
+    const { script, evals, shipped } = await gateNarration({
+      seq,
+      name: c.name,
+      base,
+      well,
+      targetSeconds: band.targetSeconds,
+      maxSeconds: band.maxSeconds,
+      diversityContext,
+      systemPrompt: persona.systemPrompt,
+    })
+    return { c, seq, script, evals, shipped }
   }
 
   console.log(`\nNarrating + gating ${queue.length} encounters (concurrency ${NARRATION_CONCURRENCY()})...`)
