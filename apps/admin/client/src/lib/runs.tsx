@@ -1,5 +1,8 @@
-import type { ElementType } from 'react'
-import { Activity, Filter, MapPin, RefreshCw, Scissors, Sparkles, Trash2, Zap } from 'lucide-react'
+import { useMemo, useState, type ElementType } from 'react'
+import { Activity, Combine, Filter, MapPin, RefreshCw, Scissors, Sparkles, Trash2, Zap } from 'lucide-react'
+import { api, type RunEvent } from '@/lib/api'
+import { qk } from '@/lib/queryKeys'
+import { useAdminList } from '@/lib/useAdminList'
 
 // Shared run-presentation vocabulary for the two run pages (Jobs + Evals) and their drawers — they read
 // the same ['runs'] cache, so this used to be duplicated verbatim in both views.
@@ -20,6 +23,7 @@ export const KIND_META: Record<string, { label: string; icon: ElementType }> = {
   discover_pois:   { label: 'Discover POIs',     icon: Filter },
   enrich_pois:     { label: 'Enrich corpus',     icon: Sparkles },
   generate_narrations: { label: 'Generate Narration', icon: Zap },
+  generate_cluster_narrations: { label: 'Fuse clusters', icon: Combine },
   curate_places:   { label: 'Curate places',     icon: MapPin },
   offline_audit:   { label: 'Re-score corpus',   icon: Activity },
 }
@@ -39,4 +43,65 @@ export function RunTarget({ slug }: { slug: string | null }) {
   const sentinel = TARGET_SENTINELS[slug]
   if (sentinel) return <span className="italic text-muted-foreground">{sentinel}</span>
   return <>{slug}</>
+}
+
+/**
+ * The filter state both run pages need, over the shared ['runs'] cache.
+ *
+ * Jobs and Evals read the same cache and had grown the same scaffolding side by side: a
+ * kind/status/search state trio, a `filtered` memo of the same shape, and a `kindsInView` memo. This
+ * module already exists because the PRESENTATIONAL half of that pair was deduped once; this is the
+ * half that was left behind.
+ *
+ * What genuinely differs stays with the caller and is passed in: which `source` the page shows, what
+ * its status buckets mean (Jobs has running/failed/ok, Evals has failed/partial/ok), and which fields
+ * its search box looks at. The deep-link effect deliberately stays in each view too — Jobs opens its
+ * drawer from a row it must find in the list, Evals opens by id and re-fetches, so they are not the
+ * same effect wearing different names.
+ */
+export function useRunsFilter(
+  source: RunEvent['source'],
+  matchesStatus: (r: RunEvent, status: string) => boolean,
+  searchText: (r: RunEvent) => string,
+) {
+  const [kindFilter, setKindFilter] = useState<string>('all')
+  const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [q, setQ] = useState('')
+
+  const list = useAdminList(qk.runs(), async () => (await api.runs()).runs, { refetchInterval: RUNS_REFETCH_MS })
+  const rows = useMemo(() => list.data.filter((r) => r.source === source), [list.data, source])
+
+  const filtered = useMemo(
+    () =>
+      rows.filter((r) => {
+        if (kindFilter !== 'all' && r.kind !== kindFilter) return false
+        if (statusFilter !== 'all' && !matchesStatus(r, statusFilter)) return false
+        if (q && !searchText(r).toLowerCase().includes(q.toLowerCase())) return false
+        return true
+      }),
+    // matchesStatus/searchText are inline arrows at both call sites, so they are new every render;
+    // depending on them would rebuild this memo every time and defeat it. They are pure functions of
+    // their arguments, so the values below are the real inputs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rows, kindFilter, statusFilter, q],
+  )
+
+  /** Kind options scoped to the rows actually on screen — no dead options for kinds that never ran. */
+  const kindsInView = useMemo(() => [...new Set(rows.map((r) => r.kind))].sort(), [rows])
+
+  return {
+    rows,
+    filtered,
+    kindsInView,
+    kindFilter,
+    setKindFilter,
+    statusFilter,
+    setStatusFilter,
+    q,
+    setQ,
+    error: list.error,
+    isPending: list.isPending,
+    isFetching: list.isFetching,
+    refetch: list.refetch,
+  }
 }

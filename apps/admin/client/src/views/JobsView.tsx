@@ -1,13 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearch } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Activity, ArrowRight, ExternalLink, Search, Trash2, X } from 'lucide-react'
 import { api, type JobStatus, type RunEvent } from '@/lib/api'
 import { errMsg, fmtDate, timeAgo } from '@/lib/format'
 import { JOB_STATUS_VARIANT } from '@/lib/status'
-import { KIND_META, TARGET_SENTINELS, RunTarget, RUNS_REFETCH_MS } from '@/lib/runs'
+import { KIND_META, TARGET_SENTINELS, RunTarget, RUNS_REFETCH_MS, useRunsFilter } from '@/lib/runs'
 import { qk } from '@/lib/queryKeys'
-import { useAdminList } from '@/lib/useAdminList'
 import { PageHeader } from '@/components/PageHeader'
 import { DataTable, type Column } from '@/components/ui/data-table'
 import { Badge } from '@/components/ui/badge'
@@ -59,17 +58,21 @@ export function JobsView() {
   const confirm = useConfirm()
   const navigate = useNavigate()
   const search = useSearch({ strict: false }) as { run?: string }
-  const [kindFilter, setKindFilter] = useState<string>('all')
-  const [statusFilter, setStatusFilter] = useState<string>('all')
-  const [q, setQ] = useState('')
   const [drawerRun, setDrawerRun] = useState<RunEvent | null>(null)
 
-  const { data: runs, error, isPending, isFetching, refetch } = useAdminList(
-    qk.runs(),
-    async () => (await api.runs()).runs,
-    { refetchInterval: RUNS_REFETCH_MS },
+  const {
+    rows, filtered, kindsInView,
+    kindFilter, setKindFilter, statusFilter, setStatusFilter, q, setQ,
+    error, isPending, isFetching, refetch,
+  } = useRunsFilter(
+    'job',
+    (r, status) =>
+      status === 'running' ? r.status === 'running' || r.status === 'queued'
+      : status === 'failed' ? isFailed(r)
+      : status === 'ok' ? r.status === 'succeeded'
+      : true,
+    (r) => `${r.kind} ${r.id} ${r.triggeredBy ?? ''}`,
   )
-  const rows = useMemo(() => runs.filter((r) => r.source === 'job'), [runs])
 
   // Deep-link: ?run=<id> opens that job's drawer once the list resolves, then strips the param —
   // so re-synth/regenerate's "jump to the run" works, and a job is shareable/bookmarkable.
@@ -97,25 +100,8 @@ export function JobsView() {
     sweepMut.mutate()
   }
 
-  const filtered = useMemo(() => rows.filter((r) => {
-    if (kindFilter !== 'all' && r.kind !== kindFilter) return false
-    if (statusFilter !== 'all') {
-      if (statusFilter === 'running') return r.status === 'running' || r.status === 'queued'
-      if (statusFilter === 'failed')  return isFailed(r)
-      if (statusFilter === 'ok')      return r.status === 'succeeded'
-    }
-    if (q) {
-      const s = `${r.kind} ${r.id} ${r.triggeredBy ?? ''}`.toLowerCase()
-      if (!s.includes(q.toLowerCase())) return false
-    }
-    return true
-  }), [rows, kindFilter, statusFilter, q])
-
   const runningN = rows.filter((r) => r.status === 'running').length
   const failedN  = rows.filter(isFailed).length
-
-  // Kind options scoped to the rows actually on screen (no dead options for kinds that never ran).
-  const kindsInView = useMemo(() => [...new Set(rows.map((r) => r.kind))].sort(), [rows])
 
   const columns: Column<RunEvent>[] = [
     {

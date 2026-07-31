@@ -1,13 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { Activity, Search, X } from 'lucide-react'
 import { api, type EvalScoreRow, type RunEvent } from '@/lib/api'
 import { errMsg, fmtDate, fmtScore, timeAgo } from '@/lib/format'
-import { KIND_META, TARGET_SENTINELS, RunTarget, RUNS_REFETCH_MS } from '@/lib/runs'
+import { KIND_META, TARGET_SENTINELS, RunTarget, RUNS_REFETCH_MS, useRunsFilter } from '@/lib/runs'
 import { VERDICT_VARIANT, verdictOf, isPartial, isTrueFail } from '@/lib/status'
 import { qk } from '@/lib/queryKeys'
-import { useAdminList } from '@/lib/useAdminList'
 import { PageHeader } from '@/components/PageHeader'
 import { DataTable, type Column } from '@/components/ui/data-table'
 import { Badge } from '@/components/ui/badge'
@@ -61,17 +60,21 @@ function EvalResultCell({ r }: { r: RunEvent }) {
 export function EvalsView() {
   const navigate = useNavigate()
   const search = useSearch({ strict: false }) as { run?: string }
-  const [kindFilter, setKindFilter] = useState<string>('all')
-  const [statusFilter, setStatusFilter] = useState<string>('all')
-  const [q, setQ] = useState('')
   const [drawerRunId, setDrawerRunId] = useState<string | null>(null)
 
-  const { data: runs, error, isPending, isFetching, refetch } = useAdminList(
-    qk.runs(),
-    async () => (await api.runs()).runs,
-    { refetchInterval: RUNS_REFETCH_MS },
+  const {
+    rows, filtered, kindsInView,
+    kindFilter, setKindFilter, statusFilter, setStatusFilter, q, setQ,
+    error, isPending, isFetching, refetch,
+  } = useRunsFilter(
+    'eval',
+    (r, status) =>
+      status === 'failed' ? isTrueFail(r)
+      : status === 'partial' ? isPartial(r)
+      : status === 'ok' ? r.pass === true
+      : true,
+    (r) => `${r.kind} ${r.id} ${r.narrationModel ?? ''} ${r.gitSha ?? ''}`,
   )
-  const rows = useMemo(() => runs.filter((r) => r.source === 'eval'), [runs])
 
   // Deep-link: ?run=<id> opens that eval's drawer, then strips the param. The id need not be in the
   // list — a job links here for its (suppressed) eval, and the drawer resolves it by id.
@@ -81,25 +84,8 @@ export function EvalsView() {
     navigate({ to: '/evals', search: (prev) => ({ ...prev, run: undefined }), replace: true })
   }, [search.run, navigate])
 
-  const filtered = useMemo(() => rows.filter((r) => {
-    if (kindFilter !== 'all' && r.kind !== kindFilter) return false
-    if (statusFilter !== 'all') {
-      if (statusFilter === 'failed')  return isTrueFail(r)
-      if (statusFilter === 'partial') return isPartial(r)
-      if (statusFilter === 'ok')      return r.pass === true
-    }
-    if (q) {
-      const s = `${r.kind} ${r.id} ${r.narrationModel ?? ''} ${r.gitSha ?? ''}`.toLowerCase()
-      if (!s.includes(q.toLowerCase())) return false
-    }
-    return true
-  }), [rows, kindFilter, statusFilter, q])
-
   const partialN = rows.filter(isPartial).length
   const failedN  = rows.filter(isTrueFail).length
-
-  // Kind options scoped to the rows actually on screen (every eval row is kind 'generation' today).
-  const kindsInView = useMemo(() => [...new Set(rows.map((r) => r.kind))].sort(), [rows])
 
   const columns: Column<RunEvent>[] = [
     {
