@@ -13,7 +13,6 @@
 // Breaks + clock-anchored asides are layered by the caller in later phases; this is the
 // narration core.
 
-import type { AreaRef } from './area'
 import { cumulativeMeters, haversineMeters, OFF_ROUTE_MAX_M, totalMeters, triggerRadiusForKind, type LngLat } from './geo'
 import { buildRouteSnapper } from './pacing'
 import { DEFAULT_TRIGGER, effectiveRadiusM } from './trigger'
@@ -49,11 +48,18 @@ export interface DriveCandidate {
    *  (`clusterTrigger`). ⚠ Only set this when the kind vocabulary genuinely cannot answer — a POI
    *  must keep deriving its radius, so the two paths can't drift. */
   triggerRadiusM?: number
-  /** Set when this candidate is an AREA telling — a district you are INSIDE rather than a place you
-   *  pass. Present ONLY to be REFUSED here (see the admission loop): a drive cannot carry one yet.
-   *  The caller must still populate it, because "absent" and "refused" have to be distinguishable —
-   *  dropping the field at the mapper would silently restore the point behaviour this exists to stop. */
-  area?: AreaRef
+  /** True when this candidate's group is too spread out for ANY single point to represent honestly —
+   *  `exceedsPointTrigger(clusterTrigger(members))` on the UNCAPPED radius. Present ONLY to be REFUSED
+   *  here (see the admission loop).
+   *
+   *  ⚠ It is a BOOLEAN carried from the server, not something recomputable here, and that is the whole
+   *  point: the loader serves `triggerRadiusM` already CAPPED at `CLUSTER_MAX_TRIGGER_RADIUS_M`, so by
+   *  the time a candidate exists the evidence is gone — asking `exceedsPointTrigger` again would read
+   *  the cap and answer `false` for exactly the groups this refuses. Compute it where the true radius
+   *  still lives.
+   *  ⚠ The caller must still populate it: "absent" and "refused" have to be distinguishable, and
+   *  dropping the field at the mapper silently restores the point behaviour this exists to stop. */
+  tooWideForPoint?: boolean
 }
 
 /** The trigger floor for a candidate: an explicit override when one is supplied (a cluster), else the
@@ -149,24 +155,27 @@ export function buildDrive(params: BuildDriveParams): DriveStop[] {
   //    honest drive beats a longer one with silent gaps in it.
   const placed: Snapped[] = []
   for (const cand of candidates) {
-    // The SECOND admission rule: an AREA candidate has no single point to snap, so the point rule
-    // below cannot judge it — and judging it anyway is not a harmless approximation.
+    // The SECOND admission rule: a group too spread out for a point has no single point to snap, so
+    // the point rule below cannot judge it — and judging it anyway is not a harmless approximation.
     //
-    // ⚠ A district's `lat/lng` is its enclosing-circle CENTRE, which `clusterTrigger` deliberately
+    // ⚠ A wide group's `lat/lng` is its enclosing-circle CENTRE, which `clusterTrigger` deliberately
     // leaves un-snapped and off-road, while the radius it arrives with is CAPPED (600 m) below the
     // group's true extent (914 m for downtown Reno). So the point rule both mis-places the stop and
     // breaks the guarantee that justified the centre in the first place ("every member is within the
     // enclosing radius" is only true UNCAPPED). The two failure modes are a stop that fires on the
     // freeway approach and one that never fires at all — and a drive's `selection` is FROZEN at
     // create against a credit that is never refunded, so either one is baked in for that rider
-    // permanently, including for a rider who never upgrades.
+    // permanently.
     //
-    // Refusing is therefore the honest answer until a drive can carry a ring END TO END (a wire
-    // field, plus a client that fires polygons). Roam has no such problem — nothing is frozen there,
-    // so the same telling already reaches roam riders correctly. When the drive path can carry it,
-    // this branch becomes the real rule: admit iff the polyline ENTERS the ring, with `alongSec`
-    // taken from the ENTRY vertex rather than the centre's projection.
-    if (cand.area) continue
+    // ⚠ This refusal is GEOMETRIC, not mode-based, and that distinction is load-bearing. It used to
+    // key on an `area` field (a served convex hull), which meant deleting the area MODE would have
+    // silently flipped this branch from REFUSE to ADMIT and shipped exactly the frozen mis-fire above.
+    // Keying it on the geometry keeps the refusal true no matter what trigger modes exist.
+    //
+    // When a drive can place these honestly, this branch becomes the real rule — and the route is the
+    // rails, so it needs no polygon: snap to where the POLYLINE comes closest to the members and take
+    // `alongSec` from there, instead of judging an off-road centre the route never passes.
+    if (cand.tooWideForPoint) continue
     const s = snap([cand.lng, cand.lat])
     const reachM = Math.min(
       offRouteMaxM,

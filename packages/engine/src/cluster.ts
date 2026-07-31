@@ -23,11 +23,21 @@ import { ANCHORED_TRIGGER_RADIUS_M, EARTH_RADIUS_M, haversineMeters, type LngLat
  * you would hear the campus named a minute and a half before reaching it. Emerald Bay at 516 m fires
  * at 26 s against a 12 s baseline on a real highway route, which is fine. The line is between them.
  *
- * ⚠ WHAT THIS NOW MEANS (changed 2026-07-30). It used to DEFER a group — too wide, so don't tell it.
- * The area trigger exists now, so it SELECTS THE MODE instead: at or under, a point; over, an AREA
- * (`./area`). It is also the cap on the point FALLBACK an area telling carries for clients that cannot
- * fire a polygon, which is the same idea one layer down — never trigger looser than the loosest thing
- * already shipping.
+ * ⚠ WHAT THIS NOW MEANS (2026-07-31, third revision — read the history, it is the point). It first
+ * DEFERRED a group ("too wide, so don't tell it"). It then SELECTED A MODE, once the area trigger
+ * existed: at or under, a point; over, an area. With roam removed there is no arrive-from-anywhere
+ * rider left, so it is back to being a plain THRESHOLD — the question "can any single point represent
+ * this group honestly?", asked once, on the UNCAPPED radius.
+ *
+ * Who answers it differently is the part that matters: the drive path REFUSES a group that fails it
+ * (`tooWideForPoint` → buildDrive's second admission rule), because a drive's selection is frozen at
+ * create against a credit that never refunds. It is ALSO still the cap on the point fallback a served
+ * area telling carries — same idea one layer down, never trigger looser than the loosest thing already
+ * shipping.
+ *
+ * ⚠ Do not collapse the threshold into whichever answer is currently implemented. Keying the drive
+ * refusal on "was a hull served?" instead of on this predicate is what would make deleting the area
+ * mode silently flip a refusal into an admission.
  */
 export const CLUSTER_MAX_TRIGGER_RADIUS_M = 600
 

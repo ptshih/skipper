@@ -348,12 +348,30 @@ comes closest to the members — no hull required), which is new machinery and n
 nearest one — **no A→B drive between curated endpoints can reach them.** ⚠ That immunity ends the day a
 paid `curate-places` run adds a Reno endpoint, which is exactly why the REFUSAL must survive this step.
 
-Delete: `packages/engine/src/area.ts` + its tests + the `index.ts` re-export; the area branch in
-`trigger.ts`; `DriveCandidate.area` and `drive-select.ts`'s second admission rule; `ClusterTelling.area`,
-`areaCapable` and the `needsArea`/hull-mint block in `apps/api/src/clusters.ts`; the `area` plumbing in
-`apps/api/src/drives.ts`; `areaRing` + `roamPin.area` in `packages/shared`; the `<Polygon>` + `area`
-threading in mobile; and the whole `CLIENT_CAPS`/`clientCan` capability channel, whose ONLY token is
-`area` and which has no production caller.
+✅ **DONE 2026-07-31 — and the SCOPE CHANGED once the code was read.** `area.ts` cannot be deleted yet:
+`roam.ts` imports six symbols from it (`areaDwellSatisfied`, `ringAreaM2`, `trackAreaEntry`,
+`signedDistanceM`, `AreaRef`, …), so the module dies **with roam, in step 3**. That turns out to be the
+better order anyway, because the load-bearing half is severing the DRIVE path from `area` — after which
+deleting the module cannot flip anything, since no refusal keys on it any more.
+
+What shipped: `DriveCandidate.area` → **`tooWideForPoint: boolean`**, `drive-select.ts`'s second
+admission rule re-keyed to it (comment rewritten to say the refusal is geometric), `ClusterTelling`
+gains the flag computed in `clusters.ts` **where the uncapped radius still exists**, `drives.ts`'s
+`NarrationRow.area` → the flag at both mapper sites, and `cluster.ts`'s threshold comment rewritten
+(third revision: defer → select-a-mode → plain threshold).
+
+✅ **Verified by BEHAVIOUR against the live loader + real `buildDrive`, not by typecheck** — the field is
+optional at every hop, so a dropped thread compiles clean and silently re-admits. Exactly **3** tellings
+carry the flag (Downtown Reno, Reno's Historic Homes, UNR), all served at `triggerRadiusM = 600` (the cap
+that destroys the evidence). On a route running straight over each centre — precisely the case the point
+rule admits — **with the flag: 0 stops, 3/3 refused. Without it: 1 stop, 3/3 admitted.**
+
+Still owed at step 3, with roam: `area.ts` + its two tests + the `index.ts` re-export; the area branch in
+`trigger.ts` and in `roam.ts`; the hull mint + `areaCapable` in `clusters.ts`; `areaRing` + `roamPin.area`
+in `packages/shared`; the `<Polygon>` + `area` threading and its theme roles in mobile; and the
+`CLIENT_CAPS`/`clientCan` channel, whose ONLY token is `area` and which has no production caller.
+⚠ That last one is entangled with re-homing `APP_VERSION` out of `clientIdentity.ts` (it feeds the
+shipped `VersionGate`), which is why it belongs to step 3 rather than here.
 
 ⚠ **KEEP, do not delete: the REFUSAL** (D42a) — re-keyed from `cand.area` to an explicit geometry
 boolean set in `clusters.ts` where the uncapped radius still exists, carried on `ClusterTelling` →

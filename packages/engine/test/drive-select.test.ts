@@ -30,17 +30,15 @@ describe('buildDrive', () => {
   })
 
 
-  // The SECOND admission rule. A district arrives with a hull, an off-road enclosing-circle CENTRE,
-  // and a radius CAPPED below its true extent — so the point rule would place it wherever the centre
-  // happens to fall and freeze that into the drive forever. It must be refused outright, even when
-  // its centre sits squarely ON the route (which is exactly the case the point rule would admit).
-  test('refuses an AREA candidate even when its point would be admitted', () => {
-    const ring: LngLat[] = [
-      [-0.004, 38.046],
-      [0.004, 38.046],
-      [0.004, 38.054],
-      [-0.004, 38.054],
-    ]
+  // The SECOND admission rule. A too-wide group arrives with an off-road enclosing-circle CENTRE and a
+  // radius CAPPED below its true extent — so the point rule would place it wherever the centre happens
+  // to fall and freeze that into the drive forever. It must be refused outright, even when its centre
+  // sits squarely ON the route (which is exactly the case the point rule would admit).
+  //
+  // ⚠ The refusal keys on GEOMETRY (`tooWideForPoint`), never on a served hull. It keyed on the hull
+  // until 2026-07-31, which meant deleting the area MODE would have flipped this branch from REFUSE to
+  // ADMIT and shipped the frozen mis-fire — a deletion elsewhere silently un-writing this test's intent.
+  test('refuses a TOO-WIDE candidate even when its point would be admitted', () => {
     const stops = buildDrive({
       polyline,
       totalSec: TOTAL_SEC,
@@ -48,17 +46,17 @@ describe('buildDrive', () => {
       maxStops: 10,
       candidates: [
         cand({ poiId: 'point', lat: 38.02 }),
-        // Dead on the line — the point rule admits this without the area branch.
-        cand({ poiId: 'district', lat: 38.05, area: { ring, marginM: 60 } }),
+        // Dead on the line — the point rule admits this without the refusal.
+        cand({ poiId: 'district', lat: 38.05, tooWideForPoint: true }),
       ],
     })
     expect(stops.some((s) => s.poiId === 'point')).toBe(true)
     expect(stops.some((s) => s.poiId === 'district')).toBe(false)
   })
 
-  // Guards the mapper: `area` is optional at every hop, so an omitted field compiles clean and
-  // silently restores the point behaviour. Same candidate, no hull ⇒ admitted.
-  test('the same candidate WITHOUT a hull is still admitted (the refusal is the area, not the place)', () => {
+  // Guards the mapper: `tooWideForPoint` is optional at every hop, so an omitted field compiles clean
+  // and silently restores the point behaviour. Same candidate, flag absent ⇒ admitted.
+  test('the same candidate WITHOUT the flag is still admitted (the refusal is the geometry, not the place)', () => {
     const stops = buildDrive({
       polyline,
       totalSec: TOTAL_SEC,

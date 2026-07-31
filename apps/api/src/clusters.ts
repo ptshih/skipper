@@ -50,6 +50,13 @@ export interface ClusterTelling {
   /** AREA mode: the convex hull of the members, for a group too spread out to be a point. Undefined
    *  for a compact group, which triggers on the point above exactly as before. */
   area?: { ring: LngLat[]; marginM: number }
+  /** GEOMETRY, not mode: `exceedsPointTrigger` on the UNCAPPED radius — "no single point can represent
+   *  this group honestly". True for exactly the groups `area` is minted for, but it is NOT a synonym
+   *  and must not be collapsed into one: `area` is one ANSWER to this condition (fire on containment),
+   *  and the drive path refuses rather than answering. Keeping the question separate from that one
+   *  answer is what lets the area mode be deleted without a refusal silently becoming an admission.
+   *  ⚠ Cannot be recomputed downstream — `triggerRadiusM` above is served capped. */
+  tooWideForPoint: boolean
 }
 
 /** The variety bucket every fused telling shares. NOT null: `drive-select` treats two nulls as
@@ -211,6 +218,12 @@ export async function loadClusterTellings(opts: {
     if (needsArea && (!area || area.ring.length < 3)) continue // collinear members: no honest polygon
     out.push({
       ...(area ? { area } : {}),
+      // ⚠ Carried SEPARATELY from `area`, and computed HERE on purpose: `triggerRadiusM` below is
+      // served already capped, so this is the last place the true extent is known. A consumer that
+      // re-asked `exceedsPointTrigger` downstream would read the cap and get `false` for exactly the
+      // groups that need refusing. buildDrive's second admission rule keys on this — never on `area`,
+      // so that deleting the area MODE cannot silently flip a refusal into an admission.
+      tooWideForPoint: needsArea,
       narrationId: r.narrationId,
       clusterId: r.clusterId,
       form: r.form,
