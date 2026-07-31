@@ -46,13 +46,20 @@ export function stableStringify(value: unknown): string {
   return `{${parts.join(',')}}`
 }
 
+/** sha256 over the canonical form — the ONE place the digest algorithm and encoding are chosen.
+ *  Private on purpose: every fingerprint in this file has to agree on it, and a caller that picked its
+ *  own would produce a hash that silently never matches the stored one. */
+function digest(value: unknown): string {
+  return createHash('sha256').update(stableStringify(value)).digest('hex')
+}
+
 /** Order-invariant hash of a poi's facts — the change-detector for narration staleness. Null when
  *  no facts. Canonicalizes via `stableStringify` so the hash survives the `pois.facts` jsonb
  *  round-trip: a writer's in-memory `pois.facts_hash` equals a reader's read-back `narrations.facts_hash`
  *  for the same content (the staleness contract compares those two STORED columns by inequality). */
 export function hashFacts(facts: PoiFacts | null): string | null {
   if (!facts) return null
-  return createHash('sha256').update(stableStringify(facts)).digest('hex')
+  return digest(facts)
 }
 
 /**
@@ -71,10 +78,9 @@ export function storyFactsHash(
   facts: PoiFacts | null,
   factSheet: FactSheetEntry[] | null | undefined,
 ): string | null {
-  if (factSheet && factSheet.length > 0) {
-    return createHash('sha256').update(stableStringify(factSheet)).digest('hex')
-  }
-  if (!facts) return null
+  if (factSheet && factSheet.length > 0) return digest(factSheet)
+  // No null guard: hashFacts is already null-in/null-out. Don't re-add one — a second guard here
+  // would have to be kept in step with that one for no gain.
   return hashFacts(facts)
 }
 
@@ -139,14 +145,10 @@ export function clusterFactsHash(input: ClusterHashInput): string | null {
     .map((m) => `${m.poiId}:${m.factsHash ?? ''}`)
     .sort()
   if (members.length === 0) return null
-  return createHash('sha256')
-    .update(
-      stableStringify({
-        members,
-        title: input.title,
-        highlights: [...input.highlights],
-        dropped: [...input.dropped],
-      }),
-    )
-    .digest('hex')
+  return digest({
+    members,
+    title: input.title,
+    highlights: [...input.highlights],
+    dropped: [...input.dropped],
+  })
 }
