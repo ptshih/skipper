@@ -21,7 +21,7 @@
 //   --include-ids a,b,c     regenerate EXACTLY these cluster ids (skips the region scope + --limit)
 //   --max-cost <usd>        stop launching work once spend crosses this
 
-import { and, between, eq, inArray, isNotNull, sql } from 'drizzle-orm'
+import { and, eq, inArray, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { narrations, poiClusters, pois } from '@skipper/db/schema'
 import type { FactSheetEntry } from '@skipper/db/schema'
@@ -39,6 +39,7 @@ import { personaFromKey } from './persona'
 import { lengthForRegister, ttsStyleFor } from './models'
 import { buildGroundingWell } from './eval/grounding'
 import { applyLoudnessOutcomes, applyTailOutcomes } from './eval/tts'
+import { clusterIdsInBbox, loadDiversityContext } from './pipeline/diversity-context'
 import { gateNarration } from './pipeline/gate'
 import { buildScorecard } from './eval/scorecard'
 import { DIMENSION_KIND, type StopEval } from './eval/types'
@@ -114,17 +115,9 @@ async function main(): Promise<void> {
   const includeIds = (flags.value('include-ids') ?? '').split(',').map((x) => x.trim()).filter(Boolean)
 
   // A cluster is in the region the same geometry-first way everything else is — by where its members
-  // are (poi_clusters stores no coordinates, deliberately).
-  const inRegion = db
-    .selectDistinct({ id: pois.clusterId })
-    .from(pois)
-    .where(
-      and(
-        isNotNull(pois.clusterId),
-        between(pois.lat, bbox.swLat, bbox.neLat),
-        between(pois.lng, bbox.swLng, bbox.neLng),
-      ),
-    )
+  // are (poi_clusters stores no coordinates, deliberately). Shared with the diversity-context loader,
+  // which has to resolve the exact same membership for fused tellings.
+  const inRegion = clusterIdsInBbox(bbox)
   const clusters = await db
     .select({
       id: poiClusters.id,
@@ -208,27 +201,7 @@ async function main(): Promise<void> {
   // bbox from — reaching for one and coalescing the NULL away would have silently dropped every fused
   // clip from its own context. Region membership resolves per subject kind: solo by its poi's point,
   // fused by the same `inRegion` member-geometry the cluster query above uses.
-  const soloIn = db
-    .selectDistinct({ id: pois.id })
-    .from(pois)
-    .where(and(between(pois.lat, bbox.swLat, bbox.neLat), between(pois.lng, bbox.swLng, bbox.neLng)))
-  const diversityContext: string[] = (
-    await withRetry(
-      () =>
-        db
-          .select({ script: narrations.script })
-          .from(narrations)
-          .where(
-            and(
-              isNotNull(narrations.script),
-              sql`(${narrations.poiId} in ${soloIn} or ${narrations.clusterId} in ${inRegion})`,
-            ),
-          ),
-      { label: 'load diversity context' },
-    )
-  )
-    .map((r) => r.script)
-    .filter((s): s is string => !!s)
+  const diversityContext: string[] = await loadDiversityContext(bbox)
   console.log(`Diversity context: ${diversityContext.length} existing tellings in this region.\n`)
 
   /** The nameable/background split (§3.2), plus the well BOTH the narrator and the judge see. */
@@ -308,6 +281,36 @@ async function main(): Promise<void> {
   const tailBySeq = new Map<number, TailOutcome>()
   const loudnessBySeq = new Map<number, LoudnessOutcome>()
 
+  // Observability: the same eval record the poi path writes, with the CLUSTER as the case identity.
+  //
+  // ⚠ Called on EVERY exit, not just the applied one — a preview and an abort are exactly the runs you
+  // most want a scorecard for, since they are how you inspect quality before paying for TTS. The poi
+  // path has always recorded its dry runs ("observability without synth/persist"); this path recorded
+  // only on success, so a fused preview left nothing in eval_runs and its withheld clips were flagged
+  // nowhere queryable. `tailBySeq`/`loudnessBySeq` are empty on a dry run, which the apply- helpers
+  // treat as a no-op, exactly as they do for the poi path.
+  const recordRun = (dryRun: boolean, synthesized?: number): Promise<unknown> =>
+    recordEvalRun({
+      region: region.slug,
+      kind: 'generation',
+      dryRun,
+      scorecard: buildScorecard({
+        slug: region.slug,
+        runName: `fused clusters — ${region.displayName}`,
+        evaluatedAt: new Date().toISOString(),
+        stops: applyLoudnessOutcomes(applyTailOutcomes(gated.flatMap((g) => g.evals), tailBySeq), loudnessBySeq),
+      }),
+      total: gated.length,
+      shipped: synthesized ?? shippedClips.length,
+      withheld: withheld.length,
+      identityBySeq: new Map<number, ClipIdentity>(
+        gated.map((g) => [
+          g.seq,
+          { poiId: null, clusterId: g.f.id, qid: null, name: g.f.title, withheld: !g.shipped, script: g.shipped ? null : g.script },
+        ]),
+      ),
+    }).catch((e) => console.warn(`  ⚠ eval record failed (observability only): ${e}`))
+
   const printScorecard = (g: GatedFused) => {
     for (const e of g.evals) {
       console.log(
@@ -330,8 +333,12 @@ async function main(): Promise<void> {
       }
       printScorecard(g)
     }
+    await recordRun(true) // a DRY eval run — observability without synth/persist
     for (const l of llmSpendLines()) console.log(l)
-    console.log(`\nSpent $${llmSpentUsd().toFixed(2)}. PREVIEW — nothing written. Re-run with --apply to synthesize + persist.`)
+    console.log(
+      `\nSpent $${llmSpentUsd().toFixed(2)}. PREVIEW — no audio synthesized, no narration persisted ` +
+        `(a dry eval run IS recorded, so this shows up in the admin Evals view). Re-run with --apply.`,
+    )
     return
   }
 
@@ -345,6 +352,7 @@ async function main(): Promise<void> {
   // changes, these two must not disagree about when spending is allowed.
   const unpriced = unpricedModels()
   if (maxCostUsd !== Infinity && unpriced.length > 0) {
+    await recordRun(true) // the gating work is done and paid for — keep its scorecard
     throw new Error(
       `⛔ --max-cost is set but these models are UNPRICED (their spend reads $0, defeating the cap): ${unpriced.join(', ')}. Add them to MODEL_PRICING (pipeline/spend.ts) or re-run without --max-cost.`,
     )
@@ -436,28 +444,7 @@ async function main(): Promise<void> {
   const ok = results.filter((r): r is { title: string; durationMs: number } => r !== null)
   const totalSec = ok.reduce((a, r) => a + r.durationMs, 0) / 1000
 
-  // Observability: the same eval record the poi path writes, with the CLUSTER as the case identity.
-  const stops = applyLoudnessOutcomes(applyTailOutcomes(gated.flatMap((g) => g.evals), tailBySeq), loudnessBySeq)
-  await recordEvalRun({
-    region: region.slug,
-    kind: 'generation',
-    dryRun: false,
-    scorecard: buildScorecard({
-      slug: region.slug,
-      runName: `fused clusters — ${region.displayName}`,
-      evaluatedAt: new Date().toISOString(),
-      stops,
-    }),
-    total: gated.length,
-    shipped: ok.length,
-    withheld: withheld.length,
-    identityBySeq: new Map<number, ClipIdentity>(
-      gated.map((g) => [
-        g.seq,
-        { poiId: null, clusterId: g.f.id, qid: null, name: g.f.title, withheld: !g.shipped, script: g.shipped ? null : g.script },
-      ]),
-    ),
-  }).catch((e) => console.warn(`  ⚠ eval record failed (observability only): ${e}`))
+  await recordRun(false, ok.length)
 
   for (const g of gated) {
     console.log(`\n▸ ${g.f.title}  [${g.shipped ? 'shipped' : 'WITHHELD'}]`)
