@@ -11,6 +11,7 @@ import { Stack, useLocalSearchParams, useNavigation, useRouter } from 'expo-rout
 import * as SecureStore from 'expo-secure-store'
 import { useDrive } from '@/lib/useDrive'
 import { useSession } from '@/lib/auth'
+import { useIsOffline } from '@/lib/connectivity'
 import { useSimMode } from '@/lib/sim-mode'
 import { stopLabel } from '@/lib/labels'
 import { useReducedMotion, useTheme } from '@/theme'
@@ -68,18 +69,27 @@ export default function DriveScreen() {
 
   // Map ⇄ List — the real map (route + live puck) or the bare itinerary. List stays the
   // offline + accessibility-complete equivalent; the choice persists across sessions.
-  const [view, setView] = useState<PlayerView>('map')
+  const [savedView, setSavedView] = useState<PlayerView>('map')
   useEffect(() => {
     SecureStore.getItemAsync(VIEW_KEY)
       .then((v) => {
-        if (v === 'map' || v === 'list') setView(v)
+        if (v === 'map' || v === 'list') setSavedView(v)
       })
       .catch(() => {})
   }, [])
+  // An explicit tap this session outranks the offline auto-flip below — the rider gets the last word.
+  const [pickedView, setPickedView] = useState(false)
   const changeView = useCallback((next: PlayerView) => {
-    setView(next)
+    setPickedView(true)
+    setSavedView(next)
     SecureStore.setItemAsync(VIEW_KEY, next).catch(() => {})
   }, [])
+  // Basemap tiles are network-only, so in a dead zone Map is our route line and puck floating on a
+  // blank field, while List is complete. Open on List instead — DERIVED, never a setState: writing
+  // it back would quietly overwrite a preference the rider set in town and never asked to change.
+  // They can still tap Map (a blank basemap with the route drawn is a legitimate thing to want).
+  const isOffline = useIsOffline()
+  const view: PlayerView = !pickedView && isOffline && savedView === 'map' ? 'list' : savedView
   // Map mode floats the player as an expandable PEEK sheet (mini-bar ↔ full card). Pre-drive
   // (ready) and arrival (done) force the full card — there's nothing to peek past.
   const [expanded, setExpanded] = useState(false)

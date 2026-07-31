@@ -1,8 +1,9 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Animated, StyleSheet, View } from 'react-native'
 import { Stack, useFocusEffect, useRouter } from 'expo-router'
 import { errorMessage, listDrives, type DriveSummary } from '@/lib/api'
 import { useSession } from '@/lib/auth'
+import { useIsOffline } from '@/lib/connectivity'
 import { listDownloadedDrives } from '@/lib/offline'
 import { cleanPlaceName } from '@/lib/labels'
 import { space } from '@/theme/tokens'
@@ -15,6 +16,9 @@ import { Badge, Button, Card, Divider, HeaderIconButton, RouteTrack, Screen, Ske
 export default function HomeScreen() {
   const router = useRouter()
   const { data: session } = useSession()
+  // Both mode CTAs open with a fetch, so with no network they lead nowhere. Dim them and say so
+  // rather than let two live-looking amber buttons hand the rider a spinner and an error.
+  const isOffline = useIsOffline()
   const [drives, setDrives] = useState<DriveSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -75,6 +79,15 @@ export default function HomeScreen() {
     }, [load]),
   )
 
+  // Self-heal on the offline→online edge: the load that failed out here re-runs the moment the bars
+  // come back, so a rider who drives back into signal never has to know to tap the retry. Guarded on
+  // the TRANSITION (not on `!isOffline`) so it never doubles up with the focus load above.
+  const wasOffline = useRef(false)
+  useEffect(() => {
+    if (wasOffline.current && !isOffline) load()
+    wasOffline.current = isOffline
+  }, [isOffline, load])
+
   const settingsButton = (
     <HeaderIconButton name="settings" accessibilityLabel="Settings" onPress={() => router.push('/settings')} />
   )
@@ -108,8 +121,18 @@ export default function HomeScreen() {
   // the secondary action just under it. Each carries a one-line blurb.
   const modes = (
     <View style={styles.modes}>
+      {/* Offline: one honest note, and the CTAs below it dimmed to match. Both modes OPEN with a
+          fetch (roam pulls its pin manifest, create lists regions), so out here the tap has nothing
+          behind it. The note ends on what still works whenever there IS something saved. */}
+      {isOffline ? (
+        <Text variant="dim" color="inkFaint" align="center">
+          {drives.length > 0
+            ? `${voice.offline.needsSignal} ${voice.offline.needsSignalSaved}`
+            : voice.offline.needsSignal}
+        </Text>
+      ) : null}
       <View style={styles.modeBlock}>
-        <Button icon="car" title={voice.roam.start} onPress={() => navigateOnce(() => router.push('/roam'))} fullWidth />
+        <Button icon="car" title={voice.roam.start} disabled={isOffline} onPress={() => navigateOnce(() => router.push('/roam'))} fullWidth />
         <Text variant="dim" color="inkFaint" align="center">
           Pull over for stories as you go — no plan needed.
         </Text>
@@ -119,12 +142,13 @@ export default function HomeScreen() {
         <Button
           variant="ghost"
           title={voice.sample.homeLink}
+          disabled={isOffline}
           onPress={() => navigateOnce(() => router.push('/sample'))}
           fullWidth={false}
         />
       </View>
       <View style={styles.modeBlock}>
-        <Button variant="secondary" icon="map" title="Create a Drive" glow={false} onPress={() => navigateOnce(() => router.push('/create'))} fullWidth />
+        <Button variant="secondary" icon="map" title="Create a Drive" glow={false} disabled={isOffline} onPress={() => navigateOnce(() => router.push('/create'))} fullWidth />
         <Text variant="dim" color="inkFaint" align="center">
           Pick a start and end; the skipper lines up the stories.
         </Text>

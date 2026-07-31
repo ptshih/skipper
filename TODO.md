@@ -899,32 +899,29 @@ This is the whole gap, not the audio pipeline.
       never flips so the "N stories told" pill stays at 0 — the rider gets no evidence anything was
       even attempted.
 
-⚠ **The app has NO connectivity awareness at all.** `expo-network` is a dependency but is imported
-ONLY as a Metro lazy-bundling workaround (`index.js:13`); nothing reads network state.
+✅ **CONNECTIVITY AWARENESS IS BUILT (2026-07-30) — the app knows, and says so.** One app-wide verdict
+in `src/lib/connectivity.ts`; `api.ts` throws `OfflineError` INSTEAD of attempting a request the device
+can't carry, so every dead-zone fallback that used to wait out the 15 s timeout is now an instant disk
+read, and every failure surface says the honest thing instead of the generic in-voice line. Home dims
+the two mode CTAs (both open with a fetch) and self-heals on the offline→online edge; the drive player
+opens on List when offline (DERIVED — it never overwrites the rider's persisted view preference).
 
-- [ ] **Know you are offline, and say so.** `errorMessage` collapses every non-`ApiError` into one
-      in-voice line, so "you're offline" is indistinguishable from a 500, a parse blip, or a GPS
-      timeout — and the rider is handed a retry button that cannot work. This is the highest
-      value-per-hour item on the list: it costs one hook and it fixes the *experience* of every
-      failure below without fixing any of them.
-- [ ] **Every offline fallback pays up to the full 15 s timeout first**, because the fallbacks are
-      triggered by a FAILED fetch rather than a connectivity check (`api.ts:85`). Cold start in a dead
-      zone: ~15 s of skeletons, then the saved drives appear; tap one, ~15 s more. It feels broken
-      twice before it works. A connectivity check turns both into instant disk reads.
-- [ ] **Online-only CTAs look live offline.** Ride Along, Create a Drive and "hear one clip" all sit as
-      amber CTAs that lead to a spinner and a generic error.
+⚠ **Two landmines are documented in `connectivity.ts` and must not be undone.** (1) We never call
+`getNetworkStateAsync()`: read expo-network's `ios/NetworkModule.swift` — with no path in hand it spins
+a temporary `NWPathMonitor` and blocks on a semaphore up to 5 s, and on TIMEOUT returns
+`isConnected: false`, i.e. it can FABRICATE an offline verdict. (2) The listener is registered once and
+never removed, because the native module cancels `NWPathMonitor` in `OnStopObserving` and a cancelled
+monitor is final — which is also why expo-network's own `useNetworkState()` hook must not be used in a
+component. The verdict fails OPEN throughout: never having observed an event reads as ONLINE, so a
+missing native module degrades to exactly the old behaviour rather than to a bricked app.
 
-Two more, unrelated to roam:
+One more, unrelated to roam:
 
 - [ ] **⚠ A `MANIFEST_VERSION` bump silently invalidates EVERY saved download** (`offline.ts:36,392`).
       `loadManifest` returns null on mismatch, so the drive vanishes from the offline list and the
       detail screen shows the error wall — while the audio bytes stay on disk, orphaned, with nothing
       sweeping them. Rider updates in town, drives into Tahoe, finds nothing. Needs a migration path or
       at minimum a re-pull prompt at update time.
-- [ ] **Map basemap tiles are network-only and the player DEFAULTS to map view** (`play.tsx:71`).
-      Route line, stop dots and puck float on a blank field. `DriveMap.tsx:10-11` already calls the
-      List view "the offline + accessibility-complete equivalent" — but nothing tells the rider to flip
-      to it. Auto-switching (or nudging) when offline is cheap; real offline tiles are not.
 
 ## Offline downloads: full re-pull only (no per-clip diff)
 

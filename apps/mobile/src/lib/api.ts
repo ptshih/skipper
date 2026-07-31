@@ -36,6 +36,8 @@ import type {
 } from '@skipper/shared'
 import { API_URL, authClient } from './auth'
 import { CLIENT_IDENTITY_VALUE } from './clientIdentity'
+import { isOfflineNow } from './connectivity'
+import { voice } from '@/ui/voice'
 
 export class ApiError extends Error {
   constructor(
@@ -64,12 +66,33 @@ export class ContractError extends Error {
   }
 }
 
+/** Thrown INSTEAD of attempting a request the device has no network to carry. Distinct from a
+ *  request that failed: this one never left the phone, so the rider is told the honest thing
+ *  ("no signal") rather than the generic in-voice fallback that also covers a 500, a parse blip
+ *  and a GPS timeout — and, critically, they aren't handed a retry button that cannot work.
+ *  Carries no message of its own; `errorMessage` supplies the rider-facing line from `voice`,
+ *  which is where every persona string lives. */
+export class OfflineError extends Error {
+  constructor() {
+    super('offline')
+    this.name = 'OfflineError'
+  }
+}
+
 /** A user-safe error string: server-authored ApiError messages and the ContractError
- *  "update" message are shown as-is; everything else (a raw RN `TypeError: Network request
- *  failed`, a multi-line ZodError dump) collapses to the `fallback`. Use at every fetch
- *  surface so plumbing never reaches the rider. */
+ *  "update" message are shown as-is, an OfflineError becomes the in-voice "no signal" line, and
+ *  everything else (a raw RN `TypeError: Network request failed`, a multi-line ZodError dump)
+ *  collapses to the `fallback`. Use at every fetch surface so plumbing never reaches the rider. */
 export const errorMessage = (e: unknown, fallback: string): string =>
-  e instanceof ContractError || e instanceof ApiError ? e.message : fallback
+  e instanceof OfflineError
+    ? voice.offline.noSignal
+    : e instanceof ContractError || e instanceof ApiError
+      ? e.message
+      : fallback
+
+/** Did this failure happen because the device has no network? Lets a surface swap its whole
+ *  treatment (a "no signal" note + a disk fallback) rather than only its error string. */
+export const isOfflineError = (e: unknown): e is OfflineError => e instanceof OfflineError
 
 // Time-box every request. RN's fetch has NO default timeout, so a half-open connection in a
 // cellular dead zone (the core Tahoe-drive concern — CLAUDE.md "Offline-first… Tahoe dead zones")
@@ -100,6 +123,12 @@ async function fetchJson(
   init?: RequestInit,
   opts?: { anonymous?: boolean },
 ): Promise<unknown> {
+  // Pre-flight: with NO network, don't spend the 15 s timeout discovering it. Every dead-zone
+  // fallback in the app (the home drive list, the drive detail, roam's manifest) is triggered by a
+  // FAILED fetch, so short-circuiting here is what turns each of them from "~15 s of skeletons,
+  // then the saved copy" into an instant disk read — without any of them changing shape. The
+  // verdict is push-based and fails OPEN (see connectivity.ts), so an unknown state still tries.
+  if (isOfflineNow()) throw new OfflineError()
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
   try {

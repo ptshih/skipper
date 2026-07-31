@@ -223,6 +223,21 @@ export const voice = {
   offline: {
     home: 'No signal out here — showing the drives you’ve saved.',
     detail: 'No signal out here — running on the saved copy.',
+    // The honest failure. Stands in for voice.error.generic whenever the request never left the
+    // phone (see api.ts OfflineError) — the generic "kink in the hose" line covers a 500, a parse
+    // blip and a GPS timeout equally, and pairs with a retry button that cannot possibly work out
+    // here. Same "No signal out here" opening as its two siblings above so the three read as one
+    // idea; the second clause is the part that changes (nothing saved to fall back ON).
+    noSignal: 'No signal out here — and this one needs a bar or two. Try again when they’re back.',
+    // Home, offline: ONE note above the two mode CTAs, which are dimmed to match. This is the one
+    // place the app BLOCKS rather than nudges, and the reason is narrow — unlike starting an unsaved
+    // drive (a legitimate gamble on a road that may have bars), riding along and creating a drive
+    // BOTH begin with a fetch, so there is no "anyway" behind the tap, only a spinner and an error.
+    // One note, not a caption per button: three repetitions of the same fact is noise.
+    needsSignal: 'No signal out here — these two need a bar or two.',
+    // Appended to the note when there ARE saved drives, so the screen ends on what still works
+    // rather than on what doesn't. Omitted when the list is empty (it would promise nothing).
+    needsSignalSaved: 'Your saved drives below still play.',
     // A saved drive whose clips were re-cut on the server: the chip flag + the ⋯ menu action to
     // re-pull. Never forced — offline play keeps working on the copy you’ve got.
     updateReady: 'Fresh cut ready',
