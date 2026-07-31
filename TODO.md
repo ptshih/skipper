@@ -264,6 +264,13 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
             ⚠ Marking beats GATING: dropping the fact would rob the one clip where a rider meets it
             first, and any "first N places may say it" rule picks arbitrarily which peak gets the good
             line.
+            ✅ **VERIFIED on a paid probe, 2026-07-30 ($2.48).** 8 clips whose sheet carries the
+            24-place granite pair and whose script spoke it: **30 mentions → 13**, max per clip 4 → 2.
+            The telling now leads with what is unique (Maggies Peaks opens on there being TWO of them,
+            with the sibling joke) and the rock lands mid-telling as texture.
+            ⚠ **Honest non-finding: opens/closes were ALREADY 0 before the change** (measured on the
+            same 8 released clips), so the "never open on it, never close on it" half of the note
+            changed nothing here — do not read the zeros as a win. The measurable effect is DENSITY.
             ⚠ **Dead-code finding en route: the `geology` narration channel is unreachable.** Only two
             callers of `narrateStop` exist and NEITHER sets it, so `geologyLines` — with its careful
             "do not close on the rock / no deep-time reflection" cues — has never fired. V2 enrichment
