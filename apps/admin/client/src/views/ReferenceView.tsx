@@ -181,6 +181,12 @@ const RUN_KINDS: RunKind[] = [
     safe: 'Preview — shows the queue + cost estimate, makes no model calls.',
   },
   {
+    kind: 'Fuse clusters',
+    does: "Write ONE fused telling per cluster in a region — a single narration covering a group of places a driver experiences as one stop (Emerald Bay = Vikingsholm + Fannette Island + Eagle Falls). The row carries cluster_id with poi_id NULL. Member clips are left ALONE; this only adds. Run from a region's row on the Regions page. Clusters are taken widest-first, so start at a limit of 1 and listen.",
+    cost: <span>LLM per fused telling; <span className="text-foreground">TTS</span> on apply.</span>,
+    safe: '⚠ Preview SPENDS here — unlike Generate narration, it narrates and scores before deciding what to keep, so a preview costs an apply minus the TTS. Confirm fires on both. A fused clip lands STAGED and goes public with the region release.',
+  },
+  {
     kind: 'Regenerate narration',
     does: "Re-narrate ONE POI from its CURRENT facts + corrections (a fresh script), then re-score + re-synthesize — the single-POI form of Generate Narration. Run from the POI's Narration tab after a fact-edit. (Re-synth, below, only re-voices the existing script.)",
     cost: <span>LLM + <span className="text-foreground">TTS</span> for one narration (when applied).</span>,

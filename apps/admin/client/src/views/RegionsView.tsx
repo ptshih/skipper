@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, Compass, Layers, Loader2, Plus, Rocket, Search, Sparkles, TriangleAlert } from 'lucide-react'
+import { CheckCircle2, Combine, Compass, Layers, Loader2, Plus, Rocket, Search, Sparkles, TriangleAlert } from 'lucide-react'
 import { api, type BboxLlmResult, type BboxRefinement, type Region } from '@/lib/api'
 import { errMsg, fmtDate } from '@/lib/format'
 import { qk } from '@/lib/queryKeys'
@@ -20,6 +20,7 @@ import { Callout } from '@/components/ui/callout'
 import { EmptyState } from '@/components/ui/empty-state'
 import { BboxMap } from '@/components/ui/google-map'
 import { DiscoverPoisDialog } from '@/components/DiscoverPoisDialog'
+import { FuseClustersDialog } from '@/components/FuseClustersDialog'
 import {
   Sheet,
   SheetContent,
@@ -46,6 +47,7 @@ export function RegionsView() {
   const [sel, setSel] = useState<Set<string>>(new Set())
   // The Discover dialog's scope: a row's own region (per-row button) or the bulk selection. null = closed.
   const [discoverScope, setDiscoverScope] = useState<{ slug: string; displayName: string }[] | null>(null)
+  const [fuseRegion, setFuseRegion] = useState<{ slug: string; displayName: string } | null>(null)
   const navigate = useNavigate()
   const { data: regions, error: err, isPending } = useAdminList(qk.regions(), async () => (await api.regions()).regions)
 
@@ -148,7 +150,7 @@ export function RegionsView() {
     },
     {
       header: '',
-      headClassName: 'w-64',
+      headClassName: 'w-80',
       cellStopPropagation: true,
       cell: (r) => {
         const released = r.releasedAt != null
@@ -161,6 +163,14 @@ export function RegionsView() {
               title="Discover Wikidata POIs in this region's bbox (free — no spend)"
             >
               <Compass className="h-3.5 w-3.5" /> Discover
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setFuseRegion({ slug: r.slug, displayName: r.displayName })}
+              title="Write the fused cluster tellings for this region (⚠ preview spends too)"
+            >
+              <Combine className="h-3.5 w-3.5" /> Fuse
             </Button>
             <Button
               variant={released ? 'ghost' : 'default'}
@@ -250,6 +260,13 @@ export function RegionsView() {
         open={discoverScope != null}
         onOpenChange={(o) => { if (!o) setDiscoverScope(null) }}
         onSubmitted={() => { setDiscoverScope(null); clearSel(); navigate({ to: '/jobs' }) }}
+      />
+
+      <FuseClustersDialog
+        region={fuseRegion}
+        open={fuseRegion != null}
+        onOpenChange={(o) => { if (!o) setFuseRegion(null) }}
+        onSubmitted={() => { setFuseRegion(null); navigate({ to: '/jobs' }) }}
       />
     </div>
   )

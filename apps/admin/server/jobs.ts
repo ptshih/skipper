@@ -68,6 +68,7 @@ export const SCRIPTS: Partial<Record<JobKind, string>> = {
   discover_pois: 'packages/studio/src/discover-pois.ts',
   enrich_pois: 'packages/studio/src/enrich-pois.ts',
   generate_narrations: 'packages/studio/src/generate-narrations.ts',
+  generate_cluster_narrations: 'packages/studio/src/generate-cluster-narrations.ts',
   curate_places: 'packages/studio/src/curate-places.ts',
   refetch_facts: 'packages/studio/src/refetch-poi.ts',
   offline_audit: 'packages/studio/src/audit-corpus.ts',
@@ -179,6 +180,27 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     // run leaves them undefined → stored NULL (no 'roam-corpus' sentinel), surfaced as "All".
     const genRegion = idCsv(body.includeIds) ? undefined : str(body.region) || DEFAULT_REGION_SLUG
     return { args, dryRun: !apply, spends: apply, targetSlug: genRegion, targetId: genRegion }
+  }
+
+  if (kind === 'generate_cluster_narrations') {
+    const apply = body.apply === true
+    const args: string[] = [script]
+    // Region-scoped like the solo generator, but `--include-ids` here names CLUSTER ids, not poi ids —
+    // a fused telling's subject is a `poi_clusters` row. No --exclude-ids/--force/--model: the CLI
+    // doesn't take them, and silently accepting a flag it ignores is worse than not offering it.
+    const idCsv = (v: unknown): string => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string').join(',') : '')
+    if (body.region) args.push(`--region=${str(body.region)}`)
+    if (body.query) args.push(`--query=${str(body.query)}`)
+    if (idCsv(body.includeIds)) args.push(`--include-ids=${idCsv(body.includeIds)}`)
+    pushPosNum(args, '--limit', body.limit, 'limit')
+    pushPosNum(args, '--max-cost', body.maxCostUsd, 'maxCostUsd')
+    if (apply) args.push('--apply')
+    // ⚠ spends: TRUE even on a dry run, unlike every other kind here. This CLI's own header says it:
+    // "A preview is NOT free: it narrates and scores, so it costs an apply minus the TTS. Only the
+    // persistence is gated." So the confirm gate must fire on Preview too — the operator is about to
+    // spend Anthropic money either way, and a gate that only guards `--apply` would wave that through.
+    const clusterRegion = idCsv(body.includeIds) ? undefined : str(body.region) || DEFAULT_REGION_SLUG
+    return { args, dryRun: !apply, spends: true, targetSlug: clusterRegion, targetId: clusterRegion }
   }
 
   if (kind === 'offline_audit') {

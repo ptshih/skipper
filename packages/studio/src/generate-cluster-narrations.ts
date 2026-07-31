@@ -35,6 +35,7 @@ import { narrationClipKey, uploadAudio } from './pipeline/storage'
 import { factSheetToAttribution } from './pipeline/persist'
 import { withRetry } from './pipeline/http'
 import { mapLimit } from './pipeline/concurrency'
+import { runJob } from './pipeline/job-progress'
 import { personaFromKey } from './persona'
 import { lengthForRegister, ttsStyleFor } from './models'
 import { buildGroundingWell } from './eval/grounding'
@@ -99,13 +100,19 @@ interface GatedFused {
   shipped: boolean
 }
 
-async function main(): Promise<void> {
-  const flags = parseFlags(process.argv.slice(2), { valueFlags: ['region', 'limit', 'query', 'max-cost', 'include-ids'] })
-  const apply = flags.has('apply')
-  const maxCostUsd = maxCostFlag(flags)
-  announce({ tool: 'generate-cluster-narrations', blast: apply ? ['SPENDS $', 'MUTATES DB'] : ['SPENDS $'], apply })
-  if (apply) assertReady(['r2', 'tts'])
+// Parsed at module scope, like the poi generator, so `runJob` can stamp the studio_jobs row before
+// main() starts — that row is how the admin console shows status and captures logs at all.
+const flags = parseFlags(process.argv.slice(2), { valueFlags: ['region', 'limit', 'query', 'max-cost', 'include-ids'] })
+const apply = flags.has('apply')
+const maxCostUsd = maxCostFlag(flags)
+announce({ tool: 'generate-cluster-narrations', blast: apply ? ['SPENDS $', 'MUTATES DB'] : ['SPENDS $'], apply })
+if (apply) assertReady(['r2', 'tts'])
+// A targeted --include-ids run has no region scope, so it keys on nothing and surfaces as "All".
+const clusterTargetRegion = (flags.value('include-ids') ?? '').trim()
+  ? undefined
+  : (flags.value('region') ?? DEFAULT_REGION_SLUG)
 
+async function main(): Promise<void> {
   const region = await resolveRegion(flags.value('region') ?? DEFAULT_REGION_SLUG)
   const bbox = requireRegionBbox(region)
   const limit = Number(flags.value('limit') ?? 1)
@@ -459,9 +466,11 @@ async function main(): Promise<void> {
   console.log('  A fused clip lands STAGED; publish it with the region release in the admin console.')
 }
 
-main()
-  .then(() => process.exit(0))
-  .catch((e) => {
-    console.error(e)
-    process.exitCode = 1
-  })
+// runJob owns begin → run → finish → exit, so the admin console gets a status row and this script's
+// stdout. Skipping it is why this generator was CLI-only: it was dispatchable in principle and
+// invisible in practice.
+await runJob(
+  'generate_cluster_narrations',
+  { dryRun: !apply, targetSlug: clusterTargetRegion, targetId: clusterTargetRegion },
+  main,
+)
