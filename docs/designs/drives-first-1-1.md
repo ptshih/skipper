@@ -386,18 +386,34 @@ so it SELECTS THE MODE") becomes false and must be rewritten in the same commit.
 
 ⚠ **KEEP `treatment` and the classifier's DISTRICT clause untouched** (D42).
 
-**3 — Remove roam** — ⚠ **BLOCKED ON A FOUNDER DECISION, not on code.** Probed read-only 2026-07-31:
-**1.0.0 is `WAITING_FOR_REVIEW`** (release type MANUAL, created 2026-06-10). Step 3 deletes
+**3 — Remove roam.** ✅ **DONE 2026-08-01, in three layered commits** (mobile → api/wire → engine),
+each with root + `apps/mobile` `bun run check` green. ~5,200 lines deleted; **zero live roam code
+remains** — what is left repo-wide is prose vocabulary ("roam narration" for the shared corpus), which
+belongs to the step-10 sweep, not here.
+
+⚠ **STILL BLOCKED ON A FOUNDER DECISION BEFORE IT CAN BE *PUSHED*.** Probed read-only 2026-07-31:
+**1.0.0 is `WAITING_FOR_REVIEW`** (MANUAL release, created 2026-06-10). This step deletes
 `GET /roam/sample` — **the exact endpoint `docs/guides/app-store-submission.md` §12 tells the reviewer
-to check** — and `skipper-api-deploy` ships **push-to-main at 100% traffic with no canary**. So the
-sequence that breaks a live review is: land step 3 → push → a reviewer picks 1.0.0 up → the endpoint
-their own instructions name is gone. The no-push rule holds this shut for now, but the decision must be
-MADE (withdraw 1.0.0? wait for review? keep `/sample` alive under its new path first?) before step 3
-lands, not discovered at push time. — then, in layered commits. ⚠ The removal table is INCOMPLETE — see its footnotes; two
-omissions are architectural, not mechanical. Regenerate router types (`bunx expo customize tsconfig.json`)
-or mobile typecheck fails. Carry `PackPin` forward in the same commit that deletes it, or step 9's
-harvest source is gone. **Move `drive_demand` OUT of this step** into the sweep — it is destructive DDL,
-not roam.
+to check** — and `skipper-api-deploy` ships push-to-main at 100% traffic with no canary. The no-push
+rule holds it shut; the decision (withdraw 1.0.0? wait for review? something else?) must be MADE before
+the first push, not discovered at push time. ⚠ This is also the commit after which `main` stops being
+1.0-compatible — everything before it could still have been pushed safely.
+
+Three things worth keeping from the execution:
+- ⚠ **A stale `.expo/types/router.d.ts` is a SUPERSET**, so `tsc` stays green on a dangling
+  `router.push('/roam')`. Type-checking does NOT catch a deleted route; the hrefs had to be found by
+  hand, and the types regenerated afterwards to become a tripwire.
+- ⚠ **Deleting a feature does not delete its bytes.** Roam's offline pack (up to ~138 MB) was
+  reclaimable only by `deleteRoamPack()`, which went with roam — leaving it permanently unreachable on
+  every device that ever tapped Save. New `reclaimLegacyRoamPack()` runs once at launch. Any future
+  feature deletion owes the same check.
+- ⚠ **Comments were the only surviving record of two field-found bugs** (the iOS `-1` heading sentinel;
+  the drive stall watchdog's "sheet frozen at 0:00 on thin 5G"). Both cross-referenced roam code. They
+  were rewritten to stand alone rather than deleted with it.
+
+`create.tsx` **deliberately survives** despite the removal table: deleting it now leaves no
+drive-creation path at all until step 7 lands the conversation — a broken app across four commits,
+against RISK-1. The build notes' point was not to INVEST in it, which is different.
 
 **4 — THE WIRE COMMIT** (batched — `packages/shared/src/schemas.ts` is visited **once**, additively,
 instead of four times on a shared tree). One atomic change spanning shared + its API producers + its

@@ -1,5 +1,5 @@
 // Player decision helpers — the pure, testable bits of the in-car clip player that the tour
-// (useDrive) and roam (useRoam) hooks BOTH need identically. Each hook keeps owning its own refs,
+// (useDrive) needs — extracted when a second hook needed it identically. Each hook keeps its own refs,
 // effects, and side-effects; this module owns only the safety-critical DECISIONS + the magic
 // thresholds, so the two players can't silently desync the logic — and it gets unit coverage the
 // stateful hooks can't give it. (The hook-level extraction was declined because the surrounding

@@ -39,7 +39,7 @@ export type Attribution = z.infer<typeof attribution>
 export const attributionList = z.array(attribution)
 /** The frozen-attribution array as a TYPE. Exported because API handlers that serve attribution
  *  need to annotate it, and the only previous way to name it was to reach through a DTO that
- *  happened to carry one (the deleted `RoamPin['attribution']`) — which made an unrelated DTO's
+ *  happened to carry one — which made an unrelated DTO's
  *  removal a compile error in a handler that has nothing to do with it. */
 export type AttributionList = z.infer<typeof attributionList>
 

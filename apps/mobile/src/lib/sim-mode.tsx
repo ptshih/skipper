@@ -1,5 +1,5 @@
 // SIM MODE — a developer toggle that swaps every REAL-GPS path in the app for the
-// simulated drive source. When ON: free-roam (`useRoam`) and the tour drive player
+// simulated drive source. When ON: the drive player
 // (`useDrive`) replay a recorded Tahoe drive through the SAME engines a real car would
 // feed, so the whole trigger→play→duck loop is exercisable from the couch — no car, no
 // standing in a parking lot spoofing a location. It does NOT touch the anonymous PREVIEW

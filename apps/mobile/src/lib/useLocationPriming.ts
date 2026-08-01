@@ -28,7 +28,7 @@ import { ensureDrivePermission, getDrivePermission } from './gps'
 
 /** The non-proceed permission result, carrying everything either consumer needs to render its
  *  gate. `granted` lets useDrive keep its `!granted`-first split (denied vs granted-but-reduced);
- *  `canAskAgain`/`reduced` feed useRoam's single `{ canAskAgain, reduced }` gate object. */
+ *  `canAskAgain`/`reduced` fed the removed roam caller's single gate object. */
 export interface LocationDenial {
   /** True only on the granted-but-REDUCED (approximate accuracy) branch; false on a hard denial. */
   granted: boolean
@@ -48,7 +48,7 @@ export interface UseLocationPriming {
 }
 
 export interface UseLocationPrimingOptions {
-  /** Granted + precise → proceed. May be async (useRoam's `beginRoamSession`); it's awaited. */
+  /** Granted + precise → proceed. May be async (the removed roam caller's start was); it's awaited. */
   onGranted: () => void | Promise<void>
   /** A hard denial OR granted-but-reduced — the caller routes this into its own gate state.
    *  `granted` distinguishes the two (false = denied, true = granted-but-reduced). */
@@ -90,7 +90,7 @@ export function useLocationPriming(opts: UseLocationPrimingOptions): UseLocation
       const perm = await ensureDrivePermission()
       if (!mountedRef.current) return // navigated away during the dialog — don't setState/subscribe
       // Not granted, or granted-but-approximate → hand the caller the denial so it routes its gate.
-      // (useDrive splits on `granted`; useRoam folds both into one `{ canAskAgain, reduced }` gate.)
+      // (useDrive splits on `granted`; the removed roam caller folded both into one gate object.)
       if (!perm.granted || perm.reduced) {
         cbRef.current.onDenied({
           granted: perm.granted,

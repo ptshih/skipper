@@ -1,4 +1,5 @@
-// Shared chrome for the app's react-native-maps surfaces (DriveMap today; RoamMap was the second).
+// Shared chrome for the app's react-native-maps surfaces (DriveMap today; a second one is what
+// forced the extraction, and step 9 is likely to bring another).
 //
 // Both files carried byte-identical copies of these. The axis converter is the one that actually
 // wanted a single home: the wire format is GeoJSON `[lng, lat]` and react-native-maps wants
