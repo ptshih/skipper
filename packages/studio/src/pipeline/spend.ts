@@ -1,103 +1,20 @@
-// Run-spend visibility — the LLM token tally + the pre-TTS cost estimate.
+// TTS spend estimation — the one cost the --max-cost gate can still PREVENT.
 //
-// Every Anthropic call site (narrate, scout, closer judge, grounding) records its
-// response.usage here; generate-narrations.ts prints the tally + a TTS estimate right before the
-// TTS/R2 phase and enforces the --max-cost gate (TODO.md cost guardrail). The framing
-// is honest: by that point the LLM spend is SUNK — TTS is the one cost still unpaid,
-// so the gate's job is to SHOW the sunk spend and cap the remainder.
+// ⚠ The LLM half of this module MOVED to `@skipper/shared` (INV-11): `POST /drives/plan` spends
+// model tokens on every rider request and `apps/api` cannot import `@skipper/studio`, so the pricing
+// table and the token tally had to live where both can reach them. Import `recordModelUsage`,
+// `MODEL_PRICING`, `llmSpentUsd`, `llmSpendLines`, `unpricedModels` and `resetSpendTally` from
+// `@skipper/shared` — they are deliberately NOT re-exported here, so there is exactly one import
+// path and no second home to drift from.
 //
-// Process-global on purpose (one generation per process; the CLI exits after a run).
+// TTS pricing stayed. Synthesis only ever happens in the operator pipeline, so handing the request
+// path a cost model for something it can never do would be worse than useless.
+//
+// The framing the gate rests on is unchanged and worth restating: by the time this prints, the LLM
+// spend is SUNK. TTS is the one cost still unpaid, so the gate's job is to SHOW the sunk spend and
+// CAP the remainder.
 
 import { WORDS_PER_SECOND } from '../config'
-
-export interface ModelPricing {
-  inputPerMTok: number
-  outputPerMTok: number
-}
-
-/** $/MTok — Anthropic catalog (claude-api skill, verified 2026-06-09). Cache READS bill
- *  0.1× the input rate; 5-minute-TTL cache WRITES 1.25× (the only TTL this repo uses). */
-export const MODEL_PRICING: Record<string, ModelPricing> = {
-  'claude-opus-4-8': { inputPerMTok: 5, outputPerMTok: 25 },
-  // Sonnet 4.6 — the default corpus `enrich` model (claude-api skill, verified 2026-06-15).
-  'claude-sonnet-4-6': { inputPerMTok: 3, outputPerMTok: 15 },
-  // Haiku 4.5 — the delivery-register classifier fallback (claude-api skill, verified 2026-06-20).
-  'claude-haiku-4-5-20251001': { inputPerMTok: 1, outputPerMTok: 5 },
-}
-const CACHE_READ_MULT = 0.1
-const CACHE_WRITE_MULT = 1.25
-
-/** The slice of Anthropic's response.usage the tally needs (structural — no SDK import). */
-export interface UsageLike {
-  input_tokens: number
-  output_tokens: number
-  cache_creation_input_tokens?: number | null
-  cache_read_input_tokens?: number | null
-}
-
-interface Tally {
-  calls: number
-  input: number
-  cacheRead: number
-  cacheWrite: number
-  output: number
-}
-
-const tallies = new Map<string, Tally>()
-
-export function recordModelUsage(model: string, usage: UsageLike): void {
-  const t = tallies.get(model) ?? { calls: 0, input: 0, cacheRead: 0, cacheWrite: 0, output: 0 }
-  t.calls += 1
-  t.input += usage.input_tokens
-  t.output += usage.output_tokens
-  t.cacheRead += usage.cache_read_input_tokens ?? 0
-  t.cacheWrite += usage.cache_creation_input_tokens ?? 0
-  tallies.set(model, t)
-}
-
-function tallyUsd(model: string, t: Tally): number {
-  const p = MODEL_PRICING[model]
-  if (!p) return 0 // unknown model: tokens are tallied, dollars honestly unpriced
-  return (
-    (t.input * p.inputPerMTok +
-      t.cacheRead * p.inputPerMTok * CACHE_READ_MULT +
-      t.cacheWrite * p.inputPerMTok * CACHE_WRITE_MULT +
-      t.output * p.outputPerMTok) /
-    1_000_000
-  )
-}
-
-/** Total recorded LLM spend (USD) across all models this process. */
-export function llmSpentUsd(): number {
-  let sum = 0
-  for (const [model, t] of tallies) sum += tallyUsd(model, t)
-  return sum
-}
-
-const fmtTok = (n: number): string =>
-  n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n / 1_000).toFixed(1)}k` : String(n)
-
-/** One human line per model — printed by generate-narrations.ts ahead of the TTS phase. */
-export function llmSpendLines(): string[] {
-  return [...tallies.entries()].map(([model, t]) => {
-    const priced = MODEL_PRICING[model] ? `$${tallyUsd(model, t).toFixed(2)}` : 'unpriced'
-    return (
-      `LLM spend ${model}: ${priced} (${t.calls} calls · in ${fmtTok(t.input)}` +
-      ` + cache r${fmtTok(t.cacheRead)}/w${fmtTok(t.cacheWrite)} · out ${fmtTok(t.output)})`
-    )
-  })
-}
-
-/** Model ids that were tallied but have no MODEL_PRICING entry — their dollars read $0,
- *  so a cost CAP must fail safe when this is non-empty (silent under-count otherwise). */
-export function unpricedModels(): string[] {
-  return [...tallies.keys()].filter((m) => !MODEL_PRICING[m])
-}
-
-/** Test seam — the tally is process-global. */
-export function resetSpendTally(): void {
-  tallies.clear()
-}
 
 /* -------------------------------------------------------------------------- */
 /*  TTS estimate — Gemini-TTS is TOKEN-billed, not char-billed                  */

@@ -20,7 +20,7 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import { NARRATION_MODEL } from '../models'
-import { recordModelUsage } from '../pipeline/spend'
+import { recordModelUsage } from '@skipper/shared'
 
 // Editing is a forced-tool turn on the NARRATION model (Opus) — same model that wrote it, so the
 // voice stays consistent; a forced tool guarantees a clean script back, never a preamble. A repaired

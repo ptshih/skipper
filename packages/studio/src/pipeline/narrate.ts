@@ -20,7 +20,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import type { StopType } from '@skipper/shared'
 import { getAnthropic, NARRATION_MODEL } from '../models'
-import { recordModelUsage } from './spend'
+import { recordModelUsage } from '@skipper/shared'
 import { WORDS_PER_SECOND } from '../config'
 
 /**

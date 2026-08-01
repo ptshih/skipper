@@ -31,7 +31,7 @@ import { synthesizeWithTailRetake } from './pipeline/tts'
 import { narrationClipKey, uploadAudio } from './pipeline/storage'
 import { withRetry } from './pipeline/http'
 import { mapLimit } from './pipeline/concurrency'
-import { estimateTtsUsd, TTS_ESTIMATE_SAFETY } from './pipeline/spend'
+import { TTS_ESTIMATE_SAFETY, estimateTtsUsd } from './pipeline/spend'
 import { TTS_CONCURRENCY } from './config'
 
 const flags = parseFlags(process.argv.slice(2), { valueFlags: ['include-ids', 'max-cost'] })

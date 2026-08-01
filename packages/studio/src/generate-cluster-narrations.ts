@@ -44,13 +44,8 @@ import { gateNarration } from './pipeline/gate'
 import { buildScorecard } from './eval/scorecard'
 import { DIMENSION_KIND, type StopEval } from './eval/types'
 import { recordEvalRun, type ClipIdentity } from './eval/record'
-import {
-  estimateTtsUsd,
-  llmSpendLines,
-  llmSpentUsd,
-  TTS_ESTIMATE_SAFETY,
-  unpricedModels,
-} from './pipeline/spend'
+import { llmSpendLines, llmSpentUsd, unpricedModels } from '@skipper/shared'
+import { TTS_ESTIMATE_SAFETY, estimateTtsUsd } from './pipeline/spend'
 import {
   DEFAULT_REGION_SLUG,
   GROUNDING_EVAL,

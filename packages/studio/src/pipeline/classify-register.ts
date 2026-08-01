@@ -19,7 +19,7 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import { CLAUDE_MODELS, type DeliveryRegister } from '@skipper/shared'
-import { recordModelUsage } from './spend'
+import { recordModelUsage } from '@skipper/shared'
 
 /** Wikidata anchor classes per register. A POI is in a register if its P31 is that class OR any
  *  P279* subclass of it. Small + top-level on purpose — the subclass walk (in WDQS) does the rest.

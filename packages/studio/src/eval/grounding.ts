@@ -20,7 +20,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import type { StopType } from '@skipper/shared'
 import { GROUNDING_VOTE_SAMPLES } from '../config'
 import { getAnthropic, JUDGMENT_MODEL } from '../models'
-import { recordModelUsage } from '../pipeline/spend'
+import { recordModelUsage } from '@skipper/shared'
 import type { ClaimStatus, ClaimVerdict, StopEval } from './types'
 
 // A well-scoped, once-per-stop entailment task on the shared JUDGMENT_MODEL (Opus).

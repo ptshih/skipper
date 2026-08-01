@@ -47,7 +47,7 @@ import { withRetry } from './pipeline/http'
 import { mapLimit } from './pipeline/concurrency'
 import { ENRICH_MODELS, type EnrichModelChoice } from './models'
 import { ANTHROPIC_READY, DEFAULT_REGION_SLUG, GEOLOGY_ENRICHMENT, SCOUT_CONCURRENCY, WIKIDATA_ENRICHMENT } from './config'
-import { llmSpendLines, llmSpentUsd } from './pipeline/spend'
+import { llmSpendLines, llmSpentUsd } from '@skipper/shared'
 import { classifyStoryEligibility } from '@skipper/shared'
 
 /** Soft narration length the fact sheet is sized for — the LONG-FORM target (roam's band), since the fact sheet

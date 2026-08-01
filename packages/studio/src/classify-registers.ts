@@ -21,7 +21,7 @@ import type { DeliveryRegister } from '@skipper/shared'
 import { announce, maxCostFlag, parseFlags } from './pipeline/ops'
 import { mapLimit } from './pipeline/concurrency'
 import { withRetry } from './pipeline/http'
-import { llmSpendLines, llmSpentUsd } from './pipeline/spend'
+import { llmSpendLines, llmSpentUsd } from '@skipper/shared'
 import { getAnthropic } from './models'
 import {
   classifyFromMatches,

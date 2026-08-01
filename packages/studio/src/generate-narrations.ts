@@ -58,7 +58,8 @@ import {
   TTS_CONCURRENCY,
   WORDS_PER_SECOND,
 } from './config'
-import { estimateTtsUsd, llmSpendLines, llmSpentUsd, unpricedModels, TTS_ESTIMATE_SAFETY } from './pipeline/spend'
+import { llmSpendLines, llmSpentUsd, unpricedModels } from '@skipper/shared'
+import { TTS_ESTIMATE_SAFETY, estimateTtsUsd } from './pipeline/spend'
 import { STORY_TASTE_DENYLIST, type DeliveryRegister } from '@skipper/shared'
 import { NARRATION_MODEL, JUDGMENT_MODEL, ttsStyleFor, lengthForRegister } from './models'
 import { buildGroundingWell } from './eval/grounding'

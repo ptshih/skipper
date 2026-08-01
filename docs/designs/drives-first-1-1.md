@@ -442,8 +442,25 @@ Three things worth keeping:
 `subjectId`/`subjectKind` are. A store keyed on `poiId` cannot tell a fused clip from a broken one, and
 one keyed on `seq` is keyed on a position in ONE drive.
 
-**5 — INV-11 pricing move**, own commit, announced first: `MODEL_PRICING` + `recordModelUsage` move to
-`@skipper/shared` (TTS pricing stays in studio). Add the planner model's row and extend the drift guard.
+**5 — INV-11 pricing move.** ✅ **DONE 2026-08-01.** `MODEL_PRICING` + the token tally moved from
+`packages/studio/src/pipeline/spend.ts` to **`packages/shared/src/spend.ts`**; TTS pricing stayed in
+studio. The 13 studio import sites now pull `recordModelUsage` etc. from `@skipper/shared`, and studio's
+`spend.ts` deliberately does **not** re-export them — one import path, no second home to drift from.
+
+`CLAUDE_MODELS.planner = 'claude-opus-5'` is a **NEW key**, priced at $5/$25 per MTok (verified against
+the `claude-api` skill's catalog, not memory). ⚠ Never bump `opus` in place — that silently repoints
+`NARRATION_MODEL`, `JUDGMENT_MODEL`, `ENRICH_MODELS.opus` and two admin job models at once.
+
+⚠ **THE DRIFT GUARD WAS THE POINT, AND IT WAS VACUOUS.** It iterated a hand-written
+`[NARRATION_MODEL, JUDGMENT_MODEL]` — two models maintained by memory — so a model added anywhere else
+stayed unpriced, tallying **$0 forever with nothing failing**. It now iterates the RECORD
+(`Object.values(CLAUDE_MODELS)`) in `@skipper/shared`, plus every studio tier constant including
+`ENRICH_MODELS`, so adding a key cannot be forgotten. **Mutation-checked**: deleting the planner's
+pricing row fails the guard; restoring it passes 8/8.
+
+New `usageUsd(model, usage)` prices ONE call without touching the process tally — the shape the request
+path needs, since a long-lived API process accumulating a global total would grow without bound and
+mean nothing. Pinned against the tally so the two arithmetics cannot diverge.
 
 **6 — Planner (server).** Prompt in `apps/api/src/planner-prompt.ts` — ⚠ **not** in `@skipper/shared`,
 which mobile imports and would ship the system prompt into the app bundle. `@anthropic-ai/sdk` is already

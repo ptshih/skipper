@@ -27,7 +27,7 @@ import {
   ENRICH_FACT_SHEET_TARGET_SPANS,
 } from '../config'
 import { ENRICH_MODELS, getAnthropic } from '../models'
-import { recordModelUsage } from './spend'
+import { recordModelUsage } from '@skipper/shared'
 
 /** A sourced fact bundle exactly as a fetcher returned it (facts verbatim + provenance). */
 export interface SourcedFacts {

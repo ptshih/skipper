@@ -36,7 +36,7 @@ import { runJob } from './pipeline/job-progress'
 import { withRetry, sleep } from './pipeline/http'
 import { resolveCuratedPlace, type CuratedPlace, type PlacesBbox } from './pipeline/places'
 import { ENRICH_MODELS, getAnthropic, type EnrichModelChoice } from './models'
-import { llmSpendLines, llmSpentUsd, recordModelUsage } from './pipeline/spend'
+import { llmSpendLines, llmSpentUsd, recordModelUsage } from '@skipper/shared'
 import { ANTHROPIC_READY, DEFAULT_REGION_SLUG, GOOGLE_READY, requireEnv } from './config'
 
 /** Rough USD for the single draft call, by model (pre-run estimate only; the real tally prints after). */
