@@ -1,6 +1,5 @@
 // Create-a-Drive (V2) — a user-owned, on-demand A→B drive assembled from REUSED roam narrations.
 //
-//   GET  /drives/anchors          -> a region's pickable START/END anchors (real places, exact coords)
 //   POST /drives/propose          -> preview the route for a picked A→B (cheap; no persist, no credit)
 //   POST /drives                  -> generate + persist the confirmed drive (free-account gated; counts a credit)
 //   GET  /drives                  -> the caller's saved drives (one card each)
@@ -20,7 +19,7 @@
 import { Hono, type Context } from 'hono'
 import { and, asc, between, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
-import { creditEntries, drives, driveDemand, narrations, places, pois, regions, selectionSubject } from '@skipper/db/schema'
+import { creditEntries, drives, driveDemand, narrations, places, pois, selectionSubject } from '@skipper/db/schema'
 import type { DriveSelection, DriveSelectionItem, Polyline, RouteProvenance } from '@skipper/db/schema'
 import { polylineBbox } from './drive-geometry'
 import { materializeRoute, type Waypoint } from '@skipper/routing'
@@ -86,14 +85,21 @@ function toClipForm(form: string): DriveClipForm {
   }
 }
 
-/** The pickable START/END/MIDPOINT anchors in a region's bbox — served to the client (GET
- *  /drives/anchors). These are the region's CURATED set of endpoint-eligible `places` (real,
- *  recognizable Google hubs — towns, marinas, lookouts — curated offline by `curate-places`), with
- *  coords RESOLVED + STORED at curation. So the rider picks FROM/TO from a stored short list with NO
- *  runtime Places call and NO geocode hop — endpoints are grounded by construction. Region membership
- *  is point-in-bbox (geometry-first; `places` carries no region_id). `kind` is the humanized Google
- *  `primary_type` (display only); `featured` floats the popular subset to the top of the picker.
- *  (SUPERSEDES the interim POI-corpus join — see docs/designs/places-endpoints-spec.md.) */
+/** A region's CURATED set of endpoint-eligible `places` (real, recognizable Google hubs — towns,
+ *  marinas, lookouts — curated offline by `curate-places`), with coords RESOLVED + STORED at curation,
+ *  so an endpoint is grounded by construction: no runtime Places call, no geocode hop. Region
+ *  membership is point-in-bbox (geometry-first; `places` carries no region_id). `kind` is the humanized
+ *  Google `primary_type`; `featured` floats the curator's popular subset to the top.
+ *  (SUPERSEDES the interim POI-corpus join — see docs/designs/places-endpoints-spec.md.)
+ *
+ *  ⚠ THIS SET IS SERVER-SIDE ONLY. It IS the planner's allowlist (`plan-route.ts` is now the sole
+ *  caller) and every row carries the anchor ID + exact coordinates — the one thing that can bill a
+ *  Google Routes call (INV-1). The client-facing `GET /drives/anchors` that used to serve it verbatim
+ *  was DELETED in 1.1 along with the tap-to-pick create form: the rider now names endpoints in
+ *  CONVERSATION and the planner emits ids. Do not resurrect it: `requireAccount` is moving to a
+ *  PER-ROUTE guard (the five owner routes below), so a re-added `/anchors` would inherit nothing and
+ *  become an anonymous dump of the whole curated allowlist WITH coordinates. What a rider may see is
+ *  NAMES, and only a handful (see ./example-anchors). */
 export async function loadRegionAnchors(bbox: string | null): Promise<RegionAnchor[]> {
   const p = (bbox ?? '').split(',').map(Number)
   if (p.length !== 4 || p.some((n) => !Number.isFinite(n))) return []
@@ -450,36 +456,17 @@ export const driveRoutes = new Hono<ApiEnv>()
 driveRoutes.use('*', withSession, requireAccount)
 
 /**
- * GET /drives/anchors?regionId= — the pickable START/END anchors for a region: real, narratable
- * places with exact coordinates. The Create-a-Drive form populates its FROM/TO pickers from this, so
- * the rider always chooses endpoints that are grounded by construction — no free text, no geocode hop.
- */
-driveRoutes.get('/anchors', async (c) => {
-  const regionId = c.req.query('regionId') ?? ''
-  if (!UUID_RE.test(regionId)) return c.json({ error: 'bad_request', message: 'regionId (uuid) is required.' }, 400)
-  const regionRows = await withRetry(
-    () => db.select({ bbox: regions.bbox }).from(regions).where(eq(regions.id, regionId)).limit(1),
-    { label: 'drive.anchors.region' },
-  )
-  const region = regionRows[0]
-  if (!region) return c.json({ error: 'not_found', message: 'Unknown region.' }, 404)
-  // Curated endpoints have no staging concept (they're admin-curated, not generated) — no admin/staged
-  // branch here, unlike loadCorpusForRoute.
-  const anchors = await loadRegionAnchors(region.bbox)
-  return c.json({ anchors } satisfies { anchors: RegionAnchor[] })
-})
-
-/**
  * POST /drives/propose — preview the route for a rider-PICKED START→END before spending a credit.
- * Both endpoints come from the region's anchors (GET /drives/anchors) with exact coords, so this just
- * materializes the route + counts narratable stops. Persists nothing, no credit — the
- * confirm-before-spend interstitial. (No LLM/geocoding: endpoints are grounded by construction.)
+ * Both endpoints are CURATED ANCHOR IDS the planner emitted, re-asserted here against
+ * `endpoint_eligible` before any billed Routes call (INV-1), so this just materializes the route +
+ * counts narratable stops. Persists nothing, no credit — the confirm-before-spend interstitial.
+ * (No LLM/geocoding: endpoints are grounded by construction.)
  */
 driveRoutes.post('/propose', async (c) => {
   const parsed = await readJsonBody(
     c,
     driveProposeRequest,
-    'start and end must be anchor ids from GET /drives/anchors.',
+    'start and end must be curated anchor ids.',
     MAX_DRIVE_BODY_BYTES,
   )
   if (!parsed.ok) return parsed.res
@@ -539,7 +526,7 @@ driveRoutes.post('/', createDriveLimiter, async (c) => {
   const parsed = await readJsonBody(
     c,
     createDriveRequest,
-    'start and end must be anchor ids from GET /drives/anchors.',
+    'start and end must be curated anchor ids.',
     MAX_DRIVE_BODY_BYTES,
   )
   if (!parsed.ok) return parsed.res

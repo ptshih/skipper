@@ -21,12 +21,13 @@
 
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { and, asc, eq, isNotNull } from 'drizzle-orm'
+import { and, asc, desc, eq, isNotNull } from 'drizzle-orm'
 import { db } from '@skipper/db'
-import { narrations, pois, regions } from '@skipper/db/schema'
+import { narrations, places, pois, regions } from '@skipper/db/schema'
 import type { AttributionList, Region } from '@skipper/shared'
 import { auth, SITE_ORIGIN } from './auth'
 import { driveRoutes } from './drives'
+import { EXAMPLE_ANCHOR_SCAN_LIMIT, pickExampleAnchors } from './example-anchors'
 import {
   PLAN_RATE_HOUR,
   PLAN_RATE_MINUTE,
@@ -91,16 +92,49 @@ app.get('/regions', async (c) => {
   const rows = await withRetry(
     () =>
       db
-        .select({ id: regions.id, slug: regions.slug, displayName: regions.displayName })
+        .select({ id: regions.id, slug: regions.slug, displayName: regions.displayName, bbox: regions.bbox })
         .from(regions)
         .where(canPreview ? undefined : isNotNull(regions.releasedAt))
         .orderBy(asc(regions.displayName)),
     { label: 'regions.list' },
   )
+
+  // A few curated endpoint NAMES per region (./example-anchors). ONE scan for ALL regions, bucketed by
+  // point-in-bbox in JS — `places` carries no region_id (geometry-first), and a per-region query would
+  // be N+1 on an anonymous route every app launch hits. `featured DESC` first is what makes the scan
+  // limit safe: a truncation can only ever trim a tail we were not going to publish.
+  const anchorRows = rows.length
+    ? await withRetry(
+        () =>
+          db
+            .select({
+              id: places.id,
+              name: places.name,
+              lat: places.lat,
+              lng: places.lng,
+              featured: places.featured,
+            })
+            .from(places)
+            .where(eq(places.endpointEligible, true))
+            .orderBy(desc(places.featured), asc(places.name), asc(places.id))
+            .limit(EXAMPLE_ANCHOR_SCAN_LIMIT),
+        { label: 'regions.exampleAnchors' },
+      )
+    : []
+  const byRegion = pickExampleAnchors(rows, anchorRows)
+
   // Typed against the WIRE DTO, not just returned raw: the select happens to match `Region` today, and
   // "happens to match" is how a shape drifts out of the contract without a test failing. Its sibling
   // `loadRegionAnchors` already annotates its return for the same reason.
-  const payload: Region[] = rows
+  // ⚠ ENUMERATE THE FIELDS — never `{ ...r, exampleAnchors }`. A spread suppresses TypeScript's
+  // excess-property check, so `regions.bbox` (selected above only to bucket the anchors) would ride
+  // out onto an anonymous wire with tsc perfectly green. The DTO says a region has no bbox; keep it true.
+  const payload: Region[] = rows.map((r) => ({
+    id: r.id,
+    slug: r.slug,
+    displayName: r.displayName,
+    exampleAnchors: byRegion.get(r.id) ?? [],
+  }))
   return c.json({ regions: payload })
 })
 

@@ -14,6 +14,22 @@ export const region = z.object({
   id: z.uuid(),
   slug: z.string(),
   displayName: z.string(),
+  /** A few curated endpoint NAMES from this region — names only, no ids, no coordinates. Feeds the
+   *  tappable example asks and the in-persona offline/outage copy, so rider-facing strings never
+   *  hardcode a place name. It is DECORATION, never an input: the client must not turn one of these
+   *  back into an endpoint — a request names an endpoint by ANCHOR ID and only the server holds the
+   *  mapping (INV-1). Names are already public (the planner speaks them on turn one, anonymously); the
+   *  id mapping is what stays server-side, because an id is the only thing that can bill a Routes call.
+   *  ⚠ `.catch([])`, NOT `.default([])`. GET /regions is critical path (it supplies the regionId every
+   *  POST /drives/plan carries) and the mobile client turns ANY DTO parse failure into a blocking
+   *  "please update the app" wall (apps/mobile/src/lib/api.ts `parseDto`). `.default()` only covers a
+   *  MISSING key — a null or a malformed element still throws, so one sloppy `?? null` in a handler
+   *  would brick the whole home screen over a cosmetic field. `.catch()` degrades to "no examples",
+   *  which every consumer already renders (a freshly-curated region has none).
+   *  ⚠ No `.max()` here either: a count bound on a RESPONSE schema can only ever break deployed
+   *  clients (and under `.catch` it would silently blank the field, worse). The count is server
+   *  policy — apps/api/src/example-anchors.ts. */
+  exampleAnchors: z.array(z.string()).catch([]),
 })
 export type Region = z.infer<typeof region>
 
