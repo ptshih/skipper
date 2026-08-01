@@ -3,6 +3,13 @@ export { Glyph, type GlyphProps } from './Glyph'
 export { Icon, type IconName, type IconProps } from './Icon'
 export { HeaderIconButton, type HeaderIconButtonProps } from './HeaderIconButton'
 export { Screen, type ScreenProps } from './Screen'
+// The conversation's own shell. NOT a flag on Screen: it owns a pinned keyboard-aware footer and an
+// auto-scroll state machine that the app's other twelve Screen call sites want nothing to do with.
+export {
+  ConversationScreen,
+  type ConversationScreenProps,
+  CONVERSATION_STICK_PX,
+} from './ConversationScreen'
 export { EdgeFade, type EdgeFadeProps } from './EdgeFade'
 export { Button, type ButtonProps } from './Button'
 export { Input } from './Input'
@@ -20,6 +27,14 @@ export { StopList, type StopListItem, type StopListProps } from './StopList'
 export { NowCard } from './NowCard'
 export { TransportBar, type TransportBarProps } from './TransportBar'
 export { StateView, type StateViewProps } from './StateView'
+// The planner conversation (1.1 step 7). Presentation only — none of these fetches, spends, or holds
+// the transcript; the screen does. See app/index.tsx.
+export { TurnBubble, type TurnBubbleProps } from './TurnBubble'
+export { TypingDots, type TypingDotsProps } from './TypingDots'
+export { Composer, type ComposerProps } from './Composer'
+export { ExampleAsks, type ExampleAsksProps } from './ExampleAsks'
+export { PreviewCard, type PreviewCardProps, type PreviewCardState } from './PreviewCard'
+export { PlannerUnavailableCard, type PlannerUnavailableCardProps } from './PlannerUnavailableCard'
 export { Skeleton, SkeletonGroup, type SkeletonProps, type SkeletonGroupProps } from './Skeleton'
 export { AccountGate } from './AccountGate'
 export { LocationGate } from './LocationGate'

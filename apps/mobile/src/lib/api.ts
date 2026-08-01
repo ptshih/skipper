@@ -10,7 +10,6 @@ import {
   driveList,
   driveManifest,
   driveProposal,
-  regionAnchorList,
   regionList,
   sample,
   signedDriveAudio,
@@ -26,7 +25,6 @@ import type {
   DriveProposeRequest,
   DriveSummary,
   Region,
-  RegionAnchor,
   Sample,
   SignedDriveAudio,
   VersionPolicy,
@@ -135,6 +133,20 @@ async function fetchJson(
         cookie = ''
       }
     }
+    // ⚠ AbortSignal.any — NOT `signal: controller.signal` written after the `...init` spread. That is
+    // how this line read until 2026-08-01, and it silently DROPPED a caller-supplied `init.signal`
+    // (in an object literal the later key wins), so a screen that unmounted mid-request could never
+    // cancel it. Latent then (no call site passed one); on the 1.1 planner path it would mean a rider
+    // who backgrounds the app bills a model call to completion with nobody left to read it.
+    // ⚠ And do NOT "tidy" it the other way either — moving `signal` ABOVE the spread lets a caller
+    // clobber the internal dead-zone TIMEOUT, which is the guard this whole file exists for (see
+    // REQUEST_TIMEOUT_MS above). Both signals have to survive; that is what `any` is for.
+    // AbortSignal.any is a WinterCG global here — expo installs it when the engine lacks it
+    // (expo/src/winter/AbortSignal.ts, wired from winter/runtime.native.ts).
+    const callerSignal = init?.signal ?? undefined
+    const signal = callerSignal
+      ? AbortSignal.any([callerSignal, controller.signal])
+      : controller.signal
     const res = await fetch(`${API_URL}${path}`, {
       ...init,
       headers: {
@@ -144,7 +156,7 @@ async function fetchJson(
       },
       // The session cookie is set manually above; 'include' would interfere on RN.
       credentials: 'omit',
-      signal: controller.signal,
+      signal,
     })
     // A response of ANY status proves the device reached the network. If the pushed verdict said
     // otherwise, it was stale or the event stream is dead — correct it now rather than let one bad
@@ -169,8 +181,12 @@ const isZodError = (e: unknown): boolean =>
 
 /** Validate a response against its DTO. A schema mismatch — additive-only contract drift an
  *  old client can't read — becomes a ContractError ("please update"), never a raw ZodError
- *  dump or the in-voice fallback. */
-function parseDto<T>(schema: { parse: (data: unknown) => T }, data: unknown): T {
+ *  dump or the in-voice fallback.
+ *
+ *  Exported for `planner.ts`, which does NOT go through `fetchJson` (it reads an SSE stream) but must
+ *  validate its terminal frame against the same DTOs and surface drift the same way. `isZodError`
+ *  stays private — the duck-type is an implementation detail of this one guard. */
+export function parseDto<T>(schema: { parse: (data: unknown) => T }, data: unknown): T {
   try {
     return schema.parse(data)
   } catch (e) {
@@ -194,10 +210,12 @@ export const getSample = async (): Promise<Sample> =>
 export const listRegions = async (): Promise<Region[]> =>
   parseDto(regionList, await fetchJson('/regions')).regions
 
-/** A region's pickable START/END anchors (real, narratable places with exact coords). The create
- *  form's FROM/TO pickers choose from these, so endpoints are grounded — no free text, no geocode. */
-export const listAnchors = async (regionId: string): Promise<RegionAnchor[]> =>
-  parseDto(regionAnchorList, await fetchJson(`/drives/anchors?regionId=${encodeURIComponent(regionId)}`)).anchors
+// ⚠ THERE IS NO `listAnchors` ANY MORE, and re-adding one would be a real exposure, not a
+// convenience. GET /drives/anchors dumped a region's entire curated allowlist WITH exact lat/lng —
+// the output of a paid `curate-places` run, and the very thing INV-1 keeps server-side. In 1.1 the
+// rider never picks an endpoint from a list: the PLANNER resolves endpoints to anchor IDS server-side
+// and the client re-sends the route object verbatim. Display-only place NAMES (the example asks, the
+// offline card) ride on `region.exampleAnchors` — names, no ids, no coordinates.
 
 /** Phase 1: preview the route for a rider-picked START→END. Cheap, persists nothing, costs no credit
  *  — the confirm-before-spend interstitial. 401 ⇒ needs an account. */
@@ -259,7 +277,6 @@ export type {
   DriveProposeRequest,
   DriveSummary,
   Region,
-  RegionAnchor,
   SignedDriveAudio,
   VersionPolicy,
 }

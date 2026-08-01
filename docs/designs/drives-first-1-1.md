@@ -492,8 +492,77 @@ The instrumentation is emitted; read it before this opens to riders.
 defined there is unreachable from a test. Caps live with caps, and zero imports is what keeps them
 testable.
 
-**7 — Planner (client)** + the `expo/fetch` streaming seam (D33a). Conversation on home, example asks,
-inline preview card, in-persona offline state. Requires `bun run check` inside `apps/mobile`.
+**7 — Planner (client)** + the `expo/fetch` streaming seam (D33a). ✅ **DONE 2026-08-01, in three
+commits** (transport → wire → client), each with root + `apps/mobile` `bun run check` green. Built by a
+parallel agent team on disjoint file ownership, with the orchestrator holding the contended files
+(`voice.ts`, `ui/index.ts`, `Icon.tsx`, `FilterChip.tsx`, `index.ts`) and two adversaries re-reading
+from disk afterwards.
+
+⚠ **THE SERVER HALF OF THE SEAM DID NOT EXIST.** `planner.ts` shipped an `onSay` delta hook in step 6
+and **nothing consumed it** — `plan-route.ts` returned `c.json`. So step 7 owned both ends. `Accept:
+text/event-stream` now streams; without the header the JSON response is byte-identical to step 6's
+(diffed), and every pre-stream path — 413, both 400s, the cap wrap-up, the unknown region, 429 —
+answers the same JSON on both Accepts.
+
+⚠ **A LIVE DEFECT IN SHIPPED STEP-6 CODE WAS FOUND HERE, AND IT IS THE MOST IMPORTANT THING IN THIS
+STEP.** Bun's default socket `idleTimeout` is **10 seconds and it fires while a handler is still
+running**, so `POST /drives/plan` was capped at ~12s wall clock against a 45s model deadline: the
+socket closed, the rider saw a failure, and **the Opus call kept generating and billing to completion**.
+Undetected because nothing had exercised a slow turn, and `thinking.display: 'omitted'` puts zero bytes
+on the wire during thinking — so it sat exactly on the boundary. Measured: 12s → 200, 16s → dead at
+~12s, `idleTimeout: 60` → 200 at 25s. **No test can catch a regression** (an in-process `app.fetch`
+never touches a socket), so `limits.ts` pins the RELATIONSHIP and `PLANNER_TIMEOUT_MS` moved there to
+make that assert writable. ⚠ The assert stays green whether or not anything READS the constant — the
+adversary caught it dead-coded once already.
+
+⚠ **`mock.module` IS PROCESS-WIDE UNDER BUN, and the design pass got this wrong.** A probe said module
+mocks do not leak between test files; the full suite says otherwise — `plan-stream.test.ts` replaced
+`../src/planner` for `planner.test.ts` too, and `bun test` ran **96 pass / 9 fail** (the entire
+six-outcome classifier) while every file was green in isolation. It failed *loudly* only by luck: the
+leftover stub happened to be a promise that never resolves. Had it resolved, those tests would have
+**passed while exercising a mock**. Every mock in that file now spreads the real module and delegates
+when idle.
+
+Also landed, and each was a decision rather than an inheritance:
+- **`region.exampleAnchors`** (review §1.11) — names only, `.catch([])` so a cosmetic field can never
+  brick home through mobile's ContractError wall. See the commit for the sort/collation reasoning.
+- **`GET /drives/anchors` deleted end to end.** Not deferred: step 8a moves `requireAccount` off the
+  `/drives*` mount and `/anchors` is not one of the five owner routes, so it would have become an
+  unauthenticated dump of the curated allowlist **with exact lat/lng** the day 8a deployed.
+- **SINGLE-REGION is now a decision, not an accident** (review §1.11's open half). The server has always
+  been single-region; `create.tsx`'s selector dying made that implicit. Auto-select at one region, a
+  chip row above the hero beyond that.
+- **Turn 1 costs zero dollars** (review §1.15c): an example chip seeds a hand-authored rider ask AND
+  the skipper's reply with no model call.
+- **`toWire` merges consecutive same-role turns.** Anthropic's own docs contradict each other on
+  whether `messages` must alternate; merging is byte-equivalent under the permissive reading and legal
+  under the strict one, so it is correct either way. Left unmerged and the strict reading true, the
+  failure is the worst shape available: the server catches the vendor 400 and answers 200 with the
+  in-persona outage line, so the rider watches the skipper apologise forever and **nothing is logged on
+  either end**. The natural output of the wire filter — drop a display-only skipper turn from between
+  two rider turns — produces exactly that violation.
+
+⚠ **D33a's stated premise is STALE and the spec should not be trusted on it.** "RN's global fetch is
+XHR-backed and cannot expose `response.body`" is no longer true: under expo 57 the global fetch **is**
+`expo/fetch` unless `EXPO_PUBLIC_USE_RN_FETCH` is set. The import is still explicit, because a flag, a
+devtools shim, or a change in expo's global-install order would otherwise swap in a buffering fetch
+whose only symptom is every delta arriving at once at the end — a bug with no error and no stack.
+
+⚠ **Deliberately NOT built here, with reasons:** the anonymous preview CLIP (it needs `/propose` open to
+anonymous plus INV-5's release-filtered presign — that is 8a), and therefore review §1.12(b)'s pinned
+mini-transport and §1.12(c)'s exclusive-audio-focus reversal, which only exist once a clip plays there.
+`PreviewCard` carries the empty slot. ⚠ §1.12(c) remains a REVERSAL of two shipped surfaces whose
+comments argue the opposite — flip it without rewriting both and the next agent flips it back.
+
+⚠ **Owed, and not a defect:** every route the planner emits auto-fires `POST /drives/propose` with no
+confirming tap. That satisfies D11 (the model only emits a route after the rider says yes in words), but
+the guarantee is prompt-held, not structural — a model that emitted a route unprompted would bill Google
+Routes. Worth a founder eye before real traffic, alongside RISK-4.
+
+⚠ **Unverified without a device** (stated rather than implied): that deltas render progressively over
+URLSession; `keyboardVerticalOffset={useHeaderHeight()}` (`ConversationScreen.tsx` carries the concrete
+on-device check — do it first); the three client timers; `AbortSignal.any` on device; and that closing
+the HTTP stream actually stops Anthropic billing, which is the premise of the whole cancellation feature.
 
 **8 — Anonymous split — THREE commits with a MANDATORY DEPLOY GATE** (INV-15). Pre-work: a request-level
 test harness for `apps/api` (importing `drives.ts` pulls `auth.ts`, which throws at module load without

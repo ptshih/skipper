@@ -16,9 +16,13 @@ export interface FilterChipProps {
   active?: boolean
   onPress: () => void
   accessibilityLabel?: string
+  /** How many lines the label may take. One by default — a selector chip is a short noun and a
+   *  wrapping one looks broken. The planner's example asks (1.1 step 7) are whole sentences the
+   *  rider taps to say, so they pass 2 rather than get silently clipped mid-phrase. */
+  numberOfLines?: number
 }
 
-export function FilterChip({ label, active, onPress, accessibilityLabel }: FilterChipProps) {
+export function FilterChip({ label, active, onPress, accessibilityLabel, numberOfLines = 1 }: FilterChipProps) {
   const { colors } = useTheme()
   const content = active ? 'onPrimary' : 'accent'
   return (
@@ -35,7 +39,7 @@ export function FilterChip({ label, active, onPress, accessibilityLabel }: Filte
         pressed && styles.pressed,
       ]}
     >
-      <Text variant="label" color={content} numberOfLines={1}>
+      <Text variant="label" color={content} numberOfLines={numberOfLines}>
         {label}
       </Text>
     </Pressable>

@@ -43,6 +43,7 @@ export type IconName =
   | 'eye'
   | 'eyeOff'
   | 'info'
+  | 'send'
 
 const IONICON: Record<IconName, ComponentProps<typeof Ionicons>['name']> = {
   // stop types
@@ -84,6 +85,9 @@ const IONICON: Record<IconName, ComponentProps<typeof Ionicons>['name']> = {
   eye: 'eye-outline', // show diagnostics overlay
   eyeOff: 'eye-off-outline', // hide diagnostics overlay
   info: 'information-circle-outline', // the ⓘ that reveals a clip's source credit (AttributionButton)
+  // Send the rider's line to the skipper (the planner composer). An ARROW, not a paper plane: the
+  // plane is a mail idiom, and this is talking, not posting.
+  send: 'arrow-up',
 }
 
 export interface IconProps {

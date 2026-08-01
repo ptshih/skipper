@@ -25,6 +25,101 @@ export const voice = {
     endDrive: 'Pull over', // stop the drive and head back to the start line
     backToTrailhead: 'Back to the trailhead', // leave the drive-complete card without replaying
   },
+  // THE PLANNER — home IS a conversation with the skipper (1.1, D6). He plans the drive by TALKING.
+  //
+  // ⚠ THIS IS THE CLIENT'S HALF OF A VOICE THE SERVER ALSO SPEAKS, and the two are not the same file.
+  // The live turns come from `apps/api/src/planner-prompt.ts`; everything here is the chrome around
+  // them — the cold open, the canned first exchange, and the honest lines for when the machinery is
+  // down. Read that prompt before editing any of this, because the two are heard as one character in
+  // the same scroll view: he is warm, corny on purpose, deadpan, SHORT (one to three sentences), and
+  // he never says what a place IS. Never copy the narration prompt's fact-sheet language into either.
+  //
+  // ⚠ NO PLACE NAMES HERE (DESIGN.md §7 — voice is delivery, never facts). The example asks are
+  // TEMPLATES: `{a}`/`{b}` are filled from the region's OWN curated names (`region.exampleAnchors`),
+  // so a chip can never name a place the skipper does not run. Hardcoding one would be a chip that
+  // dead-ends in "do not know that one" on the highest-intent tap on the screen.
+  plan: {
+    // The skipper's cold open. ⚠ DISPLAY-ONLY — it must NEVER ride the wire. The server reads a
+    // transcript whose first turn is not the rider's as a forged shape and fails the turn
+    // (apps/api/src/planner.ts toModelMessages), which surfaces to the rider as a permanent outage
+    // on a message they typed innocently. `toWire()` drops it; that is what the `wire` flag is for.
+    opening: 'Well now — where are we headed? A rough idea is plenty; I’ll take it from there.',
+    // A region with no curated endpoints yet. Not an error and not the rider's fault — the honest
+    // "coming soon", in character. (The server has its own line for an UNKNOWN region; this one is
+    // for a known region whose curated set is still empty.)
+    openingUncurated:
+      'I don’t run any roads around here yet, friend. Check back — I’m always picking up new ones.',
+    composerPlaceholder: 'Tell me where to',
+    composerA11yLabel: 'Tell the skipper where to',
+    sendA11yLabel: 'Send',
+    // The beat between the rider's line and the first token coming back. ⚠ Never "checking the map" —
+    // the skipper is given no map, no coordinates and no distances, and says so; a line that claims
+    // otherwise contradicts the character on the one screen where he speaks live.
+    thinking: 'Chewing on that…',
+    // Static, and it must STAY static: it labels the animated dots for a screen reader, and a label
+    // that changes while a turn streams re-announces on every flush (the NowCard live-region lesson).
+    thinkingA11y: 'The skipper is thinking',
+    // The tappable example asks (D17). Each demonstrates a DIFFERENT ask shape — not three
+    // destinations, which would just rebuild the picker D7 deleted.
+    // ⚠ Each `…Reply` is a hand-authored skipper turn seeded WITHOUT a model call: the highest-traffic
+    // turn in the app costs zero dollars and is founder-quality prose. It ships INTO the transcript, so
+    // the model sees what it "already said" — which is why every reply ends by asking for the one thing
+    // still missing, exactly as the prompt's "ask ONE thing at a time" rule requires.
+    exampleAToB: '{a} to {b}, the scenic way.',
+    exampleAToBReply: '{a} out to {b}. About how long do you want to be out?',
+    exampleLoop: 'A loop out of {a}, couple of hours.',
+    exampleLoopReply:
+      'Out of {a} and back around — good shape for an afternoon. Where do you want to turn around?',
+    exampleOpen: 'Somewhere pretty. You pick.',
+    exampleOpenReply: 'Happy to pick. Where are you starting from?',
+    // The turn cap (D12). ⚠ The composer is REPLACED by these, never greyed out — a disabled field
+    // reads as broken, and the skipper bowing out in character is the whole point of the cap being
+    // expressed in persona rather than as an error.
+    wrapUpDrawItUp: 'Draw it up',
+    wrapUpStartFresh: 'Start fresh',
+    // Offline (D18). The conversation genuinely cannot happen out here, so this states that plainly
+    // and then points at what still works. ⚠ It does not say "below": offline, MY DRIVES moves ABOVE
+    // this card.
+    offlineTitle: 'Parked till the signal’s back',
+    offlineBody: 'Planning a drive takes a bar or two, friend. Your saved drives play out here just fine.',
+    // A model/transport outage (RISK-2). ⚠ Reachable ONLY from a transport failure — the server
+    // catches every planner failure and answers 200 with its own in-persona line, deliberately, so
+    // there is nothing to detect. Never build a heuristic on what `say` contains.
+    outageTitle: 'Lost you for a second there',
+    outageBody: 'Something between us dropped the line. Give it another go and I’ll pick up where we left off.',
+    outageRetry: 'Try me again',
+    // Above the region's curated names on both degraded cards — so a stuck screen still says something
+    // TRUE and useful instead of only apologising.
+    anchorsIntro: 'Here’s the country I run:',
+    sendFailed: 'That one didn’t make it out. Give it another go?',
+  },
+  // The inline route card the conversation produces (D13) — the drive as drawn, before a credit is
+  // spent. ⚠ Distinct from `preview` below, which is the drive-DETAIL mini-preview (tap a stop to hear
+  // it). Two different surfaces; keeping one `preview` key for both is how they drift.
+  proposal: {
+    kicker: 'YOUR DRIVE',
+    drawing: 'Drawing it up…',
+    drawFailed: 'Couldn’t plot that one. Give me a different pair and I’ll try again.',
+    cta: 'Make this drive',
+    // ⚠ TWO disclosures, and which one shows is load-bearing (D29). Signed in: name the cost before
+    // spending it. Signed OUT: name OWNERSHIP only and never a number — a fresh account's grant does
+    // not exist until after signup, so any count here would be a guess printed as a fact.
+    costNote: 'Uses one of your free drives.',
+    ownershipNote: 'You’ll need a free account to keep this drive.',
+    adjust: 'Change it up',
+    // A route the corpus has nothing to say about. The server returns 200 with zero stops here, so
+    // this is the only thing standing between a rider and a credit spent on a silent drive.
+    noStops: 'Nothing along that road I can talk about yet.',
+    // ⚠ The same beat as a TRANSCRIPT turn, so the rider is handed back to the conversation instead of
+    // a dead card. It ships on the wire (the model must know that route did not work, or it will
+    // cheerfully offer it again). Safe under D9: "that road is quiet" is ROUTE information, not a fact
+    // about any place on it.
+    noStopsSay:
+      'That road’s a quiet one — nothing along it I can tell you about yet. Give me another pair and I’ll see what I’ve got.',
+    // Fallback ONLY. The server's own 403 names the limit and the way past it; show that when it comes.
+    capReached: 'That’s the last of your free drives, friend.',
+    openMade: 'Open the drive',
+  },
   // The drive-detail mini-preview: tap a stop (a list row or a map pin) to hear that ONE clip on the
   // couch, before ever driving. Discrete stop-by-stop — the old full-screen couch "simulated drive"
   // was cut (docs/decisions/detail-page-mini-preview.md). Glanceable, warm.
@@ -137,15 +232,11 @@ export const voice = {
     // here. Same "No signal out here" opening as its two siblings above so the three read as one
     // idea; the second clause is the part that changes (nothing saved to fall back ON).
     noSignal: 'No signal out here — and this one needs a bar or two. Try again when they’re back.',
-    // Home, offline: ONE heads-up note above the CTA. The CTA stays LIVE and tappable — a nudge,
-    // never a block, like every other offline call in this app ("never strand a rider", "Start
-    // anyway"): the app fails instantly and in voice rather than spinning, so the tap costs nothing.
-    // The note names the one thing that truly can't happen out here (creating a drive needs the
-    // network) and doesn't pretend to speak for the rest — saved drives play fine.
-    needsSignal: 'No signal out here — creating a drive will have to wait for a bar or two.',
-    // Appended when there ARE saved drives, so the screen ends on what still works rather than on
-    // what doesn't. Omitted when the list is empty (it would promise nothing).
-    needsSignalSaved: 'Your saved drives below still play.',
+    // ⚠ `needsSignal`/`needsSignalSaved` lived here until 1.1 step 7. They were a heads-up note above
+    // a CTA that stayed live because the tap cost nothing — a nudge, never a block. Home is now the
+    // conversation itself (D6), which genuinely cannot run offline, so the honest shape is a state,
+    // not a note: see `voice.plan.offlineTitle`/`offlineBody`. The "never strand a rider" rule is
+    // unchanged and still governs every other offline surface in this file.
     // A saved drive whose clips were re-cut on the server: the chip flag + the ⋯ menu action to
     // re-pull. Never forced — offline play keeps working on the copy you’ve got.
     updateReady: 'Fresh cut ready',
