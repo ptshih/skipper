@@ -37,6 +37,11 @@ export type Attribution = z.infer<typeof attribution>
  * single-object shape to tolerate (zero-reuse, no users → clean array contract).
  */
 export const attributionList = z.array(attribution)
+/** The frozen-attribution array as a TYPE. Exported because API handlers that serve attribution
+ *  need to annotate it, and the only previous way to name it was to reach through a DTO that
+ *  happened to carry one (the deleted `RoamPin['attribution']`) — which made an unrelated DTO's
+ *  removal a compile error in a handler that has nothing to do with it. */
+export type AttributionList = z.infer<typeof attributionList>
 
 /**
  * A public data-source credit for the app-wide "Sources & Licenses" screen (NOT per-clip —
@@ -100,64 +105,14 @@ export const signedClip = z.object({
 /** A presigned stop clip, keyed by the stop's seq. */
 export const signedStopClip = signedClip.extend({ seq: z.number().int() })
 
-/* -------------------------------------------------------------------------- */
-/*  Free-roam (ALPHA surface — docs/designs/free-roam-mode.md)                    */
-/* -------------------------------------------------------------------------- */
-
-/** A convex ring in [lng, lat] plus its arrival slack — the wire form of @skipper/engine's `AreaRef`.
- *  Measured on the real corpus, a district's hull is 6–9 vertices, so this stays small. */
-export const areaRing = z.object({
-  ring: z.array(coordinate).min(3),
-  marginM: z.number().int().nonnegative(),
-})
-export type AreaRing = z.infer<typeof areaRing>
-
-/** GET /roam — one free-roam encounter pin: a place + its presigned roam clip. */
-export const roamPin = z.object({
-  poiId: z.uuid(),
-  name: z.string(),
-  lat: z.number(),
-  lng: z.number(),
-  durationMs: z.number().int(),
-  /** Kind-aware proximity radius (m) — roam pins are un-snapped POI centroids, so areal
-   *  places (a peak's summit, a lake's open water) need a wider trigger floor than a
-   *  building. Optional for wire-compat; the server always sends it. */
-  radiusM: z.number().int().optional(),
-  /** AREA pins: the ring a rider must be INSIDE for this to fire, as [lng, lat] vertices, plus the
-   *  metres of slack outside it that still count. Present only for a place you are IN rather than
-   *  NEAR — a district. See @skipper/engine `area.ts`.
-   *
-   *  ⚠ ADDITIVE, and the point fallback above is NOT decoration. Zod strips unknown keys, so a client
-   *  that predates this sees only lat/lng + radiusM and fires on proximity. Area pins are sent to
-   *  EVERY client (founder call 2026-07-30, risks acknowledged) — a `?caps=area` withhold was built
-   *  and then removed — so that fallback is the ONLY thing protecting an area-unaware rider, and it
-   *  works solely because `radiusM` is CAPPED at `CLUSTER_MAX_TRIGGER_RADIUS_M` rather than being the
-   *  district's true ~900 m extent. Uncapped, the pin fires a kilometre early, the recede gate retires
-   *  it, and a long cooldown locks it — the rider hears the district on the approach and silence
-   *  inside it. Never "simplify" an area pin by dropping lat/lng or radiusM. */
-  area: areaRing.optional(),
-  url: z.url(),
-  /** MIME type derived server-side from the R2 key (see signedClip.contentType). */
-  contentType: z.string(),
-  /** The clip's frozen source credit — the SAME array `driveClip` carries. Roam narrations are
-   *  Wikipedia-derived like every other, and CC BY-SA obliges attribution wherever the adapted
-   *  work is presented; roam is the anonymous front door, so it's the one surface that most needs
-   *  to carry it. Optional for wire-compat (the radiusM precedent); the server always sends it when
-   *  the narration has one. */
-  attribution: attributionList.optional(),
-})
-export type RoamPin = z.infer<typeof roamPin>
-
-/** GET /roam?lat=&lng=&radiusKm= — every roam-narratable place near a point. */
-export const roamManifest = z.object({ pins: z.array(roamPin) })
-export type RoamManifest = z.infer<typeof roamManifest>
-
-/** GET /roam/sample — ONE curated "taste" clip, anonymous, for a user OUTSIDE any coverage (the
+/** GET /sample — ONE curated "taste" clip, anonymous, for a rider OUTSIDE any coverage (the
  *  Cupertino reviewer, and every first-timer who opens the app 200 miles from Tahoe). A single
- *  hand-picked narration (server-side `SAMPLE_NARRATION_QID`) resolved to a presigned clip — same
- *  shape as a roam pin minus the geography, since there's no map here, just the clip. `attribution`
- *  rides along because a taste presents the adapted work like any other surface (CC BY-SA). */
-export const roamSample = z.object({
+ *  hand-picked narration (server-side `SAMPLE_NARRATION_QID`) resolved to a presigned clip: no
+ *  geography, because there is no map here, just the clip. `attribution` rides along because a taste
+ *  presents the adapted work like any other surface (CC BY-SA).
+ *  ⚠ Served at /roam/sample until 1.1; the path moved with roam's removal and there is NO alias —
+ *  the wire may break freely (docs/decisions/api-versioning-posture.md). */
+export const sample = z.object({
   // The clip's poi QID — lets the client pick the matching curated "postcard" artwork (qid→image),
   // and fall back to a generic frame if it doesn't recognize the place. Optional for wire-compat.
   qid: z.string().optional(),
@@ -167,7 +122,7 @@ export const roamSample = z.object({
   durationMs: z.number().int(),
   attribution: attributionList.optional(),
 })
-export type RoamSample = z.infer<typeof roamSample>
+export type Sample = z.infer<typeof sample>
 
 /* -------------------------------------------------------------------------- */
 /*  Create-a-Drive (V2) — a user-owned, on-demand A→B drive over reused narrations */

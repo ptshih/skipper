@@ -3,7 +3,7 @@
 // ./tiers (unit-testable without constructing the auth instance).
 
 import type { MiddlewareHandler } from 'hono'
-import type { AccessTier, ClientIdentity } from '@skipper/shared'
+import type { AccessTier } from '@skipper/shared'
 import { auth } from './auth'
 import { resolveSessionSafely } from './session'
 import { isAdmin, tierOf } from './tiers'
@@ -15,11 +15,6 @@ export type ApiEnv = {
   Variables: {
     session: AuthSession | null
     tier: AccessTier
-    /** What build is asking + what it claims it can do (`withClient`, ./client). Set on EVERY
-     *  request by a global middleware, so routes may read it unconditionally.
-     *  ⚠ Client-asserted and forgeable — shape CONTENT with it, never entitlement. Credits, staged
-     *  clips, presigned audio and the account wall all stay on `session`/`tier` above. */
-    client: ClientIdentity
   }
 }
 
@@ -27,7 +22,7 @@ export type ApiEnv = {
  *
  *  FAIL-OPEN: resolving the session reads the auth DB, and this middleware runs BEFORE the
  *  per-route gate — so a transient auth-DB blip must not 500 the request (it would needlessly
- *  take down an open endpoint like `GET /roam`, which needs no session). resolveSessionSafely retries
+ *  take down an open endpoint that needs no session). resolveSessionSafely retries
  *  the read, then degrades to null → tierOf(null) = 'anonymous': the secure direction (a gated
  *  route falls back to its AccountGate 401, never a leak; open routes keep serving). See ./session. */
 export const withSession: MiddlewareHandler<ApiEnv> = async (c, next) => {
@@ -40,7 +35,9 @@ export const withSession: MiddlewareHandler<ApiEnv> = async (c, next) => {
 /**
  * Free-account wall: reject anonymous callers. (Requires withSession upstream.)
  * This is the LIVE account wall for the whole `/drives*` sub-app — mounted at
- * `driveRoutes.use('*', withSession, requireAccount)` (drives.ts), so anonymous = roam only.
+ * `driveRoutes.use('*', withSession, requireAccount)` (drives.ts). ⚠ 1.1 moves requireAccount off
+ * that mount onto the individual owner routes (D15/INV-15) — re-mounting it there re-walls the
+ * anonymous preview.
  * (The planned `POST /drives/:id/ask` route will be a future ADDITIONAL caller, not the first.)
  * The 401 shape + message mirror the per-drive wall in `loadOwnedDrive` (drives.ts) so the two
  * gates stay aligned. Do NOT "remove the unused gate" — it is load-bearing.

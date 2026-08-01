@@ -13,10 +13,29 @@ import * as Linking from 'expo-linking'
 import * as SecureStore from 'expo-secure-store'
 import { gateFor, type GateDecision, type VersionPolicy } from '@skipper/shared'
 import { getVersion } from '@/lib/api'
-import { APP_VERSION } from '@/lib/clientIdentity'
 import { Button } from './Button'
 import { Screen } from './Screen'
 import { Text } from './Text'
+import Constants from 'expo-constants'
+
+/**
+ * This build's semver, single-sourced from `app.json`'s `expo.version`.
+ *
+ * ⚠ `Constants.expoConfig`, NOT `Application.nativeApplicationVersion`, and the difference is not
+ * cosmetic. expoConfig resolves to the app config attached to the JS bundle that is actually running
+ * (for an EAS Update it is the published manifest's, falling back to the embedded config only on an
+ * embedded launch); nativeApplicationVersion is `CFBundleShortVersionString` — the store BINARY's
+ * version, which an OTA update cannot change. Capabilities live in the JS, so the JS bundle's own
+ * version is the honest answer.
+ *
+ * There is no `expo-updates` in the project today, so the two would agree — which is precisely why
+ * this comment exists: the wrong choice would not fail until OTA lands, and would then quietly report
+ * a stale version for a bundle with newer JS. (Reaching for nativeApplicationVersion also means
+ * adding `expo-application`, i.e. a new native dep and a native rebuild.)
+ *
+ * Can be undefined — `Constants.expoConfig` is nullable and VersionGate already fails open on it.
+ */
+export const APP_VERSION: string | undefined = Constants.expoConfig?.version
 
 type Gate = Exclude<GateDecision, 'ok'> // 'nudge' | 'force'
 

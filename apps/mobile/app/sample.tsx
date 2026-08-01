@@ -3,10 +3,10 @@ import { Image, StyleSheet, View } from 'react-native'
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
 import { Stack, useRouter } from 'expo-router'
 import type { ImageSourcePropType } from 'react-native'
-import { getRoamSample } from '@/lib/api'
+import { getSample } from '@/lib/api'
 import { cleanPlaceName } from '@/lib/labels'
 import { postcardImageFor } from '@/lib/postcards'
-import type { RoamSample } from '@skipper/shared'
+import type { Sample } from '@skipper/shared'
 import { space, radius } from '@/theme/tokens'
 import { useTheme, type Theme } from '@/theme'
 import {
@@ -30,7 +30,7 @@ import {
 // in dead air) — so it is structurally incapable of showing the
 // dev diagnostics footer that sim mode carries. It's a small standalone player over one presigned clip.
 //
-// The clip is chosen server-side (SAMPLE_NARRATION_QID → GET /roam/sample). If it isn't configured the
+// The clip is chosen server-side (SAMPLE_NARRATION_QID → GET /sample). If it isn't configured the
 // endpoint 404s and this screen shows a reachable retry — never a white void.
 
 // A short beat after the screen paints before audio starts — so a stranger in a quiet room isn't
@@ -44,7 +44,7 @@ export default function SampleScreen() {
   const status = useAudioPlayerStatus(player)
 
   const [phase, setPhase] = useState<'loading' | 'playing' | 'ended' | 'error'>('loading')
-  const [sample, setSample] = useState<RoamSample | null>(null)
+  const [sample, setSample] = useState<Sample | null>(null)
   // didJustFinish can double-fire; latch the end exactly once.
   const endedRef = useRef(false)
   const beatTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -63,7 +63,7 @@ export default function SampleScreen() {
     setPhase('loading')
     endedRef.current = false
     try {
-      const s = await getRoamSample()
+      const s = await getSample()
       setSample(s)
       player.replace({ uri: s.url })
       // Pre-buffer is implicit in replace(); the beat is purely the anti-jump-scare pause.

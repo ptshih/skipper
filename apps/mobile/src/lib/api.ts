@@ -2,19 +2,17 @@
 // DTOs (@skipper/shared); auth rides on the Better Auth session cookie, which the Expo
 // client stores in secure-store and hands us via authClient.getCookie().
 //
-// V2 client (roam-first + Create-a-Drive): drives are user-OWNED. GET /drives lists the
+// API client: drives are user-OWNED. GET /drives lists the
 // caller's saved drives (one card each) and GET /drives/:id replays one (route + ordered
 // place-narration clips); POST /drives/propose (cheap, no credit) then POST /drives
-// create one. Plus the anonymous reads: GET /regions, GET /roam.
+// create one. Plus the anonymous reads: GET /regions, GET /sample.
 import {
-  CLIENT_IDENTITY_HEADER,
   driveList,
   driveManifest,
   driveProposal,
   regionAnchorList,
   regionList,
-  roamManifest,
-  roamSample,
+  sample,
   signedDriveAudio,
   sourcesResponse,
   versionResponse,
@@ -29,13 +27,11 @@ import type {
   DriveSummary,
   Region,
   RegionAnchor,
-  RoamManifest,
-  RoamSample,
+  Sample,
   SignedDriveAudio,
   VersionPolicy,
 } from '@skipper/shared'
 import { API_URL, authClient } from './auth'
-import { CLIENT_IDENTITY_VALUE } from './clientIdentity'
 import { noteNetworkReachable, shouldSkipRequest } from './connectivity'
 import { voice } from '@/ui/voice'
 
@@ -103,24 +99,23 @@ export const errorMessage = (e: unknown, fallback: string): string =>
 // skips — BOUNDED, vs the infinite hang today). A shorter per-call override is a future refinement.
 const REQUEST_TIMEOUT_MS = 15_000
 
-// `anonymous: true` deliberately OMITS the session Cookie so an intentionally-anonymous call —
-// the ?preview=1 funnel and GET /roam (which carries the rider's live lat/lng) — never links a
-// signed-in identity to preview activity or live coordinates. Authenticated calls (drive/offline
-// sign without preview) leave it false so the cookie still rides.
+// `anonymous: true` deliberately OMITS the session Cookie so an intentionally-anonymous call — the
+// ?preview=1 funnel, GET /sample, and (in 1.1) the planner — never links a signed-in identity to
+// preview activity. Authenticated calls (drive/offline sign without preview) leave it false so the
+// cookie still rides.
 //
-// ⚠ The client-identity header below rides EVERY call including the anonymous ones, and that is
-// correct rather than a leak: it carries a version and a capability list, nothing that identifies a
-// device or an install. /roam is exactly where capability matters (it is the route that serves
-// district hulls), so exempting anonymous calls would defeat the purpose. Keep it that way — adding
-// anything per-install here would quietly undo the separation the anonymous flag exists to create,
-// and make the App Privacy label wrong.
+// ⚠ THE RULE THAT OUTLIVED THE HEADER IT WAS WRITTEN FOR: a client-identity header used to ride every
+// call, including anonymous ones, and that was defensible only because it carried a version and a
+// capability list — nothing identifying a device or an install. It is gone with the capability channel
+// (its one token was `area`). Do not add a per-install identifier here to replace it: it would quietly
+// undo the separation the anonymous flag exists to create, and make the App Privacy label wrong.
 async function fetchJson(
   path: string,
   init?: RequestInit,
   opts?: { anonymous?: boolean; ignoreOffline?: boolean },
 ): Promise<unknown> {
   // Pre-flight: with NO network, don't spend the 15 s timeout discovering it. Every dead-zone
-  // fallback in the app (the home drive list, the drive detail, roam's manifest) is triggered by a
+  // fallback in the app (the home drive list, the drive detail) is triggered by a
   // FAILED fetch, so short-circuiting here is what turns each of them from "~15 s of skeletons,
   // then the saved copy" into an instant disk read — without any of them changing shape. The
   // verdict is push-based, fails OPEN, and self-heals via a probe (see connectivity.ts), so an
@@ -145,7 +140,6 @@ async function fetchJson(
       headers: {
         ...(init?.headers ?? {}),
         // Spread AFTER the caller's headers so neither of ours can be clobbered by a call site.
-        ...(CLIENT_IDENTITY_VALUE ? { [CLIENT_IDENTITY_HEADER]: CLIENT_IDENTITY_VALUE } : {}),
         ...(cookie ? { Cookie: cookie } : {}),
       },
       // The session cookie is set manually above; 'include' would interfere on RN.
@@ -185,38 +179,15 @@ function parseDto<T>(schema: { parse: (data: unknown) => T }, data: unknown): T 
   }
 }
 
-// Coarsen a coordinate to 3 decimals (~110 m) before it goes on the wire. The manifest is a
-// ~50 km region pull, so 110 m precision is irrelevant to selection — yet sending exact lat/lng as
-// GET query params would persist the rider's precise location in server/proxy access logs. The
-// client-side RoamEngine still triggers on the FULL returned pins; only the request key is blurred.
-const coarsen = (n: number): number => Math.round(n * 1000) / 1000
-
-/** FREE-ROAM (alpha): every roam-narratable place near a point, with presigned clip URLs.
- *  Open like the preview (no account) — the alpha is a founder TestFlight toy. Sent anonymously so
- *  the rider's live coordinates are never linked to a signed-in identity. */
-export const getRoamManifest = async (
-  lat: number,
-  lng: number,
-  radiusKm = 50,
-): Promise<RoamManifest> =>
-  parseDto(
-    roamManifest,
-    await fetchJson(
-      `/roam?lat=${coarsen(lat)}&lng=${coarsen(lng)}&radiusKm=${radiusKm}`,
-      undefined,
-      { anonymous: true },
-    ),
-  )
-
-/** GET /roam/sample — the one curated "taste" clip for a user outside any coverage. Anonymous (no
+/** GET /sample — the one curated "taste" clip for a rider outside any coverage. Anonymous (no
  *  account, no location). Throws on a non-2xx (incl. the soft 404 when no sample is configured) — the
  *  /sample screen catches it and shows a reachable retry. */
-export const getRoamSample = async (): Promise<RoamSample> =>
-  parseDto(roamSample, await fetchJson('/roam/sample', undefined, { anonymous: true }))
+export const getSample = async (): Promise<Sample> =>
+  parseDto(sample, await fetchJson('/sample', undefined, { anonymous: true }))
 
 /* -------------------------------------------------------------------------- */
-/*  Create-a-Drive (V2) — user-owned on-demand A→B drives. All account-gated     */
-/*  (anonymous = roam only), so every call sends the session cookie.             */
+/*  Create-a-Drive — user-owned on-demand A→B drives. Account-gated today, so     */
+/*  every call sends the session cookie. ⚠ 1.1 opens plan/propose to anonymous.   */
 /* -------------------------------------------------------------------------- */
 
 /** The pickable regions for the Create-a-Drive region selector (anonymous; just id/slug/name). */
@@ -289,7 +260,6 @@ export type {
   DriveSummary,
   Region,
   RegionAnchor,
-  RoamManifest,
   SignedDriveAudio,
   VersionPolicy,
 }
