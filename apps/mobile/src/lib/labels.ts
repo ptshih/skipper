@@ -12,7 +12,7 @@ const STOP_LABEL: Record<string, string> = {
   story: 'Tale from the trail',
   scenic: 'Enjoy the view',
   break: 'Pit stop',
-  wave: 'Passing by', // a brief roam-style call-out that can ride along a drive
+  wave: 'Passing by', // a brief passing call-out that can ride along a drive
 }
 
 const titleize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)

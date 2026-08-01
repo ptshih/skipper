@@ -4,7 +4,7 @@
 // PROPOSING ("thinking") → CONFIRM (map-hero) → GENERATING → the new drive's preview.
 //
 // Endpoints are grounded by construction (a picked anchor carries exact coords), so the create flow
-// has NO endpoint-guessing: the route + the (reused roam) narration selection are deterministic
+// has NO endpoint-guessing: the route + the (reused shared) narration selection are deterministic
 // server-side. Account-gated: the first action 401s an anonymous rider into the AccountGate.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Animated, FlatList, Pressable, StyleSheet, View } from 'react-native'

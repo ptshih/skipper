@@ -1,7 +1,7 @@
 // The rows of source credit — one small "work · license" line per source a clip drew on, each
 // part tappable (work → the article, license → the CC deed). This is the BODY of the unified
 // attribution reveal: `AttributionButton` renders it inside the ⓘ tap-sheet on the drive player,
-// the free-roam encounter sheet, and the anonymous sample. It is not mounted on its own anywhere —
+// and the anonymous sample. It is not mounted on its own anywhere —
 // the ⓘ is the affordance, this is what the ⓘ shows.
 //
 // Naming the specific work + linking the license is the attribution CC BY-SA / CC BY require

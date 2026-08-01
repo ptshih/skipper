@@ -189,3 +189,30 @@ export function isPastTtl(iso: string, now: number, ttlDays: number): boolean {
   const age = daysSinceIso(iso, now)
   return age != null && age > ttlDays
 }
+
+/* -------------------------------------------------------------------------- */
+/*  Saved-shape enforcement (harvested from the deleted roam pack)              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A wire object as SAVED. A served `url` is a presigned R2 credential with a short TTL, so it must
+ * never reach disk — it is reconstructed as a `file://` uri at read time.
+ *
+ * ⚠ The point is that the TYPE does the enforcing, rather than a `map(c => ({...c, url: null}))`
+ * anyone can forget: `url` is absent from the saved shape, so persisting one is a COMPILE ERROR.
+ * That is a strictly stronger guarantee than the null-it-out convention, which `offline.ts` still
+ * uses at two sites and which is only as good as the next person's memory.
+ *
+ * Carried forward verbatim from the roam pack's `PackPin` when roam was deleted: the pattern was the
+ * durable half of that module, and it is what step 9's subject-keyed store wants. Generic here rather
+ * than bound to one DTO, since the constraint is about `url`, not about pins.
+ */
+export type Saved<T extends { url?: unknown }> = Omit<T, 'url'>
+
+/** A clip's on-disk filename, keyed by an opaque subject id. The extension follows the SERVED
+ *  contentType, never a hardcoded guess — also harvested from the roam pack, where the id could be
+ *  either a poi or a cluster and the filename had to be safe for both. */
+export function savedClipFileName(subjectId: string, contentType: string): string {
+  return `${subjectId}.${extForContentType(contentType)}`
+}
+

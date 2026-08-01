@@ -1,6 +1,6 @@
 // A segmented control — a sunken track holding 2+ mutually-exclusive options; the selected one lifts to
 // a raised enamel segment. Used for the drive-detail List⇄Map view toggle. Icon-optional, token-clean.
-// (This is the placard/settings-style toggle; the eyes-on-road roam map uses a floating icon button.)
+// (This is the placard/settings-style toggle; an eyes-on-road surface wants a floating icon button.)
 import { StyleSheet, View, Pressable, type StyleProp, type ViewStyle } from 'react-native'
 import { border, radius, space } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'

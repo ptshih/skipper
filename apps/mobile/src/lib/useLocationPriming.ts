@@ -1,5 +1,5 @@
 // useLocationPriming — the location-permission-priming orchestration SHELL shared by the
-// live driving player (useDrive) and the free-roam session (useRoam).
+// live driving player (useDrive). It was written for two callers; roam was the other.
 //
 // Both consumers do the EXACT same dance before they can start a live (real-GPS) session:
 //   1. A double-tap guard (a pending ref) so the status read / OS prompt can't be re-fired
@@ -16,8 +16,9 @@
 //
 // What DIVERGES — and is therefore the caller's job via the callbacks — is how each consumer
 // maps the granted / denied / reduced RESULT into its OWN state (useDrive: a `LocationBlock`
-// union + derived booleans + a SYNC `beginDrive`; useRoam: a `gate` object + a phase setter +
-// an ASYNC `beginRoamSession`). `onGranted` is `void | Promise<void>` so both proceed-paths fit.
+// union + derived booleans + a SYNC `beginDrive`; the removed roam caller had a `gate` object and an
+// ASYNC start). `onGranted` stays `void | Promise<void>` — it costs nothing and un-picking it would
+// re-couple this hook to its one remaining caller's shape.
 //
 // NOTE: the consumer's `start` still owns its mode gating (sim/preview vs live) and its own
 // pre-flight resets (e.g. clearing a stale error/gate); this hook is ONLY the live-mode

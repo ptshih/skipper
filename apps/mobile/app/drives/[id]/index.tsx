@@ -674,7 +674,7 @@ export default function DriveDetailScreen() {
 
       {/* NOW PLAYING — FIXED to the bottom of the screen (both views): the single reused mini-player,
           shown while a stop sounds. Its ⓘ reveals the playing clip's CC BY-SA credit — the same unified
-          affordance as the drive player + roam (legal, per-play). */}
+          affordance as the drive player (legal, per-play). */}
       {activeClip ? (
         <View
           onLayout={(e) => setDockH(e.nativeEvent.layout.height)}
@@ -698,7 +698,7 @@ export default function DriveDetailScreen() {
                 {cleanPlaceName(activeClip.name ?? '')}
               </Text>
             </View>
-            {/* The ⓘ source affordance — same reveal as the drive player + roam (unified). */}
+            {/* The ⓘ source affordance — same reveal as the drive player (unified). */}
             <AttributionButton items={activeClip.attribution} />
           </View>
           <Scrubber

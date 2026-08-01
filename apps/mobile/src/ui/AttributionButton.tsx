@@ -1,12 +1,12 @@
 // The unified attribution affordance — the ONE way source credit surfaces, identical on the drive
-// player, the free-roam encounter sheet, and the anonymous sample. A quiet ⓘ that, on tap, reveals
+// player and the anonymous sample. A quiet ⓘ that, on tap, reveals
 // THIS clip's specific source(s): the work (article link) + license (deed link) + a note that the
 // telling is adapted. That specific-work credit is what CC BY-SA / CC BY require wherever the
 // adapted work is presented — a general Settings catalog names the platform ("Wikipedia"), not the
 // article, so it doesn't satisfy the obligation on its own; this does.
 //
 // It reads the clip's frozen `attribution` snapshot, which both the drive manifest (so it works
-// offline) and the roam pin already carry — so drive and roam are ONE code path and one look, not
+// offline) already carries — so every surface is ONE code path and one look, not
 // two surfaces that can drift. Renders NOTHING when a clip has no attribution (scenic/break ground
 // on no source text, so an empty ⓘ would be a lie).
 import { useState } from 'react'

@@ -2,18 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Alert, StyleSheet, View } from 'react-native'
 import * as Linking from 'expo-linking'
 import { Stack, useRouter } from 'expo-router'
-import { errorMessage } from '@/lib/api'
 import { deleteUser, isAdmin, signOut, updateUser, useSession } from '@/lib/auth'
-import { useIsOffline } from '@/lib/connectivity'
 import { PRIVACY_POLICY_URL, TERMS_URL } from '@/lib/licenses'
 import { deleteAllDriveDownloads } from '@/lib/offline'
-import {
-  deleteRoamPack,
-  downloadRoamPack,
-  roamPackStatus,
-  type PackProgress,
-} from '@/lib/roam-pack'
-import { formatBytes } from '@/lib/roam-pack-util'
 import { space } from '@/theme/tokens'
 import { Button, Input, Screen, Text, ThemeModePicker, voice } from '@/ui'
 
@@ -103,8 +94,7 @@ export default function SettingsScreen() {
       // unreachable by every other cleanup path: the rider is anonymous, so home takes its
       // signed-out branch and `listDownloadedDrives` would hand the deleted account's drives to
       // whoever picks the phone up next — and with the server rows gone, no future drive list can
-      // ever mention them for the ownership sweep to act on. (The roam pack stays: it is anonymous
-      // device content, not an account's.)
+      // ever mention them for the ownership sweep to act on.
       deleteAllDriveDownloads()
       // The account (and its sessions) are gone server-side, but the token still sits in this
       // device's SecureStore — clear it, or the app keeps believing it's signed in until some
@@ -117,51 +107,6 @@ export default function SettingsScreen() {
       setDeleting(false)
     }
   }
-
-  /* ---- The roam offline pack: pins + audio for the dead zones (see @/lib/roam-pack) ---- */
-  const isOffline = useIsOffline()
-  const [pack, setPack] = useState(() => roamPackStatus())
-  const [packProgress, setPackProgress] = useState<PackProgress | null>(null)
-  const [packError, setPackError] = useState<string | null>(null)
-  const packAbort = useRef<AbortController | null>(null)
-  // Cancel an in-flight save if the rider leaves — the run holds a network connection and writes
-  // files; it must not outlive the screen that started it.
-  useEffect(() => () => packAbort.current?.abort(), [])
-
-  const savePack = useCallback(async () => {
-    if (packProgress) return
-    setPackError(null)
-    setPackProgress({ done: 0, total: 0 })
-    const ctrl = new AbortController()
-    packAbort.current = ctrl
-    try {
-      await downloadRoamPack(undefined, setPackProgress, ctrl.signal)
-    } catch (e) {
-      // A cancel is the rider's own doing — silent. Everything else gets an honest line: offline
-      // and storage already speak for themselves, so only the generic case needs the persona.
-      if (!(e instanceof Error && e.name === 'AbortError')) {
-        setPackError(errorMessage(e, voice.settings.roamPackFailed))
-      }
-    } finally {
-      if (packAbort.current === ctrl) packAbort.current = null
-      setPackProgress(null)
-      setPack(roamPackStatus()) // re-read from disk: a partial save still saved something
-    }
-  }, [packProgress])
-
-  const removePack = useCallback(() => {
-    Alert.alert(voice.settings.roamPackRemove, voice.settings.roamPackRemoveBody, [
-      { text: voice.confirm.keepRolling, style: 'cancel' },
-      {
-        text: voice.settings.roamPackRemoveCta,
-        style: 'destructive',
-        onPress: () => {
-          deleteRoamPack()
-          setPack(roamPackStatus())
-        },
-      },
-    ])
-  }, [])
 
   const confirmDelete = () => {
     if (deleting || !password) return
@@ -282,79 +227,6 @@ export default function SettingsScreen() {
         <Text variant="dim" color="inkFaint">
           {voice.settings.appearanceHint}
         </Text>
-      </View>
-
-      {/* RIDE ALONG OFFLINE — the roam pack (@/lib/roam-pack). Roam is the front door and the daily
-          mode, and it used to be 100% online-only; this is the control that makes it work in a dead
-          zone. It lives in Settings rather than on the roam screen because the roam canvas is
-          deliberately calm and eyes-on-road, and because a ~138 MB download is a parked decision. */}
-      <View style={styles.section}>
-        <Text variant="label" color="inkFaint">
-          {voice.settings.roamPack}
-        </Text>
-        <Text variant="dim" color="inkFaint">
-          {voice.settings.roamPackIntro}
-        </Text>
-
-        {pack.state === 'stale' ? (
-          // A pack written by an older build. It still occupies the space, so the honest thing is to
-          // say so and keep the reclaim reachable — never let unreadable bytes become invisible ones.
-          <>
-            <Text variant="dim" color="inkDim">
-              {voice.settings.roamPackStale}
-            </Text>
-            <Button variant="secondary" title={voice.settings.roamPackRemove} onPress={removePack} />
-          </>
-        ) : pack.state === 'none' ? (
-          <Text variant="dim" color="inkDim">
-            {voice.settings.roamPackNoAnchor}
-          </Text>
-        ) : (
-          <>
-            <Text variant="dim" color="inkDim">
-              {pack.clipCount > 0
-                ? `${pack.clipCount} ${pack.clipCount === 1 ? 'story' : 'stories'} saved · ${formatBytes(pack.bytes)}`
-                : `${pack.pinCount} ${pack.pinCount === 1 ? 'story' : 'stories'} out there · about ${formatBytes(pack.estimatedBytes)} to save`}
-            </Text>
-            {pack.expired ? (
-              <Text variant="dim" color="inkFaint">
-                {voice.settings.roamPackExpired}
-              </Text>
-            ) : null}
-            {packProgress ? (
-              <Text variant="dim" color="inkFaint" accessibilityLiveRegion="polite">
-                {packProgress.total > 0
-                  ? `${voice.settings.roamPackSaving} ${packProgress.done} / ${packProgress.total}`
-                  : voice.settings.roamPackSaving}
-              </Text>
-            ) : null}
-            {packError ? (
-              <Text variant="dim" color="danger">
-                {packError}
-              </Text>
-            ) : null}
-            {packProgress ? (
-              <Button
-                variant="secondary"
-                title={voice.settings.roamPackCancel}
-                onPress={() => packAbort.current?.abort()}
-              />
-            ) : (
-              <Button
-                variant="secondary"
-                title={pack.clipCount > 0 ? voice.settings.roamPackUpdate : voice.settings.roamPackSave}
-                // Saving needs the network to re-presign every clip; offline the tap can only fail.
-                // Unlike the home CTAs there is no honest destination behind it — the whole action IS
-                // the request — so this one is genuinely inert and says so.
-                disabled={isOffline}
-                onPress={() => void savePack()}
-              />
-            )}
-            {pack.clipCount > 0 && !packProgress ? (
-              <Button variant="ghost" title={voice.settings.roamPackRemove} onPress={removePack} />
-            ) : null}
-          </>
-        )}
       </View>
 
       <View style={styles.section}>

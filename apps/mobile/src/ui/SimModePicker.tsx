@@ -1,5 +1,5 @@
 // The sim-mode control — Real GPS / Simulated, the DEVELOPER toggle that swaps every
-// real-GPS path in the app (free-roam + the live drive) for the simulated drive source.
+// real-GPS path in the app (the live drive) for the simulated drive source.
 // Same visual family as ThemeModePicker: a sunken track, raised selected segment, no
 // border-swap layout nudge. Prop-driven — Settings wires it to the persisted
 // useSimMode() context.

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Image, StyleSheet, View } from 'react-native'
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
+import { Stack, useRouter } from 'expo-router'
 import type { ImageSourcePropType } from 'react-native'
 import { getRoamSample } from '@/lib/api'
 import { cleanPlaceName } from '@/lib/labels'
@@ -26,8 +26,8 @@ import {
 // Cupertino) who taps "Ride Along" gets zero pins and a dead-end. This is the way out of that wall:
 // a deterministic taste that lands in the first breath, then a "ride along for real" forward door.
 //
-// Deliberately NOT the sim roam engine (which opens on proximity-roulette, can start silent, and ends
-// in dead air) and deliberately never imports useRoam — so it is structurally incapable of showing the
+// Deliberately NOT a simulated drive (which opens on proximity-roulette, can start silent, and ends
+// in dead air) — so it is structurally incapable of showing the
 // dev diagnostics footer that sim mode carries. It's a small standalone player over one presigned clip.
 //
 // The clip is chosen server-side (SAMPLE_NARRATION_QID → GET /roam/sample). If it isn't configured the
@@ -39,9 +39,6 @@ const AUTOPLAY_BEAT_MS = 450
 
 export default function SampleScreen() {
   const router = useRouter()
-  // `?from=roam` when reached from the roam no-coverage rescue (roam is already on the stack beneath
-  // us). The end CTA then goes BACK to that roam rather than replace('/roam') stacking a second one.
-  const { from } = useLocalSearchParams<{ from?: string }>()
   const { colors } = useTheme()
   const player = useAudioPlayer()
   const status = useAudioPlayerStatus(player)
@@ -52,7 +49,7 @@ export default function SampleScreen() {
   const endedRef = useRef(false)
   const beatTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // setAudioModeAsync is process-wide (shared with roam/drive). A taste is polite — mixWithOthers,
+  // setAudioModeAsync is process-wide (shared with the drive player). A taste is polite — mixWithOthers,
   // playsInSilentMode so it sounds on a muted reviewer device, background-safe.
   useEffect(() => {
     setAudioModeAsync({
@@ -96,7 +93,7 @@ export default function SampleScreen() {
 
   // Clip finished → the end card (the forward door). didJustFinish is the primary signal, guarded
   // against its double-fire. FALLBACK: expo-audio can DROP didJustFinish across an OS audio
-  // interruption (useDrive/useRoam defend the same way) — so also flip to ended when playback has
+  // interruption (useDrive defends the same way) — so also flip to ended when playback has
   // stopped at/near the very end. Without this, a dropped event strands the rider on the postcard
   // with no CTA — the exact funnel the screen exists to close. Guarded so it can't fire at 0:00.
   useEffect(() => {
@@ -161,9 +158,11 @@ export default function SampleScreen() {
         <TransportBar
           single={{
             title: voice.sample.endCta,
-            // From the roam rescue, roam is already beneath us — go back to it, don't stack a second.
-            // From home/gate it isn't, so replace into roam.
-            onPress: () => (from === 'roam' ? router.back() : router.replace('/roam')),
+            // ⚠ Every route into this screen now arrives from home, so BACK is always correct — the
+            // `?from=roam` fork existed only because the roam rescue put roam on the stack beneath us.
+            // Do not "restore" a replace() here: with one entry point, replacing would drop the
+            // rider's history for no gain.
+            onPress: () => router.back(),
             glow: true,
             secondary: { title: voice.sample.endSecondary, onPress: () => router.back() },
           }}
@@ -201,7 +200,7 @@ export default function SampleScreen() {
           onSeekForward={() => seekBy(15)}
         />
 
-        {/* The ⓘ source affordance — same reveal as the drive player + roam (unified). */}
+        {/* The ⓘ source affordance — same reveal as the drive player (unified). */}
         <AttributionButton items={sample?.attribution} />
       </View>
     </Screen>

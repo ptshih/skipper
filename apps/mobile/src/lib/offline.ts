@@ -130,8 +130,8 @@ function clipsToDownload(detail: DriveManifest): {
 const DOWNLOAD_CONCURRENCY = 4
 
 // The per-clip transfer (timeout, retry/backoff, nonzero-size verify, cancel semantics) and the
-// free-space guard live in ./download — shared with the roam offline pack so the two downloaders
-// can't drift. `InsufficientStorageError` is re-exported because the drive-detail screen catches it
+// free-space guard live in ./download — extracted so a second downloader can never drift from this
+// one. `InsufficientStorageError` is re-exported because the drive-detail screen catches it
 // by name and this module is its established import site.
 export { InsufficientStorageError } from './download'
 
@@ -577,10 +577,8 @@ function downloadedDriveIds(): string[] {
  * Those copies are also permanently unreclaimable by any other path: the server rows are gone, so no
  * future drive list can ever mention them for `sweepUnknownDownloads` to act on.
  *
- * ⚠ Deliberately does NOT touch the roam pack. Roam is the open anonymous front door — `GET /roam`
- * takes no session and its clips are the same shared narrations any anonymous rider hears — so a
- * pack is a property of the DEVICE, not of an account. Wiping it would force a ~138 MB re-download
- * for no ownership reason.
+ * ⚠ Deliberately does NOT touch the legacy roam pack — that is `reclaimLegacyRoamPack`'s job, and it
+ * runs for EVERY rider at launch, not only one deleting an account.
  */
 export function deleteAllDriveDownloads(): number {
   // Keep NOTHING. Still excludes an in-flight download, which would otherwise have its files pulled
@@ -636,4 +634,26 @@ export async function resignPlayback(driveId: string): Promise<Map<number, strin
   if (m && clipsPresentOnDisk(driveId, m)) return localUrlMap(driveId, m)
   const signed = await signDriveAudio(driveId)
   return urlMapFromDriveSigned(signed)
+}
+
+/** One-shot reclaim of the deleted roam mode's offline pack (`Paths.document/roam-pack/`).
+ *
+ *  ⚠ THIS EXISTS BECAUSE DELETING A FEATURE DOES NOT DELETE ITS BYTES. Roam let a rider save the
+ *  region's pins + audio — up to ~138 MB — and `deleteRoamPack()` in the (now removed) roam-pack
+ *  module was the ONLY code that could ever reclaim it. `deleteAllDriveDownloads` deliberately never
+ *  touched it, and the Settings row that offered "Remove saved stories" went with roam. So on every
+ *  device that ever tapped Save, that directory would have become permanently unreachable garbage —
+ *  invisible to the app, chargeable to the rider's storage, removable only by deleting the app.
+ *
+ *  Idempotent and best-effort: a missing directory is the normal case (a rider who never saved), and
+ *  a failure here must never block launch. Safe to delete this function once no install predating the
+ *  roam removal plausibly survives — until then it is the only thing holding the promise that
+ *  uninstalling a feature gives the space back. */
+export function reclaimLegacyRoamPack(): void {
+  try {
+    const dir = new Directory(Paths.document, 'roam-pack')
+    if (dir.exists) dir.delete()
+  } catch {
+    // Nothing to do and nothing to report — the rider cannot act on it, and retrying next launch is free.
+  }
 }

@@ -74,8 +74,8 @@ const IONICON: Record<IconName, ComponentProps<typeof Ionicons>['name']> = {
   notDownloaded: 'cloud-outline',
   update: 'cloud-download-outline', // a saved tour whose clips were re-cut server-side — pull again
   more: 'ellipsis-horizontal', // header overflow menu (secondary/utility actions)
-  music: 'musical-notes-outline', // the rider's own audio (roam PAUSES it while the skipper talks, then hands it back — not ducking)
-  patter: 'chatbubble-ellipses-outline', // the skipper talking (roam contract chip)
+  music: 'musical-notes-outline', // the rider's own audio (PAUSED while the skipper talks, then handed back — not ducking)
+  patter: 'chatbubble-ellipses-outline', // the skipper talking
   map: 'map-outline', // the live-drive Map view (vs the itinerary List)
   list: 'list-outline', // the itinerary List view
   locate: 'locate-outline', // recenter-on-me chip when the rider pans the map away

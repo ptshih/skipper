@@ -59,7 +59,7 @@ const SIM_FAST_SCALE = 8
 // drive takes EXCLUSIVE focus: it IS the audio experience (the Skipper's curated soundtrack owns the
 // drive, the voice owns the stops — see driveMusic.ts), NOT a narration that ducks the rider's own music.
 // Do NOT "flip" this to 'duckOthers' — ducking leaves the rider's playlist competing under the Skipper
-// (rejected in roam too) and breaks lock-screen Now Playing. See docs/decisions/drive-audio-exclusive-focus.md.
+// (it was tried and rejected) and breaks lock-screen Now Playing. See docs/decisions/drive-audio-exclusive-focus.md.
 const DRIVE_INTERRUPTION_MODE = 'doNotMix' as const
 
 // Keep-awake lock tag — the foreground GPS watch dies on screen-lock, so hold the screen on
@@ -70,7 +70,8 @@ const KEEP_AWAKE_TAG = 'skipper-drive'
 // frozen screen (covers slow acquisition + persistently poor accuracy). (review #6)
 const GPS_SEARCH_MS = 8_000
 // POST_START_STALL_MS (the post-start interruption threshold) + the decideStall ladder live in
-// @skipper/engine/player now, single-sourced + unit-tested (shared with useRoam).
+// @skipper/engine/player now, single-sourced + unit-tested. (It was extracted to be shared with the
+// free-roam player; that caller is gone, but the engine is where the stall ladder belongs regardless.)
 
 // Bundled lock-screen / Now Playing artwork so the in-car lock screen isn't a blank thumbnail (the
 // persona is the product — the lock screen is a brand surface). A bundled asset URI works offline. (audit)
@@ -535,7 +536,7 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
   }, [data, mode, fast, resetForReady, handleFix, handleEnd, handleSourceError, pump])
 
   // ---- location-permission priming (live mode) — the prime → prompt → result SHELL, shared with
-  // useRoam via useLocationPriming. This hook owns the pending-ref double-tap guard, the no-prompt
+  // useLocationPriming. This hook owns the pending-ref double-tap guard, the no-prompt
   // status read → undetermined-gate, the request-through, the defensive catch, and the finally;
   // it hands the RESULT back so we map it into THIS player's LocationBlock + sync beginDrive. ----
   const { priming: locationPriming, start: startPrimedDrive, confirmLocationPrime } =
@@ -589,7 +590,7 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
 
   // Deep-link to system Settings (the canAskAgain===false recovery; AppState re-checks on return).
   const openLocationSettings = useCallback(() => {
-    // .catch parity with the roam screen — if the Settings deep-link rejects, swallow it rather than
+    // .catch parity — if the Settings deep-link rejects, swallow it rather than
     // letting the tap silently do nothing with an unhandled rejection. (M14)
     void Linking.openSettings().catch(() => {})
   }, [])
@@ -670,7 +671,8 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
   // ---- clip end → ducked-quiet (NOT next-stop): wait for the next GPS trigger ----
   // FRESH means audio actually ADVANCED — expo-audio flips `playing` true on the play()
   // INTENT while a stream buffers forever, so trusting it lets a stalled clip evade the
-  // watchdog (roam's field hang: a sheet frozen at 0:00 on thin 5G; same player stack here).
+  // watchdog. ⚠ This is a FIELD-OBSERVED failure, not a hypothetical: a sheet frozen at 0:00 on thin
+  // 5G, on this same player stack. Do not relax the freshness check back to `playing`.
   useEffect(() => {
     if (activeSeq === null) return
     const t = status.currentTime ?? 0

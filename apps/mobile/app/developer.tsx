@@ -3,10 +3,9 @@ import { Stack } from 'expo-router'
 import { isAdmin, useSession } from '@/lib/auth'
 import { useSimMode } from '@/lib/sim-mode'
 import { space } from '@/theme/tokens'
-import { DiagnosticsPicker, Screen, SimModePicker, StateView, Text, voice } from '@/ui'
+import { Screen, SimModePicker, StateView, Text, voice } from '@/ui'
 
-// Developer tools — simulated GPS + the roam diagnostics overlay, reached from Settings →
-// Developer. The entry row is shown ONLY to admins, and this screen self-guards too so a
+// Developer tools — simulated GPS, reached from Settings → Developer. The entry row is shown ONLY to admins, and this screen self-guards too so a
 // deep link (skipper://developer) can't slip a non-admin past the hidden row.
 //
 // Gate = isAdmin() (`role === 'admin'`, Better Auth admin plugin, server-set) — the same shared
@@ -14,7 +13,7 @@ import { DiagnosticsPicker, Screen, SimModePicker, StateView, Text, voice } from
 // 'admin' on the founder/allowlist, so an anonymous or plain free user can never satisfy it.
 export default function DeveloperScreen() {
   const { data: session, isPending } = useSession()
-  const { simMode, setSimMode, showDiag, setShowDiag } = useSimMode()
+  const { simMode, setSimMode } = useSimMode()
 
   if (isPending) {
     return <StateView loading message={voice.settings.developerLoading} title={voice.settings.developerTitle} />
@@ -38,16 +37,6 @@ export default function DeveloperScreen() {
         <SimModePicker value={simMode} onChange={setSimMode} />
         <Text variant="dim" color="inkFaint">
           {voice.settings.developerHint}
-        </Text>
-      </View>
-
-      <View style={styles.section}>
-        <Text variant="label" color="inkFaint">
-          {voice.settings.diagnosticsLabel}
-        </Text>
-        <DiagnosticsPicker value={showDiag} onChange={setShowDiag} />
-        <Text variant="dim" color="inkFaint">
-          {voice.settings.showDiagHint}
         </Text>
       </View>
     </Screen>

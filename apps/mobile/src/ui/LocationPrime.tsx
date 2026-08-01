@@ -1,5 +1,5 @@
 // The pre-permission PRIMING screen — the in-character "why I need your location", shown ONCE,
-// right before the OS location prompt (live drive + roam). iOS gives one shot at that prompt and
+// right before the OS location prompt (the live drive). iOS gives one shot at that prompt and
 // a cold ask gets denied, so we explain first. HARD RULE (App Store Guideline 5.1.1(iv), forum
 // thread 817672): a pre-prompt must NOT carry a "Not Now"/dismiss button — the single CTA leads
 // straight into the system prompt; the rider abandons (if at all) via the nav-bar back, BEFORE
@@ -18,7 +18,7 @@ export function LocationPrime({
   title,
   onContinue,
 }: {
-  /** Screen-header title — matches the host screen ("Drive" / the roam title). */
+  /** Screen-header title — matches the host screen ("Drive"). */
   title: string
   /** Fire the OS permission prompt. The ONLY action on this screen (no dismiss button). */
   onContinue: () => void

@@ -1,4 +1,4 @@
-// Shared chrome for the two react-native-maps surfaces (DriveMap, RoamMap).
+// Shared chrome for the app's react-native-maps surfaces (DriveMap today; RoamMap was the second).
 //
 // Both files carried byte-identical copies of these. The axis converter is the one that actually
 // wanted a single home: the wire format is GeoJSON `[lng, lat]` and react-native-maps wants
@@ -6,7 +6,7 @@
 // A silent failure is much easier to keep correct in one place than two — and only one of the two
 // copies carried that warning, so the other was the version a reader could "tidy" without knowing.
 //
-// NOT shared: the puck marker (DriveMap draws a heading wedge RoamMap has no use for) and the base
+// NOT shared: the puck marker (DriveMap draws a heading wedge a route-less surface has no use for) and the base
 // <MapView> prop block. Those still differ or would need prop plumbing that costs more than the copy.
 
 import { Platform, Pressable, StyleSheet } from 'react-native'
@@ -36,7 +36,7 @@ export const MAP_PROVIDER = Platform.OS === 'android' || HAS_GOOGLE_KEY ? PROVID
  *  Apple-Maps fallback. That comment is the reason `userInterfaceStyle` and `mapType` are here at all:
  *  `customMapStyle` is Google-only, so without them a keyless build gets a bright untinted basemap
  *  instead of the night one. Spread this, then add what is genuinely per-map — `ref`, `style`,
- *  `initialRegion`, `onPanDrag`, and RoamMap's viewport-change hook. */
+ *  `initialRegion`, `onPanDrag`, and a viewport-change hook. */
 export function baseMapProps(isDark: boolean) {
   return {
     provider: MAP_PROVIDER,
@@ -54,7 +54,7 @@ export function baseMapProps(isDark: boolean) {
 }
 
 /** Live-position puck geometry, shared so the two maps read as the same object on screen.
- *  (DriveMap adds a heading wedge around it; RoamMap has no travel direction to point.) */
+ *  (DriveMap adds a heading wedge around it; a surface with no travel direction has nothing to point.) */
 export const PUCK = 18
 export const puckStyles = StyleSheet.create({
   halo: { position: 'absolute', width: 34, height: 34, borderRadius: 17, opacity: 0.55 },

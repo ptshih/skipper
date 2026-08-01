@@ -16,10 +16,10 @@ import { Badge, Button, Card, Divider, HeaderIconButton, RouteTrack, Screen, Ske
  *  number they never saw does not. */
 const CREDIT_HINT_THRESHOLD = 5
 
-// Home — the two first-day modes, ranked by friction. RIDE ALONG (roam) is the PRIMARY CTA: it
-// works anonymously, no plan, the front door for a new rider. CREATE A DRIVE is the secondary,
-// higher-intent action (account-gated at the create tap). MY DRIVES — the rider's saved drives —
-// sits at the bottom as a list (or a zero-state). A framed travel-poster hero crowns it.
+// Home — CREATE A DRIVE is the front door, and after roam's removal it is the ONLY way in. MY DRIVES
+// — the rider's saved drives — sits below as a list (or a zero-state), and a framed travel-poster hero
+// crowns it. ⚠ 1.1 turns this screen INTO the conversation (D6): the CTA below is a placeholder for a
+// planner that lives here, not a permanent shape.
 export default function HomeScreen() {
   const router = useRouter()
   const { data: session } = useSession()
@@ -51,7 +51,7 @@ export default function HomeScreen() {
   // Monotonic request id: the focus load, the reconnect self-heal and a Better Auth session refetch
   // can all fire within the same moment (they share the network edge), and without this the SLOWER
   // of two overlapping loads wins and can stamp a stale list — or a stale error — over a good one.
-  // Only the newest run is allowed to write. (The same in-flight discipline useRoam's refetch uses.)
+  // Only the newest run is allowed to write.
   const loadSeq = useRef(0)
 
   const load = useCallback(async () => {
@@ -134,15 +134,12 @@ export default function HomeScreen() {
     </View>
   )
 
-  // RIDE ALONG — the PRIMARY CTA (amber). Lowest friction: anonymous, no plan. CREATE A DRIVE —
-  // the secondary action just under it. Each carries a one-line blurb.
+  // The one CTA, with a one-line blurb under it.
   const modes = (
     <View style={styles.modes}>
-      {/* Offline: one honest heads-up, and the CTAs stay LIVE beneath it. A nudge, not a block —
-          Ride Along really does work out here once the stories are saved (@/lib/roam-pack), the
-          destinations now fail instantly and in voice rather than spinning, and dimming the
-          anonymous front door would contradict what roam is for. The note ends on what still works
-          whenever there IS something saved. */}
+      {/* Offline: one honest heads-up, and the CTA stays LIVE beneath it. A nudge, not a block — the
+          destination lookup fails instantly and in voice rather than spinning, and a SAVED drive plays
+          fine out here, which is what the second half of the note says. */}
       {isOffline ? (
         <Text variant="dim" color="inkFaint" align="center">
           {drives.length > 0
@@ -151,25 +148,22 @@ export default function HomeScreen() {
         </Text>
       ) : null}
       <View style={styles.modeBlock}>
-        <Button icon="car" title={voice.roam.start} onPress={() => navigateOnce(() => router.push('/roam'))} fullWidth />
+        <Button icon="map" title="Create a Drive" onPress={() => navigateOnce(() => router.push('/create'))} fullWidth />
         <Text variant="dim" color="inkFaint" align="center">
-          Pull over for stories as you go — no plan needed.
+          Pick a start and end; the skipper lines up the stories.
         </Text>
-        {/* Cold-open escape hatch: Ride Along needs Tahoe proximity, so a first-timer anywhere else
-            (and an App Review tester) hits "I don't know these roads yet." This ghost link — no amber,
-            doesn't demote the primary — lets ANYONE hear one curated clip in one permission-free tap. */}
+        {/* Cold-open escape hatch, and it OUTLIVED the reason it was added: it existed because Ride
+            Along needed Tahoe proximity, so a first-timer anywhere else hit "I don't know these roads
+            yet." Creating a drive has the same wall (curated endpoints are Tahoe-only) plus an account
+            at the end of it, so a one-tap permission-free clip is if anything more load-bearing now —
+            it is the only thing an App Review tester 2,000 miles away can actually hear. Ghost, so it
+            never competes with the primary. */}
         <Button
           variant="ghost"
           title={voice.sample.homeLink}
           onPress={() => navigateOnce(() => router.push('/sample'))}
           fullWidth={false}
         />
-      </View>
-      <View style={styles.modeBlock}>
-        <Button variant="secondary" icon="map" title="Create a Drive" glow={false} onPress={() => navigateOnce(() => router.push('/create'))} fullWidth />
-        <Text variant="dim" color="inkFaint" align="center">
-          Pick a start and end; the skipper lines up the stories.
-        </Text>
       </View>
     </View>
   )

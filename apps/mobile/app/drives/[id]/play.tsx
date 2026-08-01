@@ -401,7 +401,7 @@ export default function DriveScreen() {
         card.badge || activeAttribution?.length ? (
           <View style={styles.headerRight}>
             {card.badge ? <Badge tone={card.badge.tone} label={card.badge.label} /> : null}
-            {/* The ⓘ that reveals THIS stop's source(s) — same affordance as roam (unified). */}
+            {/* The ⓘ that reveals THIS stop's source(s) — the app-wide affordance (unified). */}
             <AttributionButton items={activeAttribution} />
           </View>
         ) : undefined

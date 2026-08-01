@@ -1,7 +1,9 @@
 // The shared byte-transfer primitive: fetch ONE file to disk, bounded and verified, with the
-// retry/backoff/cancel semantics a dead zone demands. Extracted from offline.ts when the roam
-// offline pack became the second caller — a hardened downloader is exactly the thing that must not
-// exist twice and drift. offline.ts (drives) and roam-pack.ts (roam) both call in here.
+// retry/backoff/cancel semantics a dead zone demands. Extracted from offline.ts when a second caller
+// appeared — a hardened downloader is exactly the thing that must not exist twice and drift.
+// ⚠ That second caller (the roam pack) is gone, so offline.ts is the only one today. KEEP THE MODULE
+// SPLIT anyway: the extraction is what makes a second downloader impossible to justify, and step 9's
+// subject-keyed store is the next caller.
 //
 // API (SDK-56 expo-file-system): `File.downloadFileAsync(url, destFile, { signal })` (static) → a
 // File with `.uri`/`.exists`/`.size`; `file.delete()`.

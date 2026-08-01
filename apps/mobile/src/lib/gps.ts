@@ -2,7 +2,7 @@
 // real one. The driving player consumes a `GpsFixSource`. Two implementations exist:
 // the *simulated* source (replays `generateDrive` on a wall-clock timer, no device GPS),
 // so the whole trigger→play→duck→lock-screen loop is couch-testable on the iOS Simulator;
-// and the live `liveSource()` / `liveRoamSource()` (expo-location `watchPositionAsync` →
+// and the live `liveSource()` (expo-location `watchPositionAsync` →
 // GpsFix), which implement the SAME `GpsFixSource` shape — the hooks swap which one they
 // subscribe and nothing else changes. See docs/designs/gps-player-spec.md §3.4 / §7.
 import * as Location from 'expo-location'
@@ -179,84 +179,6 @@ export async function getDrivePermission(): Promise<{
 }
 
 /**
- * The FREE-ROAM live `GpsFixSource`: the same expo-location watch as `liveSource`, with
- * NO polyline — roam has no route, so there is no along-route projection (`alongM` stays 0;
- * the RoamEngine works from raw proximity + heading) and no end-of-route signal (a roam
- * session ends only when the rider ends it). Same accuracy gate, -1 sanitization, and
- * teardown-leak guard as the drive source.
- */
-export function liveRoamSource(): GpsFixSource {
-  return (onFix, _onEnd, onError) => {
-    let sub: Location.LocationSubscription | null = null
-    let stopped = false
-    let paused = false
-    let startMs: number | null = null
-    let acquiring = false // a watch acquisition is in flight (re-entry guard) (audit #490)
-
-    const onLocation = (loc: Location.LocationObject) => {
-      if (stopped || paused) return // teardown-leak guard (#35925/#35926) + pause guard
-      if (!accuracyOk(loc.coords.accuracy, saneNonNeg(loc.coords.speed))) return // speed-aware gate (audit #9)
-      if (startMs === null) startMs = loc.timestamp
-      onFix({
-        lat: loc.coords.latitude,
-        lng: loc.coords.longitude,
-        speedMps: saneNonNeg(loc.coords.speed),
-        // RAW course, NOT saneNonNeg(): iOS uses -1 for "unknown", and the RoamEngine treats a
-        // negative heading as unknown → skips the heading gate (proximity-only). saneNonNeg()'s
-        // -1→0 would read as a REAL northbound heading and gate out every other direction
-        // — the first live drive's zero-fire bug. (The tour path now shares this sentinel
-        // contract: liveSource passes raw course and TriggerEngine skips the gate on it.)
-        headingDeg: loc.coords.heading ?? -1,
-        tSec: (loc.timestamp - startMs) / 1000,
-        alongM: 0, // no route to be along
-      })
-    }
-
-    const startWatch = () => {
-      if (acquiring || sub) return // already watching/acquiring — don't stack a second native watch (audit #490)
-      acquiring = true
-      void Location.watchPositionAsync(
-        // timeInterval is ANDROID-ONLY (iOS cadence is accuracy-driven, ~1 Hz); harmless floor there.
-        { accuracy: Location.Accuracy.BestForNavigation, distanceInterval: 0, timeInterval: 500 },
-        onLocation,
-      )
-        .then((s) => {
-          acquiring = false
-          if (stopped || paused) {
-            s.remove()
-            return
-          }
-          sub = s
-        })
-        .catch((err) => {
-          acquiring = false
-          if (!stopped) onError?.(err)
-        })
-    }
-
-    startWatch()
-
-    return {
-      stop: () => {
-        stopped = true
-        sub?.remove()
-        sub = null
-      },
-      pause: () => {
-        paused = true
-        sub?.remove()
-        sub = null
-      },
-      resume: () => {
-        if (stopped || !paused) return
-        paused = false
-        startWatch()
-      },
-    }
-  }
-}
-
-/**
  * The live `GpsFixSource`: wraps expo-location `watchPositionAsync` into the SAME
  * `FixSubscription` the simulated source returns, so the driving hook swaps one for the other
  * and nothing else changes. Maps each `LocationObject → GpsFix` (spec §3.3): sanitizes the iOS
@@ -303,10 +225,12 @@ export function liveSource(polyline: LngLat[]): GpsFixSource {
         lat: loc.coords.latitude,
         lng: loc.coords.longitude,
         speedMps: saneNonNeg(loc.coords.speed),
-        // RAW course (same sentinel contract as liveRoamSource above): -1 = unknown, and
-        // the TriggerEngine skips the heading gate on a negative heading. saneNonNeg()'s -1→0
-        // would read as due-north and gate out every non-north stop — roam's field-confirmed
-        // zero-fire bug, ported here rather than re-learned on a tour drive.
+        // ⚠ RAW course, NOT saneNonNeg(): iOS reports -1 for "unknown", and the TriggerEngine
+        // treats a negative heading as unknown and skips the heading gate entirely. Running it
+        // through saneNonNeg() maps -1→0, which reads as a REAL due-north heading and gates out
+        // every stop the car is not driving north toward — a FIELD-CONFIRMED zero-fire bug, found
+        // on a real drive, not reasoned about. This comment used to point at the free-roam source
+        // for the rationale; that function is gone, so the reasoning lives here now.
         headingDeg: loc.coords.heading ?? -1,
         tSec: (loc.timestamp - startMs) / 1000, // ms since epoch; wall-clock since the first fix (incl. pause time) — reporting-only, triggering doesn't use it (audit #951)
         alongM, // projected onto the route so the dot follows the real position

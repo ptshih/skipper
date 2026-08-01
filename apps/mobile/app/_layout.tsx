@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar'
 import * as SplashScreen from 'expo-splash-screen'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { AnalyticsProvider, captureError, track } from '@/lib/analytics'
+import { reclaimLegacyRoamPack } from '@/lib/offline'
 import { SimModeProvider, readStoredSimMode } from '@/lib/sim-mode'
 import { ThemeProvider, readStoredThemeMode, useAppFonts, useTheme, type ThemeMode } from '@/theme'
 import { fonts } from '@/theme/tokens'
@@ -50,7 +51,7 @@ export default function RootLayout() {
   // sees a frame of daylight before their saved DUSK override applies on cold start.
   const [initialMode, setInitialMode] = useState<ThemeMode | null>(null)
   // Read the persisted sim-mode flag alongside the mood (parallel; splash already held) so
-  // roam/drive see the real value on their first read — no live→sim flip race on first tap.
+  // the drive player sees the real value on its first read — no live→sim flip race on first tap.
   const [initialSimMode, setInitialSimMode] = useState<boolean | null>(null)
 
   useEffect(() => {
@@ -71,6 +72,13 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (ready) SplashScreen.hideAsync().catch(() => {})
+  }, [ready])
+
+  // Reclaim the deleted roam mode's offline pack — up to ~138 MB that nothing else can ever free
+  // (see reclaimLegacyRoamPack). Runs once per launch, synchronous-but-trivial (one `exists` check
+  // on the common path), and deliberately AFTER `ready` so it can never delay first paint.
+  useEffect(() => {
+    if (ready) reclaimLegacyRoamPack()
   }, [ready])
 
   if (!ready) return null

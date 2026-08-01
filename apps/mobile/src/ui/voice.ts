@@ -64,7 +64,7 @@ export const voice = {
       'You’ve handed me approximate location — at that blur I’d sail right past the stops. Switch on “Precise Location” in Settings and I’ll call them on the nose.',
     locationAllow: 'Switch on location',
     locationSettings: 'Open Settings',
-    // Pre-permission PRIMING (live drive + roam, first time only — shown right before iOS's
+    // Pre-permission PRIMING (live drive, first time only — shown right before iOS's
     // one-shot location prompt). A short in-character "why I need your location" so a cold ask
     // doesn't get denied. HARD RULE (App Store 5.1.1(iv)): a pre-prompt must NOT carry a
     // "Not Now"/dismiss — its only action leads straight into the system prompt (the rider backs
@@ -93,102 +93,6 @@ export const voice = {
     // download (so a dead zone won't bite). Mirrors the drive-detail "Saved offline" chip's tone.
     offlinePlayback: 'Playing from download',
   },
-  // FREE-ROAM (alpha): no route, no plan — the skipper rides shotgun and pipes up when
-  // the road passes something he knows. Silence is the DEFAULT state, so the copy's whole
-  // job is making quiet feel companionable (the ambient contract, set IN COPY up front).
-  // Strings follow the design handoff (design_handoff_roam); encounter NAMES + tellings
-  // come from the roam pin (grounded) — never from here.
-  roam: {
-    entry: 'Roam', // the mode's display title (home card + screen header)
-    start: 'Ride along',
-    end: 'End', // ghost header affordance → the sign-off
-    // First-run ambient contract — the dead-air inoculation, done as a bit, shown ONCE.
-    contract:
-      'Here’s the deal: I talk when there’s something worth saying. The rest of the time I’m enjoying the view. It’s not awkward unless you make it awkward.',
-    contractReassure:
-      'A quiet drive is a perfectly good drive — I only pipe up when there’s something worth saying.',
-    contractCta: 'Got it — let’s ride',
-    // Session start — one line from a small placeless rotating pool, then settle into idle.
-    sessionKicker: 'NOW ROLLING',
-    sessionStart: [
-      'Mornin’. Don’t mind me — just along for the ride.',
-      'Hop in, hop in. Pretend I’m not even here.',
-      'Go where you’re going — I’ll mind the scenery.',
-      'Well, look who’s driving. I’ll keep an eye out for the good stuff.',
-    ],
-    // Riding-along idle — alive, never a spinner.
-    ridingKicker: 'Riding along',
-    simBadge: 'SIMULATED', // couch/dev clock
-    // The session is running entirely off the saved pack — no network was reached. Quiet and
-    // non-alarming (neutral, not amber): running offline is the pack working, not a degradation.
-    // The roam twin of the drive player's "Playing from download" chip.
-    packBadge: 'SAVED STORIES',
-    idleTitle: 'All quiet — and that’s fine.',
-    idle: 'Enjoying the view. I’ll pipe up when there’s something worth saying.',
-    // The idle "wandering thought" — a placeless, time-of-day-keyed murmur pool that slow-
-    // crossfades under idleTitle so the quiet reads as a person enjoying the ride, not a paused
-    // app. PLACELESS + no facts (DESIGN §7) — pure companionable presence; the SELECTION knob
-    // (clock bucket) picks, nothing generates. Screen-side of the "time-of-day opener" idea.
-    idleMurmur: {
-      morning: [
-        'Roads are ours this hour. Half the world’s still asleep.',
-        'Light’s still soft. Good time to be moving.',
-        'Empty road, full tank. Can’t beat it.',
-        'Fog’ll burn off up ahead. Patience — it’ll be a looker.',
-        'Morning shift, just you and me. Drive easy.',
-        'Nothing like an early start. I’ll mind the quiet.',
-      ],
-      day: [
-        'Sun’s up, road’s open. This is the good part.',
-        'Just here for the scenery, same as you.',
-        'No rush. The good stuff finds us when it finds us.',
-        'Plenty of road behind us, plenty ahead.',
-        'Windows-down kind of light, if you ask me.',
-        'Quiet stretch. Don’t mind me — I’m watching the hills.',
-      ],
-      dusk: [
-        'Light’s going gold. My favorite hour to ride.',
-        'Sun’s clocking out. Roads get honest about now.',
-        'Headlights and quiet. Suits me fine.',
-        'Cooler now. Engine likes it, so do I.',
-        'Stars’ll be out before long. Keep her steady.',
-        'Long shadows, easy pace. No place I’d rather be.',
-      ],
-    },
-    storiesNearby: 'nearby', // stat pill before first encounter: "<n> nearby"
-    storiesTold: 'told', // stat pill once encounters fire: "<n> told"
-    musicPlaying: 'Your music · playing',
-    // Roam PAUSES the rider's audio while the skipper talks (pause+resume, founder 2026-06-11) — NOT
-    // ducking; the label must say so honestly. (audit #251)
-    musicPaused: 'Your music · paused',
-    musicHeld: 'Held · music back up', // encounter PAUSED — the rider's audio resumes
-    storyBadge: 'STORY', // encounter sheet badge (waves/B-sides arrive with their clips)
-    skip: 'Skip',
-    // "Don't tell me this one again" — mutes this pin for good (the engine never fires it again across
-    // sessions). The ghost action beneath the transport; muting also skips the clip that's playing.
-    muteStory: "Don't tell me this one again",
-    // Tuck the encounter player away WITHOUT stopping the story — the handle drag-down / a scrim tap.
-    // (Skip is the only thing that stops it.) The peek bar brings it back, so audio never plays with
-    // no reachable controls (the "couldn't get the player back" fix).
-    minimize: 'Tuck the player away',
-    expand: 'Show the story player', // the peek bar's a11y label — one tap back to the full controls
-    // Pre-buffer skeleton: the sheet now waits for the clip to be ready before sliding up, so
-    // it opens on real audio (not a frozen 0:00). On a slow/dead-zone buffer (>~3s) it appears
-    // anyway in this loading state rather than leave the rider with nothing.
-    buffering: 'Pulling this one up…',
-    // The glanceable map toggle — the motif stays the eyes-on-road default; the map is opt-in.
-    showMap: 'Show the map',
-    hideMap: 'Back to the view',
-    // Sign-off — the only ending; hand-ended sessions deserve a warm out.
-    signoff: 'That’s me out, friend. Holler when you want company.',
-    signoffTally: 'stories this drive',
-    done: 'Done',
-    loading: 'Checking which stories live out here…',
-    noCoverage: 'I don’t know these roads yet, folks. Get me near Lake Tahoe and I’ve got stories.',
-    // The rescue out of the former dead-end: the noCoverage line now leads INTO this button
-    // instead of terminating. Routes to the /sample postcard (a Tahoe taste), not to a live drive.
-    noCoverageAction: 'Hear a Tahoe sample',
-  },
   // The "postcard" — one curated Tahoe clip a stranger anywhere can hear (the /sample screen). The
   // front-door taste for everyone outside the corpus AND the App Review path. Fact-free (the poi
   // name is a FACT, served by the API, never baked here). Warm, corny, glanceable.
@@ -198,19 +102,19 @@ export const voice = {
     loading: 'Cueing up something good from the lake…',
     endTitle: 'That’s the taste, friend.',
     endBody:
-      'One stop of a few hundred up around the lake. Get me near Tahoe and I’ll do this all drive long.',
-    endCta: 'Ride along for real',
+      'One stop of a few hundred up around the lake. Point me at a road up there and I’ll do this the whole drive.',
+    endCta: 'Plan a drive',
     endSecondary: 'Maybe later',
-    // Home cold-open ghost link, under the primary "Ride along" — the guaranteed, permission-free
-    // path for a first-timer nowhere near Tahoe. No number promised (the clip runs about a minute).
+    // Home cold-open ghost link, under the primary CTA — the guaranteed, permission-free path for a
+    // first-timer nowhere near Tahoe. No number promised (the clip runs about a minute).
     homeLink: 'Not near Tahoe? Hear a quick sample.',
   },
   greeting: 'Hop in. I’ll do the talking.',
   // The cold-open descriptor: a newcomer should know WHAT this is before any audio
   // plays. Clear first, persona second — the deadpan stays, just aimed.
-  // Names BOTH modes now that roam is co-equal with drives on home (founder 2026-06-11) —
-  // not a drives-only line. (Wording is a quick founder tweak if the voice wants nudging.)
-  tagline: 'Narrated road trips — take a guided drive, or just ride along. One corny guide either way.',
+  // ⚠ Named BOTH modes until roam was removed (it had been co-equal on home, founder 2026-06-11).
+  // Now there is one artifact, so the line says one thing. (Wording is a quick founder tweak.)
+  tagline: 'Narrated road trips — you pick the road, I’ll do the talking. One corny guide the whole way.',
   // The home hero's enamel flourish: a departures-board kicker ABOVE the headline
   // (deliberately NOT repeating the tagline). Warm, corny, glanceable, no facts.
   home: {
@@ -233,13 +137,11 @@ export const voice = {
     // here. Same "No signal out here" opening as its two siblings above so the three read as one
     // idea; the second clause is the part that changes (nothing saved to fall back ON).
     noSignal: 'No signal out here — and this one needs a bar or two. Try again when they’re back.',
-    // Home, offline: ONE heads-up note above the mode CTAs. The CTAs stay LIVE and tappable —
-    // a nudge, never a block, like every other offline call in this app ("never strand a rider",
-    // "Start anyway"). Three reasons the block that was here first was wrong: the app now fails
-    // instantly and in voice rather than spinning, so the tap costs nothing; Ride Along genuinely
-    // WORKS offline once the stories are saved (see @/lib/roam-pack), so dimming it would be a lie;
-    // and dimming the anonymous front door contradicts what roam is for. The note names the one
-    // thing that truly can't happen out here, and doesn't pretend to speak for the rest.
+    // Home, offline: ONE heads-up note above the CTA. The CTA stays LIVE and tappable — a nudge,
+    // never a block, like every other offline call in this app ("never strand a rider", "Start
+    // anyway"): the app fails instantly and in voice rather than spinning, so the tap costs nothing.
+    // The note names the one thing that truly can't happen out here (creating a drive needs the
+    // network) and doesn't pretend to speak for the rest — saved drives play fine.
     needsSignal: 'No signal out here — creating a drive will have to wait for a bar or two.',
     // Appended when there ARE saved drives, so the screen ends on what still works rather than on
     // what doesn't. Omitted when the list is empty (it would promise nothing).
@@ -340,38 +242,10 @@ export const voice = {
       'Your account, your drives, and your remaining credits go for good. This can’t be undone.',
     deleteCta: 'Delete forever',
     deleteFailed: 'Could not delete your account',
-    // The roam offline pack (Settings → RIDE ALONG OFFLINE). Roam is the front door and the daily
-    // mode, and Tahoe has dead zones — this is the control that makes it work out there. Counts and
-    // sizes are FACTS filled in by the caller; nothing here bakes one.
-    roamPack: 'RIDE ALONG OFFLINE',
-    roamPackIntro:
-      'Stow the stories on your phone and the skipper keeps talking where the bars don’t reach.',
-    // Nothing cached yet — the pack is anchored on wherever you last rode, so there's nothing to
-    // stow until you've ridden once. Says what to do, not just what's missing.
-    roamPackNoAnchor:
-      'Take one Ride Along first and I’ll know which stories to stow for you.',
-    roamPackSave: 'Save the stories',
-    roamPackUpdate: 'Refresh the stories',
-    roamPackRemove: 'Remove saved stories',
-    // Confirm before freeing the space — it's a big download to have to pull again, and out of
-    // signal it can't be pulled at all. States the consequence, not just the action.
-    roamPackRemoveBody:
-      'The stories come off your phone and the skipper goes quiet where there’s no signal. You can save them again next time you have bars.',
-    roamPackRemoveCta: 'Remove them',
-    roamPackCancel: 'Stop saving',
-    roamPackSaving: 'Stowing the stories…',
-    roamPackFailed: 'Couldn’t stow them all — signal’s thin out here. Give it another go?',
-    // A pack past PACK_TTL_DAYS. Roam pins carry no per-clip revision token, so age is the only
-    // freshness signal there is — a nudge, never a block; a stale telling still beats silence.
-    roamPackExpired: 'Saved a while back — a refresh will pick up any re-cut tellings.',
-    // A pack written by an older build of the app. Honest about the one thing the rider can act on:
-    // it still occupies the space, and removing it is how they get it back.
-    roamPackStale:
-      'Your saved stories were stowed by an older version and can’t be read. Remove them and save again.',
     // Developer: an admin-only sub-screen (Settings → Developer → /developer), gated on the
     // server-set user.role (Better Auth admin plugin) === 'admin'. `developer` labels the entry
-    // row; the controls (sim GPS + diagnostics) live on the sub-screen. They used to sit inline
-    // on Settings for everyone — they moved behind the gate once the admin role existed.
+    // row; the controls (sim GPS) live on the sub-screen. They used to sit inline on Settings for
+    // everyone — they moved behind the gate once the admin role existed.
     developer: 'DEVELOPER',
     developerAction: 'Developer tools', // → /developer (admin-only)
     developerTitle: 'Developer',
@@ -380,19 +254,13 @@ export const voice = {
     developerLoading: 'Checking your credentials…',
     developerLocked: 'These tools are for admins only.',
     simModeLabel: 'SIMULATED GPS',
-    diagnosticsLabel: 'DIAGNOSTICS',
     developerHint:
-      'Simulated GPS replays a recorded Tahoe drive through the real engine — test free-roam and the live drive from the couch, no car required. Takes effect next time you start one.',
+      'Simulated GPS replays a recorded Tahoe drive through the real engine — test the live drive from the couch, no car required. Takes effect next time you start one.',
     simModeReal: 'Real GPS',
     simModeSimulated: 'Simulated',
     simModeA11y: 'GPS source',
-    showDiagShow: 'Show',
-    showDiagHide: 'Hide',
-    showDiagA11y: 'Diagnostics overlay',
-    showDiagHint:
-      'Show the pin count + GPS fix age + nearest-pin distance on the roam canvas. Useful for field-testing real drives; hidden by default so the idle reads clean.',
   },
-  // The unified source-credit reveal — the ⓘ on the drive player + roam sheet + sample, and the
+  // The unified source-credit reveal — the ⓘ on the drive player + sample, and the
   // sheet it opens. `open` is the button's a11y label; `adapted` is the modification notice CC
   // BY-SA / CC BY require wherever an adapted work is presented. The work titles, license codes,
   // and deed links are FACTS (rendered by SourceCredit from @/lib/licenses), never here. Distinct
