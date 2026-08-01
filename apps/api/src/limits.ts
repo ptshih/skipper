@@ -100,6 +100,15 @@ export const MAX_PLAN_MESSAGE_CHARS = 2_000
  *  a reservation. Tighten only after logging real p99 output. */
 export const PLANNER_MAX_TOKENS = 2_048
 
+/** Ceiling on the curated anchors handed to the planner in its system prompt.
+ *  ⚠ A CEILING, NOT A PAGE SIZE — deliberately far above today's 26 endpoint-eligible places, so it
+ *  can never silently truncate a real region's allowlist and make a legitimate endpoint unaskable.
+ *  It exists because the set grows with every paid `curate-places` run and rides in a per-request
+ *  prompt: unbounded list, unbounded per-request bill. If a region ever approaches this, that is a
+ *  product decision (a planner cannot hold hundreds of names in useful attention anyway), not a
+ *  number to quietly raise. Pair it with a stable ORDER BY — see loadRegionAnchors. */
+export const MAX_PLAN_ANCHORS = 200
+
 /* -------------------------------------------------------------------------- */
 /* Rate-limiter buckets — the NUMBERS only (mechanism: ./rate-limit.ts).        */
 /* Keyed per-IP and per-INSTANCE, so the effective ceiling is limit x live       */

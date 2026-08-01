@@ -18,7 +18,7 @@
 // is behind requireAccount.
 
 import { Hono, type Context } from 'hono'
-import { and, between, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm'
+import { and, asc, between, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { creditEntries, drives, driveDemand, narrations, places, pois, regions, selectionSubject } from '@skipper/db/schema'
 import type { DriveSelection, DriveSelectionItem, Polyline, RouteProvenance } from '@skipper/db/schema'
@@ -45,7 +45,7 @@ import {
 } from '@skipper/shared'
 import { isAdmin, requireAccount, withSession, type ApiEnv } from './entitlements'
 import { creditSummary, driveConsumeEntry, ensureFreeGrant } from './credits'
-import { DRIVE_CREATE_RATE, MAX_DRIVE_BODY_BYTES, readBoundedText } from './limits'
+import { DRIVE_CREATE_RATE, MAX_DRIVE_BODY_BYTES, MAX_PLAN_ANCHORS, readBoundedText } from './limits'
 import { rateLimit } from './rate-limit'
 import { withRetry } from './retry'
 import { audioUnavailable, contentTypeForKey, presignGet } from './storage'
@@ -103,7 +103,18 @@ async function loadRegionAnchors(bbox: string | null): Promise<RegionAnchor[]> {
       db
         .select({ id: places.id, name: places.name, lat: places.lat, lng: places.lng, primaryType: places.primaryType, featured: places.featured })
         .from(places)
-        .where(and(eq(places.endpointEligible, true), between(places.lat, latMin, latMax), between(places.lng, lngMin, lngMax))),
+        .where(and(eq(places.endpointEligible, true), between(places.lat, latMin, latMax), between(places.lng, lngMin, lngMax)))
+        // ⚠ ORDER BY IS NOT COSMETIC HERE, AND IT IS NOT ABOUT THE PICKER.
+        // From 1.1 this set IS the planner's allowlist, and it rides inside the CACHED system-prompt
+        // prefix on EVERY rider turn. Postgres guarantees no row order without an ORDER BY, so an
+        // unsorted list can come back permuted between requests — byte-different prefix, cache miss,
+        // full-price re-read of the whole prefix, on a call that spends on every request forever.
+        // A silent ~10x cost regression with nothing failing. Sort by a stable key.
+        .orderBy(asc(places.name), asc(places.id))
+        // ⚠ And BOUND it. The set grows with every paid `curate-places` run, and an unbounded list
+        // in a per-request prompt is an unbounded per-request bill. The cap is deliberately far above
+        // today's 26 so it never truncates a real region silently — it is a ceiling, not a page size.
+        .limit(MAX_PLAN_ANCHORS),
     { label: 'drive.anchors' },
   )
   return rows.map((r) => ({
