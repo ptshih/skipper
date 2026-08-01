@@ -144,6 +144,28 @@ export const PLAN_RATE_HOUR = { limit: 120, windowSec: 3600, label: 'plan-hour' 
 /* The bounded read.                                                            */
 /* -------------------------------------------------------------------------- */
 
+/** Does this transcript fit the planner's caps? Returns a machine reason, or null when it fits.
+ *
+ *  ⚠ IT LIVES HERE, NOT WITH THE ROUTE, AND THAT IS NOT TIDINESS. The route module imports the anchor
+ *  loader from ./drives, which reaches ./entitlements -> ./auth, which THROWS at module load without
+ *  BETTER_AUTH_SECRET — so a cap rule defined there is unreachable from a test that has no secret. The
+ *  rule is also simply a cap, and caps live in this file. Zero imports here is what keeps it testable.
+ *
+ *  ⚠ Checks the PER-MESSAGE bound as well as the total: without it a single wall-of-text turn eats the
+ *  whole budget, which is simultaneously the best prompt-injection payload shape and the least
+ *  diagnosable failure ("too long", with no indication of which turn). */
+export function checkTranscript(
+  turns: readonly { text: string }[],
+): 'too_many_turns' | 'turn_too_long' | 'transcript_too_long' | null {
+  if (turns.length > MAX_PLAN_MESSAGES) return 'too_many_turns'
+  let total = 0
+  for (const t of turns) {
+    if (t.text.length > MAX_PLAN_MESSAGE_CHARS) return 'turn_too_long'
+    total += t.text.length
+  }
+  return total > MAX_PLAN_TOTAL_CHARS ? 'transcript_too_long' : null
+}
+
 export type BoundedBody = { ok: true; text: string } | { ok: false; bytes: number }
 
 /**

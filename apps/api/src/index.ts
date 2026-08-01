@@ -10,6 +10,7 @@
 //   GET  /drives                     -> the caller's saved drives (one card each)
 //   GET  /drives/:id                 -> replay a saved drive (frozen structure + live narration content)
 //   POST /drives/:id/assets/sign     -> re-presigned clip URLs for offline refresh
+//   POST /drives/plan                -> one turn of planning a drive by talking (ANONYMOUS; spends)
 //   GET  /sample                     -> one curated "taste" clip (anonymous; no location)
 //
 // The app runs on ONE rider artifact: the user-owned DRIVE, assembled from the region's shared
@@ -26,7 +27,8 @@ import { narrations, pois, regions } from '@skipper/db/schema'
 import type { AttributionList, Region } from '@skipper/shared'
 import { auth, SITE_ORIGIN } from './auth'
 import { driveRoutes } from './drives'
-import { PROPOSE_RATE, SERVER_MAX_BODY_BYTES } from './limits'
+import { PLAN_RATE_HOUR, PLAN_RATE_MINUTE, PROPOSE_RATE, SERVER_MAX_BODY_BYTES } from './limits'
+import { planRoutes } from './plan-route'
 import { isAdmin, withSession, type ApiEnv } from './entitlements'
 import { rateLimit } from './rate-limit'
 import { withRetry } from './retry'
@@ -131,6 +133,20 @@ app.on(['POST', 'GET'], '/api/auth/*', (c) => auth.handler(c.req.raw))
 // Routes + a credit consume + a write) is capped too, via route-level middleware in ./drives
 // (createDriveLimiter) — kept there so it scopes to exactly POST / and not the cheap reads under /drives.
 app.use('/drives/propose', rateLimit(PROPOSE_RATE))
+
+// ⚠ REGISTERED ABOVE THE /drives MOUNT, AND THAT IS THE WHOLE POINT. Hono matches in REGISTRATION
+// ORDER, so below `app.route('/drives', driveRoutes)` this path would be swallowed by that sub-app's
+// blanket `requireAccount` and every anonymous plan would 401 — a failure that reads like an auth bug
+// rather than a routing one. The planner is the open anonymous front door (D14/D15): a rider plans a
+// whole drive before ever meeting the wall at POST /drives. A test pins the 200-without-session.
+//
+// ⚠ BOTH rate limiters, in order. Each rateLimit() call closes over its own bucket map, so two mounts
+// give two independent windows — verified. The per-minute one alone permits ~28,800 requests/day per
+// IP per instance on a path that bills a frontier model every time; the hourly window is what makes
+// that a bounded number. No session middleware: the planner has NO corpus access at all (D9), so
+// there is nothing an admin could be shown that a stranger could not.
+app.use('/drives/plan', rateLimit(PLAN_RATE_MINUTE), rateLimit(PLAN_RATE_HOUR))
+app.route('/drives/plan', planRoutes)
 
 // Create-a-Drive (V2): user-owned, on-demand A→B drives over the shared narration corpus. The
 // whole sub-app is behind a free account — see ./drives. ⚠ 1.1 moves requireAccount OFF this mount

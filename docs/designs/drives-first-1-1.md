@@ -462,14 +462,35 @@ New `usageUsd(model, usage)` prices ONE call without touching the process tally 
 path needs, since a long-lived API process accumulating a global total would grow without bound and
 mean nothing. Pinned against the tally so the two arithmetics cannot diverge.
 
-**6 — Planner (server).** Prompt in `apps/api/src/planner-prompt.ts` — ⚠ **not** in `@skipper/shared`,
-which mobile imports and would ship the system prompt into the app bundle. `@anthropic-ai/sdk` is already
-declared in `apps/api`. Tool-use output, thinking ON (INV-8), effort low, hard `max_tokens`, lazy client
-with `maxRetries` 0–1 and an explicit timeout. ⚠ Register `/drives/plan` **ABOVE the
-`app.route('/drives', driveRoutes)` mount**, not merely "outside" it — hono matches in registration
-order, so below the mount it is swallowed by `driveRoutes`' blanket `requireAccount` and every anonymous
-plan 401s. **Pin it with a test asserting 200 WITHOUT a session**, since the failure is a plain 401 that
-reads like an auth bug rather than a routing one. Include the deflection-clause test.
+**6 — Planner (server).** ✅ **DONE 2026-08-01.** Built by a parallel agent team on disjoint file
+ownership (designers → builders → an adversary that re-read from disk), with the orchestrator holding
+the contended files. `planner-prompt.ts` (persona + the `plan_route` tool), `planner.ts` (the call and
+the six-outcome classifier), `plan-route.ts` (the handler), the wire DTOs, and 18 tests.
+
+✅ **Mounting VERIFIED BY BEHAVIOUR, not by reading:** anonymous `POST /drives/plan` → **400** (reached
+the handler), anonymous `GET /drives` → **401** (the wall still stands). Registered above the mount.
+
+⚠ **`say` IS A TEXT BLOCK, not a tool field** — the open question from the review, settled by the design
+pass. Text streams natively token-by-token; a `say` nested in tool JSON would mean accumulating
+`input_json_delta` partials on both sides for no gain, and would leave a chatting rider (no route yet)
+with nothing to stream at all. Only the ROUTE rides in the tool call.
+
+⚠ **The classifier keys on `stop_reason` FIRST, never on "is there a tool block".** A truncated turn is
+HTTP 200 with a half-parsed tool call — byte-identical, from the caller's side, to "the planner chose
+not to route". One is a chat beat, the other is a paid call that produced nothing, and conflating them
+is how a rider says yes and watches nothing happen. Pinned by test.
+
+Four things the adversary caught, three fixed: spend was keyed on the **echoed** model rather than the
+requested one (invisible to the step-5 drift guard, which validates requested ids); the transcript sat
+**outside** the cached prefix and was re-billed in full every turn; and an `onSay` throw — an SSE write
+to a rider who closed the app, the ordinary case — was classified as a vendor outage. The fourth is
+recorded, not fixed: `PLANNER_MAX_TOKENS` caps thinking **plus** output and nothing has measured p99.
+The instrumentation is emitted; read it before this opens to riders.
+
+⚠ `checkTranscript` lives in `limits.ts`, not with the route — the route module reaches
+`drives → entitlements → auth`, which throws at module load without `BETTER_AUTH_SECRET`, so a cap rule
+defined there is unreachable from a test. Caps live with caps, and zero imports is what keeps them
+testable.
 
 **7 — Planner (client)** + the `expo/fetch` streaming seam (D33a). Conversation on home, example asks,
 inline preview card, in-persona offline state. Requires `bun run check` inside `apps/mobile`.

@@ -213,6 +213,65 @@ export const driveProposal = z.object({
 })
 export type DriveProposal = z.infer<typeof driveProposal>
 
+/* -------------------------------------------------------------------------- */
+/*  The PLANNER — planning a drive by talking to the Skipper (1.1)              */
+/* -------------------------------------------------------------------------- */
+
+/** One line of the conversation. `skipper` is the assistant side; the client keeps BOTH and re-sends
+ *  the whole transcript each turn (D10 — the server is stateless and there is NO `conversations`
+ *  table; a transcript is transient rider content that `purgeUserData` must never have to chase). */
+export const plannerTurn = z.object({
+  role: z.enum(['rider', 'skipper']),
+  text: z.string(),
+})
+export type PlannerTurn = z.infer<typeof plannerTurn>
+
+/** POST /drives/plan — one conversational turn. Anonymous-capable (D14/D15).
+ *
+ *  ⚠ THE BOUNDS THAT MATTER ARE NOT ALL HERE, on purpose. The per-message and total-character caps
+ *  live in `apps/api/src/limits.ts` because they price MODEL TOKENS, and @skipper/shared cannot import
+ *  apps/api — while apps/mobile DOES import this file, so a cap value written here would ship into the
+ *  app bundle and, worse, become a second home to drift from. What stays here is the SHAPE (this is a
+ *  transcript of role/text pairs); what the handler enforces is the SIZE. The `.max()` below is a
+ *  parse-level sanity bound only — the true message cap is MAX_PLAN_MESSAGES, enforced server-side. */
+export const drivePlanRequest = z.object({
+  /** Oldest first, ending with the rider's newest line. */
+  turns: z.array(plannerTurn).min(1).max(100),
+  /** Which region's skipper is being talked to. The anchor roster is resolved SERVER-side from this —
+   *  the client never sends the allowlist, and could not be trusted with it if it did (INV-1). */
+  regionId: z.uuid(),
+})
+export type DrivePlanRequest = z.infer<typeof drivePlanRequest>
+
+/** The route the planner proposes once the rider says yes — already translated out of the model's own
+ *  tool vocabulary into the shape `POST /drives/propose` takes, so the client re-sends it verbatim and
+ *  never reconstructs an endpoint from a display string. */
+export const plannedRoute = z.object({
+  start: anchorId,
+  end: anchorId,
+  via,
+  /** Rough drive length the rider asked for, in minutes. Advisory — the route is materialized from the
+   *  endpoints, and Google decides the real duration. */
+  targetMinutes: z.number().int().positive().nullish(),
+})
+export type PlannedRoute = z.infer<typeof plannedRoute>
+
+/** What a planner turn hands back.
+ *
+ *  ⚠ `say` IS THE ONLY THING THE RIDER EVER SEES. Everything else on this object is machine-read. The
+ *  model's reasoning, its tool call, and any vendor error are never echoed (INV-13). */
+export const drivePlanResponse = z.object({
+  say: z.string(),
+  /** Present ONLY when the rider confirmed and the planner drew it up. Its absence is the normal case,
+   *  not a failure — most turns are conversation. */
+  route: plannedRoute.nullish(),
+  /** True when the skipper has bowed out (D12) and the client should stop offering a reply box. Kept
+   *  separate from `route` because a conversation can end WITHOUT a drive, and that is a real outcome
+   *  rather than an error. */
+  done: z.boolean().default(false),
+})
+export type DrivePlanResponse = z.infer<typeof drivePlanResponse>
+
 /** POST /drives — generate + persist the confirmed drive (consumes a credit; account-gated). */
 export const createDriveRequest = z.object({
   start: anchorId,

@@ -94,6 +94,15 @@ export interface PlannerModelArgs {
    *  ⚠ Never proxy the raw Anthropic stream — it carries thinking blocks, signatures and tool
    *  internals. Deltas already emitted are NOT retracted if the turn later fails. */
   onSay?: (delta: string) => void
+  /** Test seam — the Anthropic client to call. Omitted in production, where the lazy module-level
+   *  client is used instead.
+   *  ⚠ It exists because the six-outcome classifier below is the entire reason this file exists, and
+   *  without an injection point it is unreachable from a test: the classifier only runs AFTER a real
+   *  network call. A module-private client would mean the one piece of logic that decides whether a
+   *  rider's "yes" turns into a drive could never be exercised without spending money. Anything
+   *  structurally compatible with `messages.stream()` is enough — the tests pass a hand-rolled double,
+   *  not a real SDK instance. */
+  client?: Pick<Anthropic, 'messages'>
 }
 
 /**
@@ -291,7 +300,9 @@ function toModelMessages(turns: PlannerTurnInput[]): Anthropic.MessageParam[] {
  */
 export async function runPlannerTurn(args: PlannerModelArgs): Promise<PlannerTurn> {
   const messages = toModelMessages(args.turns)
-  const anthropic = plannerClient()
+  // ⚠ The injected client wins when present (tests); production omits it and pays the lazy
+  // construction below, which is what keeps ANTHROPIC_API_KEY off the module-load path.
+  const anthropic = args.client ?? plannerClient()
 
   // Three system blocks, breakpoint on the SECOND. Render order is tools -> system -> messages, so a
   // breakpoint there caches the tool definition AND the persona AND the region's roster as one prefix
