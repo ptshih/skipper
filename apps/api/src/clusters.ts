@@ -19,14 +19,7 @@
 import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { narrations, poiClusters, pois } from '@skipper/db/schema'
-import {
-  AREA_MARGIN_M,
-  CLUSTER_MAX_TRIGGER_RADIUS_M,
-  clusterTrigger,
-  convexHull,
-  exceedsPointTrigger,
-  type LngLat,
-} from '@skipper/engine'
+import { CLUSTER_MAX_TRIGGER_RADIUS_M, clusterTrigger, exceedsPointTrigger } from '@skipper/engine'
 import { isNarratableStoryPoi } from '@skipper/shared'
 
 /** A fused telling resolved to something triggerable: the clip, plus the geometry derived from the
@@ -47,15 +40,15 @@ export interface ClusterTelling {
   /** From `clusterTrigger` — a cluster has no `kind`, so the radius vocabulary can't answer this and
    *  the floor has to be carried explicitly. */
   triggerRadiusM: number
-  /** AREA mode: the convex hull of the members, for a group too spread out to be a point. Undefined
-   *  for a compact group, which triggers on the point above exactly as before. */
-  area?: { ring: LngLat[]; marginM: number }
-  /** GEOMETRY, not mode: `exceedsPointTrigger` on the UNCAPPED radius — "no single point can represent
-   *  this group honestly". True for exactly the groups `area` is minted for, but it is NOT a synonym
-   *  and must not be collapsed into one: `area` is one ANSWER to this condition (fire on containment),
-   *  and the drive path refuses rather than answering. Keeping the question separate from that one
-   *  answer is what lets the area mode be deleted without a refusal silently becoming an admission.
-   *  ⚠ Cannot be recomputed downstream — `triggerRadiusM` above is served capped. */
+  /** GEOMETRY: `exceedsPointTrigger` on the UNCAPPED radius — "no single point can represent this
+   *  group honestly". The drive path REFUSES these rather than freezing a mis-placed point into a
+   *  selection (buildDrive's second admission rule).
+   *  ⚠ Cannot be recomputed downstream — `triggerRadiusM` below is served CAPPED, so by then the
+   *  evidence is gone and `exceedsPointTrigger` would answer `false` for exactly these groups.
+   *  ⚠ There used to be a second field here, `area` — a served convex hull, so a roaming rider could
+   *  fire on CONTAINMENT instead of proximity. It went with roam: a drive knows its polyline, so it
+   *  never needs to ask "am I inside?". Keeping the QUESTION (this boolean) separate from that one
+   *  ANSWER is what let the mode be deleted without the refusal silently becoming an admission. */
   tooWideForPoint: boolean
 }
 
@@ -73,10 +66,10 @@ export const CLUSTER_VARIETY_KEY = 'cluster'
  * rider in downtown Reno with 46 competing pins plus a fused one.
  *
  * ⚠ Takes the ids of the tellings actually being served, NOT a predicate that re-derives them. That
- * is the difference between an invariant and a coincidence: the served set already accounts for the
- * release gate AND the client's area capability, so a caller who is being withheld a district cannot
- * also lose that district's members. The earlier version asked "does a visible fused telling EXIST",
- * which would have silently emptied downtown Reno for every area-unaware client.
+ * is the difference between an invariant and a coincidence: the served set accounts for the release
+ * gate, so a caller who is being withheld a telling cannot also lose that telling's members. The
+ * earlier version asked "does a visible fused telling EXIST", which would have silently emptied
+ * downtown Reno for any caller that could not see the fused clip.
  *
  * An empty list suppresses nothing, which is the correct no-op.
  */
@@ -86,8 +79,8 @@ export function notSupersededByServedCluster(servedClusterIds: readonly string[]
   // ⚠ RETURNS THE *KEEP* CONDITION, and the NULL handling is the whole reason.
   // `not(inArray(pois.clusterId, ids))` looks equivalent and is catastrophically wrong: for the ~1300
   // POIs with a NULL cluster_id, `NULL IN (…)` is NULL, so `NOT (…)` is NULL — which is not TRUE, so
-  // Postgres drops the row. Measured when I wrote it that way: /roam near Tahoe City fell from 46 pins
-  // to 4, i.e. it deleted every UNCLUSTERED place in the corpus. The previous `NOT EXISTS (…)` form
+  // Postgres drops the row. MEASURED when it was written that way: the pin list near Tahoe City fell
+  // from 46 to 4 — it deleted every UNCLUSTERED place in the corpus. The previous `NOT EXISTS (…)` form
   // was NULL-safe by accident; this one is NULL-safe on purpose.
   return sql`(${pois.clusterId} is null or ${pois.clusterId} not in (${ids}))`
 }
@@ -148,26 +141,6 @@ async function tellableMembersByCluster(clusterIds: string[]): Promise<Map<strin
  */
 export async function loadClusterTellings(opts: {
   includeStaged: boolean
-  /** May this caller be served an AREA telling — one that fires on containment in a hull rather than
-   *  proximity to a point? False DROPS those tellings entirely for this caller.
-   *
-   *  ⚠ REQUIRED so a NEW call site cannot omit it — but do not mistake that for the guard that keeps
-   *  districts out of frozen drives. The predecessor field was ALSO required (17dc913) and was still
-   *  removed wholesale in 66435e9 on the founder's ship-to-everyone call. Nothing reverted silently:
-   *  deleting the property while a call site still passes it is a TS excess-property error, so `tsc`
-   *  forced all three to be edited. Required-ness prevents FORGETTING, not DELETING.
-   *  What the deletion cost was collateral — the drive path's `areaCapable: false` went with it, so
-   *  until 78f52c3 this loader fed wide districts into drive selection as capped 600 m points snapped
-   *  from an off-road centre. Measured 0 actually frozen, and only because all three saved drives are
-   *  Tahoe-basin; the first Reno drive would have baked one in (spec §10). The protection that exists
-   *  TODAY is buildDrive's second admission rule, which refuses an area candidate and has tests
-   *  naming it — not this flag.
-   *
-   *  ⚠ It gates INSIDE the loader, not by filtering the returned array afterwards. `servedClusterIds`
-   *  is derived from what this returns and feeds `notSupersededByServedCluster`, so a post-filter at
-   *  the call site would withhold a district while still suppressing its members — downtown Reno
-   *  would go from 12 pins to ZERO. Withholding and suppressing must read from the same list. */
-  areaCapable: boolean
   /** Restrict to specific clusters (the frozen-drive replay path, whose selection items name their
    *  subject). Omit for "every fused telling". An EMPTY array means "none" and short-circuits — it
    *  must never be read as "no filter", which would serve the whole corpus into one drive. */
@@ -205,25 +178,17 @@ export async function loadClusterTellings(opts: {
     // A group too spread out for a point gets an AREA instead of a fatter circle. `exceedsPointTrigger`
     // is the same predicate the generation gate asks, so what we SERVE and what we agreed to GENERATE
     // can never disagree about which mode a group is in.
-    const needsArea = exceedsPointTrigger(trigger)
-    // Withhold rather than degrade. An area-unaware client that IS served one of these fires the
-    // capped point below instead — which is a real fallback, but a lossy one (it fires on the
-    // approach and the recede gate then retires it). The two protections are complementary, not
-    // alternatives: the cap covers "served it but ignored the ring", this covers "should never have
-    // been served it at all".
-    if (needsArea && !opts.areaCapable) continue
-    const area = needsArea
-      ? { ring: convexHull(pts.map((p): LngLat => [p.lng, p.lat])), marginM: AREA_MARGIN_M }
-      : undefined
-    if (needsArea && (!area || area.ring.length < 3)) continue // collinear members: no honest polygon
+    // ⚠ Computed HERE on purpose: `triggerRadiusM` below is served already CAPPED, so this is the
+    // last place the group's true extent is known. A consumer that re-asked `exceedsPointTrigger`
+    // downstream would read the cap and get `false` for exactly the groups that need refusing.
+    const tooWideForPoint = exceedsPointTrigger(trigger)
+    // ⚠ These are still SERVED, not withheld, and that is deliberate: `servedClusterIds` (derived
+    // from what this returns) drives `notSupersededByServedCluster`, so withholding here would leave
+    // the members suppressed with nothing replacing them — downtown Reno would go from 46 pins to
+    // ZERO. Withholding and suppressing must read from the same list. The refusal happens one level
+    // down, in buildDrive, where the route geometry is known.
     out.push({
-      ...(area ? { area } : {}),
-      // ⚠ Carried SEPARATELY from `area`, and computed HERE on purpose: `triggerRadiusM` below is
-      // served already capped, so this is the last place the true extent is known. A consumer that
-      // re-asked `exceedsPointTrigger` downstream would read the cap and get `false` for exactly the
-      // groups that need refusing. buildDrive's second admission rule keys on this — never on `area`,
-      // so that deleting the area MODE cannot silently flip a refusal into an admission.
-      tooWideForPoint: needsArea,
+      tooWideForPoint,
       narrationId: r.narrationId,
       clusterId: r.clusterId,
       form: r.form,
@@ -241,7 +206,7 @@ export async function loadClusterTellings(opts: {
       // rider hears about downtown everywhere EXCEPT downtown. The cap is the same line the generation
       // gate uses, i.e. "never looser than the loosest thing already shipping" (an un-anchored kindless
       // POI's floor), so the worst case degrades to today's worst case instead of past it.
-      triggerRadiusM: needsArea
+      triggerRadiusM: tooWideForPoint
         ? Math.min(trigger.radiusM, CLUSTER_MAX_TRIGGER_RADIUS_M)
         : trigger.radiusM,
     })
