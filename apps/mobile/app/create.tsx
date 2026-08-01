@@ -54,7 +54,10 @@ function uuidV4(): string {
 }
 
 // An anchor → the wire endpoint shape (drops `kind`).
-const coordOf = (a: RegionAnchor) => ({ name: a.name, lat: a.lat, lng: a.lng })
+/** What a request may name an anchor by: its `places` id, never its coordinates. The server re-asserts
+ *  `endpoint_eligible` and 400s before any billed Routes call, so an off-list point is unrepresentable
+ *  on the wire rather than merely discouraged (INV-1). */
+const idOf = (a: RegionAnchor) => a.id
 // Two picks are the same place (a degenerate one-way route → nudge to a round trip).
 const samePlace = (a: RegionAnchor | null, b: RegionAnchor | null): boolean =>
   !!a && !!b && a.lat === b.lat && a.lng === b.lng
@@ -146,8 +149,8 @@ export default function CreateDriveScreen() {
     try {
       // A loop is end===start with one `via` midpoint (a real out-and-back); one-way is start→end.
       const req = loop
-        ? { start: coordOf(start), end: coordOf(start), via: [coordOf(mid!)] }
-        : { start: coordOf(start), end: coordOf(end!) }
+        ? { start: idOf(start), end: idOf(start), via: [idOf(mid!)] }
+        : { start: idOf(start), end: idOf(end!) }
       const p = await proposeDrive(req)
       setProposal(p)
       idempotencyKeyRef.current = null // fresh proposal = a new logical create; key is minted on confirm
@@ -170,8 +173,10 @@ export default function CreateDriveScreen() {
     setPhase('generating')
     try {
       const m = await createDrive({
-        start: proposal.start,
-        end: proposal.end,
+        // ⚠ The IDS the proposal echoed, not its resolved endpoints — re-sending a name+coord would
+        // reopen exactly the hole the id-only wire closes, and the server would reject it anyway.
+        start: proposal.startId,
+        end: proposal.endId,
         ...(proposal.via && proposal.via.length ? { via: proposal.via } : {}),
         idempotencyKey: idempotencyKeyRef.current,
       })
@@ -248,11 +253,14 @@ export default function CreateDriveScreen() {
     // spend a credit on an unplayable drive). estStopCount runs the REAL selection in propose.
     const noStories = proposal.estStopCount === 0
     // A loop echoes back `via` (end === start); mark the start + each midpoint instead of start→end.
+    // ⚠ `via` is now ANCHOR IDS (the shape POST /drives must re-send); `viaResolved` carries the same
+    // midpoints with name+coords for DISPLAY. Rendering off `via` would print a uuid at a rider.
     const isLoop = !!(proposal.via && proposal.via.length)
+    const viaShown = proposal.viaResolved ?? []
     const endpoints: DriveMapStop[] = isLoop
       ? [
           { seq: 0, name: cleanPlaceName(proposal.start.name), lat: proposal.start.lat, lng: proposal.start.lng, state: 'upcoming' },
-          ...proposal.via!.map((v, i) => ({
+          ...viaShown.map((v, i) => ({
             seq: i + 1,
             name: cleanPlaceName(v.name),
             lat: v.lat,
@@ -280,7 +288,7 @@ export default function CreateDriveScreen() {
               <View style={styles.arrowRow}>
                 <Icon name="car" size={14} color="inkFaint" />
                 <Text variant="dim" color="inkFaint">
-                  via {cleanPlaceName(proposal.via![0]!.name)}
+                  via {viaShown[0] ? cleanPlaceName(viaShown[0].name) : 'a scenic detour'}
                 </Text>
               </View>
             </>

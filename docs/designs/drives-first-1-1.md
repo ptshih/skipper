@@ -415,21 +415,32 @@ Three things worth keeping from the execution:
 drive-creation path at all until step 7 lands the conversation — a broken app across four commits,
 against RISK-1. The build notes' point was not to INVEST in it, which is different.
 
-**4 — THE WIRE COMMIT** (batched — `packages/shared/src/schemas.ts` is visited **once**, additively,
-instead of four times on a shared tree). One atomic change spanning shared + its API producers + its
-mobile consumers: `regionAnchor` gains `id` (from the already-existing `places.id` — no migration);
-propose/create carry **anchor ids**, server re-asserts `endpoint_eligible` and 400s **before** any Routes
-call (INV-1); `driveClip` gains `subjectId` + `subjectKind` (INV-16); `driveProposal` gains the preview
-clip **including `attribution`** (CC BY-SA is legal, not optional). Unblocks steps 8, 9 and 11.
+**4 — THE WIRE COMMIT.** ✅ **DONE 2026-08-01.** `packages/shared/src/schemas.ts` visited once, as
+planned. `regionAnchor` gains `id` (from the already-existing `places.id` — no migration); propose and
+create now carry **anchor ids only**, hydrated server-side by `hydrateAnchors` which re-asserts
+`endpoint_eligible` **in the query** and 400s before any Routes call; `driveClip` gains `subjectId` +
+`subjectKind` (INV-16); `driveProposal` echoes `startId`/`endId`/`via` (the ids create must re-send)
+alongside `viaResolved` (the same midpoints with name+coords, for display).
 
-⚠ **`via` MUST go through the allowlist too — INV-1 currently stops at start/end.** Verified: `via` is
-`z.array(resolvedEndpoint).max(8)` (`schemas.ts:206`) and flows straight into `routeWaypoints` →
-`materializeRoute` at `drives.ts:427` (propose) and `:539` (create), never touching `places`. Hydrate it
-through the **same by-id + `endpoint_eligible` re-assert** as the endpoints. Without this, step 4 can
-satisfy the acceptance line exactly and still ship an **unauthenticated endpoint that bills Google
-Routes for 8 arbitrary points on Earth** — "grounded by construction" degrades to "grounded at both
-ends". ⚠ The acceptance line below says "a non-anchor ENDPOINT", which is why this gap was invisible;
-it is corrected there in the same breath.
+⚠ **`via` GOES THROUGH THE ALLOWLIST TOO** — it was `z.array(resolvedEndpoint)` while start/end were
+being hardened, which satisfies "reject a non-anchor ENDPOINT" exactly while still shipping 8 arbitrary
+billable coordinates. Guarding both ends of a route and leaving the middle open is not a partial
+guarantee, it is none. Pinned by a test.
+
+Three things worth keeping:
+- ⚠ **The eligibility re-assert is in the QUERY, not after it**, so a row that exists but has been
+  de-curated is indistinguishable from one that never existed — otherwise the 400 becomes an oracle for
+  the curated set. Verified it is not vacuous: 32 places, 26 eligible, **6 ineligible**, and both an
+  ineligible id and a bogus one fail to resolve.
+- ⚠ **`hydrateAnchors` preserves the CALLER's order**, not the database's. `inArray` returns rows in
+  whatever order Postgres likes and these are route WAYPOINTS — reordering them silently produces a
+  different, still-billable drive.
+- ⚠ In create it runs **after** the idempotent-replay branch, deliberately: replay is the hot path for a
+  lost-ACK retry and should not pay for a lookup it does not need.
+
+⚠ **`driveClip.poiId` stays** (nullish, null for a fused telling) but is no longer the identity —
+`subjectId`/`subjectKind` are. A store keyed on `poiId` cannot tell a fused clip from a broken one, and
+one keyed on `seq` is keyed on a position in ONE drive.
 
 **5 — INV-11 pricing move**, own commit, announced first: `MODEL_PRICING` + `recordModelUsage` move to
 `@skipper/shared` (TTS pricing stays in studio). Add the planner model's row and extend the drift guard.

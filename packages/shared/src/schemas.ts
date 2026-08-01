@@ -128,9 +128,10 @@ export type Sample = z.infer<typeof sample>
 /*  Create-a-Drive (V2) — a user-owned, on-demand A→B drive over reused narrations */
 /* -------------------------------------------------------------------------- */
 
-// lat/lng are bounded to valid WGS84 ranges (which also excludes ±Infinity); z.number() already
-// rejects NaN. `start`/`end` are CLIENT-supplied (the rider picks them from the region's real anchors)
-// and flow straight into the route materialization + bbox math, so the bounds are boundary hardening.
+// A SERVER-RESOLVED endpoint: the name + exact coords looked up from a curated `places` row. Only ever
+// travels outbound now — see `anchorId` below for why a request can no longer carry one.
+// lat/lng stay bounded to valid WGS84 (which also excludes ±Infinity; z.number() already rejects NaN):
+// cheap, and the shape is still parsed on the client.
 const resolvedEndpoint = z.object({
   name: z.string().min(1).max(200),
   lat: z.number().min(-90).max(90),
@@ -143,6 +144,10 @@ const resolvedEndpoint = z.object({
  *  endpoints grounded by construction. `kind` is the humanized Google `primary_type` (display only);
  *  `featured` floats the popular subset to the top of the (short) picker. */
 export const regionAnchor = z.object({
+  /** The `places` row id — the ONLY thing a request may name an endpoint by (see `anchorId`). Already
+   *  existed in the DB; it simply was never projected to the wire, which is what let requests carry
+   *  free coordinates. */
+  id: z.uuid(),
   name: z.string(),
   lat: z.number(),
   lng: z.number(),
@@ -154,27 +159,51 @@ export const regionAnchor = z.object({
 export type RegionAnchor = z.infer<typeof regionAnchor>
 export const regionAnchorList = z.object({ anchors: z.array(regionAnchor) })
 
+/**
+ * An endpoint, as a REQUEST may name it: the id of a curated `places` row, never a coordinate.
+ *
+ * ⚠ THIS IS THE WHOLE OF "GROUNDED BY CONSTRUCTION" (INV-1), and it is enforced at the WIRE rather
+ * than asked for in a prompt. Requests used to carry `{name, lat, lng}`, which flowed straight into a
+ * BILLED Google Routes call — so once /propose opens to anonymous riders (D14/D15), that shape is an
+ * unauthenticated endpoint that bills Routes for any two points on Earth. An id cannot express a point
+ * that is not on the curated list; the server re-asserts `endpoint_eligible` per row and 400s BEFORE
+ * any Routes call. An off-list ask gets the in-persona "don't know that one" — never a geocode.
+ */
+const anchorId = z.uuid()
+
 /** Ordered intermediate waypoints between start and end — the route is materialized as
  *  [start, ...via, end]. A LOOP is `end === start` with one `via` midpoint (a turnaround), so a
  *  round trip is a real out-and-back (start==end alone is a degenerate zero-distance route). Capped
- *  to bound the single Routes call. */
-const via = z.array(resolvedEndpoint).max(8).optional()
+ *  to bound the single Routes call.
+ *  ⚠ `via` GOES THROUGH THE ALLOWLIST TOO. It was `z.array(resolvedEndpoint)` while start/end were
+ *  being hardened, which satisfied "reject a non-anchor ENDPOINT" exactly while still shipping 8
+ *  arbitrary billable coordinates. Guarding both ends of a route and leaving the middle open is not a
+ *  partial guarantee — it is none. */
+const via = z.array(anchorId).max(8).optional()
 
 /** POST /drives/propose — preview the route for a picked START→END (+ optional via midpoints) before
  *  spending a credit. The endpoints were chosen from the region's anchors (GET /drives/anchors), so we
  *  just materialize the route + count stories. Persists nothing, no credit — the confirm interstitial. */
 export const driveProposeRequest = z.object({
-  start: resolvedEndpoint,
-  end: resolvedEndpoint,
+  start: anchorId,
+  end: anchorId,
   via,
 })
 export type DriveProposeRequest = z.infer<typeof driveProposeRequest>
 
-/** The proposed route to CONFIRM before generating: resolved endpoints (+ via) + a route preview. */
+/** The proposed route to CONFIRM before generating: the SERVER-resolved endpoints (name + coords, for
+ *  display) alongside the ids that produced them, plus the route preview.
+ *  ⚠ Both halves are here on purpose. The resolved shape is what the rider sees; the ids are what the
+ *  create call must re-send, and echoing them means the client never has to reconstruct an endpoint
+ *  from a display string — the failure mode that made free-text endpoints tempting in the first place. */
 export const driveProposal = z.object({
   start: resolvedEndpoint,
   end: resolvedEndpoint,
+  startId: anchorId,
+  endId: anchorId,
+  /** The via ANCHOR IDS as sent; `viaResolved` carries the same midpoints for display. */
   via,
+  viaResolved: z.array(resolvedEndpoint).max(8).optional(),
   polyline,
   distanceMeters: z.number().int(),
   durationSeconds: z.number().int(),
@@ -186,8 +215,8 @@ export type DriveProposal = z.infer<typeof driveProposal>
 
 /** POST /drives — generate + persist the confirmed drive (consumes a credit; account-gated). */
 export const createDriveRequest = z.object({
-  start: resolvedEndpoint,
-  end: resolvedEndpoint,
+  start: anchorId,
+  end: anchorId,
   via,
   /** Client-minted v4 UUID, STABLE across retries of one logical create. The server uses it AS the
    *  drive id, so a lost-ACK network retry hits the existing drive PK + the `drive:<id>` consume
@@ -203,7 +232,16 @@ export const driveClip = z.object({
   /** ≥0, in route order. */
   seq: z.number().int(),
   form: driveClipForm,
+  /** ⚠ Null for a FUSED cluster telling, by design — it is not about any one poi. Kept for
+   *  compatibility with readers that key on it; `subjectId` below is the honest identity. */
   poiId: z.uuid().nullish(),
+  /** The narration's SUBJECT — a poi id or a `poi_clusters` id, disambiguated by `subjectKind`.
+   *  ⚠ This is what the offline store keys on (INV-6/INV-16): server-side subject identity always
+   *  existed but was never projected, so the client could not tell a fused telling apart from a
+   *  missing one. Do NOT key a store on `poiId` (null for fused) or on `seq` (a position in ONE
+   *  drive — the same telling has a different seq in every drive that includes it). */
+  subjectId: z.uuid().nullish(),
+  subjectKind: z.enum(['poi', 'cluster']).nullish(),
   name: z.string().nullish(),
   /** Trigger point (the narration snapped to THIS route). */
   lat: z.number().nullish(),

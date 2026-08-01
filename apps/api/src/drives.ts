@@ -101,12 +101,13 @@ async function loadRegionAnchors(bbox: string | null): Promise<RegionAnchor[]> {
   const rows = await withRetry(
     () =>
       db
-        .select({ name: places.name, lat: places.lat, lng: places.lng, primaryType: places.primaryType, featured: places.featured })
+        .select({ id: places.id, name: places.name, lat: places.lat, lng: places.lng, primaryType: places.primaryType, featured: places.featured })
         .from(places)
         .where(and(eq(places.endpointEligible, true), between(places.lat, latMin, latMax), between(places.lng, lngMin, lngMax))),
     { label: 'drive.anchors' },
   )
   return rows.map((r) => ({
+    id: r.id,
     name: r.name,
     lat: r.lat,
     lng: r.lng,
@@ -116,12 +117,59 @@ async function loadRegionAnchors(bbox: string | null): Promise<RegionAnchor[]> {
   }))
 }
 
-/** A resolved endpoint (a picked anchor). */
+/** A resolved endpoint (a picked anchor), as the server produced it. */
 interface ResolvedEndpoint {
   name: string
   lat: number
   lng: number
 }
+
+/**
+ * Turn the anchor IDS a request carries into real endpoints — the wire-level enforcement of INV-1.
+ *
+ * ⚠ THIS MUST RUN BEFORE ANY ROUTES CALL, and it is the only thing standing between an anonymous
+ * request and a billed Google Routes call for arbitrary points. Requests used to carry
+ * `{name, lat, lng}` straight into `materializeRoute`; an id cannot express an off-list point, and
+ * every row is re-checked for `endpoint_eligible` HERE rather than trusted from whenever the client
+ * last fetched the anchor list — a place can be de-curated between a rider's picker load and their tap.
+ *
+ * ⚠ Re-asserts eligibility in the QUERY, not after: a row that exists but is no longer eligible must be
+ * indistinguishable from one that never existed, or the 400 becomes an oracle for the curated set.
+ *
+ * ⚠ Order is the caller's, not the database's. `inArray` returns rows in whatever order Postgres likes,
+ * and these are ROUTE WAYPOINTS — reordering them silently produces a different (still billable) drive.
+ *
+ * Returns null when ANY id is unknown or ineligible; the caller 400s. Deliberately all-or-nothing: a
+ * partial resolve would route a rider somewhere they did not ask to go.
+ */
+async function hydrateAnchors(ids: string[]): Promise<ResolvedEndpoint[] | null> {
+  if (ids.length === 0) return []
+  const unique = [...new Set(ids)]
+  const rows = await withRetry(
+    () =>
+      db
+        .select({ id: places.id, name: places.name, lat: places.lat, lng: places.lng })
+        .from(places)
+        .where(and(inArray(places.id, unique), eq(places.endpointEligible, true))),
+    { label: 'drive.hydrateAnchors' },
+  )
+  const byId = new Map(rows.map((r) => [r.id, { name: r.name, lat: r.lat, lng: r.lng }]))
+  const out: ResolvedEndpoint[] = []
+  for (const id of ids) {
+    const hit = byId.get(id)
+    if (!hit) return null // unknown OR de-curated — same answer either way (see above)
+    out.push(hit)
+  }
+  return out
+}
+
+/** The 400 an off-list endpoint gets. ⚠ Says nothing about WHICH id failed or whether it exists —
+ *  the response must not become a probe for the curated set. The rider-facing half is the planner's
+ *  job (an in-persona "don't know that one"), never a geocode. */
+const NOT_AN_ANCHOR = {
+  error: 'unknown_anchor',
+  message: "I don't know one of those spots — pick one from the list and I'll plot it.",
+} as const
 
 /** Build the ordered Routes waypoints for a drive: [start, ...via, end]. A LOOP is end===start with a
  *  single `via` midpoint, so it materializes as a real out-and-back (start==end alone is a degenerate
@@ -363,6 +411,10 @@ function manifestClips(selection: DriveSelection, corpusById: Map<string, Narrat
       // reads it (identity there is `seq`), so a fused clip simply omits it rather than claiming to
       // be about one of the places it names.
       poiId: n.poiId,
+      // The honest identity (INV-16): a fused telling has a null `poiId` by design, so a client keying
+      // an offline store on that field cannot tell a cluster clip apart from a broken one.
+      subjectId: n.subjectId,
+      subjectKind: n.subjectKind,
       name: n.name,
       lat: item.triggerLat,
       lng: item.triggerLng,
@@ -416,13 +468,18 @@ driveRoutes.post('/propose', async (c) => {
   const parsed = await readJsonBody(
     c,
     driveProposeRequest,
-    'start{name,lat,lng} and end{name,lat,lng} are required.',
+    'start and end must be anchor ids from GET /drives/anchors.',
     MAX_DRIVE_BODY_BYTES,
   )
   if (!parsed.ok) return parsed.res
-  const startEp: ResolvedEndpoint = parsed.data.start
-  const endEp: ResolvedEndpoint = parsed.data.end
-  const via = parsed.data.via
+  const { start: startId, end: endId, via: viaIds } = parsed.data
+
+  // ⚠ BEFORE the Routes call — this is the billed boundary (INV-1). start, end AND every via.
+  const hydrated = await hydrateAnchors([startId, ...(viaIds ?? []), endId])
+  if (!hydrated) return c.json(NOT_AN_ANCHOR, 400)
+  const startEp = hydrated[0]!
+  const endEp = hydrated[hydrated.length - 1]!
+  const via = hydrated.slice(1, -1)
 
   let route
   try {
@@ -436,11 +493,14 @@ driveRoutes.post('/propose', async (c) => {
   // An admin previews over staged clips too, so the proposed count matches what they'll build.
   const { stops } = await selectStopsForRoute(route, isAdmin(c.get('session')))
 
-  // Echo `via` so the confirm screen can mark the midpoint(s) + render a loop as a round trip.
+  // Echo the ids AND the resolved midpoints: the ids are what POST /drives must re-send, the resolved
+  // shapes are what the confirm screen renders (and what marks a loop as a round trip).
   return c.json({
     start: startEp,
     end: endEp,
-    ...(via && via.length ? { via } : {}),
+    startId,
+    endId,
+    ...(viaIds && viaIds.length ? { via: viaIds, viaResolved: via } : {}),
     polyline: route.polyline,
     distanceMeters: Math.round(route.distanceMeters),
     durationSeconds: Math.round(route.durationSeconds),
@@ -468,11 +528,11 @@ driveRoutes.post('/', createDriveLimiter, async (c) => {
   const parsed = await readJsonBody(
     c,
     createDriveRequest,
-    'start{name,lat,lng} and end{name,lat,lng} are required.',
+    'start and end must be anchor ids from GET /drives/anchors.',
     MAX_DRIVE_BODY_BYTES,
   )
   if (!parsed.ok) return parsed.res
-  const { start, end, via, idempotencyKey } = parsed.data
+  const { start: startId, end: endId, via: viaIds, idempotencyKey } = parsed.data
 
   // The drive id is the client's idempotencyKey when supplied (a v4 UUID, stable across retries),
   // else server-minted. Using it AS the id makes a lost-ACK network retry hit the existing PK + the
@@ -535,6 +595,16 @@ driveRoutes.post('/', createDriveLimiter, async (c) => {
       403,
     )
   }
+
+  // ⚠ BEFORE the Routes call — the same billed boundary /propose guards (INV-1). Deliberately placed
+  // HERE rather than at parse time: the idempotent-replay path above returns without routing, and it
+  // is the hot path for a lost-ACK retry, so it should not pay for a lookup it does not need. A rider
+  // who reached this line has already passed the credit gate, so an off-list id costs them nothing.
+  const hydrated = await hydrateAnchors([startId, ...(viaIds ?? []), endId])
+  if (!hydrated) return c.json(NOT_AN_ANCHOR, 400)
+  const start = hydrated[0]!
+  const end = hydrated[hydrated.length - 1]!
+  const via = hydrated.slice(1, -1)
 
   let route
   try {
