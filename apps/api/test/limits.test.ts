@@ -14,7 +14,9 @@ import {
   MAX_PLAN_MESSAGE_CHARS,
   MAX_PLAN_MESSAGES,
   MAX_PLAN_TOTAL_CHARS,
+  PLANNER_TIMEOUT_MS,
   readBoundedText,
+  SERVER_IDLE_TIMEOUT_SEC,
   SERVER_MAX_BODY_BYTES,
 } from '../src/limits'
 
@@ -170,5 +172,19 @@ describe('cap relationships (drift guard)', () => {
 
   test('a single message cannot consume the whole conversation budget', () => {
     expect(MAX_PLAN_MESSAGE_CHARS * 2).toBeLessThan(MAX_PLAN_TOTAL_CHARS)
+  })
+
+  // ⚠ THE SOCKET TIMEOUT ITSELF IS NOT REACHABLE BY ANY TEST — an in-process app.fetch(new Request(...))
+  // never touches a socket, exactly as SERVER_MAX_BODY_BYTES notes. This relationship IS the whole
+  // guard, and it is guarding a live defect that shipped: Bun's DEFAULT idleTimeout is 10 seconds and it
+  // fires WHILE A HANDLER IS STILL RUNNING, so POST /drives/plan was killing the rider's connection at
+  // ~12 s while the Opus call it had already paid for kept generating (probe 2026-08-01). Both numbers
+  // live in limits.ts precisely so this assert can exist.
+  //
+  // The 1.5x margin is not arbitrary: the model call is not the only thing on the clock — the bounded
+  // body read, the region query and the anchor load all run first, and the socket has to outlive the
+  // whole handler, not just its slowest await.
+  test('the socket outlives the planner wall clock by a real margin', () => {
+    expect(SERVER_IDLE_TIMEOUT_SEC * 1000).toBeGreaterThan(PLANNER_TIMEOUT_MS * 1.5)
   })
 })

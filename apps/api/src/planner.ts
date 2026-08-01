@@ -22,15 +22,16 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import { CLAUDE_MODELS, recordModelUsage, usageUsd, type UsageLike } from '@skipper/shared'
-import { MAX_PLAN_ANCHORS, PLANNER_MAX_TOKENS } from './limits'
+import { MAX_PLAN_ANCHORS, PLANNER_MAX_TOKENS, PLANNER_TIMEOUT_MS } from './limits'
 // ⚠ The tool comes from ./planner-prompt, not from here. Its name and every field description are prose
 // the MODEL reads, so it is prompt surface and changes under the prompt's review (INV-10) — a second copy
 // in this file would drift silently, since nothing fails when two tool descriptions disagree.
 import { PLAN_ROUTE_TOOL, PLANNER_SYSTEM_PROMPT } from './planner-prompt'
 
 /* -------------------------------------------------------------------------- */
-/* Call knobs. The rider-facing CAPS live in ./limits (INV-12) — these are the  */
-/* transport/depth settings that only mean something at this one call site.     */
+/* Call knobs. The rider-facing CAPS live in ./limits (INV-12), and so does the */
+/* wall clock (PLANNER_TIMEOUT_MS) now that a PROCESS-WIDE socket timeout has to */
+/* clear it. What is left here only means something at this one call site.      */
 /* -------------------------------------------------------------------------- */
 
 /** Thinking DEPTH. Deliberately paired with `PLANNER_MAX_TOKENS`, which bounds thinking PLUS visible
@@ -39,11 +40,6 @@ import { PLAN_ROUTE_TOOL, PLANNER_SYSTEM_PROMPT } from './planner-prompt'
  *  small ceiling returns HTTP 200 with stop_reason 'max_tokens' and no usable tool call. The planner's
  *  job is small — pick two endpoints off a printed list — so depth buys latency, not quality. */
 const PLANNER_EFFORT = 'low' as const
-
-/** Per-ATTEMPT socket timeout. ⚠ It is NOT a wall clock: the SDK retries timeouts, so the worst case is
- *  roughly this x (maxRetries + 1) plus backoff. The AbortSignal on the request is the hard bound, and
- *  both sit inside Cloud Run's default request timeout (cloudbuild.yaml passes no --timeout). */
-const PLANNER_TIMEOUT_MS = 45_000
 
 /** ⚠ NOT studio's `maxRetries: 5` — that number is tuned for a batch run that has already spent money
  *  and can afford to wait. This is a rider staring at a chat box, and every attempt bills again. The SDK
@@ -94,6 +90,16 @@ export interface PlannerModelArgs {
    *  ⚠ Never proxy the raw Anthropic stream — it carries thinking blocks, signatures and tool
    *  internals. Deltas already emitted are NOT retracted if the turn later fails. */
   onSay?: (delta: string) => void
+  /** The RIDER'S CONNECTION.
+   *  ⚠ THIS IS A SPEND CONTROL, NOT A TIDINESS ONE (INV-11). Without it a rider who backgrounds the app
+   *  or hits back bills Opus to completion on a turn nobody will ever read — and the caps in ./limits
+   *  cannot see that, because the request was legitimate when it arrived. The SDK bridges this into its
+   *  own controller and closes the socket, which is what stops generation upstream.
+   *  ⚠ COMBINED WITH — never replacing — the PLANNER_TIMEOUT_MS wall clock. The two are told apart by
+   *  asking this signal whether IT aborted: `AbortSignal.any` preserves each source's own reason, and
+   *  the SDK collapses both into an indistinguishable APIUserAbortError. Getting that wrong logs every
+   *  rider who closes the app as a vendor outage. */
+  signal?: AbortSignal
   /** Test seam — the Anthropic client to call. Omitted in production, where the lazy module-level
    *  client is used instead.
    *  ⚠ It exists because the six-outcome classifier below is the entire reason this file exists, and
@@ -168,8 +174,11 @@ export class PlannerTurnError extends Error {
   readonly code = 'planner_turn_failed' as const
   constructor(
     /** `bad_transcript` -> 400 (the caller sent a shape the vendor would reject); `not_configured` ->
-     *  500 (ours to fix); `timeout` / `upstream` -> 503 (retryable). All four want an IN-PERSONA line. */
-    readonly reason: 'bad_transcript' | 'not_configured' | 'timeout' | 'upstream',
+     *  500 (ours to fix); `timeout` / `upstream` -> 503 (retryable). All four want an IN-PERSONA line.
+     *  `client_gone` is the odd one out and wants NOTHING: the rider disconnected, so there is no
+     *  response to write, no line to say, and nothing to log as an outage. It exists because at the type
+     *  level a rider hanging up is indistinguishable from a vendor timeout — see plannerCancelled. */
+    readonly reason: 'bad_transcript' | 'not_configured' | 'timeout' | 'upstream' | 'client_gone',
   ) {
     super('the live planner could not complete this turn')
     this.name = 'PlannerTurnError'
@@ -299,6 +308,10 @@ function toModelMessages(turns: PlannerTurnInput[]): Anthropic.MessageParam[] {
  * regression, not a UX tweak.
  */
 export async function runPlannerTurn(args: PlannerModelArgs): Promise<PlannerTurn> {
+  // The cheapest saving available on this path: the rider may already be gone (they hung up while the
+  // region + anchor read was in flight). Spend nothing at all rather than spending and discarding.
+  if (args.signal?.aborted) throw new PlannerTurnError('client_gone')
+
   const messages = toModelMessages(args.turns)
   // ⚠ The injected client wins when present (tests); production omits it and pays the lazy
   // construction below, which is what keeps ANTHROPIC_API_KEY off the module-load path.
@@ -317,6 +330,14 @@ export async function runPlannerTurn(args: PlannerModelArgs): Promise<PlannerTur
     },
   ]
   if (args.wrapUpNotice) system.push({ type: 'text', text: args.wrapUpNotice })
+
+  // ⚠ BOTH LOCALS STAY REFERENCED for the life of the call, deliberately. A composite AbortSignal whose
+  // only strong reference lives inside the SDK has been GC-collectable in some runtimes; holding the
+  // sources here makes the question moot. `deadline` is the hard wall clock (./limits); `args.signal` is
+  // the rider hanging up. `AbortSignal.any` preserves whichever fired, which is what lets the catch
+  // below tell a cancellation from a timeout.
+  const deadline = AbortSignal.timeout(PLANNER_TIMEOUT_MS)
+  const signal = args.signal ? AbortSignal.any([args.signal, deadline]) : deadline
 
   const stream = anthropic.messages.stream(
     {
@@ -344,8 +365,9 @@ export async function runPlannerTurn(args: PlannerModelArgs): Promise<PlannerTur
       // it proposed, which is the only context the next turn needs.
       messages,
     },
-    // The client `timeout` above is per ATTEMPT and is itself retried; this is the hard wall clock.
-    { signal: AbortSignal.timeout(PLANNER_TIMEOUT_MS) },
+    // The client `timeout` above is per ATTEMPT and is itself retried; this is the hard wall clock, now
+    // fused with the rider's own connection.
+    { signal },
   )
 
   // Text streams natively, token by token. The ROUTE is deliberately held back until the stream has
@@ -371,7 +393,13 @@ export async function runPlannerTurn(args: PlannerModelArgs): Promise<PlannerTur
   try {
     message = await stream.finalMessage()
   } catch (err) {
-    throw plannerFailure(err, stream.request_id)
+    // ⚠ ORDER MATTERS, AND IT IS NOT COSMETIC. An APIUserAbortError is what the SDK raises for BOTH a
+    // rider disconnect and our own wall clock, and plannerFailure classifies it as 'timeout' — so
+    // without this branch every rider who closes the app is recorded as a vendor outage, which is
+    // precisely the signal an operator would page on. The rider's OWN signal is the only thing that
+    // tells them apart.
+    if (args.signal?.aborted) throw plannerCancelled(stream)
+    throw plannerFailure(err, stream)
   }
 
   // Both, on purpose. `usageUsd` is the number for THIS call (a long-lived API process cannot
@@ -442,13 +470,65 @@ export async function runPlannerTurn(args: PlannerModelArgs): Promise<PlannerTur
   }
 }
 
+/** The in-flight half of a stream that died: everything the salvage + logging paths below need, and
+ *  nothing that would drag an SDK type across a test seam (the hand-rolled doubles in planner.test.ts
+ *  satisfy this shape by writing two fields). */
+interface FailedStream {
+  /** The SDK's in-flight snapshot. `usage.input_tokens` and the cache counters arrive whole on
+   *  `message_start`; `output_tokens` accumulates per `message_delta`. Undefined before the first event. */
+  currentMessage?: Anthropic.Message
+  request_id?: string | null
+}
+
+/** Salvage whatever this dead call already billed into the INV-11 tally, and say so.
+ *
+ * ⚠ THE SPEND ALREADY HAPPENED. `finalMessage()` rejected, so the normal `recordModelUsage` at the
+ * bottom of runPlannerTurn never runs — without this, every cancelled or timed-out turn is money the
+ * process tally does not know about, and that tally is one of the four named guards on rider-triggered
+ * spend. A guard that under-reports is worse than no guard, because it reads as reassurance.
+ * ⚠ It CANNOT double-count: `finalMessage()` either resolves (the normal recording) or rejects (this
+ * one), never both, and the SDK clears the snapshot when it ends the request.
+ */
+function salvageUsage(stream: FailedStream): UsageLike | null {
+  const usage = stream.currentMessage?.usage
+  if (!usage) return null
+  recordModelUsage(CLAUDE_MODELS.planner, usage)
+  return usage
+}
+
+/** Counts and ids only — never the body, the prompt, the roster, `say`, or a tool input (INV-13). */
+function usageLog(usage: UsageLike): string {
+  return (
+    `in=${usage.input_tokens} cr=${usage.cache_read_input_tokens ?? 0}` +
+    ` cw=${usage.cache_creation_input_tokens ?? 0} out=${usage.output_tokens}` +
+    ` $${usageUsd(CLAUDE_MODELS.planner, usage).toFixed(5)}`
+  )
+}
+
+/**
+ * The rider hung up. Salvage the tally and log it as what it is.
+ *
+ * ⚠ NEVER THE WORD "failed" HERE. An operator greps `[planner] model call failed` for outages; a rider
+ * closing the app is not one, and a cancellation logged as a failure is how a healthy service looks
+ * like it is on fire the day the app gets popular.
+ */
+function plannerCancelled(stream: FailedStream): PlannerTurnError {
+  const usage = salvageUsage(stream)
+  console.info(
+    usage
+      ? `[planner] cancelled by rider ${usageLog(usage)} req=${stream.request_id ?? '-'}`
+      : '[planner] cancelled by rider before any tokens were billed',
+  )
+  return new PlannerTurnError('client_gone')
+}
+
 /**
  * Classify a vendor failure into something safe to carry, and log the safe half of it.
  *
  * ⚠ The raw error never leaves this function. Status, error type and request id are ours to log; the
  * body is not (`APIError.error` is the response JSON, which can quote the offending field).
  */
-function plannerFailure(err: unknown, requestId: string | null | undefined): PlannerTurnError {
+function plannerFailure(err: unknown, stream: FailedStream): PlannerTurnError {
   if (err instanceof PlannerTurnError) return err
 
   const timedOut =
@@ -457,11 +537,14 @@ function plannerFailure(err: unknown, requestId: string | null | undefined): Pla
   const type = err instanceof Anthropic.APIError ? err.type : null
   // ⚠ `requestID` on an APIError, `request_id` on a MessageStream — two spellings of one id, and a typo
   // silently logs `undefined`.
-  const id = (err instanceof Anthropic.APIError ? err.requestID : null) ?? requestId ?? '-'
+  const id = (err instanceof Anthropic.APIError ? err.requestID : null) ?? stream.request_id ?? '-'
+  // A turn that dies after `message_start` was billed for everything it generated. Same salvage as the
+  // cancellation path; the wording stays `failed` so operator alerting is unchanged.
+  const usage = salvageUsage(stream)
 
   console.error(
     `[planner] model call failed: ${timedOut ? 'timeout' : (type ?? 'unknown')}` +
-      ` status=${status ?? '-'} req=${id}`,
+      ` status=${status ?? '-'} req=${id}${usage ? ` ${usageLog(usage)}` : ''}`,
   )
   return new PlannerTurnError(timedOut ? 'timeout' : 'upstream')
 }

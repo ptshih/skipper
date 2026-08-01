@@ -27,7 +27,13 @@ import { narrations, pois, regions } from '@skipper/db/schema'
 import type { AttributionList, Region } from '@skipper/shared'
 import { auth, SITE_ORIGIN } from './auth'
 import { driveRoutes } from './drives'
-import { PLAN_RATE_HOUR, PLAN_RATE_MINUTE, PROPOSE_RATE, SERVER_MAX_BODY_BYTES } from './limits'
+import {
+  PLAN_RATE_HOUR,
+  PLAN_RATE_MINUTE,
+  PROPOSE_RATE,
+  SERVER_IDLE_TIMEOUT_SEC,
+  SERVER_MAX_BODY_BYTES,
+} from './limits'
 import { planRoutes } from './plan-route'
 import { isAdmin, withSession, type ApiEnv } from './entitlements'
 import { rateLimit } from './rate-limit'
@@ -215,4 +221,18 @@ const port = Number(process.env.PORT ?? 8787)
 // under the per-route caps in ./limits rather than a replacement for them (Bun's 413 carries an empty
 // body, so the friendly JSON still comes from readJsonBody). It is process-wide, so it also bounds the
 // /api/auth/* handler mount, which has no body limit of its own.
-export default { port, fetch: app.fetch, maxRequestBodySize: SERVER_MAX_BODY_BYTES }
+//
+// ⚠ `idleTimeout` IS LOAD-BEARING, NOT TUNING. Bun's default is 10 seconds and it fires WHILE A
+// HANDLER IS STILL RUNNING — so without this line POST /drives/plan is capped at ~12s wall clock
+// against a 45s model deadline: the socket closes, the rider sees a failure, and the Opus call keeps
+// generating and billing to completion with nobody to deliver it to. Measured 2026-08-01: a 12s
+// handler returns 200, a 16s handler dies at ~12s, and the same handler under `idleTimeout: 60`
+// returns 200 at 25s. Nothing in the test suite can catch a regression here (an in-process
+// `app.fetch` never touches a socket), which is why ./limits pins the RELATIONSHIP to
+// PLANNER_TIMEOUT_MS instead.
+export default {
+  port,
+  idleTimeout: SERVER_IDLE_TIMEOUT_SEC,
+  fetch: app.fetch,
+  maxRequestBodySize: SERVER_MAX_BODY_BYTES,
+}

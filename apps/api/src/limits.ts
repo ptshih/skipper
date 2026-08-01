@@ -66,10 +66,38 @@ export const MAX_DRIVE_BODY_BYTES = 16 * 1024
 export const SERVER_MAX_BODY_BYTES = 1024 * 1024
 
 /* -------------------------------------------------------------------------- */
-/* Planner conversation caps.                                                   */
-/* No consumer yet — POST /drives/plan arrives in build step 6. Decided here so  */
-/* the route author inherits an argued number instead of inventing one under     */
-/* deadline, which is the whole point of INV-12 existing before the planner does.*/
+/* Transport bounds. Not rider-facing caps — they are here because each one     */
+/* must CLEAR another, and a relationship you cannot assert is a relationship    */
+/* that drifts. The drift guard lives in test/limits.test.ts.                    */
+/* -------------------------------------------------------------------------- */
+
+/** The socket's patience, wired into the Bun server export in ./index.ts.
+ *  ⚠ Bun's default is 10 SECONDS (bun-types serve.d.ts, `idleTimeout` @default 10) and it fires WHILE A
+ *  HANDLER IS STILL RUNNING, not only between requests — which silently capped POST /drives/plan at ten
+ *  seconds against a 45-second model wall clock, returning the rider a dead socket while the Opus call
+ *  kept generating and billing to completion. VERIFIED by probe 2026-08-01: a 12 s handler returned 200,
+ *  a 16 s handler had its socket closed at ~12 s, and the same handler under `idleTimeout: 60` returned
+ *  200 at 25 s.
+ *  ⚠ PROCESS-WIDE, so it must clear the SLOWEST route rather than the planner alone (POST /drives does a
+ *  Routes call plus a corpus read plus a write). 120 s sits well under Cloud Run's 300 s request timeout
+ *  (cloudbuild.yaml passes no --timeout) and well above PLANNER_TIMEOUT_MS below.
+ *  ⚠ Not reachable by any test — an in-process app.fetch(new Request(...)) never touches a socket, the
+ *  same limitation SERVER_MAX_BODY_BYTES has. The relationship assert against PLANNER_TIMEOUT_MS is the
+ *  entire guard. The SSE comment heartbeat on the streaming path (./plan-route.ts) is the belt to this
+ *  file's braces, and the only thing that also covers an intermediary we do not control. */
+export const SERVER_IDLE_TIMEOUT_SEC = 120
+
+/** The planner's hard wall clock, passed as an AbortSignal on the model request.
+ *  ⚠ It lives HERE rather than beside the call because SERVER_IDLE_TIMEOUT_SEC has to clear it, and a
+ *  number in another file is a number nobody re-checks. The SDK's own per-ATTEMPT socket timeout is set
+ *  from this same value in ./planner.ts, but that one IS retried — so the worst case without this signal
+ *  is roughly this x (maxRetries + 1) plus backoff. This is the bound that is actually true. */
+export const PLANNER_TIMEOUT_MS = 45_000
+
+/* -------------------------------------------------------------------------- */
+/* Planner conversation caps. Consumed by POST /drives/plan (./plan-route.ts).  */
+/* Decided here rather than at the call site so the route inherits an argued     */
+/* number instead of inventing one under deadline — the whole point of INV-12.   */
 /* -------------------------------------------------------------------------- */
 
 /** ~2x the point where the in-persona wrap-up (D12) should already have ended the conversation, so the

@@ -11,9 +11,10 @@
 // unconditionally under NODE_ENV=test, which is every sanctioned invocation — so a test asserting a
 // 429 would assert nothing. The limiters are verified by probe instead (see limits.ts).
 
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, spyOn, test } from 'bun:test'
+import Anthropic from '@anthropic-ai/sdk'
 import { PLANNER_SYSTEM_PROMPT } from '../src/planner-prompt'
-import { buildRosterBlock, runPlannerTurn, type PlannerModelArgs } from '../src/planner'
+import { buildRosterBlock, PlannerTurnError, runPlannerTurn, type PlannerModelArgs } from '../src/planner'
 import { checkTranscript, MAX_PLAN_MESSAGES, MAX_PLAN_MESSAGE_CHARS, MAX_PLAN_TOTAL_CHARS } from '../src/limits'
 
 /* -------------------------------------------------------------------------- */
@@ -178,6 +179,119 @@ describe('planner outcome classification', () => {
   test('a clean end with neither text nor route is EMPTY, not a silent success', async () => {
     const turn = await runPlannerTurn(baseArgs(fakeClient({ stop_reason: 'end_turn', content: [] })))
     expect(turn.outcome).toBe('empty')
+  })
+})
+
+/* -------------------------------------------------------------------------- */
+/* Rider cancellation (build step 7).                                           */
+/*                                                                              */
+/* ⚠ WHY THIS SECTION EXISTS AT ALL: a rider closing the app and our own 45-     */
+/* second wall clock arrive as the SAME SDK error, and the pre-step-7 classifier */
+/* called both a 'timeout'. That is not a cosmetic mislabel — it is money the    */
+/* INV-11 tally never sees, and an outage alarm that fires on healthy traffic.   */
+/* -------------------------------------------------------------------------- */
+
+describe('rider cancellation', () => {
+  /** A client that counts how many times a call was actually opened. */
+  function countingClient(streamImpl: () => unknown) {
+    const calls = { n: 0 }
+    const client = {
+      messages: {
+        stream: () => {
+          calls.n++
+          return streamImpl()
+        },
+      },
+    } as unknown as NonNullable<PlannerModelArgs['client']>
+    return { client, calls }
+  }
+
+  // ⚠ THE "SPEND NOTHING" GUARANTEE, and the only test that proves it. The rider can hang up while the
+  // region + anchor reads are still in flight; opening the model call at that point bills for a turn
+  // that provably has no reader.
+  test('an already-aborted rider costs nothing — the model is never called', async () => {
+    const ac = new AbortController()
+    ac.abort()
+    const { client, calls } = countingClient(() => {
+      throw new Error('unreachable — the call must never open')
+    })
+
+    const err = await runPlannerTurn({ ...baseArgs(client), signal: ac.signal }).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(PlannerTurnError)
+    expect((err as PlannerTurnError).reason).toBe('client_gone')
+    expect(calls.n).toBe(0)
+  })
+
+  // The turn WAS billed — `message_start` landed, output accumulated — and then the rider left. That
+  // spend has to reach the tally, and it has to be logged as a cancellation rather than an outage.
+  test('a rider who leaves mid-stream is client_gone, and the partial spend is salvaged', async () => {
+    const ac = new AbortController()
+    const { client } = countingClient(() => {
+      // Abort AFTER the call is open, which is the real sequence: the composite signal is built first,
+      // then the request goes out, then the rider hits back.
+      ac.abort()
+      return {
+        on() {},
+        request_id: 'req_test',
+        currentMessage: { usage: { input_tokens: 10, output_tokens: 3 } },
+        finalMessage: async () => {
+          throw new Anthropic.APIUserAbortError()
+        },
+      }
+    })
+
+    const info = spyOn(console, 'info')
+    const errSpy = spyOn(console, 'error')
+    let err: unknown
+    let logged = ''
+    let errCount = -1
+    try {
+      err = await runPlannerTurn({ ...baseArgs(client), signal: ac.signal }).catch((e: unknown) => e)
+      // ⚠ READ THE RECORD BEFORE RESTORING. bun's mockRestore() clears `.mock.calls`, so a spy read
+      // after restore reports NOTHING — which turns an "it must not be logged" assertion into a test
+      // that can never fail. (It did. That is why this comment exists.)
+      logged = info.mock.calls.flat().map(String).join('\n')
+      errCount = errSpy.mock.calls.length
+    } finally {
+      info.mockRestore()
+      errSpy.mockRestore()
+    }
+
+    expect((err as PlannerTurnError).reason).toBe('client_gone')
+    expect(logged).toContain('cancelled by rider')
+    expect(logged).toContain('out=3')
+    // ⚠ An operator greps `[planner] model call failed` for outages. A rider closing the app must
+    // never land in that bucket, or a healthy service looks like it is on fire the day it gets busy.
+    expect(logged).not.toContain('failed')
+    expect(errCount).toBe(0)
+  })
+
+  // ⚠ REGRESSION GUARD. Without this, the branch above can quietly swallow the REAL timeout path —
+  // the two are told apart only by asking the rider's own signal whether it aborted.
+  test('a genuine vendor timeout is still a timeout when the rider is still there', async () => {
+    const { client } = countingClient(() => ({
+      on() {},
+      request_id: 'req_test',
+      currentMessage: { usage: { input_tokens: 10, output_tokens: 3 } },
+      finalMessage: async () => {
+        throw new Anthropic.APIConnectionTimeoutError()
+      },
+    }))
+
+    const errSpy = spyOn(console, 'error')
+    let err: unknown
+    let logged = ''
+    try {
+      err = await runPlannerTurn({ ...baseArgs(client), signal: new AbortController().signal }).catch((e: unknown) => e)
+      logged = errSpy.mock.calls.flat().map(String).join('\n') // before mockRestore clears it
+    } finally {
+      errSpy.mockRestore()
+    }
+
+    expect((err as PlannerTurnError).reason).toBe('timeout')
+    expect(logged).toContain('model call failed: timeout')
+    // The salvage applies here too: a turn that dies after message_start was billed for what it made.
+    expect(logged).toContain('out=3')
   })
 })
 
