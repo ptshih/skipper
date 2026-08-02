@@ -64,15 +64,25 @@ findings fixed (`576e031`). See `apps/mobile/CLAUDE.md` for the ESLint-9 pin and
       (with the date + SDK) and close the question. If it does NOT, the decision reopens — and the
       fallback already exists in code: no Google key → Apple Maps, and List mode is the
       offline/accessibility-complete equivalent.
-- [ ] **Burn down `eslint-suppressions.json` — now 25 across 12 files** (`react-hooks/refs` ×15,
-      `set-state-in-effect` ×8, `immutability` ×2). Was 47 across 16; `b7e6614` cleared 22 by
-      converting the eight `useRef(new Animated.Value(x)).current` sites to RN's `useAnimatedValue`.
-      ⚠ **The mechanical share is now GONE — what remains needs judgement, one site at a time.** The
-      15 `refs` are largely the deliberate `xRef.current = x` mirror-of-state that makes latest-tap-wins
-      work in the audio hooks: a real Rules-of-React violation that is also load-bearing. For those the
-      right resolution is probably a per-site `eslint-disable` with the REASON at the code, not a
-      silent line in a suppressions file. Then `bun run lint:suppress` to prune. ⚠ Never re-run a
-      blanket `--suppress-all`; that turns the backlog into a mute button.
+- [ ] **`eslint-suppressions.json` — 13 left across 6 files, and ALL 13 ARE TRIAGED AND BENIGN.**
+      47 → 25 → 13 over `b7e6614` and `dccabb2`. **Nothing here is a bug**; each remaining report is a
+      legitimate instance of a category the rule flags, which is the useful thing to know before
+      anyone treats the file as a pile of latent defects. Read this before spending time on it:
+      - **8 `set-state-in-effect`** — every one is an async load resolving (`void load()`), an
+        event-driven reset (a new clip clears the scrubber's drag state; a live drive clears the GPS
+        "searching" flag), a reconnect handler, or a form field seeded from the session. None loops.
+      - **5 `refs`** — the Scrubber's lazily-built `PanResponder` read back in JSX (3), plus two refs
+        read inside a `map`/`forEach` during render.
+      ⚠ **The only mechanical fix left is the Scrubber's PanResponder**, which could become a lazy
+      `useState` initialiser like the ones already converted. It is gesture code and cannot be
+      typechecked into confidence — do it WITH a device pass, not before one.
+      What was cleared and how, so nobody redoes the analysis: 22 by moving
+      `useRef(new Animated.Value(x)).current` → RN's `useAnimatedValue`; 4 by moving two lazy-init refs
+      to lazy `useState` initialisers; 8 by per-site `eslint-disable` carrying the reason at the code
+      (the mirror-of-state refs, and expo-audio handle mutation in driveMusic).
+      ⚠ `eslint-disable-next-line` means literally the NEXT LINE — a directive followed by a
+      continuation comment disables nothing, silently. Cost me eight of them before the error count
+      failed to move.
       Also 5 warnings left deliberately unfixed (4 × missing `preview` dep, 1 × `anchorNames` useMemo)
       — all render-churn judgement calls in the planner and drive-detail screens.
       ⚠ `b7e6614` is NOT visually verified (animation call sites, semantically identical swap) — worth
