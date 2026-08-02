@@ -1,14 +1,4 @@
 {
-  "app/drives/[id]/index.tsx": {
-    "react-hooks/refs": {
-      "count": 1
-    }
-  },
-  "app/drives/[id]/play.tsx": {
-    "react-hooks/refs": {
-      "count": 2
-    }
-  },
   "app/index.tsx": {
     "react-hooks/refs": {
       "count": 1
@@ -27,37 +17,14 @@
       "count": 1
     }
   },
-  "src/lib/driveMusic.ts": {
-    "react-hooks/immutability": {
-      "count": 2
-    },
-    "react-hooks/refs": {
-      "count": 2
-    }
-  },
   "src/lib/useDrive.ts": {
     "react-hooks/set-state-in-effect": {
       "count": 1
     }
   },
-  "src/lib/useRoutePreview.ts": {
-    "react-hooks/refs": {
-      "count": 1
-    }
-  },
-  "src/lib/useStopPreview.ts": {
-    "react-hooks/refs": {
-      "count": 1
-    }
-  },
-  "src/ui/DriveMap.tsx": {
-    "react-hooks/refs": {
-      "count": 1
-    }
-  },
   "src/ui/Scrubber.tsx": {
     "react-hooks/refs": {
-      "count": 4
+      "count": 3
     },
     "react-hooks/set-state-in-effect": {
       "count": 2
@@ -65,7 +32,7 @@
   },
   "src/ui/StopList.tsx": {
     "react-hooks/refs": {
-      "count": 2
+      "count": 1
     }
   }
 }

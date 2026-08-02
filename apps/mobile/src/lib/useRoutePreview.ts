@@ -55,6 +55,10 @@ export function useRoutePreview(): RoutePreview {
   // status-error effect below runs outside the tap's render and must see the CURRENT card, not the
   // one captured when the effect's closure was built.
   const activeCardIdRef = useRef<string | null>(null)
+  // The mirror IS the point (see above), and this ref is ALSO written imperatively by
+  // play()/failCard()/stop() so latest-tap-wins resolves within a single tap. Moving it to an effect
+  // would put the sync a paint behind the writes it has to agree with.
+  // eslint-disable-next-line react-hooks/refs
   activeCardIdRef.current = activeCardId
 
   // The native error string already accounted for. expo-audio surfaces a load/playback failure as

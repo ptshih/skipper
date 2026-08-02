@@ -20,7 +20,7 @@
 //
 // intro.mp3 / outro.mp3 are staged in assets/audio but intentionally NOT used yet.
 // Self-contained so the preview screen only adds one hook call.
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useAudioPlaylist } from 'expo-audio'
 
 // The drive soundtrack rotation, shuffled per hook instance so repeat drives don't
@@ -86,11 +86,17 @@ export function useDriveMusic({
   segmentKind: string | null
 }): void {
   // A shuffled, whole-set-looping playlist: it never runs dry and a track that ends
-  // mid-leg advances gaplessly. The source list is shuffled once (lazy ref) so it's
-  // stable across renders — the playlist isn't rebuilt on every render.
-  const sources = useRef<number[] | null>(null)
-  if (sources.current === null) sources.current = shuffled(TRACKS)
-  const playlist = useAudioPlaylist({ sources: sources.current, loop: 'all' })
+  // mid-leg advances gaplessly. The source list is shuffled ONCE and must stay referentially
+  // stable — `useAudioPlaylist` rebuilds the native playlist when `sources` changes identity,
+  // so a fresh array per render would restart the soundtrack continuously.
+  //
+  // A lazy `useState` initialiser rather than the `useRef(null)` + assign-in-render idiom this
+  // used to be: React guarantees the initialiser runs exactly once, so it is the same "compute
+  // once, keep forever" with no ref read during render (react-hooks/refs). ⚠ NOT `useMemo` —
+  // useMemo is a performance hint React is permitted to discard, and discarding this one would
+  // reshuffle mid-drive.
+  const [sources] = useState(() => shuffled(TRACKS))
+  const playlist = useAudioPlaylist({ sources, loop: 'all' })
 
   const vol = useRef(0)
   const ramp = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -102,8 +108,18 @@ export function useDriveMusic({
   // the drive screen opens — while they're still parked on the gate / "Press Play" card, before any
   // drive has begun. Playback is deferred to the first AUDIBLE leg below (and paused again whenever
   // the target falls to silence), so focus is held only while the soundtrack is actually playing. (audit #5)
+  // ⚠ THE TWO react-hooks/immutability DISABLES BELOW ARE DELIBERATE, and the reason is the same for
+  // both: `playlist` is an expo-audio player HANDLE, not a render value. Its entire API is mutation
+  // (`.volume =`, `.play()`, `.pause()`), and its identity never changes — we depend on that, which is
+  // why `sources` above is a stable lazy `useState`. The rule reads an assignment to it as "this effect
+  // modifies a local after render", which is the correct warning for a plain object and meaningless for
+  // a native handle. Its suggested fix — hold the value in state — would re-render the drive screen on
+  // every step of the volume ramp below, during a drive. Disabled at the site rather than baselined in
+  // eslint-suppressions.json so the reason travels with the code.
+  // eslint-disable-next-line react-hooks/immutability
   useEffect(() => {
     try {
+      // eslint-disable-next-line react-hooks/immutability
       playlist.volume = 0
     } catch {}
     return () => {

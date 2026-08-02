@@ -68,6 +68,9 @@ export function StopList({
   // (e.g. state), not every row on every parent render. The cached handler reads the latest
   // onPressItem via a ref, so it stays referentially stable across renders. (audit #621)
   const onPressRef = useRef(onPressItem)
+  // The mirror IS the point (see above). An effect would land after paint, so a row tapped in that
+  // window would call the previous render's onPressItem.
+  // eslint-disable-next-line react-hooks/refs
   onPressRef.current = onPressItem
   const handlers = useRef(new Map<number, () => void>()).current
   const handlerFor = (seq: number): (() => void) => {

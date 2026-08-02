@@ -94,7 +94,10 @@ export default function DriveScreen() {
   // as a peek sheet; List is a fixed shell with its own scroll position), and Tahoe coverage flaps —
   // so reading the live verdict would re-lay-out the screen, mid-drive, repeatedly, with the rider
   // touching nothing. The verdict at the moment the player opens is the one that matters.
-  const offlineAtOpen = useRef(isOfflineNow()).current
+  // A lazy `useState` initialiser rather than `useRef(isOfflineNow()).current`: React runs it exactly
+  // once, so the latch is the same — but the old form also CALLED `isOfflineNow()` on every render and
+  // discarded the answer, and it read a ref during render (react-hooks/refs).
+  const [offlineAtOpen] = useState(isOfflineNow)
   const view: PlayerView = !pickedView && offlineAtOpen && savedView === 'map' ? 'list' : savedView
   // Map mode floats the player as an expandable PEEK sheet (mini-bar ↔ full card). Pre-drive
   // (ready) and arrival (done) force the full card — there's nothing to peek past.

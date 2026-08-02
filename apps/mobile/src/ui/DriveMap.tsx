@@ -67,6 +67,11 @@ function DriveMapBase({
   const mapRef = useRef<MapView | null>(null)
   const [following, setFollowing] = useState(true)
   const followingRef = useRef(true)
+  // Mirror of `following` for the progress listener below, which is registered once and would other-
+  // wise close over the value at registration time and never see a pan.
+  // Deliberate: an effect would land after paint, so a GPS fix arriving in that window would
+  // re-centre a map the rider had just panned away from.
+  // eslint-disable-next-line react-hooks/refs
   followingRef.current = following
 
   // Cumulative along-route distances — for projecting `progress` (a fraction) to a point.

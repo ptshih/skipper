@@ -68,6 +68,10 @@ export function Scrubber({
 
   // Latest values for the once-built responder to read (so it never goes stale yet never rebuilds).
   const live = useRef({ seekable, durationMs, onSeek, onScrubbingChange })
+  // The mirror IS the point (see above): the responder is built once and must read CURRENT values.
+  // An effect would land after paint, so a gesture begun in that window would seek against the
+  // previous render's duration.
+  // eslint-disable-next-line react-hooks/refs
   live.current = { seekable, durationMs, onSeek, onScrubbingChange }
 
   // Once the real clock lands near the committed seek, stop overriding with it.

@@ -71,6 +71,9 @@ export default function DriveDetailScreen() {
   // on every ~2/sec audio-status tick, and passing it straight to DriveMap would defeat DriveMap's memo
   // (re-serializing the markers to native each tick while a clip plays). (audit #549)
   const playRef = useRef(preview.play)
+  // The mirror IS the point (see above). An effect would land after paint, so a tap in that window
+  // would call the previous tick's handler.
+  // eslint-disable-next-line react-hooks/refs
   playRef.current = preview.play
   const playStop = useCallback((seq: number) => playRef.current(seq), [])
   // The detail map has no live position, so its puck is hidden and `progress` stays parked at 0 (the

@@ -48,6 +48,10 @@ export function useStopPreview(driveId: string | undefined): StopPreview {
   // The seq currently loaded into the single reused player — the latest-tap-wins guard for the async
   // resolve below (a fast second tap must supersede a slow first one). (mirrors useDrive's loadedSeq)
   const activeSeqRef = useRef<number | null>(null)
+  // The mirror IS the point (see above), and this ref is ALSO written imperatively by
+  // play()/failSeq()/stop(); the async resolve compares against it to decide whether a newer tap
+  // superseded it. An effect would put that check a paint behind.
+  // eslint-disable-next-line react-hooks/refs
   activeSeqRef.current = activeSeq
 
   // Did we actually call play() for the loaded seq? Separates "the uri never resolved, so this seq was
