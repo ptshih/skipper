@@ -35,6 +35,9 @@ export { Composer, type ComposerProps } from './Composer'
 export { ExampleAsks, type ExampleAsksProps } from './ExampleAsks'
 export { PreviewCard, type PreviewCardProps, type PreviewCardState } from './PreviewCard'
 export { PlannerUnavailableCard, type PlannerUnavailableCardProps } from './PlannerUnavailableCard'
+// The pinned preview-clip transport (1.1 step 8). It rides the conversation's footer slot so a clip
+// that scrolls away cannot strand the rider — roam already paid for that lesson.
+export { ClipBar, type ClipBarProps } from './ClipBar'
 export { Skeleton, SkeletonGroup, type SkeletonProps, type SkeletonGroupProps } from './Skeleton'
 export { AccountGate } from './AccountGate'
 export { LocationGate } from './LocationGate'

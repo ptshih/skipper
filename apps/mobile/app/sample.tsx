@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Image, StyleSheet, View } from 'react-native'
-import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
+import { setAudioModeAsync, setIsAudioActiveAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
 import { Stack, useRouter } from 'expo-router'
 import type { ImageSourcePropType } from 'react-native'
 import { getSample } from '@/lib/api'
@@ -49,14 +49,29 @@ export default function SampleScreen() {
   const endedRef = useRef(false)
   const beatTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // setAudioModeAsync is process-wide (shared with the drive player). A taste is polite — mixWithOthers,
-  // playsInSilentMode so it sounds on a muted reviewer device, background-safe.
+  // setAudioModeAsync is process-wide (shared with the drive player). ⚠ D35 (1.1, founder): the postcard
+  // is pre-drive SKIPPER audio, so it takes EXCLUSIVE focus like a drive rather than mixing under the
+  // rider's music — the skipper never talks over their playlist on any surface. This read 'mixWithOthers'
+  // with a comment arguing "a taste is polite" until 1.1 step 8; docs/decisions/drive-audio-exclusive-focus.md
+  // was scoped to the DRIVING player and never settled this surface (it is now amended to cover all three).
+  // Do not flip it back. `playsInSilentMode` so it still sounds on a muted reviewer device.
+  // ⚠ `shouldPlayInBackground` stays TRUE and is deliberately NOT part of D35's flip: this is a dedicated
+  // full-screen player the rider navigated to, and a one-minute taste that dies mid-sentence when the
+  // phone locks is worse than one that finishes.
   useEffect(() => {
     setAudioModeAsync({
       playsInSilentMode: true,
       shouldPlayInBackground: true,
-      interruptionMode: 'mixWithOthers',
+      interruptionMode: 'doNotMix',
     }).catch(() => {})
+    // ⚠ AND HAND IT BACK ON THE WAY OUT. This is the other half of the flip and it is not optional:
+    // `doNotMix` INTERRUPTS the rider's music, and iOS resumes theirs only once the session is
+    // deactivated — pausing the player is not enough. Without this, a stranger taps the postcard, we
+    // pause their podcast, and it never comes back — on the app's very first impression, which
+    // autoplays. `useDrive` already pays this at the end of a drive; every exclusive surface owes it.
+    return () => {
+      void setIsAudioActiveAsync(false).catch(() => {})
+    }
   }, [])
 
   const load = useCallback(async () => {
@@ -102,6 +117,10 @@ export default function SampleScreen() {
     if (status.didJustFinish || atEnd) {
       endedRef.current = true
       setPhase('ended')
+      // Hand the audio session back the moment the taste is over, not on unmount: the rider sits on
+      // the end card deciding, and under `doNotMix` their own music stays paused for as long as they
+      // do. The unmount teardown above is the backstop for leaving mid-clip.
+      void setIsAudioActiveAsync(false).catch(() => {})
     }
   }, [status.didJustFinish, status.playing, status.currentTime, durSec, phase])
 

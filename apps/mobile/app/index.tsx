@@ -18,7 +18,7 @@
 // ⚠ INV-13: nothing here logs. Every string on this screen is rider content or model output, and none
 // of it is persisted — not to disk, not to the region cache (which holds public place NAMES only).
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Animated, StyleSheet, View, type TextInput } from 'react-native'
+import { Animated, Pressable, StyleSheet, View, type TextInput } from 'react-native'
 import { Stack, useFocusEffect, useRouter } from 'expo-router'
 import type { PlannedRoute } from '@skipper/shared'
 import {
@@ -32,7 +32,7 @@ import {
   type DriveSummary,
   type Region,
 } from '@/lib/api'
-import { useSession } from '@/lib/auth'
+import { isSignedIn, useSession } from '@/lib/auth'
 import { useIsOffline } from '@/lib/connectivity'
 import { listDownloadedDrives } from '@/lib/offline'
 import { cleanPlaceName } from '@/lib/labels'
@@ -50,18 +50,23 @@ import {
 } from '@/lib/planner-transcript'
 import { readCachedRegion, writeCachedRegion } from '@/lib/region-cache'
 import { emptySayBuffer, pushDelta, settle, tickHold } from '@/lib/say-buffer'
+import { useRoutePreview } from '@/lib/useRoutePreview'
 import { uuidV4 } from '@/lib/uuid'
-import { space } from '@/theme/tokens'
+import { useTheme } from '@/theme'
+import { hit, radius, space } from '@/theme/tokens'
 import {
+  AttributionButton,
   Badge,
   Button,
   Card,
+  ClipBar,
   Composer,
   ConversationScreen,
   Divider,
   ExampleAsks,
   FilterChip,
   HeaderIconButton,
+  Icon,
   PlannerUnavailableCard,
   PreviewCard,
   RouteTrack,
@@ -87,25 +92,6 @@ const CREDIT_HINT_THRESHOLD = 5
  *  SAY_MAX_HOLD_MS. Six ticks per hold is plenty; a faster interval would re-render for nothing. */
 const HOLD_TICK_MS = 100
 
-/** ⚠ INV-9, AND THIS IS THE ONE PLACE IT IS DECIDED ON THIS SCREEN. A truthy `session` is NOT
- *  "signed in": the Better Auth anonymous plugin mints a REAL user row, so an anonymous rider has a
- *  perfectly truthy session and owns nothing — they cannot list drives and cannot hold a credit.
- *  Mirrors the server's `tierOf` ('anonymous' | 'free').
- *
- *  ⚠ THIS BELONGS IN `src/lib/auth.ts` BESIDE `isAdmin()`, and build step 8b owns putting it there
- *  (nothing mints an anonymous session yet, so today it is only this screen's problem). It is written
- *  here as one exported-shaped helper, structurally typed, so 8b has exactly ONE call-shape to move
- *  and every check on this screen changes with it. Do not inline `!!session` anywhere below. */
-const isSignedIn = (s: { user?: unknown } | null | undefined): boolean => {
-  // `user` is read through a cast rather than a structural parameter type on purpose: the anonymous
-  // plugin is not installed on the CLIENT (see auth.ts's plugin list), so `session.user` carries no
-  // `isAnonymous` in its type and a structurally-typed parameter is rejected outright as a weak type.
-  // The field is server-set and present at runtime; `!== true` is what makes a missing one mean
-  // "a real account", which is the correct reading today and after 8c mints anonymous sessions.
-  const user = s?.user as { isAnonymous?: boolean | null } | null | undefined
-  return !!user && user.isAnonymous !== true
-}
-
 /** One route card living in the transcript.
  *
  *  `afterTurn` is the transcript LENGTH when the card was created, i.e. the slot it occupies between
@@ -127,8 +113,16 @@ interface PreviewItem {
 
 export default function HomeScreen() {
   const router = useRouter()
+  const { colors } = useTheme()
   const { data: session } = useSession()
+  // ⚠ INV-9 — the ONE client-side "is this rider signed in?" (src/lib/auth.ts). A truthy `session` is
+  // NOT signed in: after D16's mint every rider carries one and an anonymous rider owns nothing.
+  // Never inline `!!session` anywhere below.
   const signedIn = isSignedIn(session)
+  // ONE expo-audio player for the whole conversation, keyed by CARD id (see useRoutePreview). The
+  // screen owns the audio; PreviewCard and ClipBar stay pure presentation, same rule as everything
+  // else here that spends or holds state.
+  const preview = useRoutePreview()
   // Drives the offline INVERSION below (MY DRIVES first, no composer) and the reconnect self-heal.
   // Fails OPEN — an unknown verdict means online — so the degraded layout only ever appears on a
   // DEFINITE offline (see connectivity.ts).
@@ -280,6 +274,15 @@ export default function HomeScreen() {
       void load()
     }, [load]),
   )
+
+  // Leaving home stops the preview clip. ⚠ A SECOND, DEDICATED focus effect on purpose — folding it
+  // into the one above would put `preview.stop` into `load()`'s dependency chain, and `load` is the
+  // callback the whole credit/drives refresh hangs off.
+  //
+  // It is D35's corollary: the clip holds EXCLUSIVE audio focus, so one still talking behind
+  // /sign-in or a drive player is not "background playback", it is the skipper interrupting himself.
+  // Blur, not unmount — home stays mounted under a push (that is what keeps the transcript alive).
+  useFocusEffect(useCallback(() => () => preview.stop(), [preview.stop]))
 
   // Self-heal on the offline→online edge: the loads that failed out here re-run the moment the bars
   // come back, so a rider who drives back into signal never has to know to tap the retry. Guarded on
@@ -527,6 +530,9 @@ export default function HomeScreen() {
     sendingRef.current = false
     setSending(false)
     setTurns(resetTranscript())
+    // ⚠ BEFORE the cards go: this is the only path that removes a card that might be playing, and a
+    // clip whose card no longer exists is audio the rider can only stop by killing the app.
+    preview.stop()
     setCards([])
     cardKeysRef.current.clear()
     creatingRef.current.clear()
@@ -535,7 +541,7 @@ export default function HomeScreen() {
     setPlannerOutage(false)
     setInput('')
     focusComposer()
-  }, [focusComposer])
+  }, [focusComposer, preview.stop])
 
   const exampleAsks: ExampleAsk[] = useMemo(
     () =>
@@ -616,59 +622,102 @@ export default function HomeScreen() {
     </View>
   )
 
-  const renderCard = (c: PreviewItem, newest: boolean): ReactNode => {
-    // ⚠ A 401 on /drives/PROPOSE leaves no proposal, and PreviewCard's account-wall state needs one
-    // (its no-proposal branch is the propose-FAILED branch). That is the dominant path in step 7,
-    // where `requireAccount` is still on the whole /drives* mount — so the wall is rendered here
-    // instead, from primitives. It stays INLINE for the same reason the card's does: <AccountGate>
-    // is a whole <Screen> and mounting it would destroy the transcript.
-    // ⚠ Step 8a moves `requireAccount` per-route and opens /propose, which retires this branch.
-    if (c.state === 'needsAccount' && !c.proposal) {
+  /** The in-card taste (D14/INV-5): ONE clip the server chose from THIS route's own release-filtered
+   *  selection — the drive's opening beat, so the preview and the product can never disagree.
+   *
+   *  ⚠ NO AUTOPLAY, ever. The clip takes EXCLUSIVE audio focus (D35), so a card that lands mid-
+   *  conversation and starts talking would PAUSE the rider's music with no tap — hostile in a way the
+   *  old mixing behaviour would have hidden. Tap to play, always.
+   *
+   *  A null clip is a normal outcome (a 0-stop route, or a presign that failed) — the card renders
+   *  without the slot and nothing here says so; there is no missing-clip copy because there is no
+   *  missing thing from the rider's point of view. */
+  const renderClipRow = (c: PreviewItem): ReactNode => {
+    const clip = c.proposal?.previewClip
+    if (!clip) return null
+    // The presign is DEAD and this surface cannot mint another (`/drives/:id/assets/sign` is an owner
+    // route). So the disc goes away with it: leaving a play button under copy that says "make the
+    // drive instead" invites a tap that provably cannot work.
+    if (preview.failedCardId === c.id) {
       return (
-        <Card key={c.id} style={styles.gateCard}>
+        <View style={styles.clipRow}>
           <Text variant="label" color="accentWarm">
-            {voice.proposal.kicker}
+            {voice.proposal.clipKicker}
           </Text>
-          <Text variant="body" color="inkDim">
-            {voice.gate.body}
+          <Text variant="dim" color="danger">
+            {voice.proposal.clipUnavailable}
           </Text>
-          <Button icon="ticket" title={voice.gate.action} onPress={() => router.push('/sign-in?mode=up')} />
-          {/* ⚠ NEVER auto-fired on return from sign-up. The fresh account's grant does not exist
-              until after signup, so the number D29 requires us to disclose does not exist at wall
-              time — the rider comes back to a re-read balance and taps once more, on purpose. */}
-          <Button variant="secondary" title={voice.error.retry} onPress={() => void doPropose(c.id, c.route)} />
-          <Button
-            variant="ghost"
-            title={voice.proposal.adjust}
-            onPress={() => {
-              setCards((cs) => cs.filter((x) => x.id !== c.id))
-              focusComposer()
-            }}
-          />
-        </Card>
+        </View>
       )
     }
+    const active = preview.activeCardId === c.id
+    const playing = active && preview.playing
     return (
-      <PreviewCard
-        key={c.id}
-        state={c.state}
-        proposal={c.proposal}
-        // Only the newest card instantiates a native MapView — and wears the one amber glow.
-        mapEnabled={newest}
-        disclosure={signedIn ? voice.proposal.costNote : voice.proposal.ownershipNote}
-        errorMessage={c.errorMessage}
-        ctaLabel={voice.proposal.cta}
-        onMake={() => c.proposal && void doCreate(c.id, c.proposal)}
-        onAdjust={focusComposer}
-        onOpenDrive={() =>
-          c.driveId &&
-          navigateOnce(() => router.push({ pathname: '/drives/[id]', params: { id: c.driveId! } }))
-        }
-        onSignUp={() => router.push('/sign-in?mode=up')}
-        onDismissGate={() => patchCard(c.id, { state: 'ready' })}
-      />
+      <View style={styles.clipRow}>
+        <View style={styles.clipHead}>
+          <Pressable
+            onPress={() => preview.play(c.id, clip.url)}
+            accessibilityRole="button"
+            accessibilityLabel={playing ? voice.proposal.clipPauseA11y : voice.proposal.clipPlayA11y}
+            style={({ pressed }) => [
+              styles.clipDisc,
+              { backgroundColor: colors.primaryFill },
+              pressed && styles.clipPressed,
+            ]}
+          >
+            <Icon name={playing ? 'pause' : 'play'} size={22} color="onPrimary" />
+          </Pressable>
+          <View style={styles.flex}>
+            <Text variant="label" color="accentWarm">
+              {voice.proposal.clipKicker}
+            </Text>
+            {/* The place NAME comes from the server, never from the planner — it is a fact about a
+                stop, and D9 keeps facts out of the conversation. `places.name` carries Wikipedia's
+                ", California" disambiguation, hence cleanPlaceName. */}
+            <Text variant="bodyStrong" color="ink" numberOfLines={1}>
+              {cleanPlaceName(clip.name)}
+            </Text>
+          </View>
+          {/* ⚠ NOT decoration. Wikipedia is CC BY-SA, and this is the most-seen anonymous surface in
+              the app — the credit rides the clip wherever the adapted work is presented. It renders
+              nothing for a clip with no sources (scenic/break ground on none). */}
+          <AttributionButton items={clip.attribution} />
+        </View>
+        <Text variant="dim" color="inkDim">
+          {voice.proposal.clipHint}
+        </Text>
+      </View>
     )
   }
+
+  const renderCard = (c: PreviewItem, newest: boolean): ReactNode => (
+    <PreviewCard
+      key={c.id}
+      state={c.state}
+      proposal={c.proposal}
+      // Only the newest card instantiates a native MapView — and wears the one amber glow.
+      mapEnabled={newest}
+      disclosure={signedIn ? voice.proposal.costNote : voice.proposal.ownershipNote}
+      previewClip={renderClipRow(c)}
+      errorMessage={c.errorMessage}
+      ctaLabel={voice.proposal.cta}
+      onMake={() => c.proposal && void doCreate(c.id, c.proposal)}
+      onAdjust={focusComposer}
+      onOpenDrive={() =>
+        c.driveId &&
+        navigateOnce(() => router.push({ pathname: '/drives/[id]', params: { id: c.driveId! } }))
+      }
+      // ⚠ NEVER auto-fired on return from sign-up. The fresh account's grant does not exist until
+      // after signup, so the number D29 requires us to disclose does not exist at wall time — the
+      // rider comes back to a re-read balance and taps "Make this drive" once more, on purpose.
+      // Neither POST /drives NOR the billed POST /drives/propose may re-fire on refocus; the focus
+      // effect above calls `load()` and nothing else. (This rule used to live on the screen-level
+      // gate card that step 8a retired — /propose is open to anonymous now, so `needsAccount` can
+      // only arrive WITH a proposal, and PreviewCard's hoisted wall IS the wall.)
+      onSignUp={() => router.push('/sign-in?mode=up')}
+      onDismissGate={() => patchCard(c.id, { state: 'ready' })}
+    />
+  )
 
   // ── The transcript ──────────────────────────────────────────────────────────────────────────
   // ⚠ THE COLD OPEN IS NOT A TRANSCRIPT ENTRY, and that is structural rather than tidy. The server
@@ -833,7 +882,7 @@ export default function HomeScreen() {
   // ⚠ INV-3/INV-12: nothing on this screen knows a cap NUMBER. There is no `maxLength`, no message
   // count and no character budget anywhere under apps/mobile — the client keys on the server's
   // `done: true` and on nothing else. The caps have ONE home, apps/api/src/limits.ts.
-  const footer = isOffline || regionsFailed ? null : done ? (
+  const composer = isOffline || regionsFailed ? null : done ? (
     <View style={styles.wrapUp}>
       {/* A CTA that cannot do anything is worse than a greyed field — with no route ever offered
           (the region-miss bow-out, or a rider who chatted the cap away) only "Start fresh" shows. */}
@@ -859,6 +908,36 @@ export default function HomeScreen() {
       inputRef={composerRef}
     />
   )
+
+  // ⚠ THE PINNED CLIP BAR SITS OUTSIDE THE null BRANCH ABOVE, ON PURPOSE. `composer` goes null both
+  // offline and on a failed regions load — and roam already paid for what happens next: a clip
+  // playing when the bars drop would leave audio running with its only transport off-screen and no
+  // way to stop it short of killing the app. Whenever a clip is loaded, the bar is on screen.
+  //
+  // ⚠ Keyed on the PLAYER's active card, not on finding one: if a card ever vanishes mid-clip the
+  // transport must survive it. (Today the only path that removes a card is "Start fresh", which
+  // stops the clip first — the `?? ''` is the belt to that brace, not a live case.)
+  const activeClip =
+    cards.find((c) => c.id === preview.activeCardId)?.proposal?.previewClip ?? null
+  const clipBar = preview.activeCardId ? (
+    <ClipBar
+      playing={preview.playing}
+      name={activeClip?.name ?? ''}
+      progress={preview.durationMs > 0 ? preview.positionMs / preview.durationMs : 0}
+      onToggle={preview.toggle}
+      onDismiss={preview.stop}
+    />
+  ) : null
+
+  // One wrapper so the two stack with a gap; ConversationScreen's footer slot supplies the gutter
+  // padding and the safe-area inset, and renders nothing at all when this is null.
+  const footer =
+    clipBar || composer ? (
+      <View style={styles.footerStack}>
+        {clipBar}
+        {composer}
+      </View>
+    ) : null
 
   return (
     <ConversationScreen footer={footer} scrollSignal={scrollSignal} contentContainerStyle={styles.body}>
@@ -939,7 +1018,21 @@ const styles = StyleSheet.create({
   // rule: nothing has been said yet for it to be answering.
   opening: { marginTop: space.sm },
   thinking: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  gateCard: { gap: space.md },
+  // The in-card taste. Flat, never lit: DESIGN §8 allows ONE amber glow on screen and the card's own
+  // "Make this drive" CTA plus its MIN badge already spend it.
+  clipRow: { gap: space.sm },
+  clipHead: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  // hit.min, not the ~44 the design sketch showed — the in-car ≥48pt floor is a habit, not a
+  // per-surface judgement, and this rider is one tap from a drive.
+  clipDisc: {
+    width: hit.min,
+    height: hit.min,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clipPressed: { opacity: 0.85 },
+  footerStack: { gap: space.sm },
   wrapUp: { gap: space.sm },
   section: { marginTop: space.lg },
   sectionHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.md, marginBottom: space.sm },

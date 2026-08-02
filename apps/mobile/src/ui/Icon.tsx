@@ -44,6 +44,7 @@ export type IconName =
   | 'eyeOff'
   | 'info'
   | 'send'
+  | 'close'
 
 const IONICON: Record<IconName, ComponentProps<typeof Ionicons>['name']> = {
   // stop types
@@ -88,6 +89,8 @@ const IONICON: Record<IconName, ComponentProps<typeof Ionicons>['name']> = {
   // Send the rider's line to the skipper (the planner composer). An ARROW, not a paper plane: the
   // plane is a mail idiom, and this is talking, not posting.
   send: 'arrow-up',
+  // Dismiss a transient surface (the pinned preview-clip bar). Distinct from `back`, which NAVIGATES.
+  close: 'close',
 }
 
 export interface IconProps {

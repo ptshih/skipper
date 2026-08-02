@@ -10,7 +10,7 @@
 // `file://` when downloaded, presigned https when streaming; we re-sign on a miss (a screen can sit open
 // past the ~1h presigned TTL) and give up gracefully when a seq is genuinely absent (a partial download).
 import { useCallback, useRef, useState } from 'react'
-import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
+import { setAudioModeAsync, setIsAudioActiveAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
 import { loadPlayback, resignPlayback } from './offline'
 
 export interface StopPreview {
@@ -27,8 +27,10 @@ export interface StopPreview {
   togglePlay: () => void
   seekToMs: (ms: number) => void
   seekBy: (sec: number) => void
-  /** Pause + clear the active stop — call on screen blur so this second player never talks UNDER the
-   *  live drive (the detail screen stays mounted beneath the pushed player). */
+  /** Pause + clear the active stop — call on screen blur so this second player never talks ACROSS the
+   *  live drive (the detail screen stays mounted beneath the pushed player). ⚠ More load-bearing since
+   *  D35: both players now hold EXCLUSIVE focus, so a preview left running doesn't merely overlap the
+   *  drive, it fights it for the audio session and the lock-screen transport. */
   stop: () => void
 }
 
@@ -48,17 +50,27 @@ export function useStopPreview(driveId: string | undefined): StopPreview {
 
   const durSec = status.duration && status.duration > 0 ? status.duration : 0
 
-  // A couch preview is POLITE, not the exclusive in-car experience: mix with other audio (never the live
-  // drive's doNotMix), and don't keep talking in the background (a preview that plays on after you leave the
-  // screen is surprising, and it avoids overlapping the live player). setAudioModeAsync is PROCESS-WIDE, and
-  // the live drive sets doNotMix + background-on on a screen that PUSHES over this still-mounted one — so a
-  // mount-only reset would leave the wrong (exclusive) mode after you return from a drive. Reassert it on
-  // every play() instead (the natural await on resolveUri below gives the async call time to land). (audit)
-  const applyPoliteAudioMode = useCallback(() => {
+  // ⚠ D35 (1.1, founder): pre-drive skipper audio takes EXCLUSIVE focus, exactly like a drive — the
+  // skipper never talks over the rider's own music, on ANY surface. This block argued the OPPOSITE
+  // ("a couch preview is POLITE… mixWithOthers", and the old name `applyPoliteAudioMode` WAS the
+  // argument) until 1.1 step 8. Do not restore it: docs/decisions/drive-audio-exclusive-focus.md
+  // scoped itself to the DRIVING player and therefore never settled this surface, and its rationale
+  // (the drive supplies its own curated soundtrack, so there is nothing of the rider's left to duck)
+  // does not transfer to a single clip with no bed underneath it. That doc is now amended to cover
+  // every surface the skipper speaks on; CLAUDE.md's "In-car player landmines" audio line is the
+  // authority.
+  //
+  // ⚠ THE RE-ASSERT ON EVERY play() STAYS, AND ITS REASON MOVED — do NOT delete it as newly redundant
+  // now that both modes agree. It is no longer undoing a drive's `doNotMix`; it is undoing the drive's
+  // `shouldPlayInBackground: true`, which useDrive sets PROCESS-WIDE from a screen that PUSHES over
+  // this still-mounted one. Drop the re-assert and a preview clip keeps talking after the rider leaves
+  // the app. setAudioModeAsync is process-wide; last writer wins — which is also why a mount-only
+  // reset is not enough. (The natural await on resolveUri below gives the async call time to land.)
+  const applyPreviewAudioMode = useCallback(() => {
     setAudioModeAsync({
       playsInSilentMode: true,
       shouldPlayInBackground: false,
-      interruptionMode: 'mixWithOthers',
+      interruptionMode: 'doNotMix',
     }).catch(() => {})
   }, [])
 
@@ -104,7 +116,7 @@ export function useStopPreview(driveId: string | undefined): StopPreview {
       setUnplayableSeq(null)
       setActiveSeq(seq) // optimistic highlight; cleared below if the audio won't resolve
       activeSeqRef.current = seq
-      applyPoliteAudioMode() // reassert mixWithOthers (a prior live drive left doNotMix process-wide)
+      applyPreviewAudioMode() // exclusive focus + foreground-only (a prior live drive left background-on)
       void (async () => {
         // resolveUri can THROW on the first tap (its loadPlayback → getDrive hits the network for a
         // not-fully-downloaded drive) — a signal drop after the page loaded lands here. Treat any throw
@@ -133,7 +145,7 @@ export function useStopPreview(driveId: string | undefined): StopPreview {
         }
       })()
     },
-    [activeSeq, durSec, player, resolveUri, applyPoliteAudioMode, status.playing, status.currentTime, status.didJustFinish],
+    [activeSeq, durSec, player, resolveUri, applyPreviewAudioMode, status.playing, status.currentTime, status.didJustFinish],
   )
 
   const togglePlay = useCallback(() => {
@@ -166,6 +178,11 @@ export function useStopPreview(driveId: string | undefined): StopPreview {
     try {
       player.pause()
     } catch {}
+    // ⚠ HAND THE AUDIO SESSION BACK. Pausing does NOT release it: since D35 flipped this surface to
+    // `doNotMix` it INTERRUPTS the rider's own music, and iOS only resumes theirs once the session is
+    // deactivated. Without this, previewing one stop stops their podcast permanently. `useDrive` pays
+    // the same cost at the end of a drive and its comment there records why it is not optional.
+    void setIsAudioActiveAsync(false).catch(() => {})
     activeSeqRef.current = null
     setActiveSeq(null)
     setUnplayableSeq(null)

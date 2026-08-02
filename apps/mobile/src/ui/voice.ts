@@ -119,6 +119,20 @@ export const voice = {
     // Fallback ONLY. The server's own 403 names the limit and the way past it; show that when it comes.
     capReached: 'That’s the last of your free drives, friend.',
     openMade: 'Open the drive',
+    // ONE real clip from the rider's OWN route, before the wall (D14/INV-5). ⚠ The whole charm of it
+    // is that it is not a generic sample — it is the first thing they will actually hear on this drive
+    // — so the copy has to say "yours" without naming the place (that is a FACT, served by the API).
+    clipKicker: 'A TASTE OF THIS ONE',
+    clipHint: 'Here’s the first stop on that road — go on, have a listen.',
+    clipPlayA11y: 'Play the preview clip',
+    clipPauseA11y: 'Pause the preview clip',
+    // ⚠ Deliberately NOT retryable-sounding: the presigned url is dead and this surface has no way to
+    // re-sign one (that endpoint is owner-only). Offer the drive, not a retry that cannot work.
+    clipUnavailable: 'That clip’s gone cold on me — make the drive and you’ll get the whole telling.',
+    // ⚠ NOT 'NOW PLAYING'. `voice.player.nowPlaying` and `voice.preview.nowPlaying` already exist for
+    // two other surfaces; a third identical string is exactly the drift this file keeps warning about.
+    clipBarKicker: 'HAVE A LISTEN',
+    clipBarDismissA11y: 'Stop the preview clip',
   },
   // The drive-detail mini-preview: tap a stop (a list row or a map pin) to hear that ONE clip on the
   // couch, before ever driving. Discrete stop-by-stop — the old full-screen couch "simulated drive"
