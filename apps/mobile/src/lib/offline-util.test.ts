@@ -17,7 +17,6 @@ import {
   planV4Rekey,
   revisionToken,
   resolveClipRef,
-  savedClipFileName,
   storeFileName,
   storeKeepSet,
   storeKeyForClip,
@@ -685,13 +684,6 @@ describe('orphanStoreNames (decides DELETIONS of rider-owned audio)', () => {
   test('composed with storeKeepSet: a byte two drives share is never swept when one is removed', () => {
     const remaining = { clips: { '0': { name: A, contentType: M4A, durationMs: null, shared: true } } }
     expect(orphanStoreNames([A, B], storeKeepSet([remaining]))).toEqual([B])
-  })
-})
-
-describe('savedClipFileName (harvested in step 3, finally exercised)', () => {
-  test('follows the served contentType, never a hardcoded guess', () => {
-    expect(savedClipFileName(POI_A, M4A)).toBe(`${POI_A}.m4a`)
-    expect(savedClipFileName(POI_A, 'application/octet-stream')).toBe(`${POI_A}.mp3`)
   })
 })
 

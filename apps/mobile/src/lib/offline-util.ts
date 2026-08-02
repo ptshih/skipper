@@ -209,18 +209,6 @@ export function isPastTtl(iso: string, now: number, ttlDays: number): boolean {
  */
 export type Saved<T extends { url?: unknown }> = Omit<T, 'url'>
 
-/** A clip's on-disk filename, keyed by an opaque subject id. The extension follows the SERVED
- *  contentType, never a hardcoded guess — also harvested from the roam pack, where the id could be
- *  either a poi or a cluster and the filename had to be safe for both. */
-/** ⚠ NOT THE STORE PATH BUILDER — use `storeFileName`. This has NO revision segment, so keying the
- *  shared store on it would make two revisions of one telling collide on a single filename, and a
- *  re-synthed clip would be served stale FOREVER with nothing able to detect it (the manifests are
- *  correct; only the bytes are wrong). Kept because it is the harvested roam-pack shape and reads like
- *  the obvious choice — which is exactly why it needs this sign on it. */
-export function savedClipFileName(subjectId: string, contentType: string): string {
-  return `${subjectId}.${extForContentType(contentType)}`
-}
-
 /* -------------------------------------------------------------------------- */
 /*  THE SUBJECT-KEYED CLIP STORE — naming, re-key planning, sweep math (step 9) */
 /* -------------------------------------------------------------------------- */
@@ -298,6 +286,18 @@ export function isSafeSubjectId(id: unknown): id is string {
 /**
  * The store filename for a telling. `<kind>-<subjectId>.<rev>.<ext>`: the kind costs nothing, makes
  * an on-disk listing debuggable, and gives the sweep a shape to validate before it deletes.
+ *
+ * ⚠ THE TEMPTING SHAPE IS `<subjectId>.<ext>`, AND IT IS WRONG TWICE. That was the roam pack's
+ * filename — correct there, where one clip belonged to one pin — and a `savedClipFileName` helper
+ * built exactly it, unused, until 2026-08-02. It survives in git history; do not reintroduce it.
+ *   1. No revision. Two revisions of one telling collide on a single name, so the presence check
+ *      answers "already downloaded" for bytes that are a version behind — see `revisionToken`, which
+ *      is where the stale-telling argument lives in full.
+ *   2. No guard. It takes a bare string, so `../evil` addresses bytes outside `clips/`. A manifest
+ *      read back from disk is JSON.parse'd and shape-checked but NOT re-validated, so every id
+ *      arriving at a path builder is untrusted.
+ * Both are enforced below and pinned by tests ("two revisions → two DIFFERENT filenames", and the
+ * refusal on `../evil`) rather than left to whoever reads this comment.
  *
  * ⚠ THROWS on a key that could escape the store. Unreachable from the real paths — the only two
  * constructors of a `StoreKey` (`storeKeyForClip`, `parseStoreFileName`) both refuse an unsafe id —
