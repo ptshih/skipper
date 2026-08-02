@@ -10,6 +10,7 @@ import { ActivityIndicator, Alert, Animated, PixelRatio, Pressable, ScrollView, 
 import { Stack, useLocalSearchParams, useNavigation, useRouter } from 'expo-router'
 import * as SecureStore from 'expo-secure-store'
 import { useDrive } from '@/lib/useDrive'
+import { track } from '@/lib/analytics'
 import { isSignedIn, useSession } from '@/lib/auth'
 import { isOfflineNow } from '@/lib/connectivity'
 import { useSimMode } from '@/lib/sim-mode'
@@ -224,6 +225,18 @@ export default function DriveScreen() {
       useNativeDriver: false,
     }).start()
   }, [d.phase, reduce, d.progress])
+
+  // wall_shown — the account wall a rider meets when they open a DRIVE without an account, which is a
+  // different entrance from the one in the planner (a drive is owned, so merely loading it 401s).
+  // ⚠ An EFFECT, not a line beside the `return <AccountGate/>` below: that branch re-runs on every
+  // render of a gated screen, so emitting there would report render count, not walls. Latched because
+  // `phase` can settle back onto 'gate' — the rider must be counted as having hit one wall, once.
+  const gateSeenRef = useRef(false)
+  useEffect(() => {
+    if (d.phase !== 'gate' || gateSeenRef.current) return
+    gateSeenRef.current = true
+    track('wall_shown', { source: 'drive_play' })
+  }, [d.phase])
 
   if (d.phase === 'gate')
     // A drive is owned (account-gated), so loading it at all needs a free account — the gate catches

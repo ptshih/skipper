@@ -32,6 +32,7 @@ import {
   type GpsFix,
 } from '@skipper/engine'
 import type { Attribution } from '@skipper/shared'
+import { track } from './analytics'
 import { ApiError, errorMessage } from './api'
 import { cleanPlaceName } from './labels'
 import { loadPlayback, resignPlayback } from './offline'
@@ -77,6 +78,26 @@ const GPS_SEARCH_MS = 8_000
 // persona is the product — the lock screen is a brand surface). A bundled asset URI works offline. (audit)
 const LOCK_ARTWORK_URI: string | undefined =
   Image.resolveAssetSource(require('../../assets/icon.png'))?.uri
+
+// The `drive_started` latch — MODULE scope, not a ref, and that is the whole point. `restart` runs
+// beginDrive again on the same mount, and backing out of a rolling drive and re-opening the player
+// remounts this hook outright, so a per-mount ref re-arms on exactly the paths that would inflate
+// the number. Keyed by MODE as well as drive: a rider who couch-tests a drive in sim and later
+// actually drives it live has begun two genuinely different things, and sim-vs-live is the
+// distinction the event exists to draw.
+// ⚠ The drive id here is a LOCAL latch key and never leaves this module — it sits beside
+// `drives.user_id` server-side, so it may not ride an event (see analytics.tsx AnalyticsEventProps).
+// ⚠ IT IS NEVER CLEARED, AND THE COST IS LARGER THAN "one app run" SOUNDS. iOS suspends rather than
+// terminates, so a process routinely survives days — a rider who drives this route again next weekend
+// re-arms nothing and is not counted, unless the OS happened to evict the app in between. So
+// `drive_started` counts FIRST starts per drive per process, not every start; read it as reach, never
+// as engagement. The direction is chosen on purpose (a funnel event that double-fires corrupts a
+// denominator silently, while one that under-fires is merely conservative), but `restart` is a
+// first-class transport control rather than an edge affordance, so the undercount is real traffic.
+// Clearing on `end()` — the rider explicitly finishing — would recover most of it without re-arming on
+// the remount and `restart` paths this Set exists to absorb; deliberately not done in the same pass
+// that introduced the event, so the baseline is measured before the semantics move.
+const startedDrives = new Set<string>()
 
 interface DriveStop {
   seq: number
@@ -533,7 +554,21 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
         ? liveSource(data.polyline)
         : simulatedSource(data.polyline, { mph: SIM_MPH, timeScale: fast ? SIM_FAST_SCALE : 1 })
     subRef.current = source(handleFix, handleEnd, handleSourceError)
-  }, [data, mode, fast, resetForReady, handleFix, handleEnd, handleSourceError, pump])
+    // ── drive_started. The engine is armed and the fix source is subscribed: this is the one line in
+    // the app where a drive genuinely BEGINS. Every entry point either reaches it or ends in nothing
+    // — the detail page's "Start the drive" tap can dead-end in the unsaved-download alert, and
+    // "Let's roll" routes through the location prime and can terminate at the permission gate (whose
+    // own Allow handler is a third caller of start()). Instrumenting any of those counts intentions.
+    // ⚠ `mode` is the DERIVED drive mode handed down by the player screen (the Settings sim toggle
+    // outranks `?mode=`, and one entry point carries no param at all) — do not re-derive it here.
+    // Without it a simulated drive is indistinguishable from a real one on the launch dashboard,
+    // because `app_env` tags the BUILD, not the clock.
+    const startKey = `${driveId}:${mode}`
+    if (!startedDrives.has(startKey)) {
+      startedDrives.add(startKey)
+      track('drive_started', { mode })
+    }
+  }, [data, driveId, mode, fast, resetForReady, handleFix, handleEnd, handleSourceError, pump])
 
   // ---- location-permission priming (live mode) — the prime → prompt → result SHELL, shared with
   // useLocationPriming. This hook owns the pending-ref double-tap guard, the no-prompt

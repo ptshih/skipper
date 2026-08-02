@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { StyleSheet, TextInput, View } from 'react-native'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
+import { track } from '@/lib/analytics'
 import { PASSWORD_RESET_URL, requestPasswordReset, signIn, signUp } from '@/lib/auth'
 import { space } from '@/theme/tokens'
 import { Button, Input, Screen, Text, voice } from '@/ui'
@@ -69,6 +70,24 @@ export default function SignInScreen() {
         setError(res.error.message ?? 'Authentication failed')
         return
       }
+      // ── signup_completed: past the error guard (so it means a real account exists), before the
+      // navigation (which unmounts this screen).
+      //
+      // ⚠ SIGN-UP ONLY, never any successful submit. An existing-account sign-in is a RETURNING
+      // rider, not a wall conversion — and the wall's conversion rate is the single number this
+      // funnel exists to produce, so folding the two together makes the wall look like it works.
+      // Hence `=== 'up'` rather than `!== 'in'`.
+      //
+      // ⚠ It reads the `mode` STATE, not the `?mode=` route param. The "Have an account? / Need an
+      // account?" ghost below flips this state WITHOUT touching the route, so `modeParam` is stale
+      // the instant a rider uses it: someone who arrived at ?mode=up from the AccountGate and
+      // switched to signing in would be counted as a brand-new account. (`mode` can also be
+      // 'reset', which never reaches here — the reset branch renders sendReset instead.)
+      //
+      // ⚠ No properties, deliberately: no email, no user id. INV-4 is why it costs nothing — Better
+      // Auth hard-deletes the anonymous row at link, so PostHog's device distinct_id is already the
+      // only spine that carries wall_shown → here → drive_created across the wall.
+      if (mode === 'up') track('signup_completed', {})
       // Normally we came from a screen that pushed us here (back returns to it). But a
       // DEEP LINK straight to /sign-in has nothing beneath it, so back is a no-op — fall
       // back to home so success never strands the rider on the (now-irrelevant) form.

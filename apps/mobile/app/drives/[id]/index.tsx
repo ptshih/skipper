@@ -3,6 +3,7 @@ import { ActionSheetIOS, Alert, Animated, Linking, Platform, StyleSheet, View } 
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
 import { ApiError, deleteDrive, errorMessage, getDrive, type DriveManifest } from '@/lib/api'
+import { track } from '@/lib/analytics'
 import { useStopPreview } from '@/lib/useStopPreview'
 import { DriveMap, type DriveMapStop } from '@/ui/DriveMap'
 import {
@@ -84,6 +85,18 @@ export default function DriveDetailScreen() {
   const [drive, setDrive] = useState<DriveManifest | null>(null)
   const [needsAccount, setNeedsAccount] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // wall_shown — this screen's own account wall, a different entrance from the planner's (a drive is
+  // owned, so loading one without an account 401s here).
+  // ⚠ An EFFECT, not a line beside the `return <AccountGate/>` far below: that branch re-renders while
+  // the rider sits on it, so emitting there would count renders rather than walls. Latched, and NOT
+  // reset when `needsAccount` goes false — the gate's "keep browsing" flips it back, and a rider
+  // toggling that has still only met one wall.
+  const gateSeenRef = useRef(false)
+  useEffect(() => {
+    if (!needsAccount || gateSeenRef.current) return
+    gateSeenRef.current = true
+    track('wall_shown', { source: 'drive_detail' })
+  }, [needsAccount])
   const [loading, setLoading] = useState(true)
   // True when the manifest fetch failed but a saved download carried us (dead-zone fallback).
   const [offline, setOffline] = useState(false)

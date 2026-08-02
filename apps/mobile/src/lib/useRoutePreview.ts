@@ -16,6 +16,7 @@
 // ⚠ INV-13: nothing here logs a url, a vendor error string, or anything else.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { setAudioModeAsync, setIsAudioActiveAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
+import { track } from './analytics'
 
 export interface RoutePreview {
   /** The card whose clip is loaded (playing OR paused); null = nothing loaded. */
@@ -57,6 +58,12 @@ export function useRoutePreview(): RoutePreview {
   // hint only for the first. Chosen deliberately — a missed hint is a card that just doesn't play; a
   // false positive is a lie printed over working audio. Do not "fix" it by dropping the comparison.
   const handledErrorRef = useRef<string | null>(null)
+
+  // The card whose COMPLETION has already been reported (see the didJustFinish effect). toggle()
+  // replays a finished clip without ever passing back through play(), so an unlatched completion
+  // would report twice against one start and push the completion RATE above 1 — the one number the
+  // paired event exists to produce.
+  const completedCardRef = useRef<string | null>(null)
 
   const durSec = status.duration && status.duration > 0 ? status.duration : 0
 
@@ -104,10 +111,31 @@ export function useRoutePreview(): RoutePreview {
       activeCardIdRef.current = cardId
       // Snapshot the error showing right now so a stale one can't be blamed on this card (above).
       handledErrorRef.current = status.error ?? null
+      completedCardRef.current = null // a fresh load — this clip has reported no completion yet
       applyPreviewAudioMode()
       try {
         player.replace({ uri: url })
         player.play()
+        // ── preview_clip_played: START. It lives HERE — inside the hook, past the toggle() early
+        // return above — and not on the card's Pressable, because the Pressable fires on every
+        // pause, resume and replay too; this is the only line that means "a NEW clip began".
+        //
+        // ⚠ THE EVENT IS EMITTED TWICE PER CLIP, ON PURPOSE: once here with completed:false, once at
+        // didJustFinish with completed:true. The funnel step is satisfied by the FIRST; the
+        // completion rate is the ratio of the two. Do not "simplify" it to a single event at the
+        // end — that erases every abandoned clip, which is the half worth measuring. And do not try
+        // to infer abandonment from stop() / a card switch / blur: three more code paths carrying a
+        // signal worth less than their own bug surface.
+        //
+        // ⚠ `url` is a PRESIGNED R2 URL and `status.error` is a vendor string — neither may ever ride
+        // an event (INV-13; the App Privacy label). `completed` is the entire payload, and the file
+        // header's promise that nothing here logs a url stays true.
+        //
+        // Fires after play() rather than before replace() so a synchronous throw (a malformed
+        // source) counts as no play at all. The async failure — an expired presign surfacing via
+        // status.error — is unknowable at this line and does count as a start; it then simply never
+        // completes, which is exactly what an abandoned-clip number should look like.
+        track('preview_clip_played', { completed: false })
       } catch {
         // A synchronous throw is a malformed source, not a network failure — the presign 403 arrives
         // asynchronously via status.error. Both land on the same rider-facing hint.
@@ -159,6 +187,27 @@ export function useRoutePreview(): RoutePreview {
     if (!status.didJustFinish) return
     void setIsAudioActiveAsync(false).catch(() => {})
   }, [status.didJustFinish])
+
+  // ── preview_clip_played: COMPLETION — the other half of the pair emitted in play().
+  // ⚠ DELIBERATELY NOT RIDING `didJustFinish` ALONE, and the asymmetry is the reason this is its own
+  // effect rather than a line inside the hand-back above. expo-audio can DROP didJustFinish across an
+  // OS audio interruption — a phone call over the last seconds of a clip — and both sibling surfaces
+  // (app/sample.tsx, useDrive) already defend with an `atEnd` position check for exactly that. Here it
+  // matters more than anywhere: this event is emitted TWICE precisely so completion RATE is readable,
+  // so a dropped signal does not lose a nicety, it silently moves a listener into the abandoned bucket
+  // and biases the one number the pair exists to produce.
+  // ⚠ The session hand-back above stays on didJustFinish alone and stays UNCONDITIONAL — it is an
+  // audio-focus obligation, not a metric, and firing it off a position estimate would hand the session
+  // back mid-clip. Two different questions, two different signals; do not merge them back.
+  const atEnd = durSec > 0 && (status.currentTime ?? 0) >= durSec - 0.25
+  useEffect(() => {
+    if (!status.didJustFinish && !atEnd) return
+    const card = activeCardIdRef.current
+    if (card && completedCardRef.current !== card) {
+      completedCardRef.current = card
+      track('preview_clip_played', { completed: true })
+    }
+  }, [status.didJustFinish, atEnd])
 
   return {
     activeCardId,

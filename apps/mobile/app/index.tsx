@@ -21,6 +21,11 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Animated, Pressable, StyleSheet, View, type TextInput } from 'react-native'
 import { Stack, useFocusEffect, useRouter } from 'expo-router'
 import type { PlannedRoute } from '@skipper/shared'
+// ⚠ The TYPED contract, and the only analytics surface there is (src/lib/analytics.tsx owns the raw
+// client, unexported). Every property below is a number, a boolean or a closed union — INV-13 applies
+// to analytics exactly as it applies to logs: no rider prose, no place name, no coordinate, no url, no
+// drive id. A property that does not typecheck against that map is a signal to drop the property.
+import { track } from '@/lib/analytics'
 import {
   ApiError,
   createDrive,
@@ -174,6 +179,22 @@ export default function HomeScreen() {
   // conversation's one-shot "announced" state (see the transcript render).
   const convSeq = useRef(0)
 
+  /** How many turns the rider has SENT in the current conversation — `plan_turn_sent`'s `turn_index`,
+   *  and nothing else reads it.
+   *  ⚠ A COUNTER, NOT A DERIVATION FROM THE TRANSCRIPT, and that is the whole point. Both obvious
+   *  derivations are wrong in ways that only show up in the funnel, never in a test: counting rider
+   *  turns in `next` OR in `toWire(next)` both include the pair `seedExample` stamps `wire: true`, so
+   *  a rider who taps an example chip — the app's highest-traffic entry — reports their FIRST billed
+   *  turn as 2 while a rider who types cold reports 1. Bucket 1 then silently means "cold typists
+   *  only" and the drop-off curve is unreadable. `toWire` additionally MERGES consecutive same-role
+   *  turns, so a rider line following a failed turn collapses into the previous one and the count
+   *  goes backwards.
+   *  ⚠ Incremented at the EMIT, not in `send`, because every guard in `runTurn` returns having posted
+   *  nothing. And NOT incremented on a retry: a retry is the same turn of the conversation sent twice
+   *  (it re-sends the identical transcript), so it repeats its index and is told apart by `retry`.
+   *  Reset by `startFresh` — a fresh conversation restarts the curve at 1. */
+  const sentTurnsRef = useRef(0)
+
   // The last good GET /regions, read once. It is what lets the offline card name real places instead
   // of only apologising — public place NAMES only, never ids and never coordinates (INV-1).
   const cachedRegion = useMemo(() => readCachedRegion(), [])
@@ -266,6 +287,35 @@ export default function HomeScreen() {
     void loadRegions()
   }, [loadRegions])
 
+  // ── planner_ready — the funnel's DENOMINATOR ────────────────────────────────────────────────
+  // ⚠ Neither a bare mount effect nor the focus effect below, and both wrong answers are tempting.
+  // Focus re-runs on every return from a drive, settings, sign-in or the sample, which would count one
+  // rider's evening as a dozen riders. Mount is wrong on its own terms: it would count a rider staring
+  // at the offline or outage card, who never had a planner at all, and an inflated denominator makes
+  // every downstream rate look worse while hiding the outage itself.
+  // ⚠ Mount is ALSO not the "exactly once per process" it looks like — home is `initialRouteName` and
+  // the funnel's own path pushes over it, but two routes `router.replace('/')` and would remount it:
+  // sign-in's deep-link fallback (only when there is nothing to go back to — the wall → sign-up → back
+  // path takes `router.back()` instead) and settings after an account DELETION. Both are rare rather
+  // than routine, so this is a reason not to RELY on once-per-process, not a common double-count.
+  //
+  // So: gate on the planner being genuinely USABLE — online (the composer is absent entirely offline)
+  // AND a region actually chosen (until then the send disc is disabled, i.e. the field is on screen
+  // but nothing can be sent). `regionId` covers more than it looks: it is null through the regions
+  // load, null forever on a failed one (so `regionsFailed` needs no separate term), and null under a
+  // multi-region chip row until the rider picks — and no turn can be posted without it (see `send`).
+  //
+  // The latch is a per-MOUNT ref, so what this counts is planner-usable VIEWS of home. It exists to
+  // stop the two things that re-run this effect from each adding a denominator: the offline→online
+  // edge and the region chip row. A remount still re-fires, which is fine — with no identify() (INV-4)
+  // the funnel is read per DEVICE (distinct_id), and repeat views of one device collapse there.
+  const plannerReadyRef = useRef(false)
+  useEffect(() => {
+    if (plannerReadyRef.current || isOffline || !regionId) return
+    plannerReadyRef.current = true
+    track('planner_ready', {})
+  }, [isOffline, regionId])
+
   useFocusEffect(
     useCallback(() => {
       navigatingRef.current = false // any in-flight nav settled (or the rider backed out)
@@ -324,6 +374,12 @@ export default function HomeScreen() {
    *  before spending one. Sets the card's terminal state; never throws. */
   const doPropose = useCallback(
     async (cardId: string, route: PlannedRoute) => {
+      // ⚠ Captured before the await for the EMIT below, not for the patch. `patchCard` already fails
+      // safe when the rider has started over — its `setCards` map simply matches no id — but a
+      // `track()` call has no such no-op: it would report a proposal onto a screen that was cleared
+      // while this was in flight, and `proposal_shown` claims the rider SAW their drive. Same
+      // convSeq discipline `runTurn` uses, for the same reason.
+      const seq = convSeq.current
       patchCard(cardId, { state: 'proposing', proposal: null, errorMessage: undefined })
       try {
         // ⚠ INV-1: anchor IDS, verbatim, straight off the planner's route object. Nothing here
@@ -332,6 +388,26 @@ export default function HomeScreen() {
         // ⚠ STRICT `=== 0`. `estStopCount` is nullish-able and null means UNKNOWN, not zero.
         const quiet = p.estStopCount === 0
         patchCard(cardId, { state: quiet ? 'noStops' : 'ready', proposal: p })
+        // The beat where a rider first sees their own drive. Emitted IMPERATIVELY here, beside the
+        // patch, rather than from inside PreviewCard — the card is not memoized and re-renders on
+        // every composer keystroke, so a render-time emit would report typing speed. The `quiet`
+        // branch counts too: a quiet road is a proposal that was SHOWN, and dropping it would hide
+        // the outcome most worth seeing from the one number that would reveal it.
+        if (convSeq.current === seq) {
+          track('proposal_shown', {
+            // ⚠ `?? null`, NEVER `?? 0` — the strict `=== 0` above is the same rule stated once
+            // already. Null means UNKNOWN, and folding it into zero inflates the quiet-road rate
+            // that drive selection gets tuned against.
+            stop_count: p.estStopCount ?? null,
+            duration_min: Math.round(p.durationSeconds / 60),
+            // ⚠ A loop is `end === start`, NEVER `via.length`. A one-way route KEEPS its via
+            // midpoints (apps/api/src/plan-route.ts `toPlannedRoute` — the round-trip mapping only
+            // moves the far end into `via`), so counting via would report every via'd one-way as a
+            // round trip.
+            round_trip: p.startId === p.endId,
+            has_clip: p.previewClip != null,
+          })
+        }
         if (quiet) {
           // Hand the rider back to the CONVERSATION instead of leaving them on a dead card, and tell
           // the model so it doesn't cheerfully offer the same road again — hence `wire: true`. Safe
@@ -339,8 +415,14 @@ export default function HomeScreen() {
           setTurns((ts) => appendSkipper(ts, voice.proposal.noStopsSay, { wire: true }))
         }
       } catch (e) {
-        if (e instanceof ApiError && e.needsAccount) patchCard(cardId, { state: 'needsAccount' })
-        else patchCard(cardId, { state: 'error', errorMessage: errorMessage(e, voice.proposal.drawFailed) })
+        if (e instanceof ApiError && e.needsAccount) {
+          patchCard(cardId, { state: 'needsAccount' })
+          // ⚠ THIS SHOULD BE UNREACHABLE, and that is why it is instrumented. `POST /drives/propose`
+          // is open to anonymous riders as of step 8a, so a 401 here means the preview front door has
+          // quietly walled itself — the shape being `requireAccount` back on the `driveRoutes` wildcard
+          // mount instead of per-route. A line on this dashboard is a FINDING, not a funnel step.
+          track('wall_shown', { source: 'propose' })
+        } else patchCard(cardId, { state: 'error', errorMessage: errorMessage(e, voice.proposal.drawFailed) })
       }
     },
     [patchCard],
@@ -374,6 +456,13 @@ export default function HomeScreen() {
         const m = await createDrive(toCreateRequest(proposal, key))
         const driveId = m.driveId
         if (driveId) {
+          // The credit is spent and will never be refunded — so this fires on the SERVER's answer, not
+          // on the tap, and before the navigation (which `navigateOnce` may legitimately swallow).
+          // ⚠ NO driveId and NO routeSig. Both sit beside `drives.user_id`, so either one is joinable
+          // to a person server-side — the exact leak sanitizeScreenPath already had to close once. No
+          // credits number either: the only balance in scope here is the PRE-create one (the manifest
+          // carries none), which would be reported as though it were the post-spend balance.
+          track('drive_created', {})
           // Flip to `made` BEFORE navigating: a rider who backs out of the drive lands on a card that
           // offers to OPEN it, never a second charged tap.
           patchCard(cardId, { state: 'made', driveId })
@@ -384,7 +473,17 @@ export default function HomeScreen() {
           patchCard(cardId, { state: 'error', errorMessage: voice.error.generic })
         }
       } catch (e) {
-        if (e instanceof ApiError && e.needsAccount) patchCard(cardId, { state: 'needsAccount' })
+        if (e instanceof ApiError && e.needsAccount) {
+          patchCard(cardId, { state: 'needsAccount' })
+          // THE WALL — the funnel's numerator, and the only one that gates a spend. It is a card
+          // STATE, not a screen, which is why it is emitted from the 401 rather than from a route.
+          // ⚠ It DOES re-emit if the rider dismisses the gate (`onDismissGate`) and taps "Make this
+          // drive" again. Deliberate: every emission follows a real 401 from a real tap, so suppressing
+          // the second would under-report the wall being hit; de-duping would mean carrying wall state
+          // on PreviewItem for analytics alone. The rate is read per DEVICE (distinct_id, INV-4),
+          // where a second showing to the same rider changes nothing.
+          track('wall_shown', { source: 'create_drive' })
+        }
         // 403 = the free-drive cap. The server's own message names the limit AND the way past it, so
         // it is shown verbatim; the voice key is the fallback for an empty one.
         else if (e instanceof ApiError && e.status === 403)
@@ -400,9 +499,13 @@ export default function HomeScreen() {
   )
 
   /** One planner turn against an already-built transcript. `next` must already END on the rider's
-   *  line — this never appends one, so the outage retry can re-send the identical transcript. */
+   *  line — this never appends one, so the outage retry can re-send the identical transcript.
+   *
+   *  `retry` is REQUIRED and is THREADED, never inferred: `retryTurn` re-sends a byte-identical
+   *  transcript, so from in here a retry is indistinguishable from the first attempt, and a new caller
+   *  must decide which it is rather than inherit a default. */
   const runTurn = useCallback(
-    async (next: Turn[]) => {
+    async (next: Turn[], retry: boolean) => {
       if (sendingRef.current) return
       if (!regionId) return
       // ⚠ THE SHARPEST LINE ON THIS SCREEN. `toWire` drops display-only turns and enforces the shape
@@ -417,6 +520,21 @@ export default function HomeScreen() {
         setPlannerOutage(true)
         return
       }
+      // ⚠ HERE — after all three guards and BEFORE the await, and both halves matter. Every guard
+      // above returns having POSTED NOTHING, so emitting earlier would count turns that never billed
+      // an anonymous Opus call. Emitting on the RESOLUTION instead would be worse: a turn that times
+      // out or 5xxs billed all the same, so success-only instrumentation systematically under-counts
+      // exactly the failures worth seeing.
+      // A retry re-sends the identical transcript, so it is the same turn billed twice — it repeats
+      // its index rather than advancing the conversation. See sentTurnsRef for why this is a counter
+      // and not a count over the transcript.
+      if (!retry) sentTurnsRef.current += 1
+      track('plan_turn_sent', {
+        turn_index: sentTurnsRef.current,
+        // Without this, one conversation retried three times at turn 2 reads as a funnel that keeps
+        // re-entering — and each retry is a real second billed call at the SAME index.
+        retry,
+      })
       sendingRef.current = true
       setSending(true)
       setPlannerOutage(false)
@@ -491,7 +609,7 @@ export default function HomeScreen() {
     setTurns(next)
     setInput('')
     bumpScroll()
-    void runTurn(next)
+    void runTurn(next, false)
   }, [bumpScroll, input, regionId, runTurn, turns])
 
   const focusComposer = useCallback(() => {
@@ -514,7 +632,8 @@ export default function HomeScreen() {
       return
     }
     setPlannerOutage(false)
-    void runTurn(turns)
+    // `retry: true` — same transcript, same turn ordinal, a second billed call.
+    void runTurn(turns, true)
   }, [focusComposer, runTurn, turns])
 
   /** "Start fresh" — back to the cold open. It must not touch MY DRIVES and must not fetch anything
@@ -526,6 +645,10 @@ export default function HomeScreen() {
     // will not run, so this has to be the thing that reopens the composer. Doing one without the
     // other is a screen that can never send again.
     convSeq.current += 1
+    // A fresh conversation restarts the drop-off curve at 1 (see sentTurnsRef). Without this, turn
+    // indices climb across every conversation the process ever holds and no per-conversation depth
+    // can be read back out.
+    sentTurnsRef.current = 0
     turnAbortRef.current = null
     sendingRef.current = false
     setSending(false)

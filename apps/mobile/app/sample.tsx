@@ -3,6 +3,7 @@ import { Image, StyleSheet, View } from 'react-native'
 import { setAudioModeAsync, setIsAudioActiveAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
 import { Stack, useRouter } from 'expo-router'
 import type { ImageSourcePropType } from 'react-native'
+import { track } from '@/lib/analytics'
 import { getSample } from '@/lib/api'
 import { cleanPlaceName } from '@/lib/labels'
 import { postcardImageFor } from '@/lib/postcards'
@@ -48,6 +49,14 @@ export default function SampleScreen() {
   // didJustFinish can double-fire; latch the end exactly once.
   const endedRef = useRef(false)
   const beatTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // `sample_played` is a SEPARATE event from the conversation's preview_clip_played on purpose: this
+  // screen AUTOPLAYS, so its plays are zero-intent by default, while a tap on the rider's OWN
+  // proposed route is the sharpest charm signal the release has. Averaging the two together would
+  // hide both. `startedRef` latches the start to one event per load (a pause/resume is not a new
+  // play); `autoplayRef` carries the initiator forward to the completion event, which fires far away
+  // in the end-latch effect below.
+  const startedRef = useRef(false)
+  const autoplayRef = useRef(true)
 
   // setAudioModeAsync is process-wide (shared with the drive player). ⚠ D35 (1.1, founder): the postcard
   // is pre-drive SKIPPER audio, so it takes EXCLUSIVE focus like a drive rather than mixing under the
@@ -74,9 +83,23 @@ export default function SampleScreen() {
     }
   }, [])
 
+  // Fire sample_played's START exactly once per load. `auto` records WHO began playback — the beat
+  // timer (true) or the rider's own tap on the transport (false) — and it must be truthful: a screen
+  // that autoplays produces plays nobody asked for, and a tap after a failed/blocked autoplay is a
+  // different, much stronger signal. Whichever fires first wins, so a rider who taps during the
+  // autoplay beat is correctly recorded as deliberate. (The beat's length lives on its constant —
+  // restating it here would be a second copy that lies the day it moves.)
+  const markStarted = useCallback((auto: boolean) => {
+    if (startedRef.current) return
+    startedRef.current = true
+    autoplayRef.current = auto
+    track('sample_played', { completed: false, autoplay: auto })
+  }, [])
+
   const load = useCallback(async () => {
     setPhase('loading')
     endedRef.current = false
+    startedRef.current = false // the retry path re-loads the clip — that is a new play
     try {
       const s = await getSample()
       setSample(s)
@@ -85,6 +108,7 @@ export default function SampleScreen() {
       beatTimer.current = setTimeout(() => {
         try {
           player.play()
+          markStarted(true)
         } catch {}
       }, AUTOPLAY_BEAT_MS)
       setPhase('playing')
@@ -93,7 +117,7 @@ export default function SampleScreen() {
       // persona dead-end. Show the retry surface.
       setPhase('error')
     }
-  }, [player])
+  }, [player, markStarted])
 
   useEffect(() => {
     void load()
@@ -117,6 +141,11 @@ export default function SampleScreen() {
     if (status.didJustFinish || atEnd) {
       endedRef.current = true
       setPhase('ended')
+      // ── sample_played: COMPLETION. It rides the screen's EXISTING end latch (endedRef, plus the
+      // atEnd fallback for a didJustFinish dropped across an OS interruption) rather than a second
+      // mechanism of its own — so the event can never disagree with the end card the rider is
+      // looking at, and a dropped native event doesn't silently drop the completion too.
+      track('sample_played', { completed: true, autoplay: autoplayRef.current })
       // Hand the audio session back the moment the taste is over, not on unmount: the rider sits on
       // the end card deciding, and under `doNotMix` their own music stays paused for as long as they
       // do. The unmount teardown above is the backstop for leaving mid-clip.
@@ -133,7 +162,15 @@ export default function SampleScreen() {
   const seekBy = (sec: number) => seekToMs(((status.currentTime ?? 0) + sec) * 1000)
   const togglePlay = () => {
     try {
-      status.playing ? player.pause() : player.play()
+      if (status.playing) {
+        player.pause()
+      } else {
+        player.play()
+        // A no-op once the beat timer already started the clip (startedRef). It matters only when
+        // the autoplay never took — a silenced/interrupted session — and the rider reached for the
+        // button themselves, which is a deliberate play, not an autoplay.
+        markStarted(false)
+      }
     } catch {}
   }
 
