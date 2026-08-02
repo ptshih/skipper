@@ -8,12 +8,13 @@
 // the bar may use the full glowing btn--primary. It drives the hero clip via the
 // `skipper:play-hero` custom event (see Hero.astro).
 import Icon from '../Icon.astro'
+//
+// ⚠ The bar starts hidden AND `inert`. It is never `display:none` — it is translated off-screen at
+// opacity 0 — so without `inert` its <button> stays in the tab order inside an aria-hidden container,
+// and focus lands on a control nobody can see or hear. The script toggles both together; changing one
+// without the other brings the bug back.
 ---
 
-<!-- ⚠ Starts hidden AND inert. The bar is never `display:none` — it is translated off-screen at
-     opacity 0 — so without `inert` its <button> stays in the tab order inside an aria-hidden
-     container: focus lands on a control nobody can see or hear. Both attributes are toggled
-     together in the script below; changing one without the other reintroduces that. -->
 <div class="stickycta" data-sticky-cta aria-hidden="true" inert>
   <div class="stickycta__inner">
     <span class="stickycta__copy">

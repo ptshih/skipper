@@ -4,6 +4,11 @@
 // tokens so it matches the landing page (noindex).
 import Base from '../layouts/Base.astro'
 import Icon from '../components/Icon.astro'
+//
+// ⚠ This page shipped with NO heading of any level until 2026-08-02, so pressing H (or opening the
+// rotor) on a mistyped skipper.fm URL returned nothing and a screen-reader user had to read linearly
+// to discover it was an error page. The numeral carries the meaning visually; the <h1> carries it for
+// AT — which is why the visible "404" is aria-hidden rather than announced twice.
 ---
 
 <Base
@@ -12,10 +17,6 @@ import Icon from '../components/Icon.astro'
   noindex={true}
 >
   <main id="main" class="lost">
-    <!-- The page shipped with NO heading at all, so pressing H / opening the rotor on a mistyped
-         skipper.fm URL returned nothing and a screen-reader user had to read linearly to find out
-         they were on an error page. The numeral carries the meaning visually; the h1 carries it
-         for AT, which is why the visible "404" is hidden from the tree rather than read twice. -->
     <p class="lost__code" aria-hidden="true">404</p>
     <h1 class="lost__line">404 — looks like we’ve drifted off the route, folks.</h1>
     <a class="btn btn--secondary" href="/">

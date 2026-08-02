@@ -3,31 +3,36 @@
 // this work in MY car, with no signal?") cheaply. A trimmed, Skipper-voiced
 // steal of Shaka's whole /how-it-works page.
 //
-// ⚠ Step 02 said "your music ducks when he's got something to say" until 2026-08-02. It never did:
-// skipper audio takes EXCLUSIVE focus and PAUSES the rider's music — twice-affirmed founder decision,
-// see docs/decisions/drive-audio-exclusive-focus.md. Ducking was tried and REJECTED, so this is not a
-// default awaiting a flip. Don't let the promise drift back; the drive supplies its own soundtrack.
+// ⚠ The audio step (now 03) said "your music ducks when he's got something to say" until 2026-08-02.
+// It never did: skipper audio takes EXCLUSIVE focus and PAUSES the rider's music — twice-affirmed
+// founder decision, see docs/decisions/drive-audio-exclusive-focus.md. Ducking was tried and
+// REJECTED, so it is not a default awaiting a flip. Don't let the promise drift back.
+//
+// ⚠ Step 01 IS THE PRODUCT and did not exist here until 2026-08-02. The three steps used to start at
+// "download the drive" — i.e. the section literally titled "How the drive works" never mentioned that
+// you get a drive by TALKING to him (1.1 D6; apps/mobile/app/index.tsx "HOME IS THE CONVERSATION").
+// A visitor read this, installed, and hit a chat screen. He is TYPED to, not spoken to.
 import Icon from '../Icon.astro'
 import Trail from '../Trail.astro'
 
 const steps = [
   {
     n: '01',
-    icon: 'cloud',
-    title: 'Download the drive before you go.',
-    body: 'The whole tour lives on your phone. Tahoe loses signal in the prettiest places; the Skipper doesn’t care.',
+    icon: 'quote',
+    title: 'Tell him where you’re headed.',
+    body: 'Say it the way you’d say it to a passenger — “Tahoe City down to Emerald Bay, we’ve got about two hours.” He picks the route and the stops worth making. No menus, no dropping pins.',
   },
   {
     n: '02',
-    icon: 'mount',
-    title: 'Drop it in the mount and roll.',
-    body: 'Start at the trailhead or hop on anywhere. Plays over Bluetooth like a podcast — and it brings its own road-trip soundtrack, so give him the stereo and let your playlist sit this one out.',
+    icon: 'cloud',
+    title: 'Download it before you go.',
+    body: 'The whole drive lives on your phone. Tahoe loses signal in the prettiest places; the Skipper doesn’t care.',
   },
   {
     n: '03',
-    icon: 'play',
-    title: 'He talks when you get there.',
-    body: "Each story fires automatically as you reach the stop. You never touch the screen — eyes on the road, where they belong.",
+    icon: 'mount',
+    title: 'Drop it in the mount and drive.',
+    body: 'Each story fires itself as you reach the stop — you never touch the screen. It plays over Bluetooth like a podcast and brings its own road-trip soundtrack, so give him the stereo and let your playlist sit this one out.',
   },
 ]
 ---

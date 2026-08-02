@@ -11,6 +11,21 @@ import Icon from '../Icon.astro'
 // (see apps/site/CLIPS.md). If it 404s, the player shows the warming state.
 const HERO_CLIP = '/clips/skipper-hero.mp3'
 const HERO_STOP = 'Emerald Bay overlook'
+
+// ⚠ THE LEDE PROMISED ROAM until 2026-08-02 ("mount it, start driving, and he tells the story of
+// every lake, lookout and one-stoplight town right as you reach it") — ambient narration of whatever
+// you pass, which 1.1 deleted (D1). A drive is a route you ASKED him for. Keep the planning beat
+// first: it is the mechanic, and it is what makes this not a catalog.
+// ⚠ He is TYPED to, not spoken to (the app's Composer is a text input) — never "tell him out loud".
+//
+// The player's a11y wiring is load-bearing and easy to undo:
+//   • the state readout is aria-live because it is the ONLY signal that play/pause/ended happened —
+//     sighted users get the icon flip, AT users had nothing;
+//   • the disc's aria-label + aria-pressed move WITH the icons, or it announces "Play" while playing;
+//   • .scrub is role="slider" with keys because it is a real seek control that was a bare <div>, and
+//     the <audio> carries no `controls`, so there is no native fallback to inherit;
+//   • the <noscript> exists because every affordance here is scripted, and with JS blocked the
+//     placard rendered in full and did nothing, silently.
 ---
 
 <section class="hero section" id="top">
@@ -25,9 +40,9 @@ const HERO_STOP = 'Emerald Bay overlook'
         Your road trip just hired a tour guide with a terrible sense of humor.
       </h1>
       <p class="lede">
-        A narrated driving tour for your phone. Mount it, start driving, and a corny old guide
-        tells the story of every lake, lookout, and one-stoplight town right as you reach it. No
-        reading, no tapping — press play and he’s already talking.
+        A narrated driving tour for your phone. Tell him where you’re headed, in your own words, and
+        he plans the drive — the route, the stops, and a story for each one. Then mount the phone and
+        go: he starts himself at every stop, so you never touch the screen.
       </p>
       <div class="hero__cta">
         <div class="hero__buttons">
@@ -51,8 +66,6 @@ const HERO_STOP = 'Emerald Bay overlook'
     <div class="hero__player">
       <figure class="player framed" id="hero-player" data-hero-player aria-label="Listen to a sample from the Skipper">
         <figcaption class="player__head">
-          <!-- aria-live: this readout is the ONLY signal that play/pause/ended happened. Sighted
-               users get the icon flip; without this, AT users got nothing at all. -->
           <span class="player__state" data-state aria-live="polite">Sample clip</span>
           <span class="player__stop">{HERO_STOP}</span>
         </figcaption>
@@ -71,9 +84,6 @@ const HERO_STOP = 'Emerald Bay overlook'
 
           <div class="player__meter">
             <p class="player__label">Hear the Skipper</p>
-            <!-- A real seek control, so it owes a real role. It was a bare <div> with a click
-                 handler: mouse users could scrub, keyboard users had no way to reach it and AT
-                 could not see it at all. The <audio> has no `controls`, so there is no fallback. -->
             <div
               class="scrub"
               data-scrub
@@ -97,10 +107,6 @@ const HERO_STOP = 'Emerald Bay overlook'
 
         <p class="player__caption mono" data-caption>EMERALD BAY OVERLOOK · his real voice, his real corn</p>
         <audio data-audio src={HERO_CLIP} preload="metadata"></audio>
-        <!-- The page's stated bet is "the only action is hearing the Skipper", and every affordance
-             above it — the disc, the CTA, the scrubber — is scripted. With JS blocked the placard
-             rendered in full and did nothing, silently. The clip is a plain static file, so the
-             fallback costs one element. -->
         <noscript>
           <audio src={HERO_CLIP} controls preload="none"></audio>
         </noscript>
