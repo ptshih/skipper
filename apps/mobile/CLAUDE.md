@@ -20,6 +20,14 @@ raw hex/rgba/`fontFamily`; colors live only in `src/theme`.
   (`react-hooks/refs`, `set-state-in-effect`, `immutability`) are baselined so NEW ones fail immediately.
   Burn them down with judgement — several are the deliberate ref-mirrors-state pattern — then
   `bun run lint:suppress` prunes what you fixed. Never re-run a blanket `--suppress-all`.
+- **Three deps are pinned EXACT on purpose — `react`, `react-native`, `react-native-maps` — and
+  loosening any of them is a regression, not tidying.** They are `expo install`'s output: Expo's
+  `bundledNativeModules.json` for the SDK specifies each version, and for `react-native-maps` it
+  specifies an EXACT `1.27.2` where `react-native-screens` and `react-native-safe-area-context` get
+  `~`. That asymmetry is Expo's judgement about which native modules break on a patch bump, not ours.
+  ⚠ An unexplained exact pin reads like a scar from a bad upgrade — it isn't one here (one commit,
+  `dda5dc9`, never bumped), and reading it that way already cost one wrong migration proposal. Bump
+  these only via `expo install` / an SDK upgrade, and let `bun run doctor` tell you the target.
 - **`bun run doctor` (`expo-doctor`) is deliberately NOT in `check`:** it needs the network, and it reports
   a FALSE "node_modules may be corrupted / multiple copies" against bun's isolated linker. Run it when
   touching dependencies, and read the version table, not the duplicate warning.

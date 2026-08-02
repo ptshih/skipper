@@ -47,13 +47,21 @@ findings fixed (`576e031`). See `apps/mobile/CLAUDE.md` for the ESLint-9 pin and
       The prize is unchanged and still worth wanting — dropping `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY`, its
       billing surface, and `app.config.ts`'s whole `react-native-maps` plugin block.
       ⚠ **The underlying concern is still real and unaddressed** — see the next item.
-- [ ] **Instead: prove `react-native-maps` is actually OK on SDK 57, on a device.** It is the app's
-      only exact-pinned dependency (`1.27.2`), which reads like someone already got burned, and there
-      is an open Expo issue for this combination on iOS with Google Maps (expo/expo#43288) — but that
-      issue is **SDK 55**, and we are on 57. The risk may be entirely theoretical. This is a ten-minute
-      device check, not a migration: open a drive, confirm the tinted basemap, the stop pins, the puck
-      and camera-follow all render. If it works, the honest answer is to write that down (with the
-      date + SDK) and stop treating the pin as a smell. If it does NOT, the decision reopens — and the
+      ⚠ **AND the premise I built it on was wrong.** I called `react-native-maps@1.27.2` "the only
+      exact-pinned dependency, which reads like someone already got burned". Both halves are false:
+      `react` and `react-native` are exact too, and Expo's own SDK 57 `bundledNativeModules.json`
+      specifies `react-native-maps: 1.27.2` — **exact, with no tilde, where `react-native-screens` and
+      `react-native-safe-area-context` get `~`**. The pin is `expo install`'s output verbatim, it has
+      never been bumped (one commit, `dda5dc9`, the original map feature), and `expo-doctor` does not
+      flag it. **Loosening it would be the regression**, not the fix: it would admit unvalidated
+      releases of the most fragile native dep in the app and desync us from what doctor validates
+      against. Documented at its one home, `apps/mobile/CLAUDE.md`, 2026-08-02.
+- [ ] **Prove `react-native-maps` renders correctly on SDK 57, on a device.** The remaining reason to
+      look: there is an open Expo issue for this combination on iOS with Google Maps
+      (expo/expo#43288) — but that issue is **SDK 55**, and we are on 57, so the risk may be entirely
+      theoretical. This is a ten-minute device check, not a migration: open a drive, confirm the tinted
+      basemap, the stop pins, the puck and camera-follow all render. If it works, write that down
+      (with the date + SDK) and close the question. If it does NOT, the decision reopens — and the
       fallback already exists in code: no Google key → Apple Maps, and List mode is the
       offline/accessibility-complete equivalent.
 - [ ] **Burn down `eslint-suppressions.json` — 47 baselined Rules-of-React errors** across 16 files
