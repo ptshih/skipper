@@ -50,6 +50,46 @@ export function decideStall(s: {
   return s.resumeTried ? 'giveUp' : 'resume'
 }
 
+/** What the fire-queue pump should do this tick. */
+export type PumpAction =
+  /** A clip is playing. Do nothing — the drive is strictly sequential and clips never overlap. */
+  | { kind: 'wait' }
+  /** Dequeue the head and play it. */
+  | { kind: 'play'; seq: number }
+  /** The road is done AND nothing is queued — end the drive. */
+  | { kind: 'finish' }
+  /** Nothing queued, road not finished — wait for the next GPS trigger. */
+  | { kind: 'idle' }
+
+/** Decide the pump action. Pure; the CALLER dequeues when the action is 'play'.
+ *
+ *  This is the heart of the in-car player and the ORDER OF THE CHECKS IS THE WHOLE THING — each one
+ *  is a rule that is invisible once it works and expensive when it breaks:
+ *
+ *  1. **Busy beats everything.** Two clips talking over each other is the single worst failure this
+ *     player can produce, and it is not self-correcting: the rider cannot pause their way out of it.
+ *  2. **A queued stop beats finishing.** Ending the drive while audio is still pending silently
+ *     swallows a stop the rider drove past and paid a credit for. The road reaching its end is NOT
+ *     permission to stop talking — only a drained queue is.
+ *  3. **Finishing requires BOTH** a drained queue and a finished road. Either alone is a mid-drive
+ *     silence, not an ending.
+ *
+ *  ⚠ `queue` is read, never mutated — a pure function that shifted its input would work exactly once
+ *  under test and diverge the moment anything called it twice. */
+export function decidePump(s: {
+  /** Is a clip currently loaded and playing? */
+  clipBusy: boolean
+  /** Fired seqs waiting to play, FIFO — head first. */
+  queue: readonly number[]
+  /** Has the route's end been reached? */
+  reachedEnd: boolean
+}): PumpAction {
+  if (s.clipBusy) return { kind: 'wait' }
+  const next = s.queue[0]
+  if (next !== undefined) return { kind: 'play', seq: next }
+  return s.reachedEnd ? { kind: 'finish' } : { kind: 'idle' }
+}
+
 /** Clamp a seek (ms) to [0, durationSec], returned in seconds. */
 export function clampSeekSec(ms: number, durationSec: number): number {
   return Math.min(durationSec, Math.max(0, ms / 1000))

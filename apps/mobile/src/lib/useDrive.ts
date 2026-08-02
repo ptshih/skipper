@@ -23,6 +23,7 @@ import {
 import {
   clampSeekSec,
   cumulativeMeters,
+  decidePump,
   decideStall,
   OFF_ROUTE_MAX_M,
   PRE_START_STALL_MS,
@@ -390,14 +391,21 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
 
   // ---- pump: if idle, play the next queued stop; else, end the drive if the road's done ----
   const pump = useCallback(() => {
-    if (clipBusy.current) return // a clip is playing — wait for it (sequential, no overlap)
-    const next = queue.current.shift()
-    if (next !== undefined) {
+    // The decision (and the ORDER of its checks — busy beats queued beats finishing) lives in
+    // @skipper/engine's player.ts, where it is unit-tested; this owns only the side effects.
+    const action = decidePump({
+      clipBusy: clipBusy.current,
+      queue: queue.current,
+      reachedEnd: reachedEnd.current,
+    })
+    if (action.kind === 'play') {
+      queue.current.shift() // decidePump reads the head; dequeuing is the caller's job
       clipBusy.current = true
-      setActiveSeq(next)
+      setActiveSeq(action.seq)
       return
     }
-    if (reachedEnd.current) finishDrive()
+    if (action.kind === 'finish') finishDrive()
+    // 'wait' (a clip is playing) and 'idle' (nothing queued, road unfinished) both do nothing.
   }, [finishDrive])
 
   // ---- a clip finished (or was skipped): return to ducked-quiet, then pump the trigger fire-queue
