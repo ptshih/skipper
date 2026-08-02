@@ -14,6 +14,40 @@ Carry-forward **engineering** items (the near-term layer of the truth system —
 Each item has enough context to action without re-deriving the reasoning. **Delete items
 when done** — git history is the archive.
 
+## Test-suite sweep (2026-08-02) — 94 files, ~1,240 tests
+
+**Nothing was deleted, and that is the finding.** A sweep for stale/redundant tests came back
+almost empty; what it found instead was two packages that were invisible to the runner.
+
+Checked, so nobody repeats it: every test file grepped for the concepts 1.1 deleted (roam,
+`jokeLevel`, `areaCapable`, `clientCan`, `CLIENT_CAPS`, `drive_demand`, paid tiers, authored tours)
+— **every hit is either a regression guard asserting the old thing is GONE, or prose in a comment.**
+Zero `.skip`/`.todo`/`xit` anywhere. Every mounted API route has at least one test file. The 10
+files using `mock.module` follow the documented fix (spread the real module and delegate when idle);
+one refuses to mock at all and says why; one uses a source assertion instead and says why.
+
+✅ **THE REAL FINDING — coverage by omission.** `@skipper/routing` and `@skipper/storage` had no
+`test` script, so `bun --filter '*' test` skipped them **silently** and they read as covered. Both
+now have one (`f06ce85`, `1fc602c`): the polyline decoder (mutation-checked — an axis swap fails 5
+of 7) and the MIME map that had already drifted once in production. ⚠ **When adding a package, add
+its `test` script in the same commit** — an absent script is indistinguishable from a passing suite.
+
+- [ ] **Add: `materializeRoute`'s response parsing.** Two branches with no coverage, one of them a
+      bug that already shipped: proto3 OMITS zero-valued fields, so a degenerate A→A route (a "loop"
+      prompt resolves start == end) returns no `distanceMeters` at all, and before the `?? 0` it
+      became `NaN` → JSON `null` → a DTO failure the rider saw as a bogus "please update Skipper".
+      Also the `"786s"` duration parse. ⚠ Needs the response-shaping split out of the fetch so it can
+      be tested without network — a small extraction, the same shape as `preview-util.ts`.
+- [ ] **Add: `useLocationPriming`** (also listed above) — uncovered, gates every live drive, and
+      App Store 5.1.1(iv) rides on its explainer having no "Not Now".
+- [ ] **Consider: `apps/site` has 0 tests.** Probably correct for a static Astro build — but the
+      three pages the App Store checks (`/privacy`, `/terms`, `/support`) are load-bearing enough
+      that a build-time assertion they exist and are non-empty would be cheap insurance.
+- **Judged NOT worth changing:** `studio/test/geo.test.ts` re-tests `haversineMeters` /
+  `cumulativeMeters` through studio's re-export, duplicating `engine/test/geo.test.ts`. It is ~4
+  tests of ~1,240, it pins that the re-export still resolves, and deleting passing tests to lower a
+  number is not an improvement. `packages/sim` having no tests is fine — it is a dev tool.
+
 ## Mobile technical diligence (2026-08-02) — validated against Expo's current docs
 
 A read of `apps/mobile` against external best practice. **Version currency is a genuine asset and
