@@ -469,6 +469,7 @@ async function main(): Promise<FinishOutcome | void> {
       dryRun,
       narrationModel: NARRATION_MODEL,
       judgeModel: GROUNDING_EVAL() ? JUDGMENT_MODEL : null,
+      groundingJudged: GROUNDING_EVAL(),
       scorecard: buildScorecard({
         slug: runRegion,
         runName: 'generate_narrations',

@@ -43,6 +43,7 @@ import { charmEvaluator } from './eval/charm'
 import { evaluateVeracity } from './eval/veracity'
 import { evaluateTts } from './eval/tts'
 import { evaluateDiversity } from './eval/diversity'
+import { evaluateLaterality } from './eval/laterality'
 import { buildScorecard } from './eval/scorecard'
 import { DIMENSION_KIND, type StopEval } from './eval/types'
 import { recordEvalRun, type ClipIdentity } from './eval/record'
@@ -167,8 +168,15 @@ async function main(): Promise<FinishOutcome> {
   // whole set (repeated openers/bows the per-clip generation pass can't see).
   const ttsEvals: StopEval[] = queue.map((c, i) => evaluateTts({ seq: i, script: c.script }))
   const divEvals = evaluateDiversity(queue.map((c, i) => ({ seq: i, stopType: 'story' as const, script: c.script })))
+  // ⚠ Laterality is a GATE dimension at generation (pipeline/gate.ts runs it on every clip) but the
+  // audit did not run it, so a RELEASED clip naming a side of the road — the exact thing generation
+  // would have withheld it for — audited clean. An audit that applies a weaker bar than the gate
+  // cannot answer the question it exists to answer ("would today's gate still ship this?"). Free,
+  // deterministic, no spend.
+  const latEvals: StopEval[] = queue.map((c, i) => evaluateLaterality({ seq: i, script: c.script }))
   const ttsBad = ttsEvals.filter((e) => !e.pass).length
   const divBad = divEvals.filter((e) => !e.pass).length
+  const latBad = latEvals.filter((e) => !e.pass).length
   const spendEst =
     queue.length * GROUNDING_USD_PER_CLIP +
     (doVeracity ? queue.length * VERACITY_USD_PER_CLIP : 0) +
@@ -176,7 +184,7 @@ async function main(): Promise<FinishOutcome> {
   const judgeList = ['grounding', ...(doCharm ? ['charm'] : []), ...(doVeracity ? ['veracity'] : [])].join(' + ')
 
   if (!apply) {
-    console.log(`\nFree checks: ${ttsBad} TTS-unsafe, ${divBad} diversity-flagged (of ${queue.length}).`)
+    console.log(`\nFree checks: ${ttsBad} TTS-unsafe, ${latBad} naming a side of the road, ${divBad} diversity-flagged (of ${queue.length}).`)
     for (const e of divEvals.filter((x) => !x.pass).slice(0, 10))
       console.log(`  diversity · ${queue[e.seq]?.name}: ${e.findings.slice(0, 1).join('')}`)
     console.log(
@@ -272,7 +280,7 @@ async function main(): Promise<FinishOutcome> {
 
   // GATE fail = grounding/tts (the audit's "withheld", for run.pass + the report's withheld section).
   // ADVISORY fail = charm/veracity/diversity — surfaced separately, never counts toward withheld.
-  const allEvals = [...grounded, ...charmEvals, ...ttsEvals, ...divEvals]
+  const allEvals = [...grounded, ...charmEvals, ...ttsEvals, ...divEvals, ...latEvals]
   const gateFailedBySeq = new Map<number, boolean>()
   const advisoryFailedBySeq = new Map<number, boolean>()
   for (const e of allEvals) {

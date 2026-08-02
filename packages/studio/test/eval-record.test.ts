@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { buildScoreRows, dimensionRollupScore, runPassed, type ClipIdentity } from '../src/eval/record'
+import { buildScoreRows, dimensionRollupScore, groundingScoreFor, runPassed, type ClipIdentity } from '../src/eval/record'
 import { buildScorecard } from '../src/eval/scorecard'
 import type { StopEval } from '../src/eval/types'
 
@@ -140,5 +140,40 @@ describe('the eval-run gate verdict (buildScorecard drives it)', () => {
     })
     expect(advisoryDirty.pass).toBe(true)
     expect(runPassed(advisoryDirty, 0)).toBe(true)
+  })
+})
+
+// ── grounding_score must not go green for a judge that never ran ──────────────────────────────────
+// `evaluateLaterality` reports under dimension='grounding' and runs unconditionally, while the paid
+// Opus judge is gated. With the judge off the dimension still rolls up a clean 1.0 — a confident
+// grounding trend nobody measured. Only the caller knows, so the caller has to say.
+describe('groundingScoreFor', () => {
+  // A run with the judge OFF: laterality is the only thing that reported grounding, and it passed.
+  const lateralityOnly = buildScorecard({
+    slug: 'lake-tahoe',
+    runName: 'r',
+    evaluatedAt: null,
+    stops: [
+      { seq: 0, dimension: 'grounding', pass: true, score: 1, findings: [] },
+      { seq: 1, dimension: 'grounding', pass: true, score: 1, findings: [] },
+    ],
+  })
+
+  test('judge OFF → null, NOT the vacuous 1.0 the rollup would report', () => {
+    expect(dimensionRollupScore(lateralityOnly, 'grounding')).toBe(1) // what it used to record
+    expect(groundingScoreFor(lateralityOnly, false)).toBeNull()
+  })
+
+  test('judge ON → the real rollup', () => {
+    expect(groundingScoreFor(card, true)).toBe(0.5)
+  })
+
+  test('UNSTATED means "assume it ran" — audit-corpus always judges on --apply', () => {
+    expect(groundingScoreFor(card, undefined)).toBe(0.5)
+  })
+
+  test('a dimension that never ran is still null regardless of the flag', () => {
+    expect(groundingScoreFor(card, true)).not.toBeNull()
+    expect(dimensionRollupScore(card, 'charm')).toBeNull()
   })
 })

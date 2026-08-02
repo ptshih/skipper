@@ -48,6 +48,10 @@ export interface EvalRunInput {
   withheld: number
   /** seq → the clip's stable identity, for the per-(poi × dimension) score rows. */
   identityBySeq?: Map<number, ClipIdentity>
+  /** Did the paid Opus grounding judge actually run this pass? FALSE nulls `grounding_score` — see
+   *  the field. Omitted means "assume it ran", which keeps `audit-corpus` (whose --apply branch always
+   *  judges) unchanged. */
+  groundingJudged?: boolean
 }
 
 /** A dimension's rollup score, or null when it wasn't run (no vacuous 1s in the trend columns). */
@@ -89,6 +93,25 @@ function gitShaBestEffort(): string | null {
   } catch {
     return null
   }
+}
+
+/**
+ * The `grounding_score` trend value — NULL when the paid Opus judge was switched off, even though the
+ * dimension has evals.
+ *
+ * ⚠ `evaluateLaterality` deliberately reports under dimension='grounding' (a side of the road the clip
+ * cannot know IS an ungrounded place-claim) and runs UNCONDITIONALLY, while the Opus judge is gated on
+ * `GROUNDING_EVAL()`. So with the judge OFF the dimension still collects one clean laterality eval per
+ * clip and rolls up to a confident 1.0 — a green grounding trend for a judge that never ran, which is
+ * precisely the vacuous 1 that `dimensionRollupScore`'s own "no vacuous 1s in the trend columns" rule
+ * exists to keep out.
+ *
+ * It cannot be fixed in the rollup: laterality genuinely evaluated, so `stopsEvaluated > 0` is true and
+ * honest there. Only the CALLER knows whether the paid judge ran. `undefined` means "assume it ran",
+ * which keeps `audit-corpus` — whose --apply branch always judges — unchanged.
+ */
+export function groundingScoreFor(card: RunScorecard, groundingJudged: boolean | undefined): number | null {
+  return groundingJudged === false ? null : dimensionRollupScore(card, 'grounding')
 }
 
 /**
@@ -138,7 +161,7 @@ export async function recordEvalRun(input: EvalRunInput): Promise<string> {
     total: input.total,
     shipped: input.shipped,
     withheld: input.withheld,
-    groundingScore: dimensionRollupScore(card, 'grounding'),
+    groundingScore: groundingScoreFor(card, input.groundingJudged),
     ttsScore: dimensionRollupScore(card, 'tts'),
     diversityScore: dimensionRollupScore(card, 'diversity'),
   })

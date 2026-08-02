@@ -377,6 +377,7 @@ async function main(): Promise<void> {
       total: gated.length,
       shipped: synthesized ?? shippedClips.length,
       withheld: withheld.length,
+      groundingJudged: GROUNDING_EVAL(),
       identityBySeq: new Map<number, ClipIdentity>(
         gated.map((g) => [
           g.seq,
