@@ -2,7 +2,7 @@
 //
 // Only the BODY lives here. The WHEELS deliberately differ per callsite and are NOT shared: each set
 // punches through to whatever surface sits behind it (CarToken tires read as `--surface` and add a
-// hub dot; Medallion sinks into `--surface-sunken`; the Modes art rides on `--surface-raised` at a
+// hub dot; Medallion sinks into `--surface-sunken`; the Planning art rides on `--surface-raised` at a
 // slightly smaller radius). Sharing them would mean a prop per difference — more machinery than the
 // duplication costs.
 //

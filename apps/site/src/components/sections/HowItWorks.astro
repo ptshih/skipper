@@ -2,6 +2,11 @@
 // How it works — three numbered steps. Kills the central category fear ("will
 // this work in MY car, with no signal?") cheaply. A trimmed, Skipper-voiced
 // steal of Shaka's whole /how-it-works page.
+//
+// ⚠ Step 02 said "your music ducks when he's got something to say" until 2026-08-02. It never did:
+// skipper audio takes EXCLUSIVE focus and PAUSES the rider's music — twice-affirmed founder decision,
+// see docs/decisions/drive-audio-exclusive-focus.md. Ducking was tried and REJECTED, so this is not a
+// default awaiting a flip. Don't let the promise drift back; the drive supplies its own soundtrack.
 import Icon from '../Icon.astro'
 import Trail from '../Trail.astro'
 
@@ -16,7 +21,7 @@ const steps = [
     n: '02',
     icon: 'mount',
     title: 'Drop it in the mount and roll.',
-    body: 'Start at the trailhead or hop on anywhere. Play it over Bluetooth like a podcast — your music ducks when he’s got something to say.',
+    body: 'Start at the trailhead or hop on anywhere. Plays over Bluetooth like a podcast — and it brings its own road-trip soundtrack, so give him the stereo and let your playlist sit this one out.',
   },
   {
     n: '03',
