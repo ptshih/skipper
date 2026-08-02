@@ -37,7 +37,11 @@ import {
   MAX_PLAN_MESSAGE_CHARS,
   MAX_PLAN_MESSAGES,
   MAX_PLAN_TOTAL_CHARS,
+  PLAN_WRAP_UP_AFTER_MESSAGES,
 } from '../src/limits'
+// ⚠ Safe to import statically alongside ../src/limits: ../src/planner-prompt imports NOTHING by design,
+// so it reaches neither ./auth's module-load throw nor the SDK. If this ever needs a seed, that is the bug.
+import { PLANNER_WRAP_UP_NOTICE } from '../src/planner-prompt'
 
 /* -------------------------------------------------------------------------- */
 /* Harness. Mocks FIRST — plan-route.ts's static imports resolve through them.  */
@@ -77,6 +81,10 @@ const { PlannerTurnError } = realPlanner
 interface FakeArgs {
   onSay?: (delta: string) => void
   signal?: AbortSignal
+  /** D12's wrap-up nudge. ⚠ OPTIONAL HERE ON PURPOSE, and the D12 section asserts `'wrapUpNotice' in
+   *  args` rather than a truthiness check — the production shape is an ABSENT key on a normal turn, and
+   *  a test that only checked for falsiness would pass against the bug this field shipped with. */
+  wrapUpNotice?: string
 }
 /** ⚠ `stopReason` is carried even though the handler must never branch on it — it is what lets the
  *  plan_degraded tests below be mutation-checked against the adversarial review's literal
@@ -659,5 +667,95 @@ describe('POST /drives/plan — plan_degraded', () => {
       expect(line).not.toContain(RIDER)
       expect(line).not.toContain(MODEL)
     }
+  })
+})
+
+/* -------------------------------------------------------------------------- */
+/* D12 — the in-persona wrap-up PRODUCER.                                       */
+/* -------------------------------------------------------------------------- */
+
+// ⚠ WHY THIS LIVES IN THE SSE FILE. It is not about frames, and it would read more naturally in a file
+// of its own — but this file already owns `mock.module('../src/planner', …)`, and a THIRD file mocking
+// the same module is the exact process-wide leak documented at the top of this one. Reusing the harness
+// costs a slightly off-topic section; a new file costs another leak surface. The harness wins.
+//
+// ⚠ WHAT THIS ACTUALLY GUARDS, stated because it is the whole reason the section exists: `wrapUpNotice`
+// was TYPED in ../src/planner and CONSUMED there for a full build step with NOTHING setting it. Nothing
+// failed. An optional field that is always absent is never wrong, so tsc was green, every planner test
+// was green, and D12 was prose describing behaviour the server could not produce. The only assertion
+// that could ever have caught it is one that says "on this input the field is PRESENT" — which is what
+// these are. A test that merely tolerates the field passes on the bug.
+describe('D12: the wrap-up notice is produced, and only past the threshold', () => {
+  const region = () => crypto.randomUUID()
+  /** n messages of real-looking transcript, well inside every char cap. */
+  const transcript = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ role: i % 2 === 0 ? 'rider' : 'skipper', text: 'somewhere pretty' }))
+
+  const planWith = async (messages: number) => {
+    impl = async () => ({ outcome: 'say', say: 'Where from?', rawRoute: null, stopReason: 'end_turn' })
+    const res = await post({ turns: transcript(messages), regionId: region() })
+    expect(res.status).toBe(200)
+    return lastPlannerArgs()
+  }
+
+  test('an ordinary conversation carries NO notice — the key is absent, not undefined', async () => {
+    const args = await planWith(4)
+    expect(args.wrapUpNotice).toBeUndefined()
+    // ⚠ Absence, not falsiness. ../src/plan-route spreads the key in conditionally so a normal turn can
+    // never render an empty third system block and forfeit the cache breakpoint's benefit for nothing.
+    expect('wrapUpNotice' in args).toBe(false)
+  })
+
+  test('AT the threshold it still does not fire — the band is inclusive of normal', async () => {
+    // The comparison is strictly greater-than on purpose: PLAN_WRAP_UP_AFTER_MESSAGES is the top of a
+    // normal conversation, not the first abnormal one. Off-by-one here hurries a healthy rider.
+    const args = await planWith(PLAN_WRAP_UP_AFTER_MESSAGES)
+    expect('wrapUpNotice' in args).toBe(false)
+  })
+
+  test('one message past the threshold it fires, with the exact prose', async () => {
+    const args = await planWith(PLAN_WRAP_UP_AFTER_MESSAGES + 1)
+    // ⚠ Identity against the constant, not a substring or a truthiness check. The notice's opening
+    // phrase is a literal coupling to the prompt's `== Wrapping up ==` section ("or you are told the
+    // conversation is near its end"); a paraphrase compiled in here would pass a looser assertion while
+    // silently decoupling the two halves.
+    expect(args.wrapUpNotice).toBe(PLANNER_WRAP_UP_NOTICE)
+  })
+
+  test('it keeps firing right up to the hard cap, and the cap still wins past it', async () => {
+    const args = await planWith(MAX_PLAN_MESSAGES)
+    expect(args.wrapUpNotice).toBe(PLANNER_WRAP_UP_NOTICE)
+
+    // One past the cap is the guard's territory, and D12 must not have quietly replaced it: the rider
+    // gets the in-persona hard stop with `done: true`, and no model call is made at all.
+    seen.args = null
+    const res = await post({ turns: transcript(MAX_PLAN_MESSAGES + 1), regionId: region() })
+    expect(res.status).toBe(200)
+    expect(((await res.json()) as { done?: boolean }).done).toBe(true)
+    expect(seen.args).toBeNull()
+  })
+
+  // The notice is an instruction to the model, never words for the rider. It must not reach the wire on
+  // either transport — if it ever did, a rider would watch the character read its own stage directions.
+  // ⚠ The canary is a fragment ONLY the notice has. "near its end" would be wrong here for the same
+  // reason it is wrong in planner.test.ts: the prompt shares that phrase by design.
+  test('the notice never reaches the rider on either transport', async () => {
+    impl = async () => ({ outcome: 'say', say: 'Where from?', rawRoute: null, stopReason: 'end_turn' })
+    const body = { turns: transcript(PLAN_WRAP_UP_AFTER_MESSAGES + 1), regionId: region() }
+    for (const accept of [undefined, SSE]) {
+      const text = await (await post(body, accept)).text()
+      expect(text).not.toContain(PLANNER_WRAP_UP_NOTICE)
+      expect(text).not.toContain('there was a clock')
+    }
+  })
+
+  // ⚠ The prose itself, pinned for the two properties that make it safe to send. Both are stated as
+  // rules in ../src/planner-prompt; neither is enforceable anywhere else.
+  test('the notice leaks no count and forbids its own disclosure', () => {
+    // No digit anywhere: a number of remaining turns is the single thing most likely to be recited back
+    // to a rider verbatim, and it would expose the machinery the prompt bars narrating.
+    expect(PLANNER_WRAP_UP_NOTICE).not.toMatch(/\d/)
+    expect(PLANNER_WRAP_UP_NOTICE.toLowerCase()).toContain('near its end')
+    expect(PLANNER_WRAP_UP_NOTICE.toLowerCase()).toContain('say nothing about this note')
   })
 })

@@ -108,10 +108,31 @@ export const PLANNER_TIMEOUT_MS = 45_000
 /* number instead of inventing one under deadline — the whole point of INV-12.   */
 /* -------------------------------------------------------------------------- */
 
-/** ~2x the point where the in-persona wrap-up (D12) should already have ended the conversation, so the
- *  skipper always bows out in character before a rider can ever see this. A real "plan me a drive" runs
- *  3-8 exchanges. ⚠ The turn count the CLIENT asserts is advisory; this is the one that is true. */
+/** The BACKSTOP a rider should never reach, because the in-persona wrap-up (D12) has already landed the
+ *  conversation by then. A real "plan me a drive" runs 3-8 exchanges.
+ *  ⚠ The turn count the CLIENT asserts is advisory; this is the one that is true.
+ *  ⚠ UNITS, because they were mixed here and it matters: this counts MESSAGES (both roles), so the
+ *  3-8 exchanges above is 6-16 messages. An earlier note called 24 "~2x the wrap-up point", which reads
+ *  as ~2x in EXCHANGES; against the number it actually compares to, it is 1.5x the top of normal. */
 export const MAX_PLAN_MESSAGES = 24
+
+/** Where the in-persona wrap-up STARTS riding (D12) — the producer for `wrapUpNotice` in ./planner.
+ *
+ *  ⚠ NOT A GUARD, and the distinction is the whole of D12: `MAX_PLAN_MESSAGES` is the guard (INV-3) and
+ *  answers with a hard stop. This one is the UX that means a rider never meets it — the skipper starts
+ *  bowing out on his own, in character, several exchanges early. Both are needed: prose cannot enforce a
+ *  cap, and a cap cannot be charming.
+ *
+ *  WHY 16, derived rather than picked: it is the TOP of the normal band (8 exchanges = 16 messages), so
+ *  the nudge can never fire on a healthy conversation — it only ever sees one that has already run past
+ *  what planning a drive takes. That leaves 24 - 16 = 8 messages, about 4 exchanges, to land it warmly,
+ *  which is real runway rather than a one-turn scramble.
+ *
+ *  ⚠ IT ALSO COSTS MONEY TO BE WRONG DOWNWARD. The notice is a THIRD system block rendered AFTER the
+ *  cache breakpoint (./planner), so every turn it rides is uncached input tokens. Lowering this makes an
+ *  ordinary conversation pay that on most of its turns; raising it past the cap disables D12 silently.
+ *  Keep it strictly between the normal band and MAX_PLAN_MESSAGES — there is a test pinning exactly that. */
+export const PLAN_WRAP_UP_AFTER_MESSAGES = 16
 
 /** The cap that maps to dollars: chars / ~4 ~= input tokens. Set deliberately BELOW what
  *  MAX_PLAN_BODY_BYTES permits (12k chars + 24 message envelopes ~= 13.1 KB) so that for ordinary Latin

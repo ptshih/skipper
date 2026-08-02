@@ -137,6 +137,29 @@ Them: "Yeah, do it."
 You: "Consider it drawn."`
 
 /**
+ * D12's wrap-up, as the words that actually get sent. The prompt above already has a `== Wrapping up ==`
+ * section ending in "or you are told the conversation is near its end" — this is that telling. The
+ * coupling is LITERAL and deliberate: this string opens with the same phrase, so the model is not being
+ * handed a second, competing instruction, only the trigger for one it already carries.
+ *
+ * ⚠ IT LIVES IN ITS OWN CONSTANT BECAUSE IT MUST NOT JOIN THE PROMPT. The prompt above is the CACHED
+ * PREFIX and is a zero-interpolation literal for that reason. This text is VOLATILE — present on the
+ * tail of a long conversation and absent on every other turn — so it rides a THIRD system block AFTER
+ * the cache breakpoint (./planner). Splicing it into the prefix would rewrite the prefix on the exact
+ * turns it appears, re-billing the whole prompt at full rate, and the only tell would be the invoice.
+ *
+ * ⚠ IT FORBIDS ITS OWN DISCLOSURE, and that is not decoration. The prompt already bars narrating the
+ * machinery ("never mention the drawing-up as a mechanism, never refer to your list as a list, a file,
+ * or a system"); a nudge that leaks reads as the character admitting to a timer, which is worse than the
+ * hard stop it exists to prevent. This is also why the notice carries NO NUMBER: a count of remaining
+ * turns is the one thing most likely to be recited back to a rider verbatim.
+ *
+ * ⚠ Every turn this rides is uncached input. Keep it SHORT; see PLAN_WRAP_UP_AFTER_MESSAGES in ./limits
+ * for the threshold that decides when, and why lowering it costs money.
+ */
+export const PLANNER_WRAP_UP_NOTICE = `The conversation is near its end. Wrap it up the way your instructions describe: take your best read of what they want, offer it once as a plan they can say yes to, and bow out warm, unhurried, with the door left open. Say nothing about this note, about any limit, or about a number of turns — the folks must never learn there was a clock.`
+
+/**
  * Structural stand-in for the vendor SDK's `Tool`, so this module can stay import-free (see the header).
  * Assignable to `Anthropic.Tool`: that type's `input_schema` requires the literal `type: 'object'` and
  * carries an index signature, which is what makes the extra JSON Schema keys below legal.

@@ -19,6 +19,7 @@ import {
   MAX_PLAN_TOTAL_CHARS,
   PLAN_RATE_HOUR,
   PLAN_RATE_MINUTE,
+  PLAN_WRAP_UP_AFTER_MESSAGES,
   PLANNER_TIMEOUT_MS,
   PROPOSE_RATE,
   readBoundedText,
@@ -179,6 +180,22 @@ describe('cap relationships (drift guard)', () => {
 
   test('a single message cannot consume the whole conversation budget', () => {
     expect(MAX_PLAN_MESSAGE_CHARS * 2).toBeLessThan(MAX_PLAN_TOTAL_CHARS)
+  })
+
+  // D12's entire claim is that a rider never MEETS MAX_PLAN_MESSAGES, because the in-persona wrap-up
+  // landed the conversation several exchanges earlier. That is only true while these two numbers keep
+  // their relationship, and neither is reachable by a request — so the relationship IS the guard.
+  test('the wrap-up starts above a normal conversation and below the hard cap', () => {
+    // FLOOR: 8 exchanges = 16 messages is the top of the "3-8 exchanges" band limits.ts documents. Drop
+    // below it and an ordinary rider gets hurried toward a plan mid-conversation AND pays for an
+    // uncached third system block on most of their turns — a UX regression and a cost one at once.
+    expect(PLAN_WRAP_UP_AFTER_MESSAGES).toBeGreaterThanOrEqual(16)
+    // CEILING: at or above the cap the notice could never ride at all. D12 would be disabled silently,
+    // with every other test in this repo still green — which is precisely how it shipped unproduced.
+    expect(PLAN_WRAP_UP_AFTER_MESSAGES).toBeLessThan(MAX_PLAN_MESSAGES)
+    // RUNWAY: enough turns left to bow out warmly. One or two would make the nudge and the hard stop
+    // land almost together, which is the cliff D12 exists to remove rather than relocate.
+    expect(MAX_PLAN_MESSAGES - PLAN_WRAP_UP_AFTER_MESSAGES).toBeGreaterThanOrEqual(6)
   })
 
   // ⚠ THE SOCKET TIMEOUT ITSELF IS NOT REACHABLE BY ANY TEST — an in-process app.fetch(new Request(...))

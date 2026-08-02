@@ -794,6 +794,25 @@ suspends rather than terminates — so it counts FIRST starts per drive per proc
 never engagement. Clearing on `end()` recovers most of it; deliberately not done in the pass that
 introduced the event, so a baseline exists before the semantics move.
 
+**11a — D12's wrap-up had no producer.** ✅ **FIXED 2026-08-02.** Surfaced by step 11's dead-constant
+sweep and left open at the time: `wrapUpNotice` was typed AND consumed in `planner.ts`, and the prompt's
+`== Wrapping up ==` section already ended in "or you are told the conversation is near its end" — but
+**nothing anywhere set it**, so the model was never told, and D12 was prose describing behaviour the
+server could not produce. `limits.ts` meanwhile cited that wrap-up as the reason `MAX_PLAN_MESSAGES` is
+safe to set at 24. The fourth instance of this repo's most-repeated bug, and again invisible: an optional
+field that is always absent is never wrong, so tsc and every planner test stayed green.
+
+Now produced in `plan-route.ts` at `PLAN_WRAP_UP_AFTER_MESSAGES` (16 — the top of the normal 3-8 exchange
+band in MESSAGES, leaving ~4 exchanges of runway before the hard stop). ⚠ Also a COST fix, which is why
+the tests assert block ORDER: the notice is a third system block rendered AFTER the cache breakpoint, so
+a future "tidy-up" that splices it into the prompt or the roster would rewrite the cached prefix on
+exactly the turns it appears and re-bill the whole prompt, with nothing but the invoice to show for it.
+All three assertions were mutation-checked (producer removed → red; block moved before the breakpoint →
+red; `>` relaxed to `>=` → red).
+
+⚠ **Units corrected while here:** `MAX_PLAN_MESSAGES` counts MESSAGES, but its "~2x the wrap-up point"
+note read in EXCHANGES. Against the number it actually compares to it is 1.5x, not 2x.
+
 **12 — Docs + store.** ✅ **The in-repo half is DONE 2026-08-02** (`add97ee`, `6f07de9`, `f81794c`).
 CLAUDE.md was already rewritten (`0c268cf`).
 

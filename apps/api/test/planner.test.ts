@@ -14,7 +14,7 @@
 import { describe, expect, spyOn, test } from 'bun:test'
 import Anthropic from '@anthropic-ai/sdk'
 import { CLAUDE_MODELS } from '@skipper/shared'
-import { PLANNER_SYSTEM_PROMPT } from '../src/planner-prompt'
+import { PLANNER_SYSTEM_PROMPT, PLANNER_WRAP_UP_NOTICE } from '../src/planner-prompt'
 import { buildRosterBlock, PlannerTurnError, runPlannerTurn, type PlannerModelArgs } from '../src/planner'
 import {
   checkTranscript,
@@ -105,6 +105,9 @@ type StreamParams = {
   model?: unknown
   max_tokens?: unknown
   thinking?: { type?: unknown; display?: unknown }
+  /** The system blocks, in render order. ⚠ Captured for D12: WHERE the wrap-up notice sits relative to
+   *  the cache breakpoint is a cost property with no other observable — see the block at the bottom. */
+  system?: { text?: unknown; cache_control?: unknown }[]
 }
 
 /** Read the capture, or fail loudly if the model was never called.
@@ -508,5 +511,63 @@ describe('transcript caps (INV-3)', () => {
     const n = Math.ceil(MAX_PLAN_TOTAL_CHARS / MAX_PLAN_MESSAGE_CHARS) + 1
     expect(n).toBeLessThanOrEqual(MAX_PLAN_MESSAGES) // else this would trip the turn cap instead
     expect(checkTranscript(Array.from({ length: n }, () => turn(each)))).toBe('transcript_too_long')
+  })
+})
+
+/* -------------------------------------------------------------------------- */
+/* D12 — WHERE the wrap-up notice is rendered. This is a COST test.             */
+/* -------------------------------------------------------------------------- */
+
+// ⚠ THE FAILURE HERE IS INVISIBLE, exactly like planner-roster.test.ts's. The notice is volatile — it
+// appears only on the tail of a long conversation — so if it were ever rendered BEFORE the cache
+// breakpoint, or spliced into the prompt or the roster, the cached prefix would change on precisely the
+// turns it shows up. Every response stays byte-identical, every other test stays green, and the only
+// tell is `cr=0` in the cost line and the invoice. On an anonymous route that spends forever (INV-11),
+// that is the expensive kind of silence — so the ORDER is asserted, not just the presence.
+describe('D12: the wrap-up notice renders after the cache breakpoint', () => {
+  const say = { stop_reason: 'end_turn', content: [textBlock('Where are you starting?')] }
+
+  test('without a notice there are two blocks, and the LAST one carries the breakpoint', async () => {
+    lastStreamParams = null
+    await runPlannerTurn(baseArgs(fakeClient(say)))
+    const system = lastCallParams().system ?? []
+    expect(system.length).toBe(2)
+    expect(system[0]?.text).toBe(PLANNER_SYSTEM_PROMPT)
+    expect(system[0]?.cache_control).toBeUndefined()
+    expect(system[1]?.cache_control).toEqual({ type: 'ephemeral' })
+  })
+
+  test('with a notice it is a THIRD block, after the breakpoint and uncached', async () => {
+    lastStreamParams = null
+    await runPlannerTurn({ ...baseArgs(fakeClient(say)), wrapUpNotice: PLANNER_WRAP_UP_NOTICE })
+    const system = lastCallParams().system ?? []
+    expect(system.length).toBe(3)
+
+    // The prefix is UNCHANGED — the two blocks a normal turn sends are byte-identical here. This is the
+    // assertion that actually costs money to break: it is what makes the notice free of cache impact.
+    expect(system[0]?.text).toBe(PLANNER_SYSTEM_PROMPT)
+    expect(system[1]?.cache_control).toEqual({ type: 'ephemeral' })
+
+    // ...and the volatile block is LAST, and carries no breakpoint of its own (a second breakpoint on a
+    // per-turn-varying block is the same bug wearing a different hat).
+    expect(system[2]?.text).toBe(PLANNER_WRAP_UP_NOTICE)
+    expect(system[2]?.cache_control).toBeUndefined()
+  })
+
+  // ⚠ Guards the OTHER direction of the same mistake: interpolating the notice into the prompt or the
+  // roster instead of appending a block. That would satisfy "the model was told" while destroying the
+  // prefix, so presence alone is not enough — the first two blocks must not CONTAIN it either.
+  // ⚠ THE CANARY CANNOT BE "near its end". That phrase is SHARED: the prompt's `== Wrapping up ==`
+  // section says "or you are told the conversation is near its end", which is the listener half of the
+  // coupling the notice's opening line completes. An earlier draft of this test asserted on it and went
+  // red against correct code. Assert on the whole notice, plus a fragment only the notice has.
+  test('the notice is never spliced into the cached prefix', async () => {
+    lastStreamParams = null
+    await runPlannerTurn({ ...baseArgs(fakeClient(say)), wrapUpNotice: PLANNER_WRAP_UP_NOTICE })
+    const system = lastCallParams().system ?? []
+    for (const block of [system[0], system[1]]) {
+      expect(String(block?.text)).not.toContain(PLANNER_WRAP_UP_NOTICE)
+      expect(String(block?.text)).not.toContain('there was a clock')
+    }
   })
 })

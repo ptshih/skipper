@@ -41,9 +41,11 @@ import type { ApiEnv } from './entitlements'
 import {
   checkTranscript,
   MAX_PLAN_BODY_BYTES,
+  PLAN_WRAP_UP_AFTER_MESSAGES,
   readBoundedText,
 } from './limits'
 import { PlannerTurnError, runPlannerTurn, type PlannerModelArgs, type PlannerTurn } from './planner'
+import { PLANNER_WRAP_UP_NOTICE } from './planner-prompt'
 import { withRetry } from './retry'
 
 export const planRoutes = new Hono<ApiEnv>()
@@ -224,6 +226,21 @@ planRoutes.post('/', async (c) => {
     turns: parsed.data.turns,
     regionName: region.name,
     anchors,
+    // D12 — the in-persona wrap-up, and THIS IS THE PRODUCER. It has three halves and they only work
+    // together: the THRESHOLD in ./limits, this line, the volatile system block in ./planner, and the
+    // `== Wrapping up ==` section of ./planner-prompt that the notice's opening phrase is the trigger
+    // for. ⚠ It shipped without this line — the field was typed and consumed with nothing on earth
+    // setting it, so D12 was prose describing behaviour the server could not produce, and every test
+    // around it stayed green because a `?:` field that is always absent is never wrong.
+    //
+    // ⚠ UX, NOT THE GUARD. `checkTranscript` above is the guard (INV-3) and answers with a hard stop;
+    // this exists so a rider never reaches it. Do not merge the two — a cap cannot be charming, and
+    // prose cannot enforce a cap.
+    //
+    // ⚠ SPREAD, so the key is ABSENT rather than `undefined` on a normal turn. ./planner branches on
+    // truthiness so either would work today, but an absent key cannot be accidentally rendered as an
+    // empty third system block, which would cost the cache breakpoint's benefit for nothing.
+    ...(parsed.data.turns.length > PLAN_WRAP_UP_AFTER_MESSAGES ? { wrapUpNotice: PLANNER_WRAP_UP_NOTICE } : {}),
     // ⚠ The rider's connection, threaded all the way to the model call. This ONE line is the whole
     // cancellation feature: without it, a rider who backgrounds the app bills Opus to completion on a
     // turn nobody will read (INV-11). It is also exactly the kind of line a refactor drops silently,
