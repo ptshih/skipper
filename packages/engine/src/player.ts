@@ -5,6 +5,14 @@
 // stateful hooks can't give it. (The hook-level extraction was declined because the surrounding
 // state lifecycles legitimately differ; the DECISIONS do not.)
 
+/** A clip that never produces audio AT ALL within this window is dead — an expired presign (403), a
+ *  decode failure, or a dead-zone stream that buffers forever. Generous on purpose: the clips are 64k
+ *  AAC-LC over ~1h presigned URLs, and the callers' shared asymmetry is that a false "unavailable" is
+ *  a lie printed over audio that would have played, while a late verdict costs only a few seconds of
+ *  waiting. ⚠ Every surface that plays a presigned clip needs this, because expo-audio surfacing
+ *  `status.error` for an HTTP 403 on a remote source is DEVICE-UNVERIFIED — without a timer, a
+ *  surface that trusts `status.error` alone shows nothing at all when it doesn't fire. */
+export const PRE_START_STALL_MS = 12_000
 /** No playback progress for this long AFTER a clip started (sawFresh) ⇒ an OS interruption (call /
  *  Siri / Bluetooth handoff) or a mid-clip buffer death — expo-audio fires no didJustFinish, so the
  *  player must recover or the rest of the drive/session goes silent. (audit #1) */

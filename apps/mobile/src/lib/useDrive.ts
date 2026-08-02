@@ -26,6 +26,7 @@ import {
   decideStall,
   OFF_ROUTE_MAX_M,
   POST_START_STALL_MS,
+  PRE_START_STALL_MS,
   seekTargetReached,
   snapStopsToRoute,
   TriggerEngine,
@@ -41,9 +42,6 @@ import { useLocationPriming } from './useLocationPriming'
 import { useDriveMusic } from './driveMusic'
 import { voice } from '@/ui'
 
-// Grace before a clip that hasn't started is treated as stalled — a generous window for the
-// 64k AAC-LC .m4a clips over 1h presigned URLs (→ re-sign once on a stall).
-const CLIP_STALL_MS = 12_000
 
 // V2 drives carry no host on the manifest (persona is decoupled + single in v2), so the lock-screen
 // "artist" is the persona name. The Skipper is the only host today.
@@ -694,7 +692,7 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
       }
       setStallNote(voice.player.stall)
       onClipDone(activeSeq)
-    }, CLIP_STALL_MS)
+    }, PRE_START_STALL_MS)
     return () => {
       if (watchdog.current) {
         clearTimeout(watchdog.current)

@@ -13,9 +13,17 @@
 // the clip is a taste, not a download, and the honest offer is "make the drive", not a retry that
 // cannot work.
 //
+// ⚠ WHICH MAKES REACHING THAT STATE THE WHOLE JOB, and it used to depend on the vendor's goodwill:
+// every failure path ran through `status.error`, whose population for an HTTP 403 on a remote source
+// is device-unverified. When it doesn't fire there is no throw, no error and no timer — the disc just
+// does nothing and the rider is told nothing. A terminal state nobody can reach is not a decision, it
+// is a hang. The pre-start watchdog below closes that: the verdict is now reached on a clock, and
+// `status.error` only makes it arrive sooner.
+//
 // ⚠ INV-13: nothing here logs a url, a vendor error string, or anything else.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { setAudioModeAsync, setIsAudioActiveAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
+import { PRE_START_STALL_MS } from '@skipper/engine'
 import { track } from './analytics'
 
 export interface RoutePreview {
@@ -64,6 +72,41 @@ export function useRoutePreview(): RoutePreview {
   // would report twice against one start and push the completion RATE above 1 — the one number the
   // paired event exists to produce.
   const completedCardRef = useRef<string | null>(null)
+
+  // ⚠ THE PRE-START WATCHDOG — the reason this surface does not depend on `status.error` firing.
+  // The header's DEVICE-UNVERIFIED note below is the whole problem: if expo-audio does NOT populate
+  // `status.error` for an HTTP 403 on a remote source, the error effect never runs and the rider taps
+  // a disc that does nothing, forever, with no hint and no way to know the taste is simply gone. A
+  // timer needs no such cooperation. `useDrive` has always had one (it is the same clip over the same
+  // kind of presigned url); this surface shipped without it, so the honest terminal state the header
+  // promises was only reachable when the vendor happened to report the failure.
+  const startWatchdog = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const clearStartWatchdog = useCallback(() => {
+    if (startWatchdog.current) {
+      clearTimeout(startWatchdog.current)
+      startWatchdog.current = null
+    }
+  }, [])
+
+  // The ONE terminal state, shared by all three ways a clip can fail to play: a synchronous throw out
+  // of replace(), an asynchronous `status.error`, and the watchdog above. They were three near-copies
+  // that had already drifted (one cleared the active ref unguarded, one guarded it) — and none of them
+  // handed the audio session back, which under `doNotMix` leaves the rider's own music stopped with
+  // nothing on screen that restarts it. That is the same obligation stop() documents; a clip that
+  // failed took the session just as surely as one that played.
+  const failCard = useCallback(
+    (cardId: string) => {
+      const wasActive = activeCardIdRef.current === cardId
+      clearStartWatchdog()
+      setActiveCardId((c) => (c === cardId ? null : c))
+      if (wasActive) {
+        activeCardIdRef.current = null
+        void setIsAudioActiveAsync(false).catch(() => {})
+      }
+      setFailedCardId(cardId)
+    },
+    [clearStartWatchdog],
+  )
 
   const durSec = status.duration && status.duration > 0 ? status.duration : 0
 
@@ -136,34 +179,52 @@ export function useRoutePreview(): RoutePreview {
         // status.error — is unknowable at this line and does count as a start; it then simply never
         // completes, which is exactly what an abandoned-clip number should look like.
         track('preview_clip_played', { completed: false })
+        // Arm the pre-start watchdog LAST, so it covers only a clip that was actually handed to the
+        // player. A later tap re-enters play() and re-arms it; the guard inside is what makes the
+        // superseded timer harmless if it fires first.
+        clearStartWatchdog()
+        startWatchdog.current = setTimeout(() => {
+          startWatchdog.current = null
+          if (activeCardIdRef.current !== cardId) return // superseded by a later tap — not this card's verdict
+          failCard(cardId)
+        }, PRE_START_STALL_MS)
       } catch {
         // A synchronous throw is a malformed source, not a network failure — the presign 403 arrives
         // asynchronously via status.error. Both land on the same rider-facing hint.
-        setActiveCardId((c) => (c === cardId ? null : c))
-        if (activeCardIdRef.current === cardId) activeCardIdRef.current = null
-        setFailedCardId(cardId)
+        failCard(cardId)
       }
     },
-    [activeCardId, applyPreviewAudioMode, player, status.error, toggle],
+    [activeCardId, applyPreviewAudioMode, clearStartWatchdog, failCard, player, status.error, toggle],
   )
 
+  // Real audio arrived ⇒ disarm. Mirrors useDrive's `sawFresh` exactly (playing AND past the first
+  // quarter-second), because a player can report `playing` for a moment before any sound exists.
+  const sawFresh = !!status.playing && (status.currentTime ?? 0) > 0.25
+  useEffect(() => {
+    if (sawFresh) clearStartWatchdog()
+  }, [sawFresh, clearStartWatchdog])
+
+  // A hook that unmounts mid-load must not leave a timer that fires into a dead component.
+  useEffect(() => clearStartWatchdog, [clearStartWatchdog])
+
   // The asynchronous half of failure: an expired/denied presign or an undecodable body never throws
-  // out of replace() — it arrives here.
-  // ⚠ DEVICE-UNVERIFIED: whether iOS/Android actually populate `status.error` for an HTTP 403 on a
-  // remote source. If they do not, this degrades to "the disc does nothing" rather than showing the
-  // hint — bad, but not wrong. Worth ten seconds on a real device with a deliberately stale url.
+  // out of replace() — it arrives here, when the vendor reports it.
+  // ⚠ STILL DEVICE-UNVERIFIED: whether iOS/Android actually populate `status.error` for an HTTP 403 on
+  // a remote source. That question is now a LATENCY question rather than a correctness one — the
+  // pre-start watchdog reaches the same terminal state without it, so the worst case is the hint
+  // arriving after PRE_START_STALL_MS instead of immediately. Still worth ten seconds on a real device
+  // with a deliberately stale url, because fast is better than eventual; it is no longer load-bearing.
   useEffect(() => {
     const err = status.error ?? null
     if (!err || err === handledErrorRef.current) return
     handledErrorRef.current = err
     const card = activeCardIdRef.current
     if (!card) return
-    setActiveCardId((c) => (c === card ? null : c))
-    activeCardIdRef.current = null
-    setFailedCardId(card)
-  }, [status.error])
+    failCard(card)
+  }, [status.error, failCard])
 
   const stop = useCallback(() => {
+    clearStartWatchdog() // a dismissed clip must not be declared "unavailable" seconds later
     try {
       player.pause()
     } catch {}
