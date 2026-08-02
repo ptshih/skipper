@@ -794,9 +794,37 @@ suspends rather than terminates — so it counts FIRST starts per drive per proc
 never engagement. Clearing on `end()` recovers most of it; deliberately not done in the pass that
 introduced the event, so a baseline exists before the semantics move.
 
-**12 — Docs + store.** CLAUDE.md is already rewritten (`0c268cf`). Still owed: `.env.example` still scopes
-`ANTHROPIC_API_KEY` to narration; the roam decision records need SUPERSEDED lines; the App Store listing is
-built entirely around "Ride Along" copy that no longer exists. **Then RISK-1: drive one for real.**
+**12 — Docs + store.** ✅ **The in-repo half is DONE 2026-08-02** (`add97ee`, `6f07de9`, `f81794c`).
+CLAUDE.md was already rewritten (`0c268cf`).
+
+- **`.env.example`** — the `ANTHROPIC_API_KEY` scoping was the least of it. Diffing every
+  `process.env` / `requireEnv` / `hasEnv` read against the catalog found **seven live vars missing**
+  (`TRUSTED_PROXY_HOPS`, `EMAIL_REPLY_TO`, `ADMIN_CURATE_MODEL`, `SKIPPER_GROUNDING_VOTES`,
+  `SKIPPER_LAN_HTTP`, `SKIPPER_ALLOW_DESTRUCTIVE_DDL`, `SNAPSHOT_STAMP`) and **two documented that
+  nothing reads**. Also: the sample route was still `/roam/sample`, and the narration/TTS concurrency
+  defaults were documented as 6 when the code says 12.
+- **Roam decision records** — seven got status changes in place, plus five code comments that named
+  `GET /roam` or the "taps Ride Along, gets 0 pins" dead-end in the present tense. The one worth
+  reading is `create-a-drive-architecture.md`: 1.1 looks like a revert to the free-text planning that
+  record killed, and isn't — free-text died because the server GEOCODED a name; the planner emits
+  anchor ids the wire re-asserts.
+- **App Store listing** — §§3/4/10 now carry 1.1 replacement blocks beside the live text (the doc's
+  own rule: it is a RECORD of ASC, and re-pasting a stale copy reverts the founder's edits). §12's
+  pre-flight probed `GET /roam/sample`, which **404s on a healthy 1.1 deploy** — it would have read a
+  working sample as broken.
+
+⚠ **Three parts of this step cannot be closed from the repo, and none is a docs edit:**
+
+1. **The metadata is written, not entered.** Pasting it into ASC is blocked on §3.1's founder call —
+   `1.0.0` is still in review selling the old product, and that decision expires silently the day a
+   reviewer picks it up.
+2. **Screenshots need a real recapture** (§9): home is replaced, the roam encounter shot is of a
+   deleted mode, and the hero is the removed START/END picker. Signed Release build + dark mode +
+   `simctl status_bar` + the frame compositor. It serializes behind the UI settling.
+3. **The §10 reviewer notes need an on-device pass.** They were written from `voice.ts` and the
+   screens, which is not the same as having walked them.
+
+**Then RISK-1: drive one for real.**
 
 ## Acceptance
 
