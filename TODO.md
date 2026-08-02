@@ -106,12 +106,21 @@ findings fixed (`576e031`). See `apps/mobile/CLAUDE.md` for the ESLint-9 pin and
       fixed the three defects that found in `useStopPreview` (no session hand-back when a clip ran out
       → the rider's music stayed dead; none on a failed play; and NO reader for async failure at all,
       so an expired presign left a row lit "now playing" in silence forever).
-- [ ] **Still uncovered: `useDrive` and `useLocationPriming`.** `useDrive` is the big one — the
-      fire-queue, the two watchdogs and the trigger→play→handback loop. Same approach: move decisions
-      into pure modules (`@skipper/engine`'s `player.ts` is the established home for what BOTH real
-      players share; `preview-util.ts` is the pattern for what does not). Expo's documented setup is
-      jest-expo + `@testing-library/react-native` (`react-test-renderer` is deprecated, no React 19+)
-      — ⚠ still prefer extraction FIRST and only add a second test runner if it proves insufficient.
+- [x] ~~Still uncovered: `useDrive`~~ — **the extractable part is DONE 2026-08-02 (`c886064`).** The
+      fire-queue pump moved to `@skipper/engine`'s `decidePump` with 7 tests pinning the check ORDER,
+      which is where its two unrecoverable failures live: overlapping clips, and a drive that ends
+      while a stop the rider paid for is still queued.
+      ⚠ **I deliberately stopped there, and the reason matters more than the stopping point.** What
+      remains in `useDrive` is side-effect orchestration and vendor interaction — `finishDrive` is a
+      straight-line teardown with no branch in it (and it already hands the audio session back
+      correctly); the stall ladder already routes through `decideStall`; seeks already route through
+      `clampSeekSec`/`seekTargetReached`. Extracting further would produce pure functions that exist
+      to raise a coverage number rather than to hold a rule, which is the failure mode this whole
+      pattern is supposed to avoid. **If you want more confidence in `useDrive`, the honest next step
+      is a device pass or jest-expo + RNTL — not more extraction.**
+- [ ] **`useLocationPriming` is still uncovered** — the permission dance (double-tap guard →
+      no-prompt status read → first-run explainer → OS prompt). Lower stakes than the player, but it
+      gates every live drive and App Store 5.1.1(iv) rides on the explainer having no "Not Now".
 - [ ] **React Compiler — deliberately NOT yet.** Available via `experiments.reactCompiler` with Babel
       auto-configured on SDK 54+, still experimental and off by default. This codebase would benefit
       unusually much (it is dense with hand-rolled `useCallback`/`useMemo`/ref memoization). But it
