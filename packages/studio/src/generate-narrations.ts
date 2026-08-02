@@ -36,7 +36,7 @@ import type { FactSheetEntry, PoiFacts } from '@skipper/db/schema'
 import { announce, assertReady, maxCostFlag, numericFlag, parseFlags } from './pipeline/ops'
 import { resolveRegion, requireRegionBbox } from './pipeline/region'
 import { runJob, type FinishOutcome } from './pipeline/job-progress'
-import { ensurePoiOverridesLoaded } from './pipeline/poi-overrides'
+import { ensurePoiOverridesLoaded, overrideStaleFor, poiOverrideFor } from './pipeline/poi-overrides'
 import { regionLabel } from './pipeline/geo'
 import { resolveStoryGrounding } from './pipeline/select'
 import { synthesizeWithTailRetake, type TailOutcome } from './pipeline/tts'
@@ -80,6 +80,11 @@ import { recordEvalRun, type ClipIdentity } from './eval/record'
  *  poi plus this many others. Two hand-maintained numbers with a comment promising they match is
  *  exactly how generation and evaluation end up disagreeing about what counts as worn out. */
 const SHARED_FACT_MIN_OTHERS = SHARED_NGRAM_MIN_CLIPS - 1
+
+/** How many override-stale places the pre-flight names before it says "…and N more". Long enough
+ *  that the usual handful is fully actionable, short enough that a corpus-wide miss can't bury the
+ *  spend estimate it sits above — the point of the warning is that the operator still READS it. */
+const OVERRIDE_STALE_LIST_CAP = 10
 
 const flags = parseFlags(process.argv.slice(2), {
   valueFlags: ['limit', 'region', 'max-cost', 'query', 'include-ids', 'exclude-ids'],
@@ -130,6 +135,7 @@ async function main(): Promise<FinishOutcome | void> {
       db
         .select({
           id: pois.id,
+          source: pois.source,
           sourceId: pois.sourceId,
           qid: pois.qid,
           name: pois.name,
@@ -163,6 +169,10 @@ async function main(): Promise<FinishOutcome | void> {
   interface Candidate {
     poiId: string
     pageId: number
+    /** The pois dedup identity — also the key `poi_overrides` rows are written under (admin) and
+     *  applied under (the fetch seam), so it is what the override-staleness check must look up. */
+    source: string
+    sourceId: string
     name: string
     kind: string | null
     /** The poi's stored delivery register (classify-registers) — picks the TTS read + length band.
@@ -220,6 +230,8 @@ async function main(): Promise<FinishOutcome | void> {
     candidates.push({
       poiId: r.id,
       pageId: f.pageId ?? Number(r.sourceId),
+      source: r.source,
+      sourceId: r.sourceId,
       name: r.name,
       kind: r.kind,
       deliveryRegister: r.deliveryRegister,
@@ -247,6 +259,62 @@ async function main(): Promise<FinishOutcome | void> {
       `${skipped.length} already have fresh roam clips (skipped), ${queue.length} to generate.\n`,
   )
   for (const c of queue) console.log(`  ${String(c.extract.length).padStart(5)}  ${c.name}`)
+
+  // ── Curated-correction freshness (ADVISORY pre-flight) ─────────────────────────────────────────
+  // A `poi_overrides` fact correction reaches the corpus at exactly one place: the Wikipedia FETCH
+  // seam (pipeline/poi-overrides.ts). Generation reads `pois.facts` as stored and re-fetches nothing,
+  // so a correction adjudicated AFTER a place's last fetch is simply not in the text this run is
+  // about to narrate — and the clip bakes, at real cost, the sentence the correction superseded.
+  // `latestOverrideAt` recorded that instant from the start and nothing ever compared it to anything
+  // (founder 2026-08-02: wire it).
+  //
+  // ⚠ WARN — never block, never auto-refetch. Halting a legitimate paid run over an advisory signal
+  // is the worse failure (the stamp can also outrun a correction a re-sweep already applied), and
+  // mutating pois from inside the generator is a side effect nobody asked for.
+  //
+  // ⚠ Deliberately ABOVE the empty-queue return: corrections are adjudicated by LISTENING to shipped
+  // clips (the eval --veracity loop is the catch side), so the modal stale place already has a clip
+  // that reads FRESH — its facts_hash cannot move while the corrected text is still unfetched — and
+  // gets freshness-skipped. Warning after the return would go silent in the very case this exists for.
+  const isOverrideStale = (c: Candidate): boolean =>
+    overrideStaleFor(c.source, c.sourceId, c.factsFetchedAt)
+  const queuedIds = new Set(queue.map((c) => c.poiId))
+  const staleQueued = queue.filter(isOverrideStale)
+  const staleUnqueued = candidates.filter((c) => !queuedIds.has(c.poiId) && isOverrideStale(c))
+  const day = (d: Date | null | undefined): string => d?.toISOString().slice(0, 10) ?? 'never'
+  if (staleQueued.length > 0) {
+    console.warn(
+      `\n⚠ OVERRIDE-STALE: ${staleQueued.length}/${queue.length} queued place(s) carry a curated fact ` +
+        `CORRECTION newer than their cached facts. Corrections apply at the Wikipedia FETCH seam only, so ` +
+        `these pois.facts still hold the UNCORRECTED text — narrating them now bakes a superseded ` +
+        `sentence into a paid clip:`,
+    )
+    for (const c of staleQueued.slice(0, OVERRIDE_STALE_LIST_CAP)) {
+      console.warn(
+        `  • ${c.name} (${c.poiId}) — facts fetched ${day(c.factsFetchedAt)}, ` +
+          `corrected ${day(poiOverrideFor(c.source, c.sourceId)?.latestOverrideAt)}`,
+      )
+    }
+    if (staleQueued.length > OVERRIDE_STALE_LIST_CAP) {
+      console.warn(`  …and ${staleQueued.length - OVERRIDE_STALE_LIST_CAP} more.`)
+    }
+    console.warn(
+      `  Fix first, per poi (FREE):\n` +
+        `    dotenvx run -f .env.development -- bun packages/studio/src/refetch-poi.ts <poiId> --apply\n` +
+        `  ⚠ every candidate here is ENRICHED (the fact-sheet eligibility gate above) and narration grounds ` +
+        `on the SHEET, so the re-fetch alone does NOT reach the clip — follow it with ` +
+        `\`enrich-pois --include-ids <poiId> --force --apply\` (SPENDS) to rebuild the well from the ` +
+        `corrected article.\n  Advisory only — this run is NOT blocked.`,
+    )
+  }
+  if (staleUnqueued.length > 0) {
+    console.warn(
+      `\n⚠ ${staleUnqueued.length} story-grade place(s) OUTSIDE this run's queue are override-stale too — ` +
+        `a freshness-skipped one reads FRESH forever (a correction that never reached pois.facts can't ` +
+        `move a facts_hash), so it keeps serving the uncorrected telling until someone re-fetches it. ` +
+        `Re-fetch + re-enrich, then regenerate with --include-ids.`,
+    )
+  }
 
   if (queue.length === 0) {
     console.log('Nothing to generate.')

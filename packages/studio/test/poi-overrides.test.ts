@@ -11,6 +11,7 @@ import {
   aggregateOverrideRows,
   applyFactEditsChecked,
   clearPoiOverridesForTest,
+  overrideStaleFor,
   poiOverrideFor,
   setPoiOverridesForTest,
   type OverrideRowLike,
@@ -107,4 +108,73 @@ test('a retired row is inert at the APPLY seam — the withdrawn text is left al
   // it every run would train the operator to ignore the one signal this layer has.
   expect(out.missed).toEqual([])
   expect(poiOverrideFor('wikipedia', '4242')?.latestOverrideAt).toBeDefined()
+})
+
+/* ── overrideStaleFor: the READ side of the stamp ────────────────────────────────────────────────
+   The stamp was written and never read, so the contract in its docstring — "facts fetched BEFORE
+   this instant predate the correction" — held only as prose while generate-narrations spent real
+   money narrating uncorrected text. These pin the direction of the comparison and each edge, because
+   getting any of them backwards fails SILENTLY: too eager and every run cries wolf until the operator
+   stops reading the warning; too lax and the layer is decorative again. */
+
+const CORRECTED_AT = new Date('2026-06-09T00:00:00Z')
+
+test('a correction NEWER than the cached facts is stale', () => {
+  setPoiOverridesForTest([row({ updatedAt: CORRECTED_AT })])
+  expect(overrideStaleFor('wikipedia', '4242', new Date('2026-05-01T00:00:00Z'))).toBe(true)
+})
+
+test('facts re-fetched AFTER the correction are current — the correction rode that fetch', () => {
+  setPoiOverridesForTest([row({ updatedAt: CORRECTED_AT })])
+  expect(overrideStaleFor('wikipedia', '4242', new Date('2026-07-01T00:00:00Z'))).toBe(false)
+})
+
+test('the boundary is strict: fetched exactly AT the correction instant is NOT stale', () => {
+  // "BEFORE this instant" is the written contract, and a to-the-millisecond tie between an
+  // adjudication and a fetch is a clock artifact far more often than a real race. Non-strict here
+  // would re-flag every place on the run that just fixed it.
+  setPoiOverridesForTest([row({ updatedAt: CORRECTED_AT })])
+  expect(overrideStaleFor('wikipedia', '4242', new Date(CORRECTED_AT))).toBe(false)
+})
+
+test('a RETIRED row alone still marks a place stale — the withdrawal is the cache-bust', () => {
+  // The mirror of the aggregation rule above: a retired row contributes no EDIT but does stamp, so
+  // facts fetched while the correction was live are still carrying withdrawn text.
+  setPoiOverridesForTest([row({ active: false, updatedAt: CORRECTED_AT })])
+  expect(overrideStaleFor('wikipedia', '4242', new Date('2026-05-01T00:00:00Z'))).toBe(true)
+})
+
+test('a place with no override rows is never stale', () => {
+  setPoiOverridesForTest([row({ sourceId: '9999' })])
+  expect(overrideStaleFor('wikipedia', '4242', new Date('2020-01-01T00:00:00Z'))).toBe(false)
+})
+
+test('an UNLOADED cache reads as no overrides, not as stale-everything', () => {
+  // "Unloaded == no overrides" is the module's existing rule (unit tests + the sim take that path);
+  // a caller that forgot to load must get silence, not a false alarm on every place in the corpus.
+  clearPoiOverridesForTest()
+  expect(overrideStaleFor('wikipedia', '4242', new Date('2020-01-01T00:00:00Z'))).toBe(false)
+})
+
+test('facts with NO fetch stamp are treated as stale — unknown age cannot postdate a correction', () => {
+  // Conservative on purpose, matching the layer's stated bias: the cost of a false-stale is one FREE
+  // re-fetch, the cost of a false-fresh is a paid clip narrating a known falsehood.
+  setPoiOverridesForTest([row({ updatedAt: CORRECTED_AT })])
+  expect(overrideStaleFor('wikipedia', '4242', null)).toBe(true)
+})
+
+test('an unstamped override cannot make anything stale — two instants, one missing', () => {
+  setPoiOverridesForTest([row({ updatedAt: null })])
+  expect(overrideStaleFor('wikipedia', '4242', null)).toBe(false)
+  expect(overrideStaleFor('wikipedia', '4242', new Date('2020-01-01T00:00:00Z'))).toBe(false)
+})
+
+test('staleness follows the NEWEST row, not the first one read', () => {
+  // A place accumulates rows; a fetch that postdates the oldest correction can still predate the
+  // newest one. Folding to the max is what makes the check safe as corrections accrue.
+  setPoiOverridesForTest([
+    row({ find: 'a', updatedAt: new Date('2026-06-01T00:00:00Z') }),
+    row({ find: 'b', updatedAt: new Date('2026-07-20T00:00:00Z') }),
+  ])
+  expect(overrideStaleFor('wikipedia', '4242', new Date('2026-06-15T00:00:00Z'))).toBe(true)
 })

@@ -44,7 +44,8 @@ export interface PlaceOverride {
   name: string
   factEdits: FactEdit[]
   /** Newest row's updated_at for this place — the facts read-through's staleness stamp
-   *  (pois facts fetched BEFORE this instant predate the correction and must re-fetch).
+   *  (pois facts fetched BEFORE this instant predate the correction and must re-fetch);
+   *  read by `overrideStaleFor`, which is where that contract is actually asserted.
    *  ⚠ The stamp is max-over-EXISTING-rows, so it cannot see a DELETE — always retire by
    *  UPDATE, never by deleting the row. Two retire cases: (a) the correction is no longer
    *  NEEDED but the source text is still there → set replace = find (a no-op that still
@@ -153,6 +154,49 @@ export function clearPoiOverridesForTest(): void {
 /** The curated override for a place, if any. Unloaded cache == no overrides. */
 export function poiOverrideFor(source: string, sourceId: string): PlaceOverride | undefined {
   return cache?.get(key(source, sourceId))
+}
+
+/**
+ * Do a place's CACHED facts predate its newest curated correction? Pure; no I/O.
+ *
+ * Corrections enter the corpus ONLY at the Wikipedia fetch seam (see the header) — never at
+ * generation, which reads `pois.facts` as-is. So a correction adjudicated AFTER a poi's last
+ * fetch is simply not in the stored text, and generating that place bakes the uncorrected
+ * sentence into a paid clip. `latestOverrideAt` was written for exactly this check and nothing
+ * read it until 2026-08-02 (founder: wire it, don't delete it).
+ *
+ * The clock is the FETCH stamp, not `enriched_at`: an enrichment SELECTS from the stored
+ * extract, so a sheet built yesterday from a fetch that predates the correction still quotes the
+ * error — a recent enrich stamp proves nothing about the text underneath.
+ *
+ * Semantics at the edges (each is a deliberate direction, not a fallthrough):
+ *   • no rows for the place — including an UNLOADED cache — → not stale. "Unloaded == no
+ *     overrides" is this module's existing rule; a caller that forgot to load gets silence
+ *     rather than a false alarm on every place in the corpus.
+ *   • rows exist but none carries an updated_at → not stale: two instants can't be ordered when
+ *     one is missing. (The column is NOT NULL, so this is the seed/test row shape only.)
+ *   • `factsFetchedAt` null → STALE. Facts of unknown age cannot be shown to postdate the
+ *     correction, and this layer already prefers a false-stale (one FREE re-fetch) over a
+ *     silently uncorrected clip.
+ *   • RETIRED rows count, because they stamp (see aggregateOverrideRows) — withdrawing a
+ *     correction invalidates cached facts as surely as making one.
+ *   • strictly BEFORE, so an exactly-equal stamp is NOT stale — the docstring contract is
+ *     "fetched BEFORE this instant", and a to-the-millisecond tie is a clock artifact far more
+ *     often than a real fetch/adjudication race.
+ *
+ * ⚠ This answers "the stored text PREDATES the correction", NOT "the correction is missing from
+ * the text". A fetch made after the correction can still have MISSED (source reworded) — that is
+ * `reportMissedEdits`, a different signal on a different half of the loop.
+ */
+export function overrideStaleFor(
+  source: string,
+  sourceId: string,
+  factsFetchedAt: Date | null,
+): boolean {
+  const correctedAt = poiOverrideFor(source, sourceId)?.latestOverrideAt
+  if (!correctedAt) return false
+  if (!factsFetchedAt) return true
+  return factsFetchedAt < correctedAt
 }
 
 export interface FactEditOutcome {
