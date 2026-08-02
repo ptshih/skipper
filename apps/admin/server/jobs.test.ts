@@ -195,6 +195,37 @@ describe('buildJobArgs — targetId is per-region, aligned with the studio begin
     expect(r.targetSlug).toBeUndefined()
   })
 
+  // ⚠ Added 2026-08-02 with the id-list change. The console now ALWAYS sends includeIds, so the
+  // region-derived target above is undefined for every corpus run — which made the Jobs page label a
+  // one-clip regenerate "All", and silently dropped the per-region lock that select-all used to take.
+  // The display label and the lock key are therefore sent explicitly, and are NEVER CLI flags.
+  test('an explicit scope label becomes the display target without touching the args', () => {
+    const r = buildJobArgs({
+      kind: 'generate_narrations',
+      includeIds: ['a', 'b'],
+      scopeLabel: '2 hand-picked',
+    })
+    expect(r.targetSlug).toBe('2 hand-picked')
+    expect(r.targetId).toBeUndefined() // hand-picked deliberately does NOT lock
+    expect(r.args.join(' ')).not.toContain('scopeLabel')
+    expect(r.args.join(' ')).not.toContain('2 hand-picked')
+  })
+
+  test('a select-all run carries its region as the LOCK key while the ids stay the selection', () => {
+    const r = buildJobArgs({
+      kind: 'generate_narrations',
+      includeIds: ['a', 'b'],
+      scopeLabel: '137 POIs · Lake Tahoe',
+      lockRegion: 'lake-tahoe',
+    })
+    expect(r.targetId).toBe('lake-tahoe') // per-region lock restored
+    expect(r.targetSlug).toBe('137 POIs · Lake Tahoe')
+    // ⚠ the lock region must never narrow the run — that is the ids' job, and re-adding --region
+    // would drop every selected id outside it (the bug this whole change removed)
+    expect(r.args.join(' ')).not.toContain('--region')
+    expect(r.args.join(' ')).toContain('--include-ids=a,b')
+  })
+
   test('a region-less run falls back to the default region slug (= studio DEFAULT_REGION_SLUG)', () => {
     expect(buildJobArgs({ kind: 'generate_narrations' }).targetId).toBe('lake-tahoe')
     expect(buildJobArgs({ kind: 'discover_pois' }).targetId).toBe('lake-tahoe')

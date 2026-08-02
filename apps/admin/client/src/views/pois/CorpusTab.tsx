@@ -131,7 +131,17 @@ export function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loadin
   // `selectedIds` is the same array every count on this page is derived from, so the number on a spend
   // button and the rows the job receives cannot disagree.
   function buildSelection(): EnrichSelection {
-    return { ids: selectedIds }
+    const regionName = region !== 'all' ? (regions.find((r) => r.slug === region)?.name ?? region) : null
+    const label =
+      selMode === 'explicit'
+        ? `${numSelected} hand-picked`
+        : `${numSelected} POIs${regionName ? ` · ${regionName}` : ' · all regions'}`
+    return {
+      ids: selectedIds,
+      label,
+      // Only a whole-region select-all takes the lock — see ./types.
+      ...(selMode === 'all' && region !== 'all' ? { lockRegion: region } : {}),
+    }
   }
   const selectionSummary =
     (selMode === 'explicit'

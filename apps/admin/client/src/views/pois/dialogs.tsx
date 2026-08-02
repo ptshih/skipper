@@ -35,7 +35,13 @@ function ScopeSummary({ scope }: { scope: ScopeDescriptor }) {
  *  every wikipedia clip in the default region: the exact complement of what was on screen. Ids cannot
  *  be partially honoured. */
 function scopeBody(sel: EnrichSelection): Record<string, unknown> {
-  return { includeIds: sel.ids }
+  return {
+    includeIds: sel.ids,
+    // Target metadata, not selection. `scopeLabel` is what the Jobs page shows; `lockRegion` is the
+    // in-flight lock key. Neither ever becomes a CLI flag — see ./types.
+    scopeLabel: sel.label,
+    ...(sel.lockRegion ? { lockRegion: sel.lockRegion } : {}),
+  }
 }
 
 /* ── NARRATE (generate_narrations — re-script + re-synth, spends) ── */

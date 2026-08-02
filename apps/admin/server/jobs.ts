@@ -119,6 +119,26 @@ function pushPosNum(args: string[], flag: string, value: unknown, name: string):
  *  If this ever fires legitimately, the answer is server-side pagination, not a bigger number. */
 const MAX_JOB_IDS = 5000
 
+/** Target metadata for a corpus run: what the Jobs page DISPLAYS and what the in-flight lock keys on.
+ *
+ *  ⚠ Deliberately separate from the SELECTION. `targetSlug`/`targetId` used to be derived from
+ *  `body.region`, and set to undefined whenever `includeIds` was present — which was fine while
+ *  select-all sent a filter, and became wrong the moment the console started always sending ids
+ *  (2026-08-02): every corpus run then rendered as "All" on the Jobs page, i.e. a one-clip regenerate
+ *  advertised as a whole-corpus paid generation, and select-all silently stopped taking the per-region
+ *  lock it used to hold. Neither field is ever pushed as a CLI flag — narrowing is the ids' job. */
+function scopeTarget(body: Record<string, unknown>): { targetSlug?: string; targetId?: string } {
+  // The ORIGINAL derivation, kept as the fallback: a run scoped by region (and not by an id list)
+  // keys on that region. ⚠ This is not just legacy support — `targetId` must agree with what the
+  // studio script's own beginJob writes, so an admin-triggered run and a CLI-triggered run of the
+  // same target collide on the in-flight lock instead of both proceeding. Dropping it would have
+  // silently unaligned the two (caught by the audit #9/#11 tests, which is what they are for).
+  const byRegion = idCsv(body.includeIds, 'includeIds') ? undefined : str(body.region) || DEFAULT_REGION_SLUG
+  const label = typeof body.scopeLabel === 'string' && body.scopeLabel.trim() ? body.scopeLabel.trim() : byRegion
+  const lock = typeof body.lockRegion === 'string' && body.lockRegion.trim() ? body.lockRegion.trim() : byRegion
+  return { targetSlug: label, targetId: lock }
+}
+
 /** Comma-join a list of string ids for a `--include-ids=` / `--exclude-ids=` flag. Non-strings are
  *  dropped rather than stringified — an object in that array would otherwise become "[object Object]"
  *  and silently select nothing. */
@@ -182,7 +202,10 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     pushPosNum(args, '--max-cost', body.maxCostUsd, 'maxCostUsd')
     if (apply) args.push('--apply')
     // enrich SPENDS (Anthropic) on --apply → confirm gate; the dry run makes no model calls (free).
-    return { args, dryRun: !apply, spends: apply, targetId: 'region-corpus' }
+    // ⚠ targetId stays the CONSTANT 'region-corpus': enrich takes a GLOBAL lock, so only one runs at
+    // a time. That is deliberate and unchanged. Only the DISPLAY becomes truthful — it used to
+    // render as "whole corpus" even for three hand-picked places.
+    return { args, dryRun: !apply, spends: apply, targetSlug: scopeTarget(body).targetSlug, targetId: 'region-corpus' }
   }
 
   if (kind === 'generate_narrations') {
@@ -201,8 +224,8 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     if (apply) args.push('--apply')
     // A region run keys both the display slug and the lock on its region; a whole-corpus explicit-id
     // run leaves them undefined → stored NULL (no 'roam-corpus' sentinel), surfaced as "All".
-    const genRegion = idCsv(body.includeIds, 'includeIds') ? undefined : str(body.region) || DEFAULT_REGION_SLUG
-    return { args, dryRun: !apply, spends: apply, targetSlug: genRegion, targetId: genRegion }
+    const genScope = scopeTarget(body)
+    return { args, dryRun: !apply, spends: apply, ...genScope }
   }
 
   if (kind === 'generate_cluster_narrations') {
@@ -242,8 +265,8 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     // (grounding always; charm/veracity opt-in, veracity also web-searches) → spends → confirm gate.
     // The dry preview makes no model calls (free).
     // Region run keys slug + lock on its region; a whole-corpus explicit-id run leaves them NULL ("All").
-    const auditRegion = idCsv(body.includeIds, 'includeIds') ? undefined : str(body.region) || DEFAULT_REGION_SLUG
-    return { args, dryRun: !apply, spends: apply, targetSlug: auditRegion, targetId: auditRegion }
+    const auditScope = scopeTarget(body)
+    return { args, dryRun: !apply, spends: apply, ...auditScope }
   }
 
   if (kind === 'curate_places') {

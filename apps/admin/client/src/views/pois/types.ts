@@ -23,6 +23,15 @@
  *  the id list is the honest thing, not the optimisation. (founder call 2026-08-02) */
 export interface EnrichSelection {
   ids: string[]
+  /** Human label for the run's Target column — display ONLY, never a CLI flag. The ids are the
+   *  selection; without this the Jobs page would call every corpus run "All", because targetSlug is
+   *  derived from a region that an id-list run does not carry. */
+  label: string
+  /** The region this selection was scoped to, when it came from "select all matching" on ONE region.
+   *  Used ONLY as the in-flight lock key (studio_jobs_active_target_uq), never to narrow the run —
+   *  narrowing is the ids' job. Absent for a hand-picked selection, which deliberately does not lock:
+   *  regenerating three clips from three POI sheets must not 409 against itself. */
+  lockRegion?: string
 }
 
 /** The resolved selection + the active filters, for the confirm dialog's "exactly what will run"
