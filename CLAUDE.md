@@ -153,12 +153,11 @@ product.** When a choice trades polish-for-the-builder against scale-for-a-marke
 
 - **bun everywhere** (package manager + runtime). Internal packages export `.ts` source (no dist build); bun
   runs it, `tsc --noEmit` type-checks. No `tsx`, no `@hono/node-server`.
-- Verified pins: TS 6.0.3 (do NOT bump to 7 — the native/tsgo compiler drops the programmatic TS API, and
-  expo's dynamic-config loader `@expo/require-utils` `require('typescript')`s it to transpile `app.config.ts`;
-  under 7 `expo prebuild`/`export` die with `ModuleKind` undefined. `tsc --noEmit` alone passes and hides it),
-  zod 4.4.3 (`z.enum`, top-level `z.uuid()`/`z.url()`), drizzle-orm 0.45.2 +
-  drizzle-kit 0.31.10 (neon-http, stateless — no interactive transactions; use `db.batch`), hono 4.12.30,
-  @anthropic-ai/sdk 0.112.1.
+- Verified majors (exact pins live in `package.json`): TS 6 — do NOT bump to 7: the native/tsgo compiler drops
+  the programmatic TS API, and expo's dynamic-config loader `@expo/require-utils` `require('typescript')`s it
+  to transpile `app.config.ts`; under 7 `expo prebuild`/`export` die with `ModuleKind` undefined, and
+  `tsc --noEmit` alone passes and HIDES it. zod 4 (`z.enum`, top-level `z.uuid()`/`z.url()`); drizzle
+  (neon-http, stateless — no interactive transactions; use `db.batch`).
 - **The live planner runs a model IN THE REQUEST PATH** — configured unlike a batch call. Model id from a
   named constant in `@skipper/shared`; **thinking stays ON** (disabling it on Opus 5 can emit a tool call as
   plain TEXT — turn succeeds, no error, call never runs — and can leak `<thinking>` tags); LOW effort is the
@@ -186,14 +185,10 @@ product.** When a choice trades polish-for-the-builder against scale-for-a-marke
   with `dotenvx set KEY "v" -f .env.development`; `.env.example` is the plaintext catalog. Deploy: set
   `DOTENV_PRIVATE_KEY_PRODUCTION` in the host env.
 - **The paid studio pipeline runs from the admin console** (`apps/admin`, behind IAP) or the CLIs in
-  `packages/studio/src` (`discover-pois` / `enrich-pois` / `generate-narrations` / `resynth-narration` /
-  `sweep-orphans` / `refetch-poi` / `snap-speakable-anchors` / `prune-corpus` / `classify-treatments` /
-  `classify-registers` / `backfill-poi-extent` / `curate-places` / `snapshot-corpus` / the `audit-*` +
-  `judge-voice` QA passes)
-  — **safe-by-default: preview unless `--apply`** (`docs/guides/ops-scripts-sop.md`). `snap-speakable-anchors`,
-  `prune-corpus`, `backfill-poi-extent`, `snapshot-corpus` are FREE (run the last before ANY destructive work);
-  `classify-treatments` + `curate-places` SPEND — founder go. ⚠ `curate-places` is LOAD-BEARING: the curated
-  `places` set IS the planner's allowlist.
+  `packages/studio/src` — **safe-by-default: preview unless `--apply`** (`docs/guides/ops-scripts-sop.md`).
+  `snap-speakable-anchors`, `prune-corpus`, `backfill-poi-extent`, `snapshot-corpus` are FREE (run the last
+  before ANY destructive work); `classify-treatments` + `curate-places` SPEND — founder go. ⚠ `curate-places`
+  is LOAD-BEARING: the curated `places` set IS the planner's allowlist.
 - **Local dev servers stay UP** (the human runs them) — ports: API `bun run dev`; admin `bun run dev:admin`
   = vite client **:5173** proxying `/admin`+`/health` → Hono admin-api **:8788** (`ADMIN_DEV_BYPASS=1` skips
   IAP locally); site `bun run dev:site`.
@@ -210,20 +205,8 @@ product.** When a choice trades polish-for-the-builder against scale-for-a-marke
   of it; it lives where `apps/api` can import it (`apps/api` does NOT depend on `@skipper/studio`). Same
   voice, different job. Never copy fact-sheet / stop-kind language into the planner, or the deflection into
   the narration prompt. Each changes under its own review.
-
-## Mobile UI — design system ("Trailhead 89")
-
-`apps/mobile` has a real design system; **don't hand-roll styles or hardcode values.** Source of truth:
-`src/theme/` (raw tokens → semantic light/dark color ROLES), `src/ui/` (primitives + "smart" composites like
-`AccountGate`/`StateView`), `apps/mobile/DESIGN.md` (the language: WPA national-park aesthetic,
-**dark-mode-first**, glanceable/in-car). Screens compose `@/ui` + semantic roles (`color="ink"`) — NEVER a
-raw hex/rgba/`fontFamily`; colors live only in `src/theme`.
-
-- **Enforced:** `bun run lint:tokens` fails on a raw color/font in `app/` or `src/ui/`; a contrast unit test
-  asserts every text role clears 4.5:1 in both themes. (mobile `bun run check` = lint:tokens + typecheck + test.)
-- **Icons are VECTOR** (`@expo/vector-icons` via `src/ui/Icon.tsx`) — NOT emoji (no color-emoji fallback;
-  emoji render as tofu).
-- `*.test.ts` run under `bun test`; the app `tsc` excludes them (mobile has no `@types/bun`).
+- **`apps/mobile` has a real design system ("Trailhead 89") — never hand-roll a style or a raw color.** The
+  rules + what enforces them live in `apps/mobile/CLAUDE.md` (loads when you work there) + `DESIGN.md`.
 
 ## Posture & doctrine
 
