@@ -152,7 +152,7 @@ test('the tripwire actually scans files — a zero-file scan would pass vacuousl
   // green no-op. The exact count is volatile; that it is not zero is the invariant.
   let files = 0
   for (const dir of SCAN_DIRS) {
-    for (const _ of new Glob('**/*.{ts,tsx}').scanSync({ cwd: `${MOBILE_ROOT}/${dir}` })) files++
+    files += Array.from(new Glob('**/*.{ts,tsx}').scanSync({ cwd: `${MOBILE_ROOT}/${dir}` })).length
   }
   expect(files).toBeGreaterThan(20)
 })

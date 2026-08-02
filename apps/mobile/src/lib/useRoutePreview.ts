@@ -239,7 +239,7 @@ export function useRoutePreview(): RoutePreview {
     activeCardIdRef.current = null
     setActiveCardId(null)
     setFailedCardId(null)
-  }, [player])
+  }, [clearStartWatchdog, player])
 
   // A clip that simply RAN OUT must hand the session back too — the rider took no action, so nothing
   // else will. Without this the common case (listen to the whole taste, carry on planning) is exactly

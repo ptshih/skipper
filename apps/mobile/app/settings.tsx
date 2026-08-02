@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Alert, StyleSheet, View } from 'react-native'
 import * as Linking from 'expo-linking'
 import { Stack, useRouter } from 'expo-router'

@@ -14,7 +14,7 @@ import { palette } from './tokens'
 type MapStyleElement = {
   featureType?: string
   elementType?: string
-  stylers: Array<Record<string, string | number>>
+  stylers: Record<string, string | number>[]
 }
 
 function buildMapStyle(isDark: boolean): MapStyleElement[] {

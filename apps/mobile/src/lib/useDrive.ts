@@ -25,7 +25,6 @@ import {
   cumulativeMeters,
   decideStall,
   OFF_ROUTE_MAX_M,
-  POST_START_STALL_MS,
   PRE_START_STALL_MS,
   seekTargetReached,
   snapStopsToRoute,
@@ -566,7 +565,7 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
       startedDrives.add(startKey)
       track('drive_started', { mode })
     }
-  }, [data, driveId, mode, fast, resetForReady, handleFix, handleEnd, handleSourceError, pump])
+  }, [data, driveId, mode, fast, resetForReady, handleFix, handleEnd, handleSourceError])
 
   // ---- location-permission priming (live mode) — the prime → prompt → result SHELL, shared with
   // useLocationPriming. This hook owns the pending-ref double-tap guard, the no-prompt

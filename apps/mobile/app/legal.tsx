@@ -12,7 +12,6 @@ import {
   MUSIC_CREDITS,
   MUSIC_FREE_NOTE,
   sourceHost,
-  type DataSource,
 } from '@/lib/licenses'
 import { space } from '@/theme/tokens'
 import { Card, Screen, Text, voice } from '@/ui'

@@ -10,7 +10,7 @@
 // two surfaces that can drift. Renders NOTHING when a clip has no attribution (scenic/break ground
 // on no source text, so an empty ⓘ would be a lie).
 import { useState } from 'react'
-import { Modal, Pressable, StyleSheet, View } from 'react-native'
+import { Modal, Pressable, StyleSheet } from 'react-native'
 import type { Attribution } from '@skipper/shared'
 import { border, radius, space } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'
