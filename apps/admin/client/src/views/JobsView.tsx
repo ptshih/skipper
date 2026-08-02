@@ -214,6 +214,7 @@ export function JobsView() {
 }
 
 function JobDrawer({ run, onClose }: { run: RunEvent; onClose: () => void }) {
+  const confirm = useConfirm()
   const qc = useQueryClient()
 
   const { data: jobData } = useQuery({
@@ -354,7 +355,22 @@ function JobDrawer({ run, onClose }: { run: RunEvent; onClose: () => void }) {
             <PendingButton
               variant="destructive"
               pending={cancelMut.isPending}
-              onClick={() => cancelMut.mutate()}
+              // ⚠ The only destructive action in the console that fired straight off the click. Every
+              // sibling — region release, per-clip release, POI delete, place delete, sweep orphans,
+              // re-synth, regenerate — goes through useConfirm or a JobActionDialog. And cancelling is
+              // not free: generation has no checkpoint/resume (shelved, deliberately), so whatever the
+              // run has already spent is gone.
+              onClick={async () => {
+                const ok = await confirm({
+                  title: 'Cancel this run?',
+                  body:
+                    'It stops where it is. Generation has no resume, so anything this run has already ' +
+                    'spent is lost — restarting it begins from the top.',
+                  confirmLabel: 'Cancel run',
+                  tone: 'destructive',
+                })
+                if (ok) cancelMut.mutate()
+              }}
               icon={<X size={14} />}
               idleLabel="Cancel run"
               pendingLabel="Canceling…"

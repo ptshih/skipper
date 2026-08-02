@@ -19,12 +19,27 @@ export function HealthBanner() {
   })
 
   // Probe rejected (fetch error) or the vite proxy 502'd — the api process is down or restarting.
+  // ⚠ The remediation is DEV-ONLY and must stay gated. The same bundle serves the IAP-gated production
+  // console, where none of the dev advice applies and the "it auto-restarts, this should clear on its
+  // own" reassurance is actively wrong: in prod this branch means an expired IAP session (the
+  // cross-origin redirect makes fetch reject), an unhealthy Cloud Run revision, or a bad deploy —
+  // none of which self-heal, and all of which the operator would be told to sit and wait through.
   if (isError) {
     return (
       <Callout variant="error" className="mb-6">
-        <span className="font-medium">admin-api unreachable.</span> The ops server (<code className="font-mono">:8788</code>)
-        is down or restarting. Check the <code className="font-mono">server</code> pane of{' '}
-        <code className="font-mono">bun run dev:admin</code> — it auto-restarts on save/crash, so this should clear on its own.
+        <span className="font-medium">admin-api unreachable.</span>{' '}
+        {import.meta.env.DEV ? (
+          <>
+            The ops server (<code className="font-mono">:8788</code>) is down or restarting. Check the{' '}
+            <code className="font-mono">server</code> pane of <code className="font-mono">bun run dev:admin</code> — it
+            auto-restarts on save/crash, so this should clear on its own.
+          </>
+        ) : (
+          <>
+            Your IAP session may have expired — reload to re-authenticate. If that doesn’t clear it, the Cloud Run
+            revision is unhealthy; check its logs. This will not resolve on its own.
+          </>
+        )}
       </Callout>
     )
   }

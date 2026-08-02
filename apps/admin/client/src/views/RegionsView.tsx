@@ -410,10 +410,15 @@ function BboxLookup({ defaultQuery, onUse }: { defaultQuery: string; onUse: (bbo
     },
   })
 
-  // Keep q seeded from the display name until the operator runs a search.
+  // Seed q from the display name — but ONLY until the operator touches the lookup field.
+  // ⚠ Keyed on `rounds.length === 0` this re-fired on every keystroke in the Display-name input, so
+  // anything typed into the lookup box was silently overwritten the moment that field was edited —
+  // and the next click spends a real Opus call on whatever query survived, with no cue that it
+  // changed. `touched` is the honest guard: the operator's own text always wins.
+  const [queryTouched, setQueryTouched] = useState(false)
   useEffect(() => {
-    if (rounds.length === 0 && !lookupMut.isPending) setQ(defaultQuery)
-  }, [defaultQuery]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (!queryTouched && rounds.length === 0 && !lookupMut.isPending) setQ(defaultQuery)
+  }, [defaultQuery, queryTouched]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const current = rounds.length > 0 ? rounds[rounds.length - 1] : null
   const llmError = lookupMut.data?.llmError ?? null
@@ -446,7 +451,7 @@ function BboxLookup({ defaultQuery, onUse }: { defaultQuery: string; onUse: (bbo
       <div className="flex gap-2">
         <Input
           value={q}
-          onChange={(e) => setQ(e.target.value)}
+          onChange={(e) => { setQueryTouched(true); setQ(e.target.value) }}
           onKeyDown={(e) => { if (e.key === 'Enter') void search() }}
           placeholder="Yosemite National Park"
           className="text-sm"

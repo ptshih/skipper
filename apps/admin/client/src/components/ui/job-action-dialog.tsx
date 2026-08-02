@@ -67,6 +67,11 @@ export function JobActionDialog({
   // if the estimate exceeds it and stops mid-fan-out once actual spend crosses it. Blank = no cap.
   const [costCap, setCostCap] = useState('')
   const cap = Number(costCap)
+  // ⚠ "typed something unparseable" and "deliberately no cap" produced BYTE-IDENTICAL requests: an
+  // omitted --max-cost resolves to Infinity in the CLI (maxCostFlag), so a fat-fingered "1O" silently
+  // dispatched an UNCAPPED paid run with no message anywhere. They are now distinguishable, and the
+  // ambiguous one is refused rather than guessed at.
+  const capInvalid = costCap.trim() !== '' && !(Number.isFinite(cap) && cap > 0)
   const capBody = costCap.trim() && Number.isFinite(cap) && cap > 0 ? { maxCostUsd: cap } : {}
   const submitMut = useMutation({
     // Every apply here is a paid/destructive run → always sends confirm:true (the server-side gate).
@@ -114,10 +119,22 @@ export function JobActionDialog({
             value={costCap}
             onChange={(e) => setCostCap(e.target.value)}
           />
-          <p className="text-xs text-muted-foreground">
-            Hard ceiling — the run aborts before billing if the estimate exceeds this, and stops
-            mid-run once actual spend crosses it. Blank = no cap.
-          </p>
+          {capInvalid ? (
+            <p className="text-xs font-medium text-destructive">
+              “{costCap.trim()}” isn’t a positive number. Clear it to run with NO cap, or enter an amount —
+              an unreadable value would otherwise mean no cap.
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Hard ceiling — the run aborts before billing if the estimate exceeds this, and stops
+              mid-run once actual spend crosses it.{' '}
+              {capBody.maxCostUsd != null ? (
+                <>Resolved: aborts above <span className="font-medium text-foreground">${capBody.maxCostUsd.toFixed(2)}</span>.</>
+              ) : (
+                <span className="font-medium text-foreground">Blank = NO cap.</span>
+              )}
+            </p>
+          )}
         </div>
 
         {note && (
@@ -136,10 +153,10 @@ export function JobActionDialog({
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
             Cancel
           </Button>
-          <Button variant="outline" disabled={busy} onClick={() => submitMut.mutate(false)}>
+          <Button variant="outline" disabled={busy || capInvalid} onClick={() => submitMut.mutate(false)}>
             {busy ? 'Triggering…' : 'Preview'}
           </Button>
-          <Button disabled={busy} onClick={() => submitMut.mutate(true)}>
+          <Button disabled={busy || capInvalid} onClick={() => submitMut.mutate(true)}>
             {ApplyIcon && <ApplyIcon className="h-4 w-4" />} {busy ? 'Triggering…' : applyLabel}
           </Button>
         </DialogFooter>

@@ -48,14 +48,38 @@ export function DiscoverPoisDialog({
   const [picked, setPicked] = useState<Set<string>>(new Set())
 
   // A fresh open starts the picker empty (the fixed-scope path ignores this).
-  useEffect(() => { if (open) setPicked(new Set()) }, [open])
+  useEffect(() => { if (open) { setPicked(new Set()); setOutcomes(null) } }, [open])
 
   const scope: RegionRef[] = picker ? (options ?? []).filter((r) => picked.has(r.slug)) : (regions ?? [])
 
+  const [outcomes, setOutcomes] = useState<{ slug: string; ok: boolean; message?: string }[] | null>(null)
+
+  // ⚠ allSettled, not all. This fans out one job per region, and Promise.all rejects on the FIRST
+  // failure — so onSuccess never ran even though the other regions' jobs had been created and their
+  // Cloud Run executions triggered. The runs cache went un-invalidated, the dialog never closed, and a
+  // single un-attributed error made the screen read as "nothing happened" while paid work was already
+  // under way. Every region now reports its own outcome, and the cache is refreshed either way.
   const submitMut = useMutation({
-    mutationFn: (apply: boolean) =>
-      Promise.all(scope.map((r) => api.createJob({ kind: 'discover_pois', region: r.slug, apply }))),
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: qk.runs() }); onSubmitted() },
+    mutationFn: async (apply: boolean) => {
+      const settled = await Promise.allSettled(
+        scope.map((r) => api.createJob({ kind: 'discover_pois', region: r.slug, apply })),
+      )
+      return settled.map((res, i) => ({
+        slug: scope[i]!.slug,
+        ok: res.status === 'fulfilled',
+        message: res.status === 'rejected' ? errMsg(res.reason) : undefined,
+      }))
+    },
+    onSuccess: (rows) => {
+      void qc.invalidateQueries({ queryKey: qk.runs() })
+      const failed = rows.filter((r) => !r.ok)
+      if (failed.length === 0) {
+        onSubmitted()
+        return
+      }
+      // Some queued, some didn't — stay put and show which, rather than navigating away from the news.
+      setOutcomes(rows)
+    },
   })
 
   function toggle(slug: string) {
@@ -120,6 +144,20 @@ export function DiscoverPoisDialog({
           </p>
         </div>
 
+        {outcomes && (
+          <Callout variant="error" className="rounded-lg px-3 py-2 text-sm">
+            <div className="font-medium">
+              {outcomes.filter((o) => o.ok).length} of {outcomes.length} regions queued — the rest did not start.
+            </div>
+            <ul className="mt-1 space-y-0.5 text-xs">
+              {outcomes.map((o) => (
+                <li key={o.slug}>
+                  <span className="font-mono">{o.slug}</span> — {o.ok ? 'queued' : (o.message ?? 'failed')}
+                </li>
+              ))}
+            </ul>
+          </Callout>
+        )}
         {submitMut.error && (
           <Callout variant="error" className="rounded-lg px-3 py-2">{errMsg(submitMut.error)}</Callout>
         )}
