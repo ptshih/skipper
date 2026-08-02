@@ -9,9 +9,11 @@
 // read is silently un-playable in exactly the dead-zone case the product is built for. The map is local
 // `file://` when downloaded, presigned https when streaming; we re-sign on a miss (a screen can sit open
 // past the ~1h presigned TTL) and give up gracefully when a seq is genuinely absent (a partial download).
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { setAudioModeAsync, setIsAudioActiveAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
+import { PRE_START_STALL_MS } from '@skipper/engine'
 import { loadPlayback, resignPlayback } from './offline'
+import { decideFail, decideToggle, sawFreshAudio } from './preview-util'
 
 export interface StopPreview {
   /** The stop whose clip is loaded (playing OR paused). Drives the row/pin "now playing" highlight. */
@@ -47,6 +49,45 @@ export function useStopPreview(driveId: string | undefined): StopPreview {
   // resolve below (a fast second tap must supersede a slow first one). (mirrors useDrive's loadedSeq)
   const activeSeqRef = useRef<number | null>(null)
   activeSeqRef.current = activeSeq
+
+  // Did we actually call play() for the loaded seq? Separates "the uri never resolved, so this seq was
+  // only ever an optimistic highlight and we hold no audio session" from "we started it and it died".
+  const playbackAttempted = useRef(false)
+  // The native error string already accounted for — expo-audio clears `status.error` only when a new
+  // source loads or playback resumes, so for a frame or two after a tap it still carries the PREVIOUS
+  // clip's error. Acting on that would light the unplayable hint under a clip playing fine.
+  const handledErrorRef = useRef<string | null>(null)
+  // ⚠ THE PRE-START WATCHDOG. Without it this surface has NO way to notice a clip that never produces
+  // audio: `replace()` and `play()` both succeed, the async 403 arrives (if at all) via `status.error`,
+  // and until 2026-08-02 nothing here read that either — so an expired presign left the row highlighted
+  // "now playing", silent, forever. A timer needs no cooperation from the vendor. Same shape and same
+  // constant as useRoutePreview and useDrive: it is the same clip over the same kind of url.
+  const startWatchdog = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const clearStartWatchdog = useCallback(() => {
+    if (startWatchdog.current) {
+      clearTimeout(startWatchdog.current)
+      startWatchdog.current = null
+    }
+  }, [])
+
+  /** The ONE terminal state for a stop whose audio will not play, whatever the cause. */
+  const failSeq = useCallback(
+    (seq: number) => {
+      clearStartWatchdog()
+      const act = decideFail({
+        activeId: activeSeqRef.current,
+        failingId: seq,
+        playbackAttempted: playbackAttempted.current,
+      })
+      if (act.clearActive) {
+        setActiveSeq((s) => (s === seq ? null : s))
+        activeSeqRef.current = null
+      }
+      if (act.releaseSession) void setIsAudioActiveAsync(false).catch(() => {})
+      setUnplayableSeq(seq)
+    },
+    [clearStartWatchdog],
+  )
 
   const durSec = status.duration && status.duration > 0 ? status.duration : 0
 
@@ -103,11 +144,16 @@ export function useStopPreview(driveId: string | undefined): StopPreview {
       // Tap the already-loaded stop → toggle (or replay from the top if it finished).
       if (seq === activeSeq && activeSeqRef.current === seq) {
         try {
-          if (status.playing) {
+          const action = decideToggle({
+            playing: !!status.playing,
+            positionSec: status.currentTime ?? 0,
+            durationSec: durSec,
+            didJustFinish: !!status.didJustFinish,
+          })
+          if (action === 'pause') {
             player.pause()
           } else {
-            const atEnd = status.didJustFinish || (durSec > 0 && (status.currentTime ?? 0) >= durSec - 0.25)
-            if (atEnd) player.seekTo(0)
+            if (action === 'replay') player.seekTo(0)
             player.play()
           }
         } catch {}
@@ -116,6 +162,9 @@ export function useStopPreview(driveId: string | undefined): StopPreview {
       setUnplayableSeq(null)
       setActiveSeq(seq) // optimistic highlight; cleared below if the audio won't resolve
       activeSeqRef.current = seq
+      playbackAttempted.current = false // nothing started yet — a failure here holds no session
+      handledErrorRef.current = status.error ?? null // snapshot, so a stale error can't blame this seq
+      clearStartWatchdog()
       applyPreviewAudioMode() // exclusive focus + foreground-only (a prior live drive left background-on)
       void (async () => {
         // resolveUri can THROW on the first tap (its loadPlayback → getDrive hits the network for a
@@ -130,35 +179,91 @@ export function useStopPreview(driveId: string | undefined): StopPreview {
         }
         if (activeSeqRef.current !== seq) return // a newer tap superseded this one while awaiting
         if (!uri) {
-          setActiveSeq((s) => (s === seq ? null : s))
-          activeSeqRef.current = null
-          setUnplayableSeq(seq)
+          failSeq(seq) // never played → decideFail holds the session back, correctly
           return
         }
         try {
           player.replace({ uri })
           player.play()
+          playbackAttempted.current = true
+          // Armed only once the clip is actually in the player. The guard inside is what makes a
+          // superseded timer harmless if a later tap has already taken over.
+          startWatchdog.current = setTimeout(() => {
+            startWatchdog.current = null
+            if (activeSeqRef.current !== seq) return
+            failSeq(seq)
+          }, PRE_START_STALL_MS)
         } catch {
-          setActiveSeq((s) => (s === seq ? null : s))
-          activeSeqRef.current = null
-          setUnplayableSeq(seq)
+          // A synchronous throw is a malformed source; the presign 403 arrives asynchronously via
+          // status.error or, if the vendor stays silent, via the watchdog above. Same terminal state.
+          playbackAttempted.current = true
+          failSeq(seq)
         }
       })()
     },
-    [activeSeq, durSec, player, resolveUri, applyPreviewAudioMode, status.playing, status.currentTime, status.didJustFinish],
+    [
+      activeSeq,
+      applyPreviewAudioMode,
+      clearStartWatchdog,
+      durSec,
+      failSeq,
+      player,
+      resolveUri,
+      status.currentTime,
+      status.didJustFinish,
+      status.error,
+      status.playing,
+    ],
   )
 
   const togglePlay = useCallback(() => {
     try {
-      if (status.playing) {
+      const action = decideToggle({
+        playing: !!status.playing,
+        positionSec: status.currentTime ?? 0,
+        durationSec: durSec,
+        didJustFinish: !!status.didJustFinish,
+      })
+      if (action === 'pause') {
         player.pause()
-      } else {
-        const atEnd = status.didJustFinish || (durSec > 0 && (status.currentTime ?? 0) >= durSec - 0.25)
-        if (atEnd) player.seekTo(0)
-        player.play()
+        return
       }
+      if (action === 'replay') player.seekTo(0)
+      player.play()
     } catch {}
   }, [player, durSec, status.playing, status.currentTime, status.didJustFinish])
+
+  // Real audio arrived ⇒ disarm the watchdog. Mirrors useDrive's `sawFresh` and useRoutePreview's.
+  const sawFresh = sawFreshAudio({ playing: !!status.playing, positionSec: status.currentTime ?? 0 })
+  useEffect(() => {
+    if (sawFresh) clearStartWatchdog()
+  }, [sawFresh, clearStartWatchdog])
+
+  // The asynchronous half of failure — an expired/denied presign or an undecodable body never throws
+  // out of replace(). ⚠ This surface had NO reader for it until 2026-08-02: the row simply stayed lit
+  // "now playing" in silence. Whether iOS populates status.error for an HTTP 403 on a remote source is
+  // device-unverified, which is exactly why the watchdog above is the backstop and this is only the
+  // fast path.
+  useEffect(() => {
+    const err = status.error ?? null
+    if (!err || err === handledErrorRef.current) return
+    handledErrorRef.current = err
+    const seq = activeSeqRef.current
+    if (seq === null) return
+    failSeq(seq)
+  }, [status.error, failSeq])
+
+  // ⚠ A clip that simply RAN OUT must hand the audio session back too — the rider took no action, so
+  // nothing else will. Under doNotMix this surface INTERRUPTS their music, and iOS resumes it only on
+  // deactivation. Missing here until 2026-08-02, which made the common case — audition a stop, keep
+  // reading the drive — the one that left their podcast dead until they navigated away.
+  useEffect(() => {
+    if (!status.didJustFinish) return
+    void setIsAudioActiveAsync(false).catch(() => {})
+  }, [status.didJustFinish])
+
+  // A screen unmounting mid-load must not leave a timer that fires into a dead component.
+  useEffect(() => clearStartWatchdog, [clearStartWatchdog])
 
   const seekToMs = useCallback(
     (ms: number) => {
@@ -175,6 +280,7 @@ export function useStopPreview(driveId: string | undefined): StopPreview {
   )
 
   const stop = useCallback(() => {
+    clearStartWatchdog() // a dismissed clip must not be declared unplayable seconds later
     try {
       player.pause()
     } catch {}
@@ -186,7 +292,7 @@ export function useStopPreview(driveId: string | undefined): StopPreview {
     activeSeqRef.current = null
     setActiveSeq(null)
     setUnplayableSeq(null)
-  }, [player])
+  }, [clearStartWatchdog, player])
 
   return {
     activeSeq,
