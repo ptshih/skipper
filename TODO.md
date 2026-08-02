@@ -679,6 +679,28 @@ surface, and we cannot out-cite our own supplier with a CC BY-SA-encumbered rest
 to every instrument we have** (doc §6). A channel you cannot attribute is one you cannot iterate on —
 so treat the shipped moves as cheap insurance against being mis-resolved, NOT as a measurable channel.
 
+## The conversation cannot survive an unmount — INTENDED, revisit later (founder call 2026-08-02)
+
+**Not a bug, and not to be "fixed" opportunistically.** D10 makes the planner stateless: no
+`conversations` table, no server copy, and INV-13 forbids persisting rider content on the client. So
+the transcript is React state in `app/index.tsx` and it is the ONLY copy that exists anywhere. The
+founder confirmed this is intended; it is logged here so the cost stays visible rather than becoming
+folklore.
+
+What it costs today: an iOS background memory kill, a crash, or any navigation that unmounts home
+destroys a conversation the rider may have spent several BILLED turns building, with no way back. The
+screen already bends around this — the account wall and the route card render inline, never
+`<AccountGate>` and never `router.replace`, purely so home stays mounted. That is a real constraint on
+every future change to that screen, and the kind that gets violated by someone who doesn't know why.
+
+- [ ] Revisit whether a middle ground exists that does not weaken INV-13 or D10. Sketches worth an
+      hour, none endorsed: rehydrate the last PROPOSAL (a typed route object, not prose — arguably not
+      rider content at all) so a killed app returns to "here's the drive we landed on" instead of a
+      blank composer; or keep the transcript in memory across a *navigation* unmount (a module-level
+      ref that dies with the process) which costs nothing and covers the common case, leaving only the
+      OS-kill case lost. ⚠ Both need a founder call BEFORE building — the first stores something new,
+      and "it's only the route object" is exactly the argument that erodes an invariant.
+
 ## PostHog telemetry — Stage 2 (native crashes) + Stage 3 (session replay)
 
 Stage 1 is SHIPPED (2026-07-17): `apps/mobile/src/lib/analytics.tsx` — the pure-JS PostHog base SDK
@@ -738,6 +760,24 @@ decision.
 
 Refs: `apps/mobile/src/lib/analytics.tsx`, `apps/mobile/app/_layout.tsx`, `apps/mobile/app.config.ts`
 (where the config plugin goes), `apps/mobile/metro.config.js` (the Metro wrap), `apps/mobile/eas.json`.
+
+**Stage 4 — the funnel ends at `drive_started`, and the drive is the product.** (Raised 2026-08-02
+from a read of `analytics.tsx`'s typed event map; founder said add it as a TODO.)
+- [ ] The contract covers acquisition end-to-end — `planner_ready` → `plan_turn_sent` →
+      `proposal_shown` → `preview_clip_played` → `wall_shown` → `signup_completed` → `drive_created` →
+      `drive_started` — and then stops. **There is no event for a stop firing, a clip playing on the
+      road, a stop skipped for missing audio, or a drive reaching its end.** So the measured part is
+      everything BEFORE the thing the app exists to do, and the unmeasured part is RISK-1's part: the
+      one no rider has ever completed.
+      ⚠ The specific blind spot worth closing first is the **silent skip**. `useDrive`'s clip-load
+      effect advances past a stop with no uri after 400 ms and deliberately shows NO note (the note is
+      reserved for a clip that had a uri and wouldn't play). That is correct — it is `clip-store`'s job
+      to make it impossible — but it means a store regression is invisible from BOTH ends: the rider
+      hears silence and never learns a stop was there, and no signal reaches us. A drive that plays 3
+      of 11 stops is indistinguishable from a quiet stretch of road.
+      ⚠ INV-13 constrains the shape, not the existence: counts and closed unions only — no place name,
+      no coordinate, no drive id, no url. `{ stops_total, stops_fired, stops_skipped_no_audio }` at
+      drive end carries the whole signal and names nothing.
 
 ## Location: When-In-Use → background updates (deferred half of permission priming; NO "Always")
 
