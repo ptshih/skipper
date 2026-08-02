@@ -88,9 +88,16 @@ export function storyFactsHash(
 /*  Fused CLUSTER tellings                                                      */
 /* -------------------------------------------------------------------------- */
 
-/** One member's contribution to a cluster's fingerprint: WHICH place, and what it currently says. */
+/** One member's contribution to a cluster's fingerprint: WHICH place, what it is CALLED, and what it
+ *  currently says. */
 export interface ClusterHashMember {
   poiId: string
+  /** `pois.name` — the member's SPOKEN name. In the fused prompt it becomes the `• Name:` bullet the
+   *  telling is instructed to work in, so renaming a member rewrites the script's most audible content.
+   *  ⚠ Without it in the digest a rename left the clip reading FRESH while its prompt had changed —
+   *  the same class as the known `delivery_register` gap below, but sharper, because this one is said
+   *  out loud. Added 2026-08-02 (founder). */
+  name: string
   /** The member's `pois.facts_hash` (`storyFactsHash`). Null is tolerated, never dropped — see below. */
   factsHash: string | null
 }
@@ -114,12 +121,15 @@ export interface ClusterHashInput {
  * subject is a `poi_clusters` id rather than a poi.
  *
  * WHAT IS IN IT, and why each is not optional:
- *   - the MEMBER SET as `poiId:factsHash` pairs, sorted. Sorted (not XOR) so it stays deterministic,
- *     collision-resistant and PRINTABLE — you can dump the input and diff it. The `poiId` is in the
- *     payload because the hashes alone do not make membership part of the identity: a member whose
- *     `facts_hash` is null would be invisible, and `{h1}` would equal `{h1, null}`. It also makes an
- *     `excluded_reason` toggle — a free admin action that moves no member's facts — move the digest,
- *     which is the whole reason a member can leave the telling without any article changing.
+ *   - the MEMBER SET as sorted `[poiId, name, factsHash]` triples. Sorted (not XOR) so it stays
+ *     deterministic, collision-resistant and PRINTABLE — you can dump the input and diff it. The
+ *     `poiId` is in the payload because the hashes alone do not make membership part of the identity:
+ *     a member whose `facts_hash` is null would be invisible, and `{h1}` would equal `{h1, null}`. It
+ *     also makes an `excluded_reason` toggle — a free admin action that moves no member's facts — move
+ *     the digest, which is the whole reason a member can leave the telling without any article changing.
+ *   - the member NAME, because the fused prompt speaks it: it becomes the `• Name:` bullet the telling
+ *     is told to work in, so a rename rewrites the most audible part of the script while every
+ *     `facts_hash` stays byte-identical. Added 2026-08-02 (founder call).
  *   - `title` / `highlights` / `dropped`. §3.1 of the fused-generation spec makes `highlights` the
  *     naming set, so moving a member from highlights to dropped rewrites the telling while every
  *     member's facts stay byte-identical. A facts-only hash would call that clip fresh.
@@ -133,6 +143,12 @@ export interface ClusterHashInput {
  *     clip too. That gap is real and repo-wide; fixing it inside a cluster helper would leave the two
  *     subject kinds on different contracts. One gap, one future fix.
  *
+ * ⚠ ONE-TIME INVALIDATION (2026-08-02). Adding `name` and moving to the JSON triple changed the digest
+ * for EVERY existing fused clip, so all of them read stale once and the next fused `--apply` re-narrates
+ * them. That is a real, bounded, deliberate cost, and it is not a regression: until the freshness gate
+ * landed the same day, every fused run re-narrated the whole set unconditionally anyway. Any future
+ * change to this payload carries the same cost — price it before making one.
+ *
  * Returns NULL — never `sha256('')` — when no member contributes facts, mirroring `storyFactsHash`'s
  * null-when-nothing-to-ground-on. A constant digest shared by every empty cluster would read as FRESH
  * in the admin verdict (`clip.factsHash === poi.factsHash`) for a clip grounded on nothing. ⚠ The
@@ -141,8 +157,12 @@ export interface ClusterHashInput {
  * permanently stale, so a cluster queued on it is re-narrated and re-synthesized on every run.
  */
 export function clusterFactsHash(input: ClusterHashInput): string | null {
+  // JSON-encoded per member rather than `a:b:c` concatenation: `name` is free text and may contain the
+  // separator, and "p1:Foo: Bar:<hash>" is ambiguous with a differently-split triple. A hash whose
+  // input can be spelled two ways is a hash that can silently collide. Still sorted, still printable —
+  // you can dump this array and diff it against a stored one.
   const members = input.members
-    .map((m) => `${m.poiId}:${m.factsHash ?? ''}`)
+    .map((m) => JSON.stringify([m.poiId, m.name, m.factsHash ?? '']))
     .sort()
   if (members.length === 0) return null
   return digest({

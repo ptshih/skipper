@@ -31,6 +31,9 @@ export interface ClusterMemberRow {
   name: string
   kind: string | null
   source: string
+  /** With `source`, the `poi_overrides` key — a fused telling speaks its members' text, so the fused
+   *  generator has to be able to ask whether a curated CORRECTION postdates these cached facts. */
+  sourceId: string
   qid: string | null
   excludedReason: string | null
   lat: number
@@ -46,6 +49,9 @@ export interface ClusterMemberRow {
   /** The enrich stamp — the sheet's frozen credit instant, which a fused clip's attribution needs
    *  (`factSheetToAttribution` takes ONE retrievedAt for the union, so the caller takes the latest). */
   enrichedAt: Date | null
+  /** The EXTRACT fetch clock — the instant `pois.facts` was read from Wikipedia. Paired with
+   *  `overrideStaleFor` it answers "does this member's text predate a correction?". */
+  factsFetchedAt: Date | null
   factsHash: string | null
 }
 
@@ -79,6 +85,7 @@ export async function loadClusterMembers(
       name: pois.name,
       kind: pois.kind,
       source: pois.source,
+      sourceId: pois.sourceId,
       qid: pois.qid,
       excludedReason: pois.excludedReason,
       lat: pois.lat,
@@ -90,6 +97,7 @@ export async function loadClusterMembers(
       facts: pois.facts,
       factSheet: pois.factSheet,
       enrichedAt: pois.enrichedAt,
+      factsFetchedAt: pois.factsFetchedAt,
       factsHash: pois.factsHash,
     })
     .from(pois)
@@ -102,6 +110,31 @@ export async function loadClusterMembers(
     else byCluster.set(r.clusterId, [{ ...r, clusterId: r.clusterId }])
   }
   return byCluster
+}
+
+/** Fold a place NAME for comparing the classifier's free-text `dropped`/`highlights` lists against
+ *  `pois.name`: case- and punctuation-insensitive, whitespace collapsed. Lives here, beside the
+ *  membership rules it serves, so the generator and the generatability gate fold names identically —
+ *  two copies would let "can this be generated?" and "what does it name?" disagree. */
+export function nameKey(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+}
+
+/**
+ * The tellable members a fused telling may actually NAME ALOUD — tellable minus the ones the treatment
+ * classifier put on `dropped`.
+ *
+ * ⚠ Keyed off `dropped`, NOT `highlights`. Both are the model's free text, but measured live `dropped`
+ * matches `pois.name` 68 of 69 while `highlights` manages 165 of 186 — so the fuzzy match goes on the
+ * near-exact list, and a miss fails SAFE (an unmatched member stays NAMEABLE rather than silently
+ * muting a place the telling exists for).
+ */
+export function nameableMembers(
+  members: readonly ClusterMemberRow[],
+  dropped: readonly string[] = [],
+): ClusterMemberRow[] {
+  const droppedKeys = new Set(dropped.map(nameKey))
+  return tellableMembers(members).filter((m) => !droppedKeys.has(nameKey(m.name)))
 }
 
 /** The members a fused telling may be written over — the ones that reach the grounding well. Every
@@ -131,7 +164,7 @@ export function clusterGroundingHash(
 ): string | null {
   const tellable = tellableMembers(members)
   const input: ClusterHashInput = {
-    members: tellable.map((m) => ({ poiId: m.id, factsHash: m.factsHash })),
+    members: tellable.map((m) => ({ poiId: m.id, name: m.name, factsHash: m.factsHash })),
     title: cluster.title,
     highlights: cluster.highlights,
     dropped: cluster.dropped,
@@ -143,14 +176,25 @@ export function clusterGroundingHash(
  * Why this cluster CANNOT be generated yet, or null when it can. The one gate step 4's queue asks,
  * so "generatable" has a single definition rather than one per caller.
  *
- * ONE reason now: nothing tellable — a corpus state an `enrich` run fixes. (This said "two reasons,
- * different in kind" for a while after the second, too-wide, stopped blocking; see the ⚠ in the body.)
- * It is REPORTED rather than silently skipped — a cluster vanishing from a preview with no reason
- * given is how the un-enriched Yosemite half stayed invisible for a week.
+ * TWO reasons, both corpus states rather than design limits. (A third, too-wide, stopped blocking in
+ * 2026-07-30 — see the ⚠ in the body.) Each is REPORTED rather than silently skipped: a cluster
+ * vanishing from a preview with no reason given is how the un-enriched Yosemite half stayed invisible
+ * for a week.
  */
-export function clusterGenerationBlock(members: readonly ClusterMemberRow[]): string | null {
+export function clusterGenerationBlock(
+  members: readonly ClusterMemberRow[],
+  dropped: readonly string[] = [],
+): string | null {
   const tellable = tellableMembers(members)
   if (tellable.length === 0) return 'no tellable members (un-enriched, excluded, or taste-denied)'
+  // ⚠ Every tellable member is on the classifier's `dropped` list, so the fused sheet would carry a
+  // BACKGROUND ONLY block and nothing else. That sheet tells the model to name nothing, invent nothing,
+  // and treat the stop as scenic — and it was reachable on a PAID story generation, which then
+  // narrated, gated and synthesized whatever came back. Degenerate but silent: the clip shipped as a
+  // story. Blocking here keeps "generatable" one definition, and the fix is an operator action
+  // (re-run the treatment classifier, or shorten `dropped`), which is what a block is for.
+  if (nameableMembers(members, dropped).length === 0)
+    return 'every tellable member is on the dropped list — the telling would have nothing to name'
   // ⚠ GEOMETRY NO LONGER BLOCKS (founder call 2026-07-30). It used to defer a group too spread out for
   // a point trigger; now `exceedsPointTrigger` selects the trigger MODE instead — wide groups ship as
   // AREA tellings and the read path serves them a polygon. The only remaining block is a corpus state

@@ -37,6 +37,7 @@ const member = (over: Partial<ClusterMemberRow> = {}): ClusterMemberRow => ({
   name: 'Vikingsholm',
   kind: 'castle',
   source: 'wikipedia',
+  sourceId: '4242',
   qid: 'Q1972742',
   excludedReason: null,
   lat: 38.9469,
@@ -53,6 +54,7 @@ const member = (over: Partial<ClusterMemberRow> = {}): ClusterMemberRow => ({
   },
   factSheet: sheet('Built in nineteen twenty-nine from local granite.'),
   enrichedAt: null,
+  factsFetchedAt: new Date('2026-07-01T00:00:00Z'),
   factsHash: h(1),
   ...over,
 })
@@ -174,5 +176,70 @@ describe('clusterGroundingHash', () => {
     expect(
       hashOf([A, { ...B, deliveryRegister: 'town', speakableLat: 39.0, speakableLng: -120.0, kind: 'waterfall' }]),
     ).toBe(base!)
+  })
+})
+
+// ── The all-dropped degenerate cluster ───────────────────────────────────────────────────────────
+// The treatment classifier's `dropped` list demotes a member from NAMEABLE to background. When it
+// covers every tellable member, the fused sheet carries a BACKGROUND ONLY block and nothing else —
+// which tells the model to name nothing, invent nothing, and treat the stop as scenic. That sheet was
+// reachable on a PAID story generation, which then narrated, gated and synthesized whatever came back
+// and shipped it as a story. Degenerate, reachable, and completely silent. It is a block now.
+describe('clusterGenerationBlock — nothing left to NAME', () => {
+  const two = [member(), member({ id: 'p2', name: 'Eagle Falls' })]
+
+  test('every tellable member dropped ⇒ BLOCKED, with a reason naming the cause', () => {
+    expect(clusterGenerationBlock(two, ['Vikingsholm', 'Eagle Falls'])).toMatch(/nothing to name/)
+  })
+
+  test('one survivor is enough — a single nameable place is a legitimate telling', () => {
+    expect(clusterGenerationBlock(two, ['Eagle Falls'])).toBeNull()
+  })
+
+  test('no dropped list at all is the common case and never blocks', () => {
+    expect(clusterGenerationBlock(two)).toBeNull()
+    expect(clusterGenerationBlock(two, [])).toBeNull()
+  })
+
+  test('the dropped match is FUZZY, so punctuation and case cannot smuggle a place back in', () => {
+    // `dropped` is the model's free text; it matches `pois.name` 68 of 69 times live, and the fold is
+    // what makes that work. If this stopped folding, the block would quietly stop firing.
+    expect(clusterGenerationBlock(two, ['vikingsholm!', '  EAGLE   FALLS  '])).toMatch(/nothing to name/)
+  })
+
+  test('an UNMATCHED dropped entry fails SAFE — the member stays nameable, so no block', () => {
+    // A miss must never mute a place the telling exists for; it stays nameable, which is also why an
+    // unmatched entry cannot manufacture a block.
+    expect(clusterGenerationBlock(two, ['Some Place That Is Not A Member'])).toBeNull()
+  })
+
+  test('nothing TELLABLE still reports the tellable reason, not this one', () => {
+    // Ordering matters for the operator: "un-enriched" and "all dropped" need different actions.
+    expect(clusterGenerationBlock([member({ factSheet: [] })], ['Vikingsholm'])).toMatch(/no tellable members/)
+  })
+})
+
+// ── The member NAME is part of the fingerprint ───────────────────────────────────────────────────
+describe('clusterGroundingHash — renaming a member', () => {
+  const group: ClusterGroupingRow = {
+    title: 'Emerald Bay',
+    highlights: ['Vikingsholm', 'Eagle Falls'],
+    dropped: [],
+  }
+
+  test('moves the digest — the name is SPOKEN, so the script changes with it', () => {
+    // `pois.name` becomes the "• Name:" bullet the fused telling is told to work in. Until 2026-08-02
+    // the digest carried only poiId + factsHash, so a rename rewrote the prompt while the clip read
+    // FRESH and was never regenerated.
+    const before = clusterGroundingHash(group, [member({ factsHash: h(1) })])
+    const after = clusterGroundingHash(group, [member({ name: 'Vikingsholm Castle', factsHash: h(1) })])
+    expect(before).toMatch(HEX64)
+    expect(before).not.toBe(after!)
+  })
+
+  test('renaming an UN-TELLABLE member does not move it — the digest is over the tellable set', () => {
+    const base = [member({ factsHash: h(1) }), member({ id: 'p2', name: 'Eagle Falls', factSheet: [] })]
+    const renamed = [member({ factsHash: h(1) }), member({ id: 'p2', name: 'Eagle Lake', factSheet: [] })]
+    expect(clusterGroundingHash(group, base)).toBe(clusterGroundingHash(group, renamed)!)
   })
 })

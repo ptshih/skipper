@@ -37,6 +37,7 @@ import { factSheetToAttribution } from './pipeline/persist'
 import { withRetry } from './pipeline/http'
 import { mapLimit } from './pipeline/concurrency'
 import { runJob } from './pipeline/job-progress'
+import { ensurePoiOverridesLoaded, overrideStaleFor, poiOverrideFor } from './pipeline/poi-overrides'
 import { personaFromKey } from './persona'
 import { lengthForRegister, ttsStyleFor } from './models'
 import { buildGroundingWell } from './eval/grounding'
@@ -59,6 +60,7 @@ import {
   clusterGenerationBlock,
   clusterGroundingHash,
   loadClusterMembers,
+  nameKey,
   tellableMembers,
   type ClusterMemberRow,
 } from './pipeline/cluster'
@@ -70,11 +72,8 @@ import type { DeliveryRegister } from '@skipper/shared'
  *  register's own researched ceiling. */
 const SECONDS_PER_EXTRA_NAME = 20
 
-/** Fold a name for comparing the classifier's free-text lists against `pois.name`: case- and
- *  punctuation-insensitive, whitespace collapsed. Same shape as `pipeline/clustering`'s `titleKey`,
- *  kept local because that one folds TITLES and this one folds place names — one changing should not
- *  silently move the other. */
-const nameKey = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+/** How many override-stale members to name before collapsing to a count — a wall of them helps nobody. */
+const OVERRIDE_STALE_LIST_CAP = 10
 
 interface Fused {
   id: string
@@ -114,6 +113,10 @@ const clusterTargetRegion = (flags.value('include-ids') ?? '').trim()
   : (flags.value('region') ?? DEFAULT_REGION_SLUG)
 
 async function main(): Promise<void> {
+  // Same first move as the solo generator. This CLI never loaded overrides at all, which made it the
+  // WORSE half of the same gap: a fused telling speaks its members' text aloud, so an uncorrected
+  // member sentence gets baked into a paid clip with nothing anywhere saying so.
+  await ensurePoiOverridesLoaded()
   const limit = numericFlag(flags, 'limit', { fallback: 1 })
   const query = flags.value('query')?.toLowerCase()
   // An explicit id list is a TARGETED re-run (regenerate exactly these), so it bypasses the region
@@ -169,7 +172,7 @@ async function main(): Promise<void> {
   for (const c of clusters) {
     if (query && !c.title.toLowerCase().includes(query)) continue
     const members = membersByCluster.get(c.id) ?? []
-    const block = clusterGenerationBlock(members)
+    const block = clusterGenerationBlock(members, c.dropped ?? [])
     if (block) {
       blocked.push(`  [${c.treatment}] ${c.title} — ${block}`)
       continue
@@ -241,6 +244,39 @@ async function main(): Promise<void> {
   generatable.sort((a, b) => b.tellable.length - a.tellable.length)
   const picked = includeIds.length > 0 ? generatable : generatable.slice(0, Math.max(0, limit))
   if (picked.length === 0) return console.log('\nNothing to narrate.')
+
+  // ⚠ OVERRIDE-STALE members. Corrections apply at the Wikipedia FETCH seam only, so a member whose
+  // facts predate its newest correction still holds the SUPERSEDED text — and a fused telling reads
+  // that text out under the group's name. Checked over `tellable`, the set the telling is actually
+  // written over. ADVISORY: it warns and does not block, matching the solo generator — halting a
+  // legitimate paid run on a stamp comparison is the worse failure, and re-fetching inside a
+  // generator is a mutation nobody asked for.
+  const day = (d: Date | null | undefined): string => d?.toISOString().slice(0, 10) ?? 'never'
+  const staleMembers = picked.flatMap((f) =>
+    f.tellable
+      .filter((m) => overrideStaleFor(m.source, m.sourceId, m.factsFetchedAt))
+      .map((m) => ({ group: f.title, m })),
+  )
+  if (staleMembers.length > 0) {
+    console.warn(
+      `\n⚠ OVERRIDE-STALE: ${staleMembers.length} member(s) of the picked group(s) carry a curated fact ` +
+        `CORRECTION newer than their cached facts — narrating now bakes the superseded sentence into a paid clip:`,
+    )
+    for (const { group, m } of staleMembers.slice(0, OVERRIDE_STALE_LIST_CAP)) {
+      console.warn(
+        `  • [${group}] ${m.name} (${m.id}) — facts fetched ${day(m.factsFetchedAt)}, ` +
+          `corrected ${day(poiOverrideFor(m.source, m.sourceId)?.latestOverrideAt)}`,
+      )
+    }
+    if (staleMembers.length > OVERRIDE_STALE_LIST_CAP) {
+      console.warn(`  …and ${staleMembers.length - OVERRIDE_STALE_LIST_CAP} more.`)
+    }
+    console.warn(
+      `  Fix: refetch-poi.ts <poiId> --apply (FREE), then enrich-pois.ts --include-ids <poiId> --force --apply ` +
+        `(SPENDS — narration grounds on the preserved sheet, so a re-fetch alone does not reach the clip).\n` +
+        `  Advisory only — this run is NOT blocked.`,
+    )
+  }
   console.log(`\nNarrating + gating ${picked.length} of them (${includeIds.length > 0 ? 'explicit ids' : `--limit ${limit}`}).\n`)
 
   const persona = personaFromKey('skipper')

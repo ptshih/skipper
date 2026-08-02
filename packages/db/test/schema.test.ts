@@ -51,15 +51,6 @@ function fkOnDelete(table: PgTable, localDbName: string): string | undefined {
   return fk.onDelete
 }
 
-/** The FOREIGN (target) column names for the FK whose LOCAL column is `localDbName`. */
-function fkTargetColumns(table: PgTable, localDbName: string): string[] {
-  const fk = getTableConfig(table).foreignKeys.find((fk) =>
-    fk.reference().columns.some((col) => col.name === localDbName),
-  )
-  if (!fk) throw new Error(`no FK on "${localDbName}" of ${getTableConfig(table).name}`)
-  return fk.reference().foreignColumns.map((c) => c.name)
-}
-
 /** Every column's DB name on a table — for asserting the ABSENCE of a column (a negative invariant). */
 function columnNames(table: PgTable): string[] {
   return getTableConfig(table).columns.map((c) => c.name)

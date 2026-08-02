@@ -13,35 +13,54 @@ const group = { title: 'Emerald Bay and Vikingsholm', highlights: ['Vikingsholm'
 
 describe('clusterFactsHash', () => {
   it('is invariant to member ORDER — the member set is a set', () => {
-    const a = clusterFactsHash({ ...group, members: [{ poiId: 'p1', factsHash: h(1) }, { poiId: 'p2', factsHash: h(2) }] })
-    const b = clusterFactsHash({ ...group, members: [{ poiId: 'p2', factsHash: h(2) }, { poiId: 'p1', factsHash: h(1) }] })
+    const a = clusterFactsHash({ ...group, members: [{ poiId: 'p1', name: 'Vikingsholm', factsHash: h(1) }, { poiId: 'p2', name: 'Eagle Falls', factsHash: h(2) }] })
+    const b = clusterFactsHash({ ...group, members: [{ poiId: 'p2', name: 'Eagle Falls', factsHash: h(2) }, { poiId: 'p1', name: 'Vikingsholm', factsHash: h(1) }] })
     expect(a).toMatch(HEX64)
     expect(a).toBe(b!)
   })
 
   it('moves when a member\'s facts move', () => {
-    const before = clusterFactsHash({ ...group, members: [{ poiId: 'p1', factsHash: h(1) }] })
-    const after = clusterFactsHash({ ...group, members: [{ poiId: 'p1', factsHash: h(9) }] })
+    const before = clusterFactsHash({ ...group, members: [{ poiId: 'p1', name: 'Vikingsholm', factsHash: h(1) }] })
+    const after = clusterFactsHash({ ...group, members: [{ poiId: 'p1', name: 'Vikingsholm', factsHash: h(9) }] })
     expect(after).not.toBe(before!)
   })
 
   it('moves when MEMBERSHIP changes even though every surviving hash is identical', () => {
-    const before = clusterFactsHash({ ...group, members: [{ poiId: 'p1', factsHash: h(1) }, { poiId: 'p2', factsHash: h(2) }] })
-    const after = clusterFactsHash({ ...group, members: [{ poiId: 'p1', factsHash: h(1) }] })
+    const before = clusterFactsHash({ ...group, members: [{ poiId: 'p1', name: 'Vikingsholm', factsHash: h(1) }, { poiId: 'p2', name: 'Eagle Falls', factsHash: h(2) }] })
+    const after = clusterFactsHash({ ...group, members: [{ poiId: 'p1', name: 'Vikingsholm', factsHash: h(1) }] })
     expect(after).not.toBe(before!)
   })
 
   it('keys on WHICH place, not just the multiset of hashes — two places can share a hash', () => {
-    const a = clusterFactsHash({ ...group, members: [{ poiId: 'p1', factsHash: h(1) }] })
-    const b = clusterFactsHash({ ...group, members: [{ poiId: 'p2', factsHash: h(1) }] })
+    // Same NAME and same facts on purpose: this isolates `poiId`, so it still fails if the id is ever
+    // dropped from the payload. Vary the name too and the test would pass on the name alone.
+    const a = clusterFactsHash({ ...group, members: [{ poiId: 'p1', name: 'Vikingsholm', factsHash: h(1) }] })
+    const b = clusterFactsHash({ ...group, members: [{ poiId: 'p2', name: 'Vikingsholm', factsHash: h(1) }] })
+    expect(a).not.toBe(b!)
+  })
+
+  it('moves when a member is RENAMED — the fused prompt speaks that name aloud', () => {
+    // `pois.name` becomes the "• Name:" bullet the telling is instructed to work in, so a rename
+    // rewrites the most audible part of the script while every facts_hash stays byte-identical. Until
+    // 2026-08-02 the digest omitted it and the clip read FRESH through a rename.
+    const before = clusterFactsHash({ ...group, members: [{ poiId: 'p1', name: 'Vikingsholm', factsHash: h(1) }] })
+    const after = clusterFactsHash({ ...group, members: [{ poiId: 'p1', name: 'Vikingsholm Castle', factsHash: h(1) }] })
+    expect(before).not.toBe(after!)
+  })
+
+  it('cannot be spoofed by a name containing the field separator', () => {
+    // The member payload is JSON-encoded per member rather than "a:b:c"-joined: a free-text name may
+    // contain the separator, and a digest whose input can be spelled two ways can silently collide.
+    const a = clusterFactsHash({ ...group, members: [{ poiId: 'p1', name: 'Foo", "bar', factsHash: h(1) }] })
+    const b = clusterFactsHash({ ...group, members: [{ poiId: 'p1', name: 'Foo', factsHash: h(1) }] })
     expect(a).not.toBe(b!)
   })
 
   it('does not DROP a null-hash member — the bug a .filter(Boolean) would hide', () => {
-    const one = clusterFactsHash({ ...group, members: [{ poiId: 'p1', factsHash: h(1) }] })
+    const one = clusterFactsHash({ ...group, members: [{ poiId: 'p1', name: 'Vikingsholm', factsHash: h(1) }] })
     const plusNull = clusterFactsHash({
       ...group,
-      members: [{ poiId: 'p1', factsHash: h(1) }, { poiId: 'p2', factsHash: null }],
+      members: [{ poiId: 'p1', name: 'Vikingsholm', factsHash: h(1) }, { poiId: 'p2', name: 'Eagle Falls', factsHash: null }],
     })
     expect(plusNull).not.toBe(one!)
     expect(plusNull).toMatch(HEX64)
@@ -56,7 +75,7 @@ describe('clusterFactsHash', () => {
   })
 
   it('moves when the NAMING evidence changes but no member\'s facts do', () => {
-    const members = [{ poiId: 'p1', factsHash: h(1) }, { poiId: 'p2', factsHash: h(2) }]
+    const members = [{ poiId: 'p1', name: 'Vikingsholm', factsHash: h(1) }, { poiId: 'p2', name: 'Eagle Falls', factsHash: h(2) }]
     const base = clusterFactsHash({ ...group, members })
     // A member promoted out of `dropped` into `highlights` is spoken aloud where it wasn't before.
     expect(clusterFactsHash({ ...group, members, highlights: ['Vikingsholm', 'Eagle Falls', 'Eagle Lake'], dropped: [] })).not.toBe(base!)
@@ -65,7 +84,7 @@ describe('clusterFactsHash', () => {
   })
 
   it('treats highlight ORDER as significant — "most recognisable first" is a generation input', () => {
-    const members = [{ poiId: 'p1', factsHash: h(1) }]
+    const members = [{ poiId: 'p1', name: 'Vikingsholm', factsHash: h(1) }]
     const a = clusterFactsHash({ ...group, members, highlights: ['Vikingsholm', 'Eagle Falls'] })
     const b = clusterFactsHash({ ...group, members, highlights: ['Eagle Falls', 'Vikingsholm'] })
     expect(a).not.toBe(b!)
@@ -74,7 +93,7 @@ describe('clusterFactsHash', () => {
   it('is a pure function of pois + the cluster row — retiring member CLIPS cannot move it', () => {
     // The build order retires ~107 member narrations AFTER the fused clips are heard. Nothing about
     // that pass may re-stale the clip it just validated, so `narrations` must not be an input.
-    const members = [{ poiId: 'p1', factsHash: h(1) }, { poiId: 'p2', factsHash: h(2) }]
+    const members = [{ poiId: 'p1', name: 'Vikingsholm', factsHash: h(1) }, { poiId: 'p2', name: 'Eagle Falls', factsHash: h(2) }]
     expect(clusterFactsHash({ ...group, members })).toBe(clusterFactsHash({ ...group, members })!)
   })
 })
