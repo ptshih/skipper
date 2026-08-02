@@ -35,6 +35,7 @@
 
 import { Hono } from 'hono'
 import { serveStatic } from 'hono/bun'
+import { csrf } from 'hono/csrf'
 import { and, asc, between, count, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import {
@@ -117,6 +118,31 @@ app.get('/health', async (c) => {
     return c.json({ ok: true, db: false, dbError: err instanceof Error ? err.message : String(err) })
   }
 })
+
+// ⚠⚠ CSRF, MOUNTED AHEAD OF THE WALL. requireAdmin authenticates a CALLER; it does nothing about a
+// request the founder's own BROWSER was tricked into making, and this console had no such check at all
+// — no Origin, no Sec-Fetch-Site, no token — while `c.req.json()` parses a body whatever its
+// Content-Type. That is a live path in the normal working state: `bun run dev:admin` keeps the bypass
+// on (requireAdmin admits unconditionally, so there is no cookie or header for the browser to
+// withhold, and SameSite is irrelevant), against the SAME Neon and R2 as production.
+//
+// The sharpest instance needs no JSON trick and no confirm flag, because it reads neither:
+//     <form action="http://localhost:8788/admin/regions/lake-tahoe/release" method="POST"></form>
+// auto-submitted from any page the founder happens to open. `POST /admin/regions/:slug/release` takes
+// only a path param, has no spend/confirm gate, and stamps released_at across every staged narration
+// in the bbox plus the fused cluster clips — which this file's own header calls IRREVERSIBLE by
+// design. A form POST is a CORS-simple request: no preflight, so nothing stopped it.
+//
+// hono's csrf() rejects exactly that class — a state-changing method whose Content-Type is form-ish
+// (urlencoded / multipart / text/plain, and a MISSING one counts as text/plain), unless Sec-Fetch-Site
+// is same-origin or the Origin matches. A cross-origin JSON POST is left alone because the browser
+// already blocks it on the preflight this server never answers. The SPA is unaffected either way: its
+// `req()` always sets Content-Type: application/json, including on bodyless POSTs, so nothing it sends
+// can match — in prod (same-origin) or in dev through the vite proxy.
+// ⚠ This also covers PROD, where the only protection today is whatever SameSite policy IAP puts on its
+// own cookie: requireAdmin trusts x-goog-authenticated-user-email, which IAP injects on any
+// authenticated request — including a cross-site one. That policy is Google's to change, not ours.
+app.use('/admin/*', csrf())
 
 // Everything else is founder-only.
 app.use('/admin/*', requireAdmin)

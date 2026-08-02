@@ -60,31 +60,44 @@ export function PlacesView() {
 
   // Inline role/featured toggle — optimistic (the cache flips instantly; rolls back on error) so the
   // prune loop stays snappy over a short curated list.
+  //
+  // ⚠⚠ THE KEY TRAVELS IN THE VARIABLES, NOT THE CLOSURE, AND THAT IS LOAD-BEARING. These callbacks
+  // used to close over the render-scoped `queryKey`, and React Query hands a PENDING mutation the
+  // newest render's options — verified in the installed source:
+  //     mutationObserver.js:34  else if (this.#currentMutation?.state.status === 'pending')
+  //                             { this.#currentMutation.setOptions(this.options) }
+  //     mutation.js:159         await this.options.onError?.(...)
+  // So switching region while a PATCH was in flight made the rollback write the OLD region's
+  // {places,bbox} under the NEW region's key. With staleTime 30s suppressing a corrective refetch, the
+  // operator then saw Tahoe's curated places, Tahoe's bbox and Tahoe's counts while the page said
+  // Yosemite — and Remove would delete a Tahoe row under a Yosemite label. The curated `places` set IS
+  // the planner's endpoint allowlist (INV-2), so that is a rider-facing deletion of the wrong place.
   const toggleMut = useMutation({
-    mutationFn: ({ id, patch }: { id: string; patch: Partial<Pick<PlaceRow, 'endpointEligible' | 'breakEligible' | 'featured'>> }) =>
+    mutationFn: ({ id, patch }: { id: string; patch: Partial<Pick<PlaceRow, 'endpointEligible' | 'breakEligible' | 'featured'>>; key: readonly unknown[] }) =>
       api.patchPlace(id, patch),
-    onMutate: async ({ id, patch }) => {
-      await qc.cancelQueries({ queryKey })
-      const prev = qc.getQueryData<{ places: PlaceRow[]; bbox: string | null }>(queryKey)
-      qc.setQueryData<{ places: PlaceRow[]; bbox: string | null }>(queryKey, (old) =>
+    onMutate: async ({ id, patch, key }) => {
+      await qc.cancelQueries({ queryKey: key })
+      const prev = qc.getQueryData<{ places: PlaceRow[]; bbox: string | null }>(key)
+      qc.setQueryData<{ places: PlaceRow[]; bbox: string | null }>(key, (old) =>
         old ? { ...old, places: old.places.map((p) => (p.id === id ? { ...p, ...patch } : p)) } : old,
       )
-      return { prev }
+      return { prev, key }
     },
     onError: (_e, _v, ctx) => {
-      if (ctx?.prev) qc.setQueryData(queryKey, ctx.prev)
+      if (ctx?.prev) qc.setQueryData(ctx.key, ctx.prev)
     },
-    onSettled: () => void qc.invalidateQueries({ queryKey }),
+    onSettled: (_d, _e, vars) => void qc.invalidateQueries({ queryKey: vars.key }),
   })
 
   const confirm = useConfirm()
   const deleteMut = useMutation({
-    mutationFn: (id: string) => api.deletePlace(id),
-    onSuccess: () => void qc.invalidateQueries({ queryKey }),
+    // Same reasoning as above: invalidate the list this delete actually came from.
+    mutationFn: ({ id }: { id: string; key: readonly unknown[] }) => api.deletePlace(id),
+    onSuccess: (_d, vars) => void qc.invalidateQueries({ queryKey: vars.key }),
   })
   const onDelete = async (p: PlaceRow) => {
     if (!(await confirm({ title: `Remove ${p.name}?`, body: 'It will no longer be pickable as a drive endpoint or break.', confirmLabel: 'Remove', tone: 'destructive' }))) return
-    deleteMut.mutate(p.id)
+    deleteMut.mutate({ id: p.id, key: queryKey })
   }
 
   // Pin set for the map (endpoints + breaks; color-coded by role; click → InfoWindow with name/kind/roles).
@@ -126,7 +139,7 @@ export function PlacesView() {
       cell: (p) => (
         <Checkbox
           checked={p.endpointEligible}
-          onCheckedChange={(v) => toggleMut.mutate({ id: p.id, patch: { endpointEligible: v === true } })}
+          onCheckedChange={(v) => toggleMut.mutate({ id: p.id, patch: { endpointEligible: v === true }, key: queryKey })}
           aria-label={`${p.name} endpoint-eligible`}
         />
       ),
@@ -138,7 +151,7 @@ export function PlacesView() {
       cell: (p) => (
         <Checkbox
           checked={p.breakEligible}
-          onCheckedChange={(v) => toggleMut.mutate({ id: p.id, patch: { breakEligible: v === true } })}
+          onCheckedChange={(v) => toggleMut.mutate({ id: p.id, patch: { breakEligible: v === true }, key: queryKey })}
           aria-label={`${p.name} break-eligible`}
         />
       ),
@@ -150,7 +163,7 @@ export function PlacesView() {
       cell: (p) => (
         <Checkbox
           checked={p.featured}
-          onCheckedChange={(v) => toggleMut.mutate({ id: p.id, patch: { featured: v === true } })}
+          onCheckedChange={(v) => toggleMut.mutate({ id: p.id, patch: { featured: v === true }, key: queryKey })}
           aria-label={`${p.name} featured`}
         />
       ),
