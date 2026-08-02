@@ -22,11 +22,12 @@ const DETAIL_TABS: SegmentedOption<DetailTab>[] = [
   { value: 'corrections', label: 'Corrections' },
 ]
 
-export function PoiDetailSheet({ poiId, poiName, canDelete, hasNarration, open, onOpenChange }: {
+export function PoiDetailSheet({ poiId, poiName, canDelete, hasNarration, coveredByCluster, open, onOpenChange }: {
   poiId: string
   poiName: string
   /** Orphan (no narration) → a hard delete is allowed. Referenced POIs are guarded server-side. */
   canDelete: boolean
+  coveredByCluster: boolean
   /** Whether a synthesized narration exists for this POI (drives the player vs empty state). */
   hasNarration: boolean
   open: boolean
@@ -117,6 +118,19 @@ export function PoiDetailSheet({ poiId, poiName, canDelete, hasNarration, open, 
           {tab === 'corrections' && <Corrections poiId={poiId} />}
         </div>
 
+        {/* ⚠ A member of a group whose fused telling is RELEASED is NOT deletable, even though it
+            has no clip of its own: the API recomputes that clip's trigger point from the surviving
+            members, so removing one moves a live clip inside drives already downloaded. The footer
+            used to appear here and claim "No narration references this POI" — true of the poi_id
+            column, false about the product. Say why instead of offering the button. */}
+        {!canDelete && coveredByCluster && (
+          <div className="border-t px-6 py-4">
+            <span className="text-xs text-muted-foreground">
+              Can’t be deleted: a released fused telling speaks for this place, and its trigger point is
+              derived from the group’s members. Regenerate that telling first, or exclude the group.
+            </span>
+          </div>
+        )}
         {canDelete && (
           <div className="border-t px-6 py-3">
             <div className="flex flex-wrap items-center gap-2">
@@ -138,7 +152,9 @@ export function PoiDetailSheet({ poiId, poiName, canDelete, hasNarration, open, 
                 idleLabel="Delete POI"
                 pendingLabel="Deleting…"
               />
-              <span className="text-xs text-muted-foreground">No narration references this POI.</span>
+              <span className="text-xs text-muted-foreground">
+                No narration references this POI, and it is not named by a released group telling.
+              </span>
             </div>
             {deleteMut.error && <ErrorCallout error={deleteMut.error} className="mt-2 rounded-lg px-3 py-2 text-xs" />}
           </div>

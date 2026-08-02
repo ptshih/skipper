@@ -24,7 +24,13 @@ export function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loadin
   const [region, setRegion] = useState('all')
   const [source, setSource] = useState('all')
   const [flags, setFlags] = useState('all')
-  const [sheetPoi, setSheetPoi] = useState<{ id: string; name: string; canDelete: boolean; hasNarration: boolean } | null>(null)
+  const [sheetPoi, setSheetPoi] = useState<{
+    id: string
+    name: string
+    canDelete: boolean
+    hasNarration: boolean
+    coveredByCluster: boolean
+  } | null>(null)
 
   const [enrichOpen, setEnrichOpen] = useState(false)
   const [narrateOpen, setNarrateOpen] = useState(false)
@@ -39,7 +45,16 @@ export function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loadin
     if (!openPoiId) return
     const p = pois.find((x) => x.id === openPoiId)
     if (!p) return // not loaded yet / unknown id — the effect re-runs when `pois` arrives
-    setSheetPoi({ id: p.id, name: p.name, canDelete: p.narrationCount === 0, hasNarration: p.narrationCount > 0 })
+    setSheetPoi({
+      id: p.id,
+      name: p.name,
+      // ⚠ narrationCount counts the poi's OWN clip. A member of a group whose fused telling is
+      // released has none — but removing it rewrites that live clip's geometry, so the server
+      // 409s. `coveredByCluster` is exactly "its fused telling is RELEASED".
+      canDelete: p.narrationCount === 0 && !p.coveredByCluster,
+      hasNarration: p.narrationCount > 0,
+      coveredByCluster: p.coveredByCluster,
+    })
     navigate({ to: '/pois', search: (prev) => ({ ...prev, poi: undefined }), replace: true })
   }, [openPoiId, pois, navigate])
 
@@ -421,7 +436,16 @@ export function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loadin
         loading={loading}
         skeletonRows={8}
         pageSize={50}
-        onRowClick={(p) => setSheetPoi({ id: p.id, name: p.name, canDelete: p.narrationCount === 0, hasNarration: p.narrationCount > 0 })}
+        onRowClick={(p) => setSheetPoi({
+      id: p.id,
+      name: p.name,
+      // ⚠ narrationCount counts the poi's OWN clip. A member of a group whose fused telling is
+      // released has none — but removing it rewrites that live clip's geometry, so the server
+      // 409s. `coveredByCluster` is exactly "its fused telling is RELEASED".
+      canDelete: p.narrationCount === 0 && !p.coveredByCluster,
+      hasNarration: p.narrationCount > 0,
+      coveredByCluster: p.coveredByCluster,
+    })}
         rowClassName={(p) => (isSelected(p.id) ? 'bg-muted/40' : undefined)}
         empty={<EmptyState icon={Search}>No POIs match these filters.</EmptyState>}
       />
@@ -431,6 +455,7 @@ export function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loadin
           poiId={sheetPoi.id}
           poiName={sheetPoi.name}
           canDelete={sheetPoi.canDelete}
+          coveredByCluster={sheetPoi.coveredByCluster}
           hasNarration={sheetPoi.hasNarration}
           open={!!sheetPoi}
           onOpenChange={(o) => { if (!o) setSheetPoi(null) }}

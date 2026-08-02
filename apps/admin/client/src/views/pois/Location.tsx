@@ -247,7 +247,9 @@ export function Location({ poiId, poiLat, poiLng }: { poiId: string; poiLat?: nu
             <div className="text-xs leading-relaxed text-muted-foreground">
               Eligible. Exclude a place that EXISTS but can't be told as a stop — a numbered highway
               (its coordinate is an arbitrary point on a line you're on for miles), or an administrative
-              boundary. Takes effect immediately for new drives; audio is kept.
+              boundary. Takes effect immediately for new drives; audio is kept. ⚠ Not available while a
+              RELEASED fused telling speaks for this place: excluding it would move where that live clip
+              fires in drives riders have already downloaded, so the server refuses it.
             </div>
             <div className="flex flex-wrap items-end gap-2">
               <div className="min-w-56 flex-1 space-y-1.5">

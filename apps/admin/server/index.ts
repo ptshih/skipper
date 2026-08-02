@@ -1582,6 +1582,24 @@ app.post('/admin/pois/:id/corrections', async (c) => {
       if (reason.length > MAX_REASON_LEN) {
         return c.json({ error: 'bad_request', message: `\`reason\` must be ≤ ${MAX_REASON_LEN} chars.` }, 400)
       }
+      // ⚠ Same hazard as DELETE, and it surprised us for the same reason: excluding a member sets
+      // `excluded_reason`, which drops it from `isNarratableStoryPoi` → `tellableMembers` → the
+      // member set the API recomputes a fused clip's geometry from. So an "exclude" on a member of a
+      // RELEASED group moves (or kills) a live clip, despite this action being documented as cheap and
+      // reversible. It is reversible for a SOLO place; it is not for a released group's geometry.
+      const liveGroup = await releasedClusterFor(id)
+      if (liveGroup) {
+        return c.json(
+          {
+            error: 'conflict',
+            message:
+              `"${poi.name}" is one of the places a RELEASED fused telling speaks for. Excluding it ` +
+              'changes where that clip fires in drives riders have already downloaded. Regenerate the ' +
+              "group's telling first, or exclude the whole group.",
+          },
+          409,
+        )
+      }
       console.log(`[admin] ${operator} EXCLUDED ${poi.name} (${poi.source}:${poi.sourceId}) — ${reason}`)
       await db.update(pois).set({ excludedReason: `${reason} (by ${operator})` }).where(eq(pois.id, id))
     }
@@ -1625,6 +1643,29 @@ app.post('/admin/pois/:id/corrections', async (c) => {
 // delete it; we refuse with a clean 409. An orphaned POI carries no narration, so there are no orphan
 // R2 clips to sweep. poi_overrides are keyed by (source, source_id), survive the row, and re-apply on
 // re-discovery — left intact.
+/** Is this poi named by a cluster whose fused telling is ALREADY RELEASED?
+ *
+ *  ⚠ Removing such a member is not a corpus edit — it silently rewrites a LIVE clip. The API derives a
+ *  fused telling's trigger point per request from its surviving members
+ *  (apps/api/src/clusters.ts: `clusterTrigger(pts)`; `if (!trigger) continue`), so dropping members
+ *  MOVES where a released clip fires inside drives riders already downloaded, and dropping the last
+ *  tellable one deletes that clip from every drive that selected it — a drive they paid a
+ *  non-refundable credit for, with no error anywhere.
+ *
+ *  Gated on RELEASED, not on "has a narration" (founder call 2026-08-02): released is the irreversible
+ *  one-way latch, while a staged fused clip is unpublished scratch that a regenerate fixes for free.
+ *  This mirrors `coveredByCluster` on GET /admin/pois, which the corpus table already renders. */
+async function releasedClusterFor(poiId: string): Promise<{ clusterId: string } | null> {
+  const [poi] = await db.select({ clusterId: pois.clusterId }).from(pois).where(eq(pois.id, poiId)).limit(1)
+  if (!poi?.clusterId) return null
+  const [fused] = await db
+    .select({ id: narrations.id })
+    .from(narrations)
+    .where(and(eq(narrations.clusterId, poi.clusterId), isNotNull(narrations.releasedAt)))
+    .limit(1)
+  return fused ? { clusterId: poi.clusterId } : null
+}
+
 app.delete('/admin/pois/:id', async (c) => {
   const id = c.req.param('id')
   if (!UUID_RE.test(id)) return c.json({ error: 'not_found' }, 404)
@@ -1639,6 +1680,23 @@ app.delete('/admin/pois/:id', async (c) => {
       {
         error: 'conflict',
         message: `"${poi.name}" has a narration — regenerate or correct it instead of deleting.`,
+      },
+      409,
+    )
+  }
+
+  // ⚠ `refs` counts narrations.poi_id ONLY, and a clustered member has no clip of its own — its
+  // telling hangs off the CLUSTER. So this guard read 0 and waved through a delete that rewrites a
+  // live fused clip. See releasedClusterFor.
+  const live = await releasedClusterFor(id)
+  if (live) {
+    return c.json(
+      {
+        error: 'conflict',
+        message:
+          `"${poi.name}" is one of the places a RELEASED fused telling speaks for. Deleting it moves ` +
+          'where that clip fires in drives riders have already downloaded — and removing the last one ' +
+          'deletes the clip from those drives. Exclude the group or regenerate its telling first.',
       },
       409,
     )
