@@ -186,6 +186,16 @@ app.post('/admin/regions', async (c) => {
   if (!body.slug?.trim() || !body.displayName?.trim()) {
     return c.json({ error: 'slug and displayName are required' }, 400)
   }
+  // ⚠ The slug is PERMANENT — there is no DELETE-region route and no rename — and it is interpolated
+  // into every later path (PATCH /admin/regions/:slug, .../release). So it is validated here, at the
+  // one boundary that can still refuse it, rather than discovered later as an unroutable region.
+  const slug = body.slug.trim()
+  if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug)) {
+    return c.json(
+      { error: 'bad_request', message: 'slug must be lowercase letters/digits separated by single hyphens (e.g. "lake-tahoe")' },
+      400,
+    )
+  }
   const bbox = body.bbox?.trim() || null
   // Validate the bbox at the write boundary — a swapped-corner/oversized box silently scopes a later
   // SPENDING enrich/generate over a huge candidate set (point-in-bbox selection). (audit #5)
@@ -193,11 +203,21 @@ app.post('/admin/regions', async (c) => {
     const err = bboxError(bbox)
     if (err) return c.json({ error: err }, 400)
   }
-  const [row] = await db.insert(regions).values({
-    slug: body.slug.trim(),
-    displayName: body.displayName.trim(),
-    bbox,
-  }).returning({ slug: regions.slug, displayName: regions.displayName, bbox: regions.bbox })
+  let row
+  try {
+    ;[row] = await db.insert(regions).values({
+      slug,
+      displayName: body.displayName.trim(),
+      bbox,
+    }).returning({ slug: regions.slug, displayName: regions.displayName, bbox: regions.bbox })
+  } catch (e) {
+    // A duplicate slug surfaced as an opaque 500 via app.onError; the console had no way to tell
+    // "already exists" from "the server broke".
+    if (isUniqueViolation(e)) {
+      return c.json({ error: 'conflict', message: `a region with the slug "${slug}" already exists` }, 409)
+    }
+    throw e
+  }
   return c.json({ region: row }, 201)
 })
 
@@ -349,7 +369,15 @@ app.post('/admin/regions/bbox-lookup', async (c) => {
   }
 
   try {
-    const client = new (await import('@anthropic-ai/sdk')).default()
+    // ⚠ EXPLICIT TIMEOUT + LOW maxRetries, and this is a rule, not a preference. A bare `new Anthropic()`
+    // takes the SDK defaults — verified in the installed 0.112.1 client: `DEFAULT_TIMEOUT = 600000`
+    // (10 minutes) and `maxRetries ?? 2`. That is up to THREE Opus turns and thirty minutes behind one
+    // operator click, inside a service whose own request budget is 300s — so two of those turns would
+    // bill after the browser has already been 504'd, with nobody to deliver the answer to. CLAUDE.md says
+    // it directly for a model call in a request path: "Low maxRetries (0-1) + an explicit timeout inside
+    // the Cloud Run budget — do NOT copy studio's maxRetries: 5, tuned for a batch run that already spent."
+    // 90s x 2 attempts stays inside this server's 240s idleTimeout as well as Cloud Run's 300s.
+    const client = new (await import('@anthropic-ai/sdk')).default({ maxRetries: 1, timeout: 90_000 })
     const msg = await client.messages.create({
       model: process.env.ADMIN_PROPOSE_MODEL ?? CLAUDE_MODELS.opus,
       max_tokens: 512,
@@ -421,7 +449,13 @@ function upsertCuratedPlace(row: {
         lng: sql`excluded.lng`,
         endpointEligible: sql`${places.endpointEligible} OR excluded.endpoint_eligible`,
         breakEligible: sql`${places.breakEligible} OR excluded.break_eligible`,
-        featured: sql`excluded.featured`,
+        // ⚠ OR-merged like the roles, not last-write-wins. `featured` is a CURATOR judgement — the
+        // /places promote loop is literally PATCH { featured: true } — and this upsert is reached by
+        // both a whole-region re-curate and the manual Add-a-place dialog, whose form resets featured
+        // to false every time it opens. As `excluded.featured` it silently demoted hand-promoted
+        // places on a path that advertises itself as additive (the two roles right above cannot be
+        // dropped this way). Demotion stays possible, but only through an explicit PATCH.
+        featured: sql`${places.featured} OR excluded.featured`,
         updatedAt: new Date(),
       },
     })
@@ -576,6 +610,12 @@ app.post('/admin/places/curate', async (c) => {
   const drafts = Array.isArray(body.drafts) ? body.drafts : []
   if (!slug) return c.json({ error: 'region is required' }, 400)
   if (!drafts.length) return c.json({ error: 'no drafts to curate' }, 400)
+  // ⚠ Bounded. Every draft costs TWO billed Google Places calls, so an unbounded array makes the spend
+  // per click whatever the client posts. 60 is the ceiling the draft route already imposes on itself
+  // (targetN is clamped to 8..60), so this refuses only bodies that did not come from that flow.
+  if (drafts.length > 60) {
+    return c.json({ error: 'bad_request', message: `at most 60 drafts per curate (got ${drafts.length})` }, 400)
+  }
   const region = (await db.select({ bbox: regions.bbox }).from(regions).where(eq(regions.slug, slug)).limit(1))[0]
   if (!region) return c.json({ error: 'not_found' }, 404)
   const box = parseBbox(region.bbox)
@@ -617,20 +657,39 @@ app.post('/admin/places/curate', async (c) => {
     results.push({ name: d.name, status: 'resolved', resolvedName: place.name })
   }
 
+  // ⚠ Per-write try/catch, because everything expensive has ALREADY happened by this point. The
+  // resolve loop above has spent two billed Places calls per draft; a bare throw here escaped to
+  // app.onError, turned the whole request into `{"error":"internal"}` 500, and took the per-draft
+  // `results` report with it — so the operator paid for every resolve and was left unable to tell
+  // which places landed, on the table that IS the planner's endpoint allowlist. A failed row is now
+  // reported as an error against its own name and the batch keeps going.
+  let added = 0
   for (const r of byId.values()) {
-    await upsertCuratedPlace({
-      placeId: r.place.placeId,
-      name: r.place.name,
-      primaryType: r.place.primaryType ?? null,
-      lat: r.place.lat,
-      lng: r.place.lng,
-      endpointEligible: r.endpointEligible,
-      breakEligible: r.breakEligible,
-      featured: r.featured,
-    })
+    try {
+      await upsertCuratedPlace({
+        placeId: r.place.placeId,
+        name: r.place.name,
+        primaryType: r.place.primaryType ?? null,
+        lat: r.place.lat,
+        lng: r.place.lng,
+        endpointEligible: r.endpointEligible,
+        breakEligible: r.breakEligible,
+        featured: r.featured,
+      })
+      added += 1
+    } catch (e) {
+      console.error('[admin] curate upsert failed', r.place.placeId, e)
+      const row = results.find((x) => x.resolvedName === r.place.name && x.status === 'resolved')
+      if (row) {
+        row.status = 'error'
+        row.message = `resolved, but the write failed: ${e instanceof Error ? e.message : String(e)}`
+      }
+    }
   }
 
-  return c.json({ added: byId.size, results })
+  // `added` is now what was actually WRITTEN, not what resolved — a row whose upsert failed is
+  // counted as an error above, not as an add.
+  return c.json({ added, results })
 })
 
 // GET /admin/runs — a unified feed merging the operational studio_jobs with the historical
@@ -778,6 +837,10 @@ app.get('/admin/runs', async (c) => {
 // held back (withheld=true) and why (findings), worst-first. Read-only observability.
 app.get('/admin/runs/:id/scores', async (c) => {
   const runId = c.req.param('id')
+  // ⚠ Every other id-taking route guards this first. Without it a non-uuid reaches a uuid column, the
+  // driver raises `invalid input syntax for type uuid`, and app.onError turns a stale bookmark into an
+  // opaque 500 instead of an honest 404.
+  if (!UUID_RE.test(runId)) return c.json({ error: 'not_found' }, 404)
   // Both queries key only off `runId` — neither needs the other's result — so they go together rather
   // than paying two sequential neon-http round trips. That driver is one-shot HTTP per query, and this
   // route is fetched when the operator opens a run drawer, so the second trip is time a human spends

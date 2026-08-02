@@ -180,7 +180,15 @@ export async function draftCuratedPlaces(
   regionName: string,
   opts: { targetN: number; model: string },
 ): Promise<PlaceDraft[]> {
-  const client = new Anthropic()
+  // ⚠ EXPLICIT TIMEOUT + LOW maxRetries, and this is a rule, not a preference. A bare `new Anthropic()`
+  // takes the SDK defaults — verified in the installed 0.112.1 client: `DEFAULT_TIMEOUT = 600000`
+  // (10 minutes) and `maxRetries ?? 2`. That is up to THREE Opus turns and thirty minutes behind one
+  // operator click, inside a service whose own request budget is 300s — so two of those turns would
+  // bill after the browser has already been 504'd, with nobody to deliver the answer to. CLAUDE.md says
+  // it directly for a model call in a request path: "Low maxRetries (0-1) + an explicit timeout inside
+  // the Cloud Run budget — do NOT copy studio's maxRetries: 5, tuned for a batch run that already spent."
+  // 90s x 2 attempts stays inside this server's 240s idleTimeout as well as Cloud Run's 300s.
+  const client = new Anthropic({ maxRetries: 1, timeout: 90_000 })
   const res = await client.messages.create({
     model: opts.model,
     max_tokens: 4_000,

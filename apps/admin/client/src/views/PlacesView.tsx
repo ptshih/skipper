@@ -297,6 +297,7 @@ function CuratePanel({ region, regionName, onClose, onCurated }: {
   const [drafts, setDrafts] = useState<PlaceDraft[]>([])
   const [kept, setKept] = useState<Set<number>>(new Set())
   const [results, setResults] = useState<CurateResult[] | null>(null)
+  const [added, setAdded] = useState<number | null>(null)
 
   const draftMut = useMutation({
     mutationFn: () => api.draftPlaces({ region }),
@@ -307,7 +308,10 @@ function CuratePanel({ region, regionName, onClose, onCurated }: {
   })
   const curateMut = useMutation({
     mutationFn: () => api.curatePlaces({ region, drafts: drafts.filter((_, i) => kept.has(i)) }),
-    onSuccess: (res) => { setResults(res.results); onCurated() }, // refresh the table; keep the panel open for the summary
+    // Keep the server's `added` — it is the count of rows actually WRITTEN, after dedupe by canonical
+    // place_id and after any per-row write failure. Deriving the headline from the resolved rows
+    // instead over-counted: two drafts can pin the SAME Google place, and an upsert can fail on its own.
+    onSuccess: (res) => { setResults(res.results); setAdded(res.added); onCurated() },
   })
 
   const toggleKeep = (i: number) =>
@@ -320,7 +324,7 @@ function CuratePanel({ region, regionName, onClose, onCurated }: {
 
   // Start a fresh draft WITHOUT leaving the panel (after a results summary, or to re-draft).
   const reset = () => {
-    setDrafts([]); setKept(new Set()); setResults(null)
+    setDrafts([]); setKept(new Set()); setResults(null); setAdded(null)
     draftMut.reset(); curateMut.reset()
   }
 
@@ -381,7 +385,8 @@ function CuratePanel({ region, regionName, onClose, onCurated }: {
         {results && (
           <>
             <Callout variant={errored ? 'error' : 'info'} className="rounded-lg px-3 py-2 text-sm">
-              Added {resolved} {resolved === 1 ? 'place' : 'places'}.
+              Added {added ?? resolved} {(added ?? resolved) === 1 ? 'place' : 'places'}
+              {added != null && resolved !== added ? ` from ${resolved} resolved picks` : ''}.
               {dropped > 0 && ` ${dropped} couldn’t be pinned in-region (skipped).`}
               {errored > 0 && ` ${errored} errored.`}
             </Callout>
