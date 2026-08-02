@@ -29,8 +29,20 @@ export interface RouteProvenanceCore {
   materializedAt: string
 }
 
-/** Decode a Google encoded polyline (precision 5) to [lng, lat] pairs. */
-function decodePolyline(encoded: string): [number, number][] {
+/** Decode a Google encoded polyline (precision 5) to **[lng, lat]** pairs.
+ *
+ *  ⚠ AXIS ORDER IS [lng, lat] — GeoJSON order, matching what the API ships and what `@skipper/engine`
+ *  consumes. Google's own encoding is lat-then-lng, so this function SWAPS. Getting that backwards
+ *  does not throw and does not fail a typecheck (both are `number`); it silently relocates every drive,
+ *  and Tahoe's coordinates (~39, ~-120) swap into the Indian Ocean rather than anywhere suspicious-
+ *  looking on a map you'd think to check.
+ *
+ *  Exported for tests only — every runtime caller goes through `materializeRoute`. It is worth testing
+ *  directly because it is the one piece of pure, fiddly arithmetic on the path (varint + zigzag +
+ *  delta), everything downstream trusts its output completely (pacing, trigger radii, the map, and
+ *  `buildDrive`'s selection), and a subtly wrong decode moves stops rather than breaking them — which
+ *  reads as "the triggering is flaky" from inside a car. */
+export function decodePolyline(encoded: string): [number, number][] {
   const factor = 1e5
   let index = 0
   let lat = 0
