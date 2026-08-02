@@ -32,12 +32,10 @@ now have one (`f06ce85`, `1fc602c`): the polyline decoder (mutation-checked — 
 of 7) and the MIME map that had already drifted once in production. ⚠ **When adding a package, add
 its `test` script in the same commit** — an absent script is indistinguishable from a passing suite.
 
-- [ ] **Add: `materializeRoute`'s response parsing.** Two branches with no coverage, one of them a
-      bug that already shipped: proto3 OMITS zero-valued fields, so a degenerate A→A route (a "loop"
-      prompt resolves start == end) returns no `distanceMeters` at all, and before the `?? 0` it
-      became `NaN` → JSON `null` → a DTO failure the rider saw as a bogus "please update Skipper".
-      Also the `"786s"` duration parse. ⚠ Needs the response-shaping split out of the fetch so it can
-      be tested without network — a small extraction, the same shape as `preview-util.ts`.
+- [x] ~~Add: `materializeRoute`'s response parsing~~ — **DONE 2026-08-02 (`c871855`).** Split
+      `buildRoutesRequestBody` + `shapeRoute` out of the fetch (no behaviour change; the timestamp is
+      passed in rather than read from the clock). 13 tests, and the proto3 `?? 0` guard is
+      MUTATION-CHECKED — a bare cast fails exactly one test. `@skipper/routing` went 0 → 20 tests.
 - [ ] **Add: `useLocationPriming`** (also listed above) — uncovered, gates every live drive, and
       App Store 5.1.1(iv) rides on its explainer having no "Not Now".
 - [ ] **Consider: `apps/site` has 0 tests.** Probably correct for a static Astro build — but the
