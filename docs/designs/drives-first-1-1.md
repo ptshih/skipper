@@ -315,8 +315,15 @@ now takes drive creation down with it.
 ⚠ **Re-ordered after a pre-flight pass against the code** — the original sequence did not survive
 contact. One atomic commit per step unless noted. On `main`, explicit paths only, no codemods.
 
-**0 — SNAPSHOT.** ✅ DONE locally 2026-07-31 (D5). **Still owed: the offsite copy.** No `db:push` /
-`db:migrate` / destructive data work until it exists — dev and prod share one Neon host.
+**0 — SNAPSHOT.** ✅ **DONE 2026-07-31 (D5), and local-only is ACCEPTED** — there is no offsite copy and
+none is owed. ⚠ This line read "Still owed: the offsite copy. No `db:push` / `db:migrate` / destructive
+data work until it exists" until 2026-08-02, which contradicted D5 in the same document and gated work
+D5 had authorized. D5 is the current record (founder, 2026-08-02).
+⚠ What the snapshot does NOT make safe, and what still governs destructive work: dev and prod are ONE
+Neon host, so there is no staging to rehearse on, and the snapshot lives under a gitignored `.scratch/`
+sharing a failure domain with the working tree — which is why CLAUDE.md's ban on `git clean` is
+load-bearing. `scripts/db-preflight.ts` refuses a table-dropping `db:generate`/`db:push` on THAT basis,
+not on the backup's location.
 
 **1 — `apps/api/src/limits.ts` + the bounded body read** (INV-3, INV-12). ✅ **DONE 2026-07-31.**
 `readBoundedText` measures the ACTUAL stream and never reads `Content-Length`; `readJsonBody` takes a

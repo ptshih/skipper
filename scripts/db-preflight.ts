@@ -14,9 +14,15 @@
  *
  * ⚠ WHAT MAKES IT SHARP HERE, and why a plain "are you sure?" is not enough: `.env.development` and
  * `.env.production` point at the SAME Neon host (CLAUDE.md › Posture). There is no staging to
- * rehearse on, so a `db:push` typed in a "development" shell is a production DDL. And 1.1's step 0
- * permits destructive migrations ONLY once an OFFSITE corpus + R2 snapshot exists; today's snapshot
- * is LOCAL, under a gitignored `.scratch/`, sharing a failure domain with the working tree.
+ * rehearse on, so a `db:push` typed in a "development" shell is a production DDL.
+ *
+ * ⚠ A SNAPSHOT EXISTS AND IT IS NOT THE POINT. D5 records a whole-schema + whole-bucket snapshot taken
+ * 2026-07-31, and local-only was explicitly ACCEPTED (founder; step 0 said otherwise until 2026-08-02
+ * and was the stale half). So this guard does NOT argue "there is no backup" — it argues that the
+ * backup is local, under a gitignored `.scratch/` that shares a failure domain with the working tree,
+ * against a database with no staging twin, and that restoring 6,856 rows to undo a typo is not a
+ * recovery plan. An earlier version of this file cited the lifted gate; a guard that justifies itself
+ * with a rule that no longer exists is one people learn to route around.
  *
  * WHAT IT DOES. Compares the tables DECLARED in the schema files against the tables in the newest
  * drizzle snapshot, and prints the delta. A drop is refused (exit 1) unless the caller sets
@@ -74,7 +80,7 @@ if (!drops.length && !creates.length) console.log('  no table-level drift')
 if (!drops.length) process.exit(0)
 
 if (process.env.SKIPPER_ALLOW_DESTRUCTIVE_DDL === '1') {
-  console.log('\n  SKIPPER_ALLOW_DESTRUCTIVE_DDL=1 — proceeding. The snapshot had better be offsite.')
+  console.log('\n  SKIPPER_ALLOW_DESTRUCTIVE_DDL=1 — proceeding. Read the SQL before you apply it.')
   process.exit(0)
 }
 
@@ -85,11 +91,11 @@ console.error(
     '',
     `    ${drops.join(', ')}`,
     '',
-    '  dev and prod are the SAME Neon host — there is no staging to rehearse this on, and',
-    '  1.1 step 0 allows destructive migrations only once an OFFSITE snapshot exists (today\'s',
-    '  is local, under a gitignored .scratch/, sharing a failure domain with this tree).',
+    '  dev and prod are the SAME Neon host — there is no staging to rehearse this on. A snapshot',
+    '  exists (D5, 2026-07-31) but it is LOCAL, under a gitignored .scratch/ that shares a failure',
+    '  domain with this working tree — a restore is a bad day, not an undo.',
     '',
-    '  Take the offsite copy first. Then, deliberately:',
+    '  If you mean it, deliberately:',
     '',
     '      SKIPPER_ALLOW_DESTRUCTIVE_DDL=1 bun run db:generate    # review the SQL it writes',
     '      SKIPPER_ALLOW_DESTRUCTIVE_DDL=1 bun run db:migrate     # apply it',

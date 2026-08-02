@@ -725,12 +725,14 @@ export const drives = pgTable(
 // ARMS the next `db:generate`/`db:push` to drop it, and that DDL is a deliberate act against the one
 // shared Neon host, not a side effect of this commit.
 //
-// ⚠⚠ AND THE SAFETY FOR IT IS STILL OWED. 1.1's step 0 permits destructive migrations ONLY once an
-// OFFSITE corpus + R2 snapshot exists; what exists today is LOCAL, under a gitignored `.scratch/`,
-// sharing a failure domain with the working tree. So the charge is armed and the pin is missing, and
-// those two facts otherwise live in two different documents — which is why this one is written where
-// the person about to run the DDL will actually be standing. Take the offsite copy first.
-// (`dev` and `prod` point at the SAME Neon host; there is no staging to rehearse on.)
+// ⚠⚠ AND THE SAFETY IS THINNER THAN IT LOOKS. A snapshot exists (D5, 2026-07-31, whole schema + whole
+// bucket) and local-only was explicitly ACCEPTED by the founder — so this is NOT "there is no backup".
+// It is that the backup lives under a gitignored `.scratch/` sharing a failure domain with the working
+// tree, `dev` and `prod` point at the SAME Neon host so there is no staging to rehearse on, and
+// restoring 6,856 rows to undo a typo is a bad day rather than an undo. `scripts/db-preflight.ts`
+// refuses the drop on that basis and is the guard that stands where this comment only warns.
+// (An earlier version of both cited an offsite requirement that step 0 still listed and D5 had already
+// lifted — reconciled 2026-08-02.)
 
 /* -------------------------------------------------------------------------- */
 /*  credit_entries — the user-owned credit LEDGER (append-only; balance = SUM).  */

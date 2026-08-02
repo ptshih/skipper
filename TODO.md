@@ -577,15 +577,14 @@ None of this is a build; all of it is config. The premise changed on 2026-07-28:
       Google Routes call reachable by any stranger, forever. The number was not changed and no change is
       being recommended — its PREMISE moved, and per CLAUDE.md that is a founder call. Same question
       applies to `PLAN_RATE_MINUTE`/`PLAN_RATE_HOUR`, which never had a wall in front of them.
-- [ ] **The snapshot gate contradicts itself, and the newest safety tool inherited the stale half.**
-      D5 records the founder ACCEPTED a local-only snapshot ("Local-only is ACCEPTED (founder) — no
-      offsite copy"), but step 0 still reads "Still owed: the offsite copy. No `db:push` / `db:migrate` /
-      destructive data work until it exists." As written, step 0 gates work D5 authorized. It is not
-      inert prose: `scripts/db-preflight.ts`'s header cites the step-0 version ("permits destructive
-      migrations ONLY once an OFFSITE corpus + R2 snapshot exists"), so the repo's newest guard now
-      quotes a gate that may already be lifted. Decide which is current and say it in ONE place — a
-      docs-only fix, and step 12 is the docs step. Raised, deliberately not resolved: reconciling two
-      founder records is not an agent's call to make silently.
+- [x] **The snapshot gate contradicted itself — RESOLVED 2026-08-02 (founder): D5 is current.**
+      D5 recorded that a local-only snapshot was ACCEPTED; step 0 still said the offsite copy was owed
+      and blocked all destructive DB work, gating work D5 had authorized. Not inert prose —
+      `scripts/db-preflight.ts` cited the step-0 half, so the repo's newest guard argued from a lifted
+      rule. Step 0 now matches D5, and the guard (plus the `drive_demand` tombstone in schema.ts)
+      argues from what is actually true instead: one Neon host with no staging twin, and a backup
+      under a gitignored `.scratch/` that shares a failure domain with the working tree. The refusal
+      itself is unchanged — it was always about an accidental DROP, not about where the backup lives.
 - [x] **`skipper-api-deploy` had an EMPTY `includedFiles` — FIXED 2026-07-30.** It was the only one of the
       four Cloud Build triggers without a path filter, so ANY commit rebuilt and redeployed the API at
       100% traffic with no test step and no canary. Not theoretical: the build history showed it firing
