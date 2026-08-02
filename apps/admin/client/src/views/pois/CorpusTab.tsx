@@ -58,15 +58,22 @@ export function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loadin
     navigate({ to: '/pois', search: (prev) => ({ ...prev, poi: undefined }), replace: true })
   }, [openPoiId, pois, navigate])
 
+  // Every region any poi falls in — a place can be in several, so this walks all of them.
   const regions = useMemo(() => {
-    const seen = new Set<string>()
-    return pois
-      .filter((p) => p.regionSlug && (seen.has(p.regionSlug) ? false : (seen.add(p.regionSlug), true)))
-      .map((p) => ({ slug: p.regionSlug!, name: p.regionName ?? p.regionSlug! }))
+    const bySlug = new Map<string, string>()
+    for (const p of pois) {
+      p.regionSlugs.forEach((slug, i) => {
+        if (!bySlug.has(slug)) bySlug.set(slug, p.regionNames[i] ?? slug)
+      })
+    }
+    return [...bySlug].map(([slug, name]) => ({ slug, name }))
   }, [pois])
 
   const filtered = useMemo(() => pois.filter((p) => {
-    if (region !== 'all' && p.regionSlug !== region) return false
+    // ⚠ CONTAINS, not equals. A poi in two overlapping bboxes must appear under BOTH — otherwise the
+    // Region filter hides it from one of them, and since a paid run now dispatches the ids of the
+    // FILTERED rows, "select all" under that region would silently omit it from the job.
+    if (region !== 'all' && !p.regionSlugs.includes(region)) return false
     if (source !== 'all' && p.source !== source) return false
     // The combined remediation queue (the old "Retire" tab): any POI needing attention — stale facts, a
     // narration defect, an unattributed story clip, or a drifted speakable anchor. Fix each from its row's
@@ -238,7 +245,9 @@ export function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loadin
     {
       header: 'Region',
       cellClassName: 'text-muted-foreground',
-      cell: (p) => p.regionName ?? <span className="text-muted-foreground">—</span>,
+      // Shows every region a place is in — the set a region release would publish it from.
+      cell: (p) =>
+        p.regionNames.length ? p.regionNames.join(' · ') : <span className="text-muted-foreground">—</span>,
     },
     {
       header: 'Story',

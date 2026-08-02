@@ -153,8 +153,10 @@ export interface PoiRow {
   suspiciousDuration: boolean
   /** region-release-gate: a clip exists but is STAGED (not public) until released. false when no clip. */
   released: boolean
-  regionSlug: string | null
-  regionName: string | null
+  /** EVERY region whose bbox contains this place — regions are boxes and boxes may overlap, so a
+   *  place genuinely belongs to more than one. Empty = inside no configured region's bbox. */
+  regionSlugs: string[]
+  regionNames: string[]
 }
 
 // One fact-edit override row on a POI (a literal find→replace on the fetched extract).

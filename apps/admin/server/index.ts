@@ -163,14 +163,19 @@ app.get('/admin/regions', async (c) => {
     db.select({ lat: pois.lat, lng: pois.lng }).from(pois),
   ])
 
-  // Each poi belongs to the FIRST region (rows are displayName-ordered) whose bbox contains it — the
-  // same single-assignment coverage the POIs view shows, so the two counts always agree. A region with
-  // no/invalid bbox claims nothing → poiCount stays null ("no bbox set", distinct from a genuine 0).
+  // ⚠ A poi counts toward EVERY region whose bbox contains it — regions are boxes and boxes may
+  // overlap, so membership is genuinely many-to-many (founder, 2026-08-02). These counts therefore do
+  // NOT sum to the corpus size, deliberately: a place in the Tahoe box and a future Reno box is in
+  // both, and a region that under-reported its own corpus would be the more misleading number.
+  // This was `.find()` (first region by display name wins), which matched the POIs view — the two
+  // agreed with each other and both disagreed with what a region release would actually publish.
+  // A region with no/invalid bbox claims nothing → poiCount stays null ("no bbox set", ≠ a genuine 0).
   const boxed = rows.map((r) => ({ slug: r.slug, box: parseBbox(r.bbox) }))
   const counts = new Map<string, number>(boxed.flatMap((b) => (b.box ? [[b.slug, 0]] : [])))
   for (const { lat, lng } of poiCoords) {
-    const hit = boxed.find(({ box }) => box && pointInBbox(box, lat, lng))
-    if (hit) counts.set(hit.slug, counts.get(hit.slug)! + 1)
+    for (const { slug, box } of boxed) {
+      if (box && pointInBbox(box, lat, lng)) counts.set(slug, counts.get(slug)! + 1)
+    }
   }
 
   return c.json({ regions: rows.map((r) => ({ ...r, poiCount: counts.get(r.slug) ?? null })) })
@@ -1109,8 +1114,17 @@ app.get('/admin/pois', async (c) => {
     const box = parseBbox(r.bbox)
     return box ? [{ slug: r.slug, name: r.displayName, box }] : []
   })
-  const regionForPoi = (lat: number, lng: number) =>
-    regionBoxes.find((b) => pointInBbox(b.box, lat, lng)) ?? null
+  // ⚠ EVERY containing region, not the first. A POI can belong to more than one region — regions are
+  // BBOXES and boxes are free to overlap (founder, 2026-08-02), and `lake-tahoe`'s seeded box is the
+  // whole Tahoe–Reno corridor, so a future `reno` sits entirely inside it. This used to be `.find()`,
+  // which silently assigned each poi to the FIRST region by display name. That was not a display nit:
+  //   • a shared poi was counted in only one region, so the other under-reported;
+  //   • the Region filter HID it from its second region — and since a paid run now dispatches the
+  //     explicit ids of the filtered rows, "select all" under that region would quietly omit it;
+  //   • the off-road heuristic marked only the first region as snapped.
+  // It also made a region release look wrong when it wasn't: releasing by raw bbox correctly publishes
+  // every clip in the box, but the operator could not SEE the ones the console had filed elsewhere.
+  const regionsForPoi = (lat: number, lng: number) => regionBoxes.filter((b) => pointInBbox(b.box, lat, lng))
 
   // Off-road flag (dogfood 2026-06-25 #5/#7 "flag POIs not near a road — they won't trigger"): a POI with
   // NO road-snapped speakable anchor triggers on its raw centroid, so an off-road pin fires garbage or never.
@@ -1122,8 +1136,8 @@ app.get('/admin/pois', async (c) => {
   const snappedRegions = new Set<string>()
   for (const p of poisRows) {
     if (p.speakableLat == null) continue
-    const r = regionForPoi(p.lat, p.lng)
-    if (r) snappedRegions.add(r.slug)
+    // An anchored poi proves the snap has run over EVERY region that contains it.
+    for (const r of regionsForPoi(p.lat, p.lng)) snappedRegions.add(r.slug)
   }
 
   // clusterId → is its fused telling live to riders (vs still staged)
@@ -1136,7 +1150,7 @@ app.get('/admin/pois', async (c) => {
     // from "never generated"; they look identical on `narrationStatus` alone.
     const fusedReleased = p.clusterId != null ? fusedByCluster.get(p.clusterId) : undefined
     const coveredByCluster = fusedReleased === true
-    const region = regionForPoi(p.lat, p.lng)
+    const inRegions = regionsForPoi(p.lat, p.lng)
     // Story-eligibility — a POI property (drives draw story-grade POIs from this corpus);
     // single-sourced with the studio pipeline's gate constants (@skipper/shared).
     const storyEligibility = classifyStoryEligibility({
@@ -1173,7 +1187,7 @@ app.get('/admin/pois', async (c) => {
       sheetDrift: p.sheetDrift,
       speakableDrift,
       // Anchorless AND its region has been snapped (carries anchors) ⇒ off-road / won't trigger (see snappedRegions).
-      offRoad: p.speakableLat == null && region != null && snappedRegions.has(region.slug),
+      offRoad: p.speakableLat == null && inRegions.some((r) => snappedRegions.has(r.slug)),
       narrationStatus,
       // True once the cluster's fused telling is RELEASED — at which point this place is live via that
       // clip and its own clip (if any) no longer serves. `false` while the fused clip is merely staged,
@@ -1187,8 +1201,9 @@ app.get('/admin/pois', async (c) => {
       // region-release-gate: a clip exists but is STAGED (not yet public) until released. Only
       // meaningful when a clip exists (narrationStatus !== 'none').
       released: clip?.released ?? false,
-      regionSlug: region?.slug ?? null,
-      regionName: region?.name ?? null,
+      // ⚠ ARRAYS. A poi in two overlapping regions belongs to both; the console must not pick one.
+      regionSlugs: inRegions.map((r) => r.slug),
+      regionNames: inRegions.map((r) => r.name),
     }
   })
 

@@ -88,7 +88,7 @@ export function RegionsView() {
       title: draft ? `Release ${r.displayName} to the public?` : `Release new clips in ${r.displayName}?`,
       body: draft
         ? 'This opens the region to everyone and releases every staged clip inside its bbox. Releasing is permanent — a region can never be un-released (it would orphan saved drives and break offline downloads). Tweak POIs first; testers can preview staged clips in-app.'
-        : 'This region is already public. Re-running release pushes any clips that have staged since (new POIs, fresh regens) to the public. This is permanent and cannot be undone.',
+        : 'This region is already public. Re-running release publishes EVERY clip in this region’s bbox that is still staged — not only recent ones: the predicate is “not yet released”, with no since-date. That includes clips shared with an overlapping region, because a place inside two bboxes belongs to both. Permanent and cannot be undone.',
       confirmLabel: draft ? 'Release region' : 'Release new clips',
       tone: 'destructive',
     })
@@ -177,7 +177,7 @@ export function RegionsView() {
               size="sm"
               disabled={releaseMut.isPending}
               onClick={() => void onRelease(r)}
-              title={released ? 'Release any clips staged since' : 'Open this region to the public (permanent)'}
+              title={released ? 'Publish every clip in this bbox that is still staged (permanent)' : 'Open this region to the public (permanent)'}
             >
               <Rocket className="h-3.5 w-3.5" />
               {released ? 'Release new' : 'Release'}
