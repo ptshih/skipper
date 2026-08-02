@@ -11,8 +11,13 @@
 // ⚠ EVERY CLAIM BELOW IS A FACT ABOUT THE CODE, and drifts silently when the code
 // changes. If you touch any of these, this page is part of the change:
 //   • foreground-only location ......... apps/mobile/app.json (expo-location plugin)
-//   • the ~110 m coarsen + anonymous /roam call ... apps/mobile/src/lib/api.ts
-//   • on-device-only roam history ...... apps/mobile/src/lib/roam-history.ts
+//   • NO position ever leaves the phone . apps/mobile/src/lib/api.ts sends anchor UUIDs only. 1.1
+//     deleted roam, and with it the ~110 m coarsened /roam call and the on-device roam history —
+//     which is why this page no longer describes either. Re-adding any position to a request is a
+//     change to THIS PAGE first.
+//   • the planning conversation ........ apps/api/src/{plan-route,planner}.ts. Anonymous by
+//     construction (no session middleware on the mount; the client sends credentials:'omit'), the
+//     roster block sends name+id only, and there is NO conversations table — see D10/INV-13.
 //   • what an account stores ........... packages/db/src/auth-schema.ts
 //   • what a drive stores .............. packages/db/src/schema.ts (drives)
 //   • the credit ledger ................ packages/db/src/schema.ts (credit_entries)
@@ -25,7 +30,7 @@
 //     web form as the "designated request address"; we chose email. ⚠ It MUST actually route: it is
 //     both this address and the published legal contact on both pages. The 60-day response window
 //     is the statute's, not a stylistic choice — don't soften it.
-//   • WHO RENDERS THE MAP .............. apps/mobile/src/ui/{RoamMap,DriveMap}.tsx + eas.json.
+//   • WHO RENDERS THE MAP .............. apps/mobile/src/ui/DriveMap.tsx + eas.json.
 //     PROVIDER_GOOGLE whenever EXPO_PUBLIC_GOOGLE_MAPS_API_KEY is set, which the `production`
 //     profile does — so shipped builds are GOOGLE Maps, and only a keyless build falls back to
 //     Apple Maps. This page claimed Apple until 2026-07-24; don't let it drift back.
@@ -35,17 +40,19 @@ import Legal from '../layouts/Legal.astro'
 <Legal
   heading="Privacy Policy"
   kicker="The fine print, minus the fog"
-  description="How Skipper handles your location, your account, and your drives. Short version: as little as possible, no ads, and your precise location and roam history never leave your phone."
-  updated="July 24, 2026"
+  description="How Skipper handles your location, your account, and your drives. Short version: as little as possible, no ads, and your location never leaves your phone."
+  updated="August 2, 2026"
 >
   <div class="legal-summary framed">
     <h2>The short version</h2>
     <ul>
       <li>No ads, and we never sell your data. We do use privacy-friendly analytics (PostHog) to see what's working and catch crashes — anonymous, and not tied to your account.</li>
       <li>Skipper uses your location only while the app is open, to play each story at the right moment.</li>
-      <li>Your <strong>exact</strong> coordinates never leave your phone. To find nearby stories we send a
-        deliberately blurred position — rounded to about 110 metres — with no account attached to it.</li>
-      <li>The record of which stories you've heard is stored on your phone and is never uploaded.</li>
+      <li>Your location <strong>never leaves your phone</strong> — not precisely, not blurred, not at all.
+        Your phone does the triggering itself.</li>
+      <li>You plan a drive by <strong>talking to the Skipper</strong>, and that part is an AI. What you type
+        is sent to Anthropic to write his reply. Your location isn't, ever — and we don't keep the
+        conversation.</li>
       <li>Deleting your account deletes your data immediately — drives, credits, the lot.</li>
     </ul>
   </div>
@@ -72,26 +79,24 @@ import Legal from '../layouts/Legal.astro'
     location stops.
   </p>
 
-  <h3>Your precise location stays on your phone</h3>
+  <h3>Your location stays on your phone</h3>
   <p>
     This is the part worth being specific about, because "we use your location" usually hides the
-    interesting detail.
+    interesting detail. In Skipper's case the detail is short: <strong>your position is never sent to our
+    server at all.</strong> Not a precise reading, not a blurred one. Your phone holds the route and the
+    trigger points, watches where you are, and decides on its own when the Skipper should start talking.
   </p>
   <ul>
     <li>
-      <strong>Free roam.</strong> To fetch the stories near you, the app asks our server for everything
-      within about 50 km of a point. Before that request leaves your phone, it <strong>rounds your
-      position to three decimal places — roughly 110 metres</strong> — and sends the rounded value. The
-      request is also sent <strong>without your account credentials</strong>, deliberately, so a live
-      coordinate is never linked to a signed-in identity. Your phone keeps your real position and does
-      the precise triggering itself; the server only ever knows roughly which part of the lake you're
-      near.
+      <strong>Planning a drive.</strong> You tell the Skipper where you'd like to go, in words. He can only
+      offer places from a list we curated in advance, and what travels to our server is the
+      <strong>identifier of a place you picked</strong> — not a reading from your GPS. We send those
+      endpoints to Google's Routes API to compute the road route, and we store them with your drive so you
+      can replay it.
     </li>
     <li>
-      <strong>Drives.</strong> When you build a drive, you pick your start and end from a list of real,
-      curated places. Those endpoints are places you <em>chose</em>, not readings from your GPS. We send
-      them to Google's Routes API to compute the road route, and we store them with your drive so you can
-      replay it.
+      <strong>Driving it.</strong> Nothing. The drive plays entirely on your phone against the route it
+      already holds — that's also why it works with no signal.
     </li>
     <li>
       <strong>The map.</strong> Your position is drawn on the map on your device. The map itself is
@@ -102,9 +107,9 @@ import Legal from '../layouts/Legal.astro'
     </li>
   </ul>
   <p>
-    Being straight with you: that rounded roam coordinate travels in the web address of the request, so
-    it appears in ordinary server request logs, the same way any web address does. It's blurred to ~110 m
-    and carries no account, but it isn't invisible, and we'd rather say so than let you find out.
+    Being straight with you: our server still sees your <strong>IP address</strong> on any request your
+    phone makes, the way every server does, and PostHog turns an IP into a city-level guess (below).
+    That's a coarse, ordinary thing — but it isn't nothing, and we'd rather say so than let you find out.
   </p>
 
   <h3>Motion</h3>
@@ -115,9 +120,39 @@ import Legal from '../layouts/Legal.astro'
     gone past. We don't collect it and it isn't sent anywhere.
   </p>
 
+  <h2>Planning a drive is a conversation — and that part is an AI</h2>
+  <p>
+    You plan a drive by talking to the Skipper in the app. He's a real AI model, and we'd rather name it
+    than let "powered by AI" do the work: each time you send a message, what you have typed — and what he
+    said back earlier in that conversation — goes to <strong>Anthropic</strong>, who run the model that
+    writes his reply. He is also handed the list of curated places he's allowed to offer you.
+  </p>
+  <p>What does <em>not</em> go with it is the interesting part:</p>
+  <ul>
+    <li><strong>Not your location.</strong> The model is never given your position, and it is not given
+      coordinates for any place either — only names and identifiers. It cannot react to where you are,
+      because it is never told.</li>
+    <li><strong>Not your account.</strong> The planning request is sent without your credentials, on
+      purpose, so a conversation is never linked to a signed-in identity. You don't need an account to
+      have it.</li>
+    <li><strong>Not your IP address.</strong> Our server calls Anthropic, not your phone, so what Anthropic
+      sees is our server — not you.</li>
+  </ul>
+  <p>
+    <strong>Nobody keeps the conversation — including your phone.</strong> There is no transcript table in
+    our database and we don't log what you write. On your phone it is held in the app's memory while the
+    screen is open, and re-sent each turn so the Skipper remembers what you just said; it is never written
+    to storage. Close the app and it is gone, from both ends. What survives is the drive you decided to make.
+  </p>
+  <p>
+    Anthropic handles that text under their own terms as our processor. Being straight with you: once text
+    leaves for a third party, our promise about it is a promise about <em>us</em> — so the honest advice is
+    the same as for any chat box. Tell him where you'd like to drive; don't tell him your secrets.
+  </p>
+
   <h2>Your account</h2>
   <p>
-    Free roam works without an account. Creating and saving drives needs one. If you make an account, we
+    Planning a drive works without an account. Creating and saving one needs it. If you make an account, we
     store:
   </p>
   <ul>
@@ -147,14 +182,13 @@ import Legal from '../layouts/Legal.astro'
 
   <h2>What stays on your phone</h2>
   <p>
-    The record of <strong>which stories the Skipper has already told you</strong> — and any pins you've
-    muted — lives in a file on your phone and <strong>is never sent to a server</strong>. That's a
-    deliberate design decision, not an oversight we haven't got to yet: where you've been driving is
-    yours. It's why the Skipper doesn't repeat himself on the drive home, and it's why we can't see it.
-    Delete the app and that record is gone.
+    <strong>Where you've driven.</strong> Your position, your speed, and which stories actually played on a
+    given drive are worked out on your phone and <strong>never sent to a server</strong>. That's a
+    deliberate design decision, not an oversight we haven't got to yet: where you've been driving is yours,
+    and we can't see it because we never asked for it.
   </p>
   <p>
-    Drives you download for offline playback are stored on your phone too.
+    Drives you download for offline playback are stored on your phone too. Delete the app and they're gone.
   </p>
 
   <h2>Analytics and crash reporting</h2>
@@ -172,8 +206,8 @@ import Legal from '../layouts/Legal.astro'
   <p>
     This data is <strong>not linked to your account</strong>: we don't tell PostHog who you are, so it's
     tied to an anonymous per-device identifier, not your email. We don't record your taps or your screen,
-    there's no session replay, and we don't sell or share this data. Your <em>precise</em> location and
-    your on-device roam history (below) are never part of it.
+    there's no session replay, and we don't sell or share this data. Your location and what you type to the
+    Skipper are never part of it.
   </p>
 
   <h2>What we don't do</h2>
@@ -194,6 +228,10 @@ import Legal from '../layouts/Legal.astro'
       endpoints you pick for a drive. And the Google Maps SDK inside the app draws the map — see
       <em>The map</em> above for what that involves.
     </dd>
+    <dt>Anthropic</dt>
+    <dd>Runs the AI model the Skipper talks with while you plan a drive. Receives what you type in that
+      conversation and nothing else — no location, no account, not your IP. See <em>Planning a drive</em>
+      above.</dd>
     <dt>Cloudflare R2</dt>
     <dd>Stores the narration audio files. Audio is private and served through short-lived signed links.</dd>
     <dt>Resend</dt>
@@ -206,17 +244,19 @@ import Legal from '../layouts/Legal.astro'
     <dd>Distributes the app through the App Store.</dd>
   </dl>
   <p>
-    The Skipper's narration is written and voiced <strong>before you ever press play</strong> — it's made
-    in our studio, in advance, and stored as an audio file. Nothing about you or your drive is sent to
-    the AI services that write and voice it. There is no AI in the app listening to you or reacting to
-    where you are; there's a recording, and your phone decides when to play it.
+    Worth separating the two AIs, because they work very differently. The Skipper's <strong>narration</strong>
+    — every story you hear on the road — is written and voiced <strong>before you ever press play</strong>,
+    in our studio, in advance, and stored as an audio file. Nothing about you or your drive is sent to the
+    AI services that write and voice it. On the drive itself there is no AI listening to you or reacting to
+    where you are; there's a recording, and your phone decides when to play it. The <strong>planning
+    conversation</strong> is the live one, and it is described in full above.
   </p>
 
   <h2>Where the stories come from</h2>
   <p>
     These are sources we <em>read</em>, not places your data goes: Wikipedia, Wikidata, Macrostrat, and
     Google Places. They're credited, with their licenses, in the app under Settings → Sources &amp;
-    Licenses, and at <a href="https://api.skipper.fm/sources">api.skipper.fm/sources</a>.
+    Licenses.
   </p>
 
   <h2>Deleting your account</h2>
@@ -256,9 +296,10 @@ import Legal from '../layouts/Legal.astro'
   <h2>How long we keep things</h2>
   <p>
     Your account and drives are kept until you delete them or ask us to. Sessions expire on their own.
-    Server request logs — which include those blurred roam coordinates — are kept for a limited period by
-    our hosting provider for operating and debugging the service. The anonymous analytics and crash data
-    held by PostHog is retained per our PostHog project's settings.
+    Planning conversations aren't kept at all — there's nothing to expire. Server request logs are kept for
+    a limited period by our hosting provider for operating and debugging the service; they record that a
+    request happened, not what you typed. The anonymous analytics and crash data held by PostHog is
+    retained per our PostHog project's settings.
   </p>
 
   <h2>Children</h2>
