@@ -635,9 +635,51 @@ resumes it; the mint round-trip and its SecureStore write; whether `status.error
 on a stale presign (if not, `clipUnavailable` is dead copy — ten seconds on a device settles it); the
 ClipBar's position above the keyboard, which inherits step 7's still-ASSUMED `keyboardVerticalOffset`.
 
-**9 — Offline subject-keyed store.** Unblocked by step 4. Add a v4→v5 entry to the existing (empty,
-unit-tested) `MANIFEST_MIGRATIONS` ladder. **Re-key bytes with `File.moveSync`, never delete-and-refetch.**
-A saved v4 manifest still carries `clips[].poiId`, so the poi half migrates with **zero network**.
+**9 — Offline subject-keyed store.** ✅ **DONE 2026-08-01.** Bytes are now shared and subject-keyed in
+`Paths.document/clips/`; every drive keeps its own seq→bytes `manifest.json` (INV-6). The v4→v5 re-key
+runs with **zero network** and moves bytes rather than re-fetching them.
+
+⚠ **THE STORE KEY CARRIES THE REVISION, and that was not in the spec.** Collapsing N copies to one
+creates a failure nothing could see: drive A stores subject S; the operator re-synths S; drive B's
+manifest correctly names the new revision; the top-up asks "is S present?" → yes → skips; **B plays A's
+old telling forever.** `isDownloadStale` cannot catch it — it compares MANIFESTS, and both manifests are
+right; the BYTES are wrong and nothing compared bytes to manifest. Under per-drive storage this was
+structurally impossible. Putting the revision in the filename makes it impossible again *and* makes
+every collision provably byte-identical, which is what lets the collision rule ("delete the SOURCE") be
+lossless by construction.
+
+⚠ **The everyday "Update" re-pull was a bigger hazard than the rare drive delete** review §1.9 focused
+on: `runDownload` opened with `deleteDriveDownload` as a deliberate clean slate, which under sharing
+reaches bytes another drive depends on, on a path that already tolerates partial failure. A re-pull is
+now a top-up — fetch, diff, download only what is absent. **Nothing but the sweep may remove a shared
+byte**, and the sweep is fail-closed: it deletes nothing if any manifest is unreadable, if a transfer is
+in flight, or if the keep-set is empty. **A refcount was rejected** — a persisted count is a second
+source of truth that drifts silently in the DELETING direction; the manifests ARE the refcount.
+
+⚠ **`clipsPresentOnDisk` was all-or-nothing** and gated four functions, so any one of these failures
+would have made a whole drive vanish from the offline list and error-wall the player rather than costing
+one stop. Fixing that predicate was the cheapest safety in the step.
+
+⚠ **The adversaries caught a defect the build itself introduced:** a failed top-up rewrote the manifest
+from the fresh plan alone, dropping a seq whose OLD bytes were on disk and playing fine — then orphaned
+them for the sweep to delete. Silent, automatic, no rider action. A seq now carries forward its saved
+entry when the planned byte is absent (`resolveClipRef`, pure and mutation-checked): stale-but-playable
+beats a gap, and `missingSeqs` still counts it so the "N left to save" chip fires.
+
+Verified in the native source rather than assumed: `move()` **throws** on collision and touches nothing;
+`overwrite: true` is a non-atomic `removeItem` then `moveItem`; a **Directory** destination silently
+keeps the SOURCE filename — the one failure that throws nothing and would pass any "no exception" test.
+`file.size` returns **null**, not 0, for a missing file, so `(size ?? 0) > 0` is the only correct
+presence check.
+
+⚠ **Deferred, recorded:** promoting a legacy drive-local clip into the shared store once its subject
+becomes nameable (the FIELD landed; the promotion did not), and a disk-full migration leaving that drive
+at 2× storage permanently. Both cost space, never audio.
+
+⚠ **Unverified without a device, and unverifiable by a fresh install:** the migration itself only runs
+when a build that saved v4 downloads is upgraded in place. Install the previous build, download two or
+three overlapping drives, then install this one over it — a fresh install never exercises it, which is
+exactly how a broken migration ships green.
 
 **10 — Simplification sweep** (D36, plus `drive_demand` from step 3). ⚠ Announce and claim paths first —
 this collides with any concurrent workspace-cleanup agents far harder than docs work did. `curate-places`

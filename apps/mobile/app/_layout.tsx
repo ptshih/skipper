@@ -5,7 +5,7 @@ import * as SplashScreen from 'expo-splash-screen'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { AnalyticsProvider, captureError, track } from '@/lib/analytics'
 import { useAnonymousMint } from '@/lib/anon-session'
-import { reclaimLegacyRoamPack } from '@/lib/offline'
+import { reclaimLegacyRoamPack, sweepOrphanClips } from '@/lib/offline'
 import { SimModeProvider, readStoredSimMode } from '@/lib/sim-mode'
 import { ThemeProvider, readStoredThemeMode, useAppFonts, useTheme, type ThemeMode } from '@/theme'
 import { fonts } from '@/theme/tokens'
@@ -75,11 +75,29 @@ export default function RootLayout() {
     if (ready) SplashScreen.hideAsync().catch(() => {})
   }, [ready])
 
-  // Reclaim the deleted roam mode's offline pack — up to ~138 MB that nothing else can ever free
-  // (see reclaimLegacyRoamPack). Runs once per launch, synchronous-but-trivial (one `exists` check
-  // on the common path), and deliberately AFTER `ready` so it can never delay first paint.
+  // Launch-time disk reclamation, both deliberately AFTER `ready` so neither can delay first paint.
+  //
+  // 1. The deleted roam mode's offline pack — up to ~138 MB that nothing else can ever free (see
+  //    reclaimLegacyRoamPack). Synchronous-but-trivial on the common path (one `exists` check).
+  // 2. The shared clip store's orphans. Clip bytes are keyed by SUBJECT and shared across drives, so
+  //    no per-drive delete may remove one; the sweep is the ONLY path allowed to, and it is a
+  //    mark-and-sweep re-derived from every saved manifest (fail-closed: an unreadable manifest or an
+  //    in-flight download frees nothing this pass). ⚠ It must run at LAUNCH and not only after a
+  //    delete: a drive removed on the SERVER is dropped locally on its 404 without any sweep of its
+  //    own, so launch is the only pass that ever reclaims its exclusive subjects. Leaving it out is
+  //    exactly the reclaimLegacyRoamPack failure again — bytes nothing can find and nothing can free.
+  //
+  // ⚠ The v4→v5 store MIGRATION is not INVOKED here — it is lazy inside `loadManifest`, where every
+  // reader already funnels, so no reader can observe a half-migrated drive. But be clear about what
+  // that means in practice: the sweep reads every drive's manifest through that same door, so on the
+  // first launch after an update THIS effect is what actually drives the whole re-key, synchronously,
+  // for every saved drive. That is deliberate (nothing can read a v4 afterwards) and it is what makes
+  // the sweep safe to run in the same breath — but it is a real first-paint cost for a rider with
+  // several long drives, and it is UNMEASURED on a device. Do not read "not here" as "not now".
   useEffect(() => {
-    if (ready) reclaimLegacyRoamPack()
+    if (!ready) return
+    reclaimLegacyRoamPack()
+    sweepOrphanClips()
   }, [ready])
 
   if (!ready) return null

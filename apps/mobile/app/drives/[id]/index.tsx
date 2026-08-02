@@ -15,6 +15,7 @@ import {
   loadManifest,
   offlineStatus,
   repairDownload,
+  topUpDrive,
   type DownloadDirState,
   type DownloadProgress,
 } from '@/lib/offline'
@@ -112,6 +113,10 @@ export default function DriveDetailScreen() {
   const driveRef = useRef<DriveManifest | null>(null)
   // Cancels an in-flight download (Cancel tap / screen unmount). (audit #816)
   const downloadAbort = useRef<AbortController | null>(null)
+  // The in-flight INV-6 top-up. Separate from `downloadAbort`: a rider-initiated download and a
+  // background top-up are different promises with different lifetimes, and aborting one must not
+  // cancel the other.
+  const topUpAbort = useRef<AbortController | null>(null)
 
   const startDownload = useCallback(async () => {
     if (!id) return
@@ -178,6 +183,11 @@ export default function DriveDetailScreen() {
     setDownloaded(false)
     setExpired(false)
     setPartial(null) // the saved copy (whole or partial) is gone
+    // The drive's directory went with it. ⚠ Load-bearing now that the ⋯ menu gates repair/remove on
+    // `dirState !== 'none'`: a stale 'ok'/'unreadable' would keep offering to remove a dir that no
+    // longer exists. (The shared clip bytes are freed by the sweep inside deleteDriveDownload, which
+    // is fail-closed — a rider may see less space returned than they expect, by design.)
+    setDirState('none')
   }, [id])
 
   const cancelDownload = useCallback(() => {
@@ -186,7 +196,13 @@ export default function DriveDetailScreen() {
 
   // Cancel an in-flight download if the screen is torn down (audit #816). NOT on blur — the screen
   // stays mounted under the pushed player, so a download keeps running while the rider previews.
-  useEffect(() => () => downloadAbort.current?.abort(), [])
+  useEffect(
+    () => () => {
+      downloadAbort.current?.abort()
+      topUpAbort.current?.abort()
+    },
+    [],
+  )
 
   // Report an issue → the rider's mail composer, pre-filled with the drive's context (no
   // in-app support backend yet — alpha). The address is env-configurable (SUPPORT_EMAIL).
@@ -279,17 +295,23 @@ export default function DriveDetailScreen() {
       }
       actions.push({ label: 'Remove download', onPress: removeDownload, destructive: true })
     } else {
-      // ⚠ Bytes on disk this build can't read (a manifest format with no migration across, or a
-      // manifest lost to a hard kill mid-download). REPAIR comes first: the audio is the expensive
-      // half and it is all still here, so re-fetching the few-KB manifest and re-adopting it beats
-      // pulling hundreds of MB again. The reclaim sits alongside it and MUST stay reachable — it
-      // used to live inside the `downloaded` branch, which is false in exactly this case, leaving
-      // the rider unable to free the space at all.
-      if (dirState === 'unreadable') {
+      // ⚠ A drive directory exists but nothing playable resolves from it. REPAIR comes first: the
+      // audio is the expensive half and much of it may still be here, so re-fetching the few-KB
+      // manifest and re-adopting the bytes beats pulling hundreds of MB again. The reclaim sits
+      // alongside it and MUST stay reachable — it used to live inside the `downloaded` branch, which
+      // is false in exactly this case, leaving the rider unable to free the space at all.
+      //
+      // ⚠ The guard is `!== 'none'`, not `=== 'unreadable'`. Under the shared clip store a SECOND
+      // state reaches here: a perfectly readable manifest whose clips resolve to zero bytes on disk
+      // (`dirState === 'ok'` + `downloaded === false`). Repair can recover it for free — the bytes may
+      // already be in the store from another drive — and remove can clear the stale dir. Gated on
+      // 'unreadable' the rider was offered NEITHER, and the only remaining option was to re-download
+      // audio they might already own.
+      if (dirState !== 'none') {
         actions.push({ label: voice.offline.repair, onPress: () => void repair() })
       }
       actions.push({ label: 'Download for offline', onPress: () => void startDownload() })
-      if (dirState === 'unreadable') {
+      if (dirState !== 'none') {
         actions.push({ label: 'Remove download', onPress: removeDownload, destructive: true })
       }
     }
@@ -340,6 +362,26 @@ export default function DriveDetailScreen() {
     deleteDriveAction,
   ])
 
+  // Re-derive the offline state from DISK — the saved/partial/expired chip and the ⋯ menu's gating.
+  // Extracted so the focus pass and the top-up's completion share ONE reading: presence is now
+  // per-clip (a missing byte costs one stop, not the drive), so "downloaded" and "N left to save"
+  // both move as bytes land, and a top-up that closes a gap in the background must update the chip
+  // without waiting for the rider to leave and come back.
+  const refreshOfflineState = useCallback(() => {
+    if (!id) return
+    const status = offlineStatus(id)
+    setDownloaded(status != null)
+    // Re-derive PARTIAL from disk so a half-download surfaces as partial after an app restart
+    // (when the in-memory download result is gone) instead of as a clean "Saved offline". (audit #1)
+    setPartial(
+      status && status.missingSeqs.length > 0
+        ? { failed: status.missingSeqs.length, total: status.expectedCount }
+        : null,
+    )
+    setExpired(isDownloadExpired(id)) // offline-safe (reads savedAt) — fires even in a dead zone
+    setDirState(downloadDirState(id))
+  }, [id])
+
   const load = useCallback(async () => {
     if (!id) return
     if (!driveRef.current) setLoading(true) // keep the loaded detail on a refocus refetch — no full-screen spinner flash (audit #531)
@@ -353,6 +395,34 @@ export default function DriveDetailScreen() {
       // Online: flag a saved copy whose clips the server has re-cut since the download (free —
       // we already hold the fresh manifest). Returns false when nothing's downloaded.
       setUpdatable(isDownloadStale(id, fresh))
+      // INV-6's TOP-UP, fire-and-forget. Clip bytes live in one SHARED subject-keyed store, so this
+      // drive's own manifest is the only authority for what it needs: fill the store with any subject
+      // that manifest names and the store lacks. Two things it actually closes — a thin-signal stop
+      // that never landed (the "N left to save" gap, without making the rider find the ⋯ re-pull), and
+      // a RE-SYNTHED telling, whose bytes sit under a different filename because the revision is part
+      // of the name. In the common case it fetches nothing and costs N `exists` calls.
+      //
+      // ⚠ It lives in the ONLINE branch on purpose: in a dead zone `getDrive` has already thrown and
+      // there is nothing to top up FROM. ⚠ And it never blocks the render — the drive is painted from
+      // `fresh` above; this only fills in behind it. `topUpDrive` carries its own bounds (it returns
+      // null unless the drive is ALREADY a saved download, so opening a drive the rider never saved
+      // can't start a surprise cellular pull) — do not re-implement them here.
+      //
+      // Failures are swallowed deliberately: a top-up that can't finish leaves exactly the state we
+      // are already in, which the chip already tells the truth about and the ⋯ re-pull already offers
+      // to fix. Surfacing a second error for a background repair the rider never asked for is noise.
+      // ⚠ CANCELLABLE, and that is not tidiness. The detail screen stays MOUNTED under the pushed
+      // player, so a top-up started on focus would otherwise keep transferring while the live drive
+      // streams its clips and the stall watchdog re-signs — the exact contention the "never on the
+      // play path" bound exists to prevent, which without this is only enforced for STARTING one.
+      // It also bounds the worst case: after a whole-drive re-synth `needed` is the entire drive,
+      // tens of MB, with no progress UI and no rider action beyond opening the screen.
+      const topUpCtrl = new AbortController()
+      topUpAbort.current?.abort()
+      topUpAbort.current = topUpCtrl
+      void topUpDrive(id, fresh, topUpCtrl.signal)
+        .then(() => refreshOfflineState())
+        .catch(() => {})
     } catch (e) {
       if (e instanceof ApiError && e.needsAccount) setNeedsAccount(true)
       else {
@@ -371,25 +441,13 @@ export default function DriveDetailScreen() {
     } finally {
       setLoading(false)
     }
-  }, [id])
+  }, [id, refreshOfflineState])
 
   useFocusEffect(
     useCallback(() => {
       load()
-      if (id) {
-        const status = offlineStatus(id)
-        setDownloaded(status != null)
-        // Re-derive PARTIAL from disk so a half-download surfaces as partial after an app restart
-        // (when the in-memory download result is gone) instead of as a clean "Saved offline". (audit #1)
-        setPartial(
-          status && status.missingSeqs.length > 0
-            ? { failed: status.missingSeqs.length, total: status.expectedCount }
-            : null,
-        )
-        setExpired(isDownloadExpired(id)) // offline-safe (reads savedAt) — fires even in a dead zone
-        setDirState(downloadDirState(id))
-      }
-    }, [load, id]),
+      refreshOfflineState()
+    }, [load, refreshOfflineState]),
   )
 
   // Pause + clear the mini-preview when the screen BLURS (e.g. tapping "Start the drive" PUSHES the live
