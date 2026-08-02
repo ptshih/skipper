@@ -64,14 +64,19 @@ findings fixed (`576e031`). See `apps/mobile/CLAUDE.md` for the ESLint-9 pin and
       (with the date + SDK) and close the question. If it does NOT, the decision reopens — and the
       fallback already exists in code: no Google key → Apple Maps, and List mode is the
       offline/accessibility-complete equivalent.
-- [ ] **Burn down `eslint-suppressions.json` — 47 baselined Rules-of-React errors** across 16 files
-      (`react-hooks/refs` ×37, `set-state-in-effect` ×8, `immutability` ×2). These are NOT junk: a good
-      share are the deliberate ref-mirrors-state pattern that makes latest-tap-wins work in the audio
-      hooks. Each needs judgement about whether the violation is load-bearing or lazy. Fix in small
-      batches, then `bun run lint:suppress` to prune. ⚠ Never re-run a blanket `--suppress-all`; that
-      turns the backlog into a mute button. Also 5 warnings left deliberately unfixed (4 × missing
-      `preview` dep, 1 × `anchorNames` useMemo) — all render-churn judgement calls in the planner and
-      drive-detail screens.
+- [ ] **Burn down `eslint-suppressions.json` — now 25 across 12 files** (`react-hooks/refs` ×15,
+      `set-state-in-effect` ×8, `immutability` ×2). Was 47 across 16; `b7e6614` cleared 22 by
+      converting the eight `useRef(new Animated.Value(x)).current` sites to RN's `useAnimatedValue`.
+      ⚠ **The mechanical share is now GONE — what remains needs judgement, one site at a time.** The
+      15 `refs` are largely the deliberate `xRef.current = x` mirror-of-state that makes latest-tap-wins
+      work in the audio hooks: a real Rules-of-React violation that is also load-bearing. For those the
+      right resolution is probably a per-site `eslint-disable` with the REASON at the code, not a
+      silent line in a suppressions file. Then `bun run lint:suppress` to prune. ⚠ Never re-run a
+      blanket `--suppress-all`; that turns the backlog into a mute button.
+      Also 5 warnings left deliberately unfixed (4 × missing `preview` dep, 1 × `anchorNames` useMemo)
+      — all render-churn judgement calls in the planner and drive-detail screens.
+      ⚠ `b7e6614` is NOT visually verified (animation call sites, semantically identical swap) — worth
+      a glance at typing dots, skeletons and the stop-row stamp next time the app is open.
 - [ ] **7 patch-version drifts against SDK 57**, found by `bun run doctor` (`apps/mobile`): expo
       57.0.8→57.0.9, expo-asset, expo-constants, expo-location, expo-router, expo-dev-client, and
       **react-native 0.86.0→0.86.2**. All patch-level. ⚠ Run `bun update` from INSIDE `apps/mobile`
@@ -85,14 +90,18 @@ findings fixed (`576e031`). See `apps/mobile/CLAUDE.md` for the ESLint-9 pin and
       push/PR running root `bun run check` + `bun --filter @skipper/mobile check`. ~30 lines. It can
       land before the first push and starts paying the moment one happens. **This was finding #1 of the
       diligence pass** — ESLint went first only because it catches bugs the same afternoon.
-- [ ] **The four hooks that own the risky behaviour have zero coverage.** 13 test files, all pure
-      modules; `useDrive`, `useRoutePreview`, `useStopPreview`, `useLocationPriming` have none — and
-      that is exactly where the timers, refs and audio-session obligations live (the bug fixed in
-      `55184a9` was one). Expo's documented setup is jest-expo + `@testing-library/react-native`
-      (`react-test-renderer` is deprecated and does not support React 19+). ⚠ Prefer FIRST moving more
-      logic out of the hooks into pure modules — the audio-session hand-back is expressible as a pure
-      "what should happen on this transition" decision — and only add a second test runner if that
-      proves insufficient. Two runners in one workspace is a real cost.
+- [x] ~~The four hooks that own the risky behaviour have zero coverage~~ — **PREVIEW HALF DONE
+      2026-08-02.** `src/lib/preview-util.ts` (`0531085`) now owns the decisions both preview players
+      share, with 14 tests; extracting them proved the two siblings had already drifted, and `ffac245`
+      fixed the three defects that found in `useStopPreview` (no session hand-back when a clip ran out
+      → the rider's music stayed dead; none on a failed play; and NO reader for async failure at all,
+      so an expired presign left a row lit "now playing" in silence forever).
+- [ ] **Still uncovered: `useDrive` and `useLocationPriming`.** `useDrive` is the big one — the
+      fire-queue, the two watchdogs and the trigger→play→handback loop. Same approach: move decisions
+      into pure modules (`@skipper/engine`'s `player.ts` is the established home for what BOTH real
+      players share; `preview-util.ts` is the pattern for what does not). Expo's documented setup is
+      jest-expo + `@testing-library/react-native` (`react-test-renderer` is deprecated, no React 19+)
+      — ⚠ still prefer extraction FIRST and only add a second test runner if it proves insufficient.
 - [ ] **React Compiler — deliberately NOT yet.** Available via `experiments.reactCompiler` with Babel
       auto-configured on SDK 54+, still experimental and off by default. This codebase would benefit
       unusually much (it is dense with hand-rolled `useCallback`/`useMemo`/ref memoization). But it
