@@ -25,6 +25,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { setAudioModeAsync, setIsAudioActiveAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
 import { PRE_START_STALL_MS } from '@skipper/engine'
 import { track } from './analytics'
+import { decideFail, decideToggle, PREVIEW_END_EPS_SEC, sawFreshAudio } from './preview-util'
 
 export interface RoutePreview {
   /** The card whose clip is loaded (playing OR paused); null = nothing loaded. */
@@ -96,13 +97,15 @@ export function useRoutePreview(): RoutePreview {
   // failed took the session just as surely as one that played.
   const failCard = useCallback(
     (cardId: string) => {
-      const wasActive = activeCardIdRef.current === cardId
       clearStartWatchdog()
-      setActiveCardId((c) => (c === cardId ? null : c))
-      if (wasActive) {
+      // Every path here has already called play() — the url arrives on the proposal, so there is no
+      // "could not resolve audio" branch the way useStopPreview has one.
+      const act = decideFail({ activeId: activeCardIdRef.current, failingId: cardId, playbackAttempted: true })
+      if (act.clearActive) {
+        setActiveCardId((c) => (c === cardId ? null : c))
         activeCardIdRef.current = null
-        void setIsAudioActiveAsync(false).catch(() => {})
       }
+      if (act.releaseSession) void setIsAudioActiveAsync(false).catch(() => {})
       setFailedCardId(cardId)
     },
     [clearStartWatchdog],
@@ -132,13 +135,18 @@ export function useRoutePreview(): RoutePreview {
   // leaves a finished player parked at the end, so a second tap would resume nothing.
   const toggle = useCallback(() => {
     try {
-      if (status.playing) {
+      const action = decideToggle({
+        playing: !!status.playing,
+        positionSec: status.currentTime ?? 0,
+        durationSec: durSec,
+        didJustFinish: !!status.didJustFinish,
+      })
+      if (action === 'pause') {
         player.pause()
-      } else {
-        const atEnd = status.didJustFinish || (durSec > 0 && (status.currentTime ?? 0) >= durSec - 0.25)
-        if (atEnd) player.seekTo(0)
-        player.play()
+        return
       }
+      if (action === 'replay') player.seekTo(0)
+      player.play()
     } catch {}
   }, [player, durSec, status.playing, status.currentTime, status.didJustFinish])
 
@@ -199,7 +207,7 @@ export function useRoutePreview(): RoutePreview {
 
   // Real audio arrived ⇒ disarm. Mirrors useDrive's `sawFresh` exactly (playing AND past the first
   // quarter-second), because a player can report `playing` for a moment before any sound exists.
-  const sawFresh = !!status.playing && (status.currentTime ?? 0) > 0.25
+  const sawFresh = sawFreshAudio({ playing: !!status.playing, positionSec: status.currentTime ?? 0 })
   useEffect(() => {
     if (sawFresh) clearStartWatchdog()
   }, [sawFresh, clearStartWatchdog])
@@ -260,7 +268,7 @@ export function useRoutePreview(): RoutePreview {
   // ⚠ The session hand-back above stays on didJustFinish alone and stays UNCONDITIONAL — it is an
   // audio-focus obligation, not a metric, and firing it off a position estimate would hand the session
   // back mid-clip. Two different questions, two different signals; do not merge them back.
-  const atEnd = durSec > 0 && (status.currentTime ?? 0) >= durSec - 0.25
+  const atEnd = durSec > 0 && (status.currentTime ?? 0) >= durSec - PREVIEW_END_EPS_SEC
   useEffect(() => {
     if (!status.didJustFinish && !atEnd) return
     const card = activeCardIdRef.current
