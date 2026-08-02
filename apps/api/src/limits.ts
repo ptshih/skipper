@@ -45,10 +45,18 @@
  *  binds rather than the char cap. That is why both exist rather than either alone. */
 export const MAX_PLAN_BODY_BYTES = 16 * 1024
 
-/** POST /drives/propose and POST /drives carry two endpoints plus a few midpoints. Worst-case LEGAL body
- *  is ~6.6 KB: 10 endpoints (start + end + `via`'s max of 8) each with a 200-CHARACTER name — characters,
- *  not bytes, so up to ~600 bytes of UTF-8 apiece — plus coordinates and an idempotency key. This is
- *  ~2.4x that, so a valid drive can never 413.
+/** POST /drives/propose and POST /drives carry at most 10 endpoints (start + end + `via`'s max of 8)
+ *  plus an idempotency key. The SHAPE is owned by packages/shared/src/schemas.ts, not restated here.
+ *  ⚠ THE HEADROOM IS ENORMOUS AND THAT IS DELIBERATE, NOT SLACK TO BE RECLAIMED. Since the step-4 wire
+ *  commit an endpoint is a bare UUID — `anchorId`, the only thing a request may name an endpoint by —
+ *  so the worst-case LEGAL body is a few hundred bytes and this cap clears it by orders of magnitude.
+ *  It is a parse/DoS guard, not a fitted bound: tightening it toward the real worst case would buy
+ *  nothing (nothing is billed per byte here) and would put a 413 one schema change away from a rider
+ *  who did nothing wrong. test/drive-body-caps.test.ts derives the worst-case legal body FROM the
+ *  schema and asserts it clears — so this stays true when the shape moves, without a number in prose.
+ *  ⚠ An earlier version of this comment justified the value from a body carrying a 200-character NAME
+ *  per endpoint. That shape has not existed since step 4 (`schemas.ts`: "a request can no longer carry
+ *  one"), which is why the derivation now points at the schema instead of restating it.
  *  ⚠ Same value as the plan cap today by coincidence, not by derivation — keep them separate constants.
  *  The plan cap moves when planner spend is measured; this one moves only if the request SHAPE changes. */
 export const MAX_DRIVE_BODY_BYTES = 16 * 1024
@@ -141,6 +149,12 @@ export const MAX_PLAN_ANCHORS = 200
 /* Rate-limiter buckets — the NUMBERS only (mechanism: ./rate-limit.ts).        */
 /* Keyed per-IP and per-INSTANCE, so the effective ceiling is limit x live       */
 /* instances (RISK-4, accepted while unlaunched).                                */
+/*                                                                              */
+/* ⚠ EVERY BUCKET'S `label` MUST BE UNIQUE, and that is no longer only cosmetic:  */
+/* it is the bucket-map key prefix AND the only field a 429 emits, because the    */
+/* rider's IP may never be logged (INV-13). Two buckets sharing a label makes a   */
+/* rejection unattributable with nothing left to join on. Asserted in            */
+/* test/limits.test.ts.                                                          */
 /* -------------------------------------------------------------------------- */
 
 /** POST /drives/propose — one Google Routes call per request. Unchanged value, moved here from index.ts. */
@@ -167,6 +181,17 @@ export const PLAN_RATE_MINUTE = { limit: 20, windowSec: 60, label: 'plan-min' } 
  *  be enforced without extending the limiter"; that is wrong, and it mattered — it was the difference
  *  between accepting the exposure and writing one more line. */
 export const PLAN_RATE_HOUR = { limit: 120, windowSec: 3600, label: 'plan-hour' } as const
+
+/** GET /sample — the anonymous "taste" clip. The LOOSEST bucket here, and the only one whose number is
+ *  not argued from a vendor bill: the handler runs one indexed limit-1 query and then SIGNS the R2 URL
+ *  in-process (presign is a local computation, not a request — packages/storage), so unlike propose and
+ *  plan there is no per-request Google Routes or model charge behind it. What it caps is DB load and the
+ *  standing invitation any anonymous, uncapped, DB-touching route represents — not spend. That is the
+ *  whole reason it may sit above the paid buckets rather than beside them.
+ *  ⚠ VALUE UNCHANGED from the inline literal it replaces at the ./index.ts mount. A RE-HOMING, never a
+ *  re-pricing: a rider-facing cap moves only on an explicit founder call (CLAUDE.md STOP), so the commit
+ *  that gives a cap a home must never also be the commit that changes its number. */
+export const SAMPLE_RATE = { limit: 30, windowSec: 60, label: 'sample' } as const
 
 /* -------------------------------------------------------------------------- */
 /* The bounded read.                                                            */

@@ -1,6 +1,8 @@
 // Tests for the rider-facing caps (INV-3, INV-12, D32 — "tests cover the access and cost boundaries
 // first"). The three things that actually have to be true: the cap measures REAL bytes rather than the
 // caller's Content-Length, it is enforced under NODE_ENV=test, and a legitimate body still passes.
+// The two drift-guard blocks at the bottom cover the caps that no request can reach — the socket
+// settings and the rate-limiter buckets — where a pinned RELATIONSHIP is the only guard available.
 //
 // ⚠ Note the plain static import below — no BETTER_AUTH_SECRET seed, no dynamic import. ../src/limits
 // imports NOTHING, so it cannot reach auth.ts's module-load throw. If a future edit makes this file
@@ -9,13 +11,18 @@
 import { describe, expect, test } from 'bun:test'
 import { Hono } from 'hono'
 import {
+  DRIVE_CREATE_RATE,
   MAX_DRIVE_BODY_BYTES,
   MAX_PLAN_BODY_BYTES,
   MAX_PLAN_MESSAGE_CHARS,
   MAX_PLAN_MESSAGES,
   MAX_PLAN_TOTAL_CHARS,
+  PLAN_RATE_HOUR,
+  PLAN_RATE_MINUTE,
   PLANNER_TIMEOUT_MS,
+  PROPOSE_RATE,
   readBoundedText,
+  SAMPLE_RATE,
   SERVER_IDLE_TIMEOUT_SEC,
   SERVER_MAX_BODY_BYTES,
 } from '../src/limits'
@@ -186,5 +193,40 @@ describe('cap relationships (drift guard)', () => {
   // whole handler, not just its slowest await.
   test('the socket outlives the planner wall clock by a real margin', () => {
     expect(SERVER_IDLE_TIMEOUT_SEC * 1000).toBeGreaterThan(PLANNER_TIMEOUT_MS * 1.5)
+  })
+})
+
+describe('rate-limiter buckets (drift guard)', () => {
+  // ⚠ WHAT THESE CANNOT DO, so nobody re-litigates it: ../src/rate-limit returns next() unconditionally
+  // under NODE_ENV=test, so no test here can prove a bucket COUNTS or that a 429 (or its `rate_limited`
+  // log line) ever fires. What IS assertable is the part that actually drifts — the numbers and the
+  // labels — which is the entire reason they live in ../src/limits and not at four mount sites (INV-12).
+  const ALL = [PROPOSE_RATE, DRIVE_CREATE_RATE, PLAN_RATE_MINUTE, PLAN_RATE_HOUR, SAMPLE_RATE]
+
+  test('every bucket label is unique', () => {
+    // Load-bearing twice over. ../src/rate-limit keys buckets `${label}:${ip}`, and — since the 2026-08
+    // rejection log — the label is also the ONLY field a 429 emits: INV-13 forbids logging the rider's
+    // IP, so a duplicated label leaves a rejection with nothing left to attribute it by. Copy-pasting a
+    // bucket and forgetting the label is the exact mistake this catches.
+    expect(new Set(ALL.map((r) => r.label)).size).toBe(ALL.length)
+  })
+
+  test('the per-minute buckets really do share one window, so their limits are comparable', () => {
+    // The precondition for the next test: comparing `limit` across buckets is meaningless unless the
+    // windows match. PLAN_RATE_HOUR is excluded on purpose — it is a second window on the same route.
+    for (const r of [PROPOSE_RATE, DRIVE_CREATE_RATE, PLAN_RATE_MINUTE, SAMPLE_RATE]) {
+      expect(r.windowSec).toBe(60)
+    }
+  })
+
+  test('the unpaid bucket is never tighter than a bucket that bills a vendor', () => {
+    // GET /sample moves no per-request vendor money (one indexed query + a locally computed presign),
+    // while propose fires Google Routes and plan fires a frontier model on EVERY request (INV-11). So
+    // the free path may sit above them and must never fall below: if SAMPLE_RATE ever becomes the
+    // tightest per-minute bucket, either a real cost appeared behind /sample — which is a founder
+    // decision, not a tuning commit — or somebody edited the wrong constant.
+    for (const paid of [PROPOSE_RATE, DRIVE_CREATE_RATE, PLAN_RATE_MINUTE]) {
+      expect(SAMPLE_RATE.limit).toBeGreaterThanOrEqual(paid.limit)
+    }
   })
 })

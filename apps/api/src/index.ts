@@ -32,6 +32,7 @@ import {
   PLAN_RATE_HOUR,
   PLAN_RATE_MINUTE,
   PROPOSE_RATE,
+  SAMPLE_RATE,
   SERVER_IDLE_TIMEOUT_SEC,
   SERVER_MAX_BODY_BYTES,
 } from './limits'
@@ -211,10 +212,12 @@ app.route('/drives', driveRoutes)
 // QID is unset / not found / unreleased, so the client shows a reachable retry, never a white screen.
 // Additive wire contract (post-v1 safe).
 //
-// Its own rate limiter — one indexed limit-1 query plus a presign, so 30/min is ample. ⚠ It carried
-// one when it lived at /roam/sample because `app.use('/roam', …)` did NOT cover the subpath; keep it
-// now for the plainer reason that every anonymous, uncapped DB-touching route is a standing invitation.
-app.use('/sample', rateLimit({ limit: 30, windowSec: 60, label: 'sample' }))
+// Its own rate limiter — one indexed limit-1 query plus a presign, so it can be looser than the paid
+// buckets. ⚠ It carried one when it lived at /roam/sample because `app.use('/roam', …)` did NOT cover
+// the subpath; keep it now for the plainer reason that every anonymous, uncapped DB-touching route is
+// a standing invitation. The NUMBER lives in ./limits with every other rider-facing cap (INV-12) —
+// this mount was the last one still spelling its cap as an inline literal, the shape that drifts.
+app.use('/sample', rateLimit(SAMPLE_RATE))
 app.get('/sample', async (c) => {
   const qid = process.env.SAMPLE_NARRATION_QID
   // Unset config is an OPERATOR miss, not a rider error — but the rider still gets a clean, retryable
