@@ -29,8 +29,9 @@
     "prepare": "dotenvx ext precommit --install || true",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yaml,yml}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,yaml,yml}\"",
-    "db:generate": "dotenvx run -f .env.development -- bun --filter @skipper/db db:generate",
-    "db:push": "dotenvx run -f .env.development -- bun --filter @skipper/db db:push",
+    "db:preflight": "bun scripts/db-preflight.ts",
+    "db:generate": "bun run db:preflight && dotenvx run -f .env.development -- bun --filter @skipper/db db:generate",
+    "db:push": "bun run db:preflight && dotenvx run -f .env.development -- bun --filter @skipper/db db:push",
     "db:migrate": "dotenvx run -f .env.development -- bun --filter @skipper/db db:migrate",
     "db:migrate:prod": "dotenvx run -f .env.production --overload -- bun --filter @skipper/db db:migrate",
     "db:studio": "dotenvx run -f .env.development -- bun --filter @skipper/db db:studio"
