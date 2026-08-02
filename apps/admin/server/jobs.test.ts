@@ -83,6 +83,18 @@ describe('buildJobArgs — spend classification across ALL kinds (the confirm-ga
     }
   })
 
+  // ⚠ The one kind in NEITHER list above until 2026-08-02, which is how its Preview button shipped
+  // permanently broken: spends:true unconditionally + a client that only sent confirm on apply = a
+  // 412 for every preview. The classification is CORRECT and must not be weakened to match the
+  // client; the client was fixed to send confirm on preview for this kind.
+  test('generate_cluster_narrations spends on PREVIEW too — its dry run narrates and scores', () => {
+    for (const apply of [false, true]) {
+      const r = buildJobArgs({ kind: 'generate_cluster_narrations', region: 'lake-tahoe', apply })
+      expect(r.spends).toBe(true)
+      expect(r.dryRun).toBe(!apply)
+    }
+  })
+
   test('PAID kinds spend IFF --apply (dry run = free preview; apply = confirm-gated spend)', () => {
     const paid = [
       { kind: 'enrich_pois' },

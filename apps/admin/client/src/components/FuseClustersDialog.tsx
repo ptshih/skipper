@@ -49,6 +49,11 @@ export function FuseClustersDialog({
       })}
       applyLabel="Fuse"
       applyIcon={Combine}
+      // ⚠ This kind spends on PREVIEW too (jobs.ts returns spends:true unconditionally, because the
+      // CLI narrates and scores before deciding what to keep). Without this the Preview button 412s
+      // for every input — the cheap rehearsal the note below advertises did not exist, so every real
+      // use of the feature was the full paid apply.
+      confirmOnPreview
       note={
         <>
           ⚠ <span className="font-medium text-foreground">Preview also spends</span> — unlike Generate

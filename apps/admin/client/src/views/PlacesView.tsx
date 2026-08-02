@@ -209,8 +209,15 @@ export function PlacesView() {
             )}
           </div>
 
-          {error && (
-            <Callout variant="error" className="mb-4 rounded-lg px-3 py-2">{errMsg(error)}</Callout>
+          {/* ⚠ The LIST error is not the only one that matters. Until 2026-08-02 this was the page's
+              only error surface, so a failed role toggle just snapped the checkbox back with no
+              message (reads as a mis-click) and a failed delete left the row sitting there — on the
+              table that IS the planner's wire-level endpoint allowlist. Every other view in the
+              console surfaces its mutation errors; this one didn't. */}
+          {(error || toggleMut.error || deleteMut.error) && (
+            <Callout variant="error" className="mb-4 rounded-lg px-3 py-2">
+              {errMsg(error ?? toggleMut.error ?? deleteMut.error)}
+            </Callout>
           )}
 
           {region && pins.length > 0 && (
