@@ -34,10 +34,13 @@ export const withSession: MiddlewareHandler<ApiEnv> = async (c, next) => {
 
 /**
  * Free-account wall: reject anonymous callers. (Requires withSession upstream.)
- * This is the LIVE account wall for the whole `/drives*` sub-app — mounted at
- * `driveRoutes.use('*', withSession, requireAccount)` (drives.ts). ⚠ 1.1 moves requireAccount off
- * that mount onto the individual owner routes (D15/INV-15) — re-mounting it there re-walls the
- * anonymous preview.
+ * Applied PER-ROUTE on the five owner routes in drives.ts (D15/INV-15, 1.1 step 8a) — `POST /`,
+ * `GET /`, `GET /:id`, `POST /:id/assets/sign`, `DELETE /:id`. It is NOT on the `/drives*` mount,
+ * which carries `withSession` alone.
+ * ⚠ NEVER PUT IT BACK ON THE MOUNT. `POST /drives/propose` is the anonymous preview (D14) and a
+ * blanket wall silently re-walls it — as a 401 that reads like an auth bug rather than a routing
+ * one. The route table is pinned by test/drive-access.test.ts, which also fails when a NEW route is
+ * added without a gate; that test, not deploy ordering, is INV-15's control.
  * (The planned `POST /drives/:id/ask` route will be a future ADDITIONAL caller, not the first.)
  * The 401 shape + message mirror the per-drive wall in `loadOwnedDrive` (drives.ts) so the two
  * gates stay aligned. Do NOT "remove the unused gate" — it is load-bearing.

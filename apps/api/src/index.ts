@@ -5,7 +5,7 @@
 //   GET  /version                    -> per-platform app-version policy (anonymous; env-free)
 //   *    /api/auth/*                  -> Better Auth (sign-up/in/out, session, OAuth)
 //   GET  /regions                    -> pickable regions for the Create-a-Drive picker (anonymous)
-//   POST /drives/propose             -> preview the route for a picked A→B (free account; no credit)
+//   POST /drives/propose             -> preview a route + ONE clip from it (ANONYMOUS; no credit)
 //   POST /drives                     -> generate + persist a user-owned drive (free account; counts a credit)
 //   GET  /drives                     -> the caller's saved drives (one card each)
 //   GET  /drives/:id                 -> replay a saved drive (frozen structure + live narration content)
@@ -14,10 +14,11 @@
 //   GET  /sample                     -> one curated "taste" clip (anonymous; no location)
 //
 // The app runs on ONE rider artifact: the user-owned DRIVE, assembled from the region's shared
-// narration corpus. Hand-authored tours are deferred and free-roam was removed in 1.1. Creating or
-// playing a drive needs a free account (the /drives sub-app's requireAccount); the open anonymous
-// front door is the planner plus /sample. Audio is private in R2 — presigned on demand after the
-// tier check.
+// narration corpus. Hand-authored tours are deferred and free-roam was removed in 1.1. OWNING a
+// drive needs a free account — the wall is per-route on the five owner routes (D15/INV-15), never on
+// the `/drives*` mount. The open anonymous front door is the planner, `/drives/propose` (route,
+// stop count, and one release-filtered clip from the rider's own route — INV-5), and `/sample`.
+// Audio is private in R2 — presigned on demand after the tier check.
 
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
@@ -25,7 +26,7 @@ import { and, asc, desc, eq, isNotNull } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { narrations, places, pois, regions } from '@skipper/db/schema'
 import type { AttributionList, Region } from '@skipper/shared'
-import { auth, SITE_ORIGIN } from './auth'
+import { assertAuthEnv, auth, SITE_ORIGIN } from './auth'
 import { driveRoutes } from './drives'
 import { EXAMPLE_ANCHOR_SCAN_LIMIT, pickExampleAnchors } from './example-anchors'
 import {
@@ -42,6 +43,20 @@ import { withRetry } from './retry'
 import { DATA_SOURCES } from './sources'
 import { audioUnavailable, contentTypeForKey, presignGet } from './storage'
 import { VERSION_POLICIES } from './version-policy'
+
+// ⚠ BOOT-TIME FAIL-FAST, AND IT IS THE ONLY ONE LEFT. ./auth's instance is now a lazy memoized proxy
+// so that importing ./drives costs no env — that is what makes a request-level test of the /drives
+// access boundary possible at all, and that test is INV-15's primary control. The price is that a
+// missing BETTER_AUTH_SECRET no longer stops the process at import, so this call has to.
+//
+// Without it the API boots perfectly clean and then degrades SILENTLY in the worst available shape:
+// `withSession` resolves the session inside `resolveSessionSafely`, which swallows the build throw,
+// retries it three times with backoff, and fails OPEN to null — so every rider reads as anonymous,
+// every owner route 401s a real account, and each request pays ~450 ms of pointless retry. Secure
+// direction, no leak, and indistinguishable from "everyone got logged out".
+//
+// ⚠ Any new entrypoint that mounts these routes owes this same call.
+assertAuthEnv()
 
 const app = new Hono<ApiEnv>()
 
@@ -188,9 +203,10 @@ app.use('/drives/propose', rateLimit(PROPOSE_RATE))
 app.use('/drives/plan', rateLimit(PLAN_RATE_MINUTE), rateLimit(PLAN_RATE_HOUR))
 app.route('/drives/plan', planRoutes)
 
-// Create-a-Drive (V2): user-owned, on-demand A→B drives over the shared narration corpus. The
-// whole sub-app is behind a free account — see ./drives. ⚠ 1.1 moves requireAccount OFF this mount
-// onto the individual owner routes (D15/INV-15), so do NOT re-add a blanket wall here.
+// Create-a-Drive: user-owned, on-demand A→B drives over the shared narration corpus. ⚠ The sub-app
+// is NOT blanket-walled — `requireAccount` sits on the five OWNER routes individually (D15/INV-15,
+// step 8a) so `POST /drives/propose` can serve the anonymous preview. Do NOT add a wall here; it
+// would re-wall the whole funnel, and test/drive-access.test.ts is what catches it.
 app.route('/drives', driveRoutes)
 
 // GET /sample — the anonymous "taste" for a user OUTSIDE any coverage. The corpus is Tahoe-only,

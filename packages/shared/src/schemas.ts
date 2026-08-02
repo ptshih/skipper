@@ -207,6 +207,39 @@ export const driveProposeRequest = z.object({
 })
 export type DriveProposeRequest = z.infer<typeof driveProposeRequest>
 
+/** The anonymous rider's ONE taste of the product (D14): a single presigned clip drawn from THIS
+ *  proposal's own selection, chosen server-side.
+ *
+ *  ⚠ IT IS AN OBJECT, NOT AN ARRAY, AND THAT IS THE GUARANTEE (INV-5). "Exactly one clip" is not a
+ *  server-side length check a later edit can relax — it is the SHAPE. Turning this into a list is a
+ *  wire break someone has to argue for, not a parameter a caller can raise. And the request carries no
+ *  selector at all (`driveProposeRequest` above is start/end/via — no `seq`, `index`, `count` or
+ *  `offset` anywhere), so the ONLY lever a caller has over which clip they receive is the ROUTE. That
+ *  makes corpus enumeration cost one billed Google Routes call per clip, at the propose rate limit
+ *  (`apps/api/src/limits.ts`), and still only ever yields the FIRST stop of each route.
+ *
+ *  ⚠ DELIBERATELY NOT `driveClip`. Reusing it would put `subjectId`, `lat`/`lng`, `triggerRadiusM`,
+ *  `alongSec` and `seq` on an ANONYMOUS wire — exact trigger geometry for a corpus POI, plus a stable
+ *  corpus key a stranger could correlate across routes — and would leave `z.array(driveClip)` one
+ *  character away. A preview needs a name, a URL and a credit. Nothing else.
+ *
+ *  `attribution` is NOT decoration: Wikipedia is CC BY-SA, so any surface that presents the adapted
+ *  work owes credit, and this is the most-seen anonymous surface there is. `sample` above carries it
+ *  for exactly the same reason. */
+export const drivePreviewClip = z.object({
+  /** The place this clip is about — the card's label. Safe on an anonymous wire: the clip says the
+   *  name out loud, so withholding the string protects nothing. */
+  name: z.string(),
+  /** Presigned R2 GET, short TTL (packages/storage owns the number). Private object; the URL expires.
+   *  ⚠ Same presign, same TTL as an owner clip — the RELEASE FILTER on the build corpus, not the TTL,
+   *  is what makes this safe to serve anonymously (INV-5). */
+  url: z.url(),
+  contentType: z.string(),
+  durationMs: z.number().int().nullish(),
+  attribution: attributionList.optional(),
+})
+export type DrivePreviewClip = z.infer<typeof drivePreviewClip>
+
 /** The proposed route to CONFIRM before generating: the SERVER-resolved endpoints (name + coords, for
  *  display) alongside the ids that produced them, plus the route preview.
  *  ⚠ Both halves are here on purpose. The resolved shape is what the rider sees; the ids are what the
@@ -226,6 +259,13 @@ export const driveProposal = z.object({
   routeSig: z.string(),
   /** Rough # of narratable places along the route (for the confirm screen). */
   estStopCount: z.number().int().nullish(),
+  /** ONE clip from this route, or null — the rider's taste BEFORE the wall (D14/INV-5).
+   *  ⚠ NULL IS A NORMAL OUTCOME, not an error: a 0-stop route has no clip (see `estStopCount`), and a
+   *  presign failure degrades to null rather than 503ing an otherwise-valid free preview. The client
+   *  must render the card without it.
+   *  `.nullish()` so the two absences stay distinguishable: the handler ALWAYS emits the key, so `null`
+   *  means "this server, no clip" while `undefined` means "an older server that has no such field". */
+  previewClip: drivePreviewClip.nullish(),
 })
 export type DriveProposal = z.infer<typeof driveProposal>
 

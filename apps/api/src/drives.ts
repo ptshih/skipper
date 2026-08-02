@@ -1,20 +1,25 @@
-// Create-a-Drive (V2) — a user-owned, on-demand A→B drive assembled from REUSED roam narrations.
+// Create-a-Drive — a user-owned, on-demand A→B drive assembled from REUSED shared narrations.
 //
-//   POST /drives/propose          -> preview the route for a picked A→B (cheap; no persist, no credit)
-//   POST /drives                  -> generate + persist the confirmed drive (free-account gated; counts a credit)
-//   GET  /drives                  -> the caller's saved drives (one card each)
-//   GET  /drives/:id              -> replay a saved drive's frozen manifest (narration content resolves LIVE)
-//   POST /drives/:id/assets/sign  -> re-presigned clip URLs (offline refresh), keyed by seq
-//   DELETE /drives/:id            -> soft-delete (remove from list); CAP-NEUTRAL — a spent credit is never refunded
+//   POST /drives/propose          -> ANONYMOUS. Preview the route for a planned A→B + ONE taste clip
+//                                    (cheap; no persist, no credit, no account)
+//   POST /drives                  -> generate + persist the confirmed drive (requireAccount; spends a credit)
+//   GET  /drives                  -> the caller's saved drives (requireAccount; one card each)
+//   GET  /drives/:id              -> replay a saved drive's frozen manifest (requireAccount; content resolves LIVE)
+//   POST /drives/:id/assets/sign  -> re-presigned clip URLs (requireAccount; offline refresh), keyed by seq
+//   DELETE /drives/:id            -> soft-delete (requireAccount); CAP-NEUTRAL — a spent credit is never refunded
 //
-// A drive is "roam, pre-ordered for your route": the rider PICKS the endpoints from the region's real
-// anchors; the route is Google's (materializeRoute) and the SELECTION is deterministic (engine
-// buildDrive over the shared narration corpus). Nothing here synthesizes audio — it picks + paces
-// existing roam clips. The drive's
-// STRUCTURE freezes into `drives.selection`; each narration's CONTENT resolves live via its poi, so a
-// regenerated telling auto-improves a saved drive. Ownership lives on `drives.user_id` (a drive is
-// user-owned, never shared content). Anonymous callers get roam only — the whole module
-// is behind requireAccount.
+// ⚠ THE WALL IS PER-ROUTE, NOT ON THE MOUNT (D15/INV-15). `POST /propose` is the OPEN ANONYMOUS FRONT
+// DOOR — it is the whole preview: the route a rider planned in conversation, its stop count, and ONE
+// presigned clip drawn from that route's own release-filtered selection. Everything else in this module
+// is owner-scoped and carries `requireAccount` on its own chain. Re-mounting the gate on
+// `driveRoutes.use('*', …)` silently re-walls the preview and reads like an auth bug, not a routing one.
+//
+// A drive is "the region's tellings, pre-ordered for your route": the planner emits curated anchor IDS;
+// the route is Google's (materializeRoute) and the SELECTION is deterministic (engine buildDrive over
+// the shared narration corpus). Nothing here synthesizes audio — it picks + paces existing clips. The
+// drive's STRUCTURE freezes into `drives.selection`; each narration's CONTENT resolves live via its
+// subject, so a regenerated telling auto-improves a saved drive. Ownership lives on `drives.user_id`
+// (a drive is user-owned, never shared content).
 
 import { Hono, type Context } from 'hono'
 import { and, asc, between, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm'
@@ -30,6 +35,7 @@ import {
   driveMaxStops,
   OFF_ROUTE_MAX_M,
   type DriveCandidate,
+  type DriveStop,
   type LngLat,
 } from '@skipper/engine'
 import { CLUSTER_VARIETY_KEY, loadClusterTellings, notSupersededByServedCluster, type ClusterTelling } from './clusters'
@@ -39,6 +45,7 @@ import {
   type DriveClip,
   type DriveClipForm,
   type DriveManifest,
+  type DrivePreviewClip,
   varietyKey,
   type RegionAnchor,
 } from '@skipper/shared'
@@ -96,10 +103,10 @@ function toClipForm(form: string): DriveClipForm {
  *  caller) and every row carries the anchor ID + exact coordinates — the one thing that can bill a
  *  Google Routes call (INV-1). The client-facing `GET /drives/anchors` that used to serve it verbatim
  *  was DELETED in 1.1 along with the tap-to-pick create form: the rider now names endpoints in
- *  CONVERSATION and the planner emits ids. Do not resurrect it: `requireAccount` is moving to a
- *  PER-ROUTE guard (the five owner routes below), so a re-added `/anchors` would inherit nothing and
- *  become an anonymous dump of the whole curated allowlist WITH coordinates. What a rider may see is
- *  NAMES, and only a handful (see ./example-anchors). */
+ *  CONVERSATION and the planner emits ids. Do not resurrect it: `requireAccount` IS a PER-ROUTE guard
+ *  (the five owner routes below) and the mount carries only `withSession`, so a re-added `/anchors`
+ *  would inherit NOTHING and become an anonymous dump of the whole curated allowlist WITH coordinates.
+ *  What a rider may see is NAMES, and only a handful (see ./example-anchors). */
 export async function loadRegionAnchors(bbox: string | null): Promise<RegionAnchor[]> {
   const p = (bbox ?? '').split(',').map(Number)
   if (p.length !== 4 || p.some((n) => !Number.isFinite(n))) return []
@@ -251,6 +258,18 @@ interface NarrationRow {
   tooWideForPoint?: boolean
 }
 
+declare const releaseFiltered: unique symbol
+/** A corpus loaded through the RELEASE-FILTERED BUILD path (`loadCorpusForRoute`), nominally distinct
+ *  from the plain Map `loadCorpusBySubjectIds` returns.
+ *
+ *  ⚠ INV-5's whole failure mode is that the two maps are STRUCTURALLY IDENTICAL: swap them under the
+ *  anonymous preview and a stranger gets a downloadable URL to UNRELEASED work, with the same response
+ *  shape, the same status, the same duration — nothing fails, no test distinguishes them. This brand
+ *  makes that swap a COMPILE ERROR. It is ASSERTED EXACTLY ONCE, at the loader that owns the filter;
+ *  casting to it anywhere else is the only way to reintroduce the bug. (A branded map stays assignable
+ *  to a plain `Map<string, NarrationRow>`, so the owner/replay paths need no change.) */
+export type BuildCorpus = Map<string, NarrationRow> & { readonly [releaseFiltered]: true }
+
 /** The shared corpus projection + poi join. BOTH loaders (route-bbox and explicit-poiId) select these
  *  exact columns, so the NarrationRow shape lives in ONE place and can't drift between the two read
  *  paths. A fresh builder per call (the appended single-use `.where()` differs by path). */
@@ -353,7 +372,7 @@ function clusterRowsToCorpus(rows: ClusterTelling[], into: Map<string, Narration
 async function loadCorpusForRoute(
   polyline: Polyline,
   includeStaged = false,
-): Promise<Map<string, NarrationRow>> {
+): Promise<BuildCorpus> {
   const { minLat, minLng, maxLat, maxLng } = polylineBbox(polyline)
   const midLat = (minLat + maxLat) / 2
   const padM = OFF_ROUTE_MAX_M + 200
@@ -391,7 +410,10 @@ async function loadCorpusForRoute(
       ),
     { label: 'drive.corpus' },
   )
-  return clusterRowsToCorpus(clusters, rowsToCorpus(rows))
+  // ⚠ THE ONE PLACE THE BRAND IS ASSERTED — this function is what applies the release filter (the
+  // `isNotNull(narrations.releasedAt)` above and the same predicate inside loadClusterTellings), so it
+  // is the only function entitled to claim it. See BuildCorpus.
+  return clusterRowsToCorpus(clusters, rowsToCorpus(rows)) as BuildCorpus
 }
 
 const candidateOf = (r: NarrationRow): DriveCandidate => ({
@@ -448,19 +470,79 @@ function manifestClips(selection: DriveSelection, corpusById: Map<string, Narrat
   return clips
 }
 
+/** THE anonymous rider's ONE taste of the product (D14/INV-5): a single presigned clip drawn from THIS
+ *  proposal's own selection.
+ *
+ *  ⚠ WHICH MAP IS PASSED IN MATTERS MORE THAN WHICH STOP IS PICKED. `corpus` must be the one
+ *  `loadCorpusForRoute` produced (release-filtered unless the caller is an admin) — which is why the
+ *  parameter is `BuildCorpus` and not a plain Map. `corpusForSelection`/`loadCorpusBySubjectIds`
+ *  deliberately apply NO release filter and pass `includeStaged: true`: correct for resolving a frozen
+ *  selection a rider paid a non-refundable credit for, and catastrophic here — presigning from that map
+ *  hands a stranger a downloadable URL to UNRELEASED work, and the response is byte-shaped identically,
+ *  so nothing fails. The brand is what makes that swap red.
+ *
+ *  ⚠ THE FIRST STOP, NOT THE LONGEST. seq 0 is the drive's opening beat, so the taste is exactly what
+ *  plays first if the rider buys it — preview and product can never disagree, and the preview
+ *  manufactures the anticipate beat instead of spending it. Ranking by clip length would override
+ *  buildDrive's own judgement, where duration is only the LAST tiebreak inside a gap window.
+ *
+ *  ⚠ Same presign, same TTL as an owner clip — no anonymous variant. The RELEASE FILTER, not the TTL,
+ *  is what makes this safe to serve anonymously; the TTL has one home (packages/storage, per INV-12),
+ *  and a short URL would strand a rider who pauses mid-conversation, since the re-sign route is an owner
+ *  route they cannot reach.
+ *
+ *  ⚠ NULL, NEVER A THROW. An empty selection (a real 200 with estStopCount 0) and a presign failure both
+ *  degrade to "no taste" — the route, distance and stop count are all still true and the wall is
+ *  downstream, so a 503 here would take down a free preview over a missing clip. Contrast POST /drives
+ *  (audioUnavailable), where the credit is already spent and a 200 would strand the rider. */
+export function previewClipFor(stops: readonly DriveStop[], corpus: BuildCorpus): DrivePreviewClip | null {
+  for (const s of stops) {
+    const n = corpus.get(s.poiId)
+    if (!n) continue // subject vanished between load and select — impossible today, cheap to survive
+    try {
+      return {
+        name: n.name,
+        url: presignGet(n.key),
+        contentType: contentTypeForKey(n.key),
+        durationMs: n.durationMs,
+        // Not decoration: Wikipedia is CC BY-SA and this is the most-seen anonymous surface, so the
+        // credit rides with the clip exactly as it does on GET /sample.
+        ...(n.attribution ? { attribution: n.attribution } : {}),
+      }
+    } catch (e) {
+      // ⚠ Not audioUnavailable(). A presign failure is an R2-config fault, not per-key, so retrying the
+      // next stop would just fail identically. Log (no body, no key — INV-13) and degrade.
+      console.error('[api] drive propose preview presign failed (non-fatal)', e)
+      return null
+    }
+  }
+  return null
+}
+
 /* --------------------------------- routes --------------------------------- */
 
 export const driveRoutes = new Hono<ApiEnv>()
 
-// Everything in this module needs a free account (anonymous = roam only).
-driveRoutes.use('*', withSession, requireAccount)
+// Session only — every route below reads c.get('session')/c.get('tier').
+// ⚠ DO NOT RE-ADD requireAccount HERE. The account wall is PER-ROUTE (the five owner routes below,
+// D15/INV-15); a blanket gate on this mount silently re-walls `POST /propose` — the entire anonymous
+// preview, the open front door — and it fails as a 401 that reads like an auth bug rather than a
+// routing one. The gate list is pinned by the route-table guard in test/drive-access.test.ts.
+driveRoutes.use('*', withSession)
 
 /**
- * POST /drives/propose — preview the route for a rider-PICKED START→END before spending a credit.
+ * POST /drives/propose — preview the route for a planned START→END before spending a credit.
  * Both endpoints are CURATED ANCHOR IDS the planner emitted, re-asserted here against
- * `endpoint_eligible` before any billed Routes call (INV-1), so this just materializes the route +
- * counts narratable stops. Persists nothing, no credit — the confirm-before-spend interstitial.
+ * `endpoint_eligible` before any billed Routes call (INV-1), so this just materializes the route,
+ * counts narratable stops, and picks ONE clip to play. Persists nothing, no credit.
  * (No LLM/geocoding: endpoints are grounded by construction.)
+ *
+ * ⚠ ANONYMOUS ON PURPOSE — NO `requireAccount` (D14/D15). This is the open front door: the rider hears
+ * the skipper on their OWN route before the wall, which lands one step later at `POST /drives`. It
+ * writes nothing (no ledger touch, no drive row), so INV-4 is satisfied by construction rather than by
+ * a check — an anonymous user id is never in scope here at all.
+ * ⚠ It also spends on EVERY call, anonymously, forever: a billed Google Routes call plus a corpus read.
+ * Its only guard is PROPOSE_RATE (./limits, INV-12) — weakening that is a cost regression, not a UX tweak.
  */
 driveRoutes.post('/propose', async (c) => {
   const parsed = await readJsonBody(
@@ -489,7 +571,9 @@ driveRoutes.post('/propose', async (c) => {
 
   // Accurate est. stop count: run the real selection (pure, free) so the confirm screen matches.
   // An admin previews over staged clips too, so the proposed count matches what they'll build.
-  const { stops } = await selectStopsForRoute(route, isAdmin(c.get('session')))
+  // ⚠ `isAdmin(session)`, never `tier`/a literal — it is the SOLE staged bypass (INV-5), and an
+  // anonymous session can never obtain it because `role` lives on a real account row.
+  const { corpus, stops } = await selectStopsForRoute(route, isAdmin(c.get('session')))
 
   // Echo the ids AND the resolved midpoints: the ids are what POST /drives must re-send, the resolved
   // shapes are what the confirm screen renders (and what marks a loop as a round trip).
@@ -504,6 +588,10 @@ driveRoutes.post('/propose', async (c) => {
     durationSeconds: Math.round(route.durationSeconds),
     routeSig: routeSigOf(startEp, endEp, route.polyline),
     estStopCount: stops.length,
+    // The taste (D14). From `corpus` — the RELEASE-FILTERED build corpus this same call produced
+    // (INV-5), which is what the `BuildCorpus` parameter type enforces. Always emitted so `null` means
+    // "no clip on this route" and an ABSENT key means an older server.
+    previewClip: previewClipFor(stops, corpus),
   })
 })
 
@@ -514,13 +602,28 @@ driveRoutes.post('/propose', async (c) => {
 const createDriveLimiter = rateLimit(DRIVE_CREATE_RATE)
 
 /**
- * POST /drives — generate + persist the confirmed drive. Free-account gated (above); enforces the
- * free-tier drive cap; materializes the route, runs the deterministic selection over the shared
- * narration corpus, freezes the STRUCTURE into `drives.selection`, bumps demand, and returns the
- * playable manifest. Mints no audio (reuses roam clips), so it spends only Routes + a DB write.
+ * POST /drives — generate + persist the confirmed drive. THIS IS THE WALL: `requireAccount` on this
+ * route's own chain (D15/INV-15). Spends a credit from the ledger; materializes the route, runs the
+ * deterministic selection over the shared narration corpus, freezes the STRUCTURE into
+ * `drives.selection`, bumps demand, and returns the playable manifest. Mints no audio (reuses existing
+ * clips), so it spends only Routes + a DB write.
+ *
+ * ⚠ `requireAccount` BEFORE `createDriveLimiter`, deliberately: the gate is pure in-memory, the limiter
+ * MUTATES a per-IP bucket — so gate-first means an anonymous flood can never burn a real rider's
+ * shared-IP token, and the cheap check runs first.
  */
-driveRoutes.post('/', createDriveLimiter, async (c) => {
-  const userId = c.get('session')?.user.id
+driveRoutes.post('/', requireAccount, createDriveLimiter, async (c) => {
+  // NOT THE WALL ANY MORE — `requireAccount` above 401s before this line runs. This is (a) the
+  // narrowing that turns `string | undefined` into the `string` the ledger needs and (b)
+  // defense-in-depth if a future edit ever moves or drops that gate.
+  // ⚠ KEYED ON TIER, NOT ON ID PRESENCE. `!session?.user.id` worked only while an anonymous caller had
+  // no session at all; after the anonymous mint (D16) EVERY rider carries one and an anonymous user HAS
+  // an id, so an id-presence check is `false` forever and backstops nothing — that is INV-15's whole
+  // point. Keying on the same `tier` the gate keys on means the backstop and the wall cannot disagree.
+  // ⚠ It must stay BEFORE ensureFreeGrant. An anonymous user id that reached the ledger would write a
+  // grant against a row better-auth HARD-DELETES at link — no FK, no cascade, no purgeUserData (INV-4)
+  // — stranding a row forever in an append-only ledger with no second copy.
+  const userId = c.get('tier') === 'free' ? c.get('session')?.user.id : undefined
   if (!userId) return c.json({ error: 'account_required', message: 'Create a free account to make a drive.' }, 401)
 
   const parsed = await readJsonBody(
@@ -754,9 +857,13 @@ driveRoutes.post('/', createDriveLimiter, async (c) => {
   return c.json(manifest)
 })
 
-/** GET /drives — the caller's saved drives, newest first (no geometry; one card each). */
-driveRoutes.get('/', async (c) => {
-  const userId = c.get('session')?.user.id
+/** GET /drives — the caller's saved drives, newest first (no geometry; one card each). Owner route:
+ *  `requireAccount` on its own chain (D15/INV-15) — and load-bearing beyond the read, because this
+ *  route WRITES (`ensureFreeGrant` below materializes the free allotment). */
+driveRoutes.get('/', requireAccount, async (c) => {
+  // Backstop, not the wall — and TIER-keyed for the same reason as POST / above: after the anonymous
+  // mint an id-presence check is permanently false, and this route reaches the ledger (INV-4/INV-15).
+  const userId = c.get('tier') === 'free' ? c.get('session')?.user.id : undefined
   if (!userId) return c.json({ error: 'account_required' }, 401)
   const rows = await withRetry(
     () =>
@@ -907,11 +1014,20 @@ async function manifestForStoredDrive(drive: NonNullable<Awaited<ReturnType<type
   }
 }
 
+/** The owner id a scoped query may be keyed on, or undefined.
+ *
+ *  ⚠ TIER, NOT ID PRESENCE (INV-15). After the anonymous mint (D16) every rider carries a session and
+ *  an anonymous user HAS an id, so `session?.user.id` alone is never falsy and stops narrowing anything.
+ *  This is the same predicate `requireAccount` keys on, so the gate and the queries beneath it cannot
+ *  disagree — and no query is ever scoped by an id better-auth is about to hard-delete (INV-4). */
+const ownerId = (c: Context<ApiEnv>): string | undefined =>
+  c.get('tier') === 'free' ? c.get('session')?.user.id : undefined
+
 /** Load a LIVE drive the caller OWNS (404 on miss-or-not-yours-or-deleted — never reveal another
  *  user's drive, and a soft-deleted drive reads as gone). */
 async function loadOwnedDrive(c: Context<ApiEnv>) {
   const id = c.req.param('id')
-  const userId = c.get('session')?.user.id
+  const userId = ownerId(c)
   if (!id || !UUID_RE.test(id) || !userId) return null
   return loadOwnedDriveById(userId, id)
 }
@@ -921,7 +1037,7 @@ async function loadOwnedDrive(c: Context<ApiEnv>) {
  *  UUID guard); 404 on any miss. */
 async function loadOwnedSelection(c: Context<ApiEnv>) {
   const id = c.req.param('id')
-  const userId = c.get('session')?.user.id
+  const userId = ownerId(c)
   if (!id || !UUID_RE.test(id) || !userId) return null
   const rows = await withRetry(
     () =>
@@ -936,8 +1052,12 @@ async function loadOwnedSelection(c: Context<ApiEnv>) {
 }
 
 /** GET /drives/:id — replay a saved drive: frozen STRUCTURE + LIVE narration content (a regenerated
- *  telling auto-improves it). Re-presigns every clip. */
-driveRoutes.get('/:id', async (c) => {
+ *  telling auto-improves it). Re-presigns every clip.
+ *
+ *  ⚠ Owner route — `requireAccount` first on its own chain (D15/INV-15). It is what keeps
+ *  `corpusForSelection`'s deliberately UNFILTERED (staged-inclusive) read owner-scoped: that loader is
+ *  safe ONLY behind this gate (INV-5). */
+driveRoutes.get('/:id', requireAccount, async (c) => {
   const drive = await loadOwnedDrive(c)
   if (!drive) return c.json({ error: 'not_found' }, 404)
   try {
@@ -947,8 +1067,10 @@ driveRoutes.get('/:id', async (c) => {
   }
 })
 
-/** POST /drives/:id/assets/sign — re-presigned clip URLs (offline refresh), keyed by seq. */
-driveRoutes.post('/:id/assets/sign', async (c) => {
+/** POST /drives/:id/assets/sign — re-presigned clip URLs (offline refresh), keyed by seq. Owner route:
+ *  `requireAccount` first (D15/INV-15) — it re-presigns from the staged-inclusive replay corpus, so the
+ *  gate is what makes that read safe (INV-5). */
+driveRoutes.post('/:id/assets/sign', requireAccount, async (c) => {
   const drive = await loadOwnedSelection(c)
   if (!drive) return c.json({ error: 'not_found' }, 404)
   const corpus = await corpusForSelection(drive.selection ?? [])
@@ -970,10 +1092,13 @@ driveRoutes.post('/:id/assets/sign', async (c) => {
  * stays so it keeps counting toward the lifetime free-drive credit — deleting NEVER refunds a credit
  * (one is spent at generation). Owner-scoped + idempotent: 404 if it isn't yours or is already gone.
  * The shared narration audio is untouched — a drive only references it, never owns it.
+ * Owner route: `requireAccount` first on its own chain (D15/INV-15).
  */
-driveRoutes.delete('/:id', async (c) => {
+driveRoutes.delete('/:id', requireAccount, async (c) => {
   const id = c.req.param('id')
-  const userId = c.get('session')?.user.id
+  // 404, not 401 — deliberate here (see loadOwnedDrive): an unowned id must read as gone. Tier-keyed
+  // like the other owner loaders so no query is ever scoped by an anonymous id (INV-4/INV-15).
+  const userId = ownerId(c)
   if (!id || !UUID_RE.test(id) || !userId) return c.json({ error: 'not_found' }, 404)
   const deleted = await withRetry(
     () =>
@@ -996,7 +1121,13 @@ driveRoutes.delete('/:id', async (c) => {
  *  a credit for — every stop that later got pruned would vanish from a saved drive, and the credit is
  *  never refunded. A drive's selection is frozen at build; this path resolves that frozen set's CONTENT
  *  and must not re-adjudicate which stops belong. New drives get the clean corpus; old drives keep
- *  what they bought. */
+ *  what they bought.
+ *
+ *  ⚠ AND NO RELEASE FILTER EITHER — which is safe ONLY because every caller is owner-scoped behind
+ *  `requireAccount`. That qualifier became load-bearing the day `POST /propose` opened to anonymous
+ *  callers (INV-5): this map is structurally identical to the build corpus, so handing it to the
+ *  preview picker would publish STAGED work to a stranger with nothing failing. It deliberately does
+ *  NOT return `BuildCorpus`; that brand is the compile error standing in the way. */
 async function loadCorpusBySubjectIds(subjectIds: string[]): Promise<Map<string, NarrationRow>> {
   // A frozen selection names subjects of both kinds, and the id spaces are disjoint uuids — so both
   // queries run against the same list and each matches only its own. `includeStaged: true` on the

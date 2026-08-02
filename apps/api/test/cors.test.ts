@@ -1,12 +1,19 @@
 import { describe, expect, test } from 'bun:test'
 
-// The app and auth modules boot at IMPORT time, and auth.ts deliberately throws without a secret, so
-// seed one before importing. Never a real value — nothing here exercises auth crypto, and both db
-// clients are lazy proxies (see @skipper/db + ./auth-db), so no DATABASE_URL is needed either.
+// Seed a secret before importing. Never a real value — nothing here exercises auth crypto, and both
+// db clients are lazy proxies (see @skipper/db + ./auth-db), so no DATABASE_URL is needed either.
+//
+// ⚠ STILL REQUIRED after the 1.1 step-8 lazy-auth refactor, for a DIFFERENT reason than before, and
+// deleting it fails confusingly. ../src/auth no longer throws at module load — but ../src/index now
+// calls `assertAuthEnv()` at top level, deliberately, as the boot-time fail-fast that laziness moved
+// out of module scope. This file imports ../src/index, so it boots the app for real and hits that
+// gate. If this line ever stops being necessary, the eager assert has gone missing from index.ts,
+// and THAT is the bug — a process that boots clean and then fails open to anonymous on every route.
 process.env.BETTER_AUTH_SECRET ??= 'test-only-secret-that-signs-nothing-real'
 
-// Booting auth without a mailer logs its expected "RESET WILL FAIL" warning — real and correct
-// there, just noise here. Silence it across the import only.
+// Booting without a mailer logs the expected "RESET WILL FAIL" warning — real and correct there,
+// just noise here. It now comes from `assertAuthEnv()` rather than auth.ts's module scope, which is
+// still inside this window because index.ts calls it at top level. Silence it across the import only.
 const origWarn = console.warn
 console.warn = () => {}
 const { SITE_ORIGIN } = await import('../src/auth')
