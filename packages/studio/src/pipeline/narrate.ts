@@ -32,11 +32,13 @@ import { WORDS_PER_SECOND } from '../config'
 const NARRATION_MAX_TOKENS = 16000
 
 export interface NarrationRequest {
-  /** e.g. "Lake Tahoe". Naming the region is allowed without the sheet — it's STABLE in both modes. */
+  /** e.g. "Lake Tahoe". Naming the region is allowed without the sheet — it's STABLE for every drive
+   *  that reuses the clip. */
   region: string
-  /** OPTIONAL named stretch, e.g. "Emerald Bay Run". OMITTED for the shared atom (roam corpus): the
-   *  same telling plays on its own OR on any route, so it can't bake a specific corridor. A future
-   *  authored-tour path may pass one; naming a GIVEN corridor is allowed without the sheet. */
+  /** OPTIONAL named stretch, e.g. "Emerald Bay Run". OMITTED for the shared atom (the narration
+   *  corpus): the same telling rides ANY route through the place, so it can't bake one corridor. ⚠ No
+   *  production caller passes this today — it is held for the DEFERRED authored-tour path, where a
+   *  GIVEN corridor is sayable without the sheet. */
   corridor?: string
   stopType: StopType
   /** Required for STORY and BREAK (the curated, stable name + kind). OPTIONAL for SCENIC: a
@@ -81,13 +83,24 @@ export interface NarrationRequest {
    *  menu while never naming three of the five places the group is named for. Default (absent) is
    *  nameable, so the poi path is unchanged. */
   mergedFeatures?: { name: string; facts: string[]; background?: boolean }[]
-  /** Short reminders of earlier stops, for earned callbacks. */
+  // ⚠ THE WITHIN-SEQUENCE CONDITIONING WINDOW — DECLARED AND RENDERED, BUT NOTHING SETS IT.
+  //   No production caller (and no test) passes any of the four below, so these branches have never
+  //   fired on a shipped clip; the corpus generator narrates each POI in a VACUUM, and the ONLY live
+  //   cross-clip variety mechanism is the diversity lint → `avoid` (pipeline/lint.ts, whose header
+  //   carries the long version of this warning). Do NOT read them as an upstream repetition damper.
+  //   KEPT, not swept, for two reasons of record: docs/decisions/cut-wave-form.md cites this exact
+  //   unwired state as the evidence for "monotony in a low-input form is STRUCTURAL", and
+  //   docs/designs/drive-thesis-spec.md (SPEC ONLY, post-MVP) builds its stop-conditioning on this
+  //   window. Wiring or deleting them is a founder call, not a cleanup.
+  /** Short reminders of earlier stops, for earned callbacks. ⚠ Unwired (above) — and today it would
+   *  CONTRADICT `selfContained`, which forbids callbacks outright. */
   priorStops?: string[]
-  /** How the last few stops OPENED — so this stop can open differently (each call is independent). */
+  /** How the last few stops OPENED — so this stop can open differently. ⚠ Unwired (above). */
   recentOpeners?: string[]
-  /** How the last few stops CLOSED — so this stop can close differently (each call is independent). */
+  /** How the last few stops CLOSED — so this stop can close differently. ⚠ Unwired (above). */
   recentClosers?: string[]
-  /** Recurring frames / self-deprecation flavors already used THIS DRIVE (cumulative) — one-time bits, never reuse. */
+  /** Recurring frames / self-deprecation flavors already spent, cumulatively — one-time bits, never
+   *  reuse. ⚠ Unwired (above); there is no "this drive" at corpus-generation time to accumulate over. */
   recentMotifs?: string[]
   /** Pacing target; honored but never padded past the facts. */
   targetSeconds?: number
@@ -97,8 +110,8 @@ export interface NarrationRequest {
   maxSeconds?: number
   /** Re-narration notes from the diversity lint — concrete things THIS take must avoid. */
   avoid?: string[]
-  /** SHARED-ATOM framing (generate-narrations.ts): this telling is the place's ONE narration, played
-   *  BOTH on its own by proximity (roam) AND reused mid-drive on a planned route. Adds the
+  /** SHARED-ATOM framing (generate-narrations.ts): this telling is the place's ONE narration, reused
+   *  mid-drive by EVERY route that reaches the place, at any position in the order. Adds the
    *  self-contained block to the sheet (route-agnostic, no order, no baked laterality, no tour shape);
    *  all grounding rules are unchanged. */
   selfContained?: boolean
@@ -231,8 +244,8 @@ function mergedFeatureLines(features: MergedFeature[] | undefined): string[] {
 export function buildFactSheet(req: NarrationRequest): string {
   const lines: string[] = []
   lines.push(`REGION: ${req.region}`)
-  // Only when a named stretch is actually given (authored-tour path). The shared atom omits it — the
-  // same telling plays on its own or on any route, so it must not name a specific corridor/drive.
+  // Only when a named stretch is actually given (the deferred authored-tour path). The shared atom
+  // omits it — the same telling rides any route, so it must not name a specific corridor/drive.
   if (req.corridor) lines.push(`CORRIDOR: ${req.corridor}`)
   lines.push(`STOP TYPE: ${req.stopType.toUpperCase()}`)
   lines.push('')

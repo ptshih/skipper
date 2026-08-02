@@ -6,7 +6,7 @@
 // hashes identically), apply the curated fact-edit overrides, and rewrite facts / facts_hash /
 // facts_fetched_at / summary. When the re-fetched facts MATERIALLY change (a new facts_hash),
 // every narration that grounded on the old facts goes detectably stale (narrations.facts_hash IS
-// DISTINCT FROM pois.facts_hash) — the operator then regenerates the owning drive/roam.
+// DISTINCT FROM pois.facts_hash) — the operator then regenerates that poi's telling.
 //
 // PRESERVES a paid enrichment WELL (2026-06-16): like the sweep, a refetch keeps an existing
 // `fact_sheet` + `enriched_at` (the grounding hash is the SHEET hash, so refreshing the extract
@@ -124,7 +124,7 @@ async function main() {
   } else {
     console.log(
       hashChanged
-        ? `  → CHANGED: any narration grounded on the old facts is now STALE → regenerate it (roam + every drive reusing it).`
+        ? `  → CHANGED: any narration grounded on the old facts is now STALE → regenerate it (every drive reusing it picks the new telling up).`
         : `  → unchanged: facts identical to what's stored (only facts_fetched_at would advance).`,
     )
   }

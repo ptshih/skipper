@@ -2,7 +2,7 @@
 //
 // The DEFERRED hand-authored tour pipeline (the draft-shell load + the atomic narration/aside
 // ready-gate; its segments/tracks/tour_frames tables were dropped in migration 0009) was removed in
-// the V1→V2 migration; roam writes its 1:1 narration directly
+// the V1→V2 migration; the corpus generator writes its 1:1 narration directly
 // (generate-narrations.ts upserts `narrations`). What survives here is the SHARED facts layer every
 // writer reads: the `pois` upsert (deduped on the Wikidata QID `pois.qid`; stamps facts_hash/
 // facts_fetched_at). The grounding fingerprint helpers (storyFactsHash / hashFacts) that key the
@@ -132,7 +132,7 @@ export async function upsertPoi(input: UpsertPoiInput): Promise<string> {
             // admin edit is never clobbered by a later generate/sweep pass.
             speakableLat: sql`coalesce(${pois.speakableLat}, excluded.speakable_lat)`,
             speakableLng: sql`coalesce(${pois.speakableLng}, excluded.speakable_lng)`,
-            // FACTS are SHARED across tours: the SAME place can be a story stop on one tour and
+            // FACTS are SHARED across drives: the SAME place can be a story stop on one drive and
             // a (factless) scenic/break stop on another. NEVER let a factless write blank a place
             // that already carries facts — COALESCE keeps the richest known facts/summary, while a
             // genuine re-fetch (non-null incoming) still overwrites. (Upholds the "pois is the

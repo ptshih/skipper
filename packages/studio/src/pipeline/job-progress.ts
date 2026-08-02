@@ -37,7 +37,7 @@ let currentKind: Kind | undefined
 /** The identity of an ops run, set at begin. */
 interface BeginFields {
   dryRun: boolean
-  /** e.g. the region slug for a roam gen. */
+  /** e.g. the region slug for a corpus generate. */
   targetSlug?: string
   /** An ops audit label (the poi/region id the job acted on). */
   targetId?: string

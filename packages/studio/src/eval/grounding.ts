@@ -46,7 +46,7 @@ export interface GroundingInput {
   well: string[]
   /** Ambient carve-out: NAMING these (not asserting facts about them) is allowed sheet-free. */
   region: string
-  /** OPTIONAL named stretch — the shared atom (roam corpus) names no corridor (it plays on any route). */
+  /** OPTIONAL named stretch — the shared atom names no corridor (it plays on any route). */
   corridor?: string
   /** Sanctioned-callback carve-out: names of OTHER stops on this drive. The narrator is fed
    *  earlier stops for earned callbacks, so RECALLING one (asserting nothing new about it)

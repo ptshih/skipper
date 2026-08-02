@@ -1,11 +1,11 @@
 // enrich-pois — the corpus ENRICH step. SPENDS $ (Anthropic only — no TTS/R2) + MUTATES DB on --apply.
 //
 // The distinct PAID op between discovery and generation: `discover` (free sweep → pois.facts.extract)
-// → **`enrich` (paid, ONCE per place)** → `generate` (paid, per tour/roam). It scouts each eligible
+// → **`enrich` (paid, ONCE per place)** → `generate` (paid, per place). It scouts each eligible
 // STORY poi into a curated, grounded "fact sheet" on `pois.fact_sheet` — verbatim article spans the
 // enricher SELECTED (never rewrote) + any geology/Wikidata bundles it chose to include (pipeline/
-// scout.ts buildCorpusFactSheet). Tours + roam both READ that fact sheet (resolveStoryGrounding), so enrich cost
-// amortizes once-per-place across every telling, and roam gets enrichment for the first time. See
+// scout.ts buildCorpusFactSheet). Generation READS that fact sheet (resolveStoryGrounding), so enrich cost
+// amortizes once-per-place across every drive that reuses the telling. See
 // docs/designs/corpus-enrichment-spec.md.
 //
 // VERBATIM-only (spec §2): the fact sheet carries facts verbatim from sourced fetchers with provenance —
@@ -50,8 +50,8 @@ import { ANTHROPIC_READY, DEFAULT_REGION_SLUG, GEOLOGY_ENRICHMENT, SCOUT_CONCURR
 import { llmSpendLines, llmSpentUsd } from '@skipper/shared'
 import { classifyStoryEligibility } from '@skipper/shared'
 
-/** Soft narration length the fact sheet is sized for — the LONG-FORM target (roam's band), since the fact sheet
- *  is shared and a tour can always read fewer spans. Passed to the builder as guidance, not a cap. */
+/** Soft narration length the fact sheet is sized for — the LONG-FORM end of the register bands, since the
+ *  sheet is shared and a shorter telling can always read fewer spans. Guidance to the builder, not a cap. */
 const ENRICH_TARGET_SECONDS = 150
 /** Rough USD per place, by model (for the pre-run estimate only; the real tally prints after). */
 const EST_USD_PER_POI: Record<EnrichModelChoice, number> = { sonnet: 0.04, opus: 0.09 }

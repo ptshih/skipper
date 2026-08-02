@@ -1,5 +1,5 @@
 // The generation-side persona definition — everything that makes a region's host sound
-// like itself. Resolved per tour by region slug (see ./index.ts), so adding a region is a
+// like itself. Resolved by PERSONA KEY (see ./index.ts), so adding a host is a
 // new PersonaDef + a registry entry, never edits scattered across generate-narrations.ts / lint.ts.
 //
 // PRESENTATION (the display name/tagline/backstory/portrait served to the app) has NO v2 home —

@@ -95,7 +95,7 @@ export const WIKIDATA_ENRICHMENT = (): boolean => process.env.SKIPPER_WIKIDATA !
 // --- The corpus enrich step's fact-sheet builder (pipeline/scout.ts buildCorpusFactSheet) ------
 // Generalizes the per-stop scout to the CORPUS: it selects verbatim article spans (by id) +
 // includes/excludes grounded bundles (geology@centroid, Wikidata), ONCE per place — the shared
-// fact sheet tours + roam ground on (docs/designs/corpus-enrichment-spec.md). Same ReAct shape +
+// fact sheet every telling grounds on (docs/designs/corpus-enrichment-spec.md). Same ReAct shape +
 // bounds as the scout; the only difference is the finalize emits a list of kept span ids, so it
 // gets a bit more output headroom.
 /** Max model turns per place — look (fetch geology/wikidata), then finalize. */
@@ -217,14 +217,14 @@ export const ENRICHER_INPUT_CHARS = 12_000
  * re-swept under ENRICHER_INPUT_CHARS=12k the head is a strict VERBATIM superset (it packs a sentence
  * or two more into the same 4k window), never a content change. An ENRICHED poi ignores this: it
  * grounds on the curated fact sheet (judgment is the bound, not a char cap). resolveStoryGrounding
- * (pipeline/select.ts) applies it; tours + roam pass it in.
+ * (pipeline/select.ts) applies it; every narration writer passes it in.
  */
 export const NARRATION_FALLBACK_CHARS = 4_000
 
 // --- Narration pacing -------------------------------------------------------
 
 /** Spoken narration pace (~2.5 words/second) — the single base pace every length estimate reads:
- *  narration's target-duration→word hint (narrate.ts), the roam dry-run length print
+ *  narration's target-duration→word hint (narrate.ts), the generate dry-run length print
  *  (generate-narrations.ts), and the TTS cost estimate's base (spend.ts, which layers
  *  TTS_ESTIMATE_SAFETY on top). */
 export const WORDS_PER_SECOND = 2.5

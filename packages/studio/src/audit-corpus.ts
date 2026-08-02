@@ -49,8 +49,17 @@ import { DIMENSION_KIND, type StopEval } from './eval/types'
 import { recordEvalRun, type ClipIdentity } from './eval/record'
 import type { FinishOutcome } from './pipeline/job-progress'
 
-// Same corridor framing the roam generator used (so the grounding carve-out matches). Named, never a fact.
-const FREE_ROAM_CORRIDOR = 'Free roam — an unplanned drive, no route'
+// The CORRIDOR line handed to the grounding judge. It says "no route" ON PURPOSE: a shared clip is
+// route-agnostic (it plays on ANY drive that reaches the place), so nothing about a specific stretch
+// is sayable and the region is the only frame. Named, never a fact.
+// ⚠ The literal REACHES A MODEL. It still opens with the roam-era phrase "Free roam" — left verbatim
+//   through the 1.1 roam sweep because re-wording a judge input re-scores the whole shipped corpus,
+//   which is a founder call and a paid re-run, not a rename. The constant's NAME (code-facing) was
+//   de-roamed; the string was not.
+// ⚠ Generation itself passes NO corridor at all (generate-narrations.ts), so this line is a small,
+//   deliberate divergence between the audit and the run it audits — not the "same framing" the old
+//   comment here claimed.
+const ROUTE_AGNOSTIC_CORRIDOR = 'Free roam — an unplanned drive, no route'
 // Rough per-clip cost estimates (ONE forced-tool Opus call each) for the preview + the pre-flight cap
 // check. ESTIMATES, not the bill — the --max-cost cap is the real guard. Veracity also bills per
 // web_search (a few per clip), so it's the priciest and opt-in.
@@ -230,7 +239,7 @@ async function main(): Promise<FinishOutcome> {
       evals.push(
         await evaluateGrounding({
           seq: i, stopType: 'story', placeName: c.name, script: c.script, well,
-          region: regionLabel(c.lat, c.lng), corridor: FREE_ROAM_CORRIDOR,
+          region: regionLabel(c.lat, c.lng), corridor: ROUTE_AGNOSTIC_CORRIDOR,
         }),
       )
     } catch (e) {

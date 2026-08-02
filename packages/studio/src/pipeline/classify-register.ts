@@ -14,7 +14,7 @@
 // (which has the fact sheet) rather than a guess. ~78% classify structurally; ~22% fall to the LLM.
 //
 // The register is a STABLE property of the place, classified ONCE and stored on `pois`, shared by
-// roam + drives (like `kind`). Empirical grounding (2026-06-19 probe of the 460 enriched POIs):
+// every drive that reuses it (like `kind`). Empirical grounding (2026-06-19 probe of the 460 enriched POIs):
 // 460/460 resolve to a Wikidata entity, only 21 lack P31 (→ fallback), 48 are multi-P31 (→ tie-break).
 
 import Anthropic from '@anthropic-ai/sdk'

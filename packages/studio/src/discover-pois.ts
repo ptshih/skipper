@@ -1,7 +1,7 @@
 // discover-pois — region POI corpus discovery. MUTATES DB on --apply.
 //
-// This populates the SHARED `pois` corpus for a region's bbox — the one place both TOURS and ROAM
-// draw candidates from (POIs are not roam-owned; roam is just one consumer — see CLAUDE.md
+// This populates the SHARED `pois` corpus for a region's bbox — the one place every DRIVE draws
+// candidates from (a poi belongs to no single consumer; it is the shared facts cache — see CLAUDE.md
 // principle #1 + docs/decisions/region-corpus-discovery.md). It discovers every Wikidata-pinned
 // place in a raw bbox (the whole Tahoe–Reno corridor by default), prose-joins Wikipedia, tiers
 // them, and upserts the STORY + SCENIC tiers into `pois` (facts for story, bare typed pins for
@@ -10,7 +10,7 @@
 // persisted anyway because the sweep is free and re-discovering them later is not).
 // Dedup by the Wikidata QID is the existing upsertPoi seam (it conflicts on `pois.qid`;
 // source/source_id are the secondary guard, rewritten in place on a tier flip), so re-running is
-// idempotent and a place a tour already visits is the SAME row (facts shared; principle #1).
+// idempotent and a place a drive already visits is the SAME row (facts shared; principle #1).
 //
 // SOP (docs/guides/ops-scripts-sop.md): PREVIEWS by default; writes only on --apply.
 // Discovery is free (WDQS + MediaWiki, no LLM/TTS spend).
@@ -145,7 +145,7 @@ async function main(): Promise<void> {
     `\nCorridor sweep: ${merged.length} places → ${stories.length} STORY, ${scenics.length} SCENIC, ` +
       `${breaks.length} break (skipped), ${drops.length} drop (skipped)\n`,
   )
-  console.log('STORY (roam-narratable — extract chars):')
+  console.log('STORY (narratable — extract chars):')
   for (const s of [...stories].sort((a, b) => (b.article!.extract.length || 0) - (a.article!.extract.length || 0))) {
     console.log(`  ${String(s.article!.extract.length).padStart(5)}  ${s.name}`)
   }
@@ -166,7 +166,7 @@ async function main(): Promise<void> {
   }
 
   // Deepen to the FULL article HERE (the "real step 1", 2026-06-15): the corpus stores the full
-  // extract, so tours + roam read it WITHOUT a per-run re-fetch — no deepen-time fact mutation or
+  // extract, so enrich + generate read it WITHOUT a per-run re-fetch — no deepen-time fact mutation or
   // factsHash churn, and eligibility measures real article richness (not a lead proxy). Free
   // (MediaWiki, paced); a miss falls back to the discovery lead. There is NO separate lead field —
   // `facts.extract` IS the full article; the lead is used only transiently for discovery tiering.
@@ -183,8 +183,8 @@ async function main(): Promise<void> {
     const a = s.article!
     const full = deep.get(a.pageId)
     if (!full) deepMiss++
-    // Normalize via toFacts(...).join(' ') so the stored extract (and its hash) MATCH what a tour or
-    // roam run recomputes from toFacts(extract) — one shared fingerprint across every writer/reader.
+    // Normalize via toFacts(...).join(' ') so the stored extract (and its hash) MATCH what a later
+    // generation run recomputes from toFacts(extract) — one shared fingerprint across every writer/reader.
     const extract = toFacts(full ?? a.extract).join(' ') // full article; lead fallback on a fetch miss
     // Store the FULL extract for EVERY story-tier candidate regardless of length — it is the ENRICHER's
     // raw input, and whether the article is rich enough to NARRATE is the paid enrich step's call (it

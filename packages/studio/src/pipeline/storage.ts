@@ -12,7 +12,8 @@ export { presignGet }
 
 /**
  * Narration clip key — per-CLIP unique: narration/<poiId>/<clipId>.<ext> (the atom's bytes under the
- * atom's name; the roam MODE no longer owns the prefix). A regen mints a fresh clipId, the narration
+ * atom's name — the key is keyed on the SUBJECT, never on whatever mode plays it). A regen mints a
+ * fresh clipId, the narration
  * row repoints its audio_url at the new key, and the superseded object orphans for `sweep-orphans` —
  * never overwriting a live narration's bytes in place.
  */

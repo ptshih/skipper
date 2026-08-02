@@ -14,7 +14,7 @@ import type { NarrationRequest } from '../src/pipeline/narrate'
 import type { StopEval } from '../src/eval/types'
 
 // ⚠ No left/right language in these fixtures. `evaluateLaterality` emits a GROUNDING-dimension
-// finding for naming a side of the road (direction of travel is unknown on a free-roam clip), and it
+// finding for naming a side of the road (direction of travel is unknown on a shared clip), and it
 // carries the same `ungrounded place-claim` prefix — so a stray "off to the right" would silently
 // route every test through the excision branch and never go clean.
 const CLEAN = 'The lake sits quiet this morning, smooth as glass, and the pines lean in close along the shoulder.'

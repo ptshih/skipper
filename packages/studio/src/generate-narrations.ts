@@ -2,13 +2,13 @@
 // SPENDS $ (Anthropic narration + Cloud TTS) and MUTATES DB + R2 on --apply.
 //
 // Writes the shared NARRATION layer (V2): pois = shared FACTS, and a poi's ONE narration (1:1, the
-// `narrations` table) = the shared telling that ROAM plays by proximity AND every DRIVE reuses
-// (pre-ordered along its route) — so each clip must accommodate BOTH modes. Regenerated when the
-// place's facts_hash moves (the staleness contract). The Skipper's stop prompt rides unchanged; the
-// sheet adds the SELF-CONTAINED frame (route-agnostic, no order, no baked laterality — narrate.ts),
-// targets the register length band (per delivery_register), threads no callbacks, and names no
-// corridor. A narration is placeless: form='story', no segment, no route geometry (a drive snaps a
-// trigger point onto its route at assemble time; roam triggers on the poi's own location).
+// `narrations` table) = the shared telling EVERY DRIVE reuses, pre-ordered along its own route — so
+// one clip has to play correctly on ANY route through the place, at any position in the order.
+// Regenerated when the place's facts_hash moves (the staleness contract). The Skipper's stop prompt
+// rides unchanged; the sheet adds the SELF-CONTAINED frame (route-agnostic, no order, no baked
+// laterality — narrate.ts), targets the register length band (per delivery_register), threads no
+// callbacks, and names no corridor. A narration is placeless: form='story', no segment, no route
+// geometry (a drive snaps a trigger point onto its route at assemble time).
 //
 // AUTOMATED QUALITY GATE (2026-06-19): every clip is scored by the eval panel (grounding via Opus
 // + laterality + tts-cleanliness as GATES, diversity as advisory), auto-retaken via optimize() when
@@ -26,7 +26,7 @@
 //   ... --apply                 run it (spends; writes R2 clips + narrations)
 //   ... --apply --limit 3      smoke run (the cheapest real ear-test)
 //   ... --force                regenerate even clips whose facts_hash is still fresh
-//   ... --region <slug>          generate a region's roam corpus (default: lake-tahoe; → its bbox)
+//   ... --region <slug>          generate a region's narration corpus (default: lake-tahoe; → its bbox)
 //   ... --include-ids a,b,c      regenerate EXACTLY these poi ids (implies --force)
 
 import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm'
@@ -68,10 +68,10 @@ import { buildScorecard } from './eval/scorecard'
 import { DIMENSION_KIND, type StopEval } from './eval/types'
 import { recordEvalRun, type ClipIdentity } from './eval/record'
 
-// Roam encounter length is now REGISTER-VARIED (REGISTER_LENGTH / lengthForRegister in ./models): a
+// Clip length is REGISTER-VARIED (REGISTER_LENGTH / lengthForRegister in ./models): a
 // landscape glance is shorter than a rich story (research-grounded 2026-06-19; the old single 150/180
-// "Autio-register" band fought the "let the facts set the length" doctrine). Eligibility for a roam
-// STORY is still "has a curated fact sheet" (#1); "never pad past the facts" governs the ACTUAL length
+// "Autio-register" band fought the "let the facts set the length" doctrine). Eligibility for a STORY
+// telling is still "has a curated fact sheet" (#1); "never pad past the facts" governs the ACTUAL length
 // within the band, so a thin pin lands honestly short. An ENRICHED poi grounds on its sheet.
 
 /** How many OTHER places must carry the identical fact line before it is marked SHARED on the sheet.
@@ -128,7 +128,7 @@ async function main(): Promise<FinishOutcome | void> {
   const bbox = region ? requireRegionBbox(region) : null
 
   // ── Candidate corpus: wikipedia-sourced pois with story-grade extracts, in the region ──
-  // The ROAM telling for a poi is its 1:1 narration — left-joined so a poi with no narration yet
+  // A poi's telling is its 1:1 narration — left-joined so a poi with no narration yet
   // still appears (and queues).
   const rows = await withRetry(
     () =>
@@ -163,7 +163,7 @@ async function main(): Promise<FinishOutcome | void> {
                 sql`${pois.lng} between ${bbox!.swLng} and ${bbox!.neLng}`,
               ),
         ),
-    { label: 'load roam corpus' },
+    { label: 'load narration corpus' },
   )
 
   interface Candidate {
@@ -209,7 +209,7 @@ async function main(): Promise<FinishOutcome | void> {
     if (excludeIds.has(r.id)) continue // "select all matching, minus a few"
     if (query && !`${r.name} ${r.sourceId}`.toLowerCase().includes(query)) continue
     const f = r.facts
-    // #1: a roam STORY encounter REQUIRES a curated fact sheet — an un-enriched poi is SKIPPED (never a
+    // #1: a STORY telling REQUIRES a curated fact sheet — an un-enriched poi is SKIPPED (never a
     // raw-extract telling; a named-but-unenriched pin simply gets no telling — the scenic "wave" form that
     // was going to cover them was CUT, see docs/decisions/cut-wave-form.md). The
     // sheet IS the eligibility gate now — no char floor (removed 2026-06-16); a sheet only exists for an
@@ -256,7 +256,7 @@ async function main(): Promise<FinishOutcome | void> {
   console.log(
     `Corpus: ${candidates.length} story-grade pois ` +
       `(${isExplicit ? `${includeIds.length} hand-picked` : `region=${region!.slug}`}, enriched — have a fact sheet) — ` +
-      `${skipped.length} already have fresh roam clips (skipped), ${queue.length} to generate.\n`,
+      `${skipped.length} already have fresh clips (skipped), ${queue.length} to generate.\n`,
   )
   for (const c of queue) console.log(`  ${String(c.extract.length).padStart(5)}  ${c.name}`)
 
@@ -404,7 +404,7 @@ async function main(): Promise<FinishOutcome | void> {
     return
   }
 
-  // Cost ceiling: abort BEFORE any narration/TTS if the estimate exceeds --max-cost. A roam run
+  // Cost ceiling: abort BEFORE any narration/TTS if the estimate exceeds --max-cost. A region run
   // covers a whole corpus, so an unbounded run (no --limit) can balloon — this is the hard stop.
   const estSpendUsd = (scriptsOnly ? 0 : tts.usd * TTS_ESTIMATE_SAFETY) + queue.length * llmUsdPerClip
   if (estSpendUsd > maxCostUsd) {
@@ -418,7 +418,7 @@ async function main(): Promise<FinishOutcome | void> {
   const persona = personaFromKey('skipper')
 
   // Facts are ALREADY the full article — the region sweep deepens at discovery time (the corpus is
-  // the single fetch point, the "real step 1"), so roam narrates on the stored extract with NO
+  // the single fetch point, the "real step 1"), so generation narrates on the stored extract with NO
   // per-run re-fetch and NO fact mutation. (Override-freshness now lands via a re-sweep / refetch_facts,
   // not a per-run fetch.) `c.extract` carries the full article from the corpus query above.
 
@@ -435,7 +435,7 @@ async function main(): Promise<FinishOutcome | void> {
 
   async function gateClip(c: Candidate, seq: number): Promise<GatedClip> {
     // Ground on the curated WELL when the place is enriched, else the positional extract head — the
-    // SAME resolver tours + drives use, so the well the auditor builds matches the narrator's sheet.
+    // SAME resolver drives use, so the well the auditor builds matches the narrator's sheet.
     const grounding = resolveStoryGrounding(c.facts, c.factSheet, c.enrichedAt, {
       fallbackChars: NARRATION_FALLBACK_CHARS,
       retrievedAt: (c.factsFetchedAt ?? new Date()).toISOString(),
@@ -446,8 +446,8 @@ async function main(): Promise<FinishOutcome | void> {
     const band = lengthForRegister(register)
     const base = {
       region: regionLabel(c.lat, c.lng),
-      // No corridor: the shared atom plays on its own (roam) OR on any route (a drive reusing it), so
-      // it names only the stable REGION, never a specific stretch.
+      // No corridor: the shared atom plays on ANY route that reaches the place, so it names only the
+      // stable REGION, never a specific stretch.
       stopType: 'story' as const,
       place: { name: c.name, ...(c.kind ? { kind: c.kind } : {}) },
       facts: grounding.facts,
@@ -478,7 +478,7 @@ async function main(): Promise<FinishOutcome | void> {
     return { c, seq, script, evals, shipped }
   }
 
-  console.log(`\nNarrating + gating ${queue.length} encounters (concurrency ${NARRATION_CONCURRENCY()})...`)
+  console.log(`\nNarrating + gating ${queue.length} clips (concurrency ${NARRATION_CONCURRENCY()})...`)
   let done = 0
   const gated = await mapLimit(queue, NARRATION_CONCURRENCY(), async (c, i): Promise<GatedClip> => {
     try {
@@ -666,8 +666,8 @@ async function main(): Promise<FinishOutcome | void> {
         label: `upload(${c.name})`,
       })
       // Well-aware credit: an ENRICHED poi credits the well's distinct sources (wikipedia + any
-      // geology/wikidata kept). Same resolver tours use, so attribution can't drift between roam and
-      // a drive reusing the clip.
+      // geology/wikidata kept). Same resolver the gate ran above, so the credit frozen here can't
+      // drift from the facts the clip was actually audited against.
       const { attribution } = resolveStoryGrounding(c.facts, c.factSheet, c.enrichedAt, {
         fallbackChars: NARRATION_FALLBACK_CHARS,
         retrievedAt: (c.factsFetchedAt ?? new Date()).toISOString(),
@@ -675,7 +675,7 @@ async function main(): Promise<FinishOutcome | void> {
       // The grounding fingerprint = pois.factsHash exactly (storyFactsHash on the SAME facts the
       // freshness query read), so a freshly-generated clip never reads as stale.
       const factsHash = storyFactsHash(c.facts, c.factSheet)
-      // A roam telling = the poi's ONE narration (1:1). Upsert on poi_id so a regen replaces the
+      // A poi's telling = its ONE narration (1:1). Upsert on poi_id so a regen replaces the
       // same row's script/audio/hash in place.
       await withRetry(
         () =>

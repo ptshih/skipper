@@ -37,7 +37,7 @@ export const TAIL_COLLAPSE_DB = 4
  *  re-collapses within this band of the prior best, treat it as structural and stop spending. */
 export const STRUCTURAL_RETAKE_EPSILON_DB = 1.0
 /** Below this duration there's no body meaningfully longer than the tail — skip the probe
- *  (15 s break clips skip; ~60 s roam encounters and ~2 min story stops measure). */
+ *  (15 s break clips skip; ~60 s glance clips and ~2 min story stops measure). */
 export const MIN_MEASURABLE_SEC = TAIL_WINDOW_SEC * 2
 
 export interface TailMeasure {

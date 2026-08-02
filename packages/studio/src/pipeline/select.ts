@@ -2,7 +2,7 @@
 //
 // The hand-authored tour pipeline (time-paced stop SELECTION) was removed in the V1→V2
 // migration; what survives here is the SHARED grounding resolver every narration writer
-// reads — roam (generate-narrations) and the corpus tools (enrich-pois, refetch-poi) — plus the
+// reads — generate-narrations and the corpus tools (enrich-pois, refetch-poi) — plus the
 // drift detector. The rule (#1, 2026-06-16): a STORY telling REQUIRES a curated fact sheet;
 // an un-enriched POI never grounds on the raw extract. The extract-head branch below is a
 // DEFENSIVE fallback only.
@@ -29,11 +29,11 @@ export function headOfExtract(extract: string, maxChars: number): string {
 }
 
 /** The narration sheet + attribution for a STORY poi: the verbatim `fact_sheet` when the place has
- *  been ENRICHED, else the positional `extract` head. #1 (2026-06-16): the roam queue + every narration
+ *  been ENRICHED, else the positional `extract` head. #1 (2026-06-16): the generate queue + every narration
  *  writer GATE story tellings on a sheet (un-enriched → scenic / skipped), so the extract-head branch is a
  *  DEFENSIVE fallback that should not fire for a real story telling — it stays only so a stray caller
- *  can't crash. The SINGLE source for roam (and any drive reusing the clip) so the credit can never drift
- *  between them. The fact sheet's credit uses its `enrichedAt`; the fallback's Wikipedia credit
+ *  can't crash. The SINGLE source for the clip AND for the audit that re-scores it, so the frozen credit
+ *  can never drift from the facts it was built on. The fact sheet's credit uses its `enrichedAt`; the fallback's Wikipedia credit
  *  uses the caller's `retrievedAt` (the poi's facts_fetched_at). See corpus-enrichment-spec §6/§7. */
 export interface StoryGrounding {
   facts: string[]

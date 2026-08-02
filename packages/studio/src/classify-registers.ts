@@ -5,8 +5,8 @@
 //      register is trusted (~75% of the live corpus).
 //   2. LLM FALLBACK (paid, the tail): a POI whose P31 matched NO register or CONFLICTING ones is
 //      handed to a cheap Haiku call over its fact sheet.
-// The register is a STABLE place property, classified ONCE and stored on `pois`, shared by roam +
-// drives. Conforms to docs/guides/ops-scripts-sop.md (SAFE BY DEFAULT): PREVIEW (the structural
+// The register is a STABLE place property, classified ONCE and stored on `pois`, shared by every
+// drive that reuses the place. Conforms to docs/guides/ops-scripts-sop.md (SAFE BY DEFAULT): PREVIEW (the structural
 // distribution + the abstain count, NO LLM calls, NO writes) unless --apply.
 //
 //   preview:  dotenvx run -f .env.development -- bun packages/studio/src/classify-registers.ts
