@@ -87,8 +87,8 @@ export function RegionsView() {
     const ok = await confirm({
       title: draft ? `Release ${r.displayName} to the public?` : `Release new clips in ${r.displayName}?`,
       body: draft
-        ? 'This opens the region to everyone and releases every staged clip inside its bbox. Releasing is permanent — a region can never be un-released (it would orphan saved drives and break offline downloads). Tweak POIs first; testers can preview staged clips in-app.'
-        : 'This region is already public. Re-running release publishes EVERY clip in this region’s bbox that is still staged — not only recent ones: the predicate is “not yet released”, with no since-date. That includes clips shared with an overlapping region, because a place inside two bboxes belongs to both. Permanent and cannot be undone.',
+        ? 'This opens the region to everyone and releases every staged clip inside its bbox — per-POI tellings AND the FUSED clip of any group with a member in the box. ⚠ Releasing a fused telling also RETIRES its members: those places stop appearing in new drives, because the group’s one clip now speaks for them. Releasing is permanent — a region can never be un-released (it would orphan saved drives and break offline downloads). Tweak POIs first; testers can preview staged clips in-app.'
+        : 'This region is already public. Re-running release publishes EVERY clip in this region’s bbox that is still staged — not only recent ones: the predicate is “not yet released”, with no since-date. That includes clips shared with an overlapping region, because a place inside two bboxes belongs to both, and any staged FUSED clip whose group has a member in the box — which also retires that group’s members from new drives. Permanent and cannot be undone.',
       confirmLabel: draft ? 'Release region' : 'Release new clips',
       tone: 'destructive',
     })
