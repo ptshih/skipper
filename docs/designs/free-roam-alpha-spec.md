@@ -1,9 +1,13 @@
 # Free-roam ALPHA — what v0 actually is
 
-> **Status:** BUILT 2026-06-10 (same-day founder greenlight off
-> [free-roam-mode.md](free-roam-mode.md)) — shipped as a founder-only TestFlight alpha.
-> This spec records what the alpha IS (including its deliberate cuts) so the next pass knows
-> what's real vs. deferred. The idea doc keeps the full product vision.
+> **Status:** 🔴 **REMOVED — the mode this describes no longer exists.** Built 2026-06-10 (same-day
+> founder greenlight off [free-roam-mode.md](free-roam-mode.md)), shipped as a founder-only TestFlight
+> alpha, and **deleted end to end on 2026-08-01 by 1.1 D1** (client + server + engine + DTOs; git is
+> the archive) — see [drives-first-1-1.md](drives-first-1-1.md). Read every present tense below as
+> 2026-06-10. The record is kept because roam is where every field lesson came from: the trigger
+> radii, the iOS heading sentinel, all 8 TestFlight items, and the pause+resume audio call that
+> became `doNotMix`. What survives is the layer UNDER the mode — the shared `narrations` corpus and
+> the `@skipper/engine` trigger primitives, both now driven by a drive's frozen route.
 
 Free-roam = the skipper rides shotgun on the rider's OWN drive: no route, no tour shape — the
 app watches live GPS and pipes up (over the rider's own audio) when the road passes a place with

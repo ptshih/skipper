@@ -6,7 +6,17 @@
 > mini-preview": expect to land on the detail page, toggle List/Map, and tap stops — NOT a full-screen
 > autostarting simulated drive. See [`../decisions/detail-page-mini-preview.md`](../decisions/detail-page-mini-preview.md).
 
-> **Status:** guide (written 2026-06-18) — the one-sitting pass that clears the last V2 gate: the
+> **Status:** ⚠ **SUPERSEDED BY 1.1 (2026-08-02) — do not execute this as written.** Three of its
+> preconditions are now false: the FROM/TO **pickers are deleted** (home IS the conversation — D6), so
+> steps 1–2 have no screen; roam is gone, so "Roam is primary" describes nothing; and — the one that
+> can do damage — **"roam is the only anonymous surface" is now the OPPOSITE of the rule.** Anonymous
+> riders get plan, propose, and one preview clip from their own route; the wall is `POST /drives`
+> alone, enforced **per-ROUTE**. Anyone who "restores" the 401 by mounting `requireAccount` on the
+> `/drives` sub-app silently re-walls the whole preview (CLAUDE.md says so twice). The 1.1 replacement
+> is the Acceptance list in [../designs/drives-first-1-1.md](../designs/drives-first-1-1.md) plus its
+> RISK-1 ("drive one for real"). Kept because the runtime questions in *Why this exists* are still the
+> right questions, and no on-device pass has ever been recorded. Originally:
+> guide (written 2026-06-18) — the one-sitting pass that clears the last V2 gate: the
 > live **Create→propose→confirm→generate→preview→drive** runtime, which `bun run check` cannot judge
 > (it needs a dev build + a signed-in account + a real Maps spend). Code-anchored to the tree as
 > of 2026-06-18 — re-verify anchors against the current files before trusting a line number. Pairs
@@ -35,7 +45,7 @@ clip, cap hit). This is the single 🔴 gate left before the founder ear-pass + 
 
 **Spend note (founder-gated).** Each `propose` now spends just 1 Google Routes call (+ a corpus read);
 each `create` spends 1 Routes call + a DB write. **No LLM, no geocoding, no TTS, no generation** —
-endpoints are picked (not resolved) and drives REUSE the existing 459 roam clips. So a full pass is a
+endpoints are picked (not resolved) and drives REUSE the existing 459 shared clips. So a full pass is a
 few cents of Google Maps, not a paid regen. Still, per CLAUDE.md the *spend* needs an explicit founder
 OK before firing.
 

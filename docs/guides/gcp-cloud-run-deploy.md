@@ -185,7 +185,7 @@ from `apps/site` (a `.firebaserc` pins the project).
 
 `apps/admin` (the founder-only ops console: a bun Hono API + the built `apps/admin/client`
 Vite/React SPA, ONE container) → a Cloud Run **service** `skipper-admin` behind **Google
-IAP**. `packages/studio` → a Cloud Run **job** `skipper-studio` (the corpus/roam CLI runner:
+IAP**. `packages/studio` → a Cloud Run **job** `skipper-studio` (the corpus CLI runner:
 discover-pois / enrich-pois / generate-narrations / resynth-narration / sweep-orphans / refetch-poi,
 one image, per-execution `args`). Both reuse the
 SAME `skipper-gh` connection + the `skipper` Artifact Registry repo — CD is two more

@@ -21,8 +21,10 @@ admin Users page → "Grant credits" CTA). One concept (credits) instead of two 
 ## What changed
 
 - **Access collapses to two levels.** `accessTier` is now `'anonymous' | 'free'`. `anonymous` =
-  no/guest session (roam + preview only); `free` = **any** signed-in account. The load-bearing wall is
-  unchanged: `requireAccount` still rejects `anonymous` (drives need an account).
+  no/guest session; `free` = **any** signed-in account. The load-bearing wall is
+  unchanged: `requireAccount` still rejects `anonymous` (drives need an account). ⚠ What anonymous
+  can REACH has since widened — roam is gone and 1.1 opened plan/propose + one preview clip from the
+  rider's own route; the wall moved to `POST /drives` alone, per-ROUTE.
 - **Every account spends credits.** The `tier === 'free'` guards in `POST /drives` are gone — the
   pre-check, the co-committed consume, and the `GET /drives` "N left" hint now run for **every**
   account. There is no uncapped path.

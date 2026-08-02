@@ -4,7 +4,8 @@ A toy/lifestyle project: an AI-narrated, GPS-triggered driving audio tour with a
 persona, played as phone audio (CarPlay later). **Optimize for charm, not scale — the persona is the
 product.** When a choice trades polish-for-the-builder against scale-for-a-market, pick polish.
 
-⚠ **1.1 is mid-build and large** — roam is being REMOVED entirely; Create-a-Drive becomes a CONVERSATION.
+⚠ **1.1 has LANDED in-repo but is not released** — roam is REMOVED entirely (git is the archive) and
+Create-a-Drive IS a conversation; what's left is on-device verification, the store listing, and the push.
 `docs/designs/drives-first-1-1.md` is the build truth — read it before touching `apps/api` or `apps/mobile`.
 
 ## STOP — the expensive or irreversible mistakes

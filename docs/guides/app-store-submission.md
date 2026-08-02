@@ -415,13 +415,22 @@ manifest, which does not excuse the label from saying it.
 Everything else — Contacts, Health, Fitness, Financial, Payment Info, Purchases, Browsing History,
 Search History, Sensitive Info, Identifiers for advertising, User Content — is **Not Collected**. Two
 that look close but genuinely aren't: a drive's `label` is server-generated from its endpoint names
-(`apps/api/src/drives.ts`), and the FROM/TO pickers choose from a curated anchor list — no free text
-and no geocode — so there is no User Content and no Search History.
+(`apps/api/src/drives.ts`), and endpoints resolve to a curated anchor allowlist — no geocode — so
+there is no Search History.
 
-**Why Precise Location is "Linked" — the nuance, so nobody "corrects" it later.** Roam coarsens the
-fix to 3 decimal places and sends it *without the session cookie*, so that call is genuinely
-unlinked. But (a) Apple counts ≥3 decimal places as *Precise*, and (b) a saved drive stores its
-endpoint coordinates against `user_id`. So one linked use exists, and Linked = Yes is the honest answer.
+⚠ **1.1 note (2026-08-02) — re-decide this one before pasting the label.** "No free text" was true of
+the deleted FROM/TO pickers and is NOT true of the planner: the rider types prose to
+`POST /drives/plan`, which reaches our server and Anthropic. The declaration still looks right —
+nothing persists it (no `conversations` table; request bodies are never logged), so it is transmitted,
+not *collected* — but that is a judgement call on Apple's definition, and it is the founder's to make,
+not a docs edit. Deciding it wrong is a rejection-class error.
+
+**Why Precise Location is "Linked" — the nuance, so nobody "corrects" it later.** A saved drive stores
+its endpoint coordinates against `user_id`, and Apple counts ≥3 decimal places as *Precise*. So a
+linked use exists and Linked = Yes is the honest answer. ⚠ **1.1 note (2026-08-02):** the old second
+half of this argument — roam's cookie-less, 3-decimal `GET /roam` call being *genuinely* unlinked —
+is gone with the mode, along with the only anonymous location upload the app had. That REMOVES an
+unlinked use; it cannot remove the linked one, so the answer does not change.
 
 **Why Coarse Location is "Linked" too.** Better Auth stores `session.ip_address` and
 `session.user_agent` against `user.id` (`packages/db/src/auth-schema.ts`). Apple grants IP no
@@ -495,15 +504,16 @@ the landing page. Two traps if they're ever recaptured:
 
 - **Shoot in dark mode**, and set the status bar with
   `xcrun simctl status_bar <udid> override --time 9:41 --batteryState charged --batteryLevel 100`.
-- ⚠ **Use LIVE roam, not `?mode=sim`.** Sim mode is the easy way to fire an encounter from a desk, but
-  it renders a **SIMULATED** badge in the UI — not something to ship to App Review. Instead drive a real
+- ⚠ **Use the LIVE player, not `?mode=sim`.** Sim is the easy way to fire a stop from a desk, but it
+  renders a **SIMULATED** badge in the UI — not something to ship to App Review. Instead drive a real
   GPS fix through a real trigger point: `xcrun simctl location <udid> start --speed=11 --interval=1.0`
-  along CA-89 through Eagle Falls trailhead. Pull actual trigger coordinates from `GET /roam`.
+  along CA-89 through Eagle Falls trailhead. Trigger coordinates come from the saved drive's own
+  manifest now (roam's `GET /roam` pin list is gone).
 
-⚠ **The roam screen has a large empty band when the map is toggled OFF** — about 40% of the frame.
-It's the real layout, but in a marketing frame it reads as a failed render. Do NOT restage it: the map
-is a REPLACEMENT view, not a background, so there is no "story over map" screen to capture. The fix is
-to splice the void shorter, which is invisible because the band is a single flat colour (`#090E0C`).
+⚠ **The dead-band trap, kept because it is about the FRAME, not the screen.** The roam screen it was
+found on no longer exists, but any capture whose layout leaves a large flat band reads as a failed
+render in a marketing frame. Do NOT restage the app to fill it. The fix is to splice the void shorter,
+which is invisible because the band is a single flat colour (`#090E0C`).
 Verified seam rows with `ffmpeg -vf crop=1320:1:0:<y>` piped to `xxd` — cut only where a row is one
 colour edge to edge, or a sliver of the progress-bar car marker bleeds in and looks like a glitch:
 

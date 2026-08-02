@@ -34,8 +34,9 @@ in-content dismiss) — that's pre-prompt abandonment and is allowed.
 
 Shown **only when the foreground permission status is `undetermined`** — i.e. exactly when iOS
 is actually about to prompt. Already `granted` → drive immediately; already `denied`/`reduced`
-→ the existing Settings gate. Net: the explainer appears once, the first time, for whichever
-mode (tour drive or roam) the rider hits first; never again.
+→ the existing Settings gate. Net: the explainer appears once, the first time the rider starts a
+drive; never again. (As decided it covered whichever of two modes came first — roam was the other,
+and is gone; see the Status note.)
 
 - `getDrivePermission()` (`apps/mobile/src/lib/gps.ts`) now also returns `undetermined` (a
   no-prompt status read via `getForegroundPermissionsAsync`).

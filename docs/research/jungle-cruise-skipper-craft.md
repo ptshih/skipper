@@ -54,8 +54,9 @@ repo already works (a fixed kit/palette + per-telling generation freedom + a del
   spiel to learn, "dead trips" on empty boats, then a practical + written exam. No
   comedy-specific audition appears in any verified account.
 
-**Mapping to the repo:** the joke book ≈ the persona kit + joke-shape rules in
-`skipper.ts`; selection-and-delivery latitude ≈ the per-telling generation options
+**Mapping to the repo:** the joke book ≈ the joke-shape rules in `skipper.ts` (the "cousin Ray"
+persona KIT this line also named was deleted 2026-06-19 — it leaked off-persona jokes into stops,
+which is the failure this very research warns about); selection-and-delivery latitude ≈ the per-telling generation options
 (`generate-narrations.ts` → `pipeline/narrate.ts`) + zero-reuse narration already provide; the approval pipeline ≈ the lint/judge/founder-ear
 gates. The research validates the architecture: don't loosen authorship (free invention);
 widen the *menu* when the voice feels samey.

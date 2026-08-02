@@ -1,9 +1,16 @@
 # Roam-first region expansion — the beachhead inversion
 
-> **Status:** IDEA, captured 2026-06-11 (founder: "intriguing — proceed") out of the roam
-> improvement brainstorm ([free-roam-mode.md](free-roam-mode.md) §Alpha learnings). Grounded
-> same day with three $0 dry-run corpus probes (numbers below). No build greenlit; the
-> sequencing question is on the founder's desk after roam build pass 2 proves out.
+> **Status:** ⚠ **The VEHICLE is gone, the INVERSION survives — amended 2026-08-02.** Roam was
+> removed entirely on 2026-08-01 (1.1 D1), so there is no roaming to paint a demand heatmap and no
+> "roam build pass 2". What still holds — and is how region N+1 actually opens today — is the
+> half that never needed roam: **a region opens with a BBOX and a batch run** (discover → enrich →
+> generate), no route curation, no arc, no per-region design work; drives then assemble that corpus
+> at runtime. Where a roaming heatmap would have chosen the next region, product analytics on what
+> riders ASK the planner for is the evidence channel that replaces it. Read the probe numbers below
+> as dated 2026-06-11.
+> Originally captured 2026-06-11 (founder: "intriguing — proceed") out of the roam
+> improvement brainstorm ([free-roam-mode.md](free-roam-mode.md) §Alpha learnings), grounded
+> same day with three $0 dry-run corpus probes. No build greenlit.
 
 **The thesis:** the milestone plan assumes a region opens with a TOUR (curate a route, generate,
 ear-pass) and roam arrives later as the companion mode. Invert it. A roam region needs a bounding
@@ -41,7 +48,11 @@ What the numbers actually say:
 
 - **Yosemite is Tahoe-grade** (110 story vs 139) — roam-ready on corpus alone, and drivable from
   Zephyr Cove for founder field validation. The obvious candidate #1.
-- **Moab is story-thin but scenic-rich** (48 vs 130) — its roam viability *depends on the wave
+- **Moab is story-thin but scenic-rich** (48 vs 130) — ⚠ **this bullet's conclusion is void**: the
+  WAVE form it depends on was cut 2026-07-26 (`../decisions/cut-wave-form.md`) and there is no "build
+  pass 2". The MEASUREMENT still matters, and now cuts the other way: a scenic-rich, story-thin region
+  has fewer full tellings to hang a drive on, so it is a harder region to open, not an easier one. As
+  captured: its roam viability *depends on the wave
   layer*, which is exactly what build pass 2 locks. The wave form isn't just Tahoe charm; it's
   the unlock for the whole scenic-rich/story-thin region class (most of red-rock Utah, probably).
 - **Big Sur is the richest corpus of the three and the ideal roam SHAPE** — a linear corridor

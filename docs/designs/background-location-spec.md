@@ -11,8 +11,8 @@
 
 ## Why / the gap
 
-Today the live drive + roam use a **foreground** `Location.watchPositionAsync` (`apps/mobile/src/lib/gps.ts`
-`liveSource`/`liveRoamSource`) at `BestForNavigation`. A foreground watch dies when the app leaves the
+Today the live drive uses a **foreground** `Location.watchPositionAsync` (`apps/mobile/src/lib/gps.ts`
+`liveSource`) at `BestForNavigation`. A foreground watch dies when the app leaves the
 foreground, so the drive holds the screen awake via `expo-keep-awake` (`useDrive.ts`) — and if the screen
 ever locks or the phone pockets, **audio keeps playing but GPS triggering silently stops** (the skipper
 goes quiet at the next stop). `useDrive.ts` states it: *"watchPositionAsync is foreground-only."* A

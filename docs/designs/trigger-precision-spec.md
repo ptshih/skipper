@@ -8,6 +8,15 @@
 > ✅ MECHANISM BUILT 2026-06-27** — an anchored pin now gets a tight kind-independent floor while an
 > anchorless pin keeps its kind floor (`triggerRadiusForKind`); only the **FINAL tuned numbers** wait on
 > the on-device re-drive (it is NOT a blanket shrink — see below). Step 4 optional.
+>
+> ⚠ **Amended 2026-08-02: HALF THIS SPEC IS GONE.** Roam was removed in 1.1, taking `RoamEngine`,
+> `packages/engine/src/roam.ts`, `GET /roam` and every roam-side constant (`floorM:600`,
+> `headingConeDeg:120`, `leadSeconds:15`, the 4 h per-POI cooldown, `recedeMarginM:60`) with it. Read
+> all of those as a dated record of what the numbers were compared against. **The remaining work is
+> the DRIVE half and it is unchanged**: step 2's `ANCHORED_TRIGGER_RADIUS_M` is still a conservative
+> 250 m awaiting the on-device re-drive, and steps 4 (stored approach heading) and 5 (background-GPS
+> pause) are still open. ⚠ The re-drive this spec waits on has also gotten harder
+> to schedule: roam was the road-tested mode, so the validation loop is now a created drive.
 
 ## Origin
 
@@ -117,6 +126,7 @@ dev build, the same loop that produced this feedback. Verify against the exact P
 
 ## Touchpoints
 
-- `packages/engine/src/geo.ts` (`radiusForKind`), `trigger.ts` + `roam.ts` (passed-point retire,
-  optional stored-heading gate), `apps/api/src/index.ts` + `drives.ts` (coalesce anchor as center).
+- `packages/engine/src/geo.ts` (`radiusForKind`), `trigger.ts` (passed-point retire, optional
+  stored-heading gate), `apps/api/src/drives.ts` (coalesce anchor as center). ⚠ `roam.ts` and
+  `apps/api/src/index.ts`'s pin loader were the other half of every step above and no longer exist.
 - No schema change required (steps 1–4 reuse existing columns).

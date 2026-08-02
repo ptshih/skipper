@@ -69,15 +69,15 @@ yields the exact nearest road point. (Google Roads also billed + needed a consol
 
 ## Why a dedicated pass — not discovery, not enrichment
 
-- **Not enrichment.** `enrich-pois.ts` is **story-only**; un-enriched/scenic POIs are skipped. But roam
-  triggers scenic POIs too, and off-road centroids skew scenic (lakes, vistas, resort grounds). Snapping
+- **Not enrichment.** `enrich-pois.ts` is **story-only**; un-enriched/scenic POIs are skipped. But
+  scenic POIs trigger too, and off-road centroids skew scenic (lakes, vistas, resort grounds). Snapping
   in enrichment would leave the worst offenders uncorrected.
 - **Not bolted onto discovery.** A separate pass **re-runs over the existing ~850-POI Tahoe corpus**
   without re-discovering — exactly what let it backfill anchors after the corpus already existed.
 
 ## Scope / coverage
 
-Snap **every triggerable POI** (story + scenic), since both fire in roam. The pass walks `pois` for a
+Snap **every triggerable POI** (story + scenic), since both kinds fire. The pass walks `pois` for a
 region bbox (same selection shape as `audit-speakable.ts`).
 
 ## Open questions / caveats
@@ -86,8 +86,9 @@ region bbox (same selection shape as `audit-speakable.ts`).
   a freeway you won't drive. Excluding `service` (driveways/parking) already removes the worst noise; a
   road-class preference is a later refinement if a device drive shows bad snaps.
 - **Flag mechanism for the ~99 un-snappable.** MVP = the pass report (they stay anchorless → fall back to
-  the centroid in 1b). If we want roam to actively suppress them, that's a small follow-up column (e.g.
-  `pois.off_road`); many are arguably not roam targets at all (Desolation Wilderness — no road for miles).
+  the centroid in 1b). If we want selection to actively suppress them, that's a small follow-up column
+  (e.g. `pois.off_road`); many are arguably not stop candidates at all (Desolation Wilderness — no road
+  for miles).
 - **This fixes off-road centroids only** (#5, #7 Edgewood). It does NOT fix early/late firing for POIs
   that *are* near a road (#6 Harrah's, #8 Zephyr Cove) — those are radius/heading, handled in **1b**.
 

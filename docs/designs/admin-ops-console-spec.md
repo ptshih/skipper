@@ -1,6 +1,6 @@
 # Admin ops console — build spec
 
-> **Schema-names note (2026-06-13):** this BUILT spec predates the 2026-06-12 segments/tracks refactor — read `roam_clips`→`segments`+`tracks`, `personaForRegion`→`personaFromKey`, `saved_tours`→dropped. The shipped admin already uses the current names; this is a historical build record. **(V2 2026-06-18):** the segments/tracks model was further collapsed — read `tracks`→`narrations`, `tours`→user-owned `drives`, and the `/tours*` routes → `/drives*`; hand-authored tours are deferred. **(Schema cluster 2026-06-19):** the `asides` table (placeless intro/outro framing — the old `tour_frames`) was DELETED, not renamed (migration `0019`; v3 brings it back with guided tours); `pois` now dedupes by the Wikidata **QID** (`pois_qid_uq`), and the §14.3/§3 "browse by `(source, source_id)`" facts-cache reads are QID-keyed today (`(source, source_id)` survives only on `poi_overrides`, which is correct as-is); Google break anchors live in their own `places` table (+ deferred `detours` audio), not `pois`.
+> **Schema-names note (2026-06-13):** this BUILT spec predates the 2026-06-12 segments/tracks refactor — read `roam_clips`→`segments`+`tracks`, `personaForRegion`→`personaFromKey`, `saved_tours`→dropped. The shipped admin already uses the current names; this is a historical build record. **(V2 2026-06-18):** the segments/tracks model was further collapsed — read `tracks`→`narrations`, `tours`→user-owned `drives`, and the `/tours*` routes → `/drives*`; hand-authored tours are deferred. **(Schema cluster 2026-06-19):** the `asides` table (placeless intro/outro framing — the old `tour_frames`) was DELETED, not renamed (migration `0019`; v3 brings it back with guided tours); `pois` now dedupes by the Wikidata **QID** (`pois_qid_uq`), and the §14.3/§3 "browse by `(source, source_id)`" facts-cache reads are QID-keyed today (`(source, source_id)` survives only on `poi_overrides`, which is correct as-is); Google break anchors live in their own `places` table (+ deferred `detours` audio), not `pois`. **(1.1, 2026-08-02):** roam is REMOVED — backlog item **#13 ("Free-roam under the same roof") is VOID**, there is no `roam_clips` owner and no `sweep_roam_pois`/`generate_roam` job kind (the sweep is `discover-pois.ts`); read every other "tour or roam" enumeration below as the user-owned DRIVE alone, and the intro/outro "brackets" as deleted (`docs/decisions/cut-intro-frame-and-persona-kit.md`).
 
 > **Status:** spec, **BUILT + DEPLOYED 2026-06-11**, **PARTIALLY SUPERSEDED 2026-06-19** — the
 > `skipper-admin` service is live on Cloud Run behind Google IAP, but the spec has drifted from the code:
@@ -153,7 +153,7 @@ Migration: the table arrived additively; `kind` started as a `gen_job_kind` pgEn
   --set-secrets=DOTENV_PRIVATE_KEY_PRODUCTION=dotenv-private-key-production:latest
   --service-account=skipper-studio@… --max-retries=0 --task-timeout=21600` (`jobs deploy` is
   create-or-update; **`--max-retries=0`** so a half-run regen never silently re-fires; 6h
-  timeout covers a full-region roam run — the real spend guard is the script's own `--max-cost`;
+  timeout covers a full-region corpus run — the real spend guard is the script's own `--max-cost`;
   the wall-clock cap is just the runaway backstop. Raised from 3600 (it timed out a full-region
   generate_narrations) 2026-06-17 — see §12).
 
@@ -472,7 +472,7 @@ almost every one rides on a column the schema already has but the UI throws away
    OAuth/ADC path already in `jobs.ts`). Seeing a runaway $5 generate without stopping it is
    half a tool — the COST gate cuts both ways. (Absorbs/supersedes #6's stall-only framing.)
 9. **Ready-gate integrity check (S, free).** Nothing audits the live DB for the hardest
-   invariant: a `status='ready'` tour (or roam set) with a NULL `audioUrl` on any
+   invariant: a `status='ready'` drive with a NULL `audioUrl` on any
    story/scenic/break stop, or a story stop missing `attribution` (the CC BY-SA legal floor).
    A half-failed resynth or manual DB poke could leave a tour silently broken. A read-only
    per-tour flag + fleet rollup is the cheapest guard against a silently-broken ready tour —
@@ -491,11 +491,15 @@ almost every one rides on a column the schema already has but the UI throws away
     needs the scratch-key plumbing.
 12. **Universal inline "play this clip" primitive (S).** The most frequent micro-action is
     "does THIS one stop sound right" — but presign+play is buried inside the full ear-pass
-    flows. A row-level presign + `<audio>` reused across tours, brackets, AND roam: the atomic
+    flows. A row-level presign + `<audio>` reused anywhere a clip is listed: the atomic
     unit of the ear-pass loop, decoupled from #1's autoplay player.
 Bigger bets (past the free first pass):
 
-13. **Free-roam under the same roof (L).** `roam_clips` is the THIRD narration owner, already
+13. 🔴 **VOID — roam was removed in 1.1 (2026-08-01).** Kept because its ARGUMENT outlived it: a
+    narration owner with no admin presence is un-vetted persona, and that is now the case for the
+    fused CLUSTER tellings (see `fused-cluster-generation-spec.md` §7 open question 4, which proposes
+    the cheap version — a block on the existing POI sheet, not a new page). As written:
+    **Free-roam under the same roof (L).** `roam_clips` is the THIRD narration owner, already
     shipping to TestFlight alpha, with ZERO admin presence — no list, no audio vetting, regen
     is SSH-only, and `generate-narrations` ships with FEWER guards than tours (no eval panel). A Roam
     tab (roam_clips ⨝ pois name/kind + inline audio + a `pois LEFT JOIN roam_clips` coverage

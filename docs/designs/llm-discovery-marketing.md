@@ -66,7 +66,8 @@ to Autio's SEO machine is the same one that makes us uncopyable."* True as strat
 invisibility has a mechanical cost the doc didn't price: **a generic brand name in a crowded entity
 space.** "Skipper" collides with a cluster of *boating* apps `[observed]` — while our persona is
 deliberately a road-trip guide and NOT a boat (`docs/decisions/cut-intro-frame-and-persona-kit.md`
-territory; the persona kit is single-sourced in `packages/studio/src/persona/skipper.ts`). Refusing the
+territory; the persona is single-sourced in `packages/studio/src/persona/skipper.ts` — the "cousin Ray"
+KIT that used to carry it was deleted with the intro frame that housed it). Refusing the
 category is free; being *unresolvable as an entity* is not, and it's fixable for an hour of work.
 
 **And the honest hole stays open.** `autio-content-moat.md` §"the honest hole" says acquisition is the

@@ -404,7 +404,7 @@ What survives unchanged: QID dedup (every member keeps its row), and `narrations
 array, so one fused clip credits every Wikipedia-sourced member — CC BY-SA satisfied by construction.
 
 ⚠ **`narrations.poi_id` is now NULLABLE.** Every read path inner-joins `pois`, so a cluster telling is
-simply invisible to roam and to drives until generation is taught about it — silence, never a wrong
+simply invisible to every read path until generation is taught about it — silence, never a wrong
 place-name. Where a query had no join to borrow a non-null id from, it either filters explicitly or
 relies on `poi_id IN (…)` never matching NULL; both are commented at the site.
 
@@ -458,15 +458,16 @@ R2 — `sweep-orphans.ts` already exists for exactly that.
 - **Cluster radius.** 400 m is a guess that produces sane diameters; it is not derived. Phase 1's road
   data may give a better rule ("same road, same side, within X").
 - **Does a district need a different trigger radius?** You're inside it for minutes, not seconds.
-- **Does roam want the same treatment?** Probably yes for CLUSTER, unclear for DISTRICT — roam is
-  ambient and a district telling may be too much when you're parked in it.
+  (The "does the OTHER mode want this too" question that sat here is closed — roam was removed in 1.1
+  and a drive is the only consumer. Its live remainder is the one above: a district is an EXTENT and a
+  point radius is the wrong primitive for it.)
 - **Region-agnostic proof.** The only honest test is running phases 1–3 against a second region's
   corpus (Yosemite) and checking the treatment split looks sane without tuning.
 
 ## Refs
 
-`packages/engine/src/drive-select.ts` (pick-one, §3a; `better()`, §2), `packages/engine/src/roam.ts:86-89`
-(the 300 m/15-min suppression this would subsume), `packages/studio/src/snap-speakable-anchors.ts` (§6),
+`packages/engine/src/drive-select.ts` (pick-one, §3a; `better()`, §2 — it is also where the 300 m/15-min
+suppression this would subsume used to live, in the deleted `roam.ts`), `packages/studio/src/snap-speakable-anchors.ts` (§6),
 `packages/studio/src/generate-narrations.ts` (where fusion lands), `docs/decisions/geometry-first-regions.md`,
 `docs/decisions/region-corpus-discovery.md`, `docs/decisions/corpus-enrichment.md`.
 Supersedes the `TODO.md` item "Co-located POIs: collapse a cluster into ONE telling".

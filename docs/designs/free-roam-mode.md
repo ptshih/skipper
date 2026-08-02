@@ -1,9 +1,13 @@
 # Free-roam mode — the skipper rides shotgun
 
-> **Status:** ALPHA BUILT 2026-06-10 — founder greenlit a same-day prototype; the shipped v0 (and
-> its deliberate cuts) is recorded in `docs/designs/free-roam-alpha-spec.md`. THIS doc remains the
-> full product vision (second product, tours primary; the grammar/logbook/monetization layers are
-> still future). Originally captured + fleshed out 2026-06-10 as the buildable-now rung missing
+> **Status:** 🔴 **CUT — roam was removed entirely on 2026-08-01 (1.1 D1); this doc is the vision it
+> was, not a vision it is.** Rationale for the cut: [drive-as-arc.md](drive-as-arc.md) — a drive is an
+> ARC (prepare → preview → anticipate → experience) and roam only ever had the fourth beat, on
+> identical clips. Nothing below is scheduled; the layers it imagines (grammar, logbook, monetization)
+> that still make sense have their own docs and attach to DRIVES. Read the rest as of its capture
+> dates. ALPHA BUILT 2026-06-10 — founder greenlit a same-day prototype; the shipped v0 (and
+> its deliberate cuts) is recorded in [free-roam-alpha-spec.md](free-roam-alpha-spec.md).
+> Originally captured + fleshed out 2026-06-10 as the buildable-now rung missing
 > from [journey-layer.md](journey-layer.md)'s coverage spectrum. 2026-06-11: post-field-drive
 > improvement backlog captured (§Alpha learnings); founder LOCKED waves + sonic cue +
 > history/mute as the next build pass (TODO.md carries the build context). 2026-06-11: idle-canvas

@@ -1,6 +1,11 @@
 # V2 — roam-first + Create-a-Drive
 
-> **Status:** CONVERGED + BUILT — see [../decisions/create-a-drive-architecture.md](../decisions/create-a-drive-architecture.md)
+> **Status:** ⚠ **PRODUCT STRUCTURE SUPERSEDED by [drives-first-1-1.md](drives-first-1-1.md)
+> (greenlit 2026-07-31, landed 2026-08-01); the DATA model it converged on is unchanged and
+> load-bearing.** There is no longer a "roam + drives" pair of first-day experiences: roam was removed
+> entirely and the drive is the only rider artifact. The shared-corpus half — one atom
+> `pois`──1:1──`narrations`, reused pre-ordered along a route — is exactly what 1.1 kept, and is why
+> removing a whole mode cost no content. See [../decisions/create-a-drive-architecture.md](../decisions/create-a-drive-architecture.md)
 > for build truth; this doc retained for the product rationale + the DEFERRED authored-drive (rung 3)
 > vision. (Founder-converged in a brainstorm 2026-06-18; the full V2 migration shipped same day —
 > `narrations`/`drives` schema, the `/drives` API, the mobile Create-a-Drive flow + roam-first home.)

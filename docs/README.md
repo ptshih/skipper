@@ -53,19 +53,20 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   the live model is `pois ─1:1─ narrations` (shared atom) + user-owned `drives`, not the old
   `tour_stops` (migration `0009` dropped `tours`/`segments`/`tracks`/`tour_frames`).
 - [create-a-drive-architecture.md](decisions/create-a-drive-architecture.md) — **the V2 build record**
-  (✅ BUILT 2026-06-18): the roam-first data model (one atom `pois`──1:1──`narrations` +
-  sequences; `segments`/`tour_frames` dissolve; roam = a mode; `drives` = user-owned sequences) +
-  the two-phase Create-a-Drive flow, access/credits, and the build phases. Carries a 2026-06-19
-  supersession addendum (asides deleted, regions geometry-first, credits → the ledger).
+  (✅ BUILT 2026-06-18): the shared-corpus data model (one atom `pois`──1:1──`narrations` +
+  sequences; `segments`/`tour_frames` dissolve; `drives` = user-owned sequences) + the two-phase
+  Create-a-Drive flow, access/credits, and the build phases. The DATA model is still live; the
+  roam-as-a-mode half of it died in 1.1. Carries a 2026-06-19 supersession addendum (asides deleted,
+  regions geometry-first, credits → the ledger).
   Product rationale: [roam-first-create-a-drive.md](designs/roam-first-create-a-drive.md).
 - [api-versioning-posture.md](decisions/api-versioning-posture.md) — no URL versioning; evolve the
   contract additively, with `GET /version` + the mobile `VersionGate` as the sole hard-break escape
   hatch; decided + built 2026-06-09.
 - [offline-connectivity-and-roam-pack.md](decisions/offline-connectivity-and-roam-pack.md) — working
-  without internet: one push-only connectivity verdict that fails OPEN and self-heals, the roam
-  offline pack (pins AND audio, one artifact), and a migration seam so a `MANIFEST_VERSION` bump
-  stops silently destroying saved downloads. ⚠ Carries three expo native landmines that must not be
-  undone; built 2026-07-30.
+  without internet: one push-only connectivity verdict that fails OPEN and self-heals, and a
+  migration seam so a `MANIFEST_VERSION` bump stops silently destroying saved downloads. ⚠ The PACK
+  half went with roam (1.1); the CONNECTIVITY verdict and the three expo native landmines it records
+  are still live and must not be undone. Built 2026-07-30.
 - [region-corpus-discovery.md](decisions/region-corpus-discovery.md) — the discovery-first sweep
   (`discover-pois.ts` → `pois`) that populates a region's shared POI corpus; the SWEEP survives but
   its original tour-generation consumer is **CONSUMER SUPERSEDED by V2** (migration `0009`).
@@ -94,8 +95,8 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   and the two traps the build surfaced (structural monotony, name-derived claims) are recorded (2026-07-26).
 - [sample-ride-postcard.md](decisions/sample-ride-postcard.md) — the `/sample` "postcard": one curated
   Tahoe clip anyone outside the corpus (incl. an App Review tester) can hear in one permission-free tap,
-  fixing the "I don't know these roads yet" dead-end; anonymous `GET /roam/sample`, three entry points,
-  and the sim→diagnostics decouple (2026-07-16).
+  fixing the "I don't know these roads yet" dead-end; anonymous `GET /sample` (it lost its `/roam`
+  prefix with roam, no alias), three entry points, and the sim→diagnostics decouple (2026-07-16).
 - [detail-page-mini-preview.md](decisions/detail-page-mini-preview.md) — cut the couch "simulated drive"
   (`?mode=preview`); the drive-detail page IS the mini-preview now — tap a stop (List row or Map pin) to
   hear one clip, no auto-drop on create. Deletes the preview clock + `buildPreviewTimeline`; `useDrive`
@@ -116,7 +117,7 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   automated eval gate. ✅ BUILT 2026-06-20; preview gate moved from `user.tester` → the Better Auth
   `admin` plugin role 2026-06-20 (migration `0030`).
 - [corpus-enrichment.md](decisions/corpus-enrichment.md) — the paid `enrich` step that scouts story
-  POIs into curated fact wells (`pois.fact_sheet`) shared by roam + drives; ✅ BUILT 2026-06-15, RUN
+  POIs into curated fact wells (`pois.fact_sheet`) every drive shares; ✅ BUILT 2026-06-15, RUN
   2026-06-16 (315 welled).
 - [t-share-funnel-removed.md](decisions/t-share-funnel-removed.md) — the `/t/<id>` share funnel
   removed (drives are user-owned, not anonymous-shareable); the iOS universal-link capability kept
@@ -133,13 +134,14 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
 - [enrichment-scout.md](decisions/enrichment-scout.md) — story-stop enrichment decided by a
   bounded tool-using scout (judgment) instead of char-count sparse-gates; built 2026-06-09.
 - [location-permission-priming.md](decisions/location-permission-priming.md) — a pre-permission
-  explainer before iOS's one-shot location prompt (drive + roam); When-In-Use priming built
-  2026-06-13, Always/background escalation deferred (App Store 5.1.1(iv): no "Not Now").
+  explainer before iOS's one-shot location prompt; When-In-Use priming built 2026-06-13,
+  Always/background escalation deferred (App Store 5.1.1(iv): no "Not Now"). 1.1 narrowed it to the
+  single "Let's roll" caller — the whole pre-drive flow is location-free.
 - [fact-overrides-and-veracity.md](decisions/fact-overrides-and-veracity.md) — the
   upstream-source-error loop (`poi_overrides` corrections + the web-checking `--veracity`
   eval) and the durable eval record (`eval_runs`/`eval_scores`); built 2026-06-09.
   (Zero-reuse gained a §9 addendum 2026-06-10 — itself superseded; V2 collapsed roam to a MODE over
-  the 1:1 `pois`↔`narrations` atom, no `roam_clips` table.)
+  the 1:1 `pois`↔`narrations` atom, no `roam_clips` table, and 1.1 then removed the mode outright.)
 
 ### designs/
 - [drives-first-1-1.md](designs/drives-first-1-1.md) — **the 1.1 release**: DRIVES become the primary
@@ -148,9 +150,10 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   planning a scenic drive the way you'd plan it with ChatGPT. The planner resolves the ROUTE only and
   **never discusses places** (deflects in persona — that protects the facts invariant by construction
   AND manufactures the anticipate beat); selection stays deterministic. Anonymous riders get the whole
-  preview including one clip from their own route, with the wall at "Make this drive". Also: region
-  packs, district re-anchoring, a repo-wide simplification sweep, instrumentation. ⚠ Removes the only
-  road-tested mode — drive one before submitting. Greenlit 2026-07-31, NOT started.
+  preview including one clip from their own route, with the wall at "Make this drive". Also: the
+  subject-keyed offline store (the REGION PACK itself was cut), district re-anchoring, a repo-wide
+  simplification sweep, instrumentation. ⚠ Removes the only road-tested mode — drive one before
+  submitting. Greenlit 2026-07-31; steps 0–12 LANDED in-repo, unreleased.
 - [1-1-adversarial-review.md](designs/1-1-adversarial-review.md) — a ten-lens outside pass over the
   1.1 spec **while it was mid-build**, every code claim checked by an adversarial verifier: 15 findings
   to raise with the builder (⚠ `via` bypasses INV-1's allowlist; the `/drives/plan` mount is
@@ -165,8 +168,8 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   with the condition that expires it. Idea shelf, nothing greenlit; 2026-07-31.
 - [fused-cluster-generation-spec.md](designs/fused-cluster-generation-spec.md) — **phase 4** of the
   legibility layer: one fused telling per cluster, and the read-path work that makes it audible.
-  Build-ready 2026-07-30, NOT started. Five open questions listed; the load-bearing one is whether
-  members keep their own clips for roam.
+  31 fused clips exist (STAGED); the release is the remaining step. ⚠ Amended 2026-08-02 — its §10
+  AREA trigger was cut with roam, so read that section (and every `/roam` measurement) as a record.
 - [road-snapped-anchors-spec.md](designs/road-snapped-anchors-spec.md) — **1a** of the 2026-06-25 dogfood
   triage: a safe-by-default `snap-speakable-anchors` pass auto-populates `pois.speakable_lat/lng` from the
   nearest drivable road (Google Roads API), flagging POIs no road can reach; un-snappable centroids never
@@ -190,7 +193,9 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   `watchPositionAsync` to a `startLocationUpdatesAsync` + TaskManager task. Build-ready, unbuilt;
   empirically gated behind a real-device drive showing foreground + keep-awake is insufficient.
 - [tour-structure-spec.md](designs/tour-structure-spec.md) — intro/outro brackets + quality-gated
-  narration; §3/§4 built, data-model half superseded by zero-reuse.
+  narration; §3/§4 built, data-model half superseded by zero-reuse. ⚠ The BRACKETS themselves were
+  cut 2026-06-19 with the `asides` table that housed them
+  ([cut-intro-frame-and-persona-kit.md](decisions/cut-intro-frame-and-persona-kit.md)).
 - [downtime-callouts-spec.md](designs/downtime-callouts-spec.md) — persona-only beats in the quiet
   stretches (the "dead air" answer); unbuilt.
 - [tell-me-more-spec.md](designs/tell-me-more-spec.md) — pre-generated deeper-cut B-side per story
@@ -204,16 +209,18 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
 - [scenic-stops-spec.md](designs/scenic-stops-spec.md) — deliberately adding scenic stops; unblocked
   but partially overtaken by the pacing rework — re-ground before building.
 - [corpus-enrichment-spec.md](designs/corpus-enrichment-spec.md) — a paid `enrich` step that scouts the
-  POI facts ONCE at the corpus (verbatim selection → a curated "fact well" roam + drives share); the
+  POI facts ONCE at the corpus (verbatim selection → a curated "fact well" every drive shares); the
   well becomes the narration bound, letting the raw-extract cap drop. ✅ BUILT 2026-06-15, RUN 2026-06-16.
 - [admin-ops-console-spec.md](designs/admin-ops-console-spec.md) — **builder infra**: cloud-execute the
   studio CLIs (discover/enrich/generate/resynth/sweep) as **Cloud Run Jobs** (v0), then a deployed
   `apps/admin` (Vite + Hono) behind **Google IAP** with a jobs record + ear-pass/eval monitor (v1);
   ✅ BUILT + DEPLOYED 2026-06-11, **partially superseded 2026-06-19** (the §5b Create-Tour authoring
   flow was never built — hand-authored tours are V2-deferred).
-- [free-roam-alpha-spec.md](designs/free-roam-alpha-spec.md) — what the free-roam ALPHA actually is
-  (roam as a MODE over the 1:1 `narrations` atom, basin sweep, ~60s encounters, RoamEngine, pause+resume) + its
-  deliberate cuts; BUILT 2026-06-10, founder-only TestFlight.
+- [free-roam-alpha-spec.md](designs/free-roam-alpha-spec.md) — 🔴 **REMOVED (1.1, 2026-08-01)**, kept
+  as the record of what the free-roam ALPHA was (roam as a MODE over the 1:1 `narrations` atom, basin
+  sweep, ~60s encounters, RoamEngine, pause+resume) + its deliberate cuts. Worth reading only because
+  every field lesson the drive player inherited — trigger radii, the iOS heading sentinel, all 8
+  TestFlight items, `doNotMix` — was paid for here. BUILT 2026-06-10, founder-only TestFlight.
 
 - [drive-as-arc.md](designs/drive-as-arc.md) — **why a drive out-charms a roam session on identical
   clips**: it's an ARC (prepare → preview → anticipate → experience) and roam has only the last beat.
@@ -222,14 +229,13 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   CHOOSE a start/end rather than invent one, so free text returns without loosening grounding. ⚠ Notes
   that CLAUDE.md's "the LLM resolves ONLY the endpoints" is stale against the code TODAY, and that no
   created drive has ever been driven end-to-end. Captured 2026-07-31; PROMOTED same day → [drives-first-1-1.md](designs/drives-first-1-1.md).
-- [offline-region-packs.md](designs/offline-region-packs.md) — treat offline as ONE region pack kept
-  fresh opportunistically, rather than a download per drive: it matches "the narration is the shared
-  atom", ends the double-storage between a roam pack and a saved drive, and makes most of the
-  per-drive manifest machinery unrepresentable. ⚠ Carries the two things that must be designed in —
-  a roam-built pack does NOT cover every clip a FROZEN drive can reference, and `roamPin` has no
-  revision token to sync against. DESIGN SETTLED 2026-07-31 (region pack + per-drive top-up, no new
-  endpoint; region is the only rider-facing action; sync auto-applies only off-session, on wifi,
-  under a cap) — build NOT greenlit.
+- [offline-region-packs.md](designs/offline-region-packs.md) — ⚠ **the REGION PACK is CUT** (founder,
+  2026-07-31): its purpose was ambient proximity playback, which died with roam, and a drive can't be
+  created offline anyway. What SURVIVES is its D1, now **INV-6** of 1.1 and the reason there is no
+  pack: *no bbox-level eligibility rule can guarantee coverage of a selection FROZEN under a different
+  rule*, so **only a drive's own manifest is authoritative for that drive** — the per-drive top-up is
+  nearly free because `createDrive`/`getDrive` already return a full `DriveManifest`. The body is the
+  pre-cut reasoning, kept as the argument to re-read if per-drive downloads ever prove insufficient.
 - [poi-legibility-layer.md](designs/poi-legibility-layer.md) — **the claimed moat**: everything between
   "a Wikidata entity exists" and "a driver hears one coherent thing at the right moment" — the
   SOLO/CLUSTER/DISTRICT treatment split, leader (non-chaining) grouping, an Opus treatment classifier,
@@ -240,19 +246,19 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   entertainment/meaning layer of the journey (the self-driving age) + "any road, anywhere, generated
   live" — the demand and supply of one endgame the feature-ideas below ladder toward. Direction, not
   commitment.
-- [free-roam-mode.md](designs/free-roam-mode.md) — **a second product** (tours stay primary): the POI
-  corpus as a proximity-triggered "skipper rides shotgun" roam mode — Autio's shape, Skipper's soul,
-  region-gated by density; rung 1.5 of the journey-layer spectrum. Captured 2026-06-10; the ALPHA
-  shipped same day (see [free-roam-alpha-spec.md](designs/free-roam-alpha-spec.md)) — this doc keeps
-  the unbuilt vision layers.
+- [free-roam-mode.md](designs/free-roam-mode.md) — 🔴 **CUT (1.1, 2026-08-01)**: the POI corpus as a
+  proximity-triggered "skipper rides shotgun" roam mode — Autio's shape, Skipper's soul, region-gated
+  by density; rung 1.5 of the journey-layer spectrum. Captured 2026-06-10, alpha shipped same day.
+  Nothing in it is scheduled; why it lost is [drive-as-arc.md](designs/drive-as-arc.md).
 - [roam-first-region-expansion.md](designs/roam-first-region-expansion.md) — the beachhead
-  inversion: roam (a bbox + ~$15) opens a region, the demand heatmap picks the tour to build;
-  probed Yosemite/Moab/Big Sur corpora for $0 on capture day (2026-06-11).
+  inversion: a region opens with a BBOX and a batch run (~$15), not a curated route. ⚠ Its VEHICLE
+  (roam + a demand heatmap) died in 1.1; the inversion itself is how region N+1 still opens.
+  Probed Yosemite/Moab/Big Sur corpora for $0 on capture day (2026-06-11).
 - [roam-first-create-a-drive.md](designs/roam-first-create-a-drive.md) — **the V2 product
-  structure** (founder-converged 2026-06-18): roam + on-demand "Create a Drive" (enter A→B → route
-  in seconds → roam clips pre-ordered along it, user-owned) are the two first-day experiences;
-  the hand-authored tour is DEFERRED. journey-layer rung 2 made buildable on the batch stack via
-  clip REUSE; zero-reuse scopes down to the authored rung; V2 may break freely (V1 never shipped).
+  structure** (founder-converged 2026-06-18): roam + on-demand "Create a Drive" as the two first-day
+  experiences, hand-authored tours DEFERRED. ⚠ The PAIRING is superseded by 1.1 (drives only); the
+  DATA half — journey-layer rung 2 made buildable on the batch stack via clip REUSE — is unchanged
+  and load-bearing, which is why deleting a whole mode cost no content.
 - [eval-panel-rewire.md](designs/eval-panel-rewire.md) — re-wiring the BUILT-but-unwired eval panel
   as one instrument over everything the LLM/TTS touches, re-keyed to V2 pois/places; STAGED — a $0
   out-of-band corpus audit + folding the two cheap inline guards in (ships now), then an inline
@@ -318,7 +324,8 @@ The rest are post-MVP features, gated behind the proven phone player:
 - [app-store-submission.md](guides/app-store-submission.md) — every App Store Connect field ready to
   paste (name/subtitle/description/keywords pre-counted against Apple's caps), the privacy nutrition
   label that must match the binary's manifest, and the App Review notes — which carry the whole
-  submission, since the corpus is Tahoe-only and a reviewer in Cupertino gets 0 roam pins.
+  submission, since the corpus is Tahoe-only and a reviewer in Cupertino is 200 miles outside it.
+  ⚠ LISTING vs BUILD have DIVERGED: the live listing still sells roam.
 - [eas-setup.md](guides/eas-setup.md) — building + running the Expo app on EAS (dev build).
 - [device-verification-runbook.md](guides/device-verification-runbook.md) — the one-sitting
   on-device pass that clears the last M1 gate (phone-player feel + real GPS); checklist of what only
@@ -346,5 +353,7 @@ The rest are post-MVP features, gated behind the proven phone player:
   one-off operational CLIs (preview unless `--apply`); reference impl `sweep-orphans.ts`; adopted
   2026-06-10.
 - [create-a-drive-verification-runbook.md](guides/create-a-drive-verification-runbook.md) — the
-  one-sitting on-device pass that clears the last V2 gate: the live Create→propose→confirm→generate→
-  preview→drive runtime (needs a dev build + signed-in account + real LLM/Maps spend); written 2026-06-18.
+  one-sitting on-device pass over the live Create→propose→confirm→generate→preview→drive runtime
+  (needs a dev build + real Maps spend); written 2026-06-18. ⚠ **SUPERSEDED by 1.1** — its pickers are
+  deleted and its "roam is the only anonymous surface" precondition is now inverted. Use
+  [drives-first-1-1.md](designs/drives-first-1-1.md)'s Acceptance list.

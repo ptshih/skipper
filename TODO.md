@@ -1,6 +1,6 @@
 # TODO — engineering backlog
 
-> ⚠ **1.1 IS MID-BUILD AND IT DELETES ROAM.** The build truth is
+> ⚠ **1.1 HAS LANDED IN-REPO (unreleased) AND IT DELETED ROAM.** The build truth is
 > [docs/designs/drives-first-1-1.md](docs/designs/drives-first-1-1.md) (43 decisions, 16 invariants)
 > with verified file:line coordinates in
 > [docs/designs/drives-first-1-1-build-notes.md](docs/designs/drives-first-1-1-build-notes.md).
@@ -608,8 +608,17 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
             area mode introduces, and bounding it would mean cutting clips off mid-sentence across the
             live corpus. Recorded rather than actioned. (Re-run: `packages/studio/.scratch` is
             gitignored; the query is member anchors → `clusterTrigger` → mean chord = πA/P.)
-      - [ ] **Latent: a DEGENERATE hull that needs an area is dropped to silence.** `clusters.ts`
-            refuses to serve a `ring.length < 3` area ("no honest polygon"). Measured: 16 clusters hull
+      - [x] ~~**Latent: a DEGENERATE hull that needs an area is dropped to silence.**~~ **MOOT — the
+            AREA path was deleted with roam (1.1).** No hull is minted or served, so there is no
+            degenerate-ring guard to trip. Kept for the ONE measurement that outlives it and would
+            otherwise be re-derived: ⚠ **the quantity that matters in cluster geometry is DISTINCT
+            ANCHORS, not members** — `speakableLat ?? lat` snapping co-locates points routinely
+            (Truckee is 4 members over **2** distinct anchors), so any future extent work must triage
+            by distinct anchors. The three clusters over `CLUSTER_MAX_TRIGGER_RADIUS_M` (Downtown Reno
+            914 m, UNR 903 m, Historic Homes 698 m) are still the ones `clusterGenerationBlock`
+            refuses, which is what keeps a capped point from mis-placing a district. As measured:
+            `clusters.ts`
+            refused to serve a `ring.length < 3` area ("no honest polygon"). Measured: 16 clusters hull
             down to a 2-vertex ring and **0 are dropped** — not because they are small, but because
             every one is under `CLUSTER_MAX_TRIGGER_RADIUS_M`, so `needsArea` is false and the guard is
             never reached (14 sit at the 250 m floor; Truckee is 302 m, Mount Rose Summit 255 m). Only
@@ -758,8 +767,8 @@ None of this is a build; all of it is config. The premise changed on 2026-07-28:
 
 Content is SERVER-SIDE, so a second region goes live with no app release. That is the whole problem:
 the corpus changes underneath a listing that still says Tahoe-only, and nothing forces the two back
-into agreement. Trigger this list the day Yosemite narrations are RELEASED (`released_at` non-null and
-serving from `/roam`), not the day generation finishes.
+into agreement. Trigger this list the day Yosemite narrations are RELEASED (`released_at` non-null, so
+a built drive can serve them), not the day generation finishes.
 
 ⚠ Do NOT pre-announce Yosemite in ASC before it serves. Guideline 2.3.7 wants keywords that
 "accurately describe the app", and §10's reviewer notes say in capitals that coverage is Lake Tahoe
@@ -1049,24 +1058,21 @@ GPS triggering imports only `expo-location` + `@skipper/engine` (no fetch anywhe
 drive LIST and DETAIL both fall back to disk. The downloader is partial-tolerant with retries and a
 size verify. Refs: `offline.ts:369,425-434,566-585`, `useDrive.ts:296`, `app/index.tsx:56-68`.
 
-✅ **ROAM WORKS OFFLINE (2026-07-30) — the pack shipped.** `src/lib/roam-pack.ts` saves ONE artifact
-holding pins AND audio; `useRoam` resolves its pin set from the network when it can reach it and from
-the pack when it can't, and prefers saved BYTES over a presigned url even on a live session (so a
-thin-signal stall on a clip we already hold is now impossible, and the whole expired-presign stall
-class is a no-op). Sim mode rides the same path, so the couch replay is no longer network-bound
-either. Saved from Settings → RIDE ALONG OFFLINE, anchored on wherever the rider last rode — which is
-why it needs no location permission of its own.
+🔴 **The roam PACK (2026-07-30) is deleted** along with the mode — `roam-pack.ts`, `roam-pack-util.ts`
+and `useRoam` are gone. Two things it proved were harvested rather than lost, and both are the reason
+the subject-keyed store looks the way it does:
 
-⚠ **Pins and audio ship together, deliberately** (`playablePins` in `roam-pack-util.ts`). A cached pin
-whose bytes never landed would fire its trigger, buffer for `CLIP_STALL_MS` and skip in silence — a
-rider watching a sheet spin. Only pins with audio on disk are ever narrated from a pack; the filter is
-the feature, not a detail. Same reason the pack refuses to move its anchor once audio exists: a drive
-to another basin must not silently orphan ~138 MB.
+⚠ **Bytes and their index ship together, deliberately.** A cached entry whose bytes never landed
+fires its trigger, buffers for `CLIP_STALL_MS`, and skips in silence — a rider watching a spinner.
+Only entries with audio ON DISK may be narrated from a saved artifact; the filter is the feature, not
+a detail. (The pack's other half — a saved shape from which `url` is structurally ABSENT, so
+persisting a presigned credential is a compile error — was carried forward verbatim as `Saved<T>` in
+`offline-util.ts`.)
 
-- [ ] **Mid-session signal loss still costs ~24 s of dead air per encounter for a clip the pack does
+- [ ] **Mid-session signal loss still costs ~24 s of dead air per stop for a clip the phone does
       NOT hold** (3 s skeleton → 12 s stall → one futile recovery → 12 s stall → `onClipDone`), and
-      `sawFresh` never flips so the "N stories told" pill stays at 0 — no evidence anything was even
-      attempted. Unchanged for an un-saved rider; a saved pack sidesteps it entirely.
+      `sawFresh` never flips so the progress pill stays at 0 — no evidence anything was even
+      attempted. Unchanged for a rider who did not save the drive; a saved drive sidesteps it entirely.
 
 ✅ **CONNECTIVITY AWARENESS IS BUILT (2026-07-30) — the app knows, and says so.** One app-wide verdict
 in `src/lib/connectivity.ts`; `api.ts` throws `OfflineError` INSTEAD of attempting a request the device
@@ -1121,13 +1127,14 @@ size readout; now swept after each save.
 
 ✅ **DOWNLOADS ARE DEVICE DATA, AND ONLY ERASURE DELETES THEM (2026-07-31).** An ownership sweep was
 built and then removed the same day, on the founder's follow-up: do downloads need a user at all?
-Mostly no — a drive's audio IS the shared roam corpus (roam serves those same clips anonymously to
-anyone near Tahoe), so the only account-specific part is the route/label, a few KB of JSON. Scoping
-drives to a user while the roam pack was device-scoped applied two rules to the same bytes.
+Mostly no — a drive's audio IS the shared corpus (the same clips ride every rider's drive, and one of
+them is served to anonymous riders as a preview), so the only account-specific part is the route/label,
+a few KB of JSON. Scoping drives to a user while the (then device-scoped) pack was not applied two
+rules to the same bytes.
 Where it DOES matter is account DELETION — and the sweep missed exactly that case, because after
 `deleteUser` the rider is anonymous, so the owner reconcile never fired while `listDownloadedDrives`
 would hand the deleted account's drives to the next person holding the phone. `deleteAllDriveDownloads`
-now runs in the delete-account flow (roam pack left alone — anonymous device content).
+now runs in the delete-account flow.
 `sweepUnknownDownloads` went too: if it were ever wrong the rider loses every saved drive silently,
 possibly right before Tahoe, and all it bought was disk reclaimed from a drive deleted on another
 device. Nothing in the app deletes downloads automatically now except that one erasure path.
@@ -1136,23 +1143,18 @@ device. Nothing in the app deletes downloads automatically now except that one e
       another device, a previous account's, or one this build can't read. And a drive missing from
       the server list can't be tapped into, so the per-drive Remove is unreachable. A Settings
       "free up space" line is the honest fix; NOT built yet, pending the direction below.
-- [ ] **⭐ DIRECTION (founder 2026-07-31): treat downloads as REGION PACKS, not per-drive.** Most of
-      the offline machinery above — versioned per-drive manifests, migrations, repair, orphan
-      classes, ownership — exists to manage a per-drive download. A region-shaped store dissolves
-      most of it and matches what the architecture already says ("the NARRATION is the shared atom;
-      ASSEMBLE per drive"). Today a rider holding a roam pack AND a drive stores the same clips
-      twice under two filing systems. **Design is SETTLED** in
-      `docs/designs/offline-region-packs.md` — region pack + per-drive top-up (no new endpoint, because
-      the top-up is structurally required either way: only a drive's OWN manifest is authoritative for
-      a FROZEN selection), region as the only rider-facing action, and sync that auto-applies only
-      off-session, on wifi, under a size cap. ⚠ Build NOT greenlit (founder 2026-07-31). Prerequisite
-      when it is: `revisedAt` on `roamPin` — the same `narrations.updatedAt` column the drive corpus
-      already selects.
+- [x] ~~**⭐ DIRECTION (founder 2026-07-31): treat downloads as REGION PACKS, not per-drive.**~~
+      **RESOLVED, and NOT as written: the REGION PACK was CUT (1.1 D21).** The double-storage it
+      targeted is gone anyway — deleting roam removed one filing system and step 9's subject-keyed
+      clip store removed the other (bytes keyed by narration SUBJECT ID, shared across drives). Why a
+      pack could never have replaced the per-drive top-up is D1 in
+      [docs/designs/offline-region-packs.md](docs/designs/offline-region-packs.md), which survives as
+      INV-6. The `revisedAt` prerequisite died with `roamPin`.
 - [ ] **Verify on a real device.** None of the offline work has run on hardware. Two specifics: a
       COLD LAUNCH in airplane mode (the listener arms at import, but home's `load()` may still beat
       the first pushed event — if it reproduces, the bounded fix is a one-time race against a ~250 ms
       delay inside the FIRST `fetchJson` only; ⚠ never an await on `getNetworkStateAsync`, see the
-      landmines), and a real Tahoe drive running off a saved roam pack.
+      landmines), and a real Tahoe drive running off a saved DRIVE download.
 - [ ] **Better Auth's transport is deliberately NOT covered** (`src/lib/auth.ts` has its own fetch),
       so sign-in / sign-up / password-reset / delete-account get no offline line and no timeout at
       all — offline they hang on RN's untimed fetch, then print the generic line. Named as a non-goal

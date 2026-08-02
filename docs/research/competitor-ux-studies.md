@@ -31,7 +31,7 @@ This is the single most validated finding in the whole competitive set. **Skippe
 ## GuideAlong — the closest persona comp (validates the bet, shows the ceiling)
 
 - **CONSIDER:** it's the strongest proof your core bet works — a warm, corny, single-guide voice is genuinely *loved* (4.9★/13k, "tour guide in the car," people praise the voice + humor). Lean in.
-- **The ceiling to beat:** it's a **fixed human recording** — no generation, no per-tour variability, no joke notch, no reactivity, no "ask the guide." Every Skipper differentiator maps onto a GuideAlong limit.
+- **The ceiling to beat:** it's a **fixed human recording** — no generation, no per-drive variability, no reactivity, no "ask the guide." Every Skipper differentiator maps onto a GuideAlong limit. (This line also listed a rider-facing "joke notch"; that was CUT 2026-06-19 — delivery is one fixed telling, and variation returns as different NARRATORS. See `docs/decisions/cut-joke-notch.md`.)
 - **CONSIDER (a real gap):** *"difficulty replaying previous commentaries."* If you zone out and miss a stop, recovery is clunky — and Skipper's no-auto-advance means a *passed* stop is simply gone. A **"replay that last one?"** affordance is a small, high-value add.
 - **IGNORE / respect-the-tension:** navigation-via-narration (*"kept us from turning the wrong way"*) is loved utility, but Skipper isn't a nav app — ride alongside the rider's own nav; just nail "where to start."
 

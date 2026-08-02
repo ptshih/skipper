@@ -17,11 +17,11 @@ decisions, specs, and ideas live in `docs/` (indexed in `docs/README.md`).
 
 1. **Fetch FACTS once per place; the NARRATION is the shared atom; ASSEMBLE per drive.**
    `pois` is the facts cache — a place's grounded facts (TTL + hash), SHARED by every
-   drive. Each place has ONE shared telling: a `narrations` row (1:1 per poi). Two
-   things consume that one corpus: anonymous **ROAM** (the front door — narrations played
-   by proximity, no account) and a user-owned **DRIVE** (which REUSES the same narrations,
-   pre-ordered along its route). Content resolves LIVE via `poi_id`, so a regenerated
-   telling auto-improves every saved drive.
+   drive. Each place has ONE shared telling: a `narrations` row (1:1 per poi). ONE thing
+   consumes that corpus: the user-owned **DRIVE**, which REUSES those narrations
+   pre-ordered along its route. Content resolves LIVE via subject id, so a regenerated
+   telling auto-improves every saved drive. (The anonymous front door is the PLANNER —
+   plan/propose a route + one preview clip — not a second content mode.)
 2. **The route is the rails; the generation is everything inside.**
    A drive's route is materialized from the rider's A→B (Google Routes) and frozen per
    drive — the LLM resolves ONLY the endpoints, and the SELECTION of which narrations ride
@@ -42,7 +42,7 @@ decisions, specs, and ideas live in `docs/` (indexed in `docs/README.md`).
 ```
 skipper/
 ├── apps/
-│   ├── api/        @skipper/api       — Hono API: /roam, /drives, /regions, signed R2 URLs. Bun-native serve.
+│   ├── api/        @skipper/api       — Hono API: /drives (+ /drives/plan, /drives/propose), /regions, /sample, signed R2 URLs. Bun-native serve.
 │   ├── admin/      @skipper/admin     — Vite + Hono ops console (cloud-run the studio CLIs) behind Google IAP.
 │   ├── site/       @skipper/site      — Astro landing page (skipper.fm).
 │   └── mobile/     @skipper/mobile    — Expo app. Phone player is the MVP (CarPlay later).
@@ -52,7 +52,7 @@ skipper/
 │   ├── studio/     @skipper/studio    — server-side narration/corpus generation (discover → enrich → generate).
 │   ├── routing/    @skipper/routing   — Google Routes client (A→B route materialization).
 │   ├── storage/    @skipper/storage   — Cloudflare R2 / S3 client (audio upload + presign).
-│   ├── engine/     @skipper/engine    — pure geo + trigger engine + drive sim + preview timeline (RN-safe; shared by sim & mobile).
+│   ├── engine/     @skipper/engine    — pure geo + trigger engine + drive sim (RN-safe; shared by sim & mobile).
 │   └── sim/        @skipper/sim       — DB-backed drive-sim CLI (runs @skipper/engine against a real drive).
 ├── design-system/  — browsable HTML mirror of the "Trailhead 89" design system (open index.html). A specimen book; not a workspace. Canonical source = apps/mobile/DESIGN.md + src/theme + src/ui.
 ├── tsconfig.base.json · package.json (bun workspaces)

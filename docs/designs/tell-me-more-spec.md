@@ -89,7 +89,7 @@ V2 already anticipates this feature: the live `narrationFormEnum` (and its Zod m
 cut is a SECOND `narrations` row for the same poi, `form='bside'` — sharing the place, the
 `attribution` (`AttributionSnapshot[]`), and the `facts_hash` of the main `story` telling, so it
 **regenerates when the fact sheet changes** (it grounds on the same sheet). The deeper cut is
-**place-owned** (`narrations`), reused by every drive/roam that visits the poi — the same shared-atom
+**place-owned** (`narrations`), reused by every drive that visits the poi — the same shared-atom
 posture as the main telling — not per-tour storage (there is no `tours` table in V2).
 
 > **The one real open question (decide at build time):** today `narrations` carries a
@@ -97,8 +97,9 @@ posture as the main telling — not per-tour storage (there is no `tours` table 
 > A `bside` is a SECOND telling of the same poi, so it can't land as another `narrations` row without
 > reconciling that constraint. Two clean options:
 > 1. **Relax the uniqueness to `UNIQUE(poi_id, form)`** — a poi may hold one row per form (its
->    `story`/`scenic`/`break`/`wave` telling + its `bside`). Most schema-faithful; the `form` column
->    already exists. The roam/drive joins must then select the right form explicitly.
+>    `story`/`scenic`/`break` telling + its `bside`; `wave` came off the live list in the 1.1 sweep and
+>    survives only as reserved enum vocabulary). Most schema-faithful; the `form` column already
+>    exists. The drive joins must then select the right form explicitly.
 > 2. **Keep the 1:1 narration and hang the bside off it** — nullable `bside_*` columns on the main
 >    `narrations` row (the spirit of the original "no new table" decision, transposed from `tour_stops`
 >    onto `narrations`). Simpler, but mixes two tellings on one row.

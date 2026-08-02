@@ -8,7 +8,8 @@ longer exists in `schema.ts`** — read them as HISTORY. What carries forward in
 (§1 — facts shared via `pois` TTL + `facts_hash`, the *telling* owned by its context, **no content cache**)
 and the facts-staleness contract (§4, now riding `narrations.facts_hash`). Current entity model + rationale:
 `docs/decisions/create-a-drive-architecture.md` (✅ BUILT); the hand-authored-tour rung this doc was written
-for is DEFERRED — live artifacts are ROAM + drives.
+for is DEFERRED — and since 1.1 (2026-08-01) removed roam, there is exactly ONE live artifact: the
+user-owned DRIVE. Read every "roam + drives" pairing below as the drive alone.
 
 **Addendum 2026-06-19 — the PRINCIPLE was SCOPED DOWN, not carried "intact."** Read the "zero-reuse
 survives intact" line above with this correction: under V2 a `narrations` row is **SHARED** (1:1 with

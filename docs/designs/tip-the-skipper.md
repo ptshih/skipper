@@ -14,8 +14,9 @@ subscription.
 
 What it stresses:
 
-- **Payment rails ride on the V2 drive-credit IAP work.** `user.tier` is still a manual flag (no
-  billing wired yet). On iOS a tip for digital content MUST go through Apple IAP (≈30% cut) — model it
+- **Payment rails ride on the V2 drive-credit IAP work.** No billing is wired yet (and there is no
+  `user.tier` flag to ride on any more — tiers were cut 2026-06-20; premium is CREDITS, so a paid
+  anything is a ledger entry). On iOS a tip for digital content MUST go through Apple IAP (≈30% cut) — model it
   as a consumable IAP "tip" product on the SAME consumable-IAP layer the V2 drive-credit pack
   introduces. Those rails are the provider-agnostic `credit_entries` ledger
   ([../decisions/credit-ledger.md](../decisions/credit-ledger.md)): a verified purchase writes a

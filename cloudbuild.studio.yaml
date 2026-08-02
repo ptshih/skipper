@@ -28,7 +28,7 @@ steps:
   #    --max-retries=0: a half-run regen must never silently re-fire (it spends $ + writes prod).
   #    --task-timeout=21600 (6h): wall-clock cap. The real spend guard is the script's own
   #      --max-cost (aborts before any $ if the estimate exceeds the cap); this is just the
-  #      runaway-wall-clock backstop. 3600 (1h) was too small once a FULL-REGION roam run
+  #      runaway-wall-clock backstop. 3600 (1h) was too small once a FULL-REGION corpus run
   #      (the whole TAHOE_RENO_BBOX — hundreds of clips narrated then synthesized at conc 6)
   #      became the worst case: it timed out at 1h and --max-retries=0 made that a hard fail.
   #      generate-narrations is idempotent (per-clip upsert; a re-run skips fresh clips), so a 6h

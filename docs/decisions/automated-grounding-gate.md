@@ -20,7 +20,8 @@ into the per-clip generation loop. Per clip, before any TTS spend:
 
 1. **Narrate** the draft (`narrateStop`).
 2. **Score** the panel: GROUNDING (Opus, the cardinal-invariant gate) + LATERALITY (free, a grounding
-   backstop — naming a side of the road in roam is an ungrounded place-claim) + TTS-cleanliness (free
+   backstop — the direction of travel is unknown, so naming a side of the road is an ungrounded
+   place-claim; the rule outlived the roam mode it was written for) + TTS-cleanliness (free
    gate) + DIVERSITY (free, advisory — kit ban + within-clip tics) + PACING (free, advisory — over-long
    clip detection).
 3. **Auto-retake** via the built `optimize()` flywheel (accept-only-if-not-worse, Pareto gate-guard,

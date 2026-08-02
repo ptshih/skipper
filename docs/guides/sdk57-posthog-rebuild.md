@@ -53,7 +53,7 @@ Signing: Apple team **L24UJYJ5DK** (Manoa, Inc.), bundle **fm.skipper.app**, ASC
 ## §3 — Verify: the upgrade-specific NEW surface
 
 - [ ] **SDK 57 / RN 0.86 boots clean.** Launch the build. Expect: past the splash to home, no redbox, no
-      native link error; open Roam, open a drive detail, play one clip. Watch-for: any RN 0.86 / new-arch
+      native link error; talk to the planner on home, open a drive detail, play one clip. Watch-for: any RN 0.86 / new-arch
       regression (the whole app is new-arch now), a missing native module, audio not starting.
 - [ ] **PostHog Stage 2 — SYMBOLICATED native crash.** On the **Release** build (§2), force a native crash
       (a deliberate native-fault dev affordance, or the documented test path), reopen the app so the report

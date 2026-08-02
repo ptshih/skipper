@@ -1,6 +1,11 @@
 # Fused cluster generation — phase 4 of the legibility layer
 
-> **Status:** READY TO RELEASE — **2026-07-30**. §9 steps 1–6 are done: 31 fused clips exist (59.6 min,
+> **Status:** READY TO RELEASE — **2026-07-30**. ⚠ **Amended 2026-08-02: ROAM IS GONE (1.1 D1), so
+> every `/roam` measurement below is a dated RECORD, not a live read, and §10's AREA trigger is CUT —
+> `packages/engine/src/area.ts`, `roamPin.area`, the `X-Skipper-Client` capability channel and the
+> mobile polygon were all deleted with the mode.** The FUSED TELLING itself survives untouched (it is
+> a `narrations` row about a `poi_clusters` subject, served to drives), and so does everything in §§1–8.
+> §9 steps 1–6 are done: 31 fused clips exist (59.6 min,
 > all STAGED), the founder listen passed ("clips sound fine"), and member retirement is built and inert.
 > **The only thing left is the release**, which is now a real-riders change — 1.0 is submitted, and
 > releasing is what activates both the fused clips and the retirement of 104 member clips.
@@ -426,7 +431,15 @@ to 1.00 was not representative. Naming five places in one telling pulls toward e
 exactly the NAME-DENSITY tension §3.3 predicted. Advisory only — it never withheld a clip — but at
 half the run it is a real quality signal rather than noise.
 
-## 10. The AREA trigger — engine BUILT 2026-07-30, NOT SHIPPABLE YET
+## 10. The AREA trigger — BUILT 2026-07-30, then CUT WITH ROAM (1.1, 2026-08-01)
+
+⚠ **Read this whole section as a record.** It never shipped to a rider and it no longer exists in the
+tree: `packages/engine/src/area.ts`, the `roamPin.area` field, the `X-Skipper-Client` capability
+channel, and the mobile `<Polygon>` all went with roam. It stays because the MEASUREMENTS are what a
+future area/district trigger would otherwise have to re-derive (hull vs bbox vs disc union, why the
+retire and heading cone must be bypassed, INSIDE-beats-NEAR ordering) and because of the lesson in the
+`areaCapable` correction below. A drive knows its frozen polyline, so a drives-only revival is a
+different design: admit iff the polyline ENTERS the ring.
 
 `packages/engine/src/area.ts` + an area branch in both trigger loops. 125 engine tests pass,
 including the whole existing point-trigger suite unchanged — the branch is additive.

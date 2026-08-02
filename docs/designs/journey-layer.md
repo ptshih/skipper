@@ -84,11 +84,14 @@ Any-road-anywhere stresses three principles. Each survives:
 3. **Truly live / wandering** (hardest) — no known destination, narrate-as-you-go. Maximal coverage,
    hardest to keep paced and charming.
 
-*(Added 2026-06-10)* A **rung 1.5** sits between curated and live: **pre-generated regional
-free-roam** — the POI corpus batch-narrated as standalone proximity-triggered encounters, no route
-at all. It approximates rung 3 *inside covered regions* on today's batch stack (no live gen, no
-on-device LLM), and de-risks the climb: it forces the rail-less trigger the later rungs need.
-Captured as [free-roam-mode.md](free-roam-mode.md).
+*(Added 2026-06-10; 🔴 **built, then CUT 2026-08-01**)* A **rung 1.5** sat between curated and live:
+**pre-generated regional free-roam** — the POI corpus batch-narrated as standalone proximity-triggered
+encounters, no route at all. The theory was that it approximates rung 3 *inside covered regions* on
+today's batch stack and de-risks the climb by forcing the rail-less trigger the later rungs need. It
+shipped and was removed in 1.1 ([free-roam-mode.md](free-roam-mode.md),
+[drive-as-arc.md](drive-as-arc.md)): rail-less triggering turned out to be the cheap part, and what it
+could not manufacture was the ARC — prepare, preview, anticipate — which is where the charm lives. ⚠ A
+future rung 3 inherits that lesson, not the rung.
 
 "Any road" need not mean "abandon curation" — the middle rung is **curate-on-the-fly from the user's
 real route.**
@@ -163,7 +166,7 @@ A north-star earns its keep by tilting near-term decisions:
   post-mortem; the existential risk), `docs/research/competitor-ux-studies.md` (Autio's coverage model
   produces "nothing for miles" — the any-road failure mode our charm machinery must beat).
 - Architecture it inverts: the offline-batch generation pipeline; narration is poi-owned — one shared
-  telling 1:1 per place, reused across roam and user-owned drives, NOT tour-owned (tours were dropped in
+  telling 1:1 per place, reused across user-owned drives, NOT tour-owned (tours were dropped in
   migration 0009; `docs/decisions/create-a-drive-architecture.md`). The zero-reuse principle survives
   (the telling is owned by its context, no content cache), so per-trip bespoke is a new generation
   *mode*, not shared content reuse across drives.

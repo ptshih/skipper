@@ -83,12 +83,15 @@ verified — they share the build, so do them together.
 - The old plan flipped the tour to `'duckOthers'`; the founder **reversed it**: narration should
   **pause+resume** other audio, never duck (ducking left the rider's music competing UNDER the
   skipper — distracting). So:
-  - **Tour player STAYS `doNotMix`** (`DRIVE_INTERRUPTION_MODE`, `useDrive.ts:67`) — no flip. It
+  - **Drive player STAYS `doNotMix`** (`DRIVE_INTERRUPTION_MODE`, `useDrive.ts:67`) — no flip. It
     already pauses the rider's external audio for the drive and resumes it at the end; its own bundled
     music bed fades to **silence** under narration (`driveMusic.ts` ramps), so nothing competes.
-  - **Roam player now does pause+resume** *in code already* (`useRoam.ts`): it opens `mixWithOthers`
-    (rider's audio untouched through the quiet), takes exclusive `doNotMix` only while a clip is
-    actually sounding, and hands focus back (`mixWithOthers`) the instant the clip ends/holds.
+  - **Pre-drive audio does the same** (the sample, the route preview clip, a tapped stop): exclusive
+    `doNotMix` while a clip sounds, session handed back the instant it ends. ⚠ The `mixWithOthers`
+    "polite" variant this line used to describe — roam's between-encounters mode, and the couch
+    preview's `applyPoliteAudioMode` — is gone on BOTH counts: roam was removed and 1.1's D35 extended
+    exclusive focus to every surface the skipper speaks on. One rule now, not two
+    (`docs/decisions/drive-audio-exclusive-focus.md`).
 - ⚠️ **The unverified part is the RESUME.** expo-audio has no explicit session-deactivate — we
   relinquish by flipping the interruption mode back to `mixWithOthers`. Whether iOS actually
   **resumes** Spotify/podcasts on that flip is device-only. §6 verifies it. (Lock-screen no longer
@@ -292,13 +295,13 @@ There is **no** dedicated drive-complete component — the moment is composed in
 
 ## §6 — Audio pause+resume (no prereq flip — it's already in code)
 
-The founder's call (2026-06-11): narration pauses+resumes other audio, never ducks. Both players
-keep `doNotMix` while a clip sounds; the **roam** player additionally hands focus back between
-encounters. This concerns the **rider's external** music (Spotify/Apple Music) — the tour's *own*
+The founder's call (2026-06-11): narration pauses+resumes other audio, never ducks. Every surface
+keeps `doNotMix` while a clip sounds and hands the session back when it stops. This concerns the
+**rider's external** music (Spotify/Apple Music) — the drive's *own*
 bundled bed is a separate engine (`driveMusic.ts`) that fades to silence under narration, don't
 conflate them. Use a real device with a real music app; the simulator can't run cross-app focus.
 
-**Tour player** (`doNotMix`, unchanged):
+**Drive player** (`doNotMix`, unchanged):
 - [ ] **Rider's music pauses for the drive, resumes at the end.** Do: start Spotify; return to
   Skipper, start a sim/preview drive. Expect: the music **pauses** when the drive's audio takes over
   and **resumes** when you end the drive / leave the player. Watch-for: music ducking instead of
@@ -310,23 +313,30 @@ conflate them. Use a real device with a real music app; the simulator can't run 
   `doNotMix` retained there's no `setActiveForLockScreen` conflict, so this should *just work*.
   Watch-for: card missing/replaced by the music app; dead transport. (`useDrive.ts:721`)
 
-**Roam player** (`mixWithOthers` ⇄ `doNotMix` per encounter — the new behaviour):
-- [ ] **★ Music plays through the quiet, PAUSES for an encounter, RESUMES after.** Do: start Spotify;
-  open Roam (sim is fine), let it idle, then let an encounter fire. Expect: the rider's music keeps
-  playing during the idle/quiet, **pauses** the moment the skipper starts talking, and **resumes**
-  the instant the encounter ends. Watch-for: music ducking-not-pausing (stale `duckOthers`); music
-  **staying paused** through the next quiet stretch (the resume flip didn't take — the core risk);
-  the skipper overlapping the music (focus not taken). (`apps/mobile/src/lib/useRoam.ts`)
-- [ ] **Re-pause on the NEXT encounter + hold-to-resume.** Do: let a second encounter fire; separately,
-  pause a playing encounter with the sheet's play/pause. Expect: music pauses again for the second
-  clip; pausing an encounter **un-pauses the rider's music while held**, re-pausing it on resume.
-  Watch-for: a resume/pause *flicker* between back-to-back encounters (rare given the min-gap).
-- [ ] **Dead-zone skip never interrupts.** Do: trigger an encounter on thin/no signal (or let one
-  stall). Expect: a clip that never sounds is skipped and the rider's music is **never touched**
-  (focus is taken only on real audio). Watch-for: music pausing for a clip that then never plays.
-- [ ] **Same behaviour in live mode.** Do: re-confirm tour + roam in a real `?mode=live` session (the
-  audio session is mode-agnostic). Watch-for: any `live`↔`sim` divergence (would be surprising —
-  report it). (`apps/mobile/app/drives/[id]/play.tsx:45`)
+**Pre-drive audio** (the sample postcard, the route preview clip, a tapped stop on drive detail):
+
+> 🔴 **The four checks that were here belonged to the ROAM player and it no longer exists** (removed
+> 1.1, 2026-08-01, along with `useRoam.ts` and its `mixWithOthers` ⇄ `doNotMix` per-encounter dance).
+> They are replaced rather than deleted because **the risk they were testing did not go away — it
+> MOVED.** Every pre-drive surface now takes the same EXCLUSIVE `doNotMix` the drive does
+> (`docs/decisions/drive-audio-exclusive-focus.md`, extended 2026-08-01), so each one INTERRUPTS the
+> rider's music and each one owes the session back afterwards. That hand-back is the identical
+> unverifiable-from-a-desk flip §6 exists for, and it is now spread across three call sites
+> (`useStopPreview.ts`, `useRoutePreview.ts`, `useDrive.ts`) instead of one.
+
+- [ ] **★ A one-off clip pauses the rider's music and gives it back.** Do: start Spotify; return to
+  Skipper and play the free sample, then a stop from a drive-detail page. Expect: the music **pauses**
+  when the skipper starts and **resumes** within a beat of the clip ending — from EACH surface, tested
+  separately. Watch-for: music **staying paused** after the clip (the hand-back didn't take — the core
+  risk, and the failure this section exists for); ducking instead of pausing; the skipper overlapping.
+- [ ] **A clip that never sounds never touches the music.** Do: play one on thin/no signal, or
+  interrupt it mid-load. Expect: focus is taken only on real audio, so the rider's music is untouched.
+  Watch-for: music pausing for a clip that then fails to play. (⚠ `preview-util.ts` calls this out as
+  "the obligation that was missed, twice" — a clip that merely ATTEMPTED to play still owes the
+  hand-back.)
+- [ ] **Same behaviour in live mode.** Do: re-confirm in a real `?mode=live` session (the audio session
+  is mode-agnostic). Watch-for: any `live`↔`sim` divergence (would be surprising — report it).
+  (`apps/mobile/app/drives/[id]/play.tsx:45`)
 
 ## §7 — Real GPS, outdoors & in motion (Phase 4 — the bike/drive test)
 
@@ -366,9 +376,9 @@ Foreground When-In-Use only. Mode resolves to `live` via "Start the drive" (`ind
   **⚠ CONFIRMED IN THE FIELD (2026-06-10, free-roam's first live drive):** the −1→0 coercion DID
   read as a real northbound heading and gated out everything non-north. Roam's fix: `liveRoamSource`
   passes the RAW course and `RoamEngine` skips the gate when `headingDeg < 0` (unknown). **The same
-  sentinel contract is now PORTED to the tour path** (2026-06-11: `liveSource` passes raw course;
+  sentinel contract is now PORTED to the drive path** (2026-06-11: `liveSource` passes raw course;
   `TriggerEngine` skips the gate on a negative heading — unit-tested, but the port itself is what
-  this checklist item now verifies on the road). Residual to weigh on-device: tour stops are
+  this checklist item now verifies on the road). Residual to weigh on-device: drive stops are
   one-shot, so during a −1 stretch a behind/abeam stop within radius CAN fire wrong-direction and
   is then consumed — judged better than the field-confirmed silence, same policy as crawling speed.
 - [ ] **★ Triggers fire at the right points while moving (the core bet).** Do: bike/drive the real

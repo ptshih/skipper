@@ -4,7 +4,9 @@
 > now" founder call; a paid `enrich --apply` has since been RUN across all story-eligible POIs (315
 > welled), so the ear-test (§11) is now the remaining acceptance gate. What shipped, the resolved §9 calls, and the deviations are
 > recorded in [`docs/decisions/corpus-enrichment.md`](../decisions/corpus-enrichment.md) (read that for
-> current truth — this spec is the as-designed record).
+> current truth — this spec is the as-designed record). ⚠ **Amended 2026-08-02:** roam was removed in
+> 1.1, so read every "tours + roam both read it" below as the DRIVE alone. The `enrich` step itself is
+> unchanged — it is a property of the PLACE, which is exactly why it survived losing a consumer.
 > Pairs with `docs/decisions/enrichment-scout.md` (the scout this generalizes),
 > `docs/decisions/region-corpus-discovery.md` (the corpus + ops sequence), and principle #1.
 
