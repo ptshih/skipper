@@ -106,6 +106,31 @@ function pushPosNum(args: string[], flag: string, value: unknown, name: string):
   args.push(`${flag}=${n}`)
 }
 
+/** Ceiling on a single id list. The console now always dispatches an explicit id list rather than a
+ *  server-resolvable filter (apps/admin/client/src/views/pois/types.ts explains why), so this arg
+ *  grows with the corpus: ~37 bytes per uuid.
+ *
+ *  ⚠ The real ceiling is UNDOCUMENTED. Cloud Run publishes only "Maximum number of command arguments
+ *  for each container: 1000 per job or per service" (cloud.google.com/run/quotas) — a COUNT, which
+ *  this never approaches because every id rides inside ONE `--include-ids=` argument. Neither a
+ *  per-argument byte limit nor a RunJob request-size limit is published, and below them sits the
+ *  kernel's own ARG_MAX. So rather than discover the cliff during a paid run, bound it here and say
+ *  so: 5000 ids is ~185 KB, comfortably under anything plausible and far above today's corpus.
+ *  If this ever fires legitimately, the answer is server-side pagination, not a bigger number. */
+const MAX_JOB_IDS = 5000
+
+/** Comma-join a list of string ids for a `--include-ids=` / `--exclude-ids=` flag. Non-strings are
+ *  dropped rather than stringified — an object in that array would otherwise become "[object Object]"
+ *  and silently select nothing. */
+function idCsv(v: unknown, name: string): string {
+  if (!Array.isArray(v)) return ''
+  const ids = v.filter((x): x is string => typeof x === 'string')
+  if (ids.length > MAX_JOB_IDS) {
+    throw new HttpError(400, `${name} has ${ids.length} ids; the per-run ceiling is ${MAX_JOB_IDS}`)
+  }
+  return ids.join(',')
+}
+
 /** Build the per-execution override args from a request body (the spec §5 contract). Value
  *  flags use the `=` form — the parser drops a space-form value that begins with `--`. */
 export function buildJobArgs(body: Record<string, unknown>): BuildResult {
@@ -146,12 +171,11 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     const args: string[] = [script]
     // Selection: a FILTER (region/source/query) + exclude-ids, XOR an explicit include-ids list — the CLI
     // resolves it server-side (explicit XOR filter, NOT a union). See the enrich-pois.ts selection block.
-    const idCsv = (v: unknown): string => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string').join(',') : '')
     if (body.region) args.push(`--region=${str(body.region)}`)
     if (body.source) args.push(`--source=${str(body.source)}`)
     if (body.query) args.push(`--query=${str(body.query)}`)
-    if (idCsv(body.includeIds)) args.push(`--include-ids=${idCsv(body.includeIds)}`)
-    if (idCsv(body.excludeIds)) args.push(`--exclude-ids=${idCsv(body.excludeIds)}`)
+    if (idCsv(body.includeIds, 'includeIds')) args.push(`--include-ids=${idCsv(body.includeIds, 'includeIds')}`)
+    if (idCsv(body.excludeIds, 'excludeIds')) args.push(`--exclude-ids=${idCsv(body.excludeIds, 'excludeIds')}`)
     pushPosNum(args, '--limit', body.limit, 'limit')
     if (body.force) args.push('--force')
     if (body.model) args.push(`--model=${str(body.model)}`)
@@ -166,11 +190,10 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     const args: string[] = [script]
     // Same selection contract as enrich: a region (default: lake-tahoe) XOR an explicit include-ids list,
     // narrowable by query/exclude-ids. The CLI resolves --region → its discovery bbox server-side.
-    const idCsv = (v: unknown): string => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string').join(',') : '')
     if (body.region) args.push(`--region=${str(body.region)}`)
     if (body.query) args.push(`--query=${str(body.query)}`)
-    if (idCsv(body.includeIds)) args.push(`--include-ids=${idCsv(body.includeIds)}`)
-    if (idCsv(body.excludeIds)) args.push(`--exclude-ids=${idCsv(body.excludeIds)}`)
+    if (idCsv(body.includeIds, 'includeIds')) args.push(`--include-ids=${idCsv(body.includeIds, 'includeIds')}`)
+    if (idCsv(body.excludeIds, 'excludeIds')) args.push(`--exclude-ids=${idCsv(body.excludeIds, 'excludeIds')}`)
     pushPosNum(args, '--limit', body.limit, 'limit')
     if (body.force) args.push('--force')
     // --min-extract removed 2026-06-16: story-eligibility is "has a fact sheet" (#1), not a char floor.
@@ -178,7 +201,7 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     if (apply) args.push('--apply')
     // A region run keys both the display slug and the lock on its region; a whole-corpus explicit-id
     // run leaves them undefined → stored NULL (no 'roam-corpus' sentinel), surfaced as "All".
-    const genRegion = idCsv(body.includeIds) ? undefined : str(body.region) || DEFAULT_REGION_SLUG
+    const genRegion = idCsv(body.includeIds, 'includeIds') ? undefined : str(body.region) || DEFAULT_REGION_SLUG
     return { args, dryRun: !apply, spends: apply, targetSlug: genRegion, targetId: genRegion }
   }
 
@@ -188,10 +211,9 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     // Region-scoped like the solo generator, but `--include-ids` here names CLUSTER ids, not poi ids —
     // a fused telling's subject is a `poi_clusters` row. No --exclude-ids/--force/--model: the CLI
     // doesn't take them, and silently accepting a flag it ignores is worse than not offering it.
-    const idCsv = (v: unknown): string => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string').join(',') : '')
     if (body.region) args.push(`--region=${str(body.region)}`)
     if (body.query) args.push(`--query=${str(body.query)}`)
-    if (idCsv(body.includeIds)) args.push(`--include-ids=${idCsv(body.includeIds)}`)
+    if (idCsv(body.includeIds, 'includeIds')) args.push(`--include-ids=${idCsv(body.includeIds, 'includeIds')}`)
     pushPosNum(args, '--limit', body.limit, 'limit')
     pushPosNum(args, '--max-cost', body.maxCostUsd, 'maxCostUsd')
     if (apply) args.push('--apply')
@@ -199,7 +221,7 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     // "A preview is NOT free: it narrates and scores, so it costs an apply minus the TTS. Only the
     // persistence is gated." So the confirm gate must fire on Preview too — the operator is about to
     // spend Anthropic money either way, and a gate that only guards `--apply` would wave that through.
-    const clusterRegion = idCsv(body.includeIds) ? undefined : str(body.region) || DEFAULT_REGION_SLUG
+    const clusterRegion = idCsv(body.includeIds, 'includeIds') ? undefined : str(body.region) || DEFAULT_REGION_SLUG
     return { args, dryRun: !apply, spends: true, targetSlug: clusterRegion, targetId: clusterRegion }
   }
 
@@ -207,11 +229,10 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     const apply = body.apply === true
     const args: string[] = [script]
     // Same geometry-first selection as generate (region XOR include-ids, narrowable by query/exclude-ids).
-    const idCsv = (v: unknown): string => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string').join(',') : '')
     if (body.region) args.push(`--region=${str(body.region)}`)
     if (body.query) args.push(`--query=${str(body.query)}`)
-    if (idCsv(body.includeIds)) args.push(`--include-ids=${idCsv(body.includeIds)}`)
-    if (idCsv(body.excludeIds)) args.push(`--exclude-ids=${idCsv(body.excludeIds)}`)
+    if (idCsv(body.includeIds, 'includeIds')) args.push(`--include-ids=${idCsv(body.includeIds, 'includeIds')}`)
+    if (idCsv(body.excludeIds, 'excludeIds')) args.push(`--exclude-ids=${idCsv(body.excludeIds, 'excludeIds')}`)
     pushPosNum(args, '--limit', body.limit, 'limit')
     pushPosNum(args, '--max-cost', body.maxCostUsd, 'maxCostUsd')
     if (body.charm) args.push('--charm')
@@ -221,7 +242,7 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     // (grounding always; charm/veracity opt-in, veracity also web-searches) → spends → confirm gate.
     // The dry preview makes no model calls (free).
     // Region run keys slug + lock on its region; a whole-corpus explicit-id run leaves them NULL ("All").
-    const auditRegion = idCsv(body.includeIds) ? undefined : str(body.region) || DEFAULT_REGION_SLUG
+    const auditRegion = idCsv(body.includeIds, 'includeIds') ? undefined : str(body.region) || DEFAULT_REGION_SLUG
     return { args, dryRun: !apply, spends: apply, targetSlug: auditRegion, targetId: auditRegion }
   }
 

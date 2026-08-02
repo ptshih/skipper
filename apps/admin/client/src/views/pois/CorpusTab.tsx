@@ -98,6 +98,7 @@ export function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loadin
     selMode,
     selIds,
     isSelected,
+    selectedIds,
     numSelected,
     numEligibleSelected,
     numNarratableSelected,
@@ -107,7 +108,7 @@ export function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loadin
     toggleRow,
     toggleAll,
     clearSel,
-  } = useCorpusSelection(filtered)
+  } = useCorpusSelection(filtered, pois)
 
   // The table-filter axes (search/region/source/flags) are independent of the row SELECTION above.
   const filtersActive = q !== '' || region !== 'all' || source !== 'all' || flags !== 'all'
@@ -126,33 +127,15 @@ export function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loadin
     setFlags(flag)
   }
 
-  // Resolve the selection into the enrich job's contract. 'all' mode prefers a server-side FILTER
-  // (pagination-proof) when the active table filter is faithfully resolvable (region→bbox, source,
-  // query); a hygiene `flags` view or a region without a bbox can't be reproduced server-side, so it
-  // falls back to enumerating the visible ids (exact, client-side — fine at today's corpus size).
+  // The selection IS the id list — see ./types for why the server-resolvable-filter branch was removed.
+  // `selectedIds` is the same array every count on this page is derived from, so the number on a spend
+  // button and the rows the job receives cannot disagree.
   function buildSelection(): EnrichSelection {
-    if (selMode === 'explicit') return { kind: 'explicit', ids: [...selIds] }
-    // The server resolves a region SLUG → its discovery bbox, so we send the slug (not a bbox). region='all'
-    // → no region → the CLI defaults to the launch region. Only send a region the server can resolve (has a
-    // bbox); a bbox-less region falls back to enumerating the visible ids.
-    const regionHasBbox = region === 'all' || !!regionDefs.find((r) => r.slug === region)?.bbox
-    const resolvable = (flags === 'all' || flags === 'story-eligible') && regionHasBbox
-    if (resolvable) {
-      return {
-        kind: 'all',
-        filter: {
-          region: region !== 'all' ? region : undefined,
-          source: source !== 'all' ? source : undefined,
-          query: q || undefined,
-        },
-        excludeIds: [...selIds],
-      }
-    }
-    return { kind: 'explicit', ids: filtered.filter((p) => isSelected(p.id)).map((p) => p.id) }
+    return { ids: selectedIds }
   }
   const selectionSummary =
     (selMode === 'explicit'
-      ? `${selIds.size} hand-picked POI${selIds.size === 1 ? '' : 's'}`
+      ? `${numSelected} hand-picked POI${numSelected === 1 ? '' : 's'}`
       : `all ${numSelected} POIs matching this filter${selIds.size ? ` (minus ${selIds.size} deselected)` : ''}`) +
     ` — ${numEligibleSelected} story-eligible`
 
@@ -164,11 +147,19 @@ export function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loadin
     'sheet-drift': 'Story: sheet drifted', 'speakable-drift': 'Speakable: drifted', defect: 'Narration defects',
     stale: 'Stale facts', unattrib: 'Unattributed', 'off-road': 'Off-road (no road anchor)',
   }
+  // ⚠ Chips describe the FILTER, which only equals the run in 'all' mode. A hand-picked selection is
+  // deliberately filter-independent, so showing "Region: Tahoe" beside 40 ids picked across two regions
+  // would be the same lie in a new place — say so instead.
   const scopeChips: { label: string; value: string }[] = []
-  if (region !== 'all') scopeChips.push({ label: 'Region', value: regions.find((r) => r.slug === region)?.name ?? region })
-  if (source !== 'all') scopeChips.push({ label: 'Source', value: source })
-  if (flags !== 'all') scopeChips.push({ label: 'Flag', value: FLAG_LABELS[flags] ?? flags })
-  if (q) scopeChips.push({ label: 'Search', value: q })
+  if (selMode === 'explicit') {
+    scopeChips.push({ label: 'Scope', value: `${numSelected} hand-picked (filters not applied)` })
+  } else {
+    if (region !== 'all') scopeChips.push({ label: 'Region', value: regions.find((r) => r.slug === region)?.name ?? region })
+    else scopeChips.push({ label: 'Region', value: 'all regions' })
+    if (source !== 'all') scopeChips.push({ label: 'Source', value: source })
+    if (flags !== 'all') scopeChips.push({ label: 'Flag', value: FLAG_LABELS[flags] ?? flags })
+    if (q) scopeChips.push({ label: 'Search', value: q })
+  }
   const scope: ScopeDescriptor = { selection: buildSelection(), summary: selectionSummary, chips: scopeChips }
 
   const totals = {

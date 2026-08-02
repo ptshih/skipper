@@ -76,6 +76,24 @@ describe('buildJobArgs — spend classification across ALL kinds (the confirm-ga
   // build.spends is exactly what index.ts gates the confirm:true requirement on (`if build.spends &&
   // body.confirm !== true → 412`). A kind mislabeled spends:false would skip the gate on a real paid
   // run, so pin every kind's classification — incl. the two deliberate free exceptions. (audit #6)
+  // The console now always dispatches an EXPLICIT id list rather than a server-resolvable filter, so
+  // this arg grows with the corpus. Cloud Run publishes only an argument COUNT limit (1000/container),
+  // which one --include-ids= flag never approaches; no per-arg byte limit is documented. Bounded here
+  // so the failure is a clean 400 instead of an undocumented cliff during a paid run.
+  test('an id list is bounded, and the ceiling is a 400 rather than a truncation', () => {
+    const ok = Array.from({ length: 5000 }, (_, i) => `id-${i}`)
+    expect(() => buildJobArgs({ kind: 'enrich_pois', includeIds: ok })).not.toThrow()
+    const tooMany = [...ok, 'one-too-many']
+    expect(() => buildJobArgs({ kind: 'enrich_pois', includeIds: tooMany })).toThrow(/ceiling is 5000/)
+    // ⚠ Truncating would be the dangerous alternative: a paid run silently acting on a subset of what
+    // the operator authorised is precisely the class of bug the id-list change was made to remove.
+  })
+
+  test('non-string ids are dropped, never stringified into a selector that matches nothing', () => {
+    const r = buildJobArgs({ kind: 'enrich_pois', includeIds: ['a', 42, null, { id: 'b' }, 'c'] })
+    expect(r.args).toContain('--include-ids=a,c')
+  })
+
   test('FREE kinds never spend (no confirm gate), with or without --apply', () => {
     for (const apply of [false, true]) {
       expect(buildJobArgs({ kind: 'discover_pois', apply }).spends).toBe(false)

@@ -27,15 +27,15 @@ function ScopeSummary({ scope }: { scope: ScopeDescriptor }) {
   )
 }
 
-/** Map a selection onto the createJob body fields a kind that takes region/query/includeIds/excludeIds
- *  understands (generate_narrations, offline_audit). enrich also takes `source`, added by its builder. */
+/** Map a selection onto the createJob body. One shape for every kind: the ids.
+ *
+ *  ⚠ This used to translate a filter into region/query/excludeIds, and quietly dropped any axis the
+ *  target kind could not express — `source` is accepted by enrich_pois and by NEITHER
+ *  generate_narrations NOR offline_audit, so a "Source: wikidata" chip could sit above a re-score of
+ *  every wikipedia clip in the default region: the exact complement of what was on screen. Ids cannot
+ *  be partially honoured. */
 function scopeBody(sel: EnrichSelection): Record<string, unknown> {
-  if (sel.kind === 'explicit') return { includeIds: sel.ids }
-  const body: Record<string, unknown> = {}
-  if (sel.filter.region) body.region = sel.filter.region
-  if (sel.filter.query) body.query = sel.filter.query
-  if (sel.excludeIds.length) body.excludeIds = sel.excludeIds
-  return body
+  return { includeIds: sel.ids }
 }
 
 /* ── NARRATE (generate_narrations — re-script + re-synth, spends) ── */
@@ -155,8 +155,9 @@ export function EnrichDialog({ open, onOpenChange, scope, onSubmitted }: {
   const buildBody = () => {
     const sel = scope.selection
     const body: Record<string, unknown> = { kind: 'enrich_pois', ...scopeBody(sel) }
-    // enrich is the one kind that also filters by source (story is wikipedia-only anyway).
-    if (sel.kind === 'all' && sel.filter.source) body.source = sel.filter.source
+    // ⚠ No `source` here any more. It used to be re-added from the filter for this one kind — which is
+    // precisely what made the axis look honoured everywhere while narrate/re-score silently dropped it.
+    // The ids already encode every axis the operator filtered on, so there is nothing left to narrow.
     if (model !== 'sonnet') body.model = model // sonnet is the CLI default — only send a non-default override
     const n = Number(limit)
     if (limit.trim() && Number.isFinite(n) && n > 0) body.limit = Math.floor(n)
