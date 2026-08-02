@@ -232,11 +232,14 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     const apply = body.apply === true
     const args: string[] = [script]
     // Region-scoped like the solo generator, but `--include-ids` here names CLUSTER ids, not poi ids —
-    // a fused telling's subject is a `poi_clusters` row. No --exclude-ids/--force/--model: the CLI
-    // doesn't take them, and silently accepting a flag it ignores is worse than not offering it.
+    // a fused telling's subject is a `poi_clusters` row. No --exclude-ids/--model: the CLI doesn't take
+    // them, and silently accepting a flag it ignores is worse than not offering it.
+    // ⚠ `--force` IS offered now: the CLI gained a freshness skip, so without a way to override it the
+    // console could never re-narrate a region whose clusters are all fresh. `--include-ids` implies it.
     if (body.region) args.push(`--region=${str(body.region)}`)
     if (body.query) args.push(`--query=${str(body.query)}`)
     if (idCsv(body.includeIds, 'includeIds')) args.push(`--include-ids=${idCsv(body.includeIds, 'includeIds')}`)
+    if (body.force) args.push('--force')
     pushPosNum(args, '--limit', body.limit, 'limit')
     pushPosNum(args, '--max-cost', body.maxCostUsd, 'maxCostUsd')
     if (apply) args.push('--apply')

@@ -113,6 +113,16 @@ describe('buildJobArgs — spend classification across ALL kinds (the confirm-ga
     }
   })
 
+  // The fused CLI gained a freshness skip, so the console needs a way to re-narrate a region whose
+  // clusters are all fresh — otherwise "Fuse clusters" would report "nothing to narrate" forever with
+  // no override. Off by default: a re-narration overwrites the script with no history to roll back to.
+  test('generate_cluster_narrations threads --force, and omits it unless asked', () => {
+    expect(buildJobArgs({ kind: 'generate_cluster_narrations', region: 'lake-tahoe', force: true }).args)
+      .toContain('--force')
+    expect(buildJobArgs({ kind: 'generate_cluster_narrations', region: 'lake-tahoe' }).args)
+      .not.toContain('--force')
+  })
+
   test('PAID kinds spend IFF --apply (dry run = free preview; apply = confirm-gated spend)', () => {
     const paid = [
       { kind: 'enrich_pois' },

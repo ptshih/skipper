@@ -4,6 +4,7 @@ import { JobActionDialog } from '@/components/ui/job-action-dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 
 type RegionRef = { slug: string; displayName: string }
 
@@ -32,7 +33,16 @@ export function FuseClustersDialog({
   // The CLI defaults to 1 for a reason: clusters are picked WIDEST first, and each one is a paid
   // narration. Starting small is the cost control.
   const [limit, setLimit] = useState('1')
-  useEffect(() => { if (open) setLimit('1') }, [open])
+  // The CLI now skips clusters whose fused clip already grounds on its members' current facts. Without
+  // this override the console could never re-narrate a region once every cluster is fresh — it would
+  // just report "nothing to narrate". Defaults OFF: re-narration overwrites the script irreversibly.
+  const [force, setForce] = useState(false)
+  useEffect(() => {
+    if (open) {
+      setLimit('1')
+      setForce(false)
+    }
+  }, [open])
 
   return (
     <JobActionDialog
@@ -46,6 +56,7 @@ export function FuseClustersDialog({
         kind: 'generate_cluster_narrations',
         ...(region ? { region: region.slug } : {}),
         ...(Number(limit) > 0 ? { limit: Number(limit) } : {}),
+        ...(force ? { force: true } : {}),
       })}
       applyLabel="Fuse"
       applyIcon={Combine}
@@ -85,6 +96,14 @@ export function FuseClustersDialog({
             Each cluster is a paid narration. Start at 1 and listen before widening.
           </p>
         </div>
+        <label className="flex cursor-pointer items-start gap-2 text-sm">
+          <Checkbox checked={force} onCheckedChange={setForce} aria-label="Re-narrate fused clips that are already fresh" />
+          <span>
+            <span className="font-medium text-foreground">Re-narrate fresh clips</span> — overwrite groups
+            whose telling already matches its members' current facts. Off = skip them. ⚠ A re-narration
+            replaces the script permanently; there is no history to roll back to.
+          </span>
+        </label>
       </div>
     </JobActionDialog>
   )

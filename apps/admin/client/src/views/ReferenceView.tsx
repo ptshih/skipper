@@ -182,7 +182,7 @@ const RUN_KINDS: RunKind[] = [
   },
   {
     kind: 'Fuse clusters',
-    does: "Write ONE fused telling per cluster in a region — a single narration covering a group of places a driver experiences as one stop (Emerald Bay = Vikingsholm + Fannette Island + Eagle Falls). The row carries cluster_id with poi_id NULL. Member clips are left ALONE; this only adds. Run from a region's row on the Regions page. Clusters are taken widest-first, so start at a limit of 1 and listen.",
+    does: "Write ONE fused telling per cluster in a region — a single narration covering a group of places a driver experiences as one stop (Emerald Bay = Vikingsholm + Fannette Island + Eagle Falls). The row carries cluster_id with poi_id NULL. Member clips are left ALONE; this only adds. Run from a region's row on the Regions page. Clusters are taken widest-first, so start at a limit of 1 and listen. A group whose telling already matches its members' current facts is SKIPPED — so a re-run costs nothing for work already done, and “nothing to narrate” means the region is done, not broken. “Re-narrate fresh clips” overrides that; ⚠ it overwrites the script permanently (there is no history table), so it is for fixing a defect, not for browsing.",
     cost: <span>LLM per fused telling; <span className="text-foreground">TTS</span> on apply.</span>,
     safe: '⚠ Preview SPENDS here — unlike Generate narration, it narrates and scores before deciding what to keep, so a preview costs an apply minus the TTS. Confirm fires on both. A fused clip lands STAGED and goes public with the region release.',
   },

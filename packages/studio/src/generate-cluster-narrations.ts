@@ -18,7 +18,9 @@
 //   --region <slug>         scope to a region's bbox via its members (default: lake-tahoe)
 //   --limit N               only the first N generatable clusters, WIDEST first (cost control)
 //   --query <substr>        narrow to cluster titles containing <substr>
-//   --include-ids a,b,c     regenerate EXACTLY these cluster ids (skips the region scope + --limit)
+//   --include-ids a,b,c     regenerate EXACTLY these cluster ids (skips the region scope + --limit;
+//                           implies --force, since you named the set)
+//   --force                 re-narrate even clusters whose fused clip is still fresh
 //   --max-cost <usd>        stop launching work once spend crosses this
 
 import { inArray, sql } from 'drizzle-orm'
@@ -119,6 +121,9 @@ async function main(): Promise<void> {
   // An explicit id list is a TARGETED re-run (regenerate exactly these), so it bypasses the region
   // scope and the limit — the caller has already decided the set.
   const includeIds = (flags.value('include-ids') ?? '').split(',').map((x) => x.trim()).filter(Boolean)
+  // `--include-ids` IMPLIES regeneration — you asked for those exact clusters, so don't freshness-skip
+  // them. Same rule the solo generator uses, for the same reason.
+  const force = flags.has('force') || includeIds.length > 0
 
   // A cluster is in the region the same geometry-first way everything else is — by where its members
   // are (poi_clusters stores no coordinates, deliberately). Shared with the diversity-context loader,
@@ -182,15 +187,49 @@ async function main(): Promise<void> {
     })
   }
 
+  // ── Freshness ───────────────────────────────────────────────────────────────────────────────────
+  // ⚠ This generator had NO freshness gate at all. Every `--apply` re-narrated, re-gated and
+  // re-synthesized EVERY generatable cluster, overwriting `narrations.script` in place — and there is
+  // no history table, so that regeneration cannot be undone, only fixed forward (the ops SOP's first
+  // "judging a paid run" trap). `clusterGroundingHash` was written for precisely this comparison —
+  // its own docstring tells the caller to consult freshness — and until now was only ever WRITTEN,
+  // never read back, which is the shape of a design that was finished everywhere except its use.
+  //
+  // Same contract as the solo generator: FRESH = a fused clip already exists AND its stored
+  // `facts_hash` equals the one this run would stamp. A null hash is never fresh (nothing tellable),
+  // which is why the docstring insists the block above runs first — a null reads as permanently stale
+  // and would re-queue the cluster for paid narration forever.
+  const clipHashByCluster = new Map<string, string | null>()
+  if (queue.length > 0) {
+    const existing = await db
+      .select({ clusterId: narrations.clusterId, factsHash: narrations.factsHash })
+      .from(narrations)
+      .where(inArray(narrations.clusterId, queue.map((q) => q.id)))
+    for (const r of existing) if (r.clusterId) clipHashByCluster.set(r.clusterId, r.factsHash)
+  }
+  const generatable: Fused[] = []
+  let freshSkipped = 0
+  for (const f of queue) {
+    const hash = clusterGroundingHash(f, f.members)
+    const clipHash = clipHashByCluster.get(f.id)
+    if (!force && hash !== null && clipHash !== undefined && clipHash === hash) {
+      freshSkipped++
+      continue
+    }
+    generatable.push(f)
+  }
+
   console.log(`\nRegion: ${region.displayName}  ·  ${clusters.length} group(s) in scope (clusters AND districts — the GATE decides, not the treatment)`)
-  console.log(`${queue.length} generatable, ${blocked.length} blocked:`)
+  console.log(
+    `${generatable.length} to generate, ${freshSkipped} already fresh (skipped${force ? '' : ' — pass --force to re-narrate'}), ${blocked.length} blocked:`,
+  )
   for (const b of blocked.slice(0, 4)) console.log(b)
   if (blocked.length > 4) console.log(`  …+${blocked.length - 4} more`)
 
   // Widest first — the density stress case is the one worth reading, and the one worth spending on
   // first when the run is capped.
-  queue.sort((a, b) => b.tellable.length - a.tellable.length)
-  const picked = includeIds.length > 0 ? queue : queue.slice(0, Math.max(0, limit))
+  generatable.sort((a, b) => b.tellable.length - a.tellable.length)
+  const picked = includeIds.length > 0 ? generatable : generatable.slice(0, Math.max(0, limit))
   if (picked.length === 0) return console.log('\nNothing to narrate.')
   console.log(`\nNarrating + gating ${picked.length} of them (${includeIds.length > 0 ? 'explicit ids' : `--limit ${limit}`}).\n`)
 
