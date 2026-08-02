@@ -7,8 +7,8 @@
 // pulse is gated on Reduce Motion (falls back to a static mid-opacity), like the player's
 // celebratory beats.
 import type { ReactNode } from 'react'
-import { useEffect, useRef } from 'react'
-import { Animated, type StyleProp, type ViewStyle, type DimensionValue } from 'react-native'
+import { useEffect } from 'react'
+import { Animated, useAnimatedValue, type StyleProp, type ViewStyle, type DimensionValue } from 'react-native'
 import { radius as radii } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'
 import { useReducedMotion } from '../theme/useReducedMotion'
@@ -53,7 +53,7 @@ export interface SkeletonGroupProps {
  */
 export function SkeletonGroup({ children, accessibilityLabel, style }: SkeletonGroupProps) {
   const reduced = useReducedMotion()
-  const pulse = useRef(new Animated.Value(0)).current
+  const pulse = useAnimatedValue(0)
 
   useEffect(() => {
     if (reduced) return

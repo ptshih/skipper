@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActionSheetIOS, Alert, Animated, Linking, Platform, StyleSheet, View } from 'react-native'
+import { ActionSheetIOS, Alert, Linking, Platform, StyleSheet, useAnimatedValue, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
 import { ApiError, deleteDrive, errorMessage, getDrive, type DriveManifest } from '@/lib/api'
@@ -75,7 +75,7 @@ export default function DriveDetailScreen() {
   const playStop = useCallback((seq: number) => playRef.current(seq), [])
   // The detail map has no live position, so its puck is hidden and `progress` stays parked at 0 (the
   // whole route reads untraveled). DriveMap requires the value; this static one satisfies it.
-  const mapProgress = useRef(new Animated.Value(0)).current
+  const mapProgress = useAnimatedValue(0)
   const insets = useSafeAreaInsets()
   const { colors } = useTheme()
   // Measured height of the FIXED now-playing dock, reserved at the bottom so the dock never covers
@@ -121,7 +121,7 @@ export default function DriveDetailScreen() {
   const [partial, setPartial] = useState<{ failed: number; total: number } | null>(null)
   // The signature rig, parked at the trailhead (~0.06) on the placard's static trail. Created
   // once, never animated — a still motif (the Start CTA owns this screen's one amber glow).
-  const parked = useRef(new Animated.Value(0.06)).current
+  const parked = useAnimatedValue(0.06)
   // Mirror of `drive` so load() can skip the full-screen spinner on a refocus refetch. (audit #531)
   const driveRef = useRef<DriveManifest | null>(null)
   // Cancels an in-flight download (Cancel tap / screen unmount). (audit #816)

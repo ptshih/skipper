@@ -5,8 +5,8 @@
 //              (not raised) so it reads BOTH on the bare screen AND inside the raised route
 //              card. PINE accent, never amber — the player card owns the one amber glow.
 //   passed   — dimmed, with a quiet check
-import { memo, useEffect, useRef } from 'react'
-import { Animated, Pressable, StyleSheet, View } from 'react-native'
+import { memo, useEffect } from 'react'
+import { Animated, Pressable, StyleSheet, useAnimatedValue, View } from 'react-native'
 import { radius, space } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'
 import { Icon, type IconName } from './Icon'
@@ -45,7 +45,7 @@ function StopRowBase({
   // The passed-check "ink press": opacity + scale + a slight rotate settle, staggered by the
   // parent. Starts at its END state (1) unless asked to stamp in, so a normal drive shows the
   // check statically — only the drive-complete cascade animates.
-  const stamp = useRef(new Animated.Value(enterStamp ? 0 : 1)).current
+  const stamp = useAnimatedValue(enterStamp ? 0 : 1)
   useEffect(() => {
     if (!enterStamp) return
     stamp.setValue(0)

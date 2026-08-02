@@ -12,8 +12,8 @@
 //
 // ⚠ INV-1 on the display side: everything shown here comes from `viaResolved` / `start` / `end`, which
 // carry names. `proposal.via` is ANCHOR IDS and rendering it would print a uuid at a rider.
-import { useMemo, useRef, type ReactNode } from 'react'
-import { ActivityIndicator, Animated, StyleSheet, View } from 'react-native'
+import { useMemo, type ReactNode } from 'react'
+import { ActivityIndicator, StyleSheet, useAnimatedValue, View } from 'react-native'
 import type { DriveProposal } from '@/lib/api'
 import { cleanPlaceName } from '@/lib/labels'
 import { border, radius, space } from '../theme/tokens'
@@ -89,7 +89,7 @@ export function PreviewCard({
 
   // DriveMap wants an Animated.Value; this map has no live position, so it stays parked at 0 and the
   // puck is hidden outright (below).
-  const mapProgress = useRef(new Animated.Value(0)).current
+  const mapProgress = useAnimatedValue(0)
 
   // A loop echoes back `via` (end === start) — mark the start + each midpoint instead of start→end.
   const endpoints = useMemo<DriveMapStop[]>(() => {

@@ -18,7 +18,7 @@
 // ⚠ INV-13: nothing here logs. Every string on this screen is rider content or model output, and none
 // of it is persisted — not to disk, not to the region cache (which holds public place NAMES only).
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Animated, Pressable, StyleSheet, View, type TextInput } from 'react-native'
+import { Pressable, StyleSheet, useAnimatedValue, View, type TextInput } from 'react-native'
 import { Stack, useFocusEffect, useRouter } from 'expo-router'
 import type { PlannedRoute } from '@skipper/shared'
 // ⚠ The TYPED contract, and the only analytics surface there is (src/lib/analytics.tsx owns the raw
@@ -211,7 +211,7 @@ export default function HomeScreen() {
   // The signature car token, parked at the trailhead (~0.12). STATIC: created once and never
   // animated. It is the screen's SOLE amber glow, and the hero collapses the moment the rider
   // speaks — which is what keeps it from colliding with a route card's amber MIN badge (DESIGN §8).
-  const parkedAnim = useRef(new Animated.Value(0.12)).current
+  const parkedAnim = useAnimatedValue(0.12)
 
   // Monotonic request id: the focus load, the reconnect self-heal and a Better Auth session refetch
   // can all fire within the same moment (they share the network edge), and without this the SLOWER

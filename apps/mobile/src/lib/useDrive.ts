@@ -12,7 +12,7 @@
 // the native per-stop mini-preview on the drive-detail page, so this hook is just sim + live.
 // See docs/decisions/detail-page-mini-preview.md.) See docs/designs/gps-player-spec.md §3.5.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Animated, AppState, Image, Linking } from 'react-native'
+import { Animated, AppState, Image, Linking, useAnimatedValue } from 'react-native'
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake'
 import {
   setAudioModeAsync,
@@ -259,7 +259,7 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
   const player = useAudioPlayer()
   const status = useAudioPlayerStatus(player)
 
-  const dot = useRef(new Animated.Value(0)).current
+  const dot = useAnimatedValue(0)
 
   // Drive engine + fire-queue (refs: mutated from the source's timer callbacks).
   const engineRef = useRef<TriggerEngine | null>(null)

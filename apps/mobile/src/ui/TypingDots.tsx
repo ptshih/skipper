@@ -12,8 +12,8 @@
 // region is the NowCard flooding lesson in miniature, and it would bury the announce the settled
 // skipper turn makes a moment later. The VISIBLE "Chewing on that…" line (voice.plan.thinking) is
 // the screen's to render beside this — kept out so this node's label can't start changing.
-import { useEffect, useRef } from 'react'
-import { Animated, StyleSheet } from 'react-native'
+import { useEffect } from 'react'
+import { Animated, StyleSheet, useAnimatedValue } from 'react-native'
 import { radius, space } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'
 import { useReducedMotion } from '../theme/useReducedMotion'
@@ -32,7 +32,7 @@ export interface TypingDotsProps {
 export function TypingDots({ label }: TypingDotsProps) {
   const { colors } = useTheme()
   const reduced = useReducedMotion()
-  const pulse = useRef(new Animated.Value(0)).current
+  const pulse = useAnimatedValue(0)
 
   useEffect(() => {
     if (reduced) return

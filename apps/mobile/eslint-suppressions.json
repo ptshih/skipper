@@ -1,7 +1,7 @@
 {
   "app/drives/[id]/index.tsx": {
     "react-hooks/refs": {
-      "count": 3
+      "count": 1
     }
   },
   "app/drives/[id]/play.tsx": {
@@ -11,7 +11,7 @@
   },
   "app/index.tsx": {
     "react-hooks/refs": {
-      "count": 2
+      "count": 1
     },
     "react-hooks/set-state-in-effect": {
       "count": 2
@@ -36,9 +36,6 @@
     }
   },
   "src/lib/useDrive.ts": {
-    "react-hooks/refs": {
-      "count": 2
-    },
     "react-hooks/set-state-in-effect": {
       "count": 1
     }
@@ -58,11 +55,6 @@
       "count": 1
     }
   },
-  "src/ui/PreviewCard.tsx": {
-    "react-hooks/refs": {
-      "count": 1
-    }
-  },
   "src/ui/Scrubber.tsx": {
     "react-hooks/refs": {
       "count": 4
@@ -71,24 +63,9 @@
       "count": 2
     }
   },
-  "src/ui/Skeleton.tsx": {
-    "react-hooks/refs": {
-      "count": 4
-    }
-  },
   "src/ui/StopList.tsx": {
     "react-hooks/refs": {
       "count": 2
-    }
-  },
-  "src/ui/StopRow.tsx": {
-    "react-hooks/refs": {
-      "count": 8
-    }
-  },
-  "src/ui/TypingDots.tsx": {
-    "react-hooks/refs": {
-      "count": 4
     }
   }
 }
