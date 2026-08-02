@@ -199,11 +199,28 @@ three sites treat it as authorization: `drives.ts:449` (POST /, which then **spe
 opening the home screen would write a `free:<anonUserId>` grant into `credit_entries` — against a user
 id better-auth is about to **hard-delete with no cascade and no `purgeUserData`** — stranding a row
 forever in an append-only ledger with no second copy. An INV-4 breach by OMISSION, not by writing code.
-→ Mitigation is **DEPLOY ordering, not merge ordering**: the API's per-route `requireAccount` must be
-**deployed** before the mobile mint ships. Keep the `!userId` checks as backstops but demote them in
-their comments — they are no longer the wall. Gate the mint on `!isPending && !session` (ANY session)
-behind a module-level once-guard: `/sign-in/anonymous` refuses only a caller who already holds an
-anonymous session, and will otherwise sign a real rider **out of their own account and drives**.
+→ ⚠ **THE MITIGATION THIS INVARIANT ORIGINALLY NAMED — "deploy 8a before the mobile mint" — WAS THE
+WRONG CONTROL, and was replaced in step 8** (review §1.3/§3.3, confirmed against the code by three
+independent design passes). Today *and after a correct 8a*, `GET /drives` sits behind a gate and the
+mint is harmless regardless of deploy order. **The hazard is INTRA-8a**: it opens only if 8a drops the
+gate from a route that WRITES. Deploy ordering cannot detect a missing gate; a test can.
+→ **THE CONTROL IS `apps/api/test/drive-access.test.ts`.** It asserts the five owner routes 401 for an
+anonymous session, that an anonymous `GET /drives` never reaches `ensureFreeGrant` (the hazard is a
+WRITE — a 401 issued *after* the ledger row was written is still a 401), and — the highest-value part —
+a **route-table completeness guard** that pins the gated set and fails when any NEW route is added
+without a gate. Deploying 8a before the mint remains the correct operational sequence; it is simply no
+longer what makes this safe.
+→ ⚠ **`!userId` STOPPED BEING A BACKSTOP THE DAY THE MINT SHIPPED, and re-commenting it was not
+enough.** It worked only because an anonymous caller had no session; afterwards every rider carries one
+and an anonymous user HAS an id, so an id-presence check is `false` forever and guards nothing. Every
+such site is now keyed on `c.get('tier') === 'free'` — the same predicate the gate uses, so the wall and
+the backstop cannot disagree.
+→ Gate the mint on `!isPending && !session` (ANY session) behind a module-level once-guard:
+`/sign-in/anonymous` refuses only a caller who already holds an anonymous session, and will otherwise
+sign a real rider **out of their own account and drives**. ⚠ The once-guard must also be **consumed by
+observing a session it did not mint** — otherwise a process that launched signed-in still holds it
+unspent, and the moment that rider signs out *or deletes their account* the app mints them a fresh
+undeletable row (found by the step-8 adversary, fixed there).
 
 **INV-16 — `driveClip` cannot key the offline store yet.**
 It has no `subjectId`/`subjectKind`, and `drives.ts:354` sets only `poiId` — a fused cluster clip
@@ -564,12 +581,59 @@ URLSession; `keyboardVerticalOffset={useHeaderHeight()}` (`ConversationScreen.ts
 on-device check — do it first); the three client timers; `AbortSignal.any` on device; and that closing
 the HTTP stream actually stops Anthropic billing, which is the premise of the whole cancellation feature.
 
-**8 — Anonymous split — THREE commits with a MANDATORY DEPLOY GATE** (INV-15). Pre-work: a request-level
-test harness for `apps/api` (importing `drives.ts` pulls `auth.ts`, which throws at module load without
-`BETTER_AUTH_SECRET`). **(8a)** API: `requireAccount` off the mount onto the five owner routes, keep
-`withSession` on the mount, preview presign from `loadCorpusForRoute`. **DEPLOY THIS.** **(8b)** mobile:
-register `anonymousClient`; flip the seven bare-`session` call sites (INV-9). **(8c)** mint at app open
-behind the once-guard, the wall as a sheet over the preview, and INV-14's `/sign-in/anonymous` rule.
+**8 — Anonymous split.** ✅ **DONE 2026-08-01, in four commits** (API → mobile session → the preview
+clip's playback → the mint), each with root + `apps/mobile` `bun run check` green. Built by a parallel
+agent team with two adversaries re-reading from disk.
+
+⚠ **INV-15'S CONTROL CHANGED — see INV-15 above.** The request-level test replaces deploy ordering as
+the mitigation, and the `!userId` backstops are re-keyed on TIER because id-presence becomes a no-op
+the day the mint ships. Those two are the load-bearing half of this step.
+
+**Pre-work (folded into the API commit, because it is what makes the test possible):** `auth.ts` is now
+a **memoized** `buildAuth()` behind `createLazyProxy`, so importing `drives.ts` costs no env. ⚠ The
+memoization is a SECURITY property, not an optimization: `createLazyProxy` runs its factory on every
+property read, so an un-memoized build would construct a fresh auth context per request — including a
+new in-memory rate-limit store, silently disabling the brute-force guard on `/sign-in/email` with
+nothing failing. Mutation-checked. Boot-time fail-fast moves to an explicit `assertAuthEnv()` in
+`index.ts`; ⚠ it was briefly left un-wired and the adversary caught it — a constant nobody reads, which
+is the exact step-7 failure repeated. Verified by running the API with the secret deleted.
+
+**The preview clip (INV-5).** `/propose` already had the release-filtered corpus in a local variable, so
+the clip is `stops[0]` — **the drive's opening beat**, so the taste and the product can never disagree
+(ranking by clip length overrides `buildDrive`'s own judgement and spends the best moment before the
+drive starts). The build corpus is now **branded** (`BuildCorpus`), which makes the swap INV-5 forbids a
+COMPILE error: the filtered and unfiltered maps are structurally identical, which is precisely why that
+mistake would otherwise typecheck clean and publish unreleased work to a stranger. Mutation-checked both
+ways — including a type-level probe that fails if the brand itself is ever "simplified" away.
+
+⚠ **The audio flip (D35) created a regression the adversary caught: nothing handed the session BACK.**
+Under the old `mixWithOthers` nothing was ever interrupted, so nothing needed returning; `doNotMix`
+moved three surfaces into the class `useDrive` had already solved and none inherited the solution.
+Pausing a player does NOT release the session — iOS resumes the rider's music only on deactivation — so
+a rider who tapped the taste would have had Spotify paused permanently, with no control on screen that
+fixed it. `setIsAudioActiveAsync(false)` now runs on stop, on natural end, and on unmount, on all three.
+**Any future surface that takes exclusive focus owes the same.**
+
+⚠ **Cost posture, unchanged but re-premised (founder-visible):** `PROPOSE_RATE` (15/min per IP per
+instance) was set when `/propose` sat behind an account wall — the wall was the first-order guard and
+the limiter was defence-in-depth. It is now the ONLY guard on a billed Google Routes call reachable by
+any stranger, forever. The number was not changed and is not being recommended as a change; its premise
+moved, and per CLAUDE.md's STOP rule that is a founder call, not a refactor.
+
+⚠ **Owed, NOT decided (RISK-3, and it got sharper):** whether minting at app open counts as account
+creation under 5.1.1(v). The rider cannot delete that row in-app — `deleteUser` sits behind
+`sensitiveSessionMiddleware` and an anonymous user has no credential. If the answer is yes, the fix
+already ships in the installed package (`deleteAnonymousUser`, exposed by `anonymousClient()`) and is
+~15 lines. **Decide before submission.**
+
+⚠ **Skipped deliberately:** review §1.10's ~3-stop floor — an unargued product number the review itself
+calls "a product judgement with no right answer". The honest floor now on the wire for free is
+`previewClip != null`: a proposal with a clip has at least one stop and at least one thing to say.
+
+⚠ **Unverified without a device:** that `doNotMix` actually pauses Spotify and that the session release
+resumes it; the mint round-trip and its SecureStore write; whether `status.error` is populated for a 403
+on a stale presign (if not, `clipUnavailable` is dead copy — ten seconds on a device settles it); the
+ClipBar's position above the keyboard, which inherits step 7's still-ASSUMED `keyboardVerticalOffset`.
 
 **9 — Offline subject-keyed store.** Unblocked by step 4. Add a v4→v5 entry to the existing (empty,
 unit-tested) `MANIFEST_MIGRATIONS` ladder. **Re-key bytes with `File.moveSync`, never delete-and-refetch.**

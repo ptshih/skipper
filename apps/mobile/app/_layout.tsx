@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar'
 import * as SplashScreen from 'expo-splash-screen'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { AnalyticsProvider, captureError, track } from '@/lib/analytics'
+import { useAnonymousMint } from '@/lib/anon-session'
 import { reclaimLegacyRoamPack } from '@/lib/offline'
 import { SimModeProvider, readStoredSimMode } from '@/lib/sim-mode'
 import { ThemeProvider, readStoredThemeMode, useAppFonts, useTheme, type ThemeMode } from '@/theme'
@@ -93,6 +94,12 @@ export default function RootLayout() {
           {/* Launch-time update gate — floats above the whole navigator. Renders nothing
               unless the server /version floor says this build must nudge or force-update. */}
           <VersionGate />
+          {/* D16's anonymous mint. Its OWN leaf beside VersionGate — the app-root side-effect slot —
+              so a $sessionSignal tick re-renders this and not the navigator. It sits inside the
+              `if (!ready)` gate above and that is correct, not a compromise: nothing a rider can do
+              in the first frames needs a session (POST /drives/plan sends no cookie at all, /sample
+              is anonymous), and the splash is already held for the fonts. */}
+          <AnonymousMint />
         </ThemeProvider>
       </SafeAreaProvider>
     </AnalyticsProvider>
@@ -136,6 +143,14 @@ function ThemedStack() {
           "regions" modal picker was removed with the V1 region-filter catalog (429d328). */}
     </>
   )
+}
+
+/** Renders nothing. It exists only so the mint's `useSession()` subscription is scoped to a leaf
+ *  instead of to RootLayout, whose re-render would drag the whole navigator along for free — but for
+ *  nothing. The rule it fires lives in src/lib/anon-session-util.ts; the call is one line up. */
+function AnonymousMint() {
+  useAnonymousMint()
+  return null
 }
 
 // The global back affordance: our own themed circular chip with a left-chevron
