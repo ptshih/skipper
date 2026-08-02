@@ -42,12 +42,10 @@ export interface ThemeColors {
   glow: string // campfire-amber halo (NOW card, dusk CTA, car token)
   shadowCast: string // neutral ambient cast shadow (daylight elevation)
   scrim: string // dim behind sheets / gates
-  // map overlays — a DISTRICT's hull (somewhere you are INSIDE, not a place you pass).
-  // FILL/SHAPE only: there is deliberately no "text on areaFill" role. Teal, not pine and not
-  // amber — pine is already the story-dot color (a district wash in pine would read as the same
-  // object class), and the screen's ONE amber is spent on the rider's puck (DESIGN §8).
-  areaFill: string // translucent district wash, drawn UNDER the story dots
-  areaStroke: string // opaque district edge — the wash alone has no readable boundary at night
+  // ⚠ `areaFill`/`areaStroke` lived here until the 1.1 sweep. They coloured a DISTRICT's convex hull
+  // on the map — the AREA trigger, deleted end-to-end in 1.1 (the mode was answering "a roamer can
+  // arrive from any direction", which a drive never can). The `<Polygon>` that consumed them went with
+  // roam; the roles outlived it by three steps. Nothing renders a hull, so nothing needs a hull colour.
 }
 
 export interface Theme {
@@ -96,8 +94,6 @@ export const lightTheme: Theme = {
     scrim: 'rgba(42,32,20,0.42)',
     // lakeTeal at low alpha — the day basemap is bright paper, so the wash needs less to read
     // than it does at dusk (the same asymmetry `glow` carries at 0.30 light / 0.42 dark).
-    areaFill: 'rgba(44,110,126,0.14)',
-    areaStroke: palette.lakeTeal,
   },
 }
 
@@ -130,8 +126,6 @@ export const darkTheme: Theme = {
     shadowCast: 'rgba(0,0,0,0.5)',
     scrim: 'rgba(0,0,0,0.55)',
     // lakeTealNight, lifted — over the deep-pine night basemap a 0.14 wash disappears entirely.
-    areaFill: 'rgba(95,167,184,0.24)',
-    areaStroke: palette.lakeTealNight,
   },
 }
 

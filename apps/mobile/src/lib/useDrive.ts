@@ -314,7 +314,7 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
           stops: narrationClips.map((c) => ({
             seq: c.seq,
             name: cleanPlaceName(c.name ?? ''), // display-only: drops Wikipedia's ", California" suffix
-            stopType: c.form, // the clip's form (story|scenic|break|wave) — the view-model treatment axis
+            stopType: c.form, // the clip's form (story|scenic|break) — the view-model treatment axis
             lat: c.lat,
             lng: c.lng,
             triggerRadiusM: c.triggerRadiusM ?? 120,

@@ -105,15 +105,12 @@ light↔dark swap for free. **The contrast footguns are designed out:**
 | `glow`          | amber 30% α     | amber 42% α     | campfire halo (boxShadow) — NOW card, CTA, token |
 | `shadowCast`    | ink 20% α       | black 50% α     | neutral daylight cast shadow                     |
 | `scrim`         | ink 42% α       | black 55% α     | behind sheets / gates                            |
-| `areaFill`      | teal 14% α      | teal 24% α      | district hull wash on the map (FILL only)        |
-| `areaStroke`    | `#2C6E7E` teal  | `#5FA7B8` teal  | district hull edge — the wash has no boundary    |
 
-**On `areaFill`/`areaStroke`** — a DISTRICT is somewhere you are *inside* (downtown Reno), so the map
-draws its convex hull rather than a dot. Teal is deliberate and the choice is constrained on both
-sides: pine (`trackActive`) is already the story-dot colour, so a pine wash would read as the same
-object class, and the screen's one amber (§8) is spent on the rider's puck. The two roles are
-FILL/SHAPE only — there is no "text on `areaFill`". The alphas are asymmetric for the same reason
-`glow`'s are: 14% reads over bright paper and vanishes over the deep-pine night basemap.
+**On the map's district wash** — `areaFill`/`areaStroke` were cut in the 1.1 sweep along with
+the AREA trigger they coloured. Nothing draws a district hull any more. Recorded because the reasoning
+is worth keeping if one ever returns: teal was deliberate and constrained on both sides — pine is the
+story-dot colour, so a pine wash reads as the same object class, and the screen's one amber is spent on
+the rider's puck (§8).
 
 ## 5. Type (`fonts` + `typeScale`)
 

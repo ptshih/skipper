@@ -718,16 +718,12 @@ export const drives = pgTable(
   (t) => [index('drives_user_idx').on(t.userId), index('drives_route_sig_idx').on(t.routeSig)],
 )
 
-// Shared route-sig DEMAND counter — instrumentation ONLY in v2 (the cache-warming / authored-tour
-// graduation job that CONSUMES it is deferred behind a real route-concentration histogram). One row
-// per normalized route signature.
-export const driveDemand = pgTable('drive_demand', {
-  routeSig: text('route_sig').primaryKey(),
-  hits: integer('hits').notNull().default(0),
-  distinctUsers: integer('distinct_users').notNull().default(0),
-  lastHitAt: timestamp('last_hit_at', { withTimezone: true }).defaultNow().notNull(),
-  warmedAt: timestamp('warmed_at', { withTimezone: true }),
-})
+// ⚠ `drive_demand` lived here until the 1.1 sweep (D25). It counted hits per normalized route
+// signature for a cache-warming / authored-tour graduation job that is deferred behind a real
+// route-concentration histogram — i.e. it was written on every create and read by nothing. PostHog is
+// the demand instrument now. ⚠ THE TABLE IS STILL IN THE DATABASE: removing the declaration is what
+// makes the next `db:generate`/`db:push` drop it, and that DDL is a deliberate act against the one
+// shared Neon host, not a side effect of this commit.
 
 /* -------------------------------------------------------------------------- */
 /*  credit_entries — the user-owned credit LEDGER (append-only; balance = SUM).  */

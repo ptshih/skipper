@@ -20,7 +20,7 @@ export const narrationForm = z.enum(['story', 'scenic', 'break', 'wave', 'bside'
  * ⚠ Despite living here, this is NOT a wire shape and nothing ever parses it (verified 2026-07-30:
  * the Zod value has zero importers; only the inferred TYPE is imported, by exactly three studio files
  * — `pipeline/narrate.ts`, `pipeline/lint.ts`, `eval/grounding.ts`). The DTO for a played clip is
- * `driveClipForm` (four values — it carries `wave`), and the player's icon/treatment switch is its own
+ * `driveClipForm` (the played wire forms), and the player's icon/treatment switch is its own
  * plain-string map in `apps/mobile/src/ui/stops.ts` that does not import this. Reach for
  * `driveClipForm` if you want a stop's wire form. Studio-only today, so `@skipper/studio` is arguably
  * where it belongs — left here because moving it buys less than the churn costs.
@@ -28,10 +28,17 @@ export const narrationForm = z.enum(['story', 'scenic', 'break', 'wave', 'bside'
 export const stopType = z.enum(['story', 'scenic', 'break'])
 export type StopType = z.infer<typeof stopType>
 
-/** The WIRE form of one clip in a DRIVE manifest — the played narration forms (story/scenic/break/
- *  wave). The player's icon/treatment switch. (V2: the placeless intro/outro framing was deleted with
- *  the `asides` concept; see docs/decisions/geometry-first-regions.md. It returns in v3 with guided tours.) */
-export const driveClipForm = z.enum(['story', 'scenic', 'break', 'wave'])
+/** The WIRE form of one clip in a DRIVE manifest — the player's icon/treatment switch. (V2: the
+ *  placeless intro/outro framing was deleted with the `asides` concept; see
+ *  docs/decisions/geometry-first-regions.md. It returns in v3 with guided tours.)
+ *
+ *  ⚠ `wave` came off this list in the 1.1 sweep. It was a FREE-ROAM passing call-out and roam was
+ *  removed entirely in 1.1, so no drive can contain one — the live corpus is 458 rows, every one of
+ *  them `story`. It stays in `narrationForm` above, which is paired byte-for-byte with the pg
+ *  `narration_form` enum by `bun run lint:enums`: narrowing THAT forces a destructive migration in the
+ *  same commit, which is a separate act from taking a value off the wire. Do not "finish the job" here
+ *  without doing that one deliberately. */
+export const driveClipForm = z.enum(['story', 'scenic', 'break'])
 export type DriveClipForm = z.infer<typeof driveClipForm>
 
 /**
@@ -90,18 +97,10 @@ export const jobKind = z.enum([
 ])
 export type JobKind = z.infer<typeof jobKind>
 
-/**
- * DEFERRED axis (no variant matrix in v1). Not a stored tour column — kept only as the
- * studio pipeline's internal pacing key (config PACING). When the duration=skip-stops feature
- * lands it becomes a player-side trim, never separate tours.
- */
-export const durationBucket = z.enum(['short', 'standard', 'long'])
-
-/**
- * DEFERRED axis (no variant matrix in v1). When interests land they are a stop FILTER
- * (stop tags), never separate tours. Kept for forward use; not a stored tour column.
- */
-export const interest = z.enum(['history', 'nature', 'geology', 'culture', 'food', 'quirky'])
+// ⚠ `durationBucket` and `interest` lived here until the 1.1 sweep, both labelled "kept for forward
+// use". Neither was ever imported by anything, and both survived two product pivots untouched — which
+// is the proof they were sediment rather than vocabulary. Deleted rather than re-justified: git is the
+// archive, and six strings cost nothing to retype the day interests-as-a-filter is actually built.
 
 /**
  * Access level (DERIVED per request, not a column):

@@ -1,15 +1,15 @@
 # Ops-scripts SOP
 
 **Status:** ✅ **ADOPTED 2026-06-10.** Enforced by reuse via `packages/studio/src/pipeline/ops.ts`;
-reference implementation = `sweep-orphans.ts`; `resynth-narration.ts` (1:1 narration resynth) and
-`rename-roam-prefix.ts` conform to the contract (preview by default, act only on `--apply`). This is
-the contract for the studio pipeline's one-off operational CLIs.
+reference implementation = `sweep-orphans.ts`; `resynth-narration.ts` (1:1 narration resynth) conforms
+to the contract (preview by default, act only on `--apply`). This is the contract for the studio
+pipeline's one-off operational CLIs.
 
 ## What this covers
 
 The studio pipeline's **one-off ops CLIs** — `packages/studio/src/*.ts` you run by hand via
-`dotenvx … bun …` to fix or maintain live data (`sweep-orphans`, `resynth-narration`,
-`rename-roam-prefix`, backfills). NOT the generation pipeline itself, and not app/API code.
+`dotenvx … bun …` to fix or maintain live data (`sweep-orphans`, `resynth-narration`, backfills).
+NOT the generation pipeline itself, and not app/API code.
 
 These touch live, irreversible things — the DB, R2 bytes, and metered TTS/LLM spend (a live regen
 burns GCP credits). So they share one safety contract.
@@ -145,7 +145,6 @@ was measured on. Before building on one, check that yours is the same population
 | --- | --- | --- | --- |
 | `sweep-orphans.ts` | DELETES BYTES | dry-run | ✅ (reference) |
 | `resynth-narration.ts` | SPENDS $ + MUTATES DB | dry-run | ✅ |
-| `rename-roam-prefix.ts` | MUTATES DB + DELETES BYTES | dry-run | ✅ |
 | `snap-speakable-anchors.ts` | MUTATES DB (no spend — OSM) | dry-run | ✅ |
 | `prune-corpus.ts` | MUTATES DB; `--delete` DELETES ROWS + cascades | dry-run | ✅ (`--restore`; `--delete` needs `--apply`) |
 | `classify-treatments.ts` | SPENDS $ (~$0.8/region) + MUTATES DB | ⚠ preview SPENDS | ⚠ see above — only the WRITE is gated |

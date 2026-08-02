@@ -8,8 +8,6 @@ import { describe, expect, it } from 'bun:test'
 import { getTableConfig, type PgTable } from 'drizzle-orm/pg-core'
 import {
   creditEntries,
-  detours,
-  driveDemand,
   drives,
   narrations,
   places,
@@ -158,7 +156,7 @@ describe('credit_entries — the money / double-charge invariants', () => {
   })
 })
 
-describe('places / detours — break-anchor structural invariants', () => {
+describe('places — curated break/endpoint anchor structural invariants', () => {
   it('a place dedupes by a UNIQUE place_id, with place_id/name/lat/lng NOT NULL', () => {
     expect(uniqueIndexNames(places)).toContain('places_place_id_uq')
     for (const col of ['place_id', 'name', 'lat', 'lng']) {
@@ -179,25 +177,15 @@ describe('places / detours — break-anchor structural invariants', () => {
   it('the endpoint picker has a partial bbox index (places_endpoint_idx) for GET /drives/anchors', () => {
     expect(indexNames(places)).toContain('places_endpoint_idx')
   })
-  it('a detour is 1:1 with its place (UNIQUE place_id) and cascade-deletes with it', () => {
-    expect(uniqueIndexNames(detours)).toContain('detours_place_uq')
-    expect(fkOnDelete(detours, 'place_id')).toBe('cascade')
-    // place_id FKs the internal UUID PK (places.id), NOT the Google text key (places.place_id) —
-    // the name collision makes a wrong re-point plausible; pin the target.
-    expect(fkTargetColumns(detours, 'place_id')).toEqual(['id'])
-  })
-  it('a detour always carries audio (audio_url + audio_duration_ms NOT NULL — a silent break never rides)', () => {
-    expect(columnByDbName(detours, 'audio_url').notNull).toBe(true)
-    expect(columnByDbName(detours, 'audio_duration_ms').notNull).toBe(true)
-  })
-  it('a detour carries NO facts_hash — a break bakes no fact text, so it is never fact-stale', () => {
-    expect(() => columnByDbName(detours, 'facts_hash')).toThrow()
-  })
+  // ⚠ Three `detours` structural assertions lived here until the 1.1 sweep (D27). The table has ZERO
+  // WRITERS — break audio is stubbed and nothing generates it — so they pinned the shape of something
+  // that has never held a row, and would have had to be rewritten by whoever finally builds it. The
+  // TABLE stays until an explicit drop call; only the tests that pretended it was live are gone.
 })
 
 describe('geometry-first regions — region is a BBOX, never a stored FK', () => {
   it('no coordinate-bearing table carries a region_id column (membership = point-in-bbox, derived)', () => {
-    for (const t of [pois, drives, driveDemand]) {
+    for (const t of [pois, drives]) {
       expect(columnNames(t)).not.toContain('region_id')
     }
   })

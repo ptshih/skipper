@@ -24,7 +24,7 @@
 import { Hono, type Context } from 'hono'
 import { and, asc, between, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
-import { creditEntries, drives, driveDemand, narrations, places, pois, selectionSubject } from '@skipper/db/schema'
+import { creditEntries, drives, narrations, places, pois, selectionSubject } from '@skipper/db/schema'
 import type { DriveSelection, DriveSelectionItem, Polyline, RouteProvenance } from '@skipper/db/schema'
 import { polylineBbox } from './drive-geometry'
 import { materializeRoute, type Waypoint } from '@skipper/routing'
@@ -79,16 +79,22 @@ const SUPPORT_EMAIL = process.env.EMAIL_REPLY_TO ?? 'hello@skipper.fm'
 
 /* --------------------------------- helpers -------------------------------- */
 
-/** A clip's wire form. Roam narrations are story|scenic|break|wave; `bside` never reaches a drive,
- *  but coerce it to `story` so the manifest always validates against the driveClipForm enum. */
+/** A clip's wire form. `narrations.form` is the wider storage enum; this narrows it to what a DRIVE
+ *  can actually play, coercing anything else to `story` so a manifest always validates.
+ *
+ *  ⚠ `wave` came off `driveClipForm` in the 1.1 sweep and therefore off this switch. It was a
+ *  free-roam passing call-out and roam is gone, so no drive can contain one — and the live corpus is
+ *  458 rows, every one of them `story`. It still exists in the STORAGE enum (`narrationForm`, paired
+ *  byte-for-byte with the pg type by `lint:enums`), so a stray row coerces to `story` here rather than
+ *  failing to validate. That is the INV-7 direction: a form this build cannot render must degrade to
+ *  something playable, never silently produce a clip the player has no treatment for. */
 function toClipForm(form: string): DriveClipForm {
   switch (form) {
     case 'scenic':
     case 'break':
-    case 'wave':
       return form
     default:
-      return 'story' // story + the (never-expected) bside
+      return 'story' // story, plus the never-expected wave/bside
   }
 }
 
@@ -822,20 +828,10 @@ driveRoutes.post('/', requireAccount, createDriveLimiter, async (c) => {
     { label: 'drive.insert' },
   )
 
-  // Demand instrumentation (route-concentration signal; the cache-warming job that consumes it is
-  // deferred). distinctUsers is a rough lower bound — exact per-user dedup isn't worth a join here.
-  // FIRE-AND-FORGET + intentionally NOT withRetry-wrapped: the `hits + 1` upsert is the one
-  // non-idempotent write on this path, so a commit-then-lost-response retry would double-count; and as
-  // deferred instrumentation it must never add a DB round-trip (or retry backoff) to the rider's create
-  // latency. Best-effort — a failure is logged and swallowed.
-  void db
-    .insert(driveDemand)
-    .values({ routeSig, hits: 1, distinctUsers: 1, lastHitAt: new Date() })
-    .onConflictDoUpdate({
-      target: driveDemand.routeSig,
-      set: { hits: sql`${driveDemand.hits} + 1`, lastHitAt: new Date() },
-    })
-    .catch((e) => console.error('[api] drive demand bump failed (non-fatal)', e))
+  // ⚠ `drive_demand` was bumped here until the 1.1 sweep (D25). It was instrumentation for a
+  // cache-warming / authored-tour graduation job that never shipped and is deferred behind a real
+  // route-concentration histogram — so it was a non-idempotent write on the credit-spending path,
+  // paying a DB round-trip on every create, feeding nothing. PostHog is the demand instrument now.
 
   const manifest: DriveManifest = {
     driveId: id,

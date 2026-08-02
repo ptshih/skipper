@@ -19,8 +19,6 @@
 
 import { buildGroundingWell } from './grounding'
 import type { GroundingInput } from './grounding'
-import type { TtsInput } from './tts'
-import type { LintInput } from '../pipeline/lint'
 
 export interface GroundingCase {
   id: string
@@ -28,21 +26,6 @@ export interface GroundingCase {
   input: GroundingInput
   /** Expected verdict: overall pass, + lowercase substrings each expected ungrounded claim should contain. */
   expect: { pass: boolean; ungrounded: string[] }
-  why: string
-}
-export interface TtsCase {
-  id: string
-  dimension: 'tts'
-  input: TtsInput
-  expect: { pass: boolean }
-  why: string
-}
-export interface DiversityCase {
-  id: string
-  dimension: 'diversity'
-  /** Diversity is CROSS-stop, so a case is a set of scripts. */
-  inputs: LintInput[]
-  expect: { failingSeqs: number[] }
   why: string
 }
 const LT = { region: 'Lake Tahoe', corridor: 'Emerald Bay Run' }
@@ -350,39 +333,8 @@ export const GROUNDING_CASES: GroundingCase[] = [
   },
 ]
 
-export const TTS_CASES: TtsCase[] = [
-  {
-    id: 'tts-clean',
-    dimension: 'tts',
-    input: { seq: 0, script: 'Coming up on the right — a beaut of a cove. Do not blink... you will miss it.' },
-    expect: { pass: true },
-    why: 'em-dashes, ellipses, apostrophes are normal spoken prose — must not flag.',
-  },
-  { id: 'tts-markdown-bold', dimension: 'tts', input: { seq: 1, script: 'Pull over at **Camp Richardson** for a bite.' }, expect: { pass: false }, why: 'markdown emphasis would be read aloud as garbage.' },
-  { id: 'tts-emoji', dimension: 'tts', input: { seq: 2, script: 'What a view 😍 folks.' }, expect: { pass: false }, why: 'emoji render as tofu and TTS chokes.' },
-  { id: 'tts-url', dimension: 'tts', input: { seq: 3, script: 'More at https://tahoe.example later.' }, expect: { pass: false }, why: 'a URL spoken aloud is nonsense.' },
-  { id: 'tts-year-ok', dimension: 'tts', input: { seq: 4, script: 'Back in 1960, the games came to the valley.' }, expect: { pass: true }, why: 'a bare year reads fine — digits are intentionally NOT gated.' },
-]
-
-export const DIVERSITY_CASES: DiversityCase[] = [
-  {
-    id: 'diversity-clean',
-    dimension: 'diversity',
-    inputs: [
-      { seq: 0, stopType: 'story', script: 'A quiet cove opens up on the left, the water gone glassy and still.' },
-      { seq: 1, stopType: 'scenic', script: 'Pines crowd the shoulder here; the light comes down green and easy.' },
-    ],
-    expect: { failingSeqs: [] },
-    why: 'two varied, clean stops — no cross-stop sameness to flag.',
-  },
-  {
-    id: 'diversity-banned-windup',
-    dimension: 'diversity',
-    inputs: [
-      { seq: 0, stopType: 'story', script: 'The lake sits flat and bright this morning, smooth off to the right.' },
-      { seq: 1, stopType: 'story', script: "Well, here's the thing about this old town, folks." },
-    ],
-    expect: { failingSeqs: [1] },
-    why: 'locks the banned "here\'s the …" reveal wind-up the persona prompt forbids.',
-  },
-]
+// ⚠ `TTS_CASES` and `DIVERSITY_CASES` lived here until the 1.1 sweep (D26). They were dropped from the
+// runner in 5ca12d3 and kept "as labeled fixtures" — but nothing imported them after that, so they
+// were two hand-maintained case tables that could never fail and never ran. The GATE they belonged to
+// is very much alive (`generate-narrations` is fail-closed on the eval panel); these were the part of
+// it that had already been disconnected. Git is the archive if the runner ever wants them back.
