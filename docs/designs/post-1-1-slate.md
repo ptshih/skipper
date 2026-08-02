@@ -131,8 +131,11 @@ the file, `dataSource`/`sourcesResponse`, `getSources()`, and the `useEffect`; r
 `FALLBACK_DATA_SOURCES` to the truth.
 `effort S · downside: a fifth fact source then needs an app release to credit — per-clip attribution is unaffected`
 
-**3.3 — `durationBucket` and `interest` in `packages/shared/src/enums.ts`.** Zero importers repo-wide
-(the `judge-voice.ts:42` hit is an unrelated local `string` field). Both are documented as "kept for
+**3.3 — `durationBucket` and `interest` in `packages/shared/src/enums.ts`. ✅ DONE** — both deleted in
+the 1.1 sweep; `enums.ts` carries the tombstone comment recording why. (The `judge-voice.ts:42` hit
+cited below is also gone: that local interface was deleted when the CLI was repointed at the live
+corpus on 2026-08-02. Nothing to do here; kept so the reasoning isn't re-derived.) Zero importers repo-wide
+(the `judge-voice.ts:42` hit was an unrelated local `string` field). Both were documented as "kept for
 forward use" and have survived two pivots untouched, which is the proof they are sediment, not
 vocabulary. ⚠ **Correction to an earlier pass that claimed three:** `stopType` is **not** dead — its
 inferred type is used across studio. Leave it.

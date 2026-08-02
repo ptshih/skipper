@@ -58,8 +58,9 @@ apply and get the founder go for either.
 preview is genuinely free" — which was false for the whole life of the fused generator, in the one
 document an operator reads to find out what a no-flag run costs.
 
-**`judge-voice` is a third shape and not a preview at all:** it has no `--apply` because running it IS
-the request (one Opus charm-judge call per stop). It touches no live data, R2 or corpus.
+(`judge-voice` used to be a third shape — no `--apply` at all, because running it WAS the request. It
+stopped being one on 2026-08-02: repointed at the live corpus, its by-ear worksheet costs nothing to
+produce, so the free half is now the default and only the writing judge is gated. It conforms.)
 
 Every other CLI's preview is genuinely free — verified against the table below, not assumed.
 
@@ -183,7 +184,7 @@ are the ops CLIs" rather than "these are the ones anyone checked" — and the un
 | `audit-loudness.ts` | READ-ONLY (ffmpeg probe) | n/a | ✅ |
 | `audit-speakable.ts` | READ-ONLY | n/a | ✅ |
 | `test-mastering-chain.ts` | READ-ONLY (local ffmpeg, synthetic input) | n/a | ✅ |
-| `judge-voice.ts` | SPENDS $ (charm judge) | ⚠ NO GATE — running it IS the request | ⚠ analysis-only; touches no DB/R2/corpus |
+| `judge-voice.ts` | SPENDS $ (charm judge) on `--apply` | dry-run (free by-ear worksheet + estimate) | ✅ — writes only a local markdown file |
 
 **Numeric flags fail CLOSED.** `--max-cost`, `--limit`, `--radius` and friends go through
 `numericFlag`/`maxCostFlag` (`pipeline/ops.ts`): ABSENT means the documented default, but

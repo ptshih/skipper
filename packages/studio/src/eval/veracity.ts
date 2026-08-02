@@ -22,6 +22,7 @@
 // unit-tested with a deterministic fake and zero API spend (test/eval-veracity.test.ts).
 
 import Anthropic from '@anthropic-ai/sdk'
+import { recordModelUsage } from '@skipper/shared'
 import { getAnthropic, JUDGMENT_MODEL } from '../models'
 import type { StopEval } from './types'
 
@@ -171,6 +172,12 @@ export const anthropicChecker: VeracityChecker = async (input) => {
       tools: [WEB_SEARCH_TOOL, REPORT_TOOL] as Anthropic.Messages.ToolUnion[],
       messages,
     })
+    // ⚠ Per TURN, not per stop: this is a loop and EVERY iteration is billed, so recording only the
+    // final one would under-count a multi-search check by however many turns it took. Recorded before
+    // any of the throws below for the same reason charm.ts does — the tokens are spent either way.
+    // (The server-side web_search fee is billed separately by the API and is not in `usage`; the
+    // per-clip estimate in audit-corpus is still the only view of that half.)
+    recordModelUsage(VERACITY_MODEL, response.usage)
     const report = response.content.find(
       (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use' && b.name === 'report',
     )

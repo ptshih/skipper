@@ -11,6 +11,7 @@
 // --charm to keep the default audit cheap (grounding Opus + free deterministic dims).
 
 import Anthropic from '@anthropic-ai/sdk'
+import { recordModelUsage } from '@skipper/shared'
 import { getAnthropic, JUDGMENT_MODEL } from '../models'
 import type { StopEval } from './types'
 
@@ -101,6 +102,12 @@ export async function judgeCharm(stops: CharmStop[]): Promise<CharmVerdict> {
     tool_choice: { type: 'tool', name: 'report' },
     messages: [{ role: 'user', content: `Every narrated stop on the tour, in order:\n\n${userMessage}` }],
   })
+  // ⚠ RECORD BEFORE the parse can throw: the tokens are billed the moment the call returns, and a
+  // malformed report must not also lose the charge. This call went unrecorded until 2026-08-02, so
+  // `llmSpentUsd()` — which the CLIs print as "LLM spend this run" and `finishJob` writes to
+  // `studio_jobs.cost_usd` — read $0.00 for the charm judge's share. A judge that bills invisibly is
+  // the one thing a spend tally must not permit.
+  recordModelUsage(JUDGMENT_MODEL, response.usage)
   const call = response.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
   if (!call) throw new Error('Charm judge returned no structured report.')
   return call.input as CharmVerdict
