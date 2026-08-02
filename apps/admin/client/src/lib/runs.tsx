@@ -28,13 +28,15 @@ export const KIND_META: Record<string, { label: string; icon: ElementType }> = {
   offline_audit:   { label: 'Re-score corpus',   icon: Activity },
 }
 
-// A run targeting no region (whole-corpus) leaves its slug NULL → "All". Legacy sentinels map to a
-// friendly label rather than a raw slug.
+// A run targeting no region (whole-corpus) leaves its slug NULL → "All". Lock labels that aren't
+// region slugs map to a friendly label rather than a raw slug.
+//
+// ⚠ A fourth entry, `'roam-corpus': 'All'`, lived here until the 1.1 sweep. It translated a sentinel
+// no code has emitted since 2026-07 — roam itself is gone (1.1 D1) — into the same word a NULL target
+// already renders, so it could only ever fire on a pre-2026-07 row, where "All" was a lie anyway (that
+// run targeted the roam corpus, not everything). Such a row now shows its raw slug, which is honest.
+// Only add a key here for a lock label jobs.ts ACTUALLY writes today.
 export const TARGET_SENTINELS: Record<string, string> = {
-  // ⚠ HISTORICAL ONLY — jobs.ts no longer emits this sentinel (a whole-corpus run leaves the target
-  // NULL). It stays so pre-2026-07 rows still render a label instead of a raw slug; roam itself is
-  // gone (1.1 D1). Do not add new sentinels here.
-  'roam-corpus': 'All',
   'region-corpus': 'whole corpus',
   narration: 'all clips',
 }

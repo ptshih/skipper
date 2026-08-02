@@ -193,8 +193,8 @@ let client: Anthropic | null = null
 
 /**
  * ⚠ NEVER CONSTRUCT AT MODULE SCOPE. Two reasons, and the second is the real one:
- *  - `apps/api` must keep booting env-free. `GET /health`, `/sources` and `/version` have no business
- *    needing an Anthropic key, and auth.ts is already the one hard throw-at-load this app tolerates.
+ *  - `apps/api` must keep booting env-free. `GET /health` and `/version` have no business needing an
+ *    Anthropic key, and auth.ts is already the one hard throw-at-load this app tolerates.
  *  - `new Anthropic()` with no key does not throw — it kicks off a credential-chain resolution that
  *    reads `~/.config/anthropic/`. At module scope that is a filesystem probe on import, and the first
  *    rider request fails with the SDK's generic "could not resolve authentication method" instead of

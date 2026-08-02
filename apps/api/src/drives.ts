@@ -330,9 +330,9 @@ interface NarrationRow {
    *  drive's selection is frozen at create, and a wide group frozen as a mis-placed point is permanent
    *  for that rider. ⚠ Dropping it at the mapper below silently re-admits the group as a capped 600 m
    *  point — which is exactly what this code path did until 2026-07-30.
-   *  ⚠ Keyed on the GEOMETRY, never on the presence of a served hull: the hull is one answer to this
-   *  condition and is going away with roam, and a refusal that keys on an answer flips to an admission
-   *  the moment that answer is deleted. */
+   *  ⚠ Keyed on the GEOMETRY, never on the presence of a served hull: the hull was one answer to this
+   *  condition and it WENT with roam (see the `area` tombstone in ./clusters), and a refusal that keys
+   *  on an answer flips to an admission the moment that answer is deleted. */
   tooWideForPoint?: boolean
 }
 

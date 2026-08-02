@@ -133,7 +133,7 @@ async function tellableMembersByCluster(clusterIds: string[]): Promise<Map<strin
  * Unlike the poi paths there is no SQL bbox prefilter: `poi_clusters` stores no coordinates, so the
  * position only exists once the members are loaded. That is fine at this scale — the whole grouped
  * corpus is a few hundred rows and only a few dozen carry a telling — and the caller trims by
- * distance afterwards, exactly as `/roam` already trims the bbox's corners.
+ * distance afterwards, the same way the poi paths trim the bbox's corners.
  *
  * A cluster whose members have all become un-tellable (excluded, un-enriched) yields NO position and
  * is DROPPED. That is the correct failure: the clip names places that are no longer in the corpus, so

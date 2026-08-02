@@ -5,7 +5,7 @@
 // observed 2026-06-10); the API is even MORE cold-start-prone (it idles between rare anonymous
 // visitors, so every funnel visitor is a cold start), but its reads were bare `db.select`.
 //
-// A read can NOT fail open — empty rows would silently 404 a real tour / blank the catalog — so
+// A read can NOT fail open — empty rows would silently 404 a real drive / blank the region list — so
 // `withRetry` retries a transient throw then RE-THROWS: after a bounded effort, a 500 is the
 // honest answer. (Contrast ./session `resolveSessionSafely`, which shares this loop but fails
 // OPEN to null — the secure direction for AUTH, where a missing session legitimately = anonymous.)

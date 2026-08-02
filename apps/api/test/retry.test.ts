@@ -53,10 +53,10 @@ describe('withRetry (retry-then-rethrow for API reads)', () => {
         async () => {
           throw new Error('x')
         },
-        { attempts: 3, baseMs: 0, label: 'tours.list' },
+        { attempts: 3, baseMs: 0, label: 'drive.list' },
       ).catch(() => {})
       expect(warnings.length).toBe(2)
-      expect(warnings[0]).toContain('tours.list')
+      expect(warnings[0]).toContain('drive.list')
 
       // Unlabeled → silent (session resolution stays quiet, as it was before sharing this loop).
       warnings.length = 0

@@ -2,9 +2,9 @@
 //
 // Access: anonymous (no/guest session) -> free (a signed-in account). There is no paid tier —
 // premium is bought as CREDITS, not a plan (docs/decisions/cut-tiers.md).
-// Roam is open/anonymous; drives are user-owned. Auth layers around both. Email/password is
-// enabled now; Google/Apple are registered only when their creds are present
-// (placeholders otherwise) so the server boots without them. The anonymous plugin
+// The front door (plan / propose / sample) is open/anonymous; drives are user-owned. Auth layers
+// around both. Email/password is enabled now; Google/Apple are registered only when their creds
+// are present (placeholders otherwise) so the server boots without them. The anonymous plugin
 // gives guests a session that links to a real account on sign-up.
 //
 // Secret comes from env (BETTER_AUTH_SECRET); the base URL is derived per-request from the
@@ -331,8 +331,9 @@ function createAuth() {
       expo(),
       anonymous({
         onLinkAccount: async () => {
-          // Nothing to migrate on sign-up: roam state is anonymous and drives are created
-          // (and owned) only by a signed-in account — there is no anonymous per-user state to move.
+          // Nothing to migrate on sign-up: the anonymous surfaces (plan / propose / sample) keep no
+          // per-user server state, and drives are created (and owned) only by a signed-in account —
+          // so there is no anonymous per-user state to move.
         },
       }),
       // Admin roles. Adds user.role (plugin sets 'user' on signup; server-set input:false) + ban/impersonate columns
