@@ -1,8 +1,11 @@
 # Corpus enrichment (the `enrich` step)
 
 **Status:** ✅ **BUILT + RUN** (code shipped 2026-06-15; a paid `enrich --apply` has since been RUN
-across all story-eligible POIs — **315 welled as of 2026-06-16** — so roam now grounds on real
+across all story-eligible POIs — **315 welled as of 2026-06-16** — so the corpus grounds on real
 wells, not the extract head. The founder ear-test (§11 of the spec) remains the acceptance gate.)
+⚠ **Amended 2026-08-02 (1.1):** roam is removed, so read every "tours AND roam" / "skips it (roam)"
+below as the **drive** path alone. The rule this record exists for is untouched and still enforced:
+a STORY telling REQUIRES a fact sheet, and an un-enriched POI is downgraded to scenic.
 **Tour integration below is DEFERRED, NOT current behavior** (the `generate-tour.ts` + tours/segments/
 tracks/tour_frames tables were dropped in migration 0009 with the V1→V2 roam-first collapse; hand-authored
 tours are DEFERRED — see CLAUDE.md and `packages/db/src/schema.ts` for current truth). The

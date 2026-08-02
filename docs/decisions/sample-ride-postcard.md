@@ -1,12 +1,22 @@
 # The sample "postcard" — a curated taste for everyone outside Tahoe
 
-> **Status:** DECIDED + BUILT 2026-07-16. The corpus is Lake Tahoe only, so a first-timer (or an Apple
-> reviewer in Cupertino) who taps the primary "Ride Along" CTA gets 0 pins and a terminal
-> "I don't know these roads yet" dead-end. This adds a **`/sample` postcard**: ONE curated, iconic clip
-> (`SAMPLE_NARRATION_QID`, default Emerald Bay State Park `Q1335376`) that autoplays instantly,
-> account-free and permission-free, then offers "Ride along for real". Reached from three entry points;
-> served by a new anonymous `GET /roam/sample`. Verified E2E against the live corpus (Emerald Bay, 64s,
-> CC BY-SA, presigned audio serves 206) and the soft-404 + rate-limit paths.
+> **Status:** DECIDED + BUILT 2026-07-16; **the postcard SURVIVES 1.1, its PLUMBING moved
+> (2026-08-02).** The decision is unchanged and load-bearing: the corpus is Lake Tahoe only, so a
+> first-timer — or an Apple reviewer in Cupertino — needs one curated, iconic clip
+> (`SAMPLE_NARRATION_QID`, default Emerald Bay State Park `Q1335376`) that autoplays, account-free and
+> permission-free. Verified E2E against the live corpus (Emerald Bay, 64s, CC BY-SA, presigned audio
+> serves 206) and the soft-404 + rate-limit paths.
+>
+> **What 1.1 changed, and what a runbook must not keep repeating:**
+> - The route is **`GET /sample`**, not `GET /roam/sample`. The old path 404s. ⚠ Anything still
+>   probing it — a checklist, a reviewer note — reads a removed route as a broken sample.
+> - The dead-end it rescues is no longer "taps Ride Along, gets 0 pins": roam is gone, and there are
+>   no pins. It is now the taste for a rider whose *conversation* can't reach a covered road.
+> - **Two** entry points, not three — the planner screen's ghost link (`app/index.tsx`) and the
+>   player's no-coverage path (`app/drives/[id]/play.tsx`). The `?from=roam` return hop is gone.
+> - The forward CTA is **"Plan a drive"**, not "Ride along for real".
+>
+> Everything below is the original reasoning, which still holds; only the names above moved.
 
 ## Why a curated single clip, not the sim drive
 

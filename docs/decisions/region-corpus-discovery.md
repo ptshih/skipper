@@ -9,6 +9,11 @@ truth: the schema (`packages/db/src/schema.ts`) and `docs/decisions/tour-data-mo
 (itself now "ENTITY MODEL SUPERSEDED by V2"). The history below is preserved as written; present-tense
 tour claims are corrected inline.
 
+⚠ **Amended 2026-08-02 (1.1):** the SWEEP is still live and still the point of this record, but its
+OTHER consumer is gone too — roam was removed. Read "Generate roam" (§2b) and "the first-day artifacts
+are Roam + user-owned Drives" as **the user-owned DRIVE, alone**. The corpus is unchanged: one shared
+`pois` substrate, one telling per subject, assembled per drive.
+
 **Note (2026-06-19):** two discovery-mechanic details below are now superseded by later records —
 (a) `pois` dedups on the **Wikidata QID** (`pois_qid_uq`), not `(source, source_id)` (now a secondary
 guard); the corpus is a Wikidata spine (`docs/decisions/geometry-first-regions.md`, schema). (b) The

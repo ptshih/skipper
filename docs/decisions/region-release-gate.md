@@ -10,6 +10,15 @@
 > `narrations.released_at`, `user.role`) + the backfill, the roam/drive read filters + the `isAdmin`
 > plumbing, and the admin Release actions (region + per-clip) are all in. Build refinement vs. the
 > original design: the drive read filter is applied at BUILD time only — see Read-path changes.
+>
+> ⚠ **Amended 2026-08-02 (1.1):** the GATE is unchanged and still doctrine — but the list of paths it
+> guards shrank. Roam is removed, so **`GET /roam` no longer exists**; wherever the body enumerates
+> "the roam/drive read filters" or `apps/api/src/index.ts` roam, read it as the DRIVE build path
+> (`loadCorpusForRoute`) plus `GET /sample`. The anonymous preview clip 1.1 added comes off that same
+> release-filtered build path, which is exactly why it can be served to a stranger. ⚠ Unchanged and
+> easy to get wrong: `loadCorpusBySubjectIds` / `corpusForSelection` still apply NO release filter by
+> design — they resolve a FROZEN selection a rider already paid for, and are safe only while every
+> caller stays owner-scoped behind `requireAccount`.
 
 ## The problem
 

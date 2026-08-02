@@ -24,8 +24,8 @@ import {
 
 // /sample — the "postcard": ONE curated Tahoe clip a stranger ANYWHERE can hear, permission-free and
 // account-free. It exists because the corpus is Tahoe-only, so a first-timer (or an Apple reviewer in
-// Cupertino) who taps "Ride Along" gets zero pins and a dead-end. This is the way out of that wall:
-// a deterministic taste that lands in the first breath, then a "ride along for real" forward door.
+// Cupertino) can talk to the Skipper and still never reach a road he has stories for. This is the way
+// out of that wall: a deterministic taste that lands in the first breath, then a "plan a drive" door.
 //
 // Deliberately NOT a simulated drive (which opens on proximity-roulette, can start silent, and ends
 // in dead air) — so it is structurally incapable of showing the

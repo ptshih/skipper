@@ -1,8 +1,22 @@
 # Working without internet — the connectivity verdict and the roam offline pack
 
-**Status:** BUILT 2026-07-30 (founder ask 2026-07-31 in `TODO.md`, surveyed before building). Three
-steps shipped in order: connectivity awareness (`67f408b`), the roam offline pack + hardening
-(`be27184`), and the saved-manifest migration seam. Unverified on a real device — see *Still open*.
+**Status:** ⚠ **The PACK is SUPERSEDED by 1.1 (2026-08-02); the CONNECTIVITY VERDICT survives.**
+Built 2026-07-30 (founder ask 2026-07-31 in `TODO.md`, surveyed before building) in three steps:
+connectivity awareness (`67f408b`), the roam offline pack + hardening (`be27184`), and the
+saved-manifest migration seam.
+
+1.1 removed roam, and `roam-pack.ts` / `useRoam.ts` / `roam.tsx` went with it — so everything below
+about **the pack** (the pins-AND-audio atom, `playablePins`, the `Omit<RoamPin,'url'>` on-disk shape,
+age-based freshness, `GET /roam`'s point+radius) is a record of a shipped-then-deleted artifact. Read
+it as history; do not go looking for the code.
+
+**Still live, and still the reason this record matters:** the connectivity verdict itself —
+`connectivity.ts` / `connectivity-util.ts`, imported today by the planner screen (`app/index.tsx`)
+and the player (`app/drives/[id]/play.tsx`) — plus the offline copy rules and the saved-manifest
+seam, which 1.1 re-keyed by **narration subject id + revision** (`<kind>-<subjectId>.<rev>.<ext>`,
+`offline-util.ts`) and fills from a drive's OWN manifest. ⚠ The generalization this record gestured
+at — a region-level pack — was CUT; `docs/designs/offline-region-packs.md` records why no bbox rule
+can cover a selection frozen under a different one. Unverified on a real device — see *Still open*.
 
 ## The problem, as surveyed rather than assumed
 

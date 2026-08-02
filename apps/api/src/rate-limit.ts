@@ -77,7 +77,7 @@ export function rateLimit({ limit, windowSec, label }: RateLimitOptions): Middle
     const bucket = buckets.get(key)
 
     if (!bucket || now >= bucket.resetAt) {
-      // Size-gated lazy GC. The map otherwise only ever grows — an IP that hits an OPEN path (/roam)
+      // Size-gated lazy GC. The map otherwise only ever grows — an IP that hits an OPEN path (/sample)
       // once and never returns leaves a permanent entry — so once it crosses a soft cap, sweep every
       // expired window here on the (already O(1)) window-roll branch. Bounded, no timer, no shared state.
       if (buckets.size > 5000) {

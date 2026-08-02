@@ -12,9 +12,9 @@ export { presignGet, contentTypeForKey } from '@skipper/storage'
 /**
  * The ONE answer to "presigning failed" — a 503, never a 200.
  *
- * Six route handlers presign audio (roam, roam/sample, drive create, its idempotent replay, drive
- * read, and the offline re-sign) and each was carrying its own byte-identical copy of this log line
- * and body. That is six places to keep a rider-facing sentence in step, and the status is
+ * Every route that presigns audio (drive create, its idempotent replay, drive replay, the offline
+ * re-sign, and `GET /sample`) was carrying its own byte-identical copy of this log line and body.
+ * That is one rider-facing sentence to keep in step across a handful of files, and the status is
  * load-bearing: a 200 with a `warning` field was tried once and navigated the rider into a silently
  * EMPTY paid drive, because `driveManifest` is a plain z.object and strips unknown keys, so the
  * client never saw a retry signal. Keep this a 503.

@@ -1,7 +1,12 @@
 # Location permission priming (explainer before the OS prompt)
 
-**Status:** ✅ **BUILT 2026-06-13** (When-In-Use priming). A pre-permission explainer now
-precedes iOS's one-shot location prompt on the live drive AND free-roam. **Phased decision
+**Status:** ✅ **BUILT 2026-06-13** (When-In-Use priming); **NARROWED and strengthened by 1.1
+(2026-08-02).** A pre-permission explainer precedes iOS's one-shot location prompt. It used to guard
+two surfaces — the live drive AND free-roam; roam is gone, so `LocationGate` now has exactly ONE
+consumer, `app/drives/[id]/play.tsx`. That is a reinforcement, not a retreat: 1.1 makes it an
+acceptance criterion that **no location permission is asked until "Let's roll"** — planning a drive,
+hearing the sample, and seeing the proposed route are all location-free. The "which mode the rider
+hits first" branching below is therefore moot; there is one path. **Phased decision
 (founder, 2026-06-13):** ship the explainer in front of the *existing When-In-Use* prompt now
 (pure JS/UI, no native rebuild); the **Always/background** escalation is DEFERRED to its own
 pass (see §Deferred + `TODO.md`). The explainer copy/architecture is written to survive that

@@ -59,6 +59,24 @@ pre-gen aside/bracket library; route-demand cache. Product rationale + the decis
 > (the story layer that rides the route) is untouched. Full spec + the go-sequence:
 > [../designs/places-endpoints-spec.md](../designs/places-endpoints-spec.md).
 
+> **Supersession addendum (2026-08-02) — the two biggest claims in this record are now false.**
+> 1.1 (`../designs/drives-first-1-1.md`) removed **roam entirely**. There is no `RoamEngine`, no
+> `GET /roam`, no roam-first home; `roam-pack.ts`, `useRoam.ts` and `roam.tsx` are deleted. So the
+> title's "roam-first" and §Context's "Roam (ambient) + Create a Drive are the first-day experiences"
+> describe a shape that no longer exists. **The ladder is now ONE rider artifact: the user-owned
+> DRIVE.** The line that survives intact is the mechanism — a drive still reuses pre-generated,
+> region-shared narration rather than doing realtime TTS.
+>
+> **And the 2026-06-20 addendum above inverted again.** The structured FROM/TO pickers it describes
+> are GONE; Create-a-Drive is a **live conversation** once more. That is not a revert to the free-text
+> flow this record killed — it is the same idea with the failure fixed. Free-text died because the
+> model resolved a NAME and the server GEOCODED it ("Tahoe City" landing ~28 km off). 1.1's planner
+> never emits coordinates at all: it emits **curated anchor ids**, and the server re-asserts
+> `endpoint_eligible` per row at the wire, rejecting an unknown or ineligible id *before* any billed
+> Routes call. The curated `places` set from the addendum above is what makes that possible — it is
+> now the planner's allowlist, not just a picker's data source. An off-list ask gets an in-persona
+> "don't know that one", never a geocode.
+
 ## Context
 
 V2 inverts the hierarchy: **Roam** (ambient) + **Create a Drive** (on-demand A→B) are the first-day

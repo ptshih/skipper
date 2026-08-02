@@ -204,10 +204,10 @@ app.route('/drives/plan', planRoutes)
 // would re-wall the whole funnel, and test/drive-access.test.ts is what catches it.
 app.route('/drives', driveRoutes)
 
-// GET /sample — the anonymous "taste" for a user OUTSIDE any coverage. The corpus is Tahoe-only,
-// so a first-timer (or an Apple reviewer in Cupertino) who taps "Ride Along" gets 0 pins and a
-// dead-end; this serves ONE curated, always-iconic clip so they hear the Skipper regardless of where
-// they are. Anonymous — no account, no location. Resolves SAMPLE_NARRATION_QID to its
+// GET /sample — the anonymous "taste" for a rider OUTSIDE any coverage. The corpus is Tahoe-only, so
+// a first-timer (or an Apple reviewer in Cupertino) can talk to the Skipper and still never reach a
+// road he has stories for; this serves ONE curated, always-iconic clip so they hear him regardless of
+// where they are. Anonymous — no account, no location. Resolves SAMPLE_NARRATION_QID to its
 // released narration and presigns the private clip. Fails SOFT (404 with a friendly code) when the
 // QID is unset / not found / unreleased, so the client shows a reachable retry, never a white screen.
 // Additive wire contract (post-v1 safe).

@@ -2,7 +2,7 @@
 //
 // withSession (entitlements.ts) runs BEFORE the per-route gate and reads the auth DB (a
 // neon-serverless Pool) to resolve the caller's session. A transient blip there must NOT 500
-// the request: an open endpoint like `GET /roam` needs no session at all (it's anonymous), so a
+// the request: an open endpoint like `GET /sample` needs no session at all (it's anonymous), so a
 // 500 there would needlessly take down the open funnel for everyone, signed-in or not.
 //
 // Auth-free + generic on purpose: the fail-open path is unit-tested without constructing the
