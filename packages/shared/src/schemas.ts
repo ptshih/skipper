@@ -59,30 +59,12 @@ export const attributionList = z.array(attribution)
  *  removal a compile error in a handler that has nothing to do with it. */
 export type AttributionList = z.infer<typeof attributionList>
 
-/**
- * A public data-source credit for the app-wide "Sources & Licenses" screen (NOT per-clip —
- * that's `attribution`, frozen on the `narrations` row). Served by GET /sources so a NEW fact
- * source (Wikidata, OSM, public-domain texts…) credits correctly with a backend deploy,
- * never an App Store release. Keep in step with the studio pipeline's actual sources.
- */
-export const dataSource = z.object({
-  /** Display name of the source, e.g. "Wikipedia". */
-  name: z.string(),
-  /** What this source contributes to a drive — plain + accurate, no volatile claims. */
-  use: z.string(),
-  /** Short license code (shown as a tappable badge), or null when not a public-content license. */
-  license: z.string().nullable(),
-  /** Canonical license deed — satisfies CC's "provide a link to the license". */
-  licenseUrl: z.url().optional(),
-  /** The source's own home, for credit. */
-  sourceUrl: z.url(),
-  /** One-line plain-language gloss of the obligation (attribution, share-alike, …). */
-  note: z.string().optional(),
-})
-export type DataSource = z.infer<typeof dataSource>
-
-/** GET /sources — the app-wide data-source/license catalog (anonymous; public legal info). */
-export const sourcesResponse = z.object({ sources: z.array(dataSource) })
+// ⚠ `dataSource`/`sourcesResponse` and `GET /sources` were cut in the 1.1 sweep. The catalog was
+// served so a new fact source could be credited "without an App Store release" — but the app had to
+// ship a byte-identical bundled fallback anyway (a legal page must render offline), so the release it
+// was avoiding was never actually avoided, and the CC BY-SA source list had TWO homes that could
+// disagree. One home now: `apps/mobile/src/lib/licenses.ts`. ⚠ This is the CATALOG only — per-clip
+// `attribution`, frozen on the narration row, is untouched and is what the licence actually requires.
 
 /**
  * The per-platform app-version policy. The client reads its OWN version, compares against

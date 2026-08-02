@@ -13,12 +13,10 @@ import {
   regionList,
   sample,
   signedDriveAudio,
-  sourcesResponse,
   versionResponse,
 } from '@skipper/shared'
 import type {
   CreateDriveRequest,
-  DataSource,
   DriveList,
   DriveManifest,
   DriveProposal,
@@ -260,9 +258,6 @@ export const deleteDrive = async (driveId: string): Promise<void> => {
   await fetchJson(`/drives/${encodeURIComponent(driveId)}`, { method: 'DELETE' })
 }
 
-/** The app-wide data-source/license catalog (authoritative; the app bundles only a fallback). */
-export const getSources = async (): Promise<DataSource[]> =>
-  parseDto(sourcesResponse, await fetchJson('/sources')).sources
 
 /** The per-platform app-version policy for the launch-time update gate (see VersionGate). */
 export const getVersion = async (): Promise<VersionPolicy[]> =>
@@ -270,7 +265,6 @@ export const getVersion = async (): Promise<VersionPolicy[]> =>
 
 export type {
   CreateDriveRequest,
-  DataSource,
   DriveList,
   DriveManifest,
   DriveProposal,

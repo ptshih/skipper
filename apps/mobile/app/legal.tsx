@@ -4,13 +4,11 @@
 // The catalog is served by GET /sources (authoritative) so a new fact source credits
 // without an App Store release; we seed from the bundled FALLBACK so the page never
 // dead-ends offline, then upgrade to the live list. Theme roles only (no raw hex/font).
-import { useEffect, useState } from 'react'
 import { Pressable, StyleSheet, View } from 'react-native'
 import * as Linking from 'expo-linking'
 import { Stack } from 'expo-router'
-import { getSources } from '@/lib/api'
 import {
-  FALLBACK_DATA_SOURCES,
+  DATA_SOURCES,
   MUSIC_CREDITS,
   MUSIC_FREE_NOTE,
   sourceHost,
@@ -44,21 +42,6 @@ function LinkText({ label, url, shrink }: { label: string; url: string; shrink?:
 }
 
 export default function LegalScreen() {
-  // Seed with the bundled fallback (instant render, survives offline), then upgrade to the
-  // live /sources list. On failure we keep the fallback — a legal page must never dead-end.
-  const [sources, setSources] = useState<DataSource[]>(FALLBACK_DATA_SOURCES)
-  useEffect(() => {
-    let cancelled = false
-    getSources()
-      .then((live) => {
-        if (!cancelled && live.length > 0) setSources(live)
-      })
-      .catch(() => {})
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
   return (
     <Screen scroll padded edges={['bottom']} contentContainerStyle={styles.body}>
       <Stack.Screen options={{ title: voice.legal.title }} />
@@ -68,7 +51,7 @@ export default function LegalScreen() {
       </Text>
 
       <View style={styles.list}>
-        {sources.map((source) => (
+        {DATA_SOURCES.map((source) => (
           <Card key={source.name}>
             <View style={styles.card}>
               <Text variant="heading" color="ink">

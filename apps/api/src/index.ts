@@ -1,7 +1,6 @@
 // @skipper/api — Hono API (M2), served natively by bun.
 //
 //   GET  /health                     -> liveness (env-free)
-//   GET  /sources                    -> data-source/license catalog (anonymous; env-free)
 //   GET  /version                    -> per-platform app-version policy (anonymous; env-free)
 //   *    /api/auth/*                  -> Better Auth (sign-up/in/out, session, OAuth)
 //   GET  /regions                    -> pickable regions for the Create-a-Drive picker (anonymous)
@@ -40,7 +39,6 @@ import { planRoutes } from './plan-route'
 import { isAdmin, withSession, type ApiEnv } from './entitlements'
 import { rateLimit } from './rate-limit'
 import { withRetry } from './retry'
-import { DATA_SOURCES } from './sources'
 import { audioUnavailable, contentTypeForKey, presignGet } from './storage'
 import { VERSION_POLICIES } from './version-policy'
 
@@ -82,10 +80,6 @@ app.onError((err, c) => {
 // Health check — used by infra / local smoke tests.
 app.get('/health', (c) => c.json({ ok: true }))
 
-// Public data-source/license catalog for the in-app "Sources & Licenses" screen.
-// Anonymous + env-free (no DB) — served from code so a NEW fact source credits without
-// an App Store release (the app bundles only an offline fallback).
-app.get('/sources', (c) => c.json({ sources: DATA_SOURCES }))
 
 // Per-platform app-version policy for the client's update gate. Anonymous + env-free (no
 // DB) — served from code so the minimum/recommended floor is raised by a backend deploy,

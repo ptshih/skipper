@@ -1,16 +1,33 @@
-// Data-source attribution + licensing for the in-app "Sources & Licenses" screen
-// (app/legal.tsx). The AUTHORITATIVE catalog now lives SERVER-SIDE (apps/api/src/sources.ts,
-// served by GET /sources) so a new fact source credits without an App Store release; the app
-// fetches it via `getSources()`. The constant below is ONLY an offline fallback so the legal
-// screen never dead-ends in a dead zone — the API list wins whenever it's reachable, so this
-// copy may lag a release without legal harm (new-source content can't be reached offline
-// without first downloading it online, where the live list was available).
+// Data-source attribution + licensing for the in-app "Sources & Licenses" screen (app/legal.tsx).
+// THE ONE HOME for the catalog.
+//
+// ⚠ It was served by `GET /sources` until the 1.1 sweep, on the argument that a new fact source could
+// then be credited "without an App Store release". The app still had to bundle a byte-identical
+// fallback (a legal page must render in a dead zone), so the release was never actually avoided — and
+// two copies of a CC BY-SA credit list that can disagree is strictly worse than one that cannot. A
+// fifth source now costs a release; there have been four in the life of the project.
+//
+// ⚠ This is the CATALOG. Per-clip `attribution` is frozen on the narration row at generation time and
+// is what the licence actually requires; it is untouched by this and rides every clip independently.
 //
 // These are LEGAL facts (license codes, the canonical license + source URLs), kept OUT of the
 // persona layer: the skipper's voice colors the page intro (voice.legal), never the credit.
 
-export type { DataSource } from '@skipper/shared'
-import type { DataSource } from '@skipper/shared'
+/** One credited data source. Local to the app now that there is no wire DTO for it. */
+export interface DataSource {
+  /** Display name of the source, e.g. "Wikipedia". */
+  name: string
+  /** What this source contributes to a drive — plain + accurate, no volatile claims. */
+  use: string
+  /** Short license code (shown as a tappable badge), or null when not a public-content license. */
+  license: string | null
+  /** Canonical license deed — satisfies CC's "provide a link to the license". */
+  licenseUrl?: string
+  /** The source's own home, for credit. */
+  sourceUrl: string
+  /** One-line plain-language gloss of the obligation (attribution, share-alike, …). */
+  note?: string
+}
 
 /** The public legal documents, on the marketing site (apps/site/src/pages/). They live on the WEB,
  *  not in the app, because the App Store listing must point at a URL and a reviewer — plus anyone
@@ -23,7 +40,7 @@ export const TERMS_URL = 'https://skipper.fm/terms'
 /** Canonical license deeds, keyed by the license CODE frozen on a clip's attribution
  *  (`narrations.attribution[].license`). Creative Commons requires a LINK to the license wherever
  *  the adapted work appears, and the frozen snapshot stores only the code — so this is the one place
- *  that maps code → deed. Keep in step with FALLBACK_DATA_SOURCES below (same URLs, different key:
+ *  that maps code → deed. Keep in step with DATA_SOURCES below (same URLs, different key:
  *  that catalog is per-SOURCE, this is per-LICENSE, and one source's license can change over time
  *  while old clips keep crediting the license they were actually built under).
  *  An unknown code renders as plain text — credit without a link beats a link to the wrong license. */
@@ -50,7 +67,7 @@ export const attributionSourceLabel = (source: string): string => SOURCE_LABELS[
 
 /** Offline fallback for the credits screen. Source of truth is GET /sources — keep this in
  *  rough sync, but it is non-authoritative (the live list overrides it whenever online). */
-export const FALLBACK_DATA_SOURCES: DataSource[] = [
+export const DATA_SOURCES: DataSource[] = [
   {
     name: 'Wikipedia',
     use: 'The stories — the facts behind the tales the skipper tells at each stop.',
