@@ -135,8 +135,15 @@ async function main(): Promise<void> {
       console.log('PREVIEW — no writes. Re-run with --apply to restore them.')
       return
     }
+    // ⚠ `ownedByThisTool` — the SAME predicate the SELECT above counted with, and the same one
+    // `--delete` uses. These had drifted: the count matched both reason forms while the UPDATE
+    // cleared only the LEGACY one, so restoring rows this tool writes TODAY (`${PRUNE_REASON_PREFIX}
+    // — …`, the flag path below) cleared NOTHING and still printed a success count. That silently
+    // broke the reversibility the header leans on to justify flagging over deleting, and the flag
+    // path advertises as "Undo: --restore --apply". One predicate, three call sites — a second
+    // expression here is what let them disagree, so there is no longer one.
     await withRetry(
-      () => db.update(pois).set({ excludedReason: null }).where(and(...inBbox, eq(pois.excludedReason, LINEAR_FEATURE_REASON))),
+      () => db.update(pois).set({ excludedReason: null }).where(and(...inBbox, ownedByThisTool)),
       { label: 'prune.restore' },
     )
     console.log(`✓ ${rows.length} POI(s) restored (excluded_reason cleared).`)
