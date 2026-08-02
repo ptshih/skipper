@@ -10,7 +10,7 @@ import { ActivityIndicator, Alert, Animated, PixelRatio, Pressable, ScrollView, 
 import { Stack, useLocalSearchParams, useNavigation, useRouter } from 'expo-router'
 import * as SecureStore from 'expo-secure-store'
 import { useDrive } from '@/lib/useDrive'
-import { useSession } from '@/lib/auth'
+import { isSignedIn, useSession } from '@/lib/auth'
 import { isOfflineNow } from '@/lib/connectivity'
 import { useSimMode } from '@/lib/sim-mode'
 import { stopLabel } from '@/lib/labels'
@@ -108,14 +108,22 @@ export default function DriveScreen() {
   // effect watches only [driveId, reloadKey, mode] — nothing the session — so a rider who just
   // got their free ticket would otherwise sit on the same gate. Re-check ONCE per signed-in
   // user while gated; retry() bumps reloadKey → re-fetches → drops them straight into the drive.
-  const sessionUserId = session?.user?.id ?? null
+  //
+  // ⚠ INV-9: this goes through isSignedIn, not a bare `session?.user?.id`. After 1.1's anonymous
+  // mint EVERY rider holds a session with a real user id, so a bare read is non-null for a rider
+  // the server will still 401 — the retry would fire a GET /drives/:id that bounces straight back
+  // to `phase: 'gate'`, one wasted round-trip per gated open. Gating on the same predicate the
+  // server's tierOf keys on means the retry fires exactly when it can succeed. (The ref then holds
+  // the REAL account id, so the retry after signup still runs — the anon id never enters it, which
+  // is also INV-4: nothing may key state on an id better-auth hard-deletes at link.)
+  const signedInUserId = isSignedIn(session) ? (session?.user?.id ?? null) : null
   const retriedForUser = useRef<string | null>(null)
   useEffect(() => {
-    if (d.phase === 'gate' && sessionUserId && retriedForUser.current !== sessionUserId) {
-      retriedForUser.current = sessionUserId
+    if (d.phase === 'gate' && signedInUserId && retriedForUser.current !== signedInUserId) {
+      retriedForUser.current = signedInUserId
       d.retry()
     }
-  }, [d.phase, sessionUserId, d.retry])
+  }, [d.phase, signedInUserId, d.retry])
 
   // A rolling drive must not die on one stray tap. The header back chevron dispatches a JS
   // GO_BACK (HeaderBack → router.back()), which beforeRemove reliably catches → confirm. The

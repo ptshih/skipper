@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Alert, StyleSheet, View } from 'react-native'
 import * as Linking from 'expo-linking'
 import { Stack, useRouter } from 'expo-router'
-import { deleteUser, isAdmin, signOut, updateUser, useSession } from '@/lib/auth'
+import { deleteUser, isAdmin, isSignedIn, signOut, updateUser, useSession } from '@/lib/auth'
 import { PRIVACY_POLICY_URL, TERMS_URL } from '@/lib/licenses'
 import { deleteAllDriveDownloads } from '@/lib/offline'
 import { space } from '@/theme/tokens'
@@ -22,6 +22,9 @@ const openUrl = (url: string) => {
 export default function SettingsScreen() {
   const router = useRouter()
   const { data: session } = useSession()
+  // ⚠ INV-9: a truthy `session` is NOT "signed in" — after 1.1's anonymous mint every rider has one.
+  // Everything account-shaped on this screen keys on the one helper, mirroring the server's tierOf.
+  const signedIn = isSignedIn(session)
   // Developer tools are admin-only (isAdmin = role === 'admin', server-set). Shared with
   // developer.tsx's self-guard so the gate has exactly one definition.
   const showDeveloper = isAdmin(session)
@@ -124,10 +127,12 @@ export default function SettingsScreen() {
         <Text variant="label" color="inkFaint">
           {voice.settings.account}
         </Text>
-        {session ? (
+        {signedIn ? (
           <>
             <Text variant="dim" color="inkFaint" numberOfLines={1}>
-              Riding as {savedName.trim() || session.user.email}
+              {/* `session?.` because `signedIn` is a boolean, not a type guard — the branch is
+                  correct at runtime but TypeScript can't narrow through it. */}
+              Riding as {savedName.trim() || session?.user?.email}
             </Text>
             <Input
               placeholder="Add your name"
@@ -207,9 +212,35 @@ export default function SettingsScreen() {
           </>
         ) : (
           <>
+            {/* ⚠ THE ANONYMOUS RIDER LANDS HERE, not in the account block above — that is what the
+                isSignedIn re-key buys (INV-9). Every omission below is deliberate:
+                • no "Riding as" line — the anonymous plugin writes a synthetic `temp-…@….com` and
+                  the name "Anonymous" (better-auth's anonymous plugin, not our copy); printing
+                  either tells the rider they have an account they do not have.
+                • no name field / Save name — it would write to a row better-auth HARD-DELETES at
+                  link-to-account, with no cascade and no purgeUserData (INV-4). The edit evaporates.
+                • no Sign out — signing out of an anonymous session strands the row server-side and,
+                  because the mint's guard is module-level, leaves the app session-less until the
+                  next cold start. A control whose only effect is to make things worse.
+                • no Delete account — `deleteUser` sits behind better-auth's sensitiveSessionMiddleware
+                  and an anonymous user has no credential to re-auth with, so the button could only
+                  ever return an error. Advertising a deletion that cannot succeed is the exact
+                  inverse of what App Store 5.1.1(v) asks for.
+                ⚠ RISK-3 LIVES IN THIS BRANCH: the mint created a server-side row this rider cannot
+                delete from inside the app. Whether that counts as "creating an account" under
+                5.1.1(v) is a FOUNDER call before submission — see docs/designs/drives-first-1-1.md
+                RISK-3. If the answer is yes, the fix is the installed plugin's own
+                `deleteAnonymousUser`; do NOT wire it on your own initiative.
+                ⚠ Do not delete this branch as "unreachable after the mint" — it is also what a cold
+                start in a dead zone and an explicit sign-out land on. */}
             <Text variant="dim" color="inkFaint">
               {voice.guest}
             </Text>
+            <Button
+              icon="ticket"
+              title={voice.gate.action}
+              onPress={() => router.push('/sign-in?mode=up')}
+            />
             <Button
               variant="secondary"
               title="Sign in"
