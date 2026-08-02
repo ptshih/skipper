@@ -464,3 +464,30 @@ is a rewrite, not a decision.
   spend because an anonymous rider never reaches `POST /drives`.
 - **`stopType` is not dead vocabulary** (an early pass claimed three dead enums; it is two — see
   [post-1-1-slate.md](post-1-1-slate.md) §3).
+- **§1.7(b)'s `plan_degraded` condition is wrong in BOTH directions** — found while building step 11,
+  and the emit now carries the reasoning so nobody restores it. "`stop_reason !== 'tool_use'`" fires on
+  the ORDINARY HEALTHY BEAT (`end_turn` with text is outcome `'say'` — most of a 3-8 exchange
+  conversation), so the metric would count normal traffic; and it MISSES the real case where
+  `stop_reason` **is** `tool_use` but `toPlannedRoute` returns null, where the vendor scored the turn a
+  success while no route ever reached the map. The honest predicate is the OUTCOME, which
+  `planner.ts`'s `PlannerOutcome` union already spells correctly.
+- **§2.3's event set assumed an app shape steps 7-10 had already changed.** Corrected set greenlit by
+  the founder 2026-08-02 and built. `plan_opened` does not exist: home is the conversation, the PostHog
+  SDK already emits `Application Opened` (`captureAppLifecycleEvents` defaults **true** and the client
+  never sets it), and `ScreenTracker` already emits `$screen` for `/` — a mount-time event would be a
+  third copy. It became `planner_ready`, gated on the planner being usable, which is the number the
+  other two cannot give. `preview_clip_played` spans **two** surfaces that must not be merged
+  (`/sample` AUTOPLAYS; the route-preview clip is a deliberate tap), so it split. `proposal_shown`
+  gained `has_clip` — a null clip is a normal outcome, so clip-conversion is uninterpretable without it
+  — and `plan_turn_sent` gained `retry`, because `retryTurn` re-sends the identical transcript as a
+  real second billed call. ⚠ The review's own `round_trip` example was unsafe: `via.length` reports
+  every via'd ONE-WAY as a loop, since the non-round-trip branch keeps `via`. It is `startId === endId`.
+- **"There is no wall SCREEN" is right, and there are THREE walls, not one.** §2.3 implies a single
+  `wall_shown`. Step 8 made it a STATE, reached in the planner from two catches, and an owned drive
+  also 401s on both the detail and player screens — `play.tsx`'s own comment records an anonymous rider
+  having looped on one. All three emit, told apart by a closed `source`.
+- **The `identify()` prohibition understates its own enforcement.** §2.3 states the rule; it can be
+  made mechanical. `personProfiles: 'never'` makes seven person-mutating SDK methods logged no-ops
+  (verified in the installed `@posthog/core`), and a comment-stripped source-text tripwire in
+  `analytics.test.ts` fails on `.identify(`/`.reset(` anywhere under `app/` or `src/`. ⚠ `reset()` is
+  NOT gated by that option — it would really work, which is why the tripwire covers it too.

@@ -732,7 +732,67 @@ console is the codemod-shaped churn this sweep exists to avoid.
 is now fed — step 8's `exampleAnchors` orders by it) and §3.11 (the `GET /drives` credit block sits
 behind `requireAccount` after 8a, and its backstop is tier-keyed).
 
-**11 — Instrumentation + remaining boundary tests** (D31/D32).
+**11 — Instrumentation + remaining boundary tests** (D31/D32). ✅ **DONE 2026-08-02, in five atomic
+commits** (API tests → the INV-12 re-homing → API instrumentation → the mobile contract → the mobile
+funnel), root + `apps/mobile` `bun run check` green after each. The spec body was one line, so the
+content came from the review's §2.3 and §1.7(b) — **both of which had to be corrected against the code
+before they could be built; the corrections are recorded in that doc's §4.**
+
+**The COST half of D32 existed only as prose.** Step 8a shipped the access half; a grep for
+`hydrateAnchors|NOT_AN_ANCHOR|materializeRoute` across `apps/api/test` returned one hit and it was a
+comment — including for the criterion this spec's own Acceptance list states ("rejects a non-anchor
+start, end, **OR `via` midpoint** … BEFORE any Routes call"). Four new files close it, each mutation-
+checked. ⚠ `anchor-allowlist.test.ts`'s fixture RENDERS the query's WHERE clause and honours the
+predicates it finds: a fixture that simply returned "the eligible rows" stays green through the exact
+production regression it exists to catch. ⚠ `drive-body-caps.test.ts`'s create case drives an ACCOUNT
+session deliberately — `requireAccount` answers 401 *before* the body is read, so an anonymous fixture
+asserts the wrong boundary and passes for the wrong reason.
+⚠ **`plan-route.ts:12` and `index.ts` had BOTH asserted in prose, for four steps, that a test pinned
+the anonymous plan mount. There was none.** `app-mount.test.ts` finally writes it; it needed no
+production change (`cors.test.ts` already imports the whole app).
+
+**Rider-triggered spend is now countable.** Four single-line-JSON events — `plan_spend`,
+`plan_degraded`, `route_spend`, `rate_limited` — so Cloud Logging parses them into `jsonPayload` where
+a budget alert can key on them (a plain line lands in `textPayload` and no metric can query it).
+⚠ `POST /drives/propose` previously logged **nothing** on success, so the billed Google Routes call —
+half of what INV-11 names — was entirely invisible. ⚠ On severity: the `severity` field is the
+DOCUMENTED lever (Cloud Logging lifts it onto the LogEntry); the stderr⇒ERROR fallback is agent
+behaviour documented for GKE/Functions and is **not** stated on Cloud Run's logging page. Two files
+had drifted into contradicting each other about this; both now state it the same way.
+⚠ **`recordModelUsage` is NOT a guard on this path, and `planner.ts` used to claim it was.** The tally
+is a process-global `Map` with no reader anywhere in `apps/api`, on an instance created and recycled at
+will — a readout would report an unknown fraction of the fleet's spend as if it were the number. The
+per-call line is the guard; the comment now says so. (The deploy-config half of §1.7 — `--max-instances`,
+the budget alert, the log-based metric — is out-of-repo and tracked in `TODO.md`; nothing in
+`bun run check` can assert it exists.)
+
+**The full event set (D31) ships typed, and the `identify()` ban is enforced by the SDK.** ⚠ THE
+FAILURE MODE HERE IS SILENCE: `track()` is `posthog?.capture()` and `posthog` is undefined without
+`EXPO_PUBLIC_POSTHOG_KEY`, so a fully typed, fully green analytics module that emits NOTHING is
+indistinguishable from a working one on any machine without a key — the repo's thrice-hit dead-symbol
+trap, as the default outcome. **The exit gate is `grep -rn '\btrack(' apps/mobile/app apps/mobile/src`,
+not `bun run check`.** Ten events, 16 call sites.
+⚠ Both `track()` parameters are narrowed, not just the name — a name-only union still compiles
+`track('plan_turn_sent', { text: riderInput })`, which is INV-13's actual hole.
+⚠ `personProfiles: 'never'` makes seven person-mutating SDK methods no-ops, and a comment-stripped
+source-text tripwire (mutation-checked in both directions) fails on `.identify(`/`.reset(` anywhere in
+`app/`/`src/`. This is not a funnel preference: the App Privacy label filed with Apple declares Product
+Interaction **Linked = No** and justifies its Device ID row with "PostHog gets no `identify()` call
+anywhere in the app" (`../guides/app-store-submission.md` §8). ⚠ `reset()` is NOT gated by that option
+and is deliberately absent — with no `identify()` there is nothing account-scoped in PostHog for an
+erasure to reach, while `reset()` WOULD destroy the device spine the funnel runs on (INV-4).
+
+Three placement traps, each recorded at its call site because the obvious answer is wrong in every
+case: `turn_index` is a per-conversation COUNTER, because `seedExample` stamps its pair `wire: true` so
+BOTH transcript-derived counts report a chip-tapper's first billed turn as 2 while a cold typist
+reports 1; `round_trip` is `startId === endId` and never `via.length` (a one-way route KEEPS its via);
+and `preview_clip_played`'s completion does not ride `didJustFinish` alone, because expo-audio drops it
+across an OS audio interruption and completion RATE is the entire reason the event emits twice.
+
+⚠ **Known and accepted, not a bug to rediscover:** `drive_started`'s latch is never cleared, and iOS
+suspends rather than terminates — so it counts FIRST starts per drive per process. Read it as reach,
+never engagement. Clearing on `end()` recovers most of it; deliberately not done in the pass that
+introduced the event, so a baseline exists before the semantics move.
 
 **12 — Docs + store.** CLAUDE.md is already rewritten (`0c268cf`). Still owed: `.env.example` still scopes
 `ANTHROPIC_API_KEY` to narration; the roam decision records need SUPERSEDED lines; the App Store listing is
