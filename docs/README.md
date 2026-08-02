@@ -330,6 +330,10 @@ The rest are post-MVP features, gated behind the proven phone player:
 - [gcp-cloud-run-deploy.md](guides/gcp-cloud-run-deploy.md) — deploying `@skipper/api` to Cloud Run
   (us-east4, co-located with the Neon DB); push-to-`main` continuous deployment via Cloud Build,
   the dotenvx-secret-from-Secret-Manager model, and the one-time IAM/DRS gotchas.
+- [1-1-cutover-runbook.md](guides/1-1-cutover-runbook.md) — the ordering for 1.1's FIRST push: the four
+  triggers one push fires (the API's is unfiltered), why the cutover is code-only and therefore cheaply
+  reversible, the `/roam/sample`→`/sample` flip against an in-review build, and the rollback capture
+  that has to happen beforehand. Written 2026-08-02, never executed.
 - [ops-scripts-sop.md](guides/ops-scripts-sop.md) — the safe-by-default contract for the studio's
   one-off operational CLIs (preview unless `--apply`); reference impl `sweep-orphans.ts`; adopted
   2026-06-10.
