@@ -277,7 +277,14 @@ road geometry. The lead-time result does not depend on that: it is radius ÷ spe
 
 ✅ **BUILT 2026-07-30 (founder go): the geometry gate.** `CLUSTER_MAX_TRIGGER_RADIUS_M = 600` in
 `@skipper/engine` + `exceedsPointTrigger`, asked through `clusterGenerationBlock` (studio) so
-"generatable" has ONE definition. 600 is not a taste number — it is the floor `radiusForKind` already
+"generatable" has ONE definition.
+
+⚠ **SUPERSEDED (see §"area tellings" below, commit `66435e9`): geometry NO LONGER BLOCKS.**
+`exceedsPointTrigger` now selects the trigger MODE — a wide group ships as an AREA telling served a
+polygon — and `clusterGenerationBlock` returns exactly ONE reason, "no tellable members". The
+paragraph below is kept for the rationale behind the 600 m figure, which still governs the mode
+choice; read it as "why 600", not as "what blocks generation". (UNR, deferred at 903 m below, would
+generate today.) 600 is not a taste number — it is the floor `radiusForKind` already
 gives an un-anchored kindless place, so a fused telling may never trigger LOOSER than the loosest
 thing already shipping. The corpus leaves a wide gap right there: 250 (×22) … 386, 416, 516, then 903.
 Live result: **31 generatable, 1 deferred (UNR, 903 m), 30 awaiting enrichment.**

@@ -154,12 +154,29 @@ function geologyLines(
  * island, and falls) as ONE flowing telling, not several stops. Same grounding rule: only what
  * is listed here is known.
  */
-function mergedFeatureLines(
-  features: { name: string; facts: string[]; background?: boolean }[] | undefined,
-): string[] {
+type MergedFeature = { name: string; facts: string[]; background?: boolean }
+
+/**
+ * The merged features a telling may actually NAME: entries carrying both a name and facts, minus the
+ * ones the classifier demoted to background.
+ *
+ * ⚠ BOTH closer rules key on THIS count, never on the raw array — that mismatch was a live bug. The
+ * fused closer fired at `named.length >= 2` (post-filter) while the single-subject closer was
+ * suppressed by `req.mergedFeatures?.length` (RAW), so any sheet in between — exactly one nameable
+ * feature, one nameable plus background, all background, or entries that all filter out — got NEITHER
+ * closing rule. That window is live on the fused path (a cluster whose tellable set narrows to one
+ * member), and it is precisely the defect the two rules exist to close: their absence was MEASURED at
+ * 21% tail collapse on single-place clips and 35% on fused ones, up to 14.4 dB under the body. A
+ * collapsed tail is also not free — it drives the synth retake loop, which bills per take.
+ */
+function nameableFeatures(features: MergedFeature[] | undefined): MergedFeature[] {
+  return (features ?? []).filter((f) => f.name && f.facts.length > 0 && !f.background)
+}
+
+function mergedFeatureLines(features: MergedFeature[] | undefined): string[] {
   const fs = (features ?? []).filter((f) => f.name && f.facts.length > 0)
   if (fs.length === 0) return []
-  const named = fs.filter((f) => !f.background)
+  const named = nameableFeatures(features)
   const background = fs.filter((f) => f.background)
   const out: string[] = []
   const bullets = (list: typeof fs) => {
@@ -267,8 +284,11 @@ export function buildFactSheet(req: NarrationRequest): string {
     // move and the system prompt teaches it; the defect is a closer with no PREDICATE to land on, not
     // a closer that is wry. So the rule asks for a full sentence, not for a bigger finish.
     //
-    // Scoped to the single-subject case because the fused block above already carries its own version.
-    if (!req.mergedFeatures?.length) {
+    // Scoped to the single-subject case because the fused block above already carries its own version
+    // — which it only emits at TWO OR MORE nameable features, so this must be the exact complement of
+    // that condition (`nameableFeatures`), not a raw-array check. Between the two lay a window where a
+    // story sheet carried no closing-shape rule at all. Every story sheet now carries exactly one.
+    if (nameableFeatures(req.mergedFeatures).length < 2) {
       lines.push('')
       lines.push(
         '(END ON A FULL SENTENCE — subject and verb, said flat and sure, the last thing you would leave a friend with as the car pulls away. Your deflate still belongs here; just give it something to stand on. A closing FRAGMENT ("Not bad company.", "A house furnished by half a state.") reads as an afterthought and dies in the mouth — the voice drops away and the rider loses the line entirely over road noise.)',

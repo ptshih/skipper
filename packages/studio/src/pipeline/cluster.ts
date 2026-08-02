@@ -143,10 +143,10 @@ export function clusterGroundingHash(
  * Why this cluster CANNOT be generated yet, or null when it can. The one gate step 4's queue asks,
  * so "generatable" has a single definition rather than one per caller.
  *
- * Two reasons, and they are different in kind: nothing tellable is a corpus state that an `enrich`
- * run fixes, while too-wide is a design limit that needs the districts' area trigger. Both are
- * reported rather than silently skipped — a cluster vanishing from a preview with no reason given is
- * how the un-enriched Yosemite half stayed invisible for a week.
+ * ONE reason now: nothing tellable — a corpus state an `enrich` run fixes. (This said "two reasons,
+ * different in kind" for a while after the second, too-wide, stopped blocking; see the ⚠ in the body.)
+ * It is REPORTED rather than silently skipped — a cluster vanishing from a preview with no reason
+ * given is how the un-enriched Yosemite half stayed invisible for a week.
  */
 export function clusterGenerationBlock(members: readonly ClusterMemberRow[]): string | null {
   const tellable = tellableMembers(members)

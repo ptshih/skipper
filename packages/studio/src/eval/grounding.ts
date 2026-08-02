@@ -87,6 +87,13 @@ export function buildGroundingWell(s: GroundingWellStop): string[] {
     // facts / wikidata / merged features are STORY-only channels — gating them here keeps a
     // mislabeled input from ever blessing identifying place-facts on a scenic/break well.
     well.push(...(s.facts ?? []))
+    // ⚠ The KIND, which narrate.ts puts on the STORY narrator's own sheet (`KIND: <kind>`) right under
+    // the place name. This branch used to drop it while the scenic and break branches kept it, so the
+    // auditor scored a script against a well missing a line the narrator was explicitly shown — and
+    // "this lake", "the old mining town", the plainest thing a telling opens with, could come back as
+    // an ungrounded place-claim. Exactly the failure the docstring above warns about. It licenses no
+    // new latitude: `pois.kind` is curated data, as much a given as the name beside it.
+    if (s.kind) well.push(`${s.name || 'This place'} is a ${s.kind}.`)
     if (s.sideOfRoad)
       well.push(`${s.name || 'This place'} is on the ${s.sideOfRoad} side of the road.`)
     well.push(...(s.wikidata ?? []))

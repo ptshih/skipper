@@ -114,8 +114,6 @@ const clusterTargetRegion = (flags.value('include-ids') ?? '').trim()
   : (flags.value('region') ?? DEFAULT_REGION_SLUG)
 
 async function main(): Promise<void> {
-  const region = await resolveRegion(flags.value('region') ?? DEFAULT_REGION_SLUG)
-  const bbox = requireRegionBbox(region)
   const limit = numericFlag(flags, 'limit', { fallback: 1 })
   const query = flags.value('query')?.toLowerCase()
   // An explicit id list is a TARGETED re-run (regenerate exactly these), so it bypasses the region
@@ -125,10 +123,22 @@ async function main(): Promise<void> {
   // them. Same rule the solo generator uses, for the same reason.
   const force = flags.has('force') || includeIds.length > 0
 
+  // ⚠ An explicit id list spans NO single region, so it must not resolve one. This used to fall back to
+  // DEFAULT_REGION_SLUG: a targeted re-run of clusters anywhere in the corpus scored its diversity lint
+  // against lake-tahoe's tellings and filed its eval_run under lake-tahoe. The job row already went
+  // NULL for this case (`clusterTargetRegion` above); the eval run and the lint did not agree with it.
+  // A null bbox loads the WHOLE corpus for diversity — a superset, and more context is never worse —
+  // and the admin surfaces a null region as "All", exactly as the solo generator does.
+  const isExplicitRun = includeIds.length > 0 && !flags.value('region') && !query
+  const region = isExplicitRun ? null : await resolveRegion(flags.value('region') ?? DEFAULT_REGION_SLUG)
+  const bbox = region ? requireRegionBbox(region) : null
+  const scopeLabel = region ? region.displayName : 'All (explicit ids)'
+
   // A cluster is in the region the same geometry-first way everything else is — by where its members
   // are (poi_clusters stores no coordinates, deliberately). Shared with the diversity-context loader,
-  // which has to resolve the exact same membership for fused tellings.
-  const inRegion = clusterIdsInBbox(bbox)
+  // which has to resolve the exact same membership for fused tellings. Only consulted on the
+  // region-scoped path — an explicit run selects by id and never reads it.
+  const inRegion = bbox ? clusterIdsInBbox(bbox) : null
   const clusters = await db
     .select({
       id: poiClusters.id,
@@ -150,7 +160,7 @@ async function main(): Promise<void> {
     .where(
       includeIds.length > 0
         ? inArray(poiClusters.id, includeIds)
-        : sql`${poiClusters.id} in ${inRegion}`,
+        : sql`${poiClusters.id} in ${inRegion!}`,
     )
 
   const membersByCluster = await loadClusterMembers(clusters.map((c) => c.id))
@@ -219,7 +229,7 @@ async function main(): Promise<void> {
     generatable.push(f)
   }
 
-  console.log(`\nRegion: ${region.displayName}  ·  ${clusters.length} group(s) in scope (clusters AND districts — the GATE decides, not the treatment)`)
+  console.log(`\nRegion: ${scopeLabel}  ·  ${clusters.length} group(s) in scope (clusters AND districts — the GATE decides, not the treatment)`)
   console.log(
     `${generatable.length} to generate, ${freshSkipped} already fresh (skipped${force ? '' : ' — pass --force to re-narrate'}), ${blocked.length} blocked:`,
   )
@@ -247,7 +257,7 @@ async function main(): Promise<void> {
   // clip from its own context. Region membership resolves per subject kind: solo by its poi's point,
   // fused by the same `inRegion` member-geometry the cluster query above uses.
   const diversityContext: string[] = await loadDiversityContext(bbox)
-  console.log(`Diversity context: ${diversityContext.length} existing tellings in this region.\n`)
+  console.log(`Diversity context: ${diversityContext.length} existing tellings ${region ? 'in this region' : 'across the corpus'}.\n`)
 
   /** The nameable/background split (§3.2), plus the well BOTH the narrator and the judge see. */
   function inputsFor(f: Fused) {
@@ -365,12 +375,12 @@ async function main(): Promise<void> {
   // treat as a no-op, exactly as they do for the poi path.
   const recordRun = (dryRun: boolean, synthesized?: number): Promise<unknown> =>
     recordEvalRun({
-      region: region.slug,
+      region: region ? region.slug : null,
       kind: 'generation',
       dryRun,
       scorecard: buildScorecard({
-        slug: region.slug,
-        runName: `fused clusters — ${region.displayName}`,
+        slug: region ? region.slug : null,
+        runName: `fused clusters — ${scopeLabel}`,
         evaluatedAt: new Date().toISOString(),
         stops: applyLoudnessOutcomes(applyTailOutcomes(gated.flatMap((g) => g.evals), tailBySeq), loudnessBySeq),
       }),
