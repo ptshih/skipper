@@ -87,13 +87,13 @@ findings fixed (`576e031`). See `apps/mobile/CLAUDE.md` for the ESLint-9 pin and
       — all render-churn judgement calls in the planner and drive-detail screens.
       ⚠ `b7e6614` is NOT visually verified (animation call sites, semantically identical swap) — worth
       a glance at typing dots, skeletons and the stop-row stamp next time the app is open.
-- [ ] **7 patch-version drifts against SDK 57**, found by `bun run doctor` (`apps/mobile`): expo
-      57.0.8→57.0.9, expo-asset, expo-constants, expo-location, expo-router, expo-dev-client, and
-      **react-native 0.86.0→0.86.2**. All patch-level. ⚠ Run `bun update` from INSIDE `apps/mobile`
-      (the isolated linker), and re-verify with `expo export` — a green `tsc` does not prove a bundle.
-      ⚠ IGNORE doctor's "node_modules may be corrupted / multiple copies" line: it is a FALSE positive
-      against bun's isolated linker, and it is the same shape of false alarm that once talked someone
-      into forcing the hoisted linker.
+- [x] ~~7 patch-version drifts against SDK 57~~ — **DONE 2026-08-02 (`44642c6`)** via
+      `expo install --fix` (not `bun update`, so each version is the one `bundledNativeModules`
+      specifies). Verified by `expo export` producing a real iOS bundle, not by typecheck. ⚠ **A native
+      rebuild is still owed before this ships** — `ios/`/`android/` are gitignored prebuild output so
+      nothing in-repo is inconsistent, but the installed pods match 0.86.0 until someone runs prebuild.
+      ⚠ Doctor still reports "node_modules may be corrupted / multiple copies": known FALSE positive
+      against bun's isolated linker (see `apps/mobile/CLAUDE.md`) — never "fix" it by forcing hoisted.
 - [ ] **There is no CI.** No `.github/workflows` anywhere, and `cloudbuild.yaml` is build → push →
       deploy with NO test step — so the entire quality bar is "an agent remembered to run
       `bun run check`", in a repo where several agents share one working tree. Want: one workflow on
