@@ -308,6 +308,11 @@ The rest are post-MVP features, gated behind the proven phone player:
   (2026-06-23): 18 actionable findings clustered on spend/security of the paid Routes path (XFF-spoof
   rate-limit bypass, credit-consume TOCTOU, unrated `POST /drives`). **Working doc — UNTRIAGED; delete
   once the findings are actioned.**
+- [rider-spend-exposure.md](research/rider-spend-exposure.md) — what the rider-facing caps actually
+  bound (2026-08-01), and what nothing bounds: the RISK-4 multiplier is Cloud Run's **unchosen default
+  of 100 instances**, `PLAN_RATE_HOUR`'s window outlives the process that holds it, and per-IP caps
+  guard one caller while **no control anywhere bounds aggregate spend** (the GCP Budget API is not
+  enabled). Ceilings with their arithmetic, not forecasts. **Findings, not decisions.**
 
 ### guides/
 - [app-store-submission.md](guides/app-store-submission.md) — every App Store Connect field ready to

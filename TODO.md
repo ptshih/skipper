@@ -557,6 +557,26 @@ None of this is a build; all of it is config. The premise changed on 2026-07-28:
 - [ ] **GCP billing budget + alert.** The Budget API is not even enabled on the project
       (`gcloud beta billing budgets list` → `SERVICE_DISABLED`). Billing — not code — is the documented
       root cause of the only real outage this project has had. ~5 min.
+      ⚠ Got heavier after 1.1 step 8: it is now the ONLY control anywhere that bounds AGGREGATE spend.
+      Every cap in `limits.ts` keys on client IP, so each bounds one caller and none bounds the total —
+      see [rider-spend-exposure.md](docs/research/rider-spend-exposure.md).
+- [ ] **Set `--max-instances` on the API deploy** (`cloudbuild.yaml`, one line). The deploy passes no
+      scaling flags at all, so the multiplier in RISK-4's "limit × live instances" is Cloud Run's
+      **default cap of 100** — a number nobody chose and that appears nowhere in the repo. Both paid
+      rider endpoints lost their account wall in 1.1 step 8, so the limiter is now their only guard.
+      A small value bounds the worst case while sitting far above any pre-launch demand, and it is
+      trivially raised at launch. ~2 min. Findings + the arithmetic:
+      [rider-spend-exposure.md](docs/research/rider-spend-exposure.md).
+      ⚠ Related but NOT the same bug, and not fixed by this: `PLAN_RATE_HOUR`'s 3,600 s window lives in
+      an in-memory map that dies with the instance, and with no `--min-instances` Cloud Run recycles
+      idle instances in minutes — so the long cap is largely unenforced even at ONE instance. A shared
+      store is the real fix and `rate-limit.ts` already puts it at M4.
+- [ ] **Re-accept RISK-4 deliberately, or re-price it** (founder, STOP rule — not a refactor).
+      `PROPOSE_RATE` was set when `/propose` sat behind an account wall: the wall was the first-order
+      guard, the limiter was defence-in-depth. After D14/D15 the limiter is the only guard on a billed
+      Google Routes call reachable by any stranger, forever. The number was not changed and no change is
+      being recommended — its PREMISE moved, and per CLAUDE.md that is a founder call. Same question
+      applies to `PLAN_RATE_MINUTE`/`PLAN_RATE_HOUR`, which never had a wall in front of them.
 - [x] **`skipper-api-deploy` had an EMPTY `includedFiles` — FIXED 2026-07-30.** It was the only one of the
       four Cloud Build triggers without a path filter, so ANY commit rebuilt and redeployed the API at
       100% traffic with no test step and no canary. Not theoretical: the build history showed it firing
