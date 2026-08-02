@@ -13,26 +13,32 @@
 // which also keeps the privacy page honest about who receives data.
 //
 // Imported per WEIGHT and per SUBSET on purpose — Fontsource's bare package import pulls all seven
-// subsets (cyrillic, math, symbols, vietnamese…). The site is English and US-only, so latin +
-// latin-ext is everything it renders; anything outside those ranges falls back to the stack in
-// tokens.css exactly as it does today. Add a subset here if that ever stops being true.
+// subsets (cyrillic, math, symbols, vietnamese…). Anything outside the imported range falls back to
+// the stack in tokens.css. Add a subset here if that ever stops being true.
+//
+// ⚠⚠ LATIN ONLY — DO NOT ADD THE latin-ext IMPORTS BACK. They shipped alongside latin until
+// 2026-08-02 and were actively harmful, because Fontsource's PER-SUBSET files carry no
+// `unicode-range` (only the aggregate `400.css`-style files do — verified: latin-400.css has 0,
+// 400.css has 7). Without it the browser cannot subset: 12 @font-face rules with identical
+// family/style/weight and no range, and latin-ext declared LAST, so per CSS Fonts §5.2 latin-ext
+// won for ALL text. Every visitor fetched a latin-ext file (94,796 bytes across the six), found no
+// glyph for `a` or `—`, and only then fell through to latin — a second serial round trip in front
+// of every word, lengthening the font-display:swap flash.
+// It buys nothing here: latin covers U+2000-206F, which is where this site's only non-ASCII
+// characters live (— U+2014, ' U+2019). latin-ext is U+0100-02BA etc — Central/Eastern European
+// accents the copy never renders. If real latin-ext coverage is ever wanted, import the AGGREGATE
+// weight files (@fontsource/lora/400.css), which ship the ranges that make subsetting work.
 //
 // ⚠ NO italic face, deliberately. The Google request never asked for one either
 // (`Lora:ital,wght@0,400;0,600;0,700` is ital=0 throughout), so the `<em>` in the legal pages has
 // always rendered as a browser-synthesised oblique. Adding a real italic would be a typography
 // change, not a hosting change — worth doing, but not smuggled in here.
 import '@fontsource/zilla-slab/latin-700.css'
-import '@fontsource/zilla-slab/latin-ext-700.css'
 import '@fontsource/lora/latin-400.css'
-import '@fontsource/lora/latin-ext-400.css'
 import '@fontsource/lora/latin-600.css'
-import '@fontsource/lora/latin-ext-600.css'
 import '@fontsource/lora/latin-700.css'
-import '@fontsource/lora/latin-ext-700.css'
 import '@fontsource/overpass-mono/latin-400.css'
-import '@fontsource/overpass-mono/latin-ext-400.css'
 import '@fontsource/overpass-mono/latin-600.css'
-import '@fontsource/overpass-mono/latin-ext-600.css'
 import '../styles/global.css'
 import { APP_STORE_URL } from '../appStore'
 
@@ -70,29 +76,47 @@ const {
 // ⚠ `TouristTrip`/`TouristAttraction` are tempting and deliberately NOT used: they describe a
 // specific itinerary or place, and asserting one on a page that renders neither would be a lie in
 // schema form.
+// ⚠ The ENTITY description is not the PAGE description. This markup renders on every indexable
+// page, so binding the Organization/MobileApplication `description` to the per-page prop emitted
+// five contradictory copies of the same unkeyed entity — /terms told a crawler, as machine-readable
+// fact, that the Organization "Skipper" IS "the terms for using Skipper: drive safely, the narration
+// is AI-generated…", and /support that it is "Help with Skipper — coverage, location, audio…".
+// One brand sentence here; the per-page `description` stays with <meta>/og/twitter where it belongs.
+const BRAND_DESCRIPTION =
+  'Skipper is a narrated audio driving tour for iPhone: a corny old guide rides shotgun and tells you ' +
+  'the story of each place as you reach it, GPS-triggered and grounded in cited public sources. ' +
+  'Starting with Lake Tahoe.'
+
+// @id so the repeated nodes across pages reconcile to ONE entity instead of competing.
+const ORG_ID = new URL('#org', Astro.site).href
+const SITE_ID = new URL('#website', Astro.site).href
+const APP_ID = new URL('#app', Astro.site).href
+
 const storeLinks = APP_STORE_URL ? { sameAs: [APP_STORE_URL], installUrl: APP_STORE_URL } : {}
 const ldJson = JSON.stringify({
   '@context': 'https://schema.org',
   '@graph': [
     {
       '@type': 'Organization',
+      '@id': ORG_ID,
       name: 'Skipper',
       url: Astro.site?.href,
-      logo: new URL('/favicon.svg', Astro.site).href,
-      description,
+      description: BRAND_DESCRIPTION,
       ...(APP_STORE_URL ? { sameAs: [APP_STORE_URL] } : {}),
     },
-    { '@type': 'WebSite', name: 'Skipper', url: Astro.site?.href },
+    { '@type': 'WebSite', '@id': SITE_ID, name: 'Skipper', url: Astro.site?.href, publisher: { '@id': ORG_ID } },
     {
       '@type': 'MobileApplication',
+      '@id': APP_ID,
       name: 'Skipper',
       applicationCategory: 'TravelApplication',
       operatingSystem: 'iOS',
+      publisher: { '@id': ORG_ID },
       // The official page while the listing is unreleased; the store URL joins as `installUrl` +
       // `sameAs` the moment APP_STORE_URL is set (§13). Pointing `url` at a 404 would be worse
       // than pointing it here.
       url: Astro.site?.href,
-      description,
+      description: BRAND_DESCRIPTION,
       // True and load-bearing: the app is free. Premium is CREDITS, bought in-app later, never a
       // paid download — see docs/decisions/cut-tiers.md.
       offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },

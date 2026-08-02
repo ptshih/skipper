@@ -1,7 +1,15 @@
 # /t/ share funnel removed (universal-link capability kept dormant)
 
-**Status:** ✅ **DECIDED + DONE 2026-06-19.** The `/t/<id>` share funnel is removed; the iOS
-universal-link *capability* (the `associatedDomains` entitlement) is retained, dormant.
+**Status:** ✅ **DECIDED + DONE 2026-06-19.** The `/t/<id>` share funnel is removed.
+**⚠ AMENDED 2026-07-28 (`c78a3df`), recorded here 2026-08-02:** the entitlement is **no longer
+dormant and the AASA is BACK** — for a different job. `apps/mobile/app.json` now declares
+`associatedDomains: ["webcredentials:skipper.fm"]` (NOT `applinks:`), and
+`apps/site/public/.well-known/apple-app-site-association` is served again carrying a
+`webcredentials` key only. That association is what lets iOS Password AutoFill offer the app the
+password a rider just set in a browser on `/reset-password`. **Deleting that file, or the
+`application/json` Content-Type rule for it in `apps/site/firebase.json`, silently breaks
+sign-in AutoFill on device — no test and no build will catch it.** The "Removed" list below is
+therefore historically accurate but no longer describes the tree; `applinks` remains gone.
 
 ## Why
 
@@ -18,13 +26,17 @@ the real share URL (`skipper.fm/t/…`) never reaches. Dead-ish weight carrying 
 - **api:** the `GET /t/:id` route + `shareLandingHtml`; the whole `apps/api/src/share.ts` +
   `apps/api/test/share.test.ts`.
 - **site:** the static `apps/site/public/.well-known/apple-app-site-association` (the AASA file).
+  ⚠ **Restored 2026-07-28 (`c78a3df`)** in a different form — `webcredentials` only, no `applinks`.
+  See the amendment in the Status line above; do not read this bullet as current.
 
 ## Kept (the dormant capability)
 
-- `apps/mobile/app.json` → `associatedDomains: ["applinks:skipper.fm"]` — the entitlement /
-  provisioning (the finicky Apple-side setup: App ID + Team ID `L24UJYJ5DK.fm.skipper.app`). With no
-  AASA served, iOS establishes no association at install — harmless. Keeping it avoids re-walking the
-  universal-link setup (a notorious silent-failure minefield) when links return.
+- `apps/mobile/app.json` → `associatedDomains` — the entitlement / provisioning (the finicky
+  Apple-side setup: App ID + Team ID `L24UJYJ5DK.fm.skipper.app`). Kept because re-walking the
+  universal-link setup (a notorious silent-failure minefield) is the expensive part.
+  ⚠ **It reads `["webcredentials:skipper.fm"]` since `c78a3df`, not `["applinks:skipper.fm"]`, and
+  it is no longer dormant** — the entitlement is live and doing a real job (Password AutoFill against
+  the web password reset). `applinks` is the half that stays gone until a share story exists.
 
 ## Reintroducing later
 

@@ -8,7 +8,7 @@ import Trail from '../Trail.astro'
 import Icon from '../Icon.astro'
 
 // Swap-in point for the hero clip. Drop a founder-blessed ~20s MP3 at this path
-// (see public/clips/README.md). If it 404s, the player shows the warming state.
+// (see apps/site/CLIPS.md). If it 404s, the player shows the warming state.
 const HERO_CLIP = '/clips/skipper-hero.mp3'
 const HERO_STOP = 'Emerald Bay overlook'
 ---
@@ -97,6 +97,13 @@ const HERO_STOP = 'Emerald Bay overlook'
 
         <p class="player__caption mono" data-caption>EMERALD BAY OVERLOOK · his real voice, his real corn</p>
         <audio data-audio src={HERO_CLIP} preload="metadata"></audio>
+        <!-- The page's stated bet is "the only action is hearing the Skipper", and every affordance
+             above it — the disc, the CTA, the scrubber — is scripted. With JS blocked the placard
+             rendered in full and did nothing, silently. The clip is a plain static file, so the
+             fallback costs one element. -->
+        <noscript>
+          <audio src={HERO_CLIP} controls preload="none"></audio>
+        </noscript>
       </figure>
 
       <!-- the atlas trail: car parked at the trailhead, glides as he talks -->
