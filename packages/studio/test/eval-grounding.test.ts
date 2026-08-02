@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test'
+import type Anthropic from '@anthropic-ai/sdk'
 import {
   buildGroundingWell,
+  claimsFromResponse,
   evaluateGrounding,
   makeVotingDecomposer,
   normalizeClaims,
@@ -278,5 +280,65 @@ describe('buildScorecard — rollup + the gate', () => {
     expect(charm.pass).toBe(false)
     expect(charm.stopsFailed).toBe(2)
     // (this same case proves the all-gates-clean → card.pass=true path: the grounding gate passes here)
+  })
+})
+
+// ── claimsFromResponse — the gate must FAIL CLOSED on an untrustworthy verdict ───────────────────
+// evaluateGrounding scores an empty claim list `pass: true, score: 1`. That is correct for a clip
+// that genuinely speaks no place-claims, and catastrophic for a judge reply that was cut short: the
+// two used to be the same shape. These pin the distinction. A throw is the fail-closed direction —
+// both generators catch a gate throw per clip and record it WITHHELD.
+describe('claimsFromResponse — a truncated audit is never a clean audit', () => {
+  const toolCall = (input: unknown, stop: string | null = 'tool_use'): Anthropic.Message =>
+    ({
+      content: [{ type: 'tool_use', id: 't1', name: 'report', input }],
+      stop_reason: stop,
+      usage: { input_tokens: 10, output_tokens: 10 },
+    }) as unknown as Anthropic.Message
+
+  test('a well-formed verdict passes through and normalizes', () => {
+    const out = claimsFromResponse(
+      toolCall({ claims: [{ claim: 'a bay on Lake Tahoe', status: 'grounded', evidence: 'sheet' }] }),
+      0,
+    )
+    expect(out).toHaveLength(1)
+    expect(out[0]!.status).toBe('grounded')
+  })
+
+  test('claims: [] is a LEGITIMATE zero-claim verdict and still passes', async () => {
+    // The distinction that matters: present-and-empty is a real answer, absent is a missing one.
+    const out = claimsFromResponse(toolCall({ claims: [] }), 0)
+    expect(out).toEqual([])
+    const e = await evaluateGrounding(input(), async () => out)
+    expect(e.pass).toBe(true)
+    expect(e.score).toBe(1)
+  })
+
+  test('stop_reason max_tokens THROWS — a cut-off verdict must not score 1.0', () => {
+    expect(() => claimsFromResponse(toolCall({ claims: [] }, 'max_tokens'), 7)).toThrow(/truncated/i)
+    // ...even when the partial call still carries some claims: the rest of them are unknown.
+    expect(() =>
+      claimsFromResponse(toolCall({ claims: [{ claim: 'x', status: 'grounded' }] }, 'max_tokens'), 7),
+    ).toThrow(/truncated/i)
+  })
+
+  test('a tool call with NO claims key THROWS rather than reading as "nothing wrong"', () => {
+    // The tool schema marks `claims` required, so its absence means malformed/cut-short — the exact
+    // shape that used to reach normalizeClaims(undefined) → [] → pass, score 1, clip ships.
+    expect(() => claimsFromResponse(toolCall({}), 3)).toThrow(/claims/)
+  })
+
+  test('no tool call at all still throws', () => {
+    const textOnly = {
+      content: [{ type: 'text', text: 'I think it is fine' }],
+      stop_reason: 'end_turn',
+      usage: { input_tokens: 1, output_tokens: 1 },
+    } as unknown as Anthropic.Message
+    expect(() => claimsFromResponse(textOnly, 1)).toThrow(/no tool call/)
+  })
+
+  test('a non-array claims value is still COERCED, not thrown on (the old crash regression)', () => {
+    expect(claimsFromResponse(toolCall({ claims: null }), 0)).toEqual([])
+    expect(claimsFromResponse(toolCall({ claims: { claim: 'one', status: 'grounded' } }), 0)).toHaveLength(1)
   })
 })

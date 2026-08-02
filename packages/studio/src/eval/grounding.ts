@@ -202,6 +202,53 @@ export function normalizeClaims(raw: unknown): ClaimVerdict[] {
   })
 }
 
+/**
+ * The judge's raw reply → claim verdicts, with every "this verdict is not trustworthy" shape turned
+ * into a THROW. Split out of `anthropicDecomposer` so it is reachable without a model call (and
+ * without a process-wide module mock) — the same dependency-seam convention `pipeline/gate.ts` uses,
+ * for the same reason: the fail-closed branches below could otherwise only be exercised by paying
+ * for them, and non-deterministic model output could not prove they work even then.
+ */
+export function claimsFromResponse(response: Anthropic.Message, seq: number): ClaimVerdict[] {
+  // ⚠ A TRUNCATED audit must never read as a clean one. `max_tokens` cuts the forced tool call off
+  // mid-JSON, so `claims` arrives absent or half-written — and `evaluateGrounding` below scores an
+  // empty claim list `pass: true, score: 1`. That made the one response shape meaning "the judge
+  // never finished" score identically to "the judge found nothing wrong", on the gate whose entire
+  // job is to be fail-CLOSED. Worse, truncation is likeliest on long, claim-dense scripts: exactly
+  // the clips that most need auditing.
+  //
+  // Throwing IS the fail-closed direction here — both generators catch a gate throw per clip and
+  // record it as WITHHELD (generate-narrations.ts's fault-isolation block), so one truncated verdict
+  // costs one clip, never the run. The sibling model calls in this package already branch on
+  // stop_reason (narrate.ts, scout.ts, veracity.ts); the safety gate was the one that did not.
+  if (response.stop_reason === 'max_tokens') {
+    throw new Error(
+      `Grounding eval: judge response truncated at max_tokens (${GROUNDING_MAX_TOKENS}) for stop ${seq} — ` +
+        'the verdict is incomplete; refusing to score it as clean.',
+    )
+  }
+  const call = response.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
+  if (!call) throw new Error(`Grounding eval: model returned no tool call for stop ${seq}.`)
+  const rawClaims = (call.input as { claims?: unknown }).claims
+  // An ABSENT `claims` key is not "no claims". The tool schema marks it required, so its absence means
+  // a malformed or cut-short call — distinct from `claims: []`, which is a legitimate verdict (a clip
+  // that speaks no place-claims) and still passes. Only the missing key fails closed.
+  if (rawClaims === undefined) {
+    throw new Error(
+      `Grounding eval: judge returned a tool call with no 'claims' key for stop ${seq} — ` +
+        'incomplete verdict; refusing to score it as clean.',
+    )
+  }
+  if (rawClaims !== null && !Array.isArray(rawClaims)) {
+    // Visibility for recurrence — this shape used to crash `.map`; it is now coerced, not dropped.
+    console.warn(
+      `Grounding eval: model returned non-array 'claims' (${typeof rawClaims}) for stop ${seq} — coercing.`,
+    )
+  }
+  // Never trust the wire — the schema constrains the model, but coerce defensively anyway.
+  return normalizeClaims(rawClaims)
+}
+
 /** The real, Anthropic-backed decomposer (tool-use structured output). */
 export const anthropicDecomposer: ClaimDecomposer = async (input) => {
   const response = await getAnthropic('grounding eval needs it').messages.create({
@@ -213,17 +260,7 @@ export const anthropicDecomposer: ClaimDecomposer = async (input) => {
     messages: [{ role: 'user', content: buildUserMessage(input) }],
   })
   recordModelUsage(GROUNDING_MODEL, response.usage)
-  const call = response.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
-  if (!call) throw new Error(`Grounding eval: model returned no tool call for stop ${input.seq}.`)
-  const rawClaims = (call.input as { claims?: unknown }).claims
-  if (rawClaims != null && !Array.isArray(rawClaims)) {
-    // Visibility for recurrence — this shape used to crash `.map`; it is now coerced, not dropped.
-    console.warn(
-      `Grounding eval: model returned non-array 'claims' (${typeof rawClaims}) for stop ${input.seq} — coercing.`,
-    )
-  }
-  // Never trust the wire — the schema constrains the model, but coerce defensively anyway.
-  return normalizeClaims(rawClaims)
+  return claimsFromResponse(response, input.seq)
 }
 
 /**
