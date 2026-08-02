@@ -370,7 +370,7 @@ function clusterRowsToCorpus(rows: ClusterTelling[], into: Map<string, Narration
   return into
 }
 
-/** Load every roam narration whose POI falls within the route's bounding box (padded by the off-route
+/** Load every narration whose POI falls within the route's bounding box (padded by the off-route
  *  ceiling) — the candidate set buildDrive snaps + paces. A few hundred rows per region, so a bbox
  *  prefilter beats PostGIS. Keyed by poiId (the buildDrive ⇄ narration join).
  *

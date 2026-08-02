@@ -229,7 +229,7 @@ export function Location({ poiId, poiLat, poiLng }: { poiId: string; poiLat?: nu
         {data?.excludedReason ? (
           <>
             <div className="text-xs leading-relaxed">
-              <span className="font-semibold text-foreground">Hidden from new drives and from roam.</span>{' '}
+              <span className="font-semibold text-foreground">Hidden from new drives.</span>{' '}
               <span className="text-muted-foreground">
                 Existing saved drives keep it — a drive's stops are frozen at build, so nobody loses a stop
                 they spent a credit on. Audio is untouched, so restoring needs no regeneration.

@@ -13,7 +13,7 @@
  *  "attack"/"fire"/"shootout"/"wreck". Two guards dodge benign POIs: `shooting(?! range)` keeps gun
  *  ranges, `\brape\b` keeps "Grapevine"/"grape". Cheap to over-filter (a skipped POI is just silence,
  *  visible in the admin); a leak gets the founder ear. Enforced once in the shared narration pipeline
- *  (generate-narrations.ts), so BOTH roam and drives inherit it via the one `narrations` corpus. */
+ *  (generate-narrations.ts), so every drive inherits it via the one `narrations` corpus. */
 export const STORY_TASTE_DENYLIST =
   /kidnap|abduction|murder|manslaughter|homicide|killing of|mass killing|massacre|lynching|shooting(?! range)|stabbing|gunman|hostage|\brape\b|sexual assault|assault|suicide|death of|serial killer|execution of|terrorism|terrorist|genocide|torture/i
 

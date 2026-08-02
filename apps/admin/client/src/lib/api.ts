@@ -175,7 +175,7 @@ export interface PoiCorrections {
    *  was hand-placed or the poi is un-snapped. A minor-layer class is the tell for "triggers from a
    *  real road that no drive actually takes". */
   speakableRoadClass: string | null
-  /** Non-null ⇒ HIDDEN from new drives and from roam. Audio is untouched, so clearing it restores the
+  /** Non-null ⇒ HIDDEN from new drives. Audio is untouched, so clearing it restores the
    *  place with no regeneration. */
   excludedReason: string | null
   /** The legibility GROUP this poi belongs to, or null when it stands alone (most of them). INERT until

@@ -26,7 +26,7 @@ export const OFF_ROUTE_MAX_M = 700
  * matches its body: a peak's pin is its SUMMIT, a lake's is open water, while a building sits
  * near the curb. Measured on the first live drive: at a flat 250 m only 8 of 77 basin pins were
  * reachable from the highway. The client's speed-adaptive lead still extends these at speed.
- * Single-sourced here so the /roam and /drives radii can't drift apart.
+ * Single-sourced here so every consumer's trigger radii can't drift apart.
  *
  * The patterns track the discovery vocabulary (`featureKind` in the studio pipeline): an extended
  * landform (peninsula/point/cape) gets the areal tier, a high mountain feature (incl. a pass) the
@@ -201,7 +201,7 @@ export function timeAtAlong(alongM: number, totalRouteM: number, totalRouteSec: 
 // `sideOfApproach` (which side of the road a POI sits on) lived here until 2026-07-15. It was wired
 // live by 6cb88d1 under the PHASE-2 tour model, where a narration was tour-owned and could bake a
 // side; 3b95785 deleted that pipeline and stranded it. V2 doesn't just not-use it — it BANS what it
-// computed: a narration is the shared atom (one telling reused by roam and by every drive, from any
+// computed: a narration is the shared atom (one telling reused by every drive, from any
 // approach direction), so naming a side is an ungrounded place-claim, fail-closed by the laterality
 // gate (studio eval/laterality.ts). Kept as a guarded helper it would read as blessed and current —
 // a trap pointing at the one thing that must never ship. If laterality ever returns it needs a

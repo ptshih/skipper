@@ -104,7 +104,7 @@ export type JobKind = z.infer<typeof jobKind>
 
 /**
  * Access level (DERIVED per request, not a column):
- *  - `anonymous` = no/guest session (roam + the preview tour)
+ *  - `anonymous` = no/guest session (the planner, /sample, and the route preview)
  *  - `free`      = a signed-in account
  * There is NO paid tier — premium is bought as CREDITS, not a plan flag, so every account is `free`
  * and the credit ledger governs what it can do (a comp = a big admin grant). `anonymous` is simply

@@ -4,7 +4,7 @@
 // Cloud Run service from the public api.skipper.fm so a routing bug can't leak ops onto the
 // funnel. Reads the same DB + presigns R2 for the roam ear-pass; triggers the skipper-studio Cloud
 // Run Job for corpus ops (jobs.ts). V2: authored tours are deferred — the console operates the
-// shared POI corpus + roam narrations; the tour catalog / Create-a-Tour flow is gone.
+// shared POI corpus + the narrations drives reuse; the tour catalog / Create-a-Tour flow is gone.
 // Background: docs/designs/admin-ops-console-spec.md §6.
 //
 //   GET  /health                  -> liveness (OPEN — Cloud Run probes don't pass through IAP)
@@ -1357,7 +1357,7 @@ async function correctionsForPoi(poi: {
     // drive never takes. Written by snap-speakable-anchors; null for a hand-placed or un-snapped anchor.
     cluster,
     speakableRoadClass: poi.speakableRoadClass,
-    // Non-null ⇒ this poi is HIDDEN from new drives and from roam. Surfaced here because it is
+    // Non-null ⇒ this poi is HIDDEN from new drives. Surfaced here because it is
     // otherwise invisible: the API just stops returning the place, with nothing in the console saying so.
     excludedReason: poi.excludedReason,
   }

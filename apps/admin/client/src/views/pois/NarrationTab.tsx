@@ -68,7 +68,7 @@ export function NarrationTab({ poiId, hasNarration }: { poiId: string; hasNarrat
   async function handleRelease() {
     if (!(await confirm({
       title: 'Release this clip to the public?',
-      body: 'Makes this narration publicly playable in roam + drives. Releasing is permanent — a clip can never be un-released (it would orphan saved drives and break offline downloads). Make sure you’ve heard it.',
+      body: 'Makes this narration publicly playable in drives. Releasing is permanent — a clip can never be un-released (it would orphan saved drives and break offline downloads). Make sure you’ve heard it.',
       confirmLabel: 'Release clip',
       tone: 'destructive',
     }))) return

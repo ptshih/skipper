@@ -1,4 +1,4 @@
-// buildDrive — assemble a paced, ordered drive from REUSED roam narrations along a frozen route.
+// buildDrive — assemble a paced, ordered drive from the corpus's REUSED narrations along a frozen route.
 //
 // The heart of V2's "Create a Drive": a drive is "roam, pre-ordered for your route." Each narration
 // is a place's ONE shared telling (1:1 with its POI), already synthesized — so this NEVER generates
@@ -17,7 +17,7 @@ import { cumulativeMeters, haversineMeters, OFF_ROUTE_MAX_M, totalMeters, trigge
 import { buildRouteSnapper } from './pacing'
 import { DEFAULT_TRIGGER, effectiveRadiusM } from './trigger'
 
-/** A reusable roam narration a drive can include — the place's ONE shared telling (1:1 with the POI).
+/** A reusable narration a drive can include — the place's ONE shared telling (1:1 with the POI).
  *  engine stays DB-agnostic, so the caller maps DB rows to this shape. */
 export interface DriveCandidate {
   poiId: string
