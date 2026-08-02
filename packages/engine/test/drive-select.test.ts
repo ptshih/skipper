@@ -29,6 +29,40 @@ describe('buildDrive', () => {
     expect(stops.some((s) => s.poiId === 'off')).toBe(false)
   })
 
+  // The PICK-ONE co-located dedupe (DRIVE_MIN_SEPARATION_M). Two narrations closer than 1 km on the
+  // ground are the same physical stop, so one of them must go.
+  //
+  // ⚠ THIS WAS UNTESTED until 2026-08-02, and the gap was invisible in the usual way: setting
+  // DRIVE_MIN_SEPARATION_M to 0 — i.e. deduping NOTHING — left the whole engine suite green. Found by
+  // mutating the constant after it was inlined, not by reading the code.
+  //
+  // ⚠ THE CONTROL IS THE POINT. Two other rules can drop a nearby second stop and would make a
+  // separation-only assertion pass for the wrong reason: the min-gap pacing clock, and the queue-lag
+  // DROP (a 2-minute clip in front of a stop 33 s later lags it out at DRIVE_MAX_LAG_SEC). So the gap
+  // is 1 s and the clips are 10 s — both neutralized — and the far pair proves the DISTANCE is what
+  // discriminates, because it survives with everything else held identical.
+  const coLocated = (aLat: number, bLat: number) =>
+    buildDrive({
+      polyline,
+      totalSec: TOTAL_SEC,
+      minGapSec: 1,
+      maxStops: 10,
+      candidates: [
+        cand({ poiId: 'a', lat: aLat, audioDurationMs: 10_000 }),
+        cand({ poiId: 'b', lat: bLat, audioDurationMs: 10_000 }),
+      ],
+    })
+
+  test('two candidates INSIDE the separation floor collapse to one', () => {
+    // 0.005 deg lat ≈ 557 m — inside the 1 km floor.
+    expect(coLocated(38.05, 38.055)).toHaveLength(1)
+  })
+
+  test('...and the same pair OUTSIDE it keeps both (the distance is what decides)', () => {
+    // 0.02 deg lat ≈ 2.2 km — outside the floor, everything else identical.
+    expect(coLocated(38.05, 38.07)).toHaveLength(2)
+  })
+
 
   // The SECOND admission rule. A too-wide group arrives with an off-road enclosing-circle CENTRE and a
   // radius CAPPED below its true extent — so the point rule would place it wherever the centre happens

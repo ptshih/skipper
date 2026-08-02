@@ -95,12 +95,6 @@ export interface BuildDriveParams {
   minGapSec: number
   /** Hard cap on the number of stops. */
   maxStops: number
-  /** Off-route ceiling (m); defaults to the shared OFF_ROUTE_MAX_M. */
-  offRouteMaxM?: number
-  /** Min on-the-ground separation (m) for the pick-one co-located dedupe. */
-  minSeparationM?: number
-  /** A stop whose clip would start more than this many seconds after its trigger is DROPPED. */
-  maxLagSec?: number
 }
 
 /** Two narrations closer than this on the ground are the same physical stop — collapse to one
@@ -120,9 +114,6 @@ interface Snapped {
 
 export function buildDrive(params: BuildDriveParams): DriveStop[] {
   const { polyline, totalSec, candidates, minGapSec, maxStops } = params
-  const offRouteMaxM = params.offRouteMaxM ?? OFF_ROUTE_MAX_M
-  const minSeparationM = params.minSeparationM ?? DRIVE_MIN_SEPARATION_M
-  const maxLagSec = params.maxLagSec ?? DRIVE_MAX_LAG_SEC
   const minGapMs = minGapSec * 1000
 
   const snap = buildRouteSnapper(polyline, totalSec)
@@ -137,8 +128,8 @@ export function buildDrive(params: BuildDriveParams): DriveStop[] {
 
   // 1. Snap to the route, then drop candidates the car will never come close enough to TRIGGER.
   //
-  //    ⚠ Two different distances used to govern this, and they disagreed. `offRouteMaxM` (700 m) is an
-  //    HONESTY bound — "is this place actually along the drive". The TRIGGER fires on the car's distance
+  //    ⚠ Two different distances used to govern this, and they disagreed. `OFF_ROUTE_MAX_M` (700 m) is
+  //    an HONESTY bound — "is this place actually along the drive". The TRIGGER fires on the car's distance
   //    to the stop, floored at ANCHORED_TRIGGER_RADIUS_M (250 m) for a road-snapped anchor and only
   //    stretched by speed (max(floor, speed x leadSeconds) ~ 322 m at 60 mph). So every candidate
   //    admitted in the 250-700 m band was SELECTED and then silent: it consumed a min-gap pacing slot,
@@ -178,7 +169,7 @@ export function buildDrive(params: BuildDriveParams): DriveStop[] {
     if (cand.tooWideForPoint) continue
     const s = snap([cand.lng, cand.lat])
     const reachM = Math.min(
-      offRouteMaxM,
+      OFF_ROUTE_MAX_M,
       effectiveRadiusM(candidateTriggerRadiusM(cand), avgMps, DEFAULT_TRIGGER.leadSeconds),
     )
     if (s.offRouteM <= reachM) {
@@ -199,7 +190,7 @@ export function buildDrive(params: BuildDriveParams): DriveStop[] {
   for (const cand of byScore) {
     const collides = kept.some(
       (k) =>
-        haversineMeters([k.cand.lng, k.cand.lat], [cand.cand.lng, cand.cand.lat]) < minSeparationM,
+        haversineMeters([k.cand.lng, k.cand.lat], [cand.cand.lng, cand.cand.lat]) < DRIVE_MIN_SEPARATION_M,
     )
     if (!collides) kept.push(cand)
   }
@@ -249,14 +240,14 @@ export function buildDrive(params: BuildDriveParams): DriveStop[] {
 
   // 4. Queue-lag DROP: clips play through a sequential FIFO, so a clip can't start until the
   //    previous ends. Walk in route order keeping a play cursor; DROP any clip that would start
-  //    more than maxLagSec after its trigger (it would lag too far behind the car). Dropping a
+  //    more than DRIVE_MAX_LAG_SEC after its trigger (it would lag too far behind the car). Dropping a
   //    laggard frees the queue for the next one, so this is a single forward pass.
   chosen.sort((a, b) => a.alongSec - b.alongSec)
   const survivors: Snapped[] = []
   let playEnd = 0
   for (const s of chosen) {
     const start = Math.max(s.alongSec, playEnd)
-    if (start - s.alongSec > maxLagSec) continue
+    if (start - s.alongSec > DRIVE_MAX_LAG_SEC) continue
     playEnd = start + s.cand.audioDurationMs / 1000
     survivors.push(s)
   }

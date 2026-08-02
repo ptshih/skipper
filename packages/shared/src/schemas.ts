@@ -155,7 +155,6 @@ export const regionAnchor = z.object({
   featured: z.boolean().default(false),
 })
 export type RegionAnchor = z.infer<typeof regionAnchor>
-export const regionAnchorList = z.object({ anchors: z.array(regionAnchor) })
 
 /**
  * An endpoint, as a REQUEST may name it: the id of a curated `places` row, never a coordinate.
