@@ -681,9 +681,56 @@ when a build that saved v4 downloads is upgraded in place. Install the previous 
 three overlapping drives, then install this one over it — a fresh install never exercises it, which is
 exactly how a broken migration ships green.
 
-**10 — Simplification sweep** (D36, plus `drive_demand` from step 3). ⚠ Announce and claim paths first —
-this collides with any concurrent workspace-cleanup agents far harder than docs work did. `curate-places`
-untouched (INV-2). `routeSigOf` survives the table drop.
+**10 — Simplification sweep** (D36). ✅ **DONE 2026-08-01, in six atomic commits by explicit path** —
+no codemod, `curate-places` untouched (INV-2), root `bun run check` green after each.
+
+Cut, each verified to have zero readers first: `durationBucket` + `interest` (never imported, survived
+two pivots — sediment, not vocabulary); `wave` off `driveClipForm` (roam is gone, so no drive can
+contain one; the corpus is 458/458 `story`); `areaFill`/`areaStroke` (the district hull they coloured
+went with the area trigger, three steps earlier); `drive_demand` (D25 — a non-idempotent write on the
+credit-spending path, read by nothing); `GET /sources` + `apps/api/src/sources.ts` (two homes for one
+CC BY-SA list, where the "credit a source without a release" argument was never true because the app
+had to bundle a byte-identical fallback anyway); the two dead studio CLIs and `golden.ts`'s two
+disconnected case tables (D26); the `detours` structural tests (D27 — zero writers).
+
+**One parser for `regions.bbox`.** There were FOUR, agreeing by luck, and one difference was real: the
+admin's trimmed and the other three did not, so a bbox typed with a space after a comma resolved in the
+console and matched zero pois everywhere else. Now `parseRegionBbox`/`pointInRegionBbox` in
+`@skipper/engine`, tested including that case. ⚠ `bboxError`/`MAX_BBOX_SPAN_DEG` deliberately stay in
+the admin — an operator WRITE-boundary guard against a paid-run runaway is different semantics.
+
+**One definition of "signed in"** (`packages/shared/src/access.ts`). The API's and the app's copies
+agreed by comment, not by construction, while INV-9 makes that predicate decide both what a rider sees
+and whether the server hands them a gated route — and a drift had already happened (the client's
+`isAdmin` did not exclude anonymous until step 8b). Mutation-checked.
+
+⚠ **The three untyped success literals in `drives.ts` now `satisfies` their DTOs.** They matched
+already; the point is that an optional field was previously invisible to tsc in BOTH directions.
+Mutation-checked that the guard bites.
+
+⚠ **Roam prose that described a LIVE surface** is corrected — most importantly the admin Reference
+page, which CLAUDE.md requires to stay true and which no test can catch drifting. It told an operator
+that Released meant "playable in roam + drives" on the page they consult before doing something
+permanent. ~140 incidental historical mentions are deliberately left; a mechanical rename across the
+console is the codemod-shaped churn this sweep exists to avoid.
+
+⚠ **NOT cut, with reasons** — all from `post-1-1-slate.md` §3:
+- **`drives.route_sig` (§3.1).** The evidence is sound (no SELECT reads it; zero hits outside the API),
+  but the column is **NOT NULL**, so the code cut and the DDL must land together or `POST /drives`
+  breaks on the first insert. That pairing is a deliberate production act against the one shared Neon
+  host, not a side effect of a sweep commit. Owed as its own change.
+- **`test-mastering-chain.ts`**, which D26 names as dead. Its premise is wrong for that file:
+  `audio-loudness-spec.md` cites it twice as the harness to run before any mastering-chain change.
+  Rarely used is not dead. Raised rather than resolved against a live decision record.
+- **Hard-delete drives (§3.5)** — the slate itself says "right after 1.1", and it carries a real
+  behaviour change (the idempotent replay must re-key off the ledger or a replay becomes a free drive).
+- **Drive music (§3.8)** — contradicts D28 and is explicitly founder taste.
+- **The conditional-spread idiom (§3.6)** beyond the typed literals — churn across files steps 4 and 8a
+  both edited, for a guard the `satisfies` now provides at the boundary that matters.
+
+✅ **Already resolved by earlier steps, recorded so they are not re-proposed:** §3.10 (`places.featured`
+is now fed — step 8's `exampleAnchors` orders by it) and §3.11 (the `GET /drives` credit block sits
+behind `requireAccount` after 8a, and its backstop is tier-keyed).
 
 **11 — Instrumentation + remaining boundary tests** (D31/D32).
 

@@ -45,8 +45,11 @@ import {
   driveProposeRequest,
   type DriveClip,
   type DriveClipForm,
+  type DriveList,
   type DriveManifest,
   type DrivePreviewClip,
+  type DriveProposal,
+  type SignedDriveAudio,
   varietyKey,
   type RegionAnchor,
 } from '@skipper/shared'
@@ -602,7 +605,7 @@ driveRoutes.post('/propose', async (c) => {
     // (INV-5), which is what the `BuildCorpus` parameter type enforces. Always emitted so `null` means
     // "no clip on this route" and an ABSENT key means an older server.
     previewClip: previewClipFor(stops, corpus),
-  })
+  } satisfies DriveProposal)
 })
 
 // Per-IP cap on the CREATE path — it fires a Google Routes call + consumes a credit + writes a row,
@@ -904,7 +907,7 @@ driveRoutes.get('/', requireAccount, async (c) => {
       createdAt: r.createdAt.toISOString(),
     })),
     credits,
-  })
+  } satisfies DriveList)
 })
 
 /** Owner-scoped drive load by EXPLICIT id — the shared core of loadOwnedDrive (URL param) and the
@@ -1081,7 +1084,7 @@ driveRoutes.post('/:id/assets/sign', requireAccount, async (c) => {
       contentType: cl.contentType!,
       durationMs: cl.durationMs,
     }))
-    return c.json({ clips })
+    return c.json({ clips } satisfies SignedDriveAudio)
   } catch (e) {
     return audioUnavailable(c, 'drive sign', e)
   }
