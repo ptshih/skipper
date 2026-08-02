@@ -1,18 +1,30 @@
 # App Store Connect — the submission cheat-sheet
 
-> **Status:** LIVE 2026-07-30 — **SUBMITTED**. `1.0.0` is `WAITING_FOR_REVIEW` (submitted
+> **Status:** ⚠ **LISTING vs BUILD DIVERGED — 1.1 metadata WRITTEN 2026-08-02, NOT ENTERED.** The
+> live listing sells roam ("TWO WAYS TO RIDE / Ride Along: free, no account"), which 1.1 deletes, and
+> its "No account, no ads" claim is now factually wrong. §§3, 4 and 10 each carry a **1.1 replacement
+> block** alongside the live text; §9's screenshots are stale and need a real recapture (its own
+> step); §12 has the paste-it checkbox. Nothing here has been pushed to ASC — that is deliberate, and
+> it is **blocked on a founder decision that is not a metadata question**: `1.0.0` is still sitting in
+> review selling the old product, and the choice to take the approval, hold the release, or pull it
+> before 1.1 lands (`docs/designs/1-1-adversarial-review.md` §3.1) expires silently the day a reviewer
+> picks it up.
+>
+> **Submission state (as of 2026-07-30).** `1.0.0` is `WAITING_FOR_REVIEW` (submitted
 > 2026-07-28T21:42:22Z) with **build 15** attached; **build 16 (`1.0.1`)** is `VALID` in TestFlight,
 > deliberately NOT attached — swapping the build under a submission in review restarts the queue, so
-> 16 ships as the first post-approval update. Everything through §11b is now a RECORD of what is on
-> the live listing, not a to-do; the only open work is **§13 (after approval)**. Re-read values back
+> 16 ships as the first post-approval update. Everything through §11b is a RECORD of what is on the
+> live listing, not a to-do — read it as "what a reviewer sees today", which is no longer what the
+> app does. Open work: the 1.1 metadata paste, §9's recapture, and **§13 (after approval)**. Re-read values back
 > from ASC rather than trusting this file — it has drifted before (this pass, 2026-07-30, corrected
 > the age rating and the §10 notes, both of which were stale enough to do damage if re-pasted).
 > §8's privacy label was re-derived from the bundled SDKs'
 > own manifests on 2026-07-24 and grew from 9 data types to 12 — paste that table, not an older copy.
 > Every field App Store Connect asks for, ready to paste,
 > for `fm.skipper.app` (ASC app id `6778946770`, team `L24UJYJ5DK`, Manoa, Inc.). Character-limited
-> fields are pre-counted against Apple's caps. Screenshots are DONE and uploaded (§9) — they
-> no longer need capturing by hand. ⚠ Do NOT paste the review demo password into this file or
+> fields are pre-counted against Apple's caps. ⚠ Screenshots were DONE for 1.0 and are uploaded, but
+> **1.1 invalidates half the set** — see §9 before assuming they are reusable.
+> ⚠ Do NOT paste the review demo password into this file or
 > any committed file; it lives only in App Store Connect.
 
 Why this doc exists: the listing is the one launch surface with no test to fail, so it drifts
@@ -124,13 +136,95 @@ the listing and the site flip together. Editable until submission and while awai
 > pitch, so it now closes the line as "Starting in Lake Tahoe." Same rule as the subtitle and the
 > screenshot captions: mention the launch region, never pin the product to it.
 
+**LIVE on 1.0.0** — still TRUE under 1.1 (it never mentioned roam), so this is the one metadata
+field that is not broken. Nothing forces the swap below; take it when convenient.
+
 ```
 A corny old guide rides shotgun and tells you what happened where, timed to the road, hands-free, honest enough to hush when he doesn't know. Starting in Lake Tahoe.
+```
+
+**The 1.1 option — not yet entered.** This field is editable without a review, which makes it the
+cheapest place to announce the conversation. Still leads with the persona, still closes with the
+place, per the rule above:
+
+```
+A corny old guide plans your drive from a sentence, then narrates it — timed to the road, hands-free, honest enough to hush when he doesn't know. Starting in Lake Tahoe.
 ```
 
 ---
 
 ## 4. Description (4000 max)
+
+> ⚠ **The live description sells a product 1.1 deleted.** "TWO WAYS TO RIDE / Ride Along: free, no
+> account, no plan" is the headline 1.1 removes outright, and "No account, no ads" is now simply
+> **false** — planning is still account-free, but keeping a drive is not. A wrong factual claim in
+> the description is worth more than an awkward one: it is the kind of thing a reviewer checks.
+>
+> ⚠ **He is TYPED to, not spoken to.** The composer is a text input ("Tell me where to"). Copy that
+> implies voice input — "just say", "talk to him", "tell him out loud" — describes a feature that
+> does not exist. `apps/site/src/components/sections/Hero.astro` carries the same warning.
+
+### The 1.1 replacement — written 2026-08-02, **NOT YET ENTERED**
+
+Paste this when 1.1's metadata goes in (§12 has a checkbox for it). It leads with the conversation,
+because that is what changed and it is what the marketing site now leads with too.
+
+```
+A corny old tour guide rides shotgun and narrates your drive.
+
+Tell Skipper where you're headed, in your own words. He plans the drive — the route, the stops, and a story for each one — then rides along and tells them, timed to the road, so the tale about the bay lands while you can still see the bay.
+
+Mount your phone and go. He starts himself at every stop, so you never touch the screen.
+
+He's a ham. He will pun. He is also, underneath it, telling you the truth: every story is grounded in real, cited sources, and when the record is thin he says so and lets the view do the talking. A skipper who doesn't know is better than a skipper who invents.
+
+RIGHT NOW: LAKE TAHOE ONLY
+Every story is researched and recorded for a specific place, and the finished collection covers Lake Tahoe. Ask him for a road he doesn't know and he'll tell you so, honestly and in character. More regions are the plan, but we'd rather ship one place done properly than a nationwide map of nothing much.
+
+PLANNING IS A CONVERSATION, NOT A FORM
+No dropdowns, no pins to drag. Tell him "Tahoe City down to South Lake Tahoe, and I've got about two hours" and he'll lay out the route and what's on it. Change your mind — longer, shorter, take the west shore instead — and he'll redo it.
+
+HEAR IT BEFORE YOU COMMIT
+When he's drawn up a drive, he'll play you the first stop on that road — a real clip from your actual route, not a generic demo. No account needed to get that far.
+
+HONEST ABOUT THE MONEY
+Planning is free and needs no account. Keeping a drive — saved, downloaded, ready to go — takes a free account and spends one of your free credits, because building one does real work. No subscription, nothing to buy inside the app, and we never sell your data.
+
+BUILT FOR AN ACTUAL CAR
+Audio-first, so it works from a mount or over Bluetooth with your eyes on the road. Lock-screen controls. Nothing to look at, nothing to tap.
+
+WORKS WHERE THE SIGNAL DOESN'T
+Mountain roads have real dead zones. Download a drive before you go and the whole thing plays from your phone. No bars required.
+
+RE-HEAR ANYTHING
+Missed a line to a passing truck? Tap once to hear that stop again. Scrub, skip back fifteen seconds, pause. It's your drive.
+
+WHERE THE STORIES COME FROM
+Skipper's facts are grounded in public sources, including Wikipedia (CC BY-SA). Every stop's source is a tap away in the app, and the full list lives under Settings.
+
+A note on the driving: Skipper is meant to be heard, not watched. Mount your phone, start the drive, and keep your eyes where they belong. No story is worth it.
+```
+
+**What changed and why**, so this isn't re-litigated at paste time:
+
+- **TWO WAYS TO RIDE → one way.** Roam is gone; the drive is the only rider artifact. The section is
+  replaced by PLANNING IS A CONVERSATION, which is the actual new capability.
+- **"No account, no ads, and it plays offline" is cut from the lede.** It was true when riding along
+  was the free front door. Now the account line has to be precise about *where* the wall is, and
+  burying that in a lede claim is how you earn a 2.3.1 complaint.
+- **HEAR IT BEFORE YOU COMMIT is new**, and it is the strongest thing in the listing: an anonymous
+  rider gets a real clip from their own proposed route before any wall. Worth its own beat.
+- **The money beat keeps its position and its competitive edge** (§structure notes below) — it just
+  no longer claims unlimited free riding, which would be false.
+- **Kept verbatim:** the opening line, the ham/truth paragraph, Tahoe-only, car, offline, re-hear,
+  sources, and the driving note. They were never about roam and they still test well.
+- ⚠ **No credit NUMBER anywhere.** The free allotment lives in `apps/api/src/credits.ts` + env and a
+  grant freezes at signup; printing a count here would drift silently and be unfixable without a
+  review. "one of your free credits" is deliberate.
+
+### LIVE on the 1.0.0 listing — the record, not a target
+
+⚠ This is what is on ASC right now. Do not paste it; it is here so a future reader can diff.
 
 ```
 A corny old tour guide rides shotgun and narrates your drive.
@@ -235,6 +329,16 @@ stale copy from here silently reverts that work.
 ```
 narrated,sightseeing,GPS,offline,landmark,legend,attraction,itinerary,route,nearby,guide,Lake,Tahoe
 ```
+
+**1.1 note (2026-08-02): no change required, one term worth a look.** Unlike the description and the
+review notes, nothing here is false — these are category terms, and `Lake,Tahoe` must stay (it is
+still the only indexed field carrying the geography). The one candidate is **`nearby`**, which was
+chosen for roam's proximity model: "what's near me" was literally the product. It now describes
+nothing the app does — a rider names a route, and the guide never surfaces anything by proximity to
+the phone. Whether that makes it dead weight or just a broad discovery term is a real judgement call
+and it costs 7 of 99 characters, so it is left alone rather than swapped on a guess. If it goes,
+`conversation` and `itinerary`-adjacent terms are the obvious replacements — but keywords are
+version-scoped, so this rides a build either way and there is no hurry.
 
 ---
 
@@ -360,7 +464,25 @@ label) and does not justify a build 16; it ships on the next natural rebuild.
 
 ---
 
-## 9. Screenshots — DONE (six uploaded 2026-07-28)
+## 9. Screenshots — ⚠ **STALE for 1.1; recapture is its own step**
+
+> **Status 2026-08-02.** The six live assets show a product 1.1 deleted. Of the narrative order
+> below: **home is replaced** (the conversation is the home screen now), **the roam encounter shot is
+> of a mode that no longer exists**, and **"plan a drive" is the START/END picker** — which is also
+> the hero shot, the first thing a browser sees. Map, player and sample survive content-wise.
+>
+> The 28-second **App Preview video** (§9b) survives too: it shows the sample flow, not roam. ⚠ But it
+> bakes the OLD sample audio path, so re-check it plays before relying on it.
+>
+> **This is not a docs edit — budget it as real work.** A recapture needs a signed Release build
+> against production, dark mode, `simctl status_bar`, the branded-frame compositor, and for the video
+> `recordVideo` + an ffmpeg audio mux. It also cannot start until 1.1's UI is visually settled, so it
+> serializes behind the client work rather than running alongside it.
+>
+> ⚠ The dark-mode and status-bar traps below still apply. The roam-specific capture instructions
+> (drive a real GPS fix to fire an encounter, pull coordinates from `GET /roam`) are **dead** —
+> `GET /roam` no longer exists. The 1.1 equivalent for a player shot is a saved drive's live player;
+> for the hero, the conversation mid-proposal, which needs no GPS at all and is far easier to stage.
 
 Required slot is **6.9"** at **1320×2868**, which ASC stores under `APP_IPHONE_67`. Apple up-scales for
 smaller sizes; **no iPad set needed** (`supportsTablet: false`). Six are uploaded and validated
@@ -466,8 +588,72 @@ so re-pasting it would have *re-broken* a listing that was already fixed. What w
 3. It claimed **"no tracking, no analytics"** while the app ships PostHog and the Google Maps SDK —
    contradicting our own App Privacy label (§8). A reviewer who diffs those two rejects the build.
 
-Below is what is actually on the record now (3655 chars). Treat it as a mirror of ASC, not a source:
-if you change one, change both, and read it back.
+### The 1.1 replacement — written 2026-08-02, **NOT YET ENTERED**
+
+⚠ **1.1 makes the review path strictly better, and the notes have to say so.** Under 1.0 the only
+account-free, permission-free thing a reviewer could do was play one canned sample clip. Under 1.1 a
+reviewer at a desk in Cupertino can **plan a real drive and hear a real clip from their own route,
+with no account and no location prompt** — the planner, the route proposal and the preview clip are
+all anonymous, and the wall lands at "Make this drive". Lead with that.
+
+⚠ Every label below was read out of `apps/mobile/src/ui/voice.ts` and the screens on 2026-08-02.
+⚠ **Still requires an on-device pass before submission** — these notes describe a build nobody has
+walked through yet (the device verification owed since steps 7-9). A note that walks a reviewer into
+a screen that moved is the exact failure the 2026-07-30 rewrite was cleaning up.
+
+```
+Skipper is a hands-free, GPS-triggered audio tour for drivers. You plan a drive by TYPING to the guide in plain language and he lays out the route, the stops, and a story for each one. Three things will help you review it from a desk.
+
+1) COVERAGE IS THE LAKE TAHOE REGION ONLY.
+Every story is written and recorded for a specific place, and our finished collection covers Lake Tahoe and the nearby Nevada side (Reno, Carson City, Virginia City). Everywhere else has no content yet, and the guide will say so honestly and in character rather than failing. That is intended behavior. YOUR OWN LOCATION DOES NOT MATTER for anything below: the app does not ask for location permission until you start an actual drive.
+
+2) THE FASTEST REAL LOOK, FROM ANYWHERE: NO ACCOUNT, NO PERMISSION.
+Open the app. The guide opens with "Well now - where are we headed?" and a text box reading "Tell me where to". Type:
+
+    Tahoe City down to South Lake Tahoe
+
+He answers and draws it up. You will see the route and its stops under the heading "YOUR DRIVE", and below that a player headed "A TASTE OF THIS ONE" - press play. That is a real narration clip from the first stop on the route you just asked for, about a minute of audio. No sign-in and no location prompt anywhere on this path.
+
+"Make this drive" is where an account becomes necessary; signed out it says "You'll need a free account to keep this drive."
+
+3) ONE-TAP AUDIO IF YOU WOULD RATHER NOT TYPE.
+On the opening screen, under the example suggestions, tap "Not near Tahoe? Hear a quick sample." It opens a curated Lake Tahoe narration (Emerald Bay State Park) that begins playing on its own - real audio, about a minute. Also no account and no permission.
+
+FULLER EXPERIENCE (optional) - a complete multi-stop drive, still with no GPS:
+  - Tap "Sign in" (top-left) and use the demo account above.
+  - The demo account already has a saved drive. Under "MY DRIVES", tap "Tahoe City -> South Lake Tahoe".
+  - You land on a screen titled "Drive". Under the heading "THE ROUTE" is the line "Tap a stop to hear it." Tap any stop to play that stop's full narration (about a minute each). It plays one stop at a time and does not auto-advance, so tap the next when you are ready.
+  - Please do not tap "Start the drive" from a desk. That is the live, GPS-triggered drive: it waits until you physically reach a stop near Lake Tahoe, so in Cupertino nothing will play. It is also the ONLY place in the app that asks for location.
+  - To build one yourself while signed in, repeat step 2 and tap "Make this drive". Each drive you create uses one of the account's free drive credits.
+
+ACCOUNT DELETION (Guideline 5.1.1(v)):
+Sign in first, then: Settings (gear, top-right) -> "Delete account" -> type the account password at "Enter your password to confirm" -> "Permanently delete" -> confirm "Delete forever". It permanently deletes the account, its saved drives, and its remaining credits immediately. Nothing is emailed, and it cannot be undone. If you would like the demo account to stay usable for a second pass, you can create a throwaway account first (any email, no verification) and delete that one instead - the flow is identical.
+
+LOCATION USE:
+"When In Use" only, and only once you start a drive - planning, the sample and the preview clip never ask. It is used to time narration to your position while driving. There is no background location and no advertising. If you create a drive, its start and end coordinates are saved with that drive on your account. You may also see a one-time "Motion & Fitness" prompt; motion is used only to gauge speed and heading so each stop plays at the right moment. Coarse location and device identifiers are used for app functionality and product analytics (the sign-in session record, PostHog, and the bundled Google Maps SDK), as declared in our App Privacy labels.
+
+Thank you. Happy to help if anything is unclear.
+```
+
+**Deliberate choices, so they survive the next edit:**
+
+- **The typing step is spelled out with an exact string to type.** A reviewer who improvises an
+  off-corpus route gets the in-persona "don't know that one" and may read it as a broken app. Giving
+  them a route that works removes the only way this path fails.
+- **"TYPING" is stated in the first sentence.** The composer is a text input; a reviewer expecting
+  voice input would file the absence as a bug.
+- **No position claim on MY DRIVES.** The 1.0 notes said "at the bottom of Home"; that section moves
+  above the fold when offline (`voice.ts` says so explicitly). Naming the heading is stable, naming
+  the position is not.
+- **Location is addressed three times on purpose** — in the preamble, at "Start the drive", and in
+  its own section. 1.1's answer genuinely improved (nothing before the drive asks), and 5.1.1 friction
+  is cheaper to prevent than to appeal.
+
+### LIVE on the 1.0.0 record — read back from ASC 2026-07-30
+
+⚠ **This block describes roam and is superseded by the one above.** It is kept because ASC still
+serves it: until the 1.1 metadata is entered, this is what a reviewer would actually read. Do not
+paste it. Treat it as a mirror of ASC, not a source: if you change one, change both, and read it back.
 
 ```
 Skipper is a hands-free, GPS-triggered audio tour for drivers. Two things will help you review it from a desk.
@@ -494,12 +680,15 @@ LOCATION USE:
 Thank you. Happy to help if anything is unclear.
 ```
 
-**Why this matters more than the rest of the listing:** the app's primary button dead-ends 200 miles
-from the only corpus. Verified against production: `/roam` at Apple Park (37.3349, −122.0090) returns
-**0 pins**; at Tahoe it returns **337**. The Home "Hear a quick sample" link (→ the `/sample` postcard,
-`docs/decisions/sample-ride-postcard.md`) is the deterministic, permission-free path built precisely so
-a reviewer — or any first-timer outside Tahoe — hears the Skipper regardless of location, and the former
-"I don't know these roads yet" dead-end now carries the same rescue. Point the reviewer at the sample.
+**Why this matters more than the rest of the listing:** the corpus is one basin, and the reviewer is
+2,000 miles from it. Under 1.0 that was a dead end — the primary button needed Tahoe proximity, and
+the rescue was one canned clip. **1.1 changes the shape of the problem, not just the copy:** the
+planner is region-scoped rather than proximity-scoped, so a reviewer anywhere can ask for a Tahoe
+road and get a genuine route, a genuine stop list, and one genuine clip off it — the actual product,
+at a desk, signed out. The `/sample` postcard (`docs/decisions/sample-ride-postcard.md`) is still
+there as the zero-typing path. ⚠ What replaced the old failure is a NEW one worth naming: a reviewer
+who invents an off-corpus route ("Cupertino to Santa Cruz") gets an in-persona refusal, which is
+correct behaviour and can still read as a broken app. That is why §10 hands them a route that works.
 
 ---
 
@@ -576,9 +765,17 @@ Re-run the list; don't inherit last release's ticks.
       a well-formed body and no session it answers 401. **404 is the only failing answer** — it means
       the route never deployed.
 - [ ] `https://skipper.fm/privacy`, `/terms`, `/support` all return 200.
-- [ ] **The sample plays in prod:** `GET https://api.skipper.fm/roam/sample` returns 200 with a clip
-      (needs `SAMPLE_NARRATION_QID` set + the API deployed). This is the reviewer's primary path — if
-      it 404s, the sample link shows a retry and the review path is broken.
+- [ ] **The sample plays in prod:** `GET https://api.skipper.fm/sample` returns 200 with a clip
+      (needs `SAMPLE_NARRATION_QID` set + the API deployed). ⚠ **The path changed in 1.1** — this
+      item read `/roam/sample` until 2026-08-02, which now 404s on a *healthy* deploy. Probing the
+      old path would have reported a working sample as broken, and vice versa.
+- [ ] **The planner answers anonymously:** `POST https://api.skipper.fm/drives/plan` returns a turn
+      with no session. This is 1.1's primary review path (§10) and it needs `ANTHROPIC_API_KEY` set
+      in the deployed service — if it isn't, every reviewer attempt gets the in-persona outage line
+      and the app looks broken rather than unconfigured.
+- [ ] **The 1.1 metadata is actually entered in ASC** — description, promo text and App Review notes
+      all still describe roam until someone pastes §§3/4/10's replacement blocks in. The build and
+      the listing shipping out of step is the specific failure this checklist exists to catch.
 - [ ] The demo account exists, its password is in ASC, and it has credits left to create a drive.
 - [ ] Screenshots captured in dark mode (§9).
 - [ ] The coverage sentence in the description still matches reality (it says Tahoe only).
