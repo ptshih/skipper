@@ -23,24 +23,39 @@ latest, not two SDKs behind. The gaps are all in the ENFORCEMENT layer, not the 
 ✅ DONE 2026-08-02: ESLint (`eslint-config-expo`) wired into mobile `check` (`c1e21db`) and its first
 findings fixed (`576e031`). See `apps/mobile/CLAUDE.md` for the ESLint-9 pin and the suppressions rule.
 
-- [ ] **NEXT (founder, 2026-08-02): switch `react-native-maps` → `expo-maps`.** `react-native-maps` is
-      the riskiest dependency in the app — it is the ONLY exact-pinned one (`1.27.2`, which reads like
-      someone already got burned), there is an open Expo issue for this exact combination breaking on
-      iOS with Google Maps (expo/expo#43288), and the community has reported marker / user-location
-      regressions across recent versions. `expo-maps` is Expo-maintained and built on SwiftUI +
-      Jetpack Compose.
-      ⚠ **The catch, stated up front so it is a decision and not a surprise: `expo-maps` supports
-      Google Maps on ANDROID ONLY — on iOS it renders Apple Maps.** For an iOS-first driving app that
-      draws a route polyline and stop markers that is arguably an upgrade (native in-car look), and
-      Android is not shipped — but it IS a visible change to the one screen riders stare at while
-      driving, so it needs a real visual pass, not a typecheck.
-      The prize: deletes the Google Maps API key, its billing surface, and a fragile third-party dep
-      in one move — `app.config.ts`'s whole `react-native-maps` plugin block and
-      `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` go with it.
-      Touches: `src/ui/DriveMap.tsx`, `src/theme/mapStyle.ts` (Google-specific style JSON — Apple Maps
-      has no equivalent, so the dusk map styling has to be re-thought or dropped), `mapChrome.tsx`,
-      `app.config.ts`, `app.json`. ⚠ Native change → `expo prebuild --clean` + a device build; do NOT
-      attempt it as a JS-only edit.
+- [x] ~~**NEXT: switch `react-native-maps` → `expo-maps`**~~ — **REJECTED 2026-08-02 after reading
+      expo-maps' actual API against what `DriveMap.tsx` does. Do NOT re-propose without re-checking
+      the three blockers below; they are capability gaps, not effort.** I recommended this earlier the
+      same day on the strength of "react-native-maps is fragile + Apple Maps is arguably better for a
+      driving app", having checked that expo-maps EXISTS and is Expo-maintained but NOT that it can
+      express this map. It cannot, today:
+      1. **Custom React marker views are not supported — image icons only.** Our puck is a `<Marker>`
+         wrapping a halo, a `rotate(${heading}deg)` wedge and a dot; stop markers are styled views
+         keyed to remount on passed/active/upcoming. A rotating heading wedge cannot be an image icon
+         at GPS rates without pre-rendering a sprite per heading.
+      2. **`setCameraPosition()` animation duration is unsupported on iOS.** `DriveMap` calls
+         `animateCamera(…, { duration: 500 })` throttled to 1/sec. Losing the tween turns camera
+         follow into a hard jump-cut every second *while the rider is driving* — a regression exactly
+         where the product is least forgiving.
+      3. **It is ALPHA** — Expo's own words: "currently in alpha and will frequently experience
+         breaking changes." Trading a stable-if-crusty dependency for an alpha one on the screen
+         riders stare at is the wrong direction, whatever the API looked like.
+      Also lost: `mapStyle.ts`'s 68-line dusk tint. Custom JSON styling is `GoogleMapsMapStyleOptions`
+      — Android only; AppleMaps gets `colorScheme` light/dark and `mapType`, nothing more.
+      ⚠ **What WOULD reopen it**, so the re-check is cheap rather than a re-derivation: expo-maps
+      leaving alpha, AND either custom marker views or (at minimum) an animated iOS camera landing.
+      The prize is unchanged and still worth wanting — dropping `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY`, its
+      billing surface, and `app.config.ts`'s whole `react-native-maps` plugin block.
+      ⚠ **The underlying concern is still real and unaddressed** — see the next item.
+- [ ] **Instead: prove `react-native-maps` is actually OK on SDK 57, on a device.** It is the app's
+      only exact-pinned dependency (`1.27.2`), which reads like someone already got burned, and there
+      is an open Expo issue for this combination on iOS with Google Maps (expo/expo#43288) — but that
+      issue is **SDK 55**, and we are on 57. The risk may be entirely theoretical. This is a ten-minute
+      device check, not a migration: open a drive, confirm the tinted basemap, the stop pins, the puck
+      and camera-follow all render. If it works, the honest answer is to write that down (with the
+      date + SDK) and stop treating the pin as a smell. If it does NOT, the decision reopens — and the
+      fallback already exists in code: no Google key → Apple Maps, and List mode is the
+      offline/accessibility-complete equivalent.
 - [ ] **Burn down `eslint-suppressions.json` — 47 baselined Rules-of-React errors** across 16 files
       (`react-hooks/refs` ×37, `set-state-in-effect` ×8, `immutability` ×2). These are NOT junk: a good
       share are the deliberate ref-mirrors-state pattern that makes latest-tap-wins work in the audio
