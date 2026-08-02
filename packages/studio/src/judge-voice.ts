@@ -18,8 +18,16 @@
 // the eval panel and this report share one rubric (no drift). This file is the human-facing
 // markdown report + the by-ear VOICE worksheet on top of that core.
 //
+// ⚠ NOTHING EMITS ITS INPUT TODAY. The artifact used to come from the V1 tour entrypoint
+// (`src/run.ts --json=…`), deleted in the V1→V2 collapse; no current CLI writes a run JSON. The file
+// you pass is therefore HAND-BUILT against the VoiceArtifact shape below (a scratch query over
+// `narrations` is the usual way) — it needs only `script` per stop, plus `audioUrl` for the by-ear half.
+// The tool is kept because the by-ear VOICE worksheet has no substitute: `audit-corpus --charm` reuses
+// the same judge but grades the WRITING only. Repointing this at the live corpus (poi ids →
+// narrations.script + audio_url) or retiring it is a founder call, not a cleanup.
+//
 // Usage (env via dotenvx — ANTHROPIC_API_KEY for the judge, R2_* to presign audio):
-//   # Feed it a narration-run JSON artifact (stops with scripts; audioUrls to presign the voice):
+//   # Feed it a VoiceArtifact JSON (stops with scripts; audioUrls to presign the voice):
 //   dotenvx run -f .env.development -- bun packages/studio/src/judge-voice.ts /tmp/tour.json --out=/tmp/voice.md
 
 import { presignGet } from './pipeline/storage'
@@ -27,7 +35,9 @@ import { judgeCharm, type CharmVerdict } from './eval/charm'
 
 // The minimal structural shape this report reads from a narration-run JSON artifact. Kept LOCAL
 // (decoupled from any pipeline type) so the report survives the V1→V2 tour-pipeline removal — it
-// tolerates extra fields and only depends on what it prints.
+// tolerates extra fields and only depends on what it prints. A required `durationBucket` was dropped
+// here: the 1.1 sweep deleted that concept from the vocabulary, so demanding it of a hand-built input
+// meant inventing a value for a field nothing defines.
 interface VoiceArtifactStop {
   seq: number
   stopType: string
@@ -39,7 +49,6 @@ interface VoiceArtifactStop {
 interface VoiceArtifact {
   runName: string
   region: string
-  durationBucket: string
   stops: VoiceArtifactStop[]
 }
 
@@ -52,7 +61,7 @@ const RECO_LABEL: Record<CharmVerdict['recommendation'], string> = {
 function buildReport(r: VoiceArtifact, v: CharmVerdict): string {
   const bySeq = new Map(v.stops.map((s) => [s.seq, s]))
   const out: string[] = []
-  out.push(`# Voice & charm report — ${r.runName} (${r.region}) · ${r.durationBucket}`)
+  out.push(`# Voice & charm report — ${r.runName} (${r.region})`)
   out.push('')
   out.push('## The bet: is the persona charming enough to build the player on?')
   out.push(`**Judge — the writing (Opus):** ${v.overall}/10 · ${RECO_LABEL[v.recommendation]}`)
@@ -98,7 +107,8 @@ async function main() {
   const outPath = args.find((a) => a.startsWith('--out='))?.split('=')[1]
   if (!jsonPath) {
     throw new Error(
-      'Usage: judge-voice.ts <generate-result.json> [--out=<path>]  (json from `run.ts --json=...`)',
+      'Usage: judge-voice.ts <voice-artifact.json> [--out=<path>]  ' +
+        '(a hand-built VoiceArtifact — no CLI emits one today; see the file header)',
     )
   }
 

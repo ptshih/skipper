@@ -5,13 +5,18 @@
 // each known-answer pass/fail verdict right, and did it catch each expected violation (recall)?
 // Run it after a model or prompt change to confirm the judge still tracks the founder's ear.
 //
-// Costs one grounding (Opus) call per case — ON DEMAND, not CI. The deterministic evaluators
-// (tts/diversity) have their own always-on unit tests (test/eval-tts.test.ts, test/eval-advisory.test.ts);
-// this is the periodic calibration check. Exits non-zero if the judge disagrees with any verdict label.
+// ⚠ Costs GROUNDING_VOTE_SAMPLES Opus calls per case, not one: this runs the REAL production judge
+// (`evaluateGrounding` with no decomposer override → the union-VOTING decomposer), which is the point —
+// calibrating a k=1 judge would measure something the gate never uses. The resolved fan-out is printed
+// before the first call so the operator sees the real bill; it is ON DEMAND, not CI, and has no
+// --apply gate (running it IS the request). The deterministic evaluators (tts/diversity) have their own
+// always-on unit tests (test/eval-tts.test.ts, test/eval-advisory.test.ts); this is the periodic
+// calibration check. Exits non-zero if the judge disagrees with any verdict label.
 //
 // Usage (ANTHROPIC_API_KEY via dotenvx):
 //   dotenvx run -f .env.development -- bun packages/studio/src/eval/calibrate.ts
 
+import { GROUNDING_VOTE_SAMPLES } from '../config'
 import { GROUNDING_CASES, type GroundingCase } from './golden'
 import { evaluateGrounding } from './grounding'
 import type { ClaimVerdict, StopEval } from './types'
@@ -51,7 +56,13 @@ function scoreCase(c: GroundingCase, ev: StopEval): CaseResult {
 }
 
 async function main() {
-  console.log(`Calibrating the grounding judge against ${GROUNDING_CASES.length} golden cases (Opus)...\n`)
+  // Print the resolved fan-out, not just the case count: the judge is union-voted, so the Opus bill is
+  // cases × samples. Reading the case count alone is how this run gets budgeted at a third of its cost.
+  const samples = GROUNDING_VOTE_SAMPLES()
+  console.log(
+    `Calibrating the grounding judge against ${GROUNDING_CASES.length} golden cases ` +
+      `(Opus, ${samples} vote sample(s) each → ${GROUNDING_CASES.length * samples} judge calls)...\n`,
+  )
   const evals = await Promise.all(GROUNDING_CASES.map((c) => evaluateGrounding(c.input)))
   const results = GROUNDING_CASES.map((c, i) => scoreCase(c, evals[i]!))
 

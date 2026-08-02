@@ -3,6 +3,10 @@
 // READ-ONLY. Spends nothing: one ~1.4s DB read + R2 GETs (egress is free). No --apply gate
 // needed (ops-scripts-sop.md rule 2 governs SPEND, and this spends nothing).
 //
+// EXITS 1 when the snapshot is INCOMPLETE (a referenced clip missing from disk, or a failed R2 GET),
+// so it is safe to `&&`-chain ahead of a destructive step — the chain stops instead of running with a
+// net full of holes. A throw before that point exits non-zero on its own (top-level await).
+//
 // WIDER THAN D5 ON PURPOSE. D5 names five tables; D4 authorizes destructive migrations
 // "everywhere". The gap includes `credit_entries` — append-only, never refunds, documented as
 // having NO second copy — plus `poi_overrides` (hand-authored fact corrections), `drives`,
@@ -119,5 +123,14 @@ writeFileSync(
 
 console.log(`\n${'='.repeat(60)}`)
 console.log(`referenced clips: ${referenced.length}, missing from snapshot: ${missing.length}`)
-console.log(missing.length === 0 && r2.failed === 0 ? '✓ SNAPSHOT COMPLETE' : '✗ SNAPSHOT INCOMPLETE — do not start destructive work')
+if (missing.length === 0 && r2.failed === 0) {
+  console.log('✓ SNAPSHOT COMPLETE')
+} else {
+  // Exit NON-ZERO (SOP rule 6 — an honest exit code), not just a warning line: this printed
+  // "do not start destructive work" and still exited 0, so `snapshot-corpus && <destructive step>`
+  // — the chain prune-corpus's own header recommends — proceeded on a net that cannot restore what
+  // the next step is about to cascade away. The shell now stops at the &&.
+  console.log('✗ SNAPSHOT INCOMPLETE — do not start destructive work')
+  process.exitCode = 1
+}
 console.log(`took ${((Date.now() - t0) / 1000).toFixed(0)}s`)

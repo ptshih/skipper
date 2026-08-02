@@ -2,10 +2,17 @@
 // can't be.
 //
 // Each stop's narration is an INDEPENDENT per-stop LLM call (narrateStop) with no
-// view of its siblings, so a stop can't know what its neighbours did. The studio pipeline
-// threads a recent-openers/closers/kit window to dampen repetition, but a window
-// can't catch a gag that recurs >3 stops apart, and a per-stop prompt quota can't
-// enforce a tour-level budget. After every stop is narrated, this lints the
+// view of its siblings, so a stop can't know what its neighbours did.
+//
+// ⚠ This header used to say the pipeline "threads a recent-openers/closers/kit window to dampen
+// repetition", framing the lint as the second of two layers. There is no such window on any live path:
+// `narrateStop` still DECLARES `recentOpeners`/`recentClosers`/`recentMotifs`/`priorStops` and renders
+// them, but no production caller sets any of them (grep — only narrate.ts mentions them), and the
+// persona KIT was cut outright (docs/decisions/cut-intro-frame-and-persona-kit.md). So this lint plus
+// the diversity context the gate scores against is the ONLY cross-clip layer, not the backstop behind
+// one. Worth knowing before trusting repetition to be handled upstream — it isn't.
+//
+// After every stop is narrated, this lints the
 // ASSEMBLED scripts and emits per-stop `avoid` notes. It's consumed via
 // eval/diversity.ts (evaluateDiversity), whose findings drive optimize() (defined in
 // eval/optimize.ts) from generate-narrations.ts for a bounded re-narration.

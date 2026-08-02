@@ -13,8 +13,11 @@ export function requireEnv(name: string): string {
   const v = process.env[name]
   if (!v) {
     throw new Error(
+      // The example names a CLI that EXISTS: this used to point at `src/run.ts <slug>`, the V1
+      // tour entrypoint deleted in the V1→V2 collapse — a dead path and a dead argument, shown at
+      // the one moment the operator is already lost. Keep it in step with the header above.
       `${name} is not set. Run via dotenvx, e.g.\n` +
-        `  dotenvx run -f .env.development -- bun packages/studio/src/run.ts <slug>`,
+        `  dotenvx run -f .env.development -- bun packages/studio/src/generate-narrations.ts`,
     )
   }
   return v

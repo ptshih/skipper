@@ -5,8 +5,10 @@
 // principle #1 + docs/decisions/region-corpus-discovery.md). It discovers every Wikidata-pinned
 // place in a raw bbox (the whole Tahoe–Reno corridor by default), prose-joins Wikipedia, tiers
 // them, and upserts the STORY + SCENIC tiers into `pois` (facts for story, bare typed pins for
-// scenic — the story tier is what a long-form telling needs; scenic pins seed the future wave
-// layer). Dedup by the Wikidata QID is the existing upsertPoi seam (it conflicts on `pois.qid`;
+// scenic — the story tier is what a long-form telling needs; a scenic pin gets NO telling today, the
+// short passing call-out that would have voiced it was cut, docs/decisions/cut-wave-form.md — they are
+// persisted anyway because the sweep is free and re-discovering them later is not).
+// Dedup by the Wikidata QID is the existing upsertPoi seam (it conflicts on `pois.qid`;
 // source/source_id are the secondary guard, rewritten in place on a tier flip), so re-running is
 // idempotent and a place a tour already visits is the SAME row (facts shared; principle #1).
 //
@@ -147,7 +149,9 @@ async function main(): Promise<void> {
   for (const s of [...stories].sort((a, b) => (b.article!.extract.length || 0) - (a.article!.extract.length || 0))) {
     console.log(`  ${String(s.article!.extract.length).padStart(5)}  ${s.name}`)
   }
-  console.log(`\nSCENIC pins persisted for the future wave layer: ${scenics.length}`)
+  // States the fact without a roadmap claim: this line used to promise a "future wave layer" that was
+  // cut (docs/decisions/cut-wave-form.md), telling every operator these pins were staged for something.
+  console.log(`\nSCENIC pins persisted (no telling today — see docs/decisions/cut-wave-form.md): ${scenics.length}`)
 
   // Co-location triage — runs on the swept batch, BEFORE anything is written, so a mis-located place
   // is caught before it is paid to enrich and narrate. Warns, never rejects: most collisions are

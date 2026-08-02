@@ -131,12 +131,15 @@ export const TTS_LANGUAGE_CODE = 'en-US' as const
 // LOUDNESS NORMALIZATION (TODO.md "TTS audio QA" #2 — clip-to-clip level spread + overall level vs
 // Spotify). Gemini-TTS takes are non-deterministic in LEVEL (measured body means −26.7 → −19.5 dB
 // across 30 live clips) and PEAK-BOUND (crest at ~0 dBFS), so a plain loudnorm undershoots
-// inconsistently. Fix = a true-peak limiter → single-pass loudnorm MASTERING CHAIN
-// (pipeline/loudnorm.ts — it owns the limiter, the NARRATION target, and the pre-encode TP, as two
-// parked presets: `normal14` (−14, ACTIVE) and `loud13` (−13, Spotify-"Loud", validated-but-off). With
-// the −14 default the narration matches the shared AUDIO_LOUDNESS −14 that governs the drive-music bed;
-// flipping to loud13 puts the voice 1 dB above it. Only the LRA is shared here — targets, limiter params,
-// pre-encode ceilings + bitrates live in loudnorm.ts; history in docs/decisions/audio-loudness-spec.md.
+// inconsistently. Fix = the voice-MASTERING CHAIN in pipeline/loudnorm.ts: corrective EQ → light
+// denoise → gate → gentle compression → single-pass loudnorm, whose own look-ahead true-peak limiter is
+// the final peak guard (it REPLACED the standalone alimiter). That file owns every number on the path —
+// the asked-for target, the chain's measured LANDING (ACTIVE_MASTER_TARGET_LUFS, what QA judges
+// against), the pre-encode TP ceiling and the AAC bitrate. Only the LRA is shared from here; history in
+// docs/decisions/audio-loudness-spec.md.
+// ⚠ This block used to describe a separate limiter stage plus two switchable presets (`normal14` /
+// `loud13`). Both were retired with the PROD-natural chain, so an agent reading models.ts — the file
+// CLAUDE.md names as the audio-format truth — went looking for a preset switch that does not exist.
 // LRA (loudness range) is held at the loudnorm default — speech is low-dynamic, so it rarely binds.
 export const LOUDNORM_RANGE_LU = AUDIO_LOUDNESS.rangeLu
 
