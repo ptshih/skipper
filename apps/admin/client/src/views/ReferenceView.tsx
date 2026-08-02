@@ -218,9 +218,14 @@ const RUN_KINDS: RunKind[] = [
   },
   {
     kind: 'Sweep orphans',
-    does: 'Delete R2 audio clips that no narration references anymore.',
+    does: 'Delete R2 audio clips that no narration references anymore — and that are at least an hour old.',
     cost: 'Deletes bytes (when applied).',
-    safe: 'Confirm before it deletes.',
+    safe:
+      'Confirm before it deletes. ⚠ The one-hour grace window is a SAFETY, not tidiness: a generation ' +
+      'uploads a clip’s bytes BEFORE writing its narrations row, so a brand-new clip looks exactly like ' +
+      'an orphan for a moment. Sweeping without the window could delete a clip a running generate was ' +
+      'about to record, leaving a row pointing at bytes that no longer exist — silence on that stop, ' +
+      'with nothing erroring. Held-back keys are named in the run log.',
   },
 ]
 

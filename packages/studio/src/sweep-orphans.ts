@@ -14,7 +14,7 @@
 import { db } from '@skipper/db'
 import { narrations } from '@skipper/db/schema'
 import { announce, assertReady, parseFlags } from './pipeline/ops'
-import { deleteAudio, listAudioKeys, orphanKeys } from './pipeline/storage'
+import { deleteAudio, listAudioObjects, reapableKeys, SWEEP_MIN_AGE_MS } from './pipeline/storage'
 import { mapLimit } from './pipeline/concurrency'
 import { beginJob, runJob } from './pipeline/job-progress'
 
@@ -43,11 +43,18 @@ async function main() {
   if (!(await beginJob('sweep_orphans', { dryRun: !apply, targetId: 'narration' }))) return
 
   const referenced = await narrationReferencedKeys()
-  const listed = await listAudioKeys('narration/')
-  const orphans = orphanKeys(listed, referenced)
+  const listed = await listAudioObjects('narration/')
+  // ⚠ Age-guarded. "Unreferenced" is briefly TRUE for a perfectly healthy clip: generate-narrations
+  // uploads the bytes and only then writes the narrations row, so between those two statements the
+  // object looks exactly like an orphan — once per clip, across a run of hundreds. See reapableKeys.
+  const { reap: orphans, heldBack } = reapableKeys(listed, referenced)
+  const graceMin = Math.round(SWEEP_MIN_AGE_MS / 60_000)
   console.log(
-    `narration corpus — ${listed.length} object(s), ${referenced.size} referenced, ${orphans.length} orphan(s)`,
+    `narration corpus — ${listed.length} object(s), ${referenced.size} referenced, ${orphans.length} orphan(s)` +
+      (heldBack.length ? `, ${heldBack.length} too new to reap (<${graceMin}m)` : ''),
   )
+  // Name what was spared, so "why didn't it delete that one?" never needs a code read.
+  for (const key of heldBack) console.log(`  hold (<${graceMin}m old): ${key}`)
   // List every key FIRST — the listing is this tool's output and its order is the report — then delete
   // in parallel. Deletes are independent R2 objects; serial cost one round trip each after a big regen.
   for (const key of orphans) console.log(`  ${apply ? 'delete' : 'orphan'}: ${key}`)
