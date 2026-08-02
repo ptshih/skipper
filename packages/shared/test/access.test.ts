@@ -30,10 +30,29 @@ describe('tierOf', () => {
   })
 
   // A session cached before the anonymous plugin was registered carries no `isAnonymous` at all.
-  // Reading that as anonymous would log a real rider out of their own drives on upgrade.
+  // Reading that as anonymous would log a real rider out of their own drives on upgrade. This is the
+  // CLIENT's rule, and it is why the predicate cannot simply be `!user.isAnonymous`.
   test('a MISSING isAnonymous reads as a real account, not as anonymous', () => {
     expect(tierOf({ user: {} })).toBe('free')
     expect(tierOf({ user: { isAnonymous: null } })).toBe('free')
+  })
+
+  // ⚠ THE SERVER'S RULE, AND THE ONE NOTHING PINNED UNTIL NOW. A malformed-but-PRESENT value must fail
+  // toward `anonymous` — `entitlements.ts` calls that "the secure direction" — because `free` is the
+  // tier that opens the five gated routes, mints a grant, and takes drive ownership. Written against an
+  // anonymous row those become ledger and drive rows stranded forever (INV-4: hard-deleted at link, no
+  // cascade, no session left to retry). The first shared version used `=== true` and would have
+  // returned `free` for every one of these.
+  test('a PRESENT but malformed isAnonymous fails toward anonymous, never toward free', () => {
+    for (const bad of [1, 'true', 'false', {}, [], 'yes']) {
+      expect(tierOf({ user: { isAnonymous: bad as unknown as boolean } })).toBe('anonymous')
+      expect(isSignedIn({ user: { isAnonymous: bad as unknown as boolean } })).toBe(false)
+    }
+  })
+
+  test('only an exact false is a real account when the field is present', () => {
+    expect(tierOf({ user: { isAnonymous: false } })).toBe('free')
+    expect(tierOf({ user: { isAnonymous: 0 as unknown as boolean } })).toBe('anonymous')
   })
 })
 

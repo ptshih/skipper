@@ -34,14 +34,34 @@ export interface AccessSession {
 /**
  * Derive the access level: no session or a guest one → `anonymous`; any real account → `free`.
  *
- * ⚠ `isAnonymous === true`, not `!isAnonymous`. A MISSING field must read as "a real account": that is
- * correct for a session cached before the anonymous plugin existed, and the alternative would log a
- * real rider out of their own drives on upgrade. The plugin sets the field explicitly when it applies.
+ * ⚠ THE THREE BRANCHES ARE NOT STYLE. Unifying the API's and the app's copies forced a choice between
+ * two DIFFERENT correctness rules, and each side needs one of them:
+ *
+ *   - THE CLIENT worries about the field being ABSENT. A session cached in SecureStore before the
+ *     anonymous plugin was registered carries no `isAnonymous` at all, and reading that as anonymous
+ *     would log a real rider out of their own drives on upgrade. So absent ⇒ `free`.
+ *   - THE SERVER worries about it being PRESENT AND WRONG. `entitlements.ts` states the requirement
+ *     outright — a degraded session must fail toward `anonymous`, "the secure direction", because
+ *     `free` is the tier that opens the five gated routes, mints a FREE_DRIVE_CAP grant, and takes
+ *     drive ownership. Written against an anonymous row, those become `credit_entries` and `drives`
+ *     rows stranded forever: the plugin HARD-DELETES that user at link with no cascade and no
+ *     `purgeUserData` (INV-4), and there is no session left to retry with. So present-and-not-exactly-
+ *     `false` ⇒ `anonymous`.
+ *
+ * ⚠ The first version of this shared helper used `isAnonymous === true` — the client's rule, applied
+ * to both — which quietly moved the SERVER in the fail-OPEN direction: any truthy-but-not-`true` value
+ * (`1`, `"true"`, even the string `"false"`) resolved to `free`. Better Auth on Postgres yields a real
+ * boolean, so it was not reachable; the point is that the rationale was one-sided and nothing would
+ * have failed if it flipped again. The two intents do not actually collide — absent and
+ * present-but-malformed are different questions — so both are answered here, separately, on purpose.
  */
 export function tierOf(session: AccessSession | null | undefined): AccessTier {
   const user = session?.user
-  if (!user || user.isAnonymous === true) return 'anonymous'
-  return 'free'
+  if (!user) return 'anonymous'
+  // Absent (never written) ⇒ a real account. The client's rule.
+  if (user.isAnonymous == null) return 'free'
+  // Present ⇒ only an exact `false` is an account. The server's rule.
+  return user.isAnonymous === false ? 'free' : 'anonymous'
 }
 
 /**

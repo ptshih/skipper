@@ -722,8 +722,15 @@ export const drives = pgTable(
 // signature for a cache-warming / authored-tour graduation job that is deferred behind a real
 // route-concentration histogram — i.e. it was written on every create and read by nothing. PostHog is
 // the demand instrument now. ⚠ THE TABLE IS STILL IN THE DATABASE: removing the declaration is what
-// makes the next `db:generate`/`db:push` drop it, and that DDL is a deliberate act against the one
+// ARMS the next `db:generate`/`db:push` to drop it, and that DDL is a deliberate act against the one
 // shared Neon host, not a side effect of this commit.
+//
+// ⚠⚠ AND THE SAFETY FOR IT IS STILL OWED. 1.1's step 0 permits destructive migrations ONLY once an
+// OFFSITE corpus + R2 snapshot exists; what exists today is LOCAL, under a gitignored `.scratch/`,
+// sharing a failure domain with the working tree. So the charge is armed and the pin is missing, and
+// those two facts otherwise live in two different documents — which is why this one is written where
+// the person about to run the DDL will actually be standing. Take the offsite copy first.
+// (`dev` and `prod` point at the SAME Neon host; there is no staging to rehearse on.)
 
 /* -------------------------------------------------------------------------- */
 /*  credit_entries — the user-owned credit LEDGER (append-only; balance = SUM).  */
