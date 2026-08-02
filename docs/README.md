@@ -330,6 +330,11 @@ The rest are post-MVP features, gated behind the proven phone player:
 - [gcp-cloud-run-deploy.md](guides/gcp-cloud-run-deploy.md) — deploying `@skipper/api` to Cloud Run
   (us-east4, co-located with the Neon DB); push-to-`main` continuous deployment via Cloud Build,
   the dotenvx-secret-from-Secret-Manager model, and the one-time IAM/DRS gotchas.
+- [architecture-overview.md](guides/architecture-overview.md) — orientation: the whole system from
+  first principles. The two architectural principles, the three machines (studio / API / mobile), the
+  route table, the data model, the rider flow, the trigger + audio engine, a deep pass on
+  `apps/mobile` internals, and the five seams that break quietly. ⚠ DERIVED and dated 2026-08-02 —
+  CLAUDE.md and the code win over it; read it to get oriented, not to settle an argument.
 - [1-1-cutover-runbook.md](guides/1-1-cutover-runbook.md) — the ordering for 1.1's FIRST push: the four
   triggers one push fires (the API's is unfiltered), why the cutover is code-only and therefore cheaply
   reversible, the `/roam/sample`→`/sample` flip against an in-review build, and the rollback capture
