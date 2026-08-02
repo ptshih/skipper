@@ -1,7 +1,7 @@
 // buildDrive — assemble a paced, ordered drive from the corpus's REUSED narrations along a frozen route.
 //
-// The heart of V2's "Create a Drive": a drive is "roam, pre-ordered for your route." Each narration
-// is a place's ONE shared telling (1:1 with its POI), already synthesized — so this NEVER generates
+// The heart of "Create a Drive": a drive is the region's shared corpus, pre-ordered for your route.
+// Each narration is a place's ONE shared telling (1:1 with its POI), already synthesized — so this NEVER generates
 // audio; it SELECTS + PACES existing clips. Pure, zero-dep, RN-safe (like the rest of engine), so
 // the server assembles a drive at request time AND the device can re-pace one offline.
 //
@@ -10,7 +10,7 @@
 //   - the window prefers a clip that FITS the gap (won't queue-lag) + variety, ranked on the clip's
 //     REAL audioDurationMs, not an extract length (the clip already exists).
 //
-// Breaks + clock-anchored asides are layered by the caller in later phases; this is the
+// Break stops are layered by the caller when they land (DEFERRED — `detours`); this is the
 // narration core.
 
 import { cumulativeMeters, haversineMeters, OFF_ROUTE_MAX_M, totalMeters, triggerRadiusForKind, type LngLat } from './geo'
@@ -70,7 +70,7 @@ export function candidateTriggerRadiusM(cand: Pick<DriveCandidate, 'kind' | 'anc
 }
 
 /** One stop in an assembled drive — a narration placed on THIS route. A superset of the fields the
- *  preview/live player need; the route supplies the trigger geometry roam clips don't store. */
+ *  preview/live player need; the route supplies the trigger geometry a narration doesn't store. */
 export interface DriveStop {
   seq: number
   poiId: string
@@ -78,7 +78,8 @@ export interface DriveStop {
   audioDurationMs: number
   name?: string
   kind?: string | null
-  /** Snapped to THIS route (roam stores no trigger geometry — the route supplies it). */
+  /** Snapped to THIS route (a shared narration stores no trigger geometry — the route supplies it,
+   *  which is what lets one telling ride every drive that passes it). */
   triggerLat: number
   triggerLng: number
   approachHeadingDeg: number

@@ -1,6 +1,6 @@
 // Schema-invariant guards. These assert that schema.ts DECLARES the structural invariants
 // the rest of the system relies on — the pois dedup key, the delete-cascade/restrict graph,
-// and the "every stop/frame has audio" NOT NULL columns. They introspect the Drizzle table
+// and the "every narration has audio" NOT NULL columns. They introspect the Drizzle table
 // definitions (the source of truth the migrations are generated from), so they run offline in
 // the normal `bun test` gate — no live DB, no shared-DB pollution. Postgres itself is trusted
 // to ENFORCE a declared constraint; what these catch is a schema edit that silently DROPS one.
@@ -106,7 +106,7 @@ describe('V2 — narrations / drives structural invariants', () => {
     expect(columnByDbName(narrations, 'audio_url').notNull).toBe(true)
     expect(columnByDbName(narrations, 'audio_duration_ms').notNull).toBe(true)
   })
-  it('facts_hash is NULLABLE — only story grounds on facts; scenic/wave carry none and are never fact-stale', () => {
+  it('facts_hash is NULLABLE — only story grounds on facts; scenic carries none and is never fact-stale', () => {
     expect(columnByDbName(narrations, 'facts_hash').notNull).toBe(false)
   })
   it('carries NO persona/voice/joke/delivery column — the one host resolves in CODE and is baked into audio (joke notch CUT)', () => {

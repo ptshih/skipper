@@ -1,5 +1,5 @@
-// The drive simulator — replay a tour's polyline as a GPS fix stream and run the
-// trigger core against the tour's stops, so we can validate speed-adaptive
+// The drive simulator — replay a drive's polyline as a GPS fix stream and run the
+// trigger core against that drive's stops, so we can validate speed-adaptive
 // triggering, debounce, and audio overlap WITHOUT a car or live GPS.
 
 import { bearingDeg, cumulativeMeters, interpolate, MPH_TO_MPS, OFF_ROUTE_MAX_M } from './geo'

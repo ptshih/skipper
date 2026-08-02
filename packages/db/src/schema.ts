@@ -63,8 +63,8 @@ export type FactSheetEntry = {
  * Attribution snapshot frozen at narration time so credit stays correct even if
  * the source POI row is later edited (e.g. Wikipedia CC BY-SA requirements).
  *
- * Lives on the `narrations` row now (narration is drive/roam-owned; there is no shared
- * content cache). `source` is the ATTRIBUTION source, a SUPERSET of `poiSourceEnum`
+ * Lives on the `narrations` row — the shared per-place telling every drive reuses — rather than on
+ * `pois`, whose facts can be re-fetched under it. `source` is the ATTRIBUTION source, a SUPERSET of `poiSourceEnum`
  * (a POI's discovery source): a clip can blend a Wikipedia POI with enrichment that
  * owns no `pois` row — coordinate-keyed Macrostrat geology, QID-keyed Wikidata
  * structured facts, or a `google_places` break-anchor name (which now lives in its OWN
@@ -174,8 +174,10 @@ export const poiSourceEnum = pgEnum('poi_source', ['wikipedia', 'wikidata'])
 // key), not a corniness notch column. See docs/decisions/cut-joke-notch.md.
 
 // A NARRATION's treatment/depth — the "what kind of telling" axis. `story`/`scenic`/`break` are
-// the drive-stop forms; `wave` is the roam call-out; `bside` is a deferred "tell me more". Mirror
-// with the Zod `narrationForm` enum.
+// the drive-stop forms; `bside` is a deferred "tell me more". ⚠ `wave` is RETIRED — it was roam's
+// passing call-out and roam was removed in 1.1; nothing writes one. The value stays only to hold pg
+// lockstep with the Zod `narrationForm` enum, since narrowing it is a destructive migration and a
+// separate deliberate act. Mirror with the Zod `narrationForm` enum.
 export const narrationFormEnum = pgEnum('narration_form', ['story', 'scenic', 'break', 'wave', 'bside'])
 
 // A POI's DELIVERY REGISTER — how the TTS voice READS this place (pace/space/energy), a stable
@@ -216,8 +218,8 @@ const narrationColumns = {
   // every wikipedia-grounded clip (CC BY-SA is legal, not optional).
   attribution: jsonb('attribution').$type<AttributionSnapshot[]>(),
   // The pois.facts_hash this narration grounded on. NULL for tellings that don't ground on
-  // facts (scenic/break, and every frame) → never fact-stale. Stale iff DISTINCT FROM the
-  // segment's poi.facts_hash.
+  // facts (scenic/break) → never fact-stale. Stale iff DISTINCT FROM the subject poi's
+  // facts_hash.
   factsHash: text('facts_hash'),
 }
 
@@ -262,8 +264,8 @@ export const regions = pgTable(
 /*  pois — a shared narratable PLACE (Wikidata universe; facts/coords)           */
 /* -------------------------------------------------------------------------- */
 
-// The shared facts cache for NARRATABLE places: a place's facts are SHARED by every drive/roam
-// that visits it. Narration is NOT here — it is drive/roam-owned (see narrations). Every poi is a
+// The shared facts cache for NARRATABLE places: a place's facts are SHARED by every drive
+// that visits it. Narration is NOT here — it has its own row (see narrations). Every poi is a
 // Wikidata-discovered place keyed by its QID (`qid`, the canonical identity). Google break anchors
 // are a DIFFERENT universe (no QID) and live in `places`, not here.
 export const pois = pgTable(
@@ -364,8 +366,9 @@ export const pois = pgTable(
     // Still true, kept as a guard; no longer the dedup arbiter.
     uniqueIndex('pois_source_source_id_uq').on(t.source, t.sourceId),
     index('pois_kind_idx').on(t.kind),
-    // Bounding-box prefilter for /roam (and any near-a-point query) — bounds the scan instead
-    // of loading every roam narration globally before the haversine pass.
+    // Bounding-box prefilter for the along-route corpus load (and any near-a-point query) — bounds
+    // the scan to the drive's bbox instead of loading every narrated poi globally before the
+    // haversine pass.
     index('pois_lat_lng_idx').on(t.lat, t.lng),
   ],
 )
@@ -592,16 +595,18 @@ export const poiOverrides = pgTable(
 )
 
 /* -------------------------------------------------------------------------- */
-/*  V2 — narrations / drives / drive_demand                                     */
-/*  The roam-first model: pois ──1:1── narrations (the shared telling); roam is  */
-/*  a MODE over them; a `drive` is a user-owned ordered sequence of them. (Tour  */
-/*  tables tours/segments/tracks/tour_frames dropped in 0009; asides — placeless */
-/*  framing — dropped in 0019, see docs/decisions/geometry-first-regions.md.)    */
+/*  V2 — narrations / drives                                                    */
+/*  pois ──1:1── narrations (the ONE shared telling of a place); a `drive` is a  */
+/*  user-owned ordered sequence of them along a frozen route. (Tour tables       */
+/*  tours/segments/tracks/tour_frames dropped in 0009; asides — placeless        */
+/*  framing — dropped in 0019, see docs/decisions/geometry-first-regions.md;     */
+/*  drive_demand dropped in the 1.1 sweep — its tombstone is below `drives`.)    */
 /* -------------------------------------------------------------------------- */
 
-// The ONE shared telling of a place — 1:1 with its poi (UNIQUE poi_id). The atom: roam plays these by
-// proximity and every drive REFERENCES them (narration content resolves live via poi_id; nothing else
-// owns it). The old roam `tracks` hoisted to hang directly off the poi — no segment, no `variant` (one
+// The ONE shared telling of a place — 1:1 with its poi (UNIQUE poi_id). The atom: every drive
+// REFERENCES these rather than minting its own (narration content resolves live via poi_id; nothing
+// else owns it), which is why a regenerated telling auto-improves every saved drive. The V1 `tracks`
+// row hoisted to hang directly off the poi — no segment, no `variant` (one
 // telling per place; multi-telling axes — authored tours, region-skippers — are deferred and re-expand
 // storage then; the joke notch was CUT, not deferred). Persona is baked into the single telling (one
 // host per region in v2). A
@@ -621,8 +626,9 @@ export const narrations = pgTable(
     // a wrong place-name) and is the work fused GENERATION has to do.
     poiId: uuid('poi_id').references(() => pois.id, { onDelete: 'cascade' }),
     clusterId: uuid('cluster_id').references(() => poiClusters.id, { onDelete: 'cascade' }),
-    // story|scenic|wave|bside — the telling's treatment (1:1, so no `variant`). 'break' is enum-
-    // valid (wire lockstep) but CHECK-excluded here: breaks live in `detours`, not narrations.
+    // story|scenic|bside — the telling's treatment (1:1, so no `variant`). 'break' is enum-valid
+    // (wire lockstep) but CHECK-excluded here: breaks live in `detours`, not narrations. 'wave' is
+    // enum-valid too but RETIRED with roam — nothing writes it (see the enum note above).
     form: narrationFormEnum('form').notNull(),
     ...narrationColumns,
     // The release latch (region-release-gate). NULL = STAGED (auto-gate passed + persisted, but not
@@ -641,7 +647,7 @@ export const narrations = pgTable(
       .$onUpdate(() => new Date()),
   },
   (t) => [
-    // UNIQUE poi_id = the 1:1 invariant (and the lookup index for roam/drive joins).
+    // UNIQUE poi_id = the 1:1 invariant (and the lookup index for the drive corpus joins).
     uniqueIndex('narrations_poi_uq').on(t.poiId),
     // …and 1:1 with a CLUSTER too: one fused telling per group, the same invariant one level up.
     uniqueIndex('narrations_cluster_uq').on(t.clusterId),
@@ -670,8 +676,9 @@ export const narrations = pgTable(
 )
 
 // A user-owned DRIVE: an ordered sequence of place narrations along a frozen route.
-// Ownership lives HERE on `user_id` (a drive is user-owned, never a shared content table); anonymous
-// callers get roam only. References shared narrations; mints no narration. The frozen
+// Ownership lives HERE on `user_id` (a drive is user-owned, never a shared content table); an
+// anonymous caller can PLAN and PREVIEW a route but never owns a row here — the wall is at
+// POST /drives. References shared narrations; mints no narration. The frozen
 // `selection` manifest is replayed verbatim on re-open (structure frozen; narration content live).
 export const drives = pgTable(
   'drives',
@@ -700,8 +707,10 @@ export const drives = pgTable(
     distanceMeters: integer('distance_meters'),
     durationSeconds: integer('duration_seconds'),
     routeProvenance: jsonb('route_provenance').$type<RouteProvenance>(),
-    // Shape-aware route signature (region + quantized endpoints + via-points) — the demand +
-    // cache-warming key (instrumentation only in v2). Indexed.
+    // Shape-aware route signature (region + quantized endpoints + via-points) — the future dedup /
+    // cache-warming key (M4). WRITE-ONLY today: it is stamped on every create and the index is here,
+    // but nothing queries by it yet. (The `drive_demand` counter that once read it is gone — see the
+    // tombstone below.)
     routeSig: text('route_sig').notNull(),
     selection: jsonb('selection').$type<DriveSelection>().notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

@@ -1,4 +1,4 @@
-// The trigger core — decides WHEN a tour stop fires as a vehicle approaches.
+// The trigger core — decides WHEN a drive stop fires as a vehicle approaches.
 //
 // This is the heart of the M1 bet, and the algorithm the real in-car player will
 // reuse on every foreground GPS update (so it lives here, pure + testable, not in
@@ -119,7 +119,7 @@ export class TriggerEngine {
   update(fix: GpsFix): TriggerEvent[] {
     // Defense-in-depth: a malformed fix (non-finite coords/speed) must NEVER fire. Without this,
     // a NaN distance — or a NaN effective radius from a NaN speed — makes `d > radius` read FALSE,
-    // so the stop fires; and since every unfired stop shares the one bad fix, the WHOLE tour would
+    // so the stop fires; and since every unfired stop shares the one bad fix, the WHOLE drive would
     // dump into the queue at once. The live source sanitizes the iOS -1 SPEED sentinel (gps.ts
     // `saneNonNeg()`), but this engine is the SHARED safety-critical choke point (sim, live drive) and
     // must not trust each source to do so. A malformed fix is useless for triggering anyway → drop it.
@@ -187,8 +187,8 @@ export interface SnappedStop extends DriveStopRef {
 /**
  * Move each stop's trigger location from its POI to the nearest point on the route,
  * so it fires as the vehicle passes the POI's point on the road. This is the
- * preprocessing both the simulator and the real player run once at tour-load
- * (the player has the tour's polyline) before feeding stops to TriggerEngine.
+ * preprocessing both the simulator and the real player run once at drive-load
+ * (the player has the drive's polyline) before feeding stops to TriggerEngine.
  */
 export function snapStopsToRoute(polyline: LngLat[], stops: DriveStopRef[]): SnappedStop[] {
   const cum = cumulativeMeters(polyline)

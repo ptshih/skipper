@@ -9,7 +9,7 @@ export type Coordinate = z.infer<typeof coordinate>
 export const polyline = z.array(coordinate)
 export type Polyline = z.infer<typeof polyline>
 
-/** A region — the minimal keying entity (a tour/drive belongs to one). */
+/** A region — the minimal keying entity (a drive belongs to one). */
 export const region = z.object({
   id: z.uuid(),
   slug: z.string(),
@@ -390,8 +390,10 @@ export const driveCredits = z.object({
 
 export const driveList = z.object({
   drives: z.array(driveSummary),
-  /** Credit balance, or `null`/absent = uncapped (paid) OR an older server without the field — the
-   *  client renders the "N free drives left" hint only when present (nullish = degrade to hidden). */
+  /** Credit balance. `null`/absent = an older server without the field (today's handler always emits
+   *  it) — the client renders the "N free drives left" hint only when present, so an absent balance
+   *  degrades to hidden rather than to "unlimited". There is no uncapped tier to mean: premium is
+   *  bought as CREDITS, so the ledger is always the answer (docs/decisions/cut-tiers.md). */
   credits: driveCredits.nullish(),
 })
 export type DriveList = z.infer<typeof driveList>

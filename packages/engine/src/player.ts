@@ -1,4 +1,4 @@
-// Player decision helpers — the pure, testable bits of the in-car clip player that the tour
+// Player decision helpers — the pure, testable bits of the in-car clip player the drive hook
 // (useDrive) needs — extracted when a second hook needed it identically. Each hook keeps its own refs,
 // effects, and side-effects; this module owns only the safety-critical DECISIONS + the magic
 // thresholds, so the two players can't silently desync the logic — and it gets unit coverage the

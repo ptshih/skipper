@@ -1,13 +1,13 @@
 // Story-eligibility — is a POI story-grade NARRATION material? This is a property of the POI, shared
-// by every consumer that narrates it: BOTH drives and roam select story-grade POIs from the same
-// corpus (roam is one consumer, not the owner). SINGLE SOURCE OF TRUTH for the gates — the admin POIs
+// by every consumer that narrates it: solo and FUSED cluster tellings alike draw story-grade POIs
+// from the same corpus (a consumer is never the owner of this verdict). SINGLE SOURCE OF TRUTH for the gates — the admin POIs
 // table classifies with `classifyStoryEligibility`, and `generate-narrations` reads the same constants for
 // its queue. (Whether a narration exists / is fresh is a SEPARATE axis — computed in
 // /admin/pois as `narrationStatus`, not here.)
 
 /** TASTE gate: violent-crime / personal-tragedy articles are never a charming narration target — a
  *  joke-forward persona can't carry them (the sweep is breadth-first, so these slip in). Applies to
- *  ANY telling (drive or roam). Title-keyed; tuned for MODERN personal/violent crime while preserving
+ *  ANY telling. Title-keyed; tuned for MODERN personal/violent crime while preserving
  *  the historical/civic-tragedy carve-out the persona CAN play straight (a wildfire, a shipwreck, an
  *  earthquake, the Donner Party, a wild-west gunfight) — so it deliberately omits broad words like
  *  "attack"/"fire"/"shootout"/"wreck". Two guards dodge benign POIs: `shooting(?! range)` keeps gun
@@ -17,8 +17,9 @@
 export const STORY_TASTE_DENYLIST =
   /kidnap|abduction|murder|manslaughter|homicide|killing of|mass killing|massacre|lynching|shooting(?! range)|stabbing|gunman|hostage|\brape\b|sexual assault|assault|suicide|death of|serial killer|execution of|terrorism|terrorist|genocide|torture/i
 
-/** Whether a POI is story-grade narration material — a POI property, NOT roam-specific (tours AND
- *  roam draw story-grade POIs from the same corpus). The FIRST failing gate names the reason.
+/** Whether a POI is story-grade narration material — a property of the PLACE, not of whoever is
+ *  asking (every consumer draws story-grade POIs from the one corpus). The FIRST failing gate names
+ *  the reason.
  *
  *  NO char-length quality floor (the arbitrary 800-char `STORY_MIN_EXTRACT` was REMOVED 2026-06-16):
  *  whether a Wikipedia article is rich enough to NARRATE is the paid ENRICH step's call — it builds a
@@ -28,7 +29,7 @@ export const STORY_TASTE_DENYLIST =
  *  a sub-cent enrich call beats a guessed cutoff; see docs/decisions/corpus-enrichment.md.) */
 export type StoryEligibility =
   | 'eligible' // wikipedia + has article text + not taste-denied → ENRICHABLE (the enricher decides if it becomes a telling)
-  | 'filtered-source' // not a wikipedia story source (a wikidata scenic pin — wave layer later)
+  | 'filtered-source' // not a wikipedia story source (a wikidata scenic pin: no article to enrich)
   | 'filtered-taste' // title hits the taste denylist
   | 'filtered-stub' // wikipedia, but NO article text to enrich (empty extract — a text-less/disambiguation page)
 

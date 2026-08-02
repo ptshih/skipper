@@ -21,8 +21,8 @@ export const METERS_PER_MILE = 1609.344
 export const OFF_ROUTE_MAX_M = 700
 
 /**
- * Kind-aware proximity radius (m) for an un-snapped roam/drive pin. Roam pins are raw POI
- * centroids — never road-snapped (no route to snap to) — so an areal place needs a floor that
+ * Kind-aware proximity radius (m) for an UN-ANCHORED pin. Such a pin is the raw POI centroid —
+ * nothing snapped it to a road — so an areal place needs a floor that
  * matches its body: a peak's pin is its SUMMIT, a lake's is open water, while a building sits
  * near the curb. Measured on the first live drive: at a flat 250 m only 8 of 77 basin pins were
  * reachable from the highway. The client's speed-adaptive lead still extends these at speed.
@@ -58,7 +58,7 @@ export function radiusForKind(kind: string | null): number {
 export const ANCHORED_TRIGGER_RADIUS_M = 250
 
 /**
- * The trigger floor (m) for a roam/drive pin, CONDITIONAL on whether that pin is a road-snapped anchor.
+ * The trigger floor (m) for a drive pin, CONDITIONAL on whether that pin is a road-snapped anchor.
  * Anchored ⇒ the tight `ANCHORED_TRIGGER_RADIUS_M` (center's on the road; no inflation needed).
  * Un-anchored ⇒ the kind-aware `radiusForKind` floor stays — a tight radius around an OFF-road centroid
  * would never fire, regressing the ~99 Tahoe POIs that have no anchor (trigger-precision §2: "NOT a

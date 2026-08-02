@@ -7,7 +7,10 @@ import { z } from 'zod'
  *   break  = food/rest stop; names the curated anchor only. NOTE: the break CLIP is stored
  *            place-anchored in the `detours` table, NOT as a poi-bound `narrations` row — this value
  *            is the played-form/treatment projection (see `driveClipForm`/`stopType`), not break storage.
- *   wave   = a free-roam passing call-out.
+ *   wave   = RETIRED. It was roam's passing call-out, and roam was removed entirely in 1.1 — nothing
+ *            generates one and no drive can play one. The VALUE survives only because this enum is
+ *            paired member-for-member with the pg `narration_form` enum by `bun run lint:enums`, so
+ *            narrowing it here forces a destructive migration in the same commit (see `driveClipForm`).
  *   bside  = a deferred "tell me more" alternate telling.
  * Keep in lockstep with the pg `narration_form` enum (@skipper/db/schema).
  */

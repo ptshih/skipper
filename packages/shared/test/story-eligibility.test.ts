@@ -36,7 +36,7 @@ describe('STORY_TASTE_DENYLIST', () => {
 })
 
 describe('classifyStoryEligibility', () => {
-  // A POI property — the same verdict whether the consumer is a tour or a roam encounter.
+  // A POI property — the same verdict whichever consumer is asking (solo clip or fused telling).
   // extractChars is the measured `facts.extract` length, which is the FULL article now.
   const base = { source: 'wikipedia', name: 'Emerald Bay', extractChars: 1200 }
 

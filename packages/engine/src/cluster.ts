@@ -29,15 +29,14 @@ import { ANCHORED_TRIGGER_RADIUS_M, EARTH_RADIUS_M, haversineMeters, type LngLat
  * rider left, so it is back to being a plain THRESHOLD — the question "can any single point represent
  * this group honestly?", asked once, on the UNCAPPED radius.
  *
- * Who answers it differently is the part that matters: the drive path REFUSES a group that fails it
+ * Who answers it is the part that matters: the drive path REFUSES a group that fails it
  * (`tooWideForPoint` → buildDrive's second admission rule), because a drive's selection is frozen at
- * create against a credit that never refunds. It is ALSO still the cap on the point fallback a served
- * area telling carries — same idea one layer down, never trigger looser than the loosest thing already
- * shipping.
+ * create against a credit that never refunds.
  *
- * ⚠ Do not collapse the threshold into whichever answer is currently implemented. Keying the drive
- * refusal on "was a hull served?" instead of on this predicate is what would make deleting the area
- * mode silently flip a refusal into an admission.
+ * ⚠ Do not collapse the threshold into whichever answer is currently implemented. The area mode HAS
+ * since been deleted (the served hull went with roam), and keying the drive refusal on "was a hull
+ * served?" rather than on this predicate is exactly what would have flipped that refusal into a
+ * silent admission the moment it went.
  */
 export const CLUSTER_MAX_TRIGGER_RADIUS_M = 600
 

@@ -22,7 +22,7 @@ import type { PoiFacts, FactSheetEntry } from './schema'
  * facts object is INVARIANT to key ORDER. This is load-bearing because `pois.facts` is `jsonb`:
  * Postgres does NOT preserve object key order, so the SAME logical facts serialize one way
  * in-memory (a writer's freshly-built object, stamped onto `pois.facts_hash`) and a DIFFERENT way
- * read back from the DB (what drives/roam stamp onto `narrations.facts_hash` — e.g. `{text,source,…}`
+ * read back from the DB (what the pipeline stamps onto `narrations.facts_hash` — e.g. `{text,source,…}`
  * comes back as `{url,text,…}`). Plain `JSON.stringify` would make those two hashes diverge, so a
  * read-back-hashed clip would read as perpetually stale against the staleness contract
  * (`narrations.facts_hash IS DISTINCT FROM pois.facts_hash`). Sorting keys normalizes both sides to one
@@ -71,7 +71,7 @@ export function hashFacts(facts: PoiFacts | null): string | null {
  *     input change" detector. Byte-identical to the pre-column well-hash, so existing rows stay valid.
  *   - UN-ENRICHED (no sheet) → hash the whole facts object (`hashFacts`), so existing rows + the
  *     extract-head fallback keep their current hash exactly. Both WRITERS (sweep/enrich) and READERS
- *     (drives/roam) call THIS, canonicalized (`stableStringify`), so a clip's stamped hash can never
+ *     (the staleness verdicts) call THIS, canonicalized (`stableStringify`), so a clip's stamped hash can never
  *     diverge from `pois.facts_hash` across the in-memory ↔ jsonb-read-back boundary.
  */
 export function storyFactsHash(
