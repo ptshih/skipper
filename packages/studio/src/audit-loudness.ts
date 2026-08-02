@@ -28,7 +28,7 @@ import { db } from '@skipper/db'
 import { narrations, pois } from '@skipper/db/schema'
 import { AUDIO_LOUDNESS } from '@skipper/shared'
 import { getR2Client } from '@skipper/storage'
-import { parseFlags } from './pipeline/ops'
+import { numericFlag, parseFlags } from './pipeline/ops'
 import { resolveRegion, requireRegionBbox } from './pipeline/region'
 import { withRetry } from './pipeline/http'
 import { mapLimit } from './pipeline/concurrency'
@@ -38,7 +38,7 @@ import { measureTailCollapse, TAIL_COLLAPSE_DB } from './pipeline/tail'
 const flags = parseFlags(process.argv.slice(2), { valueFlags: ['region', 'limit', 'include-ids'] })
 const run = flags.has('run')
 const releasedOnly = flags.has('released')
-const limit = Number(flags.value('limit') ?? Infinity)
+const limit = numericFlag(flags, 'limit', { fallback: Infinity })
 const regionRaw = flags.value('region') || null
 const includeIds = (flags.value('include-ids') ?? '')
   .split(',')

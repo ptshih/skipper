@@ -25,7 +25,7 @@ import { inArray, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { narrations, poiClusters } from '@skipper/db/schema'
 import type { FactSheetEntry } from '@skipper/db/schema'
-import { announce, assertReady, maxCostFlag, parseFlags } from './pipeline/ops'
+import { announce, assertReady, maxCostFlag, numericFlag, parseFlags } from './pipeline/ops'
 import { resolveRegion, requireRegionBbox } from './pipeline/region'
 import { regionLabel } from './pipeline/geo'
 import { synthesizeWithTailRetake, type TailOutcome } from './pipeline/tts'
@@ -114,7 +114,7 @@ const clusterTargetRegion = (flags.value('include-ids') ?? '').trim()
 async function main(): Promise<void> {
   const region = await resolveRegion(flags.value('region') ?? DEFAULT_REGION_SLUG)
   const bbox = requireRegionBbox(region)
-  const limit = Number(flags.value('limit') ?? 1)
+  const limit = numericFlag(flags, 'limit', { fallback: 1 })
   const query = flags.value('query')?.toLowerCase()
   // An explicit id list is a TARGETED re-run (regenerate exactly these), so it bypasses the region
   // scope and the limit — the caller has already decided the set.

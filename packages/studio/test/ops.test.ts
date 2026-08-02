@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { parseFlags } from '../src/pipeline/ops'
+import { maxCostFlag, numericFlag, parseFlags } from '../src/pipeline/ops'
 import { orphanKeys, reapableKeys, SWEEP_MIN_AGE_MS } from '../src/pipeline/storage'
 
 describe('parseFlags', () => {
@@ -112,5 +112,62 @@ describe('reapableKeys — the age guard that keeps the sweep off a live generat
   test('the boundary is inclusive-of-older: exactly the window old is reapable', () => {
     const exact = new Date(NOW - SWEEP_MIN_AGE_MS).toISOString()
     expect(reapableKeys([{ key: 'k', lastModified: exact }], new Set(), { now: NOW }).reap).toEqual(['k'])
+  })
+})
+
+// ── numericFlag / maxCostFlag — the spend brakes must FAIL CLOSED ────────────────────────────────
+// These parsers guard real money. Every caller gates as `if (cap !== Infinity && …)`, so a value the
+// parser rejects does not tighten the cap, it REMOVES it — which is why "reject" has to mean throw,
+// not fall back. The cases below are the literal operator typos that used to buy an uncapped run.
+describe('numericFlag — a rejected value never becomes "no limit"', () => {
+  const f = (...argv: string[]) => parseFlags(argv, { valueFlags: ['limit', 'max-cost'] })
+
+  test('ABSENT → the fallback, untouched', () => {
+    expect(numericFlag(f('--apply'), 'limit', { fallback: Infinity })).toBe(Infinity)
+    expect(numericFlag(f('--apply'), 'limit', { fallback: 1 })).toBe(1)
+  })
+
+  test('a good value parses, in both flag forms', () => {
+    expect(numericFlag(f('--limit', '5'), 'limit', { fallback: Infinity })).toBe(5)
+    expect(numericFlag(f('--limit=5'), 'limit', { fallback: Infinity })).toBe(5)
+    expect(numericFlag(f('--limit=2.5'), 'limit', { fallback: 1 })).toBe(2.5)
+  })
+
+  test('a TYPO throws — it must not silently read as no limit', () => {
+    // `5o` (letter O) is the fat-finger that produced NaN, and NaN disables a comparison rather
+    // than bounding it: `queue.length >= NaN` is never true, so audit-corpus swept the whole corpus.
+    expect(() => numericFlag(f('--limit', '5o'), 'limit', { fallback: Infinity })).toThrow(/--limit/)
+    expect(() => numericFlag(f('--limit', 'abc'), 'limit', { fallback: Infinity })).toThrow()
+  })
+
+  test('a value-less flag throws rather than inheriting the fallback', () => {
+    // `--limit --apply`: parseFlags yields undefined when the next token is itself a flag, so this
+    // used to be indistinguishable from "flag absent" — the operator asked for a bound and got none.
+    expect(() => numericFlag(f('--limit', '--apply'), 'limit', { fallback: Infinity })).toThrow()
+    expect(() => numericFlag(f('--limit='), 'limit', { fallback: Infinity })).toThrow()
+  })
+
+  test('zero and negatives throw — "spend nothing" must never mean "spend anything"', () => {
+    expect(() => numericFlag(f('--limit', '0'), 'limit', { fallback: Infinity })).toThrow()
+    expect(() => numericFlag(f('--limit', '-5'), 'limit', { fallback: Infinity })).toThrow()
+  })
+})
+
+describe('maxCostFlag — the cost ceiling', () => {
+  const f = (...argv: string[]) => parseFlags(argv, { valueFlags: ['max-cost'] })
+
+  test('unset → Infinity (no cap is the documented default)', () => {
+    expect(maxCostFlag(f('--apply'))).toBe(Infinity)
+  })
+
+  test('a real cap parses', () => {
+    expect(maxCostFlag(f('--max-cost', '12.5'))).toBe(12.5)
+    expect(maxCostFlag(f('--max-cost=2'))).toBe(2)
+  })
+
+  test('every shape that used to silently uncap a PAID run now throws', () => {
+    for (const argv of [['--max-cost', '0'], ['--max-cost', '-5'], ['--max-cost', '5usd'], ['--max-cost', '--apply'], ['--max-cost=']]) {
+      expect(() => maxCostFlag(f(...argv))).toThrow()
+    }
   })
 })

@@ -28,7 +28,7 @@ import { db } from '@skipper/db'
 import { narrations, pois } from '@skipper/db/schema'
 import type { FactSheetEntry, PoiFacts } from '@skipper/db/schema'
 import { STORY_TASTE_DENYLIST } from '@skipper/shared'
-import { announce, maxCostFlag, parseFlags } from './pipeline/ops'
+import { announce, maxCostFlag, numericFlag, parseFlags } from './pipeline/ops'
 import { resolveRegion, requireRegionBbox } from './pipeline/region'
 import { runJob } from './pipeline/job-progress'
 import { regionLabel } from './pipeline/geo'
@@ -64,7 +64,10 @@ const apply = flags.has('apply')
 const doCharm = flags.has('charm')
 const doVeracity = flags.has('veracity')
 const maxCostUsd = maxCostFlag(flags)
-const limit = Number(flags.value('limit') ?? Infinity)
+// ⚠ `numericFlag`, not `Number(...)`: this limit is compared as `queue.length >= limit` (the break
+// below), and NaN >= NaN is false — so a typo'd `--limit` silently audited the WHOLE corpus at full
+// judge spend, which is the opposite of the "smoke a cheap N first" this flag exists to offer.
+const limit = numericFlag(flags, 'limit', { fallback: Infinity })
 const parseIds = (v: string | undefined): string[] => (v ? v.split(',').map((s) => s.trim()).filter(Boolean) : [])
 const regionRaw = flags.value('region') || null
 const query = (flags.value('query') ?? '').trim().toLowerCase()

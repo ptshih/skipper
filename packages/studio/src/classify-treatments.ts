@@ -44,7 +44,7 @@ import type Anthropic from '@anthropic-ai/sdk'
 import { and, inArray, isNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { narrations, poiClusters, pois } from '@skipper/db/schema'
-import { announce, parseFlags } from './pipeline/ops'
+import { announce, numericFlag, parseFlags } from './pipeline/ops'
 import { mapLimit } from './pipeline/concurrency'
 import { withRetry } from './pipeline/http'
 import { resolveRegion, requireRegionBbox } from './pipeline/region'
@@ -170,11 +170,9 @@ async function main(): Promise<void> {
   const apply = flags.has('apply')
   const clearOnly = flags.has('clear')
   const forceRegroup = flags.has('force-regroup')
-  const radiusM = Number(flags.value('radius') ?? DEFAULT_RADIUS_M)
-  if (!Number.isFinite(radiusM) || radiusM <= 0) {
-    console.error('--radius must be a positive number of metres.')
-    process.exit(1)
-  }
+  // This CLI already validated its own radius; `numericFlag` is that same check, shared — so every
+  // numeric flag in the package rejects a typo the same way instead of each one deciding.
+  const radiusM = numericFlag(flags, 'radius', { fallback: DEFAULT_RADIUS_M })
   announce({ tool: 'classify-treatments', blast: clearOnly ? ['MUTATES DB'] : ['SPENDS $', 'MUTATES DB'], apply })
 
   const region = await resolveRegion(flags.value('region') ?? DEFAULT_REGION_SLUG)

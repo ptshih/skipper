@@ -33,7 +33,7 @@ import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { narrations, pois } from '@skipper/db/schema'
 import type { FactSheetEntry, PoiFacts } from '@skipper/db/schema'
-import { announce, assertReady, maxCostFlag, parseFlags } from './pipeline/ops'
+import { announce, assertReady, maxCostFlag, numericFlag, parseFlags } from './pipeline/ops'
 import { resolveRegion, requireRegionBbox } from './pipeline/region'
 import { runJob } from './pipeline/job-progress'
 import { ensurePoiOverridesLoaded } from './pipeline/poi-overrides'
@@ -89,7 +89,7 @@ const maxCostUsd = maxCostFlag(flags)
 // Narrate + PRINT the scripts, then stop — NO TTS, NO R2, NO DB writes. The cheapest way to ear-read
 // the writing (e.g. a new length band) before committing to a paid synth + regen. Spends narration $.
 const scriptsOnly = flags.has('scripts-only')
-const limit = Number(flags.value('limit') ?? Infinity)
+const limit = numericFlag(flags, 'limit', { fallback: Infinity })
 // Selection mirrors enrich (geometry-first): a region (default: the launch region) → its discovery bbox →
 // point-in-bbox, XOR an explicit hand-picked id list. `--bbox` is gone — a region is the only geo input.
 const parseIds = (v: string | undefined): string[] => (v ? v.split(',').map((s) => s.trim()).filter(Boolean) : [])

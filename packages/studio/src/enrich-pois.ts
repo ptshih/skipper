@@ -32,7 +32,7 @@
 import { and, eq, inArray, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { pois } from '@skipper/db/schema'
-import { announce, maxCostFlag, parseFlags } from './pipeline/ops'
+import { announce, maxCostFlag, numericFlag, parseFlags } from './pipeline/ops'
 import { resolveRegion, requireRegionBbox } from './pipeline/region'
 import { runJob } from './pipeline/job-progress'
 import { ensurePoiOverridesLoaded } from './pipeline/poi-overrides'
@@ -61,7 +61,7 @@ const flags = parseFlags(process.argv.slice(2), {
 })
 const apply = flags.has('apply')
 const force = flags.has('force')
-const limit = Number(flags.value('limit') ?? Infinity)
+const limit = numericFlag(flags, 'limit', { fallback: Infinity })
 const maxCostUsd = maxCostFlag(flags)
 const modelChoice: EnrichModelChoice = flags.value('model') === 'opus' ? 'opus' : 'sonnet'
 const model = ENRICH_MODELS[modelChoice]
