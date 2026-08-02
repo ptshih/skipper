@@ -1,9 +1,12 @@
 # Ops-scripts SOP
 
-**Status:** ✅ **ADOPTED 2026-06-10.** Enforced by reuse via `packages/studio/src/pipeline/ops.ts`;
-reference implementation = `sweep-orphans.ts`; `resynth-narration.ts` (1:1 narration resynth) conforms
-to the contract (preview by default, act only on `--apply`). This is the contract for the studio
-pipeline's one-off operational CLIs.
+**Status:** ✅ **ADOPTED 2026-06-10; conformance table completed + spend claims corrected 2026-08-02.**
+Enforced by reuse via `packages/studio/src/pipeline/ops.ts`; reference implementation =
+`sweep-orphans.ts`; `resynth-narration.ts` (1:1 narration resynth) conforms to the contract (preview by
+default, act only on `--apply`). This is the contract for the studio pipeline's one-off operational CLIs.
+The 2026-08-02 pass audited every CLI in `packages/studio/src` rather than the six previously listed:
+`generate-cluster-narrations`'s preview also SPENDS (this doc had claimed only one CLI's did), and the
+numeric-flag parsers now fail closed instead of degrading to "no limit".
 
 ## What this covers
 
@@ -37,13 +40,28 @@ That is where the money is, and where the wrong conclusions have actually been d
 6. **Idempotent + logged + honest exit.** Re-runnable without harm; log per item + a final
    summary; `process.exitCode = 1` on failure (the `main().catch(...)` tail).
 
-## ⚠ The one CLI whose PREVIEW spends
+## ⚠ The CLIs whose PREVIEW spends
 
-`classify-treatments` breaks rule 2's spirit and it is not a bug: the tool's whole job is to ask the
-model how to group a region, so the no-flag run **classifies** (one Opus call per multi-member group,
-~$0.82 for 64 groups, plus one per group the duplicate merge fuses) and only the DB WRITE is gated on
-`--apply`. There is no way to see the verdicts without paying for them. Budget a preview like an apply,
-and get the founder go for either. Every other CLI's preview is genuinely free.
+**Two, not one.** Both break rule 2's spirit and neither is a bug — in each the thing you want to
+preview IS the paid output, so there is no way to see it without buying it. Budget a preview like an
+apply and get the founder go for either.
+
+- **`classify-treatments`** — the tool's whole job is to ask the model how to group a region, so the
+  no-flag run **classifies** (one Opus call per multi-member group, ~$0.82 for 64 groups, plus one per
+  group the duplicate merge fuses) and only the DB WRITE is gated on `--apply`.
+- **`generate-cluster-narrations`** — the no-flag run **narrates and gates** every picked cluster, so a
+  preview costs an apply minus the TTS; only the synthesis + persistence are gated. Its own header and
+  `announce` say so (`blast: ['SPENDS $']` even without `--apply`), and the admin classifies the kind
+  `spends: true` unconditionally so the confirm dialog fires on Preview too.
+
+⚠ This section used to say `classify-treatments` was the ONE such CLI and that "every other CLI's
+preview is genuinely free" — which was false for the whole life of the fused generator, in the one
+document an operator reads to find out what a no-flag run costs.
+
+**`judge-voice` is a third shape and not a preview at all:** it has no `--apply` because running it IS
+the request (one Opus charm-judge call per stop). It touches no live data, R2 or corpus.
+
+Every other CLI's preview is genuinely free — verified against the table below, not assumed.
 
 ## Corpus hygiene: what the checks CAN'T see
 
@@ -141,6 +159,10 @@ was measured on. Before building on one, check that yours is the same population
 
 ## Conformance
 
+⚠ This table listed 6 of the ~19 CLIs in `packages/studio/src` until 2026-08-02, which read as "these
+are the ops CLIs" rather than "these are the ones anyone checked" — and the unchecked majority is where
+`generate-cluster-narrations`'s paid preview hid. Every row below was read from the code.
+
 | Tool | Blast radius | Default | Conforms |
 | --- | --- | --- | --- |
 | `sweep-orphans.ts` | DELETES BYTES | dry-run | ✅ (reference) |
@@ -149,3 +171,23 @@ was measured on. Before building on one, check that yours is the same population
 | `prune-corpus.ts` | MUTATES DB; `--delete` DELETES ROWS + cascades | dry-run | ✅ (`--restore`; `--delete` needs `--apply`) |
 | `classify-treatments.ts` | SPENDS $ (~$0.8/region) + MUTATES DB | ⚠ preview SPENDS | ⚠ see above — only the WRITE is gated |
 | `backfill-poi-extent.ts` | MUTATES DB (no spend — WDQS) | dry-run | ✅ |
+| `generate-narrations.ts` | SPENDS $ + MUTATES DB | dry-run (exits before narrating) | ✅ — ⚠ `--scripts-only` SPENDS narration $ and writes the eval run |
+| `generate-cluster-narrations.ts` | SPENDS $ + MUTATES DB | ⚠ preview SPENDS | ⚠ see above — only synth + persistence are gated |
+| `enrich-pois.ts` | SPENDS $ + MUTATES DB | dry-run | ✅ |
+| `curate-places.ts` | SPENDS $ (Places + LLM) + MUTATES DB | dry-run | ✅ |
+| `discover-pois.ts` | MUTATES DB (no spend — Wikidata/WDQS) | dry-run | ✅ |
+| `classify-registers.ts` | SPENDS $ (Haiku tail) + MUTATES DB | dry-run (structural only, no LLM) | ✅ |
+| `refetch-poi.ts` | MUTATES DB (no spend) | dry-run | ✅ |
+| `audit-corpus.ts` | SPENDS $ (judges) | dry-run (free count + estimate) | ✅ |
+| `snapshot-corpus.ts` | READ-ONLY | n/a | ✅ |
+| `audit-loudness.ts` | READ-ONLY (ffmpeg probe) | n/a | ✅ |
+| `audit-speakable.ts` | READ-ONLY | n/a | ✅ |
+| `test-mastering-chain.ts` | READ-ONLY (local ffmpeg, synthetic input) | n/a | ✅ |
+| `judge-voice.ts` | SPENDS $ (charm judge) | ⚠ NO GATE — running it IS the request | ⚠ analysis-only; touches no DB/R2/corpus |
+
+**Numeric flags fail CLOSED.** `--max-cost`, `--limit`, `--radius` and friends go through
+`numericFlag`/`maxCostFlag` (`pipeline/ops.ts`): ABSENT means the documented default, but
+present-and-unparseable **throws before any spend**. It must never silently mean "no limit" — every
+caller gates as `if (cap !== Infinity && …)`, so a value that fails to parse would REMOVE the ceiling
+rather than tighten it. `--max-cost 0`, `-5`, `5usd` and `--max-cost --apply` were all "no cap" until
+2026-08-02.

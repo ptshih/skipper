@@ -103,7 +103,10 @@ const force = flags.has('force') || isExplicit
 
 announce({
   tool: 'generate-narrations',
-  blast: scriptsOnly ? ['SPENDS $'] : ['SPENDS $', 'MUTATES DB'],
+  // ⚠ `--scripts-only` is MUTATES DB too. It writes no narration and no R2 object — which is what the
+  // flag's name promises — but it still records the eval run + its score rows (`recordRun(true)` at the
+  // scripts-only exit), so a blast label of SPENDS-only under-declared it. Same label, different rows.
+  blast: ['SPENDS $', 'MUTATES DB'],
   apply: apply || scriptsOnly, // scripts-only spends narration $, so it's not a free dry run
 })
 if (apply) assertReady(['tts', 'r2']) // scripts-only needs neither TTS nor R2
