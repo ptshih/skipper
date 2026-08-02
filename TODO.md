@@ -14,6 +14,68 @@ Carry-forward **engineering** items (the near-term layer of the truth system —
 Each item has enough context to action without re-deriving the reasoning. **Delete items
 when done** — git history is the archive.
 
+## Mobile technical diligence (2026-08-02) — validated against Expo's current docs
+
+A read of `apps/mobile` against external best practice. **Version currency is a genuine asset and
+needs no work**: SDK 57 is the current release (2026-06-30), RN 0.86, React 19.2 — the app is ON the
+latest, not two SDKs behind. The gaps are all in the ENFORCEMENT layer, not the code.
+
+✅ DONE 2026-08-02: ESLint (`eslint-config-expo`) wired into mobile `check` (`c1e21db`) and its first
+findings fixed (`576e031`). See `apps/mobile/CLAUDE.md` for the ESLint-9 pin and the suppressions rule.
+
+- [ ] **NEXT (founder, 2026-08-02): switch `react-native-maps` → `expo-maps`.** `react-native-maps` is
+      the riskiest dependency in the app — it is the ONLY exact-pinned one (`1.27.2`, which reads like
+      someone already got burned), there is an open Expo issue for this exact combination breaking on
+      iOS with Google Maps (expo/expo#43288), and the community has reported marker / user-location
+      regressions across recent versions. `expo-maps` is Expo-maintained and built on SwiftUI +
+      Jetpack Compose.
+      ⚠ **The catch, stated up front so it is a decision and not a surprise: `expo-maps` supports
+      Google Maps on ANDROID ONLY — on iOS it renders Apple Maps.** For an iOS-first driving app that
+      draws a route polyline and stop markers that is arguably an upgrade (native in-car look), and
+      Android is not shipped — but it IS a visible change to the one screen riders stare at while
+      driving, so it needs a real visual pass, not a typecheck.
+      The prize: deletes the Google Maps API key, its billing surface, and a fragile third-party dep
+      in one move — `app.config.ts`'s whole `react-native-maps` plugin block and
+      `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` go with it.
+      Touches: `src/ui/DriveMap.tsx`, `src/theme/mapStyle.ts` (Google-specific style JSON — Apple Maps
+      has no equivalent, so the dusk map styling has to be re-thought or dropped), `mapChrome.tsx`,
+      `app.config.ts`, `app.json`. ⚠ Native change → `expo prebuild --clean` + a device build; do NOT
+      attempt it as a JS-only edit.
+- [ ] **Burn down `eslint-suppressions.json` — 47 baselined Rules-of-React errors** across 16 files
+      (`react-hooks/refs` ×37, `set-state-in-effect` ×8, `immutability` ×2). These are NOT junk: a good
+      share are the deliberate ref-mirrors-state pattern that makes latest-tap-wins work in the audio
+      hooks. Each needs judgement about whether the violation is load-bearing or lazy. Fix in small
+      batches, then `bun run lint:suppress` to prune. ⚠ Never re-run a blanket `--suppress-all`; that
+      turns the backlog into a mute button. Also 5 warnings left deliberately unfixed (4 × missing
+      `preview` dep, 1 × `anchorNames` useMemo) — all render-churn judgement calls in the planner and
+      drive-detail screens.
+- [ ] **7 patch-version drifts against SDK 57**, found by `bun run doctor` (`apps/mobile`): expo
+      57.0.8→57.0.9, expo-asset, expo-constants, expo-location, expo-router, expo-dev-client, and
+      **react-native 0.86.0→0.86.2**. All patch-level. ⚠ Run `bun update` from INSIDE `apps/mobile`
+      (the isolated linker), and re-verify with `expo export` — a green `tsc` does not prove a bundle.
+      ⚠ IGNORE doctor's "node_modules may be corrupted / multiple copies" line: it is a FALSE positive
+      against bun's isolated linker, and it is the same shape of false alarm that once talked someone
+      into forcing the hoisted linker.
+- [ ] **There is no CI.** No `.github/workflows` anywhere, and `cloudbuild.yaml` is build → push →
+      deploy with NO test step — so the entire quality bar is "an agent remembered to run
+      `bun run check`", in a repo where several agents share one working tree. Want: one workflow on
+      push/PR running root `bun run check` + `bun --filter @skipper/mobile check`. ~30 lines. It can
+      land before the first push and starts paying the moment one happens. **This was finding #1 of the
+      diligence pass** — ESLint went first only because it catches bugs the same afternoon.
+- [ ] **The four hooks that own the risky behaviour have zero coverage.** 13 test files, all pure
+      modules; `useDrive`, `useRoutePreview`, `useStopPreview`, `useLocationPriming` have none — and
+      that is exactly where the timers, refs and audio-session obligations live (the bug fixed in
+      `55184a9` was one). Expo's documented setup is jest-expo + `@testing-library/react-native`
+      (`react-test-renderer` is deprecated and does not support React 19+). ⚠ Prefer FIRST moving more
+      logic out of the hooks into pure modules — the audio-session hand-back is expressible as a pure
+      "what should happen on this transition" decision — and only add a second test runner if that
+      proves insufficient. Two runners in one workspace is a real cost.
+- [ ] **React Compiler — deliberately NOT yet.** Available via `experiments.reactCompiler` with Babel
+      auto-configured on SDK 54+, still experimental and off by default. This codebase would benefit
+      unusually much (it is dense with hand-rolled `useCallback`/`useMemo`/ref memoization). But it
+      REQUIRES strict adherence to the Rules of React — which is precisely what the 47 suppressed
+      errors above say is not true today. Do it after the backlog and after CI, or not at all.
+
 ## ⚠ REGRESSION I SHIPPED: the 2026-07-30 regeneration raised tail collapse 2% → 21%
 
 **72 released solo clips were regenerated** (2026-07-30, ~$20) to pick up three prompt fixes — the
