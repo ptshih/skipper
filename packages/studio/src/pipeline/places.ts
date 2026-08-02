@@ -40,6 +40,42 @@ const BREAK_CATEGORIES: { textQuery: string; includedType: string }[] = [
   { textQuery: 'rest area', includedType: 'rest_stop' },
 ]
 
+/**
+ * Read a Places response body, keeping the HTTP STATUS on every failure path.
+ *
+ * These helpers used to `await res.json()` BEFORE checking `res.ok` — and fetchWithRetry hands back
+ * the final 5xx Response rather than throwing, while Google's edge answers gateway failures with
+ * HTML. So a Places outage surfaced as `SyntaxError: Unexpected token '<'`, the `!res.ok` branch that
+ * would have named the status never ran, and an operator reading a PAID `curate-places --apply` log
+ * (the Anthropic draft call is already billed by the time we get here) could not tell a transient 503
+ * from a disabled Places API or a bad key. Text-first + a guarded JSON.parse keeps the status.
+ * (Same shape, same reason as `wiki<T>()` in wikipedia.ts.)
+ */
+async function placesJson<T extends { error?: { status: string; message: string } }>(
+  endpoint: string,
+  res: Response,
+): Promise<T> {
+  const body = await res.text()
+  let json: T
+  try {
+    json = JSON.parse(body) as T
+  } catch {
+    throw new Error(`Places ${endpoint} HTTP ${res.status} (non-JSON body): ${body.slice(0, 160)}`)
+  }
+  // A literal `null`/scalar body parses fine; guard the shape before reading `.error` so a
+  // misbehaving proxy surfaces as a clear message, not a raw TypeError outside the catch.
+  if (json === null || typeof json !== 'object') {
+    throw new Error(`Places ${endpoint} HTTP ${res.status} (non-object body): ${body.slice(0, 160)}`)
+  }
+  if (!res.ok || json.error) {
+    const e = json.error
+    throw new Error(
+      `Places ${endpoint} ${res.status}: ${e ? `${e.status} — ${e.message}` : 'unknown error'}`,
+    )
+  }
+  return json
+}
+
 interface PlaceResult {
   id: string
   displayName?: { text: string; languageCode?: string }
@@ -83,16 +119,10 @@ async function searchOneCategory(
     },
     { timeoutMs: REQUEST_TIMEOUT_MS },
   )
-  const json = (await res.json()) as {
+  const json = await placesJson<{
     error?: { code: number; status: string; message: string }
     places?: PlaceResult[]
-  }
-  if (!res.ok || json.error) {
-    const e = json.error
-    throw new Error(
-      `Places searchText ${res.status}: ${e ? `${e.status} — ${e.message}` : 'unknown error'}`,
-    )
-  }
+  }>('searchText', res)
   return json.places ?? []
 }
 
@@ -180,14 +210,10 @@ async function autocompletePlaceId(input: string, bbox: PlacesBbox, apiKey: stri
     },
     { timeoutMs: REQUEST_TIMEOUT_MS },
   )
-  const json = (await res.json()) as {
+  const json = await placesJson<{
     error?: { status: string; message: string }
     suggestions?: { placePrediction?: { placeId?: string } }[]
-  }
-  if (!res.ok || json.error) {
-    const e = json.error
-    throw new Error(`Places autocomplete ${res.status}: ${e ? `${e.status} — ${e.message}` : 'unknown error'}`)
-  }
+  }>('autocomplete', res)
   for (const s of json.suggestions ?? []) {
     if (s.placePrediction?.placeId) return s.placePrediction.placeId
   }
@@ -208,17 +234,13 @@ async function placeDetails(placeId: string, apiKey: string): Promise<CuratedPla
     },
     { timeoutMs: REQUEST_TIMEOUT_MS },
   )
-  const json = (await res.json()) as {
+  const json = await placesJson<{
     error?: { status: string; message: string }
     id?: string
     location?: { latitude: number; longitude: number }
     displayName?: { text: string }
     primaryType?: string
-  }
-  if (!res.ok || json.error) {
-    const e = json.error
-    throw new Error(`Places details ${res.status}: ${e ? `${e.status} — ${e.message}` : 'unknown error'}`)
-  }
+  }>('details', res)
   if (!json.id || !json.location || !json.displayName?.text) return null
   return {
     placeId: json.id,

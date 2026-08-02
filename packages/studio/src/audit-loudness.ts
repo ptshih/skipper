@@ -202,7 +202,12 @@ async function main(): Promise<void> {
   // ── LOUDNESS ──
   const lufs = measured.map((m) => m.integratedLufs!).filter((x): x is number => x !== null).sort((a, b) => a - b)
   const offLoud = measured.filter((m) => !m.loudnessOk && m.integratedLufs !== null)
-  console.log(`\n── LOUDNESS (integrated LUFS · target ${fmt(TARGET)} · flag |I−target| > 1.0 LU) ──`)
+  // ⚠ Do NOT retype the flag band here. It is loudnorm.ts's LOUDNESS_TOLERANCE_LU, applied by
+  // judgeMasteredLoudness — the same function `m.loudnessOk` above comes from — and it is not
+  // exported, so this header names the OWNER instead of a number. The hand-typed copy that used to sit
+  // here had drifted NARROWER than the real gate, so the audit whose job is a GO/no-go on a paid regen
+  // mis-stated its own criterion by a band that contains real clips.
+  console.log(`\n── LOUDNESS (integrated LUFS · target ${fmt(TARGET)} · flagged by loudnorm.ts judgeMasteredLoudness) ──`)
   console.log(`  measured ${lufs.length} of ${queue.length}${unmeasured.length ? ` (${unmeasured.length} unmeasurable)` : ''}`)
   if (lufs.length > 0) {
     console.log(`  p5 / p50 / p95:  ${fmt(percentile(lufs, 5))} / ${fmt(percentile(lufs, 50))} / ${fmt(percentile(lufs, 95))} LUFS`)

@@ -55,13 +55,6 @@ export async function listAudioKeys(prefix: string): Promise<string[]> {
   return (await listAudioObjects(prefix)).map((o) => o.key)
 }
 
-/** Keys present in R2 (`listed`) that NO current DB row references (`referenced`) — i.e. the
- *  orphans safe to delete. Pure (the decision the sweep tool acts on); a referenced key can
- *  never be returned. */
-export function orphanKeys(listed: string[], referenced: Set<string>): string[] {
-  return listed.filter((k) => !referenced.has(k))
-}
-
 /** How long a clip must have existed before the sweep may consider it an orphan. */
 export const SWEEP_MIN_AGE_MS = 60 * 60 * 1000
 
@@ -84,6 +77,10 @@ export const SWEEP_MIN_AGE_MS = 60 * 60 * 1000
  * Nothing is lost by waiting: a genuine orphan is produced by a run that has already finished or died,
  * so it is still there an hour later. `lastModified` missing is treated as TOO YOUNG — unknown age
  * must not authorise a delete. (founder call 2026-08-02)
+ *
+ * ⚠ This is deliberately the ONLY "which keys are unreferenced" helper here. Its age-guard-less
+ * predecessor (`orphanKeys`) was DELETED rather than left exported: a green, fully-tested function
+ * one import away is exactly how the window above gets reintroduced by a well-meaning caller.
  */
 export function reapableKeys(
   listed: AudioObject[],

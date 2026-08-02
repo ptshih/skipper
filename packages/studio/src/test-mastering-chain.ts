@@ -22,7 +22,7 @@ import { join } from 'node:path'
 import { readFile, unlink, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { AUDIO_LOUDNESS } from '@skipper/shared'
-import { ACTIVE_MASTER_TARGET_LUFS, normalizeAndEncode, parseEbur128Summary } from './pipeline/loudnorm'
+import { ACTIVE_MASTER_TARGET_LUFS, LOUDNESS_TOLERANCE_LU, normalizeAndEncode, parseEbur128Summary } from './pipeline/loudnorm'
 
 const TP_CEILING = AUDIO_LOUDNESS.truePeakDbtp // −1.0 dBTP — the hard clipping ceiling for every case
 const LEAD_RMS_MAX_DB = -60 // a gated lead-in must sit below this (the model hiss, ungated, sits ~−49)
@@ -183,7 +183,8 @@ async function runCase(c: Case): Promise<Result> {
     }
     if (c.checks.loudness) {
       if (integrated == null) fail('integrated loudness unmeasurable')
-      else if (Math.abs(integrated - ACTIVE_MASTER_TARGET_LUFS) > 1.2) fail(`integrated ${integrated} LUFS outside ${ACTIVE_MASTER_TARGET_LUFS}±1.2`)
+      else if (Math.abs(integrated - ACTIVE_MASTER_TARGET_LUFS) > LOUDNESS_TOLERANCE_LU)
+        fail(`integrated ${integrated} LUFS outside ${ACTIVE_MASTER_TARGET_LUFS}±${LOUDNESS_TOLERANCE_LU}`)
       else ok(`integrated ${integrated} LUFS`)
     }
     if (c.checks.duration) {

@@ -97,7 +97,9 @@ export interface LoudnessOutcomeLike {
 
 /**
  * Fold the TTS phase's POST-ENCODE loudness measurements into the tts dimension (ADVISORY mark-and-flag).
- * The masteringChain lands ~−14.9 LUFS under the −1 dBTP ceiling but nothing read the shipped clip back
+ * The masteringChain lands at ACTIVE_MASTER_TARGET_LUFS (loudnorm.ts — the one home for the figure; this
+ * line used to name ~−14.9, which the target has since moved away from) under the true-peak ceiling, but
+ * nothing read the shipped clip back
  * until now; this records whether the master actually landed in spec. A clip whose measured integrated loudness drifts
  * past tolerance, OR whose decoded-AAC true peak breached the −1 dBTP delivery ceiling (the inter-sample
  * overshoot the pre-encode PCM ceiling can't see), fails its tts row so the human-review pass sees it — it

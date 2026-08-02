@@ -52,12 +52,18 @@ describe('Skipper persona def', () => {
       // ⚠ NO exemption here, deliberately. A scenic example once read "That is all the card gives
       // me" and taught the leak to every clip generated after it; few-shot text is the strongest
       // conditioning in this prompt, so it is held to the whole table.
+      let checked = 0
       for (const block of exampleBlocks) {
         // The narration is the quoted body; the `Card:` line is input, not the Skipper talking.
         for (const [, said] of block.matchAll(/"([^"]*)"/g)) {
+          checked++
           expect(bannedTicsIn(said!)).toEqual([])
         }
       }
+      // ⚠ The inner loop asserts NOTHING when the regex finds nothing — reformat the examples to curly
+      // quotes or an unquoted block and this test goes silently vacuous while staying green, on the one
+      // prompt the repo iterates on hardest. Every example must yield at least one narration to lint.
+      expect(checked).toBeGreaterThanOrEqual(exampleBlocks.length)
     })
   })
 })

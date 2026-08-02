@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { maxCostFlag, numericFlag, parseFlags } from '../src/pipeline/ops'
-import { orphanKeys, reapableKeys, SWEEP_MIN_AGE_MS } from '../src/pipeline/storage'
+import { reapableKeys, SWEEP_MIN_AGE_MS } from '../src/pipeline/storage'
 
 describe('parseFlags', () => {
   test('separates positionals from boolean flags', () => {
@@ -41,27 +41,6 @@ describe('parseFlags', () => {
   })
 })
 
-describe('orphanKeys', () => {
-  test('returns only unreferenced keys', () => {
-    const listed = ['clips/t/a.mp3', 'clips/t/b.mp3', 'clips/t/c.mp3']
-    const referenced = new Set(['clips/t/b.mp3'])
-    expect(orphanKeys(listed, referenced)).toEqual(['clips/t/a.mp3', 'clips/t/c.mp3'])
-  })
-
-  test('never returns a referenced key', () => {
-    const listed = ['clips/t/a.mp3', 'clips/t/b.mp3']
-    expect(orphanKeys(listed, new Set(listed))).toEqual([])
-  })
-
-  test('empty listed → empty', () => {
-    expect(orphanKeys([], new Set(['x']))).toEqual([])
-  })
-
-  test('empty referenced → everything is an orphan', () => {
-    expect(orphanKeys(['a', 'b'], new Set())).toEqual(['a', 'b'])
-  })
-})
-
 describe('reapableKeys — the age guard that keeps the sweep off a live generate', () => {
   const NOW = Date.parse('2026-08-02T12:00:00Z')
   const at = (minutesAgo: number) => new Date(NOW - minutesAgo * 60_000).toISOString()
@@ -74,6 +53,16 @@ describe('reapableKeys — the age guard that keeps the sweep off a live generat
     )
     expect(reap).toEqual(['narration/p/old.m4a'])
     expect(heldBack).toEqual([])
+  })
+
+  test('several unreferenced objects come back in listed order', () => {
+    const listed = [
+      { key: 'narration/p/a.m4a', lastModified: at(120) },
+      { key: 'narration/p/b.m4a', lastModified: at(120) },
+      { key: 'narration/p/c.m4a', lastModified: at(120) },
+    ]
+    const { reap } = reapableKeys(listed, new Set(['narration/p/b.m4a']), { now: NOW })
+    expect(reap).toEqual(['narration/p/a.m4a', 'narration/p/c.m4a'])
   })
 
   // THE bug this exists for: generate-narrations uploads the bytes, THEN writes the narrations row.

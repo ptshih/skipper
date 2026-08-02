@@ -82,9 +82,24 @@ export function masteringChain(): string {
   )
 }
 
+/** How much of ffmpeg's stderr rides along in the thrown error. The tail, because the actual failure
+ *  (a filter-graph reject, a malformed WAV, ENOSPC) is the LAST thing ffmpeg prints — the head is the
+ *  input/stream dump. */
+const STDERR_TAIL_CHARS = 800
+
 /** Master + encode in ONE ffmpeg pass: the limiter→loudnorm chain fused with the AAC encode.
- *  Returns false on any ffmpeg failure/absence (the caller turns that into a hard throw). */
-async function encode(file: string, out: string): Promise<boolean> {
+ *  Never throws; reports WHICH failure happened so the caller's hard throw can say something true.
+ *  This used to collapse to a bare `false` and the caller threw one fixed "install ffmpeg" string —
+ *  which is right only for an absent binary. When ffmpeg was PRESENT and the encode failed for any
+ *  other reason (a truncated TTS take, a `masteringChain()` edit, no tmpdir space on Cloud Run), a
+ *  founder-approved paid run printed N identical "install ffmpeg" lines, after every narration had
+ *  already been billed, with zero diagnostics. `spawn` = the binary is missing (the only case that
+ *  advice fits); `exit` = ffmpeg ran and rejected the job, and carries its stderr. */
+async function encode(
+  file: string,
+  out: string,
+): Promise<{ ok: true } | { ok: false; reason: 'spawn' | 'exit'; detail: string }> {
+  let launched = false
   try {
     const proc = Bun.spawn(
       [
@@ -95,10 +110,20 @@ async function encode(file: string, out: string): Promise<boolean> {
       ],
       { stdout: 'ignore', stderr: 'pipe' },
     )
-    await new Response(proc.stderr).text()
-    return (await proc.exited) === 0
-  } catch {
-    return false
+    launched = true
+    // Drain stderr BEFORE awaiting exit — a chatty ffmpeg deadlocks on a full pipe buffer.
+    const stderr = await new Response(proc.stderr).text()
+    const code = await proc.exited
+    if (code === 0) return { ok: true }
+    return {
+      ok: false,
+      reason: 'exit',
+      detail: `ffmpeg exited ${code}: ${stderr.trimEnd().slice(-STDERR_TAIL_CHARS)}`,
+    }
+  } catch (e) {
+    // Bun.spawn THROWS (ENOENT) when the binary isn't on PATH — the absent-ffmpeg case. A throw
+    // AFTER the spawn landed is something else entirely, so don't mislabel it as "not installed".
+    return { ok: false, reason: launched ? 'exit' : 'spawn', detail: (e as Error).message }
   }
 }
 
@@ -109,7 +134,8 @@ async function encode(file: string, out: string): Promise<boolean> {
  * stored duration still matches.
  *
  * THROWS if ffmpeg can't produce the clip (absent or failed encode) — ffmpeg is the encoder on this
- * path, not optional QA. Leveling is part of the same pass, so it is not separately skippable.
+ * path, not optional QA. Leveling is part of the same pass, so it is not separately skippable. The
+ * two failures are reported DIFFERENTLY (see `encode`): only an absent binary is told to install one.
  */
 export async function normalizeAndEncode(audio: Uint8Array): Promise<Uint8Array> {
   const id = crypto.randomUUID()
@@ -117,10 +143,13 @@ export async function normalizeAndEncode(audio: Uint8Array): Promise<Uint8Array>
   const outFile = join(tmpdir(), `skipper-master-out-${id}.m4a`)
   try {
     await writeFile(inFile, audio)
-    if (!(await encode(inFile, outFile))) {
+    const enc = await encode(inFile, outFile)
+    if (!enc.ok) {
       throw new Error(
-        'ffmpeg AAC encode failed — ffmpeg is REQUIRED for the LINEAR16→AAC clip path. ' +
-          'Install ffmpeg (the Cloud Run image already carries it).',
+        enc.reason === 'spawn'
+          ? `ffmpeg could not be launched (${enc.detail}) — ffmpeg is REQUIRED for the ` +
+            'LINEAR16→AAC clip path. Install ffmpeg (the Cloud Run image already carries it).'
+          : `ffmpeg AAC encode failed — ${enc.detail}`,
       )
     }
     const out = new Uint8Array(await readFile(outFile))
@@ -144,10 +173,15 @@ export async function normalizeAndEncode(audio: Uint8Array): Promise<Uint8Array>
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Post-encode QA tolerance: |measured integrated − ACTIVE_MASTER_TARGET_LUFS (the LANDING)| beyond this
- *  many LU is FLAGGED. The PROD-natural chain lands ~−14.9 with a per-clip spread (gentle compression + the
- *  single-pass undershoot vary with each take's crest factor), so ±1.2 LU never trips a healthy clip but
- *  still catches one that failed to normalize. Mark-and-flag only — a flagged clip is recorded, never withheld. */
-const LOUDNESS_TOLERANCE_LU = 1.2
+ *  many LU is FLAGGED. The chain lands with a per-clip spread (gentle compression + the single-pass
+ *  undershoot vary with each take's crest factor), so this band never trips a healthy clip but still
+ *  catches one that failed to normalize. Mark-and-flag only — a flagged clip is recorded, never withheld.
+ *
+ *  ⚠ EXPORTED because it was being retyped by hand elsewhere and had already drifted: `audit-loudness`
+ *  advertised a narrower band than the gate it reports, and `test-mastering-chain` still spells the
+ *  number twice in one assertion. One home; read it, don't copy it. The prose above no longer names the
+ *  landing figure either — it said ~−14.9 against an `ACTIVE_MASTER_TARGET_LUFS` that has since moved. */
+export const LOUDNESS_TOLERANCE_LU = 1.2
 
 /** The post-encode loudness/true-peak verdict for one shipped .m4a. */
 export interface LoudnessOutcome {

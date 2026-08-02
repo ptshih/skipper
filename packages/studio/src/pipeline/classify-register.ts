@@ -20,6 +20,8 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { CLAUDE_MODELS, type DeliveryRegister } from '@skipper/shared'
 import { recordModelUsage } from '@skipper/shared'
+import { WDQS_ENDPOINT, WDQS_USER_AGENT } from '../config'
+import { fetchWithRetry } from './http'
 
 /** Wikidata anchor classes per register. A POI is in a register if its P31 is that class OR any
  *  P279* subclass of it. Small + top-level on purpose — the subclass walk (in WDQS) does the rest.
@@ -93,16 +95,24 @@ export function classifyFromMatches(matchedRegisters: DeliveryRegister[]): Struc
   return { register: null, reason: 'conflict', matched: distinct }
 }
 
-const WDQS = 'https://query.wikidata.org/sparql'
-const UA = 'Skipper/1.0 (https://skipper.fm; hello@skipper.fm) delivery-register-classifier'
+/** Per-attempt timeout (ms). WDQS walks P279* server-side across a whole batch of QIDs, so this is
+ *  the slow kind of SPARQL — budgeted like the discovery spine's WDQS call (wikidata-discovery.ts),
+ *  not like the small-payload Wikipedia/Wikidata/Macrostrat callers. */
+const REQUEST_TIMEOUT_MS = 30_000
 
 /** Fetch, per POI QID, which register ANCHORS it is a (sub)instance of — the P31/P279* walk runs in
  *  WDQS. Returns qid → matched registers (deduped). QIDs absent from the result matched nothing
  *  (no P31, or only unmapped classes) → they abstain to the LLM fallback. Batched to keep each query
- *  light. `fetchImpl` is injectable for tests. */
+ *  light.
+ *
+ *  Goes through `fetchWithRetry` like every other outbound call in this package. It used to be a bare
+ *  `fetch`: with no timeout, a hung WDQS connection never rejects, so `classify-registers` — which
+ *  awaits this before anything else — sat silent in its Cloud Run job until the task timeout; and with
+ *  no retry, one transient WDQS 429/503 (almost always rate-limiting/overload, not a real failure)
+ *  aborted the whole classify run. The old injectable `fetchImpl` seam went with it — no test used it,
+ *  and fetchWithRetry owns the fetch now. */
 export async function fetchRegisterMatches(
   qids: string[],
-  fetchImpl: typeof fetch = fetch,
   batchSize = 120,
 ): Promise<Map<string, DeliveryRegister[]>> {
   const anchorValues = Object.keys(REGISTER_BY_ANCHOR)
@@ -113,10 +123,20 @@ export async function fetchRegisterMatches(
   for (let i = 0; i < clean.length; i += batchSize) {
     const items = clean.slice(i, i + batchSize).map((q) => `wd:${q}`).join(' ')
     const query = `SELECT ?item ?anchor WHERE { VALUES ?item { ${items} } VALUES ?anchor { ${anchorValues} } ?item wdt:P31/wdt:P279* ?anchor. }`
-    const res = await fetchImpl(`${WDQS}?format=json&query=${encodeURIComponent(query)}`, {
-      headers: { 'User-Agent': UA, Accept: 'application/sparql-results+json' },
-    })
-    if (!res.ok) throw new Error(`WDQS register query failed: ${res.status} ${await res.text()}`)
+    const res = await fetchWithRetry(
+      `${WDQS_ENDPOINT}?format=json&query=${encodeURIComponent(query)}`,
+      { headers: { 'User-Agent': WDQS_USER_AGENT, Accept: 'application/sparql-results+json' } },
+      { attempts: 3, timeoutMs: REQUEST_TIMEOUT_MS },
+    )
+    if (!res.ok) {
+      const retryAfter = res.headers.get('retry-after')
+      throw new Error(
+        `WDQS register query failed: HTTP ${res.status}` +
+          (retryAfter ? ` (Retry-After: ${retryAfter}s)` : '') +
+          ` — usually rate-limited or overloaded; the structural pass is free, so retry later. ` +
+          (await res.text()).slice(0, 200),
+      )
+    }
     const json = (await res.json()) as { results: { bindings: { item: { value: string }; anchor: { value: string } }[] } }
     for (const b of json.results.bindings) {
       const qid = b.item.value.split('/').pop()!
