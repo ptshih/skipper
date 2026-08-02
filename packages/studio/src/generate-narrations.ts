@@ -35,7 +35,7 @@ import { narrations, pois } from '@skipper/db/schema'
 import type { FactSheetEntry, PoiFacts } from '@skipper/db/schema'
 import { announce, assertReady, maxCostFlag, numericFlag, parseFlags } from './pipeline/ops'
 import { resolveRegion, requireRegionBbox } from './pipeline/region'
-import { runJob } from './pipeline/job-progress'
+import { runJob, type FinishOutcome } from './pipeline/job-progress'
 import { ensurePoiOverridesLoaded } from './pipeline/poi-overrides'
 import { regionLabel } from './pipeline/geo'
 import { resolveStoryGrounding } from './pipeline/select'
@@ -111,7 +111,10 @@ announce({
 })
 if (apply) assertReady(['tts', 'r2']) // scripts-only needs neither TTS nor R2
 
-async function main(): Promise<void> {
+// `FinishOutcome | void`, not plain void: the early exits (nothing queued, dry run, scripts-only) have
+// nothing to report and fall through to runJob's `{ ok: true }`, but the full path MUST be able to say
+// it failed — see the systemic-failure guard at the end.
+async function main(): Promise<FinishOutcome | void> {
   await ensurePoiOverridesLoaded()
 
   // Region-scoped selection (geometry-first; see pipeline/region.ts): --region → discovery bbox →
@@ -197,7 +200,8 @@ async function main(): Promise<void> {
     if (query && !`${r.name} ${r.sourceId}`.toLowerCase().includes(query)) continue
     const f = r.facts
     // #1: a roam STORY encounter REQUIRES a curated fact sheet — an un-enriched poi is SKIPPED (never a
-    // raw-extract telling; the scenic-tier "wave" form will cover named-but-unenriched pins later). The
+    // raw-extract telling; a named-but-unenriched pin simply gets no telling — the scenic "wave" form that
+    // was going to cover them was CUT, see docs/decisions/cut-wave-form.md). The
     // sheet IS the eligibility gate now — no char floor (removed 2026-06-16); a sheet only exists for an
     // enriched poi, so it subsumes the old `minExtract` check. `f` guards a text-less (pin) row.
     if (!f || !(Array.isArray(r.factSheet) && r.factSheet.length > 0)) continue
@@ -576,14 +580,17 @@ async function main(): Promise<void> {
       // Tail-collapse retake (pipeline/tts.ts): narration clips ship unheard, so a mumbled
       // closing sentence would reach riders' ears first — measure + retake here too.
       // The poi's register modulates the READ (pace/space/energy) on the shared base; null → story base.
-      const { audio, durationMs, tail, loudness } = await synthesizeWithTailRetake(
+      const { audio, durationMs, tail, loudness, takes } = await synthesizeWithTailRetake(
         script,
         persona.voice,
         ttsStyleFor(persona.ttsStyle, c.deliveryRegister ?? 'story'),
         `"${c.title}"`,
       )
       // The TTS is now paid — count it toward the running cap even if the upload/upsert below fails.
-      ttsSpentUsd += estimateTtsUsd([script], persona.ttsStyle.length).usd
+      // ⚠ × `takes`, not once: the synth chain re-rolls on an overlong or tail-collapsed take, so a clip
+      // can bill several. Counting one made the cap blind to exactly the retake spend it exists to
+      // bound — the retaking clips ARE the expensive ones. Same text every take, so this is exact.
+      ttsSpentUsd += estimateTtsUsd([script], persona.ttsStyle.length).usd * takes
       // Idempotent (same key + bytes), so a transient R2 blip after a paid synth retries instead of
       // wasting the synth.
       const audioUrl = await withRetry(() => uploadAudio(narrationClipKey(c.poiId, clipId), audio), {
@@ -662,7 +669,7 @@ async function main(): Promise<void> {
       `\n⛔ ${capped} clip(s) SKIPPED — --max-cost=$${maxCostUsd.toFixed(2)} reached mid-synthesis. Re-run (with a higher cap if needed) to finish the rest.`,
     )
   }
-  await recordRun(false)
+  const evalRunId = await recordRun(false)
   for (const line of llmSpendLines()) console.log(line)
   console.log(`LLM spend this run: ~$${llmSpentUsd().toFixed(2)}`)
   const ttsActual = estimateTtsUsd(
@@ -670,6 +677,25 @@ async function main(): Promise<void> {
     persona.ttsStyle.length,
   )
   console.log(`TTS spend (estimated from chars): ~$${ttsActual.usd.toFixed(2)}`)
+
+  // SYSTEMIC-failure guard, mirroring enrich-pois. If EVERY clip the gate cleared then FAILED to
+  // synthesize, that is an outage / bad TTS auth / exhausted quota / R2 down — not per-clip bad luck.
+  //
+  // ⚠ `main` returned void until 2026-08-02, so `runJob` settled `{ ok: true }` unconditionally and the
+  // console showed a GREEN row for a paid run that narrated, gated, billed, and produced no audio at
+  // all. Thrown (not returned) so runJob's catch records the message and exits non-zero, and placed
+  // AFTER the eval record + spend lines so the run's observability still lands before it fails.
+  //
+  // A fully-WITHHELD run is deliberately NOT this case: `failures` is empty there, and the gate
+  // withholding everything is the fail-closed design working, not an error.
+  if (ok.length === 0 && failures.length > 0) {
+    throw new Error(
+      `generate: all ${failures.length} gate-cleared clip(s) failed synthesis — likely systemic ` +
+        `(TTS auth / quota / R2 outage), not per-clip misses. First: ${failures[0]!.error.slice(0, 200)}`,
+    )
+  }
+  // Link the eval run to the job row so the console can get from a paid run to what it scored.
+  return { ok: true, ...(typeof evalRunId === 'string' ? { evalRunId } : {}) }
 }
 
 // A region run keys the lock on its slug; a whole-corpus explicit-id run leaves slug+target NULL

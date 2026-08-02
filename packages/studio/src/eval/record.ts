@@ -91,12 +91,38 @@ function gitShaBestEffort(): string | null {
   }
 }
 
+/**
+ * The run-level gate verdict: nothing was withheld AND every GATE dimension in the scorecard is clean.
+ *
+ * ⚠ It was `withheld === 0` alone, which is not the same claim. The gate scores the SCRIPT, but
+ * tail-collapse and loudness are measured AFTER synthesis and folded into the scorecard
+ * (`applyTailOutcomes` / `applyLoudnessOutcomes`) — by which point the clip has already shipped and was
+ * never "withheld". So a run that synthesized a collapsed clip recorded `pass: true` and the admin
+ * showed a green gate verdict for a run with a known-bad clip in it. `buildScorecard` already computes
+ * the honest half (the AND over every GATE dimension, advisory dims excluded); this stopped discarding
+ * it. ANDing is deliberately one-way — it can only turn a green red, never the reverse.
+ *
+ * Exported for the test: the expression itself is the thing that was wrong, so it needs to be
+ * reachable without a database.
+ */
+export const runPassed = (card: RunScorecard, withheld: number): boolean => withheld === 0 && card.pass
+
 /** Insert one run + its score rows ATOMICALLY. Returns the run id.
  *
  *  The run id is generated CLIENT-side so both inserts ride one `db.batch` — neon-http runs a
  *  batch as a single non-interactive transaction, so a run row can never land without its score
- *  rows (and no interactive-transaction driver is needed). Run `pass` = nothing had to be
- *  withheld (every gate dimension was clean on every clip that shipped). */
+ *  rows (and no interactive-transaction driver is needed).
+ *
+ *  Run `pass` = nothing had to be withheld AND the scorecard's gate dimensions are all clean.
+ *
+ *  ⚠ It was `withheld === 0` alone, which is not the same claim. The gate runs on the SCRIPT, but the
+ *  tail-collapse and loudness verdicts are measured AFTER synthesis and folded into the scorecard
+ *  (`applyTailOutcomes` / `applyLoudnessOutcomes`) — by which point the clip has already shipped and
+ *  was never "withheld". So a run that synthesized a collapsed clip recorded `pass: true`, and the
+ *  admin showed a green gate verdict for a run with a known-bad clip in it. `buildScorecard` already
+ *  computes the honest answer (the AND over every GATE dimension); this just stopped discarding it.
+ *
+ *  ANDing is deliberately one-way: it can only turn a green red, never the reverse. */
 export async function recordEvalRun(input: EvalRunInput): Promise<string> {
   const card = input.scorecard
   const runId = crypto.randomUUID()
@@ -108,7 +134,7 @@ export async function recordEvalRun(input: EvalRunInput): Promise<string> {
     gitSha: gitShaBestEffort(),
     narrationModel: input.narrationModel ?? null,
     judgeModel: input.judgeModel ?? null,
-    pass: input.withheld === 0,
+    pass: runPassed(card, input.withheld),
     total: input.total,
     shipped: input.shipped,
     withheld: input.withheld,

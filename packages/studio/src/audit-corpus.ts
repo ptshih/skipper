@@ -35,7 +35,7 @@ import { regionLabel } from './pipeline/geo'
 import { resolveStoryGrounding } from './pipeline/select'
 import { withRetry } from './pipeline/http'
 import { mapLimit } from './pipeline/concurrency'
-import { DEFAULT_REGION_SLUG, NARRATION_CONCURRENCY, NARRATION_FALLBACK_CHARS } from './config'
+import { ANTHROPIC_READY, DEFAULT_REGION_SLUG, NARRATION_CONCURRENCY, NARRATION_FALLBACK_CHARS } from './config'
 import { llmSpendLines, llmSpentUsd } from '@skipper/shared'
 import { JUDGMENT_MODEL } from './models'
 import { buildGroundingWell, evaluateGrounding } from './eval/grounding'
@@ -187,6 +187,14 @@ async function main(): Promise<FinishOutcome> {
     return { ok: true }
   }
 
+  // Fail fast on a missing key rather than discovering it once per clip. Without this, `getAnthropic`
+  // throws inside the per-clip catch below, which records the miss as a GATE FAILURE — so a revoked key
+  // wrote "every released clip is ungrounded" into the audit's system of record. Same guard
+  // `enrich-pois` and `curate-places` already put on their --apply branch.
+  if (!ANTHROPIC_READY()) {
+    throw new Error('ANTHROPIC_API_KEY is not set — `audit-corpus --apply` needs it to run the judges.')
+  }
+
   // Pre-flight spend guard — abort BEFORE any Opus call if the estimate already exceeds the cap.
   if (spendEst > maxCostUsd) {
     throw new Error(
@@ -199,6 +207,10 @@ async function main(): Promise<FinishOutcome> {
   // failure can't abort the paid audit. The well is built once per clip and shared by both.
   console.log(`\nScoring ${judgeList} on ${queue.length} clip(s) (concurrency ${NARRATION_CONCURRENCY()})...`)
   let done = 0
+  // Clips whose grounding judge THREW (infrastructure), as opposed to clips the judge scored as
+  // ungrounded (content). The two are indistinguishable in `eval_scores` — both land pass:false — so
+  // they have to be counted apart here, while the difference is still visible.
+  let judgeErrors = 0
   const perClip = await mapLimit(queue, NARRATION_CONCURRENCY(), async (c, i): Promise<StopEval[]> => {
     const grounding = resolveStoryGrounding(c.facts, c.factSheet, c.enrichedAt, {
       fallbackChars: NARRATION_FALLBACK_CHARS,
@@ -215,6 +227,7 @@ async function main(): Promise<FinishOutcome> {
       )
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
+      judgeErrors++
       console.warn(`  ⚠ ${c.name}: grounding eval failed — ${msg.slice(0, 160)}`)
       evals.push({ seq: i, dimension: 'grounding', pass: false, score: 0, findings: [`audit error: ${msg.slice(0, 200)}`] })
     }
@@ -231,6 +244,19 @@ async function main(): Promise<FinishOutcome> {
     console.log(`  [${done}/${queue.length}] ${c.name} — ${g?.pass ? 'grounded' : `${g?.findings.length ?? 0} ungrounded`}`)
     return evals
   })
+  // SYSTEMIC-failure guard, mirroring enrich-pois. If EVERY clip's judge threw, that is an outage /
+  // revoked key / sustained 429 — not a corpus that went ungrounded overnight.
+  //
+  // ⚠ Without this the run recorded a FAKE gate failure per clip (pass:false, withheld:true), wrote
+  // `eval_runs.pass = false`, and then returned `{ ok: true }` so the job row settled SUCCEEDED. The
+  // fail-closed gate's own system of record would have said every released clip was ungrounded, in a
+  // run the console showed as green. Throwing settles the row failed and leaves eval_runs alone.
+  if (judgeErrors === queue.length && queue.length > 0) {
+    throw new Error(
+      `audit: all ${queue.length} clip(s) failed the grounding judge with an ERROR (not an ungrounded verdict) — ` +
+        'likely systemic (auth / rate-limit / outage). Nothing recorded; re-run once the cause is fixed.',
+    )
+  }
   const grounded = perClip.flat()
 
   // CHARM — ONE batch Opus call over the whole queue (advisory; a failure is non-fatal, skipped).

@@ -828,7 +828,10 @@ export const evalRuns = pgTable(
     gitSha: text('git_sha'),
     narrationModel: text('narration_model'),
     judgeModel: text('judge_model'),
-    /** Gate verdict: every SHIPPED clip cleared every GATE dimension. */
+    /** Gate verdict for the run as a whole: nothing was withheld AND every GATE dimension in the
+     *  scorecard is clean. Both halves are load-bearing — the gate scores the SCRIPT, but tail-collapse
+     *  and loudness are measured after synthesis, so a clip can fail a gate dimension having already
+     *  shipped and never been "withheld". See `recordEvalRun` (studio eval/record.ts). */
     pass: boolean('pass').notNull(),
     /** Run tallies — the at-a-glance summary. */
     total: integer('total').notNull(),

@@ -460,13 +460,15 @@ async function main(): Promise<void> {
         return null
       }
       const clipId = crypto.randomUUID()
-      const { audio, durationMs, tail, loudness } = await synthesizeWithTailRetake(
+      const { audio, durationMs, tail, loudness, takes } = await synthesizeWithTailRetake(
         g.script,
         persona.voice,
         ttsStyleFor(persona.ttsStyle, f.register),
         `"${f.title}"`,
       )
-      ttsSpentUsd += estimateTtsUsd([g.script], persona.ttsStyle.length).usd
+      // × `takes` — the synth chain re-rolls on an overlong or collapsed take (see tts.ts); billing one
+      // per clip hid the retake spend from the running cap. Same text every take, so this is exact.
+      ttsSpentUsd += estimateTtsUsd([g.script], persona.ttsStyle.length).usd * takes
       // ⚠ The key stays under the `narration/` prefix — that prefix is the ONLY thing `sweep-orphans`
       // protects, so a cluster clip filed anywhere else would be reaped as an orphan on the next sweep.
       const audioUrl = await withRetry(() => uploadAudio(narrationClipKey(f.id, clipId), audio), {

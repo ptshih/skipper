@@ -121,10 +121,12 @@ async function loadAllTargets(): Promise<Target[]> {
 }
 
 /** Re-synthesize ONE target: fresh TTS take (best-of-3 + the active master) → new R2 key → atomic repoint.
- *  Throws on any failure so the batch driver can isolate it (skip + continue). */
-async function resynthOne(t: Target, tag: string): Promise<void> {
+ *  Throws on any failure so the batch driver can isolate it (skip + continue).
+ *  Returns the number of TTS calls actually BILLED — the synth chain re-rolls on an overlong or
+ *  tail-collapsed take, and the caller's running cost cap has to see those, not assume one. */
+async function resynthOne(t: Target, tag: string): Promise<number> {
   const oldSec = (t.audioDurationMs / 1000).toFixed(1)
-  const { audio, durationMs, tail, loudness } = await synthesizeWithTailRetake(
+  const { audio, durationMs, tail, loudness, takes } = await synthesizeWithTailRetake(
     t.script!,
     persona.voice,
     ttsStyleFor(persona.ttsStyle, t.register ?? 'story'),
@@ -155,6 +157,7 @@ async function resynthOne(t: Target, tag: string): Promise<void> {
           .join(', ')} off-spec`
       : ''
   console.log(`  ${tag} ${t.poiName} (${oldSec}s → ${(durationMs / 1000).toFixed(1)}s)${flagsTail}${flagsLoud}`)
+  return takes
 }
 
 async function main(): Promise<FinishOutcome> {
@@ -216,8 +219,10 @@ async function main(): Promise<FinishOutcome> {
       return false
     }
     try {
-      await resynthOne(t, `[${++done}/${targets.length}]`)
-      ttsSpentUsd += estimateTtsUsd([t.script ?? ''], persona.ttsStyle.length).usd
+      const takes = await resynthOne(t, `[${++done}/${targets.length}]`)
+      // × takes: a re-rolled clip bills more than once, and this is a resynth-ONLY cost cap, so an
+      // under-count here is the whole cap being wrong rather than merely late.
+      ttsSpentUsd += estimateTtsUsd([t.script ?? ''], persona.ttsStyle.length).usd * takes
       return true
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e)

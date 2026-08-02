@@ -139,6 +139,14 @@ export type SynthWithTailResult = SynthResult & {
   tail: TailOutcome | null
   /** The post-encode loudness/true-peak verdict for the shipped .m4a (null = meter skipped, ffmpeg miss). */
   loudness: LoudnessOutcome | null
+  /** How many TTS calls were actually BILLED for this clip — 1 in the common case, up to
+   *  `(OVERLONG_RETAKE_LIMIT + 1) × (RETAKE_LIMIT + 1)` when both retake loops fire.
+   *
+   *  ⚠ Exists because every caller tallied ONE take per clip against the running `--max-cost` guard
+   *  while this function could bill several. The cap therefore under-counted precisely the retake
+   *  spend it was written to bound: the clips that retake are the expensive ones, and they were the
+   *  ones the tally could not see. Callers multiply their per-clip estimate by this. */
+  takes: number
 }
 
 /** Best-of-N tail retakes: on a collapsed first take, synthesize up to this many MORE takes and keep the
@@ -160,8 +168,9 @@ async function synthesizeNotOverlong(
   voiceId: string,
   style: string,
   label: string,
-): Promise<SynthResult> {
+): Promise<SynthResult & { takes: number }> {
   let best = await synthesize(text, voiceId, style)
+  let takes = 1 // every `synthesize` below is a BILLED call; the caller's cost cap needs the real count
   let tries = 0
   while (isOverlongTake(best.durationMs, text) && tries < OVERLONG_RETAKE_LIMIT) {
     tries++
@@ -170,12 +179,13 @@ async function synthesizeNotOverlong(
       `  ⚠ overlong take on ${label}: ${(best.durationMs / 1000).toFixed(0)}s ≈ ${ratio.toFixed(1)}× expected — re-synthesizing...`,
     )
     const next = await synthesize(text, voiceId, style)
+    takes++
     if (next.durationMs < best.durationMs) best = next // keep the shortest (closest to the script's length)
     if (!isOverlongTake(best.durationMs, text)) break
   }
   if (isOverlongTake(best.durationMs, text))
     console.warn(`  ⚠ ${label}: still overlong after ${tries} retake(s) — shipping the shortest, flag for the human pass.`)
-  return best
+  return { ...best, takes }
 }
 
 /**
@@ -200,6 +210,7 @@ export async function synthesizeWithTailRetake(
   label = 'clip',
 ): Promise<SynthWithTailResult> {
   const first = await synthesizeNotOverlong(text, voiceId, style, label)
+  let takes = first.takes
   const m1 = await measureTailCollapse(first.audio, first.durationMs)
 
   // ── Pick the take (the tail-collapse retake) ──
@@ -227,6 +238,7 @@ export async function synthesizeWithTailRetake(
     while (retakes < RETAKE_LIMIT && bestMeasure.dropDb >= TAIL_COLLAPSE_DB) {
       retakes++
       const next = await synthesizeNotOverlong(text, voiceId, style, label)
+      takes += next.takes
       const mNext = await measureTailCollapse(next.audio, next.durationMs)
       if (mNext === null) {
         unknownFallback = next // probe failed on this take — keep it as an unmeasured last resort
@@ -280,5 +292,5 @@ export async function synthesizeWithTailRetake(
   //    miss, never fails synthesis; the caller records the verdict for the human-review pass. ──
   const loudness = await verifyMasteredLoudness(audio)
 
-  return { audio, durationMs: shipped.durationMs, tail, loudness }
+  return { audio, durationMs: shipped.durationMs, tail, loudness, takes }
 }

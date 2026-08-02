@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { buildScoreRows, dimensionRollupScore, type ClipIdentity } from '../src/eval/record'
+import { buildScoreRows, dimensionRollupScore, runPassed, type ClipIdentity } from '../src/eval/record'
 import { buildScorecard } from '../src/eval/scorecard'
 import type { StopEval } from '../src/eval/types'
 
@@ -52,5 +52,93 @@ describe('dimensionRollupScore', () => {
     expect(dimensionRollupScore(card, 'grounding')).toBe(0.5) // (1 + 0) / 2
     expect(dimensionRollupScore(card, 'tts')).toBe(1)
     expect(dimensionRollupScore(card, 'charm')).toBeNull() // never ran
+  })
+})
+
+// ── The FUSED cluster identity path ──────────────────────────────────────────────────────────────
+// `ClipIdentity` mirrors `narrations_subject_xor`: exactly one of poiId / clusterId. The fixture above
+// only ever exercises the poi side, so the cluster side — the one whose whole reason for existing is
+// that putting a cluster id in `poiId` would violate the eval_scores FK AND restate the false claim
+// `poi_clusters` was created to prevent — shipped uncovered.
+describe('buildScoreRows — fused cluster tellings', () => {
+  const fusedIdentity = new Map<number, ClipIdentity>([
+    [0, { poiId: null, clusterId: 'cluster-a', qid: null, name: 'Emerald Bay', withheld: false, script: null }],
+    [1, { poiId: 'poi-b', qid: 'Q2', name: 'Fannette Island', withheld: true, script: 'held back' }],
+  ])
+
+  test('a fused clip keys on clusterId and leaves poiId NULL', () => {
+    const rows = buildScoreRows('run-2', card, fusedIdentity)
+    const fused = rows.filter((r) => r.name === 'Emerald Bay')
+    expect(fused.length).toBe(2) // both dimensions
+    expect(fused.every((r) => r.clusterId === 'cluster-a')).toBe(true)
+    expect(fused.every((r) => r.poiId === null)).toBe(true)
+    // A cluster has no QID — documented, and load-bearing for eval_scores_case_idx.
+    expect(fused.every((r) => r.qid === null)).toBe(true)
+  })
+
+  test('the xor holds on every row: never both keys, never neither', () => {
+    const rows = buildScoreRows('run-2', card, fusedIdentity)
+    for (const r of rows) {
+      expect((r.poiId !== null) !== (r.clusterId !== null)).toBe(true)
+    }
+  })
+
+  test('a poi clip still leaves clusterId NULL (the other half of the xor)', () => {
+    const rows = buildScoreRows('run-2', card, fusedIdentity)
+    expect(rows.filter((r) => r.qid === 'Q2').every((r) => r.clusterId === null)).toBe(true)
+  })
+})
+
+// ── The run-level gate verdict ───────────────────────────────────────────────────────────────────
+// `pass` was `withheld === 0` alone, which greens a run whose SHIPPED clips carry a gate failure the
+// scorecard knows about — tail-collapse and loudness are measured after synthesis, so those clips
+// were never "withheld". These pin both halves of the AND.
+describe('the eval-run gate verdict (buildScorecard drives it)', () => {
+  const clean = buildScorecard({
+    slug: 'lake-tahoe',
+    runName: 'r',
+    evaluatedAt: null,
+    stops: [
+      { seq: 0, dimension: 'tts', pass: true, score: 1, findings: [] },
+      { seq: 0, dimension: 'grounding', pass: true, score: 1, findings: [] },
+    ],
+  })
+  // A clip that SHIPPED and then measured a tail collapse: the tts gate dim is dirty, nothing withheld.
+  const shippedButDirty = buildScorecard({
+    slug: 'lake-tahoe',
+    runName: 'r',
+    evaluatedAt: null,
+    stops: [
+      { seq: 0, dimension: 'tts', pass: false, score: 0, findings: ['tail collapse 9.1 dB'] },
+      { seq: 0, dimension: 'grounding', pass: true, score: 1, findings: [] },
+    ],
+  })
+
+  test('a genuinely clean run with nothing withheld passes', () => {
+    expect(runPassed(clean, 0)).toBe(true)
+  })
+
+  test('a scorecard gate failure fails the run even with NOTHING withheld', () => {
+    // The regression: `withheld === 0` alone reported this exact run as a PASS. The clip shipped, so
+    // it was never withheld, and only the post-synthesis measurement knows it is bad.
+    expect(runPassed(shippedButDirty, 0)).toBe(false)
+  })
+
+  test('a withheld clip still fails the run even with a clean scorecard', () => {
+    expect(runPassed(clean, 1)).toBe(false)
+  })
+
+  test('an ADVISORY dimension never fails the run', () => {
+    const advisoryDirty = buildScorecard({
+      slug: 'lake-tahoe',
+      runName: 'r',
+      evaluatedAt: null,
+      stops: [
+        { seq: 0, dimension: 'tts', pass: true, score: 1, findings: [] },
+        { seq: 0, dimension: 'diversity', pass: false, score: 0, findings: ['echoes an existing opener'] },
+      ],
+    })
+    expect(advisoryDirty.pass).toBe(true)
+    expect(runPassed(advisoryDirty, 0)).toBe(true)
   })
 })
