@@ -8,14 +8,13 @@
 import { eq, or, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { regions } from '@skipper/db/schema'
+import { parseRegionBbox, type RegionBbox } from '@skipper/engine'
 import { withRetry } from './http'
 
-export interface RegionBbox {
-  swLng: number
-  swLat: number
-  neLng: number
-  neLat: number
-}
+// ⚠ `RegionBbox` and its parser moved to @skipper/engine in the 1.1 sweep — there were FOUR
+// independently-written parsers of `regions.bbox` that agreed only by luck. Re-exported here so the
+// studio's existing importers are unchanged; the engine is the one home.
+export type { RegionBbox } from '@skipper/engine'
 
 export interface ResolvedRegion {
   id: string
@@ -25,13 +24,6 @@ export interface ResolvedRegion {
   bbox: RegionBbox | null
 }
 
-/** Parse a "lng_min,lat_min,lng_max,lat_max" bbox into corners; null if absent/malformed. */
-function parseRegionBbox(raw: string | null): RegionBbox | null {
-  if (!raw) return null
-  const p = raw.split(',').map(Number)
-  if (p.length !== 4 || p.some((n) => !Number.isFinite(n))) return null
-  return { swLng: p[0]!, swLat: p[1]!, neLng: p[2]!, neLat: p[3]! }
-}
 
 /**
  * Resolve a region by its SLUG (e.g. `lake-tahoe`) OR its uuid → identity + parsed discovery bbox.

@@ -37,6 +37,7 @@ import {
   type DriveCandidate,
   type DriveStop,
   type LngLat,
+  parseRegionBbox,
 } from '@skipper/engine'
 import { CLUSTER_VARIETY_KEY, loadClusterTellings, notSupersededByServedCluster, type ClusterTelling } from './clusters'
 import {
@@ -114,9 +115,12 @@ function toClipForm(form: string): DriveClipForm {
  *  would inherit NOTHING and become an anonymous dump of the whole curated allowlist WITH coordinates.
  *  What a rider may see is NAMES, and only a handful (see ./example-anchors). */
 export async function loadRegionAnchors(bbox: string | null): Promise<RegionAnchor[]> {
-  const p = (bbox ?? '').split(',').map(Number)
-  if (p.length !== 4 || p.some((n) => !Number.isFinite(n))) return []
-  const [lngMin, latMin, lngMax, latMax] = p as [number, number, number, number]
+  // ⚠ ONE parser, in @skipper/engine (1.1 sweep). There were four of these, agreeing only by luck —
+  // and since a region IS a bbox and never a stored FK, two readers disagreeing about this one string
+  // silently move places between regions. `between` below is inclusive, matching `pointInRegionBbox`.
+  const box = parseRegionBbox(bbox)
+  if (!box) return []
+  const { swLng: lngMin, swLat: latMin, neLng: lngMax, neLat: latMax } = box
   const rows = await withRetry(
     () =>
       db

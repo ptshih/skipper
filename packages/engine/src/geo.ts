@@ -249,3 +249,53 @@ export function checkSpeakableAnchor(pin: LngLat, anchor: LngLat, kind: string |
   const maxM = speakableAnchorMaxM(kind)
   return { distanceM, maxM, ok: distanceM <= maxM }
 }
+
+/* -------------------------------------------------------------------------- */
+/*  Region bbox — ONE parser (1.1 sweep)                                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A region's discovery box, parsed. `regions.bbox` is stored as the string
+ * `"lng_min,lat_min,lng_max,lat_max"` — south-west corner first, LONGITUDE first within each corner.
+ *
+ * ⚠ THE AXIS ORDER IS THE WHOLE REASON THIS IS SHARED. Until the 1.1 sweep there were FOUR
+ * independently-written parsers of that one string — in the API's anchor loader, the API's
+ * example-anchor picker, the studio's region resolver and the admin server — that agreed only by
+ * luck: one trimmed whitespace and three did not, and they disagreed on whether to call the corners
+ * sw/ne or min/max. A region is a BBOX and never a stored FK (geometry-first), so this string is the
+ * only thing standing between a poi and the region it belongs to; two readers disagreeing about it
+ * silently move places between regions.
+ */
+export interface RegionBbox {
+  swLng: number
+  swLat: number
+  neLng: number
+  neLat: number
+}
+
+/**
+ * Parse `regions.bbox`. Null for absent or malformed input — never a throw and never a partial box,
+ * because every caller's honest answer to "I cannot read this region's extent" is "match nothing",
+ * not "match everything".
+ *
+ * ⚠ Trims each field. The admin's parser did and the other three did not, so a bbox hand-entered with
+ * a space after a comma resolved in the console and matched zero pois everywhere else.
+ */
+export function parseRegionBbox(raw: string | null | undefined): RegionBbox | null {
+  if (!raw) return null
+  const p = raw.split(',').map((s) => Number(s.trim()))
+  if (p.length !== 4 || p.some((n) => !Number.isFinite(n))) return null
+  return { swLng: p[0]!, swLat: p[1]!, neLng: p[2]!, neLat: p[3]! }
+}
+
+/**
+ * Is a point inside the box? INCLUSIVE on all four edges.
+ *
+ * ⚠ Inclusive matters and is not arbitrary: the admin's region poi-count and the pois view's region
+ * column are read by an operator as the same number, so an edge case decided differently in one place
+ * surfaces as two screens disagreeing about one poi. The API's anchor query uses SQL `between`, which
+ * is also inclusive — that agreement is what makes this function and that query interchangeable.
+ */
+export function pointInRegionBbox(box: RegionBbox, lat: number, lng: number): boolean {
+  return lat >= box.swLat && lat <= box.neLat && lng >= box.swLng && lng <= box.neLng
+}

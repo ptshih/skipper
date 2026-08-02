@@ -2,6 +2,8 @@ import { describe, expect, test } from 'bun:test'
 import {
   ANCHORED_TRIGGER_RADIUS_M,
   angularDiffDeg,
+  parseRegionBbox,
+  pointInRegionBbox,
   bearingDeg,
   checkSpeakableAnchor,
   cumulativeMeters,
@@ -144,5 +146,39 @@ describe('speakable anchor sanity', () => {
     const r = checkSpeakableAnchor([-120.1, 39.05], [-120.1, 40.05], 'mountain peak')
     expect(r.distanceM).toBeGreaterThan(110_000)
     expect(r.ok).toBe(false)
+  })
+})
+
+describe('parseRegionBbox / pointInRegionBbox — ONE reader of regions.bbox (1.1 sweep)', () => {
+  const TAHOE = '-120.16,38.93,-119.93,39.25'
+
+  test('parses "lng_min,lat_min,lng_max,lat_max" — LONGITUDE first within each corner', () => {
+    // The axis order is the thing four independent parsers could have disagreed on, and a region IS a
+    // bbox rather than a stored FK — so getting it backwards silently moves places between regions.
+    expect(parseRegionBbox(TAHOE)).toEqual({ swLng: -120.16, swLat: 38.93, neLng: -119.93, neLat: 39.25 })
+  })
+
+  // ⚠ THE DIVERGENCE THAT ACTUALLY EXISTED: the admin's parser trimmed and the other three did not, so
+  // a bbox typed with a space after a comma resolved in the console and matched zero pois everywhere.
+  test('tolerates whitespace around each field', () => {
+    expect(parseRegionBbox('-120.16, 38.93, -119.93, 39.25')).toEqual(parseRegionBbox(TAHOE))
+  })
+
+  test('null for absent or malformed input — never a partial box', () => {
+    // Every caller's honest answer to "I cannot read this extent" is "match nothing", not "match all".
+    for (const bad of [null, undefined, '', 'not,a,box,here', '1,2,3', '1,2,3,4,5', '1,2,3,NaN']) {
+      expect(parseRegionBbox(bad as string | null)).toBeNull()
+    }
+  })
+
+  test('containment is INCLUSIVE on all four edges', () => {
+    // Matches SQL `between` in the API's anchor query — that agreement is what makes the JS helper and
+    // the query interchangeable, and it is why two admin screens cannot disagree about one poi.
+    const box = parseRegionBbox(TAHOE)!
+    expect(pointInRegionBbox(box, 38.93, -120.16)).toBe(true)
+    expect(pointInRegionBbox(box, 39.25, -119.93)).toBe(true)
+    expect(pointInRegionBbox(box, 39.0, -120.0)).toBe(true)
+    expect(pointInRegionBbox(box, 39.26, -120.0)).toBe(false)
+    expect(pointInRegionBbox(box, 39.0, -120.17)).toBe(false)
   })
 })

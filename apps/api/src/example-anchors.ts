@@ -8,6 +8,11 @@
 // load without BETTER_AUTH_SECRET, and `bun test` runs unwrapped by dotenvx — so anything importable
 // from index.ts is untestable by construction. Same workaround as apps/api/test/planner.test.ts.
 
+// ⚠ The one import, and it keeps this file's env-free property: @skipper/engine is zero-dep and
+// RN-safe by design, so importing it needs no secret, no DB and no network — which is what lets this
+// selection be tested without booting index.ts.
+import { parseRegionBbox } from '@skipper/engine'
+
 /** How many names a region publishes. A DISPLAY count: it prices nothing and bounds no request body,
  *  which is why it is here and not in ./limits (that file is the ONE home for rider-facing SPEND and
  *  SIZE caps — INV-11/INV-12 — and diluting it with cosmetics is how a real cap gets edited casually).
@@ -44,16 +49,6 @@ export interface ExampleAnchorPlace {
   lat: number
   lng: number
   featured: boolean
-}
-
-/** "lng_min,lat_min,lng_max,lat_max" → corners. Same parse and the same axis order as
- *  `loadRegionAnchors` (apps/api/src/drives.ts) — two parsers disagreeing about axis order would put a
- *  region's examples on the wrong side of the lake. A null bbox is NORMAL, not an error: a region row
- *  exists from the moment discovery starts and may have no extent yet. */
-function parseBox(raw: string | null): [number, number, number, number] | null {
-  const p = (raw ?? '').split(',').map(Number)
-  if (p.length !== 4 || p.some((n) => !Number.isFinite(n))) return null
-  return p as [number, number, number, number]
 }
 
 /** Collapse whitespace — the same `flatten` the planner's roster block applies. A name carrying a
@@ -101,12 +96,15 @@ export function pickExampleAnchors(
   const ranked = [...placeRows].sort(byRank)
   const out = new Map<string, string[]>()
   for (const r of regionRows) {
-    const box = parseBox(r.bbox)
+    const box = parseRegionBbox(r.bbox)
     if (!box) {
       out.set(r.id, [])
       continue
     }
-    const [lngMin, latMin, lngMax, latMax] = box
+    // ⚠ The engine's parser is the ONE reader of `regions.bbox` (1.1 sweep) — this file used to carry
+    // its own, and a region IS a bbox rather than a stored FK, so two parsers disagreeing about axis
+    // order would put a region's example anchors on the wrong side of the lake.
+    const { swLng: lngMin, swLat: latMin, neLng: lngMax, neLat: latMax } = box
     const names: string[] = []
     const seen = new Set<string>()
     for (const p of ranked) {

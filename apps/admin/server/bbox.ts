@@ -3,6 +3,8 @@
 // oversized box silently scopes a LATER spending enrich/generate over a huge candidate set
 // (cost-runaway). Pure + native-free so it unit-tests under `bun test`. (audit #5)
 
+import { parseRegionBbox, pointInRegionBbox, type RegionBbox } from '@skipper/engine'
+
 // A generous span cap (~1650 km/deg of latitude): passes any real region or multi-state corridor
 // (e.g. Yosemite→Moab is ~10° of longitude), but catches a continent/hemisphere fat-finger or a
 // units/order mix-up that would balloon a paid run.
@@ -34,27 +36,12 @@ export function bboxError(raw: string): string | null {
   return null
 }
 
-export interface BboxCorners {
-  swLng: number
-  swLat: number
-  neLng: number
-  neLat: number
-}
+// ⚠ The corners type and both readers moved to @skipper/engine in the 1.1 sweep — there were FOUR
+// independently-written parsers of `regions.bbox`, and this one was the only one that TRIMMED, so a
+// bbox typed with a space after a comma resolved here and matched zero pois everywhere else.
+// Re-exported under the old name so this server's importers are unchanged.
+export type BboxCorners = RegionBbox
 
-/** Parse a "swLng,swLat,neLng,neLat" region bbox into corners; null if absent/malformed. Pair with
- *  bboxError at a write boundary; this is the read-side parse for point-in-bbox queries (e.g. the
- *  region-release stamp, which selects in-bbox pois). */
-export function parseBbox(raw: string | null | undefined): BboxCorners | null {
-  if (!raw) return null
-  const p = raw.split(',').map((s) => Number(s.trim()))
-  if (p.length !== 4 || p.some((n) => !Number.isFinite(n))) return null
-  return { swLng: p[0]!, swLat: p[1]!, neLng: p[2]!, neLat: p[3]! }
-}
-
-/** Is a point inside the box? Bounds are INCLUSIVE on all four edges — the same containment the
- *  /admin/regions poi-count and the /admin/pois region column each used to spell out inline. They
- *  have to agree exactly: the two views show counts the operator reads as the same number, so an edge
- *  case decided differently in one place would surface as two screens disagreeing about one poi. */
-export function pointInBbox(box: BboxCorners, lat: number, lng: number): boolean {
-  return lat >= box.swLat && lat <= box.neLat && lng >= box.swLng && lng <= box.neLng
-}
+export const parseBbox = parseRegionBbox
+export const pointInBbox = (box: BboxCorners, lat: number, lng: number): boolean =>
+  pointInRegionBbox(box, lat, lng)
