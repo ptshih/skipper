@@ -402,28 +402,35 @@ export async function runPlannerTurn(args: PlannerModelArgs): Promise<PlannerTur
     throw plannerFailure(err, stream)
   }
 
-  // Both, on purpose. `usageUsd` is the number for THIS call (a long-lived API process cannot
-  // meaningfully attribute a running total to anyone); `recordModelUsage` is the process tally INV-11
-  // names as one of the four guards on rider-triggered spend. The tally is keyed by model, so it is
-  // bounded in entries — only the counters grow.
+  // ⚠ THE COST LINE BELOW IS THE GUARD ON THIS SPEND — `recordModelUsage` IS NOT. Read that the other
+  // way round and you will trust a number nobody can see: INV-11 names a recorded token tally among its
+  // guards and this call IS that tally, but @skipper/shared's tally is a PROCESS-GLOBAL Map with NO
+  // reader anywhere in `apps/api` — `llmSpentUsd`/`llmSpendLines` are read only by the studio CLIs,
+  // where one process is one run that prints and exits. Here the process is an autoscaled Cloud Run
+  // instance created and recycled at will, so no readout is possible, and one would MISLEAD if it were:
+  // an unknown fraction of the fleet's real spend, presented as the number. What actually makes this
+  // spend visible is the per-call `plan_spend` line — it leaves the instance, aggregates across the
+  // fleet in Cloud Logging, and is what a budget alert can be built on. The call stays because it is
+  // free, bounded in entries (keyed by model — only the counters grow), and correct for any future
+  // in-process reader; it is simply not the thing standing between a rider and an unbounded bill.
+  //
   // ⚠ Keyed on the model we ASKED for, never on `message.model`. The API is not contractually bound to
   // echo the alias back — it may resolve to a longer id — and MODEL_PRICING is keyed on the alias, so
   // pricing the echo would silently tally $0 under a second, unpriced key. That is exactly the failure
   // @skipper/shared's spend.ts warns about, and the drift guard CANNOT catch it: the guard validates
   // the requested ids, so it stays green while the runtime key drifts. Every other call site in the
-  // repo records against the requested constant; this one now matches. `message.model` is still worth
-  // having as the served-by signal — it goes in the log line below, not into the tally.
+  // repo records against the requested constant; this one matches. The echo is still worth having as
+  // the served-by signal, so the line below carries BOTH — under two different names, `model` (the
+  // pricing key) and `served_by` (what answered). One field for both is how they get conflated again.
   recordModelUsage(CLAUDE_MODELS.planner, message.usage)
-  const details = message.usage.output_tokens_details
-  console.info(
-    `[planner] stop=${message.stop_reason} anchors=${args.anchors.length}` +
-      ` in=${message.usage.input_tokens} cr=${message.usage.cache_read_input_tokens ?? 0}` +
-      ` cw=${message.usage.cache_creation_input_tokens ?? 0} out=${message.usage.output_tokens}` +
-      ` think=${details?.thinking_tokens ?? 0} $${usageUsd(CLAUDE_MODELS.planner, message.usage).toFixed(5)}` +
-      ` served=${message.model} req=${stream.request_id ?? '-'}`,
-  )
-  // ⚠ Counts, ids and an anchor COUNT only. Never the body, the prompt, the roster, `say`, or a tool
-  // input. `cr=0` across turns is the tell that the cached prefix broke — that is what it is here for.
+  logPlanSpend({
+    outcome: 'served',
+    usage: message.usage,
+    servedBy: message.model,
+    stopReason: message.stop_reason,
+    anchors: args.anchors.length,
+    requestId: stream.request_id,
+  })
 
   // ⚠ Index content by TYPE, never by position: block 0 can be a thinking block, or absent entirely.
   const say = message.content
@@ -480,45 +487,140 @@ interface FailedStream {
   request_id?: string | null
 }
 
-/** Salvage whatever this dead call already billed into the INV-11 tally, and say so.
+/** Salvage whatever this dead call already billed, so the cost line and the tally both see it.
  *
- * ⚠ THE SPEND ALREADY HAPPENED. `finalMessage()` rejected, so the normal `recordModelUsage` at the
- * bottom of runPlannerTurn never runs — without this, every cancelled or timed-out turn is money the
- * process tally does not know about, and that tally is one of the four named guards on rider-triggered
- * spend. A guard that under-reports is worse than no guard, because it reads as reassurance.
+ * ⚠ THE SPEND ALREADY HAPPENED. `finalMessage()` rejected, so the normal recording at the bottom of
+ * runPlannerTurn never runs — without this, every cancelled or timed-out turn is money that shows up
+ * nowhere. What makes that matter is the `plan_spend` LINE rather than the process tally (which has no
+ * reader in `apps/api` — see runPlannerTurn): a spend figure obtained by summing an event that silently
+ * omits its own failures under-reports, and an under-reporting guard is worse than no guard because it
+ * reads as reassurance.
  * ⚠ It CANNOT double-count: `finalMessage()` either resolves (the normal recording) or rejects (this
  * one), never both, and the SDK clears the snapshot when it ends the request.
  */
-function salvageUsage(stream: FailedStream): UsageLike | null {
+function salvageUsage(stream: FailedStream): LoggedUsage | null {
   const usage = stream.currentMessage?.usage
   if (!usage) return null
   recordModelUsage(CLAUDE_MODELS.planner, usage)
   return usage
 }
 
-/** Counts and ids only — never the body, the prompt, the roster, `say`, or a tool input (INV-13). */
-function usageLog(usage: UsageLike): string {
-  return (
-    `in=${usage.input_tokens} cr=${usage.cache_read_input_tokens ?? 0}` +
-    ` cw=${usage.cache_creation_input_tokens ?? 0} out=${usage.output_tokens}` +
-    ` $${usageUsd(CLAUDE_MODELS.planner, usage).toFixed(5)}`
-  )
+/* -------------------------------------------------------------------------- */
+/* The cost line — ONE structured event per model call (1.7(b)).                */
+/* -------------------------------------------------------------------------- */
+
+/** What the cost line reads: `UsageLike` (everything MODEL_PRICING needs) plus the SDK's breakdown of
+ *  how much of `output_tokens` was thinking. Aliased so the served path and both salvage paths provably
+ *  build the SAME line from the same shape. */
+type LoggedUsage = Anthropic.Message['usage']
+
+interface PlanSpendInput {
+  /** WHY this call ended, as a closed enum — the field that replaces three differently-worded human
+   *  lines. Total spend over a window is now a SUM over one `evt`, filtered or not by this. */
+  outcome: 'served' | 'cancelled' | 'failed'
+  /** null when the call died before `message_start` and genuinely billed nothing. Still logged, as
+   *  zeros: a sum over this event must be able to count every turn, or "no line" and "no spend" become
+   *  the same observation. */
+  usage: LoggedUsage | null
+  /** The vendor's echo — what actually served the turn. NEVER the pricing key; see runPlannerTurn. */
+  servedBy?: string
+  stopReason?: string | null
+  anchors?: number
+  requestId?: string | null
+  /** Failure path only. A closed vendor error type (or our own 'timeout'), never a vendor message. */
+  err?: string
+  /** Failure path only. HTTP status, absent when the failure never got one. */
+  status?: number
 }
 
 /**
- * The rider hung up. Salvage the tally and log it as what it is.
+ * Emit the turn's cost as ONE LINE of serialized JSON.
  *
- * ⚠ NEVER THE WORD "failed" HERE. An operator greps `[planner] model call failed` for outages; a rider
- * closing the app is not one, and a cancellation logged as a failure is how a healthy service looks
- * like it is on fire the day the app gets popular.
+ * ⚠ THE SINGLE LINE AND THE `evt` FIELD ARE THE WHOLE POINT, AND NEITHER IS COSMETIC. Cloud Run drops a
+ * plain text line into a LogEntry's `textPayload`, which cannot be queried by field and cannot back a
+ * metric; a single line of serialized JSON is parsed into `jsonPayload`, where `jsonPayload.usd` is a
+ * numeric field a log-based DISTRIBUTION metric reads with no extractor regex at all. A JSON object
+ * split across lines is NOT reassembled — each line becomes its own plain-text entry. Sources, so the
+ * next agent re-checks them rather than trusting this comment:
+ *   https://docs.cloud.google.com/run/docs/logging — "a single line of serialized JSON … is picked up
+ *     and parsed by Cloud Logging and is placed into jsonPayload"
+ *   https://docs.cloud.google.com/logging/docs/structured-logging — the reserved keys lifted OUT of
+ *     jsonPayload onto the LogEntry: `severity`, `message`, `httpRequest`, `logging.googleapis.com/*`
+ *     and the time fields
+ *   https://docs.cloud.google.com/logging/docs/logs-based-metrics/distribution-metrics — an
+ *     already-numeric field needs no regular expression, only its name
+ *
+ * ⚠ NO FIELD IS NAMED `message`. It is one of those reserved keys, so a `message` key would be lifted
+ * out of `jsonPayload` entirely — the field an operator reaches for first is the one that vanishes.
+ * `severity` is reserved for the same reason, which is precisely why setting it works.
+ *
+ * ⚠ INV-13 — EVERY FIELD HERE IS A COUNT, AN ID, OR A CLOSED ENUM, and there is deliberately no field
+ * that CAN hold prose: `outcome` is ours from a three-value set, `stop_reason`/`err` are vendor enums,
+ * `model`/`served_by` are model ids, `req` is a request id, and the rest are numbers. The transcript,
+ * the roster, `say`, thinking and the tool input have nowhere to land even by accident. The single-line
+ * guarantee is `JSON.stringify`'s, not ours — it escapes any newline inside a string field.
+ */
+function logPlanSpend(i: PlanSpendInput): void {
+  const failed = i.outcome === 'failed'
+  const line = {
+    // ⚠ EXPLICIT, AND ON THE FAILURE LINE IT IS LOAD-BEARING. This field is the only DOCUMENTED way to
+    // set severity: Cloud Logging lifts `severity` out of `jsonPayload` onto the LogEntry, so it wins
+    // outright. The stream a line is written to (stderr => ERROR) is only a FALLBACK for lines carrying
+    // no severity, and it is not stated on Cloud Run's own logging page — it is agent behaviour
+    // documented for GKE/Functions. So: do not rely on the stream alone (it is undocumented here), and
+    // do not drop this field on the assumption the stream covers it (it is then the only signal, and a
+    // JSON line without it silently DEMOTES the one entry an operator pages on to a healthy turn's
+    // severity). Belt AND braces, deliberately — see the `console.error` at the bottom of this function,
+    // and ./rate-limit.ts, which states the same rule from the other side.
+    // Derived from `outcome` in exactly one place so the two can never disagree: a rider hanging up is
+    // INFO because it is not an outage (see plannerCancelled).
+    severity: failed ? 'ERROR' : 'INFO',
+    evt: 'plan_spend',
+    outcome: i.outcome,
+    /** The PRICING key — the alias we asked for, the key MODEL_PRICING and the tally are both keyed on. */
+    model: CLAUDE_MODELS.planner,
+    served_by: i.servedBy,
+    stop_reason: i.stopReason ?? undefined,
+    err: i.err,
+    status: i.status,
+    anchors: i.anchors,
+    in: i.usage?.input_tokens ?? 0,
+    // `cache_read: 0` across a conversation is the tell that the cached prefix broke — the single most
+    // expensive silent regression on this path, and the reason this field is here at all.
+    cache_read: i.usage?.cache_read_input_tokens ?? 0,
+    cache_write: i.usage?.cache_creation_input_tokens ?? 0,
+    out: i.usage?.output_tokens ?? 0,
+    thinking: i.usage?.output_tokens_details?.thinking_tokens ?? 0,
+    // ⚠ A JSON NUMBER, never a formatted `$0.00018` string: the distribution metric reads a numeric
+    // field directly, while a currency-prefixed string forces an extractor regex that starts silently
+    // matching nothing the day someone tidies the prefix. Rounded only to keep float tails out of the
+    // logs — six places is far finer than one turn can cost.
+    usd: i.usage ? Math.round(usageUsd(CLAUDE_MODELS.planner, i.usage) * 1e6) / 1e6 : 0,
+    req: i.requestId ?? undefined,
+  }
+  // ⚠ STILL console.error ON FAILURE. `severity` is what Cloud Logging reads, but stderr is what every
+  // local `bun run dev` session, container log tail and test spy reads — demoting the stream would hide
+  // the failure everywhere the JSON is not being parsed.
+  if (failed) console.error(JSON.stringify(line))
+  else console.info(JSON.stringify(line))
+}
+
+/**
+ * The rider hung up. Salvage the spend and log it as what it is.
+ *
+ * ⚠ NEVER `outcome: 'failed'` HERE, AND NEVER `severity: 'ERROR'`. An operator alerts on the failure
+ * bucket; a rider closing the app is not an outage, and a cancellation filed as a failure is how a
+ * perfectly healthy service looks like it is on fire the day the app gets popular. Under the old
+ * human-formatted lines this was a rule about the WORD "failed"; the rule did not change, only where it
+ * is written down — it is now the `outcome` enum plus the severity `logPlanSpend` derives from it.
+ * ⚠ It still emits when nothing was billed. Same `evt`, zeros, so summing the event counts the turn.
  */
 function plannerCancelled(stream: FailedStream): PlannerTurnError {
-  const usage = salvageUsage(stream)
-  console.info(
-    usage
-      ? `[planner] cancelled by rider ${usageLog(usage)} req=${stream.request_id ?? '-'}`
-      : '[planner] cancelled by rider before any tokens were billed',
-  )
+  logPlanSpend({
+    outcome: 'cancelled',
+    usage: salvageUsage(stream),
+    requestId: stream.request_id,
+  })
   return new PlannerTurnError('client_gone')
 }
 
@@ -537,14 +639,21 @@ function plannerFailure(err: unknown, stream: FailedStream): PlannerTurnError {
   const type = err instanceof Anthropic.APIError ? err.type : null
   // ⚠ `requestID` on an APIError, `request_id` on a MessageStream — two spellings of one id, and a typo
   // silently logs `undefined`.
-  const id = (err instanceof Anthropic.APIError ? err.requestID : null) ?? stream.request_id ?? '-'
+  const id = (err instanceof Anthropic.APIError ? err.requestID : null) ?? stream.request_id
   // A turn that dies after `message_start` was billed for everything it generated. Same salvage as the
-  // cancellation path; the wording stays `failed` so operator alerting is unchanged.
+  // cancellation path — the two differ only in `outcome`, which is the point of there being one event.
   const usage = salvageUsage(stream)
 
-  console.error(
-    `[planner] model call failed: ${timedOut ? 'timeout' : (type ?? 'unknown')}` +
-      ` status=${status ?? '-'} req=${id}${usage ? ` ${usageLog(usage)}` : ''}`,
-  )
+  // ⚠ `err` is `APIError.type` — a closed vendor error TYPE ('rate_limit_error', 'overloaded_error'),
+  // not `APIError.message` and not `.error`, either of which can quote the offending request field and
+  // therefore rider text (INV-13). This is the only branch where an upstream-derived string reaches a
+  // log at all, which is why it names the field it reads.
+  logPlanSpend({
+    outcome: 'failed',
+    usage,
+    err: timedOut ? 'timeout' : (type ?? 'unknown'),
+    status,
+    requestId: id,
+  })
   return new PlannerTurnError(timedOut ? 'timeout' : 'upstream')
 }

@@ -62,7 +62,8 @@ function clientIp(c: Parameters<MiddlewareHandler<ApiEnv>>[0]): string {
 /**
  * Build a fixed-window limiter middleware. Each call gets its own bucket map, so two mounts with
  * different labels never share state. Returns JSON `{ error: 'rate_limited', message }` with HTTP
- * 429 and a `Retry-After` header (seconds) on exceed. No-op under NODE_ENV=test.
+ * 429 and a `Retry-After` header (seconds) on exceed, and emits one structured `evt: 'rate_limited'`
+ * log line per rejection (never on the allowed path). No-op under NODE_ENV=test.
  */
 export function rateLimit({ limit, windowSec, label }: RateLimitOptions): MiddlewareHandler<ApiEnv> {
   const buckets = new Map<string, Bucket>()
@@ -88,6 +89,35 @@ export function rateLimit({ limit, windowSec, label }: RateLimitOptions): Middle
 
     if (bucket.count >= limit) {
       const retryAfterSec = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000))
+      // THE ONLY SIGNAL A 429 EVER EMITS, and the only way an operator can tell "the cap is absorbing a
+      // scraper" from "nobody is calling this route" — they are the same observation from the outside,
+      // and because buckets are per-IP AND per-INSTANCE (see the header) the aggregate exists nowhere
+      // else. One line per rejection IS the count; the alerting handle is a log-based metric keyed on
+      // `evt`, which is why the shape is single-line JSON rather than the `[api] …` prose elsewhere.
+      //
+      // ⚠ INV-13 — a rider transcript is transient rider content, and a log is not transient. Every
+      // field here is OURS by construction: `evt` is a literal, `label`/`limit`/`windowSec` come from
+      // this middleware's own options object, whose only call sites pass a frozen const from ./limits.
+      // None can carry prose. The IP is the RIDER's and never appears — nor does any header, path,
+      // query or body. That is also why the label has to stay unique per bucket (./limits): with the
+      // key withheld, the label is the whole identity of a rejection.
+      //
+      // ⚠ `count` is deliberately NOT logged: the increment lives on the allowed branch below, so on
+      // this branch it is pinned at `limit` by construction and could never vary. `windowSec` is the
+      // field that makes `limit` mean anything (/drives/plan runs a 20/60s and a 120/3600s bucket).
+      //
+      // ⚠ console.info, not warn/error, and this line carries NO `severity` field. Both halves matter:
+      // with no severity in the JSON, the LogEntry's severity falls back to the STREAM, and warn/error
+      // go to stderr — conventionally ERROR. A guardrail doing exactly its job must not land in Error
+      // Reporting looking like an outage. ⚠ That stream fallback is NOT stated on Cloud Run's logging
+      // page; it is agent behaviour documented for GKE/Functions, so treat it as the reason to pick the
+      // right stream, never as a guarantee. The DOCUMENTED lever is the `severity` field, which
+      // ./planner.ts's logPlanSpend sets explicitly for exactly that reason — a line that must be ERROR
+      // says so; this one must not be, so it says nothing and stays on stdout.
+      //
+      // ⚠ REJECTION PATH ONLY. On the allowed path this would be one line per request forever — pure
+      // log cost, on the hottest code in the process.
+      console.info(JSON.stringify({ evt: 'rate_limited', label, limit, windowSec }))
       c.header('Retry-After', String(retryAfterSec))
       return c.json(
         { error: 'rate_limited', message: 'Too many requests. Give it a moment and try again.' },

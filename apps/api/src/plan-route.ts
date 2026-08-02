@@ -19,7 +19,9 @@
 // `event: say` deltas, then exactly ONE `event: turn` carrying the whole `DrivePlanResponse`. Anything
 // else gets that same response as a single JSON body, byte-identical to what step 6 shipped. Both come
 // out of the SAME `toResponse`, and keeping it that way is the only reason a JSON-level test remains
-// proof of the framed payload's shape — do not grow a second response builder inside the callback.
+// proof of the framed payload's shape — do not grow a second response builder inside the callback. It
+// is also what makes the operator-facing `plan_degraded` signal identical on both Accepts: what a rider
+// asks for must never change what an operator can see.
 //   • The TERMINAL frame is AUTHORITATIVE and its `say` may DIFFER from the concatenated deltas: a
 //     refusal REPLACES the streamed text, a truncation APPENDS the retry line to it. The client
 //     overwrites its buffer with the terminal `say` — it never appends.
@@ -107,24 +109,79 @@ function toPlannedRoute(raw: unknown): PlannedRoute | null {
   return wire
 }
 
+/** Why a paid turn produced nothing the rider can use. A CLOSED SET OF LITERALS CHOSEN IN THIS FILE —
+ *  see the INV-13 note on `noteDegraded`. */
+type DegradedReason = 'truncated' | 'aborted' | 'empty' | 'refused' | 'route_untranslatable'
+
+/**
+ * ONE structured line when a paid turn produced nothing the rider can use.
+ *
+ * WHY IT EXISTS: every plan call spends (INV-11) and every outcome below still answers HTTP 200, so a
+ * 5xx alert stays green while the product is broken. This line is the only thing a log-based metric can
+ * count. It pairs with the per-call cost line ./planner emits — one says what the turn COST, this one
+ * says the rider got nothing for it.
+ *
+ * ⚠ ONE LINE OF SERIALIZED JSON, and `logPlanSpend` in ./planner documents why (with the Cloud Logging
+ * sources) — a plain text line lands in `textPayload`, which no metric can query by field. Same reason,
+ * stated once. This line deliberately does NOT set the reserved `severity` key that one does: none of
+ * these is an outage, and a metric matches on `evt` rather than on severity.
+ *
+ * ⚠ THE ADVERSARIAL REVIEW'S LITERAL CONDITION WAS EVALUATED AND REJECTED — do not "fix" it back to it.
+ * 1.7(b) says emit when `stop_reason !== 'tool_use'`, which is wrong in BOTH directions:
+ *   - It fires on the ORDINARY HEALTHY BEAT. In ./planner's switch, `end_turn` with text is outcome
+ *     'say' — most of a 3-8 exchange conversation. The metric would count normal traffic, and a signal
+ *     that fires on success is noise from its first day.
+ *   - It MISSES a real degradation: stop_reason IS 'tool_use' and `toPlannedRoute` still returns null
+ *     (malformed ids, or `via` over the wire's cap). The vendor scored that turn a success, the rider
+ *     hears VOICE.retry, and no route ever reaches the map — the exact "paid call produced nothing"
+ *     case the control is for.
+ * The honest predicate is the OUTCOME, not the stop reason. 'refused' rides its own reason because a
+ * classifier decline is a different operational fact from a broken turn — nothing to page on, while a
+ * SPIKE in it is a prompt problem rather than an outage.
+ *
+ * ⚠ INV-13. The payload is `evt` + `reason` and nothing else, and both are string literals written in
+ * this file — there is no path by which a body, a turn, the prompt, the roster, `say`, thinking or a
+ * tool input can reach it. Anything derived from the turn would break that proof; add a field only if
+ * you can make the same claim about it.
+ * ⚠ warn, not error, and the stream is what a local `bun run dev` and a container tail actually read.
+ * The two THROW paths below deliberately emit nothing here — ./planner has already logged a vendor
+ * failure, and a rider hanging up is not a degradation at all.
+ * ⚠ CANNOT THROW, which is load-bearing on the SSE path — see the streamSSE note below. Stringifying an
+ * object of two string literals has no cycle, no BigInt and no toJSON to run.
+ */
+function noteDegraded(reason: DegradedReason): void {
+  console.warn(JSON.stringify({ evt: 'plan_degraded', reason }))
+}
+
 /** Map a planner outcome to what the rider hears. ⚠ Derived from the OUTCOME, never from "is there a
  *  route" — a truncated turn and a normal chat beat are byte-identical from the caller's side, and
- *  treating them the same is how a rider says yes and watches nothing happen. */
+ *  treating them the same is how a rider says yes and watches nothing happen.
+ *
+ *  ⚠ DELIBERATELY NOT PURE. The `plan_degraded` emit lives HERE because this is the ONE function both
+ *  transports funnel through, which is what makes "a rider's Accept header cannot change what an
+ *  operator sees" true by CONSTRUCTION rather than by convention. An emit at either call site instead
+ *  would be a second thing to keep in sync — the same reason there is only one response builder. */
 function toResponse(turn: PlannerTurn): DrivePlanResponse {
   switch (turn.outcome) {
     case 'route': {
       const route = toPlannedRoute(turn.rawRoute)
       // A route we cannot translate is not a route. The rider still hears what the skipper said; they
-      // simply are not handed a drive to confirm.
+      // simply are not handed a drive to confirm — which is why this, uniquely, is a degradation the
+      // vendor's own stop_reason calls a success.
+      if (!route) noteDegraded('route_untranslatable')
       return route ? { say: turn.say, route, done: false } : { say: turn.say || VOICE.retry, done: false }
     }
     case 'say':
       return { say: turn.say, done: false }
     case 'refused':
+      noteDegraded('refused')
       return { say: VOICE.refused, done: false }
     case 'truncated':
     case 'aborted':
     case 'empty':
+      // The outcome IS the reason here, and passing it through keeps the enum honest: if PlannerOutcome
+      // ever grows a case, this switch stops being exhaustive and the compiler says so.
+      noteDegraded(turn.outcome)
       // ⚠ `say` may be non-empty even here — the model got a sentence out before it was cut off. Show
       // it, then add the retry line, rather than throwing away words the rider already saw streaming.
       return { say: turn.say ? `${turn.say} ${VOICE.retry}` : VOICE.retry, done: false }

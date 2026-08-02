@@ -215,6 +215,71 @@ function routeWaypoints(start: ResolvedEndpoint, end: ResolvedEndpoint, via?: Re
   return [start, ...(via ?? []), end].map((p) => ({ label: p.name, lat: p.lat, lng: p.lng }))
 }
 
+/** "These two endpoints are the same spot" — ~11 m, the tolerance that makes an out-and-back readable as
+ *  a LOOP rather than as two distinct places. ONE home for the epsilon: the cost line below and the
+ *  0-stop warning further down both key on it, and a loop is the shape most likely to bill a Routes call
+ *  and yield nothing, so the two must never disagree about which drives were loops. */
+const sameSpot = (a: ResolvedEndpoint, b: ResolvedEndpoint): boolean =>
+  Math.abs(a.lat - b.lat) < 1e-4 && Math.abs(a.lng - b.lng) < 1e-4
+
+/**
+ * ONE structured cost line per BILLED Google Routes call — the Routes half of INV-11's spend visibility
+ * (the model half is the planner's `[planner]` usage line).
+ *
+ * ⚠ CALL IT THE INSTANT `materializeRoute` RESOLVES. That resolve IS the bill; everything downstream —
+ * the corpus read, the selection, the ledger batch — can throw, and a cost line placed after them would
+ * lose exactly the requests that spent money and produced nothing. Until this existed, the ONLY
+ * `console.*` on either billed path was the failure branch, so a healthy Routes bill was invisible: no
+ * count, no marker, nothing for a Cloud Logging log-based metric or a budget alert to key on. Single-line
+ * JSON so `evt` is a queryable field rather than a substring.
+ *
+ * ⚠ ONE `evt` for BOTH sites, told apart by `path`. Propose and create bill the SAME vendor call, so
+ * "how many Routes calls did we buy" must be one counter with a label — not two names an operator has to
+ * remember to add together.
+ *
+ * ⚠ THE ARGUMENT TYPE IS THE PRIVACY GUARD (INV-13). It takes counts, one enum and two magnitudes — no
+ * endpoint, no coordinate, no id — so this function is structurally incapable of emitting a place NAME
+ * or a WHERE, and a future field can only be added by widening a type someone has to read this comment
+ * to touch. Specifically NOT here: anchor names/coords (they are the rider's destination), the request
+ * body, and any drive/user id — a drive id sits beside `drives.user_id`, which makes the log joinable to
+ * a person, the same leak the client's `sanitizeScreenPath` already had to close. No region field
+ * either: a drive stores no region and this file never resolves one (geometry-first — see
+ * docs/decisions/geometry-first-regions.md), so "region" here could only be invented from coordinates.
+ */
+function logRouteSpend(spend: {
+  /** Which billed site. A literal from this file, two values. */
+  path: 'propose' | 'create'
+  /** Waypoints in the billed request (start + via + end). Routes prices per request and the intermediate
+   *  count is what selects the SKU, so this IS the cost driver. */
+  anchors: number
+  /** How many of those were intermediates — the shape signal an operator reads when a bill moves. */
+  via: number
+  /** start ≈ end (`sameSpot`): the shape most likely to bill and return nothing. */
+  loop: boolean
+  /** The route's own magnitude. A length and a duration, never a position. */
+  meters: number
+  seconds: number
+}): void {
+  console.info(
+    JSON.stringify({
+      // Same shape as the sibling `plan_spend` line, so ONE alert policy covers both halves of INV-11's
+      // spend. Why the field exists at all (Cloud Logging lifts it off a structured stdout payload) is
+      // written down once, in ./planner's log-spend helper — don't restate it here.
+      severity: 'INFO',
+      evt: 'route_spend',
+      vendor: 'google-routes-v2',
+      path: spend.path,
+      anchors: spend.anchors,
+      via: spend.via,
+      loop: spend.loop,
+      // Integers: the float only ever reaches the wire rounded, and a metric filter on a fixed-point
+      // number is not worth the noise.
+      meters: Math.round(spend.meters),
+      seconds: Math.round(spend.seconds),
+    }),
+  )
+}
+
 /** Quantize a coordinate to ~110 m for the route signature. */
 const qz = (n: number): string => n.toFixed(3)
 
@@ -581,6 +646,16 @@ driveRoutes.post('/propose', async (c) => {
     console.error('[api] drive propose route failed', e)
     return c.json({ error: 'no_route', message: "Couldn't find a drivable route between those points." }, 422)
   }
+  // The bill just landed — record it HERE, before the (throwable, unbilled) selection below. See
+  // logRouteSpend for why this line exists and what may never ride on it.
+  logRouteSpend({
+    path: 'propose',
+    anchors: hydrated.length,
+    via: via.length,
+    loop: sameSpot(startEp, endEp),
+    meters: route.distanceMeters,
+    seconds: route.durationSeconds,
+  })
 
   // Accurate est. stop count: run the real selection (pure, free) so the confirm screen matches.
   // An admin previews over staged clips too, so the proposed count matches what they'll build.
@@ -727,6 +802,18 @@ driveRoutes.post('/', requireAccount, createDriveLimiter, async (c) => {
     console.error('[api] drive create route failed', e)
     return c.json({ error: 'no_route', message: "Couldn't find a drivable route between those points." }, 422)
   }
+  // Create bills its OWN Routes call (it does not reuse the proposal — nothing is persisted at
+  // /propose), so it gets its own line, distinguished by `path`. Placed before the selection for the
+  // same reason as /propose: below this point a corpus read, a 0-stop rejection or the ledger batch can
+  // all end the request, and the Routes call is paid for either way.
+  logRouteSpend({
+    path: 'create',
+    anchors: hydrated.length,
+    via: via.length,
+    loop: sameSpot(start, end),
+    meters: route.distanceMeters,
+    seconds: route.durationSeconds,
+  })
 
   // Release gate: an admin builds over staged clips too; everyone else gets released-only. The frozen
   // selection then references whatever was eligible at build time (monotonic → stays valid). (region-release-gate)
@@ -739,7 +826,7 @@ driveRoutes.post('/', requireAccount, createDriveLimiter, async (c) => {
   // a 422 BEFORE the insert + demand bump. The loop-aware log keeps that root cause visible for the
   // verification pass instead of masking it behind the generic message (runbook Finding 1/2).
   if (stops.length === 0) {
-    const loopish = Math.abs(start.lat - end.lat) < 1e-4 && Math.abs(start.lng - end.lng) < 1e-4
+    const loopish = sameSpot(start, end)
     console.warn(
       `[api] drive create produced 0 stops — rejecting before persist (${start.name} → ${end.name}, ` +
         `loopish=${loopish}, candidates=${corpus.size}, durationSec=${Math.round(route.durationSeconds)})`,
