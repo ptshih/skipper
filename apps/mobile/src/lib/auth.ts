@@ -55,39 +55,10 @@ export const { signIn, signUp, signOut, useSession, updateUser, deleteUser, requ
  *  API. Must be listed in the server's `trustedOrigins` or the request is rejected outright. */
 export const PASSWORD_RESET_URL = 'https://skipper.fm/reset-password'
 
-/** The session fields the two gates below read. Structurally satisfied by useSession()'s session, and
- *  by a null/loading one. Deliberately the same shape as the server's `TierSession`
- *  (apps/api/src/tiers.ts) — these helpers are that file's client-side mirror. */
-interface GateSession {
-  user?: { isAnonymous?: boolean | null; role?: string | null } | null
-}
+// ⚠ `isSignedIn`, `isAdmin` and their session shape moved to `@skipper/shared` in the 1.1 sweep
+// (packages/shared/src/access.ts). They lived here AND in apps/api/src/tiers.ts, and their agreement
+// was a comment rather than a fact — while INV-9 makes this predicate decide what every rider sees.
+// One implementation, one test, both sides. Re-exported so screens keep importing them from '@/lib/auth',
+// which is where a reader looks for "is this rider signed in".
+export { isAdmin, isSignedIn } from '@skipper/shared'
 
-/** ⚠ THE ONE client-side "is this rider signed in?" (INV-9), mirroring the server's `tierOf`
- *  (apps/api/src/tiers.ts). Moved here from app/index.tsx in 1.1 step 8b, which is where it was
- *  written to end up.
- *
- *  ⚠ A truthy `session` is NOT "signed in": the Better Auth anonymous plugin mints a REAL user row,
- *  so after D16's mint every rider on a warm launch has a perfectly truthy session and owns nothing —
- *  they cannot list drives and cannot hold a credit (INV-4: that row is hard-deleted at link, so
- *  nothing may be written or persisted against it). A bare `session ?` in a screen is a bug.
- *
- *  `isAnonymous !== true` rather than `!isAnonymous` so a MISSING field reads as "a real account" —
- *  the correct answer for a pre-1.1 session cached in SecureStore and for any row written before the
- *  column existed. The field is typed here only because `anonymousClient()` is registered above. */
-export function isSignedIn(session: GateSession | null | undefined): boolean {
-  const user = session?.user
-  return !!user && user.isAnonymous !== true
-}
-
-/** Admin gate — a signed-in account whose `role === 'admin'` (Better Auth admin plugin, server-set).
- *  The ONE client-side definition of "is this user an admin?", mirroring the API's isAdmin()
- *  (apps/api/src/tiers.ts), which gates the dev-tools screen and is also the server's staged-content
- *  preview role (docs/decisions/region-release-gate.md).
- *
- *  ⚠ The `isSignedIn` clause is not belt-and-braces — the server's isAdmin() has always excluded
- *  anonymous and this one did not (1.1 step 8b closed the gap). No live defect today, because the
- *  anonymous plugin leaves an anon row's `role` at the admin plugin's default 'user'; but it was one
- *  server-side role write away from handing dev tools and STAGED content to an anonymous session. */
-export function isAdmin(session: GateSession | null | undefined): boolean {
-  return isSignedIn(session) && session?.user?.role === 'admin'
-}

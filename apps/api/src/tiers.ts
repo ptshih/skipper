@@ -1,30 +1,12 @@
-// Pure access-level logic — no auth/DB imports, so it's unit-testable in
-// isolation (importing the Better Auth instance is not required to reason about
-// access).
+// ⚠ THIS FILE IS NOW A RE-EXPORT. The access predicates moved to `@skipper/shared` in the 1.1 sweep
+// (packages/shared/src/access.ts), because the API and the app each carried their own copy and their
+// agreement was a COMMENT ("mirroring the server's tierOf") rather than a fact — while INV-9 makes
+// that predicate decide both what a rider sees and whether the server hands them a gated route. A
+// drift between the two was invisible on both sides, and one had already happened: the client's
+// `isAdmin` did not exclude anonymous sessions until step 8b.
 //
-//   anonymous (no/guest session) -> free (a signed-in account)
-// There is no paid tier: premium is bought as CREDITS, so every account is `free` and the credit
-// ledger governs it (see docs/decisions/cut-tiers.md).
+// Kept as a module rather than deleted so the API's existing importers are untouched and so this
+// note sits where someone looking for the API's access logic will actually find it. The one home is
+// @skipper/shared; add nothing here.
 
-import type { AccessTier } from '@skipper/shared'
-
-/** The only session fields tierOf/isAdmin need — structurally satisfied by Better Auth's session. */
-export interface TierSession {
-  user?: { isAnonymous?: boolean | null; role?: string | null } | null
-}
-
-/** Derive the access level from a session: null/guest → anonymous, any real account → free. */
-export function tierOf(session: TierSession | null | undefined): AccessTier {
-  const user = session?.user
-  if (!user || user.isAnonymous) return 'anonymous'
-  return 'free'
-}
-
-/** Region-release-gate preview check: an admin hears STAGED (not-yet-released) content. Anonymous/guest
- *  sessions are never admins (the role lives on a real account). The read paths skip the released_at
- *  filter when this is true. `role` is the Better Auth admin plugin's field (auth.ts). See
- *  docs/decisions/region-release-gate.md. */
-export function isAdmin(session: TierSession | null | undefined): boolean {
-  const user = session?.user
-  return !!user && !user.isAnonymous && user.role === 'admin'
-}
+export { isAdmin, isSignedIn, tierOf, type AccessSession, type AccessSession as TierSession } from '@skipper/shared'

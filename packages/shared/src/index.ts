@@ -1,6 +1,7 @@
 // @skipper/shared — Zod schemas + inferred types, imported everywhere.
 export * from './audio'
 export * from './enums'
+export * from './access'
 export * from './models'
 export * from './story-eligibility'
 export * from './schemas'
