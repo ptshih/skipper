@@ -30,7 +30,9 @@ product.** When a choice trades polish-for-the-builder against scale-for-a-marke
   (find ports with `lsof -nP -iTCP:<port> -sTCP:LISTEN`).
 - **✅ Verify before committing:** root `bun run check` (= `lint:docs` + `lint:types` + `lint:enums` +
   `typecheck` + `test`). If you touched `apps/mobile`, ALSO run `bun run check` there (the real delta is
-  `lint:tokens` — root `test`/`typecheck` already filter into the workspace).
+  `lint:tokens` + `lint` — root `test`/`typecheck` already filter into the workspace). ⚠ `lint` is ESLint,
+  which exists ONLY in `apps/mobile` and only for `react-hooks` (the hooks are unreachable by `bun test`);
+  pin it to 9.x and treat `eslint-suppressions.json` as a backlog — see `apps/mobile/CLAUDE.md`.
 
 ## Git workflow
 

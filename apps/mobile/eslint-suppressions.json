@@ -1,0 +1,94 @@
+{
+  "app/drives/[id]/index.tsx": {
+    "react-hooks/refs": {
+      "count": 3
+    }
+  },
+  "app/drives/[id]/play.tsx": {
+    "react-hooks/refs": {
+      "count": 2
+    }
+  },
+  "app/index.tsx": {
+    "react-hooks/refs": {
+      "count": 2
+    },
+    "react-hooks/set-state-in-effect": {
+      "count": 2
+    }
+  },
+  "app/sample.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 2
+    }
+  },
+  "app/settings.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/lib/driveMusic.ts": {
+    "react-hooks/immutability": {
+      "count": 2
+    },
+    "react-hooks/refs": {
+      "count": 2
+    }
+  },
+  "src/lib/useDrive.ts": {
+    "react-hooks/refs": {
+      "count": 2
+    },
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/lib/useRoutePreview.ts": {
+    "react-hooks/refs": {
+      "count": 1
+    }
+  },
+  "src/lib/useStopPreview.ts": {
+    "react-hooks/refs": {
+      "count": 1
+    }
+  },
+  "src/ui/DriveMap.tsx": {
+    "react-hooks/refs": {
+      "count": 1
+    }
+  },
+  "src/ui/PreviewCard.tsx": {
+    "react-hooks/refs": {
+      "count": 1
+    }
+  },
+  "src/ui/Scrubber.tsx": {
+    "react-hooks/refs": {
+      "count": 4
+    },
+    "react-hooks/set-state-in-effect": {
+      "count": 2
+    }
+  },
+  "src/ui/Skeleton.tsx": {
+    "react-hooks/refs": {
+      "count": 4
+    }
+  },
+  "src/ui/StopList.tsx": {
+    "react-hooks/refs": {
+      "count": 2
+    }
+  },
+  "src/ui/StopRow.tsx": {
+    "react-hooks/refs": {
+      "count": 8
+    }
+  },
+  "src/ui/TypingDots.tsx": {
+    "react-hooks/refs": {
+      "count": 4
+    }
+  }
+}

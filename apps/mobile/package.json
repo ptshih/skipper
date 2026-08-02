@@ -14,7 +14,10 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "lint:tokens": "bun scripts/check-tokens.ts",
-    "check": "bun run lint:tokens && bun run typecheck && bun run test"
+    "lint": "eslint .",
+    "lint:suppress": "eslint . --prune-suppressions",
+    "doctor": "expo-doctor",
+    "check": "bun run lint:tokens && bun run lint && bun run typecheck && bun run test"
   },
   "dependencies": {
     "@better-auth/expo": "^1.6.23",
@@ -51,6 +54,8 @@
     "@posthog/cli": "^0.9.1",
     "@types/react": "~19.2.14",
     "babel-preset-expo": "~57.0.0",
+    "eslint": "^9",
+    "eslint-config-expo": "^57.0.1",
     "expo-dev-client": "~57.0.9",
     "typescript": "^6.0.3"
   }
