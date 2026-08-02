@@ -44,6 +44,13 @@ export function useCorpusSelection(filtered: PoiRow[], all: PoiRow[]) {
     () => selectedRows.filter((p) => p.narrationCount > 0).length,
     [selectedRows],
   )
+  // ⚠ Excluded places are hidden from NEW drives (the API enforces it in the build query) but the paid
+  // CLIs do NOT skip them — so they are billable work that no rider will ever hear. Surfaced on the
+  // spend readout rather than quietly subtracted, because the run really will touch them.
+  const numExcludedSelected = useMemo(
+    () => selectedRows.filter((p) => p.excludedReason != null).length,
+    [selectedRows],
+  )
   // ⚠ The header checkbox is about the TABLE, so it stays relative to the visible rows — unlike every
   // count above, which is about the RUN. Conflating the two is what produced the bug.
   const numVisibleSelected = useMemo(
@@ -81,6 +88,7 @@ export function useCorpusSelection(filtered: PoiRow[], all: PoiRow[]) {
     numEligibleSelected,
     numNarratableSelected,
     numWithNarrationSelected,
+    numExcludedSelected,
     headerChecked,
     headerIndeterminate,
     toggleRow,

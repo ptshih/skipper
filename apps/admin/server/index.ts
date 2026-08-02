@@ -1113,6 +1113,11 @@ app.get('/admin/pois', async (c) => {
         else false
       end`,
       clusterId: pois.clusterId,
+      // ⚠ Exclusion is a real, BULK-settable state (prune-corpus writes it en masse) that the drive
+      // build path enforces — apps/api/src/drives.ts:482 `isNull(pois.excludedReason)`. The corpus
+      // table could not see it, so it had no badge, no filter and no count, and the numbers on the two
+      // paid-run buttons silently included places no read path will ever serve.
+      excludedReason: pois.excludedReason,
       createdAt: pois.createdAt,
     })
     .from(pois)
@@ -1264,6 +1269,7 @@ app.get('/admin/pois', async (c) => {
       // region-release-gate: a clip exists but is STAGED (not yet public) until released. Only
       // meaningful when a clip exists (narrationStatus !== 'none').
       released: clip?.released ?? false,
+      excludedReason: p.excludedReason,
       // ⚠ ARRAYS. A poi in two overlapping regions belongs to both; the console must not pick one.
       regionSlugs: inRegions.map((r) => r.slug),
       regionNames: inRegions.map((r) => r.name),

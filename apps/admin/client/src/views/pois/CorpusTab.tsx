@@ -94,6 +94,11 @@ export function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loadin
     if (flags === 'sheet-drift' && !p.sheetDrift) return false
     if (flags === 'speakable-drift' && !p.speakableDrift) return false
     if (flags === 'off-road' && !p.offRoad) return false
+    // ⚠ Exclusion is enforced by the DRIVE build path (apps/api drives.ts `isNull(excludedReason)`) but
+    // NOT by the paid CLIs, so an excluded place still costs money to enrich/narrate and will never be
+    // served. "Hide excluded" is the axis that lets an operator keep it out of a run.
+    if (flags === 'excluded' && !p.excludedReason) return false
+    if (flags === 'hide-excluded' && p.excludedReason) return false
     if (q) {
       const s = `${p.name} ${p.sourceId}`.toLowerCase()
       if (!s.includes(q.toLowerCase())) return false
@@ -110,6 +115,7 @@ export function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loadin
     numEligibleSelected,
     numNarratableSelected,
     numWithNarrationSelected,
+    numExcludedSelected,
     headerChecked,
     headerIndeterminate,
     toggleRow,
@@ -154,7 +160,10 @@ export function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loadin
     (selMode === 'explicit'
       ? `${numSelected} hand-picked POI${numSelected === 1 ? '' : 's'}`
       : `all ${numSelected} POIs matching this filter${selIds.size ? ` (minus ${selIds.size} deselected)` : ''}`) +
-    ` — ${numEligibleSelected} story-eligible`
+    ` — ${numEligibleSelected} story-eligible` +
+    (numExcludedSelected > 0
+      ? `, ${numExcludedSelected} EXCLUDED (still billed — hidden from new drives, so nobody hears them)`
+      : '')
 
   // The active filters, surfaced in every action's confirm dialog so a spend can't run on an unseen scope.
   const FLAG_LABELS: Record<string, string> = {
@@ -162,6 +171,7 @@ export function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loadin
     'story-eligible': 'Story: eligible', 'story-filtered': 'Story: filtered out', enriched: 'Enriched',
     'needs-enrich': 'Eligible · un-enriched', narrated: 'Has narration', 'narration-stale': 'Narration: stale', staged: 'Narration: staged',
     'sheet-drift': 'Story: sheet drifted', 'speakable-drift': 'Speakable: drifted', defect: 'Narration defects',
+    excluded: 'Excluded', 'hide-excluded': 'Excluded hidden',
     stale: 'Stale facts', unattrib: 'Unattributed', 'off-road': 'Off-road (no road anchor)',
   }
   // ⚠ Chips describe the FILTER, which only equals the run in 'all' mode. A hand-picked selection is
@@ -255,6 +265,15 @@ export function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loadin
         const em = STORY_ELIGIBILITY_META[p.storyEligibility]
         return (
           <div className="flex flex-wrap items-center gap-1">
+            {/* ⚠ First, because it overrides everything to its right: an excluded place is hidden from
+                NEW drives whatever its story grade. It is still billable — the paid CLIs don't skip
+                it — which is why this belongs on the row an operator selects from, not only in the
+                detail sheet where it already had a banner. */}
+            {p.excludedReason && (
+              <Badge variant="destructive" title={`Excluded — hidden from new drives. ${p.excludedReason}`}>
+                excluded
+              </Badge>
+            )}
             <Badge variant={em.variant} title={em.hint}>{em.label}</Badge>
             {p.enriched && !p.sheetDrift && (
               <Badge variant="success" title="Has a curated fact sheet — the telling grounds on it">
@@ -404,6 +423,8 @@ export function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loadin
             <SelectItem value="enriched">Enriched</SelectItem>
             <SelectItem value="needs-enrich">Eligible · un-enriched</SelectItem>
             <SelectItem value="narrated">Narration: any</SelectItem>
+            <SelectItem value="excluded">Excluded</SelectItem>
+            <SelectItem value="hide-excluded">Hide excluded</SelectItem>
             <SelectItem value="narration-stale">Narration: stale</SelectItem>
             <SelectItem value="staged">Narration: staged (unreleased)</SelectItem>
             <SelectItem value="sheet-drift">Story: sheet drifted</SelectItem>

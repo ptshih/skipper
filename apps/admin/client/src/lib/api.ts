@@ -153,6 +153,11 @@ export interface PoiRow {
   suspiciousDuration: boolean
   /** region-release-gate: a clip exists but is STAGED (not public) until released. false when no clip. */
   released: boolean
+  /** Non-null ⇒ hidden from NEW drives (apps/api enforces it in the build query). Audio is kept and
+   *  already-saved drives keep the stop. ⚠ The paid CLIs do NOT filter on it (deliberate — see
+   *  @skipper/shared story-eligibility), so an excluded place still costs money to enrich/narrate;
+   *  the console surfaces it so an operator can filter it out of a run themselves. */
+  excludedReason: string | null
   /** EVERY region whose bbox contains this place — regions are boxes and boxes may overlap, so a
    *  place genuinely belongs to more than one. Empty = inside no configured region's bbox. */
   regionSlugs: string[]
