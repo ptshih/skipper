@@ -29,7 +29,7 @@ export function PoisView() {
     <div className="space-y-6">
       <PageHeader
         title="POIs"
-        description="The shared place corpus — sources, narration coverage, attribution, and fact corrections. Roam + drives select from here."
+        description="The shared place corpus — sources, narration coverage, attribution, and fact corrections. Drives select their stops from here."
         actions={
           <Button onClick={() => setDiscoverOpen(true)}>
             <Compass className="h-4 w-4" /> Discover POIs

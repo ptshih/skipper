@@ -100,7 +100,7 @@ export function ReferenceView() {
               ['Staged', 'A generated narration that is NOT yet public — testers (and you) hear it in the real app, nobody else. Every clip is born staged.'],
               ['Released', 'Public — playable in drives for everyone. The read paths gate on this bit alone.'],
               ['Release a region', 'Regions page → Release. Opens the region AND auto-releases every staged clip in its bbox at once — per-POI tellings AND the FUSED cluster tellings whose members sit in the bbox. ⚠ Releasing a fused telling also RETIRES its members: those places stop appearing in new drives, because the group’s clip now speaks for them. Re-run (“Release new”) to push clips that staged since (new POIs, fresh regens). Permanent.'],
-              ['Release a clip', "A POI's Narration tab → Release. The trickle case: publish one freshly ear-checked clip inside an already-open region. Permanent."],
+              ['Release a clip', "A POI's Narration tab → Release. The trickle case: publish one freshly ear-checked clip inside an already-open region. It publishes EXACTLY ONE clip — the POI's own telling if it has one, and only if it doesn't, the fused telling of the group it belongs to. ⚠ That second case releases a clip the Narration tab does not play (the tab is per-POI), and a fused telling speaks for every member of its group — so releasing it also retires them from new drives. Permanent either way."],
               ['Regenerating a public clip', 'Updates the audio in place and stays live — a released clip is never yanked back to staged; the automated eval gate is the safety net.'],
             ]}
           />

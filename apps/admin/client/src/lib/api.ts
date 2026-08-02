@@ -129,7 +129,7 @@ export interface PoiRow {
   createdAt: string
   narrationCount: number
   storyEligibility: StoryEligibility
-  /** A non-empty curated fact sheet exists (server checks the `fact_sheet` column) — roam grounds on it. */
+  /** A non-empty curated fact sheet exists (server checks the `fact_sheet` column) — the telling grounds on it. */
   enriched: boolean
   /** ENRICHED, but a curated sheet span no longer appears in the current article — the article drifted;
    *  the place needs a re-enrich (`enrich --force`) to pick up the upstream change. */
@@ -399,7 +399,9 @@ export const api = {
     req<{ added: number; results: CurateResult[] }>('/admin/places/curate', { method: 'POST', body: JSON.stringify(body) }),
   users: () => req<{ users: UserRow[] }>('/admin/users'),
   // Append an admin_grant ledger entry; returns the refreshed credit summary for the row.
-  grantCredits: (id: string, body: { amount: number; reason?: string }) =>
+  // ⚠ `idempotencyKey` is REQUIRED (the server 400s without a uuid). Mint it once per dialog and
+  // reuse it across retries — that is what makes a double-click or a retried POST land ONE grant.
+  grantCredits: (id: string, body: { amount: number; reason?: string; idempotencyKey: string }) =>
     req<{ id: string; granted: number; used: number; remaining: number }>(
       `/admin/users/${id}/credits`,
       { method: 'POST', body: JSON.stringify(body) },

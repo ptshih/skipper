@@ -42,7 +42,7 @@ export function PoiDetailSheet({ poiId, poiName, canDelete, hasNarration, open, 
   })
   // Legibility state, read here rather than only inside the Location tab so an exclusion is visible on
   // EVERY tab. The whole point of this banner: an excluded poi silently stops appearing in drives and
-  // roam, and an operator staring at a normal-looking detail sheet had no way to know why.
+  // drives, and an operator staring at a normal-looking detail sheet had no way to know why.
   const { data: curation } = useQuery({
     queryKey: qk.poiCorrections(poiId),
     queryFn: () => api.poiCorrections(poiId),
@@ -73,7 +73,7 @@ export function PoiDetailSheet({ poiId, poiName, canDelete, hasNarration, open, 
             <div className="flex items-start gap-2 text-xs">
               <EyeOff className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-500" />
               <div className="leading-relaxed">
-                <div className="font-semibold">Excluded — hidden from new drives and roam.</div>
+                <div className="font-semibold">Excluded — hidden from new drives.</div>
                 {/* Own line: the reason is operator-authored and does not reliably end in punctuation,
                     so inlining it ran straight into the next sentence ("…point trigger Saved drives…"). */}
                 <div className="text-muted-foreground">{curation.excludedReason}</div>

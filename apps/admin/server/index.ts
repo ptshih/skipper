@@ -2,7 +2,7 @@
 //
 // v1 BACKEND. Behind Google IAP (requireAdmin asserts the founder's identity); a separate
 // Cloud Run service from the public api.skipper.fm so a routing bug can't leak ops onto the
-// funnel. Reads the same DB + presigns R2 for the roam ear-pass; triggers the skipper-studio Cloud
+// funnel. Reads the same DB + presigns R2 for the ear-pass; triggers the skipper-studio Cloud
 // Run Job for corpus ops (jobs.ts). V2: authored tours are deferred — the console operates the
 // shared POI corpus + the narrations drives reuse; the tour catalog / Create-a-Tour flow is gone.
 // Background: docs/designs/admin-ops-console-spec.md §6.
@@ -35,7 +35,7 @@
 
 import { Hono } from 'hono'
 import { serveStatic } from 'hono/bun'
-import { and, asc, between, count, desc, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm'
+import { and, asc, between, count, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import {
   creditEntries,
@@ -343,7 +343,10 @@ app.post('/admin/regions/bbox-lookup', async (c) => {
 /* -------------------------------------------------------------------------- */
 // The `places` table is the curated real-world-location layer (towns/marinas/lookouts as drive
 // endpoints; coffee/gas/rest as break pitstops), role-tagged. Coords are resolved + STORED here so the
-// runtime picker (GET /drives/anchors) makes zero live Places calls. Region membership is point-in-bbox
+// runtime allowlist makes zero live Places calls. (It used to be served as GET /drives/anchors; 1.1
+// deleted that route — the curated set is now sent to the PLANNER server-side and never to a client,
+// because the endpoint was an unauthenticated dump of every curated place WITH exact coordinates.)
+// Region membership is point-in-bbox
 // (geometry-first; no region_id). The bulk seed is the interactive Curate flow (POST /draft → operator
 // prunes → POST /curate); these endpoints are the draft/resolve + review/prune/promote + manual-add
 // surface. See docs/designs/places-endpoints-spec.md.
@@ -1053,7 +1056,7 @@ app.get('/admin/pois', async (c) => {
       .from(narrations)
       .where(isNotNull(narrations.clusterId)),
     // All regions + their discovery bbox. POI→region is GEOGRAPHIC (bbox containment), matching
-    // how roam actually selects candidates (region-corpus.ts / generate-narrations.ts). A region with no
+    // how a drive actually selects candidates (discover-pois.ts / generate-narrations.ts). A region with no
     // bbox can't claim any poi.
     db
       .select({ slug: regions.slug, displayName: regions.displayName, bbox: regions.bbox })
@@ -1108,7 +1111,7 @@ app.get('/admin/pois', async (c) => {
     const fusedReleased = p.clusterId != null ? fusedByCluster.get(p.clusterId) : undefined
     const coveredByCluster = fusedReleased === true
     const region = regionForPoi(p.lat, p.lng)
-    // Story-eligibility — a POI property (roam draws story-grade POIs from this corpus);
+    // Story-eligibility — a POI property (drives draw story-grade POIs from this corpus);
     // single-sourced with the studio pipeline's gate constants (@skipper/shared).
     const storyEligibility = classifyStoryEligibility({
       source: p.source,
@@ -1224,22 +1227,46 @@ app.post('/admin/pois/:poiId/narration/release', async (c) => {
   const poiId = c.req.param('poiId')
   if (!UUID_RE.test(poiId)) return c.json({ error: 'not_found' }, 404)
   const [poi] = await db.select({ clusterId: pois.clusterId }).from(pois).where(eq(pois.id, poiId)).limit(1)
-  const subject = poi?.clusterId
-    ? or(eq(narrations.poiId, poiId), eq(narrations.clusterId, poi.clusterId))
-    : eq(narrations.poiId, poiId)
+
+  // ⚠⚠ ELSE, NOT OR — and the difference published clips nobody had heard. Until 2026-08-02 the
+  // subject was `or(poiId = X, clusterId = C)` fed straight into an UPDATE, and an UPDATE has no
+  // LIMIT: for a clustered member that still carried its own solo clip, ONE click stamped BOTH that
+  // clip and the cluster's staged fused telling. Neither the operator nor the UI could see it — the
+  // GET above is `eq(narrations.poiId, poiId)`, so the tab renders and plays the SOLO clip only, and
+  // `.returning()` was destructured to a single row, so the response reported one release. Release is
+  // monotonic and irreversible by invariant (docs/decisions/region-release-gate.md), so a fused clip
+  // speaking for dozens of members went public forever, silently, from a button labelled "Release
+  // this clip". The route's own comment above already said "else"; only the code disagreed.
+  //
+  // So resolve the subject FIRST, as a genuine else, and update exactly that row by id.
+  const cols = { id: narrations.id, releasedAt: narrations.releasedAt }
+  const [own] = await db.select(cols).from(narrations).where(eq(narrations.poiId, poiId)).limit(1)
+  const target =
+    own ??
+    (poi?.clusterId
+      ? (
+          await db.select(cols).from(narrations).where(eq(narrations.clusterId, poi.clusterId)).limit(1)
+        )[0]
+      : undefined)
+
+  if (!target) return c.json({ error: 'not_found' }, 404)
+  // An already-released clip is a no-op success, not a 404 — the client shows the right state.
+  if (target.releasedAt) return c.json({ releasedAt: target.releasedAt, alreadyReleased: true })
+
   const [row] = await db
     .update(narrations)
     .set({ releasedAt: new Date() })
-    .where(and(subject, isNull(narrations.releasedAt)))
+    .where(and(eq(narrations.id, target.id), isNull(narrations.releasedAt)))
     .returning({ releasedAt: narrations.releasedAt })
   if (row) return c.json({ releasedAt: row.releasedAt })
-  // No row updated → either no narration for this poi, or it's already released. Distinguish so the
-  // client shows the right state (an already-released clip is a no-op success, not a 404).
-  const existing = (
-    await db.select({ releasedAt: narrations.releasedAt }).from(narrations).where(subject).limit(1)
-  )[0]
-  if (!existing) return c.json({ error: 'not_found' }, 404)
-  return c.json({ releasedAt: existing.releasedAt, alreadyReleased: true })
+  // Lost a race with a concurrent release: it IS released now, just not by us — so re-read the
+  // stamp rather than echoing `target.releasedAt`, which is null by construction at this point.
+  const [now] = await db
+    .select({ releasedAt: narrations.releasedAt })
+    .from(narrations)
+    .where(eq(narrations.id, target.id))
+    .limit(1)
+  return c.json({ releasedAt: now?.releasedAt ?? null, alreadyReleased: true })
 })
 
 /* -------------------------------------------------------------------------- */
@@ -1264,7 +1291,7 @@ interface CorrectionsPayload {
   speakable: { lat: number; lng: number } | null
   /** OSM `highway=` class the anchor snapped to; null when hand-placed or un-snapped. */
   speakableRoadClass: string | null
-  /** Non-null ⇒ hidden from NEW drives + roam (audio kept; saved drives keep the stop). */
+  /** Non-null ⇒ hidden from NEW drives (audio kept; saved drives keep the stop). */
   excludedReason: string | null
   /** The legibility GROUP this poi belongs to, or null when it stands alone (most of them). Written by
    *  `classify-treatments`; INERT until phase 4 fuses the audio. `subjectName` is the member that IS the
@@ -1686,9 +1713,22 @@ app.get('/admin/users', async (c) => {
 
 // Grant credits to a user — appends a positive `admin_grant` entry to the ledger (lifts both their
 // balance AND their lifetime cap). NOT a GCP spend (it hands the USER free drive generations), so no
-// founder-go gate; it IS an append-only mutation, so the client confirms. Each grant is a distinct
-// event with a fresh idempotency key (mirrors freeGrantEntry's shape; source 'admin_grant' already in
-// the enum). The amount>0 + kind:'grant' satisfies the ledger's sign check.
+// founder-go gate; it IS an append-only mutation, so the client confirms. The amount>0 + kind:'grant'
+// satisfies the ledger's sign check.
+//
+// ⚠ EXACTLY-ONCE COMES FROM THE CLIENT'S KEY. Until 2026-08-02 this minted
+// `admin_grant:${crypto.randomUUID()}` per REQUEST and omitted onConflictDoNothing — so it was the
+// only ledger write in the repo with no exactly-once property at all, while the schema's
+// `idempotency_key UNIQUE` sat there unused and both API paths (`free:<userId>`, `drive:<driveId>`)
+// have a deterministic key AND the conflict clause. A double-click or a retried POST wrote two grants.
+// The client now mints one uuid per dialog and reuses it across retries, exactly as `POST /drives`
+// does with its per-card key. A missing/!uuid key is rejected rather than silently made unique again.
+//
+// ⚠ ANONYMOUS ACCOUNTS ARE REFUSED, mirroring the automatic path in apps/api/src/auth.ts. An
+// anonymous row is a real `user` row, so this route used to accept it and report a cheerful
+// granted/remaining — but `/drives*` is behind requireAccount, so the credit can never be spent, and
+// the moment the rider signs up the plugin hard-deletes that row and `purgeUserData` takes the grant
+// with it. A comp that silently evaporates is worse than a refusal that explains itself (INV-4).
 app.post('/admin/users/:id/credits', async (c) => {
   const id = c.req.param('id')
 
@@ -1710,23 +1750,47 @@ app.post('/admin/users/:id/credits', async (c) => {
   if (note.length > MAX_REASON_LEN) {
     return c.json({ error: 'bad_request', message: `\`reason\` must be ≤ ${MAX_REASON_LEN} chars.` }, 400)
   }
+  const clientKey = typeof body.idempotencyKey === 'string' ? body.idempotencyKey : ''
+  if (!UUID_RE.test(clientKey)) {
+    return c.json({ error: 'bad_request', message: '`idempotencyKey` must be a uuid.' }, 400)
+  }
 
   // credit_entries.userId is a soft (un-FK'd) ref to user.id — validate the account exists here.
-  const [account] = await db.select({ id: user.id, email: user.email }).from(user).where(eq(user.id, id)).limit(1)
+  const [account] = await db
+    .select({ id: user.id, email: user.email, isAnonymous: user.isAnonymous })
+    .from(user)
+    .where(eq(user.id, id))
+    .limit(1)
   if (!account) return c.json({ error: 'not_found' }, 404)
+  if (account.isAnonymous) {
+    return c.json(
+      {
+        error: 'anonymous_account',
+        message:
+          'This is a pre-signup anonymous session, not an account. Credits here can never be spent ' +
+          '(/drives is behind requireAccount) and are deleted the moment the rider signs up. Grant ' +
+          'to their real account after they create one.',
+      },
+      409,
+    )
+  }
 
   const operator = c.get('adminEmail')
   const reason = note ? `admin grant by ${operator}: ${note}` : `admin grant by ${operator}`
   console.log(`[admin] ${operator} granted ${amount} credit(s) to ${account.email} (${id})`)
 
-  await db.insert(creditEntries).values({
-    userId: id,
-    amount,
-    kind: 'grant',
-    source: 'admin_grant',
-    reason,
-    idempotencyKey: `admin_grant:${crypto.randomUUID()}`,
-  })
+  await db
+    .insert(creditEntries)
+    .values({
+      userId: id,
+      amount,
+      kind: 'grant',
+      source: 'admin_grant',
+      reason,
+      idempotencyKey: `admin_grant:${clientKey}`,
+    })
+    // Exactly-once: a retry or a double-click carries the SAME key and lands nothing the second time.
+    .onConflictDoNothing({ target: creditEntries.idempotencyKey })
 
   // Return the refreshed credit summary so the row updates in place without a full refetch race.
   const [summary] = await db
@@ -1752,5 +1816,32 @@ app.get('*', serveStatic({ path: `${WEB_ROOT}/index.html` }))
 
 const port = Number(process.env.PORT ?? 8788)
 
+// ⚠⚠ idleTimeout IS LOAD-BEARING HERE TOO, and this console needs it MORE than apps/api does.
+// Bun's default is 10 SECONDS and it fires WHILE A HANDLER IS STILL RUNNING (measured in apps/api on
+// 2026-08-01: a 16s handler had its socket closed at ~12s). Two admin routes structurally exceed that:
+//   • POST /admin/places/draft — one Opus call, max_tokens 4_000, up to 60 places. The dialog's own
+//     copy says "this takes ~30s". It could therefore NEVER have completed: the socket died at ~12s,
+//     the operator saw a network error, and the Anthropic call billed to completion regardless.
+//   • POST /admin/places/curate — 2 Google Places round-trips per draft, serially, then a second loop
+//     of upserts. ~30 drafts is 15-25s. Worse than a failed read: the handler is never aborted, so the
+//     writes still land. The operator is shown a FAILURE while curated `places` rows — the planner's
+//     wire-level endpoint allowlist (INV-1/INV-2) — are committed to production.
+// This is the paid path that seeds that allowlist, and it has never been run (memory: the Tahoe
+// curation is still founder-gated), so the whole two-step flow was latently unable to complete.
+// 240s: Bun hard-caps idleTimeout at 255 (verified — 256 throws), and Cloud Run's own request timeout
+// (300s, unset in cloudbuild.admin.yaml so the default applies) stays the outer bound.
+const IDLE_TIMEOUT_SEC = 240
+
+// ⚠ BIND LOOPBACK WHEN THE BYPASS IS ON. Bun's default hostname is 0.0.0.0 — every interface — while
+// `bun run dev:admin` sets ADMIN_DEV_BYPASS=1, which makes requireAdmin admit EVERY request with no
+// header at all (auth.ts). Against the SAME Neon and R2 as production, with delete authority and the
+// ability to dispatch paid Cloud Run jobs. So on any shared wifi, or to any node on the tailnet the
+// iOS dev builds already use, `curl http://<laptop>:8788/admin/...` was the whole console.
+// ⚠ Bun's printed banner says "localhost" even when it binds the wildcard, so the URL in the terminal
+// actively hides this — trust `lsof -nP -iTCP:8788 -sTCP:LISTEN`, not the banner.
+// Deployed is unaffected: Cloud Run needs 0.0.0.0, and NODE_ENV=production already makes the bypass
+// inert, so this narrows only the case that is dangerous.
+const hostname = process.env.ADMIN_DEV_BYPASS === '1' ? '127.0.0.1' : '0.0.0.0'
+
 // Bun serves a default export of the shape { port, fetch }.
-export default { port, fetch: app.fetch }
+export default { port, hostname, idleTimeout: IDLE_TIMEOUT_SEC, fetch: app.fetch }

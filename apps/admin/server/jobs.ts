@@ -61,7 +61,7 @@ export class HttpError extends Error {
 // removed with the tour pipeline. Those `jobKind` enum members survive in @skipper/shared (the
 // wire contract evolves additively — installed clients still know the vocabulary) but have NO
 // dispatchable script here, so buildJobArgs rejects them with "unknown kind". Hence a PARTIAL
-// record (only the live corpus/roam ops); the test only checks the scripts that remain.
+// record (only the live corpus ops); the test only checks the scripts that remain.
 export const SCRIPTS: Partial<Record<JobKind, string>> = {
   resynth_narration: 'packages/studio/src/resynth-narration.ts',
   sweep_orphans: 'packages/studio/src/sweep-orphans.ts',
@@ -173,7 +173,7 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     if (idCsv(body.excludeIds)) args.push(`--exclude-ids=${idCsv(body.excludeIds)}`)
     pushPosNum(args, '--limit', body.limit, 'limit')
     if (body.force) args.push('--force')
-    // --min-extract removed 2026-06-16: roam story-eligibility is "has a fact sheet" (#1), not a char floor.
+    // --min-extract removed 2026-06-16: story-eligibility is "has a fact sheet" (#1), not a char floor.
     pushPosNum(args, '--max-cost', body.maxCostUsd, 'maxCostUsd')
     if (apply) args.push('--apply')
     // A region run keys both the display slug and the lock on its region; a whole-corpus explicit-id

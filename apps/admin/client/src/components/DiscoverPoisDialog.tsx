@@ -74,7 +74,7 @@ export function DiscoverPoisDialog({
           <DialogTitle className="flex items-center gap-2"><Compass className="h-4 w-4" /> Discover POIs</DialogTitle>
           <DialogDescription>
             Discovers every Wikidata-pinned place in each region's bbox and upserts the shared POI corpus —
-            roam draws from it. Free — no LLM or TTS spend.
+            drives select their stops from it. Free — no LLM or TTS spend.
           </DialogDescription>
         </DialogHeader>
 

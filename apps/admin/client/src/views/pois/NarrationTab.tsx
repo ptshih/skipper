@@ -14,7 +14,8 @@ import { useConfirm } from '@/components/ui/confirm-dialog'
 import { cn } from '@/lib/utils'
 
 // The POI's one shared telling — audio player + script + a re-synth action. Moved here from the
-// retired /roam page; a narration is 1:1 with its poi (resolves via poiId), so it lives in the POI.
+// retired /roam page (roam itself is gone — 1.1 D1); a narration is 1:1 with its poi (resolves via
+// poiId), so it lives in the POI.
 export function NarrationTab({ poiId, hasNarration }: { poiId: string; hasNarration: boolean }) {
   const navigate = useNavigate()
   const qc = useQueryClient()

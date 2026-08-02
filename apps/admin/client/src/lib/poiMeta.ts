@@ -9,10 +9,10 @@ export const SOURCE_META: Record<string, { label: string; variant: 'default' | '
   wikidata: { label: 'Wikidata', variant: 'secondary' },
 }
 
-/** Story-eligibility → badge. A POI property (roam draws story-grade POIs from the corpus).
+/** Story-eligibility → badge. A POI property (drives select story-grade POIs from the corpus).
  *  `eligible` is the actionable one; the filtered-* states are intentional exclusions, muted. */
 export const STORY_ELIGIBILITY_META: Record<StoryEligibility, { label: string; variant: BadgeVariant; hint: string }> = {
-  eligible: { label: 'eligible', variant: 'default', hint: 'Story-grade — a roam telling can use it' },
+  eligible: { label: 'eligible', variant: 'default', hint: 'Story-grade — a drive can tell it as a story stop' },
   'filtered-source': { label: 'scenic pin', variant: 'outline', hint: 'Wikidata pin — not a story source (wave layer later)' },
   'filtered-taste': { label: 'taste-gate', variant: 'outline', hint: 'Title hits the taste denylist' },
   'filtered-stub': { label: 'stub', variant: 'secondary', hint: 'No article text to enrich (empty/disambiguation page)' },

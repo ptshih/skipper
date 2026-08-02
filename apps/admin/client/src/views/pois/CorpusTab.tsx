@@ -232,7 +232,7 @@ export function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loadin
           <div className="flex flex-wrap items-center gap-1">
             <Badge variant={em.variant} title={em.hint}>{em.label}</Badge>
             {p.enriched && !p.sheetDrift && (
-              <Badge variant="success" title="Has a curated fact sheet — roam grounds on it">
+              <Badge variant="success" title="Has a curated fact sheet — the telling grounds on it">
                 enriched
               </Badge>
             )}

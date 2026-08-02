@@ -137,7 +137,8 @@ export function RescoreDialog({ open, onOpenChange, scope, onSubmitted }: {
 // count + a cost estimate) or Enrich (apply, SPENDS Anthropic; no TTS). THIS dialog is the paid-run gate:
 // it names the scope + cost and needs an explicit Enrich click, so the server's confirm:true (added by
 // JobActionDialog for the apply) is already human-gated — no extra window.confirm. The fact sheet it
-// builds (pois.fact_sheet) is read by roam, so enrich ONCE between Discover and Generate Narration.
+// builds (pois.fact_sheet) is what the narration grounds on, so enrich ONCE between Discover and
+// Generate Narration.
 // Enrich only acts on ELIGIBLE story POIs (the CLI gates), so the Preview count is authoritative.
 export function EnrichDialog({ open, onOpenChange, scope, onSubmitted }: {
   open: boolean
@@ -172,7 +173,7 @@ export function EnrichDialog({ open, onOpenChange, scope, onSubmitted }: {
       description={
         <>
           Scouts each story POI ONCE into a curated, verbatim <strong>fact well</strong> on the shared corpus —
-          roam narrates from it. Run after Discover, before generating. Spends Anthropic credits
+          the narration grounds on it. Run after Discover, before generating. Spends Anthropic credits
           (no TTS). A re-discover now PRESERVES wells; rebuild one with Enrich after a material article change.
         </>
       }

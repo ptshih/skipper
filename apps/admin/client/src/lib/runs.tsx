@@ -31,6 +31,9 @@ export const KIND_META: Record<string, { label: string; icon: ElementType }> = {
 // A run targeting no region (whole-corpus) leaves its slug NULL → "All". Legacy sentinels map to a
 // friendly label rather than a raw slug.
 export const TARGET_SENTINELS: Record<string, string> = {
+  // ⚠ HISTORICAL ONLY — jobs.ts no longer emits this sentinel (a whole-corpus run leaves the target
+  // NULL). It stays so pre-2026-07 rows still render a label instead of a raw slug; roam itself is
+  // gone (1.1 D1). Do not add new sentinels here.
   'roam-corpus': 'All',
   'region-corpus': 'whole corpus',
   narration: 'all clips',

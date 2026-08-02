@@ -19,6 +19,12 @@ import { FormDialog } from '@/components/ui/form-dialog'
 // A readable label for a row: the name, or email, or a truncated id for an un-named anonymous account.
 const userLabel = (u: UserRow) => u.name?.trim() || u.email?.trim() || `${u.id.slice(0, 8)}…`
 
+// ⚠ MUST MATCH `MAX_ADMIN_GRANT` in apps/admin/server/index.ts, which is the authority — the server
+// 400s above it regardless of what this allows. It cannot be imported: the client tsconfig includes
+// only `src`, and the root one excludes `client`. `server/grant-ceiling.test.ts` pins the two
+// literals together so they cannot drift silently.
+const MAX_GRANT = 1000
+
 export function UsersView() {
   const [granting, setGranting] = useState<UserRow | null>(null)
   const { data: users, error: err, isPending } = useAdminList(qk.users(), async () => (await api.users()).users)
@@ -66,11 +72,25 @@ export function UsersView() {
     {
       header: '',
       headClassName: 'w-36',
+      // ⚠ Not offered on an anonymous row, and the server refuses it too (409 anonymous_account).
+      // An anonymous session is a real `user` row, so this used to look perfectly grantable — but
+      // /drives is behind requireAccount so the credit can never be spent, and the plugin hard-deletes
+      // that row at signup, taking the grant with it (INV-4). A comp that silently evaporates is the
+      // worst outcome; refuse it where the operator can see why.
       cell: (u) => (
         <div className="flex justify-end">
-          <Button variant="ghost" size="sm" onClick={() => setGranting(u)}>
-            <Coins className="h-3.5 w-3.5" /> Grant credits
-          </Button>
+          {u.isAnonymous ? (
+            <span
+              className="text-xs text-muted-foreground"
+              title="Anonymous pre-signup session — credits here can't be spent and are deleted when they sign up."
+            >
+              no account yet
+            </span>
+          ) : (
+            <Button variant="ghost" size="sm" onClick={() => setGranting(u)}>
+              <Coins className="h-3.5 w-3.5" /> Grant credits
+            </Button>
+          )}
         </div>
       ),
     },
@@ -111,12 +131,17 @@ function GrantCreditsDialog({ user, onClose }: { user: UserRow; onClose: () => v
   const qc = useQueryClient()
   const [amount, setAmount] = useState('10')
   const [reason, setReason] = useState('')
+  // ONE key per dialog, reused across retries — a double-click or a retried POST then writes exactly
+  // one ledger row (the server keys the entry on this and ON CONFLICT DO NOTHING). Same shape as the
+  // per-card key POST /drives uses. useState initialiser so it survives re-renders but not a reopen.
+  const [idempotencyKey] = useState(() => crypto.randomUUID())
 
   const n = Number(amount)
-  const valid = Number.isInteger(n) && n > 0 && n <= 1000
+  const valid = Number.isInteger(n) && n > 0 && n <= MAX_GRANT
 
   const grantMut = useMutation({
-    mutationFn: () => api.grantCredits(user.id, { amount: n, reason: reason.trim() || undefined }),
+    mutationFn: () =>
+      api.grantCredits(user.id, { amount: n, reason: reason.trim() || undefined, idempotencyKey }),
     onSuccess: () => { void qc.invalidateQueries({ queryKey: qk.users() }); onClose() },
   })
 
@@ -159,12 +184,12 @@ function GrantCreditsDialog({ user, onClose }: { user: UserRow; onClose: () => v
             id="grant-amount"
             type="number"
             min={1}
-            max={1000}
+            max={MAX_GRANT}
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             className="font-mono"
           />
-          <p className="text-xs text-muted-foreground">A positive whole number, 1–1000.</p>
+          <p className="text-xs text-muted-foreground">A positive whole number, 1–{MAX_GRANT}.</p>
         </div>
 
         <div className="space-y-1.5">
