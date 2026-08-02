@@ -53,12 +53,20 @@ the push one-way. Do it on a separate, deliberate day.
 ## Before the push
 
 1. **Make the App Store decision.** This is the actual gate and it has been open for 46 commits.
-   1.0.0 was `WAITING_FOR_REVIEW` when the spec probed it on 2026-07-31; **re-check the current state
-   rather than trusting that** — an approval or a rejection in the interim changes the answer
-   completely. The bind: `GET /roam/sample` **returns 200 on prod right now** and becomes a 404 the
-   moment this lands, and `GET /sample` (its 1.1 replacement) is **404 right now** and becomes the live
-   one. `app-store-submission.md` §12 has already been corrected to probe `/sample`; a reviewer holding
-   the 1.0.0 submission has not. Withdraw, wait it out, or accept the window — but decide it here.
+   ⚠ **1.0.0 was SUBMITTED 2026-07-28** (founder — the spec's "created 2026-06-10" is the version
+   *record*, not the submission, and reading it as the submission makes a normal wait look like a
+   stuck one). Five days in is an ordinary 2026 wait, which means **the window is live and short**:
+   expect a reviewer within days, not weeks. **Re-check the state before pushing** — an approval or a
+   rejection changes the answer completely.
+   The bind is bigger than one endpoint. `GET /roam/sample` **returns 200 on prod right now** and 404s
+   the moment this lands — but step 3 removed roam from the API *entirely*, so every `/roam/*` route
+   the shipped 1.0.0 build calls goes with it. **Pushing while 1.0.0 is in review hands the reviewer a
+   broken app**, not a stale sample link. `app-store-submission.md` §12 has already been corrected to
+   probe `/sample`; the reviewer holding the 1.0.0 submission has not.
+   ⚠ The release type is **MANUAL**, so an approval cannot publish itself — it lands in *Pending
+   Developer Release*. The exposure here is a REJECTION mid-review, never a surprise launch. That
+   asymmetry is why waiting is cheap: let 1.0.0 resolve either way, then push. (Two versions cannot be
+   in review at once, so it has to clear or be withdrawn before 1.0.1 goes anywhere regardless.)
 2. **Capture the rollback target.** `:latest` is reused for every build, so rollback is **by revision**,
    never by tag. Write this down somewhere outside the terminal:
    ```bash
