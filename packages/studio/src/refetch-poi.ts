@@ -43,7 +43,8 @@ async function main() {
   }
 
   announce({ tool: 'refetch-poi', blast: ['MUTATES DB'], apply })
-  await beginJob('refetch_facts', { dryRun: !apply, targetId: poiId })
+  // ⚠ See sweep-orphans: false ⇒ the run was canceled before this container started. Don't mutate.
+  if (!(await beginJob('refetch_facts', { dryRun: !apply, targetId: poiId }))) return
 
   const [poi] = await db
     .select({

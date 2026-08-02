@@ -37,7 +37,10 @@ async function main() {
 
   assertReady(['r2']) // listing needs R2 even for a dry run
   announce({ tool: 'sweep-orphans', blast: ['DELETES BYTES'], apply })
-  await beginJob('sweep_orphans', { dryRun: !apply, targetId: 'narration' })
+  // ⚠ beginJob returns false when the row is already terminal — an operator canceled between
+  // dispatch and container start. Return rather than delete bytes they said no to. Returning is
+  // safe: finishJob's own guard (audit #4) will not overwrite the 'canceled' status.
+  if (!(await beginJob('sweep_orphans', { dryRun: !apply, targetId: 'narration' }))) return
 
   const referenced = await narrationReferencedKeys()
   const listed = await listAudioKeys('narration/')

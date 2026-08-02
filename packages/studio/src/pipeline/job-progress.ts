@@ -60,10 +60,23 @@ const warn = (phase: string, e: unknown): void =>
   console.warn(`[job-progress] ${phase} write failed (non-fatal):`, e instanceof Error ? e.message : e)
 
 /** Flip the studio_jobs row to `running`, creating it if a v0 gcloud run didn't pre-create one.
- *  No-op without STUDIO_JOB_ID. Never throws. */
-export async function beginJob(kind: Kind, fields: BeginFields): Promise<void> {
+ *  No-op without STUDIO_JOB_ID. Never throws.
+ *
+ *  Returns FALSE when this run must not proceed — i.e. the row already sits in a TERMINAL status,
+ *  which in practice means an operator canceled it between dispatch and container start. Callers
+ *  must honour it; `runJob` does.
+ *
+ *  ⚠ Until 2026-08-02 this upsert set `status: 'running'` UNCONDITIONALLY, which made it the one
+ *  place in the system that could move a row OUT of a terminal state. The one-way latch is guarded
+ *  in four others (the admin's expireStuckJob + reconcile + cancel route, and finishJob's `audit #4`
+ *  WHERE) — but Cloud Run cancellation is not instant, so a task already scheduled can still start,
+ *  and this ran after it. The cancel was silently overwritten, the console showed the run live
+ *  again, `finishJob`'s guard then passed because the status was 'running', and the PAID run settled
+ *  normally. The operator had been told it was canceled. */
+export async function beginJob(kind: Kind, fields: BeginFields): Promise<boolean> {
   const id = jobId()
-  if (!id) return
+  // No job id ⇒ a plain local CLI run, not an admin dispatch: nothing to cancel, always proceed.
+  if (!id) return true
   currentKind = kind
   installLogCapture() // tee this run's stdout/stderr so finishJob can persist it on the row
   const row: NewStudioJob = {
@@ -94,10 +107,35 @@ export async function beginJob(kind: Kind, fields: BeginFields): Promise<void> {
           updatedAt: new Date(),
           cloudRunExecution: sql`coalesce(${studioJobs.cloudRunExecution}, ${row.cloudRunExecution})`,
         },
+        // The latch, mirroring finishJob's WHERE: never move a terminal row back to 'running'.
+        setWhere: inArray(studioJobs.status, ['queued', 'running']),
       })
   } catch (e) {
     warn('begin', e)
+    // A failed status write must not silently become a refusal to run — that would turn a transient
+    // DB blip into a skipped job. Proceed; the row is observability, not the work.
+    return true
   }
+
+  // Did we actually win the row? If setWhere blocked the update, the status is still terminal, and
+  // the only way to know is to read it back. Fail OPEN on a read error for the same reason as above.
+  try {
+    const [cur] = await db
+      .select({ status: studioJobs.status })
+      .from(studioJobs)
+      .where(eq(studioJobs.id, id))
+      .limit(1)
+    if (cur && cur.status !== 'running') {
+      console.warn(
+        `[job-progress] job ${id} is '${cur.status}', not 'running' — an operator settled it before ` +
+          'this container started. Exiting without doing the work.',
+      )
+      return false
+    }
+  } catch (e) {
+    warn('begin/verify', e)
+  }
+  return true
 }
 
 /** Settle the studio_jobs row terminal. No-op without STUDIO_JOB_ID. Never throws. */
@@ -155,7 +193,8 @@ export async function runJob(
   beginFields: BeginFields | null,
   fn: () => Promise<FinishOutcome | void>,
 ): Promise<void> {
-  if (beginFields) await beginJob(kind, beginFields)
+  // A canceled row means the operator already said no. Don't spend.
+  if (beginFields && !(await beginJob(kind, beginFields))) return
   try {
     const out = await fn()
     await finishJob(out ?? { ok: true })
