@@ -71,7 +71,18 @@ export function decodePolyline(encoded: string): [number, number][] {
   return out
 }
 
-async function computeRoute(waypoints: readonly Waypoint[], apiKey: string) {
+/** The Routes API response fields we consume — narrowed to the `X-Goog-FieldMask` below. */
+export interface RoutesApiRoute {
+  /** ⚠ OPTIONAL on purpose: proto3 JSON omits zero-valued fields. See `shapeRoute`. */
+  distanceMeters?: number
+  duration: string
+  polyline: { encodedPolyline: string }
+}
+
+/** Build the `computeRoutes` request body from ordered waypoints. Pure — extracted from the fetch so
+ *  it can be tested, because this is the function that decides WHICH points reach a BILLED endpoint.
+ *  First is origin, last is destination, everything between rides as `intermediates`. */
+export function buildRoutesRequestBody(waypoints: readonly Waypoint[]) {
   const toLoc = (w: { lat: number; lng: number }) => ({
     location: { latLng: { latitude: w.lat, longitude: w.lng } },
   })
@@ -81,7 +92,7 @@ async function computeRoute(waypoints: readonly Waypoint[], apiKey: string) {
   if (!origin || !destination || wp.length < 2) {
     throw new Error('need at least an origin and a destination (2+ waypoints)')
   }
-  const body = {
+  return {
     origin: toLoc(origin),
     destination: toLoc(destination),
     intermediates: wp.slice(1, -1).map(toLoc),
@@ -90,6 +101,10 @@ async function computeRoute(waypoints: readonly Waypoint[], apiKey: string) {
     // geofencing + the drive simulator, so prefer more points over fewer.
     polylineQuality: 'HIGH_QUALITY',
   }
+}
+
+async function computeRoute(waypoints: readonly Waypoint[], apiKey: string) {
+  const body = buildRoutesRequestBody(waypoints)
   const res = await fetch(ROUTES_URL, {
     method: 'POST',
     headers: {
@@ -133,6 +148,17 @@ export async function materializeRoute(
   apiKey: string = requireApiKey(),
 ): Promise<MaterializedRoute> {
   const route = await computeRoute(waypoints, apiKey)
+  return shapeRoute(route, waypoints, new Date().toISOString())
+}
+
+/** Shape a Routes API response into the frozen `MaterializedRoute`. Pure — extracted from the fetch
+ *  so the two parsing quirks below can be tested without network. `materializedAt` is passed in
+ *  rather than read from the clock, so the output is a function of its inputs. */
+export function shapeRoute(
+  route: RoutesApiRoute,
+  waypoints: readonly Waypoint[],
+  materializedAt: string,
+): MaterializedRoute {
   const polyline = decodePolyline(route.polyline.encodedPolyline)
   // duration comes back like "786s".
   const durationSeconds = Number.parseInt(route.duration.replace(/s$/, ''), 10)
@@ -148,11 +174,13 @@ export async function materializeRoute(
     durationSeconds,
     provenance: {
       source: 'google-routes-v2',
+      // ⚠ COPIED, not aliased: provenance is frozen into `drives.routeProvenance`, and holding the
+      // caller's array would let a later mutation rewrite the record of what was actually routed.
       waypoints: [...waypoints],
       distanceMeters,
       durationSeconds,
       pointCount: polyline.length,
-      materializedAt: new Date().toISOString(),
+      materializedAt,
     },
   }
 }
