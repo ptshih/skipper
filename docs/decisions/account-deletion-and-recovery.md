@@ -3,7 +3,8 @@
 > **Status:** DECIDED + BUILT 2026-07-15. In-app account deletion (App Store Guideline 5.1.1(v)) and
 > password reset now exist; both were absent, and either one alone would have blocked or broken a
 > public launch. Deletion is **immediate and total** (founder call): Better Auth's `deleteUser` with
-> `beforeDelete` → `purgeUserData` (`apps/api/src/account.ts`) hard-deleting the rider's `drives` +
+> `databaseHooks.user.delete.before` → `purgeUserData` (`apps/api/src/account.ts`) hard-deleting the
+> rider's `drives` +
 > `credit_entries`; UI at Settings → Delete account. Reset mails a one-time link via Resend
 > (`apps/api/src/email.ts`) that resolves on the WEB (`apps/site/src/pages/reset-password.astro`).
 > **Both are LIVE and proven E2E (2026-07-15).** Deletion: grant materialized → deleted →
@@ -26,10 +27,25 @@ cascade to ride**. Deleting the auth user alone would have silently orphaned eve
 row a rider ever had: personal data, retained forever, with no session left that could ever reach it.
 The guideline's whole point, inverted. So the purge is explicit.
 
-**`beforeDelete`, not `afterDelete`** — the order is load-bearing. Purge-then-delete converges: if the
+**BEFORE the delete, not after** — the order is load-bearing. Purge-then-delete converges: if the
 user delete fails after the purge, the rider still holds a session and can retry, and the re-run finds
-nothing left to remove. Delete-then-purge does not: a throw in `afterDelete` strands orphaned rows
+nothing left to remove. Delete-then-purge does not: a throw after the delete strands orphaned rows
 behind a user row that no longer exists.
+
+**⚠ AMENDED 2026-08-02 — which hook, and why it moved.** The purge originally hung off
+`user.deleteUser.beforeDelete`. That hook fires on the two SELF-SERVE routes only (verified in
+`better-auth/dist/api/routes/update-user.mjs`), so it silently missed every other way a user row can
+die — most importantly `POST /api/auth/admin/remove-user`, which is **mounted and live** because the
+admin plugin is registered unconditionally, and which calls `internalAdapter.deleteUser` directly.
+An admin-side deletion therefore produced exactly the orphan this record exists to prevent. It now
+hangs off **`databaseHooks.user.delete.before`**, which `internalAdapter.deleteUser` reaches via
+`deleteWithHooks(..., 'user')` — so every path is covered, including the anonymous plugin's link-time
+cleanup (a no-op there: INV-4 means no row references an anonymous id).
+
+That chain is a vendor *implementation detail*, not a public contract, so an upgrade could break
+erasure silently — with no error and nothing failing. `apps/api/test/auth-delete-hook.test.ts` pins it
+against the installed source. If that test ever fails, decide where the purge belongs now; do not
+relax it.
 
 ## The accepted cost: re-signup mints a fresh grant
 

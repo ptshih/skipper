@@ -64,17 +64,21 @@ product.** When a choice trades polish-for-the-builder against scale-for-a-marke
 - **An anonymous session is a REAL user row, DELETED at link — never upgraded.** The Better Auth anonymous
   plugin hard-deletes it on link-to-account and creates a fresh user (verified in the installed plugin
   source). So state that must survive signup lives **on the client** and is re-sent — never keyed on the
-  anonymous user id; never write `drives`/`credit_entries` against one (that internal delete does not run
-  `purgeUserData`); never bulk-delete anonymous rows (a reaper breaks conversations mid-flight). ⚠ On the
+  anonymous user id; never write `drives`/`credit_entries` against one; never bulk-delete anonymous rows
+  (a reaper breaks conversations mid-flight). ⚠ On the
   CLIENT, `session` truthiness is **not** "signed in" — an anonymous session is truthy; every check goes
   through the one helper excluding `isAnonymous`, mirroring the server's `tierOf`.
 - **In-app account deletion is REQUIRED and must PURGE, not just unlink** (App Store 5.1.1(v) — an app
   that creates accounts must delete them from inside; removing this = rejection). `drives.user_id` /
   `credit_entries.user_id` are SOFT refs across the auth pool boundary — **no FK, so no cascade**:
   Better Auth's `deleteUser` alone would orphan a rider's drives + ledger. `purgeUserData`
-  (`apps/api/src/account.ts`) runs in `beforeDelete` (NOT after — a post-delete throw strands rows behind
-  a vanished user with no session left to retry). Erasure is immediate + total; re-signup mints a fresh
-  grant, knowingly. See `docs/decisions/account-deletion-and-recovery.md`.
+  (`apps/api/src/account.ts`) runs in **`databaseHooks.user.delete.before`** — before, never after (a
+  post-delete throw strands rows behind a vanished user with no session left to retry) — and on the
+  DATABASE hook, not `deleteUser.beforeDelete`, because that one fires on the self-serve routes ONLY and
+  `POST /api/auth/admin/remove-user` (mounted, live) skipped it. That rests on a vendor implementation
+  detail, pinned by `apps/api/test/auth-delete-hook.test.ts` — don't delete that test. Erasure is
+  immediate + total; re-signup mints a fresh grant, knowingly. See
+  `docs/decisions/account-deletion-and-recovery.md`.
 - **Public read paths serve `released_at IS NOT NULL` only; `isAdmin` is the sole bypass.**
   `loadCorpusBySubjectIds`/`corpusForSelection` deliberately apply NO release filter and pass
   `includeStaged: true` — correct, since they resolve a FROZEN selection a rider paid a non-refundable

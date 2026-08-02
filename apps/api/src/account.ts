@@ -9,10 +9,17 @@
 // data the guideline says must go, minus any session that could ever reach it again. Hence an
 // explicit purge.
 //
-// ⚠ ORDER IS LOAD-BEARING: this runs in Better Auth's `beforeDelete`, not `afterDelete`. If the
-// purge lands and the user delete then fails, the rider still holds a session and can retry —
-// converging, because a re-run finds nothing left to delete. `afterDelete` inverts that: a throw
-// there strands orphaned rows behind a user row that no longer exists, unrecoverable.
+// ⚠ ORDER IS LOAD-BEARING: this runs BEFORE the user row is deleted, never after. If the purge
+// lands and the user delete then fails, the rider still holds a session and can retry — converging,
+// because a re-run finds nothing left to delete. Running after inverts that: a throw there strands
+// orphaned rows behind a user row that no longer exists, unrecoverable.
+//
+// ⚠ WHICH hook, and why it changed (2026-08-02). This used to hang off `user.deleteUser.beforeDelete`,
+// which fires on the two SELF-SERVE delete routes only. `POST /api/auth/admin/remove-user` — mounted
+// and live, because the admin plugin is registered unconditionally — went straight to
+// `internalAdapter.deleteUser` and skipped it, orphaning exactly the rows this file exists to remove.
+// It now hangs off `databaseHooks.user.delete.before`, which every delete path reaches. See
+// `./auth` for the full note and `../test/auth-delete-hook.test.ts` for the guard on that assumption.
 //
 // No R2 cleanup belongs here: audio is SHARED narration clips referenced by a drive, never
 // per-user bytes (docs/decisions/create-a-drive-architecture.md). A drive owns its selection

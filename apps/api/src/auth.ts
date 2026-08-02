@@ -246,14 +246,47 @@ function createAuth() {
         // 2026-07-15). The endpoint already sits behind a fresh session or a password re-entry
         // (Better Auth's sensitiveSessionMiddleware), which is the confirmation that matters; an
         // email round-trip would only add a second way to be locked out of your own erasure.
-        // beforeDelete (NOT afterDelete) — see ./account for why the order is load-bearing.
-        beforeDelete: async (user) => {
-          await purgeUserData(user.id)
-        },
+        //
+        // ⚠ THE PURGE IS NOT HERE ANY MORE. It moved to `databaseHooks.user.delete.before` below,
+        // because `deleteUser.beforeDelete` only fires on the two SELF-SERVE routes and silently
+        // skipped every other way a user row can die. See that hook for the whole story.
       },
     },
     databaseHooks: {
       user: {
+        // ERASURE LIVES HERE, not on `user.deleteUser.beforeDelete`, and the difference is a data bug.
+        //
+        // `deleteUser.beforeDelete` is invoked from exactly TWO places in the installed package — the
+        // self-serve `/delete-user` and its `/delete-user/callback` (verified in
+        // better-auth/dist/api/routes/update-user.mjs). Every OTHER way a user row dies goes straight
+        // through `internalAdapter.deleteUser` and never sees it:
+        //   • `POST /api/auth/admin/remove-user` — the admin plugin is mounted unconditionally below,
+        //     so this endpoint is LIVE on api.skipper.fm. It called `internalAdapter.deleteUser`
+        //     directly, which meant a deleted rider's `drives` and `credit_entries` were left behind a
+        //     vanished user id, forever — the exact orphan `purgeUserData` exists to prevent, because
+        //     those are soft refs across the auth-pool boundary with no FK and therefore no cascade.
+        //   • the anonymous plugin's link-time cleanup (see `anonymous()` below).
+        //
+        // A `databaseHooks` hook reaches all of them: `internalAdapter.deleteUser` calls
+        // `deleteWithHooks(where, 'user')`, which runs `hooks.user.delete.before` before the row goes
+        // (better-auth/dist/db/{internal-adapter,with-hooks}.mjs). That is an implementation detail of
+        // the vendor, so `apps/api/test/auth-delete-hook.test.ts` pins it against the installed source
+        // and fails loudly on an upgrade that changes it — do not delete that test.
+        //
+        // ⚠ Still BEFORE, never after: `./account` explains why the order is load-bearing (a post-delete
+        // throw strands rows behind a user with no session left to retry). Returning `false` here would
+        // ABORT the delete; we never do — erasure must not be blockable by a ledger hiccup.
+        //
+        // ⚠ It now also fires on the ANONYMOUS link-time delete, where it should find nothing: INV-4
+        // says no `drives`/`credit_entries` row may reference an anonymous id, and that holds
+        // structurally (POST /drives is tier-gated, and the signup grant skips anonymous). So this is a
+        // no-op batch on that path — and if it ever ISN'T, it deletes rows that were about to orphan
+        // permanently, which is the outcome we want either way.
+        delete: {
+          before: async (user) => {
+            await purgeUserData((user as { id: string }).id)
+          },
+        },
         create: {
           // Materialize the free allotment AT SIGNUP so a new account's balance is REAL the moment it
           // exists (founder call 2026-07-28). Before this it appeared only on first credit-relevant
@@ -266,8 +299,10 @@ function createAuth() {
           // plugin source, not assumed). Granting there would hand credits to an identity that cannot
           // spend them — `/drives*` is behind requireAccount — and then STRAND the grant when the row is
           // deleted, because `credit_entries.user_id` is a soft ref across the auth-pool boundary with no
-          // FK and no cascade, and the plugin's internal delete does not run `purgeUserData`. The real
-          // account created by the link gets its own grant through this same hook.
+          // FK and no cascade. (Since 2026-08-02 the delete hook above DOES reach that path, so such a
+          // grant would now be purged rather than stranded — but a credit that is minted only to be
+          // deleted is still pointless work, so the skip stays.) The real account created by the link
+          // gets its own grant through this same hook.
           //
           // This is ADDITIVE, not a replacement: `ensureFreeGrant` stays on its read/spend paths in
           // ./drives as the backstop. Both write the same `free:<userId>` idempotency key under
