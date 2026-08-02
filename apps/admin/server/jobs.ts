@@ -293,6 +293,16 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
 
 /** Trigger a skipper-studio execution with per-run arg + env overrides. Returns the execution's
  *  SHORT name (matches the Job's self-reported CLOUD_RUN_EXECUTION), or '' if unparseable. */
+/** Cloud Run definitively REFUSED the execution — a non-2xx from jobs:run. Nothing was created, so the
+ *  row is safe to settle 'failed' and the target is safe to unlock.
+ *
+ *  ⚠ Any OTHER throw (DNS, socket reset, a truncated body, a JSON parse error) is ambiguous: the
+ *  request may well have created an execution whose response we simply never read. Treating those the
+ *  same way marked a live paid run 'failed' with a NULL execution name, which released the in-flight
+ *  lock, left nothing for the reconcile to attach to, and told the operator it had not started — so the
+ *  obvious retry ran the same paid work a second time, concurrently. */
+export class TriggerRejected extends Error {}
+
 export async function runJob(args: string[], env: Record<string, string>): Promise<string> {
   const res = await fetch(`${jobBase()}:run`, {
     method: 'POST',
@@ -305,11 +315,19 @@ export async function runJob(args: string[], env: Record<string, string>): Promi
       },
     }),
   })
-  const json = (await res.json()) as {
-    metadata?: { name?: string }
-    error?: { message?: string }
+  // Read the body defensively: a non-2xx with an unparseable body is still a definite REFUSAL, and
+  // must not be reclassified as "we don't know" just because the error payload was malformed.
+  const raw = await res.text().catch(() => '')
+  let json: { metadata?: { name?: string }; error?: { message?: string } } = {}
+  try {
+    json = raw ? JSON.parse(raw) : {}
+  } catch {
+    if (!res.ok) throw new TriggerRejected(`jobs:run ${res.status}: ${raw.slice(0, 200)}`)
+    throw new Error(`jobs:run ${res.status}: unreadable response body`)
   }
-  if (!res.ok) throw new Error(`jobs:run ${res.status}: ${json.error?.message ?? JSON.stringify(json)}`)
+  if (!res.ok) {
+    throw new TriggerRejected(`jobs:run ${res.status}: ${json.error?.message ?? JSON.stringify(json)}`)
+  }
   // The LRO's metadata is the Execution being created; its name is the full resource path.
   return json.metadata?.name?.split('/').pop() ?? ''
 }

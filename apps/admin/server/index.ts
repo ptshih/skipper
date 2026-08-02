@@ -64,6 +64,7 @@ import {
   HttpError,
   jobExecutionLogsUrl,
   runJob,
+  TriggerRejected,
   type BuildResult,
   type ExecState,
   type JobKind,
@@ -898,7 +899,14 @@ const RECONCILE_AFTER_MS = 30_000
 // can NOT still be running — the job was killed. Force-fail it with NO API round-trip; this is the
 // backstop for a row the executionState reconcile can't settle (no/expired execution name, or a
 // row already >6h old which the list reconcile skips), so a stuck row stops blocking re-runs.
-const JOB_MAX_AGE_MS = 21_600_000 + 300_000
+// ⚠ ONE HOME. This mirrors cloudbuild.studio.yaml's `--task-timeout=21600`, and that value has already
+// been changed once (1h → 6h). If it is raised again and this copy is not, the backstop force-FAILS a
+// live, spending run five minutes past six hours — and because the in-flight lock only blocks
+// non-terminal rows, that also frees the target for a second, concurrent paid run. Set
+// STUDIO_TASK_TIMEOUT_SEC in the same place that sets --task-timeout; the literal is the fallback for
+// a deploy that has not been updated yet, not the source of truth.
+const TASK_TIMEOUT_SEC = Number(process.env.STUDIO_TASK_TIMEOUT_SEC) || 21_600
+const JOB_MAX_AGE_MS = TASK_TIMEOUT_SEC * 1000 + 300_000
 
 /** Force-fail a non-terminal studio_jobs row that has outlived the task-timeout. Pure age check (no
  *  Cloud Run API call), guarded so it never clobbers a concurrently-settled row. Returns true if
@@ -975,12 +983,27 @@ app.post('/admin/jobs/:id/cancel', async (c) => {
   if (TERMINAL.includes(job.status as (typeof TERMINAL)[number])) {
     return c.json({ error: 'conflict', message: `Run already ${job.status}.` }, 409)
   }
-  if (job.cloudRunExecution) {
-    try {
-      await cancelExecution(job.cloudRunExecution)
-    } catch (e) {
-      return c.json({ error: 'cancel_failed', message: e instanceof Error ? e.message : String(e) }, 502)
-    }
+  // ⚠ REFUSE rather than pretend. With no execution name there is nothing to ask Cloud Run to stop, and
+  // this used to skip the API call and stamp 'canceled' anyway — telling the operator a paid run had
+  // stopped when nothing had been told to stop, and releasing the in-flight lock so a replacement run
+  // could start alongside the one still going. The window is small (the name is backfilled at trigger,
+  // and by beginJob if that was lost) but it is exactly the moment an operator cancels: right after
+  // dispatch.
+  if (!job.cloudRunExecution) {
+    return c.json(
+      {
+        error: 'conflict',
+        message:
+          "This run hasn't reported its Cloud Run execution yet, so there is nothing to cancel — " +
+          'retry in a moment. (Cancelling now would mark it stopped without stopping it.)',
+      },
+      409,
+    )
+  }
+  try {
+    await cancelExecution(job.cloudRunExecution)
+  } catch (e) {
+    return c.json({ error: 'cancel_failed', message: e instanceof Error ? e.message : String(e) }, 502)
   }
   await db
     .update(studioJobs)
@@ -1065,12 +1088,29 @@ app.post('/admin/jobs', async (c) => {
   try {
     execShortName = await runJob(build.args, { STUDIO_JOB_ID: id, STUDIO_JOB_TRIGGERED_BY: triggeredBy })
   } catch (e) {
-    // The trigger failed — settle the row so it isn't a phantom 'queued'.
-    await db
-      .update(studioJobs)
-      .set({ status: 'failed', error: e instanceof Error ? e.message : String(e), endedAt: new Date() })
-      .where(eq(studioJobs.id, id))
-    return c.json({ error: 'trigger_failed', message: e instanceof Error ? e.message : String(e) }, 502)
+    const msg = e instanceof Error ? e.message : String(e)
+    if (e instanceof TriggerRejected) {
+      // Cloud Run definitively refused — nothing was created, so settle the row and free the target.
+      await db
+        .update(studioJobs)
+        .set({ status: 'failed', error: msg, endedAt: new Date() })
+        .where(and(eq(studioJobs.id, id), inArray(studioJobs.status, ['queued', 'running'])))
+      return c.json({ error: 'trigger_failed', message: msg }, 502)
+    }
+    // ⚠ AMBIGUOUS — leave it QUEUED. A network reset or an unreadable body means we never learned
+    // whether the execution was created; marking it 'failed' with a NULL execution name released the
+    // in-flight lock and told the operator nothing had started, so the natural retry ran the same PAID
+    // work again, alongside the first. Queued is the honest state: `beginJob` flips it to 'running'
+    // and backfills the execution name if it really did start, and `expireStuckJob` settles it if it
+    // did not. The target stays locked meanwhile, which is the safe direction.
+    console.error('[admin] jobs:run outcome unknown — leaving the row queued', id, e)
+    return c.json(
+      {
+        error: 'trigger_unknown',
+        message: `${msg} — the run may have started. It is left queued; the Jobs page will settle it either way.`,
+      },
+      502,
+    )
   }
   if (execShortName) {
     await db.update(studioJobs).set({ cloudRunExecution: execShortName }).where(eq(studioJobs.id, id))

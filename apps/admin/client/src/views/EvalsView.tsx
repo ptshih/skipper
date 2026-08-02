@@ -37,15 +37,26 @@ function RunScores({ r }: { r: RunEvent }) {
   )
 }
 
+// ⚠ "withheld" is GENERATION vocabulary and is FALSE for an offline audit. audit-corpus.ts re-scores
+// the EXISTING stored scripts read-only and reuses `withheld`/`shipped` purely to fit recordEvalRun's
+// shape — its own comment calls it "the audit's 'withheld'". Nothing was held back and nothing was
+// shipped by that run: the flagged clips are already synthesized, persisted, and (if their region is
+// released) publicly playable right now. Rendering them as "held back" describes a live production
+// defect as a defence that worked — the exact inversion an operator would act on.
+const isAudit = (kind: string) => kind === 'offline_audit'
+
 function EvalResultCell({ r }: { r: RunEvent }) {
   const withheld = r.withheld ?? 0
   if (withheld === 0) return <Badge variant="success">pass</Badge>
   const verdict = verdictOf(r)
+  const audit = isAudit(r.kind)
   return (
     <span className="flex items-center gap-2">
       <Badge variant={VERDICT_VARIANT[verdict]}>{verdict}</Badge>
       <span className="font-mono text-xs text-muted-foreground">
-        {r.shipped != null && r.total != null ? `${r.shipped}/${r.total} · ` : ''}{withheld} withheld
+        {audit
+          ? `${withheld} flagged${r.total != null ? ` of ${r.total}` : ''}`
+          : `${r.shipped != null && r.total != null ? `${r.shipped}/${r.total} · ` : ''}${withheld} withheld`}
       </span>
     </span>
   )
@@ -292,8 +303,20 @@ function EvalReport({ runId }: { runId: string }) {
         <SectionLabel>Eval report</SectionLabel>
         <DetailList>
           <DetailRow label="Clips">
-            {run.total} total · {run.shipped} shipped ·{' '}
-            <span className={cn(run.withheld > 0 && 'font-medium text-warning')}>{run.withheld} withheld</span>
+            {isAudit(run.kind) ? (
+              <>
+                {run.total} scored ·{' '}
+                <span className={cn(run.withheld > 0 && 'font-medium text-warning')}>
+                  {run.withheld} failing the gate
+                </span>{' '}
+                <span className="text-muted-foreground">— already live; nothing was withheld by this run</span>
+              </>
+            ) : (
+              <>
+                {run.total} total · {run.shipped} shipped ·{' '}
+                <span className={cn(run.withheld > 0 && 'font-medium text-warning')}>{run.withheld} withheld</span>
+              </>
+            )}
           </DetailRow>
           <DetailRow label="Scores" mono>
             g {fmtScore(run.grounding)} · tts {fmtScore(run.tts)} · div {fmtScore(run.diversity)}
@@ -311,7 +334,9 @@ function EvalReport({ runId }: { runId: string }) {
           {withheld.length > 0 && (
             <div className="space-y-2">
               <SectionLabel className="text-warning">
-                Withheld — {withheld.length} {withheld.length === 1 ? 'place' : 'places'} held back (gate)
+                {isAudit(run.kind)
+                  ? `Failing the gate — ${withheld.length} ${withheld.length === 1 ? 'place is' : 'places are'} already live and need a regen`
+                  : `Withheld — ${withheld.length} ${withheld.length === 1 ? 'place' : 'places'} held back (gate)`}
               </SectionLabel>
               <div className="space-y-3">{withheld.map((p) => <PlaceReport key={p.key} place={p} />)}</div>
             </div>

@@ -171,6 +171,31 @@ describe('buildJobArgs — numeric flag validation (the server is the trust boun
   })
 })
 
+describe('a trigger whose outcome is UNKNOWN must not free the target', () => {
+  const jobsSrc = readFileSync(join(import.meta.dir, 'jobs.ts'), 'utf8')
+  const indexSrc = readFileSync(join(import.meta.dir, 'index.ts'), 'utf8')
+
+  // runJob threw the same Error for "Cloud Run refused" and "we never read the response", and the
+  // route settled the row 'failed' either way — releasing the in-flight lock with a NULL execution
+  // name and telling the operator nothing had started. The obvious retry then ran the same PAID work
+  // a second time, concurrently with the first.
+  test('a definite non-2xx throws a distinct error type', () => {
+    expect(jobsSrc).toContain('export class TriggerRejected extends Error')
+    expect(jobsSrc).toContain('throw new TriggerRejected')
+  })
+
+  test('only a definite refusal settles the row failed; the ambiguous case stays queued', () => {
+    expect(indexSrc).toContain('if (e instanceof TriggerRejected)')
+    const from = indexSrc.indexOf('if (e instanceof TriggerRejected)')
+    const branch = indexSrc.slice(from, from + 1600)
+    expect(branch).toContain('trigger_unknown')
+    // everything after the refusal branch returns must not write a terminal status
+    const ambiguous = branch.slice(branch.indexOf('AMBIGUOUS'))
+    expect(ambiguous).not.toContain("status: 'failed'")
+    expect(ambiguous.length).toBeGreaterThan(0)
+  })
+})
+
 describe('buildJobArgs — targetId is per-region, aligned with the studio beginJob (audit #9 / #11)', () => {
   // The in-flight lock + the studio_jobs_active_target_uq unique index key on targetId. A constant
   // per-kind targetId would over-block two REGIONS (a spurious 409); region-specific keying lets them
