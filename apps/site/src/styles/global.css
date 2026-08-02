@@ -20,6 +20,11 @@ html {
   -webkit-text-size-adjust: 100%; /* iOS Safari: don't inflate text in landscape */
   -webkit-tap-highlight-color: transparent; /* iOS Safari: no grey flash on tap (we use :active) */
   scroll-behavior: smooth;
+  /* The nav is position:sticky at 4rem, so a bare #anchor jump parks the target's kicker and <h2>
+     UNDER it — i.e. the heading you navigated to is exactly what gets covered. This offsets every
+     in-page landing (nav links, footer /#how links, and a shared deep link) by the bar plus a
+     breath. WCAG 2.4.11 Focus Not Obscured, applied to navigation targets. */
+  scroll-padding-top: calc(4rem + var(--space-lg));
 }
 
 /* iOS Safari strips its own control chrome (the inner shadow on inputs, the
@@ -86,6 +91,45 @@ a:hover {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
   border-radius: 4px;
+}
+
+/* ── Accessibility utilities ────────────────────────────────────────────── */
+
+/* Available to AT, invisible on screen. The clip-path/1px pattern rather than
+   display:none or visibility:hidden, both of which remove it from the a11y tree too. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  clip-path: inset(50%);
+  border: 0;
+}
+
+/* Skip link — WCAG 2.4.1 Bypass Blocks. Every page renders a header before <main>
+   (the landing nav's 5 links, the legal pages' back-link), and a keyboard-only user
+   had no way past it. Hidden until focused, then lands over the nav. */
+.skip-link {
+  position: absolute;
+  left: var(--gutter);
+  top: 0;
+  z-index: 100; /* over the sticky nav (50) and the sticky CTA (60) */
+  transform: translateY(-150%);
+  padding: var(--space-sm) var(--space-lg);
+  background: var(--surface-raised);
+  color: var(--ink);
+  border: var(--border-keyline) solid var(--accent);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--fs-label);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.skip-link:focus-visible {
+  transform: translateY(var(--space-sm));
 }
 
 /* ── Type scale ─────────────────────────────────────────────────────────── */

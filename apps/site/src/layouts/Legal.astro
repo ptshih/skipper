@@ -38,7 +38,7 @@ const { heading, kicker, description, updated } = Astro.props
     </div>
   </header>
 
-  <main class="section legaldoc">
+  <main id="main" class="section legaldoc">
     <div class="container">
       <div class="prose">
         <span class="kicker">{kicker}</span>
@@ -146,8 +146,12 @@ const { heading, kicker, description, updated } = Astro.props
   .legaldoc__body :global(li) {
     margin-bottom: var(--space-sm);
   }
+  /* ⚠ Was --track-inactive (#3A4A3E), which lands at 1.78:1 on --surface and 1.56:1 inside the
+     raised summary box — the bullets were effectively invisible, so the credit rules and the
+     driving-safety obligations read as loose paragraphs. Markers are structural, not ornamental,
+     so they owe WCAG 1.4.11's 3:1. --ink-faint clears it on both surfaces. */
   .legaldoc__body :global(li::marker) {
-    color: var(--track-inactive);
+    color: var(--ink-faint);
   }
   .legaldoc__body :global(strong) {
     color: var(--ink);

@@ -140,6 +140,10 @@ const ogImage = new URL(image, Astro.site)
          stylesheet, nothing cross-origin left to block first paint. -->
   </head>
   <body>
+    <!-- WCAG 2.4.1 Bypass Blocks. Every page puts a header before <main> — the landing nav's five
+         links, the legal pages' back-link — and a keyboard-only user had no way past it. Every
+         <main> on the site carries id="main"; if you add a page, it needs one too. -->
+    <a class="skip-link" href="#main">Skip to content</a>
     <slot />
   </body>
 </html>

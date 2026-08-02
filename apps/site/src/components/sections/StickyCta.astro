@@ -10,7 +10,11 @@
 import Icon from '../Icon.astro'
 ---
 
-<div class="stickycta" data-sticky-cta aria-hidden="true">
+<!-- ⚠ Starts hidden AND inert. The bar is never `display:none` — it is translated off-screen at
+     opacity 0 — so without `inert` its <button> stays in the tab order inside an aria-hidden
+     container: focus lands on a control nobody can see or hear. Both attributes are toggled
+     together in the script below; changing one without the other reintroduces that. -->
+<div class="stickycta" data-sticky-cta aria-hidden="true" inert>
   <div class="stickycta__inner">
     <span class="stickycta__copy">
       <span class="stickycta__title">Hear the Skipper</span>
@@ -103,7 +107,14 @@ import Icon from '../Icon.astro'
   if (bar && hero) {
     let pastHero = false
     let atClosing = false
-    const update = () => bar.classList.toggle('is-visible', pastHero && !atClosing)
+    const update = () => {
+      const shown = pastHero && !atClosing
+      bar.classList.toggle('is-visible', shown)
+      // Keep the accessibility tree and the tab order in step with the transform. See the
+      // comment on the element: hidden here means off-screen, not display:none.
+      bar.toggleAttribute('inert', !shown)
+      bar.setAttribute('aria-hidden', String(!shown))
+    }
 
     new IntersectionObserver(
       ([e]) => {

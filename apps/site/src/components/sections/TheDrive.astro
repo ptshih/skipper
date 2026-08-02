@@ -88,6 +88,7 @@ const pins = [
                     class="drive__stop drive__stop--play"
                     type="button"
                     data-clip={s.clip}
+                    aria-pressed="false"
                     aria-label={`Hear a few seconds of the Skipper at ${s.name}`}
                   >
                     <span class="drive__pip" style={`--tone:${toneVar[s.tone]}`}>{s.n}</span>
@@ -336,6 +337,16 @@ const pins = [
       const pa = btn.querySelector<HTMLElement>('[data-ic-pause]')
       if (pi) pi.hidden = playing
       if (pa) pa.hidden = !playing
+      // The row highlight and the glyph flip are the only feedback that anything is happening, and
+      // both are hidden from AT (a CSS class and an aria-hidden span). Without this the button
+      // reads identically before and after activating it, so pausing is indistinguishable from
+      // playing a second time. The name carries the state because the icon cannot.
+      btn.setAttribute('aria-pressed', String(playing))
+      const stop = btn.querySelector<HTMLElement>('.drive__stopname')?.textContent?.trim() ?? 'this stop'
+      btn.setAttribute(
+        'aria-label',
+        playing ? `Stop the sample at ${stop}` : `Hear a few seconds of the Skipper at ${stop}`
+      )
     }
 
     rows.forEach((btn) => {

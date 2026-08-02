@@ -51,19 +51,40 @@ const HERO_STOP = 'Emerald Bay overlook'
     <div class="hero__player">
       <figure class="player framed" id="hero-player" data-hero-player aria-label="Listen to a sample from the Skipper">
         <figcaption class="player__head">
-          <span class="player__state" data-state>Sample clip</span>
+          <!-- aria-live: this readout is the ONLY signal that play/pause/ended happened. Sighted
+               users get the icon flip; without this, AT users got nothing at all. -->
+          <span class="player__state" data-state aria-live="polite">Sample clip</span>
           <span class="player__stop">{HERO_STOP}</span>
         </figcaption>
 
         <div class="player__body">
-          <button class="disc" data-play type="button" aria-label="Play the Emerald Bay sample from the Skipper">
+          <button
+            class="disc"
+            data-play
+            type="button"
+            aria-pressed="false"
+            aria-label="Play the Emerald Bay sample from the Skipper"
+          >
             <span class="disc__icon" data-icon-play><Icon name="play" size={34} /></span>
             <span class="disc__icon disc__icon--pause" data-icon-pause hidden><Icon name="pause" size={32} /></span>
           </button>
 
           <div class="player__meter">
             <p class="player__label">Hear the Skipper</p>
-            <div class="scrub" data-scrub>
+            <!-- A real seek control, so it owes a real role. It was a bare <div> with a click
+                 handler: mouse users could scrub, keyboard users had no way to reach it and AT
+                 could not see it at all. The <audio> has no `controls`, so there is no fallback. -->
+            <div
+              class="scrub"
+              data-scrub
+              role="slider"
+              tabindex="0"
+              aria-label="Seek within the sample"
+              aria-valuemin="0"
+              aria-valuemax="0"
+              aria-valuenow="0"
+              aria-valuetext="0:00"
+            >
               <span class="scrub__fill" data-scrub-fill></span>
               <span class="scrub__thumb" data-scrub-thumb></span>
             </div>
@@ -338,23 +359,40 @@ const HERO_STOP = 'Emerald Bay overlook'
 
     audio.addEventListener('error', warmUp)
     // metadata never loads if the file is missing on a static host
+    // Keep the slider's reported value in step with playback. Sighted users read the fill and the
+    // mm:ss pair; without this the same information reaches AT as nothing at all.
+    const syncSlider = () => {
+      if (!audio.duration || !isFinite(audio.duration)) return
+      scrub.setAttribute('aria-valuemax', String(Math.round(audio.duration)))
+      scrub.setAttribute('aria-valuenow', String(Math.round(audio.currentTime)))
+      scrub.setAttribute('aria-valuetext', `${fmt(audio.currentTime)} of ${fmt(audio.duration)}`)
+    }
+
     audio.addEventListener('loadedmetadata', () => {
       if (audio.duration && isFinite(audio.duration)) durEl.textContent = fmt(audio.duration)
+      syncSlider()
     })
     audio.addEventListener('timeupdate', () => {
       curEl.textContent = fmt(audio.currentTime)
       if (audio.duration) setProgress(audio.currentTime / audio.duration)
+      syncSlider()
     })
     audio.addEventListener('play', () => {
       iconPlay.hidden = true
       iconPause.hidden = false
       stateEl.textContent = 'NOW PLAYING'
+      // The label and pressed state must move with the icons — otherwise the button still
+      // announces "Play…" while it is playing, and pressing it to stop reads as pressing play twice.
+      playBtn.setAttribute('aria-pressed', 'true')
+      playBtn.setAttribute('aria-label', 'Pause the Emerald Bay sample from the Skipper')
       setCtaPlaying(true)
     })
     audio.addEventListener('pause', () => {
       iconPlay.hidden = false
       iconPause.hidden = true
       if (!audio.ended) stateEl.textContent = 'PAUSED'
+      playBtn.setAttribute('aria-pressed', 'false')
+      playBtn.setAttribute('aria-label', 'Play the Emerald Bay sample from the Skipper')
       setCtaPlaying(false)
     })
     audio.addEventListener('ended', () => {
@@ -366,21 +404,29 @@ const HERO_STOP = 'Emerald Bay overlook'
 
     playBtn.addEventListener('click', togglePlay)
 
+    // ⚠ An explicit `behavior` OVERRIDES the CSS `scroll-behavior: auto` that global.css sets under
+    // prefers-reduced-motion — the reduced-motion reset there cannot reach a JS-specified behavior.
+    // So the one visitor who asked not to be scrolled was the one getting scrolled. Query live
+    // rather than caching: the OS setting can change while the page is open.
+    const revealPlayer = () =>
+      root.scrollIntoView({
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+        block: 'center',
+      })
+
     // The copy-column CTA toggles the same clip. On a phone the player sits below
     // the fold of the copy, so starting playback also brings the placard into view.
     ctaBtn?.addEventListener('click', () => {
       const wasPaused = audio.paused
       togglePlay()
-      if (wasPaused && window.innerWidth < 992) {
-        root.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      }
+      if (wasPaused && window.innerWidth < 992) revealPlayer()
     })
 
     // Cross-component trigger (the sticky mobile bar dispatches this): always
     // PLAY (never toggle to pause) and reveal the placard.
     document.addEventListener('skipper:play-hero', () => {
       if (available && audio.paused) togglePlay()
-      root.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      revealPlayer()
     })
 
     // scrub-to-seek
@@ -388,6 +434,42 @@ const HERO_STOP = 'Emerald Bay overlook'
       if (!available || !audio.duration) return
       const r = scrub.getBoundingClientRect()
       audio.currentTime = ((e.clientX - r.left) / r.width) * audio.duration
+      syncSlider()
+    })
+
+    // …and the same seek from the keyboard. Standard slider keys; without these the control is
+    // reachable by Tab (role=slider, tabindex=0) but does nothing, which is worse than absent.
+    scrub.addEventListener('keydown', (e) => {
+      if (!available || !audio.duration) return
+      const STEP = 5
+      const d = audio.duration
+      let next: number | null = null
+      switch (e.key) {
+        case 'ArrowLeft':
+        case 'ArrowDown':
+          next = audio.currentTime - STEP
+          break
+        case 'ArrowRight':
+        case 'ArrowUp':
+          next = audio.currentTime + STEP
+          break
+        case 'Home':
+          next = 0
+          break
+        case 'End':
+          next = d
+          break
+        case ' ':
+        case 'Enter':
+          e.preventDefault()
+          togglePlay()
+          return
+        default:
+          return
+      }
+      e.preventDefault()
+      audio.currentTime = Math.min(Math.max(next, 0), d)
+      syncSlider()
     })
 
     // The initial 404 (no clip dropped in yet) can fire its `error` before this

@@ -11,9 +11,13 @@ import Icon from '../components/Icon.astro'
   description="Looks like we’ve drifted off the route. Head back to the trailhead — Skipper is a narrated driving tour for Lake Tahoe, coming soon to iOS."
   noindex={true}
 >
-  <main class="lost">
-    <p class="lost__code">404</p>
-    <p class="lost__line">Looks like we’ve drifted off the route, folks.</p>
+  <main id="main" class="lost">
+    <!-- The page shipped with NO heading at all, so pressing H / opening the rotor on a mistyped
+         skipper.fm URL returned nothing and a screen-reader user had to read linearly to find out
+         they were on an error page. The numeral carries the meaning visually; the h1 carries it
+         for AT, which is why the visible "404" is hidden from the tree rather than read twice. -->
+    <p class="lost__code" aria-hidden="true">404</p>
+    <h1 class="lost__line">404 — looks like we’ve drifted off the route, folks.</h1>
     <a class="btn btn--secondary" href="/">
       <Icon name="arrowRight" size={18} /> Back to the trailhead
     </a>
