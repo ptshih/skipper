@@ -33,6 +33,7 @@ import { voice } from './voice'
  *  `needsAccount` — the create (or the propose, until 8a moves `requireAccount`) 401'd. A STATE OF
  *    THIS CARD, never `<AccountGate>`: that is a whole `<Screen>`, and mounting it unmounts home,
  *    which holds THE ONLY COPY of the transcript (D10 — nothing persists it, here or on the server).
+ *    With a proposal in hand it swaps ONLY the CTA group; the drive stays drawn behind the ask.
  *  `creating` — `POST /drives` in flight.
  *  `made` — the drive exists; the credit is spent and must never be spent twice from this card.
  *  `error` — propose or create failed; `errorMessage` carries the server's own words when it had any. */
@@ -67,6 +68,13 @@ export interface PreviewCardProps {
    *  omitted, and nothing in step 7 may occupy this space — 8a drops a transport in here without
    *  touching any other state of this card. */
   previewClip?: ReactNode
+  // ⚠ NO `clipActive` HERE, DELIBERATELY — and it was added and removed on 2026-08-03, so don't
+  // re-add it. `DriveMap` takes one (the two DRIVE surfaces pass it, and there it dims a live amber
+  // that would otherwise glow beside the NOW sheet). This card's map has no amber left to dim: the
+  // halo is suppressed outright on a puck-less map, so §8 is already satisfied and the destination
+  // pin is a flat FILL. Dimming that fill to `trackInactive` while a clip plays would tint it the
+  // SAME colour as the untraveled route line and the destination would vanish into the road —
+  // trading a compliance win the card already has for a legibility loss it doesn't need.
   errorMessage?: string
   ctaLabel: string
   onMake: () => void
@@ -99,6 +107,14 @@ export function PreviewCard({
 
   // The pins: start, every via midpoint, and — unless this is a loop — the end.
   //
+  // ⚠ THE STATES ARE NOT DRIVE PROGRESS. This route has none: nothing has been played, nothing is
+  // "now playing". Until 2026-08-03 this borrowed `upcoming` for the start (a 12pt disc filled with
+  // the basemap's own colour — a hole, not a marker, so the card never read A→B at a glance) and
+  // `active` for the end AND every via (a 22pt amber dot inside a glowing halo — so the map glowed
+  // amber beside a CTA already wearing the one glow §8 allows, twice over with a via). Now: pine
+  // `endpoint` start, quiet vias, and ONE amber destination — amber as a flat FILL, which §4 permits
+  // and §8 does not count, because DriveMap suppresses the halo on a puck-less map.
+  //
   // ⚠ A LOOP IS `startId === endId`, NOT "it has a via". A loop echoes its start back as the end, so
   // pinning both would stack two markers on one spot; its turnaround is the LAST via. But keying that
   // on `via.length` (as this did until 2026-08-03) silently dropped the DESTINATION pin from every
@@ -115,14 +131,17 @@ export function PreviewCard({
         name: cleanPlaceName(proposal.start.name),
         lat: proposal.start.lat,
         lng: proposal.start.lng,
-        state: 'upcoming',
+        state: 'endpoint',
       },
       ...viaShown.map((v, i) => ({
         seq: i + 1,
         name: cleanPlaceName(v.name),
         lat: v.lat,
         lng: v.lng,
-        state: 'active' as const,
+        // A midpoint is a waypoint, not a destination — it stays quiet so the one amber pin means
+        // exactly one thing. (On a LOOP the last via IS the turnaround, and it stays quiet too: a
+        // round trip's one landmark is where it starts, which is already pinned pine.)
+        state: 'upcoming' as const,
       })),
     ]
     if (isLoop) return pins
@@ -133,6 +152,8 @@ export function PreviewCard({
         name: cleanPlaceName(proposal.end.name),
         lat: proposal.end.lat,
         lng: proposal.end.lng,
+        // The destination keeps `active` — the amber FILL is the "you're headed here" mark, and it
+        // is the only one on the map. (See the states note above for why that isn't §8 amber.)
         state: 'active',
       },
     ]
@@ -144,23 +165,34 @@ export function PreviewCard({
     </Text>
   )
 
+  // The gate's CTA group — the sign-up ask in place of the "make this drive" ask. Rendered either
+  // as the WHOLE card (below, when there is no drive to show) or swapped in for the CTA group at the
+  // bottom of a fully drawn card, which is the point: a wall that replaces the map, the route line,
+  // the badges and the taste clip is asking the rider to sign up for something they can no longer
+  // see — and dismissing it remounts the native MapView from scratch. Same group, two hosts.
+  const gateGroup = (glow: boolean) => (
+    <View style={styles.ctaGroup}>
+      <Text variant="body" color="inkDim">
+        {voice.gate.body}
+      </Text>
+      <Button icon="ticket" title={voice.gate.action} onPress={onSignUp} glow={glow} />
+      <Button variant="ghost" title={voice.gate.keepBrowsing} onPress={onDismissGate} />
+    </View>
+  )
+
   // The account wall, hoisted ABOVE the no-proposal early return on purpose. A 401 arrives from
   // `/drives/propose` — i.e. BEFORE there is a proposal to render — so with this branch left below,
   // `needsAccount` fell into the propose-FAILED case and showed "couldn't plot that one" plus a ghost,
   // with `onSignUp` unreachable. There is no live defect today only because the screen happens to
   // render its own gate for that case; the trap survives into step 8a, where this card becomes the
   // wall. Handled first, it is correct with or without a proposal.
-  if (state === 'needsAccount') {
+  // ⚠ `&& !proposal` is the ONLY narrowing that may ever be added here: with a drive drawn, the wall
+  // is a CTA swap further down, not a replacement card.
+  if (state === 'needsAccount' && !proposal) {
     return (
       <Card style={styles.card}>
         {kicker}
-        <View style={styles.ctaGroup}>
-          <Text variant="body" color="inkDim">
-            {voice.gate.body}
-          </Text>
-          <Button icon="ticket" title={voice.gate.action} onPress={onSignUp} />
-          <Button variant="ghost" title={voice.gate.keepBrowsing} onPress={onDismissGate} />
-        </View>
+        {gateGroup(true)}
       </Card>
     )
   }
@@ -211,13 +243,17 @@ export function PreviewCard({
       {mapEnabled ? (
         <View style={[styles.mapFrame, { borderColor: theme.colors.rule }]}>
           {/* hidePuck: there is no live position here, and a stray amber puck would spend the
-              screen's one-amber budget on a card that isn't even a drive yet. */}
+              screen's one-amber budget on a card that isn't even a drive yet (it also drops the
+              marker halo — see DriveMap). `locked`: this map sits INSIDE the conversation's scroll
+              view, so it must not eat a vertical drag or wander off-frame with `hideRecenter` set
+              and no way back. */}
           <DriveMap
             polyline={proposal.polyline}
             stops={endpoints}
             progress={mapProgress}
             hideRecenter
             hidePuck
+            locked
           />
         </View>
       ) : null}
@@ -299,7 +335,10 @@ export function PreviewCard({
         </Text>
       ) : null}
 
-      {spent ? (
+      {state === 'needsAccount' ? (
+        // The wall, with the drive it is selling still on screen above it. Only the ASK changes.
+        gateGroup(mapEnabled)
+      ) : spent ? (
         // The credit is gone. Offer the drive, never a second charged tap.
         <View style={styles.ctaGroup}>
           <Button variant="ghost" icon="car" title={voice.proposal.openMade} onPress={onOpenDrive} />

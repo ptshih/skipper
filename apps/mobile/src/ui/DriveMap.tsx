@@ -1,6 +1,6 @@
 // The live-drive MAP — a tinted Google basemap (Trailhead 89, day/dusk) with our
 // brand-owned overlay drawn on top: the route line (traveled pine / untraveled dashed
-// tan), the stop markers (passed / upcoming / active), and the live-position puck. The
+// tan), the stop markers (passed / upcoming / active / endpoint), and the live-position puck. The
 // puck rides the ROUTE at `progress` — the same 0..1 the car token uses on `RouteTrack`
 // — so it's mode-agnostic (live GPS, sim, and the couch preview all drive `progress`)
 // and always sits on the road, never in the gutter.
@@ -29,13 +29,25 @@ import { useReducedMotion, useTheme } from '../theme'
 const STATIC_ROUTE_DASH = [6, 6]
 const STATIC_ROUTE_W = 5
 
-/** A map stop = a place to pin, with its current drive state (mirrors the StopList rows). */
+// THE ENDPOINT PIN IS PINE AND BIGGER THAN AN UPCOMING ONE, because on a static overview it is the
+// mark the whole card is read through. `upcoming` is a 12pt disc filled with `surface` — i.e. the
+// dusk basemap itself — which reads as a HOLE at card size, not a marker. A filled pine disc with a
+// surface ring separates from the trail at a glance (DESIGN §2.1) and spends none of the §8 amber.
+const ENDPOINT_DOT = 18
+
+/** A map stop = a place to pin, with its state on the surface drawing it.
+ *
+ *  ⚠ `passed`/`active`/`upcoming` are DRIVE-PROGRESS states — `active` means "now playing", NOT
+ *  "destination". `endpoint` exists because the proposal card and the detail preview have no
+ *  progress at all: it means "a place this route begins or ends at", and borrowing `active` for it
+ *  (as PreviewCard did until 2026-08-03) put a glowing amber halo on a surface whose CTA already
+ *  owns the screen's one amber — twice over on a route with a via. */
 export interface DriveMapStop {
   seq: number
   name: string
   lat: number
   lng: number
-  state: 'passed' | 'active' | 'upcoming'
+  state: 'passed' | 'active' | 'upcoming' | 'endpoint'
 }
 
 export interface DriveMapProps {
@@ -56,8 +68,19 @@ export interface DriveMapProps {
   onPressStop?: (seq: number) => void
   /** Drop the live-position puck (+ the traveled/untraveled split): the detail mini-preview has no
    *  live position — it's a static route + pins with the active stop highlighted, driven only by the
-   *  passed-in `progress` (held at 0). The in-drive player leaves this off so the puck rides. */
+   *  passed-in `progress` (held at 0). The in-drive player leaves this off so the puck rides.
+   *  ⚠ Also suppresses the active marker's amber halo: a surface with no live position has no "now
+   *  playing" to glow about, and its host (the proposal card's CTA) is already spending the screen's
+   *  one moving/glowing amber (DESIGN §8). */
   hidePuck?: boolean
+  /** Freeze the camera — no pan, no zoom. For a map embedded in a SCROLLING page (the proposal
+   *  card), where it is a picture, not a control: at RN's defaults the 200pt full-width MapView eats
+   *  any vertical drag that starts on it, so the conversation will not scroll past the card. Worse,
+   *  a pan drops follow mode, and that surface passes `hideRecenter` while its `progress` never
+   *  ticks — so the camera listener below never re-frames and the route goes off-screen for good.
+   *  ⚠ NOT keyed on `hidePuck`: the drive-detail map is also puck-less but is FULL-SCREEN, where
+   *  panning to browse pins + the "fit the whole drive" chip are the point. */
+  locked?: boolean
 }
 
 
@@ -73,6 +96,7 @@ function DriveMapBase({
   recenterBottom,
   onPressStop,
   hidePuck,
+  locked,
 }: DriveMapProps) {
   const { colors, isDark } = useTheme()
   const reducedMotion = useReducedMotion()
@@ -228,6 +252,9 @@ function DriveMapBase({
         {...baseMapProps(isDark)}
         style={styles.fill}
         initialRegion={routeRegion}
+        // See `locked` — a preview map inside a scroll view is a picture, not a control.
+        scrollEnabled={!locked}
+        zoomEnabled={!locked}
         onPanDrag={() => following && setFollowing(false)}
         // ⚠ LABELLED BECAUSE THE NATIVE VIEW NAMES ITSELF BADLY. Observed on device 2026-08-03: the
         // Google Maps iOS view surfaces to VoiceOver as a **slider with no label** — the single
@@ -254,10 +281,12 @@ function DriveMapBase({
           <Polyline coordinates={traveled} strokeColor={colors.trackActive} strokeWidth={5} />
         ) : null}
 
-        {/* Stop markers — passed (filled pine), upcoming (hollow), active (amber, larger). */}
+        {/* Stop markers — passed (filled pine), upcoming (hollow), endpoint (filled pine, larger),
+            active (amber, larger, haloed only where there is a live position to have). */}
         {stops.map((s) => {
           const active = s.state === 'active'
           const passed = s.state === 'passed'
+          const endpoint = s.state === 'endpoint'
           return (
             <Marker
               // Key on seq+state: with tracksViewChanges=false the native bitmap is snapshotted ONCE,
@@ -277,7 +306,7 @@ function DriveMapBase({
               }
             >
               <View style={styles.markerBox}>
-                {active ? (
+                {active && !hidePuck ? (
                   <View
                     style={[
                       styles.activeHalo,
@@ -297,13 +326,22 @@ function DriveMapBase({
                           borderColor: colors.surface,
                           borderWidth: 3,
                         }
-                      : passed
-                        ? { backgroundColor: colors.trackActive }
-                        : {
-                            backgroundColor: colors.surface,
-                            borderColor: colors.trackInactive,
+                      : endpoint
+                        ? {
+                            width: ENDPOINT_DOT,
+                            height: ENDPOINT_DOT,
+                            borderRadius: ENDPOINT_DOT / 2,
+                            backgroundColor: colors.trackActive,
+                            borderColor: colors.surface,
                             borderWidth: 2,
-                          },
+                          }
+                        : passed
+                          ? { backgroundColor: colors.trackActive }
+                          : {
+                              backgroundColor: colors.surface,
+                              borderColor: colors.trackInactive,
+                              borderWidth: 2,
+                            },
                   ]}
                 >
                   {active ? (

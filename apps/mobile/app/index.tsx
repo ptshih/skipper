@@ -354,6 +354,24 @@ export default function HomeScreen() {
   // Blur, not unmount — home stays mounted under a push (that is what keeps the transcript alive).
   useFocusEffect(useCallback(() => () => preview.stop(), [preview.stop]))
 
+  // The first clip of the conversation starting SHRINKS the scroll viewport: `clipBar` appears in
+  // the footer and takes ~80pt off the bottom of the ScrollView. That is a LAYOUT change and not a
+  // content change, so ConversationScreen's `onContentSizeChange` never fires — nothing scrolls, and
+  // the card's "Make this drive" CTA plus the disclosure line under it slide under the fold at the
+  // exact moment the rider is being sold (confirmed on device). `scrollSignal` is the sanctioned way
+  // to ask for the re-pin: it overrides where the rider had scrolled to, which is only ever allowed
+  // for an action the RIDER took, and tapping the play disc is one.
+  //
+  // ⚠ EDGE-TRIGGERED (null → non-null), never "a clip is loaded". The bar mounts once and stays for
+  // the rest of the conversation, so a later tap costs no height and must not yank back a rider who
+  // deliberately scrolled up mid-clip — the one thing ConversationScreen's pin rule exists to stop.
+  const clipBarShownRef = useRef(false)
+  useEffect(() => {
+    const shown = preview.activeCardId != null
+    if (shown && !clipBarShownRef.current) bumpScroll()
+    clipBarShownRef.current = shown
+  }, [bumpScroll, preview.activeCardId])
+
   // Self-heal on the offline→online edge: the loads that failed out here re-run the moment the bars
   // come back, so a rider who drives back into signal never has to know to tap the retry. Guarded on
   // the TRANSITION (not on `!isOffline`) so it never doubles up with the focus load above.
@@ -390,6 +408,36 @@ export default function HomeScreen() {
     setCards((cs) => cs.map((c) => (c.id === id ? { ...c, ...patch } : c)))
   }, [])
 
+  // Coming back from sign-up UNWALLS the cards the rider was walled on. Nothing else did: the focus
+  // load re-reads the balance and the drives list, and a card patched to `needsAccount` by the 401
+  // stayed there — so the only way back to a drive the rider had already agreed to was the "Keep
+  // browsing" ghost, a label that reads as "abandon this one", not "here is your drive again".
+  //
+  // ⚠ THIS RESTORES THE CARD; IT NEVER FIRES THE CREATE. `POST /drives` spends a NON-REFUNDABLE
+  // credit, so the rider taps "Make this drive" once more, on purpose — the same no-auto-fire rule
+  // this file's header states and `onSignUp` restates. `signedIn` (INV-9), never `!!session`: an
+  // anonymous session is truthy and gets walled by the very same 401.
+  //
+  // ⚠ A THIRD focus effect rather than a `useEffect` on `signedIn`, and it covers strictly more:
+  // useFocusEffect's inner effect depends on the CALLBACK as well as the navigation object
+  // (expo-router/build/react-navigation/core/useFocusEffect.js:129 + :99), so keying the callback on
+  // `signedIn` fires this BOTH when home refocuses after the sign-in screen pops AND when the Better
+  // Auth session flips while home is already focused — the two orderings a return from sign-up can
+  // arrive in. Kept apart from the `load()` effect above so `setCards` never joins that callback's
+  // dependency chain (same reason the preview-stop effect stands alone).
+  useFocusEffect(
+    useCallback(() => {
+      if (!signedIn) return
+      setCards((cs) =>
+        // The SAME array back when nothing is walled — which is every focus but the one that matters.
+        // A fresh array re-renders the newest card, and with it its native MapView, for nothing.
+        cs.some((c) => c.state === 'needsAccount')
+          ? cs.map((c): PreviewItem => (c.state === 'needsAccount' ? { ...c, state: 'ready' } : c))
+          : cs,
+      )
+    }, [signedIn]),
+  )
+
   /** Materialize a planned route on Google Routes (billed, no credit) so the rider sees the drive
    *  before spending one. Sets the card's terminal state; never throws. */
   const doPropose = useCallback(
@@ -413,6 +461,15 @@ export default function HomeScreen() {
         // every composer keystroke, so a render-time emit would report typing speed. The `quiet`
         // branch counts too: a quiet road is a proposal that was SHOWN, and dropping it would hide
         // the outcome most worth seeing from the one number that would reveal it.
+        // ⚠ ONE GATE, TWO WRITES, AND THEY ARE A PAIR — do not let either drift back outside it.
+        // The `quiet` line is the dangerous half: `patchCard` no-ops against a cleared screen, but
+        // `setTurns` does not. A rider who taps "Start fresh" while this /propose is in flight gets
+        // an EMPTY transcript, and appending a `wire: true` SKIPPER line to it makes the first wire
+        // turn the skipper's — which `toWire` refuses forever (planner-transcript.ts), because that
+        // turn never leaves the array. Every later send then draws the outage card, and "Start
+        // fresh" only exists in the `done` wrap-up bar, so the conversation is unrecoverable short
+        // of relaunching. Dropping the line is the correct outcome: it belongs to a conversation the
+        // rider threw away, and the route it describes went with it.
         if (convSeq.current === seq) {
           track('proposal_shown', {
             // ⚠ `?? null`, NEVER `?? 0` — the strict `=== 0` above is the same rule stated once
@@ -427,12 +484,13 @@ export default function HomeScreen() {
             round_trip: p.startId === p.endId,
             has_clip: p.previewClip != null,
           })
-        }
-        if (quiet) {
-          // Hand the rider back to the CONVERSATION instead of leaving them on a dead card, and tell
-          // the model so it doesn't cheerfully offer the same road again — hence `wire: true`. Safe
-          // under D9: "that road is quiet" is ROUTE information, not a fact about any place on it.
-          setTurns((ts) => appendSkipper(ts, voice.proposal.noStopsSay, { wire: true }))
+          if (quiet) {
+            // Hand the rider back to the CONVERSATION instead of leaving them on a dead card, and
+            // tell the model so it doesn't cheerfully offer the same road again — hence `wire: true`.
+            // Safe under D9: "that road is quiet" is ROUTE information, not a fact about any place
+            // on it.
+            setTurns((ts) => appendSkipper(ts, voice.proposal.noStopsSay, { wire: true }))
+          }
         }
       } catch (e) {
         if (e instanceof ApiError && e.needsAccount) {

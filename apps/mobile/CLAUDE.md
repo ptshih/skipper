@@ -34,6 +34,14 @@ raw hex/rgba/`fontFamily`; colors live only in `src/theme`.
 - **Icons are VECTOR** (`@expo/vector-icons` via `src/ui/Icon.tsx`) — NOT emoji (no color-emoji fallback;
   emoji render as tofu).
 - `*.test.ts` run under `bun test`; the app `tsc` excludes them (mobile has no `@types/bun`).
+- **⚠ Kill the dev-client FAB before ANY visual review.** `expo-dev-client`'s floating "Tools" gear parks
+  itself over the home header's settings gear, and it is NOT an `app.json` option — it is a UserDefaults
+  preference, so the fix is per-simulator and ships nothing:
+  `xcrun simctl spawn <udid> defaults write fm.skipper.app EXDevMenuShowFloatingActionButton -bool NO`.
+  Worth the line because it does not merely look untidy: on 2026-08-03 it read as a DUPLICATE settings
+  control to two independent reviewers, who filed it as a real defect against `unstable_headerRightItems`
+  (which is correct — it is the documented iOS-26 fallback pair, see `app/_layout.tsx`). A dev artifact
+  that manufactures plausible bug reports costs more than it looks like.
 
 ⚠ This file loads only when an agent works with files under `apps/mobile`. The root `CLAUDE.md` keeps the
 pointer here plus the rule that touching `apps/mobile` means running `bun run check` in this workspace too
