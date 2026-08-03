@@ -179,16 +179,31 @@ export const MAX_PLAN_ANCHORS = 200
 /* -------------------------------------------------------------------------- */
 
 /** POST /drives/propose — one Google Routes call per request. Unchanged value, moved here from index.ts. */
-export const PROPOSE_RATE = { limit: 15, windowSec: 60, label: 'propose' } as const
+export const PROPOSE_RATE = {
+  limit: 15,
+  windowSec: 60,
+  label: 'propose',
+  message: "Still got my pencil out from the last one. Give me a second and ask me again.",
+} as const
 
 /** POST /drives — Routes + a credit consume + a write. Unchanged value, moved here from drives.ts. */
-export const DRIVE_CREATE_RATE = { limit: 15, windowSec: 60, label: 'drives-create' } as const
+export const DRIVE_CREATE_RATE = {
+  limit: 15,
+  windowSec: 60,
+  label: 'drives-create',
+  message: "One at a time, friend — I'm still hitching up the last one.",
+} as const
 
 /** POST /drives/plan, per minute — LOOSER than propose on purpose: the INTENT COUNT differs, not the
  *  cost. Propose fires once per conversation; plan fires 5-10 times, and a fast typist can plausibly
  *  reach a dozen turns in a minute. Matching propose's 15 would put a real rider one retry away from a
  *  429 mid-conversation, holding the only copy of the transcript. */
-export const PLAN_RATE_MINUTE = { limit: 20, windowSec: 60, label: 'plan-min' } as const
+export const PLAN_RATE_MINUTE = {
+  limit: 20,
+  windowSec: 60,
+  label: 'plan-min',
+  message: "You're quicker than I am, friend. Give me a breath and say that again.",
+} as const
 
 /** POST /drives/plan, per hour — the highest-leverage number in this file, and the reason a per-minute
  *  bucket alone is not enough: 20/min permits ~28,800 requests/day per IP per instance, which at the
@@ -201,7 +216,12 @@ export const PLAN_RATE_MINUTE = { limit: 20, windowSec: 60, label: 'plan-min' } 
  *  neither leaks into the other). An earlier read of ./rate-limit.ts concluded a second window "cannot
  *  be enforced without extending the limiter"; that is wrong, and it mattered — it was the difference
  *  between accepting the exposure and writing one more line. */
-export const PLAN_RATE_HOUR = { limit: 120, windowSec: 3600, label: 'plan-hour' } as const
+export const PLAN_RATE_HOUR = {
+  limit: 120,
+  windowSec: 3600,
+  label: 'plan-hour',
+  message: "That's a fair bit of planning for one sitting. Rest the voice a spell and come back to me.",
+} as const
 
 /** GET /sample — the anonymous "taste" clip. The LOOSEST bucket here, and the only one whose number is
  *  not argued from a vendor bill: the handler runs one indexed limit-1 query and then SIGNS the R2 URL
@@ -212,7 +232,12 @@ export const PLAN_RATE_HOUR = { limit: 120, windowSec: 3600, label: 'plan-hour' 
  *  ⚠ VALUE UNCHANGED from the inline literal it replaces at the ./index.ts mount. A RE-HOMING, never a
  *  re-pricing: a rider-facing cap moves only on an explicit founder call (CLAUDE.md STOP), so the commit
  *  that gives a cap a home must never also be the commit that changes its number. */
-export const SAMPLE_RATE = { limit: 30, windowSec: 60, label: 'sample' } as const
+export const SAMPLE_RATE = {
+  limit: 30,
+  windowSec: 60,
+  label: 'sample',
+  message: 'Let me catch my breath, friend. Try that again in a moment.',
+} as const
 
 /** How long `GET /regions` may serve its memoized ANONYMOUS payload before re-reading.
  *

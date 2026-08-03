@@ -19,6 +19,19 @@ interface RateLimitOptions {
   windowSec: number
   /** Short label for the bucket (kept separate per label so distinct routes don't share a count). */
   label: string
+  /**
+   * What the RIDER reads on a 429, in persona.
+   *
+   * ⚠ THIS IS SHOWN VERBATIM. The mobile client's `errorMessage()` returns an `ApiError`'s `.message`
+   * as-is, so whatever is written here is what the Skipper appears to say. The default below is
+   * machine English, which is correct for a script and wrong for a rider — this limiter mounts ABOVE
+   * ./plan-route, so a 429 never passes through that file's in-persona `VOICE` block and the character
+   * breaks on the one screen where he speaks live and ungated.
+   *
+   * Optional so a future internal/ops route can take the plain default; every RIDER-FACING cap in
+   * ./limits sets it, and there is a test asserting they all still do.
+   */
+  message?: string
 }
 
 interface Bucket {
@@ -65,7 +78,7 @@ function clientIp(c: Parameters<MiddlewareHandler<ApiEnv>>[0]): string {
  * 429 and a `Retry-After` header (seconds) on exceed, and emits one structured `evt: 'rate_limited'`
  * log line per rejection (never on the allowed path). No-op under NODE_ENV=test.
  */
-export function rateLimit({ limit, windowSec, label }: RateLimitOptions): MiddlewareHandler<ApiEnv> {
+export function rateLimit({ limit, windowSec, label, message }: RateLimitOptions): MiddlewareHandler<ApiEnv> {
   const buckets = new Map<string, Bucket>()
   const windowMs = windowSec * 1000
 
@@ -119,8 +132,10 @@ export function rateLimit({ limit, windowSec, label }: RateLimitOptions): Middle
       // log cost, on the hottest code in the process.
       console.info(JSON.stringify({ evt: 'rate_limited', label, limit, windowSec }))
       c.header('Retry-After', String(retryAfterSec))
+      // ⚠ `error` stays the machine-readable literal — clients branch on it, never on the prose.
+      // `message` is what a human reads, so it is the cap's own in-persona line when it has one.
       return c.json(
-        { error: 'rate_limited', message: 'Too many requests. Give it a moment and try again.' },
+        { error: 'rate_limited', message: message ?? 'Too many requests. Give it a moment and try again.' },
         429,
       )
     }

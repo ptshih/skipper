@@ -247,3 +247,35 @@ describe('rate-limiter buckets (drift guard)', () => {
     }
   })
 })
+
+describe('429 copy — the persona speaks, never a validator', () => {
+  // ⚠ WHAT THIS GUARDS, because it is not obvious from either file alone: the mobile client's
+  // `errorMessage()` returns an ApiError's `.message` VERBATIM, and these limiters mount ABOVE
+  // ../src/plan-route, so a 429 never passes through that file's in-persona VOICE block. Whatever is
+  // written on the cap is literally what the Skipper appears to say — and until 2026-08-02 every one
+  // of these answered "Too many requests. Give it a moment and try again." on the one screen where the
+  // persona speaks live, ungated, to an anonymous stranger.
+  //
+  // ⚠ THIS IS NOT A CAP CHANGE. Weakening a cap is a cost regression and a founder call (CLAUDE.md
+  // STOP); the numbers here are untouched. Only what a rider READS on rejection moved.
+  const RIDER_FACING = [PROPOSE_RATE, DRIVE_CREATE_RATE, PLAN_RATE_MINUTE, PLAN_RATE_HOUR, SAMPLE_RATE]
+
+  test('every rider-facing cap carries a line, and none of them sounds like a machine', () => {
+    // Reported as a LIST OF LABELS rather than a per-cap assert so a failure names the offender —
+    // `label` is the one field a 429 emits, so it is also how an operator would find it in logs.
+    const missing = RIDER_FACING.filter((c) => !c.message || c.message.trim().length < 10)
+    expect(missing.map((c) => c.label)).toEqual([])
+
+    // The generic default in ../src/rate-limit is correct for an internal route and wrong for a rider.
+    // Anything matching here has either been reverted to it or written in its register.
+    const machine = RIDER_FACING.filter((c) => /too many requests|rate.?limit|quota|throttl/i.test(c.message))
+    expect(machine.map((c) => c.label)).toEqual([])
+  })
+
+  test('no line leaks the number it is enforcing', () => {
+    // The cap is OURS (INV-3/INV-12): a rider is told to wait, never told the budget they just spent.
+    // A digit here is also how "20 per minute" ends up quoted back in a support email as a promise.
+    const withDigits = RIDER_FACING.filter((c) => /\d/.test(c.message))
+    expect(withDigits.map((c) => c.label)).toEqual([])
+  })
+})
