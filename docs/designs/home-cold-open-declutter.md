@@ -758,7 +758,7 @@ leaving a lone chip on an empty line.
 signature move per screen, never six.** The failure mode being re-run is the original complaint, so
 every move below adds **zero blocks and zero CTAs**.
 
-### ✅ S1 — applied (free)
+### ✅ S1 — CHOSEN (founder, 2026-08-03) and free
 
 Three moves, none of which invents anything:
 
@@ -769,7 +769,12 @@ Three moves, none of which invents anything:
   being seen at all**, which is why nobody noticed losing it. Raising it is a one-number change and
   restores the WPA poster reference the rest of the cut removed.
 
-### Alternatives, not chosen but drawn
+⚠ **The one thing S1 needs that is not a style change:** the Sunburst is currently anchored *behind
+the kicker* in the `hero` block, and the kicker is being deleted. Raising its opacity is a one-number
+change, but it has to be **re-anchored to the region row first**, or it is removed along with the
+element it hangs off — silently taking the last poster reference with it.
+
+### Alternatives — NOT chosen (drawn for the record)
 
 - **S2 · the rig is parked here** — the `RouteTrack` trail with the car token at rest, at quarter
   height. The strongest Skipper signal in the system. ⚠ The only option that **spends a row**, and on
