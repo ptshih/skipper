@@ -580,6 +580,38 @@ the old layout and is not correct for this one.
 - **R2 + R3 together** is the likely answer: the kicker carries the switch for typers, the rows carry
   it implicitly for tappers.
 
+### ✅ CHOSEN (founder, 2026-08-03): R3 — the kicker is the region switch
+
+Spec, with the system's own answers where they exist:
+
+- **The kicker becomes `NOW DEPARTING · {region.displayName}`.** "NOW DEPARTING" stays in `voice.ts`;
+  the region name is a FACT and is interpolated from the server, never authored into the voice file.
+- ✅ **The affordance cue already exists and needs no new style:** `Icon name="expand"`
+  (`chevron-down`), whose comment in `Icon.tsx` is literally *"a filter chip that opens a picker"* —
+  the exact semantic. No hand-rolled caret, no new token.
+- ⚠ **At `regions.length === 1` it must NOT be pressable and must NOT show the caret.** Still show the
+  region NAME (it is informative), but a dead affordance at 1.1 launch — when Tahoe is the only
+  region — would be worse than no affordance.
+- ✅ **This lets the limit line shrink.** Once the kicker names the region, *"I only know the roads
+  around Lake Tahoe so far"* is largely redundant — so the sub-line gets shorter AND the hardcoded
+  place name leaves `voice.ts`, which §10's invariant wanted anyway. Two problems, one move.
+- ✅ **Offline already works:** `region-cache.ts` persists `displayName`, so the kicker renders the
+  right region with no network.
+- ⚠ **Hit target.** A kicker is ~16pt tall. It needs `hitSlop` to clear the 48pt in-car minimum —
+  the `FilterChip` precedent (`hitSlop={12}`) is the pattern.
+- ⚠ **Accessibility.** It stops being a `Text` and becomes a control: `accessibilityRole="button"`, a
+  label naming the current region and that tapping changes it, and it must keep its place in the
+  VoiceOver order.
+- ⚠ **Dynamic Type — do NOT set `numberOfLines={1}`.** Home is a scrollable, non-driving surface and
+  is therefore UNCAPPED, including the AX sizes. "NOW DEPARTING · LAKE TAHOE ⌄" will wrap there, and
+  clamping it would truncate the region name for exactly the riders who need it largest.
+- **The picker surface:** there is **no shared sheet primitive** in `src/ui/`. The in-repo precedent is
+  `AttributionButton.tsx`'s local `Modal`; follow that or promote it. ⚠ `Segmented` is the wrong
+  choice beyond ~3 regions — it is a visible track, i.e. the row we are removing, wearing a different
+  hat.
+- ⚠ **Delete the dormant chip row when this lands** (`app/index.tsx`, the `regions.length > 1` block).
+  R3 supersedes it, and leaving both means **two region switchers appear the day region 2 ships**.
+
 ### Two things that must change with region N+1, whichever option wins
 
 - ⚠ **The limit line is region-hardcoded.** "I only know the roads around Lake Tahoe so far" must
@@ -643,6 +675,43 @@ names only, deliberately ("names ONLY — never anchor ids, never coordinates").
 the client therefore needs region bboxes added to the `/regions` DTO. That is a small addition, but it
 is a wire change and a deliberate loosening of that file's "no coordinates" stance, so it wants to be
 a decision rather than a drive-by.
+
+## 12. Note 10 — "planner outage" is NOT network-down (three states, not two)
+
+Founder, 2026-08-03: *"the 'Planner outage' screen is confusing… i'm assuming it is when network is
+down, but then the chat input at the bottom should also be disabled probably?"*
+
+⚠ **The confusion was my mock's fault** — it collapsed two states into one and borrowed offline copy
+("my line's down"), which made it read as a network failure. The code already separates **three**:
+
+| State | Network | Composer | Retry |
+| --- | --- | --- | --- |
+| `isOffline` | **none** | **absent** | n/a — this is the offline home (§8) |
+| `plannerOutage` | fine | **stays** | `retryTurn` — sending again IS the recovery |
+| `regionsFailed` | fine | **absent** | `loadRegions` — no region ⇒ no turn can be posted |
+
+`plannerDown = plannerOutage || regionsFailed` drives the card; the composer is governed separately by
+`composer = isOffline || regionsFailed ? null : …`.
+
+### ✅ So the answer to "should the input be disabled" is: never disabled — present or absent
+
+That is already the rule, and the reasoning is recorded at the code: *"the composer is REPLACED, never
+greyed out — a disabled field reads as broken."* Same principle as §8's Spotify contrast — Skipper's
+primary action has no degraded form, so a greyed field would tease something that cannot happen.
+
+### What the mock should show instead
+
+- **Outage A (`plannerOutage`)** — composer PRESENT, because removing it would strand the rider with no
+  way to retry. The sample card returns here: the device has network, so a static presigned clip still
+  plays.
+- **Outage B (`regionsFailed`)** — composer ABSENT. ⚠ And the kicker cannot name a region in this
+  state (§10's R3), because there are none loaded — so R3's kicker must degrade to plain
+  "NOW DEPARTING" rather than render an empty or half-interpolated string.
+
+⚠ **The last point is a genuine R3 edge case worth building for**: `regionsFailed` is exactly the
+state where `region.displayName` is undefined. The cached region (`region-cache.ts`) can cover it if
+there has ever been a successful load; on a true cold first launch with a failed `/regions` there is
+nothing to name.
 
 ## Sources
 
