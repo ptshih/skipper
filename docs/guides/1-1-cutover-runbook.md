@@ -1,8 +1,22 @@
 # The 1.1 cutover — the first push
 
-**Status:** Ready — 2026-08-02, written against `main` at `3db599d` with **49 commits unpushed** and
-every fact below measured, not assumed. **Never executed**; the first execution is the one it was
-written for. Where this and the code disagree, the code wins. Companion to
+**Status:** ✅ **EXECUTED 2026-08-02** — `9dc3987..ecc30f7`, all four builds SUCCESS, every endpoint
+below verified green. Written 2026-08-02 against `main` at `3db599d` with 49 commits unpushed; executed
+18 commits later at `ecc30f7`. Kept as the record of the first push and the template for the next.
+Where this and the code disagree, the code wins.
+
+⚠ **ONE CLAIM BELOW WAS ALREADY FALSE WHEN IT WAS EXECUTED, and it was the load-bearing one** — see
+*What does NOT happen*. That is not a criticism of the writing; it is what "measured, not assumed"
+costs when the measurement is 18 commits old. **Re-measure the migration claim before any future push;
+do not inherit it.**
+
+**What the push actually cost:** the App Store decision (1.0.0 was WITHDRAWN by the founder first, which
+is what unblocked it), four concurrent builds, and about six minutes end to end. Verified after: `/health`
+`{"ok":true}`, `/regions` returning Lake Tahoe with 6 example anchors (so the prod secret decrypted and
+Neon is reachable), `/sample` 200, `/roam/sample` **404** (the flip landed), site `/privacy` `/terms`
+`/support` all 200, `delete-user` **400** (not 404 — the 5.1.1(v) route is live), and one anonymous
+`POST /drives/plan` answering in character in **2.5 s**, which is the only proof that
+`ANTHROPIC_API_KEY` is set on the deployed service. Companion to
 [gcp-cloud-run-deploy.md](gcp-cloud-run-deploy.md) (how the pipeline works) and
 [app-store-submission.md](app-store-submission.md) §12 (what a reviewer checks) — this covers only the
 ordering between them, which neither one owns.
@@ -39,9 +53,26 @@ actually in TestFlight before pushing rather than inferring it from `app.json` (
 
 ## What does NOT happen — and the one thing that must not
 
-**No migration is pending.** `git diff --name-only origin/main..main -- packages/db/drizzle/` returns
-**zero `.sql` files** across all 49 commits. 1.1 changed no schema. The cutover is code-only, which is
-precisely why rollback is clean — there is no DDL to un-apply.
+⚠ **CORRECTED 2026-08-02, AT EXECUTION TIME. This section was true when written and false when used.**
+
+It said: no migration pending, zero `.sql` files, the cutover is code-only, rollback is clean. By the
+time the push happened, `6bd018e` had landed **migration `0042` — `DROP TABLE "drive_demand" CASCADE`,
+already APPLIED to the shared Neon host.** The same commit closed the armed `DROP` this section warns
+about two paragraphs down, so the warning worked; the summary above it just never caught up.
+
+**The consequence inverts the rollback advice, so read this before trusting the Rollback section.**
+The table was dropped from the DB *before* the code that writes to it was deployed away. The revision
+live at push time (`skipper-api-00135-5zz`) still did `.insert(driveDemand)` on the drive-create path
+— so `POST /drives` on production was **already broken** in the window between the migration and this
+push. The push was the FORWARD FIX, not the risk.
+
+Which means: **rolling back to `skipper-api-00135-5zz` would re-break drive creation.** It restores code
+that writes to a table that no longer exists. Rollback is still correct for `/roam/*` and for anything
+that does not touch `drive_demand`, but it is no longer "restores prod exactly."
+
+The general rule this earns: **a migration applied ahead of its deploy makes rollback one-way for every
+path that touches it.** Check `git diff --name-only origin/main..main -- packages/db/drizzle/` yourself
+at push time — one command, and it is the difference between a reversible push and a forward-only one.
 
 ⚠ **Do not "tidy up" the schema during the cutover.** `drive_demand` is still **armed**: cut from
 `schema.ts` in the 1.1 sweep (D25, `9f43d4e`), still present in the DB and in the newest drizzle
@@ -111,9 +142,13 @@ rather than assuming they rode along.
 gcloud run services update-traffic skipper-api --region=us-east4 --to-revisions=<CAPTURED>=100
 ```
 
-Because there is no migration, this restores prod exactly — including `/roam/sample` answering 200
-again. The site is a separate rollback (Firebase Hosting release history) and does not come back with
-it, so a half-rolled-back fleet is a real intermediate state: **1.0 API, 1.1 marketing site.**
+⚠ **This no longer restores prod exactly** — see the correction above. `0042` dropped `drive_demand`
+and the pre-push revision writes to it, so rolling back fixes `/roam/*` and re-breaks `POST /drives`.
+The captured target for this push was `skipper-api-00135-5zz`; it is a partial escape hatch, not a
+time machine. Roll back to stop a bad deploy, then go forward — do not sit on the old revision.
+
+The site is a separate rollback (Firebase Hosting release history) and does not come back with it, so a
+half-rolled-back fleet is a real intermediate state: **1.0 API, 1.1 marketing site.**
 
 ## What this does not cover
 
