@@ -23,6 +23,7 @@ import {
   PLANNER_TIMEOUT_MS,
   PROPOSE_RATE,
   readBoundedText,
+  REGIONS_RATE,
   SAMPLE_RATE,
   SERVER_IDLE_TIMEOUT_SEC,
   SERVER_MAX_BODY_BYTES,
@@ -218,7 +219,14 @@ describe('rate-limiter buckets (drift guard)', () => {
   // under NODE_ENV=test, so no test here can prove a bucket COUNTS or that a 429 (or its `rate_limited`
   // log line) ever fires. What IS assertable is the part that actually drifts — the numbers and the
   // labels — which is the entire reason they live in ../src/limits and not at four mount sites (INV-12).
-  const ALL = [PROPOSE_RATE, DRIVE_CREATE_RATE, PLAN_RATE_MINUTE, PLAN_RATE_HOUR, SAMPLE_RATE]
+  const ALL = [
+    PROPOSE_RATE,
+    DRIVE_CREATE_RATE,
+    PLAN_RATE_MINUTE,
+    PLAN_RATE_HOUR,
+    SAMPLE_RATE,
+    REGIONS_RATE,
+  ]
 
   test('every bucket label is unique', () => {
     // Load-bearing twice over. ../src/rate-limit keys buckets `${label}:${ip}`, and — since the 2026-08
@@ -231,7 +239,7 @@ describe('rate-limiter buckets (drift guard)', () => {
   test('the per-minute buckets really do share one window, so their limits are comparable', () => {
     // The precondition for the next test: comparing `limit` across buckets is meaningless unless the
     // windows match. PLAN_RATE_HOUR is excluded on purpose — it is a second window on the same route.
-    for (const r of [PROPOSE_RATE, DRIVE_CREATE_RATE, PLAN_RATE_MINUTE, SAMPLE_RATE]) {
+    for (const r of [PROPOSE_RATE, DRIVE_CREATE_RATE, PLAN_RATE_MINUTE, SAMPLE_RATE, REGIONS_RATE]) {
       expect(r.windowSec).toBe(60)
     }
   })
@@ -242,8 +250,11 @@ describe('rate-limiter buckets (drift guard)', () => {
     // the free path may sit above them and must never fall below: if SAMPLE_RATE ever becomes the
     // tightest per-minute bucket, either a real cost appeared behind /sample — which is a founder
     // decision, not a tuning commit — or somebody edited the wrong constant.
+    // ⚠ Asserted for BOTH unpaid buckets, not just /sample: /regions bills no vendor either, and the
+    // property is about the class of route rather than about one constant.
     for (const paid of [PROPOSE_RATE, DRIVE_CREATE_RATE, PLAN_RATE_MINUTE]) {
       expect(SAMPLE_RATE.limit).toBeGreaterThanOrEqual(paid.limit)
+      expect(REGIONS_RATE.limit).toBeGreaterThanOrEqual(paid.limit)
     }
   })
 })
@@ -258,7 +269,14 @@ describe('429 copy — the persona speaks, never a validator', () => {
   //
   // ⚠ THIS IS NOT A CAP CHANGE. Weakening a cap is a cost regression and a founder call (CLAUDE.md
   // STOP); the numbers here are untouched. Only what a rider READS on rejection moved.
-  const RIDER_FACING = [PROPOSE_RATE, DRIVE_CREATE_RATE, PLAN_RATE_MINUTE, PLAN_RATE_HOUR, SAMPLE_RATE]
+  const RIDER_FACING = [
+    PROPOSE_RATE,
+    DRIVE_CREATE_RATE,
+    PLAN_RATE_MINUTE,
+    PLAN_RATE_HOUR,
+    SAMPLE_RATE,
+    REGIONS_RATE,
+  ]
 
   test('every rider-facing cap carries a line, and none of them sounds like a machine', () => {
     // Reported as a LIST OF LABELS rather than a per-cap assert so a failure names the offender —

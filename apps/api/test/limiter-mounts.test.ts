@@ -41,7 +41,11 @@ console.warn = origWarn
 
 // ⚠ The HONO instance, not `mod.default` — the default export is Bun's serve config
 // (`{ port, fetch, … }`), which carries no `.routes` and makes the middleware chain invisible.
-const { app, proposeLimiter, planMinuteLimiter, planHourLimiter, sampleLimiter } = mod
+const { app, proposeLimiter, planMinuteLimiter, planHourLimiter, sampleLimiter, regionsLimiter } = mod
+
+// ⚠ The REAL `withSession`, imported rather than reconstructed: the /regions order assertion below is
+// only meaningful if it compares against the same reference ../src/index mounted.
+const { withSession } = await import('../src/entitlements')
 
 /** Every registered handler on `path`, in REGISTRATION order. */
 const handlersOn = (path: string): unknown[] =>
@@ -72,6 +76,28 @@ describe('the paid anonymous paths carry their rate limiter', () => {
     // which is a standing invitation. Pinned for the same structural reason, not the same cost reason.
     expect(handlersOn('/sample')).toContain(sampleLimiter)
   })
+
+  test('GET /regions is capped too', () => {
+    // Same family as /sample: no vendor charge, a LOAD cap. What it bounds is not the two corpus
+    // queries — REGIONS_MEMO_TTL_MS already caps those to one pair per instance per minute — but the
+    // `withSession` auth-DB round-trip, which runs on every request and, post-D16, never
+    // short-circuits because every rider arrives holding an anonymous cookie.
+    expect(handlersOn('/regions')).toContain(regionsLimiter)
+  })
+})
+
+describe('⚠ /regions — the limiter must run BEFORE the session read', () => {
+  test('regionsLimiter is registered above withSession', () => {
+    // THE ORDER IS THE WHOLE VALUE HERE. Both are mounted on the exact same path, so a refactor that
+    // reorders these two lines leaves every test green, every type sound, and the cap still returning
+    // 429s — while capping nothing that matters, because the auth-DB round-trip this exists to bound
+    // would already have been paid before the limiter ran. The only visible symptom would be DB load
+    // that nothing explains. Mutation-checked: swapping the two mounts in ../src/index fails this.
+    const chain = handlersOn('/regions')
+    expect(chain).toContain(regionsLimiter)
+    expect(chain).toContain(withSession)
+    expect(chain.indexOf(regionsLimiter)).toBeLessThan(chain.indexOf(withSession))
+  })
 })
 
 describe('⚠ mount ORDER — a limiter registered too late is dead', () => {
@@ -92,7 +118,7 @@ describe('⚠ the limiters are DISTINCT instances', () => {
     // Each rateLimit() call closes over its OWN Map, so reusing one middleware on two paths would
     // silently merge their counts — a rider's /sample reads would then eat their /drives/plan budget.
     // Cheap to assert, and the failure mode is invisible at every other layer.
-    const all = [proposeLimiter, planMinuteLimiter, planHourLimiter, sampleLimiter]
+    const all = [proposeLimiter, planMinuteLimiter, planHourLimiter, sampleLimiter, regionsLimiter]
     expect(new Set(all).size).toBe(all.length)
   })
 })

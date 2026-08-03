@@ -33,6 +33,7 @@ import {
   PLAN_RATE_MINUTE,
   PROPOSE_RATE,
   REGIONS_MEMO_TTL_MS,
+  REGIONS_RATE,
   SAMPLE_RATE,
   SERVER_IDLE_TIMEOUT_SEC,
   SERVER_MAX_BODY_BYTES,
@@ -122,6 +123,17 @@ let regionsMemo: { at: number; payload: Region[] } | null = null
 // caching delays REVOCATION by its maxAge, and the sharp edge for us is account deletion — a cached
 // cookie validating against a user `purgeUserData` just erased would write an orphan of exactly the
 // kind INV-4 exists to prevent. See TODO.
+/** ⚠ EXPORTED FOR THE MOUNT TEST ONLY, and declared HERE rather than with the other named limiters
+ *  further down: those are grouped after the Better Auth mount because that is where they are used,
+ *  and a `const` referenced above its declaration is a TDZ throw at boot, not a lint error. */
+export const regionsLimiter = rateLimit(REGIONS_RATE)
+
+// ⚠ REGISTERED ABOVE `withSession`, AND THAT IS THE WHOLE POINT — the same shape of ordering bug as
+// the /drives/plan mount. Hono runs middleware in REGISTRATION order, so below the `withSession` line
+// this limiter would still return 429s while capping nothing worth capping: the auth-DB round-trip it
+// exists to bound would already have been paid before it ever ran. The memo below covers the two
+// corpus queries; it does NOT cover the session read, which happens on every request. See ./limits.
+app.use('/regions', regionsLimiter)
 app.use('/regions', withSession)
 app.get('/regions', async (c) => {
   const canPreview = isAdmin(c.get('session'))

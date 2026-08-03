@@ -239,6 +239,34 @@ export const SAMPLE_RATE = {
   message: 'Let me catch my breath, friend. Try that again in a moment.',
 } as const
 
+/** GET /regions — the last anonymous, uncapped, DB-touching route.
+ *
+ *  ⚠ WHAT IT CAPS IS NOT THE QUERIES THE MEMO ALREADY COVERS. `REGIONS_MEMO_TTL_MS` bounds the two
+ *  corpus reads to one pair per instance per minute, so those were never the exposure. The uncapped
+ *  cost is `withSession`, which runs on EVERY request BEFORE the memo is consulted and pays an
+ *  auth-DB round-trip on the separate neon-serverless Pool — and post-D16 it never short-circuits,
+ *  because the anonymous mint means every rider arrives holding a cookie. That round-trip is the
+ *  thing this bounds, and it is why the mount order in ./index.ts is load-bearing rather than
+ *  cosmetic: registered BELOW `app.use('/regions', withSession)` this limiter would cap nothing that
+ *  matters, since the round-trip it exists to bound would already have been paid.
+ *
+ *  ⚠ THE LOOSEST BUCKET IN THIS FILE, DELIBERATELY — 4x SAMPLE_RATE, and the reason is the failure
+ *  mode, not the cost. Limits key on CLIENT IP, and CGNAT / corporate NAT put many unrelated riders
+ *  behind one address; `/regions` is on the LAUNCH path, so a 429 here is not a graceful degrade but
+ *  an empty region picker — an app that reads as broken, for people doing nothing wrong. At 120/min a
+ *  single abusive host still resolves to ~2 auth-DB round-trips a second, which is the actual thing
+ *  worth bounding. There is no vendor charge behind this route at all (INV-12 spend caps are propose
+ *  and plan); this is a LOAD cap, in the same family as SAMPLE_RATE.
+ *
+ *  Number set by founder call 2026-08-03 — a new rider-facing cap, not a re-homing of an existing
+ *  literal, which is the one thing the ⚠ on SAMPLE_RATE says a commit may not do quietly. */
+export const REGIONS_RATE = {
+  limit: 120,
+  windowSec: 60,
+  label: 'regions',
+  message: "Easy there — I'm still unrolling the map. Try me again in a moment.",
+} as const
+
 /** How long `GET /regions` may serve its memoized ANONYMOUS payload before re-reading.
  *
  *  Not a spend cap — a LOAD cap, and it belongs beside the others because it governs the same shared

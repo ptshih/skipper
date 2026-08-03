@@ -839,12 +839,20 @@ schema-introspected and mutation-checked.
       would resolve from the DB and find the session cascade-deleted. What that buys is a ≤60s
       cosmetically-stale signed-in state on a second device — which is the cost we accepted, now
       confirmed to be the whole of it rather than the visible part of something larger.
-- [ ] **Optional follow-up: a rate limit on `/regions` as defence-in-depth.** Much less urgent now —
-      the memo absorbs a burst, so an attacker gets cached bytes rather than DB load — but it is still
-      the only anonymous route with no cap, and a cold instance serves the first request for real.
-      ⚠ Picking the number is the judgement call: it is the app's COLD-START call, so a tight cap
-      presents as a broken launch. It degrades gracefully (the client falls back to `region-cache.ts`).
-      Suggest something generous, single-sourced in `limits.ts` with every other rider-facing cap.
+- [x] ~~**Optional follow-up: a rate limit on `/regions` as defence-in-depth.**~~ **DONE 2026-08-03** —
+      `REGIONS_RATE` (120/60s, founder call), single-sourced in `limits.ts` beside every other
+      rider-facing cap, mounted as the named `regionsLimiter`.
+      ⚠ **The premise above was WRONG in a way worth keeping, because it argued the item down.** "The
+      memo absorbs a burst, so an attacker gets cached bytes rather than DB load" is true of the two
+      CORPUS queries and false of the request as a whole: `app.use('/regions', withSession)` runs on
+      EVERY request, BEFORE the memo is consulted, and pays an auth-DB round-trip on the separate
+      neon-serverless Pool — which post-D16 never short-circuits, because the anonymous mint means
+      every rider arrives holding a cookie. The uncapped cost was never the cached bytes. The limiter
+      is therefore mounted ABOVE `withSession`, and that order is the whole value: below it, the cap
+      would still return 429s while bounding nothing. Pinned + MUTATION-CHECKED in
+      `test/limiter-mounts.test.ts` (swapping the two mounts fails exactly one test).
+      Generous on purpose — caps key on client IP and CGNAT puts many riders behind one address, on
+      the launch path. The graceful-degrade note above still holds (`region-cache.ts`).
 
 ## Production ops hardening — from the 2026-07-30 ship-readiness audit
 
