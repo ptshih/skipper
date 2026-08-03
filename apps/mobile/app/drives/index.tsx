@@ -63,7 +63,7 @@ const CREDIT_HINT_THRESHOLD = 5
  *  re-author it while lifting, or the move hides a rewrite. Every other string on this screen already
  *  comes from `voice`, which is where they all belong. */
 const OWED_VOICE = {
-  drives: 'No drives yet — plan one and it lands here for the road.',
+  drives: 'No drives yet. Plan one and it lands here for the road.',
   drivesAction: 'Plan a drive',
   drivesSignedOut:
     'Your drives ride with your ticket, friend. Grab one and they’ll be waiting right here.',

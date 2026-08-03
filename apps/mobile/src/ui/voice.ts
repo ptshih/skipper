@@ -34,8 +34,8 @@ export const voice = {
   error: {
     generic: 'Well, that’s a kink in the hose. Give her another pull?',
     retry: 'Give her another pull',
-    download: 'Couldn’t pull the clips down — signal’s thin out here. Give it another go?',
-    storage: 'No room left in the hold — clear some space and we’ll stow the drive.',
+    download: 'Couldn’t pull the clips down. Signal’s thin out here. Give it another go?',
+    storage: 'No room left in the hold. Clear some space and we’ll stow the drive.',
   },
   cta: {
     play: 'Let’s roll', // short: the center CTA is now flanked by the ±15s skip buttons
@@ -78,7 +78,7 @@ export const voice = {
     // "coming soon", in character. (The server has its own line for an UNKNOWN region; this one is
     // for a known region whose curated set is still empty.)
     openingUncurated:
-      'I don’t run any roads around here yet, friend. Check back — I’m always picking up new ones.',
+      'I don’t run any roads around here yet, friend. Check back; I’m always picking up new ones.',
     composerPlaceholder: 'Tell me where to',
     // ⚠ SHAPES, not sentences — `{a}`/`{b}` are filled from the region's own curated names, so the
     // placeholder can never name a road the skipper does not run. The rows teach WHAT kinds of thing
@@ -123,7 +123,7 @@ export const voice = {
     exampleAToBReply: '{a} out to {b}. About how long do you want to be out?',
     exampleLoop: 'A loop out of {a}, couple of hours.',
     exampleLoopReply:
-      'Out of {a} and back around — good shape for an afternoon. Where do you want to turn around?',
+      'Out of {a} and back around: good shape for an afternoon. Where do you want to turn around?',
     // ⚠ NOT "Somewhere pretty. You pick." — that read fine as a standalone chip and stopped making
     // sense the moment it sat under the title "Let the skipper pick": the row said the same thing
     // twice, and the second time in the rider's mouth ("you pick") pointing at the skipper while the
@@ -134,8 +134,8 @@ export const voice = {
     // two without losing the property it exists for: it is the shape that survives a region with ZERO
     // curated anchors, so it must still have a form that names nothing. `openRegion` when a region is
     // known, `open` when one is not.
-    exampleOpenRegion: 'Surprise me — somewhere pretty around {r}.',
-    exampleOpen: 'Surprise me — somewhere pretty.',
+    exampleOpenRegion: 'Surprise me: somewhere pretty around {r}.',
+    exampleOpen: 'Surprise me: somewhere pretty.',
     exampleOpenReply: 'Happy to pick. Where are you starting from?',
     // The turn cap (D12). ⚠ The composer is REPLACED by these, never greyed out — a disabled field
     // reads as broken, and the skipper bowing out in character is the whole point of the cap being
@@ -180,7 +180,7 @@ export const voice = {
     // cheerfully offer it again). Safe under D9: "that road is quiet" is ROUTE information, not a fact
     // about any place on it.
     noStopsSay:
-      'That road’s a quiet one — nothing along it I can tell you about yet. Give me another pair and I’ll see what I’ve got.',
+      'That road’s a quiet one, and there’s nothing along it I can tell you about yet. Give me another pair and I’ll see what I’ve got.',
     // Fallback ONLY. The server's own 403 names the limit and the way past it; show that when it comes.
     capReached: 'That’s the last of your free drives, friend.',
     openMade: 'Open the drive',
@@ -191,19 +191,19 @@ export const voice = {
     // turns a contradiction into candour. ⚠ Says nothing about WHY (that would be a place fact, D9)
     // and offers no fix — "Change it up" is already the affordance directly below.
     durationShort: (asked: number, actual: number) =>
-      `You said about ${spokenDuration(asked)} — this one runs closer to ${actual} minutes. Still worth the trip.`,
+      `You said about ${spokenDuration(asked)}; this one runs closer to ${actual} minutes. Still worth the trip.`,
     durationLong: (asked: number, actual: number) =>
-      `You said about ${spokenDuration(asked)} — this one runs closer to ${actual} minutes. Longer road than you asked for.`,
+      `You said about ${spokenDuration(asked)}; this one runs closer to ${actual} minutes. Longer road than you asked for.`,
     // ONE real clip from the rider's OWN route, before the wall (D14/INV-5). ⚠ The whole charm of it
     // is that it is not a generic sample — it is the first thing they will actually hear on this drive
     // — so the copy has to say "yours" without naming the place (that is a FACT, served by the API).
     clipKicker: 'A TASTE OF THIS ONE',
-    clipHint: 'Here’s the first stop on that road — go on, have a listen.',
+    clipHint: 'Here’s the first stop on that road. Go on, have a listen.',
     clipPlayA11y: 'Play the preview clip',
     clipPauseA11y: 'Pause the preview clip',
     // ⚠ Deliberately NOT retryable-sounding: the presigned url is dead and this surface has no way to
     // re-sign one (that endpoint is owner-only). Offer the drive, not a retry that cannot work.
-    clipUnavailable: 'That clip’s gone cold on me — make the drive and you’ll get the whole telling.',
+    clipUnavailable: 'That clip’s gone cold on me. Make the drive and you’ll get the whole telling.',
     // ⚠ NOT 'NOW PLAYING'. `voice.player.nowPlaying` and `voice.preview.nowPlaying` already exist for
     // two other surfaces; a third identical string is exactly the drift this file keeps warning about.
     clipBarKicker: 'HAVE A LISTEN',
@@ -219,11 +219,11 @@ export const voice = {
     hint: 'Tap a stop to hear it.',
     nowPlaying: 'NOW PLAYING',
     // A tapped stop whose audio can't be resolved here (a partial download that never landed this clip).
-    unplayable: 'That stop didn’t come down with the rest — pull the drive again and I’ll have it.',
+    unplayable: 'That stop didn’t come down with the rest. Pull the drive again and I’ll have it.',
   },
   gate: {
     title: 'Grab your ticket',
-    body: 'The full drive needs a (free) ticket — ten seconds, and the skipper never stops talking.',
+    body: 'The full drive needs a (free) ticket. Ten seconds, and the skipper never stops talking.',
     action: 'Get my free ticket',
     secondary: 'Just take the sample ride', // the play-screen gate → routes to /sample (the postcard)
     keepBrowsing: 'Keep browsing', // the detail download-gate → dismiss back to the drive
@@ -259,10 +259,10 @@ export const voice = {
     // Location-permission gate (live drive only): three states — can re-ask, must visit Settings
     // (denied), or location’s on but only APPROXIMATE (iOS Precise Location off → fixes too coarse
     // to trigger stops; the only fix is the Settings toggle, so it routes there like a hard denial).
-    locationNeeded: 'I steer by your GPS — switch on location and I’ll call out each stop as we reach it.',
+    locationNeeded: 'I steer by your GPS. Switch on location and I’ll call out each stop as we reach it.',
     locationBlocked: 'Location’s switched off for me. Flip it on in Settings and we’ll hit the road.',
     locationReduced:
-      'You’ve handed me approximate location — at that blur I’d sail right past the stops. Switch on “Precise Location” in Settings and I’ll call them on the nose.',
+      'You’ve handed me approximate location, and at that blur I’d sail right past the stops. Switch on “Precise Location” in Settings and I’ll call them on the nose.',
     locationAllow: 'Switch on location',
     locationSettings: 'Open Settings',
     // Pre-permission PRIMING (live drive, first time only — shown right before iOS's
@@ -274,19 +274,19 @@ export const voice = {
     locationPrimeKicker: 'BEFORE WE ROLL',
     locationPrimeTitle: 'I steer by your GPS',
     locationPrimeBody:
-      'I call out each stop the moment we roll up to it — so I need your location while we’re on the drive. Your phone will ask next; let me know it’s a yes.',
-    locationPrimeReassure: 'Only while you’re on a drive. Parked, I’m off the clock — no tracking.',
+      'I call out each stop the moment we roll up to it, so I need your location while we’re on the drive. Your phone will ask next; let me know it’s a yes.',
+    locationPrimeReassure: 'Only while you’re on a drive. Parked, I’m off the clock. No tracking.',
     locationPrimeCta: 'Switch on location',
   },
   player: {
     buffering: 'Warming up the skipper…',
-    stall: 'Couldn’t load that stop — skipping ahead.',
+    stall: 'Couldn’t load that stop. Skipping ahead.',
     nowPlaying: 'NOW PLAYING', // emoji kept OUT of label strings (custom font = tofu)
     paused: 'PAUSED', // a held clip — the NOW card must not keep saying "NOW PLAYING"
     rolling: 'ROLLING', // between stops — road-trip, not the flat "DRIVING"
     rollingOpen: 'On the open road', // rolling-card title when there's no next stop queued yet
     replay: 'Replay that', // re-hear the stop that just ended — plain chrome, NOT the skipper's voice (replay-last-stop)
-    gpsSearching: 'Looking for the satellites — hang tight.', // live drive, no usable fix yet
+    gpsSearching: 'Looking for the satellites. Hang tight.', // live drive, no usable fix yet
     gpsError: 'Lost the GPS signal, folks. Pull over and give her another go.', // live watch failed
     driveCompleteKicker: 'DRIVE COMPLETE', // the done-card kicker
     arrived: 'You’ve arrived', // the done-card title
@@ -336,7 +336,7 @@ export const voice = {
   // plays. Clear first, persona second — the deadpan stays, just aimed.
   // ⚠ Named BOTH modes until roam was removed (it had been co-equal on home, founder 2026-06-11).
   // Now there is one artifact, so the line says one thing. (Wording is a quick founder tweak.)
-  tagline: 'Narrated road trips — you pick the road, I’ll do the talking. One corny guide the whole way.',
+  tagline: 'Narrated road trips. You pick the road, I’ll do the talking. One corny guide the whole way.',
   // The home hero's enamel flourish: a departures-board kicker ABOVE the headline
   // (deliberately NOT repeating the tagline). Warm, corny, glanceable, no facts.
   home: {
@@ -351,14 +351,14 @@ export const voice = {
   },
   // Offline-first fallback notes: shown when the network's gone but a saved copy carries us.
   offline: {
-    home: 'No signal out here — showing the drives you’ve saved.',
-    detail: 'No signal out here — running on the saved copy.',
+    home: 'No signal out here, so showing the drives you’ve saved.',
+    detail: 'No signal out here, so running on the saved copy.',
     // The honest failure. Stands in for voice.error.generic whenever the request never left the
     // phone (see api.ts OfflineError) — the generic "kink in the hose" line covers a 500, a parse
     // blip and a GPS timeout equally, and pairs with a retry button that cannot possibly work out
     // here. Same "No signal out here" opening as its two siblings above so the three read as one
     // idea; the second clause is the part that changes (nothing saved to fall back ON).
-    noSignal: 'No signal out here — and this one needs a bar or two. Try again when they’re back.',
+    noSignal: 'No signal out here, and this one needs a bar or two. Try again when they’re back.',
     // ⚠ `needsSignal`/`needsSignalSaved` lived here until 1.1 step 7. They were a heads-up note above
     // a CTA that stayed live because the tap cost nothing — a nudge, never a block. Home is now the
     // conversation itself (D6), which genuinely cannot run offline, so the honest shape is a state,
@@ -402,14 +402,14 @@ export const voice = {
     // (which keeps its "Lake Tahoe" deliberately) there was nothing here to template FROM. Naming a
     // region would simply have been wrong for every drive outside it. §7 holds either way: this says
     // something true about the ROAD, which is route information, not a fact about a place on it.
-    saveHint: 'These roads have dead zones — best done before you lose signal.',
+    saveHint: 'These roads have dead zones, so best done before you lose signal.',
     // The one warning in front of a live drive that hasn't been saved. NEVER a block: the rider may
     // be on a road with good signal, or just auditioning from the couch. `useDrive`'s stall watchdog
     // skips any clip that won't load, so an unsaved drive through a dead zone loses those stops
     // SILENTLY — this is the only moment we can say so while it's still fixable.
     unsavedTitle: 'This drive isn’t saved yet',
     unsavedBody:
-      'Out where the signal drops, any stop that can’t load gets skipped — you’d drive right past it in silence. Saving it first takes a moment, and then the whole drive plays off your phone.',
+      'Out where the signal drops, any stop that can’t load gets skipped, and you’d drive right past it in silence. Saving it first takes a moment, and then the whole drive plays off your phone.',
     unsavedSave: 'Save it first',
     unsavedStart: 'Start anyway',
   },
@@ -432,7 +432,7 @@ export const voice = {
     // mirroring the server's own reply. Anything more specific ("no such account") would turn the
     // form into an oracle for which emails are registered.
     resetSent:
-      'If that address is one of ours, the link is on its way. Go check your email — and mind the spam bin.',
+      'If that address is one of ours, the link is on its way. Go check your email, and mind the spam bin.',
   },
   settings: {
     account: 'ACCOUNT',
@@ -440,7 +440,7 @@ export const voice = {
     // Explains all three options + reassures that the default needs no fiddling: a
     // night drive dims itself. Persona-light, still informative.
     appearanceHint:
-      'Auto rides with your phone — dusk-dark when the sun clocks out, bright by day. Pin Day or Dusk to hold one mood.',
+      'Auto rides with your phone: dusk-dark when the sun clocks out, bright by day. Pin Day or Dusk to hold one mood.',
     // "SOURCES", not "CREDITS": this section is ATTRIBUTION (where the facts and music came from —
     // credits as in a film's credits). The app now has literal drive CREDITS (the credit_entries
     // ledger, surfaced on Home), and one label meaning both sent riders here looking for a balance.
@@ -473,7 +473,7 @@ export const voice = {
     developerAction: 'Developer tools', // → /developer (admin-only)
     developerTitle: 'Developer',
     developerIntro:
-      'Admin-only tools. These ride along with you on field drives — leave them off unless you’re testing.',
+      'Admin-only tools. These ride along with you on field drives, so leave them off unless you’re testing.',
     developerLoading: 'Checking your credentials…',
     developerLocked: 'These tools are for admins only.',
     simModeLabel: 'SIMULATED GPS',
@@ -483,12 +483,12 @@ export const voice = {
     // accuracy gate, the iOS -1 sentinels, the projection cursor). Copy that invites you to trust a
     // desk pass more than it deserves is worse than no copy. docs/designs/desk-drive-harness.md.
     developerHint:
-      'Simulated GPS walks this drive’s route at a steady speed and fires the stops — no car required. It tests the triggering and the audio, not the GPS itself. Takes effect next time you start a drive.',
+      'Simulated GPS walks this drive’s route at a steady speed and fires the stops, no car required. It tests the triggering and the audio, not the GPS itself. Takes effect next time you start a drive.',
     tracesLabel: 'DRIVE TRACES',
     // Says what it is FOR, because the value is not obvious from the file list: a trace is the only
     // way a drive that already happened can be driven again.
     tracesHint:
-      'Every live drive records its raw GPS to this phone. Share one to your Mac and it can be replayed and re-analysed forever — that’s how one real drive keeps paying off.',
+      'Every live drive records its raw GPS to this phone. Share one to your Mac and it can be replayed and re-analysed forever. That’s how one real drive keeps paying off.',
     tracesEmpty: 'No traces yet. Take a live drive and one lands here.',
     tracesShare: 'Share',
     tracesDelete: 'Delete',
@@ -516,9 +516,9 @@ export const voice = {
   legal: {
     title: 'Sources & Licenses',
     intro:
-      'The skipper does his homework. Every tale, every rock, every pit stop on a drive is built from the sources below — and we keep the credit where it’s due.',
+      'The skipper does his homework. Every tale, every rock, every pit stop on a drive is built from the sources below, and we keep the credit where it’s due.',
     musicHeading: 'The road music',
-    musicIntro: 'And the songs between stops — the skipper’s glovebox playlist, credited where it counts.',
+    musicIntro: 'And the songs between stops: the skipper’s glovebox playlist, credited where it counts.',
     footer: 'Tap a license or a source name to read it in full.',
   },
   guest: 'Riding as a guest',

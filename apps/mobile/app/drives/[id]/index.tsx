@@ -223,7 +223,7 @@ export default function DriveDetailScreen() {
   // in-app support backend yet — alpha). The address is env-configurable (SUPPORT_EMAIL).
   const reportIssue = useCallback(() => {
     const subject = encodeURIComponent('Skipper — report an issue')
-    const body = encodeURIComponent(`\n\n—\nDrive: ${drive?.label ?? id ?? '—'}\nID: ${id ?? '—'}`)
+    const body = encodeURIComponent(`\n\n---\nDrive: ${drive?.label ?? id ?? 'unknown'}\nID: ${id ?? 'unknown'}`)
     void Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`).catch(() => {})
   }, [id, drive])
 
@@ -235,7 +235,7 @@ export default function DriveDetailScreen() {
     if (!id) return
     Alert.alert(
       'Delete this drive?',
-      "This can't be undone — and it won't give back the free drive it used.",
+      "This can't be undone, and it won't give back the free drive it used.",
       [
         { text: 'Cancel', style: 'cancel' },
         {

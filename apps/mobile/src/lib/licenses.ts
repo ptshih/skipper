@@ -70,7 +70,7 @@ export const attributionSourceLabel = (source: string): string => SOURCE_LABELS[
 export const DATA_SOURCES: DataSource[] = [
   {
     name: 'Wikipedia',
-    use: 'The stories — the facts behind the tales the skipper tells at each stop.',
+    use: 'The stories: the facts behind the tales the skipper tells at each stop.',
     license: 'CC BY-SA 4.0',
     licenseUrl: 'https://creativecommons.org/licenses/by-sa/4.0/',
     sourceUrl: 'https://www.wikipedia.org',
@@ -78,15 +78,15 @@ export const DATA_SOURCES: DataSource[] = [
   },
   {
     name: 'Wikidata',
-    use: 'The details — the dates, elevations, and namesakes behind certain stops.',
+    use: 'The details: the dates, elevations, and namesakes behind certain stops.',
     license: 'CC0 1.0',
     licenseUrl: 'https://creativecommons.org/publicdomain/zero/1.0/',
     sourceUrl: 'https://www.wikidata.org',
-    note: 'Structured data dedicated to the public domain under CC0 — free to use without attribution; credited here for transparency.',
+    note: 'Structured data dedicated to the public domain under CC0, free to use without attribution; credited here for transparency.',
   },
   {
     name: 'Macrostrat',
-    use: 'The ground — the bedrock type and age under each stop, for the geology notes.',
+    use: 'The ground: the bedrock type and age under each stop, for the geology notes.',
     license: 'CC BY 4.0',
     licenseUrl: 'https://creativecommons.org/licenses/by/4.0/',
     sourceUrl: 'https://macrostrat.org',
@@ -94,7 +94,7 @@ export const DATA_SOURCES: DataSource[] = [
   },
   {
     name: 'Google Places',
-    use: 'The pit stops — the name and category of the rest and food stops along a route.',
+    use: 'The pit stops: the name and category of the rest and food stops along a route.',
     license: null,
     sourceUrl: 'https://www.google.com/maps',
     note: 'Used under the Google Maps Platform Terms of Service. Powered by Google.',
