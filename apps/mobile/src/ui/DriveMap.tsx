@@ -285,10 +285,25 @@ function DriveMapBase({
             re-serialized to native each tick; the traveled pine grows over it. NOTE: lineDashPattern
             is iOS-only on Polyline — on Android the untraveled line is solid tan (color/width carry
             the distinction). (audit #7, #472) */}
+        {/* ⚠ THE CASING, and it is why the route survives a basemap it does not control. A single flat
+            stroke CANNOT read over both dusk land (#14201B) and dusk water (#5FA7B8): measured, the tan
+            that scores 4.97 on land scores 1.24 on the lake, and the value that beats the lake is the
+            one that vanished into the roads. Two stacked lines solve what one colour cannot — the
+            standard cartographic casing, and the same idiom this file already uses for the active
+            marker's `borderColor: colors.surface`. Solid under a dashed top line reads as a track, and
+            it keeps the dashed-trail language §1 asks for rather than trading it for a solid rope.
+            STATIC ONLY: the live drive grows a traveled pine line over this one and carries a puck, so
+            it has its own separation and its untraveled backdrop is meant to recede. */}
+        {latlngs.length > 1 && hidePuck ? (
+          <Polyline coordinates={latlngs} strokeColor={colors.surface} strokeWidth={STATIC_ROUTE_W + 4} />
+        ) : null}
         {latlngs.length > 1 ? (
           <Polyline
             coordinates={latlngs}
-            strokeColor={colors.trackInactive}
+            // ⚠ `routeTrail` on a basemap, NOT `trackInactive` — that one is the trail on our own
+            // surfaces, and on the MAP it is the byte-identical twin of the minor roads underneath
+            // (contrast 1.00, both themes). See the role's note in theme.ts.
+            strokeColor={hidePuck ? colors.routeTrail : colors.trackInactive}
             strokeWidth={hidePuck ? STATIC_ROUTE_W : 4}
             lineDashPattern={hidePuck ? STATIC_ROUTE_DASH : [2, 10]}
           />

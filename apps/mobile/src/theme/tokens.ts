@@ -24,6 +24,10 @@ export const palette = {
   amberBurnt: '#9A4D17', // amber that survives as TEXT on paper (~5:1) — kickers
   lakeTeal: '#2C6E7E', // cool route/water accent + scenic badges
   tanRule: '#CDB988', // hairlines, dashed inactive track, dividers
+  // The route line ON A BASEMAP, daylight. A deeper tan than `tanRule` for one measured reason: the
+  // map style paints minor roads in `tanRule` too, so a route drawn in it scored **1.00** against the
+  // roads underneath — not faint, IDENTICAL. This clears them at 2.07 and the paper at 3.24.
+  trailInk: '#967C46',
   rustError: '#A8401F', // errors — brick-and-clay, never clinical blue-red
 
   // Dusk / night-drive-first

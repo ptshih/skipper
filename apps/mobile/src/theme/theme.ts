@@ -34,6 +34,15 @@ export interface ThemeColors {
   onPrimary: string // text/glyphs on primaryFill
   trackActive: string // traveled portion of the route trail
   trackInactive: string // dashed atlas trail (untraveled) + hairlines
+  // The route drawn ON A BASEMAP — distinct from `trackInactive`, which is the trail on our OWN
+  // surfaces (RouteTrack's hero motif, a marker ring) where nothing competes with it.
+  // ⚠ MEASURED, not taste. `theme/mapStyle.ts` paints minor roads in `tanRule` (day) and
+  // `tanRuleNight` (dusk) — the exact values `trackInactive` carries — so the route was drawn in the
+  // SAME COLOUR as the roads beneath it: contrast 1.00 in BOTH themes. It did not read as faint, it
+  // read as absent (mistaken for a missing polyline during a device review on 2026-08-03, and only
+  // found in the accessibility tree). The dusk value is deliberately the DAYLIGHT tan: on a night
+  // basemap a light atlas tan is the legible choice, and this is a route on a map, not text.
+  routeTrail: string
   rule: string // dividers, card keylines, dashed rules
   // status
   danger: string
@@ -114,6 +123,7 @@ export const lightTheme: Theme = {
     onPrimary: palette.paperRaised, // cream
     trackActive: palette.pine,
     trackInactive: palette.tanRule,
+    routeTrail: palette.trailInk,
     rule: palette.tanRule,
     danger: palette.rustError,
     onDanger: palette.paperRaised,
@@ -147,6 +157,7 @@ export const darkTheme: Theme = {
     onPrimary: palette.inkBrown, // dark ink glows on amber
     trackActive: palette.pineGlow,
     trackInactive: palette.tanRuleNight,
+    routeTrail: palette.tanRule,
     rule: palette.tanRuleNight,
     danger: palette.emberError,
     onDanger: palette.inkBrown,
