@@ -939,6 +939,60 @@ structurally cannot see. ⚠ And one docs chore rides along: `app/index.tsx` and
 [sample-ride-postcard.md](../decisions/sample-ride-postcard.md) still assert the sample is the only
 thing an App Review tester can hear — false since 1.1 removed roam (§9).
 
+## 16. How the nine worries get ADDRESSED, not remembered
+
+A hazard list honoured by discipline is the weakest guard in the repo. `docs/README.md` says
+*"enforced, not aspirational"*; CLAUDE.md's invariants are *"enforced in code"*. So each worry below
+is converted, in this order of preference: **make it impossible** > **make it fail a test** >
+**leave it to a human**. Seven of the nine become the first two.
+
+### Made STRUCTURALLY impossible
+
+- **1 · The Sunburst.** Do the re-anchor as a **separate, prior commit** — a pure move out of the hero
+  View with no visual change — and only then delete the hero. The dangerous version (delete + re-add
+  in one edit) never exists.
+- **2 · The sign-out purge.** ✅ `signOut` is currently **re-exported straight from Better Auth** with
+  no wrapper (`src/lib/auth.ts`), and has two call sites. **Wrap it**: a local `signOut()` that purges
+  then delegates. Every caller — present and future — gets the purge, so there is nothing to
+  remember and no way to add a third call site that forgets. ⚠ Double-purge is safe: the
+  account-deletion flow already calls `deleteAllDriveDownloads()` and `removeDriveDir` is documented
+  idempotent.
+- **3 · The offline split.** Two guards, both structural: **create no route file** (the failure would
+  require *adding* `app/offline.tsx`, which is visible in review), and **lift the planner state to the
+  route component** so the two children are pure presentation. Once state lives above the branch, an
+  unmount cannot bin a transcript — the hazard is designed out rather than avoided.
+- **4 · The hide flag.** Read it in a **lazy `useState` initialiser**, so "evaluated once at mount" is
+  true *by construction* rather than by care. Matches the pattern the repo already converted its
+  lazy-init refs to.
+- **6 · Chip clamping.** The region chip component **does not accept a `numberOfLines` prop.** No
+  prop, no footgun.
+- **8 · Chip degradation.** Type it `region: Region | null` and handle null *inside* the component.
+  The type forces every caller through the degraded path; `regionsFailed` cannot produce a
+  half-interpolated string.
+- **9 · The client flag.** One `client-flags.ts` built on `region-cache.ts`'s helper, so `Paths.document`
+  is chosen **once**, in one file, and no future flag can pick the cache dir.
+
+### Made to FAIL A TEST
+
+- **5 · The placeholder rotation.** Extract the decision to `src/lib/placeholder-util.ts` and test it —
+  which index at time T, given enabled/disabled — leaving the effect thin. This is the house pattern,
+  with seven existing `*-util.ts` siblings (`preview-util`, `location-util`, `connectivity-util`…).
+- **7 · The dormant chip row** and **1b · the Sunburst's continued existence**: **source-assertion
+  tests** (`index.tsx` contains `<Sunburst`; the `regions.length > 1` row appears at most once).
+
+⚠ **Why those two specifically get source assertions, which are otherwise a smell:** they are the only
+two whose failure has **no runtime symptom today**. A deleted watermark still renders a fine-looking
+screen; a duplicate region switcher is invisible until region 2 ships, which could be months.
+Everything else fails visibly the moment someone opens the app. **Reach for a source assertion exactly
+when the defect cannot be seen at runtime yet** — the repo already has one such test and says why.
+
+### Left to a HUMAN, because nothing else can see it
+
+**AX Dynamic Type sizes, Reduce Motion, and audio focus.** `bun test` cannot render these components
+(the hooks import `expo-audio`, which is why ESLint exists here at all), so the device pass is not a
+formality — it is the only instrument for three of this design's decisions. Put them on the checklist
+explicitly rather than trusting a general "looks fine".
+
 ## Sources
 
 - [Airbnb design-system breakdown](https://github.com/VoltAgent/awesome-design-md/blob/main/design-md/airbnb/DESIGN.md)
