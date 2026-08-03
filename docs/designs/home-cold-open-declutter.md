@@ -128,13 +128,30 @@ realistic prompts that demonstrate the RANGE** of the feature. Our three already
 — keep three, keep them obviously tappable, demote the TIER and the type, not the affordance.
 Recorded because it corrects this doc's own earlier recommendation.
 
-## 6. Three options
+## 6. Seven options
 
-| Option | What moves | Answers | Cost / risk |
-| --- | --- | --- | --- |
-| **A · Re-tier** | Nothing structural — type scale, colour, one fill | Notes 2 and 3 fully; note 1 only partly (block count unchanged) | Lowest; mostly a `variant` swap + the tagline edit. Collides with the in-flight agent's narrower version. |
-| **B · Input as hero** *(recommended)* | Composer rises above the fold and grows; headline shrinks; the one amber moves to the send disc; tagline drops below MY DRIVES | All three, structurally — there is exactly one thing to do and it is the biggest element | Medium. Cold open and conversation become two layouts (the composer must fall back to a pinned footer once a transcript exists). ⚠ Moving the amber needs a founder call. |
-| **C · Poster restored** | The conversation leaves home for a pushed full-screen surface; asks live inside it | Note 1 most decisively — home drops to five blocks | Highest, and adds a navigation hop before the rider's first word, which fights 1.1's thesis that *prepare is a conversation*. Kills the keyboard-covers-the-hero problem `Composer.tsx` already comments on. |
+Founder asked for a wider set (2026-08-03). They separate on **two axes**, and everything else is a
+flavour of one of these:
+
+1. **How much poster survives the cold open** — the hero is FOUR stacked blocks (kicker · headline ·
+   trail · tagline). Keep all four / compress to one object / delete and let the skipper's voice carry
+   the explainer.
+2. **What the rider's entry point IS** — a live FIELD on home (A, B, D, E, G), a TAP-THROUGH to a
+   dedicated surface (C), or a GUIDED CHOICE with typing as fallback (F).
+
+| Option | Entry | Poster | Answers | Cost / risk |
+| --- | --- | --- | --- | --- |
+| **A · Re-tier** | field, bottom | all four | notes 2+3 fully, 1 partly | Lowest — a `variant` swap + copy edit. ⚠ Collides with the in-flight agent's narrower version. |
+| **G · One object** | field, bottom | compressed to one `Card framed` | note 1 cheaply; needs A for 2+3 | Low; reuses an existing primitive on a surface the system already permits it. ⚠ Ornament at small size fights DESIGN §2 — needs an eye. |
+| **B · Input as hero** | **field, HERO** | headline only, shrunk | all three, structurally | Medium. Two layouts (composer falls back to a pinned footer once a transcript exists). ⚠ Moves the amber — founder call. |
+| **C · Poster restored** | **tap-through** | all four | note 1 most decisively (home → 5 blocks) | High. Adds a hop before the rider's first word; fights 1.1's *prepare IS a conversation*. Does kill the keyboard-covers-hero problem `Composer.tsx` comments on. |
+| **F · Guided first** | **guided choice** | headline only | all three; best for a first-timer with nothing to say | High + strategic. ⚠ **Reopens a settled 1.1 decision** — the pickers were deliberately deleted — and narrows the ask to three shapes when free text is the planner's whole point. |
+| **D · Straight in** | field, bottom | **none** | all three; biggest reduction that keeps the conversation immediate | Medium. ⚠ Deletes the WPA poster from the front door — DESIGN.md's entire identity claim. The persona absorbs the explainer ("Narrated road trips, folks — you pick the road, I do the talking"), which is either the charming answer or the loss of the one poster-shaped screen. |
+| **E · Poster once** | field, bottom | **first launch only** | note 1 for everyone past launch 1 | Low-med; one persisted flag, re-keying `collapsed` off `riderTurnCount`. ⚠ Makes the screen the founder reviews rarely the screen most riders see. |
+
+**Recommended: B + E.** B's hierarchy every launch, E's full poster on the very first one — the
+newcomer (and App Review) gets the travel poster and the explainer, the regular gets a screen with one
+obvious thing to do, and neither audience pays for the other.
 
 ### ⚠ Option B moves the one amber, and that is an invariant, not a style
 
