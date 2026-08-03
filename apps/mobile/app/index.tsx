@@ -1227,9 +1227,16 @@ export default function HomeScreen() {
         ) : null}
       </View>
       {offline ? (
-        <Text variant="dim" color="inkFaint" style={styles.offlineNote}>
-          {voice.offline.home}
-        </Text>
+        // ⚠ ICON *AND* THE WORD, which is the one rule worth taking from Google's offline guidance:
+        // pair the cloud-off mark with text rather than relying on either alone. A glyph by itself is
+        // ambiguous at a glance and unreadable to a screen reader; the sentence by itself is easy to
+        // scroll past in a dead zone, which is exactly when it matters most.
+        <View style={styles.offlineNote}>
+          <Icon name="notDownloaded" size={14} color="inkFaint" />
+          <Text variant="dim" color="inkFaint" style={styles.flex}>
+            {voice.offline.home}
+          </Text>
+        </View>
       ) : null}
 
       {loading ? (
@@ -1466,7 +1473,7 @@ const styles = StyleSheet.create({
   wrapUp: { gap: space.sm },
   section: { marginTop: space.lg },
   sectionHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.md, marginBottom: space.sm },
-  offlineNote: { marginBottom: space.sm },
+  offlineNote: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginBottom: space.sm },
   list: { gap: space.md },
   metaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space.sm, marginTop: space.xs },
   zeroState: { gap: space.md, alignItems: 'center', paddingVertical: space.md },

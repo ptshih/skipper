@@ -385,6 +385,22 @@ phone that still works"*. Online home's job is **plan a drive**; offline home's 
 saved drive**. Today the second is expressed as *absences* (composer removed, order flipped) — a
 subtraction from the online screen rather than a designed one.
 
+### ✅ BUILT 2026-08-03 — and the component SPLIT was deliberately NOT done
+
+The offline experience ships as an authored branch inside `app/index.tsx`, not as two sibling
+components. ⚠ **That is the safer form, not a shortcut**, and the reasoning inverts what §8 assumed:
+the hazard §8 wanted guarded against — an unmount binning the transcript and killing a billed turn —
+**only exists if the two experiences are separate components**, because React unmounts whichever
+branch is not rendered. Kept as a JSX branch inside one component, planner state is inherently
+preserved and there is nothing to lift. Splitting would have *added* the risk in exchange for tidier
+file organisation, then required lifting state to buy the safety back.
+
+What DID ship is the part that mattered — the offline screen as a designed thing rather than a
+subtraction: drives first (out there they are the product), the honest "can't plan out here" card
+below, no composer, and a no-signal marker that pairs a cloud-off **icon with the word** — the one
+rule worth taking from Google's offline guidance, since a glyph alone is ambiguous at a glance and
+invisible to a screen reader.
+
 ### ⚠ Two EXPERIENCES, not two ROUTES — and this is not a style preference
 
 Both reasons are verified in the code, and the first costs money:
