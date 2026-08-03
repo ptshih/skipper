@@ -159,6 +159,27 @@ async function main() {
     )
   }
 
+  // ⚠ BUILD vs VERSION-STRING MISMATCH. Apple only OFFERS builds whose short version matches the
+  // record (§11b), but it does not un-attach one when the record is renamed underneath it — so
+  // renaming 1.0.0 → 1.1.0 leaves the old binary sitting on the new listing, and on 2026-08-03 that is
+  // exactly what happened: a 1.1.0 record still carrying build 15, the pre-1.1 roam client that 404s
+  // against the deployed API. Nothing in ASC flags it. Submitting in that state ships the wrong app
+  // under the right number, which is the worst available outcome, so this shouts.
+  const attached = await asc('GET', `/v1/appStoreVersions/${version.id}/build`)
+  const attachedShort = attached?.data?.attributes?.version
+  if (attached?.data) {
+    const buildRes = await asc('GET', `/v1/builds/${attached.data.id}?include=preReleaseVersion`)
+    const pre = buildRes.included?.find((i: any) => i.type === 'preReleaseVersions')
+    const shortVersion = pre?.attributes?.version
+    if (shortVersion && shortVersion !== version.attributes.versionString) {
+      console.log(
+        `\n⚠ ATTACHED BUILD MISMATCH: build ${attachedShort} is short-version ${shortVersion}, but this\n` +
+          `  record is ${version.attributes.versionString}. Detach it (or attach a matching build) before\n` +
+          `  submitting — ASC will not warn you.`,
+      )
+    }
+  }
+
   const locs = await asc('GET', `/v1/appStoreVersions/${version.id}/appStoreVersionLocalizations`)
   const loc = locs.data?.find((l: any) => l.attributes.locale === 'en-US') ?? locs.data?.[0]
   if (!loc) die('No en-US appStoreVersionLocalization.')

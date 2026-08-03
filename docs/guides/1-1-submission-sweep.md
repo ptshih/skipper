@@ -176,12 +176,14 @@ Everything here is owned by [app-store-submission.md](app-store-submission.md) �
       `scripts/compose-screenshot.ts`, rebuilt 2026-08-03; it had never been committed), so this is a
       recapture again rather than a build. Dark mode + `simctl status_bar` override, and capture on an
       **iPhone 17 Pro Max** simulator — it is natively 1320×2868, so nothing is resampled.
-- [ ] **Paste the 1.1 metadata** — §§3, 4 and 10's replacement blocks. Re-read the LIVE values back
-      from ASC first; this file has drifted before.
-- [ ] **Set the ASC version string to `1.1.0`.** The `1.0.0` record is `DEVELOPER_REJECTED` (verified
-      2026-08-03), so it is editable and reusable — no second version record needed. ⚠ Apple only
-      offers builds whose short version MATCHES the record, so if the build picker looks empty, this is
-      why.
+- [x] ✅ **The 1.1 metadata is entered** — done 2026-08-03 with
+      `bun run asc:metadata -- --apply --version=1.1.0`, verified by an independent read-back. The
+      record is now `1.1.0` / `PREPARE_FOR_SUBMISSION`. Re-check any time with a no-flag
+      `bun run asc:metadata`; it prints "already matches" for all three fields.
+- [ ] **Attach build 17.** ⚠ The record has NO build right now, on purpose: renaming it to 1.1.0 left
+      build 15 (short version `1.0.0`, the pre-1.1 roam client) attached, because Apple neither
+      detaches nor warns. It was detached; `asc:metadata` now checks this every run. Apple only offers
+      builds whose short version MATCHES, so 17 is the only one that will appear.
 - [ ] **Decide the App Privacy free-text question** (§8's 1.1 note). The rider types prose to
       `POST /drives/plan`, which reaches our server and Anthropic; nothing persists it. Transmitted vs
       *collected* is a judgement on Apple's definition and it is **founder's, not a docs edit** —

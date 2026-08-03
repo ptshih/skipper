@@ -1,23 +1,24 @@
 # App Store Connect — the submission cheat-sheet
 
-> **Status:** ⚠ **LISTING vs BUILD DIVERGED — 1.1 metadata WRITTEN 2026-08-02, NOT ENTERED.** The
-> live listing sells roam ("TWO WAYS TO RIDE / Ride Along: free, no account"), which 1.1 deletes, and
-> its "No account, no ads" claim is now factually wrong. §§3, 4 and 10 each carry a **1.1 replacement
-> block** alongside the live text; §9's screenshots are stale and need a real recapture (its own
-> step); §12 has the paste-it checkbox.
+> **Status:** ✅ **1.1 TEXT METADATA IS ENTERED AND LIVE (2026-08-03).** Pushed with
+> `bun run asc:metadata -- --apply --version=1.1.0` and verified by an independent read-back:
+> promotional text, description and App Review notes are all the 1.1 copy from §§3/4/10, and the
+> version record is now **`1.1.0`, state `PREPARE_FOR_SUBMISSION`**, release type MANUAL.
+> ⚠ The §§3/4/10 code blocks are the SOURCE the script extracts (`<!-- asc:… -->` markers) — edit the
+> block, re-run the script; never hand-paste, and never delete a marker.
 >
-> ✅ **The blocking founder decision is RESOLVED — `1.0.0` was WITHDRAWN.** Read back from the ASC API
-> 2026-08-03: `1.0.0` is **`DEVELOPER_REJECTED`**, release type MANUAL, build 15 attached. Nothing is
-> in review, the submission slot is free, **and the version record is editable — so 1.1 reuses it
-> rather than creating a second one** (change `versionString` to `1.1.0`). The earlier "expires
-> silently the day a reviewer picks it up" warning is spent; do not re-derive it.
+> **What is still owed before submitting** (see [1-1-submission-sweep.md](1-1-submission-sweep.md) for
+> the order): §9's screenshots, §8's App Privacy label (no public API — hand entry, and the free-text
+> question is a founder call), the two builds, and the on-device passes.
 >
-> ⚠ **What is now the sharp edge instead: TestFlight ships a DEAD CLIENT.** The newest build is
-> **16 (`1.0.1`), uploaded 2026-07-30 — pre-1.1 code** that calls `/roam/*`, which 404s on the
-> deployed 1.1 API. Anyone opening TestFlight today gets a broken app. There is no 1.1 build anywhere;
-> `app.json` is at `1.1.0` (bumped 2026-08-03) and the next production build is 17.
-> **The order of operations from here is [1-1-submission-sweep.md](1-1-submission-sweep.md)** — this
-> file owns the FIELDS, that one owns the sequence and the on-device proof.
+> ⚠ **NO BUILD IS ATTACHED, deliberately.** Renaming the record to 1.1.0 left build 15 — short version
+> `1.0.0`, the pre-1.1 roam client that 404s against the deployed API — still sitting on it, because
+> Apple does not detach a build when the record is renamed underneath it and warns about it nowhere.
+> It was detached on 2026-08-03; `asc:metadata` now checks for this every run. Attach **build 17** when
+> it exists. Submitting a mismatched build ships the wrong app under the right number.
+>
+> ⚠ **TestFlight still ships a DEAD CLIENT** until 17 lands: the newest build is 16 (`1.0.1`,
+> 2026-07-30), pre-1.1 code calling the deleted `/roam/*`. `app.json` is at `1.1.0`.
 >
 > **Prior submission state (as of 2026-07-30), kept for the diff.** `1.0.0` was `WAITING_FOR_REVIEW`
 > (submitted 2026-07-28T21:42:22Z) with **build 15** attached; **build 16 (`1.0.1`)** is `VALID` in
@@ -153,7 +154,7 @@ field that is not broken. Nothing forces the swap below; take it when convenient
 A corny old guide rides shotgun and tells you what happened where, timed to the road, hands-free, honest enough to hush when he doesn't know. Starting in Lake Tahoe.
 ```
 
-**The 1.1 option — not yet entered.** This field is editable without a review, which makes it the
+**The 1.1 option — ✅ ENTERED 2026-08-03, this is what is LIVE.** This field is editable without a review, which makes it the
 cheapest place to announce the conversation. Still leads with the persona, still closes with the
 place, per the rule above:
 
@@ -175,9 +176,9 @@ A corny old guide plans your drive from a sentence, then narrates it — timed t
 > implies voice input — "just say", "talk to him", "tell him out loud" — describes a feature that
 > does not exist. `apps/site/src/components/sections/Hero.astro` carries the same warning.
 
-### The 1.1 replacement — written 2026-08-02, **NOT YET ENTERED**
+### The 1.1 replacement — ✅ **LIVE since 2026-08-03** (written 2026-08-02)
 
-Paste this when 1.1's metadata goes in (§12 has a checkbox for it). It leads with the conversation,
+This is live. It leads with the conversation,
 because that is what changed and it is what the marketing site now leads with too.
 
 <!-- asc:description — scripts/asc-metadata.ts reads the block below. Keep the marker attached to its fence. -->
@@ -628,7 +629,7 @@ so re-pasting it would have *re-broken* a listing that was already fixed. What w
 3. It claimed **"no tracking, no analytics"** while the app ships PostHog and the Google Maps SDK —
    contradicting our own App Privacy label (§8). A reviewer who diffs those two rejects the build.
 
-### The 1.1 replacement — written 2026-08-02, **NOT YET ENTERED**
+### The 1.1 replacement — ✅ **LIVE since 2026-08-03** (written 2026-08-02)
 
 ⚠ **1.1 makes the review path strictly better, and the notes have to say so.** Under 1.0 the only
 account-free, permission-free thing a reviewer could do was play one canned sample clip. Under 1.1 a
@@ -814,9 +815,11 @@ Re-run the list; don't inherit last release's ticks.
       with no session. This is 1.1's primary review path (§10) and it needs `ANTHROPIC_API_KEY` set
       in the deployed service — if it isn't, every reviewer attempt gets the in-persona outage line
       and the app looks broken rather than unconfigured.
-- [ ] **The 1.1 metadata is actually entered in ASC** — description, promo text and App Review notes
-      all still describe roam until someone pastes §§3/4/10's replacement blocks in. The build and
-      the listing shipping out of step is the specific failure this checklist exists to catch.
+- [x] ✅ **The 1.1 metadata is entered in ASC** — done 2026-08-03 via `bun run asc:metadata --apply`,
+      read back independently. Re-verify with a no-flag `bun run asc:metadata` (it prints
+      "already matches" for all three) rather than trusting this tick.
+- [ ] **A build whose short version is `1.1.0` is attached.** The record deliberately has NONE right
+      now — see the Status block. ⚠ ASC does not warn about a mismatch; `asc:metadata` does.
 - [ ] The demo account exists, its password is in ASC, and it has credits left to create a drive.
 - [ ] Screenshots captured in dark mode (§9).
 - [ ] The coverage sentence in the description still matches reality (it says Tahoe only).
