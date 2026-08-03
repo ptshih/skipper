@@ -1,0 +1,1 @@
+DROP TABLE "drive_demand" CASCADE;

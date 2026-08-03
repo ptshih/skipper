@@ -600,7 +600,8 @@ export const poiOverrides = pgTable(
 /*  user-owned ordered sequence of them along a frozen route. (Tour tables       */
 /*  tours/segments/tracks/tour_frames dropped in 0009; asides — placeless        */
 /*  framing — dropped in 0019, see docs/decisions/geometry-first-regions.md;     */
-/*  drive_demand dropped in the 1.1 sweep — its tombstone is below `drives`.)    */
+/*  drive_demand: declaration cut in the 1.1 sweep, TABLE dropped in 0042 —       */
+/*  its tombstone is below `drives`.)                                            */
 /* -------------------------------------------------------------------------- */
 
 // The ONE shared telling of a place — 1:1 with its poi (UNIQUE poi_id). The atom: every drive
@@ -727,19 +728,20 @@ export const drives = pgTable(
   (t) => [index('drives_user_idx').on(t.userId), index('drives_route_sig_idx').on(t.routeSig)],
 )
 
-// ⚠ `drive_demand` lived here until the 1.1 sweep (D25). It counted hits per normalized route
-// signature for a cache-warming / authored-tour graduation job that is deferred behind a real
-// route-concentration histogram — i.e. it was written on every create and read by nothing. PostHog is
-// the demand instrument now. ⚠ THE TABLE IS STILL IN THE DATABASE: removing the declaration is what
-// ARMS the next `db:generate`/`db:push` to drop it, and that DDL is a deliberate act against the one
-// shared Neon host, not a side effect of this commit.
+// ⚠ `drive_demand` lived here until the 1.1 sweep (D25), and the TABLE itself was dropped by migration
+// `0042` on 2026-08-02 (founder go). It counted hits per normalized route signature for a
+// cache-warming / authored-tour graduation job that is deferred behind a real route-concentration
+// histogram — i.e. it was written on every create and read by nothing. PostHog is the demand
+// instrument now. It held 3 rows at the end, one hit apiece; they were dumped before the drop and are
+// worth nothing.
 //
-// ⚠⚠ AND THE SAFETY IS THINNER THAN IT LOOKS. A snapshot exists (D5, 2026-07-31, whole schema + whole
-// bucket) and local-only was explicitly ACCEPTED by the founder — so this is NOT "there is no backup".
-// It is that the backup lives under a gitignored `.scratch/` sharing a failure domain with the working
-// tree, `dev` and `prod` point at the SAME Neon host so there is no staging to rehearse on, and
-// restoring 6,856 rows to undo a typo is a bad day rather than an undo. `scripts/db-preflight.ts`
-// refuses the drop on that basis and is the guard that stands where this comment only warns.
+// ⚠ THE DURABLE LESSON, which is why this tombstone outlives the table: CUTTING A DECLARATION DOES
+// NOT DROP ANYTHING — it ARMS the drop. For eleven days this file said the table was gone while it sat
+// in the one shared Neon host, so `db:generate` carried a `DROP TABLE` nobody had decided to run and
+// `db:push` would have executed one on sight. `dev` and `prod` point at the SAME host, so there is no
+// staging to discover that on. `scripts/db-preflight.ts` exists to refuse exactly that gap and now
+// reports the schema and the database in agreement; it is the guard that stands where this comment
+// only warns.
 // (An earlier version of both cited an offsite requirement that step 0 still listed and D5 had already
 // lifted — reconciled 2026-08-02.)
 
