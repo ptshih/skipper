@@ -4,6 +4,15 @@
 (re-anchored 2026-06-19). The CONCEPT survives the V1→V2 pivot, but its implementation plan was
 written against storage that no longer exists; read the V2 banner below before building.
 
+> ⚠ **Its core mechanism was BUILT AND REJECTED — read
+> [scenic-filler-and-the-empty-stretch](../decisions/scenic-filler-and-the-empty-stretch.md) FIRST**
+> (added 2026-08-03). `SCENIC_ANCHORS` — the factless curated-overlook table this spec proposes at
+> §210/§233 — was implemented and reverted on **2026-06-09** (`d2a2056`); the founder's words were
+> *"too neutered"*, and the paired `FEATURED_STOPS` force-include died alongside it because famous
+> spots should be **grounded, not factless**. The call: candidate-less stretches **stay silent**, real
+> stops only. That decision was never written down until now, which is why this spec still reads as
+> live. It was REOPENED 2026-08-03, but not in this shape — see §3 of that record.
+
 > **Schema-names note (updated 2026-06-19 for the V2 roam-first model):** the V1 authored-tour
 > storage this spec assumes is GONE (migration 0009 dropped `tours`/`tour_stops`/`segments`/`tracks`/
 > `tour_brackets` — see `packages/db/src/schema.ts`). Re-anchor onto V2:

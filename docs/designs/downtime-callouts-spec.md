@@ -1,8 +1,11 @@
 # Downtime callouts — build spec / handoff
 
-> **Status: SPEC ONLY — nothing built.** This is a future-feature design, gated behind the
-> proven phone player (M1 Phase 4/5) like the rest of the charm roadmap. Decided in a design
-> session 2026-06-09; supersedes an earlier "fold callouts into scenic stops" sketch (see §2).
+> **Status: SPEC ONLY — nothing built, nothing spent.** Designed 2026-06-09 (supersedes an earlier
+> "fold callouts into scenic stops" sketch, §2). **Re-interrogated 2026-08-03 in a Skipper Hours
+> session: the idea SURVIVED, one locked decision is OVERTURNED (duck-overlay → the music steps
+> back), and the v3 deferral's stated reason does not hold up. Read §0 before anything else — it
+> amends the body, and three of the body's load-bearing numbers are no longer checkable.** Still
+> NOT greenlit; the agreed next move is a $0 desk measurement (§0), not a build.
 
 > **Schema-names note (updated 2026-06-19 for the V2 roam-first model):** identifiers below predate
 > the V2 pivot that dropped the entire authored-tour storage (migration 0009) — `tours`,
@@ -41,7 +44,142 @@ audio content type alongside route-anchored place narrations and the (v3) placel
 framing. (Both this feature and that framing are DEFERRED to v3/guided-tours — see the banner: their
 v2 storage substrate, the `asides` table, was deleted in migration 0019.)
 
-## 0. TL;DR for the next Claude
+## 0. Skipper Hours amendment — 2026-08-03 (read before the rest)
+
+A Skipper Hours session re-interrogated this spec against today's tree. **It survived**, but in an
+amended shape: one locked decision is overturned, the stated reason for the v3 deferral does not
+survive scrutiny, and three of the pressure test's load-bearing numbers cite config that no longer
+exists. Nothing was built and nothing was spent. **This is still not greenlit.**
+
+### 0.1 What the founder staged (the grin)
+
+Two moments, both chosen, and they are what the feature is FOR:
+
+- **CRAWL** — 89 southbound above Emerald Bay, six minutes at 6 mph, brake lights to the horizon.
+  *"…We have been at this a while now, haven't we. Good news is the lake is not going anywhere.
+  Bad news is neither are we."*
+- **LONG-GAP** — US-50 east, open road, four minutes to the next stop.
+  *"…Long quiet stretch coming up. My favorite kind, if I am honest."*
+
+⚠ **`golden_hour` was offered and NOT taken.** It stays in the §3 mood enum, but it is a
+*condition*, not a response — it would fire on a drive where nothing happened. Do not let it become
+the lead example when someone builds the pool; the two beats above are the target.
+
+### 0.2 DECISION OVERTURNED — duck-overlay is dead; the music STEPS BACK
+
+§6.3 and §13's "Decisions locked this session" both specify **duck-overlay**: music continues at
+reduced gain *under* the callout. **Overturned 2026-08-03 (founder).**
+
+What overturned it: **the quiet stretch is not quiet.** `apps/mobile/src/lib/driveMusic.ts` runs a
+curated instrumental through every driving leg, and CLAUDE.md states it outright — *the drive IS the
+audio (curated soundtrack + narration)*. So a callout never fills a void; it talks over a song. The
+bar was never "beats silence", it was **"beats the song he would be talking over."** The founder's
+call: the charm is the **drop**, not the sentence. The music falls away (~1.5 s), he speaks into real
+quiet, the music comes back.
+
+⚠ **This makes the ramp load-bearing charm, not a mixing detail.** §6.3's "third gain state" framing
+is wrong for this design — it is a *transition with timing*, and the timing is the feature.
+
+⚠ **IMPLEMENTATION CONSTRAINT, verified in code, and it is a trap.** The obvious build — model the
+drop as a new `segmentKind` — **would shuffle the song every time he speaks.** `driveMusic.ts:144`
+rotates on `segmentKind === 'drive' && prevKind.current !== 'drive'`, and the audit #287 comment
+directly above it establishes that a `rest → drive` transition rotates *by design* ("rests keep the
+current song", then the drive rotates). Any new kind returning to `'drive'` inherits exactly that.
+**The drop must be a gain envelope INSIDE the `'drive'` segment** — `segmentKind` never changes, only
+volume moves. This is a sharper form of §11's existing rotation gotcha, and it applies to the
+music-drop design that gotcha was not written for.
+
+### 0.3 The v3 storage deferral is the WEAKEST part of this spec
+
+The banner defers the whole feature to v3 because a callout is placeless and `asides` was dropped in
+0019. That reason does not hold today:
+
+- **Storage is break-freely** (founder, 2026-07-31 — CLAUDE.md): 1.0 will probably never be released,
+  destructive migrations are allowed, and a `callouts` table is ~10 lines. This spec's deferral was
+  written 2026-06-09 and predates that posture.
+- **The geometry objection does not apply to this feature.** `geometry-first-regions` killed placeless
+  content because such a row "could not be selected, ordered, or triggered by the same geometry the
+  rest of the system runs on". But a callout is **deliberately not geometrically selected** — §2
+  chose a runtime scheduler over studio-placed anchors on purpose. It never asked for the thing it
+  was denied.
+
+⚠ **What DOES still hold, so nobody over-corrects:** `asides` is gone (verified in
+`packages/db/src/schema.ts`, 2026-08-03) — there is genuinely no placeless table today. And **1.1's
+live planner is NOT a precedent for skipping storage**: it speaks pre-drive, over text, from a paid
+model call in the request path, whereas a callout is mid-drive *audio* in Tahoe dead zones, where §8
+pins selection as 100% on-device. Live generation cannot cross that constraint.
+
+**Net: what stands between this and a build is charm, not schema.** Do not cite "there is no table"
+as the reason again.
+
+### 0.4 ⚠ Findings 1 and 2 are UN-RECHECKABLE — do not re-cite their numbers
+
+§2's pressure test rests on `PACING.standard.minGapSec = 180`, `TARGET_SECONDS.story = 120` and
+`QUEUE_LAG_WARN_SEC`, all cited from `packages/studio/src/config.ts`. **Every one of those citations
+is now wrong**, but in three different ways — corrected 2026-08-03 after a first pass here
+over-claimed that they had simply vanished:
+
+- **The 180 s floor is ALIVE and MOVED** — `DRIVE_MIN_GAP_SEC = 180` now lives at
+  `packages/engine/src/pacing.ts:15` (with `driveMaxStops = totalSec / 240`, capped 24), because the
+  device must be able to re-pace a drive offline with the same math. So Finding 1's premise still
+  stands; only its address changed.
+- **`TARGET_SECONDS.story` is GONE as a constant** — clip length is now a per-call `targetSeconds` /
+  `maxSeconds` pair on the narrate request (`packages/studio/src/pipeline/narrate.ts:106`). There is
+  no single global "a story is 120 s" number to divide against any more.
+- **`QUEUE_LAG_WARN_SEC` / `projectQueueLag` were REMOVED** 2026-06-19 — see the note at
+  `packages/engine/src/pacing.ts:54`: it had no production caller, and `buildDrive`'s step-4 FIFO
+  walk inlines the lag projection *because it also drops laggards mid-pass*, which the standalone
+  helper could not.
+
+⚠ So "a ~120 s clip against a 180 s floor leaves ~60 s of quiet" is no longer arithmetic you can
+re-derive from two constants — the clip half is now per-call. **Re-measure (§0.6); do not inherit the
+number.** ⚠ `SIM_MPH = 60` does still stand at `apps/mobile/src/lib/useDrive.ts:61`.
+
+### 0.5 ⚠ Requirement A (§9) is mis-scoped — `packages/sim` already exists
+
+§9 proposes building perturbations into the **mobile** `simulatedSource` (`apps/mobile/src/lib/gps.ts`)
+as a prerequisite. That was written before — or without — `packages/sim`, which today is a headless,
+deterministic, desk-runnable drive simulator:
+
+- `packages/sim/src/run.ts` takes `--mph` / `--tick` / `--lead` (plus `--gpx` for the Xcode replay).
+- `runDrive(polyline, stops, { mph, tickHz, leadSeconds })` returns a report that already knows every
+  stop's **fire time** and already **detects audio overlaps**.
+- The 1.1 submission sweep already trusts it: Pass A checks the in-app run against a `--mph=45`
+  schedule from this exact script (`docs/guides/1-1-submission-sweep.md` §2).
+
+So the first move is **not** a mobile change, and does not enter the 1.1 critical path.
+
+### 0.6 The agreed next move — measure the quiet. $0, no founder go needed.
+
+Teach `packages/sim` to report **gaps**, not just stops — it is arithmetic over data `runDrive`
+already holds (fire time + clip duration → next fire time) — and run it over the real Tahoe drive at
+30 / 45 / 60 mph. Output: every window ≥ the §7.1 gate (~95 s) where a callout could fire.
+
+That settles Finding 1 with a number instead of an argument, and it can **kill the LONG-GAP half on
+evidence**: if the real drive has zero qualifying windows at 45 mph, that half is dead and the build
+was never worth starting. If it has several, you know exactly where they are before writing a line
+of scheduler.
+
+### 0.7 Alternatives considered (2026-08-03)
+
+| | | |
+|---|---|---|
+| **A — measure the quiet** | **CHOSEN** | $0, headless, off the 1.1 critical path, can kill half the idea on evidence. |
+| B — hear the bare gap on device | not chosen | Build the music-drop with no line and go listen. Faster to a real feeling, but edits `driveMusic` + `useDrive` while 1.1 is mid-submission, and a bad result is ambiguous — you would not know whether the idea failed or the drive simply had no good gap to try it in. That ambiguity is what A removes. |
+| C — don't build it | not chosen | The honest case, recorded because it may still win: this is the third "fill the space between stops" idea on the shelf (with `skipper-opinions-spec.md`, `tell-me-more-spec.md`), none built; **RISK-1 stands — no drive has been driven end-to-end for real**; and nobody has yet heard a long empty leg *with the soundtrack*. Every competitor fails at dead air, but this product may not have dead air — it has music. |
+
+**What would flip A → B:** the measurement comes back rich in qualifying windows **and** a real drive
+shows the music-only legs land flat. **What would flip the whole thing to C:** the measurement shows
+the gaps are not there, or the first real drive shows the soundtrack already does this job.
+
+### 0.8 Spend gate
+
+Nothing agreed in this session spends anything, and the gap measurement needs no founder go.
+⚠ The first step that DOES spend is §4's TTS pool — an **operator paid run, which requires an
+explicit founder "go" per run and is never inferred from a design conversation**. A future reader
+must not read "the idea survived Skipper Hours" as authorization for that run.
+
+## 0b. TL;DR for the next Claude (2026-06-09 — amended by §0 above)
 
 - **Callouts = persona-only (NO facts) short clips, fired by a runtime scheduler during
   downtime, ducked OVER the soundtrack.** Persona-only is the whole safety story: they assert
