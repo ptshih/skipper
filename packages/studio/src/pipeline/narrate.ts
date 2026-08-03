@@ -491,3 +491,76 @@ function describe(req: NarrationRequest): string {
     : `${req.stopType.toUpperCase()} "${req.place?.name ?? '?'}"`
 }
 
+/**
+ * The exhaustion sentinel for a b-side (docs/designs/tell-me-more-spec.md §2, "if the facts are
+ * exhausted, return nothing").
+ *
+ * ⚠ IT EXISTS BECAUSE "RETURN NOTHING" IS NOT AVAILABLE. `runNarration` THROWS on empty output — a
+ * deliberate quality invariant for the main telling (never persist a half script), and one a b-side
+ * must not weaken, since both share the call. So an exhausted place has to say so IN BAND, and the
+ * caller maps the sentinel to `null`. Silence would be indistinguishable from a truncation.
+ *
+ * Kept ugly and unpunctuated on purpose: the model is otherwise told to write only spoken words, so a
+ * sentinel that could plausibly BE a spoken line risks a real telling being thrown away as exhausted.
+ */
+export const DEEPER_CUT_NONE = 'NO DEEPER CUT'
+
+/**
+ * The B-SIDE conditioning block, appended AFTER the ordinary fact sheet.
+ *
+ * ⚠ ORDER IS LOAD-BEARING: the sheet comes first so the prompt's cached prefix and every grounding
+ * rule land exactly as they do for the main telling — a b-side is not a looser form, it is the SAME
+ * grounding with a different selection rule. This block only narrows WHICH facts are still available.
+ *
+ * ⚠ The main script is quoted as MATERIAL ALREADY SPENT, never as an example to imitate. Handing a
+ * model its own prior output invites pastiche of the telling rather than of the facts, which is the
+ * failure mode this whole block exists to avoid (tell-me-more-spec §8.5: "a genuine B-side or a
+ * leftover-scraps dump?").
+ */
+function deeperCutBlock(mainScript: string): string {
+  return [
+    'THE SECOND TELLING (this is a B-SIDE):',
+    '',
+    'The folks already heard the telling below at this place, start to finish. They liked it enough to ask for more, so they are not being sold the place again — they are being let further in.',
+    '',
+    '--- ALREADY SAID (do not repeat any of it) ---',
+    mainScript,
+    '--- END OF WHAT WAS ALREADY SAID ---',
+    '',
+    'Now tell them something ELSE from the fact sheet above. The rules:',
+    '- Everything you say must still come off that sheet. This is not permission to reach further; it is permission to go where the first telling did not.',
+    '- Never restate a fact from the already-said, even reworded, and never re-explain what the place IS. They know. Start from the assumption that they were listening.',
+    '- Do not open by acknowledging the request with a stock line, and do not narrate that this is a second telling. One warm beat that lands as "since you asked" is plenty, and it should sound like YOU, not like a menu.',
+    '- Go for the material the first telling had no room for: the specific, the odd, the human. A tight telling spends the headline and drops the detail — the detail is what you are here for.',
+    '- No recap, no summary, no closing bow that ties it back to the main telling.',
+    '',
+    `IF THE SHEET IS SPENT, SAY SO BY RETURNING EXACTLY THIS AND NOTHING ELSE: ${DEEPER_CUT_NONE}`,
+    'A thin place with one good fact already used has no b-side, and that is a correct outcome, not a failure. Padding, restating, or stretching one leftover fact into a telling is worse than the folks hearing nothing — silence beats a scraps dump. Returning the line above is the RIGHT answer more often than you would think; do not talk yourself into a telling you cannot ground.',
+  ].join('\n')
+}
+
+/**
+ * Narrate a place's DEEPER CUT — the "Tell me more" b-side (tell-me-more-spec.md).
+ *
+ * Resolves to `null` when the model reports the sheet exhausted, which IS the spec's eligibility
+ * gate: there is no separate heuristic deciding which places deserve a b-side, only whether one can
+ * be grounded (§2, "eligibility is automatic"). Throws on refusal/truncation exactly like
+ * `narrateStop` — a caller must never persist a half script.
+ *
+ * ⚠ `req` is the SAME request that produced the main telling (same sheet, same grounding, same
+ * attribution), with `mainScript` naming what was spent. Do NOT hand it a trimmed sheet: the model
+ * needs the whole well to find what the first pass left behind.
+ */
+export async function narrateDeeperCut(
+  req: NarrationRequest,
+  systemPrompt: string,
+  mainScript: string,
+): Promise<NarrationResult | null> {
+  const user = `${buildFactSheet(req)}\n\n${deeperCutBlock(mainScript)}`
+  const result = await runNarration(systemPrompt, user, `B-SIDE ${describe(req)}`)
+  // Tolerant match: the sentinel may arrive with stray punctuation or quoting, and a false NEGATIVE
+  // here is the expensive direction — it persists a "telling" that is really the model saying no.
+  if (result.script.replace(/[^a-z ]/gi, '').trim().toUpperCase() === DEEPER_CUT_NONE) return null
+  return result
+}
+

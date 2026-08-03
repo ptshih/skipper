@@ -1,9 +1,16 @@
 # "Tell me more" — the deeper-cut / B-side spec
 
-> **Status: SPEC ONLY — nothing built.** A studio pipeline + player feature, fully offline. Decided
-> 2026-06-09. Builds on [replay-last-stop-spec](replay-last-stop-spec.md) (the soft-clip player
-> concept it shares) and [downtime-callouts-spec](downtime-callouts-spec.md); it's the pre-canned
-> rung of the pull ladder formalized in [ask-the-skipper-spec](ask-the-skipper-spec.md) §4.6.
+> **Status: GENERATION BUILT (script-only, preview-by-default, NOTHING PERSISTED) 2026-08-03; the rest
+> is SPEC ONLY.** A studio pipeline + player feature, fully offline. Decided 2026-06-09. Builds on
+> [replay-last-stop-spec](replay-last-stop-spec.md) (the soft-clip player concept it shares) and
+> [downtime-callouts-spec](downtime-callouts-spec.md); it's the pre-canned rung of the pull ladder
+> formalized in [ask-the-skipper-spec](ask-the-skipper-spec.md) §4.6.
+>
+> **⚠ §8's build order was deliberately INVERTED (founder, 2026-08-03) — read §8.0 before following it.**
+> `narrateDeeperCut` (`pipeline/narrate.ts`) + `generate-bside-narrations.ts` exist and can print a
+> b-side script for any live story stop. No schema change, no TTS, no DTO, no player, and **no
+> persistence** — deliberately, since a second telling of one poi has nowhere to land until
+> `narrations_poi_uq` is reconciled (§3), and writing first would decide that by accident.
 
 > **Schema-names note (updated 2026-06-19 for the V2 roam-first model):** the V1 authored-tour
 > storage this spec assumed is GONE (migration 0009 — `tour_stops`, `segments`, `tracks`). In V2 the
@@ -161,6 +168,39 @@ lands, Ask is the natural upgrade: swap the *fixed* B-side for a *responsive* gr
   deliberate trade for offline + ships-now.
 
 ## 8. Build phases (file-level)
+
+### 8.0 The order below is INVERTED — ear-tune came first (2026-08-03)
+
+As written, phases 1–4 build generation, a live-DB migration, API/DTO and the player, and only then
+(phase 5) ask by ear whether a deeper cut *is a genuine B-side or a leftover-scraps dump*. That puts
+the one question capable of killing the feature after every irreversible step. So phase 5 was pulled
+to the front and answered on its own:
+
+- **Built:** `narrateDeeperCut` (`packages/studio/src/pipeline/narrate.ts`) — the same
+  `NarrationRequest` that produced the main telling, plus a B-SIDE block naming the main script as
+  material already spent. ⚠ It resolves to `null` on exhaustion via an **in-band sentinel**
+  (`DEEPER_CUT_NONE`), because §2's "return nothing" is not available: `runNarration` THROWS on empty
+  output, a quality invariant for the main telling that a b-side must not weaken since both share the
+  call.
+- **Built:** `packages/studio/src/generate-bside-narrations.ts` — ranks live story stops by unspoken
+  sheet material and prints the b-side. **Preview-by-default; `--apply` makes the model calls.** ⚠ The
+  flag means something different here than in the other studio CLIs: on a script-only run the CALL is
+  the spend, so `--apply` does not mean "write to the DB". It still persists nothing.
+- **Measured (read-only, no spend):** across 421 live story tellings, ~52% of curated `fact_sheet`
+  facts are never spoken by the shipped clip (median 4/poi). Eligibility, if the exhaustion gate is
+  proxied by material: **92%** of stops hold ≥1 unspoken fact, **64%** hold ≥300 chars, **47%** ≥500,
+  **32%** ≥900. So the button would be present on roughly HALF the corpus at a "real telling"
+  threshold, not nearly all of it — §10's "thin stop → button absent" is the common case, not the
+  edge case, and the player should be designed for a button that comes and goes.
+- **⚠ One correction to §2:** it sources the b-side from the curated sheet **or** the extract
+  fallback. It should be **both** — there are ~277 median chars in `facts.extract` beyond the sheet on
+  373/421 pois, and a b-side has no two-minute budget forcing it to choose. Widening the source is
+  free and it raises the eligible pool. (Same argument as
+  [ask-the-skipper-spec](ask-the-skipper-spec.md) §0.1.)
+- **Not done:** the ear check itself. Generating even one script is an **operator paid run** and needs
+  an explicit founder go.
+
+Resume the numbered phases below only once the ear check says the b-side is worth having.
 
 1. **Generation.** `narrate.ts`: a `narrateDeeperCut` (conditioned on the main script, exhaustion-
    gated). Wire into `generate-narrations.ts` as a post-narration pass; persist a `form='bside'`
