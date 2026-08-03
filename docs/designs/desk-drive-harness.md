@@ -101,7 +101,7 @@ noise baked in, replayable forever, by anyone, in CI.
 ⚠ **Local-only, and this is not a detail.** A raw GPS trace is precise location data about the founder.
 INV-13 keeps coordinates out of analytics events deliberately; a recorder that uploads would walk
 straight around that. Write to app storage, export by explicit user action, never to a server. If it is
-ever anything but dev-gated, it is new personal data and `purgeUserData` has to chase it.
+ever opened past admins, it is new personal data and `purgeUserData` has to chase it.
 
 ### 4.3 Fault injection — synthesize what the road does
 
@@ -174,8 +174,12 @@ prevent. `--trace` was a deliberate refusal until that move; it works now for th
 
 - **How far to go now** — 4.1 alone materially improves every future desk pass; 4.1 + 4.2 is the
   compounding one; 4.4 is what removes founder time from the loop permanently.
-- **Whether the recorder ships dev-gated or to every rider.** Dev-gated is the obvious default and the
-  privacy-cheap one. Rider-wide would gather real traces from roads nobody here has driven — genuinely
-  valuable, and a much larger consent/retention question that is founder's alone.
+- ✅ **DECIDED 2026-08-03 (founder): the recorder gates on `isAdmin`, not `__DEV__`.** Under `__DEV__`
+  only an Xcode-launched build records, so the TestFlight drives actually worth capturing would have
+  banked nothing — the one loss that cannot be undone. `isAdmin` is the same server-set role that
+  already gates the Developer screen the traces are read from, so it widens nothing a non-admin can
+  reach, and traces stay local-only. **Still open:** whether to ever gather traces from ordinary
+  riders. That would reach roads nobody here has driven — genuinely valuable, and a much larger
+  consent/retention question that is founder's alone.
 - **Fix the `voice.ts:390` copy now**, independent of everything else — it currently describes a
   feature that does not exist.

@@ -37,6 +37,7 @@ import {
 import type { Attribution } from '@skipper/shared'
 import { track, type StopSkipReason } from './analytics'
 import { ApiError, errorMessage } from './api'
+import { isAdmin, useSession } from './auth'
 import { cleanPlaceName } from './labels'
 import { loadPlayback, resignPlayback } from './offline'
 // Pure + native-free (offline-util.ts's whole reason for existing), so importing it here costs this
@@ -332,6 +333,7 @@ export interface UseDriveOptions {
 
 export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}): UseDrive {
   const mode = opts.mode ?? 'sim'
+  const { data: session } = useSession()
   const [data, setData] = useState<DriveData | null>(null)
   const [urls, setUrls] = useState<Map<number, string>>(new Map())
   // True when playback is served entirely from the on-disk download (zero network) — surfaced as a
@@ -406,6 +408,8 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
   // EMPTY — this callback is upstream of finishDrive → pump → handleFix, the one the GPS source
   // captures once, so a dep added here silently rebuilds the whole chain mid-drive.
   const recorderRef = useRef<{ rec: TraceRecorder; meta: TraceMeta } | null>(null)
+  // Whether THIS rider may record. Mirrored into a ref by the effect near `dataRef` — see there.
+  const isAdminRef = useRef(false)
 
   const teardownSource = useCallback(() => {
     subRef.current?.stop()
@@ -715,14 +719,22 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
     engineRef.current = new TriggerEngine(triggerable)
     setDriving(true)
     // ── the black box. Live drives only (a synthetic drive's fixes are already reproducible from the
-    // polyline, so recording them banks nothing), and __DEV__ only — a raw GPS trace is precise
-    // location data about a real person, and shipping the recorder to riders is a consent question,
-    // not a flag flip. See trace-recorder.ts. Attached BEFORE the accuracy gate so the trace keeps the
-    // fixes the gate threw away; a post-gate trace always replays clean and therefore proves nothing.
+    // polyline, so recording them banks nothing), and ADMINS only.
+    //
+    // ⚠ Admin, deliberately NOT `__DEV__` (founder, 2026-08-03). Under `__DEV__` the only build that
+    // records is one launched from Xcode — and the drives that matter will be driven on TestFlight,
+    // so the gate would have silently discarded exactly the traces this exists to capture. That loss
+    // is the one that cannot be undone: a drive not recorded is gone. `isAdmin` is the same
+    // server-set role that already gates the Developer screen these traces are read from, so this
+    // widens nothing a non-admin can reach. Traces remain LOCAL-ONLY — nothing here uploads, and the
+    // only exit is an explicit tap into the share sheet. See @skipper/engine trace.ts.
+    //
+    // Attached BEFORE the accuracy gate so the trace keeps the fixes the gate threw away; a post-gate
+    // trace always replays clean and therefore proves nothing.
     let onRaw: ((raw: RawFix) => void) | undefined
     // `driveId` is narrowed here rather than asserted: `data` only ever loads for a real id, but the
     // type does not know that, and a trace stamped with an empty id cannot be matched to a route.
-    if (mode === 'live' && __DEV__ && driveId) {
+    if (mode === 'live' && isAdminRef.current && driveId) {
       const rec = new TraceRecorder()
       recorderRef.current = {
         rec,
@@ -1072,6 +1084,13 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
       mountedRef.current = false
     }
   }, [])
+
+  // ---- mirror admin into a ref, for the same reason `data` is mirrored below: `beginDrive` sits
+  // upstream of the callback the GPS source captures once, so reading a session value directly there
+  // would put it in that dep array. A ref keeps the recorder gate out of the callback graph entirely.
+  useEffect(() => {
+    isAdminRef.current = isAdmin(session)
+  }, [session])
 
   // ---- mirror `data` into a ref so the GPS-source-captured handleFix always reads the latest (audit #377) ----
   useEffect(() => {

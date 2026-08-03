@@ -18,7 +18,9 @@
 // ⚠ **A trace is precise location data about a real person, so it is LOCAL-ONLY.** INV-13 keeps
 // coordinates out of analytics events deliberately; a recorder that uploaded would walk straight
 // around that guarantee. Nothing here transmits — it buffers in memory and hands bytes to an explicit
-// user-initiated export. If this ever stops being dev-gated it becomes new personal data and
+// user-initiated export. Recording is gated on `isAdmin` (founder, 2026-08-03) — NOT `__DEV__`, which
+// would have recorded only from Xcode-launched builds and therefore discarded exactly the TestFlight
+// drives worth capturing. If it is ever opened to ordinary riders it becomes new personal data and
 // `purgeUserData` has to chase it, which is a founder decision, not a refactor.
 import type { RawFix } from './fix-mapper'
 

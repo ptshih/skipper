@@ -9,7 +9,7 @@
 // ⚠ **LOCAL-ONLY.** Nothing here uploads. A trace is precise location data about a real person, and
 // INV-13 keeps coordinates out of analytics deliberately; the only way one leaves the device is the
 // system share sheet, driven by an explicit tap. See @skipper/engine's trace.ts header for what
-// changes if this ever stops being dev-gated.
+// changes if this is ever opened past admins.
 //
 // API (expo-file-system 57): `Directory`/`File`/`Paths`; `dir.create({intermediates,idempotent})`;
 // `file.write(str)`/`file.textSync()`/`file.delete()` — same idiom as clip-store.ts / offline.ts.
