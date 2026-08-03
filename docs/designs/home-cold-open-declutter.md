@@ -747,6 +747,42 @@ state where `region.displayName` is undefined. The cached region (`region-cache.
 there has ever been a successful load; on a true cold first launch with a failed `/regions` there is
 nothing to name.
 
+## 13. Note 11 — putting the charm back (the declutter went one edit too far)
+
+Founder, 2026-08-03: *"the home screen looks a bit stale… lets try and spice it up a bit? the region
+filter looks lonely"*. Agreed, and the cause is traceable: cutting `voice.home.kicker` and "Well
+now —" removed **the last two persona markers** on the screen within a few minutes of each other,
+leaving a lone chip on an empty line.
+
+⚠ **The constraint is DESIGN §2: charm lives in voice, motif and warmth — NOT clutter, and one
+signature move per screen, never six.** The failure mode being re-run is the original complaint, so
+every move below adds **zero blocks and zero CTAs**.
+
+### ✅ S1 — applied (free)
+
+Three moves, none of which invents anything:
+
+- **A dashed atlas rule runs from the chip to the right edge**, so the chip sits *on* something — a
+  route line leaving a marker. `Divider dashed` is already documented as "the atlas-trail rule".
+- **An enamel glyph inside the chip**, so it reads as a place badge rather than a filter control.
+- ✅ **The sunburst is raised.** `Sunburst` renders at `opacity 0.09` today — **below the threshold of
+  being seen at all**, which is why nobody noticed losing it. Raising it is a one-number change and
+  restores the WPA poster reference the rest of the cut removed.
+
+### Alternatives, not chosen but drawn
+
+- **S2 · the rig is parked here** — the `RouteTrack` trail with the car token at rest, at quarter
+  height. The strongest Skipper signal in the system. ⚠ The only option that **spends a row**, and on
+  launch 1 the token must not glow (the sample disc owns the one amber).
+- **S3 · enamel badges** — replace the rows' generic glyphs with the hand-drawn badge set DESIGN §9
+  already asks for. Highest charm per pixel and it **composes with S1**. ⚠ An asset build, not a
+  restyle.
+
+⚠ **This is the second time the amber budget has constrained a decision** (§10 was the first). Worth
+noticing as a pattern: on launch 1 the sample disc owns the one amber, so anything else warm on that
+screen must be a fill without a glow — which is exactly why S1's three moves are pine, ink and a
+watermark rather than anything amber.
+
 ## Sources
 
 - [Airbnb design-system breakdown](https://github.com/VoltAgent/awesome-design-md/blob/main/design-md/airbnb/DESIGN.md)
