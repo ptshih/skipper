@@ -451,9 +451,46 @@ true". That is the ceiling holding under temptation, not luck.
 a defect — `cut-wave-form.md` recorded the same thing ("lengths ran 4-9s, under the 15s aim… a
 name-only wave lands short and evaluatePacing never flags short"). Do not tune it back up.
 
-**Total smoke: 22 clips, $0.25, nothing persisted.** The content question is closed; what remains
-before a real run is the machinery no smoke has touched — TTS, loudnorm, R2, the fail-closed eval
-gate, and the `narrations` write path for a form that has never had a row.
+**Total smoke: 22 clips, $0.25, nothing persisted.** The content question is closed.
+
+### 11.10 ⛔ BLOCKER — a scenic clip is NEVER SELECTED. Do not generate this tier yet.
+
+Measured free, 2026-08-03, **before** any generation spend — and it would have been a ~$30 mistake.
+Simulated the real Tahoe drive with the scenic tier added as candidates (20 s each, the band the smoke
+produced):
+
+| run | stops | of which scenic | coverage | quiet |
+| --- | --- | --- | --- | --- |
+| today (story only) | 8 | 0 | 23% | 80% |
+| **with the scenic tier added** | 8 | **0** | 23% | 80% |
+| scenic ONLY (no stories) | 7 | **7** | 6% | 94% |
+
+**Adding 30 eligible scenic candidates changes the drive by nothing.** The isolation run is the
+diagnosis: scenics ARE reachable, DO survive the 1 km co-located dedupe, and DO clear the pacing
+floor — they lose purely to **competition**. `buildDrive` step 3 picks ONE winner per `minGapSec`
+window and `better()` ranks on `audioDurationMs`, so a 60–90 s story beats a 20 s glance every time.
+A tier generated today would be invisible in the only mode that exists.
+
+⚠ **This is the same shape as the fused-telling refusal** (§4.3): audio paid for, released, and
+unreachable because a selection rule never learned about it. It was caught this time only because the
+question was asked BEFORE the spend, not after.
+
+**The fix is a PLACEMENT rule, not a content or generation change.** A glance must not contend for a
+3-minute stop slot against a full telling under one comparator. The shape that works:
+
+1. select STORIES first, exactly as today (unchanged — a scenic must never displace a telling);
+2. compute the quiet windows that result (`SimReport.quietWindows`, `@skipper/engine`);
+3. drop scenics into windows over some floor, consuming **no stop slot** and ignoring `driveMaxStops`.
+
+⚠ **That is the downtime-callout scheduler's problem, restated** — "play something in the gap without
+competing for a stop" — so the two threads converge here and should share one mechanism rather than
+grow two. See [downtime-callouts-spec](downtime-callouts-spec.md) §0.6, whose gap measurement is
+already the tool for both.
+
+⚠ **Sequence, so nobody pays out of order:** placement rule → re-run this simulation and see scenics
+actually selected → THEN the machinery no smoke has touched (TTS, loudnorm, R2, the fail-closed eval
+gate against an empty fact well, and the `narrations` write path for a form that has never had a row)
+→ THEN the ~$29–31 generation run. **The content is ready; the drive cannot play it yet.**
 
 **Cost discipline, for the next run's estimate:** 16 script-only clips cost **$0.19** total ($0.06 +
 $0.05 + $0.08), heavily prompt-cached. That is scripts only — TTS, loudnorm, R2 and the eval gate are
