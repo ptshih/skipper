@@ -158,7 +158,10 @@ export async function finishJob(outcome: FinishOutcome): Promise<void> {
   if (log) {
     set.outputLog = log
     try {
-      const { summary, data } = await synthesizeJobOutput(currentKind ?? 'generate', log)
+      // `'unknown'` is a PROMPT LABEL, not a JobKind — `synthesizeJobOutput` takes a plain string and
+      // only interpolates it. It used to fall back to `'generate'`, which named a V1 job kind that no
+      // longer exists, so an unlabelled run was summarised as if it were something it could not be.
+      const { summary, data } = await synthesizeJobOutput(currentKind ?? 'unknown', log)
       set.outputSummary = summary
       set.outputData = data
     } catch (e) {

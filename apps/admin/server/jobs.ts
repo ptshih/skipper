@@ -57,11 +57,15 @@ export class HttpError extends Error {
 // longer reads Cloud Logging). Follow generate-narrations.ts's main()+begin/finish shape. Enforced by
 // jobs.test.ts.
 //
-// V2: authored-tour generation is deferred — the generate / patch_clip / resynth scripts were
-// removed with the tour pipeline. Those `jobKind` enum members survive in @skipper/shared (the
-// wire contract evolves additively — installed clients still know the vocabulary) but have NO
-// dispatchable script here, so buildJobArgs rejects them with "unknown kind". Hence a PARTIAL
-// record (only the live corpus ops); the test only checks the scripts that remain.
+// EVERY `jobKind` now has a script here, and `jobs.test.ts` asserts it. This was a deliberately
+// PARTIAL record while the V1 tour kinds (generate / patch_clip / resynth) sat in the enum with no
+// dispatchable script; those were deleted from `@skipper/shared` on 2026-08-02 once the founder
+// confirmed zero installed clients, so the gap they justified is gone.
+//
+// ⚠ Still typed `Partial`, and that is now about the LOOKUP, not the map: `buildJobArgs` receives an
+// untrusted body and casts `body.kind` to `JobKind`, so the index can miss at runtime whatever the
+// type says. `Partial` keeps `SCRIPTS[kind]` honestly `string | undefined` and keeps the "unknown
+// kind" 400 below a real check rather than one TypeScript believes is dead.
 export const SCRIPTS: Partial<Record<JobKind, string>> = {
   resynth_narration: 'packages/studio/src/resynth-narration.ts',
   sweep_orphans: 'packages/studio/src/sweep-orphans.ts',

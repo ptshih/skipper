@@ -85,9 +85,6 @@ export const attributionSource = z.enum(['wikipedia', 'google_places', 'macrostr
  * not a migration-bound DB type. Add a kind here + in `jobs.ts` SCRIPTS; no migration needed.
  */
 export const jobKind = z.enum([
-  'generate',
-  'patch_clip',
-  'resynth',
   'resynth_narration',
   'sweep_orphans',
   'discover_pois',
@@ -99,6 +96,16 @@ export const jobKind = z.enum([
   'offline_audit',
 ])
 export type JobKind = z.infer<typeof jobKind>
+
+// ⚠ `generate`, `patch_clip` and `resynth` — the V1 authored-tour pipeline's job kinds — lived here
+// until 2026-08-02. Their scripts went with the tour pipeline; the enum members were kept on the
+// argument that "the wire contract evolves additively, installed clients still know the vocabulary".
+// That argument has no data behind it and never did: job kinds are ADMIN-only (no client consumes
+// one), `studio_jobs.kind` is plain text so nothing needs the enum to read a historical row, and a
+// read-only count found ZERO rows carrying any of the three. The founder confirmed zero installed
+// clients on 2026-08-02, which retires the last of it. Deleted rather than re-justified — same call,
+// and the same reasoning, as `durationBucket`/`interest` above. Every remaining kind now has a
+// dispatchable script, which `apps/admin/server/jobs.test.ts` asserts.
 
 // ⚠ `durationBucket` and `interest` lived here until the 1.1 sweep, both labelled "kept for forward
 // use". Neither was ever imported by anything, and both survived two product pivots untouched — which

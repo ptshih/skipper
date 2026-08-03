@@ -1,6 +1,7 @@
 import { test, expect, describe } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { jobKind } from '@skipper/shared'
 import { SCRIPTS, buildJobArgs } from './jobs'
 
 // Every gen-job entrypoint MUST record its status AND capture its own logs through the
@@ -145,9 +146,24 @@ describe('buildJobArgs — spend classification across ALL kinds (the confirm-ga
     }
   })
 
-  test('an unknown / removed-legacy kind is rejected, never dispatched', () => {
+  test('an unknown kind is rejected, never dispatched', () => {
     expect(() => buildJobArgs({ kind: 'nope' })).toThrow()
-    expect(() => buildJobArgs({ kind: 'generate' })).toThrow() // legacy enum member, no dispatchable script
+    // The V1 tour kinds left the enum on 2026-08-02, so they are now unknown strings like any other.
+    // Still asserted by name: the reason they must never dispatch has not changed, and a future
+    // "restore the legacy kinds" edit should fail here rather than silently wire a missing script.
+    for (const gone of ['generate', 'patch_clip', 'resynth']) {
+      expect(() => buildJobArgs({ kind: gone })).toThrow()
+    }
+  })
+
+  test('EVERY declared jobKind has a dispatchable script', () => {
+    // The invariant the sediment used to prevent. `SCRIPTS` is typed `Partial` because the LOOKUP key
+    // is untrusted (buildJobArgs casts an untrusted body), NOT because kinds may legitimately be
+    // missing — so nothing but this test stands between "declared in the enum" and "actually
+    // dispatchable". Add a kind without wiring a script and it fails here.
+    for (const kind of jobKind.options) {
+      expect(SCRIPTS[kind], `jobKind '${kind}' has no script in SCRIPTS`).toBeTruthy()
+    }
   })
 
   test('poi-targeted kinds require a poiId', () => {
