@@ -105,7 +105,7 @@ mock.module('@skipper/db', () => ({ ...realDb, db: dbTripwire }))
 /* --------------------------------- the app -------------------------------- */
 
 // Imported AFTER the mocks so drives.ts's static imports resolve through them.
-const { requireAccount, withSession } = await import('../src/entitlements')
+const { requireAccount, withFreshSession, withSession } = await import('../src/entitlements')
 const { driveRoutes } = await import('../src/drives')
 
 afterEach(() => {
@@ -317,5 +317,39 @@ describe('⚠ the route table itself is PINNED (the guard that catches the NEXT 
     const chain = driveRoutes.routes.filter((r) => r.method === 'POST' && r.path === '/')
     expect(chain.length).toBeGreaterThan(1) // gate + limiter + handler
     expect(chain[0]?.handler).toBe(requireAccount)
+  })
+
+  /* ---- the cookie-cache orphan guard (../src/auth `session.cookieCache`) ---- */
+
+  /** Every (method path) whose chain includes `withFreshSession`. */
+  const fresh = new Set(
+    driveRoutes.routes.filter((r) => r.handler === withFreshSession).map((r) => `${r.method} ${r.path}`),
+  )
+
+  test('exactly the two INSERTING routes re-resolve the session without the cookie cache', () => {
+    // ⚠ THE GUARD THAT CATCHES THE NEXT INSERTING ROUTE. `session.cookieCache` means a DELETED account
+    // still authenticates for up to `maxAge`, so any route that INSERTS a user-keyed row can write an
+    // orphan — no FK across the auth-pool boundary, and `credit_entries` has no second copy.
+    // ⚠ `GET /` is in here and it is the one that looks wrong: it reads like a pure list, but it calls
+    // `ensureFreeGrant`, which INSERTS the free-allotment row. It is also the likelier vector of the
+    // two — the home screen hits it on every launch. If someone "optimises" it back off this list
+    // because it is a GET, that is the bug this test exists to stop.
+    // The other three owner routes only touch rows `purgeUserData` already deleted, so they 404 and
+    // orphan nothing — they stay cached deliberately, which is what preserves the win.
+    expect(fresh).toEqual(new Set(['POST /', 'GET /']))
+  })
+
+  test('withFreshSession runs AFTER requireAccount, never before it', () => {
+    // Leading with it would be simpler and wrong: requireAccount is a pure in-memory check placed
+    // first so an anonymous flood costs nothing, and an auth-DB read ahead of it hands that flood a
+    // query per request. Only a caller who cleared the cheap gate should pay for freshness.
+    for (const path of ['POST /', 'GET /']) {
+      const [method, p] = path.split(' ') as [string, string]
+      const chain = driveRoutes.routes.filter((r) => r.method === method && r.path === p)
+      const gate = chain.findIndex((r) => r.handler === requireAccount)
+      const fresher = chain.findIndex((r) => r.handler === withFreshSession)
+      expect(gate).toBeGreaterThanOrEqual(0)
+      expect(fresher).toBeGreaterThan(gate)
+    }
   })
 })

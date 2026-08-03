@@ -32,6 +32,54 @@ export const withSession: MiddlewareHandler<ApiEnv> = async (c, next) => {
   await next()
 }
 
+/** Re-resolve the session WITHOUT the cookie cache, for routes that INSERT rows keyed on a user id.
+ *
+ *  ⚠ WHY THIS EXISTS AT ALL. `session.cookieCache` (./auth) lets `getSession` answer from a signed
+ *  cookie instead of the auth DB, which means a DELETED account still authenticates elsewhere until
+ *  the cached copy expires. A read in that window is harmless — `purgeUserData` already removed the
+ *  rows, so it finds nothing and 404s. An INSERT is not: it writes a row against a user id that no
+ *  longer exists, into tables with no FK across the auth-pool boundary and, for `credit_entries`, no
+ *  second copy. That is precisely the orphan INV-4 and App Store 5.1.1(v) exist to prevent.
+ *
+ *  ⚠ APPLIED TO EXACTLY TWO ROUTES, and the second one is the surprise: `POST /` (drives + a consume
+ *  + `ensureFreeGrant`) and **`GET /`**, which looks like a pure read but calls `ensureFreeGrant` and
+ *  therefore INSERTS the free-allotment row. It is also the likelier vector of the two — the home
+ *  screen hits it on every launch, while creating a drive is rare and rate-limited. The other three
+ *  owner routes only touch rows the purge already deleted, so they keep the cache and keep the win.
+ *
+ *  ⚠ IT RUNS AFTER the blanket `driveRoutes.use('*', withSession)` and OVERWRITES what that set. The
+ *  double resolve is deliberate and nearly free: the first one is the cookie read this exists to
+ *  distrust, so the only real cost is the one auth-DB round-trip we are choosing to pay here.
+ *
+ *  ⚠ AND IT GOES LAST IN THE CHAIN, AFTER `requireAccount` (and after `createDriveLimiter` on POST) —
+ *  NOT first. Leading with it would be simpler to reason about, and wrong: `requireAccount` is a pure
+ *  in-memory check placed first precisely so an anonymous flood costs nothing, and an auth-DB read
+ *  ahead of it hands that flood a query per request. Running last means only a caller who already
+ *  cleared the cheap gate pays for freshness.
+ *  ⚠ WHICH MAKES THE HANDLERS' TIER-KEYED BACKSTOPS LOAD-BEARING IN A NEW WAY. A deleted account still
+ *  passes `requireAccount`, because that decided on the cached session — what rejects it is
+ *  `c.get('tier') === 'free' ? … : undefined` inside the handler, reading the session THIS middleware
+ *  just replaced. Those backstops were written as defence-in-depth against a dropped gate; they are
+ *  now also the thing that catches an erased user, and deleting one as "unreachable" would silently
+ *  reopen the orphan.
+ *
+ *  ⚠ A MIDDLEWARE, NEVER A FLAG ON `withSession`. test/drive-access.test.ts enforces INV-15 by reading
+ *  the route table in drives.ts; a per-route middleware is visible to that test — and to a human
+ *  scanning the routes — in a way a boolean argument buried in a call is not.
+ *
+ *  Fail-open like `withSession`, for the same reason: a transient auth-DB blip degrades to anonymous,
+ *  which a gated route turns into its 401 rather than a leak. */
+export const withFreshSession: MiddlewareHandler<ApiEnv> = async (c, next) => {
+  const session = await resolveSessionSafely(() =>
+    // `disableCookieCache` is read off the query by better-auth's session route (verified in the
+    // installed 1.6.23 source; test/auth-cookie-cache.test.ts pins that the flag still exists).
+    auth.api.getSession({ headers: c.req.raw.headers, query: { disableCookieCache: true } }),
+  )
+  c.set('session', session)
+  c.set('tier', tierOf(session))
+  await next()
+}
+
 /**
  * Free-account wall: reject anonymous callers. (Requires withSession upstream.)
  * Applied PER-ROUTE on the five owner routes in drives.ts (D15/INV-15, 1.1 step 8a) — `POST /`,

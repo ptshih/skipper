@@ -54,7 +54,7 @@ import {
   varietyKey,
   type RegionAnchor,
 } from '@skipper/shared'
-import { requireAccount, withSession, type ApiEnv } from './entitlements'
+import { requireAccount, withFreshSession, withSession, type ApiEnv } from './entitlements'
 import { creditSummary, driveConsumeEntry, ensureFreeGrant } from './credits'
 import { DRIVE_CREATE_RATE, MAX_DRIVE_BODY_BYTES, MAX_PLAN_ANCHORS, readBoundedText } from './limits'
 import { rateLimit } from './rate-limit'
@@ -737,7 +737,13 @@ const createDriveLimiter = rateLimit(DRIVE_CREATE_RATE)
  * MUTATES a per-IP bucket — so gate-first means an anonymous flood can never burn a real rider's
  * shared-IP token, and the cheap check runs first.
  */
-driveRoutes.post('/', requireAccount, createDriveLimiter, async (c) => {
+// ⚠ `withFreshSession` LAST of the three, and the order is the whole design. It must not go first:
+// `requireAccount` is a pure in-memory check and the reason it leads (above) is that an anonymous
+// flood must never cost anything — putting an auth-DB read ahead of it hands that flood a query per
+// request. So the cheap gate and the limiter run on the CACHED session, and only a caller who cleared
+// both pays for a fresh one. The deleted-account case is then caught by the tier-keyed backstop inside
+// the handler, which reads the session this middleware just replaced. See ./entitlements.
+driveRoutes.post('/', requireAccount, createDriveLimiter, withFreshSession, async (c) => {
   // NOT THE WALL ANY MORE — `requireAccount` above 401s before this line runs. This is (a) the
   // narrowing that turns `string | undefined` into the `string` the ledger needs and (b)
   // defense-in-depth if a future edit ever moves or drops that gate.
@@ -982,8 +988,12 @@ driveRoutes.post('/', requireAccount, createDriveLimiter, async (c) => {
 
 /** GET /drives — the caller's saved drives, newest first (no geometry; one card each). Owner route:
  *  `requireAccount` on its own chain (D15/INV-15) — and load-bearing beyond the read, because this
- *  route WRITES (`ensureFreeGrant` below materializes the free allotment). */
-driveRoutes.get('/', requireAccount, async (c) => {
+ *  route WRITES (`ensureFreeGrant` below materializes the free allotment).
+ *  ⚠ AND THAT WRITE IS WHY IT CARRIES `withFreshSession`. It looks like a pure read, so it is the easy
+ *  one to "optimise" back onto the cached session — but a cached session for a DELETED account would
+ *  insert a free-allotment row against a user id that no longer exists. This is the LIKELIER of the two
+ *  exposed routes, not the lesser: the home screen hits it on every launch. See ./entitlements. */
+driveRoutes.get('/', requireAccount, withFreshSession, async (c) => {
   // Backstop, not the wall — and TIER-keyed for the same reason as POST / above: after the anonymous
   // mint an id-presence check is permanently false, and this route reaches the ledger (INV-4/INV-15).
   const userId = c.get('tier') === 'free' ? c.get('session')?.user.id : undefined
