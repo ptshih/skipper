@@ -191,6 +191,47 @@ curl -s "$URL/regions"  # {"regions":[...]}      — DB reachable + secret decry
   protocol on a real reset mail, not by assuming.
 - **Mobile:** build with `EXPO_PUBLIC_API_URL=$URL`.
 
+## Monitoring & alerting (built 2026-08-03)
+
+⚠ **These live ONLY in GCP — nothing in this repo creates them.** That is the same invisibility that
+let the Cloud Run max-instances default sit unnoticed at 100, so they are written down here; if the
+project is ever recreated, recreate these too or the recreation is silently unmonitored.
+
+**Why it exists at all:** production returned 500s for **14 days** (2026-06-30 → 07-15, billing
+disabled) and the way it was found was a human running `curl`. Nothing was watching.
+
+```sh
+# 1. Email channel. ⚠ `enabled: true` is NOT proof mail is delivered or read — send a test alert.
+gcloud beta monitoring channels create --display-name="Skipper prod alerts (email)" \
+  --type=email --channel-labels=email_address=hello@skipper.fm
+
+# 2. Uptime check. Matches the BODY, not just the status class: a 200 that is not actually
+#    healthy (a stub, a cached shell, a proxy error page) still trips it.
+gcloud monitoring uptime create "skipper-api /health" \
+  --resource-type=uptime-url \
+  --resource-labels=host=api.skipper.fm,project_id=lithe-window-491818-k8 \
+  --protocol=https --port=443 --path=/health --period=5 --timeout=10 \
+  --matcher-content='"ok":true' --matcher-type=contains-string
+
+# 3. Alert policy — see the JSON shape in the Monitoring console; the condition is
+#    check_passed aggregated REDUCE_COUNT_FALSE over resource.label.host, COMPARISON_GT 1.
+gcloud beta monitoring policies create --policy-from-file=<file>
+```
+
+- **Threshold is "more than ONE region failing", not "any region".** Google probes from several
+  regions and a single one flaps; a `> 1` threshold is the difference between an alert that gets
+  read and one that gets muted.
+- **The policy carries its runbook inline** (`documentation`), because the moment you need it you are
+  on a phone: revision check, the ⚠ **regional** `builds list` (a plain one looks empty — see
+  *Continuous deployment*), and the `update-traffic` rollback.
+- ⚠ **`skipper-admin` is deliberately NOT checked.** It is behind IAP, so an unauthenticated probe
+  gets a redirect rather than a health signal — a check on it would either always fail or, worse, pass
+  on the IAP login page. Doing it properly needs `--service-agent-auth`.
+- ⚠ **Still missing: a BILLING budget alert.** Uptime catches the 14-day outage *after* it starts;
+  a budget alert is what would have prevented it, and after 1.1 it is also the only control anywhere
+  that bounds AGGREGATE spend (every cap in `limits.ts` keys on client IP, so each bounds one caller
+  and none bounds the total). The Budget API is not enabled on the project. See `TODO.md`.
+
 ## Gotchas we hit (so the next deploy doesn't re-discover them)
 
 | Symptom | Cause | Fix |

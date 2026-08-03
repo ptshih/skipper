@@ -871,10 +871,24 @@ None of this is a build; all of it is config. The premise changed on 2026-07-28:
       ⚠ Got heavier on 2026-07-30: the in-app "Report an issue" mailto now points at `hello@` too. It
       previously pointed at a `feedback@` placeholder nobody had replaced, which shipped in builds 15
       and 16 — so this address is now the ONLY route a rider has to reach a human from inside the app.
-- [ ] **Alerting — there is NONE.** No uptime checks, no alert policies, no notification channels on the
-      project. Prod 500'd for **14 days** (2026-06-30 → 07-15, billing disabled) and was found by a human
-      running `curl`. Want: one uptime check on `https://api.skipper.fm/health` + an email channel to
-      `hello@skipper.fm`. ~10 min once the inbox above is settled.
+- [x] ~~**Alerting — there is NONE.**~~ **BUILT 2026-08-03.** Prod 500'd for **14 days**
+      (2026-06-30 → 07-15, billing disabled) and was found by a human running `curl`; that is now
+      caught in ~5 minutes. Live in `lithe-window-491818-k8` (console-only — these are NOT in git,
+      which is the same invisibility that hid the max-instances default, so they are recorded here):
+      - Uptime check `skipper-api /health` — `https://api.skipper.fm/health`, 300s period, 10s timeout.
+        ⚠ It matches on the BODY (`"ok":true`), not just the status class, so a 200 that is not
+        actually healthy still trips it.
+      - Alert policy `skipper-api /health is DOWN` — fires when `check_passed` is false in **more than
+        one** probe region (`REDUCE_COUNT_FALSE > 1`), so a single flaky region does not page. Carries
+        runbook `documentation` inline: revision check, the ⚠ REGIONAL builds list, and the
+        `update-traffic` rollback one-liner.
+      - Email channel `Skipper prod alerts (email)` → `hello@skipper.fm`.
+      ⚠ **STILL UNPROVEN: that the mail is READ.** The channel reports enabled with an unset
+      `verificationStatus`, which is not the same as a delivered message — the open inbox item above is
+      what closes this, and until then a page can fire into nothing. **Send yourself a test alert.**
+      ⚠ **Admin is deliberately NOT checked**: `skipper-admin` sits behind IAP, so an unauthenticated
+      probe gets a redirect, not a health signal. It needs `--service-agent-auth`, which is its own
+      piece of work.
 - [ ] **GCP billing budget + alert.** The Budget API is not even enabled on the project
       (`gcloud beta billing budgets list` → `SERVICE_DISABLED`). Billing — not code — is the documented
       root cause of the only real outage this project has had. ~5 min.
@@ -919,16 +933,48 @@ None of this is a build; all of it is config. The premise changed on 2026-07-28:
       `triggers import` with the full spec. And the dangerous direction is TOO NARROW, not too wide: an
       over-broad filter is merely noisy, while a missing path makes a real API fix look shipped when it
       never deployed.
-- [ ] **`apps/api/Dockerfile` never copies `bun.lock`**, so every production image resolves dependencies
-      fresh (lockfile `better-auth` 1.6.23 vs 1.6.25 on npm today), and `RUN bun add -g @dotenvx/dotenvx`
-      is completely unpinned on the container's secret-decryption ENTRYPOINT. `COPY bun.lock` + pin the
-      dotenvx version.
-- [ ] **No Cloud Run instance/resource bounds** (`cloudbuild.yaml` sets no `--min-instances` /
-      `--max-instances` / `--cpu` / `--memory`), so defaults apply and every first tap after idle pays a
-      cold start plus a Neon wake. Only worth it if the cold start is actually felt in the car.
+- [x] ~~**`apps/api/Dockerfile` never copies `bun.lock`** → `COPY bun.lock` + pin dotenvx~~ —
+      **⛔ REFUTED 2026-08-03. DO NOT ACTION THIS. The prescribed fix BREAKS PRODUCTION DEPLOYS**, and
+      that is not a prediction: `apps/api/Dockerfile` (the comment block above the install step) records
+      it TESTED on 2026-07-30. `bun install --production` implies `--frozen-lockfile`, and the build
+      REWRITES `package.json` to trim `workspaces` to the api's closure — exactly the change a frozen
+      lockfile refuses (`error: lockfile had changes, but lockfile is frozen`). `--no-frozen-lockfile`
+      did not clear it. ⚠ **This entry was itself the second time an audit prescribed it**; the
+      Dockerfile comment exists because the first prescription would have taken deploys down.
+      The dotenvx half was simply WRONG: it is pinned exactly (`@dotenvx/dotenvx@2.14.0`), and the
+      comment there calls it the one pin in the image that most deserves it.
+      **If exact pinning is ever wanted the real shape is a PRUNED lock** — trim workspaces,
+      `bun install`, commit that lock as its own file, COPY it — a deliberate trade (a second lockfile
+      to regenerate on every dependency move), not a one-liner. Read the Dockerfile before re-opening.
+- [ ] **Cloud Run `--cpu` / `--memory` are still defaults** (`cloudbuild.yaml`). ⚠ Narrowed 2026-08-03 —
+      the SCALING half of this item is DONE and should not be re-raised: `--max-instances=3` is in the
+      deploy step, and the service-level `maxScale: 3` / `minScale: 1` were applied out of band
+      (the min/max asymmetry is deliberate and documented in `cloudbuild.yaml`'s header + the deploy
+      guide's *Scaling* section). `minScale: 1` also closed the cold-start-plus-Neon-wake this item was
+      originally about — 4.2 s → 0.23 s, measured. What is left is only the resource shape, which is
+      worth setting only if a real workload says the defaults are wrong.
 - [ ] **Neon PITR / backup retention is unverified** and lives nowhere in git. It is the only thing
       between a mistaken migration and permanent loss of the append-only `credit_entries` ledger, which
-      never refunds and has no second copy. Check the retention setting; record it here.
+      never refunds and has no second copy.
+      ⚠ **FOUNDER-OWNED, ~2 min — it CANNOT be checked from this repo** (verified 2026-08-03): there is
+      no `NEON_API_KEY` in either env file and no Neon CLI installed, so the control plane is
+      unreachable from an agent session. Project endpoint is `ep-super-shape-aqvlhvto`, AWS
+      `us-east-1`, db `neondb`.
+      **Where:** Neon Console → **Settings → Instant restore**. It is ONE project-wide history window —
+      not per-branch — and PITR restores only from ROOT branches
+      ([neon.com/docs/introduction/point-in-time-restore](https://neon.com/docs/introduction/point-in-time-restore)).
+      **What the answer means** (checked against Neon's docs 2026-08-03, not memory): **Free defaults to
+      6 HOURS**, capped at 1 GB of changes; paid plans default to 1 day; Launch/Scale raise to 7 days;
+      Business/Enterprise 30. ⚠ **If this project is on Free, the real window is six hours** — a bad
+      migration run in the evening and noticed the next morning is simply gone, and D4 now permits
+      destructive migrations. Record the plan AND the window here once read.
+- [ ] **The corpus snapshot — the OTHER half of that net — is 3 days stale.** Last one is
+      `packages/studio/.scratch/snapshot-2026-07-31/`, taken `2026-07-31T14:53:52Z` and COMPLETE (458
+      narrations / 785 R2 objects, 0 failed, 0 missing clips). ⚠ It **predates both the 1.1 production
+      cutover (08-02) and migration 0043 (08-03)**, and its `drive_demand` rows are a table 1.1 removed
+      — so it restores a schema that no longer exists. `snapshot-corpus` is READ-ONLY and spends nothing
+      (no `--apply` gate by design), so re-running it is free; the STOP rule wants a current one before
+      any destructive step, and there has been one since.
 
 ## When YOSEMITE ships: the metadata that goes stale (founder ask 2026-07-28)
 
