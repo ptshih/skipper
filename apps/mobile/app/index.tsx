@@ -197,6 +197,20 @@ export default function HomeScreen() {
   const sendingRef = useRef(false)
   const creatingRef = useRef<Set<string>>(new Set())
 
+  /** Bumped by "Start fresh", and its ONLY job is to schedule the autofocus below.
+   *
+   *  ⚠ STATE, not `convSeq` — and the split is forced, not duplication for its own sake. `convSeq`
+   *  is a ref because it is captured before an await and compared after (a state read in a closure
+   *  would be the render-time value, which is the opposite of what those guards need); a ref cannot
+   *  drive an effect. So the reset publishes an ordinal, and the effect keyed on it runs AFTER the
+   *  commit that swaps the wrap-up bar back to the composer.
+   *
+   *  An ordinal rather than a boolean flag nobody clears: `done` is false immediately after a reset,
+   *  so the wrap-up bar is gone and a second "Start fresh" needs another `done` to become reachable
+   *  at all — but a flag that must be reset by the thing it triggers is a state machine, and this is
+   *  a number that only goes up. */
+  const [resetSeq, setResetSeq] = useState(0)
+
   // Monotonic conversation id, bumped by "Start fresh". ⚠ A SPEND CONTROL, not bookkeeping, and
   // `turnAbortRef.current?.abort()` is not enough on its own: abort() on an already-settled fetch is a
   // no-op, so a turn that resolved microseconds before the tap still runs its continuation — which
@@ -722,7 +736,8 @@ export default function HomeScreen() {
   }, [focusComposer, runTurn, turns])
 
   /** "Start fresh" — back to the cold open. It must not touch MY DRIVES and must not fetch anything
-   *  paid. Autofocus IS correct here: the rider explicitly asked for an empty field. */
+   *  paid. Autofocus IS correct here (the rider explicitly asked for an empty field) but it cannot
+   *  happen from in here — see `resetSeq` and the effect below. */
   const startFresh = useCallback(() => {
     turnAbortRef.current?.abort()
     // ⚠ Bump BEFORE clearing state, and take over the in-flight turn's guards. The bump makes any
@@ -747,8 +762,28 @@ export default function HomeScreen() {
     setDone(false)
     setPlannerOutage(false)
     setInput('')
-    focusComposer()
-  }, [applyBuf, focusComposer, preview.stop])
+    // The autofocus is DEFERRED, not dropped. "Start fresh" only exists in the `done` wrap-up bar,
+    // and in that branch the composer is not rendered at all — so `composerRef.current` is null for
+    // the whole of this handler and the focus() that used to sit here has never once fired. Publish
+    // the intent; the effect below claims it after the composer is back on screen.
+    setResetSeq((n) => n + 1)
+  }, [applyBuf, preview.stop])
+
+  // The deferred autofocus. Runs after the commit that put the composer back, which is the earliest
+  // moment `composerRef.current` exists.
+  // ⚠ `resetSeq === 0` is the COLD-LAUNCH guard and it is the whole reason this is an ordinal rather
+  // than an effect on `done`: every mount runs its effects, so an unguarded version would raise the
+  // keyboard over the hero on a fresh app launch — worse than the missing focus it fixes, because it
+  // hides the one thing that explains what this screen is before the rider has asked for anything.
+  // ⚠ `composerRef.current?.focus()`, NOT `focusComposer` — the scroll pin is wrong here and would
+  // also be a setState inside an effect. `focusComposer` bumps the scroll because it is normally
+  // called mid-conversation, where the rider wants the bottom of the transcript. After a reset the
+  // transcript is EMPTY, so the end of the scroll view is MY DRIVES: pinning there would drag the
+  // rider straight past the cold open they just asked for.
+  useEffect(() => {
+    if (resetSeq === 0) return
+    composerRef.current?.focus()
+  }, [resetSeq])
 
   const exampleAsks: ExampleAsk[] = useMemo(
     () =>
@@ -771,15 +806,25 @@ export default function HomeScreen() {
       const ex = exampleAsks[i]
       if (!ex) return
       setTurns((ts) => seedExample(ts, ex.ask, ex.reply))
-      bumpScroll()
+      // ⚠ FOCUS, not just the scroll pin (`focusComposer` does both). Every authored reply ends on a
+      // direct question — "About how long do you want to be out?" — so the seeded turn hands the ball
+      // straight back to the rider, and leaving the cursor nowhere makes them find the field for a
+      // question that was just asked of them. "Change it up" already earns this; so does this.
+      // The keyboard covering the hero is fine: the first rider turn has already collapsed it (see
+      // `collapsed`), which is the same render that puts this pair on screen.
+      focusComposer()
     },
-    [bumpScroll, exampleAsks],
+    [exampleAsks, focusComposer],
   )
 
   const riderTurnCount = turns.reduce((n, t) => (t.role === 'rider' ? n + 1 : n), 0)
   const collapsed = riderTurnCount > 0 || isOffline
   const plannerDown = plannerOutage || regionsFailed
-  const showExamples = riderTurnCount === 0 && !isOffline && !plannerDown && !sending
+  // THE COLD OPEN: nothing said yet, and the phone can actually reach the network. `!isOffline` is
+  // stated here rather than inherited from the offline branch below, because it is the one condition
+  // that must gate the SAMPLE too — a presigned clip cannot stream in a dead zone.
+  const coldOpen = riderTurnCount === 0 && !isOffline
+  const showExamples = coldOpen && !plannerDown && !sending
 
   // The wrap-up bar's CTA (design §7 case 2): the most recent route the rider was shown, but ONLY if
   // it never got drawn. Every route is drawn on arrival, so this is normally empty — it exists for
@@ -815,7 +860,20 @@ export default function HomeScreen() {
       </Text>
       {collapsed ? null : (
         <>
-          <Text variant="display" color="ink" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5} style={styles.heroHeadline}>
+          {/* ⚠ 0.6, and it is arithmetic, not taste: `display` is Zilla Slab 700 · 30, and DESIGN §5
+              reserves that face for ~18pt+ (below it the slab strokes muddy the half-second glance).
+              30 × 0.6 = 18 exactly — the lowest floor that still honours the rule. The 0.5 this
+              carried let a long greeting shrink to 15pt, i.e. the one size the type system says this
+              font may never be. A rounder number is available in both directions and both are wrong:
+              0.5 breaks §5, 0.75 (22.5pt) throws away shrink room the greeting is allowed to use. */}
+          <Text
+            variant="display"
+            color="ink"
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.6}
+            style={styles.heroHeadline}
+          >
             {voice.greeting}
           </Text>
           <View style={styles.heroTrail}>
@@ -1008,22 +1066,24 @@ export default function HomeScreen() {
           onRetry={regionsFailed ? () => void loadRegions() : retryTurn}
         />
       ) : null}
-      {showExamples ? (
-        <>
-          <ExampleAsks asks={exampleAsks.map((e) => e.ask)} onPick={pickExample} />
-          {/* Cold-open escape hatch, and it OUTLIVED the reason it was added: it existed because Ride
-              Along needed Tahoe proximity, so a first-timer anywhere else hit "I don't know these
-              roads yet." The conversation has the same wall (curated endpoints are Tahoe-only) plus an
-              account at the end of it, so a one-tap permission-free clip is if anything more
-              load-bearing now — it is the only thing an App Review tester 2,000 miles away can
-              actually hear. Ghost, so it never competes with the composer. */}
-          <Button
-            variant="ghost"
-            title={voice.sample.homeLink}
-            onPress={() => navigateOnce(() => router.push('/sample'))}
-            fullWidth={false}
-          />
-        </>
+      {showExamples ? <ExampleAsks asks={exampleAsks.map((e) => e.ask)} onPick={pickExample} /> : null}
+      {/* Cold-open escape hatch, and it OUTLIVED the reason it was added: it existed because Ride
+          Along needed Tahoe proximity, so a first-timer anywhere else hit "I don't know these roads
+          yet." The conversation has the same wall (curated endpoints are Tahoe-only) plus an account
+          at the end of it, so a one-tap permission-free clip is if anything more load-bearing now —
+          it is the only thing an App Review tester 2,000 miles away can actually hear. Ghost, so it
+          never competes with the composer.
+          ⚠ `coldOpen`, NOT `showExamples` — it lived inside the examples branch and therefore
+          vanished on a planner OUTAGE, i.e. at the exact moment it is the only audio in the app that
+          still works, leaving "Try me again" as the sole thing to do on a dead screen. The sample is
+          a static presigned clip; it does not care whether the planner is up. */}
+      {coldOpen ? (
+        <Button
+          variant="ghost"
+          title={voice.sample.homeLink}
+          onPress={() => navigateOnce(() => router.push('/sample'))}
+          fullWidth={false}
+        />
       ) : null}
     </>
   )

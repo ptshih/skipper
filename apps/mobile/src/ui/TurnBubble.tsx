@@ -47,8 +47,11 @@ export function TurnBubble({ role, text, streaming, announceOnSettle }: TurnBubb
   // planner's route turn is TOOL USE, so the model may legitimately return a `PlannedRoute` with no
   // prose at all. Rendered anyway, a skipper turn with no text left an orphaned 2pt pine rule
   // floating above the route card — and, because the row is `accessible`, an interactive element
-  // with NO accessible name, which VoiceOver announces as a nameless button. Observed on device
-  // 2026-08-03: every drawn route produced one.
+  // with NO accessible name, which VoiceOver announces as a nameless button.
+  // ⚠ INTERMITTENT, not universal — corrected 2026-08-03 after a second device run. Whether the route
+  // turn carries prose is the MODEL's choice: one run drew a route with an empty `say` (the orphan),
+  // the next answered "Consider it drawn." So this cannot be reproduced on demand and its absence
+  // from a single manual test is not evidence it is fixed.
   const isEmpty = text.trim().length === 0
 
   // `isEmpty` also gates the ANNOUNCE — a settled-but-empty turn would otherwise push an empty

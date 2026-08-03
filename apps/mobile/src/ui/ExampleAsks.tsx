@@ -54,5 +54,23 @@ export function ExampleAsks({ asks, onPick }: ExampleAsksProps) {
 const styles = StyleSheet.create({
   // Wrapped, not a horizontal scroller: a scroller hides asks 2 and 3 off-screen at exactly the
   // moment the rider needs to see that there is more than one shape of thing to ask for.
-  wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  //
+  // ⚠ THE GAP IS SET BY THE HIT SLOP, NOT BY TASTE (2026-08-03). `FilterChip` carries hitSlop 12,
+  // so every chip's touch region reaches 12pt past its drawn edge on all four sides; two neighbours
+  // therefore need 2 × 12 = 24pt between them before their regions stop overlapping. At `space.sm`
+  // (8) they overlapped by 16pt: the tappable area no longer matched the drawn pill and z-order
+  // silently decided which ask a tap near the boundary seeded. `space.xxl` (24) is the smallest
+  // token that separates them — the regions now abut exactly, with no overlap left to arbitrate.
+  //
+  // The slop itself has to stay, so this is not two mechanisms stacked: FilterChip is shared with
+  // the region selector, whose one-word `label` chips are ~34pt tall and depend on it for §2.5's
+  // 48pt floor. A `body` ask clears 48pt unaided (16/24 line + 2 × space.sm + 2 keylines ≈ 43pt of
+  // pill, 67pt with slop), but the constant is FilterChip's, not this row's, to spend.
+  //
+  // 24 is loose for a chip cluster and deliberately so here: since the P2 type change these are
+  // whole SENTENCES at `body`, one per row on any real phone, so what the gap actually spaces is
+  // three separate offers — and §8 asks for generous spacing between tappables. A mis-tap is not
+  // free either: it seeds the wrong authored exchange into the transcript, and the rider's next
+  // send bills a planner turn against it.
+  wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xxl },
 })

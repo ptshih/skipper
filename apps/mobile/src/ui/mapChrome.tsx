@@ -94,6 +94,12 @@ export function RecenterChip({
   return (
     <Pressable
       onPress={onPress}
+      // ~32pt tall on its own (8+8 padding around a 16pt line box), under §2.5/§8's 48pt in-car
+      // floor — so it borrows FilterChip's fix rather than inventing a second one: the same
+      // hitSlop=12, which lifts it to ~56pt without growing the mark floating over the map. Worth
+      // more here than on a chip in a list: this is the ONLY way back after a pan, so a missed tap
+      // strands the rider looking at the wrong part of their own route. (2026-08-03)
+      hitSlop={12}
       accessibilityRole="button"
       accessibilityLabel={label}
       style={[

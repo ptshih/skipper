@@ -5,7 +5,7 @@
 // reads the same in day and dusk, with a crisp ink glyph (ink-on-raised clears 4.5:1).
 // ~40pt + hitSlop keeps the in-car tap target generous.
 import { Pressable, StyleSheet } from 'react-native'
-import { radius } from '../theme/tokens'
+import { border, radius } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'
 import { Icon, type IconName } from './Icon'
 
@@ -39,7 +39,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: border.hair,
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -3,13 +3,14 @@
 // `secondary` is an outlined placard action; `ghost` is a text link.
 import {
   ActivityIndicator,
+  PixelRatio,
   Pressable,
   StyleSheet,
   View,
   type StyleProp,
   type ViewStyle,
 } from 'react-native'
-import { border, hit, radius, space } from '../theme/tokens'
+import { IN_CAR_MAX_FONT_SCALE, border, hit, radius, space } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'
 import { Icon, type IconName } from './Icon'
 import { Text } from './Text'
@@ -75,6 +76,18 @@ export function Button({
 
   const labelColor = isPrimary ? 'onPrimary' : 'accent'
 
+  // One line, EXCEPT past the standard Dynamic Type range, where a second is allowed instead of
+  // a truncation: "Make this drive" — the conversion CTA — otherwise reads "Make this…" at AX
+  // sizes, and DESIGN §8 makes AX a supported configuration on every scrollable surface, not an
+  // edge case. The clamp itself is right and is KEPT for the glance-critical in-car controls: §8
+  // caps those at IN_CAR_MAX_FONT_SCALE, so the same constant is the ceiling of everything they
+  // can render — below it nothing here changes, and above it no in-car surface exists. Gating on
+  // the boundary rather than adding a per-caller prop keeps the one rule in one place instead of
+  // asking ~30 call sites to remember which side of it they're on.
+  // ⚠ The button GROWS, never clips: `minHeight: hit.cta` + paddingVertical, so a wrapped label
+  // makes a taller ≥60pt target rather than a cropped one.
+  const labelLines = PixelRatio.getFontScale() > IN_CAR_MAX_FONT_SCALE ? 2 : 1
+
   return (
     <Pressable
       onPress={onPress}
@@ -97,7 +110,13 @@ export function Button({
       <View style={[styles.row, loading && styles.hiddenWhileLoading]}>
         {icon ? <Icon name={icon} size={18} color={labelColor} style={styles.glyph} /> : null}
         {title ? (
-          <Text variant="heading" color={labelColor} numberOfLines={1}>
+          <Text
+            variant="heading"
+            color={labelColor}
+            numberOfLines={labelLines}
+            align="center"
+            style={styles.label}
+          >
             {title}
           </Text>
         ) : null}
@@ -118,6 +137,10 @@ const styles = StyleSheet.create({
   },
   fullWidth: { alignSelf: 'stretch' },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  // RN defaults flexShrink to 0, which lets a label out-measure the row and overflow instead of
+  // wrapping. A no-op on a label that fits. (Its `align="center"` is here for the same reason:
+  // a wrapped second line hanging left under a centered first reads as a layout bug.)
+  label: { flexShrink: 1 },
   glyph: { marginTop: -1 },
   // Label stays laid out (reserves the width) but invisible under the spinner.
   hiddenWhileLoading: { opacity: 0 },

@@ -35,6 +35,14 @@ const STATIC_ROUTE_W = 5
 // surface ring separates from the trail at a glance (DESIGN §2.1) and spends none of the §8 amber.
 const ENDPOINT_DOT = 18
 
+// EVERY MARKER RING IS `border.keyline` (§3's top border value), where the active dot used a raw 3
+// and the endpoint/upcoming dots a raw 2. The ring's job — separating a dot from the basemap under
+// it — is the same job the live PUCK's ring does, and the puck has always drawn it at `border.keyline`
+// on the same tinted basemap (mapChrome `puckStyles.dot`). Two marks meant to read as one object
+// class now literally share one value, and if 1.5 turns out to be too thin against a busy basemap it
+// is too thin for the puck first — one screenshot settles both, and the fix lands in one place
+// instead of three. (2026-08-03)
+
 /** A map stop = a place to pin, with its state on the surface drawing it.
  *
  *  ⚠ `passed`/`active`/`upcoming` are DRIVE-PROGRESS states — `active` means "now playing", NOT
@@ -128,25 +136,33 @@ function DriveMapBase({
   const total = cum[cum.length - 1] ?? 0
 
   // The route framed as a region (first paint shows the whole drive before follow kicks in).
+  // ⚠ THE STOPS COUNT TOWARD THE BBOX, NOT JUST THE LINE. A polyline can be empty while the pins
+  // are known — a proposal whose geometry hasn't resolved yet, or a drive stored with stops but no
+  // route — and an undefined `initialRegion` hands the map its VENDOR default (a world view, or
+  // Mountain View), i.e. the one framing guaranteed to contain none of the rider's drive. `recenter`
+  // already fits both sets; first paint had no reason to be narrower. Undefined stays reserved for
+  // the honest case: neither a line nor a pin, so there is genuinely nothing to frame. (2026-08-03)
   const routeRegion = useMemo<Region | undefined>(() => {
-    if (polyline.length === 0) return undefined
     let minLat = Infinity
     let maxLat = -Infinity
     let minLng = Infinity
     let maxLng = -Infinity
-    for (const [lng, lat] of polyline) {
+    const extend = (lat: number, lng: number) => {
       if (lat < minLat) minLat = lat
       if (lat > maxLat) maxLat = lat
       if (lng < minLng) minLng = lng
       if (lng > maxLng) maxLng = lng
     }
+    for (const [lng, lat] of polyline) extend(lat, lng)
+    for (const s of stops) extend(s.lat, s.lng)
+    if (minLat === Infinity) return undefined
     return {
       latitude: (minLat + maxLat) / 2,
       longitude: (minLng + maxLng) / 2,
       latitudeDelta: Math.max(0.02, (maxLat - minLat) * 1.5),
       longitudeDelta: Math.max(0.02, (maxLng - minLng) * 1.5),
     }
-  }, [polyline])
+  }, [polyline, stops])
 
   // The full route as LatLng, computed ONCE per polyline — the static untraveled base layer. NOT
   // rebuilt per tick (the old project() re-sliced + re-mapped both full arrays every fix and re-pushed
@@ -324,7 +340,7 @@ function DriveMapBase({
                           borderRadius: 11,
                           backgroundColor: amber,
                           borderColor: colors.surface,
-                          borderWidth: 3,
+                          borderWidth: border.keyline,
                         }
                       : endpoint
                         ? {
@@ -333,14 +349,14 @@ function DriveMapBase({
                             borderRadius: ENDPOINT_DOT / 2,
                             backgroundColor: colors.trackActive,
                             borderColor: colors.surface,
-                            borderWidth: 2,
+                            borderWidth: border.keyline,
                           }
                         : passed
                           ? { backgroundColor: colors.trackActive }
                           : {
                               backgroundColor: colors.surface,
                               borderColor: colors.trackInactive,
-                              borderWidth: 2,
+                              borderWidth: border.keyline,
                             },
                   ]}
                 >

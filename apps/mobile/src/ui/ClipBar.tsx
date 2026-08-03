@@ -23,6 +23,11 @@ import { voice } from './voice'
 // though this surface is used parked — the rider is one tap from a drive and the habit is the point.
 const DISC = hit.min
 
+// The position track's height, named so the fully-rounded cap DERIVES from it (`TRACK_H / 2`) the
+// way Scrubber's bed does, instead of a raw `borderRadius: 2` that silently stops matching the day
+// the bar gets thicker. §3's radius scale starts at 8 and has no business on a 4pt rule.
+const TRACK_H = 4
+
 export interface ClipBarProps {
   playing: boolean
   /** The stop the loaded clip belongs to. Raw API name — cleaned here at the view boundary. */
@@ -100,14 +105,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   // minWidth: 0 lets the name actually truncate instead of shoving the dismiss off the row.
-  text: { flex: 1, minWidth: 0, gap: 3 },
+  text: { flex: 1, minWidth: 0, gap: space.xs },
   dismiss: {
     width: hit.min,
     height: hit.min,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  track: { height: 4, borderRadius: 2, overflow: 'hidden', marginTop: 2 },
+  // No marginTop: the raw 2 that used to sit here stacked on the raw 3 gap for ~5pt of air. The
+  // grid `gap` above now owns the whole stack's rhythm — one number, on the scale.
+  track: { height: TRACK_H, borderRadius: TRACK_H / 2, overflow: 'hidden' },
   fill: { height: '100%' },
   pressed: { opacity: 0.85 },
 })

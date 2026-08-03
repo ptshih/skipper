@@ -48,6 +48,34 @@ export interface ThemeColors {
   // roam; the roles outlived it by three steps. Nothing renders a hull, so nothing needs a hull colour.
 }
 
+// The roles that may be rendered as TEXT. This is what makes §4's "there is intentionally no
+// amber-text-on-surface role" a COMPILE ERROR rather than a convention (2026-08-03): `Text`'s
+// `color` was `keyof ThemeColors`, so `<Text color="amberToken">` — or `scrim`, or `rule`, or a
+// surface — typechecked fine. It was the one §4 guarantee with nothing behind it; no call site
+// had drifted yet, which is the moment to close it.
+// ⚠ Derived through `Pick` rather than hand-written, so it fails in BOTH directions: a role added
+// to `ThemeColors` cannot silently widen what text may use, and renaming/dropping a listed role is
+// an error HERE instead of a union that quietly shrinks under the call sites.
+// Membership rule = "this role's contrast is gate-enforced as a FOREGROUND" (`theme.test.ts`):
+// its `TEXT_ROLES` (safe on surface/surfaceRaised) PLUS the foreground half of each `ON_FILL` pair
+// — `onPrimary`/`onAmber`/`onDanger`, which Button/FilterChip/Badge already render as text on a
+// fill. The two lists differ on purpose and neither is stale: that test asks "safe on the app
+// surface", this asks "is a text colour at all". Everything omitted is a surface, fill, rule, or
+// rgba effect, and stays reachable from `style` / `Icon` / `Glyph` / `Sunburst`.
+export type TextColorRole = keyof Pick<
+  ThemeColors,
+  | 'ink'
+  | 'inkDim'
+  | 'inkFaint'
+  | 'accent'
+  | 'accentWarm'
+  | 'onAmber'
+  | 'water'
+  | 'onPrimary'
+  | 'danger'
+  | 'onDanger'
+>
+
 export interface Theme {
   name: 'light' | 'dark'
   isDark: boolean

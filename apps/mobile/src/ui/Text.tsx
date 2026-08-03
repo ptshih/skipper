@@ -3,11 +3,13 @@
 import { Text as RNText, type TextProps as RNTextProps, type TextStyle } from 'react-native'
 import { typeScale, type TypeVariant } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'
-import type { ThemeColors } from '../theme/theme'
+import type { TextColorRole } from '../theme/theme'
 
 export interface TextProps extends RNTextProps {
   variant?: TypeVariant
-  color?: keyof ThemeColors
+  // Not `keyof ThemeColors`: only roles whose contrast is gate-enforced as a FOREGROUND are
+  // spellable here, so DESIGN §4's no-amber-text rule is checked, not merely observed.
+  color?: TextColorRole
   align?: TextStyle['textAlign']
 }
 

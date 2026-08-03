@@ -15,7 +15,7 @@
 // sentence; hijacking it costs the rider their paragraph and there is nowhere to put a newline.
 // Sending is the disc, and only the disc.
 import type { Ref } from 'react'
-import { Pressable, StyleSheet, View, type TextInput } from 'react-native'
+import { PixelRatio, Pressable, StyleSheet, View, type TextInput } from 'react-native'
 import { hit, radius, space } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'
 import { Icon } from './Icon'
@@ -30,6 +30,11 @@ import { voice } from './voice'
 // ⚠ APPROXIMATE ON PURPOSE — it is NOT typeScale.body.lineHeight × 5. Input deliberately drops
 // body's explicit lineHeight (an explicit one clips descenders on iOS), so the rendered line box
 // is the font's natural metrics, which are tighter. Treat this as "roughly five lines".
+// ⚠ It is "five lines" only at 1×, so it is SCALED, never used raw: the planner is a scrollable
+// non-driving surface, which DESIGN §8 leaves UNCAPPED — the accessibility text sizes are a
+// supported configuration here, not an edge case. Left fixed, a rider at AX sizes composes their
+// sentence through a one-line slot in a box built for five. Multiplying by the font scale is the
+// move §8 already cites for the stop list's STOP_ROW_HEIGHT scroll target.
 const FIELD_MAX_HEIGHT = 144
 
 export interface ComposerProps {
@@ -77,7 +82,9 @@ export function Composer({
         // defaults to 'newline' when submitBehavior is undefined — which is the behavior we want and
         // the reason this is a comment rather than a prop.
         returnKeyType="default"
-        style={styles.field}
+        // Read per render, not at module scope: a StyleSheet is evaluated once at import and
+        // would freeze the scale the app happened to launch with.
+        style={[styles.field, { maxHeight: FIELD_MAX_HEIGHT * PixelRatio.getFontScale() }]}
       />
       {/* An enamel disc, not a labeled Button: the row is already the rider's sentence, and a
           60pt CTA next to a growing field would own a screen that belongs to the conversation.
@@ -105,7 +112,7 @@ const styles = StyleSheet.create({
   // Bottom-aligned: as the field grows upward the disc stays on the last line, where the thumb
   // already is. Centering it would make the send target wander up the screen mid-sentence.
   row: { flexDirection: 'row', alignItems: 'flex-end', gap: space.sm },
-  field: { flex: 1, maxHeight: FIELD_MAX_HEIGHT },
+  field: { flex: 1 }, // maxHeight rides on the element — it scales with Dynamic Type
   send: {
     width: hit.min,
     height: hit.min,
