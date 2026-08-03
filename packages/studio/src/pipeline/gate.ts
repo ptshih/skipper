@@ -103,33 +103,35 @@ export async function gateNarration(
   } = deps
   const { seq, name, base, well, targetSeconds, maxSeconds, diversityContext, systemPrompt } = input
 
-  // ⚠ STOP TYPE IS HARDCODED 'story', AND THAT IS CORRECT ONLY BECAUSE STORY IS THE ONLY THING
-  // GENERATED. Both live callers narrate story clips (a scenic pin gets no telling — the passing
-  // call-out that would have voiced one was cut with roam; break audio is the STUBBED `detours`
-  // table, which nothing writes). So there is no non-story clip for this to be wrong about today.
+  // ⚠ THE STOP TYPE COMES FROM `base`, THE SAME OBJECT THE NARRATOR IS HANDED. It was hardcoded
+  // 'story' until 2026-08-03, which was correct only while story was the only thing generated — and
+  // the SCENIC generator is what un-deferred it.
   //
-  // ⚠ WHAT MAKES IT A TRAP RATHER THAN A SHORTCUT: the grounding judge's rules are STRICTER for the
-  // other two types — a scenic stop may assert no place-fact beyond geology and its own name/kind/side,
-  // and a break may name only the given place plus its category (see the SYSTEM prompt in
-  // eval/grounding.ts). `buildGroundingWell` implements all three branches faithfully; this call site
-  // can only ever ask for one. So the day break audio un-defers, a break clip routed through here is
-  // scored under STORY rules — the loosest set — and the failure is silent: the gate returns a clean
-  // verdict, the clip ships, and nothing in the panel or the tests distinguishes it.
+  // ⚠ WHY IT WAS A TRAP RATHER THAN A SHORTCUT, kept because the hazard survives the fix: the
+  // grounding judge's rules are STRICTER for the other two types — a scenic stop may assert no
+  // place-fact beyond geology and its own name/kind, and a break may name only the given place plus
+  // its category (see the SYSTEM prompt in eval/grounding.ts). `buildGroundingWell` implements all
+  // three branches faithfully. So a scenic clip scored under STORY rules gets the LOOSEST set, and the
+  // failure is silent: the gate returns a clean verdict, the clip ships, and nothing in the panel or
+  // the tests distinguishes it. For this tier that is not a nicety — "a given name licenses nothing it
+  // implies" is the entire reason a name-and-kind-only telling is safe to generate at all.
   //
-  // The real fix is a REQUIRED `stopType` on GateNarrationInput, so a new generator cannot omit it (a
-  // defaulted field would re-create exactly this bug). That is deliberately not done here: it changes
-  // the signature both generators call, and they are owned elsewhere right now. Whoever adds the break
-  // path owes that change in the same commit as the path.
+  // ⚠ DERIVED, NOT A SECOND FIELD, and that is a deliberate departure from what the old comment here
+  // proposed (a required `stopType` on GateNarrationInput). A parallel field is one a caller can set
+  // to something the narrator was never told — two copies of the same fact, free to drift, which is
+  // the bug class this repo keeps paying for. `base.stopType` is already required on
+  // `NarrationRequest`, so the judge and the narrator now read ONE expression and cannot disagree.
+  const stopType = base.stopType
   const evaluate = async (script: string): Promise<StopEval[]> => {
     const evals: StopEval[] = [
       evaluateTts({ seq, script }),
-      ...evaluateDiversityAgainst({ seq, stopType: 'story', script }, diversityContext),
+      ...evaluateDiversityAgainst({ seq, stopType, script }, diversityContext),
       evaluateLaterality({ seq, script }),
       evaluatePacing({ seq, script, targetSeconds, maxSeconds }),
     ]
     if (groundingEnabled()) {
       evals.push(
-        await judgeGrounding({ seq, stopType: 'story', placeName: name, script, well, region: base.region }),
+        await judgeGrounding({ seq, stopType, placeName: name, script, well, region: base.region }),
       )
     }
     return evals

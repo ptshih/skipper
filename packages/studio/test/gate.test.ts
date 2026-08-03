@@ -48,6 +48,29 @@ const grounding = (pass: boolean, findings: string[] = []): StopEval => ({
 })
 
 describe('gateNarration', () => {
+  // ⚠ THE SILENT FAILURE THIS PINS. The stop type handed to the grounding judge was hardcoded 'story'
+  // until 2026-08-03. The judge's rules are STRICTEST for scenic — "a given name licenses NOTHING it
+  // implies" — and loosest for story, so a scenic clip scored as a story gets graded under rules that
+  // permit exactly the name-derived claims the scenic tier's whole safety argument rests on. Nothing
+  // would have failed: the gate returns a clean verdict, the clip ships, no panel or test notices.
+  //
+  // ⚠ And it must be DERIVED from `base`, never passed alongside it. A parallel field is one a caller
+  // can set to something the narrator was never told — two copies of one fact, free to drift.
+  test('the grounding judge is told the SAME stop type the narrator was', async () => {
+    const seen: string[] = []
+    for (const stopType of ['story', 'scenic'] as const) {
+      await gateNarration(input({ base: { ...base, stopType } }), {
+        narrate: async () => ({ script: CLEAN }) as never,
+        groundingEnabled: () => true,
+        judgeGrounding: async (g) => {
+          seen.push(g.stopType)
+          return grounding(true)
+        },
+      })
+    }
+    expect(seen).toEqual(['story', 'scenic'])
+  })
+
   test('ships a clean take and feeds it back into the diversity context', async () => {
     const ctx: string[] = []
     const r = await gateNarration(input({ diversityContext: ctx }), {
