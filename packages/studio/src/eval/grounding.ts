@@ -271,18 +271,81 @@ export function claimsFromResponse(response: Anthropic.Message, seq: number): Cl
   return normalizeClaims(rawClaims)
 }
 
+/**
+ * How many times to RE-ASK the judge when it answers in an unusable shape.
+ *
+ * ⚠ MEASURED, and it is not an edge case: a 30-clip SCENIC run withheld 15 — a 50% failure rate, every
+ * one of them `claims` returned as a bare string. The tool schema already marks `claims` a required
+ * array and describes it as "empty if the script makes none"; the model says it in prose anyway, and
+ * it does so overwhelmingly on THIS path because a scenic well is one line and the script asserts
+ * almost nothing, so there is genuinely nothing to decompose.
+ *
+ * ⚠ A RE-ASK, NEVER A RECOVERY. Reading "no claims found" as `[]` is precisely the false-pass this
+ * whole branch exists to stop — an empty claim list scores a perfect 1.0. Each attempt is an
+ * independent sample (Opus 4.8 rejects `temperature`, so there is no other lever), and a run of
+ * attempts that all come back malformed still THROWS and withholds the clip. Fail-closed is preserved;
+ * only the waste is removed.
+ */
+const GROUNDING_SHAPE_RETRIES = 2
+
+/** The real, Anthropic-backed decomposer (tool-use structured output). */
+/**
+ * The corrective turn appended after an unusable shape.
+ *
+ * ⚠ A BLIND RE-ASK IS NOT ENOUGH, measured: retrying the identical request took the scenic withhold
+ * rate from 50% to 20%, but the residue was DETERMINISTIC — the same places failed all three attempts
+ * (Bald Mountain did it in two separate runs). The pattern is the tell: a clip that asserts genuinely
+ * ZERO place-claims leaves the judge with nothing to decompose, and it reports that in prose instead
+ * of returning the empty array the schema asks for. Sampling again cannot fix a shape the model
+ * chooses reliably; naming the mistake can.
+ *
+ * ⚠ Still not a recovery — this asks for the CORRECT SHAPE, never for a particular verdict, and an
+ * answer that stays malformed still throws and withholds.
+ */
+const SHAPE_CORRECTION =
+  'Your previous reply set `claims` to a string. `claims` MUST be a JSON ARRAY of claim objects. ' +
+  'If the script makes no factual place-claims at all — which is common and perfectly valid for a ' +
+  'short scenic call-out that only names a place and reacts to the visible day — then return an ' +
+  'EMPTY ARRAY: {"claims": []}. Do not describe your finding in prose. Call the tool again, correctly.'
+
 /** The real, Anthropic-backed decomposer (tool-use structured output). */
 export const anthropicDecomposer: ClaimDecomposer = async (input) => {
-  const response = await getAnthropic('grounding eval needs it').messages.create({
-    model: GROUNDING_MODEL,
-    max_tokens: GROUNDING_MAX_TOKENS,
-    system: SYSTEM,
-    tools: [REPORT_TOOL],
-    tool_choice: { type: 'tool', name: 'report' },
-    messages: [{ role: 'user', content: buildUserMessage(input) }],
-  })
-  recordModelUsage(GROUNDING_MODEL, response.usage)
-  return claimsFromResponse(response, input.seq)
+  let lastErr: unknown
+  for (let attempt = 0; attempt <= GROUNDING_SHAPE_RETRIES; attempt++) {
+    const response = await getAnthropic('grounding eval needs it').messages.create({
+      model: GROUNDING_MODEL,
+      max_tokens: GROUNDING_MAX_TOKENS,
+      system: SYSTEM,
+      tools: [REPORT_TOOL],
+      tool_choice: { type: 'tool', name: 'report' },
+      messages:
+        attempt === 0
+          ? [{ role: 'user', content: buildUserMessage(input) }]
+          : [
+              { role: 'user', content: buildUserMessage(input) },
+              { role: 'assistant', content: '(previous reply used the wrong shape)' },
+              { role: 'user', content: SHAPE_CORRECTION },
+            ],
+    })
+    // ⚠ Recorded on EVERY attempt, including the discarded ones — a retry is billed, and a tally that
+    // counted only the winning call would under-report the exact spend `--max-cost` bounds.
+    recordModelUsage(GROUNDING_MODEL, response.usage)
+    try {
+      return claimsFromResponse(response, input.seq)
+    } catch (e) {
+      // ⚠ ONLY the unusable-SHAPE failure is worth re-asking. A truncation (`max_tokens`) would
+      // truncate again, and a missing tool call means the model declined the tool — neither is a
+      // fresh-sample problem, and retrying them would just bill twice for the same verdict.
+      if (!(e instanceof Error) || !/primitive 'claims'/.test(e.message)) throw e
+      lastErr = e
+      if (attempt < GROUNDING_SHAPE_RETRIES) {
+        console.warn(
+          `  ↻ grounding judge returned an unusable shape for stop ${input.seq} — re-asking (${attempt + 1}/${GROUNDING_SHAPE_RETRIES}).`,
+        )
+      }
+    }
+  }
+  throw lastErr
 }
 
 /**
