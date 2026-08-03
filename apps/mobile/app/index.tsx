@@ -850,11 +850,20 @@ export default function HomeScreen() {
   // (DESIGN §8) and it must be gone before a route card's amber MIN badge — or the TypingDots —
   // appears. Collapsing on the first rider turn guarantees exactly that ordering. It is a plain
   // conditional render, deliberately un-animated: no LayoutAnimation, no Reduce-Motion question.
+  // ⚠ THE WATERMARK IS DELIBERATELY NOT INSIDE THE HERO, and this is the whole reason it is its own
+  // element: it used to live in `hero`'s View, so deleting that block — which the cold-open redesign
+  // does next — would have taken the last WPA poster reference off the screen SILENTLY, with nothing
+  // failing. Anchoring it to the screen instead makes its survival independent of any block above it.
+  // ⚠ It also stops being CLIPPED: `styles.hero` carries `overflow: 'hidden'`, so most of the burst
+  // was cropped to the hero's box, which is a large part of why losing it would have gone unnoticed.
+  const watermark = (
+    <View style={styles.watermark} pointerEvents="none">
+      <Sunburst size={168} opacity={0.09} />
+    </View>
+  )
+
   const hero = (
     <View style={styles.hero}>
-      <View style={styles.heroSunburst} pointerEvents="none">
-        <Sunburst size={168} opacity={0.09} />
-      </View>
       <Text variant="label" color="accentWarm">
         {voice.home.kicker}
       </Text>
@@ -1265,6 +1274,8 @@ export default function HomeScreen() {
         </View>
       ) : null}
 
+      {watermark}
+
       {hero}
 
       {/* ⚠ OFFLINE INVERTS THE SCREEN. Out here MY DRIVES is not the archive, it is the product — the
@@ -1301,7 +1312,8 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   regionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   hero: { paddingTop: space.sm, paddingBottom: space.sm, overflow: 'hidden' },
-  heroSunburst: { position: 'absolute', top: -54, right: -38 },
+  // Pinned to the screen's content box, not to any block inside it — see `watermark`'s comment.
+  watermark: { position: 'absolute', top: -54, right: -38 },
   heroHeadline: { marginTop: space.sm },
   heroTrail: { marginTop: space.md, marginBottom: space.md },
   // The cold open is prose on the paper, like every other skipper turn — but it carries no speaker
