@@ -708,19 +708,23 @@ with the measurement that settled it. Two things came out.
 would be erased by nothing and fail nothing — under an App Store 5.1.1(v) requirement. Now
 schema-introspected and mutation-checked.
 
-- [ ] **`GET /regions` is the only anonymous DB-touching route with NO rate limit**, and the
-      inconsistency runs the wrong way: `GET /sample` — ONE indexed limit-1 query plus a presign — is
-      capped, while `/regions` runs TWO queries (the region list, plus a 500-row scan of `places`) and
-      is hit on **every app launch**. `index.ts` states the principle itself at the `/sample` mount:
-      "every anonymous, uncapped DB-touching route is a standing invitation."
-      ⚠ Severity is moderate, not urgent — no vendor spend, and the `places` scan rides a PARTIAL index
-      (`places_endpoint_idx`). The real exposure is that **DB capacity is shared with the paid
-      endpoints**: hammering `/regions` degrades `/drives/plan` and `/drives/propose`, which do spend.
-      ⚠ **Picking the number is the judgement call, which is why this is a proposal and not a commit.**
-      It is the app's COLD-START call, so a tight cap presents as a broken launch; it also degrades
-      gracefully (the client falls back to `region-cache.ts`, which holds the last good answer). Suggest
-      something generous — well above any real launch pattern — single-sourced in `limits.ts` with
-      every other rider-facing cap (INV-12), then `app.use('/regions', rateLimit(REGIONS_RATE))`.
+- [x] ~~`GET /regions` has no rate limit~~ — **ADDRESSED 2026-08-02 (`928cb1a`), and the fix was not a
+      rate limit.** The route was paying an auth-DB session read plus TWO SEQUENTIAL queries on every
+      app launch to answer a question that changes only when an operator releases a region. Now: the
+      queries run in parallel, staged preview is opt-in (`?includeStaged=1`) so riders stop paying a
+      session read for an admin feature, and the anonymous payload is memoized for
+      `REGIONS_MEMO_TTL_MS`. A burst now costs one pair of queries per instance per minute instead of
+      three round-trips per request.
+      ⚠ **The memo sits in front of a RELEASE-GATED endpoint**, which is the shape that leaks
+      unreleased content — pinned in `test/regions-cache.test.ts` (admin previews are never written to
+      the memo; the param alone grants nothing; mutation-checked). Do not add `Cache-Control` here: a
+      shared cache serving the staged variant is the exact failure that test exists to prevent.
+- [ ] **Optional follow-up: a rate limit on `/regions` as defence-in-depth.** Much less urgent now —
+      the memo absorbs a burst, so an attacker gets cached bytes rather than DB load — but it is still
+      the only anonymous route with no cap, and a cold instance serves the first request for real.
+      ⚠ Picking the number is the judgement call: it is the app's COLD-START call, so a tight cap
+      presents as a broken launch. It degrades gracefully (the client falls back to `region-cache.ts`).
+      Suggest something generous, single-sourced in `limits.ts` with every other rider-facing cap.
 
 ## Production ops hardening — from the 2026-07-30 ship-readiness audit
 
