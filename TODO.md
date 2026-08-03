@@ -36,11 +36,18 @@ its `test` script in the same commit** — an absent script is indistinguishable
       `buildRoutesRequestBody` + `shapeRoute` out of the fetch (no behaviour change; the timestamp is
       passed in rather than read from the clock). 13 tests, and the proto3 `?? 0` guard is
       MUTATION-CHECKED — a bare cast fails exactly one test. `@skipper/routing` went 0 → 20 tests.
-- [ ] **Add: `useLocationPriming`** (also listed above) — uncovered, gates every live drive, and
-      App Store 5.1.1(iv) rides on its explainer having no "Not Now".
-- [ ] **Consider: `apps/site` has 0 tests.** Probably correct for a static Astro build — but the
-      three pages the App Store checks (`/privacy`, `/terms`, `/support`) are load-bearing enough
-      that a build-time assertion they exist and are non-empty would be cheap insurance.
+- [x] ~~Add: `useLocationPriming`~~ — **DONE 2026-08-02 (`9a65ed5`).** Rules moved to
+      `src/lib/location-util.ts`, 7 tests. MUTATION-CHECKED: dropping `|| perm.reduced` fails exactly
+      one test. ⚠ The rule worth knowing before touching that hook: **granted-but-REDUCED is a
+      denial** — `granted` is TRUE on that branch, so a check reading only `granted` compiles clean
+      and starts a live drive on approximate location, which fires stops in the wrong place and reads
+      as broken triggering rather than a permission problem.
+- [x] ~~Consider: `apps/site` has 0 tests~~ — **DONE 2026-08-02 (`5abf697`)**, and it was the THIRD
+      package the runner was skipping for want of a `test` script. 5 tests: the three App Store pages
+      exist, none has been emptied to a stub, and every `mailto:` across `src/pages` is
+      `hello@skipper.fm` (with a negative guard on gmail.com / `feedback@` / example.com — `feedback@`
+      shipped in builds 15 and 16). ⚠ Scoped to `src/pages` deliberately: the personal address is a
+      legitimate ACCOUNT IDENTITY elsewhere (GCP, IAP, Expo) and a broader rule would break logins.
 - **Judged NOT worth changing:** `studio/test/geo.test.ts` re-tests `haversineMeters` /
   `cumulativeMeters` through studio's re-export, duplicating `engine/test/geo.test.ts`. It is ~4
   tests of ~1,240, it pins that the re-export still resolves, and deleting passing tests to lower a
@@ -150,9 +157,8 @@ findings fixed (`576e031`). See `apps/mobile/CLAUDE.md` for the ESLint-9 pin and
       to raise a coverage number rather than to hold a rule, which is the failure mode this whole
       pattern is supposed to avoid. **If you want more confidence in `useDrive`, the honest next step
       is a device pass or jest-expo + RNTL — not more extraction.**
-- [ ] **`useLocationPriming` is still uncovered** — the permission dance (double-tap guard →
-      no-prompt status read → first-run explainer → OS prompt). Lower stakes than the player, but it
-      gates every live drive and App Store 5.1.1(iv) rides on the explainer having no "Not Now".
+- [x] ~~`useLocationPriming` is still uncovered~~ — DONE 2026-08-02 (`9a65ed5`); see the test-sweep
+      section above for what the two extracted rules are and why both directions are load-bearing.
 - [ ] **React Compiler — deliberately NOT yet.** Available via `experiments.reactCompiler` with Babel
       auto-configured on SDK 54+, still experimental and off by default. This codebase would benefit
       unusually much (it is dense with hand-rolled `useCallback`/`useMemo`/ref memoization). But it
