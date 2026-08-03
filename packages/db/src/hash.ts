@@ -30,6 +30,16 @@ import type { PoiFacts, FactSheetEntry } from './schema'
  * cluster's `highlights` are "most recognisable first"); only object keys are reordered. Mirrors
  * `JSON.stringify`'s treatment of `undefined` (object entries dropped, array holes → null) so an
  * omitted-vs-undefined key never shifts the hash.
+ *
+ * ⚠ NOT RFC 8785 (JCS), and does not need to be — checked 2026-08-03. JCS matters when a digest must
+ * be reproduced by a DIFFERENT implementation; here the same function writes and compares every hash,
+ * so internal determinism is the whole requirement. It happens to agree with JCS anyway on the three
+ * axes that usually diverge: key order (JS's default string sort and JCS both order by UTF-16 code
+ * units), number form (`JSON.stringify` IS ES `Number::toString`, which JCS mandates), and string
+ * escaping. The one REAL divergence: `toJSON` is ignored, so a `Date` hashes as `{}` — every Date
+ * colliding, and a changed one never moving the digest. Unreachable today because every input
+ * (`PoiFacts`, `FactSheetEntry`, `ClusterHashInput`) is a flat record of strings and numbers read back
+ * from jsonb. ⚠ Putting a Date, Map, or class instance into one of those types breaks this FIRST.
  */
 export function stableStringify(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null'
