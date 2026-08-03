@@ -710,15 +710,36 @@ schema-introspected and mutation-checked.
 
 - [x] ~~`GET /regions` has no rate limit~~ — **ADDRESSED 2026-08-02 (`928cb1a`), and the fix was not a
       rate limit.** The route was paying an auth-DB session read plus TWO SEQUENTIAL queries on every
-      app launch to answer a question that changes only when an operator releases a region. Now: the
-      queries run in parallel, staged preview is opt-in (`?includeStaged=1`) so riders stop paying a
-      session read for an admin feature, and the anonymous payload is memoized for
-      `REGIONS_MEMO_TTL_MS`. A burst now costs one pair of queries per instance per minute instead of
-      three round-trips per request.
+      app launch to answer a question that changes only when an operator releases a region. The two
+      changes that stand: the queries now run in PARALLEL, and the rider payload is MEMOIZED for
+      `REGIONS_MEMO_TTL_MS`. A burst costs one pair of queries per instance per minute.
+      ⚠ A third change — making staged preview opt-in via `?includeStaged=1` to dodge the session read
+      — was **REVERTED in `ecc30f7`**: it only did the server half, so the client never sent the param
+      and in-app staged preview silently stopped working. The session read is a real cost and it has
+      its own item above; it is not this route's to solve.
       ⚠ **The memo sits in front of a RELEASE-GATED endpoint**, which is the shape that leaks
-      unreleased content — pinned in `test/regions-cache.test.ts` (admin previews are never written to
-      the memo; the param alone grants nothing; mutation-checked). Do not add `Cache-Control` here: a
-      shared cache serving the staged variant is the exact failure that test exists to prevent.
+      unreleased content. `canPreview` gates both the read and the write — an admin never reads the
+      memo and never fills it — pinned in `test/regions-cache.test.ts` and mutation-checked on both
+      gates. Do not add `Cache-Control` here: a shared cache serving the staged variant is the exact
+      failure that test exists to prevent.
+- [ ] **The session read on every `withSession` route — fix it at the auth layer, not per-route.**
+      `withSession` calls `auth.api.getSession()`, an auth-DB round-trip on the separate
+      neon-serverless Pool, and post-D16 it NEVER short-circuits: the anonymous mint means every rider
+      carries a cookie, so there is always a token to look up. It is paid on `/regions` and on every
+      `/drives*` request.
+      The mechanism is better-auth's **`session.cookieCache`** — a signed copy of the session in the
+      cookie, so `getSession` validates without a query. Disabled by default; not configured here.
+      Config shape (from the current docs): `session: { cookieCache: { enabled: true, maxAge: 60 } }`.
+      ⚠ **NOT a drop-in, which is why this is a founder call.** Cookie caching delays REVOCATION by
+      `maxAge` — better-auth's own words: "revoked sessions may remain active on other devices until
+      the cookie cache expires". The sharp edge for us is not sign-out, it is **account deletion**: a
+      cached cookie validating against a user `purgeUserData` has already erased would write a drive
+      or a ledger row against a vanished user id — precisely the orphan INV-4 and 5.1.1(v) exist to
+      prevent. Mitigation exists (`disableCookieCache: true` per-request on the sensitive paths, which
+      already sit behind `sensitiveSessionMiddleware`), but it must be deliberate.
+      ⚠ Do NOT solve this per-route. `928cb1a` tried, via a `?includeStaged=1` opt-in on `/regions`,
+      and it both left every other route paying the read AND broke in-app staged preview because the
+      client never sent the param — reverted in `ecc30f7`.
 - [ ] **Optional follow-up: a rate limit on `/regions` as defence-in-depth.** Much less urgent now —
       the memo absorbs a burst, so an attacker gets cached bytes rather than DB load — but it is still
       the only anonymous route with no cap, and a cold instance serves the first request for real.
