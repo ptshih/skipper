@@ -600,6 +600,15 @@ Spec, with the system's own answers where they exist:
   `FilterChip` look, loudest), or **K-b** `surfaceRaised` fill + `rule` hairline + `ink` label +
   `accent` caret (quieter). ⚠ Judge them on **launch 1**, where the sample disc already owns the one
   amber — K-a puts the screen's most saturated non-amber element at the very top.
+- ✅ **RIGHT-ALIGNED** (founder, 2026-08-03): kicker left, chip pushed to the trailing edge. It earns
+  it three ways — a departures board *is* label-left / destination-right, so the gap reinforces the
+  metaphor instead of reading as disconnection; it lines the chip up with the suggestion rows'
+  chevrons and the nav gear, giving the screen **one consistent right edge for interactive things**;
+  and it puts the control under the thumb.
+  ⚠ **It must be allowed to WRAP, not squeeze.** At AX Dynamic Type sizes an uppercase kicker plus a
+  long region name will not fit one line, and a `space-between` row that cannot wrap will either clip
+  the name or crush the chip's padding. This is the same hazard as the "never clamp to one line" note
+  above, and it is the more likely of the two to be missed.
 - ⚠ **At `regions.length === 1` it must NOT be pressable and must NOT show the caret.** Still show the
   region NAME (it is informative), but a dead affordance at 1.1 launch — when Tahoe is the only
   region — would be worse than no affordance.
