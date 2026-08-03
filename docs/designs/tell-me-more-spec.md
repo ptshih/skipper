@@ -8,7 +8,9 @@
 >
 > **✅ The §8.5 ear check RAN and PASSED (founder go, 2026-08-03) — see §8.0.1.** A median stop and a
 > rich stop both produced genuine b-sides; two thin stops correctly DECLINED rather than padding. The
-> content risk is retired; what remains is `narrations_poi_uq` (§3), the half-the-corpus button
+> content risk is retired; storage is now DECIDED (§3 — a b-side gets its own table, NOT a relaxed
+> `narrations_poi_uq`: [bside-gets-its-own-table](../decisions/bside-gets-its-own-table.md)). What
+> remains is the half-the-corpus button
 > question (§8.0), and one prompt tweak (§8.0.1).
 >
 > **⚠ MEASURED 2026-08-03 — a b-side is NOT a gap-filler, and nobody should promote it to one.** A
@@ -127,7 +129,15 @@ posture as the main telling — not per-tour storage (there is no `tours` table 
 > 2. **Keep the 1:1 narration and hang the bside off it** — nullable `bside_*` columns on the main
 >    `narrations` row (the spirit of the original "no new table" decision, transposed from `tour_stops`
 >    onto `narrations`). Simpler, but mixes two tellings on one row.
-> Option 1 fits the V2 atom model better (a `bside` IS a telling); pick it unless the join cost bites.
+> ✅ **RESOLVED 2026-08-03 — and NEITHER option was taken. A b-side gets its OWN TABLE**, anchored to a
+> poi XOR a cluster like `narrations` is (not to a `narrations.id`), and `narrations_poi_uq` is left
+> alone. The recommendation above ("Option 1 … pick it unless the join cost bites") weighed the wrong
+> cost: relaxing the uniqueness is not a schema change but an audit of every reader that resolves "the
+> telling for this place" — including the loader that resolves a rider's frozen selection — and the
+> failure mode is a rider hearing the deep cut instead of the introduction. The `detours` precedent
+> (break audio is not a `narrations` row either, and anchors to `place_id` directly) settles the shape.
+> Full reasoning, what the table must carry, and the two things still owed:
+> [bside-gets-its-own-table](../decisions/bside-gets-its-own-table.md).
 
 - **NOT in the ready-gate.** A drive is playable with zero deeper cuts (optional enhancement, like
   callouts) — readiness derives from non-null `audio_url` on the SELECTED items, so an absent `bside`
