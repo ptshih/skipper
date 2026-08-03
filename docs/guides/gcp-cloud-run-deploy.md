@@ -25,6 +25,37 @@ re-derive if the project is recreated; the *shape* is the durable part.
 - **Rollback:** by Cloud Run revision, not image tag —
   `gcloud run services update-traffic skipper-api --region=us-east4 --to-revisions=REVISION=100`.
 
+## Scaling is a SPEND control (max instances)
+
+**Set 2026-08-02.** `apps/api/src/limits.ts` owns every rider-facing cap, but its rate
+limiter is per-IP **and per-instance** (in-memory, no shared store), so the real ceiling on
+anonymous model spend is `PLAN_RATE_HOUR × live instances`. That multiplier was Cloud Run's
+**unchosen default of 100** — nobody picked it, and at the default a single IP could reach
+five figures of Opus planner turns per hour. It is now pinned in **two** places, which cover
+different holes and are deliberately redundant:
+
+| Level | Where | Why it alone is not enough |
+| --- | --- | --- |
+| **Service** (`run.googleapis.com/maxScale`) | applied by hand, sticky across deploys | Lives only in GCP — invisible to anyone reading the repo, which is exactly how the default went unnoticed. |
+| **Revision** (`--max-instances`) | `cloudbuild.yaml` deploy step | Does not compose under a traffic split: each revision may run up to it. |
+
+```bash
+# service-level ceiling (one-time; survives future deploys)
+gcloud run services update skipper-api --region us-east4 --max 3
+
+# verify — the service annotation, NOT the revision one (the v1 describe view
+# shows the revision's maxScale, which stays at its own value)
+gcloud run services describe skipper-api --region us-east4 --format=json \
+  | jq '.metadata.annotations["run.googleapis.com/maxScale"]'
+```
+
+The **value** is Google's own documented starting point for budget protection
+([max-instances docs](https://docs.cloud.google.com/run/docs/configuring/max-instances)).
+Concurrency is the default `80 × vCPU` and the service runs 1 vCPU, so the cap still allows
+~240 concurrent requests — orders of magnitude above real load, while cutting the worst-case
+anonymous spend multiplier ~30×. ⚠ **Raising it raises the anonymous spend ceiling
+proportionally** — a founder call, not a capacity tweak.
+
 ## Secrets model
 
 `.env.production` is committed **dotenvx-encrypted** and baked into the image. The

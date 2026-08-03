@@ -17,6 +17,25 @@
 # an allUsers IAM binding (which Domain Restricted Sharing blocks); the app's own
 # Better Auth does the real authorization. Cloud Run injects PORT; the Dockerfile's
 # `dotenvx run` has no --overload, so the injected PORT wins and Bun binds it.
+#
+# ⚠ SCALING IS A SPEND CONTROL HERE, NOT A CAPACITY ONE — see --max-instances below.
+# apps/api/src/limits.ts owns every rider-facing cap, but its rate limiter is per-IP AND
+# PER-INSTANCE (in-memory, no shared store), so the effective ceiling on anonymous
+# model spend is `PLAN_RATE_HOUR x live instances`. That multiplier was Cloud Run's
+# UNCHOSEN default of 100 until 2026-08-02 — nobody picked it, and at the default it put
+# five figures of hourly Opus turns behind a single IP. It is now pinned, in two places
+# that cover different holes:
+#   1. SERVICE level (run.googleapis.com/maxScale) — the real ceiling, applied once by
+#      hand and sticky across deploys:
+#        gcloud run services update skipper-api --region us-east4 --max 3
+#   2. REVISION level (--max-instances, below) — what THIS file can set. Deliberately
+#      redundant: a revision-level cap does not compose under a traffic split (each
+#      revision may run up to it), and a service-level cap set only in GCP is invisible
+#      to anyone reading the repo, which is how the default went unnoticed. Each covers
+#      the other.
+# The VALUE is Google's own documented starting point for budget protection
+# (docs.cloud.google.com/run/docs/configuring/max-instances). Raising it raises the
+# anonymous spend ceiling proportionally — that is a founder call, not a capacity tweak.
 
 steps:
   # 1. Build. Tag :latest — Cloud Run pins the image DIGEST per revision, so rollback
@@ -38,6 +57,9 @@ steps:
       - --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/api:latest
       - --region=${_REGION}
       - --no-invoker-iam-check
+      # Revision-level half of the spend cap (the service-level ceiling is set out of
+      # band — see the SCALING note in the header for why both exist).
+      - --max-instances=3
       - --set-secrets=DOTENV_PRIVATE_KEY_PRODUCTION=dotenv-private-key-production:latest
 
 substitutions:
