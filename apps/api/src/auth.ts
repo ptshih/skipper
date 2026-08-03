@@ -220,6 +220,19 @@ function createAuth() {
     // resolves to `tier: 'anonymous'`, so `requireAccount` 401s it before any write. The tier check,
     // not the freshness of the read, is what protects that one.
     //
+    // ⚠ THREE THINGS VERIFIED AGAINST THIS BUILD before enabling it, each of which would have been a
+    // silent failure — all three are now pinned in test/auth-cookie-cache.test.ts:
+    //  • PLUGIN fields survive into the cached payload. `role` (admin) and `isAnonymous` (anonymous)
+    //    are not core columns, and the cached user is filtered through `parseUserOutput`. Had they
+    //    been dropped, `isAdmin()` would return false for admins and `tierOf()` would mis-read
+    //    anonymity on CACHED reads only — nothing throwing, just an admin quietly losing the staged
+    //    /regions view. `getFields` merges each plugin's schema fields, so they ride.
+    //  • SIGN-OUT clears the cached cookie, not only the session token (`deleteSessionCookie` expires
+    //    `sessionData` too). Without that the window would not be cross-device at all — a signed-out
+    //    rider would keep authenticating on their own device.
+    //  • `banned` rides in the payload as well, which means an admin BAN is subject to the same
+    //    `maxAge` delay as a revocation. Same bound, same acceptance.
+    //
     // ⚠ Do NOT raise `maxAge` without re-reading the paragraph above; test/auth-cookie-cache.test.ts
     // fails if it moves. Grounded in the INSTALLED better-auth 1.6.23 source
     // (`dist/api/routes/session.mjs` reads `session.cookieCache.enabled` + `maxAge`, defaulting the

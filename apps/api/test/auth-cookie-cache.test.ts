@@ -74,4 +74,26 @@ describe('the vendor assumptions this rests on', () => {
   test('the library default really is 300s, which is what 60 is chosen against', () => {
     expect(read('dist/cookies/index.mjs')).toMatch(/cookieCache\?\.maxAge \|\| 300/)
   })
+
+  test('PLUGIN fields ride in the cached payload — `role` and `isAnonymous` must survive', () => {
+    // ⚠ THE SILENT BREAKAGE THIS RULES OUT. The cached user goes through `parseUserOutput`, which
+    // filters to the output schema. `role` (admin plugin) and `isAnonymous` (anonymous plugin) are not
+    // core columns — if plugin fields were dropped, `isAdmin()` would quietly return false for admins
+    // and `tierOf()` would mis-read anonymity, on CACHED reads only. Nothing would throw; the admin
+    // would just stop seeing staged regions, and the bug would look like a permissions problem.
+    //
+    // Verified empirically against this exact build before writing this: parseUserOutput(auth.options,
+    // {…role:'admin', isAnonymous:false, banned:false}) returns all three. `getFields` is why — it
+    // merges each plugin's `schema[model].fields` into the output schema.
+    expect(read('dist/db/schema.mjs')).toMatch(/plugin\.schema\[modelName\]\.fields/)
+  })
+
+  test('sign-out clears the CACHED cookie too, not just the session token', () => {
+    // Otherwise the residual window would not be cross-device at all — a signed-out rider would keep
+    // authenticating on their OWN device until the cache expired, which is a different and much worse
+    // bug than the one accepted in auth.ts.
+    const fn = read('dist/cookies/index.mjs')
+    const body = fn.slice(fn.indexOf('function deleteSessionCookie'))
+    expect(body.slice(0, body.indexOf('\n}'))).toContain('authCookies.sessionData')
+  })
 })
