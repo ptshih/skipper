@@ -4,6 +4,7 @@ import { setAudioModeAsync, setIsAudioActiveAsync, useAudioPlayer, useAudioPlaye
 import { Stack, useRouter } from 'expo-router'
 import type { ImageSourcePropType } from 'react-native'
 import { track } from '@/lib/analytics'
+import { markSamplePlayed } from '@/lib/client-flags'
 import { getSample } from '@/lib/api'
 import { cleanPlaceName } from '@/lib/labels'
 import { postcardImageFor } from '@/lib/postcards'
@@ -94,6 +95,12 @@ export default function SampleScreen() {
     startedRef.current = true
     autoplayRef.current = auto
     track('sample_played', { completed: false, autoplay: auto })
+    // ⚠ RIDES THIS LATCH RATHER THAN ADDING ONE — it is already exactly "the sample began playing",
+    // once per load, for both the autoplay beat and a deliberate tap. A second latch would be a
+    // second definition of the same fact, and the two would drift the first time either moved.
+    // This is the PLAYED half of home's listen-row rule (the SEEN half is marked on home itself):
+    // heard it once and the row never greets you again, whichever came first.
+    markSamplePlayed()
   }, [])
 
   const load = useCallback(async () => {
