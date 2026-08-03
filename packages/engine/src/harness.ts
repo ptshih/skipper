@@ -11,8 +11,10 @@
 // accuracy rejection, a -1 sentinel, a frozen cursor or a missed end predicate. This runs the same
 // stops through the same engine but by way of the code a real phone actually executes. Use runDrive
 // to ask "is the trigger geometry right"; use this to ask "does a real fix stream survive the trip".
-import { TriggerEngine, type DriveStopRef, type GpsFix, type LngLat, type TriggerOptions } from '@skipper/engine'
-import { createFixMapper, type RawFix } from './gps-util'
+import { createFixMapper, type RawFix } from './fix-mapper'
+import { TriggerEngine } from './trigger'
+import type { DriveStopRef, GpsFix, TriggerOptions } from './trigger'
+import type { LngLat } from './geo'
 
 export interface HarnessResult {
   /** Fixes that passed the accuracy gate and reached the trigger engine. */
@@ -21,7 +23,7 @@ export interface HarnessResult {
   rejected: number
   /** Did the end predicate fire? A trace that stops short must NOT complete — see gps-source.ts. */
   ended: boolean
-  fired: { seq: number; tSec: number; leadSec: number }[]
+  fired: { seq: number; tSec: number; leadSec: number; distanceM: number }[]
   /** Stops handed in that never fired — the finding a desk drive exists to surface. */
   neverFired: number[]
   /** How far along the route the projection cursor actually got (m). Freezes on a run of off-route fixes. */
@@ -52,7 +54,9 @@ export function driveTrace(
     onFix: (f: GpsFix) => {
       admitted++
       finalAlongM = f.alongM
-      for (const e of engine.update(f)) fired.push({ seq: e.seq, tSec: e.tSec, leadSec: e.leadSec })
+      for (const e of engine.update(f)) {
+        fired.push({ seq: e.seq, tSec: e.tSec, leadSec: e.leadSec, distanceM: e.distanceM })
+      }
     },
     onEnd: () => {
       ended = true

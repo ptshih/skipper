@@ -1,6 +1,9 @@
-// THE BLACK BOX — the pure half. Buffers the raw fix stream of a live drive so it can be replayed at
-// a desk, forever, by anyone. No native imports, so `bun test` reaches all of it; the file write and
-// the share sheet live in trace-export.ts. (Mirrors the offline-util.ts / offline.ts split.)
+// THE BLACK BOX — the trace FORMAT and the recorder that fills it.
+//
+// ⚠ It lives in @skipper/engine, not in the app, for the same reason fix-mapper.ts does: the phone
+// WRITES traces and `packages/sim` READS them, so a format defined on one side only would give each
+// side its own private idea of what a recorded drive is. One definition, both ends. The file write
+// and the share sheet stay native, in apps/mobile/src/lib/trace-export.ts.
 //
 // WHY THIS EXISTS, and why it is worth more than it looks: the founder can rarely drive, so each real
 // drive is scarce. Un-recorded, a drive yields ONE observation and is then gone. Recorded, it becomes
@@ -17,7 +20,7 @@
 // around that guarantee. Nothing here transmits — it buffers in memory and hands bytes to an explicit
 // user-initiated export. If this ever stops being dev-gated it becomes new personal data and
 // `purgeUserData` has to chase it, which is a founder decision, not a refactor.
-import type { RawFix } from './gps-util'
+import type { RawFix } from './fix-mapper'
 
 /** Bump when the envelope shape changes in a way a reader must branch on. */
 export const TRACE_FORMAT_VERSION = 1

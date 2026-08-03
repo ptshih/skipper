@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import type { RawFix } from './gps-util'
+import type { RawFix } from './fix-mapper'
 import {
   MAX_TRACE_FIXES,
   parseTraceEnvelope,
@@ -7,7 +7,7 @@ import {
   TraceRecorder,
   traceFileName,
   traceMatchesRoute,
-} from './trace-recorder'
+} from './trace'
 
 const ROUTE: [number, number][] = Array.from({ length: 20 }, (_, i) => [0, i * 0.0001])
 const META = { driveId: 'b6388400-0df4-4edc-a2e0-f4ca65072279', recordedAt: '2026-08-03T12:00:00.000Z', polyline: ROUTE }

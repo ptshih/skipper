@@ -1,6 +1,9 @@
 # The desk-drive harness — making a drive re-runnable
 
-> **Status:** idea (written 2026-08-03) — a proposal, nothing built. Prompted by the founder's
+> **Status:** ✅ **BUILT 2026-08-03 — all five parts (§4.1–4.5) are in and green.** Written the same
+> day as a proposal; kept as the reasoning behind what shipped, with the outcomes folded in below.
+> What is NOT done is the only thing that needs a car: **recording an actual trace.** Until then the
+> sweep runs on synthetic input and says so in its own output. Prompted by the founder's
 > constraint: *"I'm limited in my ability to go out and actually drive."* Companion to
 > [../guides/1-1-submission-sweep.md](../guides/1-1-submission-sweep.md), whose §0 documents what the
 > two desk passes can and cannot prove today; this is how that ceiling gets raised.
@@ -17,7 +20,9 @@ What a simulated drive **does** exercise, and it is a lot: the real `TriggerEngi
 (`decidePump`), the real clip store, the real audio session and focus handover, the lock screen, the
 offline store, the whole UI.
 
-What it **cannot reach**, because `simulatedSource` returns finished `GpsFix` objects:
+What it **could not reach** — the diagnosis that motivated all of this — because `simulatedSource`
+returns finished `GpsFix` objects. ✅ Every row is now reachable from a desk via `replaySource` /
+`driveTrace`; the table is kept because it is the argument for why:
 
 | Skipped on every desk drive | What it guards |
 |---|---|
@@ -28,16 +33,15 @@ What it **cannot reach**, because `simulatedSource` returns finished `GpsFix` ob
 | `reachedRouteEnd` | the three-clause end predicate |
 | watch lifecycle | `.remove()` leaks (expo/expo #35925/#35926), pause/resume re-acquisition, permission, reduced accuracy |
 
-Each of those pure functions is unit-tested in `gps-util.test.ts` — **in isolation, one `describe` each.**
-Their *composition*, fed a stream, is tested nowhere. And the fixes a simulated drive emits are perfect:
+Each of those pure functions was unit-tested **in isolation, one `describe` each**, while their
+*composition* — fed an actual stream — was tested nowhere. And the fixes a simulated drive emits are perfect:
 exactly on the polyline, exact speed, exact bearing, `alongM` computed by the generator rather than
 recovered by the projection cursor. They contain none of the error the code above exists to survive.
 
-⚠ **The dev-settings copy currently claims otherwise, and it will mislead you.**
-`voice.ts:390` reads *"Simulated GPS replays a **recorded** Tahoe drive through the **real engine**"*.
-There is no recorded drive anywhere in the repo — `simulatedSource` calls `generateDrive`, a synthetic
-constant-speed walk. Fix the string or build the thing it promises; today it invites over-trusting a
-desk pass.
+✅ **The dev-settings copy used to claim otherwise, and it was fixed in the same pass.** It read
+*"Simulated GPS replays a **recorded** Tahoe drive through the **real engine**"* — but there was no
+recorded drive anywhere in the repo, and `simulatedSource` never touched the live mapping pipeline.
+Copy that invites over-trusting a desk pass is worse than no copy.
 
 ## 2. The reframe: the limitation isn't "desk", it's "synthetic"
 
@@ -135,6 +139,36 @@ you have already driven), thermal and battery behaviour over a real hour, Blueto
 an incoming call mid-clip, or the plain question of whether the timing *feels* right at 55 mph with a
 windscreen in front of you. The recorder narrows this to "roads never driven" — which is a coverage
 problem, not a fidelity one, and it shrinks with every trip.
+
+## 5b. What shipped, and what it found
+
+| Part | Where | Outcome |
+|---|---|---|
+| 4.1 seam | `@skipper/engine/fix-mapper.ts`, `apps/mobile/src/lib/gps-source.ts` | `createFixMapper` extracted from `liveSource`; `replaySource`/`replayHeadless` run the identical mapping. Both critical guards mutation-verified. |
+| 4.2 black box | `@skipper/engine/trace.ts`, `apps/mobile/src/lib/trace-export.ts` | Records pre-gate, keeps the iOS sentinels verbatim, caps by stopping (never a ring), flushes at `teardownSource`. Dev-only, local-only, share-sheet export. |
+| 4.3 fault injection | `apps/mobile/src/lib/gps-fault.ts` | Six seeded, deterministic degradations + `degrade()`. |
+| 4.4 headless drive | `@skipper/engine/harness.ts` | `driveTrace` — a whole drive asserted in milliseconds. |
+| 4.5 sweep | `packages/sim/src/sweep.ts` | Grid over floor × lead, per-stop thresholds, `--trace` for real input. |
+
+⚠ **§3's argument was settled by MOVING code, not by winning it.** The mapper, the trace format and
+the harness all live in `@skipper/engine` now, because `packages/sim` and `bun test` must run the code
+the phone runs — a mapper only the phone could execute is exactly the drift the engine exists to
+prevent. `--trace` was a deliberate refusal until that move; it works now for that reason alone.
+
+**Three findings the harness produced before anyone drove anywhere:**
+
+1. **A GPS dropout that SPANS a stop loses it, silently and permanently.** No fix lands inside the
+   radius, so the passed-point retire drops it. Correct (with no GPS you cannot know you passed it)
+   but not harmless, and none of `StopSkipReason`'s five members names it — so it lands in
+   `drive_completed`'s unattributed remainder, which cannot separate a dead zone from a stop that was
+   never near the road. Naming it needs a sixth reason, not a new event.
+2. **`ANCHORED_TRIGGER_RADIUS_M` is dead weight above ~47 mph** at the baseline lead, because
+   `effectiveRadiusM = max(floor, speed·lead)`. The parked question is therefore not "what should the
+   floor be" but **"what should it be at town/approach speed"** — which is where those four failing
+   POIs (Edgewood, Harrah's, Van Sickle, Zephyr Cove) actually are.
+3. **An iOS `-1` speed inside a canyon collapses the accuracy ceiling to its floor and the fixes get
+   rejected** — neither fault does that alone. Realistic, since iOS drops course and speed exactly
+   where fix quality drops, and it means a composed run's rejection count is not a canyon result.
 
 ## 6. Open decisions
 

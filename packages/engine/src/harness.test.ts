@@ -3,11 +3,12 @@
 // ⚠ These assert on the pipeline a REAL PHONE runs (createFixMapper → TriggerEngine), not on the
 // engine's own synthetic simulator. The difference is the entire point: everything below can see an
 // accuracy rejection, an iOS sentinel, a frozen cursor and a missed end predicate, none of which
-// `runDrive` in @skipper/engine is capable of producing. docs/designs/desk-drive-harness.md §4.4.
+// `runDrive` in this same package is capable of producing. docs/designs/desk-drive-harness.md §4.4.
 import { describe, expect, test } from 'bun:test'
-import type { DriveStopRef, LngLat } from '@skipper/engine'
-import { driveTrace, syntheticTrace } from './drive-harness'
-import type { RawFix } from './gps-util'
+import type { DriveStopRef } from './trigger'
+import type { LngLat } from './geo'
+import { driveTrace, syntheticTrace } from './harness'
+import type { RawFix } from './fix-mapper'
 
 // ~5.5 km due north from (0,0): 501 vertices at 0.0001° (~11.1 m) each.
 const ROUTE: LngLat[] = Array.from({ length: 501 }, (_, i) => [0, i * 0.0001])

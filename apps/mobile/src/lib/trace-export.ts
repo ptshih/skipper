@@ -8,14 +8,14 @@
 //
 // ⚠ **LOCAL-ONLY.** Nothing here uploads. A trace is precise location data about a real person, and
 // INV-13 keeps coordinates out of analytics deliberately; the only way one leaves the device is the
-// system share sheet, driven by an explicit tap. See trace-recorder.ts's header for what changes if
-// this ever stops being dev-gated.
+// system share sheet, driven by an explicit tap. See @skipper/engine's trace.ts header for what
+// changes if this ever stops being dev-gated.
 //
 // API (expo-file-system 57): `Directory`/`File`/`Paths`; `dir.create({intermediates,idempotent})`;
 // `file.write(str)`/`file.textSync()`/`file.delete()` — same idiom as clip-store.ts / offline.ts.
 import { Share } from 'react-native'
 import { Directory, File, Paths } from 'expo-file-system'
-import { parseTraceEnvelope, traceFileName, type TraceEnvelope } from './trace-recorder'
+import { parseTraceEnvelope, traceFileName, type TraceEnvelope } from '@skipper/engine'
 
 /** `Paths.document/traces/` — deliberately NOT under `drives/`, which clip-store.ts owns and prunes. */
 function tracesDir(): Directory {

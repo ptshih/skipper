@@ -29,8 +29,10 @@ import {
   PRE_START_STALL_MS,
   seekTargetReached,
   snapStopsToRoute,
+  TraceRecorder,
   TriggerEngine,
   type GpsFix,
+  type TraceMeta,
 } from '@skipper/engine'
 import type { Attribution } from '@skipper/shared'
 import { track, type StopSkipReason } from './analytics'
@@ -43,7 +45,6 @@ import { loadPlayback, resignPlayback } from './offline'
 import { expectedAudioSeqs } from './offline-util'
 import Constants from 'expo-constants'
 import { getDrivePermission, liveSource, simulatedSource, type FixSubscription, type RawFix } from './gps'
-import { TraceRecorder, type TraceMeta } from './trace-recorder'
 import { saveTrace } from './trace-export'
 import { useLocationPriming } from './useLocationPriming'
 import { useDriveMusic } from './driveMusic'
