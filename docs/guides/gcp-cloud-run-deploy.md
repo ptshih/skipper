@@ -25,9 +25,14 @@ re-derive if the project is recreated; the *shape* is the durable part.
 - **Rollback:** by Cloud Run revision, not image tag —
   `gcloud run services update-traffic skipper-api --region=us-east4 --to-revisions=REVISION=100`.
 
-## Scaling is a SPEND control (max instances)
+## Scaling: max is a SPEND control, min is a LATENCY one
 
-**Set 2026-08-02.** `apps/api/src/limits.ts` owns every rider-facing cap, but its rate
+**Set 2026-08-02 (max) / 2026-08-03 (min).** The two are set at different levels on purpose —
+see "min instances" below for why `--min` and `--max` are NOT symmetric.
+
+### Max instances (spend)
+
+`apps/api/src/limits.ts` owns every rider-facing cap, but its rate
 limiter is per-IP **and per-instance** (in-memory, no shared store), so the real ceiling on
 anonymous model spend is `PLAN_RATE_HOUR × live instances`. That multiplier was Cloud Run's
 **unchosen default of 100** — nobody picked it, and at the default a single IP could reach
@@ -55,6 +60,37 @@ Concurrency is the default `80 × vCPU` and the service runs 1 vCPU, so the cap 
 ~240 concurrent requests — orders of magnitude above real load, while cutting the worst-case
 anonymous spend multiplier ~30×. ⚠ **Raising it raises the anonymous spend ceiling
 proportionally** — a founder call, not a capacity tweak.
+
+### Min instances (latency) — SERVICE level ONLY, deliberately
+
+```bash
+gcloud run services update skipper-api --region us-east4 --min 1
+```
+
+⚠ **Do NOT also put `--min-instances` in `cloudbuild.yaml`, the way max is.** gcloud's own help
+is explicit: `--min-instances` "is immutably set on each new Revision", while `--min` applies
+across all revisions and "may be modified dynamically" — and it recommends `--min` for exactly
+that reason. Pinning it per-revision would mean every change to the warm-instance count costs a
+deploy, and during a rollout two revisions would each hold their own warm instance. Max is
+different (its revision-level flag is a genuine second guard against a traffic-split gap), which
+is why the two are not treated the same. This asymmetry is the whole reason this section exists.
+
+**Why it is set at all.** Both tiers scale to zero, and they stack:
+
+- Cloud Run scales to zero, so the first request after idle pays a container cold start —
+  measured **4.2 s vs 0.2 s warm** on `/health`, which is env-free and touches no database.
+- **Neon scales to zero too.** `apps/api/src/retry.ts` exists precisely for this: "the FIRST
+  query after idle wakes a suspended Neon serverless compute and can transiently throw", and it
+  notes the public API "idles between rare anonymous visitors, so every funnel visitor is a cold
+  start."
+
+At pre-launch traffic that is not an edge case, it is the NORMAL path — a reviewer, or a
+TestFlight tester on day three, pays both before the home screen has regions to render. With
+`--min 1` all three anonymous endpoints measure ~0.23 s.
+
+⚠ `--min 1` warms the CONTAINER only. The Neon wake is a separate setting on Neon's side and is
+NOT addressed here; `withRetry` still masks it. ⚠ It also bills continuously (an always-on
+instance at idle rates) — unlike max, which costs nothing to hold.
 
 ## Secrets model
 

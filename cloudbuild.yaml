@@ -36,6 +36,17 @@
 # The VALUE is Google's own documented starting point for budget protection
 # (docs.cloud.google.com/run/docs/configuring/max-instances). Raising it raises the
 # anonymous spend ceiling proportionally — that is a founder call, not a capacity tweak.
+#
+# ⚠ MIN INSTANCES IS SET, AND IS DELIBERATELY *NOT* HERE. `--min 1` is applied at the SERVICE
+# level out of band (2026-08-03), to hold one warm container: both Cloud Run AND Neon scale to
+# zero and the two cold starts STACK, which at pre-launch traffic is the normal path rather than
+# an edge case (measured 4.2s cold vs 0.2s warm). It is absent from this file on gcloud's own
+# advice — `--min-instances` "is immutably set on each new Revision" while `--min` applies across
+# revisions and "may be modified dynamically", so pinning it here would make every change to the
+# warm count cost a deploy and would hold one warm instance PER revision mid-rollout. Max is the
+# opposite case (its revision-level flag is a real second guard under a traffic split), which is
+# why only max appears below. Do not "make them consistent" — the asymmetry is the point.
+# Full rationale: docs/guides/gcp-cloud-run-deploy.md › Scaling.
 
 steps:
   # 1. Build. Tag :latest — Cloud Run pins the image DIGEST per revision, so rollback
