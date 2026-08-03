@@ -305,6 +305,29 @@ const topUps = new Map<string, Promise<OfflineStatus | null>>()
 const writingStoreNames = new Set<string>()
 
 /**
+ * In-flight SHARED transfers, keyed by STORE FILENAME — i.e. by (subject, revision), NOT by driveId.
+ *
+ * ⚠ EVERY OTHER DEDUPE IN THIS MODULE IS PER-DRIVE, AND THAT IS THE WRONG AXIS FOR THE STORE. `inFlight`
+ * and `topUps` key on driveId, and `topUpDrive` only declines when THIS drive is already downloading —
+ * so two runs for DIFFERENT drives could reach `fetchClip` for the same subject at once. Both compute
+ * the same `.part` path (it is keyed on subject+revision and lives in the shared store), and each opens
+ * by deleting it, so each was destroying the other's in-flight partial; `downloadFileAsync` also
+ * rejects on an existing dest and `downloadFileWithRetry` deletes between attempts, so two runs could
+ * mutually starve across all three and BOTH drives would record the stop as missing.
+ *
+ * ⚠ It needed no unusual behaviour to hit: `downloadDrive` runs as a background promise, and opening
+ * ANOTHER drive fires its `topUpDrive` automatically on the online load. Two drives sharing a subject
+ * is not an edge case — it is the entire premise of the shared store.
+ *
+ * Serializing here rather than giving each transfer a unique temp is deliberate: it also collapses the
+ * DUPLICATE FETCH, which is what makes "a second drive down the same corridor costs N `exists` calls
+ * and no network" true while a download is in flight rather than only after it finishes. A unique temp
+ * would have fixed the collision and left both drives pulling the same bytes — and left an abandoned
+ * temp after a hard kill that nothing reclaims (today's fixed name self-cleans on the next attempt).
+ */
+const transfers = new Map<string, Promise<void>>()
+
+/**
  * Download a drive (manifest + clip bytes) to persistent storage and write the manifest.
  *
  * ⚠ IT IS A TOP-UP, NOT A WIPE-AND-REFETCH (step 9). It used to open with `deleteDriveDownload` for a
@@ -343,18 +366,10 @@ export function downloadDrive(
 /**
  * Fetch ONE clip's bytes to its destination.
  *
- * ⚠ A SHARED DESTINATION IS NEVER THE DOWNLOAD TARGET. `downloadFileWithRetry` deletes `dest` between
- * attempts (a truncated file must not read as a saved clip) and `downloadFileAsync`'s own idempotent
- * path does remove-then-move — either would destroy an incumbent good copy that another drive is
- * relying on, and on final exhaustion leave the subject missing for BOTH. So a shared clip lands in a
- * `.part` temp inside the store and is placed with a `moveSync` that carries NO `overwrite` option
- * (default false → a collision throws while touching neither file; `overwrite: true` is
- * remove-then-move, a real window with zero copies). Safe because the revision is in the filename: a
- * collision means the same subject at the same `revisedAt`, i.e. provably identical bytes, so the
- * temp — never the incumbent — is what gets dropped.
- *
- * The `.part` suffix is deliberate: `parseStoreFileName` rejects a four-segment name, so the sweep
- * will never mistake a temp for an orphan (or for a live clip).
+ * Drive-local bytes go straight to the drive's own dir. A SHARED clip is serialized per store name
+ * first (see `transfers`) and then transferred by `transferSharedClip`, which owns the temp-and-move
+ * mechanics. The split is the point: the per-name lock has to sit OUTSIDE the transfer, or the second
+ * caller has already computed the contended temp path before it can be told to wait.
  */
 async function fetchClip(driveId: string, p: PlannedClip, signal?: AbortSignal): Promise<void> {
   if (!p.shared) {
@@ -368,6 +383,52 @@ async function fetchClip(driveId: string, p: PlannedClip, signal?: AbortSignal):
     }
     return
   }
+  // ⚠ WAIT FOR ANY RUN ALREADY FETCHING THIS EXACT SUBJECT+REVISION, rather than racing it on a temp
+  // both sides delete (see `transfers`). The loop consumes a SETTLED promise per iteration and the slot
+  // is always cleared in the `finally` below, so it terminates: either a leader lands the bytes and
+  // every waiter returns, or the leader fails and exactly one waiter becomes the next leader.
+  for (;;) {
+    const running = transfers.get(p.name)
+    if (!running) break
+    // Its failure is not ours to inherit — a dead-zone exhaustion for one drive must not poison
+    // another drive's attempt at the same subject.
+    await running.catch(() => {})
+    // A cancel that arrived while we waited is terminal, exactly as it is inside the transfer.
+    if (signal?.aborted) throw abortError()
+    if (hasStoredClip(p.name)) return // the other run landed it — this is the free, no-network case
+  }
+  const task = transferSharedClip(p, signal)
+  transfers.set(p.name, task)
+  try {
+    await task
+  } finally {
+    // Identity-checked: only clear the slot if it is still OURS, never a successor's.
+    if (transfers.get(p.name) === task) transfers.delete(p.name)
+  }
+}
+
+/**
+ * The shared-store transfer itself — ONE caller at a time per store name, enforced by `fetchClip`.
+ *
+ * ⚠ A SHARED DESTINATION IS NEVER THE DOWNLOAD TARGET. `downloadFileWithRetry` deletes `dest` between
+ * attempts (a truncated file must not read as a saved clip) and `downloadFileAsync`'s own idempotent
+ * path does remove-then-move — either would destroy an incumbent good copy that another drive is
+ * relying on, and on final exhaustion leave the subject missing for BOTH. So a shared clip lands in a
+ * `.part` temp inside the store and is placed with a `moveSync` that carries NO `overwrite` option
+ * (default false → a collision throws while touching neither file; `overwrite: true` is
+ * remove-then-move, a real window with zero copies). Safe because the revision is in the filename: a
+ * collision means the same subject at the same `revisedAt`, i.e. provably identical bytes, so the
+ * temp — never the incumbent — is what gets dropped.
+ *
+ * The `.part` suffix is deliberate: `parseStoreFileName` rejects a four-segment name, so the sweep
+ * will never mistake a temp for an orphan (or for a live clip).
+ *
+ * ⚠ THE TEMP IS KEYED ON SUBJECT+REVISION, SO IT IS SHARED ACROSS DRIVES — which is exactly why the
+ * caller must hold the per-name slot before entering here. The opening `deleteQuietly(tmp)` is only
+ * safe as "our own abandoned temp" while this function has no concurrent twin; unguarded, it deleted
+ * another drive's in-flight partial. Do not call this directly.
+ */
+async function transferSharedClip(p: PlannedClip, signal?: AbortSignal): Promise<void> {
   const store = clipStoreDir()
   const tmp = new File(store, `${p.name}.part`)
   writingStoreNames.add(p.name)
