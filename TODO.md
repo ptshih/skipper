@@ -1,6 +1,9 @@
 # TODO — engineering backlog
 
-> ⚠ **1.1 HAS LANDED IN-REPO (unreleased) AND IT DELETED ROAM.** The build truth is
+> ⚠ **1.1 IS DEPLOYED TO PROD (2026-08-02) BUT NOT RELEASED TO RIDERS, AND IT DELETED ROAM.** The push
+> already happened ([docs/guides/1-1-cutover-runbook.md](docs/guides/1-1-cutover-runbook.md)); what is
+> left is the native rebuild + TestFlight, RISK-1, the on-device sweep, and the ASC store listing.
+> The build truth is
 > [docs/designs/drives-first-1-1.md](docs/designs/drives-first-1-1.md) (43 decisions, 16 invariants)
 > with verified file:line coordinates in
 > [docs/designs/drives-first-1-1-build-notes.md](docs/designs/drives-first-1-1-build-notes.md).
@@ -736,8 +739,9 @@ schema-introspected and mutation-checked.
       ⚠ The anonymous→account link does NOT open a matching hole despite also hard-deleting a user
       row: a stale cached ANONYMOUS session still resolves to `tier: 'anonymous'`, so `requireAccount`
       401s it before any write.
-- [ ] **PLAN (2026-08-02): close the cookie-cache deletion window. ⚠ SCOPE IS BIGGER THAN "WRITE
-      PATHS" — the first framing was wrong.** Not started; `drives.ts` was mid-edit by another agent.
+- [x] ~~**PLAN (2026-08-02): close the cookie-cache deletion window**~~ — **DONE 2026-08-02 (`5b2286d`),
+      option 2; the plan and the two ruled-out alternatives are kept below because re-proposing option 1
+      is the live hazard.** ⚠ **SCOPE WAS BIGGER THAN "WRITE PATHS" — the first framing was wrong.**
       **The finding that changes it:** `GET /drives` — a READ route — calls `ensureFreeGrant`
       (`drives.ts:1018`), which INSERTS a `credit_entries` grant row. So "a read cannot orphan
       anything" is false, and this is the *more likely* orphan path than `POST /drives`: the home
@@ -824,6 +828,15 @@ schema-introspected and mutation-checked.
 
 None of this is a build; all of it is config. The premise changed on 2026-07-28: 1.0.0 is submitted, so
 "prod has no users" stops being true on approval (see CLAUDE.md's storage rule, rewritten the same day).
+
+- [ ] **⏸ DEFERRED (founder, 2026-08-03): there is NO test gate in front of production.** There is no
+      `.github/` in this repo at all, and `cloudbuild.yaml` runs docker build → push → deploy with **no
+      `bun run check` step** — so a push deploys prod at **100% traffic** with nothing having run the
+      suite. Held until after the on-device verification pass, deliberately: the fix edits the release
+      path, and editing the release path is the last thing you want to be doing on the way to a ship.
+      **The fix when it lands: `bun run check` as step 0 in `cloudbuild.yaml`** — ⚠ *not* a GitHub
+      Action. An Action cannot stop an independent Cloud Build trigger, so it would report a red check
+      beside a deploy that already went out; only a step inside the build that deploys can gate it.
 
 - [ ] **⚠ FIRST: confirm `hello@skipper.fm` actually delivers somewhere you read.** Founder-owned, ~5 min,
       and it BLOCKS the alerting below (there is no point routing pages to an address nobody reads).

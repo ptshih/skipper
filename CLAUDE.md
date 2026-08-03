@@ -4,8 +4,10 @@ A toy/lifestyle project: an AI-narrated, GPS-triggered driving audio tour with a
 persona, played as phone audio (CarPlay later). **Optimize for charm, not scale — the persona is the
 product.** When a choice trades polish-for-the-builder against scale-for-a-market, pick polish.
 
-⚠ **1.1 has LANDED in-repo but is not released** — roam is REMOVED entirely (git is the archive) and
-Create-a-Drive IS a conversation; what's left is on-device verification, the store listing, and the push.
+⚠ **1.1 is DEPLOYED to prod (2026-08-02) but NOT released to riders** — roam is REMOVED entirely (git is
+the archive) and Create-a-Drive IS a conversation. The PUSH already happened (record + template for the
+next one: `docs/guides/1-1-cutover-runbook.md`); what is left is the native rebuild + TestFlight, RISK-1
+(drive one for real), the on-device sweep, and App Store Connect metadata + screenshots.
 `docs/designs/drives-first-1-1.md` is the build truth — read it before touching `apps/api` or `apps/mobile`.
 
 ## STOP — the expensive or irreversible mistakes
@@ -68,9 +70,9 @@ Create-a-Drive IS a conversation; what's left is on-device verification, the sto
   plugin hard-deletes it on link-to-account and creates a fresh user (verified in the installed plugin
   source). So state that must survive signup lives **on the client** and is re-sent — never keyed on the
   anonymous user id; never write `drives`/`credit_entries` against one; never bulk-delete anonymous rows
-  (a reaper breaks conversations mid-flight). ⚠ On the
-  CLIENT, `session` truthiness is **not** "signed in" — an anonymous session is truthy; every check goes
-  through the one helper excluding `isAnonymous`, mirroring the server's `tierOf`.
+  (a reaper breaks conversations mid-flight). ⚠ On the CLIENT, `session` truthiness is **not** "signed
+  in" — an anonymous session is truthy; every check goes through the one helper excluding `isAnonymous`,
+  mirroring the server's `tierOf`.
 - **In-app account deletion is REQUIRED and must PURGE, not just unlink** (App Store 5.1.1(v) — an app
   that creates accounts must delete them from inside; removing this = rejection). `drives.user_id` /
   `credit_entries.user_id` are SOFT refs across the auth pool boundary — **no FK, so no cascade**:
@@ -80,8 +82,9 @@ Create-a-Drive IS a conversation; what's left is on-device verification, the sto
   DATABASE hook, not `deleteUser.beforeDelete`, because that one fires on the self-serve routes ONLY and
   `POST /api/auth/admin/remove-user` (mounted, live) skipped it. That rests on a vendor implementation
   detail, pinned by `apps/api/test/auth-delete-hook.test.ts` — don't delete that test. Erasure is
-  immediate + total; re-signup mints a fresh grant, knowingly. See
-  `docs/decisions/account-deletion-and-recovery.md`.
+  immediate + total; re-signup mints a fresh grant, knowingly. ⚠ The ANONYMOUS mint is NOT account
+  creation under 5.1.1(v) — anonymous riders get no in-app delete (founder, 2026-08-03). See
+  `docs/decisions/account-deletion-and-recovery.md` + `anonymous-mint-and-account-deletion.md`.
 - **Public read paths serve `released_at IS NOT NULL` only; `isAdmin` is the sole bypass.**
   `loadCorpusBySubjectIds`/`corpusForSelection` deliberately apply NO release filter and pass
   `includeStaged: true` — correct, since they resolve a FROZEN selection a rider paid a non-refundable

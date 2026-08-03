@@ -1,34 +1,46 @@
 # Fused cluster generation — phase 4 of the legibility layer
 
-> **Status:** READY TO RELEASE — **2026-07-30**. ⚠ **Amended 2026-08-02: ROAM IS GONE (1.1 D1), so
-> every `/roam` measurement below is a dated RECORD, not a live read, and §10's AREA trigger is CUT —
-> `packages/engine/src/area.ts`, `roamPin.area`, the `X-Skipper-Client` capability channel and the
-> mobile polygon were all deleted with the mode.** The FUSED TELLING itself survives untouched (it is
-> a `narrations` row about a `poi_clusters` subject, served to drives), and so does everything in §§1–8.
-> §9 is **DONE, INCLUDING THE RELEASE.** Counted read-only against the live DB 2026-08-02:
-> **37 fused tellings, ALL 37 RELEASED, 75.0 min** (32 cluster + 5 district), over 219 released member
-> clips whose places the fused tellings now speak for. The founder listen passed ("clips sound fine").
-> ⚠ Three earlier numbers in this file and in TODO.md disagreed with each other and with the DB —
-> "31 clips, all STAGED", "no audio exists yet", and TODO's "34 tellings / three districts". All three
-> were stale; the DB is the arbiter and the count above is it. They mattered because they read as
-> "the paid `--apply` has not run yet", which would invite paying for it twice.
-> Member RETIREMENT is a read-path behaviour (a member is suppressed at drive-build once its cluster
-> has a released telling), not a `released_at` flip — which is why those 219 rows are still released
-> and that is correct, not a leftover.
+> **Status:** ✅ **BUILT, GENERATED AND RELEASED for Tahoe/Reno — 2026-07-30, re-counted 2026-08-02.**
 > Steps 1–3 (staleness hash + member-set resolver, trigger position, read paths) spend nothing and are
-> green. Step 4's tool is complete and its output has been read twice on one cluster ($0.83, nothing
-> persisted); running `--apply` is the commitment point and needs a founder go. §8b's two corpus
-> defects are both RESOLVED. Promoted from `docs/designs/poi-legibility-layer.md` on
-> founder intent ("let's prepare to do phase 4"). Phases 1–3 are BUILT and APPLIED, and the grouping was
-> re-applied on 2026-07-30 after the third district-merge fix: **64 clusters** (60 cluster / 4 district)
-> over 295 members, all 64 carrying `highlights` / `dropped`, 33 with a real `subject_poi_id`. The four
-> districts are Downtown Reno (46), Historic Carson City (33), Virginia City (15), Stateline's Casino
-> Row (9). ⚠ §7.5 is now CLEARED — Carson City fused from two districts into one.
-> ⚠ **"No audio exists yet" was true when this was written and is NOT true now** — see the Status
-> above: step 4 ran, and all 37 fused clips are released. Step 4 is still the step that SPENDS; it has
-> simply already spent. Read
-> `poi-legibility-layer.md` §4–§5 first — it records why the shape is what it is, including two designs
-> that were tried and replaced.
+> green; **step 4 — the step that SPENDS — has already spent**; step 5's founder listen passed ("clips
+> sound fine"); step 6's member retirement is built. Counted read-only against the live DB 2026-08-02:
+> **37 fused tellings, ALL 37 RELEASED, 75.0 min** (32 cluster + 5 district), over 219 released member
+> clips whose places the fused tellings now speak for. §8b's two corpus defects are both RESOLVED.
+>
+> ⚠ **THIS LEAD IS THE ARBITER OF STATE; the body below is a build journal written as it happened.**
+> Where a section still reads "not run", "no audio exists yet", "31 clips, all STAGED", "needs a founder
+> go", or "READY TO RELEASE", it is a dated record of the moment it was written, not a live read. That
+> distinction is worth money: every one of those phrasings invites paying a second time for audio that
+> already exists. What is genuinely **NOT DONE** is exactly one thing — **§9 step 4c, Yosemite's 30
+> clusters**, which have zero enriched members and so need a paid `enrich-pois --region yosemite`
+> BEFORE a paid generation run. Both are founder-gated spends.
+>
+> ⚠ **Amended 2026-08-02: ROAM IS GONE (1.1 D1), so every `/roam` measurement below is a dated RECORD,
+> and §10's AREA trigger is CUT** — `packages/engine/src/area.ts`, `roamPin.area`, the
+> `X-Skipper-Client` capability channel and the mobile polygon all went with the mode. The FUSED
+> TELLING itself survives untouched (a `narrations` row about a `poi_clusters` subject, served to
+> drives), and so does everything in §§1–8.
+>
+> ⚠ **Amended 2026-08-03: the GENERATION gate REFUSES a too-wide group again** — `clusterGenerationBlock`
+> (`packages/studio/src/pipeline/cluster.ts`) blocks a group whose enclosing radius exceeds
+> `CLUSTER_MAX_TRIGGER_RADIUS_M`, matching what the SERVING side already does (`buildDrive` refuses a
+> `tooWideForPoint` group outright; `apps/api/src/clusters.ts`). This **re-supersedes** §4.1b's
+> "geometry NO LONGER BLOCKS" paragraph, and the reason is the amendment above it: that paragraph turned
+> the geometry check into a *mode selector* because a wide group could ship as an AREA telling — and the
+> area mode no longer exists, so a wide group has no mode left to ship as. Generating one now would pay
+> for a clip that serving refuses to play. §4.1b's arithmetic for **why 600 m** still governs.
+>
+> ⚠ **Grouping counts: the body wins over this lead's older figure.** The post-merge grouping is
+> **67 groups (62 CLUSTER / 5 DISTRICT)** over 295 members — see §8b and §4.2's table. This line used to
+> read "64 clusters (60/4)" and list four districts including Stateline's Casino Row; both are PRE-merge
+> (§8b's merge fired three times, moved Stateline DISTRICT → CLUSTER and `Reno's Historic Homes`
+> CLUSTER → DISTRICT). ⚠ §7.5 is CLEARED — Carson City fused from two districts into one.
+>
+> Member RETIREMENT is a read-path behaviour (a member is suppressed at drive-build once its cluster has
+> a released telling), not a `released_at` flip — which is why those 219 member rows are still released,
+> and that is correct rather than a leftover. Promoted from `docs/designs/poi-legibility-layer.md` on
+> founder intent ("let's prepare to do phase 4"); read that doc's §4–§5 first — it records why the shape
+> is what it is, including two designs that were tried and replaced.
 
 ## 1. What phase 4 is
 
@@ -291,6 +303,11 @@ road geometry. The lead-time result does not depend on that: it is radius ÷ spe
 ✅ **BUILT 2026-07-30 (founder go): the geometry gate.** `CLUSTER_MAX_TRIGGER_RADIUS_M = 600` in
 `@skipper/engine` + `exceedsPointTrigger`, asked through `clusterGenerationBlock` (studio) so
 "generatable" has ONE definition.
+
+⚠ **RE-SUPERSEDED 2026-08-03 — geometry BLOCKS again, and the paragraph below is the middle state.**
+The mode-selector reading was only ever valid while an AREA telling existed to select; roam took that
+with it (Status line). `clusterGenerationBlock` refuses a too-wide group once more, agreeing with
+`buildDrive`. Everything below stands as the rationale for the 600 m figure itself.
 
 ⚠ **SUPERSEDED (see §"area tellings" below, commit `66435e9`): geometry NO LONGER BLOCKS.**
 `exceedsPointTrigger` now selects the trigger MODE — a wide group ships as an AREA telling served a

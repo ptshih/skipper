@@ -17,6 +17,7 @@
 // filter that turns raw membership into the set a telling may actually be written over.
 
 import { inArray } from 'drizzle-orm'
+import { clusterTrigger, exceedsPointTrigger } from '@skipper/engine'
 import { db } from '@skipper/db'
 import { pois } from '@skipper/db/schema'
 import { clusterFactsHash, type ClusterHashInput } from '@skipper/db/hash'
@@ -176,10 +177,9 @@ export function clusterGroundingHash(
  * Why this cluster CANNOT be generated yet, or null when it can. The one gate step 4's queue asks,
  * so "generatable" has a single definition rather than one per caller.
  *
- * TWO reasons, both corpus states rather than design limits. (A third, too-wide, stopped blocking in
- * 2026-07-30 — see the ⚠ in the body.) Each is REPORTED rather than silently skipped: a cluster
- * vanishing from a preview with no reason given is how the un-enriched Yosemite half stayed invisible
- * for a week.
+ * THREE reasons: two corpus states an operator run fixes, and one GEOMETRY refusal that mirrors the one
+ * the serving side already makes. Each is REPORTED rather than silently skipped: a cluster vanishing
+ * from a preview with no reason given is how the un-enriched Yosemite half stayed invisible for a week.
  */
 export function clusterGenerationBlock(
   members: readonly ClusterMemberRow[],
@@ -195,9 +195,31 @@ export function clusterGenerationBlock(
   // (re-run the treatment classifier, or shorten `dropped`), which is what a block is for.
   if (nameableMembers(members, dropped).length === 0)
     return 'every tellable member is on the dropped list — the telling would have nothing to name'
-  // ⚠ GEOMETRY NO LONGER BLOCKS (founder call 2026-07-30). It used to defer a group too spread out for
-  // a point trigger; now `exceedsPointTrigger` selects the trigger MODE instead — wide groups ship as
-  // AREA tellings and the read path serves them a polygon. The only remaining block is a corpus state
-  // an `enrich` run fixes.
+  // ⚠ GEOMETRY BLOCKS AGAIN (founder call 2026-08-03) — read the reversal, it is the whole point.
+  //   · 2026-07-30 it STOPPED blocking, on an explicit rationale: `exceedsPointTrigger` had become a
+  //     MODE selector, so a group too spread out for a point still shipped as an AREA telling and "the
+  //     read path serves them a polygon".
+  //   · 2026-07-31 (D42/D42a, docs/designs/drives-first-1-1.md) DELETED area mode along with roam —
+  //     which deleted that RATIONALE, not just the feature. No ring, no polygon, no area-aware client
+  //     remains for a wide group to fall back to, so `exceedsPointTrigger` is a plain REFUSAL THRESHOLD
+  //     now (see the history on `CLUSTER_MAX_TRIGGER_RADIUS_M`), and the serving side already refuses:
+  //     `buildDrive` skips a `tooWideForPoint` candidate outright (packages/engine/src/drive-select.ts).
+  // Asking the SAME predicate here is what keeps "generatable" and "selectable" one definition. Without
+  // it a PAID `--apply` narrates, gates, synthesizes and PERSISTS a clip no drive can ever select — and
+  // a fused clip lands staged, publishes with the region release, and `releasedAt` is never cleared, so
+  // that is a permanently-released, permanently-unplayable clip bought with real money.
+  // ⚠ Measured HERE, on the UNCAPPED radius, because this is one of the two places it still exists:
+  // apps/api serves `triggerRadiusM` already capped at `CLUSTER_MAX_TRIGGER_RADIUS_M`, and a predicate
+  // reading a capped radius answers `false` for exactly the groups that need refusing. Never re-derive
+  // this from a served value. The points are `speakableLat ?? lat`, the same rule serving measures on —
+  // a different point rule would put the two answers back out of step.
+  // Like the blocks above, the fix is an operator action: re-run the treatment classifier to split the
+  // group into ones a single point can honestly speak for.
+  const trigger = clusterTrigger(
+    tellable.map((m) => ({ lat: m.speakableLat ?? m.lat, lng: m.speakableLng ?? m.lng })),
+  )
+  // Null only for an empty member set, which the first block already returned on.
+  if (trigger && exceedsPointTrigger(trigger))
+    return `too spread out for a point trigger (${trigger.radiusM} m enclosing radius, over CLUSTER_MAX_TRIGGER_RADIUS_M) — buildDrive would refuse the clip, so generating it would spend on an unplayable telling`
   return null
 }

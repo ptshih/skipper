@@ -1,6 +1,12 @@
 # 1.1 — Drives first: remove roam, plan a drive by talking
 
-> **Status:** BUILD-READY, **greenlit 2026-07-31** (founder). Supersedes the roam-first PRODUCT
+> **Status:** ✅ **BUILT AND SHIPPED TO PROD — steps 0–12's in-repo half is DONE and the push EXECUTED
+> 2026-08-02** (`9dc3987..ecc30f7`, four builds green; the record and the template for the next push is
+> [../guides/1-1-cutover-runbook.md](../guides/1-1-cutover-runbook.md)). ⚠ **Deployed is not RELEASED**
+> — what remains is all outside the API: the native rebuild + TestFlight, **RISK-1 (drive one for real)**,
+> the on-device sweep ([../guides/device-verification-runbook.md](../guides/device-verification-runbook.md)),
+> and the App Store Connect metadata + screenshots that step 12 could not close from the repo. Greenlit
+> **2026-07-31** (founder). Supersedes the roam-first PRODUCT
 > structure of [roam-first-create-a-drive.md](roam-first-create-a-drive.md) (its shared-corpus DATA
 > model is unchanged and load-bearing). Rationale: [drive-as-arc.md](drive-as-arc.md). Consumes
 > [offline-region-packs.md](offline-region-packs.md) — ⚠ **its D1 holds; the REGION PACK itself is
@@ -876,10 +882,16 @@ created drive has ever been driven end-to-end; the verification runbook has no r
 ⚠ **RISK-2 — A model outage blocks all drive creation.** Accepted when the pickers were deleted. The
 anchor list inline, in persona, is the only degradation path.
 
-⚠ **RISK-3 — Minting on launch creates a row the rider cannot delete in-app.** The 5.1.1(v) flow sits
-behind `sensitiveSessionMiddleware`, and an anonymous user has no credential. Accepted knowingly;
+⚠ **RISK-3 — Minting on launch creates a row the rider cannot delete in-app.** Accepted knowingly;
 mitigate by tightening `/sign-in/anonymous` (INV-14), and decide before submission whether this counts
 as account creation.
+
+> ✅ **DECIDED 2026-08-03 (founder): the mint is NOT account creation under 5.1.1(v); 1.1 ships with no
+> anonymous delete affordance** — [../decisions/anonymous-mint-and-account-deletion.md](../decisions/anonymous-mint-and-account-deletion.md).
+> ⚠ That record also corrects this paragraph's original reasoning, which was wrong on the mechanism: the
+> barrier was never "no credential to re-auth with". The anonymous plugin mounts its OWN
+> `POST /delete-anonymous-user`, it is live here, and it asks for a session — not a password. So the
+> omission is a JUDGEMENT that survives on its own merits, and the residual risk is one review cycle.
 
 ⚠ **RISK-4 — No global spend ceiling.** The limiter is per-instance and Cloud Run autoscales, so the
 real bound is limit × instances. Accepted for an unlaunched app; revisit before real traffic.

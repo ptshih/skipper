@@ -33,7 +33,7 @@ import {
   type GpsFix,
 } from '@skipper/engine'
 import type { Attribution } from '@skipper/shared'
-import { track } from './analytics'
+import { track, type StopSkipReason } from './analytics'
 import { ApiError, errorMessage } from './api'
 import { cleanPlaceName } from './labels'
 import { loadPlayback, resignPlayback } from './offline'
@@ -100,6 +100,82 @@ const LOCK_ARTWORK_URI: string | undefined =
 // the remount and `restart` paths this Set exists to absorb; deliberately not done in the same pass
 // that introduced the event, so the baseline is measured before the semantics move.
 const startedDrives = new Set<string>()
+
+// ── THE IN-DRIVE TRACE ────────────────────────────────────────────────────────────────────────
+// One mutable record per drive RUN, carried in a ref and read by every emit site below.
+//
+// ⚠ THE REF IS THE POINT, not a shortcut. `offline`, `mode` and `data` are all state/props, and
+// reading them at the emit sites would put them into the dependency arrays of finishDrive → pump →
+// handleFix — and handleFix is the callback the GPS source CAPTURES ONCE at beginDrive (audit
+// #377). Adding telemetry must not be able to move that callback graph: these events exist to
+// verify the player, so an instrumentation-induced change in WHEN a stop fires would corrupt the
+// very run they are measuring.
+interface DriveTrace {
+  mode: 'sim' | 'live'
+  offline: boolean
+  /** ms of beginDrive; 0 = no run in progress. Every emitter checks it first — without the
+   *  sentinel a stray late callback would report `elapsed_sec` as seconds-since-the-epoch. */
+  startedAt: number
+  /** Seqs whose audio genuinely STARTED. A Set rather than a counter because it does double duty:
+   *  it is also what keeps a rider-tapped REPLAY — which legitimately re-runs the freshness edge on
+   *  an already-heard clip — from landing a second `stop_fired` for the same stop. */
+  played: Set<number>
+  skipped: number
+  /** `drive_completed` latch. pump() is re-entrant by design; a double completion would inflate the
+   *  one number that says the drive worked, and a funnel event that over-fires corrupts silently. */
+  completed: boolean
+}
+
+function newTrace(mode: 'sim' | 'live', offline: boolean, startedAt: number): DriveTrace {
+  return { mode, offline, startedAt, played: new Set(), skipped: 0, completed: false }
+}
+
+const elapsedSec = (t: DriveTrace): number => Math.max(0, Math.round((Date.now() - t.startedAt) / 1000))
+
+/** The event payload a stop is allowed to carry — an ORDINAL and a closed form union, and nothing
+ *  else. ⚠ INV-13: the stop's name, its coordinates and its clip url are all in scope at every call
+ *  site below and NONE of them may ride an event (see analytics.tsx AnalyticsEventProps). Module
+ *  scope so the emitters can be called from inside effects without entering one dependency array. */
+function stopProps(t: DriveTrace, stops: DriveStop[] | undefined, seq: number) {
+  // -1 when the seq isn't in the itinerary — unreachable today (every seq here came from it), and
+  // an out-of-range ordinal is the honest report if it ever happens.
+  const index = stops?.findIndex((s) => s.seq === seq) ?? -1
+  const form = index >= 0 ? stops?.[index]?.stopType : undefined
+  // ⚠ The ANNOTATION is what keeps this closed. `stopType` is a plain `string` off the manifest, and
+  // an object-literal property widens an inferred literal union straight back to `string` — i.e. the
+  // event would compile with whatever the wire happened to send. Naming the union here re-narrows
+  // it, so a form we don't know lands as 'other' instead of becoming an open text channel.
+  const stopForm: 'story' | 'scenic' | 'break' | 'other' =
+    form === 'story' || form === 'scenic' || form === 'break' ? form : 'other'
+  return {
+    mode: t.mode,
+    offline: t.offline,
+    elapsed_sec: elapsedSec(t),
+    stop_index: index,
+    stop_form: stopForm,
+  }
+}
+
+/** The drive's heartbeat: this stop's audio actually reached the rider. */
+function emitStopFired(t: DriveTrace, stops: DriveStop[] | undefined, seq: number): void {
+  if (t.startedAt === 0 || t.played.has(seq)) return
+  t.played.add(seq)
+  track('stop_fired', stopProps(t, stops, seq))
+}
+
+/** A stop went by in SILENCE. The counter it bumps is what `drive_completed` reports, so every
+ *  silent branch must come through here — a skip emitted anywhere else would be missing from the
+ *  drive's own summary. */
+function emitStopSkipped(
+  t: DriveTrace,
+  stops: DriveStop[] | undefined,
+  seq: number,
+  reason: StopSkipReason,
+): void {
+  if (t.startedAt === 0) return
+  t.skipped += 1
+  track('stop_skipped', { ...stopProps(t, stops, seq), reason })
+}
 
 interface DriveStop {
   seq: number
@@ -318,6 +394,8 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
   const durationRef = useRef(0) // last observed clip duration (sec)
   const resumeTried = useRef(false) // already attempted a resume for the current stall
   const dataRef = useRef<DriveData | null>(null) // current `data` for the source-captured handleFix (audit #377)
+  // This run's analytics trace (see DriveTrace). Idle until beginDrive replaces it — `startedAt: 0`.
+  const trace = useRef<DriveTrace>(newTrace('sim', false, 0))
 
   const teardownSource = useCallback(() => {
     subRef.current?.stop()
@@ -419,6 +497,25 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
     setActiveSeq(null)
     setDriving(false)
     setDone(true)
+    // ── drive_completed. HERE and nowhere else: finishDrive is only reachable from decidePump's
+    // 'finish' (the road ran out AND the fire-queue drained), so a rider "Pull over" / back-out —
+    // which runs resetForReady instead — stays an ABANDON and is not counted as an arrival.
+    // ⚠ Reads the trace ref, not `firedSeqs`/`offline`/`data` state, so this callback's deps are
+    // unchanged: pump and handleFix hang off it (see DriveTrace).
+    const t = trace.current
+    if (t.startedAt > 0 && !t.completed) {
+      t.completed = true
+      track('drive_completed', {
+        mode: t.mode,
+        offline: t.offline,
+        elapsed_sec: elapsedSec(t),
+        // The itinerary's own length — `stops_played + stops_skipped` leaves the stops that never
+        // triggered at all, which is a trigger/route question rather than an audio one.
+        stops_total: dataRef.current?.stops.length ?? 0,
+        stops_played: t.played.size,
+        stops_skipped: t.skipped,
+      })
+    }
   }, [player, teardownSource])
 
   // ---- pump: if idle, play the next queued stop; else, end the drive if the road's done ----
@@ -581,6 +678,17 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
       })),
     )
     const triggerable = snapped.filter((s) => s.offRouteM <= OFF_ROUTE_MAX_M)
+    // A fresh trace per RUN — `restart` produces a second complete trace, never a continuation of
+    // the first. Set before the emits below, which are already part of this run.
+    trace.current = newTrace(mode, offline, Date.now())
+    // ── stop_skipped / 'off_route'. The ONE place this class of silence is visible: a stop dropped
+    // here never enters the engine, so it is absent from firedSeqs exactly like a stop the road
+    // hasn't reached yet — while the itinerary still lists it and the rider still drives past it.
+    // Emitted per dropped stop (normally none) rather than as a count, so "which stops went quiet"
+    // has a single answer covering all five silent branches.
+    for (const s of snapped) {
+      if (s.offRouteM > OFF_ROUTE_MAX_M) emitStopSkipped(trace.current, data.stops, s.seq, 'off_route')
+    }
     // All trigger params (lead, heading gate, cone) come from DEFAULT_TRIGGER in engine — pass
     // nothing so a future change there takes effect here instead of being silently pinned by a
     // partial opts object that READS as if it were configured. (audit #933)
@@ -605,7 +713,10 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
       startedDrives.add(startKey)
       track('drive_started', { mode })
     }
-  }, [data, driveId, mode, fast, resetForReady, handleFix, handleEnd, handleSourceError])
+    // `offline` joins the deps for the trace snapshot above. It settles in the load effect
+    // alongside `data` (already a dep) and never moves once the drive is ready, so this adds no
+    // new rebuild of beginDrive — and therefore none of handleFix.
+  }, [data, driveId, mode, offline, fast, resetForReady, handleFix, handleEnd, handleSourceError])
 
   // ---- location-permission priming (live mode) — the prime → prompt → result SHELL, shared with
   // useLocationPriming. This hook owns the pending-ref double-tap guard, the no-prompt
@@ -680,7 +791,14 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
       // paused: arming (or re-arming, on every pause toggle) the skip timer would advance a
       // held drive through audio-less stops.
       if (paused) return
-      const t = setTimeout(() => onClipDone(activeSeq), 400)
+      const t = setTimeout(() => {
+        // ── stop_skipped / 'no_audio' — the silent hole this whole event was built for. Emitted
+        // INSIDE the timer, beside onClipDone, not when the branch is entered: the effect re-runs
+        // (a pause toggle re-arms this timer), and only the timer that actually completes is a
+        // stop the rider really drove past.
+        emitStopSkipped(trace.current, data.stops, activeSeq, 'no_audio')
+        onClipDone(activeSeq)
+      }, 400)
       return () => clearTimeout(t)
     }
     if (loadedSeq.current !== activeSeq) {
@@ -724,12 +842,17 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
         void resign().then((ok) => {
           if (!ok && !sawFresh.current && loadedSeq.current === activeSeq) {
             setStallNote(voice.player.stall)
+            // The re-sign never landed (dead zone / 503) — silence caused by the NETWORK, which is
+            // why it is not folded into 'load_timeout' below.
+            emitStopSkipped(trace.current, data.stops, activeSeq, 'resign_failed')
             onClipDone(activeSeq)
           }
         })
         return
       }
       setStallNote(voice.player.stall)
+      // Second pass: a fresh url and the clip still never produced audio — our clip, not the road.
+      emitStopSkipped(trace.current, data.stops, activeSeq, 'load_timeout')
       onClipDone(activeSeq)
     }, PRE_START_STALL_MS)
     return () => {
@@ -763,6 +886,12 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
     }
     if (status.duration != null && status.duration > 0) durationRef.current = status.duration
     if (status.playing && t > 0.25) {
+      // ── stop_fired, on the freshness EDGE — the one instant we know audio truly reached the
+      // rider, and the same instant the pre-start watchdog is disarmed just below. Read before the
+      // assignment rather than restructured around it: the three statements in this branch must
+      // keep running exactly when they ran before (a watchdog re-armed by a pause/resume is still
+      // cleared here on every later tick), so the emit is added, nothing is moved.
+      if (!sawFresh.current) emitStopFired(trace.current, dataRef.current?.stops, activeSeq)
       sawFresh.current = true
       if (watchdog.current) {
         clearTimeout(watchdog.current)
@@ -834,6 +963,11 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
           return
         case 'giveUp': // resume didn't take — don't strand the drive on a dead clip
           setStallNote(voice.player.stall)
+          // The rider heard PART of this one before it froze — deliberately its own reason, since
+          // a mid-clip death (call / Siri / Bluetooth handoff / buffer death) is a different defect
+          // from a stop that was silent from the first second. 'completeAtEnd' above is NOT a skip:
+          // the clip effectively finished, didJustFinish simply never arrived.
+          emitStopSkipped(trace.current, dataRef.current?.stops, seq, 'stalled_mid_clip')
           onClipDone(seq)
           return
       }

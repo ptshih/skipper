@@ -105,6 +105,12 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   deletion (App Store 5.1.1(v)) is immediate + total and must PURGE `drives`/`credit_entries` by hand
   (soft refs, no FK cascade); password reset mails a Resend link that resolves on the web. Reset is
   inert until `RESEND_API_KEY` is set (2026-07-15).
+- [anonymous-mint-and-account-deletion.md](decisions/anonymous-mint-and-account-deletion.md) — the
+  anonymous mint is **not** account creation under App Store 5.1.1(v), so 1.1 ships with no in-app
+  delete affordance for anonymous riders (an anonymous row holds no rider data by invariant, and the
+  real sign-up flow already deletes). Closes the 1.1 spec's RISK-3. ⚠ Corrects the code comment that
+  called such a button impossible: the anonymous plugin's own `POST /delete-anonymous-user` is mounted
+  and asks only for a session — so this is a decision, not a limitation (2026-08-03).
 - [automated-grounding-gate.md](decisions/automated-grounding-gate.md) — the founder reversed "human
   ear instead": `generate-narrations.ts` now scores every clip through the eval panel and is
   FAIL-CLOSED (a clip whose grounding/tts gate stays dirty after the bounded `optimize()` retakes is
@@ -153,7 +159,8 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   preview including one clip from their own route, with the wall at "Make this drive". Also: the
   subject-keyed offline store (the REGION PACK itself was cut), district re-anchoring, a repo-wide
   simplification sweep, instrumentation. ⚠ Removes the only road-tested mode — drive one before
-  submitting. Greenlit 2026-07-31; steps 0–12 LANDED in-repo, unreleased.
+  submitting. Greenlit 2026-07-31; steps 0–12 built and **pushed to prod 2026-08-02**, not yet released
+  to riders (TestFlight, RISK-1, the on-device sweep and the ASC listing remain).
 - [1-1-adversarial-review.md](designs/1-1-adversarial-review.md) — a ten-lens outside pass over the
   1.1 spec **while it was mid-build**, every code claim checked by an adversarial verifier: 15 findings
   to raise with the builder (⚠ `via` bypasses INV-1's allowlist; the `/drives/plan` mount is
@@ -168,8 +175,10 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   with the condition that expires it. Idea shelf, nothing greenlit; 2026-07-31.
 - [fused-cluster-generation-spec.md](designs/fused-cluster-generation-spec.md) — **phase 4** of the
   legibility layer: one fused telling per cluster, and the read-path work that makes it audible.
-  31 fused clips exist (STAGED); the release is the remaining step. ⚠ Amended 2026-08-02 — its §10
-  AREA trigger was cut with roam, so read that section (and every `/roam` measurement) as a record.
+  **BUILT, GENERATED AND RELEASED** — 37 fused tellings, all released (counted 2026-08-02); only
+  Yosemite's 30 clusters remain, behind a paid `enrich` first. ⚠ Its §10 AREA trigger was cut with
+  roam, so read that section (and every `/roam` measurement) as a record; the lead is the arbiter of
+  state and the body is a build journal.
 - [road-snapped-anchors-spec.md](designs/road-snapped-anchors-spec.md) — **1a** of the 2026-06-25 dogfood
   triage: a safe-by-default `snap-speakable-anchors` pass auto-populates `pois.speakable_lat/lng` from the
   nearest drivable road (Google Roads API), flagging POIs no road can reach; un-snappable centroids never
@@ -180,9 +189,10 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   center, shrink the inflated `radiusForKind` floors, and retire passed points (the "fired after passing"
   bug). Build-ready, unbuilt; needs an on-device re-drive to tune.
 - [places-endpoints-spec.md](designs/places-endpoints-spec.md) — a per-region CURATED set of Google
-  Places feeds the drive's start/end/midpoint picker (and break/pitstops); reuses the `places` table,
-  zero runtime Google cost; build-ready, unbuilt, spike-validated; supersedes the interim
-  corpus-anchor picker.
+  Places, reusing the `places` table at zero runtime Google cost. **BUILT and RUN — Tahoe's set is
+  live in prod** (32 places, 26 endpoint-eligible). 💸 Do not re-run `curate-places` to "fix an empty
+  allowlist". ⚠ Its consumer moved: the picker and `GET /drives/anchors` were both deleted in 1.1, and
+  the curated set is now the **planner's allowlist**, server-side only.
 - [ask-the-skipper-spec.md](designs/ask-the-skipper-spec.md) — live, grounded voice Q&A mid-drive (the
   north-star delighter); build-ready, unbuilt, post-MVP.
 - [gps-player-spec.md](designs/gps-player-spec.md) — the M1 live GPS phone player; mostly built (the

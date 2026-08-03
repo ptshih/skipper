@@ -147,6 +147,51 @@ test('no identify()/reset() call anywhere in app/ or src/', () => {
   expect(hits).toEqual([])
 })
 
+// --- the EMITTER tripwire ---------------------------------------------------------------------
+//
+// analytics.tsx's header states the trap and then hands the reader a grep: track() is
+// `posthog?.capture(...)`, so on a machine with no key a hand-check of "did it fire?" passes by
+// doing nothing, and "the only real check is whether a call site EXISTS". This is that grep, as a
+// test — which matters most for the events that are hardest to exercise by hand: the in-drive ones
+// only reachable by actually driving, or by a clip failing to load in a dead zone.
+//
+// ⚠ It proves a call site exists, NOT that the site is on the right branch. Nothing here can tell
+// `stop_skipped` emitted at the watchdog from `stop_skipped` emitted at the top of the file.
+const ANALYTICS_SRC = `${MOBILE_ROOT}/src/lib/analytics.tsx`
+
+/** The event names, read out of AnalyticsEventProps itself so a new event is covered the moment it
+ *  is declared — a hand-maintained list here would go stale exactly when it was needed. */
+function declaredEvents(): string[] {
+  const lines = stripComments(readFileSync(ANALYTICS_SRC, 'utf8'))
+  const open = lines.findIndex((l) => l.includes('type AnalyticsEventProps = {'))
+  expect(open).toBeGreaterThanOrEqual(0) // the map was renamed → fix this parse, don't delete it
+  const names: string[] = []
+  // Stop at the map's own closing brace (column 0). A nested props object closes at `  }`, so the
+  // 2-space key pattern and the flush-left terminator can't be confused for each other.
+  for (let i = open + 1; i < lines.length && lines[i] !== '}'; i++) {
+    const key = /^ {2}(\w+):/.exec(lines[i] ?? '')?.[1]
+    if (key) names.push(key)
+  }
+  return names
+}
+
+test('every declared event has a real call site — an event with no emitter is a type, not instrumentation', () => {
+  const declared = declaredEvents()
+  expect(declared.length).toBeGreaterThan(10) // a parse that found nothing would pass vacuously
+
+  const emitted = new Set<string>()
+  for (const dir of SCAN_DIRS) {
+    for (const rel of new Glob('**/*.{ts,tsx}').scanSync({ cwd: `${MOBILE_ROOT}/${dir}` })) {
+      const path = `${dir}/${rel}`
+      if (path === 'src/lib/analytics.tsx') continue // the declaration is not an emitter
+      // Comments stripped first: an emitter that was commented out is an emitter that is gone.
+      const text = stripComments(readFileSync(`${MOBILE_ROOT}/${path}`, 'utf8')).join('\n')
+      for (const m of text.matchAll(/track\(\s*'([a-z_]+)'/g)) if (m[1]) emitted.add(m[1])
+    }
+  }
+  expect(declared.filter((e) => !emitted.has(e))).toEqual([])
+})
+
 test('the tripwire actually scans files — a zero-file scan would pass vacuously', () => {
   // Without this, deleting a directory or breaking the path math turns the guard above into a
   // green no-op. The exact count is volatile; that it is not zero is the invariant.

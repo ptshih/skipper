@@ -1,11 +1,26 @@
 # Drive endpoints + pitstops from a curated Places set — Build Spec
 
-> **Status:** CODE BUILT 2026-06-20/21 (steps 1, 2, 4, 5 + the admin `/places` page); the **Tahoe
-> curation run (step 3) is FOUNDER-GATED / PAID and still PENDING** — until it runs, `GET /drives/anchors`
-> returns an empty set (no curated `places` yet). Built: the `places` role markers + `featured` (migration
-> 0033, **APPLIED** to the shared DB), the `GET /drives/anchors` repoint to curated endpoint-eligible
-> `places`, the `regionAnchor.featured` DTO field, the mobile featured-first picker, and the admin
-> **`/places`** curation page. Design walked through + settled with the founder (2026-06-20): a
+> **Status:** ✅ **BUILT AND RUN — the curated Tahoe set is LIVE in production.** Code built 2026-06-20/21
+> (the `places` role markers + `featured`, migration 0033 **APPLIED**; the curated-endpoint repoint; the
+> `regionAnchor.featured` DTO field; the mobile featured-first picker; the admin **`/places`** curation
+> page), and **step 3's paid Tahoe curation run HAS HAPPENED** — measured live during 1.1 (2026-07-31):
+> **32 curated places, 26 `endpoint_eligible`, 6 ineligible**, every one Tahoe-basin. Prod confirmed it
+> on 2026-08-02, `GET /regions` serving Lake Tahoe's example anchors out of that set
+> ([../guides/1-1-cutover-runbook.md](../guides/1-1-cutover-runbook.md)).
+> 💸 **Do NOT re-run `curate-places` to "fix an empty allowlist" — it is not empty, and that run SPENDS.**
+> A curation run is now only for a NEW region (and still needs an explicit founder go).
+>
+> ⚠ **The rider-facing half of §Runtime below is GONE: `GET /drives/anchors` was DELETED end to end in
+> 1.1** ([drives-first-1-1.md](drives-first-1-1.md) D7 + its removal table), together with the
+> tap-to-pick create form this spec was written to feed. Read every mention of that endpoint below as
+> HISTORY. The curated set itself got *more* load-bearing, not less: it is now the **planner's
+> allowlist** — `loadRegionAnchors` (`apps/api/src/drives.ts`), whose sole caller is the planner, plus a
+> handful of NAMES on `GET /regions` (`exampleAnchors`). ⚠ **Do not resurrect the endpoint.**
+> `requireAccount` is per-route and the `/drives` mount carries only `withSession`, so a re-added
+> `/anchors` would inherit no guard and become an anonymous dump of the whole allowlist **with exact
+> coordinates** — the one thing that can bill a Google Routes call.
+>
+> Design walked through + settled with the founder (2026-06-20): a
 > **per-region CURATED set of Google Places** serves a drive's start / end / midpoint AND its
 > break/pitstops; the picker offers ONLY that set (Q6 resolved → curated, not open autocomplete).
 > Spike-validated (Places API (New) is enabled and returns clean Tahoe hubs — used at *curation* time, not
@@ -20,8 +35,9 @@
 > wasn't the draft that got resolved). The `curate-places` studio CLI still exists for terminal/batch use
 > (now also Opus-default).
 >
-> **Go-sequence to finish (founder):** open admin `/places` → **Curate** → Draft (Opus) → prune → Resolve
-> & add (or `curate-places --apply` from the terminal) → review/promote → deploy. Mobile is already wired.
+> **Go-sequence — EXECUTED for Lake Tahoe; keep it as the recipe for the NEXT region:** open admin
+> `/places` → **Curate** → Draft (Opus) → prune → Resolve & add (or `curate-places --apply` from the
+> terminal) → review/promote → deploy.
 
 ## Why
 
@@ -92,9 +108,10 @@ Google/LLM spend, and it's offline.
 
 ## Runtime (mostly already built)
 
-- **`GET /drives/anchors?regionId=`** → the curated **endpoint-eligible** `places` in the region bbox
-  (REPLACES the POI-corpus query). It's a short list → the picker already shipped (FROM/TO/MIDPOINT +
-  search + featured quick-picks + loop mode) reads it directly.
+- ⚠ **HISTORY — `GET /drives/anchors?regionId=` no longer exists** (deleted in 1.1 with the picker; see
+  the Status line). What it queried survives as `loadRegionAnchors`, server-side only: the curated
+  **endpoint-eligible** `places` in the region bbox (REPLACES the POI-corpus query), read by the planner
+  rather than served to a client.
 - **`POST /drives/propose` / `POST /drives`** take the picked places' coords (**already stored — no
   runtime Google Details, no session tokens**); materialize the route (`[start, ...via, end]`) + count
   stories, exactly as today. Loop mode unchanged (start + midpoint; end = start).

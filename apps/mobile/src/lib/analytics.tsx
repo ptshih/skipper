@@ -127,6 +127,58 @@ export type WallSource =
   /** Pressing play on a saved drive without an account. */
   | 'drive_play'
 
+/** Which clock drove the drive. On every drive-scoped event, never just `drive_started`: the couch
+ *  SIMULATOR is a dev/demo path, and one drive event that can't be filtered lets simulated drives
+ *  masquerade as real ones on the launch dashboard (`app_env` tags the BUILD, not the clock). */
+type DriveMode = 'sim' | 'live'
+
+/** Why a stop resolved to SILENCE — the closed union that is the entire point of `stop_skipped`.
+ *  Every hole in the player is silent BY CONSTRUCTION (the watchdog skips a clip with no note; the
+ *  rider just drives past a stop hearing nothing), so from the outside every cause looks identical.
+ *  Each member below is a DISTINCT branch in useDrive, and the fix for each is a different fix —
+ *  collapsing them back into one "skipped" number throws away the only thing worth knowing. */
+export type StopSkipReason =
+  /** The url map had no clip for this stop. `loadPlayback` deliberately serves a PARTIAL local map
+   *  rather than error-walling a rider holding 39 of 40 stops (offline.ts) — this is that gap
+   *  actually being driven through, the same one the ready card's missingClipCount warns about
+   *  while the rider is still parked. */
+  | 'no_audio'
+  /** The clip HAD a url and never produced audio: the pre-start watchdog re-signed once and the
+   *  second pass still hadn't started (expired 403 / decode failure / a stream buffering forever). */
+  | 'load_timeout'
+  /** The same pre-start stall, except the re-sign itself failed (dead zone / 503), so the stop was
+   *  dropped immediately rather than hanging the sequential pump. Kept distinct from
+   *  'load_timeout' because it is the difference between "no network here" and "our audio is broken". */
+  | 'resign_failed'
+  /** The clip STARTED and then froze mid-telling (call / Siri / a Bluetooth handoff / buffer death)
+   *  and the one resume attempt didn't take. The rider heard PART of this stop — a materially
+   *  different defect from the three above, which are silence from the first second. */
+  | 'stalled_mid_clip'
+  /** Never armed at all: the stop's snapped trigger point sat further off the route than
+   *  OFF_ROUTE_MAX_M, so beginDrive never handed it to the engine. Silence decided before the
+   *  wheels turn, and invisible in every other signal — a stop that never triggers is absent from
+   *  firedSeqs exactly like a road not yet reached. */
+  | 'off_route'
+
+/** The shape the two per-stop events share, so `fired` and `skipped` stay directly comparable.
+ *  ⚠ `stop_index` is the stop's ORDINAL within this drive's own itinerary — NOT a narration id and
+ *  not a seq that means anything off this drive. An ordinal describes the drive's SHAPE (were the
+ *  holes at the front? did it die after stop 3?); an id names a place. */
+type DriveStopProps = {
+  mode: DriveMode
+  /** Playback came entirely off the on-disk download (zero network) — the axis most likely to
+   *  explain a cluster of skips. */
+  offline: boolean
+  /** Seconds since the drive began. In sim FAST mode this is compressed 8× along with everything
+   *  else; `mode` is what tells you not to read it as wall-clock pacing. */
+  elapsed_sec: number
+  stop_index: number
+  /** The clip's treatment. A CLOSED union with an explicit fallback rather than the wire string:
+   *  the manifest's form is `driveClipForm` today, and 'other' is what keeps a future widened wire
+   *  value from becoming an open text channel here (the WallSource rule, restated). */
+  stop_form: 'story' | 'scenic' | 'break' | 'other'
+}
+
 /** THE ANALYTICS VOCABULARY — the founder-approved 1.1 funnel (D31), one entry per event, and the
  *  only properties that may ever be sent. Adding an event or a property is an edit here first.
  *
@@ -179,7 +231,31 @@ type AnalyticsEventProps = {
   drive_created: EmptyProps
   /** Playback started. `sim` vs `live` because the simulator is a dev/demo path, and folding it into
    *  the same number would let simulated drives masquerade as real ones on the launch dashboard. */
-  drive_started: { mode: 'sim' | 'live' }
+  drive_started: { mode: DriveMode }
+  /** A stop's audio ACTUALLY BEGAN — the drive's heartbeat, and the denominator every skip rate is
+   *  read against. Emitted on the FRESHNESS edge (the clock advanced past the clip's head), never on
+   *  expo-audio's `playing`, which flips on the play() INTENT while a stream buffers forever: that
+   *  number would count stops the rider never heard, which is the failure this whole event set
+   *  exists to make visible. A rider-tapped REPLAY is deliberately not one of these — it is the same
+   *  stop being re-heard, and counting it would inflate the heartbeat with rewinds. */
+  stop_fired: DriveStopProps
+  /** A stop resolved to SILENCE. THE reason this instrumentation was built: the funnel ended at
+   *  `drive_started`, so the one thing a drive could do wrong — quietly skip the stops it exists to
+   *  play — produced no signal at all, on either side of the wire. */
+  stop_skipped: DriveStopProps & { reason: StopSkipReason }
+  /** The drive reached the end of its road (the fix source ran out AND the fire-queue drained).
+   *  ⚠ NOT a rider "Pull over" / back-out: that is an ABANDON, and folding it in here would make
+   *  the number that says "the bet works" unable to tell finishing from quitting.
+   *  `stops_played + stops_skipped` against `stops_total` leaves a remainder — stops that never
+   *  triggered at all, which is a trigger/route signal rather than an audio one. */
+  drive_completed: {
+    mode: DriveMode
+    offline: boolean
+    elapsed_sec: number
+    stops_total: number
+    stops_played: number
+    stops_skipped: number
+  }
   /** Trailhead type failed to load and the app degraded to the system font. Predates the 1.1 funnel.
    *  `message` is `String(fontError)` — an SDK/asset error, never rider input. */
   font_load_failed: { message: string }
@@ -191,12 +267,23 @@ export type AnalyticsEvent = keyof AnalyticsEventProps
 /** Fire a product-analytics event. No-op when unconfigured.
  *  ⚠ `properties` is REQUIRED even for the no-property events (`track('drive_created', {})`). An
  *  optional second parameter would let `track('proposal_shown')` compile — a half-instrumented event
- *  that reports nothing and looks instrumented, which is the failure mode this whole file guards. */
+ *  that reports nothing and looks instrumented, which is the failure mode this whole file guards.
+ *
+ *  ⚠ TOTAL — IT CANNOT THROW, AND THAT IS A PRODUCT GUARANTEE, NOT TIDINESS. The optional chain only
+ *  covers an ABSENT client; `capture` itself throwing would propagate into whatever branch emitted.
+ *  Since the drive events (`stop_fired`/`stop_skipped`/`drive_completed`) fire from inside the audio
+ *  path — `stop_skipped` sits immediately BEFORE the `onClipDone` that advances the drive — a throw
+ *  here would stall a rider at a silent stop, i.e. telemetry causing the exact failure it exists to
+ *  measure, in a dead zone, with the stall watchdog's own note saying nothing. Analytics may never be
+ *  load-bearing for playback. Swallowed silently on purpose: there is no rider-facing remedy for a
+ *  dropped metric, and INV-13 forbids logging the payload. */
 export function track<E extends AnalyticsEvent>(
   event: E,
   properties: AnalyticsEventProps[E],
 ): void {
-  posthog?.capture(event, properties)
+  try {
+    posthog?.capture(event, properties)
+  } catch {}
 }
 
 // expo-router runs on react-navigation v7, whose container PostHog's `captureScreens` can't auto-hook

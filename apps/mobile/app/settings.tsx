@@ -222,15 +222,22 @@ export default function SettingsScreen() {
                 • no Sign out — signing out of an anonymous session strands the row server-side and,
                   because the mint's guard is module-level, leaves the app session-less until the
                   next cold start. A control whose only effect is to make things worse.
-                • no Delete account — `deleteUser` sits behind better-auth's sensitiveSessionMiddleware
-                  and an anonymous user has no credential to re-auth with, so the button could only
-                  ever return an error. Advertising a deletion that cannot succeed is the exact
-                  inverse of what App Store 5.1.1(v) asks for.
-                ⚠ RISK-3 LIVES IN THIS BRANCH: the mint created a server-side row this rider cannot
-                delete from inside the app. Whether that counts as "creating an account" under
-                5.1.1(v) is a FOUNDER call before submission — see docs/designs/drives-first-1-1.md
-                RISK-3. If the answer is yes, the fix is the installed plugin's own
-                `deleteAnonymousUser`; do NOT wire it on your own initiative.
+                • no Delete account — a FOUNDER DECISION (2026-08-03), NOT a technical impossibility.
+                  The anonymous plugin already mounts POST /delete-anonymous-user, and it needs only
+                  a session plus `isAnonymous` — no credential, no re-auth (its
+                  sensitiveSessionMiddleware just resolves an authoritative session), and it is LIVE
+                  here because we don't set `disableDeleteAnonymousUser`. Verified in the installed
+                  source: better-auth@1.6.23 dist/plugins/anonymous/index.mjs. (The old reasoning
+                  here cited `deleteUser` — a different endpoint, which really does demand a
+                  password — and concluded the button could only error. It couldn't; it would work.)
+                  The call is that the mint does not constitute account CREATION under App Store
+                  5.1.1(v): in-app deletion already exists for real accounts, and an anonymous row
+                  holds no rider data by invariant — INV-4 forbids writing a drive or a credit entry
+                  against it, so there is nothing to erase.
+                ⚠ RISK-3 (opened in docs/designs/drives-first-1-1.md) is CLOSED by that decision, not
+                open: see docs/decisions/anonymous-mint-and-account-deletion.md. If it is ever
+                REOPENED, the fix is the plugin endpoint named above, wired deliberately — do NOT
+                wire it on your own initiative.
                 ⚠ Do not delete this branch as "unreachable after the mint" — it is also what a cold
                 start in a dead zone and an explicit sign-out land on. */}
             <Text variant="dim" color="inkFaint">
