@@ -7,13 +7,12 @@
 > ⚠ The §§3/4/10 code blocks are the SOURCE the script extracts (`<!-- asc:… -->` markers) — edit the
 > block, re-run the script; never hand-paste, and never delete a marker.
 >
-> ⚠⚠ **ASC IS NOW ONE EDIT BEHIND THIS DOC (2026-08-03).** The em-dash sweep re-punctuated §3
-> promotional text and §4 description (founder ask: no em-dashes in anything a rider reads). Wording
-> is otherwise unchanged and promotional text re-measured at **168/170 chars**; §10 review notes were
-> already clean. **The live listing still has the old punctuation until someone re-runs
-> `bun run asc:metadata -- --apply --version=1.1.0`.** Run the no-flag preview first: it should report
-> a diff on exactly those two fields and nothing else. Until then the read-back claim above is stale
-> for §§3/4 — deliberately, because pushing to ASC is a founder call, not a side effect of a sweep.
+> ⚠ **The em-dash sweep re-punctuated §3 and §4, and that IS pushed (2026-08-03, founder go).** No
+> em-dashes in anything a rider reads; wording otherwise unchanged. Applied with
+> `bun run asc:metadata -- --apply` — no `--version`, because the record was already `1.1.0` and a
+> rename flag is scope nobody needed on a live listing. The script's own read-back confirmed both
+> fields, and the preview beforehand showed a diff on exactly those two and nothing else.
+> Promotional text sits at **168/170**; §10 review notes needed no change (`already matches`).
 >
 > **What is still owed before submitting** (see [1-1-submission-sweep.md](1-1-submission-sweep.md) for
 > the order): §9's screenshots, §8's App Privacy label (no public API — hand entry, and the free-text
@@ -827,11 +826,10 @@ Re-run the list; don't inherit last release's ticks.
       with no session. This is 1.1's primary review path (§10) and it needs `ANTHROPIC_API_KEY` set
       in the deployed service — if it isn't, every reviewer attempt gets the in-persona outage line
       and the app looks broken rather than unconfigured.
-- [ ] **The 1.1 metadata is entered in ASC — RE-PUSH OWED.** It was pushed and independently read back
-      on 2026-08-03, but the em-dash sweep later that day re-punctuated §3 and §4, so ASC is one edit
-      behind (see the Status block). Re-run `bun run asc:metadata -- --apply --version=1.1.0`, then
-      re-verify with the no-flag preview (it should print "already matches" for all three) rather than
-      trusting this tick.
+- [x] ✅ **The 1.1 metadata is entered in ASC** — pushed 2026-08-03 and re-pushed the same day after
+      the em-dash sweep re-punctuated §3 and §4, both times read back independently. Re-verify with a
+      no-flag `bun run asc:metadata` (it prints "already matches" for all three) rather than trusting
+      this tick — that check is cheap and ASC does not warn when the doc and the listing drift apart.
 - [ ] **A build whose short version is `1.1.0` is attached.** The record deliberately has NONE right
       now — see the Status block. ⚠ ASC does not warn about a mismatch; `asc:metadata` does.
 - [ ] The demo account exists, its password is in ASC, and it has credits left to create a drive.
