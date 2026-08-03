@@ -788,6 +788,77 @@ noticing as a pattern: on launch 1 the sample disc owns the one amber, so anythi
 screen must be a fill without a glow — which is exactly why S1's three moves are pine, ink and a
 watermark rather than anything amber.
 
+## 14. The last three calls (founder, 2026-08-03) — the design is now settled
+
+1. ✅ **The QUIET region chip** — `surfaceRaised` fill, `rule` hairline, `ink` label, `accent` caret.
+   Not the pine outline. It stays unmistakably a control while leaving the screen calm.
+2. ✅ **The listen card hides after the first launch OR once it has been PLAYED** — the union, so
+   whichever comes first wins. ⚠ **Evaluate the flag ONCE AT MOUNT, not continuously**: a live
+   `played` check would yank the card off screen *while the clip is still playing*, which is a worse
+   bug than the one the rule fixes.
+3. ✅ **The limit line stays, but COMPOSED, and only while there is one region.**
+
+### ✅ The limit line is CUT — the screen already says it three times
+
+I first argued to keep it (an off-region ask is a billed `/drives/plan` turn that cannot succeed, so
+naming the limit is a free guard against paid dead ends). **The founder found the sentence confusing,
+and that is itself the evidence against it** — if it does not read to the founder it will not read to
+a first-timer. Re-counted: the chip says "Lake Tahoe" and **all three suggestion rows are Tahoe
+places**, so the clause would be a fourth statement of something already obvious, on a screen whose
+original complaint was saying things twice.
+
+- **Scope is carried by the chip and the rows.** An off-region ask gets the planner's in-persona
+  deflection, which is charming and sells him as a guide with real turf.
+- The residual cost — one wasted turn for a rider who ignored all three cues — is **cheaper than a
+  fourth redundant sentence** on this particular screen.
+- ⚠ Revisit if the deflection ever proves expensive in practice; the spend argument is sound, it is
+  just outweighed here.
+
+### ✅ The sample becomes a LISTEN ROW, not a hero card (founder)
+
+*"what if for launch 1, we moved the sample above 'drive somewhere' but kept the distinct visual
+styling to separate from the other 3"* — better than my hero card, and worth naming why: it makes the
+two launches **structurally identical except for one inserted row**. The question is the hero on both;
+the sample is the *first action offered*, which is still "hear him first" in the action order without
+paying for two layouts.
+
+Distinct skin, same row geometry: a round play disc (the others are square badges), a pine keyline
+(the others a `rule` hairline), its own `HAVE A LISTEN` kicker, and a dashed rule beneath separating
+it from the three. It must never read as a fourth suggestion.
+
+### ✅ S3 joins S1 — enamel badges (founder)
+
+Both charm moves ship. The three rows get the hand-drawn enamel badge set DESIGN §9 asks for. ⚠ It is
+an **asset build**, not a restyle — and ⚠ worth an on-device look at the total pine load once it lands
+(the listen keyline, three filled badges and the send disc are all pine; the chip going *quiet* is
+what keeps that in budget).
+
+### ✅ Rotating composer placeholder (founder)
+
+*"the placeholder should be more representative, and maybe rotating every few seconds."* It earns its
+place because it is **not** a restatement of the rows: the rows teach *what kinds of things* to ask
+for, the placeholder teaches *how casually you can say it* — lowercase, sloppy, short, which is what
+the sub-line already promises ("a rough idea is plenty").
+
+- ⚠ **The examples are FACTS** — compose them from `region.exampleAnchors`, which the client already
+  holds and `region-cache.ts` already persists (names only, exactly for display like this). Never
+  author place names into `voice.ts`. ✅ This also makes the placeholder region-correct for free when
+  region 2 ships.
+- ⚠ **Gate the animation on Reduce Motion** (DESIGN already does this for the drive-complete stamp):
+  with it on, show one and stop.
+- ⚠ **Freeze on focus.** Text that changes while the rider is deciding what to type is a genuine
+  distraction — stop the cycle the moment the field is focused, not just when they type.
+- ⚠ **Stop it when the screen is unfocused.** Home stays MOUNTED under a push (§8), so a bare interval
+  would tick forever behind Settings and the player. `useIsFocused` is already in the file.
+- ✅ **No accessibility churn:** `Composer` already passes an explicit `accessibilityLabel`, so the
+  field's accessible name is stable and rotation never re-announces it.
+
+### ✅ And one simplification fell out
+
+The founder also rejected launch 1's *"Then — where are we headed?"*. Using **the same line in both
+states** removes the copy dependency §9 flagged entirely: the listen card becomes a **true
+one-element toggle** rather than two authored states. One fewer thing to get wrong.
+
 ## Sources
 
 - [Airbnb design-system breakdown](https://github.com/VoltAgent/awesome-design-md/blob/main/design-md/airbnb/DESIGN.md)
