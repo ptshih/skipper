@@ -64,3 +64,76 @@ for (const theme of [lightTheme, darkTheme] as Theme[]) {
       expect(contrast(theme.colors[fg], theme.colors[bg])).toBeGreaterThanOrEqual(AA)
     })
 }
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MARKS ON THE BASEMAP — the gap that produced three bugs before anyone measured it.
+//
+// Everything above asks "does this text read on one of OUR surfaces". Nothing asked whether a mark
+// reads on the MAP, which we do not control: `theme/mapStyle.ts` paints it from the same palette, so
+// a brand colour and a basemap layer can land on the SAME HEX and no test notices. Three instances,
+// every one found by eye rather than by CI:
+//   1. water LABELS at ~1:1 on the lake (fixed by hiding them — audit #662)
+//   2. the ROUTE line drawn in the roads' own colour — contrast 1.00 in BOTH themes. It read as a
+//      MISSING polyline on device, not a faint one (fixed 2026-08-03, the `routeTrail` role)
+//   3. `passed` stop markers, pine at 1.05 on the lake and STILL 1.05 under simulated deuteranopia
+//      and protanopia — so hue did not rescue it (fixed 2026-08-03 with the ring its siblings had)
+//
+// ⚠ THRESHOLD IS 3:1, NOT 4.5 — these are graphical objects, so WCAG 2.1 SC 1.4.11 applies, not the
+// text ratio. Using 4.5 here would fail honest marks and teach the next person to baseline it away.
+//
+// ⚠ THE RULE IS A DISJUNCTION, and getting that wrong is instructive enough to record: the first cut
+// asserted that the `surface` separator must clear EVERY layer, which failed six honest pairs. A mark
+// survives if EITHER its own colour clears the layer OR its `surface` casing/ring does. Pine on water
+// is 1.05 and survives on its dark ring; pine on a road needs no ring because the pine already reads.
+// Demanding both is not a stricter guarantee, it is a wrong one.
+//
+// ⚠ AND NO SINGLE FLAT COLOUR CAN PASS ALONE. Dusk land is #14201B and dusk water is #5FA7B8 —
+// opposite ends — so the tan scoring 4.97 on land scores 1.24 on the lake. That is WHY marks carry a
+// separator at all, and why one value (`surface`) silently carries the whole guarantee.
+const MAP_LAYERS = (t: Theme): Record<string, string> => ({
+  land: t.isDark ? '#14201B' : '#F2E7CC',
+  water: t.isDark ? '#5FA7B8' : '#2C6E7E',
+  roadMajor: t.isDark ? '#2A3A30' : '#E7D9B5',
+  roadMinor: t.isDark ? '#3A4A3E' : '#CDB988',
+  park: t.isDark ? '#163326' : '#DDE3C9',
+})
+// The brand colours DriveMap paints onto the basemap, each drawn with a `colors.surface` casing (the
+// route line) or ring (every marker fill).
+// ⚠ SCOPE, STATED RATHER THAN SILENT: `amberToken` (the active marker + the puck) is NOT here. It
+// fails this rule on the DAYLIGHT basemap — #DD7A33 on paper is ~2.5, and its `surface` ring cannot
+// help because `surface` IS the land. That is a REAL open finding, recorded in TODO.md, not a pair
+// this rule gets wrong: a saturated orange on cream separates by hue for most riders, which is
+// precisely the reassurance a low-vision rider does not get. It is excluded because fixing it means
+// changing the LIVE DRIVE's puck, which is deliberately frozen until the first real drive — not
+// because it passes. Add it here the moment that ships.
+const MAP_MARKS: (keyof ThemeColors)[] = ['routeTrail', 'trackActive']
+const NON_TEXT_AA = 3
+
+for (const theme of [lightTheme, darkTheme] as Theme[]) {
+  const layers = MAP_LAYERS(theme)
+  for (const mark of MAP_MARKS)
+    for (const [layer, hex] of Object.entries(layers))
+      test(`${theme.name}: ${mark} is separable on map ${layer}`, () => {
+        const own = contrast(theme.colors[mark], hex)
+        const ring = contrast(theme.colors.surface, hex)
+        expect(Math.max(own, ring)).toBeGreaterThanOrEqual(NON_TEXT_AA)
+      })
+
+  // The route line additionally has to carry ITSELF against the roads. A road runs underneath it for
+  // the route's whole length, so a collision there is the one case a casing cannot fix — the ring
+  // would be tracing the same road the line is lost in. This is instance #2's regression test, and it
+  // is what caught `trailInk`'s first cut (2.07 on the daylight roads, under the 3:1 bar).
+  for (const road of ['roadMajor', 'roadMinor'] as const)
+    test(`${theme.name}: routeTrail clears ${NON_TEXT_AA}:1 on map ${road} unaided`, () => {
+      expect(contrast(theme.colors.routeTrail, layers[road]!)).toBeGreaterThanOrEqual(NON_TEXT_AA)
+    })
+
+  // ⚠ `surface` IS the basemap's land colour, deliberately (mapStyle draws land from the same token).
+  // That is why a ring vanishes ON land and does not need to be there — the mark itself contrasts
+  // land. Asserted so the relationship is a FACT rather than a coincidence: retint land away from
+  // `surface` and the sentence above stops being true, loudly, here.
+  test(`${theme.name}: basemap land is exactly \`surface\``, () => {
+    expect(layers.land).toBe(theme.colors.surface)
+  })
+}

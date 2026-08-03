@@ -26,8 +26,8 @@ export const palette = {
   tanRule: '#CDB988', // hairlines, dashed inactive track, dividers
   // The route line ON A BASEMAP, daylight. A deeper tan than `tanRule` for one measured reason: the
   // map style paints minor roads in `tanRule` too, so a route drawn in it scored **1.00** against the
-  // roads underneath — not faint, IDENTICAL. This clears them at 2.07 and the paper at 3.24.
-  trailInk: '#967C46',
+  // roads underneath — not faint, IDENTICAL. This clears them at 3.67 and the paper at 5.76 — the 3:1 non-text bar (WCAG 2.1 SC 1.4.11), which a first cut at #967C46 missed at 2.07 and the new map-layer test caught.
+  trailInk: '#6B552F',
   rustError: '#A8401F', // errors — brick-and-clay, never clinical blue-red
 
   // Dusk / night-drive-first

@@ -367,10 +367,27 @@ function DriveMapBase({
                             borderWidth: border.keyline,
                           }
                         : passed
-                          ? { backgroundColor: colors.trackActive }
+                          ? {
+                              // ⚠ THE RING IS NOT DECORATION — it is the only thing separating a mark
+                              // from a basemap we do not control. `passed` was the ONE state without
+                              // one (its three siblings all set it), and it is pine: measured 1.05
+                              // against the dusk lake, and still 1.05 under simulated deuteranopia and
+                              // protanopia, so hue does not rescue it either. On a lakeside route —
+                              // i.e. every Tahoe drive — a played stop simply vanished into the water.
+                              // Same idiom as the route casing: `surface` is what the map is not.
+                              backgroundColor: colors.trackActive,
+                              borderColor: colors.surface,
+                              borderWidth: border.keyline,
+                            }
                           : {
                               backgroundColor: colors.surface,
-                              borderColor: colors.trackInactive,
+                              // ⚠ `routeTrail`, NOT `trackInactive` — this marker is INVERTED (the
+                              // brand colour is the RING and `surface` is the FILL), so it had the
+                              // collision twice over: a disc the colour of the land, ringed in the
+                              // colour of the roads (both 1.00, measured). It was a hole, not a
+                              // marker. Drawing the ring in the trail's own colour is also what it
+                              // means — a waypoint ON the route, not yet reached.
+                              borderColor: colors.routeTrail,
                               borderWidth: border.keyline,
                             },
                   ]}

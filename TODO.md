@@ -976,6 +976,28 @@ None of this is a build; all of it is config. The premise changed on 2026-07-28:
       (no `--apply` gate by design), so re-running it is free; the STOP rule wants a current one before
       any destructive step, and there has been one since.
 
+## The amber puck under-contrasts on the DAYLIGHT basemap (2026-08-03, measured)
+
+⚠ **The one instance of the map-contrast class left OPEN, and it is open on purpose.** The 2026-08-03
+sweep that produced `theme.test.ts`'s map-layer gate found four instances of one bug: a brand colour
+drawn on a basemap layer the contrast gate never checked. Three are fixed (the route polyline, the
+`passed` marker, the `upcoming` marker's ring). This is the fourth.
+
+**The number:** `amberToken` in DAYLIGHT is `#DD7A33` on paper land `#F2E7CC` ≈ **2.5**, under the 3:1
+graphical-object bar (WCAG 2.1 SC 1.4.11). Its `colors.surface` ring cannot rescue it the way every
+other mark's does, because on the map `surface` **IS** the land colour — the ring is invisible exactly
+where the fill needs it. Dusk is fine; this is a light-theme-only finding.
+
+**Why it is not fixed:** it affects the ACTIVE stop marker and the live-position PUCK — i.e. the
+in-drive map, deliberately frozen until the first real drive is done. Every other fix in that sweep
+was on the proposal card or made a mark strictly MORE visible; changing the puck is neither.
+
+**When it ships:** add `'amberToken'` to `MAP_MARKS` in `apps/mobile/src/theme/theme.test.ts` — the
+gate is written to accept it and will hold the fix. The exclusion is stated in a comment there, not
+baselined into a passing assertion.
+⚠ A saturated orange on cream DOES separate by hue for most riders. That is exactly the reassurance a
+low-vision rider does not get, so "it looks fine" is not the counter-argument it appears to be.
+
 ## When YOSEMITE ships: the metadata that goes stale (founder ask 2026-07-28)
 
 Content is SERVER-SIDE, so a second region goes live with no app release. That is the whole problem:
