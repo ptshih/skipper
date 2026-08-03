@@ -736,18 +736,62 @@ schema-introspected and mutation-checked.
       ⚠ The anonymous→account link does NOT open a matching hole despite also hard-deleting a user
       row: a stale cached ANONYMOUS session still resolves to `tier: 'anonymous'`, so `requireAccount`
       401s it before any write.
-- [ ] **Close the deletion window properly: `disableCookieCache` on the WRITE paths.** The residual
-      risk above is entirely about writes — a READ against a deleted user returns nothing and orphans
-      nothing. So the fix is narrow: have the owner WRITE routes (`POST /drives` above all) resolve a
-      FRESH session while reads keep the cache. Mechanism is per-request:
-      `auth.api.getSession({ headers, query: { disableCookieCache: true } })` — the installed session
-      route reads `ctx.query.disableCookieCache`, and `test/auth-cookie-cache.test.ts` pins that it
-      still exists so this plan does not rot silently.
-      ⚠ Shape it as a SECOND middleware (`withFreshSession`) rather than a flag on `withSession` —
-      the route table in `drives.ts` is what `test/drive-access.test.ts` reads to enforce INV-15, and
-      a per-route middleware is visible there in a way a boolean argument is not.
-      ⚠ Deferred only because `apps/api/src/drives.ts` was mid-edit by another agent at the time.
-      Cost is ~one extra session read per created drive, which is already rate-limited and rare.
+- [ ] **PLAN (2026-08-02): close the cookie-cache deletion window. ⚠ SCOPE IS BIGGER THAN "WRITE
+      PATHS" — the first framing was wrong.** Not started; `drives.ts` was mid-edit by another agent.
+      **The finding that changes it:** `GET /drives` — a READ route — calls `ensureFreeGrant`
+      (`drives.ts:1018`), which INSERTS a `credit_entries` grant row. So "a read cannot orphan
+      anything" is false, and this is the *more likely* orphan path than `POST /drives`: the home
+      screen hits it on every launch, while creating a drive is rare and rate-limited. A deleted
+      rider's second device hitting the home screen inside `maxAge` writes a grant row keyed to a user
+      id that no longer exists — into an APPEND-ONLY ledger with no second copy and no FK to catch it.
+      **The exposed set is exactly two routes**, both behind `requireAccount`: `POST /drives` (inserts
+      `drives` + a consume + `ensureFreeGrant`) and `GET /drives` (`ensureFreeGrant`). The other three
+      owner routes — `GET /drives/:id`, `POST /:id/assets/sign`, `DELETE /:id` — only ever touch rows
+      that `purgeUserData` has already removed, so they 404 and orphan nothing. They can stay cached.
+      **Three ways to close it, cheapest first:**
+      1. **Drop the lazy grant from the READ path.** `auth.ts:364` already grants at signup via a
+         database hook, so `ensureFreeGrant` on `GET /drives` is a BACKSTOP for accounts created
+         before that hook existed. If that backstop has outlived its purpose, deleting it removes the
+         orphan vector *and* leaves the hottest owner route fully cached. ⚠ Founder call — `auth.ts`
+         explicitly calls the signup grant "ADDITIVE, not a replacement", so this reverses a stated
+         decision and needs the question asked, not assumed.
+      2. **`withFreshSession` on the two exposed routes.** Mechanism verified in the installed
+         better-auth: `auth.api.getSession({ headers, query: { disableCookieCache: true } })` — the
+         session route reads `ctx.query.disableCookieCache` and merges it with a `config` argument,
+         and `test/auth-cookie-cache.test.ts` already pins that the flag exists so this cannot rot
+         silently. ⚠ Shape it as a SECOND MIDDLEWARE, never a boolean on `withSession`: the route
+         table in `drives.ts` is what `test/drive-access.test.ts` reads to enforce INV-15, and a
+         per-route middleware is visible there in a way an argument is not.
+         Cost: one session read on the two hottest owner routes — so signed-in riders give back much
+         of the win, while every anonymous surface (planner, propose, sample, regions) keeps all of it.
+      3. **Accept it, explicitly.** The window is 60s and needs a two-device delete race. The residual
+         artifact is a single grant row with no drives attached. Cheapest, but it leaves personal data
+         surviving a deletion request, which is the thing 5.1.1(v) is actually about.
+      **Recommended: 1 if the founder retires the backstop, else 2 on `POST /drives` + `GET /drives`.**
+      A reaper for orphaned ledger rows was considered and rejected — it is new machinery for a
+      bounded race, and CLAUDE.md's existing wariness about reapers touching rider identity applies.
+      **Test plan:** extend `test/drive-access.test.ts` (it already enumerates the route table for
+      INV-15) to assert the two exposed routes carry the fresh-session middleware, so adding a third
+      inserting route without it fails there — the same shape as the existing gate assertion.
+- [ ] **PLAN: cookie growth is now a per-request cost — write the rule down.** No action needed today:
+      `auth.ts` configures **no user `additionalFields`**, and the cached payload is nine small fields
+      (`id, email, name, emailVerified, createdAt, updatedAt, role, isAnonymous, banned` — verified by
+      probing `parseUserOutput` against this build). Nowhere near the ~4 KB cookie limit.
+      ⚠ What changed is the RULE, not the state: since `7bd7614`, adding a field to `user` puts it in
+      the cookie on **every request**, and plugin fields ride automatically (that is what makes `role`
+      and `isAnonymous` work). Oversized cookies fail in ugly, hard-to-attribute ways. Cheapest guard
+      is one line in `auth.ts`'s cookie-cache note plus, if it ever grows, an assertion on the field
+      count in `test/auth-cookie-cache.test.ts`. Do it when a field is actually proposed.
+- [ ] **PLAN: trace whether the mobile client's session view can now lag the server's.** Unproven
+      either way — flagged for honesty, not because a bug is known. The client keeps its own session in
+      secure-store via `@better-auth/expo` and refetches off a `$sessionSignal` atom
+      (`apps/mobile/src/lib/auth.ts`), and `useSession` has six consumers including `_layout`,
+      `index`, `settings` and the drive player. With the server now answering `get-session` from a
+      cookie for up to `REGIONS`-independent 60s, a client refetch can observe a stale server answer.
+      ⚠ Most paths look benign by construction: sign-out clears both cookies on that device (verified),
+      and deletion happens on-device. The case worth actually tracing is INV-9 — whether `isSignedIn`
+      can read TRUE for up to 60s after the account is gone, and if so whether any screen writes
+      during that window. ~30 minutes of reading, no change expected.
 - [ ] **Optional follow-up: a rate limit on `/regions` as defence-in-depth.** Much less urgent now —
       the memo absorbs a burst, so an attacker gets cached bytes rather than DB load — but it is still
       the only anonymous route with no cap, and a cold instance serves the first request for real.
