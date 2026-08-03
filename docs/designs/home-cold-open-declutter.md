@@ -298,18 +298,45 @@ is settled — the founder biases to the move. What the move actually needs:
   `headerLeft: () => (signedIn ? undefined : signInButton)` — the header-left slot is **already
   conditionally empty for exactly the signed-in riders who need a drives entry**. A `HeaderIconButton`
   there costs **zero new chrome**: signed out the slot says "Sign in", signed in it says "Drives".
-- ⚠ **THE HAZARD — "signed-in only" taken literally ships a bug.** `load()` short-circuits for
-  anonymous riders to `listDownloadedDrives()`, reading from DISK. A rider who signed in, downloaded
-  drives and later signed out — or whose session merely expired — still has drives on the phone, by
-  design, as the offline-first fallback. **Gating the new screen on `signedIn` alone makes their own
-  downloaded audio unreachable.** Gate on **`signedIn || hasLocalDrives`**.
-- ⚠ **It breaks the documented OFFLINE INVERSION.** `index.tsx` deliberately hoists MY DRIVES to the
-  top when the network is dead — out there it "is not the archive, it is the product — the only thing
-  on the phone that still works" — and removes the composer entirely. Move the section away and **the
-  offline home becomes a "can't plan out here" card and nothing else**: a dead end, in a dead zone,
-  for a rider about to drive. Needs an explicit answer; cheapest is that `isOffline` still renders the
-  list inline on home (or redirects to the drives screen), preserving today's behaviour in the one
-  state it was designed for.
+I raised two hazards; the founder ruled on both (2026-08-03).
+
+#### Ruling 1 — losing signed-out access is ACCEPTABLE: *"drives belong to a specific user"*
+
+Gate on `signedIn`, not `signedIn || hasLocalDrives`. ✅ **The principle is right — and the on-disk
+store does not currently implement it.** Verified:
+
+- **Nothing reconciles downloaded drive dirs against the signed-in account.** `sweepOrphanClips` (the
+  ONLY path allowed to remove a shared byte) reclaims CLIP bytes no drive dir **on disk** still needs
+  — it keeps every drive dir regardless of who owns it. `deleteAllDriveDownloads()` has exactly one
+  call site: the account-DELETION flow in `app/settings.tsx`. There is no Settings control to clear
+  downloads.
+- ⚠ So under ruling 1 a rider who merely SIGNS OUT leaves drive dirs on disk that **no UI can reach
+  and no sweep reclaims** — invisible, unreclaimable, and chargeable to their storage.
+- ⚠ **And it is already a cross-account exposure in one narrow path.** `load()`'s catch branch (the
+  offline fallback) calls `listDownloadedDrives()`, which lists everything on disk. So account B,
+  signed in on a device where account A downloaded drives, would see A's drives **when offline**.
+  Pre-existing and NOT introduced by this change — but this change removes the last surface that made
+  those files visible at all.
+- ⚠ `app/settings.tsx`'s comment reasons about exactly this hazard for the deletion case and defers
+  the list case to *"the ownership sweep"*. **I could not find a reconcile that plays that role** —
+  worth a second pair of eyes before anyone relies on it existing.
+- ✅ **The fix that makes ruling 1 true on disk: purge downloads on SIGN-OUT, not only on account
+  deletion.** `deleteAllDriveDownloads()` already does exactly the right thing, including clearing
+  the shared clip store (the half that is easy to get wrong — every megabyte of audio lives in
+  `clips/`, a SIBLING of `drives/`). One new call site.
+
+#### Ruling 2 — the offline break is real ("good point")
+
+✅ **And ruling 1 mostly dissolves it.** `signedIn` is knowable offline (the token is in SecureStore),
+so the rule is:
+
+- **offline + signed in** → keep today's inversion exactly: render the drives list inline on home,
+  composer absent. Nothing is lost.
+- **offline + signed out** → the "can't plan out here" card ALONE, which under ruling 1 is now
+  *correct* rather than a dead end: a signed-out rider has no drives to show, by definition.
+
+So the offline inversion survives as a `signedIn` branch rather than needing a new mechanism — and it
+stops being a dead end precisely because sign-out purges.
 - **Two smaller things ride along.** The **credit-balance hint** lives in the MY DRIVES section head
   and needs a new home (the drives screen is the natural one). The new route is
   `app/drives/index.tsx`, which makes `/drives → /drives/[id]` a real hierarchy with a proper back
