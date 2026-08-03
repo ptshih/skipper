@@ -1546,3 +1546,59 @@ single-Charon model already answer, so the moat (persona continuity, in-car qual
 a feature to copy. This borrow is small and serves that moat. NOT borrowing:
 subscription-first pricing, celebrity narrator roster, national free-roam pin-map,
 over-broad trigger radius (all anti-charm or anti-doctrine).
+
+## A round trip goes QUIET on the return leg (founder ask 2026-08-03)
+
+Founder: *"round trip routes should probably include POIs going both directions so it isn't completely
+quiet on the return trip."*
+
+- [ ] **Give the return leg something to say.** The mechanic, traced before writing this so nobody
+      re-derives it:
+      - A round trip IS a real out-and-back — `toPlannedRoute` (`apps/api/src/plan-route.ts:100-105`)
+        maps the model's `round_trip` to `{ start, end: start, via: [...via, end] }`, so the frozen
+        polyline genuinely contains BOTH legs (`start === end` alone would materialize degenerate).
+      - But **a candidate is snapped ONCE**. `buildRouteSnapper` (`packages/engine/src/pacing.ts:39`)
+        calls `nearestOnRoute` (`packages/engine/src/geo.ts:155`), which scans every vertex and keeps
+        the single globally-nearest one. So one POI ⇒ one `alongSec` ⇒ **at most one stop, on whichever
+        leg won** — and its comparison is a strict `<`, so an exact tie breaks to the LOWEST index,
+        i.e. the OUTBOUND leg. Where Google returns lane-level-different geometry per direction it is
+        closer to a coin flip per POI, so the return gets a scattered few rather than literally none.
+      - ⚠ **The direction-independent statement is the durable one:** a round trip has roughly HALF
+        the stop density of the equivalent one-way over the same road, because the candidate supply is
+        the road's POIs but the clock is doubled. The pacing budget is NOT the binding constraint —
+        `driveMaxStops` (`pacing.ts:17`) is ~1 stop / 4 min of the WHOLE round trip, so a 2-hour loop
+        is budgeted ~24 stops while `DRIVE_MIN_GAP_SEC` (180 s) lets the outbound half hold ~half that.
+        The cap has room; the geometry never offers it anything.
+      - ⚠ **The glance fill cannot rescue it** (`93867aa`). Glances are placed on the SAME geometry in
+        the same step-1 loop (`drive-select.ts:249`) — they inherit the identical one-leg-only bias, so
+        the quiet stretch they exist to fill is precisely the stretch they are also absent from.
+
+      Two candidate fixes, cheapest first, NOT mutually exclusive:
+      1. **Snap to every LOCAL minimum, not the global one — free, no new audio, no spend.** Let a
+         candidate offer both its outbound and its return occurrence to the pacing pass and let step 3
+         pick. This does not repeat a clip; it MOVES a stop the outbound leg's `minGap` crowded out
+         onto the return leg, where there is room — which is why it should raise the audible stop count
+         rather than just redistribute it. ⚠ **Step 2's co-located dedupe is the landmine**: it
+         collapses anything within `DRIVE_MIN_SEPARATION_M` (1 km) of a kept anchor by comparing
+         PLACED ANCHORS, and one place's two occurrences are ~0 m apart, so it would eat the second
+         one and the whole change would no-op. It has to become "one telling appears once" (subject
+         identity) rather than "two points 1 km apart are one stop" (position) — and that is a real
+         rule change with its own blast radius, not a constant tweak.
+      2. **Let a repeated place get a DIFFERENT telling — that is exactly the b-side.**
+         `docs/designs/tell-me-more-spec.md`: generation is already BUILT (script-only,
+         preview-by-default, nothing persisted), the ear check passed 2026-08-03, and storage is
+         DECIDED — its own table, `narrations_poi_uq` is NOT loosened
+         (`docs/decisions/bside-gets-its-own-table.md`). A return leg is arguably a better home for a
+         b-side than the pull-button it was specced for. ⚠ **But do NOT plan on it as the primary
+         fix**: the same spec measured that only **1 of 8** stops on a real drive carries usable
+         leftover material (~90 s added to a 39-minute drive). A b-side return leg would be thin, not
+         full. It also costs a founder-gated paid run; fix 1 costs nothing.
+
+      ⛔ **Anti-goal: replaying the SAME clip on the way back.** The rider hears an identical telling
+      twice inside an hour — the one outcome worse than the quiet we are fixing.
+
+      ⚠ **Verify by BEHAVIOUR, not by unit test alone.** The symptom is a DISTRIBUTION, so the check is
+      to plan one out-and-back and compare the selection's `alongSec` values against `totalSec / 2` —
+      today they should pile up below it. A test that asserts "a stop exists" passes on the broken
+      version. ⚠ And `drives.selection` is FROZEN at create against a non-refundable credit, so this
+      only ever improves NEW drives; existing round trips keep their quiet return.
