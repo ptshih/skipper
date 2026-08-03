@@ -45,10 +45,10 @@ The CLAUDE.md "in-car landmines" are largely **implemented** in `@skipper/engine
   = max(triggerRadiusM, speedMps·leadSeconds)` ([`trigger.ts:80-82`](../../packages/engine/src/trigger.ts)).
   `triggerRadiusM` is a **floor**. Drive `leadSeconds:12`, roam `leadSeconds:15`.
 - **Heading gate:** drive `headingConeDeg:90` ([`trigger.ts:116-119`](../../packages/engine/src/trigger.ts)),
-  roam `headingConeDeg:120` ([`roam.ts:184-187`](../../packages/engine/src/roam.ts)); both gated above
+  roam `headingConeDeg:120` (`roam.ts:184-187`, deleted in 1.1); both gated above
   `~2.2 m/s` (≈5 mph) and **skipped when heading is unknown** (the iOS `-1` course sentinel).
 - **Debounce / already-fired:** drive `fired:Set` (`trigger.ts:85`); roam cooldowns — per-POI `firedAt`
-  (4 h), per-name `firedNameAt`, `minGapSec:75`, and cluster suppression (`roam.ts:155-204`).
+  (4 h), per-name `firedNameAt`, `minGapSec:75`, and cluster suppression (`roam.ts:155-204`, deleted in 1.1).
 
 **The actual root cause is that the trigger center is the raw centroid `pois.lat/lng`** — the speakable
 anchor is **never used by the trigger**:

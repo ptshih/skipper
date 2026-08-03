@@ -1,9 +1,10 @@
 # API versioning posture
 
-**Status:** ✅ **DECIDED + BUILT 2026-06-09**; the GATE MECHANISM still holds. The launch-time update
-gate ships now (pre-submission): `GET /version` + the mobile `VersionGate` + the `ContractError`
-self-defense. This doc is the single source of truth for the versioning posture; it closes the
-`TODO.md` "API contract" item and supersedes the CLAUDE.md forward-reference.
+**Status:** ✅ **DECIDED + BUILT 2026-06-09**; the GATE MECHANISM still holds — `GET /version` + the
+mobile `VersionGate` + the `ContractError` self-defense are all still live. This doc is the single
+source of truth for the versioning posture; it closes the `TODO.md` "API contract" item and supersedes
+the CLAUDE.md forward-reference. ⚠ **The 2026-07-30 client-capability addendum is REMOVED** (1.1,
+`c66b03f`) — read that section as historical; its principles are kept deliberately, its mechanism is gone.
 
 **Scope addendum (V2, 2026-06-18):** the additive-only **freeze had NOT engaged yet** when V2 landed —
 v1 never shipped to the App Store, so there were zero installed clients to protect, and the V2 migration
@@ -15,12 +16,17 @@ submission** — until that moment the contract is break-freely (CLAUDE.md's STO
 already states this). Everything else in this doc — no URL versioning, the `/version` floor, client
 self-defense — is unchanged and live.
 
-**Scope addendum (client capability channel, 2026-07-30):** this doc answers *don't break old
-clients*. It does **not** answer *serve old clients something DIFFERENT*, which is a distinct problem
-and now has a mechanism: the app sends `X-Skipper-Client: v=<semver>; caps=<tokens>` from `fetchJson`,
-and the API parses it into `c.get('client')` (`@skipper/shared` `client-identity.ts`, `apps/api/src/client.ts`).
+**Scope addendum (client capability channel, 2026-07-30) — 🔴 REMOVED 2026-08-01 (1.1, `c66b03f`).**
+This doc answers *don't break old clients*. It does **not** answer *serve old clients something
+DIFFERENT* — a distinct problem that briefly had a mechanism: the app sent
+`X-Skipper-Client: v=<semver>; caps=<tokens>` from `fetchJson` and the API parsed it into
+`c.get('client')`. **All of it is gone** — the header, `@skipper/shared` `client-identity.ts`,
+`apps/api/src/client.ts`, the `'*'` withClient mount and `ApiEnv.Variables.client` were deleted whole,
+along with the AREA trigger mode that motivated it (`packages/engine/src/area.ts`, `3944e5f`). It never
+reached a rider. Read the rest of this section as historical.
 
-This **extends** the posture rather than superseding it, and the boundary is the load-bearing part:
+The principles are kept on purpose: they outlived the mechanism and are where a rebuild should start.
+It **extended** the posture rather than superseding it, and the boundary was the load-bearing part:
 
 - **Capabilities gate CONTENT, never SHAPE.** Which items appear in a response may vary by caller; the
   DTOs may not. §2 (additive-only) is untouched, and a capability must never become an excuse to
@@ -33,9 +39,10 @@ This **extends** the posture rather than superseding it, and the boundary is the
 - **`GET /version` is unchanged and still a client-side self-check** (§3/§5). A floor is not a switch;
   the two coexist and neither replaces the other.
 
-Why it exists: AREA-triggered district tellings need a polygon an older build cannot fire, and with no
-way to tell clients apart the only options were "send to everyone" and "send to no one". See
-`fused-cluster-generation-spec.md` §10.
+Why it existed: AREA-triggered district tellings needed a polygon an older build could not fire, and
+with no way to tell clients apart the only options were "send to everyone" and "send to no one". That
+motivation died with the AREA trigger mode itself — which is why the channel went with it, having had
+exactly one token (`area`) and zero live callers. See `fused-cluster-generation-spec.md` §10.
 
 ## Context
 

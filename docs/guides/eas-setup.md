@@ -19,7 +19,7 @@ eas build:run -p ios --latest
 
 # 4. start Metro + the API, then open the app
 bun start                                   # in apps/mobile
-cd ../.. && bun run dev                      # API on http://localhost:8787
+cd ../.. && bun run dev:api                  # API on http://localhost:8787
 ```
 
 ---
@@ -85,7 +85,7 @@ This downloads the `.app` and installs it to the booted simulator.
 ```bash
 cd apps/mobile && bun start          # dev client connects to Metro
 # in another shell, from the repo root:
-bun run dev                          # API on http://localhost:8787 so the app has data
+bun run dev:api                      # API on http://localhost:8787 so the app has data
 ```
 
 Open the installed **dev-client** app in the simulator; it connects to Metro and
