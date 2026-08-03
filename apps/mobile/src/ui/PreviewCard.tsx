@@ -356,10 +356,21 @@ export function PreviewCard({
             onPress={onMake}
             disabled={noStops}
             loading={state === 'creating'}
-            // Only the live card wears the campfire glow — see `mapEnabled`.
-            glow={mapEnabled}
+            // Only the live card wears the campfire glow — see `mapEnabled`. ⚠ And never a DEAD
+            // one: under `noStops` this CTA can't be pressed, so §8's one-amber-glow budget was
+            // being spent pointing the rider at the single control on screen that does nothing
+            // (2026-08-03). The glow has to mean "press this".
+            glow={mapEnabled && !noStops}
           />
-          <Button variant="ghost" title={voice.proposal.adjust} onPress={onAdjust} />
+          <Button
+            // With the make-CTA dead, re-opening the conversation IS the next step, so it stops
+            // being a text link and becomes the outlined placard. It does NOT re-spend the glow
+            // freed above: `secondary`'s keyline is `accent` = PINE, and only `primary` ever
+            // carries the amber boxShadow.
+            variant={noStops ? 'secondary' : 'ghost'}
+            title={voice.proposal.adjust}
+            onPress={onAdjust}
+          />
         </View>
       )}
     </Card>
@@ -373,7 +384,12 @@ const styles = StyleSheet.create({
   mapFrame: { height: 200, borderRadius: radius.lg, borderWidth: border.hair, overflow: 'hidden' },
   routeLine: { gap: space.xs },
   arrowRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
-  statRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  // `flexWrap` matches app/index.tsx's structurally identical `metaRow` (the MY DRIVES meta) rather
+  // than inventing a second approach: `Badge`'s pill is `alignSelf: 'flex-start'` and RN defaults
+  // `flexShrink: 0`, so without it the second badge overruns the card and clips at AX1+ — which
+  // DESIGN §8 leaves UNCAPPED here, home being a scrollable surface. The `gap` shorthand is both
+  // axes in RN, so it is already the row gap that keeps a wrapped badge off the line above.
+  statRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space.sm },
   durationNote: { marginTop: space.sm },
   ctaGroup: { gap: space.sm },
 })

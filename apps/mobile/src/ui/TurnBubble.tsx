@@ -29,7 +29,11 @@ export interface TurnBubbleProps {
   text: string
   /** A skipper turn still receiving deltas — suppresses every announce until it settles. */
   streaming?: boolean
-  /** Speak this turn once when it settles. Set by the screen on the NEWEST skipper turn only. */
+  /** Speak this turn once when it settles. Set by the screen on the NEWEST skipper turn only, and
+   *  only while that screen is FOCUSED — a planner turn outlives leaving home (the transcript is
+   *  kept alive by staying mounted under a push), so an ungated announce speaks the skipper's reply
+   *  over Settings or a running drive. Going false and back true HOLDS the announce rather than
+   *  losing it: the one-shot ref below has not fired, so it lands on the rider's return. */
   announceOnSettle?: boolean
 }
 

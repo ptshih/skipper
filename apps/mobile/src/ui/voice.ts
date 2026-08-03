@@ -333,7 +333,12 @@ export const voice = {
     repairFailed:
       'Couldn’t match what’s on the phone to this drive. Download it again, or remove the leftovers.',
     save: 'Save for offline', // the main-path button under the Start CTA (was ⋯-menu-only)
-    saveHint: 'Tahoe has dead zones — best done before you lose signal.',
+    // ⚠ REGION-FREE ON PURPOSE (founder, 2026-08-03), and this one had no alternative: it sits on the
+    // drive-detail Save button, and a `DriveManifest` carries no region — so unlike the /sample copy
+    // (which keeps its "Lake Tahoe" deliberately) there was nothing here to template FROM. Naming a
+    // region would simply have been wrong for every drive outside it. §7 holds either way: this says
+    // something true about the ROAD, which is route information, not a fact about a place on it.
+    saveHint: 'These roads have dead zones — best done before you lose signal.',
     // The one warning in front of a live drive that hasn't been saved. NEVER a block: the rider may
     // be on a road with good signal, or just auditioning from the couch. `useDrive`'s stall watchdog
     // skips any clip that won't load, so an unsaved drive through a dead zone loses those stops

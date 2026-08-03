@@ -19,7 +19,7 @@
 // of it is persisted — not to disk, not to the region cache (which holds public place NAMES only).
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Pressable, StyleSheet, useAnimatedValue, View, type TextInput } from 'react-native'
-import { Stack, useFocusEffect, useRouter } from 'expo-router'
+import { Stack, useFocusEffect, useIsFocused, useRouter } from 'expo-router'
 import type { PlannedRoute } from '@skipper/shared'
 // ⚠ The TYPED contract, and the only analytics surface there is (src/lib/analytics.tsx owns the raw
 // client, unexported). Every property below is a number, a boolean or a closed union — INV-13 applies
@@ -136,6 +136,13 @@ export default function HomeScreen() {
   // Fails OPEN — an unknown verdict means online — so the degraded layout only ever appears on a
   // DEFINITE offline (see connectivity.ts).
   const isOffline = useIsOffline()
+  // ⚠ AN ACCESSIBILITY GUARD, not a render optimisation — it gates the VoiceOver announce below, and
+  // the reason it is needed at all is the same fact that keeps the transcript alive: home STAYS
+  // MOUNTED under a push. A turn in flight is not aborted when the rider leaves (only unmount aborts
+  // it), so a reply settling while they are in Settings or inside a drive would push itself to
+  // VoiceOver over a screen it has nothing to do with. `useIsFocused` re-renders on the focus edge,
+  // which is what lets a held announce arrive when the rider actually comes back.
+  const focused = useIsFocused()
 
   // ── MY DRIVES (the archive) ─────────────────────────────────────────────────────────────────
   const [drives, setDrives] = useState<DriveSummary[]>([])
@@ -958,7 +965,14 @@ export default function HomeScreen() {
         text={t.text}
         // Only the NEWEST skipper turn speaks itself, and only once — a live region on every
         // historical bubble would re-read the whole conversation on any re-render.
-        announceOnSettle={i === lastSkipperIdx && !sending}
+        // ⚠ `focused` is the third term and it HOLDS rather than drops: an in-flight turn keeps
+        // running while the rider is on another screen (see `focused` above), so this goes false at
+        // the moment the reply settles and true again when they return — TurnBubble's one-shot ref
+        // then speaks it exactly once, on the screen it belongs to. Announcing nothing at all was
+        // the other option and it is worse for the rider it exists for: on iOS this push IS the
+        // whole mechanism (there is no live region), so a dropped announce means a VoiceOver rider
+        // is simply never told the skipper answered.
+        announceOnSettle={i === lastSkipperIdx && !sending && focused}
       />,
     )
     for (const c of cards)

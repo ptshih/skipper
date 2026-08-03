@@ -40,7 +40,8 @@ export interface RoutePreview {
   /** Tap a card's clip: switch+play a new one, or toggle/replay the active one. Latest tap wins. */
   play: (cardId: string, url: string) => void
   toggle: () => void
-  /** Pause + clear. Call on blur, and from the pinned bar's dismiss. */
+  /** Pause + unload the ACTIVE clip (a failed card stays failed — see stop()). Call on blur, and
+   *  from the pinned bar's dismiss. */
   stop: () => void
 }
 
@@ -222,7 +223,13 @@ export function useRoutePreview(): RoutePreview {
     releasePreviewAudioSession()
     activeCardIdRef.current = null
     setActiveCardId(null)
-    setFailedCardId(null)
+    // ⚠ `failedCardId` SURVIVES a stop, deliberately — clearing it here handed the rider back a play
+    // disc on a card whose presign is dead, and this surface has no re-sign path (file header), so
+    // that tap provably cannot work. Two ordinary paths reached it: card A fails → the rider plays
+    // card B → ✕ on the pinned bar; and card A fails → the rider opens Settings → the screen's blur
+    // effect calls stop(). Neither says anything about card A's url. The failure is CLEARED where it
+    // is disproved instead: play() drops it per-card the moment a new clip actually starts on that
+    // card, and "Start fresh" throws the whole conversation (cards included) away.
   }, [clearStartWatchdog, player])
 
   // A clip that simply RAN OUT must hand the session back too — the rider took no action, so nothing

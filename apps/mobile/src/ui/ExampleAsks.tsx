@@ -32,10 +32,18 @@ export function ExampleAsks({ asks, onPick }: ExampleAsksProps) {
         <FilterChip
           key={i}
           label={ask}
-          // An ask is a whole sentence, not the short noun a selector chip carries, so it may wrap
-          // to a second line. One line would clip it mid-phrase — and a half-sentence a rider is
-          // being invited to SAY reads as a bug, not as a truncation.
-          numberOfLines={2}
+          // ⚠ TYPE, not restyle (2026-08-03): the pine pill, the keyline and the hit target are the
+          // selector chip's; the small-caps `label` scale is NOT. An ask is a whole SENTENCE the
+          // rider is invited to say, and DESIGN §5 gives `label` (12.5 UPPER, tracked) to kickers
+          // and badges — set on a sentence it shouts a category tag at the reader and loses the
+          // half-second glance. `body` is §5's sentence role, and lands just under the 17pt of a
+          // Button's `heading` — which is right: an ask is an offer, not the screen's CTA.
+          variant="body"
+          // Uncapped rather than clipped: the interpolated place names are real curated names of
+          // any length ("Lake Tahoe - Nevada State Park"), so a fixed line cap truncates a
+          // half-sentence at the default type size and worse at AX sizes. Wrapping is free here —
+          // this is a wrapped row on a scrollable screen, not a horizontal scroller.
+          wrap
           onPress={() => onPick(i)}
         />
       ))}

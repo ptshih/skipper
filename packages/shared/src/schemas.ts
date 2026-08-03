@@ -51,8 +51,24 @@ export type Attribution = z.infer<typeof attribution>
  * A clip's frozen attribution: an ARRAY, one entry per source it drew on (Wikipedia +
  * Macrostrat, etc.). Stored as a jsonb array on `narrations` — there is no legacy
  * single-object shape to tolerate (zero-reuse, no users → clean array contract).
+ *
+ * ⚠ `.catch([])` for the SAME reason `region.exampleAnchors` carries one, and the stakes are higher
+ * here: this rides the anonymous `/drives/propose` response (and `/sample`), the mobile client turns
+ * ANY DTO parse failure into a blocking "please update the app" wall (apps/mobile/src/lib/api.ts
+ * `parseDto`), and the value is a FROZEN blob the studio pipeline wrote — nothing re-validates it on
+ * the way out. So a fifth `attributionSource` value, a stamp that isn't strict ISO, or one malformed
+ * `url` would kill an ALREADY-BILLED propose over an ⓘ button. `.catch()`, not `.default()`: a
+ * default only covers a MISSING key, while a null or a bad element still throws. Every consumer
+ * already renders the empty case (scenic/break clips ground on no sources at all).
+ * ⚠ The cost, stated honestly: one bad element drops the WHOLE credit list for that clip, and
+ * Wikipedia's CC BY-SA credit is legal rather than optional. It is still the better failure — a wall
+ * presents no credit AND no clip AND no app — but it means a drift in what the pipeline freezes
+ * shows up as silently missing credit, not as an error. The credit's real guard stays where it is
+ * enforceable: the form-conditional CHECK on `narrations` (packages/db).
+ * ⚠ RESPONSE-ONLY. Never reuse this to validate attribution on the way IN (a studio write, an admin
+ * edit) — a `.catch` on a write silently discards exactly what the licence requires us to keep.
  */
-export const attributionList = z.array(attribution)
+export const attributionList = z.array(attribution).catch([])
 /** The frozen-attribution array as a TYPE. Exported because API handlers that serve attribution
  *  need to annotate it, and the only previous way to name it was to reach through a DTO that
  *  happened to carry one — which made an unrelated DTO's
